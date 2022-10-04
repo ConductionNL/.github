@@ -1,2 +1,2 @@
-# .github
+# Welcome!
 Repro for company wide code
