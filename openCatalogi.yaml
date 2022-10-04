@@ -1,0 +1,17 @@
+name: "ConductionNL"
+description: "Conduction is een ICT bedrijf met een sterke idealistische en sociale inslag, waarbij mens en community centraal staan."
+
+type: "public"
+
+telephone: "0853036840"
+email: "info@conduction.nl"
+website: "https://conduction.nl/"
+logo: "https://avatars.githubusercontent.com/u/46676163?v=4"
+
+catalogusAPI: []
+
+uses: []
+
+supports:
+  - https://github.com/OpenCatalogi/web-app
+  - https://github.com/CommonGateway/gateway
