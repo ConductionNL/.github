@@ -1,0 +1,21 @@
+name: My Open Catalogi Workflow
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update publiccode.yaml
+        uses: OpenCatalogi/opencatalogi-action@0.1.0-SNAPSHOT.10.928fe98                    
+      - name: Create or Update publiccode.yaml
+        uses: OpenCatalogi/publiccode-action@0.0.1-main.53.17ba9e3
