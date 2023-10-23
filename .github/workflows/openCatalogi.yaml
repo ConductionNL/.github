@@ -14,8 +14,8 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    steps:
-      - name: Update publiccode.yaml
-        uses: OpenCatalogi/opencatalogi-action@0.1.0-SNAPSHOT.10.928fe98                    
+    steps:              
       - name: Create or Update publiccode.yaml
-        uses: OpenCatalogi/publiccode-action@0.0.1-main.53.17ba9e3
+        uses: OpenCatalogi/publiccode-action@0.0.1-main.54.4bba30f
+      - name: Update publiccode.yaml
+        uses: OpenCatalogi/opencatalogi-action@0.1.0-SNAPSHOT.10.928fe98      
