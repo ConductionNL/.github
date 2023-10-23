@@ -18,4 +18,4 @@ jobs:
       - name: Create or Update publiccode.yaml
         uses: OpenCatalogi/publiccode-action@1.0.0
       - name: Update publiccode.yaml
-        uses: OpenCatalogi/opencatalogi-action@0.1.0-SNAPSHOT.10.928fe98      
+        uses: OpenCatalogi/opencatalogi-action@1.0.0      
