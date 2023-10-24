@@ -17,5 +17,9 @@ jobs:
     steps:              
       - name: Create or Update publiccode.yaml
         uses: OpenCatalogi/publiccode-action@1.0.0
-      - name: Update publiccode.yaml
+        with:
+          opencatalogi: true
+      - name: Create an Open Catalogi page
         uses: OpenCatalogi/opencatalogi-action@1.0.0      
+        with:
+          nl_design_theme_classname: 'condution-theme'
