@@ -23,6 +23,7 @@
       "pathname": "/about",
       "operator": "includes"
     },
+    "handleClick": { "link": "https://github.com/ConductionNL/.github/blob/main/profile/README.md" },
     "subItems": [
       {
         "label": "About us",
