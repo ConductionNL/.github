@@ -32,19 +32,19 @@
     "title": "Social",
     "items": [
       {
-        "value": "conduction_nl",
-        "ariaLabel": "Common ground",
+        "value": "Twitter",
+        "ariaLabel": "Twitter",
         "link": "https://twitter.com/conduction_nl",
         "icon": { "prefix": "fas", "icon": "external-link", "placement": "left" }
       },
       {
-        "value": "conduction",
+        "value": "LinkedIn",
         "ariaLabel": "LinkedIn",
         "link": "https://www.linkedin.com/company/conduction/about/",
         "icon": { "prefix": "fas", "icon": "external-link", "placement": "left" }
       },
       {
-        "value": "ConductionNL",
+        "value": "Github",
         "ariaLabel": "Github",
         "link": "https://github.com/ConductionNL",
         "icon": { "prefix": "fas", "icon": "external-link", "placement": "left" }
@@ -55,26 +55,10 @@
     "title": "Contact",
     "items": [
       {
-        "label": "conduction.nl",
         "value": "conduction.nl",
         "ariaLabel": "Website",
         "link": "https://conduction.nl/",
         "icon": { "prefix": "fas", "icon": "globe", "placement": "left" }
-      },
-      {
-        "value": "+31 (0)85 3036840",
-        "ariaLabel": "Phone number",
-        "link": "tel:+31 (0)85 3036840",
-        "icon": { "prefix": "fas", "icon": "phone", "placement": "left" }
-      },
-      {
-        "value": "Lauriergracht 14h",
-        "ariaLabel": "Phone number",
-        "icon": { "prefix": "fas", "icon": "phone", "placement": "left" }
-      },
-      {
-        "value": "1016 RL Amsterdam",
-        "ariaLabel": "Phone number"
       },
       {
         "value": "info@conduction.nl",
@@ -83,12 +67,27 @@
         "icon": { "prefix": "fas", "icon": "email", "placement": "left" }
       },
       {
-        "value": "i76741850",
+        "value": "+31 (0)85 3036840",
+        "ariaLabel": "Phone number",
+        "link": "tel:+31 (0)85 3036840",
+        "icon": { "prefix": "fas", "icon": "phone", "placement": "left" }
+      },
+      {
+        "label": "Bezoek adres",
+        "value": "Lauriergracht 14h",
+        "ariaLabel": "Phone number",
+      },
+      {
+        "value": "1016 RL Amsterdam",
+        "ariaLabel": "Phone number"
+      },
+      {
+        "value": "KVK: 76741850",
         "ariaLabel": "KVK",
         "icon": { "prefix": "fas", "icon": "email", "placement": "left" }
       },
       {
-        "value": "NL860784241B01",
+        "value": "BTW: NL860784241B01",
         "ariaLabel": "BTW",
         "icon": { "prefix": "fas", "icon": "email", "placement": "left" }
       }
