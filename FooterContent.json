@@ -64,7 +64,7 @@
         "value": "info@conduction.nl",
         "ariaLabel": "Email",
         "link": "mail:info@conduction.nl",
-        "icon": { "prefix": "fas", "icon": "email", "placement": "left" }
+        "icon": { "prefix": "fas", "icon": "envelope", "placement": "left" }
       },
       {
         "value": "+31 (0)85 3036840",
