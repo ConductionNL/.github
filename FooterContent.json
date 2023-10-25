@@ -1,0 +1,97 @@
+[
+  {
+    "title": "Menu",
+    "items": [
+      {
+        "value": "Processes",
+        "ariaLabel": "Processes",
+        "setFilter": { "filter": "softwareType", "value": "process", "link": "/components" },
+        "icon": { "prefix": "fas", "icon": "arrow-right", "placement": "left" }
+      },
+      {
+        "value": "Data models",
+        "ariaLabel": "Data models",
+        "setFilter": { "filter": "softwareType", "value": "schema", "link": "/components" },
+        "icon": { "prefix": "fas", "icon": "arrow-right", "placement": "left" }
+      },
+      {
+        "value": "API's",
+        "ariaLabel": "API's",
+        "setFilter": { "filter": "softwareType", "value": "api", "link": "/components" },
+        "icon": { "prefix": "fas", "icon": "arrow-right", "placement": "left" }
+      },
+      {
+        "value": "Initiatives",
+        "ariaLabel": "Initiatives",
+        "setFilter": { "filter": "softwareType", "value": "concept", "link": "/components" },
+        "icon": { "prefix": "fas", "icon": "arrow-right", "placement": "left" }
+      }
+    ]
+  },
+  {
+    "title": "Social",
+    "items": [
+      {
+        "value": "conduction_nl",
+        "ariaLabel": "Common ground",
+        "link": "https://twitter.com/conduction_nl",
+        "icon": { "prefix": "fas", "icon": "external-link", "placement": "left" }
+      },
+      {
+        "value": "conduction",
+        "ariaLabel": "LinkedIn",
+        "link": "https://www.linkedin.com/company/conduction/about/",
+        "icon": { "prefix": "fas", "icon": "external-link", "placement": "left" }
+      },
+      {
+        "value": "ConductionNL",
+        "ariaLabel": "Github",
+        "link": "https://github.com/ConductionNL",
+        "icon": { "prefix": "fas", "icon": "external-link", "placement": "left" }
+      }
+    ]
+  },
+  {
+    "title": "Contact",
+    "items": [
+      {
+        "label": "conduction.nl",
+        "value": "conduction.nl",
+        "ariaLabel": "Website",
+        "link": "https://conduction.nl/",
+        "icon": { "prefix": "fas", "icon": "globe", "placement": "left" }
+      },
+      {
+        "value": "+31 (0)85 3036840",
+        "ariaLabel": "Phone number",
+        "link": "tel:+31 (0)85 3036840",
+        "icon": { "prefix": "fas", "icon": "phone", "placement": "left" }
+      },
+      {
+        "value": "Lauriergracht 14h",
+        "ariaLabel": "Phone number",
+        "icon": { "prefix": "fas", "icon": "phone", "placement": "left" }
+      },
+      {
+        "value": "1016 RL Amsterdam",
+        "ariaLabel": "Phone number"
+      },
+      {
+        "value": "info@conduction.nl",
+        "ariaLabel": "Email",
+        "link": "mail:info@conduction.nl",
+        "icon": { "prefix": "fas", "icon": "email", "placement": "left" }
+      },
+      {
+        "value": "i76741850",
+        "ariaLabel": "KVK",
+        "icon": { "prefix": "fas", "icon": "email", "placement": "left" }
+      },
+      {
+        "value": "NL860784241B01",
+        "ariaLabel": "BTW",
+        "icon": { "prefix": "fas", "icon": "email", "placement": "left" }
+      }
+    ]
+  }
+]

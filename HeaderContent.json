@@ -1,0 +1,63 @@
+[
+  {
+    "label": "Home",
+    "type": "readme",
+    "current": {
+      "pathname": "/",
+      "operator": "equals"
+    },
+    "handleClick": { "link": "https://github.com/ConductionNL/.github/blob/main/docs/Catalogi.md" }
+  },
+  {
+    "label": "Components",
+    "current": {
+      "pathname": "/components",
+      "operator": "includes"
+    }
+  },
+  {
+    "label": "About Conduction",
+    "current": {
+      "pathname": "/documentation",
+      "operator": "includes"
+    },
+    "subItems": [
+      {
+        "label": "About",
+        "type": "readme",
+        "current": {
+          "pathname": "/documentation/about",
+          "operator": "equals"
+        },
+        "handleClick": { "link": "https://github.com/ConductionNL/.github/blob/main/profile/README.md" }
+      },
+      {
+        "label": "Products",
+        "type": "readme",
+        "current": {
+          "pathname": "/documentation/usage",
+          "operator": "equals"
+        },
+        "handleClick": { "link": "https://github.com/ConductionNL/.github/blob/main/docs/Products.md" }
+      },
+      {
+        "label": "Pricing",
+        "type": "readme",
+        "current": {
+          "pathname": "/documentation/usage",
+          "operator": "equals"
+        },
+        "handleClick": { "link": "https://github.com/ConductionNL/.github/blob/main/docs/Pricing.md" }
+      },
+      {
+        "label": "Use",
+        "type": "readme",
+        "current": {
+          "pathname": "/documentation/usage",
+          "operator": "equals"
+        },
+        "handleClick": { "link": "/documentation/usage" }
+      }
+    ]
+  }
+]
