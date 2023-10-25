@@ -12,36 +12,12 @@ As a result of our mission and values, we've embarked on a journey of creating o
 
 Our commitment to open source reflects our belief in the principles of democracy, inclusivity, and transparency. We want to enable everyone to participate in the digital transformation and contribute to the betterment of society.
 
-### Explore Our Components
+### Get to know us
 
-We invite you to explore the open-source software components that Conduction has produced. Each component is a testament to our dedication to making the digital world a better place for all.
-
-- [Browse Our Components](/components)
-
-## Discover Conduction
-
-### About Us
-
-Curious to know more about Conduction? Learn about our story, mission, and the team behind our innovative solutions.
-
-- [About Us](/about)
-
-### Our Products
-
-Explore our range of products and services designed to meet your digital needs, from SLA/SAAS to training and consultancy.
-
-- [Products](/about/products)
-
-### Pricing
-
-Get a clear understanding of our transparent pricing structure and discover how Conduction can work within your budget.
-
-- [Pricing](/about/pricing)
-
-### Join Our Team
-
-Interested in being part of the Conduction family? Check out our vacancies and embark on a journey of innovation with us.
-
-- [Vacancies](/about/vacancies)
+- **[Browse Our Components](/components)** We invite you to explore the open-source software components that Conduction has produced. Each component is a testament to our dedication to making the digital world a better place for all.
+- **[About Us](/about)** Curious to know more about Conduction? Learn about our story, mission, and the team behind our innovative solutions.
+- **[Products](/about/products)** Explore our range of products and services designed to meet your digital needs, from SLA/SAAS to training and consultancy.
+- **[Pricing](/about/pricing)** Get a clear understanding of our transparent pricing structure and discover how Conduction can work within your budget.
+- **[Vacancies](/about/vacancies)** Interested in being part of the Conduction family? Check out our vacancies and embark on a journey of innovation with us.
 
 
