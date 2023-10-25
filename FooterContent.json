@@ -3,27 +3,28 @@
     "title": "Menu",
     "items": [
       {
-        "value": "Processes",
-        "ariaLabel": "Processes",
-        "setFilter": { "filter": "softwareType", "value": "process", "link": "/components" },
+        "value": "Componenten",
+        "ariaLabel": "Componenten",
         "icon": { "prefix": "fas", "icon": "arrow-right", "placement": "left" }
       },
       {
-        "value": "Data models",
-        "ariaLabel": "Data models",
-        "setFilter": { "filter": "softwareType", "value": "schema", "link": "/components" },
+        "value": "About us",
+        "ariaLabel": "About us",
         "icon": { "prefix": "fas", "icon": "arrow-right", "placement": "left" }
       },
       {
-        "value": "API's",
-        "ariaLabel": "API's",
-        "setFilter": { "filter": "softwareType", "value": "api", "link": "/components" },
+        "value": "Products",
+        "ariaLabel": "Products",
         "icon": { "prefix": "fas", "icon": "arrow-right", "placement": "left" }
       },
       {
-        "value": "Initiatives",
-        "ariaLabel": "Initiatives",
-        "setFilter": { "filter": "softwareType", "value": "concept", "link": "/components" },
+        "value": "Pricing",
+        "ariaLabel": "Pricing",
+        "icon": { "prefix": "fas", "icon": "arrow-right", "placement": "left" }
+      },
+      {
+        "value": "Vacancies",
+        "ariaLabel": "Vacancies",
         "icon": { "prefix": "fas", "icon": "arrow-right", "placement": "left" }
       }
     ]
@@ -55,6 +56,7 @@
     "title": "Contact",
     "items": [
       {
+        "label": "Digitaal contact",
         "value": "conduction.nl",
         "ariaLabel": "Website",
         "link": "https://conduction.nl/",
@@ -82,6 +84,7 @@
         "ariaLabel": "Phone number"
       },
       {
+        "label": "Overige",
         "value": "KVK: 76741850",
         "ariaLabel": "KVK",
         "icon": { "prefix": "fas", "icon": "email", "placement": "left" }

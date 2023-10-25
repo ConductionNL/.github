@@ -10,6 +10,7 @@
   },
   {
     "label": "Components",
+    "type": "internal",
     "current": {
       "pathname": "/components",
       "operator": "includes"
@@ -18,12 +19,10 @@
   },
   {
     "label": "About Conduction",
-    "type": "readme",
     "current": {
       "pathname": "/about",
       "operator": "includes"
     },
-    "handleClick": { "link": "https://github.com/ConductionNL/.github/blob/main/profile/README.md" },
     "subItems": [
       {
         "label": "About us",
