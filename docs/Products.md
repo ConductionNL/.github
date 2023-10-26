@@ -1,87 +1,80 @@
-# Conduction Products Overview
+# Overzicht van Conduction-producten
 
-Welcome to Conduction's product portfolio! We offer a wide range of services and solutions to meet your digital needs. Our products are categorized into four main categories: SLA/SAAS, Implementation, Training, and Consultancy.
+Welkom bij het productportfolio van Conduction! We bieden een breed scala aan diensten en oplossingen om aan uw digitale behoeften te voldoen. Onze producten zijn onderverdeeld in vier hoofdcategorieën: SLA/SAAS, Implementatie, Training en Consultancy.
 
 ## SLA/SAAS (Service Level Agreements / Software as a Service)
 
-### 1. Managed Common Gateway
+### 1. Beheerde Common Gateway
 
-- Description: Our Managed Common Gateway service provides a secure and efficient gateway solution for government agencies, ensuring reliable connectivity.
-- Benefits: Enhanced security, scalability, and reliability for digital services.
+- Beschrijving: Onze dienst Beheerde Common Gateway biedt een veilige en efficiënte gateway-oplossing voor overheidsinstanties, en zorgt voor betrouwbare connectiviteit.
+- Voordelen: Verbeterde beveiliging, schaalbaarheid en betrouwbaarheid voor digitale diensten.
 
-[More Details](/products/managed-common-gateway)
+[Meer Details](/products/managed-common-gateway)
 
 ### 2. Codebase Stewardship
 
-- Description: Codebase Stewardship offers expert code maintenance and management, ensuring the longevity and quality of your software projects.
-- Benefits: Codebase optimization, security, and compliance.
+- Beschrijving: Codebase Stewardship biedt expertcode-onderhoud en -beheer, en zorgt voor de duurzaamheid en kwaliteit van uw softwareprojecten.
+- Voordelen: Optimalisatie van codebase, beveiliging en compliance.
 
-[More Details](/products/codebase-stewardship)
+[Meer Details](/products/codebase-stewardship)
 
 ### 3. Mijn Omgeving (Open Webconcept)
 
-- Description: Mijn Omgeving is a user-friendly and accessible digital environment for citizens, built on the Open Webconcept (OWC).
-- Benefits: Improved citizen engagement, transparency, and accessibility.
+- Beschrijving: Mijn Omgeving is een gebruiksvriendelijke en toegankelijke digitale omgeving voor burgers, gebouwd op het Open Webconcept (OWC).
+- Voordelen: Verbeterde betrokkenheid van burgers, transparantie en toegankelijkheid.
 
-[More Details](/products/mijn-omgeving)
+[Meer Details](/products/mijn-omgeving)
 
-## Implementation
+## Implementatie
 
 ### 4. WOO Pagina (RAD)
 
-- Description: Our Rapid Application Development (RAD) for WOO Pages allows for quick and efficient creation of web pages.
-- Benefits: Speedy web page development, reduced time-to-market.
+- Beschrijving: Onze Rapid Application Development (RAD) voor WOO Pagina's maakt snelle en efficiënte creatie van webpagina's mogelijk.
+- Voordelen: Snelle ontwikkeling van webpagina's, verminderde time-to-market.
 
-[More Details](/products/woo-pagina)
+[Meer Details](/products/woo-pagina)
 
 ### 5. OC Pagina (RAD)
 
-- Description: OC Pagina (RAD) enables rapid development of online catalogs, simplifying the creation and management of catalog pages.
-- Benefits: Efficient catalog management, seamless updates.
+- Beschrijving: OC Pagina (RAD) maakt snelle ontwikkeling van online catalogi mogelijk en vereenvoudigt de creatie en het beheer van cataloguspagina's.
+- Voordelen: Efficiënt catalogusbeheer, naadloze updates.
 
-[More Details](/products/oc-pagina)
-
-### 6. KISS Pagina (RAD)
-
-- Description: KISS Pagina (RAD) provides a rapid development solution for straightforward web pages, ensuring simplicity and speed.
-- Benefits: Easy webpage creation, minimal complexity.
-
-[More Details](/products/kiss-pagina)
+[Meer Details](/products/oc-pagina)
 
 ## Training
 
-### 7. Digital Transformation Training
+### 7. Training Digitale Transformatie
 
-- Description: Our Digital Transformation Training programs equip your team with the knowledge and skills needed to navigate the digital landscape effectively.
-- Benefits: Enhanced digital literacy, adaptability, and innovation.
+- Beschrijving: Onze trainingsprogramma's Digitale Transformatie rusten uw team uit met de kennis en vaardigheden die nodig zijn om effectief te navigeren in het digitale landschap.
+- Voordelen: Verbeterde digitale geletterdheid, aanpassingsvermogen en innovatie.
 
-[More Details](/products/digital-transformation-training)
+[Meer Details](/products/digital-transformation-training)
 
-### 8. Open Webconcept Training
+### 8. Training Open Webconcept
 
-- Description: Open Webconcept Training offers in-depth training on the Open Webconcept (OWC), enabling your team to harness its potential.
-- Benefits: Expertise in OWC, streamlined development.
+- Beschrijving: Training Open Webconcept biedt diepgaande training over het Open Webconcept (OWC), waardoor uw team zijn potentieel kan benutten.
+- Voordelen: Expertise in OWC, gestroomlijnde ontwikkeling.
 
-[More Details](/products/open-webconcept-training)
+[Meer Details](/products/open-webconcept-training)
 
 ## Consultancy
 
-### 9. Architectural Consultancy
+### 9. Architectuur Consultancy
 
-- Description: Architectural Consultancy services provide expert guidance on system architecture, ensuring scalable and robust solutions.
-- Benefits: Effective system design, scalability, and reliability.
+- Beschrijving: Architectuur Consultancy biedt deskundige begeleiding bij systeemarchitectuur, waardoor schaalbare en robuuste oplossingen worden gegarandeerd.
+- Voordelen: Effectief systeemontwerp, schaalbaarheid en betrouwbaarheid.
 
-[More Details](/products/architectural-consultancy)
+[Meer Details](/products/architectural-consultancy)
 
-### 10. Project Management Consultancy
+### 10. Projectmanagement Consultancy
 
-- Description: Project Management Consultancy offers experienced project managers and scrum masters to drive successful project outcomes.
-- Benefits: Efficient project delivery, clear objectives.
+- Beschrijving: Projectmanagement Consultancy biedt ervaren projectmanagers en scrum masters om succesvolle projectresultaten te behalen.
+- Voordelen: Efficiënte projectoplevering, duidelijke doelstellingen.
 
-[More Details](/products/project-management-consultancy)
+[Meer Details](/products/project-management-consultancy)
 
-## Contact Us
+## Neem contact met ons op
 
-For more information on any of our products or to discuss your specific requirements, please contact our sales team at [sales@conduction.nl](mailto:sales@conduction.nl).
+Voor meer informatie over een van onze producten of om uw specifieke vereisten te bespreken, neemt u contact op met ons verkoopteam via [sales@conduction.nl](mailto:sales@conduction.nl).
 
-Thank you for considering Conduction for your digital solutions. We look forward to working with you!
+Bedankt voor het overwegen van Conduction voor uw digitale oplossingen. We

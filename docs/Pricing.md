@@ -1,71 +1,78 @@
-# Pricing at Conduction
+# Tarieven bij Conduction
 
-At Conduction, we offer a transparent and competitive pricing structure for our services. We understand the importance of clear pricing to help you make informed decisions. Our pricing is designed to reflect the complexity of the components you require, ensuring that you get the best value for your investment.
+Bij Conduction bieden we een transparante en competitieve prijsstructuur voor onze diensten aan. We begrijpen het belang van duidelijke prijzen om u te helpen geïnformeerde beslissingen te nemen. Onze prijzen zijn ontworpen om de complexiteit van de benodigde componenten weer te geven, zodat u de beste waarde voor uw investering krijgt.
 
-## Pricing Structure
+## SLA Prijsstructuur
 
-We offer two main SLA/SAAS pricing tiers:
+We bieden twee belangrijke SLA/SAAS-prijstiers:
 
-- **Simple Components:** €250 per month
-- **Complex Components:** €500 per month
+- **Eenvoudige Componenten:** €250 per maand
+- **Complexere Componenten:** €500 per maand
 
-## Component Pricing
+We hebben twee SLA/SAAS-prijsopties:
+- Standalone Software (waarbij elke component zijn eigen installatie heeft)
+- Framework-uitbreidingen (waarbij plugins/bundles op een gemeenschappelijk framework zijn geïnstalleerd)
 
-Here's a breakdown of the pricing for various components:
+### Prijzen voor Standalone Software
 
-| Component                        | Monthly Price | Open Catalogi | Product Page |
-| -------------------------------- | ------------- |---------------| ------------ |
-| Managed Common Gateway           | €500          | [Catalog](#)  | [Product](#) |
-| Codebase Stewardship             | €500          | [Catalog](#)  | [Product](#) |
-| WOO Page                    | €250          | [Catalog](#)  | [Product](#) |
-| OC Page                     | €250          | [Catalog](#)  | [Product](#) |
-| KISS Page                   | €250          | [Catalog](#)  | [Product](#) |
-| My Environment              | €500          | [Catalog](#)  | [Product](#) |
-| Management of NL Design Token    | €250          | [Catalog](#)  | [Product](#) |
-| Management of Municipal GitHub   | €250          | [Catalog](#)  | [Product](#) |
-| Securities                       | €250          | [Catalog](#)  | [Product](#) |
-| Open Registers (Registrations)   | €250          | [Catalog](#)  | [Product](#) |
-| E-Services (OWC)                | €250          | [Catalog](#)  | [Product](#) |
+| Component            | Maandelijkse Prijs | Implementatiekosten | Open Catalogi | Product Pagina |
+|----------------------| ------------------ |---------------------|---------------| --------------- |
+| Open WOO Pagina      | €250               | €2500                | [Catalogus](#) | [Product](#)   |
+| Open Catalogi Pagina | €250               | €2500                | [Catalogus](#) | [Product](#)   |
+| Product Pagina       | €250               | €2500                | [Catalogus](#) | [Product](#)   |
 
-Please note that the pricing for components is either €250 per month for simple components or €500 per month for complex components.
+### Prijzen voor Framework
 
-## What's Included?
+In het geval van framework-prijzen splitsen we tussen een basistarief voor het draaien van het framework en
 
-Our pricing includes:
+| Component                       | Maandelijkse Prijs | Implementatiekosten | Open Catalogi | Product Pagina |
+|---------------------------------|--------------------|---------------------|---------------| --------------- |
+| Common Gateway (Basis)          | €500               | €5000                | [Catalogus](#) | [Product](#)   |
+| Waardepapieren (Common Gateway) | €250               | €2500                | [Catalogus](#) | [Product](#)   |
+| Notify (Common Gateway)         | €250               | €2500                | [Catalogus](#) | [Product](#)   |
+| Open Webconcept (Basis)         | €500               | €5000                | [Catalogus](#) | [Product](#)   |
+| Open Pub (Open Webconcept)      | €250               | €2500                | [Catalogus](#) | [Product](#)   |
+| Open PDD (Open Webconcept)      | €500               | €5000                | [Catalogus](#) | [Product](#)   |
 
-- Ongoing support and maintenance for the specified component.
-- Regular updates and improvements.
-- Access to our expertise and knowledge.
-- Adherence to industry best practices and standards.
 
-## Custom Solutions
+## Wat is inbegrepen?
 
-If you have custom requirements or need a tailored solution for your organization, please contact us to discuss your needs. We can provide customized pricing based on your specific project.
+Onze prijzen zijn inclusief:
 
-## Consultancy and Development
+- Doorlopende ondersteuning en onderhoud voor de gespecificeerde component.
+- Regelmatige updates en verbeteringen.
+- Toegang tot onze expertise en kennis.
+- Naleving van de beste praktijken en normen in de branche.
 
-When hiring a development team, the following rates apply:
+## Consultancy en Ontwikkeling
 
-- Developers (Technical Administrators): €110 per hour
-- Consultants (Architects, Scrum Masters/Project Managers): €150 per hour
-- Strip Cards: A flat fee of €120 per hour
+| Diensten             | Maandelijkse Prijs | Implementatiekosten |Product Pagina   |
+|----------------------| ------------------ |---------------------|------------------ |
+| Codebase Stewardship | €500               | €2500                |[Lees meer](#)   |
+| NL Design Token      | €250               | €2500                |[Lees meer](#)   |
+| GitHub Stewardship   | €250               | €2500                |[Lees meer](#)   |
 
-A development team typically consists of an architect, scrum master/project manager, an administrator, and multiple developers. Additional costs (if incurred and agreed upon) are passed on directly.
+### Uurtarieven
+Bij het inhuren van een ontwikkelteam gelden de volgende tarieven:
 
-## Tiers and Strip Cards
+- Ontwikkelaars (Technisch Beheerders): €110 per uur
+- Consultants (Architecten, Scrum Masters/Projectmanagers): €150 per uur
+- Strippenkaarten: Een vast tarief van €120 per uur
 
-See the table below for discounts applied to strip cards. Please note that our prices are indexed to 2023 and will be adjusted annually based on the value index.
+Een ontwikkelteam bestaat doorgaans uit een architect, scrum master/projectmanager, een beheerder en meerdere ontwikkelaars. Bijkomende kosten (indien gemaakt en overeengekomen) worden direct doorberekend.
 
-| Tier Description        | Discount | Hourly Rate Consultancy | Hourly Rate Development | Flat Fee |
-|-------------------------|----------| ----------------------- | ----------------------- |----------|
-| 1. Less then 50 hours   | 0%       | €150/hour               | €110/hour               | €120/hour |
-| 2. 50-100-hour Strip Card | 5%       | €150/hour               | €110/hour               | €114/hour |
-| 3. 100-250-hour Strip Card | 10%      | €150/hour               | €110/hour               | €108/hour |
-| 4. 250-500-hour Strip Card | 15%      | €150/hour               | €110/hour               | €102/hour |
-| 5. 500 hours or more    | 20%      | €150/hour               | €110/hour               | €96/hour |
+### Tiers en Strippenkaarten
 
-## Contact Us
+Zie onderstaande tabel voor de kortingen die worden toegepast op stripkaarten. Houd er rekening mee dat onze prijzen zijn geïndexeerd naar 2023 en jaarlijks worden aangepast op basis van de waarde-index.
 
-For more information or to discuss your specific requirements, please contact our sales team at [sales@conduction.nl](mailto:sales@conduction.nl).
+| Tier Beschrijving          | Korting | Uurtarief Consultancy | Uurtarief Ontwikkeling | Vast Tarief |
+|-----------------------------|---------| ----------------------- | ----------------------- | ------------ |
+| 1. Minder dan 50 uur        | 0%      | €150/uur               | €110/uur               | €120/uur     |
+| 2. 50-100 uur               | 5%      | €150/uur               | €110/uur               | €114/uur     |
+| 3. 100-250 uur              | 10%     | €150/uur               | €110/uur               | €108/uur     |
+| 4. 250-500 uur              | 15%     | €150/uur               | €110/uur               | €102/uur     |
+| 5. 500 uur of meer          | 20%     | €150/uur               | €110/uur               | €96/uur      |
 
-Thank you for considering Conduction for your digital solutions. We look forward to working with you!
+## Neem contact met ons op
+
+Voor meer informatie of om uw specifieke wensen te bespreken, neemt u contact
