@@ -22,6 +22,7 @@ jobs:
       - name: Create an Open Catalogi page
         uses: OpenCatalogi/opencatalogi-action@1.0.0-SNAPSHOT.13.cda0940     
         with:
+          github_repository_name_as_prefix: false
           nl_design_theme_classname: 'conduction-theme'
           pull_from_branche: 'development'
           start_page: 'https://github.com/ConductionNL/.github/blob/main/docs/Catalogi.md'          
