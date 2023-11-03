@@ -1,10 +1,10 @@
 contact:
   email: ''
   phone: ''
-name: 'Conduction'
-description: 'Making the world a better place'
+description: Making the world a better place
+name: Conduction
 publiccodeYmlVersion: '0.2'
 softwareOwned: []
 softwareSupported: []
 softwareUsed: []
-website: 'https://conduction.nl/'
+website: https://conduction.nl/
