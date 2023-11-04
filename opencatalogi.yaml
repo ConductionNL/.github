@@ -1,10 +1,36 @@
 contact:
   email: ''
   phone: ''
-description: Making the world a better place
+description: At Conduction, we are driven by a vision that sees the digitization of the world as an extraordinary opportunity. It's a chance to transform our world into something more democratic, inclusive, and transparent. We understand that digitalization is not just inevitable but comes with immense potential and challenges.
 name: Conduction
 publiccodeYmlVersion: '0.2'
-softwareOwned: []
-softwareSupported: []
-softwareUsed: []
+softwareOwned:
+  - https://github.com/ConductionNL/conduction-components
+  - https://github.com/ConductionNL/woo-website-template
+  - https://github.com/ConductionNL/commonground-gateway
+softwareSupported:
+  - software: https://github.com/OpenCatalogi/web-app
+    type: community
+  - software: https://github.com/OpenCatalogi/publiccode-action
+    type: community
+  - software: https://github.com/OpenCatalogi/opencatalogi-action
+    type: community
+  - software: https://github.com/OpenCatalogi/OpenCatalogiBundle
+    type: community
+  - software: https://github.com/OpenCatalogi/productpage-action
+    type: community
+  - software: https://github.com/ConductionNL/conduction-components
+    type: community
+  - software: https://github.com/ConductionNL/woo-website-template
+    type: community
+  - software: https://github.com/ConductionNL/commonground-gateway
+    type: community
+softwareUsed:
+  - https://github.com/ConductionNL/conduction-components
+  - https://github.com/ConductionNL/commonground-gateway
+  - https://github.com/OpenCatalogi/OpenCatalogiBundle
+  - https://github.com/OpenCatalogi/web-app
+  - https://github.com/OpenCatalogi/opencatalogi-action
+  - https://github.com/OpenCatalogi/productpage-action
+  - https://github.com/OpenCatalogi/publiccode-action
 website: https://conduction.nl/
