@@ -13,21 +13,65 @@ softwareOwned:
 - https://github.com/ConductionNL/commonground-gateway
 softwareSupported:
 - software: https://github.com/OpenCatalogi/web-app
-  type: community
+  type: 'maintenance'
+  contact:
+    email: 'info@conduction.nl' # Public contact email
+    phone: '+31 (0)85 3036840' # Public contact phone number
 - software: https://github.com/OpenCatalogi/publiccode-action
-  type: community
+  type: 'maintenance'
+  contact:
+    email: 'info@conduction.nl' # Public contact email
+    phone: '+31 (0)85 3036840' # Public contact phone number
 - software: https://github.com/OpenCatalogi/opencatalogi-action
-  type: community
+  type: 'maintenance'
+  contact:
+    email: 'info@conduction.nl' # Public contact email
+    phone: '+31 (0)85 3036840' # Public contact phone number
 - software: https://github.com/OpenCatalogi/OpenCatalogiBundle
-  type: community
+  type: 'maintenance'
+  contact:
+    email: 'info@conduction.nl' # Public contact email
+    phone: '+31 (0)85 3036840' # Public contact phone number
 - software: https://github.com/OpenCatalogi/productpage-action
-  type: community
+  type: 'maintenance'
+  contact:
+    email: 'info@conduction.nl' # Public contact email
+    phone: '+31 (0)85 3036840' # Public contact phone number
 - software: https://github.com/ConductionNL/conduction-components
-  type: community
+  type: 'maintenance'
+  contact:
+    email: 'info@conduction.nl' # Public contact email
+    phone: '+31 (0)85 3036840' # Public contact phone number
 - software: https://github.com/ConductionNL/woo-website-template
-  type: community
+  type: 'maintenance'
+  contact:
+    email: 'info@conduction.nl' # Public contact email
+    phone: '+31 (0)85 3036840' # Public contact phone number
 - software: https://github.com/ConductionNL/commonground-gateway
-  type: community
+  type: 'maintenance'
+  contact:
+    email: 'info@conduction.nl' # Public contact email
+    phone: '+31 (0)85 3036840' # Public contact phone number
+- software: https://github.com/OpenWebconcept/openpdd
+  type: 'maintenance'
+  contact:
+    email: 'info@conduction.nl' # Public contact email
+    phone: '+31 (0)85 3036840' # Public contact phone number
+- software: https://github.com/OpenWebconcept/plugin-pdc-base
+  type: 'maintenance'
+  contact:
+    email: 'info@conduction.nl' # Public contact email
+    phone: '+31 (0)85 3036840' # Public contact phone number
+- software: https://github.com/OpenWebconcept/plugin-owc-gravityforms-zaaksysteem
+  type: 'maintenance'
+  contact:
+    email: 'info@conduction.nl' # Public contact email
+    phone: '+31 (0)85 3036840' # Public contact phone number
+- software: https://github.com/OpenWebconcept/plugin-openpub-base
+  type: 'maintenance'
+  contact:
+    email: 'info@conduction.nl' # Public contact email
+    phone: '+31 (0)85 3036840' # Public contact phone number
 softwareUsed:
 - https://github.com/ConductionNL/conduction-components
 - https://github.com/ConductionNL/commonground-gateway
