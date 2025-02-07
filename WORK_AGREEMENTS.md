@@ -14,6 +14,10 @@ Dit document bevat de dagelijkse werkafspraken voor het development team van Con
 - Gebruik correcte **labels en story points** voor een realistische sprintplanning.
 - Onvoorziene problemen worden **direct** gemeld in Slack en de volgende stand-up.
 
+## 🔄 Pull Requests & Code Reviews
+- Als een pull request wijzigingen vereist, is het aan de ontwikkelaar die de pull request heeft geopend, of de ontwikkelaar die de wijzigingen heeft aangebracht, om deze aan te passen.
+- De reviewer of andere ontwikkelaars kunnen helpen bij het oplossen van de gevraagde wijzigingen, indien daarom wordt gevraagd door de ontwikkelaar die de pull request heeft geopend.
+
 ## 🛠 Dagelijkse Werkregels
 - **Stand-up:** Elke werkdag om **10:00**, tenzij vooraf afgemeld.
 - **Stand-down:** Dagelijkse update in Slack om **16:30**.
