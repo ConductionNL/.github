@@ -42,6 +42,16 @@
      - Returns with feedback
      - Sets to "Selected for Development" and unassigns himself
 
+## Code Development 
+
+1. Developers can pick up unassigned issues in "Selected for Development"
+2. After completion and code merge to development branch:
+   - Status changes to "Review"
+   - Tester can test from development branch
+3. After successful testing, completed issues are:
+   - Presented to Product Owner during sprint review (Friday)
+   - Released to master branch on Monday morning following successful review
+
 ## Development Process
 
 1. Developers can pick up unassigned issues in "Selected for Development"
@@ -51,3 +61,16 @@
 3. After successful testing, completed issues are:
    - Presented to Product Owner during sprint review (Friday)
    - Released to master branch on Monday morning following successful review
+
+## Sprint Closure
+
+1. Scrum Master prepares sprint review proposal including:
+   - List of completed issues for review
+   - Overview of unfinished issues
+   - Recommendation per unfinished issue (keep or return to backlog)
+2. During sprint review (Friday):
+   - Team reviews unfinished issues
+   - Decision made per issue to either:
+     - Keep in sprint (if aligned with roadmap and capacity)
+     - Return to backlog
+   - Decisions are made in accordance with roadmap priorities
