@@ -57,11 +57,6 @@ const config = {
             position: 'left',
             label: 'Documentation',
           },
-          {
-            href: 'https://github.com/conductionnl/docs',
-            label: 'GitHub',
-            position: 'right',
-          },
         ],
       },
       footer: {
@@ -73,15 +68,6 @@ const config = {
               {
                 label: 'Documentation',
                 to: '/docs/intro',
-              },
-            ],
-          },
-          {
-            title: 'Community',
-            items: [
-              {
-                label: 'GitHub',
-                href: 'https://github.com/conductionnl/docs',
               },
             ],
           },
