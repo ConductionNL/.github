@@ -10,7 +10,7 @@ const config = {
   
   // GitHub pages deployment config
   organizationName: 'conductionnl', 
-  projectName: 'docs',
+  projectName: '.github',
   trailingSlash: false,
 
   onBrokenLinks: 'throw',
