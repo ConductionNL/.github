@@ -43,8 +43,23 @@ Critical aspects requiring special attention during implementation:
 - Rights management: Ensuring proper access control and security measures
 - Authentication: Implementing robust user verification systems
 - External collaboration: Maintaining seamless interaction with external partners and clients
+- Support Model: Evaluate the necessity of a paid SLA for Nextcloud support versus leveraging internal technical expertise for self-support
 
 The evaluation criteria follows a pragmatic "Good enough" approach. While we acknowledge that Nextcloud may not match every feature of Google Suite perfectly, our goal is to ensure that the platform meets our core operational requirements effectively. This realistic approach focuses on essential functionality rather than feature-for-feature parity.
+
+## Financial Comparison
+
+### Current Costs (Google Suite)
+- Google Workspace Business Standard: €12.00 per user/month
+- Estimated annual cost for 15 users: €2,160
+
+### Projected Nextcloud Costs
+- Self-hosted infrastructure: €150/month
+- Storage costs: €50/month
+- Optional Enterprise support: €1,900/year
+- Estimated annual total: €2,400 - €4,300 (depending on support model)
+
+The financial analysis shows that with 15 users, the current Google Suite costs are lower than the projected Nextcloud costs. However, the self-hosted model still provides more control over costs and scalability while maintaining operational efficiency. As our team grows, Nextcloud becomes more cost-effective since the infrastructure costs remain relatively stable regardless of user count. It is only cost effective to enable enterpice support above 30 users.
 
 ## Technical Comparison
 
@@ -82,3 +97,32 @@ Systematic migration approach:
 ### Phase 4: Wrap-up (Apr 25 - May 24)
 
 - Write a short blog post about the projects and lessons learned
+
+## Project Conclusions (TODO)
+
+The following sections need to be documented after project completion:
+
+- Technical Implementation Results
+  - Document successful configurations and setups
+  - Note any technical challenges encountered and solutions implemented
+  - Evaluate performance metrics and system stability
+
+- User Adoption & Feedback
+  - Summarize user experience feedback
+  - Document training effectiveness
+  - Highlight areas requiring additional support or improvements
+
+- Cost Analysis
+  - Compare actual costs against projections
+  - Document any unexpected expenses
+  - Analyze ROI and cost savings
+
+- Migration Process Review
+  - Document successful migration strategies
+  - Note lessons learned during the transition
+  - Identify potential improvements for future migrations
+
+- Recommendations
+  - Provide guidance for similar future projects
+  - Suggest optimizations and improvements
+  - List best practices discovered during implementation
