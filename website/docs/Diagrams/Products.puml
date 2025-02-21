@@ -1,0 +1,43 @@
+@startuml
+title Basis Architectuur
+footer: OpenWoo.app
+header: OpenWoo.app
+
+
+skinparam defaultFontName Arial
+skinparam nodesep 50
+skinparam ranksep 50
+skinparam shadowing false
+
+skinparam linetype ortho
+
+' Applications
+frame "Applications" {
+    component "Open Catalogi" as OC #4376FC
+    component "Zaak Afhandel App" as ZAA #4376FC
+    component "Klant Contact App" as KCA #4376FC
+    component "Larping" as LA #4376FC
+}
+
+' Core Components
+frame "Core Components" {
+    component "Open Connector" as OCon #4376FC
+    component "Open Register" as OR #4376FC
+}
+
+
+' Services
+frame "Services" {
+    component "DocuDesk" as DD #4376FC
+}
+
+OC -left-> DD
+
+OC -down-> OR
+ZAA -down-> OR
+KCA -down-> OR
+LA -down-> OR
+
+OCon -right-> OR
+
+@enduml
