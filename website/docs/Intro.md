@@ -1,3 +1,24 @@
+---
+id: intro
+title: Welcome to Conduction!👋
+sidebar_label: About COnduction
+sidebar_position: 1
+description: Welcome to Conduction - Building a better digital world for citizens through democratic, inclusive and transparent software
+keywords:
+  - introduction
+  - about
+  - mission
+  - values
+  - government
+  - digital transformation
+  - proactive services
+  - citizen-centric
+  - open source
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 # Welcome to Conduction!👋
 
 Whether you're a potential employee looking for your next career move, a client seeking innovative digital solutions, a fellow IT company interested in collaboration, or even a competitor curious about our approach - we're glad you're here!
@@ -32,24 +53,22 @@ Through proactive service delivery, we envision a future where government servic
 
 To achieve our ambitious goal of ensuring all Dutch residents automatically receive their entitled government services by 2035, we need strong foundational values that guide our approach. Here's how our core values directly support this mission:
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
 
 <Tabs>
-  <TabItem value="current" label="Current Values" default>
+<TabItem value="current" label="Current Values" default>
 
 **Democratic:** To create truly automated and proactive government services, we must incorporate diverse perspectives and needs. By actively seeking input from all stakeholders and valuing feedback, we ensure our solutions work for everyone, not just the digitally savvy.
 
 **Inclusive:** Automatic service delivery can only succeed if it reaches ALL citizens. Our commitment to creating solutions where everyone feels respected, supported, and valued ensures we don't leave anyone behind - whether they're elderly, disabled, or digitally challenged.
 
-**Transparent:** For citizens to trust automated government services, they need to understand how decisions are made. Our dedication to open communication and honest operations builds this crucial trust, helping citizens feel confident in receiving proactive services.
+ **Transparent:** For citizens to trust automated government services, they need to understand how decisions are made. Our dedication to open communication and honest operations builds this crucial trust, helping citizens feel confident in receiving proactive services.
 
 **Responsible and Sustainable:** Automated service delivery must be built to last. We develop solutions that not only serve current citizens but are sustainable for future generations, ensuring our 2035 goal creates lasting positive change.
 
 **Innovative:** Achieving universal automatic service delivery requires creative solutions to complex challenges. Our commitment to innovation and efficiency drives us to find new ways to identify citizen needs and deliver services proactively, making our 2035 goal achievable.
 
-  </TabItem>
-  <TabItem value="proposed" label="Proposed Values">
+</TabItem>
+<TabItem value="proposed" label="Proposed Values">
 
 **Innovative:** Innovation is at the heart of achieving our 2035 goal. We don't just follow trends - we create solutions that truly transform government service delivery. When working with clients, this means we actively explore cutting-edge technologies and creative approaches. For example, instead of building another form portal, we might suggest using AI to proactively identify citizen needs.
 
@@ -63,7 +82,7 @@ import TabItem from '@theme/TabItem';
 - Build upon existing open-source solutions instead of reinventing the wheel
 - Actively participate in and contribute to various open-source communities
 
-  </TabItem>
+</TabItem>
 </Tabs>
 
 ## Our Behavior: Living Our Values
