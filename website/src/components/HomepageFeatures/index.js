@@ -4,30 +4,33 @@ import styles from './styles.module.css';
 
 /**
  * List of features displayed on the homepage
- * Each feature has a title and description about the LarpingApp
+ * Each feature represents a main section of Conduction's documentation
  */
 const FeatureList = [
   {
-    title: 'Easy Event Management',
+    title: 'How We Work',
     description: (
       <>
-        Create and manage your LARP events with ease. Handle registrations, character sheets, and event schedules all in one place.
+        Comprehensive user manuals and organizational information to understand our processes, 
+        methodologies, and company culture. Learn how we operate and collaborate effectively.
       </>
     ),
   },
   {
-    title: 'Character Development',
+    title: 'ISO Certification',
     description: (
       <>
-        Build rich character backgrounds, track skills and abilities, and manage character progression throughout your LARP campaign.
+        Our commitment to quality and security standards through ISO certification. 
+        Detailed information about our quality management system and security practices.
       </>
     ),
   },
   {
-    title: 'Community Features',
+    title: 'Products & Services',
     description: (
       <>
-        Connect with other LARPers, join groups, and coordinate with your fellow players. Share stories and experiences within the LARP community.
+        Explore our suite of components and services. Detailed documentation about our 
+        solutions, technical specifications, and implementation guides.
       </>
     ),
   },

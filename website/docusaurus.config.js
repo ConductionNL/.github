@@ -45,7 +45,7 @@ const config = {
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
       navbar: {
-        title: 'Conduction Documentation',
+        title: 'Conduction',
         logo: {
           alt: 'Conduction Logo',
           src: 'img/logo.svg',
@@ -56,6 +56,16 @@ const config = {
             sidebarId: 'tutorialSidebar',
             position: 'left',
             label: 'Documentation',
+          },
+          {
+            href: 'https://github.com/conductionnl',
+            label: 'GitHub',
+            position: 'right',
+          },
+          {
+            href: 'https://www.linkedin.com/company/conduction-nl/',
+            label: 'LinkedIn',
+            position: 'right',
           },
         ],
       },

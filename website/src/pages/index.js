@@ -7,6 +7,25 @@ import HomepageFeatures from '@site/src/components/HomepageFeatures';
 
 import styles from './index.module.css';
 
+/**
+ * Component to display the main vision statement
+ * @returns {JSX.Element} VisionStatement component
+ */
+function VisionStatement() {
+  return (
+    <div className={clsx(styles.vision, 'margin-vert--xl')}>
+      <div className="container">
+        <div className="text--center">
+          <h2 className={styles.visionText}>
+            "By 2035, Conduction ensures that all residents of the Netherlands 
+            automatically receive the government services they are entitled to."
+          </h2>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function HomepageHeader() {
   const {siteConfig} = useDocusaurusContext();
   return (
@@ -18,7 +37,7 @@ function HomepageHeader() {
           <Link
             className="button button--secondary button--lg"
             to="/docs/intro">
-            Documentation
+            Explore Our Documentation →
           </Link>
         </div>
       </div>
@@ -33,6 +52,7 @@ export default function Home() {
       title={`${siteConfig.title}`}
       description="Flexible object management for Nextcloud">
       <HomepageHeader />
+      <VisionStatement />
       <main>
         <HomepageFeatures />
       </main>
