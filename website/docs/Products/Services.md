@@ -14,7 +14,7 @@ Both options provide the same high-quality service and support, just with differ
 - Benefits: Seamless integration with existing Nextcloud infrastructure, enhanced collaboration, and secure data management.
 - Available as: Both SLA and SAAS
 
-[More Details](/products/nextcloud-apps)
+[Learn more about our Nextcloud Applications](/Products/Components#nextcloud-applications)
 
 ### Common Ground Components
 
@@ -22,27 +22,27 @@ Both options provide the same high-quality service and support, just with differ
 - Benefits: Standardized architecture, interoperability with other government systems, and compliance with Common Ground principles.
 - Available as: Both SLA and SAAS
 
-[More Details](/products/common-ground-components)
+[Learn more about our Common Ground Components](/Products/Components#common-ground-components)
 
 ## Implementation
 
 The main difference between our Implementation and Development offerings lies in the customization level. Implementation services focus on configuring and deploying existing solutions, while Development involves creating custom features or applications.
 
-### WOO Page (RAD)
+### Nextcloud Applications
 
-- Description: Our Rapid Application Development (RAD) for WOO Pages enables fast and efficient webpage creation.
-- Benefits: Rapid webpage development, reduced time-to-market.
-- Available as: Implementation Service or Development Project
+- Description: Our Nextcloud applications extend the functionality of your Nextcloud environment with government-specific features.
+- Benefits: Seamless integration with existing Nextcloud infrastructure, enhanced collaboration, and secure data management.
+- Available as: Both SLA and SAAS
 
-[More Details](/products/woo-page)
+[Learn more about our Nextcloud Applications](/Products/Components#nextcloud-applications)
 
-### OC Page (RAD)
+### Common Ground Components
 
-- Description: OC Page (RAD) enables rapid development of online catalogs and simplifies catalog page creation and management.
-- Benefits: Efficient catalog management, seamless updates.
-- Available as: Implementation Service or Development Project
+- Description: Full-featured Common Ground components that form the building blocks of modern government digital infrastructure.
+- Benefits: Standardized architecture, interoperability with other government systems, and compliance with Common Ground principles.
+- Available as: Both SLA and SAAS
 
-[More Details](/products/oc-page)
+[Learn more about our Common Ground Components](/Products/Components#common-ground-components)
 
 ## Development
 
@@ -54,7 +54,7 @@ Our Development services focus on creating custom solutions for specific needs. 
 - Benefits: Fully customized solutions, seamless integration with Nextcloud, ongoing support.
 - Available as: Development Project
 
-[More Details](/products/nextcloud-development)
+[Learn more about our Nextcloud Applications](/Products/Components#nextcloud-applications)
 
 ### NL Design Frontends
 
@@ -62,51 +62,19 @@ Our Development services focus on creating custom solutions for specific needs. 
 - Benefits: Compliance with government design standards, accessible interfaces, modern user experience.
 - Available as: Development Project
 
-[More Details](/products/nl-design-development)
+[Learn more about NL Design Development](/Products/Components#nl-design-system)
 
 ## Training
 
-### Training Services
+Our comprehensive training programs help organizations maximize their digital potential.
 
-At Conduction, we offer comprehensive training programs designed to empower your organization in the digital age. Our training services are tailored to meet various skill levels and organizational needs, focusing on:
-
-- Technical Skills Development
-- Digital Transformation Strategies
-- Modern Development Practices
-- Common Ground Principles
-- Government Standards and Frameworks
-
-Our training approach combines:
-- Hands-on workshops
-- Interactive sessions
-- Real-world case studies
-- Practical exercises
-- Customized learning paths
-
-Benefits of our training services include:
-- Enhanced team capabilities
-- Improved digital literacy
-- Better adoption of new technologies
-- Increased operational efficiency
-- Sustainable knowledge transfer
-
-[Contact Us for Training Options](/products/training-services)
+[View our Training Programs](/Products/Training)
 
 ## Consultancy
 
-### Architecture Consultancy
+We offer expert consultancy services to guide your digital transformation journey.
 
-- Description: Architecture Consultancy provides expert guidance on system architecture, ensuring scalable and robust solutions.
-- Benefits: Effective system design, scalability, and reliability.
-
-[More Details](/products/architectural-consultancy)
-
-### Project Management Consultancy
-
-- Description: Project Management Consultancy provides experienced project managers and scrum masters to achieve successful project outcomes.
-- Benefits: Efficient project delivery, clear objectives.
-
-[More Details](/products/project-management-consultancy)
+[Learn more about our Consultancy Services](/Products/Consultancy)
 
 ## Contact Us
 
