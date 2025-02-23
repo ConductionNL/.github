@@ -3,7 +3,6 @@ id: products
 title: Our Products & Solutions
 sidebar_label: Products Overview
 sidebar_position: 1
-slug: docs/products
 description: Explore Conduction's suite of innovative products and solutions designed to transform government services and enhance citizen experience
 keywords:
   - open source products

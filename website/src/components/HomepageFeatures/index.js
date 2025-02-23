@@ -16,7 +16,7 @@ const FeatureList = [
         methodologies, and company culture. Learn how we operate and collaborate effectively.
       </>
     ),
-    link: '/docs/way-of-work',
+    link: '/docs/way-of-work/Intro',
     buttonText: 'Learn How We Work',
   },
   {
@@ -27,7 +27,7 @@ const FeatureList = [
         Detailed information about our quality management system and security practices.
       </>
     ),
-    link: '/docs/ISO',
+    link: '/docs/ISO/Intro',
     buttonText: 'View ISO Documentation',
   },
   {
@@ -38,7 +38,7 @@ const FeatureList = [
         solutions, technical specifications, and implementation guides.
       </>
     ),
-    link: '/docs/Products',
+    link: '/docs/Products/Intro',
     buttonText: 'Explore Products',
   },
 ];

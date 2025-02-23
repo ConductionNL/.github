@@ -14,7 +14,7 @@ Both options provide the same high-quality service and support, just with differ
 - Benefits: Seamless integration with existing Nextcloud infrastructure, enhanced collaboration, and secure data management.
 - Available as: Both SLA and SAAS
 
-[Learn more about our Nextcloud Applications](/Products/Components#nextcloud-applications)
+[Learn more about our Nextcloud Applications](Components.md#nextcloud-applications)
 
 ### Common Ground Components
 
@@ -22,7 +22,7 @@ Both options provide the same high-quality service and support, just with differ
 - Benefits: Standardized architecture, interoperability with other government systems, and compliance with Common Ground principles.
 - Available as: Both SLA and SAAS
 
-[Learn more about our Common Ground Components](/Products/Components#common-ground-components)
+[Learn more about our Common Ground Components](Components.md#common-ground-components)
 
 ## Implementation
 
@@ -34,7 +34,7 @@ The main difference between our Implementation and Development offerings lies in
 - Benefits: Seamless integration with existing Nextcloud infrastructure, enhanced collaboration, and secure data management.
 - Available as: Both SLA and SAAS
 
-[Learn more about our Nextcloud Applications](/Products/Components#nextcloud-applications)
+[Learn more about our Nextcloud Applications](Components.md#nextcloud-applications)
 
 ### Common Ground Components
 
@@ -42,7 +42,7 @@ The main difference between our Implementation and Development offerings lies in
 - Benefits: Standardized architecture, interoperability with other government systems, and compliance with Common Ground principles.
 - Available as: Both SLA and SAAS
 
-[Learn more about our Common Ground Components](/Products/Components#common-ground-components)
+[Learn more about our Common Ground Components](Components.md#common-ground-components)
 
 ## Development
 
@@ -54,7 +54,7 @@ Our Development services focus on creating custom solutions for specific needs. 
 - Benefits: Fully customized solutions, seamless integration with Nextcloud, ongoing support.
 - Available as: Development Project
 
-[Learn more about our Nextcloud Applications](/Products/Components#nextcloud-applications)
+[Learn more about our Nextcloud Applications](Components.md#nextcloud-applications)
 
 ### NL Design Frontends
 
@@ -62,19 +62,19 @@ Our Development services focus on creating custom solutions for specific needs. 
 - Benefits: Compliance with government design standards, accessible interfaces, modern user experience.
 - Available as: Development Project
 
-[Learn more about NL Design Development](/Products/Components#nl-design-system)
+[Learn more about NL Design Development](Components.md#nl-design-system)
 
 ## Training
 
 Our comprehensive training programs help organizations maximize their digital potential.
 
-[View our Training Programs](/Products/Training)
+[View our Training Programs](Training.md)
 
 ## Consultancy
 
 We offer expert consultancy services to guide your digital transformation journey.
 
-[Learn more about our Consultancy Services](/Products/Consultancy)
+[Learn more about our Consultancy Services](Consultancy.md)
 
 ## Contact Us
 
