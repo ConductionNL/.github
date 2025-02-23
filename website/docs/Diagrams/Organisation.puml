@@ -1,0 +1,79 @@
+@startuml
+title Organisatie Structuur
+footer: OpenWoo.app
+header: OpenWoo.app
+
+skinparam defaultFontName Arial
+skinparam nodesep 50
+skinparam ranksep 50
+skinparam shadowing false
+skinparam linetype ortho
+
+' Shareholders
+frame "Shareholders" {
+    component "Shareholder 1 B.V." as SH1 #87CEEB
+    component "Shareholder 2 B.V." as SH2 #87CEEB
+    component "Shareholder 3 B.V." as SH3 #87CEEB
+}
+
+' Board
+frame "Board" {
+    component "Algemeen Directeur" as AD #98FB98
+}
+
+' Lead Team frame
+frame "Lead Team" as LT {
+    component "Team Lead Beheer" as TLB #FFA07A
+    component "Team Lead Ontwikkeling" as TLO #FFA07A
+    component "Team Lead Sales & Marketing" as TLS #FFA07A
+    component "Team Lead R&I" as TLR #FFA07A
+    component "Team Lead P&F" as TLP #FFA07A
+}
+
+' Teams
+frame "Teams" {
+    ' Beheer Team
+    frame "Beheer" {
+        component "Team Lead Beheer" as TLB2 #FFA07A
+        component "Consultants" as CON #FFE4B5
+    }
+
+    ' Ontwikkeling Team
+    frame "Ontwikkeling" {
+        component "Team Lead Ontwikkeling" as TLO2 #FFA07A
+        component "Developers" as DEV #FFE4B5
+    }
+
+    ' Sales & Marketing Team
+    frame "Sales & Marketing" {
+        component "Team Lead S&M" as TLS2 #FFA07A
+    }
+
+    ' Research & Innovation Team
+    frame "Research & Innovation" {
+        component "Team Lead R&I" as TLR2 #FFA07A
+        component "Solution Architects" as SA #FFE4B5
+    }
+
+    ' People & Finance Team
+    frame "People & Finance" {
+        component "Team Lead P&F" as TLP2 #FFA07A
+    }
+}
+
+' Relationships
+Shareholders -[#gray]-> Board
+
+Board -[#gray]down-> LT
+
+TLB -[#gray]down-> TLB2
+TLO -[#gray]down-> TLO2
+TLS -[#gray]down-> TLS2
+TLR -[#gray]down-> TLR2
+TLP -[#gray]down-> TLP2
+
+TLB2 -[#gray]down-> CON
+TLO2 -[#gray]down-> DEV
+TLR2 -[#gray]down-> SA
+
+@enduml
