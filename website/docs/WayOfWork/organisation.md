@@ -1,3 +1,4 @@
+---
 id: organisation
 title: Organizational Structure at Conduction
 sidebar_label: Organization
@@ -31,11 +32,68 @@ Our shareholder structure consists of three entities:
 - Shareholder 3 B.V.
 
 ### Board
-The board consists of:
-- General Director (Algemeen Directeur)
+Currently, our board consists of:
+- General Director (Algemeen Directeur / Chief Executive Officer)
+
+#### Strategic Focus
+The board operates exclusively at a strategic level, focusing on:
+- Long-term organizational vision and direction
+- Strategic decision-making and policy development
+- Overall company performance and growth
+- Stakeholder relationships and accountability
+- Risk management and compliance oversight
+- Corporate governance
+
+This strategic focus ensures that:
+- The organization maintains its long-term vision while the Leadership Team handles operational execution
+- Strategic decisions are made with consideration of market trends and organizational capabilities
+- Resources are allocated in alignment with long-term objectives
+- The organization maintains proper governance and oversight
+
+#### Future Board Development
+While our current board structure is intentionally lean with a single Chief Executive Officer, we have a strategic vision for board expansion that aligns with our organizational growth. This measured approach to board development ensures that our governance structure evolves in harmony with:
+
+- **Organizational Scale**: Board expansion will parallel our company's growth in size and complexity
+- **Operational Needs**: Additional board positions will be created to address specific organizational requirements
+- **Market Demands**: Board composition will adapt to changing market conditions and opportunities
+- **Regulatory Requirements**: Board structure will evolve to meet governance requirements as we grow
+
+Potential future board positions may include:
+- Chief Financial Officer (CFO)
+- Chief Technology Officer (CTO)
+- Chief Operations Officer (COO)
+
+The timing and sequence of these additions will be carefully considered to ensure they:
+- Add clear value to organizational governance
+- Support sustainable growth
+- Maintain efficient decision-making processes
+- Provide appropriate oversight and leadership
+
+This approach allows us to maintain agile decision-making in our current phase while having a clear vision for scaling our governance structure as the organization matures.
 
 ### Leadership Team
-Our leadership team consists of five key roles, each with specific responsibilities and competencies.
+Our organization intentionally operates with a Leadership Team rather than a traditional Management Team. This distinction is fundamental to our organizational philosophy and way of working.
+
+#### Leadership vs Management Approach
+We believe in "first among equals" rather than traditional top-down management. Our Leadership Team members are:
+- Actively involved in daily operations alongside their teams
+- Leading by example and expertise rather than position
+- Both team members and team leaders simultaneously
+- Focused on enabling and empowering their teams
+
+#### Operational Focus
+The Leadership Team operates primarily at an operational level:
+- Meets weekly to address operational concerns
+- Ensures cross-team collaboration and alignment
+- Resolves operational challenges
+- Facilitates knowledge sharing between teams
+- Implements strategic decisions in daily operations
+
+#### Team Integration
+Leadership Team members maintain a dual role:
+- End responsibility for their team's performance and development
+- Active participation in their team's daily work
+This approach ensures leaders stay connected to operational realities while guiding their teams.
 
 #### Expected Competencies for Leadership Team Members
 - Strategic thinking: Ability to develop and implement long-term vision
