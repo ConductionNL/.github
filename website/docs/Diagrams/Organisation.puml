@@ -21,59 +21,89 @@ frame "Board" {
     component "Algemeen Directeur" as AD #98FB98
 }
 
-' Lead Team frame
+' Leadership Team
 frame "Leadership Team" as LT {
-    component "Team Lead Beheer" as TLB #FFA07A
-    component "Team Lead Ontwikkeling" as TLO #FFA07A
-    component "Team Lead Sales & Marketing" as TLS #FFA07A
-    component "Team Lead R&I" as TLR #FFA07A
-    component "Team Lead P&F" as TLP #FFA07A
+    component "Team Lead HR & Quality" as TLHQ #FFA07A
+    component "Team Lead Finance" as TLF #FFA07A
+    component "Team Lead Operations" as TLO #FFA07A
+    component "Team Lead Development" as TLD #FFA07A
+    component "Team Lead Sales & Marketing" as TLSM #FFA07A
+    component "Team Lead R&I" as TLRI #FFA07A
 }
 
 ' Teams
 frame "Teams" {
-    ' Beheer Team
-    frame "Beheer" {
-        component "Team Lead Beheer" as TLB2 #FFA07A
+    ' HR & Quality Team
+    frame "HR & Quality" {
+        component "HR Lead" as HRL #FFA07A
+        component "Quality Manager" as QM #FFE4B5
+    }
+
+    ' Finance Team
+    frame "Finance" {
+        component "Finance Lead" as FL #FFA07A
+        component "Financial Controller" as FC #FFE4B5
+    }
+
+    ' Operations Team
+    frame "Operations" {
+        component "Operations Lead" as OL #FFA07A
+        component "Support Engineers" as SE #FFE4B5
         component "Consultants" as CON #FFE4B5
     }
 
-    ' Ontwikkeling Team
-    frame "Ontwikkeling" {
-        component "Team Lead Ontwikkeling" as TLO2 #FFA07A
+    ' Development Team
+    frame "Development" {
+        component "Development Lead" as DL #FFA07A
+        component "Product Owner" as PO #FFE4B5
+        component "Lead Developer" as LD #FFE4B5
         component "Developers" as DEV #FFE4B5
     }
 
     ' Sales & Marketing Team
     frame "Sales & Marketing" {
-        component "Team Lead S&M" as TLS2 #FFA07A
+        component "Commercial Lead" as CL #FFA07A
+        component "Sales Support" as SS #FFE4B5
+        component "Marketing Communication" as MC #FFE4B5
     }
 
     ' Research & Innovation Team
-    frame "Research & Innovation" {
-        component "Team Lead R&I" as TLR2 #FFA07A
+    frame "R&I" {
+        component "R&D Lead" as RDL #FFA07A
         component "Solution Architects" as SA #FFE4B5
-    }
-
-    ' People & Finance Team
-    frame "People & Finance" {
-        component "Team Lead P&F" as TLP2 #FFA07A
     }
 }
 
 ' Relationships
 Shareholders -[#gray]-> Board
-
 Board -[#gray]down-> LT
 
-TLB -[#gray]down-> TLB2
-TLO -[#gray]down-> TLO2
-TLS -[#gray]down-> TLS2
-TLR -[#gray]down-> TLR2
-TLP -[#gray]down-> TLP2
+' HR & Quality relationships
+TLHQ -[#gray]down-> HRL
+HRL -[#gray]down-> QM
 
-TLB2 -[#gray]down-> CON
-TLO2 -[#gray]down-> DEV
-TLR2 -[#gray]down-> SA
+' Finance relationships
+TLF -[#gray]down-> FL
+FL -[#gray]down-> FC
+
+' Operations relationships
+TLO -[#gray]down-> OL
+OL -[#gray]down-> SE
+OL -[#gray]down-> CON
+
+' Development relationships
+TLD -[#gray]down-> DL
+DL -[#gray]down-> PO
+DL -[#gray]down-> LD
+LD -[#gray]down-> DEV
+
+' Sales & Marketing relationships
+TLSM -[#gray]down-> CL
+CL -[#gray]down-> SS
+CL -[#gray]down-> MC
+
+' R&I relationships
+TLRI -[#gray]down-> RDL
+RDL -[#gray]down-> SA
 
 @enduml
