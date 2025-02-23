@@ -17,6 +17,9 @@ keywords:
   - collaboration
 ---
 
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 # Organizational Structure
 
 At Conduction, we maintain a clear organizational structure that promotes collaboration, innovation, and efficient delivery of solutions. Here's an overview of our organization:
@@ -140,9 +143,34 @@ This approach ensures leaders stay connected to operational realities while guid
    - Leadership Team: Key role in shaping innovation and strategic development
    - Team Lead: Contributing to execution of innovation initiatives
 
+
+## Functions vs Roles
+
+In our organization, we distinguish between functions and roles:
+
+### Functions
+- Formal, established positions
+- Specific and structural
+- Fixed tasks and responsibilities
+- Part of employment agreement
+- Long-term focused
+
+### Roles
+- Flexible task collections
+- Context-dependent
+- Can be filled by multiple persons
+- Focused on collaboration and results
+- Can change based on team needs
+
+This structure allows us to maintain clear organizational hierarchy while enabling the flexibility needed in a modern, agile environment.
+
 ## Specific Team Roles and Responsibilities
 
 ### 1. HR (People & Finance)
+
+<Tabs>
+<TabItem value="hrLead" label="HR Lead" default>
+
 #### HR Lead
 **Key Responsibilities:**
 - Strategic HR goals execution
@@ -158,6 +186,9 @@ This approach ensures leaders stay connected to operational realities while guid
 - Mediator
 - Internal Communicator
 - Recruiter
+
+</TabItem>
+<TabItem value="qualityManager" label="Quality Manager">
 
 #### Quality Manager
 **Key Responsibilities:**
@@ -237,7 +268,13 @@ This approach ensures leaders stay connected to operational realities while guid
   - Risk assessment
   - Preventive actions
 
+</TabItem>
+</Tabs>
+
 ### 2. Finance (People & Finance)
+
+<Tabs>
+<TabItem value="financeLead" label="Finance Lead" default>
 #### Finance Lead
 **Key Responsibilities:**
 - Financial planning and KPI monitoring
@@ -251,7 +288,13 @@ This approach ensures leaders stay connected to operational realities while guid
 - Cost Analyst
 - Reporting Specialist
 
+</TabItem>
+</Tabs>
+
 ### 3. Quality and Safety
+
+<Tabs>
+<TabItem value="qualityLead" label="Quality Lead" default>
 #### Quality and Safety Lead
 **Key Responsibilities:**
 - Quality standards maintenance
@@ -266,7 +309,13 @@ This approach ensures leaders stay connected to operational realities while guid
 - Risk Manager
 - Audit Specialist
 
+</TabItem>
+</Tabs>
+
 ### 4. Operations (Beheer)
+
+<Tabs>
+<TabItem value="operationsLead" label="Operations Lead" default>
 #### Operations Lead
 **Key Responsibilities:**
 - Operational process management
@@ -281,6 +330,9 @@ This approach ensures leaders stay connected to operational realities while guid
 - Technical Support
 - Support Staff
 - Implementation Specialist
+
+</TabItem>
+<TabItem value="supportEngineer" label="Support Engineer" default>
 
 #### Support Engineer
 **Key Responsibilities:**
@@ -359,8 +411,13 @@ This approach ensures leaders stay connected to operational realities while guid
   - Suggests process improvements
   - Keeps skills up-to-date
   - Shares best practices
+</TabItem>
+</Tabs>
 
 ### 5. Development
+
+<Tabs>
+<TabItem value="developmentLead" label="Development Lead" default>
 #### Development Lead
 **Key Responsibilities:**
 - Development team leadership
@@ -401,6 +458,9 @@ This approach ensures leaders stay connected to operational realities while guid
   - Manages expectations
   - Presents product progress
 
+</TabItem>
+<TabItem value="leadDeveloper" label="Lead Developer" default>
+
 #### Lead Developer
 **Key Responsibilities:**
 - Technical leadership and mentoring
@@ -426,6 +486,9 @@ This approach ensures leaders stay connected to operational realities while guid
   - Resolves complex technical issues
   - Provides technical guidance
   - Optimizes development processes
+
+</TabItem>
+<TabItem value="developer" label="Developer (Full Stack)" default>
 
 #### Developer (Full Stack)
 **Key Responsibilities:**
@@ -483,8 +546,13 @@ This approach ensures leaders stay connected to operational realities while guid
 - Participates in code reviews
 - Shares knowledge with team members
 - Continuously learns and adapts to new technologies
+</TabItem>
+</Tabs>
 
 ### 6. Sales and Marketing
+
+<Tabs>
+<TabItem value="commercialLead" label="Commercial Lead" default>
 #### Commercial Lead
 **Key Responsibilities:**
 - Revenue growth
@@ -497,6 +565,9 @@ This approach ensures leaders stay connected to operational realities while guid
 - Partnership Growth Specialist
 - Marketeer
 - Lead Generator
+
+</TabItem>
+<TabItem value="salesSupport" label="Sales Support & Marketing Communication Specialist" default>
 
 #### Sales Support & Marketing Communication Specialist
 **Key Responsibilities:**
@@ -540,8 +611,13 @@ This approach ensures leaders stay connected to operational realities while guid
 - Customer service orientation
 - Attention to detail
 - Basic understanding of sales processes
+</TabItem>
+</Tabs>
 
 ### 7. Research & Innovation
+
+<Tabs>
+<TabItem value="rdLead" label="R&D Lead" default>
 #### R&D Lead
 **Key Responsibilities:**
 - Innovation and product development
@@ -554,6 +630,9 @@ This approach ensures leaders stay connected to operational realities while guid
 - Prototype Developer
 - Trend Analyst
 - Experiment Leader
+
+</TabItem>
+<TabItem value="solutionArchitect" label="Solution Architect" default>
 
 #### Solution Architect
 **Key Responsibilities:**
@@ -591,22 +670,5 @@ This approach ensures leaders stay connected to operational realities while guid
 - Strategic thinking
 - Innovation mindset
 
-## Functions vs Roles
-
-In our organization, we distinguish between functions and roles:
-
-### Functions
-- Formal, established positions
-- Specific and structural
-- Fixed tasks and responsibilities
-- Part of employment agreement
-- Long-term focused
-
-### Roles
-- Flexible task collections
-- Context-dependent
-- Can be filled by multiple persons
-- Focused on collaboration and results
-- Can change based on team needs
-
-This structure allows us to maintain clear organizational hierarchy while enabling the flexibility needed in a modern, agile environment.
+</TabItem>
+</Tabs>
