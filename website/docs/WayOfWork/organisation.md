@@ -314,8 +314,6 @@ This structure allows us to maintain clear organizational hierarchy while enabli
 
 ### 4. Operations (Beheer)
 
-<Tabs>
-<TabItem value="operationsLead" label="Operations Lead" default>
 #### Operations Lead
 **Key Responsibilities:**
 - Operational process management
@@ -331,8 +329,6 @@ This structure allows us to maintain clear organizational hierarchy while enabli
 - Support Staff
 - Implementation Specialist
 
-</TabItem>
-<TabItem value="supportEngineer" label="Support Engineer" default>
 
 #### Support Engineer
 **Key Responsibilities:**
@@ -411,8 +407,6 @@ This structure allows us to maintain clear organizational hierarchy while enabli
   - Suggests process improvements
   - Keeps skills up-to-date
   - Shares best practices
-</TabItem>
-</Tabs>
 
 ### 5. Development
 
