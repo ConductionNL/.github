@@ -22,7 +22,7 @@ frame "Board" {
 }
 
 ' Lead Team frame
-frame "Lead Team" as LT {
+frame "Leadership Team" as LT {
     component "Team Lead Beheer" as TLB #FFA07A
     component "Team Lead Ontwikkeling" as TLO #FFA07A
     component "Team Lead Sales & Marketing" as TLS #FFA07A
