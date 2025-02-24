@@ -466,10 +466,8 @@ This structure allows us to maintain clear organizational hierarchy while enabli
   - Manages expectations
   - Presents product progress
 
-
 </TabItem>
-</Tabs>
-
+<TabItem value="leadDeveloper" label="Lead Developer" default>
 
 #### Lead Developer
 **Key Responsibilities:**
@@ -497,6 +495,8 @@ This structure allows us to maintain clear organizational hierarchy while enabli
   - Provides technical guidance
   - Optimizes development processes
 
+</TabItem>
+<TabItem value="developer" label="Developer (Full Stack)" default>
 
 #### Developer (Full Stack)
 **Key Responsibilities:**
@@ -555,7 +555,13 @@ This structure allows us to maintain clear organizational hierarchy while enabli
 - Shares knowledge with team members
 - Continuously learns and adapts to new technologies
 
+</TabItem>
+</Tabs>
+
 ### 6. Sales and Marketing
+
+<Tabs>
+<TabItem value="commercialLead" label="Commercial Lead" default>
 
 #### Commercial Lead
 **Key Responsibilities:**
@@ -570,6 +576,8 @@ This structure allows us to maintain clear organizational hierarchy while enabli
 - Marketeer
 - Lead Generator
 
+</TabItem>
+<TabItem value="salesSupport" label="Sales Support & Marketing Communication Specialist" default>
 
 #### Sales Support & Marketing Communication Specialist
 **Key Responsibilities:**
@@ -614,8 +622,14 @@ This structure allows us to maintain clear organizational hierarchy while enabli
 - Attention to detail
 - Basic understanding of sales processes
 
+</TabItem>
+</Tabs>
 
 ### 7. Research & Innovation
+
+
+<Tabs>
+<TabItem value="rdLead" label="R&D Lead" default>
 
 #### R&D Lead
 **Key Responsibilities:**
@@ -630,6 +644,8 @@ This structure allows us to maintain clear organizational hierarchy while enabli
 - Trend Analyst
 - Experiment Leader
 
+</TabItem>
+<TabItem value="solutionArchitect" label="Solution Architect" default>
 
 #### Solution Architect
 **Key Responsibilities:**
@@ -666,3 +682,6 @@ This structure allows us to maintain clear organizational hierarchy while enabli
 - Excellent communication abilities
 - Strategic thinking
 - Innovation mindset
+
+</TabItem>
+</Tabs>
