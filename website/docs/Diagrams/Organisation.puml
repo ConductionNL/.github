@@ -37,6 +37,7 @@ frame "Teams" {
     frame "HR & Quality" {
         component "Team Lead HR & Quality" as HRL #FFA07A
         component "Quality Manager" as QM #FFE4B5
+        component "Office Support" as OS #FFE4B5
     }
 
     ' Finance Team
@@ -81,7 +82,7 @@ Board -[#gray]down-> LT
 ' HR & Quality relationships
 TLHQ -[#gray]down-> HRL
 HRL -[#gray]down-> QM
-
+HRL -[#gray]down-> OS
 ' Finance relationships
 TLF -[#gray]down-> FL
 FL -[#gray]down-> FC
