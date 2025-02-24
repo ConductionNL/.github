@@ -35,26 +35,26 @@ frame "Leadership Team" as LT {
 frame "Teams" {
     ' HR & Quality Team
     frame "HR & Quality" {
-        component "HR Lead" as HRL #FFA07A
+        component "Team Lead HR & Quality" as HRL #FFA07A
         component "Quality Manager" as QM #FFE4B5
     }
 
     ' Finance Team
     frame "Finance" {
-        component "Finance Lead" as FL #FFA07A
+        component "Team Lead Finance" as FL #FFA07A
         component "Financial Controller" as FC #FFE4B5
     }
 
     ' Operations Team
     frame "Operations" {
-        component "Operations Lead" as OL #FFA07A
+        component "Team Lead Operations" as OL #FFA07A
         component "Support Engineers" as SE #FFE4B5
         component "Consultants" as CON #FFE4B5
     }
 
     ' Development Team
     frame "Development" {
-        component "Development Lead" as DL #FFA07A
+        component "Team Lead Development" as DL #FFA07A
         component "Product Owner" as PO #FFE4B5
         component "Lead Developer" as LD #FFE4B5
         component "Developers" as DEV #FFE4B5
@@ -62,14 +62,14 @@ frame "Teams" {
 
     ' Sales & Marketing Team
     frame "Sales & Marketing" {
-        component "Commercial Lead" as CL #FFA07A
+        component "Team Lead Sales & Marketing"" as CL #FFA07A
         component "Sales Support" as SS #FFE4B5
         component "Marketing Communication" as MC #FFE4B5
     }
 
     ' Research & Innovation Team
     frame "R&I" {
-        component "R&D Lead" as RDL #FFA07A
+        component "Team Lead R&I" as RDL #FFA07A
         component "Solution Architects" as SA #FFE4B5
     }
 }
