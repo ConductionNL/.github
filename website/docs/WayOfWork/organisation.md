@@ -275,6 +275,7 @@ This structure allows us to maintain clear organizational hierarchy while enabli
 
 <Tabs>
 <TabItem value="financeLead" label="Finance Lead" default>
+
 #### Finance Lead
 **Key Responsibilities:**
 - Financial planning and KPI monitoring
@@ -295,6 +296,7 @@ This structure allows us to maintain clear organizational hierarchy while enabli
 
 <Tabs>
 <TabItem value="qualityLead" label="Quality Lead" default>
+
 #### Quality and Safety Lead
 **Key Responsibilities:**
 - Quality standards maintenance
@@ -313,7 +315,6 @@ This structure allows us to maintain clear organizational hierarchy while enabli
 </Tabs>
 
 ### 4. Operations (Beheer)
-
 
 <Tabs>
 <TabItem value="operationsLead" label="Operations Lead" default>
@@ -419,6 +420,9 @@ This structure allows us to maintain clear organizational hierarchy while enabli
 
 ### 5. Development
 
+<Tabs>
+<TabItem value="developmentLead" label="Development Lead" default>
+
 #### Development Lead
 **Key Responsibilities:**
 - Development team leadership
@@ -432,6 +436,9 @@ This structure allows us to maintain clear organizational hierarchy while enabli
 - Technical Direction
 - Process Improvement
 - Stakeholder Management
+
+</TabItem>
+<TabItem value="productOwner" label="Product Owner" default>
 
 #### Product Owner
 **Key Responsibilities:**
@@ -458,6 +465,10 @@ This structure allows us to maintain clear organizational hierarchy while enabli
   - Gathers and processes feedback
   - Manages expectations
   - Presents product progress
+
+
+</TabItem>
+</Tabs>
 
 
 #### Lead Developer
