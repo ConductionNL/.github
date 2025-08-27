@@ -1,0 +1,24 @@
+{
+  "unversionedId": "Products/Projects/Nextcon",
+  "id": "Products/Projects/Nextcon",
+  "title": "NEXTCon",
+  "description": "The NEXTCon project represents an ambitious initiative to evaluate and implement Nextcloud as a comprehensive replacement for our current Microsoft 365 and Google Suite environment at Conduction. This transition aligns with our organizational values of open-source adoption and digital sovereignty, while potentially reducing our dependency on proprietary software solutions.",
+  "source": "@site/docs/Products/Projects/Nextcon.md",
+  "sourceDirName": "Products/Projects",
+  "slug": "/Products/Projects/Nextcon",
+  "permalink": "/docs/Products/Projects/Nextcon",
+  "draft": false,
+  "editUrl": "https://github.com/conductionnl/docs/tree/main/website/docs/Products/Projects/Nextcon.md",
+  "tags": [],
+  "version": "current",
+  "frontMatter": {},
+  "sidebar": "tutorialSidebar",
+  "previous": {
+    "title": "Partners",
+    "permalink": "/docs/Products/Projects/InnovatieProjecten"
+  },
+  "next": {
+    "title": "Overview of Conduction Services",
+    "permalink": "/docs/Products/Services"
+  }
+}
