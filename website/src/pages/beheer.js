@@ -59,7 +59,7 @@ export default function Beheer() {
             title: 'OpenRegisters',
             description: 'OpenRegisters is de flexibele oplossing voor elk type gegevensregister. Van gemeentelijke verwerkingen tot verenigingsleden: alles gestructureerd en beheersbaar.',
             image: '/img/beheerCarousel/openRegisters.png',
-            link: 'https://openregisters.nl'
+            link: 'https://openregisters.app'
         },
         {
             title: 'Nextcloud',
@@ -74,7 +74,7 @@ export default function Beheer() {
             link: 'https://openwebconcept.nl'
         }
     ]
-    
+
     return (
         <Layout title={siteConfig.title} description="Conduction | Beheer">
             <main>
@@ -82,7 +82,7 @@ export default function Beheer() {
                     title: 'Neem hier contact op',
                     link: '/contact'
                 }} />
-                <CardsSection title="Beheer goed geregeld" image="/img/beheer-info.png" cards={cards} cols={2}/>
+                <CardsSection title="Beheer goed geregeld" image="/img/beheer-info.png" cards={cards} cols={2} />
                 <InfoBlock title="Applicaties" sectionColor="sectionNeutral" imageOnLeft={false} paragraphs={applicatiesParagraphs} image="/img/applicaties.png" />
                 <Carousel slides={slides} autoPlayMs={5000} />
                 <InfoBlock title="DashKube" sectionColor="sectionLight" imageOnLeft={false} paragraphs={dashKubeParagraphs} image="/img/dashkube.png" />

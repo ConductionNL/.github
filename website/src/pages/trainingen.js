@@ -16,8 +16,7 @@ export default function Trainingen() {
             title: 'Basis Common Ground',
             subtitle: 'Voor iedereen die wil starten met Common Ground',
             description: 'Een korte introductie in Common Ground. Waar we inzoomen op de principes, voordelen, uitdagingen en lopende projecten.',
-            image: '/img/training/basis_common.png',
-            link: 'https://www.conduction.nl/training-basis-common-ground/'
+            image: '/img/training/basis_common.png'
         },
         {
             title: 'Architectuur Common Ground',
@@ -89,15 +88,13 @@ export default function Trainingen() {
             title: 'Open Source binnen overheid',
             subtitle: 'Voor iedereen binnen de overheid',
             description: 'Deze training is specifiek ontwikkeld om in te gaan op de huidige ontwikkelingen, de voor- en nadelen en welke doelen Open Source nog meer bereikt binnen de overheid',
-            image: '/img/training/computer.png',
-            link: 'https://www.conduction.nl/training-open-source-en-overheid/'
+            image: '/img/training/computer.png'
         },
         {
             title: 'Hoe te beginnen met Common Ground?',
             subtitle: 'Dit leertraject helpt gemeenten on Common Ground',
             description: 'Voor iedere gemeente die stappen wil maken met Common Ground. Met Conduction als kennispartner ontdekt de gemeente wat Common Ground betekent in haar specifieke situatie. Samen stellen we een roadmap op waarin we Common Ground gaan toepassen en uitgaan vinden wat de uitdagingen van de gemeente zijn. Dit geldt niet alleen voor de techniek maar ook voor veranderend beleid, processen en inrichting van de organisatie.',
-            image: '/img/training/hoe_te_beginnen.png',
-            link: 'https://www.conduction.nl/hoe-te-beginnen-met-common-ground'
+            image: '/img/training/hoe_te_beginnen.png'
         },
     ];
 

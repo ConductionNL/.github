@@ -206,7 +206,7 @@ function MeetTheTeam() {
                                     AANPAKKER. DEVELOPER DIE VAN AANPAKKEN WEET
                                 </h3>
                                 <p>Barry is nieuwsgierig en open. Hij heeft een enorme drive. He gets things done!</p>
-                                    <div className={styles.teamMemberSocials}>
+                                <div className={styles.teamMemberSocials}>
                                     <div className={styles.teamMemberSocialsItem} />
                                     <div className={styles.teamMemberSocialsItem}>
                                         <a className={styles.teamMemberSocialButton} href="mailto:barry@conduction.nl" target="_blank" rel="noopener noreferrer" aria-label="Email">
@@ -226,15 +226,54 @@ function MeetTheTeam() {
 function JoinUs() {
     const [cvFile, setCvFile] = useState(null);
     const [description, setDescription] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [submitStatus, setSubmitStatus] = useState(null);
     const fileInputRef = useRef(null);
     const maxDescriptionLength = 180;
+
     const handleFileChange = (e) => {
         const file = e.target.files && e.target.files[0];
         setCvFile(file || null);
     };
+
     const handleDescriptionChange = (e) => {
         setDescription(e.target.value);
     };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+
+        if (!cvFile) {
+            setSubmitStatus({
+                success: false,
+                message: 'Uploaden CV is verplicht'
+            });
+            return;
+        }
+
+        setIsSubmitting(true);
+        setSubmitStatus(null);
+
+        const formData = new FormData(e.target);
+
+        // Import submitForm dynamically to avoid circular dependencies
+        const { submitForm } = await import('../utils/formSubmit');
+        const result = await submitForm(formData);
+
+        setIsSubmitting(false);
+        setSubmitStatus(result);
+
+        if (result.success) {
+            e.target.reset();
+            setDescription('');
+            setCvFile(null);
+            if (fileInputRef.current) {
+                fileInputRef.current.value = '';
+            }
+            setTimeout(() => setSubmitStatus(null), 5000);
+        }
+    };
+
     return (
         <section className={styles.sectionPrimary}>
             <div className="container">
@@ -252,28 +291,42 @@ function JoinUs() {
                         </p>
                     </div>
                     <div className="col">
-                        <form className={styles.contactForm} onSubmit={(e) => { if (!cvFile) { e.preventDefault(); } }}>
+                        <form className={styles.contactForm} onSubmit={handleSubmit}>
+                            {submitStatus && (
+                                <div style={{
+                                    padding: '10px',
+                                    marginBottom: '15px',
+                                    borderRadius: '4px',
+                                    backgroundColor: submitStatus.success ? '#d4edda' : '#f8d7da',
+                                    color: submitStatus.success ? '#155724' : '#721c24',
+                                    border: `1px solid ${submitStatus.success ? '#c3e6cb' : '#f5c6cb'}`
+                                }}>
+                                    {submitStatus.message}
+                                </div>
+                            )}
                             <label>Naam <span className={styles.required}>*</span></label>
-                            <input type="text" placeholder="Bijvoorbeeld: Witte de Wit" required />
+                            <input type="text" name="name" placeholder="Bijvoorbeeld: Witte de Wit" required disabled={isSubmitting} />
                             <label>E-mail Addres <span className={styles.required}>*</span></label>
-                            <input type="email" placeholder="E.g. john@doe.com" required />
+                            <input type="email" name="email" placeholder="E.g. john@doe.com" required disabled={isSubmitting} />
                             <label>Telefoon nummer</label>
-                            <input type="tel" placeholder="E.g. +1 300400500" />
+                            <input type="tel" name="phone" placeholder="E.g. +1 300400500" disabled={isSubmitting} />
                             <label>Omschrijving</label>
-                            <textarea placeholder="Beschrijf kort wie je bent en waar we je mee zouden kunnen helpen" value={description} onChange={handleDescriptionChange} maxLength={maxDescriptionLength} />
+                            <textarea name="description" placeholder="Beschrijf kort wie je bent en waar we je mee zouden kunnen helpen" value={description} onChange={handleDescriptionChange} maxLength={maxDescriptionLength} disabled={isSubmitting} />
                             <div className={styles.charCounter}>{description.length}/{maxDescriptionLength}</div>
                             <label className={styles.fileInputLabel}>
-                                <input type="file" ref={fileInputRef} className={styles.fileInput} accept=".pdf" onChange={handleFileChange} required />
+                                <input type="file" name="cv" ref={fileInputRef} className={styles.fileInput} accept=".pdf" onChange={handleFileChange} required disabled={isSubmitting} />
                                 <span>Upload CV</span>
                             </label>
                             {cvFile && (
                                 <div className={styles.fileItem}>
                                     <div className={styles.fileItemName}>{cvFile.name}</div>
                                     <div className={styles.fileItemMeta}>{(cvFile.size / 1024).toFixed(1)} KB</div>
-                                    <button type="button" onClick={() => { if (fileInputRef.current) { fileInputRef.current.value = ''; } setCvFile(null); }} aria-label="Verwijder bestand">×</button>
+                                    <button type="button" onClick={() => { if (fileInputRef.current) { fileInputRef.current.value = ''; } setCvFile(null); }} aria-label="Verwijder bestand" disabled={isSubmitting}>×</button>
                                 </div>
                             )}
-                            <button type="submit">Verstuur bericht</button>
+                            <button type="submit" disabled={isSubmitting}>
+                                {isSubmitting ? 'Verzenden...' : 'Verstuur bericht'}
+                            </button>
                         </form>
                     </div>
                 </div>
