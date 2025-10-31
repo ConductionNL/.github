@@ -41,7 +41,7 @@ export default function Projecten() {
             partners: ['/img/partners/nextcloud.png']
         },
         {
-            title: 'WaardPapieren',
+            title: 'WaardePapieren',
             paragraphs: ['Waardepapieren is een dienst waarbij burgers uittreksels digitaal kunnen opvragen bij de gemeente. Voorheen was de burger altijd genoodzaakt om diverse waardepapieren af te halen bij de gemeente, dat kan nu online!', 'Met waardepapieren is het mogelijk om BRP of woonhistorie uittreksels digitaal aan te vragen en deze vervolgens zelf uit te printen.'],
             mainImage: '/img/waardPapieren.png',
             partners: ['/img/partners/hoorn.png', '/img/partners/harderwijk.png', '/img/partners/buren.png', '/img/partners/haarlem.png', '/img/partners/dimpact.png']

@@ -1,4 +1,5 @@
 import React from 'react';
+import Link from '@docusaurus/Link';
 import styles from '../../pages/index.module.css';
 
 function TrainingCard({ title, subtitle, description, image, link = null, background = 'default' }) {
@@ -16,7 +17,7 @@ function TrainingCard({ title, subtitle, description, image, link = null, backgr
             {subtitle && <p className={styles.trainingCardSubtitle}>{subtitle}</p>}
             <p className={styles.trainingCardDescription}>{description}</p>
             {link && (
-                <a className={styles.trainingCardButton} href={link} target="_blank" rel="noopener noreferrer">Meer info</a>
+                <Link className={styles.trainingCardButton} to={link}>Meer info</Link>
             )}
         </div>
     );

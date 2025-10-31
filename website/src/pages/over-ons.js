@@ -50,7 +50,7 @@ function OnzePijlers() {
                     </div>
                 </div>
                 <div className={styles.contentButton}>
-                    <Link to="/over-ons">NEEM CONTACT OP</Link>
+                    <Link to="/contact">NEEM CONTACT OP</Link>
                 </div>
             </div>
         </section>

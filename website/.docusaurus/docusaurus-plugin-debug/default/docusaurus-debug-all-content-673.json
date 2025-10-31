@@ -15,9 +15,9 @@
           "editUrlLocalized": "https://github.com/conductionnl/docs/tree/main/website/i18n/en/docusaurus-plugin-content-docs/current",
           "isLast": true,
           "routePriority": -1,
-          "sidebarFilePath": "/Users/alexanderrekachynskyi/Programming/docusaurus/.github/website/sidebars.js",
-          "contentPath": "/Users/alexanderrekachynskyi/Programming/docusaurus/.github/website/docs",
-          "contentPathLocalized": "/Users/alexanderrekachynskyi/Programming/docusaurus/.github/website/i18n/en/docusaurus-plugin-content-docs/current",
+          "sidebarFilePath": "/Users/alexanderrekachynskyi/Programming/docusaurus/github/website/sidebars.js",
+          "contentPath": "/Users/alexanderrekachynskyi/Programming/docusaurus/github/website/docs",
+          "contentPathLocalized": "/Users/alexanderrekachynskyi/Programming/docusaurus/github/website/i18n/en/docusaurus-plugin-content-docs/current",
           "docs": [
             {
               "unversionedId": "intro",
@@ -734,6 +734,21 @@
         "type": "jsx",
         "permalink": "/projecten",
         "source": "@site/src/pages/projecten.js"
+      },
+      {
+        "type": "jsx",
+        "permalink": "/training-basis-common-ground",
+        "source": "@site/src/pages/training-basis-common-ground.js"
+      },
+      {
+        "type": "jsx",
+        "permalink": "/training-hoe-te-beginnen",
+        "source": "@site/src/pages/training-hoe-te-beginnen.js"
+      },
+      {
+        "type": "jsx",
+        "permalink": "/training-open-source-overheid",
+        "source": "@site/src/pages/training-open-source-overheid.js"
       },
       {
         "type": "jsx",

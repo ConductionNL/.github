@@ -8,9 +8,11 @@ import styles from './index.module.css';
 export default function Contact() {
     return (
         <Layout title="Contact" description="Neem contact op">
-            <div className={styles.extendedbg}>
-                <div className={styles.extendedbg + ' container'}>
-                    <ContactTeaser />
+            <div className={styles.contactPageWrapper}>
+                <div className={styles.contactPageContent + ' ' + styles.extendedbg}>
+                    <div className={'container'}>
+                        <ContactTeaser />
+                    </div>
                 </div>
                 <Socials />
                 <Footer />

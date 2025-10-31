@@ -38,10 +38,6 @@ export default function Beheer() {
         'Hieronder staan een aantal voorbeeld applicaties die op Nextcloud kunnen draaien:'
     ]
 
-    const dashKubeParagraphs = [
-        'DashKube is een Kubernetes georiënteerd dashboard dat organisaties en ontwikkelaars helpt om eenvoudig een Kubernetes-omgeving op te zetten en te configureren. Door de Kubernetes-management tool is het niet meer nodig Kubernetes te leren en is je ecosysteem binnen no time up and running. Voor meer informatie bezoek <a href="https://www.dashkube.com/">DashKube</a>.',
-    ]
-
     const slides = [
         {
             title: 'OpenWoo.app',
@@ -85,7 +81,6 @@ export default function Beheer() {
                 <CardsSection title="Beheer goed geregeld" image="/img/beheer-info.png" cards={cards} cols={2} />
                 <InfoBlock title="Applicaties" sectionColor="sectionNeutral" imageOnLeft={false} paragraphs={applicatiesParagraphs} image="/img/applicaties.png" />
                 <Carousel slides={slides} autoPlayMs={5000} />
-                <InfoBlock title="DashKube" sectionColor="sectionLight" imageOnLeft={false} paragraphs={dashKubeParagraphs} image="/img/dashkube.png" />
                 <ContactTeaser />
                 <Socials />
                 <Footer />

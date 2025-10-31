@@ -1,107 +1,128 @@
 {
-  "/__docusaurus/debug-7c5": {
+  "/__docusaurus/debug-4e5": {
     "__comp": "__comp---theme-debug-config-23-a-2ff",
     "__context": {
-      "plugin": "plugin---docusaurus-debugd-11-9aa"
+      "plugin": "plugin---docusaurus-debugf-7-f-8f9"
     }
   },
-  "/__docusaurus/debug/config-7d9": {
+  "/__docusaurus/debug/config-224": {
     "__comp": "__comp---theme-debug-config-23-a-2ff",
     "__context": {
-      "plugin": "plugin---docusaurus-debugd-11-9aa"
+      "plugin": "plugin---docusaurus-debugf-7-f-8f9"
     }
   },
-  "/__docusaurus/debug/content-163": {
+  "/__docusaurus/debug/content-ffb": {
     "__comp": "__comp---theme-debug-contentba-8-ce7",
     "__context": {
-      "plugin": "plugin---docusaurus-debugd-11-9aa"
+      "plugin": "plugin---docusaurus-debugf-7-f-8f9"
     },
     "allContent": "allContent---docusaurus-debug-content-246-9aa"
   },
-  "/__docusaurus/debug/globalData-18c": {
+  "/__docusaurus/debug/globalData-4ed": {
     "__comp": "__comp---theme-debug-global-dataede-0fa",
     "__context": {
-      "plugin": "plugin---docusaurus-debugd-11-9aa"
+      "plugin": "plugin---docusaurus-debugf-7-f-8f9"
     }
   },
-  "/__docusaurus/debug/metadata-6f1": {
+  "/__docusaurus/debug/metadata-9f0": {
     "__comp": "__comp---theme-debug-site-metadata-68-e-3d4",
     "__context": {
-      "plugin": "plugin---docusaurus-debugd-11-9aa"
+      "plugin": "plugin---docusaurus-debugf-7-f-8f9"
     }
   },
-  "/__docusaurus/debug/registry-9f4": {
+  "/__docusaurus/debug/registry-fc5": {
     "__comp": "__comp---theme-debug-registry-679-501",
     "__context": {
-      "plugin": "plugin---docusaurus-debugd-11-9aa"
+      "plugin": "plugin---docusaurus-debugf-7-f-8f9"
     }
   },
-  "/__docusaurus/debug/routes-ac1": {
+  "/__docusaurus/debug/routes-98b": {
     "__comp": "__comp---theme-debug-routes-946-699",
     "__context": {
-      "plugin": "plugin---docusaurus-debugd-11-9aa"
+      "plugin": "plugin---docusaurus-debugf-7-f-8f9"
     }
   },
-  "/beheer-2b0": {
+  "/beheer-250": {
     "__comp": "__comp---site-src-pages-beheer-js-3-bb-6f7",
     "__context": {
-      "plugin": "plugin---beheer-9-d-1-a19"
+      "plugin": "plugin---beheere-8-b-3a6"
     },
     "config": "config---beheer-5-e-9-28b"
   },
-  "/common-ground-ef0": {
+  "/common-ground-f1c": {
     "__comp": "__comp---site-src-pages-common-ground-js-990-1f1",
     "__context": {
-      "plugin": "plugin---beheer-9-d-1-a19"
+      "plugin": "plugin---beheere-8-b-3a6"
     },
     "config": "config---beheer-5-e-9-28b"
   },
-  "/contact-0d1": {
+  "/contact-d72": {
     "__comp": "__comp---site-src-pages-contact-js-83-e-320",
     "__context": {
-      "plugin": "plugin---beheer-9-d-1-a19"
+      "plugin": "plugin---beheere-8-b-3a6"
     },
     "config": "config---beheer-5-e-9-28b"
   },
-  "/kwaliteitsbeleid-9d2": {
+  "/kwaliteitsbeleid-7ca": {
     "__comp": "__comp---site-src-pages-kwaliteitsbeleid-js-90-c-235",
     "__context": {
-      "plugin": "plugin---beheer-9-d-1-a19"
+      "plugin": "plugin---beheere-8-b-3a6"
     },
     "config": "config---beheer-5-e-9-28b"
   },
-  "/over-ons-310": {
+  "/over-ons-71a": {
     "__comp": "__comp---site-src-pages-over-ons-jsa-28-3ad",
     "__context": {
-      "plugin": "plugin---beheer-9-d-1-a19"
+      "plugin": "plugin---beheere-8-b-3a6"
     },
     "config": "config---beheer-5-e-9-28b"
   },
-  "/privacy-be3": {
+  "/privacy-c36": {
     "__comp": "__comp---site-src-pages-privacy-jse-0-d-82a",
     "__context": {
-      "plugin": "plugin---beheer-9-d-1-a19"
+      "plugin": "plugin---beheere-8-b-3a6"
     },
     "config": "config---beheer-5-e-9-28b"
   },
-  "/projecten-9fe": {
+  "/projecten-513": {
     "__comp": "__comp---site-src-pages-projecten-js-6-ab-ae2",
     "__context": {
-      "plugin": "plugin---beheer-9-d-1-a19"
+      "plugin": "plugin---beheere-8-b-3a6"
     },
     "config": "config---beheer-5-e-9-28b"
   },
-  "/trainingen-3a2": {
+  "/training-basis-common-ground-c79": {
+    "__comp": "__comp---site-src-pages-training-basis-common-ground-js-376-ee1",
+    "__context": {
+      "plugin": "plugin---beheere-8-b-3a6"
+    },
+    "config": "config---beheer-5-e-9-28b"
+  },
+  "/training-hoe-te-beginnen-463": {
+    "__comp": "__comp---site-src-pages-training-hoe-te-beginnen-jsb-3-f-ceb",
+    "__context": {
+      "plugin": "plugin---beheere-8-b-3a6"
+    },
+    "config": "config---beheer-5-e-9-28b"
+  },
+  "/training-open-source-overheid-a02": {
+    "__comp": "__comp---site-src-pages-training-open-source-overheid-js-5-a-8-9ab",
+    "__context": {
+      "plugin": "plugin---beheere-8-b-3a6"
+    },
+    "config": "config---beheer-5-e-9-28b"
+  },
+  "/trainingen-af4": {
     "__comp": "__comp---site-src-pages-trainingen-js-38-d-632",
     "__context": {
-      "plugin": "plugin---beheer-9-d-1-a19"
+      "plugin": "plugin---beheere-8-b-3a6"
     },
     "config": "config---beheer-5-e-9-28b"
   },
-  "/docs-143": {
+  "/docs-ce1": {
     "__comp": "__comp---theme-doc-page-1-be-9be",
     "__context": {
-      "plugin": "plugin---docs-6-ca-055"
+      "plugin": "plugin---docsc-9-a-3be"
     },
     "versionMetadata": "versionMetadata---docs-935-398"
   },
@@ -181,10 +202,10 @@
     "__comp": "__comp---theme-doc-item-178-a40",
     "content": "content---docs-way-of-work-way-of-work-383-113"
   },
-  "/-002": {
+  "/-540": {
     "__comp": "__comp---site-src-pages-index-jsc-4-f-f99",
     "__context": {
-      "plugin": "plugin---beheer-9-d-1-a19"
+      "plugin": "plugin---beheere-8-b-3a6"
     },
     "config": "config---beheer-5-e-9-28b"
   }

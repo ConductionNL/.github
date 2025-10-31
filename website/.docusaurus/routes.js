@@ -4,82 +4,97 @@ import ComponentCreator from '@docusaurus/ComponentCreator';
 export default [
   {
     path: '/__docusaurus/debug',
-    component: ComponentCreator('/__docusaurus/debug', '7c5'),
+    component: ComponentCreator('/__docusaurus/debug', '4e5'),
     exact: true
   },
   {
     path: '/__docusaurus/debug/config',
-    component: ComponentCreator('/__docusaurus/debug/config', '7d9'),
+    component: ComponentCreator('/__docusaurus/debug/config', '224'),
     exact: true
   },
   {
     path: '/__docusaurus/debug/content',
-    component: ComponentCreator('/__docusaurus/debug/content', '163'),
+    component: ComponentCreator('/__docusaurus/debug/content', 'ffb'),
     exact: true
   },
   {
     path: '/__docusaurus/debug/globalData',
-    component: ComponentCreator('/__docusaurus/debug/globalData', '18c'),
+    component: ComponentCreator('/__docusaurus/debug/globalData', '4ed'),
     exact: true
   },
   {
     path: '/__docusaurus/debug/metadata',
-    component: ComponentCreator('/__docusaurus/debug/metadata', '6f1'),
+    component: ComponentCreator('/__docusaurus/debug/metadata', '9f0'),
     exact: true
   },
   {
     path: '/__docusaurus/debug/registry',
-    component: ComponentCreator('/__docusaurus/debug/registry', '9f4'),
+    component: ComponentCreator('/__docusaurus/debug/registry', 'fc5'),
     exact: true
   },
   {
     path: '/__docusaurus/debug/routes',
-    component: ComponentCreator('/__docusaurus/debug/routes', 'ac1'),
+    component: ComponentCreator('/__docusaurus/debug/routes', '98b'),
     exact: true
   },
   {
     path: '/beheer',
-    component: ComponentCreator('/beheer', '2b0'),
+    component: ComponentCreator('/beheer', '250'),
     exact: true
   },
   {
     path: '/common-ground',
-    component: ComponentCreator('/common-ground', 'ef0'),
+    component: ComponentCreator('/common-ground', 'f1c'),
     exact: true
   },
   {
     path: '/contact',
-    component: ComponentCreator('/contact', '0d1'),
+    component: ComponentCreator('/contact', 'd72'),
     exact: true
   },
   {
     path: '/kwaliteitsbeleid',
-    component: ComponentCreator('/kwaliteitsbeleid', '9d2'),
+    component: ComponentCreator('/kwaliteitsbeleid', '7ca'),
     exact: true
   },
   {
     path: '/over-ons',
-    component: ComponentCreator('/over-ons', '310'),
+    component: ComponentCreator('/over-ons', '71a'),
     exact: true
   },
   {
     path: '/privacy',
-    component: ComponentCreator('/privacy', 'be3'),
+    component: ComponentCreator('/privacy', 'c36'),
     exact: true
   },
   {
     path: '/projecten',
-    component: ComponentCreator('/projecten', '9fe'),
+    component: ComponentCreator('/projecten', '513'),
+    exact: true
+  },
+  {
+    path: '/training-basis-common-ground',
+    component: ComponentCreator('/training-basis-common-ground', 'c79'),
+    exact: true
+  },
+  {
+    path: '/training-hoe-te-beginnen',
+    component: ComponentCreator('/training-hoe-te-beginnen', '463'),
+    exact: true
+  },
+  {
+    path: '/training-open-source-overheid',
+    component: ComponentCreator('/training-open-source-overheid', 'a02'),
     exact: true
   },
   {
     path: '/trainingen',
-    component: ComponentCreator('/trainingen', '3a2'),
+    component: ComponentCreator('/trainingen', 'af4'),
     exact: true
   },
   {
     path: '/docs',
-    component: ComponentCreator('/docs', '143'),
+    component: ComponentCreator('/docs', 'ce1'),
     routes: [
       {
         path: '/docs/intro',
@@ -199,7 +214,7 @@ export default [
   },
   {
     path: '/',
-    component: ComponentCreator('/', '002'),
+    component: ComponentCreator('/', '540'),
     exact: true
   },
   {

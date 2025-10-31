@@ -26,12 +26,12 @@ export default {
       "classic",
       {
         "docs": {
-          "sidebarPath": "/Users/alexanderrekachynskyi/Programming/docusaurus/.github/website/sidebars.js",
+          "sidebarPath": "/Users/alexanderrekachynskyi/Programming/docusaurus/github/website/sidebars.js",
           "editUrl": "https://github.com/conductionnl/docs/tree/main/website/"
         },
         "blog": false,
         "theme": {
-          "customCss": "/Users/alexanderrekachynskyi/Programming/docusaurus/.github/website/src/css/custom.css"
+          "customCss": "/Users/alexanderrekachynskyi/Programming/docusaurus/github/website/src/css/custom.css"
         }
       }
     ]
