@@ -1,0 +1,24 @@
+{
+  "unversionedId": "WayOfWork/join",
+  "id": "WayOfWork/join",
+  "title": "Issue Flow and Sprint Planning Process",
+  "description": "Epic Creation and Sizing",
+  "source": "@site/docs/WayOfWork/join.md",
+  "sourceDirName": "WayOfWork",
+  "slug": "/WayOfWork/join",
+  "permalink": "/docs/WayOfWork/join",
+  "draft": false,
+  "editUrl": "https://github.com/conductionnl/docs/tree/main/website/docs/WayOfWork/join.md",
+  "tags": [],
+  "version": "current",
+  "frontMatter": {},
+  "sidebar": "tutorialSidebar",
+  "previous": {
+    "title": "Competences",
+    "permalink": "/docs/WayOfWork/competences"
+  },
+  "next": {
+    "title": "THe conduction knowledge base",
+    "permalink": "/docs/knowledge/intro"
+  }
+}

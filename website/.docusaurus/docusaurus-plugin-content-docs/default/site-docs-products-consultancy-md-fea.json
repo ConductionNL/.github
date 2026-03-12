@@ -1,0 +1,24 @@
+{
+  "unversionedId": "Products/Consultancy",
+  "id": "Products/Consultancy",
+  "title": "Consultancy Services 🤝",
+  "description": "At Conduction, we believe consultancy is more than just providing advice - it's a vital part of achieving our mission to create sustainable, innovative digital solutions for government organizations. Our consultancy services are deeply rooted in our commitment to knowledge sharing and collaborative growth, which you can learn more about in our introduction.",
+  "source": "@site/docs/Products/Consultancy.md",
+  "sourceDirName": "Products",
+  "slug": "/Products/Consultancy",
+  "permalink": "/docs/Products/Consultancy",
+  "draft": false,
+  "editUrl": "https://github.com/conductionnl/docs/tree/main/website/docs/Products/Consultancy.md",
+  "tags": [],
+  "version": "current",
+  "frontMatter": {},
+  "sidebar": "tutorialSidebar",
+  "previous": {
+    "title": "Components: Building Blocks for Digital Government Innovation 🏗️",
+    "permalink": "/docs/Products/Components"
+  },
+  "next": {
+    "title": "Partners",
+    "permalink": "/docs/Products/Market"
+  }
+}
