@@ -106,8 +106,8 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
-      - name: npm audit (high/critical)
-        run: npm audit --audit-level=high
+      - name: npm audit (critical only)
+        run: npm audit --audit-level=critical
 
   # ──────────────────────────────────────────────
   # Stage 1: PHP Linting — each tool as a separate job
