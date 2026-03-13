@@ -72,6 +72,11 @@ on:
         required: false
         type: string
         default: "tests/integration"
+      additional-apps:
+        description: "JSON array of additional app repos to checkout and enable (e.g. '[{\"repo\":\"ConductionNL/openregister\",\"app\":\"openregister\"}]')"
+        required: false
+        type: string
+        default: "[]"
       enable-coverage-guard:
         description: "Run coverage baseline guard and auto-update"
         required: false
@@ -348,6 +353,22 @@ jobs:
         with:
           path: server/apps/${{ inputs.app-name }}
 
+      - name: Checkout additional apps
+        if: ${{ inputs.additional-apps != '[]' }}
+        run: |
+          echo '${{ inputs.additional-apps }}' | jq -c '.[]' | while read -r app; do
+            repo=$(echo "$app" | jq -r '.repo')
+            name=$(echo "$app" | jq -r '.app')
+            ref=$(echo "$app" | jq -r '.ref // "main"')
+            echo "Checking out $repo ($name) at $ref..."
+            git clone --depth 1 --branch "$ref" "https://github.com/$repo.git" "server/apps/$name"
+            if [ -f "server/apps/$name/composer.json" ]; then
+              cd "server/apps/$name"
+              composer install --no-progress --prefer-dist --optimize-autoloader --no-dev 2>/dev/null || true
+              cd -
+            fi
+          done
+
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
@@ -363,6 +384,13 @@ jobs:
             --database sqlite \
             --admin-user admin \
             --admin-pass admin
+          # Enable additional apps first (dependencies)
+          if [ '${{ inputs.additional-apps }}' != '[]' ]; then
+            echo '${{ inputs.additional-apps }}' | jq -r '.[].app' | while read -r name; do
+              echo "Enabling app: $name"
+              php occ app:enable "$name" || echo "::warning::Failed to enable $name, continuing..."
+            done
+          fi
           php occ app:enable ${{ inputs.app-name }}
           chmod -R a+w config
 
