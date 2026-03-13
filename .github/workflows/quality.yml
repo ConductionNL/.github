@@ -57,6 +57,11 @@ on:
         required: false
         type: boolean
         default: false
+      newman-collection-path:
+        description: "Path to Newman/Postman collection files (relative to app root)"
+        required: false
+        type: string
+        default: "tests/integration"
       enable-coverage-guard:
         description: "Run coverage baseline guard and auto-update"
         required: false
@@ -346,6 +351,19 @@ jobs:
           cd server/apps/${{ inputs.app-name }}
           composer install --no-progress --prefer-dist --optimize-autoloader
 
+      - name: Validate test infrastructure
+        run: |
+          cd server/apps/${{ inputs.app-name }}
+          if [ ! -f phpunit.xml ] && [ ! -f phpunit-unit.xml ]; then
+            echo "::error::PHPUnit is enabled but no phpunit.xml or phpunit-unit.xml found. Add a PHPUnit config or disable enable-phpunit."
+            exit 1
+          fi
+          if [ ! -d tests/Unit ] && [ ! -d tests/unit ] && [ ! -d tests/Service ] && [ ! -d tests/Integration ] && [ ! -d tests/integration ]; then
+            echo "::error::PHPUnit is enabled but no test directories found (tests/Unit, tests/Service, tests/Integration). Add tests or disable enable-phpunit."
+            exit 1
+          fi
+          echo "PHPUnit infrastructure validated."
+
       - name: Run PHPUnit tests
         run: |
           cd server/apps/${{ inputs.app-name }}
@@ -450,25 +468,38 @@ jobs:
       - name: Install Newman
         run: npm install -g newman
 
-      - name: Smoke test API
+      - name: Validate Newman collections
         run: |
-          echo "=== Check app is enabled ==="
-          cd server && php occ app:list --enabled | grep -i register || echo "App not listed"
-          echo "=== Test register creation ==="
-          curl -s -u admin:admin -X POST \
-            -H "Content-Type: application/json" \
-            -d '{"title":"smoke-test","description":"CI smoke test"}' \
-            http://localhost:8080/index.php/apps/${{ inputs.app-name }}/api/registers | head -500
-          echo ""
+          cd server/apps/${{ inputs.app-name }}
+          COLLECTION_PATH="${{ inputs.newman-collection-path }}"
+          if [ ! -d "$COLLECTION_PATH" ]; then
+            echo "::error::Newman is enabled but collection directory '$COLLECTION_PATH' does not exist. Add Postman collections or disable enable-newman."
+            exit 1
+          fi
+          COLLECTIONS=$(find "$COLLECTION_PATH" -name "*.postman_collection.json" 2>/dev/null | wc -l)
+          if [ "$COLLECTIONS" -eq 0 ]; then
+            echo "::error::Newman is enabled but no .postman_collection.json files found in '$COLLECTION_PATH'. Add Postman collections or disable enable-newman."
+            exit 1
+          fi
+          echo "Found $COLLECTIONS Postman collection(s) in $COLLECTION_PATH."
 
       - name: Run Newman tests
         run: |
-          cd server/apps/${{ inputs.app-name }}/tests/integration
-          newman run *.postman_collection.json \
-            --env-var "base_url=http://localhost:8080" \
-            --env-var "admin_user=admin" \
-            --env-var "admin_password=admin" \
-            --reporters cli
+          cd server/apps/${{ inputs.app-name }}/${{ inputs.newman-collection-path }}
+          FAIL=0
+          for collection in *.postman_collection.json; do
+            echo ""
+            echo "=== Running: $collection ==="
+            newman run "$collection" \
+              --env-var "base_url=http://localhost:8080" \
+              --env-var "admin_user=admin" \
+              --env-var "admin_password=admin" \
+              --reporters cli || FAIL=1
+          done
+          if [ "$FAIL" -ne 0 ]; then
+            echo "::error::One or more Newman collections failed."
+            exit 1
+          fi
 
       - name: Show Nextcloud log on failure
         if: failure()
