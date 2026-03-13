@@ -295,22 +295,20 @@ jobs:
           tag: v${{ env.NEW_VERSION }}
           overwrite: true
 
-      - name: Register app on App Store (first time only)
+      - name: Register and upload to Nextcloud App Store
         run: |
-          # Check if app is already registered by trying to fetch it
+          DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/v${{ env.NEW_VERSION }}/${{ inputs.app-name }}-${{ env.NEW_VERSION }}.tar.gz"
+
+          # Check if app is registered
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
             "https://apps.nextcloud.com/api/v1/apps/${{ inputs.app-name }}")
 
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "App not registered or not reachable (HTTP $HTTP_CODE) — attempting to register ${{ inputs.app-name }}..."
+          if [ "$HTTP_CODE" = "404" ]; then
+            echo "App not registered — registering ${{ inputs.app-name }} on App Store..."
 
-            # Sign the app ID with the signing key
             SIGNATURE=$(echo -n "${{ inputs.app-name }}" | openssl dgst -sha512 -sign signing-key.key | openssl base64 -A)
-
-            # Read certificate content
             CERT_CONTENT=$(cat signing-cert.crt)
 
-            # Register the app
             REG_CODE=$(curl -s -o /tmp/register-response.json -w "%{http_code}" \
               -X POST "https://apps.nextcloud.com/api/v1/apps" \
               -H "Authorization: Token ${{ secrets.NEXTCLOUD_APPSTORE_TOKEN }}" \
@@ -318,25 +316,38 @@ jobs:
               -d "{\"certificate\": $(echo "$CERT_CONTENT" | jq -Rs .), \"signature\": \"$SIGNATURE\"}")
 
             if [ "$REG_CODE" = "200" ] || [ "$REG_CODE" = "201" ]; then
-              echo "✓ App registered successfully on App Store"
+              echo "✓ App registered successfully"
             else
               echo "WARNING: Registration returned HTTP $REG_CODE"
               cat /tmp/register-response.json 2>/dev/null || true
-              echo ""
-              echo "Continuing with release upload anyway..."
             fi
+          elif [ "$HTTP_CODE" = "200" ]; then
+            echo "✓ App already registered on App Store"
           else
-            echo "✓ App already registered on App Store (HTTP $HTTP_CODE)"
+            echo "WARNING: App Store lookup returned HTTP $HTTP_CODE (may be down)"
+            echo "Will attempt release upload anyway..."
           fi
 
-      - name: Upload to Nextcloud App Store
-        uses: nextcloud-releases/nextcloud-appstore-push-action@a011fe619bcf6e77ddebc96f9908e1af4071b9c1
-        with:
-          app_name: ${{ inputs.app-name }}
-          appstore_token: ${{ secrets.NEXTCLOUD_APPSTORE_TOKEN }}
-          download_url: https://github.com/${{ github.repository }}/releases/download/v${{ env.NEW_VERSION }}/${{ inputs.app-name }}-${{ env.NEW_VERSION }}.tar.gz
-          app_private_key: ${{ secrets.NEXTCLOUD_SIGNING_KEY }}
-          nightly: false
+          # Sign the release tarball
+          SIGNATURE=$(openssl dgst -sha512 -sign signing-key.key nextcloud-release.tar.gz | openssl base64 -A)
+
+          # Upload the release
+          echo "Uploading release to App Store (nightly: false)..."
+          UPLOAD_CODE=$(curl -s -o /tmp/upload-response.json -w "%{http_code}" \
+            -X POST "https://apps.nextcloud.com/api/v1/apps/releases" \
+            -H "Authorization: Token ${{ secrets.NEXTCLOUD_APPSTORE_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"download\": \"$DOWNLOAD_URL\", \"signature\": \"$SIGNATURE\", \"nightly\": false}")
+
+          if [ "$UPLOAD_CODE" = "200" ] || [ "$UPLOAD_CODE" = "201" ]; then
+            echo "✓ Release uploaded to App Store successfully"
+          else
+            echo "::warning::App Store upload returned HTTP $UPLOAD_CODE"
+            cat /tmp/upload-response.json 2>/dev/null || true
+            echo ""
+            echo "The GitHub release was created successfully. The App Store upload can be retried manually."
+            echo "App Store may be temporarily unavailable."
+          fi
 
       - name: Verify release
         run: |
