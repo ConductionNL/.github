@@ -277,34 +277,31 @@ jobs:
         run: |
           DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/v${{ env.NEW_VERSION }}/${{ inputs.app-name }}-${{ env.NEW_VERSION }}.tar.gz"
 
-          # Check if app is registered
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-            "https://apps.nextcloud.com/api/v1/apps/${{ inputs.app-name }}")
+          # Always attempt registration (idempotent — already-registered apps return 200/4xx harmlessly)
+          # The /api/v1/apps/{id} lookup endpoint is unreliable (returns 500), so we skip the check.
+          echo "Ensuring ${{ inputs.app-name }} is registered on App Store..."
 
-          if [ "$HTTP_CODE" = "404" ]; then
-            echo "App not registered — registering ${{ inputs.app-name }} on App Store..."
+          REG_SIGNATURE=$(echo -n "${{ inputs.app-name }}" | openssl dgst -sha512 -sign signing-key.key | openssl base64 -A)
+          CERT_CONTENT=$(cat signing-cert.crt)
 
-            SIGNATURE=$(echo -n "${{ inputs.app-name }}" | openssl dgst -sha512 -sign signing-key.key | openssl base64 -A)
-            CERT_CONTENT=$(cat signing-cert.crt)
+          REG_CODE=$(curl -s -o /tmp/register-response.json -w "%{http_code}" \
+            -X POST "https://apps.nextcloud.com/api/v1/apps" \
+            -H "Authorization: Token ${{ secrets.NEXTCLOUD_APPSTORE_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"certificate\": $(echo "$CERT_CONTENT" | jq -Rs .), \"signature\": \"$REG_SIGNATURE\"}")
 
-            REG_CODE=$(curl -s -o /tmp/register-response.json -w "%{http_code}" \
-              -X POST "https://apps.nextcloud.com/api/v1/apps" \
-              -H "Authorization: Token ${{ secrets.NEXTCLOUD_APPSTORE_TOKEN }}" \
-              -H "Content-Type: application/json" \
-              -d "{\"certificate\": $(echo "$CERT_CONTENT" | jq -Rs .), \"signature\": \"$SIGNATURE\"}")
-
-            if [ "$REG_CODE" = "200" ] || [ "$REG_CODE" = "201" ]; then
-              echo "✓ App registered successfully"
-            else
-              echo "WARNING: Registration returned HTTP $REG_CODE"
-              cat /tmp/register-response.json 2>/dev/null || true
-            fi
-          elif [ "$HTTP_CODE" = "200" ]; then
-            echo "✓ App already registered on App Store"
-          else
-            echo "WARNING: App Store lookup returned HTTP $HTTP_CODE (may be down)"
-            echo "Will attempt release upload anyway..."
-          fi
+          case "$REG_CODE" in
+            200|201) echo "✓ App registered successfully (first time)" ;;
+            *)
+              REG_BODY=$(cat /tmp/register-response.json 2>/dev/null || echo "")
+              if echo "$REG_BODY" | grep -qi "already"; then
+                echo "✓ App already registered"
+              else
+                echo "Registration returned HTTP $REG_CODE: $REG_BODY"
+                echo "Continuing with release upload..."
+              fi
+              ;;
+          esac
 
           # Sign the release tarball
           SIGNATURE=$(openssl dgst -sha512 -sign signing-key.key nextcloud-release.tar.gz | openssl base64 -A)
@@ -324,7 +321,6 @@ jobs:
             cat /tmp/upload-response.json 2>/dev/null || true
             echo ""
             echo "The GitHub release was created successfully. The App Store upload can be retried manually."
-            echo "App Store may be temporarily unavailable."
           fi
 
       - name: Verify release
