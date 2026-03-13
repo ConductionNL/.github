@@ -1,55 +1,74 @@
 name: Documentation
 
 on:
-  push:
-    branches: 
-      - documentation
-      - main
-  pull_request:
-    branches: 
-      - documentation
+  workflow_call:
+    inputs:
+      cname:
+        description: "Custom domain for GitHub Pages (e.g. 'pipelinq.app')"
+        required: true
+        type: string
+      source-folder:
+        description: "Folder containing the Docusaurus project"
+        required: false
+        type: string
+        default: "docs"
+      node-version:
+        description: "Node.js version for building"
+        required: false
+        type: string
+        default: "18"
 
 jobs:
   deploy:
     name: Deploy Documentation
     runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    permissions:
+      contents: write
     steps:
-      # https://github.com/marketplace/actions/checkout
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # Verify directory structure
-      - name: List directory structure
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - name: Install dependencies and build
+        timeout-minutes: 5
         run: |
-          ls -la
-          ls -la website/
+          cd ${{ inputs.source-folder }}
+          rm -rf node_modules/.cache .docusaurus build
+          npm run ci
 
-      # Generate SVG files using PlantUML
-      - name: plantuml
-        id: plantuml
-        uses: grassedge/generate-plantuml-action@v1.5
-        with:
-          message: "Render PlantUML files"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify build output
+        run: |
+          if [ ! -f "${{ inputs.source-folder }}/build/index.html" ]; then
+            echo "ERROR: index.html not found in build directory!"
+            exit 1
+          fi
 
-      # https://github.com/marketplace/actions/docusaurus-builddeploy-action
-      - name: Deploy Docusaurus
-        id: deploy
-        uses: redkubes/docusaurus-deploy-action@v1.2
-        timeout-minutes: 3
-        with:
-          source-folder: website
-          git-user: ${{ github.actor }}
-          git-password: ${{ secrets.GITHUB_TOKEN }}
-          deployment-branch: gh-pages
+      - name: Create .nojekyll and CNAME files
+        run: |
+          cd ${{ inputs.source-folder }}/build
+          touch .nojekyll
+          echo "${{ inputs.cname }}" > CNAME
 
-      # https://github.com/marketplace/actions/create-an-issue
-      - name: Create issue on failure
-        if: failure()
-        uses: JasonEtco/create-an-issue@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
         with:
-          filename: .github/DOCUMENTATION_ISSUE_TEMPLATE.md
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./${{ inputs.source-folder }}/build
+          publish_branch: gh-pages
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+          force_orphan: false
+          allow_empty_commit: true
+          keep_files: false
+
+      - name: Verify deployment
+        run: |
+          git fetch origin gh-pages
+          echo "Deployment completed. Latest commit: $(git rev-parse origin/gh-pages)"
