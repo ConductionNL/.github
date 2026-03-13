@@ -32,6 +32,11 @@ on:
         required: false
         type: boolean
         default: true
+      enable-phpmd:
+        description: "Run PHPMD mess detection"
+        required: false
+        type: boolean
+        default: true
       enable-phpmetrics:
         description: "Run phpmetrics code metrics"
         required: false
@@ -172,6 +177,7 @@ jobs:
           exit $RC
 
   lint-phpmd:
+    if: ${{ inputs.enable-phpmd }}
     runs-on: ubuntu-latest
     name: PHPMD
     steps:
@@ -308,7 +314,7 @@ jobs:
   # Gated behind linting + CVE.
   # ──────────────────────────────────────────────
   php-tests:
-    if: ${{ inputs.enable-phpunit }}
+    if: ${{ inputs.enable-phpunit && !cancelled() && needs.lint-php.result != 'failure' && needs.lint-phpcs.result != 'failure' && needs.cve-composer.result != 'failure' && needs.cve-npm.result != 'failure' && (needs.lint-phpmd.result == 'success' || needs.lint-phpmd.result == 'skipped') }}
     runs-on: ubuntu-latest
     name: "PHPUnit (PHP ${{ matrix.php-version }})"
     needs: [lint-php, lint-phpcs, lint-phpmd, cve-composer, cve-npm]
@@ -400,7 +406,7 @@ jobs:
   # Gated behind linting + CVE.
   # ──────────────────────────────────────────────
   integration-tests:
-    if: ${{ inputs.enable-newman }}
+    if: ${{ inputs.enable-newman && !cancelled() && needs.lint-php.result != 'failure' && needs.lint-phpcs.result != 'failure' && needs.cve-composer.result != 'failure' && needs.cve-npm.result != 'failure' && (needs.lint-phpmd.result == 'success' || needs.lint-phpmd.result == 'skipped') }}
     runs-on: ubuntu-latest
     name: Integration Tests (Newman)
     needs: [lint-php, lint-phpcs, lint-phpmd, cve-composer, cve-npm]
