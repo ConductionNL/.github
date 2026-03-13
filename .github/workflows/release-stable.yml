@@ -301,8 +301,8 @@ jobs:
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
             "https://apps.nextcloud.com/api/v1/apps/${{ inputs.app-name }}")
 
-          if [ "$HTTP_CODE" = "404" ]; then
-            echo "App not registered yet — registering ${{ inputs.app-name }} on App Store..."
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "App not registered or not reachable (HTTP $HTTP_CODE) — attempting to register ${{ inputs.app-name }}..."
 
             # Sign the app ID with the signing key
             SIGNATURE=$(echo -n "${{ inputs.app-name }}" | openssl dgst -sha512 -sign signing-key.key | openssl base64 -A)
