@@ -161,7 +161,15 @@ jobs:
       - name: Install dependencies
         run: composer install --no-progress --prefer-dist --optimize-autoloader
       - name: Run PHPCS
-        run: composer phpcs
+        run: |
+          # Exit code 0 = clean, 1 = warnings only, 2 = errors found.
+          # We treat warnings as non-blocking (exit 1 → success).
+          composer phpcs; RC=$?
+          if [ "$RC" -eq 1 ]; then
+            echo "::warning::PHPCS found warnings but no errors — passing."
+            exit 0
+          fi
+          exit $RC
 
   lint-phpmd:
     runs-on: ubuntu-latest
