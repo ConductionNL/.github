@@ -37,6 +37,11 @@ on:
         required: false
         type: boolean
         default: true
+      enable-phpcs:
+        description: "Run PHPCS code style checks"
+        required: false
+        type: boolean
+        default: true
       enable-phpmetrics:
         description: "Run phpmetrics code metrics"
         required: false
@@ -146,6 +151,7 @@ jobs:
         run: composer lint
 
   lint-phpcs:
+    if: ${{ inputs.enable-phpcs }}
     runs-on: ubuntu-latest
     name: PHPCS
     steps:
@@ -314,7 +320,7 @@ jobs:
   # Gated behind linting + CVE.
   # ──────────────────────────────────────────────
   php-tests:
-    if: ${{ inputs.enable-phpunit && !cancelled() && needs.lint-php.result != 'failure' && needs.lint-phpcs.result != 'failure' && needs.cve-composer.result != 'failure' && needs.cve-npm.result != 'failure' && (needs.lint-phpmd.result == 'success' || needs.lint-phpmd.result == 'skipped') }}
+    if: ${{ inputs.enable-phpunit && !cancelled() && needs.lint-php.result != 'failure' && (needs.lint-phpcs.result == 'success' || needs.lint-phpcs.result == 'skipped') && needs.cve-composer.result != 'failure' && needs.cve-npm.result != 'failure' && (needs.lint-phpmd.result == 'success' || needs.lint-phpmd.result == 'skipped') }}
     runs-on: ubuntu-latest
     name: "PHPUnit (PHP ${{ matrix.php-version }})"
     needs: [lint-php, lint-phpcs, lint-phpmd, cve-composer, cve-npm]
@@ -406,7 +412,7 @@ jobs:
   # Gated behind linting + CVE.
   # ──────────────────────────────────────────────
   integration-tests:
-    if: ${{ inputs.enable-newman && !cancelled() && needs.lint-php.result != 'failure' && needs.lint-phpcs.result != 'failure' && needs.cve-composer.result != 'failure' && needs.cve-npm.result != 'failure' && (needs.lint-phpmd.result == 'success' || needs.lint-phpmd.result == 'skipped') }}
+    if: ${{ inputs.enable-newman && !cancelled() && needs.lint-php.result != 'failure' && (needs.lint-phpcs.result == 'success' || needs.lint-phpcs.result == 'skipped') && needs.cve-composer.result != 'failure' && needs.cve-npm.result != 'failure' && (needs.lint-phpmd.result == 'success' || needs.lint-phpmd.result == 'skipped') }}
     runs-on: ubuntu-latest
     name: Integration Tests (Newman)
     needs: [lint-php, lint-phpcs, lint-phpmd, cve-composer, cve-npm]
