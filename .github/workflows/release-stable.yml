@@ -255,9 +255,10 @@ jobs:
 
       # ── Sign & Release ──
 
-      - name: Prepare signing key
+      - name: Prepare signing credentials
         run: |
           echo "${{ secrets.NEXTCLOUD_SIGNING_KEY }}" > signing-key.key
+          echo "${{ secrets.NEXTCLOUD_SIGNING_CERT }}" > signing-cert.crt
 
       - name: Create tarball
         run: |
@@ -294,6 +295,40 @@ jobs:
           tag: v${{ env.NEW_VERSION }}
           overwrite: true
 
+      - name: Register app on App Store (first time only)
+        run: |
+          # Check if app is already registered by trying to fetch it
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            "https://apps.nextcloud.com/api/v1/apps/${{ inputs.app-name }}")
+
+          if [ "$HTTP_CODE" = "404" ]; then
+            echo "App not registered yet — registering ${{ inputs.app-name }} on App Store..."
+
+            # Sign the app ID with the signing key
+            SIGNATURE=$(echo -n "${{ inputs.app-name }}" | openssl dgst -sha512 -sign signing-key.key | openssl base64 -A)
+
+            # Read certificate content
+            CERT_CONTENT=$(cat signing-cert.crt)
+
+            # Register the app
+            REG_CODE=$(curl -s -o /tmp/register-response.json -w "%{http_code}" \
+              -X POST "https://apps.nextcloud.com/api/v1/apps" \
+              -H "Authorization: Token ${{ secrets.NEXTCLOUD_APPSTORE_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              -d "{\"certificate\": $(echo "$CERT_CONTENT" | jq -Rs .), \"signature\": \"$SIGNATURE\"}")
+
+            if [ "$REG_CODE" = "200" ] || [ "$REG_CODE" = "201" ]; then
+              echo "✓ App registered successfully on App Store"
+            else
+              echo "WARNING: Registration returned HTTP $REG_CODE"
+              cat /tmp/register-response.json 2>/dev/null || true
+              echo ""
+              echo "Continuing with release upload anyway..."
+            fi
+          else
+            echo "✓ App already registered on App Store (HTTP $HTTP_CODE)"
+          fi
+
       - name: Upload to Nextcloud App Store
         uses: nextcloud-releases/nextcloud-appstore-push-action@a011fe619bcf6e77ddebc96f9908e1af4071b9c1
         with:
@@ -315,6 +350,6 @@ jobs:
           echo ""
           echo "Tarball size: $(du -h nextcloud-release.tar.gz | cut -f1)"
 
-      - name: Clean up signing key
+      - name: Clean up signing credentials
         if: always()
-        run: rm -f signing-key.key
+        run: rm -f signing-key.key signing-cert.crt
