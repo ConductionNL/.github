@@ -82,6 +82,11 @@ on:
         required: false
         type: string
         default: ""
+      newman-seed-command:
+        description: "Shell command to run after server start but before Newman tests (e.g. 'php occ maintenance:repair' to seed test fixtures). Runs with cwd set to the Nextcloud server root."
+        required: false
+        type: string
+        default: ""
       additional-apps:
         description: "JSON array of additional app repos to checkout and enable (e.g. '[{\"repo\":\"ConductionNL/openregister\",\"app\":\"openregister\"}]')"
         required: false
@@ -778,6 +783,13 @@ jobs:
           php -S 0.0.0.0:8080 &
           sleep 3
           curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/status.php || echo "Server not ready"
+
+      - name: Seed test data
+        if: inputs.newman-seed-command != ''
+        run: |
+          cd server
+          echo "Running seed command: ${{ inputs.newman-seed-command }}"
+          ${{ inputs.newman-seed-command }}
 
       - name: Setup Node.js and Newman
         uses: actions/setup-node@v4
