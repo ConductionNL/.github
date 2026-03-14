@@ -94,60 +94,50 @@ concurrency:
 
 jobs:
   # ╔══════════════════════════════════════════════╗
-  # ║  STAGE 1 — Parallel quality gates            ║
-  # ║  Four groups run simultaneously:              ║
-  # ║  • PHP Quality   (lint, phpcs, phpmd, etc.)   ║
-  # ║  • Vue Quality   (eslint, stylelint)          ║
-  # ║  • Security      (composer audit, npm audit)  ║
-  # ║  • License       (composer + npm licenses)    ║
+  # ║  STAGE 1 — Four parallel quality gates        ║
+  # ║                                               ║
+  # ║  Each group is ONE job so that GitHub Actions  ║
+  # ║  renders them as four separate visual boxes    ║
+  # ║  in the workflow graph.                        ║
+  # ║                                               ║
+  # ║  ┌──────────┐ ┌──────────┐                    ║
+  # ║  │PHP Quality│ │Vue Quality│                   ║
+  # ║  └──────────┘ └──────────┘                    ║
+  # ║  ┌──────────┐ ┌──────────┐                    ║
+  # ║  │ Security │ │ License  │                    ║
+  # ║  └──────────┘ └──────────┘                    ║
   # ╚══════════════════════════════════════════════╝
 
-  # ── PHP Quality ─────────────────────────────────
-  php-lint:
+  # ── Group 1: PHP Quality ────────────────────────
+  php-quality:
     runs-on: ubuntu-latest
-    name: "PHP Quality / Lint"
+    name: "PHP Quality"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ inputs.php-version }}
           extensions: mbstring, intl, zip, gd, curl, xml, json
           tools: composer:v2
+
       - name: Cache Composer dependencies
         uses: actions/cache@v4
         with:
           path: vendor
           key: ${{ runner.os }}-composer-${{ hashFiles('composer.lock') }}
           restore-keys: ${{ runner.os }}-composer-
+
       - name: Install dependencies
         run: composer install --no-progress --prefer-dist --optimize-autoloader
-      - name: Run PHP Lint
+
+      - name: PHP Lint
         run: composer lint
 
-  php-phpcs:
-    if: ${{ inputs.enable-phpcs }}
-    runs-on: ubuntu-latest
-    name: "PHP Quality / PHPCS"
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: ${{ inputs.php-version }}
-          extensions: mbstring, intl, zip, gd, curl, xml, json
-          tools: composer:v2
-      - name: Cache Composer dependencies
-        uses: actions/cache@v4
-        with:
-          path: vendor
-          key: ${{ runner.os }}-composer-${{ hashFiles('composer.lock') }}
-          restore-keys: ${{ runner.os }}-composer-
-      - name: Install dependencies
-        run: composer install --no-progress --prefer-dist --optimize-autoloader
-      - name: Run PHPCS
+      - name: PHPCS
+        if: ${{ inputs.enable-phpcs }}
         run: |
           # Exit code 0 = clean, 1 = warnings only, 2 = errors found.
           # We treat warnings as non-blocking (exit 1 → success).
@@ -158,175 +148,84 @@ jobs:
           fi
           exit $RC
 
-  php-phpmd:
-    if: ${{ inputs.enable-phpmd }}
-    runs-on: ubuntu-latest
-    name: "PHP Quality / PHPMD"
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: ${{ inputs.php-version }}
-          extensions: mbstring, intl, zip, gd, curl, xml, json
-          tools: composer:v2
-      - name: Cache Composer dependencies
-        uses: actions/cache@v4
-        with:
-          path: vendor
-          key: ${{ runner.os }}-composer-${{ hashFiles('composer.lock') }}
-          restore-keys: ${{ runner.os }}-composer-
-      - name: Install dependencies
-        run: composer install --no-progress --prefer-dist --optimize-autoloader
-      - name: Run PHPMD
+      - name: PHPMD
+        if: ${{ inputs.enable-phpmd }}
         run: composer phpmd
 
-  php-psalm:
-    if: ${{ inputs.enable-psalm }}
-    runs-on: ubuntu-latest
-    name: "PHP Quality / Psalm"
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: ${{ inputs.php-version }}
-          extensions: mbstring, intl, zip, gd, curl, xml, json
-          tools: composer:v2
-      - name: Cache Composer dependencies
-        uses: actions/cache@v4
-        with:
-          path: vendor
-          key: ${{ runner.os }}-composer-${{ hashFiles('composer.lock') }}
-          restore-keys: ${{ runner.os }}-composer-
-      - name: Install dependencies
-        run: composer install --no-progress --prefer-dist --optimize-autoloader
-      - name: Run Psalm
+      - name: Psalm
+        if: ${{ inputs.enable-psalm }}
         run: composer psalm
 
-  php-phpstan:
-    if: ${{ inputs.enable-phpstan }}
-    runs-on: ubuntu-latest
-    name: "PHP Quality / PHPStan"
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: ${{ inputs.php-version }}
-          extensions: mbstring, intl, zip, gd, curl, xml, json
-          tools: composer:v2
-      - name: Cache Composer dependencies
-        uses: actions/cache@v4
-        with:
-          path: vendor
-          key: ${{ runner.os }}-composer-${{ hashFiles('composer.lock') }}
-          restore-keys: ${{ runner.os }}-composer-
-      - name: Install dependencies
-        run: composer install --no-progress --prefer-dist --optimize-autoloader
-      - name: Run PHPStan
+      - name: PHPStan
+        if: ${{ inputs.enable-phpstan }}
         run: composer phpstan
 
-  php-phpmetrics:
-    if: ${{ inputs.enable-phpmetrics }}
-    runs-on: ubuntu-latest
-    name: "PHP Quality / phpmetrics"
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: ${{ inputs.php-version }}
-          extensions: mbstring, intl, zip, gd, curl, xml, json
-          tools: composer:v2
-      - name: Cache Composer dependencies
-        uses: actions/cache@v4
-        with:
-          path: vendor
-          key: ${{ runner.os }}-composer-${{ hashFiles('composer.lock') }}
-          restore-keys: ${{ runner.os }}-composer-
-      - name: Install dependencies
-        run: composer install --no-progress --prefer-dist --optimize-autoloader
-      - name: Run phpmetrics
+      - name: phpmetrics
+        if: ${{ inputs.enable-phpmetrics }}
         run: composer phpmetrics
 
-  # ── Vue Quality ─────────────────────────────────
-  vue-eslint:
-    if: ${{ inputs.enable-frontend && inputs.enable-eslint }}
-    runs-on: ubuntu-latest
-    name: "Vue Quality / ESLint"
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
-      - name: Install dependencies
-        run: npm ci
-      - name: Run ESLint
-        run: npm run lint
-
-  vue-stylelint:
+  # ── Group 2: Vue Quality ────────────────────────
+  vue-quality:
     if: ${{ inputs.enable-frontend }}
     runs-on: ubuntu-latest
-    name: "Vue Quality / Stylelint"
+    name: "Vue Quality"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
+
       - name: Install dependencies
         run: npm ci
-      - name: Run Stylelint
+
+      - name: ESLint
+        if: ${{ inputs.enable-eslint }}
+        run: npm run lint
+
+      - name: Stylelint
         run: npm run stylelint
 
-  # ── Security ────────────────────────────────────
-  security-composer:
+  # ── Group 3: Security ──────────────────────────
+  security:
     runs-on: ubuntu-latest
-    name: "Security / Composer Audit"
+    name: "Security"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ inputs.php-version }}
           tools: composer:v2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
       - name: Install Composer dependencies
         run: composer install --no-progress --prefer-dist --optimize-autoloader
+
       - name: Composer audit (high/critical)
         run: composer audit --format=plain --abandoned=report
 
-  security-npm:
-    runs-on: ubuntu-latest
-    name: "Security / npm Audit"
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
       - name: Install npm dependencies
         run: npm ci
+
       - name: npm audit (critical only)
         run: npm audit --audit-level=critical --omit=dev
 
-  # ── License Compliance ──────────────────────────
+  # ── Group 4: License Compliance ─────────────────
   #
-  # Checks dependencies against an allowlist of approved SPDX license
-  # identifiers. Generates a full license report as a workflow artifact
-  # for audit/compliance purposes.
+  # Checks all composer and npm dependencies against an allowlist of
+  # approved SPDX license identifiers. Generates a full license report
+  # as a workflow artifact for audit/compliance purposes.
   #
   # Configuration (optional files in your app repo root):
   #
@@ -341,7 +240,7 @@ jobs:
   #      "GPL-2.0-only", "GPL-2.0-or-later", "GPL-3.0-only",
   #      "GPL-3.0-or-later", "MPL-2.0", "Unlicense", "0BSD",
   #      "CC0-1.0", "CC-BY-3.0", "CC-BY-4.0", "PSF-2.0",
-  #      "Zlib", "BlueOak-1.0.0"]
+  #      "Zlib", "BlueOak-1.0.0", "OSL-3.0"]
   #
   #   .license-overrides.json
   #   ─────────────────────────────────────────────
@@ -360,17 +259,17 @@ jobs:
   #     }
   #
   # How it works:
-  #   1. Extracts all dependency licenses from composer or npm
+  #   1. Extracts all dependency licenses from composer and npm
   #   2. For dual-licensed packages ("MIT OR Apache-2.0"), passes if ANY
   #      license in the OR expression is on the allowlist
   #   3. Checks each package against overrides first, then the allowlist
   #   4. Generates a markdown + JSON report uploaded as a workflow artifact
   #   5. Fails the workflow if any dependency has a disallowed license
   # ────────────────────────────────────────────────
-  license-composer:
+  license:
     if: ${{ inputs.enable-license-check }}
     runs-on: ubuntu-latest
-    name: "License / Composer"
+    name: "License"
 
     steps:
       - name: Checkout
@@ -382,10 +281,20 @@ jobs:
           php-version: ${{ inputs.php-version }}
           tools: composer:v2
 
-      - name: Install dependencies
-        run: composer install --no-progress --prefer-dist --optimize-autoloader
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
 
-      - name: Check Composer licenses
+      - name: Install dependencies
+        run: |
+          composer install --no-progress --prefer-dist --optimize-autoloader
+          npm ci
+          npm install -g license-checker
+
+      - name: Composer licenses
+        id: composer-licenses
         run: |
           set -euo pipefail
 
@@ -400,10 +309,10 @@ jobs:
             "GPL-3.0-only", "GPL-3.0-or-later",
             "AGPL-3.0-only", "AGPL-3.0-or-later",
             "EUPL-1.1", "EUPL-1.2",
-            "MPL-2.0",
+            "MPL-2.0", "OSL-3.0",
             "Unlicense", "CC0-1.0", "CC-BY-3.0", "CC-BY-4.0",
             "PSF-2.0", "Python-2.0", "Zlib", "BlueOak-1.0.0",
-            "Artistic-2.0", "BSL-1.0", "WTFPL", "OSL-3.0"
+            "Artistic-2.0", "BSL-1.0", "WTFPL"
           ]'
 
           if [ -f .license-allowlist.json ]; then
@@ -463,102 +372,22 @@ jobs:
             REPORT_JSON=$(echo "$REPORT_JSON" | jq \
               --arg pkg "$pkg" --arg ver "$version" --arg lic "$license" \
               --arg st "$status" --arg ovr "${override:-}" \
-              '. + [{"package": $pkg, "version": $ver, "license": $lic, "status": $st, "override": $ovr}]')
+              '. + [{"package": $pkg, "version": $ver, "license": $lic, "status": $st, "override": $ovr, "ecosystem": "composer"}]')
           done
 
           TOTAL=$(echo "$REPORT_JSON" | jq 'length')
-          APPROVED=$(echo "$REPORT_JSON" | jq '[.[] | select(.status == "approved")] | length')
-          OVERRIDDEN=$(echo "$REPORT_JSON" | jq '[.[] | select(.status == "approved-override")] | length')
-          DENIED=$(echo "$REPORT_JSON" | jq '[.[] | select(.status == "DENIED")] | length')
+          echo "Checked $TOTAL Composer packages, $VIOLATIONS denied"
 
-          # Save JSON report
+          # Save partial report for merging later
           echo "$REPORT_JSON" | jq '.' > license-report/composer-licenses.json
 
-          # Generate Markdown report
-          {
-            echo "# Composer License Report"
-            echo ""
-            echo "**Generated:** $(date -u +'%Y-%m-%d %H:%M UTC')"
-            echo "**Repository:** ${{ github.repository }}"
-            echo "**Ref:** ${{ github.sha }}"
-            echo ""
-            echo "## Summary"
-            echo ""
-            echo "| Metric | Count |"
-            echo "|--------|-------|"
-            echo "| Total dependencies | $TOTAL |"
-            echo "| Approved (allowlist) | $APPROVED |"
-            echo "| Approved (manual override) | $OVERRIDDEN |"
-            echo "| **Denied** | **$DENIED** |"
-            echo ""
-            echo "## Dependencies"
-            echo ""
-            echo "| Package | Version | License | Status | Override |"
-            echo "|---------|---------|---------|--------|----------|"
-          } > license-report/composer-licenses.md
-
-          echo "$REPORT_JSON" | jq -r '.[] | "| \(.package) | \(.version) | \(.license) | \(.status) | \(.override) |"' >> license-report/composer-licenses.md
-
-          if [ "$DENIED" -gt 0 ]; then
-            {
-              echo ""
-              echo "## Denied Dependencies"
-              echo ""
-              echo "| Package | License |"
-              echo "|---------|---------|"
-            } >> license-report/composer-licenses.md
-            echo "$REPORT_JSON" | jq -r '.[] | select(.status == "DENIED") | "| \(.package) | \(.license) |"' >> license-report/composer-licenses.md
-            {
-              echo ""
-              echo "### How to resolve"
-              echo ""
-              echo "1. Add the license SPDX identifier to \`.license-allowlist.json\` if the license is generally acceptable"
-              echo "2. Add the specific package to \`.license-overrides.json\` with a justification if only this package is approved"
-              echo ""
-              echo "See the workflow comments in quality.yml for configuration details."
-            } >> license-report/composer-licenses.md
-          fi
-
-          echo ""
-          echo "════════════════════════════════════════"
-          echo "Composer: $TOTAL total, $APPROVED approved, $OVERRIDDEN overridden, $DENIED denied"
-          echo "════════════════════════════════════════"
-
           if [ "$VIOLATIONS" -gt 0 ]; then
-            echo "::error::$VIOLATIONS Composer dependency license(s) are not on the allowlist. Add them to .license-allowlist.json or .license-overrides.json"
+            echo "::error::$VIOLATIONS Composer dependency license(s) are not on the allowlist."
             exit 1
           fi
           echo "All Composer dependency licenses are compliant."
 
-      - name: Upload Composer license report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: license-report-composer
-          path: license-report/
-          retention-days: 90
-
-  license-npm:
-    if: ${{ inputs.enable-license-check }}
-    runs-on: ubuntu-latest
-    name: "License / npm"
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
-
-      - name: Install dependencies
-        run: |
-          npm ci
-          npm install -g license-checker
-
-      - name: Check npm licenses
+      - name: npm licenses
         run: |
           set -euo pipefail
 
@@ -572,10 +401,10 @@ jobs:
             "GPL-3.0-only", "GPL-3.0-or-later",
             "AGPL-3.0-only", "AGPL-3.0-or-later",
             "EUPL-1.1", "EUPL-1.2",
-            "MPL-2.0",
+            "MPL-2.0", "OSL-3.0",
             "Unlicense", "CC0-1.0", "CC-BY-3.0", "CC-BY-4.0",
             "PSF-2.0", "Python-2.0", "Zlib", "BlueOak-1.0.0",
-            "Artistic-2.0", "BSL-1.0", "WTFPL", "OSL-3.0"
+            "Artistic-2.0", "BSL-1.0", "WTFPL"
           ]'
 
           if [ -f .license-allowlist.json ]; then
@@ -595,8 +424,6 @@ jobs:
 
           mkdir -p license-report
 
-          # Helper: check if a license string is allowed
-          # Handles SPDX OR expressions and trailing "*" from license-checker
           check_license() {
             local license_str="$1"
             IFS='|' read -ra PARTS <<< "$(echo "$license_str" | sed 's/ OR /|/g; s/ or /|/g')"
@@ -636,18 +463,41 @@ jobs:
             REPORT_JSON=$(echo "$REPORT_JSON" | jq \
               --arg pkg "$pkg_name" --arg ver "$pkg_version" --arg lic "$license" \
               --arg st "$status" --arg ovr "${override:-}" \
-              '. + [{"package": $pkg, "version": $ver, "license": $lic, "status": $st, "override": $ovr}]')
+              '. + [{"package": $pkg, "version": $ver, "license": $lic, "status": $st, "override": $ovr, "ecosystem": "npm"}]')
           done
+
+          TOTAL=$(echo "$REPORT_JSON" | jq 'length')
+          echo "Checked $TOTAL npm packages, $VIOLATIONS denied"
+
+          echo "$REPORT_JSON" | jq '.' > license-report/npm-licenses.json
+
+          if [ "$VIOLATIONS" -gt 0 ]; then
+            echo "::error::$VIOLATIONS npm dependency license(s) are not on the allowlist."
+            exit 1
+          fi
+          echo "All npm dependency licenses are compliant."
+
+      - name: Generate license report
+        if: always()
+        run: |
+          mkdir -p license-report
+
+          # Merge composer + npm JSON reports
+          COMPOSER='[]'
+          NPM='[]'
+          [ -f license-report/composer-licenses.json ] && COMPOSER=$(cat license-report/composer-licenses.json)
+          [ -f license-report/npm-licenses.json ] && NPM=$(cat license-report/npm-licenses.json)
+
+          REPORT_JSON=$(jq -s '.[0] + .[1]' <<< "$COMPOSER"$'\n'"$NPM")
+          echo "$REPORT_JSON" | jq '.' > license-report/license-report.json
 
           TOTAL=$(echo "$REPORT_JSON" | jq 'length')
           APPROVED=$(echo "$REPORT_JSON" | jq '[.[] | select(.status == "approved")] | length')
           OVERRIDDEN=$(echo "$REPORT_JSON" | jq '[.[] | select(.status == "approved-override")] | length')
           DENIED=$(echo "$REPORT_JSON" | jq '[.[] | select(.status == "DENIED")] | length')
 
-          echo "$REPORT_JSON" | jq '.' > license-report/npm-licenses.json
-
           {
-            echo "# npm License Report"
+            echo "# License Compliance Report"
             echo ""
             echo "**Generated:** $(date -u +'%Y-%m-%d %H:%M UTC')"
             echo "**Repository:** ${{ github.repository }}"
@@ -662,23 +512,33 @@ jobs:
             echo "| Approved (manual override) | $OVERRIDDEN |"
             echo "| **Denied** | **$DENIED** |"
             echo ""
-            echo "## Dependencies"
+            echo "## Composer Dependencies"
             echo ""
             echo "| Package | Version | License | Status | Override |"
             echo "|---------|---------|---------|--------|----------|"
-          } > license-report/npm-licenses.md
+          } > license-report/license-report.md
 
-          echo "$REPORT_JSON" | jq -r '.[] | "| \(.package) | \(.version) | \(.license) | \(.status) | \(.override) |"' >> license-report/npm-licenses.md
+          echo "$REPORT_JSON" | jq -r '.[] | select(.ecosystem == "composer") | "| \(.package) | \(.version) | \(.license) | \(.status) | \(.override) |"' >> license-report/license-report.md
+
+          {
+            echo ""
+            echo "## npm Dependencies"
+            echo ""
+            echo "| Package | Version | License | Status | Override |"
+            echo "|---------|---------|---------|--------|----------|"
+          } >> license-report/license-report.md
+
+          echo "$REPORT_JSON" | jq -r '.[] | select(.ecosystem == "npm") | "| \(.package) | \(.version) | \(.license) | \(.status) | \(.override) |"' >> license-report/license-report.md
 
           if [ "$DENIED" -gt 0 ]; then
             {
               echo ""
               echo "## Denied Dependencies"
               echo ""
-              echo "| Package | License |"
-              echo "|---------|---------|"
-            } >> license-report/npm-licenses.md
-            echo "$REPORT_JSON" | jq -r '.[] | select(.status == "DENIED") | "| \(.package) | \(.license) |"' >> license-report/npm-licenses.md
+              echo "| Package | Ecosystem | License |"
+              echo "|---------|-----------|---------|"
+            } >> license-report/license-report.md
+            echo "$REPORT_JSON" | jq -r '.[] | select(.status == "DENIED") | "| \(.package) | \(.ecosystem) | \(.license) |"' >> license-report/license-report.md
             {
               echo ""
               echo "### How to resolve"
@@ -687,39 +547,29 @@ jobs:
               echo "2. Add the specific package to \`.license-overrides.json\` with a justification if only this package is approved"
               echo ""
               echo "See the workflow comments in quality.yml for configuration details."
-            } >> license-report/npm-licenses.md
+            } >> license-report/license-report.md
           fi
 
-          echo ""
-          echo "════════════════════════════════════════"
-          echo "npm: $TOTAL total, $APPROVED approved, $OVERRIDDEN overridden, $DENIED denied"
-          echo "════════════════════════════════════════"
-
-          if [ "$VIOLATIONS" -gt 0 ]; then
-            echo "::error::$VIOLATIONS npm dependency license(s) are not on the allowlist. Add them to .license-allowlist.json or .license-overrides.json"
-            exit 1
-          fi
-          echo "All npm dependency licenses are compliant."
-
-      - name: Upload npm license report
+      - name: Upload license report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: license-report-npm
+          name: license-report
           path: license-report/
           retention-days: 90
 
   # ╔══════════════════════════════════════════════╗
   # ║  STAGE 2 — Tests (gated behind Stage 1)      ║
+  # ║                                               ║
   # ║  • PHPUnit matrix (PHP × Nextcloud versions)  ║
   # ║  • Integration tests (Newman)                 ║
   # ╚══════════════════════════════════════════════╝
 
   phpunit:
-    if: ${{ inputs.enable-phpunit && !cancelled() && needs.php-lint.result != 'failure' && (needs.php-phpcs.result == 'success' || needs.php-phpcs.result == 'skipped') && needs.security-composer.result != 'failure' && needs.security-npm.result != 'failure' && (needs.php-phpmd.result == 'success' || needs.php-phpmd.result == 'skipped') }}
+    if: ${{ inputs.enable-phpunit && !cancelled() && needs.php-quality.result != 'failure' && needs.security.result != 'failure' }}
     runs-on: ubuntu-latest
-    name: "Tests / PHPUnit (PHP ${{ matrix.php-version }}, NC ${{ matrix.nextcloud-ref }})"
-    needs: [php-lint, php-phpcs, php-phpmd, security-composer, security-npm]
+    name: "PHPUnit (PHP ${{ matrix.php-version }}, NC ${{ matrix.nextcloud-ref }})"
+    needs: [php-quality, security]
 
     strategy:
       matrix:
@@ -776,7 +626,6 @@ jobs:
             --database sqlite \
             --admin-user admin \
             --admin-pass admin
-          # Enable additional apps first (dependencies)
           if [ '${{ inputs.additional-apps }}' != '[]' ]; then
             echo '${{ inputs.additional-apps }}' | jq -r '.[].app' | while read -r name; do
               echo "Enabling app: $name"
@@ -828,10 +677,10 @@ jobs:
           if-no-files-found: ignore
 
   newman:
-    if: ${{ inputs.enable-newman && !cancelled() && needs.php-lint.result != 'failure' && (needs.php-phpcs.result == 'success' || needs.php-phpcs.result == 'skipped') && needs.security-composer.result != 'failure' && needs.security-npm.result != 'failure' && (needs.php-phpmd.result == 'success' || needs.php-phpmd.result == 'skipped') }}
+    if: ${{ inputs.enable-newman && !cancelled() && needs.php-quality.result != 'failure' && needs.security.result != 'failure' }}
     runs-on: ubuntu-latest
-    name: "Tests / Integration (Newman)"
-    needs: [php-lint, php-phpcs, php-phpmd, security-composer, security-npm]
+    name: "Integration Tests (Newman)"
+    needs: [php-quality, security]
 
     services:
       postgres:
@@ -950,14 +799,12 @@ jobs:
   baseline-protection:
     if: ${{ inputs.enable-coverage-guard && github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
-    name: "Reporting / Coverage Baseline Protection"
-
+    name: "Coverage Baseline Protection"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - name: Check for manual baseline changes
         run: |
           if git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -q '^\.coverage-baseline$'; then
@@ -969,31 +816,26 @@ jobs:
   update-baseline:
     if: ${{ inputs.enable-coverage-guard && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/development') }}
     runs-on: ubuntu-latest
-    name: "Reporting / Update Coverage Baseline"
+    name: "Update Coverage Baseline"
     needs: phpunit
     permissions:
       contents: write
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           token: ${{ github.token }}
-
       - name: Download coverage artifact
         uses: actions/download-artifact@v4
         with:
           name: coverage-report
           path: coverage/
-
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ inputs.php-version }}
-
       - name: Update baseline if improved
         run: php scripts/coverage-guard.php coverage/clover.xml --update-baseline
-
       - name: Commit updated baseline
         run: |
           git config user.name "github-actions[bot]"
@@ -1008,29 +850,8 @@ jobs:
 
   summary:
     runs-on: ubuntu-latest
-    name: "Reporting / Quality Summary"
-    needs:
-      # Stage 1: PHP Quality
-      - php-lint
-      - php-phpcs
-      - php-phpmd
-      - php-psalm
-      - php-phpstan
-      - php-phpmetrics
-      # Stage 1: Vue Quality
-      - vue-eslint
-      - vue-stylelint
-      # Stage 1: Security
-      - security-composer
-      - security-npm
-      # Stage 1: License
-      - license-composer
-      - license-npm
-      # Stage 2: Tests
-      - phpunit
-      - newman
-      # Stage 3: Coverage
-      - baseline-protection
+    name: "Quality Summary"
+    needs: [php-quality, vue-quality, security, license, phpunit, newman, baseline-protection]
     if: always()
 
     steps:
@@ -1039,56 +860,21 @@ jobs:
           echo "## Quality Report" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          echo "### PHP Quality" >> $GITHUB_STEP_SUMMARY
-          echo "| Check | Result |" >> $GITHUB_STEP_SUMMARY
+          echo "### Stage 1 — Quality Gates" >> $GITHUB_STEP_SUMMARY
+          echo "| Group | Result |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
-          for check in "PHP Lint:${{ needs.php-lint.result }}" \
-                       "PHPCS:${{ needs.php-phpcs.result }}" \
-                       "PHPMD:${{ needs.php-phpmd.result }}" \
-                       "Psalm:${{ needs.php-psalm.result }}" \
-                       "PHPStan:${{ needs.php-phpstan.result }}" \
-                       "phpmetrics:${{ needs.php-phpmetrics.result }}"; do
+          for check in "PHP Quality:${{ needs.php-quality.result }}" \
+                       "Vue Quality:${{ needs.vue-quality.result }}" \
+                       "Security:${{ needs.security.result }}" \
+                       "License:${{ needs.license.result }}"; do
             name="${check%%:*}"; result="${check##*:}"
             case "$result" in success) icon="+" ;; skipped) icon="-" ;; *) icon="x" ;; esac
             echo "| $name | $icon $result |" >> $GITHUB_STEP_SUMMARY
           done
 
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Vue Quality" >> $GITHUB_STEP_SUMMARY
-          echo "| Check | Result |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
-          for check in "ESLint:${{ needs.vue-eslint.result }}" \
-                       "Stylelint:${{ needs.vue-stylelint.result }}"; do
-            name="${check%%:*}"; result="${check##*:}"
-            case "$result" in success) icon="+" ;; skipped) icon="-" ;; *) icon="x" ;; esac
-            echo "| $name | $icon $result |" >> $GITHUB_STEP_SUMMARY
-          done
-
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Security" >> $GITHUB_STEP_SUMMARY
-          echo "| Check | Result |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
-          for check in "Composer Audit:${{ needs.security-composer.result }}" \
-                       "npm Audit:${{ needs.security-npm.result }}"; do
-            name="${check%%:*}"; result="${check##*:}"
-            case "$result" in success) icon="+" ;; skipped) icon="-" ;; *) icon="x" ;; esac
-            echo "| $name | $icon $result |" >> $GITHUB_STEP_SUMMARY
-          done
-
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### License Compliance" >> $GITHUB_STEP_SUMMARY
-          echo "| Check | Result |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
-          for check in "Composer Licenses:${{ needs.license-composer.result }}" \
-                       "npm Licenses:${{ needs.license-npm.result }}"; do
-            name="${check%%:*}"; result="${check##*:}"
-            case "$result" in success) icon="+" ;; skipped) icon="-" ;; *) icon="x" ;; esac
-            echo "| $name | $icon $result |" >> $GITHUB_STEP_SUMMARY
-          done
-
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Tests" >> $GITHUB_STEP_SUMMARY
-          echo "| Check | Result |" >> $GITHUB_STEP_SUMMARY
+          echo "### Stage 2 — Tests" >> $GITHUB_STEP_SUMMARY
+          echo "| Group | Result |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
           for check in "PHPUnit:${{ needs.phpunit.result }}" \
                        "Newman:${{ needs.newman.result }}" \
@@ -1103,46 +889,32 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const sections = {
-              'PHP Quality': {
-                'PHP Lint': '${{ needs.php-lint.result }}',
-                'PHPCS': '${{ needs.php-phpcs.result }}',
-                'PHPMD': '${{ needs.php-phpmd.result }}',
-                'Psalm': '${{ needs.php-psalm.result }}',
-                'PHPStan': '${{ needs.php-phpstan.result }}',
-                'phpmetrics': '${{ needs.php-phpmetrics.result }}'
-              },
-              'Vue Quality': {
-                'ESLint': '${{ needs.vue-eslint.result }}',
-                'Stylelint': '${{ needs.vue-stylelint.result }}'
-              },
-              'Security': {
-                'Composer Audit': '${{ needs.security-composer.result }}',
-                'npm Audit': '${{ needs.security-npm.result }}'
-              },
-              'License Compliance': {
-                'Composer Licenses': '${{ needs.license-composer.result }}',
-                'npm Licenses': '${{ needs.license-npm.result }}'
-              },
-              'Tests': {
-                'PHPUnit': '${{ needs.phpunit.result }}',
-                'Newman': '${{ needs.newman.result }}',
-                'Coverage Baseline': '${{ needs.baseline-protection.result }}'
-              }
+            const stage1 = {
+              'PHP Quality': '${{ needs.php-quality.result }}',
+              'Vue Quality': '${{ needs.vue-quality.result }}',
+              'Security': '${{ needs.security.result }}',
+              'License': '${{ needs.license.result }}'
+            };
+            const stage2 = {
+              'PHPUnit': '${{ needs.phpunit.result }}',
+              'Newman': '${{ needs.newman.result }}',
+              'Coverage Baseline': '${{ needs.baseline-protection.result }}'
             };
 
             const icon = (s) => s === 'success' ? 'PASS' : s === 'skipped' ? 'SKIP' : 'FAIL';
 
             let body = '## Quality Report\n\n';
-            for (const [section, jobs] of Object.entries(sections)) {
-              body += `### ${section}\n\n`;
-              body += '| Check | Result |\n|-------|--------|\n';
-              for (const [name, result] of Object.entries(jobs)) {
-                body += `| ${name} | ${icon(result)} ${result} |\n`;
-              }
-              body += '\n';
+            body += '### Stage 1 — Quality Gates\n\n';
+            body += '| Group | Result |\n|-------|--------|\n';
+            for (const [name, result] of Object.entries(stage1)) {
+              body += `| ${name} | ${icon(result)} ${result} |\n`;
             }
-            body += `See [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.\n`;
+            body += '\n### Stage 2 — Tests\n\n';
+            body += '| Group | Result |\n|-------|--------|\n';
+            for (const [name, result] of Object.entries(stage2)) {
+              body += `| ${name} | ${icon(result)} ${result} |\n`;
+            }
+            body += `\nSee [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.\n`;
 
             github.rest.issues.createComment({
               issue_number: context.issue.number,
