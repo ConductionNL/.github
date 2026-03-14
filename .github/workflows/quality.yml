@@ -811,7 +811,10 @@ jobs:
         run: |
           cd server
           echo "Running seed command: ${{ inputs.newman-seed-command }}"
-          ${{ inputs.newman-seed-command }}
+          # Run the seed command (e.g. maintenance:repair, custom script, etc.)
+          # Use eval to support complex commands with pipes or &&
+          eval ${{ inputs.newman-seed-command }}
+          echo "Seed command completed."
 
       - name: Setup Node.js and Newman
         uses: actions/setup-node@v4
