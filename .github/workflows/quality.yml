@@ -77,6 +77,11 @@ on:
         required: false
         type: string
         default: "tests/integration"
+      newman-environment-path:
+        description: "Path to Postman environment JSON file (relative to app root). When set, passes --environment to Newman instead of ad-hoc --env-var flags."
+        required: false
+        type: string
+        default: ""
       additional-apps:
         description: "JSON array of additional app repos to checkout and enable (e.g. '[{\"repo\":\"ConductionNL/openregister\",\"app\":\"openregister\"}]')"
         required: false
@@ -196,6 +201,18 @@ jobs:
               ;;
           esac
 
+      - name: Record result
+        if: always()
+        run: |
+          mkdir -p quality-results
+          echo "${{ job.status }}" > quality-results/${{ matrix.tool }}.txt
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-php-quality-${{ matrix.tool }}
+          path: quality-results/
+
   # ── Group 2: Vue Quality ────────────────────────
   vue-quality:
     if: ${{ inputs.enable-frontend }}
@@ -233,6 +250,18 @@ jobs:
               npm run stylelint
               ;;
           esac
+
+      - name: Record result
+        if: always()
+        run: |
+          mkdir -p quality-results
+          echo "${{ job.status }}" > quality-results/${{ matrix.tool }}.txt
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-vue-quality-${{ matrix.tool }}
+          path: quality-results/
 
   # ── Group 3: Security ──────────────────────────
   security:
@@ -273,6 +302,18 @@ jobs:
               npm audit --audit-level=critical --omit=dev
               ;;
           esac
+
+      - name: Record result
+        if: always()
+        run: |
+          mkdir -p quality-results
+          echo "${{ job.status }}" > quality-results/${{ matrix.ecosystem }}.txt
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-security-${{ matrix.ecosystem }}
+          path: quality-results/
 
   # ── Group 4: License Compliance ─────────────────
   #
@@ -539,6 +580,18 @@ jobs:
           path: license-report/
           retention-days: 90
 
+      - name: Record result
+        if: always()
+        run: |
+          mkdir -p quality-results
+          echo "${{ job.status }}" > quality-results/${{ matrix.ecosystem }}.txt
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-license-${{ matrix.ecosystem }}
+          path: quality-results/
+
   # ╔══════════════════════════════════════════════╗
   # ║  STAGE 2 — Tests (gated behind Stage 1)      ║
   # ║                                               ║
@@ -752,15 +805,28 @@ jobs:
       - name: Run Newman tests
         run: |
           cd server/apps/${{ inputs.app-name }}/${{ inputs.newman-collection-path }}
+
+          # Build environment args: use --environment file if provided, otherwise ad-hoc vars
+          ENV_ARGS=""
+          if [ -n "${{ inputs.newman-environment-path }}" ]; then
+            ENV_FILE="../../../apps/${{ inputs.app-name }}/${{ inputs.newman-environment-path }}"
+            if [ -f "$ENV_FILE" ]; then
+              # Rewrite localhost:8080 for CI (PHP built-in server runs on 8080)
+              echo "Using environment file: ${{ inputs.newman-environment-path }}"
+              ENV_ARGS="--environment $ENV_FILE"
+            else
+              echo "::warning::Environment file '${{ inputs.newman-environment-path }}' not found, falling back to default env vars."
+              ENV_ARGS='--env-var "base_url=http://localhost:8080" --env-var "admin_user=admin" --env-var "admin_password=admin"'
+            fi
+          else
+            ENV_ARGS='--env-var "base_url=http://localhost:8080" --env-var "admin_user=admin" --env-var "admin_password=admin"'
+          fi
+
           FAIL=0
           for collection in *.postman_collection.json; do
             echo ""
             echo "=== Running: $collection ==="
-            newman run "$collection" \
-              --env-var "base_url=http://localhost:8080" \
-              --env-var "admin_user=admin" \
-              --env-var "admin_password=admin" \
-              --reporters cli || FAIL=1
+            eval newman run "\"$collection\"" $ENV_ARGS --reporters cli || FAIL=1
           done
           if [ "$FAIL" -ne 0 ]; then
             echo "::error::One or more Newman collections failed."
@@ -829,73 +895,260 @@ jobs:
             git push
           fi
 
-  summary:
+  report:
     runs-on: ubuntu-latest
-    name: "Quality Summary"
+    name: "Quality Report"
     needs: [php-quality, vue-quality, security, license, phpunit, newman, baseline-protection]
     if: always()
 
     steps:
-      - name: Write job summary
+      - name: Download all result artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: result-*
+          path: results/
+          merge-multiple: false
+
+      - name: Download license reports
+        uses: actions/download-artifact@v4
+        with:
+          pattern: license-report-*
+          path: license-reports/
+          merge-multiple: true
+        continue-on-error: true
+
+      - name: Download coverage report
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+        continue-on-error: true
+
+      - name: Install PDF tools
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq pandoc wkhtmltopdf
+
+      - name: Generate report
         run: |
-          echo "## Quality Report" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
+          set -euo pipefail
 
-          echo "### Stage 1 — Quality Gates" >> $GITHUB_STEP_SUMMARY
-          echo "| Group | Result |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
-          for check in "PHP Quality:${{ needs.php-quality.result }}" \
-                       "Vue Quality:${{ needs.vue-quality.result }}" \
-                       "Security:${{ needs.security.result }}" \
-                       "License:${{ needs.license.result }}"; do
-            name="${check%%:*}"; result="${check##*:}"
-            case "$result" in success) icon="+" ;; skipped) icon="-" ;; *) icon="x" ;; esac
-            echo "| $name | $icon $result |" >> $GITHUB_STEP_SUMMARY
-          done
+          REPORT="quality-report.md"
+          REPO="${{ github.repository }}"
+          SHA="${{ github.sha }}"
+          SHORT_SHA="${SHA:0:7}"
+          BRANCH="${{ github.ref_name }}"
+          EVENT="${{ github.event_name }}"
+          DATE="$(date -u +'%Y-%m-%d %H:%M UTC')"
+          RUN_URL="https://github.com/$REPO/actions/runs/${{ github.run_id }}"
 
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Stage 2 — Tests" >> $GITHUB_STEP_SUMMARY
-          echo "| Group | Result |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
-          for check in "PHPUnit:${{ needs.phpunit.result }}" \
-                       "Newman:${{ needs.newman.result }}" \
-                       "Coverage Baseline:${{ needs.baseline-protection.result }}"; do
-            name="${check%%:*}"; result="${check##*:}"
-            case "$result" in success) icon="+" ;; skipped) icon="-" ;; *) icon="x" ;; esac
-            echo "| $name | $icon $result |" >> $GITHUB_STEP_SUMMARY
-          done
+          # Helper to read result from artifact files
+          read_result() {
+            local file="$1"
+            if [ -f "$file" ]; then
+              cat "$file" | tr -d '[:space:]'
+            else
+              echo "skipped"
+            fi
+          }
+
+          icon() {
+            case "$1" in
+              success|Success) echo "PASS" ;;
+              skipped|Skipped) echo "SKIP" ;;
+              *) echo "FAIL" ;;
+            esac
+          }
+
+          # ── Header ──
+          {
+            echo "# Quality Report"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| **Repository** | $REPO |"
+            echo "| **Commit** | $SHORT_SHA |"
+            echo "| **Branch** | $BRANCH |"
+            echo "| **Event** | $EVENT |"
+            echo "| **Generated** | $DATE |"
+            echo "| **Workflow Run** | $RUN_URL |"
+            echo ""
+          } > "$REPORT"
+
+          # ── Overall Summary ──
+          {
+            echo "## Summary"
+            echo ""
+            echo "| Group | Result |"
+            echo "|-------|--------|"
+            echo "| PHP Quality | $(icon '${{ needs.php-quality.result }}') |"
+            echo "| Vue Quality | $(icon '${{ needs.vue-quality.result }}') |"
+            echo "| Security | $(icon '${{ needs.security.result }}') |"
+            echo "| License | $(icon '${{ needs.license.result }}') |"
+            echo "| PHPUnit | $(icon '${{ needs.phpunit.result }}') |"
+            echo "| Newman | $(icon '${{ needs.newman.result }}') |"
+            echo ""
+          } >> "$REPORT"
+
+          # ── PHP Quality Details ──
+          {
+            echo "## PHP Quality"
+            echo ""
+            echo "| Tool | Result |"
+            echo "|------|--------|"
+            for tool in lint phpcs phpmd psalm phpstan phpmetrics; do
+              result=$(read_result "results/result-php-quality-$tool/$tool.txt")
+              echo "| $tool | $(icon "$result") |"
+            done
+            echo ""
+          } >> "$REPORT"
+
+          # ── Vue Quality Details ──
+          {
+            echo "## Vue Quality"
+            echo ""
+            echo "| Tool | Result |"
+            echo "|------|--------|"
+            for tool in eslint stylelint; do
+              result=$(read_result "results/result-vue-quality-$tool/$tool.txt")
+              echo "| $tool | $(icon "$result") |"
+            done
+            echo ""
+          } >> "$REPORT"
+
+          # ── Security Details ──
+          {
+            echo "## Security"
+            echo ""
+            echo "| Ecosystem | Result |"
+            echo "|-----------|--------|"
+            for eco in composer npm; do
+              result=$(read_result "results/result-security-$eco/$eco.txt")
+              echo "| $eco | $(icon "$result") |"
+            done
+            echo ""
+          } >> "$REPORT"
+
+          # ── License Compliance Details ──
+          {
+            echo "## License Compliance"
+            echo ""
+            echo "| Ecosystem | Result |"
+            echo "|-----------|--------|"
+            for eco in composer npm; do
+              result=$(read_result "results/result-license-$eco/$eco.txt")
+              echo "| $eco | $(icon "$result") |"
+            done
+            echo ""
+
+            # Include license summary from JSON reports if available
+            for eco in composer npm; do
+              JSON_FILE="license-reports/$eco-licenses.json"
+              if [ -f "$JSON_FILE" ]; then
+                TOTAL=$(jq 'length' "$JSON_FILE")
+                APPROVED=$(jq '[.[] | select(.status == "approved")] | length' "$JSON_FILE")
+                OVERRIDDEN=$(jq '[.[] | select(.status == "approved-override")] | length' "$JSON_FILE")
+                DENIED=$(jq '[.[] | select(.status == "DENIED")] | length' "$JSON_FILE")
+                echo "### $eco dependencies ($TOTAL total)"
+                echo ""
+                echo "| Metric | Count |"
+                echo "|--------|-------|"
+                echo "| Approved (allowlist) | $APPROVED |"
+                echo "| Approved (override) | $OVERRIDDEN |"
+                echo "| **Denied** | **$DENIED** |"
+                echo ""
+
+                if [ "$DENIED" -gt 0 ]; then
+                  echo "#### Denied packages"
+                  echo ""
+                  echo "| Package | Version | License |"
+                  echo "|---------|---------|---------|"
+                  jq -r '.[] | select(.status == "DENIED") | "| \(.package) | \(.version) | \(.license) |"' "$JSON_FILE"
+                  echo ""
+                fi
+              fi
+            done
+          } >> "$REPORT"
+
+          # ── PHPUnit Results ──
+          {
+            echo "## PHPUnit Tests"
+            echo ""
+            if [ "${{ needs.phpunit.result }}" = "skipped" ]; then
+              echo "*PHPUnit tests were not enabled for this run.*"
+            else
+              echo "| PHP | Nextcloud | Result |"
+              echo "|-----|-----------|--------|"
+              echo "| Overall | | $(icon '${{ needs.phpunit.result }}') |"
+            fi
+            echo ""
+
+            # Include coverage summary if available
+            if [ -f "coverage/clover.xml" ]; then
+              COVERED=$(grep -oP 'coveredstatements="\K[0-9]+' coverage/clover.xml | head -1 || echo "0")
+              TOTAL_STMTS=$(grep -oP 'statements="\K[0-9]+' coverage/clover.xml | head -1 || echo "0")
+              if [ "$TOTAL_STMTS" -gt 0 ]; then
+                COVERAGE=$(echo "scale=1; $COVERED * 100 / $TOTAL_STMTS" | bc)
+                echo "**Code coverage:** ${COVERAGE}% ($COVERED / $TOTAL_STMTS statements)"
+                echo ""
+              fi
+            fi
+          } >> "$REPORT"
+
+          # ── Newman Results ──
+          {
+            echo "## Integration Tests (Newman)"
+            echo ""
+            if [ "${{ needs.newman.result }}" = "skipped" ]; then
+              echo "*Newman integration tests were not enabled for this run.*"
+            else
+              echo "| Result |"
+              echo "|--------|"
+              echo "| $(icon '${{ needs.newman.result }}') |"
+            fi
+            echo ""
+          } >> "$REPORT"
+
+          # ── Footer ──
+          {
+            echo "---"
+            echo ""
+            echo "*Generated automatically by the [Quality workflow]($RUN_URL).*"
+          } >> "$REPORT"
+
+          echo "Report generated: $(wc -l < "$REPORT") lines"
+
+      - name: Convert to PDF
+        run: |
+          pandoc quality-report.md \
+            -o quality-report.pdf \
+            --pdf-engine=wkhtmltopdf \
+            --metadata title="Quality Report" \
+            -V margin-top=20mm \
+            -V margin-bottom=20mm \
+            -V margin-left=15mm \
+            -V margin-right=15mm
+
+      - name: Write step summary
+        if: always()
+        run: cat quality-report.md >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload PDF report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-report
+          path: |
+            quality-report.pdf
+            quality-report.md
+          retention-days: 90
 
       - name: Comment PR with results
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           script: |
-            const stage1 = {
-              'PHP Quality': '${{ needs.php-quality.result }}',
-              'Vue Quality': '${{ needs.vue-quality.result }}',
-              'Security': '${{ needs.security.result }}',
-              'License': '${{ needs.license.result }}'
-            };
-            const stage2 = {
-              'PHPUnit': '${{ needs.phpunit.result }}',
-              'Newman': '${{ needs.newman.result }}',
-              'Coverage Baseline': '${{ needs.baseline-protection.result }}'
-            };
-
-            const icon = (s) => s === 'success' ? 'PASS' : s === 'skipped' ? 'SKIP' : 'FAIL';
-
-            let body = '## Quality Report\n\n';
-            body += '### Stage 1 — Quality Gates\n\n';
-            body += '| Group | Result |\n|-------|--------|\n';
-            for (const [name, result] of Object.entries(stage1)) {
-              body += `| ${name} | ${icon(result)} ${result} |\n`;
-            }
-            body += '\n### Stage 2 — Tests\n\n';
-            body += '| Group | Result |\n|-------|--------|\n';
-            for (const [name, result] of Object.entries(stage2)) {
-              body += `| ${name} | ${icon(result)} ${result} |\n`;
-            }
-            body += `\nSee [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.\n`;
+            const fs = require('fs');
+            let body = fs.readFileSync('quality-report.md', 'utf8');
+            body += `\n\n> Download the [full PDF report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) from the workflow artifacts.\n`;
 
             github.rest.issues.createComment({
               issue_number: context.issue.number,
