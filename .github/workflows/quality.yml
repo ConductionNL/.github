@@ -750,6 +750,13 @@ jobs:
         with:
           path: server/apps/${{ inputs.app-name }}
 
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php-version }}
+          extensions: mbstring, intl, pgsql, pdo_pgsql, zip, gd, curl, xml, json
+          tools: composer:v2
+
       - name: Checkout additional apps
         if: ${{ inputs.additional-apps != '[]' }}
         run: |
@@ -760,18 +767,12 @@ jobs:
             echo "Checking out $repo ($name) at $ref..."
             git clone --depth 1 --branch "$ref" "https://github.com/$repo.git" "server/apps/$name"
             if [ -f "server/apps/$name/composer.json" ]; then
+              echo "Installing composer dependencies for $name..."
               cd "server/apps/$name"
-              composer install --no-progress --prefer-dist --optimize-autoloader --no-dev 2>/dev/null || true
+              composer install --no-progress --prefer-dist --optimize-autoloader --no-dev
               cd -
             fi
           done
-
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: ${{ inputs.php-version }}
-          extensions: mbstring, intl, pgsql, pdo_pgsql, zip, gd, curl, xml, json
-          tools: composer:v2
 
       - name: Install Nextcloud
         run: |
