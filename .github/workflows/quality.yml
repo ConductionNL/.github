@@ -721,17 +721,6 @@ jobs:
     name: "Integration Tests (Newman)"
     needs: [php-quality, security]
 
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: nextcloud
-          POSTGRES_PASSWORD: nextcloud
-          POSTGRES_DB: nextcloud
-        ports:
-          - 5432:5432
-        options: --health-cmd="pg_isready" --health-interval=10s --health-timeout=5s --health-retries=5
-
     steps:
       - name: Checkout Nextcloud server
         uses: actions/checkout@v4
@@ -754,7 +743,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ inputs.php-version }}
-          extensions: mbstring, intl, pgsql, pdo_pgsql, zip, gd, curl, xml, json
+          extensions: mbstring, intl, sqlite3, zip, gd, curl, xml, json
           tools: composer:v2
 
       - name: Checkout additional apps
@@ -778,12 +767,7 @@ jobs:
         run: |
           cd server
           php occ maintenance:install \
-            --database pgsql \
-            --database-host 127.0.0.1 \
-            --database-port 5432 \
-            --database-name nextcloud \
-            --database-user nextcloud \
-            --database-pass nextcloud \
+            --database sqlite \
             --admin-user admin \
             --admin-pass admin
           if [ '${{ inputs.additional-apps }}' != '[]' ]; then
