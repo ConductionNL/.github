@@ -77,6 +77,11 @@ on:
         required: false
         type: string
         default: "[]"
+      enable-license-check:
+        description: "Run dependency license compliance check (composer + npm)"
+        required: false
+        type: boolean
+        default: true
       enable-coverage-guard:
         description: "Run coverage baseline guard and auto-update"
         required: false
@@ -319,6 +324,307 @@ jobs:
         run: npm ci
       - name: Run Stylelint
         run: npm run stylelint
+
+  # ──────────────────────────────────────────────
+  # Stage 1: License Compliance Check
+  # ──────────────────────────────────────────────
+  # Checks all composer and npm dependencies against an allowlist of approved
+  # SPDX license identifiers. Generates a full license report as a workflow
+  # artifact for audit/compliance purposes.
+  #
+  # Configuration (optional files in your app repo root):
+  #
+  #   .license-allowlist.json
+  #   ─────────────────────────────────────────────
+  #   A JSON array of approved SPDX license identifiers. If this file is
+  #   absent, the built-in default allowlist is used (see step below).
+  #   Example:
+  #     ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC",
+  #      "LGPL-2.1-only", "LGPL-2.1-or-later", "LGPL-3.0-only",
+  #      "LGPL-3.0-or-later", "EUPL-1.2", "AGPL-3.0-or-later",
+  #      "GPL-2.0-only", "GPL-2.0-or-later", "GPL-3.0-only",
+  #      "GPL-3.0-or-later", "MPL-2.0", "Unlicense", "0BSD",
+  #      "CC0-1.0", "CC-BY-3.0", "CC-BY-4.0", "PSF-2.0",
+  #      "Zlib", "BlueOak-1.0.0"]
+  #
+  #   .license-overrides.json
+  #   ─────────────────────────────────────────────
+  #   A JSON object to manually approve specific packages even if their
+  #   license is not on the allowlist. Use this for packages where:
+  #   - The license is valid but uses a non-standard SPDX string
+  #   - Legal has explicitly approved a specific dependency
+  #   - The package is dual-licensed and the checker picks the wrong one
+  #
+  #   Keys are package names (composer: "vendor/package", npm: "package-name").
+  #   Values are a justification string (who approved it and when).
+  #   Example:
+  #     {
+  #       "vendor/some-package": "Approved by legal (Jan de Vries) — 2026-03-14, dual-licensed MIT/proprietary, we use MIT terms",
+  #       "some-npm-package": "License is 'Artistic-2.0', compatible with EUPL — approved 2026-03-01"
+  #     }
+  #
+  # How it works:
+  #   1. Extracts all dependency licenses from composer and npm
+  #   2. For dual-licensed packages ("MIT OR Apache-2.0"), passes if ANY
+  #      license in the OR expression is on the allowlist
+  #   3. Checks each package against overrides first, then the allowlist
+  #   4. Generates a markdown + JSON report uploaded as a workflow artifact
+  #   5. Fails the workflow if any dependency has a disallowed license
+  # ──────────────────────────────────────────────
+  license-check:
+    if: ${{ inputs.enable-license-check }}
+    runs-on: ubuntu-latest
+    name: License Compliance
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php-version }}
+          tools: composer:v2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: |
+          composer install --no-progress --prefer-dist --optimize-autoloader
+          npm ci
+          npm install -g license-checker
+
+      - name: Check licenses and generate report
+        run: |
+          set -euo pipefail
+
+          # ── Default allowlist (EUPL-1.2 / AGPL-3.0 compatible) ──
+          DEFAULT_ALLOWLIST='[
+            "MIT", "ISC", "BSD-2-Clause", "BSD-3-Clause", "0BSD",
+            "Apache-2.0",
+            "LGPL-2.0-only", "LGPL-2.0-or-later",
+            "LGPL-2.1-only", "LGPL-2.1-or-later",
+            "LGPL-3.0-only", "LGPL-3.0-or-later",
+            "GPL-2.0-only", "GPL-2.0-or-later",
+            "GPL-3.0-only", "GPL-3.0-or-later",
+            "AGPL-3.0-only", "AGPL-3.0-or-later",
+            "EUPL-1.1", "EUPL-1.2",
+            "MPL-2.0",
+            "Unlicense", "CC0-1.0", "CC-BY-3.0", "CC-BY-4.0",
+            "PSF-2.0", "Python-2.0", "Zlib", "BlueOak-1.0.0",
+            "Artistic-2.0", "BSL-1.0", "WTFPL"
+          ]'
+
+          # Load repo allowlist or use default
+          if [ -f .license-allowlist.json ]; then
+            ALLOWLIST=$(cat .license-allowlist.json)
+            echo "Using project .license-allowlist.json"
+          else
+            ALLOWLIST="$DEFAULT_ALLOWLIST"
+            echo "No .license-allowlist.json found — using built-in default allowlist"
+          fi
+
+          # Load manual overrides
+          if [ -f .license-overrides.json ]; then
+            OVERRIDES=$(cat .license-overrides.json)
+            echo "Loaded .license-overrides.json with $(echo "$OVERRIDES" | jq 'length') override(s)"
+          else
+            OVERRIDES='{}'
+            echo "No .license-overrides.json found — no manual overrides"
+          fi
+
+          mkdir -p license-report
+
+          # ── Helper: check if a license string is allowed ──
+          # Handles SPDX OR expressions like "MIT OR Apache-2.0"
+          # Strips trailing "*" from license-checker (means "guessed from README")
+          # Strips surrounding parentheses from SPDX expressions
+          check_license() {
+            local license_str="$1"
+            # Split on " OR " and check each part
+            IFS='|' read -ra PARTS <<< "$(echo "$license_str" | sed 's/ OR /|/g; s/ or /|/g')"
+            for part in "${PARTS[@]}"; do
+              part=$(echo "$part" | sed 's/^ *//;s/ *$//' | sed 's/[()]//g' | sed 's/\*$//')
+              if echo "$ALLOWLIST" | jq -e --arg l "$part" 'map(ascii_downcase) | index($l | ascii_downcase)' > /dev/null 2>&1; then
+                return 0
+              fi
+            done
+            return 1
+          }
+
+          VIOLATIONS=0
+          REPORT_JSON='[]'
+
+          # ── Composer dependencies ──
+          echo ""
+          echo "=== Checking Composer dependencies ==="
+          COMPOSER_JSON=$(composer licenses --format=json 2>/dev/null || echo '{"dependencies":{}}')
+
+          for pkg in $(echo "$COMPOSER_JSON" | jq -r '.dependencies | keys[]' 2>/dev/null); do
+            license=$(echo "$COMPOSER_JSON" | jq -r --arg p "$pkg" '.dependencies[$p].license | join(" OR ")' 2>/dev/null)
+            version=$(echo "$COMPOSER_JSON" | jq -r --arg p "$pkg" '.dependencies[$p].version' 2>/dev/null)
+
+            # Check override first
+            override=$(echo "$OVERRIDES" | jq -r --arg p "$pkg" '.[$p] // empty' 2>/dev/null)
+            if [ -n "$override" ]; then
+              status="approved-override"
+              echo "  OVERRIDE: $pkg ($license) — $override"
+            elif check_license "$license"; then
+              status="approved"
+            else
+              status="DENIED"
+              VIOLATIONS=$((VIOLATIONS + 1))
+              echo "::error::Disallowed license: $pkg ($version) uses '$license'"
+            fi
+
+            REPORT_JSON=$(echo "$REPORT_JSON" | jq \
+              --arg pkg "$pkg" \
+              --arg ver "$version" \
+              --arg lic "$license" \
+              --arg st "$status" \
+              --arg ovr "${override:-}" \
+              --arg eco "composer" \
+              '. + [{"package": $pkg, "version": $ver, "license": $lic, "status": $st, "override": $ovr, "ecosystem": $eco}]')
+          done
+
+          COMPOSER_COUNT=$(echo "$COMPOSER_JSON" | jq '.dependencies | length' 2>/dev/null || echo 0)
+          echo "Checked $COMPOSER_COUNT Composer packages"
+
+          # ── npm dependencies ──
+          echo ""
+          echo "=== Checking npm dependencies ==="
+          NPM_JSON=$(license-checker --json --production 2>/dev/null || echo '{}')
+
+          for pkg in $(echo "$NPM_JSON" | jq -r 'keys[]' 2>/dev/null); do
+            # license-checker uses "licenses" (string or array)
+            license=$(echo "$NPM_JSON" | jq -r --arg p "$pkg" '.[$p].licenses // .[$p].license // "UNKNOWN"' 2>/dev/null)
+            # Extract package name without version (license-checker keys are "name@version")
+            pkg_name=$(echo "$pkg" | sed 's/@[^@]*$//')
+            pkg_version=$(echo "$pkg" | grep -oP '@[^@]+$' | sed 's/^@//')
+
+            override=$(echo "$OVERRIDES" | jq -r --arg p "$pkg_name" '.[$p] // empty' 2>/dev/null)
+            if [ -n "$override" ]; then
+              status="approved-override"
+              echo "  OVERRIDE: $pkg_name ($license) — $override"
+            elif check_license "$license"; then
+              status="approved"
+            else
+              status="DENIED"
+              VIOLATIONS=$((VIOLATIONS + 1))
+              echo "::error::Disallowed license: $pkg_name ($pkg_version) uses '$license'"
+            fi
+
+            REPORT_JSON=$(echo "$REPORT_JSON" | jq \
+              --arg pkg "$pkg_name" \
+              --arg ver "$pkg_version" \
+              --arg lic "$license" \
+              --arg st "$status" \
+              --arg ovr "${override:-}" \
+              --arg eco "npm" \
+              '. + [{"package": $pkg, "version": $ver, "license": $lic, "status": $st, "override": $ovr, "ecosystem": $eco}]')
+          done
+
+          NPM_COUNT=$(echo "$NPM_JSON" | jq 'length' 2>/dev/null || echo 0)
+          echo "Checked $NPM_COUNT npm packages"
+
+          # ── Save JSON report ──
+          echo "$REPORT_JSON" | jq '.' > license-report/license-report.json
+
+          # ── Generate Markdown report ──
+          TOTAL=$(echo "$REPORT_JSON" | jq 'length')
+          APPROVED=$(echo "$REPORT_JSON" | jq '[.[] | select(.status == "approved")] | length')
+          OVERRIDDEN=$(echo "$REPORT_JSON" | jq '[.[] | select(.status == "approved-override")] | length')
+          DENIED=$(echo "$REPORT_JSON" | jq '[.[] | select(.status == "DENIED")] | length')
+
+          cat > license-report/license-report.md << 'HEADER'
+          # License Compliance Report
+
+          **Generated:** $(date -u +"%Y-%m-%d %H:%M UTC")
+          **Repository:** ${{ github.repository }}
+          **Ref:** ${{ github.sha }}
+
+          HEADER
+
+          # Fix the template variables (heredoc doesn't expand them)
+          sed -i "s|\$(date -u +\"%Y-%m-%d %H:%M UTC\")|$(date -u +"%Y-%m-%d %H:%M UTC")|" license-report/license-report.md
+
+          cat >> license-report/license-report.md << EOF
+
+          ## Summary
+
+          | Metric | Count |
+          |--------|-------|
+          | Total dependencies | $TOTAL |
+          | Approved (allowlist) | $APPROVED |
+          | Approved (manual override) | $OVERRIDDEN |
+          | **Denied** | **$DENIED** |
+
+          ## Composer Dependencies
+
+          | Package | Version | License | Status | Override |
+          |---------|---------|---------|--------|----------|
+          EOF
+
+          echo "$REPORT_JSON" | jq -r '.[] | select(.ecosystem == "composer") | "| \(.package) | \(.version) | \(.license) | \(.status) | \(.override) |"' >> license-report/license-report.md
+
+          cat >> license-report/license-report.md << EOF
+
+          ## npm Dependencies
+
+          | Package | Version | License | Status | Override |
+          |---------|---------|---------|--------|----------|
+          EOF
+
+          echo "$REPORT_JSON" | jq -r '.[] | select(.ecosystem == "npm") | "| \(.package) | \(.version) | \(.license) | \(.status) | \(.override) |"' >> license-report/license-report.md
+
+          if [ "$DENIED" -gt 0 ]; then
+            cat >> license-report/license-report.md << EOF
+
+          ## Denied Dependencies
+
+          The following dependencies use licenses not on the allowlist and have no manual override:
+
+          | Package | Ecosystem | License |
+          |---------|-----------|---------|
+          EOF
+            echo "$REPORT_JSON" | jq -r '.[] | select(.status == "DENIED") | "| \(.package) | \(.ecosystem) | \(.license) |"' >> license-report/license-report.md
+
+            cat >> license-report/license-report.md << 'EOF'
+
+          ### How to resolve
+
+          Either:
+          1. Add the license SPDX identifier to `.license-allowlist.json` if the license is generally acceptable
+          2. Add the specific package to `.license-overrides.json` with a justification if only this package is approved
+
+          See the workflow comments in quality.yml for configuration details.
+          EOF
+          fi
+
+          # ── Summary output ──
+          echo ""
+          echo "════════════════════════════════════════"
+          echo "License Check: $TOTAL total, $APPROVED approved, $OVERRIDDEN overridden, $DENIED denied"
+          echo "════════════════════════════════════════"
+
+          if [ "$VIOLATIONS" -gt 0 ]; then
+            echo "::error::$VIOLATIONS dependency license(s) are not on the allowlist. Add them to .license-allowlist.json or .license-overrides.json"
+            exit 1
+          fi
+
+          echo "All dependency licenses are compliant."
+
+      - name: Upload license report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: license-report
+          path: license-report/
+          retention-days: 90
 
   # ──────────────────────────────────────────────
   # Stage 2: PHPUnit tests (needs NC server)
@@ -626,7 +932,7 @@ jobs:
   summary:
     runs-on: ubuntu-latest
     name: Quality Summary
-    needs: [cve-composer, cve-npm, lint-php, lint-phpcs, lint-phpmd, lint-psalm, lint-phpstan, lint-phpmetrics, lint-eslint, lint-stylelint, php-tests, integration-tests, baseline-protection]
+    needs: [cve-composer, cve-npm, lint-php, lint-phpcs, lint-phpmd, lint-psalm, lint-phpstan, lint-phpmetrics, lint-eslint, lint-stylelint, license-check, php-tests, integration-tests, baseline-protection]
     if: always()
 
     steps:
@@ -646,6 +952,7 @@ jobs:
                        "phpmetrics:${{ needs.lint-phpmetrics.result }}" \
                        "ESLint:${{ needs.lint-eslint.result }}" \
                        "Stylelint:${{ needs.lint-stylelint.result }}" \
+                       "License Compliance:${{ needs.license-check.result }}" \
                        "PHPUnit:${{ needs.php-tests.result }}" \
                        "Newman:${{ needs.integration-tests.result }}" \
                        "Coverage Baseline:${{ needs.baseline-protection.result }}"; do
@@ -675,6 +982,7 @@ jobs:
               'phpmetrics': '${{ needs.lint-phpmetrics.result }}',
               'ESLint': '${{ needs.lint-eslint.result }}',
               'Stylelint': '${{ needs.lint-stylelint.result }}',
+              'License Compliance': '${{ needs.license-check.result }}',
               'PHPUnit Tests': '${{ needs.php-tests.result }}',
               'Integration Tests': '${{ needs.integration-tests.result }}',
               'Coverage Baseline': '${{ needs.baseline-protection.result }}'
