@@ -419,7 +419,8 @@ jobs:
             "MPL-2.0", "OSL-3.0",
             "Unlicense", "CC0-1.0", "CC-BY-3.0", "CC-BY-4.0",
             "PSF-2.0", "Python-2.0", "Zlib", "BlueOak-1.0.0",
-            "Artistic-2.0", "BSL-1.0", "WTFPL"
+            "Artistic-2.0", "BSL-1.0", "WTFPL",
+            "OFL-1.1", "OFL-1.0"
           ]'
 
           if [ -f .license-allowlist.json ]; then
