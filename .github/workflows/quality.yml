@@ -1195,10 +1195,10 @@ jobs:
   # ╚══════════════════════════════════════════════╝
 
   sbom:
-    if: ${{ inputs.enable-sbom && !cancelled() && needs.php-quality.result != 'failure' && needs.security.result != 'failure' }}
+    if: ${{ inputs.enable-sbom && !cancelled() }}
     runs-on: ubuntu-latest
     name: "SBOM"
-    needs: [php-quality, security]
+    needs: [security]
 
     steps:
       - name: Checkout
