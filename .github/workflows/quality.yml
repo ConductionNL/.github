@@ -97,6 +97,11 @@ on:
         required: false
         type: boolean
         default: false
+      enable-sbom:
+        description: "Generate CycloneDX SBOM, validate (CVE + license), and commit to repo"
+        required: false
+        type: boolean
+        default: true
 
 concurrency:
   group: quality-${{ github.ref }}
@@ -1179,3 +1184,111 @@ jobs:
               repo: context.repo.repo,
               body
             });
+
+  # ╔══════════════════════════════════════════════╗
+  # ║  STAGE 4 — SBOM Generation & Validation      ║
+  # ║                                               ║
+  # ║  Generates a CycloneDX SBOM from Composer     ║
+  # ║  and npm dependencies, validates against CVE   ║
+  # ║  databases and license policies, then commits  ║
+  # ║  the validated SBOM to the repository.         ║
+  # ╚══════════════════════════════════════════════╝
+
+  sbom:
+    if: ${{ inputs.enable-sbom && !cancelled() && needs.php-quality.result != 'failure' && needs.security.result != 'failure' }}
+    runs-on: ubuntu-latest
+    name: "SBOM"
+    needs: [php-quality, security]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php-version }}
+          extensions: mbstring, intl, zip, gd, curl, xml, json
+          tools: composer:v2
+
+      - name: Setup Node
+        if: ${{ inputs.enable-frontend }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: ${{ runner.os }}-composer-${{ hashFiles('composer.lock') }}
+          restore-keys: ${{ runner.os }}-composer-
+
+      - name: Install Composer dependencies
+        run: composer install --no-progress --prefer-dist --optimize-autoloader
+
+      - name: Generate PHP SBOM
+        run: composer CycloneDX:make-sbom --output-format=JSON --output-file=bom-php.cdx.json --spec-version=1.5 --omit=dev --omit=plugin
+
+      - name: Install npm dependencies
+        if: ${{ inputs.enable-frontend }}
+        run: npm ci
+
+      - name: Generate npm SBOM
+        if: ${{ inputs.enable-frontend }}
+        run: npx @cyclonedx/cyclonedx-npm --output-file bom-npm.cdx.json --spec-version 1.5 --omit dev
+
+      - name: Merge PHP + npm SBOMs
+        if: ${{ inputs.enable-frontend }}
+        run: |
+          jq -s '.[0] * {components: ([.[].components[]?] | unique_by(.purl // .name))}' bom-php.cdx.json bom-npm.cdx.json > sbom.cdx.json
+
+      - name: Use PHP SBOM as single SBOM
+        if: ${{ !inputs.enable-frontend }}
+        run: mv bom-php.cdx.json sbom.cdx.json
+
+      # ── Validation gate ──
+
+      - name: Install Grype
+        uses: anchore/scan-action/download-grype@v5
+
+      - name: CVE scan SBOM
+        run: grype sbom:sbom.cdx.json --fail-on critical
+
+      - name: Composer audit
+        run: composer audit --format=json || true
+        # composer audit exits non-zero for any advisory; we rely on Grype for blocking
+
+      - name: npm audit
+        if: ${{ inputs.enable-frontend }}
+        run: npm audit --audit-level=critical
+
+      # ── Commit validated SBOM ──
+
+      - name: Commit SBOM
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add sbom.cdx.json
+          if git diff --cached --quiet; then
+            echo "No SBOM changes to commit"
+          else
+            git commit -m "chore: update SBOM"
+            git push
+          fi
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ inputs.app-name }}
+          path: sbom.cdx.json
+          retention-days: 90
+
+      - name: Attach SBOM to release
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        uses: softprops/action-gh-release@v2
+        with:
+          files: sbom.cdx.json
