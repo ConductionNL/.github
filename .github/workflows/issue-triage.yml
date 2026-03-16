@@ -65,7 +65,7 @@ jobs:
 
             console.log(`Triaging issue #${issue.number}: ${issue.title}`);
 
-            // --- Helper: add issue to project in Triage status ---
+            // --- Helper: add issue to project (no status — triage view is separate) ---
             async function addToProject(issueNumber) {
               const projectQuery = await github.graphql(`
                 query($owner: String!, $number: Int!) {
@@ -85,8 +85,6 @@ jobs:
 
               const project = projectQuery.organization.projectV2;
               const projectId = project.id;
-              const statusField = project.fields.nodes.find(f => f.name === 'Status' && f.options);
-              const triageStatus = statusField?.options.find(o => o.name === 'Triage');
               const appField = project.fields.nodes.find(f => f.name === 'App' && f.options);
               const sourceField = project.fields.nodes.find(f => f.name === 'Source' && f.options);
 
@@ -119,18 +117,6 @@ jobs:
               `, { projectId, contentId: issueNodeId });
 
               const itemId = addResult.addProjectV2ItemById.item.id;
-
-              // Set Status to Triage
-              if (triageStatus) {
-                await github.graphql(`
-                  mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
-                    updateProjectV2ItemFieldValue(input: {
-                      projectId: $projectId, itemId: $itemId, fieldId: $fieldId,
-                      value: { singleSelectOptionId: $optionId }
-                    }) { projectV2Item { id } }
-                  }
-                `, { projectId, itemId, fieldId: statusField.id, optionId: triageStatus.id });
-              }
 
               // Set App field
               if (appField) {
@@ -388,8 +374,6 @@ jobs:
 
             const project = projectQuery.organization.projectV2;
             const projectId = project.id;
-            const statusField = project.fields.nodes.find(f => f.name === 'Status' && f.options);
-            const triageStatus = statusField?.options.find(o => o.name === 'Triage');
             const appField = project.fields.nodes.find(f => f.name === 'App' && f.options);
             const appOption = appField?.options.find(o => o.name === appName);
             const sourceField = project.fields.nodes.find(f => f.name === 'Source' && f.options);
@@ -459,18 +443,6 @@ jobs:
               } catch (e) {
                 console.log(`  Skipped (already on project or error): ${e.message}`);
                 continue;
-              }
-
-              // Set Status to Triage
-              if (triageStatus) {
-                await github.graphql(`
-                  mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
-                    updateProjectV2ItemFieldValue(input: {
-                      projectId: $projectId, itemId: $itemId, fieldId: $fieldId,
-                      value: { singleSelectOptionId: $optionId }
-                    }) { projectV2Item { id } }
-                  }
-                `, { projectId, itemId, fieldId: statusField.id, optionId: triageStatus.id });
               }
 
               // Set App
