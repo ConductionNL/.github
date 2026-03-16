@@ -1256,6 +1256,19 @@ jobs:
         uses: anchore/scan-action/download-grype@v5
         id: grype-install
 
+      - name: Create Grype ignore list for known false positives
+        run: |
+          if [ ! -f .grype.yaml ]; then
+            cat > .grype.yaml << 'GRYPE'
+          ignore:
+            # False positives: Grype matches unscoped CycloneDX component names
+            # against malware advisories for typosquatting packages. Actual deps
+            # are scoped (@jridgewell/gen-mapping, @babel/helper-validator-identifier).
+            - vulnerability: GHSA-8rmg-jf7p-4p22
+            - vulnerability: GHSA-pvjq-589m-3mc8
+          GRYPE
+          fi
+
       - name: CVE scan SBOM
         run: ${{ steps.grype-install.outputs.cmd }} sbom:sbom.cdx.json --fail-on critical
 
