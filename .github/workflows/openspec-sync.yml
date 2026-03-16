@@ -1,0 +1,561 @@
+name: OpenSpec Sync
+
+on:
+  workflow_call:
+    inputs:
+      app-name:
+        description: "Nextcloud app ID (e.g. openregister, pipelinq)"
+        required: true
+        type: string
+      project-number:
+        description: "GitHub project number to sync issues to"
+        required: false
+        type: number
+        default: 1
+      project-owner:
+        description: "GitHub org that owns the project"
+        required: false
+        type: string
+        default: "ConductionNL"
+    secrets:
+      PROJECT_TOKEN:
+        description: "GitHub token with project and issues scope"
+        required: true
+
+jobs:
+  sync:
+    name: Sync OpenSpec to GitHub Issues
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sync OpenSpec changes to issues
+        uses: actions/github-script@v7
+        env:
+          PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+          PROJECT_NUMBER: ${{ inputs.project-number }}
+          PROJECT_OWNER: ${{ inputs.project-owner }}
+          APP_NAME: ${{ inputs.app-name }}
+        with:
+          github-token: ${{ secrets.PROJECT_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const appName = process.env.APP_NAME;
+            const projectNumber = parseInt(process.env.PROJECT_NUMBER);
+            const projectOwner = process.env.PROJECT_OWNER;
+            const repoOwner = context.repo.owner;
+            const repoName = context.repo.repo;
+
+            // --- Phase detection ---
+            function detectPhase(changePath, isArchived) {
+              if (isArchived) return 'Archived';
+              const has = (f) => fs.existsSync(path.join(changePath, f));
+              const hasSpecs = (() => {
+                const specsDir = path.join(changePath, 'specs');
+                if (!fs.existsSync(specsDir)) return false;
+                try {
+                  const entries = fs.readdirSync(specsDir);
+                  return entries.some(e => {
+                    const specFile = path.join(specsDir, e, 'spec.md');
+                    return fs.existsSync(specFile);
+                  });
+                } catch { return false; }
+              })();
+
+              if (has('review.md')) return 'Review';
+              if (has('plan.json')) return 'In Progress';
+              if (has('tasks.md')) return 'Tasks';
+              if (has('design.md')) return 'Design';
+              if (hasSpecs) return 'Specs';
+              if (has('proposal.md')) return 'Proposal';
+              return 'Proposal'; // fallback: has at least .openspec.yaml
+            }
+
+            // --- Build issue body ---
+            function buildIssueBody(changePath, changeName, isArchived, repoOwner, repoName, branch) {
+              const has = (f) => fs.existsSync(path.join(changePath, f));
+              const read = (f) => {
+                try { return fs.readFileSync(path.join(changePath, f), 'utf8'); }
+                catch { return null; }
+              };
+
+              // Relative path for GitHub links
+              const rel = changePath.replace(process.cwd() + '/', '');
+              const ghBase = `https://github.com/${repoOwner}/${repoName}/blob/${branch}/${rel}`;
+
+              let body = '';
+              body += '> :warning: **OpenSpec-managed issue** — this content is automatically synced\n';
+              body += '> from the `openspec/` directory. Manual edits will be overwritten on next sync.\n\n';
+
+              // Artifact checklist
+              body += '## Artifacts\n';
+              const artifacts = [
+                ['.openspec.yaml', 'Metadata'],
+                ['proposal.md', 'Proposal'],
+                ['specs/', 'Specs'],
+                ['design.md', 'Design'],
+                ['tasks.md', 'Tasks'],
+                ['plan.json', 'Plan'],
+                ['review.md', 'Review'],
+              ];
+              for (const [file, label] of artifacts) {
+                const exists = has(file);
+                const icon = exists ? ':white_check_mark:' : ':black_square_button:';
+                if (exists) {
+                  body += `- ${icon} [${label}](${ghBase}/${file})\n`;
+                } else {
+                  body += `- ${icon} ${label}\n`;
+                }
+              }
+              body += '\n';
+
+              // Proposal summary
+              const proposal = read('proposal.md');
+              if (proposal) {
+                // Extract summary section
+                const summaryMatch = proposal.match(/## Summary\n([\s\S]*?)(?=\n## |\n---|\Z)/);
+                if (summaryMatch) {
+                  body += '## Summary\n';
+                  body += summaryMatch[1].trim() + '\n\n';
+                }
+              }
+
+              // Specs listing
+              const specsDir = path.join(changePath, 'specs');
+              if (fs.existsSync(specsDir)) {
+                body += '## Specs\n';
+                try {
+                  const specEntries = fs.readdirSync(specsDir);
+                  for (const entry of specEntries) {
+                    const specFile = path.join(specsDir, entry, 'spec.md');
+                    if (fs.existsSync(specFile)) {
+                      body += `- [:page_facing_up: ${entry}](${ghBase}/specs/${entry}/spec.md)\n`;
+                    }
+                  }
+                } catch { /* ignore */ }
+                body += '\n';
+              }
+
+              // Tasks as checkboxes
+              const tasks = read('tasks.md');
+              const planJson = read('plan.json');
+              if (tasks) {
+                body += '## Tasks\n';
+
+                // If plan.json exists, use its status for checkbox state
+                let taskStatuses = {};
+                if (planJson) {
+                  try {
+                    const plan = JSON.parse(planJson);
+                    if (plan.tasks) {
+                      for (const t of plan.tasks) {
+                        taskStatuses[t.id] = t.status;
+                      }
+                    }
+                  } catch { /* ignore */ }
+                }
+
+                // Parse tasks from tasks.md — look for ### Task lines and sub-items
+                const taskLines = tasks.split('\n');
+                for (const line of taskLines) {
+                  // Match ### Task N.M: Title
+                  const taskHeader = line.match(/^### Task\s+(\d+\.\d+):\s+(.+)/);
+                  if (taskHeader) {
+                    const taskId = taskHeader[1];
+                    const taskTitle = taskHeader[2];
+                    const status = taskStatuses[taskId];
+                    const checked = (status === 'completed') ? 'x' : ' ';
+                    body += `- [${checked}] **${taskId}**: ${taskTitle}\n`;
+                    continue;
+                  }
+                  // Match - [x] or - [ ] sub-items
+                  const checkboxMatch = line.match(/^(\s*)- \[([ x])\]\s+(.+)/);
+                  if (checkboxMatch) {
+                    body += `  ${line.trim()}\n`;
+                  }
+                }
+                body += '\n';
+              }
+
+              // Design decisions (brief)
+              if (has('design.md')) {
+                body += `## Design\n`;
+                body += `See [design.md](${ghBase}/design.md) for technical design details.\n\n`;
+              }
+
+              // Review findings
+              const review = read('review.md');
+              if (review) {
+                body += '## Review\n';
+                const recMatch = review.match(/## Recommendation\n([\s\S]*?)(?=\n## |\Z)/);
+                if (recMatch) {
+                  body += recMatch[1].trim() + '\n\n';
+                } else {
+                  body += `See [review.md](${ghBase}/review.md) for verification report.\n\n`;
+                }
+              }
+
+              body += '---\n';
+              body += `*Synced from \`${rel}\` by OpenSpec workflow*\n`;
+              body += `*App: \`${appName}\`*\n`;
+
+              return body;
+            }
+
+            // --- Scan for changes ---
+            const changesDir = 'openspec/changes';
+            const archiveDir = path.join(changesDir, 'archive');
+
+            let allChanges = [];
+
+            // Active changes
+            if (fs.existsSync(changesDir)) {
+              const entries = fs.readdirSync(changesDir);
+              for (const entry of entries) {
+                if (entry === 'archive') continue;
+                const changePath = path.join(changesDir, entry);
+                if (!fs.statSync(changePath).isDirectory()) continue;
+                if (!fs.existsSync(path.join(changePath, '.openspec.yaml'))) continue;
+                allChanges.push({ name: entry, path: changePath, archived: false });
+              }
+            }
+
+            // Archived changes
+            if (fs.existsSync(archiveDir)) {
+              const entries = fs.readdirSync(archiveDir);
+              for (const entry of entries) {
+                const changePath = path.join(archiveDir, entry);
+                if (!fs.statSync(changePath).isDirectory()) continue;
+                // Archived changes may not have .openspec.yaml if they predate it
+                allChanges.push({ name: entry, path: changePath, archived: true });
+              }
+            }
+
+            console.log(`Found ${allChanges.length} OpenSpec changes (active + archived)`);
+
+            // --- Get default branch ---
+            const { data: repoData } = await github.rest.repos.get({
+              owner: repoOwner,
+              repo: repoName,
+            });
+            const defaultBranch = repoData.default_branch;
+
+            // --- Get project ID and field info via GraphQL ---
+            const projectQuery = await github.graphql(`
+              query($owner: String!, $number: Int!) {
+                organization(login: $owner) {
+                  projectV2(number: $number) {
+                    id
+                    fields(first: 30) {
+                      nodes {
+                        ... on ProjectV2SingleSelectField {
+                          id
+                          name
+                          options { id name }
+                        }
+                        ... on ProjectV2Field {
+                          id
+                          name
+                          dataType
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            `, { owner: projectOwner, number: projectNumber });
+
+            const project = projectQuery.organization.projectV2;
+            const projectId = project.id;
+
+            // Find Status field and its options
+            const statusField = project.fields.nodes.find(f => f.name === 'Status' && f.options);
+            if (!statusField) {
+              core.setFailed('Status field not found on project');
+              return;
+            }
+
+            const statusOptions = {};
+            for (const opt of statusField.options) {
+              statusOptions[opt.name] = opt.id;
+            }
+            console.log('Available statuses:', Object.keys(statusOptions).join(', '));
+
+            // Find App field (single select) if it exists
+            const appField = project.fields.nodes.find(f => f.name === 'App' && f.options);
+
+            // Find Change Name field (text) if it exists
+            const changeNameField = project.fields.nodes.find(f => f.name === 'Change Name' && f.dataType === 'TEXT');
+
+            // Find Source field (single select) if it exists
+            const sourceField = project.fields.nodes.find(f => f.name === 'Source' && f.options);
+
+            // --- Process each change ---
+            for (const change of allChanges) {
+              const phase = detectPhase(change.path, change.archived);
+              const issueTitle = `[OpenSpec] ${change.name}`;
+
+              console.log(`Processing: ${change.name} → ${phase}`);
+
+              // Search for existing issue
+              const searchResult = await github.rest.issues.listForRepo({
+                owner: repoOwner,
+                repo: repoName,
+                state: 'all',
+                per_page: 100,
+                labels: 'openspec',
+              });
+
+              let existingIssue = searchResult.data.find(i => i.title === issueTitle);
+
+              // If not found in first page, search more
+              if (!existingIssue && searchResult.data.length === 100) {
+                let page = 2;
+                while (!existingIssue && page <= 10) {
+                  const moreResults = await github.rest.issues.listForRepo({
+                    owner: repoOwner,
+                    repo: repoName,
+                    state: 'all',
+                    per_page: 100,
+                    page: page,
+                    labels: 'openspec',
+                  });
+                  existingIssue = moreResults.data.find(i => i.title === issueTitle);
+                  if (moreResults.data.length < 100) break;
+                  page++;
+                }
+              }
+
+              // Build issue body
+              const body = buildIssueBody(change.path, change.name, change.archived, repoOwner, repoName, defaultBranch);
+
+              // Labels
+              const labels = ['openspec', `openspec:${phase.toLowerCase().replace(' ', '-')}`];
+
+              // Ensure labels exist
+              for (const label of labels) {
+                try {
+                  await github.rest.issues.getLabel({
+                    owner: repoOwner,
+                    repo: repoName,
+                    name: label,
+                  });
+                } catch {
+                  await github.rest.issues.createLabel({
+                    owner: repoOwner,
+                    repo: repoName,
+                    name: label,
+                    color: label === 'openspec' ? '6f42c1' : 'c5def5',
+                    description: label === 'openspec'
+                      ? 'Managed by OpenSpec workflow'
+                      : `OpenSpec phase: ${phase}`,
+                  });
+                }
+              }
+
+              let issue;
+
+              if (existingIssue) {
+                // Update existing issue
+                issue = await github.rest.issues.update({
+                  owner: repoOwner,
+                  repo: repoName,
+                  issue_number: existingIssue.number,
+                  body: body,
+                  labels: labels,
+                  state: change.archived ? 'closed' : 'open',
+                });
+                issue = issue.data;
+                console.log(`  Updated issue #${issue.number}`);
+              } else {
+                // Create new issue
+                issue = await github.rest.issues.create({
+                  owner: repoOwner,
+                  repo: repoName,
+                  title: issueTitle,
+                  body: body,
+                  labels: labels,
+                });
+                issue = issue.data;
+                console.log(`  Created issue #${issue.number}`);
+
+                // Close archived issues immediately after creation
+                if (change.archived) {
+                  await github.rest.issues.update({
+                    owner: repoOwner,
+                    repo: repoName,
+                    issue_number: issue.number,
+                    state: 'closed',
+                    state_reason: 'completed',
+                  });
+                  console.log(`  Closed issue #${issue.number} (archived)`);
+                }
+              }
+
+              // --- Add to project and set Status ---
+              // Check if issue is already on project
+              const itemQuery = await github.graphql(`
+                query($projectId: ID!, $cursor: String) {
+                  node(id: $projectId) {
+                    ... on ProjectV2 {
+                      items(first: 100, after: $cursor) {
+                        nodes {
+                          id
+                          content {
+                            ... on Issue {
+                              number
+                              repository { name }
+                            }
+                          }
+                        }
+                        pageInfo { hasNextPage endCursor }
+                      }
+                    }
+                  }
+                }
+              `, { projectId });
+
+              let projectItemId = null;
+              for (const item of itemQuery.node.items.nodes) {
+                if (item.content &&
+                    item.content.number === issue.number &&
+                    item.content.repository &&
+                    item.content.repository.name === repoName) {
+                  projectItemId = item.id;
+                  break;
+                }
+              }
+
+              // Add to project if not already there
+              if (!projectItemId) {
+                // Get issue node ID
+                const issueQuery = await github.graphql(`
+                  query($owner: String!, $repo: String!, $number: Int!) {
+                    repository(owner: $owner, name: $repo) {
+                      issue(number: $number) { id }
+                    }
+                  }
+                `, { owner: repoOwner, repo: repoName, number: issue.number });
+
+                const issueNodeId = issueQuery.repository.issue.id;
+
+                const addResult = await github.graphql(`
+                  mutation($projectId: ID!, $contentId: ID!) {
+                    addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
+                      item { id }
+                    }
+                  }
+                `, { projectId, contentId: issueNodeId });
+
+                projectItemId = addResult.addProjectV2ItemById.item.id;
+                console.log(`  Added to project`);
+              }
+
+              // Set Status field
+              const targetStatus = statusOptions[phase];
+              if (targetStatus) {
+                await github.graphql(`
+                  mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                    updateProjectV2ItemFieldValue(input: {
+                      projectId: $projectId
+                      itemId: $itemId
+                      fieldId: $fieldId
+                      value: { singleSelectOptionId: $optionId }
+                    }) {
+                      projectV2Item { id }
+                    }
+                  }
+                `, {
+                  projectId,
+                  itemId: projectItemId,
+                  fieldId: statusField.id,
+                  optionId: targetStatus,
+                });
+                console.log(`  Set status to: ${phase}`);
+              } else {
+                console.log(`  Warning: no status option for phase "${phase}"`);
+              }
+
+              // Set App field if it exists
+              if (appField) {
+                const appOption = appField.options.find(o => o.name === appName);
+                if (appOption) {
+                  await github.graphql(`
+                    mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                      updateProjectV2ItemFieldValue(input: {
+                        projectId: $projectId
+                        itemId: $itemId
+                        fieldId: $fieldId
+                        value: { singleSelectOptionId: $optionId }
+                      }) {
+                        projectV2Item { id }
+                      }
+                    }
+                  `, {
+                    projectId,
+                    itemId: projectItemId,
+                    fieldId: appField.id,
+                    optionId: appOption.id,
+                  });
+                }
+              }
+
+              // Set Change Name field if it exists
+              if (changeNameField) {
+                await github.graphql(`
+                  mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $value: String!) {
+                    updateProjectV2ItemFieldValue(input: {
+                      projectId: $projectId
+                      itemId: $itemId
+                      fieldId: $fieldId
+                      value: { text: $value }
+                    }) {
+                      projectV2Item { id }
+                    }
+                  }
+                `, {
+                  projectId,
+                  itemId: projectItemId,
+                  fieldId: changeNameField.id,
+                  value: change.name,
+                });
+              }
+
+              // Set Source field if it exists
+              if (sourceField) {
+                const sourceOption = sourceField.options.find(o => o.name === 'openspec');
+                if (sourceOption) {
+                  await github.graphql(`
+                    mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                      updateProjectV2ItemFieldValue(input: {
+                        projectId: $projectId
+                        itemId: $itemId
+                        fieldId: $fieldId
+                        value: { singleSelectOptionId: $optionId }
+                      }) {
+                        projectV2Item { id }
+                      }
+                    }
+                  `, {
+                    projectId,
+                    itemId: projectItemId,
+                    fieldId: sourceField.id,
+                    optionId: sourceOption.id,
+                  });
+                }
+              }
+
+              // Small delay to avoid rate limiting
+              await new Promise(r => setTimeout(r, 500));
+            }
+
+            console.log(`\nDone! Processed ${allChanges.length} changes.`);

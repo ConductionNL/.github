@@ -1,0 +1,416 @@
+name: Issue Triage
+
+on:
+  workflow_call:
+    inputs:
+      app-name:
+        description: "Nextcloud app ID (e.g. openregister, pipelinq)"
+        required: true
+        type: string
+      project-number:
+        description: "GitHub project number for the board"
+        required: false
+        type: number
+        default: 1
+      project-owner:
+        description: "GitHub org that owns the project"
+        required: false
+        type: string
+        default: "ConductionNL"
+      triage-assignee:
+        description: "GitHub username to auto-assign triage issues to"
+        required: false
+        type: string
+        default: "rubenvdlinde"
+    secrets:
+      PROJECT_TOKEN:
+        description: "GitHub token with project and issues scope"
+        required: true
+
+jobs:
+  triage:
+    name: Triage Issue
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+
+    # Skip OpenSpec-managed issues (they are handled by openspec-sync)
+    if: >-
+      github.event_name == 'issues' &&
+      !contains(github.event.issue.labels.*.name, 'openspec')
+
+    steps:
+      - name: Triage new issue
+        if: github.event.action == 'opened'
+        uses: actions/github-script@v7
+        env:
+          PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+          PROJECT_NUMBER: ${{ inputs.project-number }}
+          PROJECT_OWNER: ${{ inputs.project-owner }}
+          APP_NAME: ${{ inputs.app-name }}
+          TRIAGE_ASSIGNEE: ${{ inputs.triage-assignee }}
+        with:
+          github-token: ${{ secrets.PROJECT_TOKEN }}
+          script: |
+            const projectNumber = parseInt(process.env.PROJECT_NUMBER);
+            const projectOwner = process.env.PROJECT_OWNER;
+            const appName = process.env.APP_NAME;
+            const triageAssignee = process.env.TRIAGE_ASSIGNEE;
+            const issue = context.payload.issue;
+
+            console.log(`Triaging issue #${issue.number}: ${issue.title}`);
+
+            // --- Determine source ---
+            let source = 'community';
+            try {
+              await github.rest.orgs.checkMembershipForUser({
+                org: projectOwner,
+                username: issue.user.login,
+              });
+              source = 'internal';
+            } catch {
+              // Not an org member = community
+            }
+            console.log(`Source: ${source} (author: ${issue.user.login})`);
+
+            // --- Add triage label ---
+            const triageLabel = 'triage';
+            try {
+              await github.rest.issues.getLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: triageLabel,
+              });
+            } catch {
+              await github.rest.issues.createLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: triageLabel,
+                color: 'fbca04',
+                description: 'Awaiting triage',
+              });
+            }
+
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              labels: [triageLabel],
+            });
+
+            // --- Auto-assign ---
+            if (triageAssignee) {
+              await github.rest.issues.addAssignees({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                assignees: [triageAssignee],
+              });
+              console.log(`Assigned to ${triageAssignee}`);
+            }
+
+            // --- Add to project board in Triage column ---
+            const projectQuery = await github.graphql(`
+              query($owner: String!, $number: Int!) {
+                organization(login: $owner) {
+                  projectV2(number: $number) {
+                    id
+                    fields(first: 30) {
+                      nodes {
+                        ... on ProjectV2SingleSelectField {
+                          id
+                          name
+                          options { id name }
+                        }
+                        ... on ProjectV2Field {
+                          id
+                          name
+                          dataType
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            `, { owner: projectOwner, number: projectNumber });
+
+            const project = projectQuery.organization.projectV2;
+            const projectId = project.id;
+
+            // Find Status field
+            const statusField = project.fields.nodes.find(f => f.name === 'Status' && f.options);
+            const triageStatus = statusField?.options.find(o => o.name === 'Triage');
+
+            // Find App field
+            const appField = project.fields.nodes.find(f => f.name === 'App' && f.options);
+
+            // Find Source field
+            const sourceField = project.fields.nodes.find(f => f.name === 'Source' && f.options);
+
+            // Get issue node ID
+            const issueQuery = await github.graphql(`
+              query($owner: String!, $repo: String!, $number: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  issue(number: $number) { id }
+                }
+              }
+            `, { owner: context.repo.owner, repo: context.repo.repo, number: issue.number });
+
+            const issueNodeId = issueQuery.repository.issue.id;
+
+            // Add to project
+            const addResult = await github.graphql(`
+              mutation($projectId: ID!, $contentId: ID!) {
+                addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
+                  item { id }
+                }
+              }
+            `, { projectId, contentId: issueNodeId });
+
+            const itemId = addResult.addProjectV2ItemById.item.id;
+            console.log(`Added to project`);
+
+            // Set Status to Triage
+            if (triageStatus) {
+              await github.graphql(`
+                mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                  updateProjectV2ItemFieldValue(input: {
+                    projectId: $projectId
+                    itemId: $itemId
+                    fieldId: $fieldId
+                    value: { singleSelectOptionId: $optionId }
+                  }) {
+                    projectV2Item { id }
+                  }
+                }
+              `, {
+                projectId,
+                itemId,
+                fieldId: statusField.id,
+                optionId: triageStatus.id,
+              });
+              console.log(`Set status to Triage`);
+            }
+
+            // Set App field
+            if (appField) {
+              const appOption = appField.options.find(o => o.name === appName);
+              if (appOption) {
+                await github.graphql(`
+                  mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                    updateProjectV2ItemFieldValue(input: {
+                      projectId: $projectId
+                      itemId: $itemId
+                      fieldId: $fieldId
+                      value: { singleSelectOptionId: $optionId }
+                    }) {
+                      projectV2Item { id }
+                    }
+                  }
+                `, {
+                  projectId,
+                  itemId,
+                  fieldId: appField.id,
+                  optionId: appOption.id,
+                });
+              }
+            }
+
+            // Set Source field
+            if (sourceField) {
+              const sourceOption = sourceField.options.find(o => o.name === source);
+              if (sourceOption) {
+                await github.graphql(`
+                  mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                    updateProjectV2ItemFieldValue(input: {
+                      projectId: $projectId
+                      itemId: $itemId
+                      fieldId: $fieldId
+                      value: { singleSelectOptionId: $optionId }
+                    }) {
+                      projectV2Item { id }
+                    }
+                  }
+                `, {
+                  projectId,
+                  itemId,
+                  fieldId: sourceField.id,
+                  optionId: sourceOption.id,
+                });
+              }
+            }
+
+            // Add welcome comment
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              body: [
+                `Thank you for opening this issue! It has been added to our [triage board](https://github.com/orgs/${projectOwner}/projects/${projectNumber}/views/2) and assigned to @${triageAssignee} for review.`,
+                '',
+                '**What happens next:**',
+                '1. A maintainer will review this issue and determine the appropriate action',
+                '2. If accepted, it may be converted into an OpenSpec change for structured development',
+                '3. You will be notified of any status changes',
+                '',
+                '**Triage labels:**',
+                '- `triage:accept-feature` — accepted as a new feature',
+                '- `triage:accept-bugfix` — accepted as a bug fix',
+                '- `triage:needs-info` — more information needed',
+                '- `triage:wontfix` — will not be addressed',
+                '- `triage:duplicate` — duplicate of another issue',
+              ].join('\n'),
+            });
+
+      - name: Handle triage decision
+        if: github.event.action == 'labeled'
+        uses: actions/github-script@v7
+        env:
+          PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+          PROJECT_NUMBER: ${{ inputs.project-number }}
+          PROJECT_OWNER: ${{ inputs.project-owner }}
+        with:
+          github-token: ${{ secrets.PROJECT_TOKEN }}
+          script: |
+            const label = context.payload.label.name;
+            const issue = context.payload.issue;
+            const projectNumber = parseInt(process.env.PROJECT_NUMBER);
+            const projectOwner = process.env.PROJECT_OWNER;
+
+            // Only handle triage: labels
+            if (!label.startsWith('triage:')) return;
+
+            console.log(`Triage decision for #${issue.number}: ${label}`);
+
+            // Remove the generic 'triage' label
+            try {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                name: 'triage',
+              });
+            } catch { /* label might not exist */ }
+
+            switch (label) {
+              case 'triage:accept-feature':
+              case 'triage:accept-bugfix': {
+                const specType = label === 'triage:accept-feature' ? 'feature' : 'bugfix';
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  body: [
+                    `:white_check_mark: **Accepted as ${specType}**`,
+                    '',
+                    'This issue has been accepted and will be developed using the OpenSpec workflow.',
+                    `To start the spec process, run: \`/opsx:new ${issue.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}\``,
+                    '',
+                    `Once the OpenSpec change is created, a linked \`[OpenSpec]\` issue will track the specification and implementation progress.`,
+                  ].join('\n'),
+                });
+
+                // Move to Proposal on the project board
+                const projectQuery = await github.graphql(`
+                  query($owner: String!, $number: Int!) {
+                    organization(login: $owner) {
+                      projectV2(number: $number) {
+                        id
+                        fields(first: 30) {
+                          nodes {
+                            ... on ProjectV2SingleSelectField {
+                              id
+                              name
+                              options { id name }
+                            }
+                          }
+                        }
+                        items(first: 100) {
+                          nodes {
+                            id
+                            content {
+                              ... on Issue { number repository { name } }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                `, { owner: projectOwner, number: projectNumber });
+
+                const project = projectQuery.organization.projectV2;
+                const statusField = project.fields.nodes.find(f => f.name === 'Status' && f.options);
+                const proposalStatus = statusField?.options.find(o => o.name === 'Proposal');
+                const item = project.items.nodes.find(i =>
+                  i.content?.number === issue.number &&
+                  i.content?.repository?.name === context.repo.repo
+                );
+
+                if (item && proposalStatus) {
+                  await github.graphql(`
+                    mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                      updateProjectV2ItemFieldValue(input: {
+                        projectId: $projectId, itemId: $itemId, fieldId: $fieldId,
+                        value: { singleSelectOptionId: $optionId }
+                      }) { projectV2Item { id } }
+                    }
+                  `, {
+                    projectId: project.id,
+                    itemId: item.id,
+                    fieldId: statusField.id,
+                    optionId: proposalStatus.id,
+                  });
+                }
+                break;
+              }
+
+              case 'triage:wontfix':
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  body: ':no_entry_sign: This issue has been reviewed and will not be addressed at this time. Feel free to reopen with additional context if you believe this should be reconsidered.',
+                });
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  state: 'closed',
+                  state_reason: 'not_planned',
+                });
+                break;
+
+              case 'triage:duplicate':
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  body: ':link: This issue has been identified as a duplicate. Please check the linked issue for updates.',
+                });
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  state: 'closed',
+                  state_reason: 'not_planned',
+                });
+                break;
+
+              case 'triage:needs-info':
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  body: [
+                    ':question: **More information needed**',
+                    '',
+                    'We need additional details to properly evaluate this issue. Please provide:',
+                    '- Steps to reproduce (for bugs)',
+                    '- Use case / user story (for features)',
+                    '- Expected vs actual behavior',
+                    '- Screenshots or logs if applicable',
+                  ].join('\n'),
+                });
+                break;
+            }
