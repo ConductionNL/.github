@@ -1254,9 +1254,10 @@ jobs:
 
       - name: Install Grype
         uses: anchore/scan-action/download-grype@v5
+        id: grype-install
 
       - name: CVE scan SBOM
-        run: grype sbom:sbom.cdx.json --fail-on critical
+        run: ${{ steps.grype-install.outputs.cmd }} sbom:sbom.cdx.json --fail-on critical
 
       - name: Composer audit
         run: composer audit --format=json || true
