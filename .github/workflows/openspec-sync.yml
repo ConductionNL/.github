@@ -242,12 +242,8 @@ jobs:
 
             console.log(`Found ${allChanges.length} OpenSpec changes (active + archived)`);
 
-            // --- Get default branch ---
-            const { data: repoData } = await github.rest.repos.get({
-              owner: repoOwner,
-              repo: repoName,
-            });
-            const defaultBranch = repoData.default_branch;
+            // --- Use the branch that triggered the workflow for file links ---
+            const defaultBranch = context.ref ? context.ref.replace('refs/heads/', '') : 'development';
 
             // --- Get project ID and field info via GraphQL ---
             const projectQuery = await github.graphql(`
