@@ -1195,7 +1195,7 @@ jobs:
   # ╚══════════════════════════════════════════════╝
 
   sbom:
-    if: ${{ inputs.enable-sbom && !cancelled() }}
+    if: ${{ inputs.enable-sbom && !cancelled() && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/beta' || github.ref == 'refs/heads/development') }}
     runs-on: ubuntu-latest
     name: "SBOM"
     needs: [security]
@@ -1283,6 +1283,7 @@ jobs:
       # ── Commit validated SBOM ──
 
       - name: Commit SBOM
+        if: ${{ github.ref == 'refs/heads/main' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
