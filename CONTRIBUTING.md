@@ -39,15 +39,15 @@ Enhancement suggestions are tracked as GitHub issues. When creating an enhanceme
 
 ## Branch Protection & Git Flow
 
-We use a structured branching model to ensure stability across environments. All branches are protected — direct pushes are not allowed. Changes flow through pull requests with required reviews and CI checks.
+We use a structured branching model to ensure stability across environments. All branches are protected — direct pushes are not allowed. Every change flows through a pull request, and the Quality CI must pass before merging is allowed.
 
 ```mermaid
 graph LR
-    F["feature/*\nbugfix/*"] -->|PR + Quality CI| D[development]
-    D -->|Auto PR via sync-to-beta| B[beta]
-    B -->|PR + Branch Protection CI| M[main]
-    H["hotfix/*"] -->|PR| B
-    H -->|PR| M
+    F["feature/*\nbugfix/*"] -->|"PR + Quality CI ✓"| D[development]
+    D -->|"PR + Quality CI ✓"| B[beta]
+    B -->|"PR + Branch Protection CI ✓"| M[main]
+    H["hotfix/*"] -->|"PR + Quality CI ✓"| B
+    H -->|"PR + Branch Protection CI ✓"| M
 
     style F fill:#e1f5fe
     style D fill:#fff9c4
@@ -58,25 +58,28 @@ graph LR
 
 ### Branch Rules
 
-| Target | Allowed Sources | Trigger |
-|--------|----------------|---------|
+| Target | Allowed Sources | Requirements |
+|--------|----------------|-------------|
 | `development` | `feature/*`, `bugfix/*` | PR with Quality CI passing |
-| `beta` | `development`, `hotfix/*`, `main` (backport) | PR with Branch Protection CI |
-| `main` | `beta`, `hotfix/*` | PR with Branch Protection CI |
+| `beta` | `development`, `hotfix/*`, `main` (backport) | PR with Quality CI passing + Branch Protection CI |
+| `main` | `beta`, `hotfix/*` | PR with Branch Protection CI passing |
 
 ### How It Works
 
 1. **Feature work** happens on `feature/*` or `bugfix/*` branches created from `development`
-2. **PRs to `development`** trigger the full Quality workflow (PHPCS, PHPStan, Psalm, PHPMD, ESLint, Stylelint, license checks)
-3. **Pushing to `development`** automatically creates/updates a PR to `beta` via the `sync-to-beta` workflow
-4. **Merging to `beta`** triggers a beta release to the Nextcloud App Store
-5. **Merging `beta` to `main`** triggers a stable release to the Nextcloud App Store
-6. **Hotfixes** can target both `beta` and `main` directly for urgent patches
-7. **Branches are automatically deleted** after their PR is merged
+2. **PRs to `development`** trigger the full Quality workflow — all checks must pass before the PR can be merged
+3. **When ready for beta release**, a developer creates a PR from `development` to `beta` — Quality CI runs again on the PR
+4. **Merging to `beta`** triggers an automatic beta release to the Nextcloud App Store
+5. **When ready for stable release**, a developer creates a PR from `beta` to `main` — Branch Protection CI validates the source branch
+6. **Merging to `main`** triggers an automatic stable release to the Nextcloud App Store
+7. **Hotfixes** can target both `beta` and `main` directly for urgent patches via PR
+8. **Branches are automatically deleted** after their PR is merged
+
+> **Important:** There are no automatic merges or auto-created PRs between branches. Every promotion (development → beta → main) requires a deliberate pull request created by a developer, with CI passing before merge is allowed.
 
 ## Quality Workflow
 
-Every push and pull request runs our automated quality pipeline. All checks must pass before a PR can be merged.
+Every pull request triggers our automated quality pipeline. **All checks must pass before a PR can be merged.** This ensures that no code enters `development`, `beta`, or `main` without meeting our quality standards.
 
 ### PHP Quality Checks
 
@@ -120,35 +123,43 @@ npx stylelint "src/**/*.{css,scss,vue}"  # Stylelint
 
 ## App Store Release Process
 
-Releases to the Nextcloud App Store are fully automated via GitHub Actions. Version numbers are calculated automatically from PR labels.
+Releases to the Nextcloud App Store are fully automated via GitHub Actions. They are triggered by merging PRs into `beta` or `main`. Version numbers are calculated automatically from PR labels.
 
 ```mermaid
 graph TD
     subgraph "Beta Release"
-        D[development] -->|auto sync-to-beta PR| B[beta branch]
-        B -->|merge PR with label| BT{Version Bump}
+        D[development] -->|"Developer creates PR"| BP1{"Quality CI\npasses?"}
+        BP1 -->|"Yes"| BM["Merge PR to beta"]
+        BP1 -->|"No"| BF["Fix issues\nre-push"]
+        BF --> BP1
+        BM --> BT{Version Bump\nfrom PR label}
         BT -->|"label: major"| BV1["v2.0.0-beta.20260319"]
         BT -->|"label: minor"| BV2["v1.1.0-beta.20260319"]
-        BT -->|"label: patch (default)"| BV3["v1.0.1-beta.20260319"]
-        BV1 & BV2 & BV3 --> BB[Build & Package]
-        BB --> BU[Upload to App Store\nas 'nightly' release]
-        BB --> BG[Create GitHub\npre-release]
+        BT -->|"label: patch\n(default)"| BV3["v1.0.1-beta.20260319"]
+        BV1 & BV2 & BV3 --> BB["Build & Package"]
+        BB --> BU["Upload to App Store\n(nightly channel)"]
+        BB --> BG["Create GitHub\npre-release"]
     end
 
     subgraph "Stable Release"
-        B2[beta] -->|PR to main| M[main branch]
-        M -->|merge| ST{Version Bump}
+        B2[beta] -->|"Developer creates PR"| SP1{"Branch Protection\nCI passes?"}
+        SP1 -->|"Yes"| SM["Merge PR to main"]
+        SP1 -->|"No"| SF["Fix issues"]
+        SF --> SP1
+        SM --> ST{Version Bump\nfrom PR label}
         ST -->|"from PR labels"| SV["v1.1.0"]
-        SV --> SB[Build & Package]
-        SB --> SU[Upload to App Store\nas stable release]
-        SB --> SG[Create GitHub release\nwith changelog]
+        SV --> SB["Build & Package"]
+        SB --> SU["Upload to App Store\n(stable channel)"]
+        SB --> SG["Create GitHub release\nwith changelog"]
     end
 
     style D fill:#fff9c4
-    style B fill:#ffe0b2
-    style M fill:#c8e6c9
+    style BM fill:#ffe0b2
+    style SM fill:#c8e6c9
     style BU fill:#e1bee7
     style SU fill:#e1bee7
+    style BF fill:#ffcdd2
+    style SF fill:#ffcdd2
 ```
 
 ### Version Labeling
@@ -189,6 +200,8 @@ Each app has its own documentation site — see the app's README for its URL.
 4. Make your changes
 5. Run quality checks: `composer cs:check` and `composer phpstan`
 6. Push to your fork and open a Pull Request
+7. Wait for Quality CI to pass, address any failures
+8. Request review from a team member
 
 ### Git Commit Messages
 
