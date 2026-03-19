@@ -39,15 +39,15 @@ Enhancement suggestions are tracked as GitHub issues. When creating an enhanceme
 
 ## Branch Protection & Git Flow
 
-We use a structured branching model to ensure stability across environments. All branches are protected — direct pushes are not allowed. Every change flows through a pull request, and the Quality CI must pass before merging is allowed.
+We use a structured branching model to ensure stability across environments. All branches are protected via **organization-wide rulesets** on the ConductionNL GitHub organization — direct pushes are not allowed. Every change flows through a pull request with peer review and CI checks.
 
 ```mermaid
 graph LR
-    F["feature/*\nbugfix/*"] -->|"PR + Quality CI ✓"| D[development]
-    D -->|"PR + Quality CI ✓"| B[beta]
-    B -->|"PR + Branch Protection CI ✓"| M[main]
-    H["hotfix/*"] -->|"PR + Quality CI ✓"| B
-    H -->|"PR + Branch Protection CI ✓"| M
+    F["feature/*\nbugfix/*"] -->|"PR + 1 review\n+ Quality CI ✓"| D[development]
+    D -->|"PR + 1 review\n+ Quality CI ✓"| B[beta]
+    B -->|"PR + 2 reviews\n+ Branch CI ✓"| M[main]
+    H["hotfix/*"] -->|"PR + 1 review\n+ Quality CI ✓"| B
+    H -->|"PR + 2 reviews\n+ Branch CI ✓"| M
 
     style F fill:#e1f5fe
     style D fill:#fff9c4
@@ -58,24 +58,40 @@ graph LR
 
 ### Branch Rules
 
-| Target | Allowed Sources | Requirements |
-|--------|----------------|-------------|
-| `development` | `feature/*`, `bugfix/*` | PR with Quality CI passing |
-| `beta` | `development`, `hotfix/*`, `main` (backport) | PR with Quality CI passing + Branch Protection CI |
-| `main` | `beta`, `hotfix/*` | PR with Branch Protection CI passing |
+These rules are enforced organization-wide across all ConductionNL repositories. They cannot be overridden at the repository level.
+
+| Target | Allowed Sources | Reviews | Required CI Checks |
+|--------|----------------|---------|-------------------|
+| `development` | `feature/*`, `bugfix/*` | 1 approving review | Quality CI (`lint-check`) |
+| `beta` | `development`, `hotfix/*`, `main` (backport) | 1 approving review | Quality CI (`lint-check`) |
+| `main` | `beta`, `hotfix/*` | 2 approving reviews | Branch Protection CI (`check-branch`, `lint-check`) |
+
+### Organization-Wide Rulesets
+
+Branch protection is managed at the **organization level**, not per-repository. This ensures consistent enforcement across all Conduction apps. The three rulesets are:
+
+1. **Development Branch Protection** — Enforces peer review and Quality CI for all feature work entering `development`
+2. **Beta Branch Protection** — Same requirements as development, gates the path to beta releases
+3. **Main Branch Protection** — Stricter: requires 2 reviewers and branch-source validation before stable release
+
+All rulesets also enforce:
+- No force pushes
+- No branch deletion
+- Stale reviews dismissed on new pushes
+- All review threads must be resolved before merge
 
 ### How It Works
 
 1. **Feature work** happens on `feature/*` or `bugfix/*` branches created from `development`
-2. **PRs to `development`** trigger the full Quality workflow — all checks must pass before the PR can be merged
-3. **When ready for beta release**, a developer creates a PR from `development` to `beta` — Quality CI runs again on the PR
+2. **PRs to `development`** require 1 approving peer review and the Quality CI workflow must pass
+3. **When ready for beta release**, a developer creates a PR from `development` to `beta` — same review + CI requirements
 4. **Merging to `beta`** triggers an automatic beta release to the Nextcloud App Store
-5. **When ready for stable release**, a developer creates a PR from `beta` to `main` — Branch Protection CI validates the source branch
+5. **When ready for stable release**, a developer creates a PR from `beta` to `main` — requires 2 approving reviews and Branch Protection CI
 6. **Merging to `main`** triggers an automatic stable release to the Nextcloud App Store
-7. **Hotfixes** can target both `beta` and `main` directly for urgent patches via PR
+7. **Hotfixes** can target both `beta` and `main` directly for urgent patches via PR (same review requirements apply)
 8. **Branches are automatically deleted** after their PR is merged
 
-> **Important:** There are no automatic merges or auto-created PRs between branches. Every promotion (development → beta → main) requires a deliberate pull request created by a developer, with CI passing before merge is allowed.
+> **Important:** There are no automatic merges or auto-created PRs between branches. Every promotion (development -> beta -> main) requires a deliberate pull request created by a developer, with peer review and CI passing before merge is allowed.
 
 ## Quality Workflow
 
