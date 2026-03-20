@@ -1,0 +1,38 @@
+{
+  "unversionedId": "intro",
+  "id": "intro",
+  "title": "Welcome to Conduction!👋",
+  "description": "Welcome to Conduction - Building a better digital world for citizens through democratic, inclusive and transparent software",
+  "source": "@site/docs/Intro.md",
+  "sourceDirName": ".",
+  "slug": "/intro",
+  "permalink": "/docs/intro",
+  "draft": false,
+  "editUrl": "https://github.com/conductionnl/docs/tree/main/website/docs/Intro.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 1,
+  "frontMatter": {
+    "id": "intro",
+    "title": "Welcome to Conduction!👋",
+    "sidebar_label": "About COnduction",
+    "sidebar_position": 1,
+    "description": "Welcome to Conduction - Building a better digital world for citizens through democratic, inclusive and transparent software",
+    "keywords": [
+      "introduction",
+      "about",
+      "mission",
+      "values",
+      "government",
+      "digital transformation",
+      "proactive services",
+      "citizen-centric",
+      "open source"
+    ]
+  },
+  "sidebar": "tutorialSidebar",
+  "next": {
+    "title": "ISO Overview",
+    "permalink": "/docs/ISO/iso"
+  }
+}

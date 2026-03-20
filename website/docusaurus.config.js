@@ -7,9 +7,9 @@ const config = {
   tagline: 'Documentation for Conduction\'s open source solutions',
   url: 'https://docs.conduction.nl',
   baseUrl: '/',
-  
+
   // GitHub pages deployment config
-  organizationName: 'conductionnl', 
+  organizationName: 'conductionnl',
   projectName: '.github',
   trailingSlash: false,
 
@@ -44,45 +44,24 @@ const config = {
   themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
+      colorMode: {
+        disableSwitch: true,
+        respectPrefersColorScheme: false,
+        defaultMode: 'light',
+      },
       navbar: {
-        title: 'Conduction',
         logo: {
           alt: 'Conduction Logo',
-          src: 'img/logo.svg',
+          src: 'img/logo.png',
         },
         items: [
-          {
-            type: 'docSidebar',
-            sidebarId: 'tutorialSidebar',
-            position: 'left',
-            label: 'Documentation',
-          },
-          {
-            href: 'https://github.com/conductionnl',
-            label: 'GitHub',
-            position: 'right',
-          },
-          {
-            href: 'https://www.linkedin.com/company/conduction-nl/',
-            label: 'LinkedIn',
-            position: 'right',
-          },
+          { to: '/over-ons', label: 'Over ons', position: 'right' },
+          { to: '/beheer', label: 'Beheer', position: 'right' },
+          { to: '/projecten', label: 'Projecten', position: 'right' },
+          { to: '/common-ground', label: 'Common Ground', position: 'right' },
+          { to: '/trainingen', label: 'Trainingen', position: 'right' },
+          { to: '/contact', label: 'Contact', position: 'right' },
         ],
-      },
-      footer: {
-        style: 'dark',
-        links: [
-          {
-            title: 'Docs',
-            items: [
-              {
-                label: 'Documentation',
-                to: '/docs/intro',
-              },
-            ],
-          },
-        ],
-        copyright: `Copyright © ${new Date().getFullYear()} Conduction. Built with Docusaurus.`,
       },
       prism: {
         theme: require('prism-react-renderer/themes/github'),

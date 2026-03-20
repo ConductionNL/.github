@@ -1,0 +1,24 @@
+{
+  "unversionedId": "WayOfWork/competences",
+  "id": "WayOfWork/competences",
+  "title": "Competences",
+  "description": "",
+  "source": "@site/docs/WayOfWork/competences.md",
+  "sourceDirName": "WayOfWork",
+  "slug": "/WayOfWork/competences",
+  "permalink": "/docs/WayOfWork/competences",
+  "draft": false,
+  "editUrl": "https://github.com/conductionnl/docs/tree/main/website/docs/WayOfWork/competences.md",
+  "tags": [],
+  "version": "current",
+  "frontMatter": {},
+  "sidebar": "tutorialSidebar",
+  "previous": {
+    "title": "Vacancies at Conduction",
+    "permalink": "/docs/WayOfWork/Vacancies"
+  },
+  "next": {
+    "title": "Issue Flow and Sprint Planning Process",
+    "permalink": "/docs/WayOfWork/join"
+  }
+}
