@@ -2,7 +2,7 @@
 
 > **Purpose**: This document outlines the current Conduction app portfolio and proposed gap apps based on market intelligence from 39,600 tenders across 8 countries. We are collecting colleague feedback on naming for the 10 planned applications.
 >
-> **How to give feedback**: Comment on the discussion thread with your preferred names or suggest alternatives. We want names that are short (5-12 characters), hint at functionality, and work in both Dutch and English — following the pattern of existing apps like Procest, Pipelinq, and Docudesk.
+> **How to give feedback**: Comment on the discussion thread with your preferred names or suggest alternatives. We want names that are short (5-12 characters), hint at functionality, and target an English-speaking audience — following the pattern of existing apps like Procest, Pipelinq, and Docudesk.
 
 ---
 
@@ -40,7 +40,7 @@ The following 10 applications address gaps identified through analysis of 7,662 
 
 | # | Name | Rationale |
 |---|------|-----------|
-| 1 | **Wijkdesk** | "Wijk" (neighborhood) + desk — social care is neighborhood-level |
+| 1 | **Caredesk** | "Care" + desk — social care management desk |
 | 2 | **Zorgregie** | "Zorg" (care) + "regie" (coordination) — care orchestration |
 | 3 | **Zorgwijz** | "Zorg" (care) + "wijs" (wise/way) — smart care routing |
 | 4 | **Sociaalq** | "Sociaal" + q suffix (Conduction pattern) |
@@ -63,7 +63,7 @@ The following 10 applications address gaps identified through analysis of 7,662 
 
 | # | Name | Rationale |
 |---|------|-----------|
-| 1 | **Groenvast** | "Groen" (green) + "vast" (fixed/solid) — solid green management |
+| 1 | **Assetdesk** | "Asset" + desk — public asset management desk |
 | 2 | **Buitendesk** | "Buiten" (outside) + desk — outdoor management desk |
 | 3 | **Straatwerk** | "Straat" (street) + "werk" (work) — street works |
 | 4 | **Openruim** | "Open ruimte" shortened — open/public space |
@@ -86,7 +86,7 @@ The following 10 applications address gaps identified through analysis of 7,662 
 
 | # | Name | Rationale |
 |---|------|-----------|
-| 1 | **Begrotiq** | "Begroting" (budget) + q suffix |
+| 1 | **Budgetq** | "Budget" + q suffix — budget management |
 | 2 | **Kaswerk** | "Kas" (treasury) + "werk" (work) — treasury work |
 | 3 | **Financq** | "Financieel" shortened + q |
 | 4 | **Budgetdesk** | Budget + desk — budget management desk |
@@ -109,7 +109,7 @@ The following 10 applications address gaps identified through analysis of 7,662 
 
 | # | Name | Rationale |
 |---|------|-----------|
-| 1 | **Bestello** | "Bestelling" (order) + o — ordering system |
+| 1 | **Purchaseq** | "Purchase" + q suffix — procurement system |
 | 2 | **Kooplink** | "Koop" (purchase) + "link" — purchase connection |
 | 3 | **Inkoopdesk** | "Inkoop" (procurement) + desk |
 | 4 | **Bestelq** | "Bestel" (order) + q suffix |
@@ -132,7 +132,7 @@ The following 10 applications address gaps identified through analysis of 7,662 
 
 | # | Name | Rationale |
 |---|------|-----------|
-| 1 | **Personeelq** | "Personeel" (personnel) + q |
+| 1 | **Staffdesk** | "Staff" + desk — staff management desk |
 | 2 | **Verlofdesk** | "Verlof" (leave) + desk — leave and absence management |
 | 3 | **Teamdesk** | Team + desk — team management |
 | 4 | **Werkplek** | "Werkplek" (workplace) — workplace management |
@@ -155,7 +155,7 @@ The following 10 applications address gaps identified through analysis of 7,662 
 
 | # | Name | Rationale |
 |---|------|-----------|
-| 1 | **Boekdesk** | "Boek" (book/ledger) + desk — bookkeeping desk |
+| 1 | **Ledgerq** | "Ledger" + q suffix — ledger/bookkeeping |
 | 2 | **Grootboekq** | "Grootboek" (general ledger) + q |
 | 3 | **Boekhoudq** | "Boekhoud" (bookkeeping) + q |
 | 4 | **Journaalq** | "Journaal" (journal entry) + q |
@@ -201,7 +201,7 @@ The following 10 applications address gaps identified through analysis of 7,662 
 
 | # | Name | Rationale |
 |---|------|-----------|
-| 1 | **Raadplein** | "Raad" (council) + "plein" (square/plaza) — council square |
+| 1 | **Councilq** | "Council" + q suffix — council information |
 | 2 | **Motiedesk** | "Motie" (motion) + desk — motion management |
 | 3 | **Raaddesk** | "Raad" (council) + desk |
 | 4 | **Besluitq** | "Besluit" (decision) + q — decision tracking |
@@ -224,7 +224,7 @@ The following 10 applications address gaps identified through analysis of 7,662 
 
 | # | Name | Rationale |
 |---|------|-----------|
-| 1 | **Steundesk** | "Steun" (support/subsidy) + desk |
+| 1 | **Grantdesk** | "Grant" + desk — grant/subsidy management |
 | 2 | **Subsidioo** | "Subsidie" + oo suffix — playful |
 | 3 | **Fondsenq** | "Fondsen" (funds) + q — fund management |
 | 4 | **Toekenq** | "Toekenning" (award/grant) + q |
@@ -247,7 +247,7 @@ The following 10 applications address gaps identified through analysis of 7,662 
 
 | # | Name | Rationale |
 |---|------|-----------|
-| 1 | **Schuldwijz** | "Schuld" (debt) + "wijs" (wise/way) — wise debt path |
+| 1 | **Debtdesk** | "Debt" + desk — debt assistance management |
 | 2 | **Schuldregie** | "Schuld" + "regie" (coordination) — debt coordination |
 | 3 | **Herstelq** | "Herstel" (recovery) + q — financial recovery |
 | 4 | **Balansq** | "Balans" (balance) + q — regaining balance |
@@ -264,14 +264,14 @@ The following 10 applications address gaps identified through analysis of 7,662 
 
 | # | Domain | Top 3 Names | Tenders | Requirements |
 |---|--------|-------------|---------|--------------|
-| 1 | Sociaal Domein | Wijkdesk, Zorgregie, Zorgwijz | 162* | cross-category |
-| 2 | BOR | Groenvast, Buitendesk, Straatwerk | 34* | cross-category |
-| 3 | ERP | Begrotiq, Kaswerk, Financq | 1,083 | 15,243 |
-| 4 | Inkoop | Bestello, Kooplink, Inkoopdesk | 1,430 | 11,533 |
-| 5 | HRM | Personeelq, Verlofdesk, Teamdesk | 112 | 589 |
-| 6 | Boekhouding | Boekdesk, Grootboekq, Boekhoudq | 71 | 462 |
-| 7 | Formulieren | Formblok, Formulierq, Invuldesk | 15 | 624 |
-| 8 | Raadsinformatie | Raadplein, Motiedesk, Raaddesk | 12* | cross-category |
+| 1 | Sociaal Domein | Caredesk, Welfareq, Casecare | 162* | cross-category |
+| 2 | BOR | Assetdesk, Groundq, Spacedesk | 34* | cross-category |
+| 3 | ERP | Budgetq, Fiscalq, Financeq | 1,083 | 15,243 |
+| 4 | Inkoop | Purchaseq, Procureq, Orderdesk | 1,430 | 11,533 |
+| 5 | HRM | Staffdesk, Peopleq, Teamdesk | 112 | 589 |
+| 6 | Boekhouding | Ledgerq, Bookdesk, Auditdesk | 71 | 462 |
+| 7 | Formulieren | Formblok, Formdesk, Formflow | 15 | 624 |
+| 8 | Raadsinformatie | Councilq, Motiondesk, Boarddesk | 12* | cross-category |
 | 9 | Subsidie | Steundesk, Subsidioo, Fondsenq | 23 | emerging |
 | 10 | Schuldhulp | Schuldwijz, Schuldregie, Herstelq | 20* | cross-category |
 
