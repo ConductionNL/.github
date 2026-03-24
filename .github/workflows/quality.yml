@@ -1012,7 +1012,11 @@ jobs:
       - name: Run Playwright tests
         run: |
           cd server/apps/${{ inputs.app-name }}
-          npx playwright test --config=${{ inputs.playwright-test-path }}/playwright.config.ts
+          CONFIG="${{ inputs.playwright-test-path }}/playwright.config.ts"
+          if [ ! -f "$CONFIG" ] && [ -f "playwright.config.ts" ]; then
+            CONFIG="playwright.config.ts"
+          fi
+          npx playwright test --config="$CONFIG"
         env:
           BASE_URL: http://localhost:8080
           ADMIN_USER: admin
