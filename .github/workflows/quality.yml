@@ -87,6 +87,31 @@ on:
         required: false
         type: string
         default: ""
+      enable-playwright:
+        description: "Run Playwright E2E browser tests against Nextcloud server"
+        required: false
+        type: boolean
+        default: false
+      playwright-test-path:
+        description: "Path to Playwright test files (relative to app root)"
+        required: false
+        type: string
+        default: "tests/e2e"
+      playwright-seed-command:
+        description: "Shell command to run after server start but before Playwright tests (e.g. 'php occ maintenance:repair' to seed test fixtures). Runs with cwd set to the Nextcloud server root."
+        required: false
+        type: string
+        default: ""
+      enable-playwright-coverage:
+        description: "Collect V8 code coverage during Playwright tests and enforce threshold"
+        required: false
+        type: boolean
+        default: false
+      playwright-coverage-threshold:
+        description: "Minimum line coverage percentage for Playwright tests (0-100). Only enforced when enable-playwright-coverage is true."
+        required: false
+        type: number
+        default: 75
       additional-apps:
         description: "JSON array of additional app repos to checkout and enable (e.g. '[{\"repo\":\"ConductionNL/openregister\",\"app\":\"openregister\"}]')"
         required: false
@@ -608,6 +633,7 @@ jobs:
   # ║                                               ║
   # ║  • PHPUnit matrix (PHP × Nextcloud versions)  ║
   # ║  • Integration tests (Newman)                 ║
+  # ║  • E2E browser tests (Playwright)             ║
   # ╚══════════════════════════════════════════════╝
 
   phpunit:
@@ -867,6 +893,233 @@ jobs:
           echo "=== Last 50 lines of Nextcloud log ==="
           tail -50 server/data/nextcloud.log 2>/dev/null | python3 -m json.tool --no-ensure-ascii 2>/dev/null || tail -50 server/data/nextcloud.log 2>/dev/null || echo "No log found"
 
+  playwright:
+    if: ${{ inputs.enable-playwright && !cancelled() && needs.php-quality.result != 'failure' && needs.security.result != 'failure' }}
+    runs-on: ubuntu-latest
+    name: "E2E Tests (Playwright)"
+    needs: [php-quality, security]
+
+    steps:
+      - name: Checkout Nextcloud server
+        uses: actions/checkout@v4
+        with:
+          repository: nextcloud/server
+          ref: ${{ fromJSON(inputs.nextcloud-test-refs)[0] }}
+          path: server
+
+      - name: Checkout server submodules
+        run: |
+          cd server
+          git submodule update --init 3rdparty
+
+      - name: Checkout app
+        uses: actions/checkout@v4
+        with:
+          path: server/apps/${{ inputs.app-name }}
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php-version }}
+          extensions: mbstring, intl, sqlite3, zip, gd, curl, xml, json
+          tools: composer:v2
+
+      - name: Checkout additional apps
+        if: ${{ inputs.additional-apps != '[]' }}
+        run: |
+          echo '${{ inputs.additional-apps }}' | jq -c '.[]' | while read -r app; do
+            repo=$(echo "$app" | jq -r '.repo')
+            name=$(echo "$app" | jq -r '.app')
+            ref=$(echo "$app" | jq -r '.ref // "main"')
+            echo "Checking out $repo ($name) at $ref..."
+            git clone --depth 1 --branch "$ref" "https://github.com/$repo.git" "server/apps/$name"
+            if [ -f "server/apps/$name/composer.json" ]; then
+              echo "Installing composer dependencies for $name..."
+              cd "server/apps/$name"
+              composer install --no-progress --prefer-dist --optimize-autoloader --no-dev
+              cd -
+            fi
+          done
+
+      - name: Install Nextcloud
+        run: |
+          cd server
+          php occ maintenance:install \
+            --database sqlite \
+            --admin-user admin \
+            --admin-pass admin
+          if [ '${{ inputs.additional-apps }}' != '[]' ]; then
+            echo '${{ inputs.additional-apps }}' | jq -r '.[].app' | while read -r name; do
+              echo "Enabling app: $name"
+              php occ app:enable "$name" || echo "::warning::Failed to enable $name, continuing..."
+            done
+          fi
+
+      - name: Install and enable app
+        run: |
+          cd server/apps/${{ inputs.app-name }}
+          composer install --no-progress --prefer-dist --optimize-autoloader
+          cd ../../
+          php occ app:enable ${{ inputs.app-name }}
+
+      - name: Start PHP built-in server
+        run: |
+          cd server
+          php -S 0.0.0.0:8080 &
+          sleep 3
+          curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/status.php || echo "Server not ready"
+
+      - name: Seed test data
+        if: inputs.playwright-seed-command != ''
+        run: |
+          cd server
+          echo "Running seed command: ${{ inputs.playwright-seed-command }}"
+          eval ${{ inputs.playwright-seed-command }}
+          echo "Seed command completed."
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install app npm dependencies
+        run: |
+          cd server/apps/${{ inputs.app-name }}
+          if [ -f "package.json" ]; then
+            npm ci
+          fi
+
+      - name: Install Playwright
+        run: |
+          cd server/apps/${{ inputs.app-name }}
+          npx playwright install --with-deps chromium
+
+      - name: Validate Playwright tests exist
+        run: |
+          cd server/apps/${{ inputs.app-name }}
+          TEST_PATH="${{ inputs.playwright-test-path }}"
+          if [ ! -d "$TEST_PATH" ]; then
+            echo "::error::Playwright is enabled but test directory '$TEST_PATH' does not exist."
+            exit 1
+          fi
+          TESTS=$(find "$TEST_PATH" -name "*.spec.ts" -o -name "*.spec.js" 2>/dev/null | wc -l)
+          if [ "$TESTS" -eq 0 ]; then
+            echo "::error::No .spec.ts or .spec.js files found in '$TEST_PATH'."
+            exit 1
+          fi
+          echo "Found $TESTS Playwright test file(s) in $TEST_PATH."
+
+      - name: Run Playwright tests
+        run: |
+          cd server/apps/${{ inputs.app-name }}
+          npx playwright test --config=${{ inputs.playwright-test-path }}/playwright.config.ts
+        env:
+          BASE_URL: http://localhost:8080
+          ADMIN_USER: admin
+          ADMIN_PASSWORD: admin
+          COLLECT_COVERAGE: ${{ inputs.enable-playwright-coverage }}
+
+      - name: Generate spec-to-test coverage report
+        if: ${{ inputs.enable-playwright-coverage && !cancelled() }}
+        run: |
+          cd server/apps/${{ inputs.app-name }}
+          node -e "
+          const fs = require('fs');
+          const path = require('path');
+
+          // Collect all spec scenarios from openspec
+          const specDir = 'openspec/specs';
+          const changeDir = 'openspec/changes';
+          let scenarios = [];
+
+          function extractScenarios(dir) {
+            if (!fs.existsSync(dir)) return;
+            for (const entry of fs.readdirSync(dir, { recursive: true })) {
+              const file = path.join(dir, entry);
+              if (!file.endsWith('spec.md') && !file.endsWith('spec.md')) continue;
+              if (!fs.statSync(file).isFile()) continue;
+              const content = fs.readFileSync(file, 'utf8');
+              const matches = content.match(/^###?\s+(S\d+|Scenario[:\s])[^\n]*/gm) || [];
+              for (const m of matches) {
+                scenarios.push({ file: file.replace(/\\\\/g, '/'), scenario: m.replace(/^#+\s+/, '').trim() });
+              }
+            }
+          }
+          extractScenarios(specDir);
+          extractScenarios(changeDir);
+
+          // Collect all test descriptions from Playwright specs
+          const testDir = '${{ inputs.playwright-test-path }}';
+          let tests = [];
+          if (fs.existsSync(testDir)) {
+            for (const entry of fs.readdirSync(testDir, { recursive: true })) {
+              const file = path.join(testDir, entry);
+              if (!file.endsWith('.spec.ts') && !file.endsWith('.spec.js')) continue;
+              if (!fs.statSync(file).isFile()) continue;
+              const content = fs.readFileSync(file, 'utf8');
+              const matches = content.match(/test\(['\x60]([^'\x60]+)/g) || [];
+              for (const m of matches) {
+                tests.push({ file: file.replace(/\\\\/g, '/'), test: m.replace(/test\(['\x60]/, '').trim() });
+              }
+            }
+          }
+
+          // Collect test flow files
+          const flowDir = 'tests/flows';
+          let flows = [];
+          if (fs.existsSync(flowDir)) {
+            for (const entry of fs.readdirSync(flowDir)) {
+              if (entry.endsWith('.md') && entry !== 'README.md') flows.push(entry);
+            }
+          }
+
+          const report = {
+            specScenarios: scenarios.length,
+            playwrightTests: tests.length,
+            testFlows: flows.length,
+            coverage: scenarios.length > 0 ? Math.round((tests.length / scenarios.length) * 100) : 100,
+            scenarios,
+            tests,
+            flows,
+          };
+
+          fs.writeFileSync('playwright-coverage.json', JSON.stringify(report, null, 2));
+          console.log('Spec scenarios: ' + report.specScenarios);
+          console.log('Playwright tests: ' + report.playwrightTests);
+          console.log('Test flows: ' + report.testFlows);
+          console.log('Spec-to-test coverage: ' + report.coverage + '%');
+
+          if (report.coverage < ${{ inputs.playwright-coverage-threshold }}) {
+            console.log('::warning::Spec-to-test coverage ' + report.coverage + '% is below threshold ' + ${{ inputs.playwright-coverage-threshold }} + '%');
+          }
+          "
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            server/apps/${{ inputs.app-name }}/playwright-report/
+            server/apps/${{ inputs.app-name }}/playwright-coverage.json
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Upload Playwright traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: server/apps/${{ inputs.app-name }}/test-results/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Show Nextcloud log on failure
+        if: failure()
+        run: |
+          echo "=== Last 50 lines of Nextcloud log ==="
+          tail -50 server/data/nextcloud.log 2>/dev/null | python3 -m json.tool --no-ensure-ascii 2>/dev/null || tail -50 server/data/nextcloud.log 2>/dev/null || echo "No log found"
+
   # ╔══════════════════════════════════════════════╗
   # ║  STAGE 3 — Reporting & coverage baseline      ║
   # ╚══════════════════════════════════════════════╝
@@ -926,7 +1179,7 @@ jobs:
   report:
     runs-on: ubuntu-latest
     name: "Quality Report"
-    needs: [php-quality, vue-quality, security, license, phpunit, newman, baseline-protection]
+    needs: [php-quality, vue-quality, security, license, phpunit, newman, playwright, baseline-protection]
     if: always()
 
     steps:
@@ -950,6 +1203,13 @@ jobs:
         with:
           name: coverage-report
           path: coverage/
+        continue-on-error: true
+
+      - name: Download Playwright coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: playwright-report
+          path: results/playwright-report/
         continue-on-error: true
 
       - name: Install PDF tools
@@ -1013,6 +1273,7 @@ jobs:
             echo "| License | $(icon '${{ needs.license.result }}') |"
             echo "| PHPUnit | $(icon '${{ needs.phpunit.result }}') |"
             echo "| Newman | $(icon '${{ needs.newman.result }}') |"
+            echo "| Playwright | $(icon '${{ needs.playwright.result }}') |"
             echo ""
           } >> "$REPORT"
 
@@ -1133,6 +1394,43 @@ jobs:
               echo "| $(icon '${{ needs.newman.result }}') |"
             fi
             echo ""
+          } >> "$REPORT"
+
+          # ── Playwright Results ──
+          {
+            echo "## E2E Tests (Playwright)"
+            echo ""
+            if [ "${{ needs.playwright.result }}" = "skipped" ]; then
+              echo "*Playwright E2E tests were not enabled for this run.*"
+            else
+              echo "| Result |"
+              echo "|--------|"
+              echo "| $(icon '${{ needs.playwright.result }}') |"
+            fi
+            echo ""
+
+            # Include spec-to-test coverage if available
+            COVERAGE_FILE="results/playwright-report/playwright-coverage.json"
+            if [ -f "$COVERAGE_FILE" ]; then
+              SPEC_COUNT=$(jq '.specScenarios' "$COVERAGE_FILE")
+              TEST_COUNT=$(jq '.playwrightTests' "$COVERAGE_FILE")
+              FLOW_COUNT=$(jq '.testFlows' "$COVERAGE_FILE")
+              COVERAGE=$(jq '.coverage' "$COVERAGE_FILE")
+              echo "### Test Coverage"
+              echo ""
+              echo "| Metric | Value |"
+              echo "|--------|-------|"
+              echo "| Spec scenarios | $SPEC_COUNT |"
+              echo "| Playwright tests | $TEST_COUNT |"
+              echo "| Test flows (LLM) | $FLOW_COUNT |"
+              echo "| **Spec-to-test coverage** | **${COVERAGE}%** |"
+              echo "| Threshold | ${{ inputs.playwright-coverage-threshold }}% |"
+              echo ""
+              if [ "$COVERAGE" -lt "${{ inputs.playwright-coverage-threshold }}" ]; then
+                echo "> **Warning:** Coverage ${COVERAGE}% is below the ${​{ inputs.playwright-coverage-threshold }}% threshold."
+                echo ""
+              fi
+            fi
           } >> "$REPORT"
 
           # ── Footer ──
