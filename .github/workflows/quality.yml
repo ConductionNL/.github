@@ -1039,7 +1039,7 @@ jobs:
               if (!file.endsWith('spec.md') && !file.endsWith('spec.md')) continue;
               if (!fs.statSync(file).isFile()) continue;
               const content = fs.readFileSync(file, 'utf8');
-              const matches = content.match(/^###?\s+(S\d+|Scenario[:\s])[^\n]*/gm) || [];
+              const matches = content.match(/^###?\s+(S\d+|Scenario[:\s]|REQ-)[^\n]*/gm) || [];
               for (const m of matches) {
                 scenarios.push({ file: file.replace(/\\\\/g, '/'), scenario: m.replace(/^#+\s+/, '').trim() });
               }
