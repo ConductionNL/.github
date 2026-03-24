@@ -894,7 +894,7 @@ jobs:
           tail -50 server/data/nextcloud.log 2>/dev/null | python3 -m json.tool --no-ensure-ascii 2>/dev/null || tail -50 server/data/nextcloud.log 2>/dev/null || echo "No log found"
 
   playwright:
-    if: ${{ inputs.enable-playwright && !cancelled() && needs.php-quality.result != 'failure' && needs.security.result != 'failure' }}
+    if: ${{ inputs.enable-playwright && !cancelled() && needs.security.result != 'failure' }}
     runs-on: ubuntu-latest
     name: "E2E Tests (Playwright)"
     needs: [php-quality, security]
