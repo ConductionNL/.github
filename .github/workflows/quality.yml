@@ -992,6 +992,7 @@ jobs:
       - name: Install Playwright
         run: |
           cd server/apps/${{ inputs.app-name }}
+          npm install --save-dev @playwright/test
           npx playwright install --with-deps chromium
 
       - name: Validate Playwright tests exist
