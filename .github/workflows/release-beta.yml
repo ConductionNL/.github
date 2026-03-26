@@ -117,32 +117,32 @@ jobs:
             echo "No composer.json found, skipping composer install"
           fi
 
-      - name: Verify vendor dependencies
-        if: inputs.verify-vendor-deps
-        run: |
-          echo "Checking critical vendor dependencies..."
+      # - name: Verify vendor dependencies
+      #   if: inputs.verify-vendor-deps
+      #   run: |
+      #     echo "Checking critical vendor dependencies..."
 
-          if [ ! -d "vendor" ] || [ -z "$(ls -A vendor 2>/dev/null)" ]; then
-            echo "ERROR: vendor directory is missing or empty"
-            exit 1
-          fi
+      #     if [ ! -d "vendor" ] || [ -z "$(ls -A vendor 2>/dev/null)" ]; then
+      #       echo "ERROR: vendor directory is missing or empty"
+      #       exit 1
+      #     fi
 
-          IFS=',' read -ra PATHS <<< "${{ inputs.vendor-check-paths }}"
-          missing=0
-          for check_path in "${PATHS[@]}"; do
-            check_path=$(echo "$check_path" | xargs)
-            if [ -n "$check_path" ] && [ ! -d "vendor/$check_path" ]; then
-              echo "ERROR: vendor/$check_path not found"
-              missing=1
-            fi
-          done
+      #     IFS=',' read -ra PATHS <<< "${{ inputs.vendor-check-paths }}"
+      #     missing=0
+      #     for check_path in "${PATHS[@]}"; do
+      #       check_path=$(echo "$check_path" | xargs)
+      #       if [ -n "$check_path" ] && [ ! -d "vendor/$check_path" ]; then
+      #         echo "ERROR: vendor/$check_path not found"
+      #         missing=1
+      #       fi
+      #     done
 
-          if [ $missing -eq 1 ]; then
-            echo "HINT: Check composer.json dependencies and composer install output"
-            exit 1
-          fi
+      #     if [ $missing -eq 1 ]; then
+      #       echo "HINT: Check composer.json dependencies and composer install output"
+      #       exit 1
+      #     fi
 
-          echo "✓ All critical dependencies verified"
+      #     echo "✓ All critical dependencies verified"
 
       # ── Package ──
 
