@@ -1,0 +1,75 @@
+---
+id: incident-reporting
+title: Incidentmelding
+sidebar_label: Incidentmelding
+sidebar_position: 4
+description: Hoe je beveiligingsincidenten en kwaliteitsafwijkingen meldt bij Conduction
+---
+
+# Incidentmelding
+
+Conduction heeft de plicht om incidenten te detecteren, te melden en ervan te leren — zowel beveiligingsincidenten (ISO 27001:2022 A.6.8) als kwaliteitsafwijkingen (ISO 9001:2015 §10.2).
+
+**Vermoed je dat er iets mis is? Meld het direct. Er is geen straf voor melden te goeder trouw.**
+
+---
+
+## Wat Te Melden
+
+### Beveiligingsincidenten (ISO 27001:2022 A.6.8)
+
+Meld elk vermoeden of bevestiging van:
+
+- Ongeautoriseerde toegang tot systemen, accounts of gegevens
+- Datalek of gegevensverlies (klantgegevens, medewerkergegevens, inloggegevens)
+- Malware, phishing of social engineering pogingen
+- Blootstelling van geheimen, API-sleutels of inloggegevens (bijv. per ongeluk in Git geplaatst)
+- Verlies of diefstal van een apparaat met toegang tot bedrijfssystemen
+- Ongewone of verdachte activiteit op een bedrijfsaccount of -systeem
+
+### Kwaliteitsafwijkingen / Bijna-Ongelukken (ISO 9001:2015 §10.2)
+
+Meld elk geval van:
+
+- Opgeleverde software die niet voldeed aan overeengekomen eisen
+- Procesfout die tot klantimpact had kunnen leiden
+- Bijna-ongeluk: iets dat mis had kunnen gaan maar gelukkig niet is misgegaan
+
+---
+
+## Hoe Te Melden
+
+| Kanaal | Wanneer te gebruiken |
+|---|---|
+| **Slack `#incidents`** | Eerste contactpunt voor alle incidenten — directe melding |
+| **E-mail: security@conduction.nl** | Voor gevoelige incidenten waarvoor Slack niet geschikt is |
+| **GitHub Issue** (privé repo) | Voor opvolging, tracking en afsluiting |
+
+**Verwachte reactietijd:**
+- Beveiligingsincidenten: bevestigd binnen **4 werkuren**
+- Kwaliteitsafwijkingen: bevestigd binnen **1 werkdag**
+
+---
+
+## Wat Er Na Je Melding Gebeurt
+
+1. De Kwaliteits- & Veiligheidsmanager bevestigt de melding
+2. Ernst wordt bepaald (kritiek / hoog / gemiddeld / laag)
+3. Zo nodig worden inperkingsacties genomen
+4. Oorzaak wordt onderzocht
+5. Corrigerende maatregel wordt gedocumenteerd en gevolgd tot afsluiting
+6. Lessen worden gedeeld met het team
+
+---
+
+## Jouw Verantwoordelijkheden
+
+- Meld incidenten **zodra je ze ontdekt** — vertraging vergroot de impact
+- Probeer een beveiligingsincident niet zelf te onderzoeken of op te lossen voordat je het hebt gemeld
+- Bewaar bewijsmateriaal (logbestanden, screenshots) indien mogelijk
+- Werk mee aan het onderzoek
+
+---
+
+_ISO 27001:2022 referentie: A.6.8 — Melden van informatiebeveiligingsgebeurtenissen_
+_ISO 9001:2015 referentie: §10.2 — Afwijking en corrigerende maatregel_

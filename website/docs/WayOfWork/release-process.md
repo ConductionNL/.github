@@ -2,7 +2,7 @@
 id: release-process
 title: Release Process
 sidebar_label: Release Process
-sidebar_position: 3
+sidebar_position: 4
 description: How we version, branch, build, and release our Nextcloud apps
 keywords:
   - release
@@ -226,3 +226,12 @@ A: Check the latest git tag with `git tag -l 'v*' --sort=-v:refname | head -1`, 
 
 **Q: What about the Nextcloud App Store version compatibility (`<nextcloud min-version>`)?**
 A: This is still managed in your repo's `appinfo/info.xml`. Only the `<version>` tag is overwritten in the tarball — all other fields (name, description, nextcloud version requirements, etc.) come from your repo as-is.
+
+---
+
+## Further Reading
+
+- **Centralized workflows**: [github.com/ConductionNL/.github](https://github.com/ConductionNL/.github/tree/main/.github/workflows) — all shared workflow definitions
+- **Branch protection**: [`.github/workflows/branch-protection.yml`](https://github.com/ConductionNL/.github/blob/main/.github/workflows/branch-protection.yml)
+- **Release workflows**: [`release.yml`](https://github.com/ConductionNL/.github/blob/main/.github/workflows/release.yml), [`release-beta.yml`](https://github.com/ConductionNL/.github/blob/main/.github/workflows/release-beta.yml), [`release-stable.yml`](https://github.com/ConductionNL/.github/blob/main/.github/workflows/release-stable.yml)
+- **Semantic Versioning**: [semver.org](https://semver.org)

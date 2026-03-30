@@ -72,3 +72,11 @@ jobs:
         run: |
           git fetch origin gh-pages
           echo "Deployment completed. Latest commit: $(git rev-parse origin/gh-pages)"
+
+      - name: Trigger Algolia crawler reindex
+        continue-on-error: true
+        run: |
+          curl -X POST \
+            --fail \
+            --user "${{ secrets.ALGOLIA_CRAWLER_ID }}:${{ secrets.ALGOLIA_CRAWLER_SECRET }}" \
+            "https://crawler.algolia.com/api/1/crawlers/${{ secrets.ALGOLIA_CRAWLER_ID }}/reindex"

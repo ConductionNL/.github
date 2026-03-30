@@ -1,3 +1,11 @@
+---
+id: way-of-working
+title: Issue Flow and Sprint Planning
+sidebar_label: Way of Working
+sidebar_position: 3
+description: How Conduction plans sprints, manages issues, and ships software
+---
+
 # Issue Flow and Sprint Planning Process
 
 ## Epic Creation and Sizing

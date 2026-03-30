@@ -1,3 +1,11 @@
+---
+id: vacancies
+title: Vacancies at Conduction
+sidebar_label: Vacancies
+sidebar_position: 5
+description: Open positions and how to apply at Conduction
+---
+
 # Vacancies at Conduction
 
 Welcome to the career section of Conduction! We are a dynamic Dutch ICT company specializing in open-source software solutions for government agencies. At Conduction, we are on a mission to transform the digital world into a fair, inclusive, and transparent environment for everyone. If you are passionate about technology and share our vision, we invite you to explore our current vacancies.

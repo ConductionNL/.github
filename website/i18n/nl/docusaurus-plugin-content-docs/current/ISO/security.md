@@ -1,0 +1,118 @@
+---
+id: security
+title: Beveiligingsbeleid
+sidebar_label: Beveiligingsbeleid
+sidebar_position: 5
+description: Hoe je kwetsbaarheden meldt, onze responstijden en safe harbor-verklaring
+---
+
+# Beveiligingsbeleid
+
+Dit beveiligingsbeleid geldt voor alle repositories onder de [ConductionNL](https://github.com/ConductionNL)-organisatie.
+
+---
+
+## Een Kwetsbaarheid Melden
+
+**Maak GEEN openbaar GitHub-issue aan voor beveiligingskwetsbaarheden.**
+
+### 1. GitHub Private Vulnerability Reporting (voorkeur)
+
+Gebruik de ingebouwde privémeldingsfunctie van GitHub direct in de betreffende repository:
+
+> **Repository → Security-tabblad → "Report a vulnerability"**
+
+Dit maakt een end-to-end versleuteld beveiligingsadvies aan, zichtbaar alleen voor beheerders.
+
+### 2. E-mail
+
+Stuur je melding naar **security@conduction.nl**.
+
+---
+
+## Wat te Vermelden
+
+- **Beschrijving** — wat is kwetsbaar en waarom
+- **Reproductiestappen** — minimale stappen om het probleem te triggeren
+- **Impact** — wat een aanvaller zou kunnen bereiken
+- **Getroffen versies** — welke releases zijn getroffen
+- **Suggestie voor oplossing** — optioneel, maar welkom
+
+---
+
+## Responstijden
+
+| Mijlpaal | Streefdatum |
+|---|---|
+| Bevestiging | Binnen **48 uur** |
+| Initiële beoordeling en ernst | Binnen **5 werkdagen** |
+| Fix voor kritiek / hoog | Binnen **30 dagen** |
+| Fix voor gemiddeld | Binnen **90 dagen** |
+| Publieke bekendmaking | Na release van de fix, of na **90 dagen** vanaf melding |
+
+---
+
+## Ernsttyclassificatie
+
+We gebruiken [CVSSv3](https://www.first.org/cvss/calculator/3.1):
+
+| Ernst | CVSS-score | Respons |
+|---|---|---|
+| **Kritiek** | 9,0–10,0 | Fix binnen 14 dagen |
+| **Hoog** | 7,0–8,9 | Fix binnen 30 dagen |
+| **Gemiddeld** | 4,0–6,9 | Fix binnen 90 dagen |
+| **Laag** | 0,1–3,9 | Opgelost in volgende geplande release |
+
+---
+
+## Toepassingsgebied
+
+### Binnen scope
+
+- Alle broncode onder [github.com/ConductionNL](https://github.com/ConductionNL)
+- API's en integraties van onze apps
+- Authenticatie- en autorisatielogica
+- Gegevensverwerking en privacycontroles
+- Dependencies met bekende CVE's die nog niet gepatcht zijn
+
+### Buiten scope
+
+- Kwetsbaarheden in Nextcloud core → meld bij [Nextcloud](https://nextcloud.com/security/)
+- Kwetsbaarheden in externe dependencies → meld eerst upstream
+- Social engineering of phishing
+- Problemen die onrealistisch gebruikersgedrag vereisen
+- Denial-of-service-aanvallen op gehoste infrastructuur
+
+---
+
+## Ondersteunde Versies
+
+Beveiligingsupdates worden alleen geleverd voor de **laatste stabiele release** van elke app.
+
+---
+
+## Safe Harbor
+
+Conduction zal geen juridische stappen ondernemen tegen beveiligingsonderzoekers die:
+
+- Kwetsbaarheden te goeder trouw via dit beleid melden
+- Geen gegevens inzien, wijzigen of verwijderen verder dan nodig om de kwetsbaarheid aan te tonen
+- Productiediensten niet verstoren
+- Ons redelijke tijd geven om het probleem op te lossen voor publieke bekendmaking
+
+We beschouwen beveiligingsonderzoek te goeder trouw als een publiek goed.
+
+---
+
+## Bug Bounty
+
+Conduction heeft momenteel geen betaald bug bounty-programma. Geldige meldingen ontvangen:
+
+- Publieke vermelding in release notes (met toestemming)
+- Erkenning in het GitHub Security Advisory
+
+---
+
+## Interne Incidentmelding
+
+Conduction-medewerkers: zie de [Incidentmelding](incident-reporting)-procedure voor het melden van beveiligingsincidenten en kwaliteitsafwijkingen.

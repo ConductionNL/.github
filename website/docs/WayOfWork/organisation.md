@@ -2,7 +2,7 @@
 id: organisation
 title: Organizational Structure at Conduction
 sidebar_label: Organization
-sidebar_position: 1
+sidebar_position: 2
 description: Learn about Conduction's organizational structure, roles and responsibilities, and how we work together to deliver government software solutions
 keywords:
   - organizational structure
@@ -18,13 +18,29 @@ keywords:
 ---
 
 import Tabs from '@theme/Tabs';
+
+:::caution Ter managementbeoordeling / Pending management review
+
+De inhoud van deze pagina is gebaseerd op een eerdere versie en wordt momenteel herzien. Het **organogram is leidend** — raadpleeg dat bij vragen over de actuele structuur. Deze pagina ligt ter beoordeling bij het managementteam.
+
+_The content of this page is based on an earlier version and is currently under review. The **organogram is authoritative** — consult it for current structure. This page is pending management review._
+
+:::
+
+
 import TabItem from '@theme/TabItem';
 
 # Organizational Structure
 
 At Conduction, we maintain a clear organizational structure that promotes collaboration, innovation, and efficient delivery of solutions. Here's an overview of our organization:
 
-![Organization Structure](../Diagrams/Organisation.svg)
+:::info Organogram
+
+Het actuele organogram is beschikbaar via het management. Neem contact op met je teamlead voor de meest recente versie.
+
+_The current organogram is available from management. Contact your team lead for the latest version._
+
+:::
 
 ## Organizational Levels
 

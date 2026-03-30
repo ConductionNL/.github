@@ -1,7 +1,7 @@
 ---
 id: intro
 title: Welcome to Conduction!👋
-sidebar_label: About COnduction
+sidebar_label: About Conduction
 sidebar_position: 1
 description: Welcome to Conduction - Building a better digital world for citizens through democratic, inclusive and transparent software
 keywords:
