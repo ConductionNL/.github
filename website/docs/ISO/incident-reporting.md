@@ -12,8 +12,6 @@ Conduction has a duty to detect, report, and learn from incidents — both secur
 
 **If you suspect something is wrong, report it immediately. There is no penalty for reporting in good faith.**
 
----
-
 ## What to Report
 
 ### Security Incidents (ISO 27001:2022 A.6.8)
@@ -35,21 +33,17 @@ Report any:
 - Process failure that could have led to customer impact
 - Near-miss: something that could have gone wrong but didn't
 
----
-
 ## How to Report
 
-| Channel | When to use |
-|---|---|
-| **Slack `#incidents`** | First point of contact for all incidents — immediate notification |
-| **Email: security@conduction.nl** | For sensitive incidents where Slack is not appropriate |
-| **GitHub Issue** (private repo) | For follow-up, tracking, and closure |
+**Create or flag an issue in Jira** and label it **`security-incident`** or **`quality-incident`**. This is the only correct way to report an incident.
+
+Not sure how? Ask a team member, your supervisor, or someone from management — they'll help you create the issue.
+
+Labeling an issue as an incident automatically triggers a Slack flow that requests a **root cause analysis template** to be filled in.
 
 **Response time expectation:**
 - Security incidents: acknowledged within **4 business hours**
 - Quality deviations: acknowledged within **1 business day**
-
----
 
 ## What Happens After You Report
 
@@ -60,16 +54,12 @@ Report any:
 5. Corrective action is documented and tracked to closure
 6. Lessons learned are shared with the team
 
----
-
 ## Your Responsibilities
 
 - Report incidents **as soon as you discover them** — delay increases impact
 - Do not attempt to investigate or resolve a security incident on your own before reporting
 - Preserve evidence (logs, screenshots) if possible
 - Cooperate with the investigation
-
----
 
 _ISO 27001:2022 reference: A.6.8 — Information security event reporting_
 _ISO 9001:2015 reference: §10.2 — Nonconformity and corrective action_

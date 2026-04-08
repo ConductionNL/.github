@@ -125,3 +125,55 @@ We appreciate responsible disclosure. Contributors who report valid vulnerabilit
 ## Internal Incident Reporting
 
 Conduction employees: see the [Incident Reporting](https://docs.conduction.nl/docs/ISO/incident-reporting) procedure on our internal documentation site.
+
+---
+
+## Employee Security Practices
+
+The sections below apply to all Conduction employees.
+
+### Passwords
+
+All Conduction passwords must be at least **10 characters** and contain:
+
+- A letter
+- A number
+- A special character
+
+Store all credentials in [Passwork](https://www.passwork.me/). Never share passwords through Slack, email, or any other communication channel.
+
+### Data Handling
+
+- Never store personal or private data of Conduction or its clients on your local device
+- Never push API keys or environment variables to GitHub
+- Share files only through Google Drive or Passwork — never via USB, email, or Slack
+- If you must store sensitive data locally, encrypt it with **BitLocker**
+- Downloaded documents with privacy-sensitive data must be removed from your laptop within **5 days**
+
+### Clean Desk & Clear Screen
+
+- Always lock your device when you step away — even for coffee
+- Never leave your device unattended
+- Store your device in a locker at end of day, or take it with you
+- Keep no notes, printouts, or peripherals lying around
+
+### Bring Your Own Device (BYOD)
+
+You choose your own development machine. The only requirements:
+
+1. It can run the required local tooling
+2. It conforms to the security requirements on this page (antivirus, encryption, VPN)
+
+### VPN
+
+Remote work — especially with sensitive data — requires a VPN connection.
+
+- [NordLayer VPN](https://nordlayer.com/) — install and activate whenever working remotely
+- If unsure whether you need it, check with your team lead
+
+### Antivirus
+
+ESET must be activated on all devices used for Conduction work, at all times. Request an exception from your team lead if needed.
+
+- [ESET Business Edition — setup and downloads](https://www.eset.com/int/business/)
+- Contact IT for your license key and 2FA setup

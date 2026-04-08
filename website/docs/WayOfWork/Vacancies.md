@@ -31,8 +31,6 @@ As a Senior Backend Developer at Conduction, you will play a key role in develop
 
 To apply for this position, create an **application issue** in this repository with the title "Application - Senior Backend Developer (PHP Symfony)". Include your CV and a brief cover letter in the issue description explaining why you are suitable for this role.
 
----
-
 ### Senior Frontend Developer (React / NL Design)
 
 **Location:** 60% Remote, 40% Office-based in Amsterdam
@@ -51,8 +49,6 @@ As a Senior Frontend Developer at Conduction, you will be responsible for creati
 #### How to Apply
 
 To apply for this position, create an **application issue** in this repository with the title "Application - Senior Frontend Developer (React / NL Design)". Include your CV and a brief cover letter in the issue description explaining why you are suitable for this role.
-
----
 
 ## Why Join Conduction?
 
@@ -75,5 +71,3 @@ If you are interested in any of the above positions or think you can contribute 
 4. In the issue description, include your CV and a brief cover letter explaining your interest in the role and why you are a strong candidate.
 
 Our HR team will review your application and contact you. Thank you for considering a career at Conduction. We look forward to welcoming talented individuals to our team!
-
----

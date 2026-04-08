@@ -6,31 +6,43 @@ const sidebars = {
     'intro',
     {
       type: 'category',
-      label: 'How We Work',
+      label: 'Working at Conduction',
       items: [
-        'WayOfWork/way-of-work',
+        'WayOfWork/onboarding',
         'WayOfWork/organisation',
-        'WayOfWork/way-of-working',
-        'WayOfWork/release-process',
+        'WayOfWork/code-of-conduct',
         'WayOfWork/vacancies',
-        'WayOfWork/contributing',
       ],
     },
     {
       type: 'category',
-      label: 'ISO & Quality',
+      label: 'Building Software',
       items: [
-        'ISO/iso-intro',
-        // quality-policy and security-policy are draft — visible after management approval
+        'WayOfWork/spec-driven-development',
+        'WayOfWork/development-pipeline',
+        'WayOfWork/way-of-working',
+        'WayOfWork/contributing',
+        'WayOfWork/release-process',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Support & Safety',
+      items: [
+        'WayOfWork/customer-support',
         'ISO/incident-reporting',
         'ISO/security',
       ],
     },
     {
       type: 'category',
-      label: 'Products & Services',
+      label: 'About Conduction',
       items: [
+        'WayOfWork/way-of-work',
+        'ISO/iso-intro',
+        // quality-policy and security-policy are draft — visible after management approval
         'Products/products-overview',
+        'WayOfWork/about-this-manual',
       ],
     },
   ],

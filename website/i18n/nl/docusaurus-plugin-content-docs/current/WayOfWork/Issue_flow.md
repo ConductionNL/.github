@@ -8,6 +8,39 @@ description: Hoe Conduction sprints plant, issues beheert en software oplevert
 
 # Issue Flow en Sprintplanning
 
+## Scrum Ceremonies
+
+We volgen Scrum met tweewekelijkse sprints. Dit is het vaste ritme:
+
+| Ceremonie | Wanneer | Wat |
+|---|---|---|
+| **Retrospective & Sprintplanning** | Maandag 09:00 | Review vorige sprint op Miro (wat ging goed / beter), daarna volgende sprint plannen |
+| **Standup** | Dagelijks 10:00 (behalve maandag) | Korte ronde: waar werk je aan, heb je blockers? |
+| **Report-out** | Dagelijks 16:30 (behalve vrijdag) | Geschreven in Slack #general — wat je gedaan hebt, eventuele impediments |
+| **Sprintreview & Presentaties** | Vrijdag (elke 2 weken) | Demo je werk aan het team, gevolgd door een borrel |
+
+**Kantooraanwezigheid:** minimaal een dag per week op kantoor. Kun je niet komen terwijl je ingepland staat? Meld het voor de werkdag begint.
+
+**Afspraken verzetten:** wie annuleert, is verantwoordelijk voor het direct opnieuw inplannen.
+
+## Story Points
+
+We schatten complexiteit, geen tijd. Story points meten hoe moeilijk iets is — een senior is misschien sneller klaar dan een junior, maar de complexiteit is hetzelfde.
+
+| Grootte | Story Points | Ongeveer |
+|---|---|---|
+| Small | 5 | Halve dag |
+| Medium | 10 | Een dag |
+| Large | 20 | Halve week |
+| XL | 40 | Een week |
+| XXL | 80 | Twee weken |
+| XXXL | 160 | Een maand |
+
+**Regels:**
+- Een enkele story mag niet meer dan 10 story points zijn — breek het op
+- Alles boven de 10 punten is een epic
+- Gebruik timeboxing: als je een hele dag bezig bent aan een 10-punts story, escaleer bij de standup
+- Gemiddelde burn rate: **10 story points per developer per dag**
 
 ## Epics aanmaken en inschatten
 

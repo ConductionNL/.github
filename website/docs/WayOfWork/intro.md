@@ -34,9 +34,37 @@ We work in small, self-directed teams using agile methods. We prefer GitHub Issu
 - **We build on Common Ground** — open standards for Dutch government software
 - **We eat our own dog food** — we use the products we build
 
+## KPIs and Goals
+
+We set yearly Key Performance Indicators to know if we're on track. KPIs may shift year to year, but the aim is steady improvement. Everyone should be aware of the current goals and KPIs — ask your team lead for the latest version.
+
+What we measure ties directly to our mission: publishing code that's actually used, building accessible software, and making customers happy.
+
+## Project Management
+
+Every project starts with a **kick-off**. If you haven't had one, ask for it — never work on assumptions.
+
+- Scope, budget and planning are defined in the quotation
+- Anything outside the quotation scope: discuss with your supervisor first
+- All work must be traceable to issues
+
+### Crisis Management
+
+When a project turns into a crisis situation:
+
+1. **Re-refine** — control is everything; investment in refinement always pays off
+2. **Be realistic** — clear expectations beat false promises. Don't say "maybe" when you mean "no"
+3. **Multidisciplinary team** — include backend, frontend, and project management
+4. **Go/no-go moment** — establish clear criteria and communicate them to the client
+5. **Clear communication** — dedicated Slack channel with all stakeholders including the client
+6. **Weekend work** — use evenings/weekends to prepare the next day; do regular development during working hours
+7. **Don't rush** — keep time to refine and think. Quick fixes come back to haunt you
+
 ## Further Reading
 
-- [Full company introduction](/docs/intro) — market position, competencies, brand promises
+- [Employee handbook](/docs/intro) — the quick-reference overview
 - [Organizational structure](organisation) — roles, responsibilities, team structure
 - [Way of working](way-of-working) — sprints, issue flow, code standards
 - [Release process](release-process) — branch model, versioning, deployment
+- [Onboarding](onboarding) — buddy system and getting started
+- [Customer support](customer-support) — support flow and complaints

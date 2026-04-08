@@ -47,8 +47,6 @@ This policy is communicated to all employees via this documentation site. Employ
 
 This policy applies to all employees, contractors, and third parties acting on behalf of Conduction.
 
----
-
 _ISO 9001:2015 reference: §5.2 — Quality Policy_
 _Last review: pending_
 _Next review: annual management review cycle_

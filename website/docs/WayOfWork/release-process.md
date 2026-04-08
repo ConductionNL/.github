@@ -227,8 +227,6 @@ A: Check the latest git tag with `git tag -l 'v*' --sort=-v:refname | head -1`, 
 **Q: What about the Nextcloud App Store version compatibility (`<nextcloud min-version>`)?**
 A: This is still managed in your repo's `appinfo/info.xml`. Only the `<version>` tag is overwritten in the tarball — all other fields (name, description, nextcloud version requirements, etc.) come from your repo as-is.
 
----
-
 ## Further Reading
 
 - **Centralized workflows**: [github.com/ConductionNL/.github](https://github.com/ConductionNL/.github/tree/main/.github/workflows) — all shared workflow definitions

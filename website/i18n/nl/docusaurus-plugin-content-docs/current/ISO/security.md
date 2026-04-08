@@ -10,8 +10,6 @@ description: Hoe je kwetsbaarheden meldt, onze responstijden en safe harbor-verk
 
 Dit beveiligingsbeleid geldt voor alle repositories onder de [ConductionNL](https://github.com/ConductionNL)-organisatie.
 
----
-
 ## Een Kwetsbaarheid Melden
 
 **Maak GEEN openbaar GitHub-issue aan voor beveiligingskwetsbaarheden.**
@@ -26,9 +24,7 @@ Dit maakt een end-to-end versleuteld beveiligingsadvies aan, zichtbaar alleen vo
 
 ### 2. E-mail
 
-Stuur je melding naar **security@conduction.nl**.
-
----
+Stuur je melding naar **security@conduction.nl**. Voor gevoelige communicatie kun je onze PGP-sleutel opvragen per e-mail.
 
 ## Wat te Vermelden
 
@@ -37,8 +33,6 @@ Stuur je melding naar **security@conduction.nl**.
 - **Impact** — wat een aanvaller zou kunnen bereiken
 - **Getroffen versies** — welke releases zijn getroffen
 - **Suggestie voor oplossing** — optioneel, maar welkom
-
----
 
 ## Responstijden
 
@@ -50,8 +44,6 @@ Stuur je melding naar **security@conduction.nl**.
 | Fix voor gemiddeld | Binnen **90 dagen** |
 | Publieke bekendmaking | Na release van de fix, of na **90 dagen** vanaf melding |
 
----
-
 ## Ernsttyclassificatie
 
 We gebruiken [CVSSv3](https://www.first.org/cvss/calculator/3.1):
@@ -62,8 +54,6 @@ We gebruiken [CVSSv3](https://www.first.org/cvss/calculator/3.1):
 | **Hoog** | 7,0–8,9 | Fix binnen 30 dagen |
 | **Gemiddeld** | 4,0–6,9 | Fix binnen 90 dagen |
 | **Laag** | 0,1–3,9 | Opgelost in volgende geplande release |
-
----
 
 ## Toepassingsgebied
 
@@ -79,17 +69,15 @@ We gebruiken [CVSSv3](https://www.first.org/cvss/calculator/3.1):
 
 - Kwetsbaarheden in Nextcloud core → meld bij [Nextcloud](https://nextcloud.com/security/)
 - Kwetsbaarheden in externe dependencies → meld eerst upstream
-- Social engineering of phishing
-- Problemen die onrealistisch gebruikersgedrag vereisen
+- Social engineering of phishing tegen Conduction-medewerkers
+- Fysieke beveiliging
+- Problemen die onwaarschijnlijk of onrealistisch gebruikersgedrag vereisen
 - Denial-of-service-aanvallen op gehoste infrastructuur
-
----
+- Reeds publiek bekende problemen
 
 ## Ondersteunde Versies
 
-Beveiligingsupdates worden alleen geleverd voor de **laatste stabiele release** van elke app.
-
----
+We leveren beveiligingsupdates voor de **laatste stabiele release** van elke app. Oudere versies ontvangen geen beveiligingspatches tenzij expliciet vermeld in de repository.
 
 ## Safe Harbor
 
@@ -97,12 +85,11 @@ Conduction zal geen juridische stappen ondernemen tegen beveiligingsonderzoekers
 
 - Kwetsbaarheden te goeder trouw via dit beleid melden
 - Geen gegevens inzien, wijzigen of verwijderen verder dan nodig om de kwetsbaarheid aan te tonen
-- Productiediensten niet verstoren
+- Productiediensten niet verstoren of gebruikerservaring niet verslechteren
+- De kwetsbaarheid niet exploiteren verder dan nodig om het bestaan ervan te bevestigen
 - Ons redelijke tijd geven om het probleem op te lossen voor publieke bekendmaking
 
-We beschouwen beveiligingsonderzoek te goeder trouw als een publiek goed.
-
----
+We beschouwen beveiligingsonderzoek te goeder trouw als een publiek goed en werken liever met je samen dan tegen je.
 
 ## Bug Bounty
 
@@ -111,8 +98,56 @@ Conduction heeft momenteel geen betaald bug bounty-programma. Geldige meldingen 
 - Publieke vermelding in release notes (met toestemming)
 - Erkenning in het GitHub Security Advisory
 
----
-
 ## Interne Incidentmelding
 
 Conduction-medewerkers: zie de [Incidentmelding](incident-reporting)-procedure voor het melden van beveiligingsincidenten en kwaliteitsafwijkingen.
+
+## Beveiligingspraktijken voor Medewerkers
+
+De onderstaande secties gelden voor alle medewerkers van Conduction.
+
+### Wachtwoorden
+
+Alle Conduction-wachtwoorden moeten minimaal **10 tekens** bevatten en bestaan uit:
+
+- Een letter
+- Een cijfer
+- Een speciaal teken
+
+Sla alle inloggegevens op in [Passwork](https://www.passwork.me/). Deel wachtwoorden nooit via Slack, e-mail of andere communicatiekanalen.
+
+### Omgang met Data
+
+- Sla nooit persoonlijke of vertrouwelijke data van Conduction of klanten lokaal op
+- Push nooit API keys of omgevingsvariabelen naar GitHub
+- Deel bestanden alleen via Google Drive of Passwork — nooit via USB, e-mail of Slack
+- Als je gevoelige data lokaal moet opslaan, versleutel met **BitLocker**
+- Gedownloade documenten met privacygevoelige data moeten binnen **5 dagen** van je laptop verwijderd worden
+
+### Clean Desk & Clear Screen
+
+- Vergrendel altijd je apparaat als je wegloopt — ook voor koffie
+- Laat je apparaat nooit onbeheerd achter
+- Berg je apparaat op in een locker aan het einde van de dag, of neem het mee
+- Laat geen notities, printjes of randapparatuur rondslingeren
+
+### Bring Your Own Device (BYOD)
+
+Je kiest zelf je ontwikkelmachine. De enige eisen:
+
+1. Het kan de vereiste lokale tooling draaien
+2. Het voldoet aan de beveiligingseisen op deze pagina (antivirus, encryptie, VPN)
+
+### VPN
+
+Thuiswerken — zeker met gevoelige data — vereist een VPN-verbinding.
+
+- [NordLayer VPN](https://nordlayer.com/) — installeer en activeer bij thuiswerken
+- Twijfel je of je het nodig hebt? Vraag je teamlead
+
+### Antivirus
+
+ESET moet op alle apparaten voor Conduction-werk altijd geactiveerd zijn. Vraag een uitzondering aan bij je teamlead indien nodig.
+
+- [ESET Business Edition — installatie en downloads](https://www.eset.com/int/business/)
+- Neem contact op met IT voor je licentiesleutel en 2FA-instelling

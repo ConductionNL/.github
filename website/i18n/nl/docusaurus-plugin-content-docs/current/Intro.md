@@ -1,125 +1,81 @@
 ---
 id: intro
-title: Welkom bij Conduction! 👋
-sidebar_label: Over Conduction
+title: "HowWeWork@Conduction"
+sidebar_label: Medewerkershandboek
 sidebar_position: 1
-description: Welkom bij Conduction - Een betere digitale wereld voor burgers door democratische, inclusieve en transparante software
+description: Het medewerkershandboek van Conduction — hoe we werken, wat we verwachten en waar je alles vindt
 ---
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
+import ToolList from '@site/src/components/ToolList';
+import {Val, Email} from '@site/src/components/SiteData';
 
-# Welkom bij Conduction! 👋
+# HowWeWork@Conduction
 
-Of je nu een potentiële medewerker bent op zoek naar je volgende stap, een klant die innovatieve digitale oplossingen zoekt, een collega-IT-bedrijf geïnteresseerd in samenwerking, of zelfs een concurrent die nieuwsgierig is naar onze aanpak — we zijn blij dat je er bent!
+Het medewerkershandboek — wijzigingen? Submit een PR op [GitHub](https://github.com/ConductionNL/.github).
 
-Voor **potentiële medewerkers**: ontdek onze unieke cultuur, waarden en ambitieuze missie om overheidsdiensten te transformeren. Leer hoe jij kunt bijdragen aan betekenisvolle projecten die direct impact hebben op het leven van burgers.
+## Wie we zijn
 
-Voor **klanten**: verken hoe onze innovatieve oplossingen en diepgaande expertise in digitalisering van de overheid jou helpen je burgers beter te bedienen.
+Conduction helpt goede ideeen tot leven brengen. We werken democratisch, inclusief en transparant — niet als bedrijfswaarden op papier, maar als manier van werken. Ons doel: **in 2035 zorgt Conduction ervoor dat alle inwoners van Nederland automatisch de overheidsdiensten ontvangen waar ze recht op hebben.**
 
-Voor **IT-bedrijven**: vind mogelijkheden voor partnerschap en samenwerking. We geloven in open source en kennisdeling.
+**Meer lezen:** [Onze missie & waarden](WayOfWork/way-of-work)
 
-En ja, ook voor onze **concurrenten**: welkom! Leer gerust van onze aanpak. We geloven dat betere overheidsdiensten samenwerking op sectorniveau vereisen.
+## Werken bij Conduction
 
-## 🧙 Wie is Conduction?
+**Je eerste dagen** — je krijgt een buddy: een ervaren collega die je door de onboarding begeleidt. Ze helpen je met toegang (<ToolList category="onboarding" />), je machine inrichten en je weg vinden. Schroom niet om te vragen — daar zijn ze voor.
 
-Bij Conduction worden we gedreven door een visie die de digitalisering van de wereld ziet als een buitengewone kans. Een kans om onze wereld democratischer, inclusiever en transparanter te maken.
+**Werkritme** — we werken in <Val path="schedule.sprintLength" /> sprints. Standup om <Val path="schedule.standup" />, report-out om <Val path="schedule.reportOut" /> (in Slack <Val path="slack.general" />, bij code-werk altijd met een commit link). Prioriteiten komen van de Product Owner, inhoudelijke vragen gaan naar de dev lead.
 
-**Onze missie:** de nieuwe digitale wereld vormen tot een eerlijke en inclusieve omgeving voor iedereen, en haar beschermen tegen de bedreigingen die digitalisering met zich meebrengt.
+**Verlof & ziekte** — vakantie minimaal <Val path="schedule.vacationNotice" /> van tevoren aanvragen via het HR-portaal en bespreken in **<Val path="slack.vacation" />**. Ziek? Bel HR voor <Val path="schedule.sickCallBefore" />. Te laat? Even een berichtje — twee keer per maand trakteer je op taart, de derde keer volgt een gesprek met HR.
 
-Simpel maar wezenlijk: **"De digitale wereld een betere plek maken voor haar burgers, door democratische, inclusieve, transparante, begrijpelijke en betaalbare software voor burgers te maken."**
+**Spelregels** — behandel elkaar met respect. Praat *met* elkaar, niet *over* elkaar. Discriminatie, intimidatie of pesten wordt nooit geaccepteerd.
 
-## Ons (Big Hairy Audacious) Goal
+**Meer lezen:**
+- [Onboarding & buddy systeem](WayOfWork/onboarding)
+- [Organisatie](WayOfWork/organisation) — rollen, teams, structuur
+- [Vacatures](WayOfWork/vacancies)
+- [Code of Conduct(ion)](WayOfWork/code-of-conduct)
 
-We hebben een ambitieus doel gesteld: **"In 2035 zorgt Conduction ervoor dat alle inwoners van Nederland automatisch de overheidsdiensten ontvangen waar ze recht op hebben."**
+## Software bouwen
 
-Stel je een wereld voor waarin niemand door de mazen van het sociale vangnet valt. Waar een alleenstaande moeder geen cruciale kinderopvangtoeslag misloopt omdat ze niet wist dat die bestond. Waar ouderen automatisch de zorg en ondersteuning ontvangen waar ze recht op hebben, zonder complexe aanvraagprocedures. Waar mensen met beperkte digitale vaardigheden niet achterblijven.
+**Wat we bouwen** — open-source componenten voor de digitale overheidsinfrastructuur, gebouwd op Common Ground principes. Onze code leeft op [GitHub](https://github.com/ConductionNL).
 
-Via proactieve dienstverlening streven we naar een toekomst waarin overheidsdiensten automatisch burgers bereiken wanneer ze die nodig hebben — in plaats van dat burgers zelf moeten zoeken en aanvragen.
+**Hoe we bouwen** — werk bestaat uit issues. Schrijf ze zo dat een collega ze kan oppakken zonder extra uitleg. Vier-ogen-principe op alle code. Nooit API keys pushen. Tooling setup? Vraag je buddy.
 
-## Onze Kernwaarden
+**Projecten** — elk project start met een kick-off. Niet gehad? Vraag erom — ga nooit op aannames werken.
 
-<Tabs>
-<TabItem value="current" label="Kernwaarden" default>
+> *Assumption is the mother of all fuckups.*
 
-**Democratisch:** We zorgen ervoor dat onze oplossingen werken voor iedereen — niet alleen de digitaal vaardigen — door actief input te zoeken van alle belanghebbenden.
+Scope, budget en planning liggen vast in de offerte. Alles daarbuiten: bespreek eerst met je leidinggevende.
 
-**Inclusief:** Automatische dienstverlening slaagt alleen als die ALLE burgers bereikt. We laten niemand achter, of ze nu oud, gehandicapt of digitaal minder vaardig zijn.
+**Uren schrijven** — log uren in Tempo, altijd op een issue met het juiste account. Weet je niet hoe? Gewoon vragen.
 
-**Transparant:** Burgers moeten begrijpen hoe beslissingen worden genomen. Onze open communicatie en eerlijke werkwijze bouwen het vertrouwen dat proactieve dienstverlening vereist.
+**Meer lezen:**
+- [Spec-driven development](WayOfWork/spec-driven-development) — OpenSpec, Claude Code, de vierfasen-pipeline
+- [Ontwikkelstraat](WayOfWork/development-pipeline) — kwaliteitspoorten, securitychecks, geautomatiseerde releases
+- [Werkwijze](WayOfWork/way-of-working) — sprints, issue flow, story points
+- [Contributing guide](WayOfWork/contributing) — codestandaarden, branching, reviews
+- [Release process](WayOfWork/release-process) — branchmodel, versiebeheer, deployment
 
-**Verantwoord en duurzaam:** We bouwen oplossingen die niet alleen huidige burgers dienen, maar ook houdbaar zijn voor volgende generaties.
+## Support & veiligheid
 
-**Innovatief:** Universele automatische dienstverlening vereist creatieve oplossingen voor complexe uitdagingen. We zoeken voortdurend nieuwe manieren om burgersbehoeften te identificeren en diensten proactief te leveren.
+**Klanten helpen** — support loopt via **<Email path="emails.support" />** (maakt automatisch een Jira-ticket). Snelle fix onder 5 minuten? Gewoon oplossen. Langer? Maak een issue. Klachten gaan naar **<Email path="emails.complaints" />**.
 
-</TabItem>
-<TabItem value="proposed" label="Voorgestelde Waarden">
+**Elkaar helpen** — ergens vastgelopen? Flag het als impediment, post in Slack met een link naar het issue, en breng het in bij de standup. Je buddy is je eerste aanspreekpunt.
 
-**Innovatief:** We volgen niet alleen trends — we creëren oplossingen die overheidsdienstverlening werkelijk transformeren.
+**Incidenten** — herken je een beveiligings- of kwaliteitsincident? Overleg direct met je leidinggevende. Flag of maak een issue met het label "security incident" of "quality incident". Schrijf achteraf een memo met root cause analysis. Onthoud: **identificeer het risico -> beoordeel het risico -> beperk het risico -> herzie de maatregelen.**
 
-**Kennisgedreven:** Diepe expertise is cruciaal. We investeren continu in kennis van zowel technologie als overheidsprocessen.
+**Security** — toegang via je Conduction Google-account, inloggegevens in Passwork. Behandel gevoelige data als je naaktfoto's — deel alleen met wie het nodig heeft. Nooit gevoelige data via Slack of mail. VPN voor kritieke servers. ESET altijd geactiveerd.
 
-**Constructief eigenwijs:** Om automatische dienstverlening in 2035 te bereiken, moeten we conventioneel denken in overheids-IT uitdagen. We durven moderne alternatieven voor te stellen waar anderen vasthouden aan verouderde systemen.
+**Meer lezen:**
+- [Klantenondersteuning](WayOfWork/customer-support) — supportproces en klachten
+- [Incidentmelding](ISO/incident-reporting) — procedures en templates
+- [Beveiligingsbeleid](ISO/security) — wachtwoorden, clean desk, BYOD, VPN, antivirus
 
-**Coöperatief:** We geloven dat het transformeren van overheidsdiensten samenwerking vereist. We delen kennis en code openlijk, ook met concurrenten, omdat ons doel voor 2035 zwaarder weegt dan individueel succes.
+## Meer weten?
 
-</TabItem>
-</Tabs>
+Voor wie het complete plaatje wil:
 
-## Ons Gedrag: Waarden in de Praktijk
-
-**Innovatie in actie:**
-- Nieuwe technologieën en aanpakken verkennen en voorstellen
-- De status quo uitdagen met creatieve oplossingen
-- Calculated risks nemen voor betekenisvolle verandering
-
-**Kennis in de praktijk:**
-- Continu investeren in leren en vaardigheidsontwikkeling
-- Expertise vrijgevig delen met collega's en klanten
-- Beslissingen baseren op diepgaand begrip, niet op aannames
-
-**Constructief eigenwijs:**
-- Gevestigde praktijken respectvol in twijfel trekken
-- Alternatieve oplossingen onderbouwen met solide redenering
-- Moderne standaarden en best practices bevorderen
-
-**Samenwerking in het dagelijks werk:**
-- Actief samenwerkingsmogelijkheden zoeken
-- Successen en lessen openlijk delen met de community
-- Collectieve doelen boven individuele erkenning stellen
-
-## 💻 Onze Kerncompetenties
-
-1. **Kennis van ecosysteem en architectuur** — diepgaand begrip van het digitale overheidslandschap
-2. **Kritische benadering** — we zijn geen orderuitvoerders; we denken kritisch mee met onze klanten
-3. **Holistische aanpak** — we verbinden klanten met andere oplossingen en leveranciers
-4. **Integratie** — we verbinden verschillende systemen en processen
-5. **Continue innovatie** — we creëren voortdurend innovatieve oplossingen met maatschappelijke impact
-
-## 👩 Onze Markt
-
-- Kleine en middelgrote gemeenten
-- Overheidssamenwerkingen en -allianties
-- Samenwerking met andere leveranciers als volwaardige partners
-- Diverse overheidsinstanties
-
-## 🙋 Merkbeloften
-
-- Open en transparant in alles wat we doen
-- Geen vendor lock-in — oplossingen vrij van beperkingen
-- Kennis delen en samenwerken
-- Integratie als prioriteit — systemen die naadloos samenwerken
-
-## 🌈 Kom bij Conduction
-
-Ben jij gepassioneerd over een democratischere, inclusievere en transparantere digitale wereld? Gedij jij in een innovatieve en collaboratieve omgeving? Dan horen we graag van je!
-
-Werken bij Conduction betekent deel uitmaken van een toegewijd team dat positieve verandering nastreeft via technologie. We waarderen diversiteit, moedigen open communicatie aan en bieden ruimte voor groei.
-
-**Waarom Conduction?**
-- **Betekenisvol werk** — jouw bijdrage heeft directe impact op het leven van burgers
-- **Innovatie** — we staan aan de voorhoede van technologische vernieuwing
-- **Samenwerking** — jouw ideeën en input zijn hier welkom
-- **Professionele groei** — we ondersteunen jouw ontwikkeling
-
-Bekijk onze [vacatures](WayOfWork/vacancies) of bezoek [conduction.nl](https://www.conduction.nl/).
+- [Missie & waarden](WayOfWork/way-of-work) — wie we zijn, wat ons drijft, KPI's
+- [ISO & Kwaliteit](ISO/iso-intro) — ons certificeringstraject (ISO 9001 & 27001)
+- [Producten & Diensten](Products/products-overview) — wat we bieden
+- [Hoe deze manual werkt](WayOfWork/about-this-manual) — structuur, databronnen en hoe bij te dragen

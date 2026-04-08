@@ -58,8 +58,6 @@ De volgende maatregelen zijn van kracht (ISO 27001:2022 Bijlage A):
 - **Incidentbeheer** (A.6.8): Alle vermoedens van incidenten moeten worden gemeld — zie [Incidentmelding](incident-reporting)
 - **Bedrijfscontinuïteit** (A.5.29): Kritieke diensten hebben gedocumenteerde herstelprocedures
 
----
-
 _ISO 27001:2022 referentie: §5.2 — Informatiebeveiligingsbeleid; Bijlage A.5.1_
 _Laatste beoordeling: in behandeling_
 _Volgende beoordeling: jaarlijkse managementbeoordeling_

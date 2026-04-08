@@ -1,18 +1,22 @@
 {
-  "sidebar.tutorialSidebar.link.About Conduction": {
+  "sidebar.tutorialSidebar.link.Employee Handbook": {
+    "message": "Medewerkershandboek",
+    "description": "Sidebar label for Employee Handbook landing page"
+  },
+  "sidebar.tutorialSidebar.category.Working at Conduction": {
+    "message": "Werken bij Conduction",
+    "description": "Sidebar category for HR, onboarding, organisation"
+  },
+  "sidebar.tutorialSidebar.category.Building Software": {
+    "message": "Software Bouwen",
+    "description": "Sidebar category for development, contributing, releases"
+  },
+  "sidebar.tutorialSidebar.category.Support & Safety": {
+    "message": "Support & Veiligheid",
+    "description": "Sidebar category for customer support, incidents, security"
+  },
+  "sidebar.tutorialSidebar.category.About Conduction": {
     "message": "Over Conduction",
-    "description": "Sidebar label for About Conduction page"
-  },
-  "sidebar.tutorialSidebar.category.How We Work": {
-    "message": "Hoe We Werken",
-    "description": "Sidebar category label for Way of Work section"
-  },
-  "sidebar.tutorialSidebar.category.ISO & Quality": {
-    "message": "ISO & Kwaliteit",
-    "description": "Sidebar category label for ISO section"
-  },
-  "sidebar.tutorialSidebar.category.Products & Services": {
-    "message": "Producten & Diensten",
-    "description": "Sidebar category label for Products section"
+    "description": "Sidebar category for mission, ISO, products"
   }
 }

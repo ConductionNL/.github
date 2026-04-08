@@ -1,0 +1,35 @@
+{
+  "homepage.vision": {
+    "message": "In 2035 zorgt Conduction ervoor dat alle inwoners van Nederland automatisch de overheidsdiensten ontvangen waar ze recht op hebben."
+  },
+  "homepage.cta": {
+    "message": "Bekijk Onze Documentatie"
+  },
+  "homepage.feature.howWeWork.title": {
+    "message": "Hoe We Werken"
+  },
+  "homepage.feature.howWeWork.description": {
+    "message": "Ons medewerkershandboek: processen, cultuur en hoe we samenwerken. Alles wat je nodig hebt om te starten en op een lijn te blijven."
+  },
+  "homepage.feature.howWeWork.button": {
+    "message": "Lees Hoe We Werken"
+  },
+  "homepage.feature.iso.title": {
+    "message": "ISO & Kwaliteit"
+  },
+  "homepage.feature.iso.description": {
+    "message": "Onze inzet voor kwaliteit en veiligheid via ISO 9001 en 27001 certificering. Incidentmelding, beveiligingsbeleid en kwaliteitsmanagement."
+  },
+  "homepage.feature.iso.button": {
+    "message": "Bekijk ISO Documentatie"
+  },
+  "homepage.feature.products.title": {
+    "message": "Producten & Diensten"
+  },
+  "homepage.feature.products.description": {
+    "message": "Onze open-source componenten en diensten voor de digitale overheidsinfrastructuur. Technische documentatie en implementatiegidsen."
+  },
+  "homepage.feature.products.button": {
+    "message": "Verken Producten"
+  }
+}

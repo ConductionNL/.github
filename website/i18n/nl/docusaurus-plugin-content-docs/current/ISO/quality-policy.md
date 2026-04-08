@@ -41,8 +41,6 @@ Het management van Conduction verbindt zich tot:
 
 Dit beleid wordt gecommuniceerd aan alle medewerkers via deze documentatiesite. Van medewerkers wordt verwacht dat zij dit beleid begrijpen en de principes toepassen in hun dagelijkse werk. Vragen of opmerkingen kunnen worden gericht aan de kwaliteitsmanager of ingediend via een [GitHub Issue](https://github.com/ConductionNL/.github/issues).
 
----
-
 _ISO 9001:2015 referentie: §5.2 — Kwaliteitsbeleid_
 _Laatste beoordeling: in behandeling_
 _Volgende beoordeling: jaarlijkse managementbeoordeling_

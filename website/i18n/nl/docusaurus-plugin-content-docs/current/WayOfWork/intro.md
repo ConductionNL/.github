@@ -35,9 +35,37 @@ We werken in kleine, zelfsturende teams met agile methoden. We geven de voorkeur
 - **We bouwen op Common Ground** — open standaarden voor Nederlandse overheidssoftware
 - **We eten ons eigen hondenvoer** — we gebruiken de producten die we bouwen
 
+## KPI's en Doelen
+
+We stellen jaarlijks Key Performance Indicators in om te weten of we op koers liggen. KPI's kunnen per jaar verschuiven, maar het doel is gestage verbetering. Iedereen moet op de hoogte zijn van de actuele doelen en KPI's — vraag je teamlead voor de laatste versie.
+
+Wat we meten hangt direct samen met onze missie: code publiceren die daadwerkelijk gebruikt wordt, toegankelijke software bouwen, en klanten blij maken.
+
+## Projectmanagement
+
+Elk project start met een **kick-off**. Heb je die niet gehad? Vraag erom — ga nooit op aannames werken.
+
+- Scope, budget en planning liggen vast in de offerte
+- Alles buiten de offertescope: bespreek eerst met je leidinggevende
+- Al het werk moet herleidbaar zijn naar issues
+
+### Crisismanagement
+
+Wanneer een project in een crisissituatie terechtkomt:
+
+1. **Herrefine** — controle is alles; investering in refinement betaalt zich altijd terug
+2. **Wees realistisch** — duidelijke verwachtingen zijn beter dan loze beloftes. Zeg geen "misschien" als je "nee" bedoelt
+3. **Multidisciplinair team** — betrek backend, frontend en projectmanagement
+4. **Go/no-go moment** — stel duidelijke criteria op en communiceer ze naar de klant
+5. **Duidelijke communicatie** — apart Slack-kanaal met alle stakeholders inclusief de klant
+6. **Weekendwerk** — gebruik avonden/weekends om de volgende dag voor te bereiden; doe reguliere ontwikkeling tijdens werkuren
+7. **Niet haasten** — neem tijd om te refinen en na te denken. Quick fixes komen altijd terug
+
 ## Meer Lezen
 
-- [Volledige bedrijfsintroductie](/docs/intro) — marktpositie, competenties, merkbeloften
+- [Medewerkershandboek](/docs/intro) — het beknopte overzicht
 - [Organisatiestructuur](organisation) — rollen, verantwoordelijkheden, teamstructuur
 - [Werkwijze](way-of-working) — sprints, issue flow, codestandaarden
 - [Releaseproces](release-process) — branch model, versiebeheer, deployment
+- [Onboarding](onboarding) — buddy systeem en aan de slag
+- [Klantenondersteuning](customer-support) — supportproces en klachten

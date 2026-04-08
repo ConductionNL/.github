@@ -1,0 +1,50 @@
+---
+id: onboarding
+title: Onboarding & Buddy System
+sidebar_label: Onboarding
+sidebar_position: 5
+description: How onboarding works at Conduction and what the buddy system means
+---
+
+import ToolList from '@site/src/components/ToolList';
+
+# Onboarding & Buddy System
+
+## Buddy System
+
+From day one, you get assigned a **buddy** — an experienced colleague who guides you through your first weeks. Your buddy is your go-to person for:
+
+- Questions about how things work
+- Help with tooling and access
+- Understanding our culture and way of working
+- Navigating projects and team dynamics
+
+Don't hesitate to ask. That's literally what they're there for.
+
+## Your First Weeks
+
+During onboarding, you'll:
+
+1. **Get access** — <ToolList category="onboarding" />
+2. **Set up your machine** — install required tooling (your buddy helps)
+3. **Security setup** — ESET antivirus, VPN, BitLocker if needed
+4. **Meet the team** — introductions, attend standups and ceremonies
+5. **Start contributing** — pick up your first issues with buddy support
+
+## Code of Conduct
+
+We treat each other with respect. Our agreements:
+
+- Talk **with** each other, not **about** each other
+- Listen and ask questions when things are unclear
+- Help each other — give constructive feedback and compliments
+- Keep your commitments, and communicate when you can't
+- Don't be afraid to ask for help
+- Resolve conflicts by talking directly
+- Discrimination, harassment, aggression, or bullying is never accepted
+
+If you experience unwanted behavior, first try to address the person directly. If that's not possible, contact the internal confidential counselor. An external counselor is available through our occupational health service.
+
+## Questions?
+
+Ask your buddy. That's the whole point.
