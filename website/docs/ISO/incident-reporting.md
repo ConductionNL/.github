@@ -12,6 +12,16 @@ Conduction has a duty to detect, report, and learn from incidents — both secur
 
 **If you suspect something is wrong, report it immediately. There is no penalty for reporting in good faith.**
 
+## Classification
+
+We distinguish three types of findings, each with their own procedure:
+
+| Type | What is it | Examples | Procedure |
+|---|---|---|---|
+| **Incident** | Unexpected event with direct impact on continuity, safety, or quality | System outage, unauthorized access, data breach, broken production deployment | Register, impact analysis, resolve immediately, evaluate |
+| **Deviation** (afwijking) | Non-compliance with a standard without direct impact | Development procedure not fully followed, document stored incorrectly, test step skipped | Register, analyze if structural, corrective/preventive action if needed |
+| **Nonconformity** (tekortkoming) | Structural or severe deviation affecting compliance, certification, or legal obligations | Security protocol structurally not followed, audit reveals missing controls, contractual obligation breached | Register, root cause analysis, improvement plan, monitor effectiveness |
+
 ## What to Report
 
 ### Security Incidents (ISO 27001:2022 A.6.8)
@@ -60,6 +70,29 @@ Labeling an issue as an incident automatically triggers a Slack flow that reques
 - Do not attempt to investigate or resolve a security incident on your own before reporting
 - Preserve evidence (logs, screenshots) if possible
 - Cooperate with the investigation
+
+## Root Cause Analysis Template
+
+The RCA memo (triggered automatically via Slack) contains the following sections:
+
+1. **Description** — what happened, when, who discovered it
+2. **Immediate measures** — containment and correction
+3. **Risk assessment** — type, score, action urgency
+4. **Root cause analysis** — why it happened, could it happen elsewhere
+5. **Corrective actions** — tracked in Jira until closure
+6. **Effectiveness review** — are the measures working
+7. **Lessons learned** — shared with the team
+
+The actual template is available on the internal ISO drive.
+
+## Incident Trend Analysis
+
+Incident trends are analyzed annually by the management team as part of the quality calendar. Patterns across incidents, deviations, and nonconformities are identified and lessons learned are documented and shared. This ensures structural improvements rather than just fixing individual cases.
+
+## Internal vs External Reporting
+
+- **Internal incidents** (quality, security) → Jira with labels, as described above. Internal SLA: 4 hours (security) / 1 business day (quality)
+- **External vulnerability reports** (from security researchers) → GitHub Security tab or security@conduction.nl. External SLA: 48-hour acknowledgement, see [Security Policy](security)
 
 _ISO 27001:2022 reference: A.6.8 — Information security event reporting_
 _ISO 9001:2015 reference: §10.2 — Nonconformity and corrective action_

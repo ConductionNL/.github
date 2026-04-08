@@ -32,6 +32,9 @@ const sidebars = {
         'WayOfWork/customer-support',
         'ISO/incident-reporting',
         'ISO/security',
+        'ISO/quality-policy',
+        'ISO/security-policy',
+        'ISO/privacy-policy',
       ],
     },
     {

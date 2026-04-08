@@ -70,6 +70,7 @@ Scope, budget en planning liggen vast in de offerte. Alles daarbuiten: bespreek 
 - [Klantenondersteuning](WayOfWork/customer-support) — supportproces en klachten
 - [Incidentmelding](ISO/incident-reporting) — procedures en templates
 - [Beveiligingsbeleid](ISO/security) — wachtwoorden, clean desk, BYOD, VPN, antivirus
+- [Privacy & AVG](ISO/privacy-policy) — persoonsgegevens, AVG, rechten van betrokkenen
 
 ## Meer weten?
 

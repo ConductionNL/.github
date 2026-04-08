@@ -3,17 +3,21 @@ id: security-policy
 title: Informatiebeveiligingsbeleid
 sidebar_label: Beveiligingsbeleid
 sidebar_position: 3
-draft: true
 description: Informatiebeveiligingsbeleid van Conduction — ISO 27001:2022 §5.2
 ---
 
 # Informatiebeveiligingsbeleid
 
-:::warning Ter managementbeoordeling
+## Toepassingsgebied (ISO 27001:2022 §4.3)
 
-Dit document is een werkversie en dient te worden goedgekeurd door het managementteam voordat het als officieel beleid geldt.
+Dit Informatiebeveiligingsbeheersysteem heeft betrekking op **alle informatiemiddelen gerelateerd aan het ontwerp, de ontwikkeling, implementatie en ondersteuning van open-source softwareoplossingen voor de digitale overheidsinfrastructuur**, waaronder:
 
-:::
+- Broncode en repositories op GitHub
+- Klantgegevens verwerkt via software en hosting van Conduction
+- Interne systemen (Google Workspace, Jira, Passwork, ontwikkelomgevingen)
+- Apparaten van medewerkers (BYOD) die voor bedrijfswerk worden gebruikt
+
+Geleverd vanuit Nederland door medewerkers en contractanten van Conduction B.V. — inclusief thuiswerkers.
 
 ## Doel
 
@@ -28,15 +32,17 @@ Dit beleid is van toepassing op:
 - Alle medewerkers, contractors en derden met toegang tot Conduction-systemen
 - Alle systemen, diensten en software ontwikkeld en beheerd door Conduction
 
-## Beveiligingsdoelstellingen
+## Beveiligingsdoelstellingen (ISO 27001:2022 §6.2)
 
-Conduction hanteert de volgende informatiebeveiligingsdoelstellingen (ISO 27001:2022 §6.2):
+| Doelstelling | Meetbaar doel | Verantwoordelijk | Evaluatie |
+|---|---|---|---|
+| Ongeautoriseerde toegang voorkomen | Nul ongeautoriseerde toegangsincidenten per jaar | Kwaliteits- & Veiligheidsmanager | Maandelijks (MT-kwaliteitsoverleg) |
+| Systeembeschikbaarheid | Kritieke systemen ≥ 99,5% uptime | Operations Lead | Maandelijks |
+| Incidentrespons | Beveiligingsincidenten bevestigd binnen 4 werkuren | Kwaliteits- & Veiligheidsmanager | Per incident |
+| Kwetsbaarheidsbeheer | Kritieke/hoge CVE's gepatcht binnen 30 dagen | Development Lead | Continu (CI/CD) |
+| Bewustwording medewerkers | Alle medewerkers voltooien jaarlijkse beveiligingsbewustzijnssessie | Kwaliteits- & Veiligheidsmanager | Jaarlijks |
 
-- Ongeautoriseerde toegang tot systemen en gegevens voorkomen
-- Beschikbaarheid van kritieke systemen waarborgen conform overeengekomen serviceniveaus
-- Klant- en medewerkergegevens beschermen conform toepasselijke regelgeving (waaronder AVG/GDPR)
-- Beveiligingsincidenten detecteren, erop reageren en ervan leren
-- Beveiligingsmaatregelen continu verbeteren op basis van risicobeoordelingen en audits
+Werkelijke prestaties worden bijgehouden in het interne monitoringsspreadsheet en besproken tijdens MT-kwaliteitsoverleggen.
 
 ## Rollen en Verantwoordelijkheden
 
@@ -46,6 +52,8 @@ Conduction hanteert de volgende informatiebeveiligingsdoelstellingen (ISO 27001:
 | Kwaliteits- & Veiligheidsmanager | ISMS beheren en onderhouden; audits en reviews coördineren |
 | Alle medewerkers | Beveiligingsprocedures volgen; incidenten en vermoedens direct melden |
 | Development Lead | Veilige ontwikkelpatronen toepassen bij alle softwareoplevering |
+
+Zie [organisatie](../WayOfWork/organisation) voor volledige rolbeschrijvingen.
 
 ## Sleutelmaatregelen
 
@@ -58,6 +66,10 @@ De volgende maatregelen zijn van kracht (ISO 27001:2022 Bijlage A):
 - **Incidentbeheer** (A.6.8): Alle vermoedens van incidenten moeten worden gemeld — zie [Incidentmelding](incident-reporting)
 - **Bedrijfscontinuïteit** (A.5.29): Kritieke diensten hebben gedocumenteerde herstelprocedures
 
+## Communicatie naar Medewerkers
+
+Dit beleid wordt gecommuniceerd aan alle medewerkers via deze documentatiesite en tijdens onboarding. Van medewerkers wordt verwacht dat zij dit beleid erkennen. Vragen of opmerkingen kunnen worden gericht aan de Kwaliteits- & Veiligheidsmanager of ingediend via een [GitHub Issue](https://github.com/ConductionNL/.github/issues).
+
 _ISO 27001:2022 referentie: §5.2 — Informatiebeveiligingsbeleid; Bijlage A.5.1_
-_Laatste beoordeling: in behandeling_
-_Volgende beoordeling: jaarlijkse managementbeoordeling_
+_Laatste beoordeling: april 2026_
+_Volgende beoordeling: jaarlijkse managementbeoordeling (februari 2027)_

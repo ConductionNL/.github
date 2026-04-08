@@ -75,6 +75,7 @@ Scope, budget and planning are in the quotation. Anything outside: discuss with 
 - [Customer support](WayOfWork/customer-support) — support flow and complaints
 - [Incident reporting](ISO/incident-reporting) — procedures and templates
 - [Security policy](ISO/security) — passwords, clean desk, BYOD, VPN, antivirus
+- [Privacy & AVG](ISO/privacy-policy) — personal data, GDPR, data subject rights
 
 ## Want to know more?
 

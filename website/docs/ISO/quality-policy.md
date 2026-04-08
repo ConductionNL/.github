@@ -3,32 +3,32 @@ id: quality-policy
 title: Quality Policy
 sidebar_label: Quality Policy
 sidebar_position: 2
-draft: true
 description: Conduction quality policy — ISO 9001:2015 §5.2
 ---
 
 # Quality Policy
 
-:::warning Ter managementbeoordeling / Pending management review
+## Scope (ISO 9001:2015 §4.3)
 
-Dit document is een werkversie en dient te worden goedgekeurd door het managementteam voordat het als officieel beleid geldt.
+This Quality Management System covers **the design, development, implementation, and support of open-source software solutions for digital government infrastructure**, delivered from the Netherlands by Conduction B.V. employees and contractors — including remote workers.
 
-_This document is a working draft and must be approved by the management team before it takes effect as official policy._
-
-:::
+Excluded: hardware manufacturing, physical product distribution.
 
 ## Purpose
 
 Conduction is committed to delivering high-quality open-source software and services for digital government infrastructure. Our Quality Management System (QMS) is designed to consistently meet customer requirements and applicable regulatory requirements, and to enhance customer satisfaction.
 
-## Quality Objectives
+## Quality Objectives (ISO 9001:2015 §6.2)
 
-Conduction pursues the following quality objectives (ISO 9001:2015 §6.2):
+| Objective | Measurable target | Responsible | Review |
+|---|---|---|---|
+| Customer satisfaction | NPS score ≥ 30 | Commercial Lead | Annually (customer evaluations) |
+| Issue response time | Support tickets acknowledged within 1 business day | Operations Lead | Monthly (MT quality meeting) |
+| Software quality | All PRs pass automated quality gates before merge | Development Lead | Continuous (CI/CD) |
+| Process improvement | ≥ 2 process improvements implemented per quarter | Quality Manager | Quarterly (internal audit) |
+| Employee competence | All employees reviewed annually against competence matrix | HR Lead | Annually (February) |
 
-- Deliver software that meets or exceeds agreed functional requirements
-- Respond to customer issues and feedback within agreed service levels
-- Continuously improve our processes based on internal audits and customer feedback
-- Ensure all employees understand their role in maintaining quality
+Actual performance against these targets is tracked in the internal monitoring spreadsheet and reviewed during MT quality meetings (last Monday of each month).
 
 ## Our Commitment
 
@@ -48,5 +48,5 @@ This policy is communicated to all employees via this documentation site. Employ
 This policy applies to all employees, contractors, and third parties acting on behalf of Conduction.
 
 _ISO 9001:2015 reference: §5.2 — Quality Policy_
-_Last review: pending_
-_Next review: annual management review cycle_
+_Last review: April 2026_
+_Next review: annual management review cycle (February 2027)_

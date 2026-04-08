@@ -12,6 +12,16 @@ Conduction heeft de plicht om incidenten te detecteren, te melden en ervan te le
 
 **Vermoed je dat er iets mis is? Meld het direct. Er is geen straf voor melden te goeder trouw.**
 
+## Classificatie
+
+We onderscheiden drie typen bevindingen, elk met een eigen procedure:
+
+| Type | Wat is het | Voorbeelden | Procedure |
+|---|---|---|---|
+| **Incident** | Onverwachte gebeurtenis met directe impact op continuïteit, veiligheid of kwaliteit | Systeemstoring, ongeautoriseerde toegang, datalek, defecte productiedeployment | Registreren, impactanalyse, direct oplossen, evalueren |
+| **Afwijking** | Niet-naleving van een standaard zonder directe impact | Ontwikkelprocedure niet volledig gevolgd, document verkeerd opgeslagen, teststap overgeslagen | Registreren, analyseren of structureel, corrigerende/preventieve maatregel indien nodig |
+| **Tekortkoming** | Structurele of ernstige afwijking die compliance, certificering of wettelijke verplichtingen raakt | Beveiligingsprotocol structureel niet gevolgd, audit onthult ontbrekende maatregelen, contractuele verplichting geschonden | Registreren, oorzaakanalyse, verbeterplan, effectiviteit monitoren |
+
 ## Wat Te Melden
 
 ### Beveiligingsincidenten (ISO 27001:2022 A.6.8)

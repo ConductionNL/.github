@@ -3,19 +3,21 @@ id: security-policy
 title: Information Security Policy
 sidebar_label: Security Policy
 sidebar_position: 3
-draft: true
 description: Conduction information security policy — ISO 27001:2022 §5.2
 ---
 
 # Information Security Policy
 
-:::warning Ter managementbeoordeling / Pending management review
+## Scope (ISO 27001:2022 §4.3)
 
-Dit document is een werkversie en dient te worden goedgekeurd door het managementteam voordat het als officieel beleid geldt.
+This Information Security Management System covers **all information assets related to the design, development, implementation, and support of open-source software solutions for digital government infrastructure**, including:
 
-_This document is a working draft and must be approved by the management team before it takes effect as official policy._
+- Source code and repositories on GitHub
+- Customer data processed via Conduction's software and hosting
+- Internal systems (Google Workspace, Jira, Passwork, development environments)
+- Employee devices (BYOD) used for company work
 
-:::
+Delivered from the Netherlands by Conduction B.V. employees and contractors — including remote workers.
 
 ## Purpose
 
@@ -30,15 +32,17 @@ This policy applies to:
 - All employees, contractors, and third parties with access to Conduction systems
 - All systems, services, and software developed and operated by Conduction
 
-## Security Objectives
+## Security Objectives (ISO 27001:2022 §6.2)
 
-Conduction pursues the following information security objectives (ISO 27001:2022 §6.2):
+| Objective | Measurable target | Responsible | Review |
+|---|---|---|---|
+| Prevent unauthorized access | Zero unauthorized access incidents per year | Quality & Safety Lead | Monthly (MT quality meeting) |
+| System availability | Critical systems ≥ 99.5% uptime | Operations Lead | Monthly |
+| Incident response | Security incidents acknowledged within 4 business hours | Quality & Safety Lead | Per incident |
+| Vulnerability management | Critical/high CVEs patched within 30 days | Development Lead | Continuous (CI/CD) |
+| Employee awareness | All employees complete annual security awareness session | Quality & Safety Lead | Annually |
 
-- Prevent unauthorised access to systems and data
-- Ensure availability of critical systems in line with agreed service levels
-- Protect customer and employee data in compliance with applicable regulations (including AVG/GDPR)
-- Detect, respond to, and learn from security incidents
-- Continuously improve security controls based on risk assessments and audits
+Actual performance is tracked in the internal monitoring spreadsheet and reviewed during MT quality meetings.
 
 ## Roles and Responsibilities
 
@@ -67,5 +71,5 @@ The following controls are in effect (ISO 27001:2022 Annex A):
 This policy is communicated to all employees via this documentation site and during onboarding. Employees are required to acknowledge this policy. Questions or concerns can be directed to the Quality & Safety Lead or raised via a [GitHub Issue](https://github.com/ConductionNL/.github/issues).
 
 _ISO 27001:2022 reference: §5.2 — Information Security Policy; Annex A.5.1_
-_Last review: pending_
-_Next review: annual management review cycle_
+_Last review: April 2026_
+_Next review: annual management review cycle (February 2027)_

@@ -151,3 +151,16 @@ ESET moet op alle apparaten voor Conduction-werk altijd geactiveerd zijn. Vraag 
 
 - [ESET Business Edition — installatie en downloads](https://www.eset.com/int/business/)
 - Neem contact op met IT voor je licentiesleutel en 2FA-instelling
+
+### AI Tooling (Claude Code)
+
+We gebruiken Claude Code voor development. AI-tooling erft de rechten van de gebruikerssessie waarin het draait. De volgende maatregelen zijn verplicht (gebaseerd op gedocumenteerde afwijking ISO-723):
+
+- **Gescheiden accounts** — Claude Code moet een dedicated GitHub-account gebruiken met standaard developer-rechten. Gebruik nooit een admin-account in dezelfde sessie als Claude Code
+- **Git-restricties** — `settings.json` moet Git-operaties beperken: Claude mag alleen pushen naar `feature/*`-branches. Direct pushen naar `development`, `beta` of `main` is geblokkeerd
+- **Vier-ogenprincipe geldt** — alle door AI geproduceerde code is onderworpen aan dezelfde peer review-eisen als door mensen geschreven code. Geen uitzonderingen
+- **Geen bypass van branchbeveiliging** — zelfs als je account admin-rechten heeft, mag Claude branchbeveiligingen niet kunnen omzeilen
+
+Deze maatregelen worden afgedwongen via de gedeelde [`claude-code-config`](https://github.com/ConductionNL/claude-code-config)-repository (toegevoegd als `.claude/`-submodule in elke app).
+
+_ISO 27001:2022 referentie: A.8.2 — Geprivilegieerde toegangsrechten_
