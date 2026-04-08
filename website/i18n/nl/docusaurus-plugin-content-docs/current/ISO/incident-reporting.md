@@ -71,5 +71,28 @@ Het labelen van een issue als incident triggert automatisch een Slack-flow die v
 - Bewaar bewijsmateriaal (logbestanden, screenshots) indien mogelijk
 - Werk mee aan het onderzoek
 
+## Root Cause Analysis Template
+
+Het RCA-memo (automatisch getriggerd via Slack) bevat de volgende onderdelen:
+
+1. **Beschrijving** — wat is er gebeurd, wanneer, wie ontdekte het
+2. **Directe maatregelen** — inperking en correctie
+3. **Risicobeoordeling** — type, score, urgentie van actie
+4. **Oorzaakanalyse** — waarom het is gebeurd, kan het elders voorkomen
+5. **Corrigerende maatregelen** — bijgehouden in Jira tot afsluiting
+6. **Effectiviteitsbeoordeling** — werken de maatregelen
+7. **Geleerde lessen** — gedeeld met het team
+
+Het daadwerkelijke template is beschikbaar op de interne ISO-drive.
+
+## Incidenttrendanalyse
+
+Incidenttrends worden jaarlijks geanalyseerd door het managementteam als onderdeel van de kwaliteitskalender. Patronen in incidenten, afwijkingen en tekortkomingen worden geïdentificeerd en geleerde lessen worden gedocumenteerd en gedeeld. Dit waarborgt structurele verbeteringen in plaats van alleen individuele gevallen op te lossen.
+
+## Interne vs Externe Melding
+
+- **Interne incidenten** (kwaliteit, beveiliging) → Jira met labels, zoals hierboven beschreven. Interne SLA: 4 uur (beveiliging) / 1 werkdag (kwaliteit)
+- **Externe kwetsbaarheidsrapporten** (van beveiligingsonderzoekers) → GitHub Security-tabblad of security@conduction.nl. Externe SLA: bevestiging binnen 48 uur, zie [Beveiligingsbeleid](security)
+
 _ISO 27001:2022 referentie: A.6.8 — Melden van informatiebeveiligingsgebeurtenissen_
 _ISO 9001:2015 referentie: §10.2 — Afwijking en corrigerende maatregel_

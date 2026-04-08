@@ -79,9 +79,7 @@ Scope, budget and planning are in the quotation. Anything outside: discuss with 
 
 ## Want to know more?
 
-For those who want the full picture:
-
 - [Mission & values](WayOfWork/way-of-work) — who we are, what drives us, KPIs
-- [ISO & Quality](ISO/iso-intro) — our certification journey (ISO 9001 & 27001)
+- [ISO & Quality](ISO/iso-intro) — our certifications, audits, risk management, and PDCA cycle
 - [Products & Services](Products/products-overview) — what we offer
 - [How this manual works](WayOfWork/about-this-manual) — structure, data sources, and how to contribute

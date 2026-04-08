@@ -13,10 +13,6 @@
   },
   "sidebar.tutorialSidebar.category.Support & Safety": {
     "message": "Support & Veiligheid",
-    "description": "Sidebar category for customer support, incidents, security"
-  },
-  "sidebar.tutorialSidebar.category.About Conduction": {
-    "message": "Over Conduction",
-    "description": "Sidebar category for mission, ISO, products"
+    "description": "Sidebar category for customer support, ISO, incidents, security"
   }
 }

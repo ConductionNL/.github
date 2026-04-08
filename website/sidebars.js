@@ -11,6 +11,7 @@ const sidebars = {
         'WayOfWork/onboarding',
         'WayOfWork/organisation',
         'WayOfWork/code-of-conduct',
+        'WayOfWork/way-of-work',
         'WayOfWork/vacancies',
       ],
     },
@@ -30,6 +31,7 @@ const sidebars = {
       label: 'Support & Safety',
       items: [
         'WayOfWork/customer-support',
+        'ISO/iso-intro',
         'ISO/incident-reporting',
         'ISO/security',
         'ISO/quality-policy',
@@ -37,17 +39,8 @@ const sidebars = {
         'ISO/privacy-policy',
       ],
     },
-    {
-      type: 'category',
-      label: 'About Conduction',
-      items: [
-        'WayOfWork/way-of-work',
-        'ISO/iso-intro',
-        // quality-policy and security-policy are draft — visible after management approval
-        'Products/products-overview',
-        'WayOfWork/about-this-manual',
-      ],
-    },
+    'Products/products-overview',
+    'WayOfWork/about-this-manual',
   ],
 };
 

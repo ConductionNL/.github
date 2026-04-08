@@ -74,9 +74,7 @@ Scope, budget en planning liggen vast in de offerte. Alles daarbuiten: bespreek 
 
 ## Meer weten?
 
-Voor wie het complete plaatje wil:
-
 - [Missie & waarden](WayOfWork/way-of-work) — wie we zijn, wat ons drijft, KPI's
-- [ISO & Kwaliteit](ISO/iso-intro) — ons certificeringstraject (ISO 9001 & 27001)
+- [ISO & Kwaliteit](ISO/iso-intro) — certificeringen, audits, risicomanagement en PDCA-cyclus
 - [Producten & Diensten](Products/products-overview) — wat we bieden
 - [Hoe deze manual werkt](WayOfWork/about-this-manual) — structuur, databronnen en hoe bij te dragen
