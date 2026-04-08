@@ -1,0 +1,31 @@
+{
+  "_note": "Copy this file to limits.json and edit the values for your plan. limits.json is git-ignored (personal). See SETUP.md for calibration instructions.",
+  "_structure": {
+    "session": "5h rolling window, shared across ALL models — only all_models.session matters for the combined bar; per-model session values are rough estimates for relative display only.",
+    "weekly": "7-day rolling window per bar. Anthropic shows two weekly bars: 'All models' (combined) and 'Sonnet only'. Their reset days/times differ and do NOT necessarily fall on Monday.",
+    "weekly_reset_day": "Day of week the weekly bar resets. 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun. Read from claude.ai/settings/usage ('Resets Thu 5:00 PM' -> 3). Omit to use Monday UTC as fallback.",
+    "weekly_reset_hour_utc": "Hour (UTC, 0-23) at which the weekly bar resets. Convert the local time shown on claude.ai/settings/usage to UTC. Example: 'Thu 5:00 PM CET' = Thu 16:00 UTC -> 16. Omit to default to 00:00 UTC."
+  },
+  "_calibration": "To find your real token limits: open claude.ai/settings/usage and note the percentage shown. Divide the tracker's current token count by that percentage (as a decimal). Example: tracker shows 286K tokens and the page shows 24% -> 286000 / 0.24 = 1.2M limit. Share a screenshot with Claude to have it calculate for you.",
+
+  "haiku": {
+    "session": 1200000,
+    "weekly": 6000000
+  },
+  "sonnet": {
+    "session": 400000,
+    "weekly": 2000000,
+    "weekly_reset_day": 3,
+    "weekly_reset_hour_utc": 16
+  },
+  "opus": {
+    "session": 200000,
+    "weekly": 1000000
+  },
+  "all_models": {
+    "session": 836000,
+    "weekly": 9000000,
+    "weekly_reset_day": 4,
+    "weekly_reset_hour_utc": 11
+  }
+}
