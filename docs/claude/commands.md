@@ -593,7 +593,7 @@ Create a Pull Request from a branch in any repo. Handles the full flow interacti
 2. **Confirms the source branch** — shows the current branch, lets you override
 3. **Recommends a target branch** based on the branching strategy; checks GitHub for an existing open PR on the same branch pair — if found, offers to view or update it instead
 4. **Checks for uncommitted or unpushed changes** — if any are found, offers to commit, stash, or continue; offers to push unpushed commits before continuing
-5. **Verifies global settings version** *(claude-code-config repo only)* — delegates to `/verify-global-settings-version`; pauses and offers a fix if a VERSION bump is missing
+5. **Verifies global settings version** *(ConductionNL/.github repo only)* — delegates to `/verify-global-settings-version`; pauses and offers a fix if a VERSION bump is missing
 6. **Discovers CI checks from `.github/workflows/`** — reads the repo's workflow files to determine exactly which checks CI will run, then mirrors them locally (never hardcodes a list)
 7. **Installs missing dependencies** (`vendor/`, `node_modules/`) if needed before running checks
 8. **Runs all discovered checks** — nothing skipped; slow checks (e.g. test suites) ask for confirmation first; shows a pass/fail table when done
@@ -621,7 +621,7 @@ Create a Pull Request from a branch in any repo. Handles the full flow interacti
 
 **Phase:** Git / Delivery
 
-Checks whether `global-settings/VERSION` has been correctly bumped after any changes to files in the `global-settings/` directory. Run this before creating a PR on the `ConductionNL/claude-code-config` repo.
+Checks whether `global-settings/VERSION` has been correctly bumped after any changes to files in the `global-settings/` directory. Run this before creating a PR on the `ConductionNL/.github` repo.
 
 **Usage:**
 ```
@@ -640,7 +640,7 @@ Checks whether `global-settings/VERSION` has been correctly bumped after any cha
 
 **When to use:**
 - Standalone: any time you modify a file in `global-settings/` and want to confirm the bump is in place before committing
-- Automatically: called by `/create-pr` when the selected repo is `ConductionNL/claude-code-config` — no need to run it separately in that flow
+- Automatically: called by `/create-pr` when the selected repo is `ConductionNL/.github` — no need to run it separately in that flow
 
 **Semver rules for `global-settings/`:**
 - `1.0.0 → 1.1.0` — new permissions, guards, or behavior added
