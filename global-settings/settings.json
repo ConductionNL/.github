@@ -8,7 +8,9 @@
       "Edit(~/.claude/settings-version)",
       "Write(~/.claude/settings-version)",
       "Edit(~/.claude/settings-repo-path)",
-      "Write(~/.claude/settings-repo-path)"
+      "Write(~/.claude/settings-repo-path)",
+      "Edit(~/.claude/settings-repo-url)",
+      "Write(~/.claude/settings-repo-url)"
     ],
     "allow": [
       "Bash(ls:*)",

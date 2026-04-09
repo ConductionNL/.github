@@ -43,7 +43,7 @@ PUSH_DENY_MSG="Blocked: git push requires explicit authorization. Include one of
 # tee, eval, bash/sh -c, and inline scripting (python, perl, node).
 # Also hard-blocks chmod that makes protected files writable.
 _h=$(printf '%s' "$HOME" | sed 's/[.[\*^$()+?{}|]/\\&/g')
-_prot="(~|\\\$HOME|${_h})/\.claude/(settings\.json|hooks/|settings-version|settings-repo-path)"
+_prot="(~|\\\$HOME|${_h})/\.claude/(settings\.json|hooks/|settings-version|settings-repo-path|settings-repo-url)"
 
 # chmod guard: deny write-enabling permissions on protected files
 if echo "$cmd" | grep -qE "^\s*chmod\b" && echo "$cmd" | grep -qE "${_prot}"; then
@@ -89,6 +89,7 @@ fi
 
 if $_is_config_write; then
     if echo "$cmd" | grep -qE "\bgit\b.*\bshow\b.*\borigin/main:"; then
+        # Method 1: git show origin/main — verify canonical repo
         _repo_path=$(cat "$HOME/.claude/settings-repo-path" 2>/dev/null | tr -d '[:space:]')
         _git_root=""
         [ -n "$_repo_path" ] && [ -d "$_repo_path" ] && \
@@ -103,8 +104,11 @@ if $_is_config_write; then
         else
             deny "BLOCKED: ~/.claude/settings-repo-path is missing or invalid. Cannot verify canonical repo."
         fi
+    elif echo "$cmd" | grep -qE "\bgh\s+api\b.*ConductionNL/\.github.*contents/global-settings/"; then
+        # Method 2: gh api — canonical repo verified by URL path
+        : # canonical repo via GitHub API — allow
     else
-        deny "BLOCKED: Claude cannot write to ~/.claude/ config files. Updates must use git show origin/main from ConductionNL/.github only."
+        deny "BLOCKED: Claude cannot write to ~/.claude/ config files. Updates must use git show origin/main or gh api from ConductionNL/.github only."
     fi
 fi
 

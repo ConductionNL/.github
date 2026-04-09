@@ -14,7 +14,7 @@ The key insight: **specs are written once, then broken into small JSON tasks** t
 
 ## Architecture
 
-All specs and changes live in their **primary app repository** (submodule). Company-wide ADRs and cross-app changes live in `hydra/openspec/`. Skills are distributed: pipeline/test/team skills in `hydra/.claude/skills/`, app creation/research skills in `concurrentie-analyse/.claude/skills/`.
+All specs and changes live in their **primary app repository** (submodule). There is no root `openspec/` directory. Workflow docs and skills live in `.claude/` (`claude-code-config` repo).
 
 ```
 apps-extra/                         # Workspace root

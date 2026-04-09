@@ -12,68 +12,6 @@ This guide walks you through setting up the spec-driven development workflow and
 - Access to the `ConductionNL` GitHub organization
 - The `apps-extra` workspace cloned with at least one project
 
-## Step 0: Workspace Setup
-
-The `.claude/` directory in `apps-extra/` contains workspace configuration (CLAUDE.md, settings.json, MCP config). Skills and ADRs live in two submodule repos that must be present:
-
-### Required submodules
-
-```bash
-cd apps-extra
-
-# Hydra — 50 skills (build, implement, test, review) + 12 ADRs + personas
-git submodule update --init hydra
-
-# Specter (concurrentie-analyse) — 21 skills (research, design, scaffold)
-git submodule update --init concurrentie-analyse
-```
-
-### How it fits together
-
-```
-apps-extra/
-├── .claude/                        # Workspace config (plain directory, NOT a submodule)
-│   ├── CLAUDE.md                   # Workflow rules + project context
-│   ├── settings.json               # Permissions + additionalDirectories → hydra + specter
-│   ├── configuration.json          # MCP browser endpoints
-│   ├── .mcp.json                   # MCP browser spawn config
-│   └── openspec/config.yaml        # OpenSpec configuration
-│
-├── hydra/                          # Submodule: AI build pipeline
-│   ├── .claude/skills/             # 50 skills: opsx-*, openspec-*, test-*, team-*, utilities
-│   ├── openspec/architecture/      # 12 compact ADRs (company-wide)
-│   ├── openspec/schemas/           # Artifact templates
-│   ├── openspec/specs/             # Shared i18n specs
-│   ├── openspec/changes/           # Cross-app change proposals
-│   └── personas/                   # 8 test personas
-│
-├── concurrentie-analyse/           # Submodule: Market intelligence
-│   └── .claude/skills/             # 21 skills: app-*, specter-*, tender-*, ecosystem-*, swc-*
-│
-├── openregister/                   # App submodule
-├── opencatalogi/                   # App submodule
-└── ...
-```
-
-The `settings.json` in `.claude/` points to both skill directories via `additionalDirectories`. Claude Code automatically loads skills from all three locations.
-
-### Verify your setup
-
-After cloning, confirm skills are available:
-
-```bash
-# Check hydra skills exist
-ls hydra/.claude/skills/ | wc -l    # Should show 50
-
-# Check specter skills exist  
-ls concurrentie-analyse/.claude/skills/ | wc -l  # Should show 21
-
-# Check ADRs exist
-ls hydra/openspec/architecture/ | wc -l  # Should show 12
-```
-
-Then start Claude Code in the `apps-extra/` directory. You should see skills from both repos in the slash command list.
-
 **Optional — Container authentication (needed for `/opsx-apply-loop` and `/opsx-pipeline`):**
 
 These commands run Claude CLI inside an isolated Docker container, which cannot use the interactive OAuth login your host session uses. You need one of these environment variables set in your shell:
@@ -118,10 +56,10 @@ source ~/.bashrc
 **Optional — Usage monitoring:** Install the usage tracker to watch your Claude token consumption in real time inside VS Code. Especially useful before running multi-agent commands (see [parallel-agents.md](parallel-agents.md)).
 
 ```bash
-bash .github/usage-tracker/install.sh
+bash .claude/usage-tracker/install.sh
 ```
 
-See [usage-tracker/README.md](../../usage-tracker/README.md) for setup details.
+See [`.claude/usage-tracker/README.md`](../usage-tracker/README.md) for setup details.
 
 ## Step 1: Install OpenSpec
 
@@ -135,27 +73,33 @@ Verify installation:
 openspec --version
 ```
 
-## Step 2: Understand the Spec Structure
+## Step 2: Understand the Workspace Structure
 
 The workspace has two levels of spec management:
 
-### Company-wide (in hydra)
+### Workspace level (shared)
 
 ```
-hydra/openspec/
-├── architecture/           # 12 compact ADRs (coding rules for all apps)
-├── schemas/conduction/     # Our custom workflow schema + artifact templates
-├── specs/                  # Shared specs (i18n, etc.)
-└── changes/                # Cross-app change proposals
+apps-extra/
+├── project.md              # Coding standards for ALL projects
+├── openspec/
+│   ├── config.yaml         # Shared context and rules
+│   ├── schemas/conduction/ # Our custom workflow schema
+│   ├── specs/              # Cross-project specs (NC conventions, APIs, etc.)
+│   └── docs/               # You are here
 ```
 
-### Project level (in each app)
+These files define the patterns and conventions that apply to every project.
+
+### Project level (specific)
 
 ```
-openregister/openspec/
-├── config.yaml             # Project config
-├── specs/                  # Domain-specific specs
-└── changes/                # Active work in progress
+openregister/
+├── project.md              # What this project does, its architecture, dependencies
+├── openspec/
+│   ├── config.yaml         # Project config (points to shared schema)
+│   ├── specs/              # Domain-specific specs for this project
+│   └── changes/            # Active work in progress
 ```
 
 Each project has its own specs describing its unique domain behavior.
