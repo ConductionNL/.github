@@ -80,9 +80,11 @@ The skill is built on recognized patterns, community best practices, or existing
 
 **Criteria (in addition to L2):**
 - Built on a **recognized pattern**: Anthropic official patterns, validated community skill, or your own proven pattern library
-- Has `examples/` showing expected output format (few-shot guidance)
-- Uses **common patterns** consistently (model guard, AskUserQuestion, destructive action confirmation — see [Common Patterns](#common-patterns) below)
+- Has **at least one supporting subfolder**: `examples/` (output format demos), `references/` (standards docs), or `templates/` (fillable scaffolds)
+- Uses **at least one common pattern** consistently (model guard, AskUserQuestion, destructive action confirmation, quality gates — see [Common Patterns](#common-patterns) below)
 - References **standards documents** where applicable (in `references/`)
+
+> **What the script auto-detects for L3:** at least one common pattern keyword present in SKILL.md (model guard, AskUserQuestion, quality gates, or subfolder references) AND existence of at least one of `examples/`, `references/`, or `templates/`. These are structural proxies for the full criteria above.
 
 **Sources for proven patterns:**
 - Anthropic's official `/skill-creator` bundled plugin ([GitHub](https://github.com/anthropics/skills/blob/main/skills/skill-creator/SKILL.md))
@@ -131,18 +133,24 @@ The skill has been systematically tested with evaluation scenarios. Its performa
   - Input prompt (what the user would say)
   - Expected output characteristics (what good output looks like)
   - Assertion criteria (how to grade pass/fail)
+- **Description trigger testing**: 10+ `should_trigger` + 10+ `should_not_trigger` prompts in `trigger_tests`
+- **Evals have been run**: `last_validated` is set to a date in `evals.json`
 - **Baseline measurement** exists: what does Claude produce on these scenarios WITHOUT the skill?
-- **Description trigger testing**: 10 should-trigger + 10 should-NOT-trigger prompts, with measured precision
 - Skill has been through at least **one improve cycle** based on eval results
-- Optional: `evals/` folder with `evals.json`, `timing.json`, `grading.json`
+- `evals/` folder with `evals.json`; `timing.json` and `grading.json` produced after running evals
+
+> **What the script auto-detects for L5:** 3+ scenarios, 10+/10+ trigger tests, and `last_validated` non-null in evals.json. Baseline measurement and improve cycles are required for true L5 but not auto-checked by the script.
 
 **How to evaluate a skill:**
 
-```
-# 1. Run Claude on tasks WITHOUT the skill — document failures
-# 2. Create eval scenarios testing those gaps:
-evals/evals.json:
+**`evals/evals.json` format:**
+
+```json
 {
+  "skill": "create-pr",
+  "version": "1.0.0",
+  "created": "2025-01-15",
+  "last_validated": null,
   "scenarios": [
     {
       "prompt": "Create a PR for the openregister feature branch",
@@ -153,14 +161,70 @@ evals/evals.json:
         "includes ## Summary and ## Test plan sections"
       ]
     }
-  ]
+  ],
+  "trigger_tests": {
+    "should_trigger": [
+      "Create a pull request for the feature branch",
+      "Open a PR from development to main",
+      "Make a PR for my changes",
+      "Submit this branch for review via PR",
+      "Create a GitHub pull request",
+      "PR this to development",
+      "Open pull request for openregister branch",
+      "Make a pull request for my new feature",
+      "Create PR targeting the main branch",
+      "Submit a pull request with these changes"
+    ],
+    "should_not_trigger": [
+      "Can you review this code?",
+      "What is the difference between git merge and rebase?",
+      "How do I resolve a merge conflict?",
+      "Show me the git log",
+      "Commit my changes",
+      "Push to the remote branch",
+      "What branches are available?",
+      "Help me write a commit message",
+      "Show the diff for my changes",
+      "Explain what a pull request is"
+    ]
+  }
 }
-# 3. Run skill on eval scenarios, grade each assertion
-# 4. Compare with-skill vs baseline scores
-# 5. Identify weak assertions, improve skill instructions, re-evaluate
 ```
 
-> **Reference:** Anthropic's official Skill Creator has 4 modes: **Create, Eval, Improve, Benchmark**. Under the hood it uses: Executor (runs skills), Grader (scores outputs), Comparator (blind A/B tests), Analyzer (suggests improvements). See [Anthropic Skill Creator](https://github.com/anthropics/skills/blob/main/skills/skill-creator/SKILL.md).
+After running evals, update `last_validated` with the run date to unlock L5 green circle status.
+
+**Using the Anthropic Skill Creator to run evals:**
+
+The [Anthropic Skill Creator](https://github.com/anthropics/skills/blob/main/skills/skill-creator/SKILL.md) automates running, grading, and improving evals as a Claude Code skill.
+
+**Step-by-step:**
+
+1. **Install** (one-time): add the Skill Creator to your `.claude/skills/` folder.
+
+2. **Invoke**: In a Claude Code session, ask Claude to evaluate the skill:
+   > "Run evals on the test-app skill" or "Use the skill creator to evaluate and improve my X skill"
+
+   Claude picks up the skill-creator and guides the process. The skill-creator's `evals/evals.json` format uses `evals[]` with `id`, `prompt`, `expected_output`, and `expectations` — note this differs from our custom tracking format (`scenarios`, `trigger_tests`, `last_validated`). The Skill Creator will create or adapt evals as needed.
+
+3. **What happens**: Two parallel subagents run each eval:
+   - **With-skill agent**: runs the scenario with the skill active
+   - **Baseline agent**: runs the same scenario without the skill
+   Results are saved to `<skill-name>-workspace/iteration-N/eval-N/` alongside the skills directory.
+
+4. **Review results**: The Skill Creator runs `eval-viewer/generate_review.py` and opens a browser tab with two tabs: **Outputs** (click through each eval, leave qualitative feedback) and **Benchmark** (pass rates, timing, tokens with-skill vs baseline).
+
+5. **Output files** written to `<skill-name>-workspace/iteration-N/eval-N/`:
+   - `grading.json` — assertion pass/fail with evidence per expectation
+   - `timing.json` — token count and duration
+   - `benchmark.json` — aggregate stats across all evals
+
+6. **Update `last_validated`** in our `evals.json` after a successful run:
+   ```json
+   "last_validated": "2026-04-10"
+   ```
+   This unlocks the L5 green circle in the skill overview dashboard (our tracking format, separate from the Skill Creator workspace).
+
+7. **Improve cycle**: The Skill Creator's analyzer flags non-discriminating assertions, flaky evals, and skill improvement suggestions. Update `SKILL.md` and re-run as iteration-2.
 
 ---
 
@@ -525,7 +589,7 @@ Non-markdown static files that get copied as-is to the user's project or used by
 Evaluation scenarios and benchmark results for measured skills.
 
 **Use for:**
-- `evals.json` — test scenarios with prompts, expected outputs, and assertion criteria
+- `evals.json` — test scenarios, `trigger_tests` (should/should-not-trigger examples), and `last_validated` (date of last eval run; required for L5 green circle)
 - `timing.json` — token usage and duration per eval run
 - `grading.json` — assertion pass/fail results with evidence
 

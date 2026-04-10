@@ -8,13 +8,15 @@ Track **Haiku, Sonnet, and Opus** simultaneously with separate usage monitoring.
 
 ## Model Limits Overview
 
-> These are **subscription quota** limits (how many tokens you can use across all conversations before hitting your cap), NOT model context windows. Context windows are a separate, per-conversation limit. See [Two Kinds of Token Limits](../../.claude/docs/parallel-agents.md#two-kinds-of-token-limits) for the full explanation.
+> These are **subscription quota** limits (how many tokens you can use across all conversations before hitting your cap), NOT model context windows. Context windows are a separate, per-conversation limit. See [Two Kinds of Token Limits](../docs/claude/parallel-agents.md#two-kinds-of-token-limits) for the full explanation.
 
-| Model | Session (~5h) | Weekly (~7d) | Best For |
-|-------|--------------|-------------|----------|
-| **Haiku** | ~1.2M tokens | ~6M tokens | ⚡ Quick tasks, high volume |
-| **Sonnet** | ~400K tokens | ~2M tokens | 🎯 Balanced, most tasks |
-| **Opus** | ~200K tokens | ~1M tokens | 🧠 Complex reasoning |
+> **Model matching:** The tracker matches by substring — `haiku` matches `claude-haiku-4-5-20251001`, `sonnet` matches `claude-sonnet-4-6`, `opus` matches `claude-opus-4-6`. New model versions are picked up automatically as long as the family name is in the model ID.
+
+| Model | Model ID | Session (~5h) | Weekly (~7d) | Best For |
+|-------|----------|--------------|-------------|----------|
+| **Haiku** (`--model haiku`) | `claude-haiku-4-5` | ~1.2M tokens | ~6M tokens | ⚡ Quick tasks, high volume |
+| **Sonnet** (`--model sonnet`) | `claude-sonnet-4-6` | ~400K tokens | ~2M tokens | 🎯 Balanced, most tasks |
+| **Opus** (`--model opus`) | `claude-opus-4-6` | ~200K tokens | ~1M tokens | 🧠 Complex reasoning |
 
 **Important:** The session limit is **shared across all models** — it's one combined 5-hour rolling window, not separate per-model buckets. The per-model session values above are estimates; only Anthropic knows the exact combined pool size for your plan.
 
@@ -114,10 +116,7 @@ alias claude-opus="python3 /path/to/project/.claude/usage-tracker/claude-usage-t
 
 ### Can I track across VS Code sessions?
 
-Yes — session data per model is saved automatically (git-ignored):
-- `.claude/usage-tracker/logs/session-sonnet.json`
-- `.claude/usage-tracker/logs/session-haiku.json`
-- `.claude/usage-tracker/logs/session-opus.json`
+Yes — the tracker reads JSONL files that Claude Code writes persistently to `~/.claude/projects/`. As long as those files exist, any run of the tracker can reconstruct historical usage for any window.
 
 ### Get total tokens across all models
 

@@ -225,7 +225,7 @@ cp .claude/usage-tracker/limits.example.json .claude/usage-tracker/limits.json
 
 `limits.json` is git-ignored so it stays personal. The tracker shows `(cfg)` when configured and `(est)` when using defaults.
 
-**Calibrating subscription quota limits:** divide the tracker's current token count by the percentage shown on [claude.ai/settings/usage](https://claude.ai/settings/usage). Example: tracker shows 286K tokens, page shows 24% → 286K ÷ 0.24 = ~1.2M quota limit. You can share a screenshot with Claude and it will calculate everything for you. (These are subscription quota limits, not model context windows — see [Two Kinds of Token Limits](../.claude/docs/parallel-agents.md#two-kinds-of-token-limits).)
+**Calibrating subscription quota limits:** divide the tracker's current token count by the percentage shown on [claude.ai/settings/usage](https://claude.ai/settings/usage). Example: tracker shows 286K tokens, page shows 24% → 286K ÷ 0.24 = ~1.2M quota limit. You can share a screenshot with Claude and it will calculate everything for you. (These are subscription quota limits, not model context windows — see [Two Kinds of Token Limits](../docs/claude/parallel-agents.md#two-kinds-of-token-limits).)
 
 **Weekly reset times:** the "Sonnet only" and "All models" bars reset on different days — configure `weekly_reset_day` and `weekly_reset_hour_utc` in `limits.json` to get accurate weekly percentages. See [SETUP.md](SETUP.md) for the conversion guide.
 

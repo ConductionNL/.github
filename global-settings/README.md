@@ -75,4 +75,4 @@ Use the `/verify-global-settings-version` command to check whether a version bum
 
 ## Full documentation
 
-See [`docs/global-claude-settings.md`](../docs/global-claude-settings.md) for the complete reference including the permissions list, hook behavior table, and troubleshooting.
+See [`docs/claude/global-claude-settings.md`](../docs/claude/global-claude-settings.md) for the complete reference including the permissions list, hook behavior table, and troubleshooting.

@@ -153,7 +153,7 @@ Run the monitor automatically every time you open the workspace.
 ## Troubleshooting
 
 ### "Today: 0.0%"
-Normal if no Claude Code API calls have been made today. Use any slash command (e.g. `/opsx-apply`, `/opsx-verify`) or run a task from the agent, then re-check.
+Normal if no Claude Code API calls have been made today. Use any slash command or run a task from the agent, then re-check.
 
 ### No `~/.claude/projects/` directory
 Claude Code CLI is not installed or hasn't been run yet. Install it from [claude.ai/code](https://claude.ai/code).
@@ -166,8 +166,8 @@ Claude Code CLI is not installed or hasn't been run yet. Install it from [claude
 
 | Metric | Claude Sonnet (approx.) |
 |--------|------------------------|
-| Session limit | 400,000 tokens (resets every ~4-5 hrs) |
-| Weekly limit | 2,000,000 tokens |
+| Session limit | Varies by plan — calibrate via `limits.json` (see SETUP.md) |
+| Weekly limit | Varies by plan — calibrate via `limits.json` |
 | Weekly reset | Varies by plan — check claude.ai/settings/usage |
 
 ---

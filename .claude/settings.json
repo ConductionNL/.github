@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "additionalDirectories": [
+      "/home/wilco/wordpress-docker/.claude/docs"
+    ]
+  }
+}

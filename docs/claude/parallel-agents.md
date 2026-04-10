@@ -95,7 +95,7 @@ The total tokens you can use across **all conversations combined** within a roll
 | Sonnet | ~400K tokens | ~2M tokens  |
 | Opus   | ~200K tokens | ~1M tokens  |
 
-These are approximate estimates — Anthropic does not publish exact numbers. Calibrate your own values using [claude.ai/settings/usage](https://claude.ai/settings/usage) (see the [usage tracker setup guide](../usage-tracker/SETUP.md)).
+These are approximate estimates — Anthropic does not publish exact numbers. Calibrate your own values using [claude.ai/settings/usage](https://claude.ai/settings/usage) (see the [usage tracker setup guide](../../usage-tracker/SETUP.md)).
 
 ### Why this matters for parallel agents
 
@@ -126,7 +126,7 @@ For guidance on which testing commands to use and when, see [testing.md](testing
 
 ## Monitor Your Live Usage
 
-The [usage tracker](../usage-tracker/README.md) lets you watch your token consumption in real time from a terminal panel in VS Code — useful for knowing how much cap you have left before starting a parallel-agent run.
+The [usage tracker](../../usage-tracker/README.md) lets you watch your token consumption in real time from a terminal panel in VS Code — useful for knowing how much cap you have left before starting a parallel-agent run.
 
 ```bash
 # One-line status check
@@ -136,4 +136,4 @@ python3 .claude/usage-tracker/claude-usage-tracker.py --status-bar
 python3 .claude/usage-tracker/claude-usage-tracker.py --monitor
 ```
 
-The tracker reads Claude Code's session files (`~/.claude/projects/`) directly and is accurate for API token counts. The **limit thresholds** are approximate — verify your real cap at [claude.ai/settings/usage](https://claude.ai/settings/usage). Setup instructions: [`.claude/usage-tracker/SETUP.md`](../usage-tracker/SETUP.md).
+The tracker reads Claude Code's session files (`~/.claude/projects/`) directly and is accurate for API token counts. The **limit thresholds** are approximate — verify your real cap at [claude.ai/settings/usage](https://claude.ai/settings/usage). Setup instructions: [`.claude/usage-tracker/SETUP.md`](../../usage-tracker/SETUP.md).

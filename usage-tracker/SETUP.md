@@ -8,7 +8,7 @@ Monitor Claude token usage directly in VS Code with real-time status indicators 
 
 The Claude Code extension writes full API responses (including token counts) to `~/.claude/projects/**/*.jsonl` as you work. The tracker reads those files directly — no verbose logging, no extra configuration.
 
-**What gets tracked:** every Claude Code API call made through VS Code (slash commands like `/opsx-apply`, agent tasks, inline chat). The tracker shows the last ~5 hours (approximating Anthropic's 5h rolling session window) and this week's running total.
+**What gets tracked:** every Claude Code API call made through VS Code (slash commands, agent tasks, inline chat). The tracker shows the last ~5 hours (approximating Anthropic's 5h rolling session window) and this week's running total.
 
 ---
 
@@ -281,7 +281,7 @@ python3 .claude/usage-tracker/claude-usage-tracker.py --monitor --all-models
 
 ### Update Plan Limits
 
-Default limits are approximate **subscription quota** estimates (not model context windows — see [Two Kinds of Token Limits](../../.claude/docs/parallel-agents.md#two-kinds-of-token-limits)). To set your real limits, edit `limits.json` (see Step 2.5). Default values:
+Default limits are approximate **subscription quota** estimates (not model context windows — see [Two Kinds of Token Limits](../docs/claude/parallel-agents.md#two-kinds-of-token-limits)). To set your real limits, edit `limits.json` (see Step 2.5). Default values:
 
 | Model | Daily | Weekly |
 |-------|-------|--------|

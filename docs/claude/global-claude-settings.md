@@ -6,13 +6,13 @@ Project files under `.claude/` in this repo (for example `settings.json` with `e
 
 ## Versioned canonical files
 
-The canonical files live under **[`global-settings/`](../global-settings/)**. The version is tracked in [`global-settings/VERSION`](../global-settings/VERSION).
+The canonical files live under **[`global-settings/`](../../global-settings/)**. The version is tracked in [`global-settings/VERSION`](../../global-settings/VERSION).
 
 | File | Install as |
 |------|------------|
-| [`global-settings/settings.json`](../global-settings/settings.json) | `~/.claude/settings.json` |
-| [`global-settings/block-write-commands.sh`](../global-settings/block-write-commands.sh) | `~/.claude/hooks/block-write-commands.sh` |
-| [`global-settings/check-settings-version.sh`](../global-settings/check-settings-version.sh) | `~/.claude/hooks/check-settings-version.sh` |
+| [`global-settings/settings.json`](../../global-settings/settings.json) | `~/.claude/settings.json` |
+| [`global-settings/block-write-commands.sh`](../../global-settings/block-write-commands.sh) | `~/.claude/hooks/block-write-commands.sh` |
+| [`global-settings/check-settings-version.sh`](../../global-settings/check-settings-version.sh) | `~/.claude/hooks/check-settings-version.sh` |
 
 ## Install / update on a new machine
 

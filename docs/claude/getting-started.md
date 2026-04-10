@@ -51,7 +51,7 @@ source ~/.bashrc
 
 > Neither variable is needed for interactive commands like `/opsx-apply` or `/opsx-verify` — only for the containerized automation commands.
 
-**Optional — VS Code extensions:** See the [main README](../README.md#4-install-vs-code-extensions) for the full list of required, recommended, and optional VS Code extensions.
+**Optional — VS Code extensions:** See the [main README](../../README.md#4-install-vs-code-extensions) for the full list of required, recommended, and optional VS Code extensions.
 
 **Optional — Usage monitoring:** Install the usage tracker to watch your Claude token consumption in real time inside VS Code. Especially useful before running multi-agent commands (see [parallel-agents.md](parallel-agents.md)).
 
@@ -59,7 +59,7 @@ source ~/.bashrc
 bash .claude/usage-tracker/install.sh
 ```
 
-See [`.claude/usage-tracker/README.md`](../usage-tracker/README.md) for setup details.
+See [`.claude/usage-tracker/README.md`](../../usage-tracker/README.md) for setup details.
 
 ## Step 1: Install OpenSpec
 
