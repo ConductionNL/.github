@@ -84,7 +84,7 @@ The skill is built on recognized patterns, community best practices, or existing
 - Uses **at least one common pattern** consistently (model guard, AskUserQuestion, destructive action confirmation, quality gates — see [Common Patterns](#common-patterns) below)
 - References **standards documents** where applicable (in `references/`)
 
-> **What the script auto-detects for L3:** at least one common pattern keyword present in SKILL.md (model guard, AskUserQuestion, quality gates, or subfolder references) AND existence of at least one of `examples/`, `references/`, or `templates/`. These are structural proxies for the full criteria above.
+> **What the script auto-detects for L3:** at least one common pattern keyword present in SKILL.md from any of these categories: (1) model guard (`model:`, `On Haiku`, `active model`, …), (2) `AskUserQuestion`, (3) quality gates (`composer check`, `phpcs`, `phpstan`, `make check`, `ruff`, `psalm`), (4) subfolder references (`examples/`, `refs/`, `references/`, or `templates/` as text in SKILL.md), or (5) destructive/browser patterns (`confirm.*before`, `browser_snapshot`, `browser_navigate`, `## Hard Rule`, `## Verification`, `acceptance_criteria`) — AND existence of at least one of `examples/`, `references/`, or `templates/` on disk. These are structural proxies for the full criteria above.
 
 **Sources for proven patterns:**
 - Anthropic's official `/skill-creator` bundled plugin ([GitHub](https://github.com/anthropics/skills/blob/main/skills/skill-creator/SKILL.md))
@@ -129,17 +129,17 @@ The skill has been systematically tested with evaluation scenarios. Its performa
 **Why most skills plateau at L4:** A skill that "feels right" but has never been measured may have blind spots, false confidence, or suboptimal triggering. Measurement turns intuition into evidence.
 
 **Criteria (in addition to L4):**
-- Has **3+ evaluation scenarios** with:
+- Has **3+ evals** with:
   - Input prompt (what the user would say)
-  - Expected output characteristics (what good output looks like)
-  - Assertion criteria (how to grade pass/fail)
+  - Expected output characteristics (`expected_output`)
+  - Assertion criteria (`expectations` — how to grade pass/fail)
 - **Description trigger testing**: 10+ `should_trigger` + 10+ `should_not_trigger` prompts in `trigger_tests`
 - **Evals have been run**: `last_validated` is set to a date in `evals.json`
-- **Baseline measurement** exists: what does Claude produce on these scenarios WITHOUT the skill?
+- **Baseline measurement** exists: what does Claude produce on these evals WITHOUT the skill?
 - Skill has been through at least **one improve cycle** based on eval results
 - `evals/` folder with `evals.json`; `timing.json` and `grading.json` produced after running evals
 
-> **What the script auto-detects for L5:** 3+ scenarios, 10+/10+ trigger tests, and `last_validated` non-null in evals.json. Baseline measurement and improve cycles are required for true L5 but not auto-checked by the script.
+> **What the script auto-detects for L5:** 3+ evals (checks `evals` key, falls back to `scenarios`), 10+/10+ trigger tests, and `last_validated` non-null in evals.json. Baseline measurement and improve cycles are required for true L5 but not auto-checked by the script.
 
 **How to evaluate a skill:**
 
@@ -147,15 +147,17 @@ The skill has been systematically tested with evaluation scenarios. Its performa
 
 ```json
 {
-  "skill": "create-pr",
+  "skill_name": "create-pr",
   "version": "1.0.0",
   "created": "2025-01-15",
   "last_validated": null,
-  "scenarios": [
+  "evals": [
     {
+      "id": 1,
       "prompt": "Create a PR for the openregister feature branch",
-      "expected": "PR targets development branch, has quality checks, proper format",
-      "assertions": [
+      "expected_output": "PR targets development branch, has quality checks, proper format",
+      "files": [],
+      "expectations": [
         "targets development branch (not main)",
         "runs composer check:strict",
         "includes ## Summary and ## Test plan sections"
