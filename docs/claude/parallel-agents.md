@@ -7,7 +7,6 @@ Running commands that spawn multiple agents simultaneously (like `/test-counsel`
 Every Claude Code API call sends the following with it:
 - **CLAUDE.md** — workspace instructions
 - **MEMORY.md** — persistent memory index
-- **CLAUDE.local.md** — local credentials/config
 - **The full conversation history** so far
 
 When you run a command that launches 8 agents in parallel, all 8 agents start simultaneously, and each one makes many tool calls internally (file reads, browser snapshots, API calls). That means those files above get sent dozens to hundreds of times within a few minutes.
@@ -61,12 +60,10 @@ These files are sent with **every single API call** in the workspace. In a paral
 |------|---------|-------------|
 | `.claude/CLAUDE.md` | Workspace instructions for Claude | < 100 lines |
 | `.claude/MEMORY.md` | Index of memory files | < 50 lines (index only, no content) |
-| `.claude/CLAUDE.local.md` | Local credentials | < 30 lines |
 
 **Rules:**
 - **CLAUDE.md**: Only include instructions Claude needs on every task. Move niche/infrequent knowledge to separate files in `.claude/docs/` that can be read on demand.
 - **MEMORY.md**: This is an index only — one line per memory file with a brief description. Never write memory content directly into MEMORY.md.
-- **CLAUDE.local.md**: Credentials only. Do not add project notes here.
 - **Persona files** (`.claude/personas/*.md`): These are only loaded when a sub-agent explicitly reads them — they don't auto-load. Keep them focused, but they don't need to be ultra-short.
 
 ## Two Kinds of Token Limits

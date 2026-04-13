@@ -9,6 +9,9 @@
 #   settings-repo-url     — (optional) GitHub repo slug for online version check
 #                           (e.g. "ConductionNL/.github")
 #                           If present, checks VERSION via GitHub API first.
+#   settings-repo-ref     — (optional) Git ref (branch/tag/sha) to track.
+#                           Defaults to "main" when absent. Applies to both
+#                           GitHub API and git-fetch lookup paths.
 #   settings-repo-path    — absolute path to the root of the canonical repo
 #                           (e.g. ~/path/to/.github)
 #                           Used as fallback when settings-repo-url is absent or fails.
@@ -24,7 +27,15 @@ NC='\033[0m'
 
 REPO_URL_FILE="$HOME/.claude/settings-repo-url"
 REPO_PATH_FILE="$HOME/.claude/settings-repo-path"
+REPO_REF_FILE="$HOME/.claude/settings-repo-ref"
 VERSION_FILE="$HOME/.claude/settings-version"
+
+# ── Tracking ref (branch/tag/sha) — defaults to "main" when unset ────────────
+tracking_ref="main"
+if [ -f "$REPO_REF_FILE" ]; then
+    _ref=$(cat "$REPO_REF_FILE" | tr -d '[:space:]')
+    [ -n "$_ref" ] && tracking_ref="$_ref"
+fi
 
 # ── Session-once guard ────────────────────────────────────────────────────────
 input=$(cat)
@@ -103,7 +114,7 @@ fi
 
 if [ -n "$online_repo_slug" ]; then
     if command -v gh >/dev/null 2>&1; then
-        _api_path="repos/${online_repo_slug}/contents/global-settings/VERSION?ref=main"
+        _api_path="repos/${online_repo_slug}/contents/global-settings/VERSION?ref=${tracking_ref}"
         _gh_result=$(timeout 5 gh api "$_api_path" -H "Accept: application/vnd.github.raw+json" 2>/dev/null | tr -d '[:space:]')
         if [ -n "$_gh_result" ] && echo "$_gh_result" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
             online_version="$_gh_result"
@@ -121,15 +132,15 @@ fi
 if ! $online_fetch_ok && [ -n "$REPO_DIR" ] && [ -n "$git_root" ]; then
     rel_path=$(realpath --relative-to="$git_root" "$REPO_DIR/global-settings/VERSION" 2>/dev/null)
 
-    if timeout 5 git -C "$git_root" fetch origin main --quiet --depth=1 2>/dev/null; then
-        fetched=$(git -C "$git_root" show "origin/main:${rel_path}" 2>/dev/null | tr -d '[:space:]')
+    if timeout 5 git -C "$git_root" fetch origin "${tracking_ref}" --quiet --depth=1 2>/dev/null; then
+        fetched=$(git -C "$git_root" show "origin/${tracking_ref}:${rel_path}" 2>/dev/null | tr -d '[:space:]')
         if [ -n "$fetched" ]; then
             online_version="$fetched"
             online_fetch_ok=true
             online_source="git-fetch"
         else
             online_version="(not on remote)"
-            config_warnings+=("global-settings/VERSION not found on origin/main (path: ${rel_path}). The canonical global settings may not be committed to this remote — your settings may be outdated.")
+            config_warnings+=("global-settings/VERSION not found on origin/${tracking_ref} (path: ${rel_path}). The canonical global settings may not be committed to this remote — your settings may be outdated.")
         fi
     else
         online_version="(fetch failed)"
@@ -175,10 +186,12 @@ fi
 
 # ── Online source label ──────────────────────────────────────────────────────
 online_label=""
+ref_suffix=""
+[ "$tracking_ref" != "main" ] && ref_suffix=" @${tracking_ref}"
 if [ "$online_source" = "github-api" ]; then
-    online_label="  ${DIM}(via GitHub API)${NC}"
+    online_label="  ${DIM}(via GitHub API${ref_suffix})${NC}"
 elif [ "$online_source" = "git-fetch" ]; then
-    online_label="  ${DIM}(via git fetch)${NC}"
+    online_label="  ${DIM}(via git fetch${ref_suffix})${NC}"
 fi
 
 # ── Status panel → stderr (displayed directly in the UI) ─────────────────────
@@ -236,7 +249,7 @@ if $online_fetch_ok && semver_gt "$online_version" "$installed_version"; then
     echo "=========================================="
     echo ""
     echo "  Installed : v${installed_version}  ❌ (outdated)"
-    echo "  Latest    : v${online_version}  ✅ (on origin/main)"
+    echo "  Latest    : v${online_version}  ✅ (on origin/${tracking_ref})"
     echo ""
     echo "  To apply the update:"
     echo "  1. First, in your own terminal (not through Claude), unlock the config files:"
@@ -244,12 +257,13 @@ if $online_fetch_ok && semver_gt "$online_version" "$installed_version"; then
     echo "  2. Then say: \"update my global settings to ${online_version}\""
 
     if [ "$online_source" = "github-api" ]; then
-        echo "  When they do, run the following to pull all files directly from GitHub (${online_repo_slug}, main branch):"
+        echo "  When they do, run the following to pull all files directly from GitHub (${online_repo_slug}, ref: ${tracking_ref}):"
         echo "    repo_slug=\"${online_repo_slug}\""
+        echo "    ref=\"${tracking_ref}\""
         echo "    base_path=\"global-settings\""
         echo "    mkdir -p ~/.claude/hooks"
         echo "    for f in settings.json block-write-commands.sh check-settings-version.sh VERSION README.md; do"
-        echo "      content=\$(gh api \"repos/\${repo_slug}/contents/\${base_path}/\${f}?ref=main\" -H \"Accept: application/vnd.github.raw+json\")"
+        echo "      content=\$(gh api \"repos/\${repo_slug}/contents/\${base_path}/\${f}?ref=\${ref}\" -H \"Accept: application/vnd.github.raw+json\")"
         echo "      case \"\$f\" in"
         echo "        *.sh) dest=\"\$HOME/.claude/hooks/\$f\" ;;"
         echo "        VERSION) dest=\"\$HOME/.claude/settings-version\" ;;"
@@ -259,14 +273,16 @@ if $online_fetch_ok && semver_gt "$online_version" "$installed_version"; then
         echo "      printf '%s\n' \"\$content\" > \"\$dest\""
         echo "      if [[ \"\$f\" == *.sh ]]; then chmod 555 \"\$dest\"; elif [[ \"\$f\" == \"settings.json\" ]]; then chmod 644 \"\$dest\"; else chmod 444 \"\$dest\"; fi"
         echo "    done"
-        echo "  This pulls files directly from GitHub — no local repo clone needed."
+        echo "  This pulls files directly from GitHub (ref: ${tracking_ref}) — no local repo clone needed."
     else
-        echo "  When they do, run the following to pull all files directly from origin/main (not the local branch):"
+        echo "  When they do, run the following to pull all files directly from origin/${tracking_ref} (not the local branch):"
+        echo "    ref=\"${tracking_ref}\""
         echo "    git_root=\$(git -C \"${REPO_DIR}\" rev-parse --show-toplevel)"
         echo "    rel_base=\$(realpath --relative-to=\"\$git_root\" \"${REPO_DIR}/global-settings\")"
         echo "    mkdir -p ~/.claude/hooks"
-        echo "    git -C \"\$git_root\" ls-tree --name-only \"origin/main:\${rel_base}/\" | while read f; do"
-        echo "      src=\"origin/main:\${rel_base}/\${f}\""
+        echo "    git -C \"\$git_root\" fetch origin \"\$ref\" --depth=1"
+        echo "    git -C \"\$git_root\" ls-tree --name-only \"origin/\${ref}:\${rel_base}/\" | while read f; do"
+        echo "      src=\"origin/\${ref}:\${rel_base}/\${f}\""
         echo "      case \"\$f\" in"
         echo "        *.sh) dest=\"\$HOME/.claude/hooks/\$f\" ;;"
         echo "        VERSION) dest=\"\$HOME/.claude/settings-version\" ;;"
@@ -275,7 +291,7 @@ if $online_fetch_ok && semver_gt "$online_version" "$installed_version"; then
         echo "      git -C \"\$git_root\" show \"\$src\" > \"\$dest\""
         echo "      if [[ \"\$f\" == *.sh ]]; then chmod 555 \"\$dest\"; elif [[ \"\$f\" == \"settings.json\" ]]; then chmod 644 \"\$dest\"; else chmod 444 \"\$dest\"; fi"
         echo "    done"
-        echo "  Do NOT copy from the local repo directory — always use origin/main to get the correct version."
+        echo "  Do NOT copy from the local repo directory — always use origin/${tracking_ref} to get the correct version."
     fi
     echo ""
     echo "INSTRUCTION FOR CLAUDE: At the very start of your response, mention that a new session has"
@@ -294,7 +310,7 @@ elif $online_fetch_ok && semver_eq "$online_version" "$installed_version"; then
 
 # Online version unknown but no other warning — still note session start
 else
-    echo "NEW SESSION — Global Claude Settings checked. Version comparison unavailable (could not reach origin/main)."
+    echo "NEW SESSION — Global Claude Settings checked. Version comparison unavailable (could not reach origin/${tracking_ref})."
     echo "Briefly mention this at the start of your response, and suggest the user run /verify-global-settings-version to retry the check."
     echo ""
 fi

@@ -43,7 +43,7 @@ PUSH_DENY_MSG="Blocked: git push requires explicit authorization. Include one of
 # tee, eval, bash/sh -c, and inline scripting (python, perl, node).
 # Also hard-blocks chmod that makes protected files writable.
 _h=$(printf '%s' "$HOME" | sed 's/[.[\*^$()+?{}|]/\\&/g')
-_prot="(~|\\\$HOME|${_h})/\.claude/(settings\.json|hooks/|settings-version|settings-repo-path|settings-repo-url)"
+_prot="(~|\\\$HOME|${_h})/\.claude/(settings\.json|hooks/|settings-version|settings-repo-path|settings-repo-url|settings-repo-ref)"
 
 # chmod guard: deny write-enabling permissions on protected files
 if echo "$cmd" | grep -qE "^\s*chmod\b" && echo "$cmd" | grep -qE "${_prot}"; then
@@ -66,7 +66,7 @@ if echo "$cmd" | grep -qE "^\s*(cp|mv)\b" && echo "$cmd" | grep -qE "[[:space:]]
     _is_config_write=true
 fi
 # 3. Variable assigned to a protected path and used as redirect target (same command)
-if echo "$cmd" | grep -qE "[a-zA-Z_][a-zA-Z0-9_]*=[\"']?(~|\\\$HOME|${_h})/\.claude/(settings\.json|hooks|settings-version|settings-repo-path)" \
+if echo "$cmd" | grep -qE "[a-zA-Z_][a-zA-Z0-9_]*=[\"']?(~|\\\$HOME|${_h})/\.claude/(settings\.json|hooks|settings-version|settings-repo-path|settings-repo-url|settings-repo-ref)" \
 && echo "$cmd" | grep -qE ">[[:space:]]*[\"']?\\\$[a-zA-Z_][a-zA-Z0-9_]*"; then
     _is_config_write=true
 fi
@@ -74,7 +74,7 @@ fi
 if echo "$cmd" | grep -qE "\btee\b.*${_prot}"; then
     _is_config_write=true
 fi
-if echo "$cmd" | grep -qE "[a-zA-Z_][a-zA-Z0-9_]*=[\"']?(~|\\\$HOME|${_h})/\.claude/(settings\.json|hooks|settings-version|settings-repo-path)" \
+if echo "$cmd" | grep -qE "[a-zA-Z_][a-zA-Z0-9_]*=[\"']?(~|\\\$HOME|${_h})/\.claude/(settings\.json|hooks|settings-version|settings-repo-path|settings-repo-url|settings-repo-ref)" \
 && echo "$cmd" | grep -qE "\btee\b[^|]*\\\$[a-zA-Z_][a-zA-Z0-9_]*"; then
     _is_config_write=true
 fi

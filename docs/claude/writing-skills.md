@@ -201,32 +201,53 @@ The [Anthropic Skill Creator](https://github.com/anthropics/skills/blob/main/ski
 
 **Step-by-step:**
 
-1. **Install** (one-time): add the Skill Creator to your `.claude/skills/` folder.
+1. **Install** (one-time): the Skill Creator lives at `.claude/skills/skill-creator/` in each repo (hydra and wordpress-docker). It's a vendored copy of [`anthropics/skills/skills/skill-creator/`](https://github.com/anthropics/skills/tree/main/skills/skill-creator) with one local modification: the eval workspace lives **inside** each skill rather than as a sibling folder.
+
+   **Keeping it up to date:** Run `bash .claude/skills/update-skill-creator.sh` from the repo root. This script:
+   - Sparse-clones `anthropics/skills` to a tempdir
+   - Compares the upstream commit hash against `.claude/skills/skill-creator/.upstream-version`
+   - Backs up the current copy, rsyncs upstream files in, then re-applies `local-mods.patch`
+   - Updates `.upstream-version` to the new commit hash
+
+   If `local-mods.patch` no longer applies cleanly (upstream rewrote the relevant section), the script aborts and points you at the backup + `.rej` files so you can hand-merge. We use this script-based approach because `anthropics/skills` keeps `skill-creator/` as a subdirectory, which makes pure `git subtree` impractical for tracking just that one folder.
+
+   **Why we deviate from upstream:** Upstream Skill Creator writes eval results to `<skill-name>-workspace/` as a sibling to the skill folder. We patch this so results live at `<skill-dir>/evals/workspace/iteration-N/`, keeping eval artifacts adjacent to the skill they belong to. The patch is recorded in `.claude/skills/skill-creator/local-mods.patch`.
 
 2. **Invoke**: In a Claude Code session, ask Claude to evaluate the skill:
    > "Run evals on the test-app skill" or "Use the skill creator to evaluate and improve my X skill"
 
-   Claude picks up the skill-creator and guides the process. The skill-creator's `evals/evals.json` format uses `evals[]` with `id`, `prompt`, `expected_output`, and `expectations` — note this differs from our custom tracking format (`scenarios`, `trigger_tests`, `last_validated`). The Skill Creator will create or adapt evals as needed.
+   Claude picks up the skill-creator and guides the process. The skill-creator's `evals/evals.json` format uses `evals[]` with `id`, `prompt`, `expected_output`, and `expectations`. We adopted this format across all our skills — see "Standard evals.json schema" below.
 
 3. **What happens**: Two parallel subagents run each eval:
    - **With-skill agent**: runs the scenario with the skill active
    - **Baseline agent**: runs the same scenario without the skill
-   Results are saved to `<skill-name>-workspace/iteration-N/eval-N/` alongside the skills directory.
+   Results are saved to `<skill-dir>/evals/workspace/iteration-N/eval-<name>/` (inside the skill folder, per our local convention).
 
-4. **Review results**: The Skill Creator runs `eval-viewer/generate_review.py` and opens a browser tab with two tabs: **Outputs** (click through each eval, leave qualitative feedback) and **Benchmark** (pass rates, timing, tokens with-skill vs baseline).
+4. **Review results**: The Skill Creator runs `eval-viewer/generate_review.py` and opens a browser tab (or generates a static HTML file with `--static`) with two tabs: **Outputs** (click through each eval, leave qualitative feedback) and **Benchmark** (pass rates, timing, tokens with-skill vs baseline).
 
-5. **Output files** written to `<skill-name>-workspace/iteration-N/eval-N/`:
+5. **Output files** written to `<skill-dir>/evals/workspace/iteration-N/eval-<name>/`:
    - `grading.json` — assertion pass/fail with evidence per expectation
    - `timing.json` — token count and duration
-   - `benchmark.json` — aggregate stats across all evals
+   - `benchmark.json` — aggregate stats across all evals (one level up, at `iteration-N/`)
+   - `eval-review-iteration-N.html` — static viewer (one level up, at `evals/workspace/`)
 
-6. **Update `last_validated`** in our `evals.json` after a successful run:
+6. **Update `last_validated` and `baseline_score`** in `evals.json` after a successful run:
    ```json
-   "last_validated": "2026-04-10"
+   "last_validated": "2026-04-13",
+   "baseline_score": 0.67
    ```
-   This unlocks the L5 green circle in the skill overview dashboard (our tracking format, separate from the Skill Creator workspace).
+   `last_validated` unlocks the L5 green circle in the skill overview dashboard. `baseline_score` records the with-skill pass rate at the time of validation — used as a regression guardrail when re-running evals (see "baseline_score" section below).
 
-7. **Improve cycle**: The Skill Creator's analyzer flags non-discriminating assertions, flaky evals, and skill improvement suggestions. Update `SKILL.md` and re-run as iteration-2.
+7. **Improve cycle**: The Skill Creator's analyzer flags non-discriminating assertions, flaky evals, and skill improvement suggestions. Update `SKILL.md` and re-run as iteration-2 (and so on, in the same `evals/workspace/` folder).
+
+**`baseline_score` field — manual tracking for regression detection:**
+
+Even running evals manually (no CI), `baseline_score` is useful: it's the with-skill pass rate from the most recent successful eval run, recorded in `evals/evals.json` next to `last_validated`. When you re-run evals later, compare the new pass rate against `baseline_score`:
+
+- **New rate ≥ baseline_score** → skill is stable or improving. Update `baseline_score` to the new rate (and bump `last_validated`).
+- **New rate < baseline_score** → regression. Investigate before updating either field. The skill change you just made may have broken something.
+
+This gives you a paper trail of "this skill scored 0.67 on these expectations on this date" without needing CI infrastructure. The Skill Creator's own `benchmark.json` already produces the pass rate — you're just writing it back into `evals.json` as a durable marker.
 
 ---
 

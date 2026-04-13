@@ -10,7 +10,35 @@
       "Edit(~/.claude/settings-repo-path)",
       "Write(~/.claude/settings-repo-path)",
       "Edit(~/.claude/settings-repo-url)",
-      "Write(~/.claude/settings-repo-url)"
+      "Write(~/.claude/settings-repo-url)",
+      "Edit(~/.claude/settings-repo-ref)",
+      "Write(~/.claude/settings-repo-ref)",
+
+      "Bash(sudo:*)",
+      "Bash(su:*)",
+      "Bash(shutdown:*)",
+      "Bash(reboot:*)",
+      "Bash(halt:*)",
+      "Bash(poweroff:*)",
+      "Bash(mkfs:*)",
+      "Bash(dd if=:*)",
+
+      "Bash(gh pr merge:*)",
+      "Bash(gh repo delete:*)",
+      "Bash(gh release delete:*)",
+
+      "Bash(git reset --hard:*)",
+      "Bash(git clean -f:*)",
+      "Bash(git clean -fd:*)",
+      "Bash(git clean -fdx:*)",
+      "Bash(git filter-branch:*)",
+      "Bash(git filter-repo:*)",
+      "Bash(git reflog expire:*)",
+      "Bash(git reflog delete:*)",
+      "Bash(git update-ref -d:*)",
+      "Bash(git config --global:*)",
+      "Bash(git checkout --:*)",
+      "Bash(git restore:*)"
     ],
     "allow": [
       "Bash(ls:*)",

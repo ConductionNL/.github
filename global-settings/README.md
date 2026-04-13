@@ -32,6 +32,10 @@ echo "$REPO_ROOT" > ~/.claude/settings-repo-path
 
 # Online version checking via GitHub API (recommended — no local repo required):
 echo "ConductionNL/.github" > ~/.claude/settings-repo-url
+
+# Optional: track a branch other than main (tag or SHA also accepted).
+# Defaults to "main" when this file is absent.
+# echo "feature/claude-code-tooling" > ~/.claude/settings-repo-ref
 ```
 
 Restart Claude Code after installing. Requires `jq`, `md5sum`, and `gh` (GitHub CLI) on `PATH`.
