@@ -127,6 +127,11 @@ on:
         required: false
         type: boolean
         default: true
+      database:
+        description: "Database backend for integration tests (sqlite, pgsql, mysql)"
+        required: false
+        type: string
+        default: "pgsql"
 
 concurrency:
   group: quality-${{ github.ref }}
@@ -642,6 +647,21 @@ jobs:
     name: "PHPUnit (PHP ${{ matrix.php-version }}, NC ${{ matrix.nextcloud-ref }})"
     needs: [php-quality, security]
 
+    services:
+      postgres:
+        image: ${{ inputs.database == 'pgsql' && 'postgres:16' || '' }}
+        env:
+          POSTGRES_USER: nextcloud
+          POSTGRES_PASSWORD: nextcloud
+          POSTGRES_DB: nextcloud
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U nextcloud"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
     strategy:
       matrix:
         php-version: ${{ fromJSON(inputs.php-test-versions) }}
@@ -686,17 +706,29 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php-version }}
-          extensions: mbstring, intl, sqlite3, zip, gd, curl, xml, json
+          extensions: mbstring, intl, sqlite3, pgsql, pdo_pgsql, zip, gd, curl, xml, json
           coverage: xdebug
           tools: composer:v2
 
       - name: Install Nextcloud
         run: |
           cd server
-          php occ maintenance:install \
-            --database sqlite \
-            --admin-user admin \
-            --admin-pass admin
+          if [ "${{ inputs.database }}" = "pgsql" ]; then
+            php occ maintenance:install \
+              --database pgsql \
+              --database-host 127.0.0.1 \
+              --database-port 5432 \
+              --database-name nextcloud \
+              --database-user nextcloud \
+              --database-pass nextcloud \
+              --admin-user admin \
+              --admin-pass admin
+          else
+            php occ maintenance:install \
+              --database ${{ inputs.database }} \
+              --admin-user admin \
+              --admin-pass admin
+          fi
           if [ '${{ inputs.additional-apps }}' != '[]' ]; then
             echo '${{ inputs.additional-apps }}' | jq -r '.[].app' | while read -r name; do
               echo "Enabling app: $name"
@@ -753,6 +785,21 @@ jobs:
     name: "Integration Tests (Newman)"
     needs: [php-quality, security]
 
+    services:
+      postgres:
+        image: ${{ inputs.database == 'pgsql' && 'postgres:16' || '' }}
+        env:
+          POSTGRES_USER: nextcloud
+          POSTGRES_PASSWORD: nextcloud
+          POSTGRES_DB: nextcloud
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U nextcloud"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
     steps:
       - name: Checkout Nextcloud server
         uses: actions/checkout@v4
@@ -775,7 +822,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ inputs.php-version }}
-          extensions: mbstring, intl, sqlite3, zip, gd, curl, xml, json
+          extensions: mbstring, intl, sqlite3, pgsql, pdo_pgsql, zip, gd, curl, xml, json
           tools: composer:v2
 
       - name: Checkout additional apps
@@ -798,10 +845,22 @@ jobs:
       - name: Install Nextcloud
         run: |
           cd server
-          php occ maintenance:install \
-            --database sqlite \
-            --admin-user admin \
-            --admin-pass admin
+          if [ "${{ inputs.database }}" = "pgsql" ]; then
+            php occ maintenance:install \
+              --database pgsql \
+              --database-host 127.0.0.1 \
+              --database-port 5432 \
+              --database-name nextcloud \
+              --database-user nextcloud \
+              --database-pass nextcloud \
+              --admin-user admin \
+              --admin-pass admin
+          else
+            php occ maintenance:install \
+              --database ${{ inputs.database }} \
+              --admin-user admin \
+              --admin-pass admin
+          fi
           if [ '${{ inputs.additional-apps }}' != '[]' ]; then
             echo '${{ inputs.additional-apps }}' | jq -r '.[].app' | while read -r name; do
               echo "Enabling app: $name"
@@ -899,6 +958,21 @@ jobs:
     name: "E2E Tests (Playwright)"
     needs: [php-quality, security]
 
+    services:
+      postgres:
+        image: ${{ inputs.database == 'pgsql' && 'postgres:16' || '' }}
+        env:
+          POSTGRES_USER: nextcloud
+          POSTGRES_PASSWORD: nextcloud
+          POSTGRES_DB: nextcloud
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U nextcloud"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
     steps:
       - name: Checkout Nextcloud server
         uses: actions/checkout@v4
@@ -921,7 +995,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ inputs.php-version }}
-          extensions: mbstring, intl, sqlite3, zip, gd, curl, xml, json
+          extensions: mbstring, intl, sqlite3, pgsql, pdo_pgsql, zip, gd, curl, xml, json
           tools: composer:v2
 
       - name: Checkout additional apps
@@ -944,10 +1018,22 @@ jobs:
       - name: Install Nextcloud
         run: |
           cd server
-          php occ maintenance:install \
-            --database sqlite \
-            --admin-user admin \
-            --admin-pass admin
+          if [ "${{ inputs.database }}" = "pgsql" ]; then
+            php occ maintenance:install \
+              --database pgsql \
+              --database-host 127.0.0.1 \
+              --database-port 5432 \
+              --database-name nextcloud \
+              --database-user nextcloud \
+              --database-pass nextcloud \
+              --admin-user admin \
+              --admin-pass admin
+          else
+            php occ maintenance:install \
+              --database ${{ inputs.database }} \
+              --admin-user admin \
+              --admin-pass admin
+          fi
           if [ '${{ inputs.additional-apps }}' != '[]' ]; then
             echo '${{ inputs.additional-apps }}' | jq -r '.[].app' | while read -r name; do
               echo "Enabling app: $name"
