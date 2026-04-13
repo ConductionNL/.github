@@ -1355,40 +1355,37 @@ jobs:
             fi
           }
 
-          # ── Single compact report ──
+          # ── Compact report: categories as columns, checks as rows ──
           {
             echo "# Quality Report — $REPO @ \`$SHORT_SHA\`"
             echo ""
-            echo "| Check | Result |"
-            echo "|-------|--------|"
+            echo "| Check | PHP | Vue | Security | License | Tests |"
+            echo "|-------|-----|-----|----------|---------|-------|"
 
-            # PHP Quality
+            # PHP-only checks
             for tool in lint phpcs phpmd psalm phpstan phpmetrics; do
               result=$(read_result "results/result-php-quality-$tool/$tool.txt")
-              echo "| PHP $tool | $(icon "$result") |"
+              echo "| $tool | $(icon "$result") | | | | |"
             done
 
-            # Vue Quality
+            # Vue-only checks
             for tool in eslint stylelint; do
               result=$(read_result "results/result-vue-quality-$tool/$tool.txt")
-              echo "| $tool | $(icon "$result") |"
+              echo "| $tool | | $(icon "$result") | | | |"
             done
 
-            # Security
-            for eco in composer npm; do
-              result=$(read_result "results/result-security-$eco/$eco.txt")
-              echo "| Security ($eco) | $(icon "$result") |"
-            done
+            # Composer: security + license in one row
+            sec_comp=$(read_result "results/result-security-composer/composer.txt")
+            echo "| composer | | | $(icon "$sec_comp") | $(license_info "composer") | |"
 
-            # License
-            for eco in composer npm; do
-              echo "| License ($eco) | $(license_info "$eco") |"
-            done
+            # npm: security + license in one row
+            sec_npm=$(read_result "results/result-security-npm/npm.txt")
+            echo "| npm | | | $(icon "$sec_npm") | $(license_info "npm") | |"
 
-            # Tests
-            echo "| PHPUnit | $(icon '${{ needs.phpunit.result }}') |"
-            echo "| Newman | $(icon '${{ needs.newman.result }}') |"
-            echo "| Playwright | $(icon '${{ needs.playwright.result }}') |"
+            # Test rows
+            echo "| PHPUnit | | | | | $(icon '${{ needs.phpunit.result }}') |"
+            echo "| Newman | | | | | $(icon '${{ needs.newman.result }}') |"
+            echo "| Playwright | | | | | $(icon '${{ needs.playwright.result }}') |"
             echo ""
           } > "$REPORT"
 
