@@ -1331,205 +1331,114 @@ jobs:
 
           icon() {
             case "$1" in
-              success|Success) echo "PASS" ;;
-              skipped|Skipped) echo "SKIP" ;;
-              *) echo "FAIL" ;;
+              success|Success) echo "✅" ;;
+              skipped|Skipped) echo "⏭️" ;;
+              *) echo "❌" ;;
             esac
           }
 
-          # ── Header ──
-          {
-            echo "# Quality Report"
-            echo ""
-            echo "| | |"
-            echo "|---|---|"
-            echo "| **Repository** | $REPO |"
-            echo "| **Commit** | $SHORT_SHA |"
-            echo "| **Branch** | $BRANCH |"
-            echo "| **Event** | $EVENT |"
-            echo "| **Generated** | $DATE |"
-            echo "| **Workflow Run** | $RUN_URL |"
-            echo ""
-          } > "$REPORT"
+          # Build license info strings
+          license_info() {
+            local eco="$1"
+            local JSON_FILE="license-reports/$eco-licenses.json"
+            if [ -f "$JSON_FILE" ]; then
+              local total=$(jq 'length' "$JSON_FILE")
+              local denied=$(jq '[.[] | select(.status == "DENIED")] | length' "$JSON_FILE")
+              if [ "$denied" -gt 0 ]; then
+                echo "❌ $denied/$total denied"
+              else
+                echo "✅ $total/$total"
+              fi
+            else
+              local result=$(read_result "results/result-license-$eco/$eco.txt")
+              echo "$(icon "$result")"
+            fi
+          }
 
-          # ── Overall Summary ──
+          # ── Single compact report ──
           {
-            echo "## Summary"
+            echo "# Quality Report — $REPO @ \`$SHORT_SHA\`"
             echo ""
-            echo "| Group | Result |"
+            echo "| Check | Result |"
             echo "|-------|--------|"
-            echo "| PHP Quality | $(icon '${{ needs.php-quality.result }}') |"
-            echo "| Vue Quality | $(icon '${{ needs.vue-quality.result }}') |"
-            echo "| Security | $(icon '${{ needs.security.result }}') |"
-            echo "| License | $(icon '${{ needs.license.result }}') |"
-            echo "| PHPUnit | $(icon '${{ needs.phpunit.result }}') |"
-            echo "| Newman | $(icon '${{ needs.newman.result }}') |"
-            echo "| Playwright | $(icon '${{ needs.playwright.result }}') |"
-            echo ""
-          } >> "$REPORT"
 
-          # ── PHP Quality Details ──
-          {
-            echo "## PHP Quality"
-            echo ""
-            echo "| Tool | Result |"
-            echo "|------|--------|"
+            # PHP Quality
             for tool in lint phpcs phpmd psalm phpstan phpmetrics; do
               result=$(read_result "results/result-php-quality-$tool/$tool.txt")
-              echo "| $tool | $(icon "$result") |"
+              echo "| PHP $tool | $(icon "$result") |"
             done
-            echo ""
-          } >> "$REPORT"
 
-          # ── Vue Quality Details ──
-          {
-            echo "## Vue Quality"
-            echo ""
-            echo "| Tool | Result |"
-            echo "|------|--------|"
+            # Vue Quality
             for tool in eslint stylelint; do
               result=$(read_result "results/result-vue-quality-$tool/$tool.txt")
               echo "| $tool | $(icon "$result") |"
             done
-            echo ""
-          } >> "$REPORT"
 
-          # ── Security Details ──
-          {
-            echo "## Security"
-            echo ""
-            echo "| Ecosystem | Result |"
-            echo "|-----------|--------|"
+            # Security
             for eco in composer npm; do
               result=$(read_result "results/result-security-$eco/$eco.txt")
-              echo "| $eco | $(icon "$result") |"
+              echo "| Security ($eco) | $(icon "$result") |"
             done
-            echo ""
-          } >> "$REPORT"
 
-          # ── License Compliance Details ──
-          {
-            echo "## License Compliance"
-            echo ""
-            echo "| Ecosystem | Result |"
-            echo "|-----------|--------|"
+            # License
             for eco in composer npm; do
-              result=$(read_result "results/result-license-$eco/$eco.txt")
-              echo "| $eco | $(icon "$result") |"
+              echo "| License ($eco) | $(license_info "$eco") |"
             done
+
+            # Tests
+            echo "| PHPUnit | $(icon '${{ needs.phpunit.result }}') |"
+            echo "| Newman | $(icon '${{ needs.newman.result }}') |"
+            echo "| Playwright | $(icon '${{ needs.playwright.result }}') |"
             echo ""
+          } > "$REPORT"
 
-            # Include license summary from JSON reports if available
-            for eco in composer npm; do
-              JSON_FILE="license-reports/$eco-licenses.json"
-              if [ -f "$JSON_FILE" ]; then
-                TOTAL=$(jq 'length' "$JSON_FILE")
-                APPROVED=$(jq '[.[] | select(.status == "approved")] | length' "$JSON_FILE")
-                OVERRIDDEN=$(jq '[.[] | select(.status == "approved-override")] | length' "$JSON_FILE")
-                DENIED=$(jq '[.[] | select(.status == "DENIED")] | length' "$JSON_FILE")
-                echo "### $eco dependencies ($TOTAL total)"
-                echo ""
-                echo "| Metric | Count |"
-                echo "|--------|-------|"
-                echo "| Approved (allowlist) | $APPROVED |"
-                echo "| Approved (override) | $OVERRIDDEN |"
-                echo "| **Denied** | **$DENIED** |"
-                echo ""
+          # ── Failures detail (only shown when something fails) ──
+          HAS_FAILURES=false
 
-                if [ "$DENIED" -gt 0 ]; then
-                  echo "#### Denied packages"
+          # License denials
+          for eco in composer npm; do
+            JSON_FILE="license-reports/$eco-licenses.json"
+            if [ -f "$JSON_FILE" ]; then
+              DENIED=$(jq '[.[] | select(.status == "DENIED")] | length' "$JSON_FILE")
+              if [ "$DENIED" -gt 0 ]; then
+                HAS_FAILURES=true
+                {
+                  echo "### ❌ Denied $eco licenses"
                   echo ""
                   echo "| Package | Version | License |"
                   echo "|---------|---------|---------|"
                   jq -r '.[] | select(.status == "DENIED") | "| \(.package) | \(.version) | \(.license) |"' "$JSON_FILE"
                   echo ""
-                fi
-              fi
-            done
-          } >> "$REPORT"
-
-          # ── PHPUnit Results ──
-          {
-            echo "## PHPUnit Tests"
-            echo ""
-            if [ "${{ needs.phpunit.result }}" = "skipped" ]; then
-              echo "*PHPUnit tests were not enabled for this run.*"
-            else
-              echo "| PHP | Nextcloud | Result |"
-              echo "|-----|-----------|--------|"
-              echo "| Overall | | $(icon '${{ needs.phpunit.result }}') |"
-            fi
-            echo ""
-
-            # Include coverage summary if available
-            if [ -f "coverage/clover.xml" ]; then
-              COVERED=$(grep -oP 'coveredstatements="\K[0-9]+' coverage/clover.xml | head -1 || echo "0")
-              TOTAL_STMTS=$(grep -oP 'statements="\K[0-9]+' coverage/clover.xml | head -1 || echo "0")
-              if [ "$TOTAL_STMTS" -gt 0 ]; then
-                COVERAGE=$(echo "scale=1; $COVERED * 100 / $TOTAL_STMTS" | bc)
-                echo "**Code coverage:** ${COVERAGE}% ($COVERED / $TOTAL_STMTS statements)"
-                echo ""
+                } >> "$REPORT"
               fi
             fi
-          } >> "$REPORT"
+          done
 
-          # ── Newman Results ──
-          {
-            echo "## Integration Tests (Newman)"
-            echo ""
-            if [ "${{ needs.newman.result }}" = "skipped" ]; then
-              echo "*Newman integration tests were not enabled for this run.*"
-            else
-              echo "| Result |"
-              echo "|--------|"
-              echo "| $(icon '${{ needs.newman.result }}') |"
+          # Coverage (if available)
+          if [ -f "coverage/clover.xml" ]; then
+            COVERED=$(grep -oP 'coveredstatements="\K[0-9]+' coverage/clover.xml | head -1 || echo "0")
+            TOTAL_STMTS=$(grep -oP 'statements="\K[0-9]+' coverage/clover.xml | head -1 || echo "0")
+            if [ "$TOTAL_STMTS" -gt 0 ]; then
+              COVERAGE=$(echo "scale=1; $COVERED * 100 / $TOTAL_STMTS" | bc)
+              echo "**Coverage:** ${COVERAGE}% ($COVERED/$TOTAL_STMTS statements)" >> "$REPORT"
+              echo "" >> "$REPORT"
             fi
-            echo ""
-          } >> "$REPORT"
+          fi
 
-          # ── Playwright Results ──
-          {
-            echo "## E2E Tests (Playwright)"
-            echo ""
-            if [ "${{ needs.playwright.result }}" = "skipped" ]; then
-              echo "*Playwright E2E tests were not enabled for this run.*"
-            else
-              echo "| Result |"
-              echo "|--------|"
-              echo "| $(icon '${{ needs.playwright.result }}') |"
-            fi
-            echo ""
+          # Playwright spec-to-test coverage (if available)
+          COVERAGE_FILE="results/playwright-report/playwright-coverage.json"
+          if [ -f "$COVERAGE_FILE" ]; then
+            SPEC_COUNT=$(jq '.specScenarios' "$COVERAGE_FILE")
+            TEST_COUNT=$(jq '.playwrightTests' "$COVERAGE_FILE")
+            COVERAGE=$(jq '.coverage' "$COVERAGE_FILE")
+            echo "**Spec coverage:** ${COVERAGE}% ($TEST_COUNT tests / $SPEC_COUNT specs)" >> "$REPORT"
+            echo "" >> "$REPORT"
+          fi
 
-            # Include spec-to-test coverage if available
-            COVERAGE_FILE="results/playwright-report/playwright-coverage.json"
-            if [ -f "$COVERAGE_FILE" ]; then
-              SPEC_COUNT=$(jq '.specScenarios' "$COVERAGE_FILE")
-              TEST_COUNT=$(jq '.playwrightTests' "$COVERAGE_FILE")
-              FLOW_COUNT=$(jq '.testFlows' "$COVERAGE_FILE")
-              COVERAGE=$(jq '.coverage' "$COVERAGE_FILE")
-              echo "### Test Coverage"
-              echo ""
-              echo "| Metric | Value |"
-              echo "|--------|-------|"
-              echo "| Spec scenarios | $SPEC_COUNT |"
-              echo "| Playwright tests | $TEST_COUNT |"
-              echo "| Test flows (LLM) | $FLOW_COUNT |"
-              echo "| **Spec-to-test coverage** | **${COVERAGE}%** |"
-              echo "| Threshold | ${{ inputs.playwright-coverage-threshold }}% |"
-              echo ""
-              if [ "$COVERAGE" -lt "${{ inputs.playwright-coverage-threshold }}" ]; then
-                echo "> **Warning:** Coverage ${COVERAGE}% is below the ${​{ inputs.playwright-coverage-threshold }}% threshold."
-                echo ""
-              fi
-            fi
-          } >> "$REPORT"
-
-          # ── Footer ──
-          {
-            echo "---"
-            echo ""
-            echo "*Generated automatically by the [Quality workflow]($RUN_URL).*"
-          } >> "$REPORT"
+          # Footer
+          echo "---" >> "$REPORT"
+          echo "" >> "$REPORT"
+          echo "*[Quality workflow]($RUN_URL) — $DATE*" >> "$REPORT"
 
           echo "Report generated: $(wc -l < "$REPORT") lines"
 
