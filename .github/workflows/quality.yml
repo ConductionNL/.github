@@ -1355,37 +1355,41 @@ jobs:
             fi
           }
 
-          # ── Compact report: categories as columns, checks as rows ──
+          # ── Compact report: categories as columns, icon + name per cell ──
           {
             echo "# Quality Report — $REPO @ \`$SHORT_SHA\`"
             echo ""
-            echo "| Check | PHP | Vue | Security | License | Tests |"
-            echo "|-------|-----|-----|----------|---------|-------|"
+            echo "| PHP | Vue | Security | License | Tests |"
+            echo "|-----|-----|----------|---------|-------|"
 
-            # PHP-only checks
-            for tool in lint phpcs phpmd psalm phpstan phpmetrics; do
-              result=$(read_result "results/result-php-quality-$tool/$tool.txt")
-              echo "| $tool | $(icon "$result") | | | | |"
-            done
+            # Row 1: lint, eslint, composer security, composer license, PHPUnit
+            r_lint=$(read_result "results/result-php-quality-lint/lint.txt")
+            r_eslint=$(read_result "results/result-vue-quality-eslint/eslint.txt")
+            r_sec_comp=$(read_result "results/result-security-composer/composer.txt")
+            echo "| $(icon "$r_lint") lint | $(icon "$r_eslint") eslint | $(icon "$r_sec_comp") composer | $(license_info "composer") composer | $(icon '${{ needs.phpunit.result }}') PHPUnit |"
 
-            # Vue-only checks
-            for tool in eslint stylelint; do
-              result=$(read_result "results/result-vue-quality-$tool/$tool.txt")
-              echo "| $tool | | $(icon "$result") | | | |"
-            done
+            # Row 2: phpcs, stylelint, npm security, npm license, Newman
+            r_phpcs=$(read_result "results/result-php-quality-phpcs/phpcs.txt")
+            r_stylelint=$(read_result "results/result-vue-quality-stylelint/stylelint.txt")
+            r_sec_npm=$(read_result "results/result-security-npm/npm.txt")
+            echo "| $(icon "$r_phpcs") phpcs | $(icon "$r_stylelint") stylelint | $(icon "$r_sec_npm") npm | $(license_info "npm") npm | $(icon '${{ needs.newman.result }}') Newman |"
 
-            # Composer: security + license in one row
-            sec_comp=$(read_result "results/result-security-composer/composer.txt")
-            echo "| composer | | | $(icon "$sec_comp") | $(license_info "composer") | |"
+            # Row 3: phpmd, -, -, -, Playwright
+            r_phpmd=$(read_result "results/result-php-quality-phpmd/phpmd.txt")
+            echo "| $(icon "$r_phpmd") phpmd | | | | $(icon '${{ needs.playwright.result }}') Playwright |"
 
-            # npm: security + license in one row
-            sec_npm=$(read_result "results/result-security-npm/npm.txt")
-            echo "| npm | | | $(icon "$sec_npm") | $(license_info "npm") | |"
+            # Row 4: psalm
+            r_psalm=$(read_result "results/result-php-quality-psalm/psalm.txt")
+            echo "| $(icon "$r_psalm") psalm | | | | |"
 
-            # Test rows
-            echo "| PHPUnit | | | | | $(icon '${{ needs.phpunit.result }}') |"
-            echo "| Newman | | | | | $(icon '${{ needs.newman.result }}') |"
-            echo "| Playwright | | | | | $(icon '${{ needs.playwright.result }}') |"
+            # Row 5: phpstan
+            r_phpstan=$(read_result "results/result-php-quality-phpstan/phpstan.txt")
+            echo "| $(icon "$r_phpstan") phpstan | | | | |"
+
+            # Row 6: phpmetrics
+            r_phpmetrics=$(read_result "results/result-php-quality-phpmetrics/phpmetrics.txt")
+            echo "| $(icon "$r_phpmetrics") phpmetrics | | | | |"
+
             echo ""
           } > "$REPORT"
 
