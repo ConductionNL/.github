@@ -152,6 +152,8 @@ ESET moet op alle apparaten voor Conduction-werk altijd geactiveerd zijn. Vraag 
 - [ESET Business Edition — installatie en downloads](https://www.eset.com/int/business/)
 - Neem contact op met IT voor je licentiesleutel en 2FA-instelling
 
+**Linux-gebruikers:** ESET heeft beperkte Linux-ondersteuning. Installeer in plaats daarvan de [workstation-security](https://github.com/MWest2020/workstation-security) tooling. Vraag je teamlead om uitleg bij de installatie indien nodig. Er kan te allen tijde om een uitdraai van je beveiligingslogs gevraagd worden.
+
 ### AI Tooling (Claude Code)
 
 We gebruiken Claude Code voor development. AI-tooling erft de rechten van de gebruikerssessie waarin het draait. De volgende maatregelen zijn verplicht (gebaseerd op gedocumenteerde afwijking ISO-723):

@@ -17,14 +17,13 @@ Zie de [Engelse vacaturepagina](/docs/WayOfWork/Vacancies) voor actuele openstaa
 
 ## Hoe Solliciteer Je?
 
-Wij verwerken sollicitaties via GitHub Issues:
+Stuur je CV en een korte motivatie naar **[info@conduction.nl](mailto:info@conduction.nl)**. We nemen binnen 5 werkdagen contact op.
 
-1. Ga naar [github.com/ConductionNL/.github/issues](https://github.com/ConductionNL/.github/issues)
-2. Maak een nieuw issue aan met als titel: `[Sollicitatie] Jouw naam — Gewenste functie`
-3. Voeg je CV en motivatie toe als bijlage of tekst in het issue
-4. We nemen binnen 5 werkdagen contact op
+Geen openstaande vacature die bij je past? Open sollicitaties zijn welkom op hetzelfde adres.
 
-Geen openstaande vacature die bij je past? Stuur een open sollicitatie via hetzelfde kanaal.
+## Over Conduction
+
+Meer weten over wat we bouwen? Bekijk onze [GitHub-organisatie](https://github.com/ConductionNL) voor onze open-source projecten, of blader door dit handboek voor onze manier van werken.
 
 ## ICT NL CAO
 

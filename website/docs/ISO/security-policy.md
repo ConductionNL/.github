@@ -37,7 +37,7 @@ This policy applies to:
 | Objective | Measurable target | Responsible | Review |
 |---|---|---|---|
 | Prevent unauthorized access | Zero unauthorized access incidents per year | Quality & Safety Lead | Monthly (MT quality meeting) |
-| System availability | Critical systems ≥ 99.5% uptime | Operations Lead | Monthly |
+| System availability | Critical systems ≥ 99.5% uptime ([status.commonground.nu](https://status.commonground.nu)) | Operations Lead | Monthly |
 | Incident response | Security incidents acknowledged within 4 business hours | Quality & Safety Lead | Per incident |
 | Vulnerability management | Critical/high CVEs patched within 30 days | Development Lead | Continuous (CI/CD) |
 | Employee awareness | All employees complete annual security awareness session | Quality & Safety Lead | Annually |

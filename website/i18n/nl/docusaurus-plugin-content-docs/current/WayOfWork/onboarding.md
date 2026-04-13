@@ -33,15 +33,7 @@ Tijdens de onboarding:
 
 ## Gedragscode
 
-We behandelen elkaar met respect. Onze afspraken:
-
-- Praat **met** elkaar, niet **over** elkaar
-- Luister en stel vragen als iets onduidelijk is
-- Help elkaar — geef constructieve feedback en complimenten
-- Kom je afspraken na, en communiceer als dat niet lukt
-- Wees niet bang om hulp te vragen
-- Los conflicten op door direct met elkaar te praten
-- Discriminatie, intimidatie, agressie of pesten wordt nooit geaccepteerd
+Tijdens de onboarding lees en bevestig je onze volledige [Code of Conduct(ion)](code-of-conduct). Dit is onze gedeelde afspraak over hoe we met elkaar omgaan — respectvol, open en constructief.
 
 Bij ongewenst gedrag: probeer eerst de persoon zelf aan te spreken. Lukt dat niet, neem contact op met de interne vertrouwenspersoon. Een externe vertrouwenspersoon is beschikbaar via de arbodienst.
 

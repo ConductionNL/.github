@@ -36,7 +36,9 @@ Zonder label: standaard `patch`.
 
 ## Hotfixes
 
-Kritieke fixes kunnen de normale flow omzeilen en rechtstreeks naar `beta` of `main` worden gemerged. Gebruik het prefix `hotfix/` voor de branchnaam.
+Hotfix-branches (`hotfix/*`) kunnen rechtstreeks naar `beta` of `main` worden gemerged, buiten de normale development-flow om. Gebruik dit alleen voor kritieke productiefouten die niet kunnen wachten op de reguliere cyclus.
+
+**Dezelfde branchbeveiligingsregels gelden voor hotfixes.** Een hotfix-PR naar `main` vereist nog steeds 2 reviewers en slagende CI. Een hotfix-PR naar `beta` vereist 1 reviewer en slagende CI. Er zijn geen uitzonderingen — de menselijke controle (human-in-the-loop) wordt altijd afgedwongen.
 
 ## Meer Lezen
 

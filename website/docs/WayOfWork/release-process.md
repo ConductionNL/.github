@@ -43,7 +43,9 @@ These rules are enforced by the centralized **branch-protection** workflow. PRs 
 
 ### Hotfixes
 
-Hotfix branches (`hotfix/*`) can target both `beta` and `main` directly, bypassing the normal flow. Use these only for critical production fixes that cannot wait for the regular development cycle.
+Hotfix branches (`hotfix/*`) can target both `beta` and `main` directly, bypassing the normal development flow. Use these only for critical production fixes that cannot wait for the regular development cycle.
+
+**The same branch protection rules apply to hotfixes.** A hotfix PR to `main` still requires 2 reviewers and passing CI. A hotfix PR to `beta` requires 1 reviewer and passing CI. There are no exceptions — the human-in-the-loop review is always enforced.
 
 After merging a hotfix to `main`, create a backport PR from `main` → `beta` to keep the branches in sync.
 

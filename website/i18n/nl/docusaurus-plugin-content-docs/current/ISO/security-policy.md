@@ -37,7 +37,7 @@ Dit beleid is van toepassing op:
 | Doelstelling | Meetbaar doel | Verantwoordelijk | Evaluatie |
 |---|---|---|---|
 | Ongeautoriseerde toegang voorkomen | Nul ongeautoriseerde toegangsincidenten per jaar | Kwaliteits- & Veiligheidsmanager | Maandelijks (MT-kwaliteitsoverleg) |
-| Systeembeschikbaarheid | Kritieke systemen ≥ 99,5% uptime | Operations Lead | Maandelijks |
+| Systeembeschikbaarheid | Kritieke systemen ≥ 99,5% uptime ([status.commonground.nu](https://status.commonground.nu)) | Operations Lead | Maandelijks |
 | Incidentrespons | Beveiligingsincidenten bevestigd binnen 4 werkuren | Kwaliteits- & Veiligheidsmanager | Per incident |
 | Kwetsbaarheidsbeheer | Kritieke/hoge CVE's gepatcht binnen 30 dagen | Development Lead | Continu (CI/CD) |
 | Bewustwording medewerkers | Alle medewerkers voltooien jaarlijkse beveiligingsbewustzijnssessie | Kwaliteits- & Veiligheidsmanager | Jaarlijks |

@@ -152,6 +152,8 @@ ESET must be activated on all devices used for Conduction work, at all times. Re
 - [ESET Business Edition — setup and downloads](https://www.eset.com/int/business/)
 - Contact IT for your license key and 2FA setup
 
+**Linux users:** ESET has limited Linux support. Install the [workstation-security](https://github.com/MWest2020/workstation-security) tooling instead. Ask your team lead for setup guidance if needed. Your security logs may be requested at any time.
+
 ### AI Tooling (Claude Code)
 
 We use Claude Code for development. AI tooling inherits the permissions of the user session it runs in. The following controls are mandatory (based on documented deviation ISO-723):

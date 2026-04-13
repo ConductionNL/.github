@@ -33,15 +33,7 @@ During onboarding, you'll:
 
 ## Code of Conduct
 
-We treat each other with respect. Our agreements:
-
-- Talk **with** each other, not **about** each other
-- Listen and ask questions when things are unclear
-- Help each other — give constructive feedback and compliments
-- Keep your commitments, and communicate when you can't
-- Don't be afraid to ask for help
-- Resolve conflicts by talking directly
-- Discrimination, harassment, aggression, or bullying is never accepted
+During onboarding you will read and acknowledge our full [Code of Conduct(ion)](code-of-conduct). This is our shared agreement on how we treat each other — respectfully, openly, and constructively.
 
 If you experience unwanted behavior, first try to address the person directly. If that's not possible, contact the internal confidential counselor. An external counselor is available through our occupational health service.
 

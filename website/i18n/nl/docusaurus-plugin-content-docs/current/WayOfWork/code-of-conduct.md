@@ -32,6 +32,22 @@ Voorbeelden van onacceptabel gedrag:
 - Het publiceren van andermans persoonlijke informatie zonder expliciete toestemming
 - Ander gedrag dat redelijkerwijs als ongepast kan worden beschouwd in een professionele omgeving
 
+## Conduction Werkafspraken
+
+Naast bovenstaande communitystandaarden gelden de volgende afspraken voor iedereen die bij of met Conduction werkt:
+
+- Discriminatie, (seksuele) intimidatie, agressie of pesten in welke vorm dan ook wordt niet geaccepteerd
+- We behandelen elkaar met respect en houden rekening met elkaars achtergrond, overtuigingen, normen en waarden
+- We praten **met** elkaar, niet **over** elkaar
+- We luisteren naar elkaar en stellen vragen als dingen onduidelijk zijn
+- We helpen elkaar, geven constructieve feedback en complimenten
+- We komen onze afspraken na en laten het anderen weten als we ze niet kunnen nakomen
+- We zijn niet bang om hulp te vragen als we iets niet begrijpen of niet kunnen
+- We lossen conflicten zo snel mogelijk op door met elkaar te praten
+- We zijn ons bewust van alle aspecten van gegevensbeveiliging en handelen daarnaar (zie ook het [Beveiligingsbeleid](../ISO/security))
+- We onthouden ons van gedrag dat de reputatie van het bedrijf kan schaden en nemen geen relatiegeschenken van meer dan €25 aan
+- We houden elkaar verantwoordelijk voor het naleven van deze gedragsregels
+
 ## Handhaving
 
 Gevallen van beledigend, intimiderend of anderszins onacceptabel gedrag kunnen worden gemeld bij de communityleiders via **info@conduction.nl**.

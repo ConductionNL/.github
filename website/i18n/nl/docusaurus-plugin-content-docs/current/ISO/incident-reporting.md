@@ -12,6 +12,18 @@ Conduction heeft de plicht om incidenten te detecteren, te melden en ervan te le
 
 **Vermoed je dat er iets mis is? Meld het direct. Er is geen straf voor melden te goeder trouw.**
 
+## Vuistregels bij een Crisis
+
+Als er een crisis is, gelden deze regels:
+
+1. **Meld eerst, onderzoek later** — het team moet het weten voordat je alle antwoorden hebt
+2. **Communiceer meer, niet minder** — stilte creëert onzekerheid; deel wat je weet, ook als het incompleet is
+3. **Eén persoon leidt, de rest ondersteunt** — de Kwaliteits- & Veiligheidsmanager coördineert; vermijd parallelle besluitvorming
+4. **Beperk eerst de schade, los dan op** — inperken gaat voor repareren
+5. **Log alles** — beslissingen, tijdstippen, genomen acties. Je hebt dit nodig voor de evaluatie
+6. **Geen schuld, wel leren** — het doel is herhaling voorkomen, niet iemand aanwijzen
+7. **Escaleer vroeg** — twijfel je of het een crisis is? Behandel het als een crisis. Afschalen is makkelijker dan inhalen
+
 ## Classificatie
 
 We onderscheiden drie typen bevindingen, elk met een eigen procedure:

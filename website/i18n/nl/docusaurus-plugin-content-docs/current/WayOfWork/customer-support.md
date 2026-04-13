@@ -16,7 +16,7 @@ Duurt het langer dan 5 minuten, maak dan een issue aan. Minimale tijdsregistrati
 
 ## Supportproces
 
-1. **E-mail** — klanten sturen vragen naar **support@conduction.nl**, wat automatisch een Jira-ticket aanmaakt
+1. **E-mail** — klanten sturen vragen naar **support@conduction.nl**. Maak handmatig een Jira-ticket aan op basis van de e-mail
 2. **Slack** — rechtermuisklik op een klantbericht en kies "create issue from" om een Jira-ticket te genereren
 3. **Toewijzen** — beoordeel het ticket en wijs het toe aan de juiste persoon
 4. **Updaten** — houd de klant op de hoogte, ook als er geen significant nieuws is
@@ -25,7 +25,3 @@ Duurt het langer dan 5 minuten, maak dan een issue aan. Minimale tijdsregistrati
 ## Klachten
 
 Klachten gaan naar **klachten@conduction.nl**. Voorbeelden: facturatiefouten, ongepast gedrag van medewerkers, kwaliteitsproblemen.
-
-## Vier-Ogen-Principe
-
-Alle codewijzigingen vereisen peer review. **Core bundles** en **betalingsgerelateerde code** vereisen het **zes-ogen-principe** — twee reviewers. Geen code mag worden gemerged naar beschermde branches zonder de vereiste review.

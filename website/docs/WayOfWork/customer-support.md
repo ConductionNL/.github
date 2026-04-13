@@ -16,7 +16,7 @@ If it takes longer than 5 minutes, create an issue. Minimum time logged: **1 hou
 
 ## Support Flow
 
-1. **Email** — customers send queries to **support@conduction.nl**, which auto-creates a Jira ticket
+1. **Email** — customers send queries to **support@conduction.nl**. Create a Jira ticket manually based on the email
 2. **Slack** — right-click a customer message and select "create issue from" to generate a Jira ticket
 3. **Assign** — review the ticket and assign it to the right person
 4. **Update** — keep the customer informed about progress, even if there's no significant update
@@ -25,7 +25,3 @@ If it takes longer than 5 minutes, create an issue. Minimum time logged: **1 hou
 ## Customer Complaints
 
 Complaints go to **klachten@conduction.nl**. Examples: billing errors, inappropriate employee behavior, quality issues.
-
-## Four-Eyes Principle
-
-All code changes require peer review. **Core bundles** and **payment-related code** require a **six-eyes principle** — two reviewers. No code may be merged into protected branches without the required review.

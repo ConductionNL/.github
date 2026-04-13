@@ -22,7 +22,6 @@ Conduction streeft ernaar kwalitatief hoogwaardige open-source software en diens
 
 | Doelstelling | Meetbaar doel | Verantwoordelijk | Evaluatie |
 |---|---|---|---|
-| Klanttevredenheid | NPS-score ≥ 30 | Commercieel Lead | Jaarlijks (klantevaluaties) |
 | Responstijd issues | Supporttickets bevestigd binnen 1 werkdag | Operations Lead | Maandelijks (MT-kwaliteitsoverleg) |
 | Softwarekwaliteit | Alle PR's doorlopen geautomatiseerde kwaliteitspoorten voor merge | Development Lead | Continu (CI/CD) |
 | Procesverbetering | ≥ 2 procesverbeteringen per kwartaal geïmplementeerd | Kwaliteitsmanager | Per kwartaal (interne audit) |
@@ -41,7 +40,7 @@ Het management van Conduction verbindt zich tot:
 
 ## Communicatie naar Medewerkers
 
-Dit beleid wordt gecommuniceerd aan alle medewerkers via deze documentatiesite. Van medewerkers wordt verwacht dat zij dit beleid begrijpen en de principes toepassen in hun dagelijkse werk. Vragen of opmerkingen kunnen worden gericht aan de kwaliteitsmanager of ingediend via een [GitHub Issue](https://github.com/ConductionNL/.github/issues).
+Dit beleid wordt gecommuniceerd aan alle medewerkers via periodieke kwaliteitssessies en is beschikbaar als referentie op deze documentatiesite. Van medewerkers wordt verwacht dat zij dit beleid begrijpen en de principes toepassen in hun dagelijkse werk. Vragen of opmerkingen kunnen worden gericht aan de kwaliteitsmanager of ingediend via een [GitHub Issue](https://github.com/ConductionNL/.github/issues).
 
 ## Toepasselijkheid
 
