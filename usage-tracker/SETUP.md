@@ -27,11 +27,11 @@ ls ~/.claude/projects/    # should list project directories after first use
 ## Step 1: Install Tracker Script
 
 ```bash
-bash .claude/usage-tracker/install.sh
+bash usage-tracker/install.sh
 ```
 
 This will:
-- ✅ Create log storage directory (`.claude/usage-tracker/logs/`, git-ignored)
+- ✅ Create log storage directory (`usage-tracker/logs/`, git-ignored)
 - ✅ Make scripts executable
 - ✅ Create a symlink at `~/.local/bin/claude-usage-tracker`
 - ✅ Self-test the configuration
@@ -42,13 +42,13 @@ This will:
 
 ```bash
 # Quick one-line status (Sonnet)
-python3 .claude/usage-tracker/claude-usage-tracker.py --status-bar
+python3 usage-tracker/claude-usage-tracker.py --status-bar
 
 # All three models at once
-python3 .claude/usage-tracker/claude-usage-tracker.py --status-bar --all-models
+python3 usage-tracker/claude-usage-tracker.py --status-bar --all-models
 
 # Full report
-python3 .claude/usage-tracker/claude-usage-tracker.py
+python3 usage-tracker/claude-usage-tracker.py
 ```
 
 If you see `Today: 0.0%`, that's normal until you make Claude Code API calls today. The weekly total should show data if you've used Claude Code this week.
@@ -61,7 +61,7 @@ Output shows `(cfg)` if your limits are configured, or `(est)` if using built-in
 
 ```bash
 # Copy the example file
-cp .claude/usage-tracker/limits.example.json .claude/usage-tracker/limits.json
+cp usage-tracker/limits.example.json usage-tracker/limits.json
 
 # Open and edit the values to match your actual plan
 ```
@@ -113,7 +113,7 @@ Omit `weekly_reset_day` / `weekly_reset_hour_utc` to fall back to Monday 00:00 U
 
 To verify your configuration:
 ```bash
-python3 .claude/usage-tracker/claude-usage-tracker.py --limits
+python3 usage-tracker/claude-usage-tracker.py --limits
 ```
 
 ### Session reset calibration
@@ -122,12 +122,12 @@ The session window is a rolling 5-hour window — there's no fixed start time in
 
 **At the start of a new session:**
 ```bash
-python3 .claude/usage-tracker/claude-usage-tracker.py --mark-session-start
+python3 usage-tracker/claude-usage-tracker.py --mark-session-start
 ```
 
 **When [claude.ai/settings/usage](https://claude.ai/settings/usage) shows a known remaining time:**
 ```bash
-python3 .claude/usage-tracker/claude-usage-tracker.py --set-session-reset "4h 50m"
+python3 usage-tracker/claude-usage-tracker.py --set-session-reset "4h 50m"
 # Also accepts: "4:50" or plain minutes ("290")
 ```
 
@@ -162,7 +162,7 @@ This creates an always-on monitor that displays in a dedicated Terminal panel.
       "type": "shell",
       "command": "python3",
       "args": [
-        "${workspaceFolder}/.claude/usage-tracker/claude-usage-tracker.py",
+        "${workspaceFolder}/usage-tracker/claude-usage-tracker.py",
         "--monitor",
         "--all-models",
         "--interval",
@@ -213,15 +213,15 @@ Press `Ctrl+Shift+U` to start the monitor at any time.
 ### One-time Report
 
 ```bash
-python3 .claude/usage-tracker/claude-usage-tracker.py                # Sonnet only
-python3 .claude/usage-tracker/claude-usage-tracker.py --all-models   # All three models
+python3 usage-tracker/claude-usage-tracker.py                # Sonnet only
+python3 usage-tracker/claude-usage-tracker.py --all-models   # All three models
 ```
 
 ### Status Bar (Compact, One Line per Model)
 
 ```bash
-python3 .claude/usage-tracker/claude-usage-tracker.py --status-bar             # Sonnet
-python3 .claude/usage-tracker/claude-usage-tracker.py --status-bar --all-models # All models
+python3 usage-tracker/claude-usage-tracker.py --status-bar             # Sonnet
+python3 usage-tracker/claude-usage-tracker.py --status-bar --all-models # All models
 ```
 
 Output (all models):
@@ -240,23 +240,23 @@ First circle = Session · Second circle = Weekly · `(cfg)` = limits.json loaded
 ### Continuous Monitoring
 
 ```bash
-python3 .claude/usage-tracker/claude-usage-tracker.py --monitor                          # Sonnet, 5 min
-python3 .claude/usage-tracker/claude-usage-tracker.py --monitor --all-models             # All models
-python3 .claude/usage-tracker/claude-usage-tracker.py --monitor --all-models --interval 300
-python3 .claude/usage-tracker/claude-usage-tracker.py --monitor --all-models --active-only  # Hide idle models
+python3 usage-tracker/claude-usage-tracker.py --monitor                          # Sonnet, 5 min
+python3 usage-tracker/claude-usage-tracker.py --monitor --all-models             # All models
+python3 usage-tracker/claude-usage-tracker.py --monitor --all-models --interval 300
+python3 usage-tracker/claude-usage-tracker.py --monitor --all-models --active-only  # Hide idle models
 ```
 
 ### Check Configured Limits
 
 ```bash
-python3 .claude/usage-tracker/claude-usage-tracker.py --limits
+python3 usage-tracker/claude-usage-tracker.py --limits
 ```
 
 ### Calibrate Session Reset
 
 ```bash
-python3 .claude/usage-tracker/claude-usage-tracker.py --mark-session-start          # new session
-python3 .claude/usage-tracker/claude-usage-tracker.py --set-session-reset "4h 50m"  # known time remaining
+python3 usage-tracker/claude-usage-tracker.py --mark-session-start          # new session
+python3 usage-tracker/claude-usage-tracker.py --set-session-reset "4h 50m"  # known time remaining
 ```
 
 ---
@@ -267,16 +267,16 @@ python3 .claude/usage-tracker/claude-usage-tracker.py --set-session-reset "4h 50
 
 ```bash
 # Sonnet (default)
-python3 .claude/usage-tracker/claude-usage-tracker.py --monitor
+python3 usage-tracker/claude-usage-tracker.py --monitor
 
 # Haiku
-python3 .claude/usage-tracker/claude-usage-tracker.py --model haiku --monitor
+python3 usage-tracker/claude-usage-tracker.py --model haiku --monitor
 
 # Opus
-python3 .claude/usage-tracker/claude-usage-tracker.py --model opus --monitor
+python3 usage-tracker/claude-usage-tracker.py --model opus --monitor
 
 # All three simultaneously
-python3 .claude/usage-tracker/claude-usage-tracker.py --monitor --all-models
+python3 usage-tracker/claude-usage-tracker.py --monitor --all-models
 ```
 
 ### Update Plan Limits
@@ -294,7 +294,7 @@ Default limits are approximate **subscription quota** estimates (not model conte
 If your Claude Code data is in a non-default location:
 
 ```bash
-python3 .claude/usage-tracker/claude-usage-tracker.py \
+python3 usage-tracker/claude-usage-tracker.py \
   --projects-dir /path/to/.claude/projects
 ```
 

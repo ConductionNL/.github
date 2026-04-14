@@ -7,22 +7,23 @@ _This is the **architecture reference** — see [Getting Started](./getting-star
 This workspace uses a spec-driven development workflow that combines:
 - **OpenSpec** — Structured specifications alongside code
 - **GitHub Issues** — Visual progress tracking via kanban boards
-- **Ralph Wiggum loops** — Focused, low-context AI coding iterations
 - **Spec verification** — Automated review of code against specifications
 
 The key insight: **specs are written once, then broken into small JSON tasks** that each point back to a specific spec section. This means AI coding loops can work with minimal context (just the task + its spec ref) instead of loading entire spec documents.
 
 ## Architecture
 
-All specs and changes live in their **primary app repository** (submodule). There is no root `openspec/` directory. Workflow docs and skills live in `.claude/` (`claude-code-config` repo).
+All specs and changes live in their **primary app repository** (submodule). Skills and shared config (schemas, company-wide ADRs) live in the `hydra` repo inside apps-extra. Developer documentation lives in the `.github` repo (`~/.github`).
 
 ```
 apps-extra/                         # Workspace root
 ├── project.md                      # Generic guidelines (all projects)
-├── .claude/                        # Claude Code config (company-wide repo)
-│   ├── CLAUDE.md                   # Workflow instructions
-│   ├── skills/                     # OpenSpec skills (opsx-new, opsx-ff, etc.)
-│   └── docs/                       # This documentation
+├── hydra/                          # Automation, skills & shared config
+│   ├── .claude/
+│   │   └── skills/                 # OpenSpec skills (opsx-new, opsx-ff, etc.)
+│   └── openspec/
+│       ├── architecture/           # Company-wide ADRs (ADR-001 through ADR-015)
+│       └── schemas/conduction/     # Shared workflow schema
 │
 ├── openregister/                   # FOUNDATION REPO
 │   ├── project.md                  # Project description & context
@@ -134,14 +135,12 @@ Start the focused implementation loop:
 /opsx-apply
 ```
 
-> **Note:** `/opsx-ralph-start` is a planned dedicated implementation loop with minimal-context loading and deeper GitHub Issues integration — not yet implemented. Use `/opsx-apply` for now; it already reads `plan.json` and supports GitHub Issues sync when a `plan.json` exists.
-
 **Automated alternative — `/opsx-apply-loop` (experimental):**
 
 Runs Phases 3 → 4 → 5 in one hands-off command inside an isolated Docker container:
 
 ```
-/opsx-apply-loop procest add-sla-tracking
+/opsx-apply-loop project add-sla-tracking
 /opsx-apply-loop                           # asks which app + change
 ```
 
@@ -173,8 +172,6 @@ After all tasks are complete, verify the implementation:
 ```
 /opsx-verify
 ```
-
-> **Note:** `/opsx-ralph-review` is a planned dedicated review command that will cross-reference shared specs and create GitHub Issues for findings — not yet implemented. Use `/opsx-verify` for now; it already supports GitHub Issues sync via `plan.json` when present.
 
 This command:
 1. Reads ALL spec requirements (ADDED/MODIFIED/REMOVED)
@@ -251,15 +248,15 @@ See [writing-specs.md](writing-specs.md) for the complete guide — RFC 2119 key
 | `/opsx-ff` | Spec | Fast-forward all artifacts |
 | `/opsx-continue` | Spec | Create next artifact |
 | `/opsx-plan-to-issues` | Plan | Tasks → JSON + GitHub Issues |
-| `/opsx-apply` | Implement | Implement tasks from plan.json (use this; `/opsx-ralph-start` not yet built) |
-| `/opsx-verify` | Review | Verify implementation against specs (use this; `/opsx-ralph-review` not yet built) |
+| `/opsx-apply` | Implement | Implement tasks from plan.json |
+| `/opsx-verify` | Review | Verify implementation against specs |
 | `/opsx-archive` | Archive | Complete and preserve change |
 
 ## Tips
 
 - **Start small**: Try the flow on a small feature first to build muscle memory
 - **Review specs before coding**: The spec review is the most valuable step — catch issues before writing code
-- **Keep tasks small**: Each task should be completable in one Ralph Wiggum iteration (15-30 min of focused work)
+- **Keep tasks small**: Each task should be completable in one focused iteration (15-30 min of work)
 - **Use shared specs**: Reference cross-project specs in your delta specs to avoid reinventing patterns
 - **Trust the JSON**: The plan.json is your source of truth during implementation — it survives context window resets
 - **GitHub is your dashboard**: Use GitHub Projects to visualize progress across multiple changes and projects

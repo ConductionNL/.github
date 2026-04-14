@@ -12,6 +12,8 @@ Current version: see [`VERSION`](VERSION)
 | `block-write-commands.sh` | `~/.claude/hooks/block-write-commands.sh` | Guards write operations, prompts for approval |
 | `check-settings-version.sh` | `~/.claude/hooks/check-settings-version.sh` | Warns at session start if settings are outdated |
 | `VERSION` | `~/.claude/settings-version` | Installed version tracker (semver) |
+| `settings-repo-url.example` | `~/.claude/settings-repo-url` | GitHub repo slug for online version checking |
+| `settings-repo-ref.example` | `~/.claude/settings-repo-ref` | Branch/tag/SHA to track (defaults to `main` when absent) |
 
 ## Install
 
@@ -31,11 +33,13 @@ cp "$REPO_ROOT/global-settings/VERSION" ~/.claude/settings-version
 echo "$REPO_ROOT" > ~/.claude/settings-repo-path
 
 # Online version checking via GitHub API (recommended — no local repo required):
-echo "ConductionNL/.github" > ~/.claude/settings-repo-url
+cp "$REPO_ROOT/global-settings/settings-repo-url.example" ~/.claude/settings-repo-url
 
 # Optional: track a branch other than main (tag or SHA also accepted).
 # Defaults to "main" when this file is absent.
-# echo "feature/claude-code-tooling" > ~/.claude/settings-repo-ref
+# To track a specific branch, copy and edit:
+# cp "$REPO_ROOT/global-settings/settings-repo-ref.example" ~/.claude/settings-repo-ref
+# echo "feature/your-branch" > ~/.claude/settings-repo-ref
 ```
 
 Restart Claude Code after installing. Requires `jq`, `md5sum`, and `gh` (GitHub CLI) on `PATH`.

@@ -28,13 +28,13 @@ Track **Haiku, Sonnet, and Opus** simultaneously with separate usage monitoring.
 
 ```bash
 # Track Sonnet (default)
-python3 .claude/usage-tracker/claude-usage-tracker.py --status-bar
+python3 usage-tracker/claude-usage-tracker.py --status-bar
 
 # Track Haiku (1.2M session / 6M weekly)
-python3 .claude/usage-tracker/claude-usage-tracker.py --model haiku --status-bar
+python3 usage-tracker/claude-usage-tracker.py --model haiku --status-bar
 
 # Track Opus (200K session / 1M weekly)
-python3 .claude/usage-tracker/claude-usage-tracker.py --model opus --status-bar
+python3 usage-tracker/claude-usage-tracker.py --model opus --status-bar
 ```
 
 ---
@@ -45,13 +45,13 @@ Open 3 VS Code terminal tabs and run one per tab:
 
 ```bash
 # Tab 1: Sonnet
-python3 .claude/usage-tracker/claude-usage-tracker.py --model sonnet --monitor --interval 300
+python3 usage-tracker/claude-usage-tracker.py --model sonnet --monitor --interval 300
 
 # Tab 2: Haiku
-python3 .claude/usage-tracker/claude-usage-tracker.py --model haiku --monitor --interval 300
+python3 usage-tracker/claude-usage-tracker.py --model haiku --monitor --interval 300
 
 # Tab 3: Opus
-python3 .claude/usage-tracker/claude-usage-tracker.py --model opus --monitor --interval 300
+python3 usage-tracker/claude-usage-tracker.py --model opus --monitor --interval 300
 ```
 
 ---
@@ -59,9 +59,9 @@ python3 .claude/usage-tracker/claude-usage-tracker.py --model opus --monitor --i
 ## Full Reports for Each Model
 
 ```bash
-python3 .claude/usage-tracker/claude-usage-tracker.py                  # Sonnet
-python3 .claude/usage-tracker/claude-usage-tracker.py --model haiku    # Haiku
-python3 .claude/usage-tracker/claude-usage-tracker.py --model opus     # Opus
+python3 usage-tracker/claude-usage-tracker.py                  # Sonnet
+python3 usage-tracker/claude-usage-tracker.py --model haiku    # Haiku
+python3 usage-tracker/claude-usage-tracker.py --model opus     # Opus
 ```
 
 ---
@@ -73,7 +73,7 @@ Check all models before starting work:
 ```bash
 for model in haiku sonnet opus; do
   echo "$model:"
-  python3 .claude/usage-tracker/claude-usage-tracker.py --model $model --status-bar
+  python3 usage-tracker/claude-usage-tracker.py --model $model --status-bar
 done
 ```
 
@@ -81,7 +81,7 @@ End-of-session summary across all models:
 
 ```bash
 for model in haiku sonnet opus; do
-  echo "=== $model ===" && python3 .claude/usage-tracker/claude-usage-tracker.py --model $model
+  echo "=== $model ===" && python3 usage-tracker/claude-usage-tracker.py --model $model
 done
 ```
 
@@ -105,9 +105,9 @@ Both yellow = both at the same limit percentage, even though token counts differ
 Add to `~/.bashrc` or `~/.zshrc`:
 
 ```bash
-alias claude-haiku="python3 /path/to/project/.claude/usage-tracker/claude-usage-tracker.py --model haiku --status-bar"
-alias claude-sonnet="python3 /path/to/project/.claude/usage-tracker/claude-usage-tracker.py --status-bar"
-alias claude-opus="python3 /path/to/project/.claude/usage-tracker/claude-usage-tracker.py --model opus --status-bar"
+alias claude-haiku="python3 /path/to/project/usage-tracker/claude-usage-tracker.py --model haiku --status-bar"
+alias claude-sonnet="python3 /path/to/project/usage-tracker/claude-usage-tracker.py --status-bar"
+alias claude-opus="python3 /path/to/project/usage-tracker/claude-usage-tracker.py --model opus --status-bar"
 ```
 
 ---
@@ -123,11 +123,11 @@ Yes — the tracker reads JSONL files that Claude Code writes persistently to `~
 Use the built-in combined view:
 
 ```bash
-python3 .claude/usage-tracker/claude-usage-tracker.py --status-bar --all-models
+python3 usage-tracker/claude-usage-tracker.py --status-bar --all-models
 ```
 
 Or for a full report across all models at once:
 
 ```bash
-python3 .claude/usage-tracker/claude-usage-tracker.py --all-models
+python3 usage-tracker/claude-usage-tracker.py --all-models
 ```

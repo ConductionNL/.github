@@ -1,4 +1,4 @@
-# Spec-Driven Development Documentation
+# Claude Code Developer Guide
 
 Documentation for Conduction's spec-driven development workflow, combining OpenSpec, GitHub Issues, and Claude Code.
 
@@ -8,10 +8,10 @@ Documentation for Conduction's spec-driven development workflow, combining OpenS
 Step-by-step guide from installation to your first completed change. Start here if you're new to the workflow.
 
 ### [Workflow Overview](./workflow.md)
-Architecture overview of the full system: how specs, GitHub Issues, plan.json, and Ralph Wiggum loops fit together. Includes the plan.json format and flow diagrams.
+Architecture overview of the full system: how specs, GitHub Issues, and plan.json fit together. Includes the plan.json format and flow diagrams.
 
 ### [Command Reference](./commands.md)
-Detailed reference for every skill — OpenSpec built-ins (`/opsx-new`, `/opsx-ff`, etc.), custom Conduction skills (`/opsx-plan-to-issues`, `/opsx-apply-loop`, `/opsx-pipeline`), and planned additions (`/opsx-ralph-start`, `/opsx-ralph-review` — not yet implemented). Includes expected output and usage tips.
+Detailed reference for every skill — OpenSpec built-ins (`/opsx-new`, `/opsx-ff`, etc.) and custom Conduction skills (`/opsx-plan-to-issues`, `/opsx-apply-loop`, `/opsx-pipeline`). Includes expected output and usage tips.
 
 ### [Writing Specs](./writing-specs.md)
 In-depth guide on writing effective specifications: RFC 2119 keywords, Gherkin scenarios, delta specs, shared spec references, task breakdown, and common mistakes to avoid.
@@ -40,6 +40,15 @@ All testing commands and skills in one place — when to use each, typical workf
 ### [Parallel Agents & Subscription Cap](./parallel-agents.md)
 How parallel agent commands (like `/test-counsel`, `/test-app`, and `/feature-counsel`) consume your Claude subscription cap, guidelines for responsible use, and which files to keep lean to reduce token usage.
 
+### [Frontend Standards](./frontend-standards.md)
+Frontend development standards enforced across all Conduction apps: OpenRegister dependency checking, CSS scoping, admin detection patterns, and reference implementations.
+
+### [Local LLM Setup (Ollama + Qwen)](./local-llm.md)
+How to run Claude Code with a local Qwen model via Ollama for privacy, cost reduction, and offline use. Includes the Double Dutch RAD workflow for pairing Claude (day shift) with Qwen (overnight batch jobs).
+
+### [Playwright MCP Browser Setup](./playwright-setup.md)
+Detailed setup guide for the 7 independent Playwright browser sessions used for parallel testing, including VS Code extension configuration, CLI alternatives, and usage rules.
+
 ### [Usage Tracker](../../usage-tracker/README.md)
 Real-time Claude token usage monitoring in VS Code — color-coded status, threshold notifications, and multi-model support (Haiku, Sonnet, Opus). Reads Claude Code session files directly; no log configuration needed. Run `bash usage-tracker/install.sh` to get started.
 
@@ -55,26 +64,16 @@ A complete worked example showing every phase of the flow on a realistic feature
   - [Stage 2: Specify](#stage-2-specify--writing-openspec-artifacts)
   - [Stage 3: Build](#stage-3-build--configuration-not-code)
   - [Stage 4: Validate](#stage-4-validate--quality-assurance--verification)
-- [Double Dutch (RAD Workflow)](#double-dutch-rad-workflow)
 - [Workstation Setup (Windows)](#workstation-setup-windows)
 - [Prerequisites (WSL)](#prerequisites-wsl)
-  - [Node.js](#nodejs-via-nvm)
-  - [PHP & Composer](#php-81--composer)
-  - [GitHub CLI](#github-cli)
-  - [PHP Quality Tools](#php-quality-tools-phpcs-phpmd-psalm-phpstan)
-  - [Playwright Browsers](#playwright-browsers)
-  - [OpenSpec CLI](#openspec-cli)
-  - [Claude Code CLI](#claude-code-cli-optional-for-terminal-use)
-  - [Ollama + Qwen (local LLM)](#ollama--qwen-coder-optional-local-llm)
 - [Local Configuration](#local-configuration)
 - [Playwright MCP Browser Setup](#playwright-mcp-browser-setup)
 - [Directory Structure](#directory-structure)
-- [Commands Reference](#commands-reference)
-- [Skills Reference](#skills-reference)
 - [Personas](#personas)
-- [Scripts](#scripts)
-- [Usage Tracker](#usage-tracker)
 - [Architectural Design Rules (ADRs)](#architectural-design-rules-adrs)
+- [Usage Tracker](#usage-tracker)
+- [Related: Hydra CI/CD Pipeline](#related-hydra-cicd-pipeline)
+- [Scripts](#scripts)
 - [Contributing](#contributing)
 - [Troubleshooting](#troubleshooting)
 
@@ -267,18 +266,9 @@ Verify that the implementation matches the specs, passes quality standards, and 
 
 #### Testing
 
-| Type | Command | What it tests |
-|------|---------|---------------|
-| **Spec verification** | `/opsx-verify` | Implementation matches spec requirements (CRITICAL / WARNING / SUGGESTION) |
-| **Functional** | `/test-functional` | Feature correctness via browser |
-| **API** | `/test-api` | REST API + NLGov Design Rules compliance |
-| **Accessibility** | `/test-accessibility` | WCAG 2.1 AA compliance |
-| **Performance** | `/test-performance` | Load times, API response, network |
-| **Security** | `/test-security` | OWASP Top 10, BIO2, multi-tenancy |
-| **Regression** | `/test-regression` | Cross-app regression |
-| **Persona testing** | `/test-persona-*` | 8 user-perspective tests (Henk, Fatima, Sem, etc.) |
-| **Multi-perspective** | `/test-counsel` | All 8 personas test simultaneously |
-| **Browser testing** | `/test-app <appname>` | Automated browser testing (single or 6 parallel agents) |
+For the full list of testing commands, browser pool rules, and recommended workflows, see [testing.md](./testing.md) and [commands.md](./commands.md).
+
+Key commands: `/opsx-verify` (spec verification), `/test-counsel` (8-persona test sweep), `/test-app` (automated browser testing), `/test-functional`, `/test-api`, `/test-accessibility`, `/test-performance`, `/test-security`, `/test-regression`, and `/test-persona-*` (per-persona testing).
 
 #### CI/CD
 
@@ -304,79 +294,6 @@ composer phpcs && composer phpmd           # Code quality gates
 /test-api                                  # API compliance check
 /opsx-archive                              # Archive when everything passes
 ```
-
----
-
-## Double Dutch (RAD Workflow)
-
-A two-shift Rapid Application Development cycle that pairs Claude (daytime, fast, cloud) with Qwen (overnight, slow, local/free).
-
-```
-         09:00                    17:00                   09:00
-           |                        |                       |
-  ┌────────┴────────────────────────┴───────────────────────┴──
-  │  REVIEW    ◄── DAY SHIFT (Claude) ──►    HANDOFF    NIGHT SHIFT (Qwen)
-  │  Qwen's        Specs, architecture,      Prepare     PHPCS fixes,
-  │  output         complex logic,           task files   boilerplate,
-  │                 code review, PRs                      bulk refactors,
-  │                                                       test generation
-  └────────────────────────────────────────────────────────────
-```
-
-### Daily Cycle
-
-**Morning (09:00)** — Review Qwen's overnight output: code changes, test results, PHPCS fixes. Accept or reject changes, note issues for the day's work.
-
-**Day (09:00-17:00)** — Spec work with Claude: clarify requirements, write OpenSpec artifacts (`/opsx-ff`, `/opsx-new` → `/opsx-continue`), design architecture, solve hard problems, review PRs. Claude handles the thinking.
-
-**Evening (17:00)** — Hand off to Qwen: prepare self-contained task files (e.g., `qwen-phpcs-task.md`) with specific, mechanical work. Start Qwen batch and leave overnight.
-
-### Division of Labor
-
-| | Claude (Day) | Qwen (Night) |
-|---|---|---|
-| **Strengths** | Reasoning, architecture, specs, multi-file design | Mechanical fixes, repetitive changes, bulk ops |
-| **Speed** | ~3s/response (cloud API) | ~2min/response (local 14b on 8GB VRAM) |
-| **Cost** | API tokens (Max plan) | Free (local GPU) |
-| **Best for** | Complex logic, code review, client deliverables | PHPCS fixes, boilerplate, test scaffolding |
-
-### Task File Format
-
-Qwen works best with narrow, explicit task files. Example:
-
-```markdown
-# Task: Fix PHPCS Named Parameter Errors
-
-Working directory: `/path/to/app`
-
-## Files to fix
-1. `lib/Controller/FooController.php` (3 errors)
-2. `lib/Service/BarService.php` (1 error)
-
-## How to fix
-Find function calls without named parameters. Look up the method signature
-and add the parameter name:
-- BEFORE: `$this->setName('value')` where signature is `setName(string $name)`
-- AFTER: `$this->setName(name: 'value')`
-
-## Verification
-Run: `./vendor/bin/phpcs --standard=phpcs.xml <files>`
-Expected: 0 errors
-```
-
-### Running Qwen Overnight
-
-```bash
-# Terminal 1 — start Qwen with Claude Code CLI
-ANTHROPIC_BASE_URL=http://localhost:11434 ANTHROPIC_API_KEY=ollama \
-  claude --model qwen3:14b
-
-# Then paste or reference the task file
-```
-
-> **Requires `qwen3:14b` or larger** for tool calling (file editing, shell commands). See [Ollama setup](#ollama--qwen-coder-optional-local-llm) for details.
-
-> **Known limitation:** Tool calling via CLI is unreliable with local models when system prompts are large. For now, Qwen works best on tasks where it can output code changes as text that you review and apply manually in the morning.
 
 ---
 
@@ -532,55 +449,6 @@ chmod +x ~/.claude/hooks/block-write-commands.sh
 
 ---
 
-## Local Configuration
-
-Claude Code uses three settings files that work together. Understanding the difference prevents confusion:
-
-| File | Scope | Committed? | Purpose |
-|------|-------|------------|---------|
-| `~/.claude/settings.json` | Machine-wide, all projects | No — installed per developer | Global read-only policy and safety hooks. Installed from [`global-settings/`](../../global-settings/) in step 7 above. |
-| `.claude/settings.json` | Project-wide, all developers | **Yes** | Shared team permissions — MCP server approvals, `enableAllProjectMcpServers`. Do not edit locally. |
-| `.claude/settings.local.json` | Project, per developer | No — gitignored | Your personal tool approvals on top of the shared settings. Auto-generated by Claude Code. |
-
-### settings.local.json
-
-This file is **auto-generated** by Claude Code the first time you approve a tool permission in a session — no manual setup needed. It stores your personal allow/deny rules on top of the shared project settings.
-
-Optionally, bootstrap it upfront with common permissions to avoid approval prompts during normal development:
-
-```json
-{
-  "$schema": "https://json.schemastore.org/claude-code-settings.json",
-  "permissions": {
-    "allow": [
-      "Bash(docker:*)",
-      "Bash(docker-compose:*)",
-      "Bash(composer:*)",
-      "Bash(git:*)",
-      "Bash(npm:*)",
-      "Bash(php:*)",
-      "Bash(curl:*)",
-      "Bash(bash:*)",
-      "Bash(ls:*)",
-      "Bash(mkdir:*)",
-      "Bash(cp:*)",
-      "Bash(mv:*)",
-      "Bash(rm:*)",
-      "WebFetch(domain:localhost)",
-      "WebFetch(domain:github.com)",
-      "WebFetch(domain:raw.githubusercontent.com)"
-    ],
-    "additionalDirectories": [
-      "/tmp"
-    ]
-  }
-}
-```
-
-Save this as `.claude/settings.local.json` in your project root. It is gitignored and will never be committed.
-
----
-
 ## Prerequisites (WSL)
 
 Run these commands inside WSL (the VS Code terminal after connecting to WSL).
@@ -659,226 +527,15 @@ npm install -g @fission-ai/openspec
 - [npm](https://www.npmjs.com/package/@fission-ai/openspec) — Package info
 - [Workflow docs](./workflow.md) — Our workspace-specific workflow
 
-**Local docs:**
-
-| File | Content |
-|------|---------|
-| [getting-started.md](./getting-started.md) | First-time setup and orientation |
-| [global-claude-settings.md](./global-claude-settings.md) | User-level Claude permissions, hooks, and safety settings |
-| [workflow.md](./workflow.md) | Full spec-driven development workflow |
-| [writing-specs.md](./writing-specs.md) | How to write good specs |
-| [commands.md](./commands.md) | CLI command reference |
-| [walkthrough.md](./walkthrough.md) | Step-by-step example of a full cycle |
-| [testing.md](./testing.md) | All testing commands and skills — when to use each, recommended workflows |
-| [app-lifecycle.md](./app-lifecycle.md) | Creating and managing Nextcloud apps — design, bootstrap, onboarding, config, and drift detection |
-| [parallel-agents.md](./parallel-agents.md) | How parallel agents work, subscription cap implications, responsible use |
-| [frontend-standards.md](./frontend-standards.md) | Frontend standards enforced across all Conduction apps |
-| [docker.md](./docker.md) | Docker environment setup, profiles, and common operations |
-| [exapp-sidecar-status.md](./exapp-sidecar-status.md) | Status report for ExApp sidecar wrapper projects |
-
 ### Claude Code CLI (optional, for terminal use)
 
 ```bash
 npm install -g @anthropic-ai/claude-code
 ```
 
-### Ollama + Qwen Coder (optional, local LLM)
+### Ollama + Qwen (optional, local LLM)
 
-Claude Code can run with a **local LLM** instead of the Anthropic API, using [Ollama](https://ollama.com/) and Alibaba's [Qwen3-Coder](https://ollama.com/library/qwen3-coder) model. Ollama v0.14.0+ includes built-in Anthropic Messages API compatibility, so Claude Code connects to it without any proxy or adapter.
-
-#### When to use local vs Claude API
-
-| Use case | Recommendation |
-|----------|---------------|
-| **Data sovereignty** — code or data must stay in the EU / on-premise | Local Qwen |
-| **Security-sensitive work** — credentials, private APIs, client data | Local Qwen |
-| **Offline / air-gapped environments** | Local Qwen |
-| **Simple tasks** — formatting, renaming, small refactors, boilerplate | Local Qwen |
-| **Cost reduction** — high-volume, repetitive prompts | Local Qwen |
-| **Complex reasoning** — architecture, debugging, multi-file changes | Claude API |
-| **Large context** — analyzing entire codebases or long specs | Claude API |
-| **Quality-critical** — production code, specs, client deliverables | Claude API |
-
-> **Rule of thumb:** Use Qwen locally for work that is private, simple, or high-volume. Use Claude API when quality and reasoning depth matter most. You can switch between them freely — they use the same Claude Code interface, tools, and commands.
-
-#### Step 1: Install Ollama
-
-Install Ollama **natively on WSL** (not in Docker — native gives better GPU passthrough and performance):
-
-```bash
-curl -fsSL https://ollama.com/install.sh | sh
-```
-
-Ollama runs as a background service automatically. Verify it's running:
-
-```bash
-ollama --version    # Should show 0.14.0+
-```
-
-#### Step 2: Pull a Qwen model
-
-Choose the right model for your GPU VRAM:
-
-| Model | Download | Size | Min VRAM | Speed (RTX 3070) | Tool calling? |
-|-------|----------|------|----------|-------------------|---------------|
-| `qwen3:8b` | `ollama pull qwen3:8b` | 5.2 GB | 8 GB (fits 100%) | ~12s | **No** (chat only) |
-| **`qwen3:14b`** | `ollama pull qwen3:14b` | **9.3 GB** | 12 GB | **~2min** (spills to CPU on 8GB) | **Yes** |
-| `qwen3-coder` | `ollama pull qwen3-coder` | 18 GB | 24 GB | ~6min (mostly CPU on 8GB) | Yes |
-
-**Recommended: `qwen3:14b`** — the smallest model that supports **tool calling** (reading files, editing code, running commands). On 8GB VRAM it's slow (~2min/response) but works as a batch/overnight agent. On 12GB+ VRAM it runs at interactive speed (~15s).
-
-```bash
-ollama pull qwen3:14b
-```
-
-> **Why not `qwen3:8b`?** It's faster but can only chat — it cannot use tools (file access, shell commands, code editing). The model is too small to reliably produce the structured function-call format that CLI agents require. It will show its thinking but won't execute anything.
->
-> **Why not `qwen3-coder`?** It's the most capable (30B params) but requires 24GB+ VRAM. On an 8GB GPU it runs ~68% on CPU and takes ~6 minutes per response. Only use it with a workstation GPU (RTX 4090, A6000, etc).
-
-Check your available memory:
-
-```bash
-free -h           # Look at the "available" column
-nvidia-smi        # Check GPU VRAM
-```
-
-If you don't have enough system memory, increase the WSL allocation. On **Windows**, edit (or create) `%USERPROFILE%\.wslconfig`:
-
-```ini
-[wsl2]
-memory=24GB
-```
-
-Then restart WSL from PowerShell:
-
-```powershell
-wsl --shutdown
-```
-
-Reopen your Ubuntu terminal — the new memory limit is now active.
-
-#### Step 3: Run Claude Code with Qwen
-
-Open a **new terminal** and run (replace model name with whichever you pulled):
-
-```bash
-ANTHROPIC_BASE_URL=http://localhost:11434 ANTHROPIC_API_KEY=ollama claude --model qwen3:14b
-```
-
-This opens the full interactive Claude Code CLI — same interface, same tools, same commands — but powered by Qwen running locally on your machine. No data leaves your workstation.
-
-For a quick **one-shot prompt** (no interactive session):
-
-```bash
-ANTHROPIC_BASE_URL=http://localhost:11434 ANTHROPIC_API_KEY=ollama claude --model qwen3:14b --print "explain this function"
-```
-
-#### Running local and API side by side
-
-The env vars are **scoped to that single terminal window only**. This means you can run both simultaneously:
-
-- **Terminal 1** — Qwen locally (free, private, slower) doing a long-running task like a bulk refactor or code review
-- **Terminal 2 / VS Code** — Claude API (fast, powerful) for your main interactive development work
-
-This is the recommended workflow: **sidecar the free local model** for background tasks while you continue your normal work with Claude API at full speed. The local session won't affect your API session in any way — they're completely independent.
-
-```
-┌─────────────────────────┐  ┌─────────────────────────┐
-│  Terminal 1 (Qwen)      │  │  VS Code / Terminal 2   │
-│                         │  │                         │
-│  Free, local, private   │  │  Claude API (Opus)      │
-│  Running: bulk refactor │  │  Fast interactive dev   │
-│  Speed: ~15 tok/s       │  │  Speed: ~50-80 tok/s    │
-│  Cost: $0               │  │  Cost: normal API usage │
-│                         │  │                         │
-│  ► Background task      │  │  ► Your main work       │
-└─────────────────────────┘  └─────────────────────────┘
-```
-
-To go back to Claude API in any terminal, simply open a new terminal as normal — no env vars to unset.
-
-#### Performance expectations
-
-Benchmarked on an RTX 3070 (8GB VRAM) with 24GB WSL memory:
-
-| Model | Simple task | Tool calling | Fits in 8GB VRAM | Usable interactively? |
-|-------|-------------|-------------|------------------|----------------------|
-| qwen3:8b | ~12 seconds | No | Yes (100% GPU) | Chat only |
-| **qwen3:14b** | **~2 minutes** | **Yes** | No (spills to CPU) | **Batch/overnight** |
-| qwen3-coder (30B) | ~6 minutes | Yes | No (68% CPU) | No |
-| Claude API (Opus) | ~3 seconds | Yes | N/A (cloud) | Yes |
-
-**Be honest about the trade-off:** The recommended local model (`qwen3:14b`) is **~40x slower** than Claude API on 8GB VRAM hardware. It's not viable for interactive coding — but it **does support tool calling**, which makes it a real coding agent that can read files, edit code, and run commands. Use it for batch jobs you kick off and walk away from (e.g., overnight PHPCS fixes, bulk refactors, code reviews).
-
-**Where local shines:**
-- **Nightly / batch jobs** — automated code reviews, linting suggestions, documentation generation, bulk refactors where you kick it off and walk away
-- **Cost** — completely free, no API usage, no token limits, run it as much as you want
-- **Privacy** — nothing leaves your machine, ideal for client code under NDA or government data
-- **Simple interactive tasks** — quick renames, formatting, boilerplate generation where the speed difference barely matters
-
-#### Alternative: Qwen Code CLI (native Qwen experience)
-
-Qwen has its own dedicated CLI tool (v0.11+) with an interface similar to Claude Code, optimized for Qwen models:
-
-```bash
-sudo npm install -g @qwen-code/qwen-code@latest
-```
-
-**Configure it to use your local Ollama** by editing `~/.qwen/settings.json`:
-
-```json
-{
-  "modelProviders": {
-    "openai": [
-      {
-        "id": "qwen3:14b",
-        "name": "Qwen3 14B (Local Ollama)",
-        "envKey": "OLLAMA_API_KEY",
-        "baseUrl": "http://localhost:11434/v1"
-      }
-    ]
-  },
-  "security": {
-    "auth": {
-      "selectedType": "openai"
-    }
-  },
-  "env": {
-    "OLLAMA_API_KEY": "ollama"
-  },
-  "model": {
-    "name": "qwen3:14b"
-  }
-}
-```
-
-> Adjust the model `id` and `name` if you pulled a different model (e.g., `qwen3:8b` for chat-only, or `qwen3-coder` on 24GB+ VRAM).
-
-The key parts: `security.auth.selectedType: "openai"` bypasses the OAuth prompt, `modelProviders.openai` tells Qwen Code where your local Ollama lives, and `env.OLLAMA_API_KEY` provides the dummy API key that Ollama ignores but Qwen Code requires.
-
-**Launch it:**
-
-```bash
-cd /path/to/your-project
-qwen
-```
-
-**Tool calling requires `qwen3:14b` or larger.** The `qwen3:8b` model runs in chat-only mode — it can reason and answer questions but cannot use tools (no file access, no shell commands, no code editing). The `qwen3:14b` model supports structured tool calling and works as a full coding agent, though it's slow on 8GB VRAM (~2min/response). On 12GB+ VRAM it runs at interactive speed.
-
-**Sharing context with Claude Code:** Qwen Code reads `QWEN.md` instead of `CLAUDE.md`, but supports `@path/to/file.md` imports. You can create a `QWEN.md` in the workspace root that imports the Claude configuration:
-
-```markdown
-@CLAUDE.md
-```
-
-This gives Qwen Code the same project context and coding standards as Claude Code. However, Qwen Code does **not** support Claude's `/opsx-*` slash commands or skills — those are Claude Code-specific. For the full OpenSpec workflow, use Claude Code (with either API or local Qwen backend).
-
-#### Tips
-
-- **Don't close the terminal** where Ollama is running — if Ollama stops, your Claude Code session loses its backend
-- **One model at a time** — Ollama loads/unloads models automatically, but running two large models simultaneously will OOM
-- **VS Code extension** still uses Claude API — the env var trick only works for the CLI. This is fine: use VS Code for complex work (Claude API) and terminal for quick local tasks (Qwen)
-- **All Claude Code features work** — tools, file editing, git, commands, skills, browser MCP — because the interface is the same, only the model backend changes
+For running Claude Code with a local Qwen model (privacy, cost reduction, offline use), see **[local-llm.md](./local-llm.md)**. That guide covers Ollama installation, model selection, performance benchmarks, the Qwen Code CLI, and the Double Dutch RAD workflow for pairing Claude (day shift) with Qwen (overnight batch jobs).
 
 ### Summary Checklist
 
@@ -893,263 +550,154 @@ openspec --version    # 1.x
 npx playwright --version  # 1.x
 ```
 
+Your machine is ready. See [Getting Started](./getting-started.md) to complete your first spec-driven change.
+
+---
+
+## Local Configuration
+
+Claude Code uses three settings files that work together. Understanding the difference prevents confusion:
+
+| File | Scope | Committed? | Purpose |
+|------|-------|------------|---------|
+| `~/.claude/settings.json` | Machine-wide, all projects | No — installed per developer | Global read-only policy and safety hooks. Installed from [`global-settings/`](../../global-settings/) in step 7 above. |
+| `.claude/settings.json` | Project-wide, all developers | **Yes** | Shared team permissions — MCP server approvals, `enableAllProjectMcpServers`. Do not edit locally. |
+| `.claude/settings.local.json` | Project, per developer | No — gitignored | Your personal tool approvals on top of the shared settings. Auto-generated by Claude Code. |
+
+### settings.local.json
+
+This file is **auto-generated** by Claude Code the first time you approve a tool permission in a session — no manual setup needed. It stores your personal allow/deny rules on top of the shared project settings.
+
+Optionally, bootstrap it upfront with common permissions to avoid approval prompts during normal development:
+
+```json
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(docker:*)",
+      "Bash(docker-compose:*)",
+      "Bash(composer:*)",
+      "Bash(git:*)",
+      "Bash(npm:*)",
+      "Bash(php:*)",
+      "Bash(curl:*)",
+      "Bash(bash:*)",
+      "Bash(ls:*)",
+      "Bash(mkdir:*)",
+      "Bash(cp:*)",
+      "Bash(mv:*)",
+      "Bash(rm:*)",
+      "WebFetch(domain:localhost)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)"
+    ],
+    "additionalDirectories": [
+      "/tmp"
+    ]
+  }
+}
+```
+
+Save this as `.claude/settings.local.json` in your project root. It is gitignored and will never be committed.
+
+### CLAUDE.local.md
+
+Contains environment-specific credentials and API tokens (passwords, keys, endpoints). **Never commit this file.**
+
+Copy the [example template](./examples/CLAUDE.local.md.example) into your project and fill in your values:
+
+```bash
+cp docs/claude/examples/CLAUDE.local.md.example .claude/CLAUDE.local.md
+# Edit with your credentials
+```
+
 ---
 
 ## Playwright MCP Browser Setup
 
-The workspace uses **7 independent Playwright browser sessions** for parallel testing.
+The workspace uses 7 independent Playwright browser sessions for parallel testing. Copy the [example .mcp.json](./examples/.mcp.json.example) to your project root as `.mcp.json`, or see the [playwright-setup.md](./playwright-setup.md) guide for the full configuration, verification steps, CLI alternatives, and usage rules.
 
-### Browser Pool
+**Quick summary:**
 
 | Server | Mode | Purpose |
 |--------|------|---------|
 | `browser-1` | Headless | Main agent (default) |
-| `browser-2` | Headless | Sub-agent / parallel |
-| `browser-3` | Headless | Sub-agent / parallel |
-| `browser-4` | Headless | Sub-agent / parallel |
-| `browser-5` | Headless | Sub-agent / parallel |
+| `browser-2`–`browser-5`, `browser-7` | Headless | Sub-agent / parallel |
 | `browser-6` | **Headed** | User observation (visible window) |
-| `browser-7` | Headless | Sub-agent / parallel |
 
-### VS Code Extension Setup
-
-The VS Code extension loads MCP servers from `.mcp.json` in the **project root**. The file defines 7 browser instances. Browsers 1–5 and 7 are headless:
-
-```json
-{
-  "mcpServers": {
-    "browser-1": { "command": "npx", "args": ["-y", "@playwright/mcp@latest", "--browser", "chromium", "--headless", "--isolated"] },
-    "browser-2": { "command": "npx", "args": ["-y", "@playwright/mcp@latest", "--browser", "chromium", "--headless", "--isolated"] },
-    "browser-3": { "command": "npx", "args": ["-y", "@playwright/mcp@latest", "--browser", "chromium", "--headless", "--isolated"] },
-    "browser-4": { "command": "npx", "args": ["-y", "@playwright/mcp@latest", "--browser", "chromium", "--headless", "--isolated"] },
-    "browser-5": { "command": "npx", "args": ["-y", "@playwright/mcp@latest", "--browser", "chromium", "--headless", "--isolated"] },
-    "browser-6": { "command": "npx", "args": ["-y", "@playwright/mcp@latest", "--browser", "chromium", "--isolated"] },
-    "browser-7": { "command": "npx", "args": ["-y", "@playwright/mcp@latest", "--browser", "chromium", "--headless", "--isolated"] }
-  }
-}
-```
-
-**Headed browser** (browser-6 — for watching tests live):
-
-```json
-{
-  "browser-6": {
-    "command": "npx",
-    "args": ["-y", "@playwright/mcp@latest", "--browser", "chromium", "--isolated"]
-  }
-}
-```
-
-> `browser-6` omits `--headless` so the browser window is visible when you want to watch.
-
-The shared `settings.json` has two pre-approval entries:
-
-- **`"enableAllProjectMcpServers": true`** — auto-approves all servers from `.mcp.json` without prompting on each reload.
-- **All `mcp__browser-*` tool calls** — pre-approved for all 7 browsers so that parallel sub-agents (used by `/test-app` Full mode and `/test-counsel`) can use their assigned browser without needing an interactive permission prompt. Without this, background agents are silently denied and no testing occurs.
-
-Then **reload the VS Code window**: `Ctrl+Shift+P` → type `reload window` → Enter.
-
-### Verification
-
-After reload, open the MCP servers panel to verify all 7 browsers show **Connected**. You can do this two ways:
-- Type `/MCP servers` in the Claude Code chat input
-- Or `Ctrl+Shift+P` → search **"MCP servers"**
-
-![MCP servers panel showing all 7 browser instances connected](./img/mcp-servers-connected.png)
-
-If any server shows an error, check the output panel: `Ctrl+Shift+P` → **"Output: Focus on Output"** → select **"Claude VSCode"** from the dropdown.
-
-### CLI Alternative (terminal only)
-
-For the Claude Code CLI (`claude` terminal command, not VS Code), you can start servers as HTTP endpoints on fixed ports and reference them via URL:
-
-```bash
-# Start headless browsers
-for port in 9221 9222 9223 9224 9225 9227; do
-  npx -y @playwright/mcp@latest --headless --isolated --port $port &
-done
-
-# Start headed browser
-npx -y @playwright/mcp@latest --isolated --port 9226 &
-```
-
-> This is **not needed for VS Code** — the extension manages server processes automatically via `.mcp.json`. Only use this approach if you're running `claude` from the terminal without VS Code.
-
-### Usage Rules
-
-1. **Default**: Use `browser-1` for normal work
-2. **Parallel agents**: Assign sub-agents `browser-2` through `browser-5` and `browser-7`
-3. **User watching**: Switch to `browser-6` when the user wants to observe
-4. **Fallback**: If a browser errors, try the next numbered browser
-5. **Keep `browser-6` reserved**: Only for explicit user observation
+**Usage rules:** Use `browser-1` for normal work. Assign `browser-2`–`browser-5` and `browser-7` to parallel sub-agents. Keep `browser-6` reserved for user observation only.
 
 ---
 
 ## Directory Structure
 
+### This repository (`.github`)
+
+This repo contains **documentation**, **global settings**, and **project templates** — not skills, personas, or scripts. Those live in each project's own `.claude/` directory (see below).
+
+```
+.github/
+├── docs/
+│   └── claude/                       # Developer guides (this documentation)
+│       ├── README.md                     # This file — overview and setup
+│       ├── getting-started.md            # First-change walkthrough
+│       ├── workflow.md                   # Spec-driven architecture reference
+│       ├── commands.md                   # Full command reference
+│       ├── testing.md                    # Testing commands and skills
+│       ├── writing-specs.md              # How to write specs
+│       ├── writing-skills.md             # How to create skills
+│       ├── writing-adrs.md              # How to write ADRs
+│       ├── writing-docs.md              # Documentation standards
+│       ├── app-lifecycle.md             # Nextcloud app lifecycle
+│       ├── frontend-standards.md        # Frontend coding standards
+│       ├── parallel-agents.md           # Parallel agents and cap usage
+│       ├── local-llm.md                 # Ollama + Qwen + Double Dutch
+│       ├── playwright-setup.md          # Playwright browser configuration
+│       ├── walkthrough.md               # End-to-end worked example
+│       ├── docker.md                    # Docker environment
+│       ├── global-claude-settings.md    # Global settings reference
+│       └── examples/                    # Project-level template files
+│           ├── CLAUDE.local.md.example      # Template for project .claude/CLAUDE.local.md
+│           └── .mcp.json.example            # Template for project root .mcp.json (7 browsers)
+│
+├── global-settings/                  # Mandatory user-level settings for ~/.claude/
+│   ├── settings.json                     # → ~/.claude/settings.json (global read-only policy)
+│   ├── block-write-commands.sh           # → ~/.claude/hooks/block-write-commands.sh
+│   ├── check-settings-version.sh         # → ~/.claude/hooks/check-settings-version.sh
+│   └── VERSION                           # Version tracking for update checks
+│
+└── usage-tracker/                    # Claude token usage monitoring tool
+```
+
+### Typical project workspace
+
+Each Conduction project (Nextcloud apps, WordPress sites, etc.) has its own `.claude/` directory with skills, personas, and configuration. The [Hydra](https://github.com/ConductionNL/hydra) repo also maintains its own set of skills and personas for CI/CD agents.
+
 ```
 <project-root>/
-├── .mcp.json                     # Playwright browser MCP servers
+├── .mcp.json                     # Playwright browser MCP servers (see docs/claude/examples/.mcp.json.example)
 │
-└── .claude/                      # Claude Code configuration (this repository)
-    ├── CLAUDE.md                     # Workflow rules, project context, Docker env
-    ├── .mcp.json                     # Template — copy to project root on setup
-    ├── settings.json                 # [COMMITTED] Shared project permissions (MCP approvals, enableAllProjectMcpServers)
-    ├── settings.local.json           # [GITIGNORED] Your personal tool permissions — auto-generated by Claude Code
+└── .claude/
+    ├── CLAUDE.md                     # Workflow rules, project context
+    ├── CLAUDE.local.md               # [GITIGNORED] Your credentials
+    ├── CLAUDE.local.md.example       # Template — copy from global-settings/ or customize per project
+    ├── settings.json                 # [COMMITTED] Shared team permissions
+    ├── settings.local.json           # [GITIGNORED] Personal tool permissions (auto-generated)
     │
-    ├── docs/                         # This documentation
-    │
-    ├── global-settings/              # Source files for ~/.claude/ — install once per machine (see step 7)
-    │   ├── settings.json             #   → installed as ~/.claude/settings.json (global read-only policy)
-    │   ├── block-write-commands.sh   #   → installed as ~/.claude/hooks/block-write-commands.sh
-    │   ├── check-settings-version.sh #   → installed as ~/.claude/hooks/check-settings-version.sh
-    │   └── VERSION                   #   → version tracking for update checks
-    │
-    ├── skills/                       # See docs/commands.md for full reference
-    │   ├── app-*/                        # App lifecycle (create, design, apply, verify, explore)
-    │   ├── ecosystem-*/                  # Ecosystem research (investigate, propose-app)
-    │   ├── opsx-*/                       # OpenSpec workflow (new, ff, apply, verify, archive, …)
-    │   ├── swc-*/                        # Softwarecatalogus (test, update)
-    │   ├── team-*/                       # Scrum team agents (architect, backend, frontend, …)
-    │   ├── tender-*/                     # Tender intelligence (scan, status, gap-report)
-    │   ├── test-*/                       # Testing (counsel, app, personas, scenarios, …)
-    │   ├── clean-env/                    # Reset Docker environment
-    │   ├── create-pr/                    # Create a PR on GitHub
-    │   ├── feature-counsel/              # Multi-persona spec analysis
-    │   ├── intelligence-update/          # Sync external data sources
-    │   ├── sync-docs/                    # Sync documentation to current state
-    │   └── verify-global-settings-version/
-    │
-    ├── personas/                     # 8 Dutch government user personas
-    │   ├── henk-bakker.md
-    │   ├── fatima-el-amrani.md
-    │   ├── sem-de-jong.md
-    │   ├── noor-yilmaz.md
-    │   ├── annemarie-de-vries.md
-    │   ├── mark-visser.md
-    │   ├── priya-ganpat.md
-    │   └── janwillem-van-der-berg.md
-    │
-    └── usage-tracker/                # Claude token usage monitoring
+    ├── skills/                       # Project-specific skills (see commands.md)
+    ├── personas/                     # User personas for testing
+    ├── scripts/                      # Shared shell utilities
+    └── docs/                         # Project-specific documentation
 ```
-
----
-
-## Commands Reference
-
-Commands are invoked as `/namespace-command [args]` in Claude Code.
-
-### OpenSpec Workflow (`/opsx-*`)
-
-**Core lifecycle:**
-
-| Command | Description |
-|---------|-------------|
-| `/opsx-new <name>` | Start a new change |
-| `/opsx-ff` | Fast-forward: create all artifacts (proposal, specs, design, tasks) |
-| `/opsx-continue` | Create the next artifact incrementally |
-| `/opsx-apply` | Implement tasks from a change |
-| `/opsx-verify` | Check implementation against specs (includes test coverage + documentation checks) |
-| `/opsx-archive` | Archive a completed change, merge delta specs, update feature docs |
-| `/opsx-bulk-archive` | Archive multiple changes at once |
-| `/opsx-sync` | Sync delta specs to main specs |
-| `/opsx-plan-to-issues` | Convert tasks.md to GitHub Issues with tracking epic |
-| `/opsx-pipeline` | Process multiple changes in parallel — full lifecycle per change, up to 5 concurrent agents |
-
-**Discovery & design:**
-
-| Command | Description |
-|---------|-------------|
-| `/opsx-explore` | Read-only investigation mode |
-| `/opsx-onboard` | Guided walkthrough for new team members |
-
-**App lifecycle:**
-
-| Command | Description |
-|---------|-------------|
-| `/app-design [app-name]` | Full upfront design — architecture research, competitor analysis, feature matrix, ASCII wireframes, OpenSpec setup. Run **before** `/app-create` for new apps. |
-| `/app-create [app-id]` | Bootstrap a new app from template or onboard an existing repo — creates `openspec/`, scaffolds files, sets up GitHub repo |
-| `/app-explore [app-id]` | Think through and evolve app configuration — updates `openspec/app-config.json`, feature specs, and ADRs |
-| `/app-apply [app-id]` | Apply `openspec/app-config.json` changes to the actual app files (info.xml, CI workflows, PHP namespaces, etc.) |
-| `/app-verify [app-id]` | Read-only audit — reports drift between `openspec/app-config.json` and the actual files (CRITICAL / WARNING / INFO) |
-
-**Team role agents:**
-
-| Command | Role |
-|---------|------|
-| `/team-architect` | Architecture review (API, data models, cross-app) |
-| `/team-backend` | Backend implementation (PHP, entities, services) |
-| `/team-frontend` | Frontend implementation (Vue, state, UX) |
-| `/team-po` | Product Owner (business value, acceptance criteria) |
-| `/team-qa` | QA Engineer (test coverage, edge cases) |
-| `/team-reviewer` | Code review (standards, conventions) |
-| `/team-sm` | Scrum Master (progress, blockers) |
-
-**Testing agents:**
-
-| Command | Focus |
-|---------|-------|
-| `/test-functional` | Feature correctness via browser |
-| `/test-api` | REST API + NLGov Design Rules compliance |
-| `/test-accessibility` | WCAG 2.1 AA compliance |
-| `/test-performance` | Load times, API response, network |
-| `/test-security` | OWASP Top 10, BIO2, multi-tenancy |
-| `/test-regression` | Cross-app regression testing |
-| `/test-persona-*` | 8 persona-specific testing agents |
-
-**Typical workflow:**
-
-```
-/opsx-new add-search-filters     # Define the change
-/opsx-ff                          # Generate all spec artifacts
-/opsx-plan-to-issues              # Create GitHub issues (optional)
-/opsx-apply                       # Implement the tasks
-/opsx-verify                      # Verify against specs
-/opsx-archive                     # Archive when done
-```
-
-### Softwarecatalogus (`/swc-*`)
-
-| Command | Description |
-|---------|-------------|
-| `/swc-test [mode]` | Run tests — `api`, `browser`, `all`, or `personas` |
-| `/swc-update` | Sync GitHub issues and update test infrastructure |
-
----
-
-## Skills Reference
-
-Skills are invoked as `/skill-name [args]`.
-
-### General
-
-| Skill | Description |
-|-------|-------------|
-| `/clean-env` | Full Docker environment reset (stop, remove volumes, restart, install apps) |
-| `/feature-counsel` | Analyze specs from 8 persona perspectives, suggest missing features |
-| `/test-app [appname]` | Automated browser testing — single agent or 6 parallel perspectives |
-| `/test-counsel` | Execute tests from 8 persona perspectives using browser + API |
-
-> These commands spawn multiple agents in parallel and consume your Claude usage cap faster than normal. See [parallel-agents.md](./parallel-agents.md) for cap impact, guidelines, and tips to reduce token usage.
-
-### Tender & Ecosystem Intelligence
-
-| Skill | Description |
-|-------|-------------|
-| `/tender-scan` | Scrape TenderNed for new tenders, import to SQLite, classify by software category using local Qwen |
-| `/tender-status` | Dashboard: tenders by source, category, status, gaps, and top integration systems |
-| `/tender-gap-report` | Generate gap analysis report — categories with tender demand but no Conduction product |
-| `/ecosystem-investigate <category>` | Deep-dive competitor research for a software category (GitHub, G2, Capterra, AlternativeTo) |
-| `/ecosystem-propose-app <category>` | Generate a structured app proposal from tender requirements and competitor research |
-| `/intelligence-update [source]` | Sync external data sources into `intelligence.db` (due sources by default, or specify `all`/`<name>`) |
-
-> Requires `concurrentie-analyse/intelligence.db` to exist. `/tender-scan` requires a local Qwen model via Ollama (`http://localhost:11434`).
 
 ---
 
 ## Personas
 
-Eight Dutch government user personas in `personas/` represent the full spectrum of public sector users:
+Each project defines its own user personas in `personas/`. Personas drive multi-perspective analysis via `/feature-counsel` and testing via `/test-counsel`.
+
+**Nextcloud workspace** — 8 Dutch government user personas representing public sector users:
 
 | Persona | Age | Role | Perspective |
 |---------|-----|------|-------------|
@@ -1162,36 +710,7 @@ Eight Dutch government user personas in `personas/` represent the full spectrum 
 | Priya Ganpat | 34 | ZZP developer | API quality, OpenAPI, DX |
 | Jan-Willem van der Berg | 55 | Small business owner | Plain language, findability |
 
-Used by `/feature-counsel` and `/test-counsel` for multi-perspective analysis.
-
----
-
-## Scripts
-
-Shell scripts in `scripts/` are shared utilities used by skills and developers.
-
-| Script | Description | Usage |
-|--------|-------------|-------|
-| `clean-env.sh` | Full Docker environment reset — stops containers, removes volumes, restarts, installs core apps | `bash scripts/clean-env.sh` or `/clean-env` |
-
----
-
-## Usage Tracker
-
-Monitor your Claude token usage in real-time to avoid hitting subscription limits mid-session. The tracker reads Claude Code's JSONL session files directly — no extra configuration needed.
-
-```bash
-# Install
-bash usage-tracker/install.sh
-
-# Quick status (all models)
-python3 usage-tracker/claude-usage-tracker.py --status-bar --all-models
-
-# Live monitoring (refreshes every 5 min)
-python3 usage-tracker/claude-usage-tracker.py --monitor --all-models
-```
-
-See [usage-tracker/README.md](../../usage-tracker/README.md) for full documentation, VS Code task integration, and limit configuration.
+Other projects define personas relevant to their domain (e.g., the [wordpress-docker](https://github.com/ConductionNL/wordpress-docker) project uses shopper and admin personas). The [Hydra](https://github.com/ConductionNL/hydra) CI/CD pipeline also maintains its own copy of personas for automated testing.
 
 ---
 
@@ -1233,9 +752,58 @@ ADRs are referenced in each app's `openspec/config.yaml` under the `rules:` sect
 
 ### Adding a New ADR
 
+See [writing-adrs.md](./writing-adrs.md) for the full guide on structure, format, and when to create one.
+
+Quick start:
+
 1. Create `openspec/architecture/adr-NNN-title.md` (company-wide) or `{app}/openspec/architecture/adr-NNN-title.md` (app-specific) following the template in `openspec/architecture/README.md`
 2. Add reference rules to `config.yaml` for the relevant artifact types
 3. Update this table
+
+---
+
+## Usage Tracker
+
+Monitor your Claude token usage in real-time to avoid hitting subscription limits mid-session. The tracker reads Claude Code's JSONL session files directly — no extra configuration needed.
+
+```bash
+# Install
+bash usage-tracker/install.sh
+
+# Quick status (all models)
+python3 usage-tracker/claude-usage-tracker.py --status-bar --all-models
+
+# Live monitoring (refreshes every 5 min)
+python3 usage-tracker/claude-usage-tracker.py --monitor --all-models
+```
+
+See [usage-tracker/README.md](../../usage-tracker/README.md) for full documentation, VS Code task integration, and limit configuration.
+
+---
+
+## Related: Hydra CI/CD Pipeline
+
+[Hydra](https://github.com/ConductionNL/hydra) is Conduction's agentic CI/CD platform that runs the same spec-driven workflow autonomously in Docker containers. It transforms OpenSpec change proposals into validated, security-scanned code on feature branches — with final human approval before merging.
+
+Hydra maintains its own skills, personas, and OpenSpec workflows in its repository, running them through three specialized agent containers:
+
+| Agent | Role | Permissions |
+|-------|------|-------------|
+| **Al Gorithm** (Builder) | Reads OpenSpec change, implements code, opens draft PR | Full: Read, Write, Edit, Bash |
+| **Juan Claude van Damme** (Reviewer) | Code review for correctness, style, architecture | Read-only |
+| **Clyde Barcode** (Security) | SAST analysis, secret detection, security hardening | Read-only |
+
+The workflow and commands documented in this guide apply to both interactive development and Hydra's automated agents. See the [Hydra repository](https://github.com/ConductionNL/hydra) for container architecture, agent configuration, deployment models, and operational guides.
+
+---
+
+## Scripts
+
+Each project may include shell scripts in its `.claude/scripts/` or `scripts/` directory, used by skills and developers. Common examples:
+
+| Script | Description | Usage |
+|--------|-------------|-------|
+| `clean-env.sh` | Full Docker environment reset — stops containers, removes volumes, restarts, installs core apps | `bash scripts/clean-env.sh` or `/clean-env` |
 
 ---
 
@@ -1243,7 +811,11 @@ ADRs are referenced in each app's `openspec/config.yaml` under the `rules:` sect
 
 ### Adding a Skill
 
-1. Create `skills/<skill-name>/SKILL.md`
+Skills are added to each project's `.claude/skills/` directory. See [writing-skills.md](./writing-skills.md) for the full guide on folder layout, SKILL.md format, naming conventions, maturity levels, and the extraction threshold rule.
+
+Quick start:
+
+1. Create `skills/<skill-name>/SKILL.md` in your project's `.claude/` directory
 2. Use frontmatter:
    ```yaml
    ---
@@ -1255,8 +827,10 @@ ADRs are referenced in each app's `openspec/config.yaml` under the `rules:` sect
 
 ### Adding a Persona
 
+Personas are added to each project's `personas/` directory.
+
 1. Create `personas/<firstname-lastname>.md`
-2. Follow the existing format (see `henk-bakker.md`)
+2. Follow the existing format (see any existing persona file in the project)
 3. Update skills that reference the persona list
 
 ### PR Process
@@ -1306,17 +880,6 @@ Ensure `.claude/` is at the workspace root and Claude Code is started from that 
 ```bash
 gh auth login
 ```
-
-### Ollama model won't load (out of memory)
-
-Increase WSL memory in `%USERPROFILE%\.wslconfig`:
-
-```ini
-[wsl2]
-memory=24GB
-```
-
-Then restart WSL from PowerShell: `wsl --shutdown`
 
 ### Docker environment not starting
 

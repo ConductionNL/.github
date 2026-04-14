@@ -6,10 +6,10 @@ Run from the project root:
 
 ```bash
 # 1. Run installer
-bash .claude/usage-tracker/install.sh
+bash usage-tracker/install.sh
 
 # 2. Test it
-python3 .claude/usage-tracker/claude-usage-tracker.py --status-bar
+python3 usage-tracker/claude-usage-tracker.py --status-bar
 ```
 
 That's it. No verbose logging to enable — the tracker reads Claude Code's session files in `~/.claude/projects/` directly.
@@ -22,50 +22,50 @@ All commands run from the project root:
 
 ### Status (one-line)
 ```bash
-python3 .claude/usage-tracker/claude-usage-tracker.py --status-bar             # Sonnet only
-python3 .claude/usage-tracker/claude-usage-tracker.py --status-bar --all-models # All three models
-python3 .claude/usage-tracker/claude-usage-tracker.py --model haiku --status-bar # Haiku only
+python3 usage-tracker/claude-usage-tracker.py --status-bar             # Sonnet only
+python3 usage-tracker/claude-usage-tracker.py --status-bar --all-models # All three models
+python3 usage-tracker/claude-usage-tracker.py --model haiku --status-bar # Haiku only
 ```
 
 ### Full Report
 ```bash
-python3 .claude/usage-tracker/claude-usage-tracker.py                # Sonnet
-python3 .claude/usage-tracker/claude-usage-tracker.py --all-models   # All models
+python3 usage-tracker/claude-usage-tracker.py                # Sonnet
+python3 usage-tracker/claude-usage-tracker.py --all-models   # All models
 ```
 
 ### Continuous Monitoring
 ```bash
-python3 .claude/usage-tracker/claude-usage-tracker.py --monitor                                        # Sonnet, 5 min
-python3 .claude/usage-tracker/claude-usage-tracker.py --monitor --all-models                           # All models
-python3 .claude/usage-tracker/claude-usage-tracker.py --monitor --interval 300                         # 5 min refresh (default)
-python3 .claude/usage-tracker/claude-usage-tracker.py --monitor --interval 30                          # 30s refresh
-python3 .claude/usage-tracker/claude-usage-tracker.py --monitor --all-models --interval 300
-python3 .claude/usage-tracker/claude-usage-tracker.py --monitor --all-models --active-only             # Hide idle models
+python3 usage-tracker/claude-usage-tracker.py --monitor                                        # Sonnet, 5 min
+python3 usage-tracker/claude-usage-tracker.py --monitor --all-models                           # All models
+python3 usage-tracker/claude-usage-tracker.py --monitor --interval 300                         # 5 min refresh (default)
+python3 usage-tracker/claude-usage-tracker.py --monitor --interval 30                          # 30s refresh
+python3 usage-tracker/claude-usage-tracker.py --monitor --all-models --interval 300
+python3 usage-tracker/claude-usage-tracker.py --monitor --all-models --active-only             # Hide idle models
 ```
 
 ### Check / Update Limits
 ```bash
-python3 .claude/usage-tracker/claude-usage-tracker.py --limits   # show current limits
+python3 usage-tracker/claude-usage-tracker.py --limits   # show current limits
 # Edit limits.json to set your real plan limits (copy from limits.example.json first)
 ```
 
 ### Calibrate Session Reset Time
 ```bash
 # When you start a fresh session:
-python3 .claude/usage-tracker/claude-usage-tracker.py --mark-session-start
+python3 usage-tracker/claude-usage-tracker.py --mark-session-start
 
 # When claude.ai/settings/usage shows a known "Resets in X" time, store it:
-python3 .claude/usage-tracker/claude-usage-tracker.py --set-session-reset "4h 50m"
+python3 usage-tracker/claude-usage-tracker.py --set-session-reset "4h 50m"
 # Accepts: "4h 50m", "4:50", or plain minutes ("290")
 # Header shows (calibrated) vs (approx) — running monitor picks up changes within 1 second
 ```
 
 ### Via Makefile
 ```bash
-make -C .claude/usage-tracker report           # View report
-make -C .claude/usage-tracker status           # Check status
-make -C .claude/usage-tracker monitor          # Monitor (60s)
-make -C .claude/usage-tracker monitor-fast     # Monitor (10s)
+make -C usage-tracker report           # View report
+make -C usage-tracker status           # Check status
+make -C usage-tracker monitor          # Monitor (60s)
+make -C usage-tracker monitor-fast     # Monitor (10s)
 ```
 
 ---
@@ -89,7 +89,7 @@ Run the monitor automatically every time you open the workspace.
       "type": "shell",
       "command": "python3",
       "args": [
-        "${workspaceFolder}/.claude/usage-tracker/claude-usage-tracker.py",
+        "${workspaceFolder}/usage-tracker/claude-usage-tracker.py",
         "--monitor",
         "--all-models",
         "--interval",

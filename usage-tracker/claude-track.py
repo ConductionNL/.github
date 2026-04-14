@@ -14,7 +14,7 @@ def load_tracker():
     tracker_path = Path(__file__).parent / "claude-usage-tracker.py"
     if not tracker_path.exists():
         print(f"❌ Tracker script not found at {tracker_path}")
-        print("Run: bash .claude/usage-tracker/install.sh")
+        print("Run: bash usage-tracker/install.sh")
         sys.exit(1)
     spec = importlib.util.spec_from_file_location("claude_usage_tracker", tracker_path)
     mod = importlib.util.module_from_spec(spec)
@@ -90,7 +90,7 @@ def main():
         if not limits_path.exists():
             print("   ⚠️  Copy limits.example.json → limits.json and edit values")
 
-        print("\n📖 Documentation  : .claude/usage-tracker/SETUP.md")
+        print("\n📖 Documentation  : usage-tracker/SETUP.md")
         print("🆘 Help           : claude-track -h")
 
     else:

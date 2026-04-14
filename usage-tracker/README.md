@@ -29,7 +29,7 @@ The Claude Code extension writes full API responses (including token counts) to 
 ## What's Included
 
 ```
-.claude/usage-tracker/
+usage-tracker/
 ├── claude-usage-tracker.py    ← Main tracker script
 ├── claude-track.py            ← CLI launcher wrapper
 ├── install.sh                 ← Installation script
@@ -52,20 +52,20 @@ The Claude Code extension writes full API responses (including token counts) to 
 ### 1. Install
 
 ```bash
-bash .claude/usage-tracker/install.sh
+bash usage-tracker/install.sh
 ```
 
 ### 2. Test
 
 ```bash
 # Quick status
-python3 .claude/usage-tracker/claude-usage-tracker.py --status-bar
+python3 usage-tracker/claude-usage-tracker.py --status-bar
 
 # Full report
-python3 .claude/usage-tracker/claude-usage-tracker.py
+python3 usage-tracker/claude-usage-tracker.py
 
 # Live monitoring
-python3 .claude/usage-tracker/claude-usage-tracker.py --monitor
+python3 usage-tracker/claude-usage-tracker.py --monitor
 ```
 
 ---
@@ -78,46 +78,46 @@ All commands run from the project root:
 
 ```bash
 # Show one-time report (Sonnet)
-python3 .claude/usage-tracker/claude-usage-tracker.py
+python3 usage-tracker/claude-usage-tracker.py
 
 # Show all three models at once
-python3 .claude/usage-tracker/claude-usage-tracker.py --all-models
+python3 usage-tracker/claude-usage-tracker.py --all-models
 
 # Compact status bar (single model)
-python3 .claude/usage-tracker/claude-usage-tracker.py --status-bar
+python3 usage-tracker/claude-usage-tracker.py --status-bar
 
 # Compact status bar (all models)
-python3 .claude/usage-tracker/claude-usage-tracker.py --status-bar --all-models
+python3 usage-tracker/claude-usage-tracker.py --status-bar --all-models
 
 # Continuous monitoring — one model
-python3 .claude/usage-tracker/claude-usage-tracker.py --monitor
+python3 usage-tracker/claude-usage-tracker.py --monitor
 
 # Continuous monitoring — all models, 30s refresh
-python3 .claude/usage-tracker/claude-usage-tracker.py --monitor --all-models --interval 300
+python3 usage-tracker/claude-usage-tracker.py --monitor --all-models --interval 300
 
 # Show configured limits
-python3 .claude/usage-tracker/claude-usage-tracker.py --limits
+python3 usage-tracker/claude-usage-tracker.py --limits
 
 # Hide models with no usage
-python3 .claude/usage-tracker/claude-usage-tracker.py --monitor --all-models --active-only
+python3 usage-tracker/claude-usage-tracker.py --monitor --all-models --active-only
 
 # Track a specific model
-python3 .claude/usage-tracker/claude-usage-tracker.py --model haiku --status-bar
+python3 usage-tracker/claude-usage-tracker.py --model haiku --status-bar
 
 # Calibrate session at start of a new session
-python3 .claude/usage-tracker/claude-usage-tracker.py --mark-session-start
+python3 usage-tracker/claude-usage-tracker.py --mark-session-start
 
 # Calibrate session reset time (when claude.ai/settings/usage shows a known remaining time)
-python3 .claude/usage-tracker/claude-usage-tracker.py --set-session-reset "4h 50m"
+python3 usage-tracker/claude-usage-tracker.py --set-session-reset "4h 50m"
 ```
 
 ### Via Make Commands
 ```bash
-make -C .claude/usage-tracker report              # Full report
-make -C .claude/usage-tracker status              # Status bar
-make -C .claude/usage-tracker monitor             # Monitor (60s)
-make -C .claude/usage-tracker monitor-fast        # Monitor (10s)
-make -C .claude/usage-tracker test                # Test setup
+make -C usage-tracker report              # Full report
+make -C usage-tracker status              # Status bar
+make -C usage-tracker monitor             # Monitor (60s)
+make -C usage-tracker monitor-fast        # Monitor (10s)
+make -C usage-tracker test                # Test setup
 ```
 
 ---
@@ -126,7 +126,7 @@ make -C .claude/usage-tracker test                # Test setup
 
 ### Option A: Terminal Panel (Easiest)
 1. Open Terminal: `` Ctrl + ` ``
-2. Run: `python3 .claude/usage-tracker/claude-usage-tracker.py --monitor`
+2. Run: `python3 usage-tracker/claude-usage-tracker.py --monitor`
 3. Keep panel open for live updates
 
 ### Option B: VS Code Task (Recommended)
@@ -219,7 +219,7 @@ Color scale: 🔵 0% · 🟢 >0–50% · 🟡 50–75% · 🟠 75–90% · 🔴 
 ### Update Your Plan Limits
 
 ```bash
-cp .claude/usage-tracker/limits.example.json .claude/usage-tracker/limits.json
+cp usage-tracker/limits.example.json usage-tracker/limits.json
 # Edit limits.json with your values — see SETUP.md for full instructions
 ```
 

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Claude Usage Tracker - Quick Install Script
-# Run from project root: bash .claude/usage-tracker/install.sh
+# Run from project root: bash usage-tracker/install.sh
 
 set -e
 
@@ -57,13 +57,13 @@ echo ""
 echo "📚 NEXT STEPS:"
 echo ""
 echo "1️⃣  Test the tracker:"
-echo "   python3 .claude/usage-tracker/claude-usage-tracker.py --status-bar --all-models"
+echo "   python3 usage-tracker/claude-usage-tracker.py --status-bar --all-models"
 echo ""
 echo "2️⃣  Full report:"
-echo "   python3 .claude/usage-tracker/claude-usage-tracker.py --all-models"
+echo "   python3 usage-tracker/claude-usage-tracker.py --all-models"
 echo ""
 echo "3️⃣  Run continuous monitoring:"
-echo "   python3 .claude/usage-tracker/claude-usage-tracker.py --monitor --all-models"
+echo "   python3 usage-tracker/claude-usage-tracker.py --monitor --all-models"
 echo ""
 echo "4️⃣  Set up VS Code task (recommended):"
 echo "   • Tasks: Open User Tasks (Ctrl/Cmd + Shift + P)"

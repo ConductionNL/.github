@@ -131,8 +131,6 @@ OpenSpec's built-in implementation command. Reads `tasks.md` and works through t
 /opsx-apply
 ```
 
-**Note:** `/opsx-ralph-start` (not yet built) is planned as a dedicated implementation loop with minimal context loading and deeper GitHub Issues integration. For now, use this command — it already supports `plan.json` and GitHub Issues when a `plan.json` exists.
-
 **Model:** Checked at run time — stops if on Haiku. **Sonnet** for most implementation work. **Opus** for architecturally complex changes.
 
 ---
@@ -154,8 +152,6 @@ OpenSpec's built-in verification. Validates implementation against artifacts.
 - **Coherence** — Design decisions reflected in code
 - **Test coverage** — Every new PHP service/controller has a corresponding test file; every new Vue component has a test if the project uses Jest/Vitest
 - **Documentation** — New features and API endpoints are described in README.md or docs/
-
-**Note:** `/opsx-ralph-review` (not yet built) is planned as a dedicated review command that cross-references shared specs and creates GitHub Issues for findings. For now, use this command — it already supports GitHub Issues sync via `plan.json` when present.
 
 **Model:** Checked at run time — stops if on Haiku. **Sonnet** for most verification work. **Opus** for complex or large changes.
 
@@ -185,21 +181,21 @@ Usually done automatically during archive.
 
 **Phase:** Maintenance
 
-Check and sync documentation to reflect the current project state. Two targets: **app docs** (`{app}/docs/`) for a specific Nextcloud app's users and admins, and **dev docs** (`.claude/docs/`) for Claude and developers.
+Check and sync documentation to reflect the current project state. Two targets: **app docs** (`{app}/docs/`) for a specific Nextcloud app's users and admins, and **dev docs** (`.github/docs/claude/`) for Claude and developers.
 
 **Usage:**
 ```
 /sync-docs                       # prompts for target
 /sync-docs app                   # prompts for which app, then syncs its docs/
 /sync-docs app openregister      # sync docs for a specific app
-/sync-docs dev                   # sync developer/Claude docs (.claude/docs/)
+/sync-docs dev                   # sync developer/Claude docs (.github/docs/claude/)
 ```
 
-Before syncing, runs 4 preliminary checks in parallel — config.yaml rules vs writing-docs.md/writing-specs.md, Sources of Truth accuracy, writing-specs.md vs schema template alignment (`.claude/openspec/schemas/conduction/`), and forked schema drift from the upstream `spec-driven` schema. Reports gaps and asks whether to fix before proceeding.
+Before syncing, runs 4 preliminary checks in parallel — config.yaml rules vs writing-docs.md/writing-specs.md, Sources of Truth accuracy, writing-specs.md vs schema template alignment (`openspec/schemas/conduction/`), and forked schema drift from the upstream `spec-driven` schema. Reports gaps and asks whether to fix before proceeding.
 
-**App docs mode** (`{app}/docs/`) — checks the app's `README.md` (root), `docs/features/`, `docs/ARCHITECTURE.md`, `docs/FEATURES.md`, `docs/GOVERNMENT-FEATURES.md`, and any other user-facing `.md` files against the app's current specs. Also loads all company-wide ADRs from `apps-extra/.claude/openspec/architecture/` and any app-level ADRs as auditing context (never as link targets in app docs). Flags outdated descriptions, missing features, stale `[Future]` markers (with full removal checklist), broken links, duplicated content, writing anti-patterns, ADR compliance gaps (screenshots, i18n, API conventions), and missing GEMMA/ZGW/Forum Standaardisatie standards references. Never inserts links into `.claude/` paths. Always shows a diff and asks for confirmation before writing.
+**App docs mode** (`{app}/docs/`) — checks the app's `README.md` (root), `docs/features/`, `docs/ARCHITECTURE.md`, `docs/FEATURES.md`, `docs/GOVERNMENT-FEATURES.md`, and any other user-facing `.md` files against the app's current specs. Also loads all company-wide ADRs from `hydra/openspec/architecture/` and any app-level ADRs as auditing context (never as link targets in app docs). Flags outdated descriptions, missing features, stale `[Future]` markers (with full removal checklist), broken links, duplicated content, writing anti-patterns, ADR compliance gaps (screenshots, i18n, API conventions), and missing GEMMA/ZGW/Forum Standaardisatie standards references. Never inserts links into `.claude/` paths. Always shows a diff and asks for confirmation before writing.
 
-**Dev docs mode** (`.claude/docs/`) — checks `commands.md`, `workflow.md`, `writing-specs.md`, `writing-docs.md`, `testing.md`, `getting-started.md`, `README.md`, plus the conduction schema (`.claude/openspec/schemas/conduction/schema.yaml`) and its `templates/spec.md` for alignment with `writing-specs.md`. Never changes intent without user confirmation. After syncing, runs a Phase 6 review of all commands and skills for stale references, outdated instructions, and redundant inline content — and asks whether to update them.
+**Dev docs mode** (`.github/docs/`) — checks `commands.md`, `workflow.md`, `writing-specs.md`, `writing-docs.md`, `testing.md`, `getting-started.md`, `README.md`, plus the conduction schema (`hydra/openspec/schemas/conduction/schema.yaml`) and its `templates/spec.md` for alignment with `writing-specs.md`. Never changes intent without user confirmation. After syncing, runs a Phase 6 review of all commands and skills for stale references, outdated instructions, and redundant inline content — and asks whether to update them.
 
 Both modes enforce the [Documentation Principles](writing-docs.md) — duplication and wrong-audience content are flagged as issues, with direct links to the relevant writing-docs.md sections.
 
@@ -573,7 +569,7 @@ Sync GitHub issues from VNG-Realisatie/Softwarecatalogus, auto-generate acceptan
 
 ## Custom Conduction Commands
 
-These commands are workspace-level and available from any project within `apps-extra/`. They extend OpenSpec with GitHub Issues integration and Ralph Wiggum loops.
+These commands are workspace-level and available from any project within `apps-extra/`. They extend OpenSpec with GitHub Issues integration.
 
 ---
 
@@ -593,7 +589,7 @@ Create a Pull Request from a branch in any repo. Handles the full flow interacti
 2. **Confirms the source branch** — shows the current branch, lets you override
 3. **Recommends a target branch** based on the branching strategy; checks GitHub for an existing open PR on the same branch pair — if found, offers to view or update it instead
 4. **Checks for uncommitted or unpushed changes** — if any are found, offers to commit, stash, or continue; offers to push unpushed commits before continuing
-5. **Verifies global settings version** *(claude-code-config repo only)* — delegates to `/verify-global-settings-version`; pauses and offers a fix if a VERSION bump is missing
+5. **Verifies global settings version** *(.github repo only)* — delegates to `/verify-global-settings-version`; pauses and offers a fix if a VERSION bump is missing
 6. **Discovers CI checks from `.github/workflows/`** — reads the repo's workflow files to determine exactly which checks CI will run, then mirrors them locally (never hardcodes a list)
 7. **Installs missing dependencies** (`vendor/`, `node_modules/`) if needed before running checks
 8. **Runs all discovered checks** — nothing skipped; slow checks (e.g. test suites) ask for confirmation first; shows a pass/fail table when done
@@ -621,7 +617,7 @@ Create a Pull Request from a branch in any repo. Handles the full flow interacti
 
 **Phase:** Git / Delivery
 
-Checks whether `global-settings/VERSION` has been correctly bumped after any changes to files in the `global-settings/` directory. Run this before creating a PR on the `ConductionNL/claude-code-config` repo.
+Checks whether `global-settings/VERSION` has been correctly bumped after any changes to files in the `global-settings/` directory. Run this before creating a PR on the `ConductionNL/.github` repo.
 
 **Usage:**
 ```
@@ -640,7 +636,7 @@ Checks whether `global-settings/VERSION` has been correctly bumped after any cha
 
 **When to use:**
 - Standalone: any time you modify a file in `global-settings/` and want to confirm the bump is in place before committing
-- Automatically: called by `/create-pr` when the selected repo is `ConductionNL/claude-code-config` — no need to run it separately in that flow
+- Automatically: called by `/create-pr` when the selected repo is `ConductionNL/.github` — no need to run it separately in that flow
 
 **Semver rules for `global-settings/`:**
 - `1.0.0 → 1.1.0` — new permissions, guards, or behavior added
@@ -688,7 +684,7 @@ Created tracking issue: https://github.com/ConductionNL/opencatalogi/issues/42
 Created 5 task issues: #43, #44, #45, #46, #47
 Saved plan.json at: openspec/changes/add-search/plan.json
 
-Run /opsx-ralph-start to begin implementation.
+Run /opsx-apply to begin implementation.
 ```
 
 **The plan.json it creates:**
@@ -721,111 +717,27 @@ Run /opsx-ralph-start to begin implementation.
 
 ---
 
-### `/opsx-ralph-start` *(not yet implemented)*
+### `/skill-creator`
 
-**Phase:** Implementation
+**Phase:** Maintenance / Meta
 
-Starts a Ralph Wiggum implementation loop driven by `plan.json`. This is the core of our minimal-context coding approach.
-
-**Usage:**
-```
-/opsx-ralph-start
-```
-
-**Prerequisites:**
-- A `plan.json` in the active change (created by `/opsx-plan-to-issues`)
-
-**What it does per iteration:**
-
-1. **Reads plan.json** — finds the next task with `"status": "pending"`
-2. **Sets status to `"in_progress"`** in plan.json
-3. **Reads ONLY the referenced spec section** — uses `spec_ref` to load just the relevant requirement, NOT the entire spec file
-4. **Implements the task** — following acceptance criteria and coding standards
-5. **Verifies** — checks acceptance criteria are met
-6. **Updates progress:**
-   - Sets task to `"completed"` in plan.json
-   - Checks off boxes in tasks.md
-   - Closes the GitHub issue with a summary comment
-   - Updates the tracking issue checklist
-7. **Loops** — picks up the next pending task, or stops if all done
-
-**Why minimal context matters:**
-
-Each iteration loads only:
-- `plan.json` (the task list — typically 1-2 KB)
-- One spec section via `spec_ref` (the specific requirement — a few paragraphs)
-- The affected files
-
-It does NOT load:
-- proposal.md
-- design.md
-- Other spec files
-- The full tasks.md
-
-This prevents context window bloat and keeps each iteration fast and focused.
-
-**Resuming after interruption:**
-
-If the loop is interrupted (context limit, error, etc.), simply run `/opsx-ralph-start` again. It reads `plan.json`, finds the first non-completed task, and continues from there.
-
----
-
-### `/opsx-ralph-review` *(not yet implemented)*
-
-**Phase:** Review
-
-Verifies the completed implementation against all spec requirements and shared conventions. Creates a structured review report.
+Create new skills, modify and improve existing skills, and measure skill performance with evals. Use when you want to build a new skill from scratch, refine an existing skill's behavior, or benchmark a skill's accuracy with quantitative evaluation runs.
 
 **Usage:**
 ```
-/opsx-ralph-review
+/skill-creator
 ```
-
-**Prerequisites:**
-- All tasks in plan.json should be `"completed"`
 
 **What it does:**
+1. Helps you decide what the skill should do and roughly how
+2. Drafts the SKILL.md
+3. Generates a small set of test prompts and runs them against `claude-with-access-to-the-skill`
+4. Drafts quantitative evals (or uses existing ones) and reports the metrics
+5. Iterates on the skill based on qualitative and quantitative feedback
+6. Optionally expands the test set for larger-scale benchmarking
+7. Can also optimize a skill's `description` field for better triggering accuracy
 
-1. **Loads full context** — proposal, all delta specs, tasks, plan.json
-2. **Checks completeness:**
-   - All tasks completed?
-   - All GitHub issues closed?
-   - All task checkboxes checked?
-3. **Checks spec compliance:**
-   - For each ADDED requirement: does the implementation exist?
-   - For each MODIFIED requirement: is the old behavior changed?
-   - For each REMOVED requirement: is the deprecated code gone?
-   - Do GIVEN/WHEN/THEN scenarios match the code behavior?
-4. **Cross-references shared specs:**
-   - `nextcloud-app/spec.md` — correct app structure, DI, route ordering
-   - `api-patterns/spec.md` — URL patterns, CORS, error responses
-   - `nl-design/spec.md` — design tokens, accessibility
-   - `docker/spec.md` — environment compatibility
-5. **Categorizes findings:**
-   - **CRITICAL** — Spec MUST/SHALL requirement not met
-   - **WARNING** — SHOULD requirement not met or partial compliance
-   - **SUGGESTION** — Improvement opportunity
-6. **Generates `review.md`** in the change directory
-7. **Creates GitHub Issue** if CRITICAL/WARNING findings exist
-
-**Output example:**
-```
-Review: add-search
-Tasks completed: 5/5
-GitHub issues closed: 5/5
-Spec compliance: PASS (with warnings)
-
-Findings:
-- 0 CRITICAL
-- 2 WARNING
-  - Missing CORS headers on /api/search (api-patterns spec)
-  - No pagination metadata in response (api-patterns spec)
-- 1 SUGGESTION
-  - Consider adding rate limiting
-
-Review saved: openspec/changes/add-search/review.md
-GitHub issue created: #48 [Review] add-search: 0 critical, 2 warnings
-```
+**When to use:** When adding a new capability, when an existing skill is misfiring or producing inconsistent results, or when you want to verify a recent skill change hasn't regressed behavior.
 
 ---
 

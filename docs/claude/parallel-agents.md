@@ -64,7 +64,7 @@ These files are sent with **every single API call** in the workspace. In a paral
 **Rules:**
 - **CLAUDE.md**: Only include instructions Claude needs on every task. Move niche/infrequent knowledge to separate files in `.claude/docs/` that can be read on demand.
 - **MEMORY.md**: This is an index only — one line per memory file with a brief description. Never write memory content directly into MEMORY.md.
-- **Persona files** (`.claude/personas/*.md`): These are only loaded when a sub-agent explicitly reads them — they don't auto-load. Keep them focused, but they don't need to be ultra-short.
+- **Persona files** (`personas/*.md`): These are only loaded when a sub-agent explicitly reads them — they don't auto-load. Keep them focused, but they don't need to be ultra-short.
 
 ## Two Kinds of Token Limits
 
@@ -127,10 +127,10 @@ The [usage tracker](../../usage-tracker/README.md) lets you watch your token con
 
 ```bash
 # One-line status check
-python3 .claude/usage-tracker/claude-usage-tracker.py --status-bar
+python3 usage-tracker/claude-usage-tracker.py --status-bar
 
 # Live monitoring (30s refresh)
-python3 .claude/usage-tracker/claude-usage-tracker.py --monitor
+python3 usage-tracker/claude-usage-tracker.py --monitor
 ```
 
-The tracker reads Claude Code's session files (`~/.claude/projects/`) directly and is accurate for API token counts. The **limit thresholds** are approximate — verify your real cap at [claude.ai/settings/usage](https://claude.ai/settings/usage). Setup instructions: [`.claude/usage-tracker/SETUP.md`](../../usage-tracker/SETUP.md).
+The tracker reads Claude Code's session files (`~/.claude/projects/`) directly and is accurate for API token counts. The **limit thresholds** are approximate — verify your real cap at [claude.ai/settings/usage](https://claude.ai/settings/usage). Setup instructions: [`usage-tracker/SETUP.md`](../../usage-tracker/SETUP.md).

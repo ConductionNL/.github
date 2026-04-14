@@ -49,7 +49,7 @@ Every spec file at `openspec/specs/{domain}/spec.md` follows this structure:
 | Field | Required | Notes |
 |-------|----------|-------|
 | `**Status**` | Yes | `idea` → `planned` → `in-progress` → `done` |
-| `**Scope**` | Yes | `company-wide` (in `.claude/openspec/specs/`) or app name (in `{app}/openspec/specs/`) |
+| `**Scope**` | Yes | `company-wide` (in `hydra/openspec/specs/`) or app name (in `{app}/openspec/specs/`) |
 | `**OpenSpec changes**` | Yes | Vertical list, one entry per line, oldest first. `_(none yet)_` until first change created. Archived entries include `_(archived YYYY-MM-DD)_`. See [Grouping rule](#openspec-changes-list-format) below. |
 | `## Non-Functional Requirements` | Yes | Always present, even if minimal |
 | `## Acceptance Criteria` | Yes | Placeholder OK for `idea` status; fill in before moving to `planned` |
@@ -245,7 +245,7 @@ See shared spec: `api-patterns/spec.md#requirement-url-structure` for URL conven
 See shared spec: `api-patterns/spec.md#requirement-cors-support` for CORS requirements.
 ```
 
-Shared specs live in `.claude/openspec/specs/` (company-wide, maintained by Conduction). Check that directory for currently available shared specs — the list evolves as new cross-app specs are added. Company-wide architectural decisions (NL Design System, API conventions, security, i18n) are captured in ADRs under `.claude/openspec/architecture/`.
+Shared specs live in `hydra/openspec/specs/` (company-wide, maintained by Conduction). Check that directory for currently available shared specs — the list evolves as new cross-app specs are added. Company-wide architectural decisions (NL Design System, API conventions, security, i18n) are captured in ADRs under `hydra/openspec/architecture/`.
 
 ## Organizing Specs
 
