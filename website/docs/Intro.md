@@ -34,6 +34,8 @@ Conduction helps bring good ideas to life. We work democratically, inclusively a
 
 **Ground rules** — treat each other with respect. Talk *with* each other, not *about* each other. Discrimination, harassment, or bullying is never accepted.
 
+**Leaving?** — HR or your team lead walks you through offboarding: accounts, company property, payroll. See [Onboarding & offboarding](WayOfWork/onboarding).
+
 **Read more:**
 - [Onboarding & buddy system](WayOfWork/onboarding)
 - [Organisation](WayOfWork/organisation) — roles, teams, structure
@@ -67,7 +69,11 @@ Scope, budget and planning are in the quotation. Anything outside: discuss with 
 
 **Helping each other** — stuck on something? Flag it as an impediment, post in Slack with a link to the issue, and raise it at standup. Your buddy is your first port of call.
 
-**Incidents** — spot a security or quality incident? Talk to your supervisor immediately. Flag or create an issue with the label "security incident" or "quality incident". Write a memo with root cause analysis afterwards. Remember: **identify the risk -> assess the risk -> mitigate the risk -> review the measures.**
+:::danger Report an Incident
+Spot a security or quality incident? **Act immediately.** → [Incident reporting procedure](ISO/incident-reporting)
+:::
+
+**Incidents** — talk to your supervisor immediately. Flag or create an issue with the label "security incident" or "quality incident". Write a memo with root cause analysis afterwards. Remember: **identify the risk -> assess the risk -> mitigate the risk -> review the measures.**
 
 **Security** — access via your Conduction Google account, credentials in Passwork. Treat sensitive data like your nudes — share only with those who need it. Never send sensitive data via Slack or email. VPN for critical servers. ESET activated at all times.
 

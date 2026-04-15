@@ -12,17 +12,17 @@ Conduction has a duty to detect, report, and learn from incidents — both secur
 
 **If you suspect something is wrong, report it immediately. There is no penalty for reporting in good faith.**
 
-## Crisis Rules of Thumb
+## Incident Escalation
 
-When a crisis hits, these rules apply:
+When a serious incident occurs, these rules apply:
 
 1. **Report first, investigate later** — the team needs to know before you have all the answers
 2. **Communicate more, not less** — silence creates uncertainty; share what you know, even if incomplete
-3. **One person leads, the rest supports** — the Quality & Safety Lead coordinates; avoid parallel decision-making
+3. **One person leads, the rest supports** — the dev lead or a management team member coordinates; avoid parallel decision-making
 4. **Contain before you fix** — limit the damage first, then work on the root cause
 5. **Log everything** — decisions, timestamps, actions taken. You will need this for the post-mortem
 6. **Don't blame, learn** — the goal is to prevent recurrence, not to assign fault
-7. **Escalate early** — if in doubt whether something is a crisis, treat it as one. Downgrading is easier than catching up
+7. **Escalate early** — if in doubt whether something is serious, treat it as serious. Downgrading is easier than catching up
 
 ## Classification
 

@@ -29,6 +29,8 @@ Conduction helpt goede ideeen tot leven brengen. We werken democratisch, inclusi
 
 **Spelregels** — behandel elkaar met respect. Praat *met* elkaar, niet *over* elkaar. Discriminatie, intimidatie of pesten wordt nooit geaccepteerd.
 
+**Vertrekken?** — HR of je teamlead begeleidt de offboarding: accounts, bedrijfseigendommen, salarisadministratie. Zie [Onboarding & offboarding](WayOfWork/onboarding).
+
 **Meer lezen:**
 - [Onboarding & buddy systeem](WayOfWork/onboarding)
 - [Organisatie](WayOfWork/organisation) — rollen, teams, structuur
@@ -62,7 +64,11 @@ Scope, budget en planning liggen vast in de offerte. Alles daarbuiten: bespreek 
 
 **Elkaar helpen** — ergens vastgelopen? Flag het als impediment, post in Slack met een link naar het issue, en breng het in bij de standup. Je buddy is je eerste aanspreekpunt.
 
-**Incidenten** — herken je een beveiligings- of kwaliteitsincident? Overleg direct met je leidinggevende. Flag of maak een issue met het label "security incident" of "quality incident". Schrijf achteraf een memo met root cause analysis. Onthoud: **identificeer het risico -> beoordeel het risico -> beperk het risico -> herzie de maatregelen.**
+:::danger Incident melden
+Zie je een beveiligings- of kwaliteitsincident? **Handel direct.** → [Procedure incidentmelding](ISO/incident-reporting)
+:::
+
+**Incidenten** — overleg direct met je leidinggevende. Flag of maak een issue met het label "security incident" of "quality incident". Schrijf achteraf een memo met root cause analysis. Onthoud: **identificeer het risico -> beoordeel het risico -> beperk het risico -> herzie de maatregelen.**
 
 **Security** — toegang via je Conduction Google-account, inloggegevens in Passwork. Behandel gevoelige data als je naaktfoto's — deel alleen met wie het nodig heeft. Nooit gevoelige data via Slack of mail. VPN voor kritieke servers. ESET altijd geactiveerd.
 

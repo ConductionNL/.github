@@ -49,18 +49,6 @@ Elk project start met een **kick-off**. Heb je die niet gehad? Vraag erom — ga
 - Alles buiten de offertescope: bespreek eerst met je leidinggevende
 - Al het werk moet herleidbaar zijn naar issues
 
-### Crisismanagement
-
-Wanneer een project in een crisissituatie terechtkomt:
-
-1. **Herrefine** — controle is alles; investering in refinement betaalt zich altijd terug
-2. **Wees realistisch** — duidelijke verwachtingen zijn beter dan loze beloftes. Zeg geen "misschien" als je "nee" bedoelt
-3. **Multidisciplinair team** — betrek backend, frontend en projectmanagement
-4. **Go/no-go moment** — stel duidelijke criteria op en communiceer ze naar de klant
-5. **Duidelijke communicatie** — apart Slack-kanaal met alle stakeholders inclusief de klant
-6. **Weekendwerk** — gebruik avonden/weekends om de volgende dag voor te bereiden; doe reguliere ontwikkeling tijdens werkuren
-7. **Niet haasten** — neem tijd om te refinen en na te denken. Quick fixes komen altijd terug
-
 ## Meer Lezen
 
 - [Medewerkershandboek](/docs/intro) — het beknopte overzicht

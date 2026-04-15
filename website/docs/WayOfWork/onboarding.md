@@ -37,6 +37,10 @@ During onboarding you will read and acknowledge our full [Code of Conduct(ion)](
 
 If you experience unwanted behavior, first try to address the person directly. If that's not possible, contact the internal confidential counselor. An external counselor is available through our occupational health service.
 
+## Offboarding
+
+Leaving Conduction? HR or your team lead handles the process: accounts are revoked, company property (laptop, phone, keys) is collected, and payroll is settled. You are responsible for removing all company data from your personal devices (BYOD). Your confidentiality agreement stays in effect after you leave. They will reach out to walk you through it.
+
 ## Questions?
 
 Ask your buddy. That's the whole point.

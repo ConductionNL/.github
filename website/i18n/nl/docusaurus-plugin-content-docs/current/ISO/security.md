@@ -114,7 +114,7 @@ Alle Conduction-wachtwoorden moeten minimaal **10 tekens** bevatten en bestaan u
 - Een cijfer
 - Een speciaal teken
 
-Sla alle inloggegevens op in [Passwork](https://www.passwork.me/). Deel wachtwoorden nooit via Slack, e-mail of andere communicatiekanalen.
+Sla alle inloggegevens op in [Passwork](https://www.passwork.me/). Deel wachtwoorden nooit via Slack, e-mail of andere communicatiekanalen. Gebruik bij het delen van credentials een **Passwork share-link** — deze is eenmalig bruikbaar en tijdgelimiteerd.
 
 ### Omgang met Data
 
@@ -154,9 +154,11 @@ ESET moet op alle apparaten voor Conduction-werk altijd geactiveerd zijn. Vraag 
 
 **Linux-gebruikers:** ESET heeft beperkte Linux-ondersteuning. Installeer in plaats daarvan de [workstation-security](https://github.com/MWest2020/workstation-security) tooling. Vraag je teamlead om uitleg bij de installatie indien nodig. Er kan te allen tijde om een uitdraai van je beveiligingslogs gevraagd worden.
 
-### AI Tooling (Claude Code)
+### AI Tooling
 
-We gebruiken Claude Code voor development. AI-tooling erft de rechten van de gebruikerssessie waarin het draait. De volgende maatregelen zijn verplicht (gebaseerd op gedocumenteerde afwijking ISO-723):
+Elke medewerker krijgt een betaald **Claude.ai**-account. Dit account slaat geen gespreksdata op. Gebruik het voor je dagelijkse werk — plak nooit klantgegevens of persoonsgegevens in een AI-tool.
+
+**Claude Code** wordt gebruikt voor development. AI-tooling erft de rechten van de gebruikerssessie waarin het draait. De volgende maatregelen zijn verplicht (gebaseerd op gedocumenteerde afwijking ISO-723):
 
 - **Gescheiden accounts** — Claude Code moet een dedicated GitHub-account gebruiken met standaard developer-rechten. Gebruik nooit een admin-account in dezelfde sessie als Claude Code
 - **Git-restricties** — `settings.json` moet Git-operaties beperken: Claude mag alleen pushen naar `feature/*`-branches. Direct pushen naar `development`, `beta` of `main` is geblokkeerd

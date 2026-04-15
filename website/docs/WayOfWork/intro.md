@@ -48,18 +48,6 @@ Every project starts with a **kick-off**. If you haven't had one, ask for it —
 - Anything outside the quotation scope: discuss with your supervisor first
 - All work must be traceable to issues
 
-### Crisis Management
-
-When a project turns into a crisis situation:
-
-1. **Re-refine** — control is everything; investment in refinement always pays off
-2. **Be realistic** — clear expectations beat false promises. Don't say "maybe" when you mean "no"
-3. **Multidisciplinary team** — include backend, frontend, and project management
-4. **Go/no-go moment** — establish clear criteria and communicate them to the client
-5. **Clear communication** — dedicated Slack channel with all stakeholders including the client
-6. **Weekend work** — use evenings/weekends to prepare the next day; do regular development during working hours
-7. **Don't rush** — keep time to refine and think. Quick fixes come back to haunt you
-
 ## Further Reading
 
 - [Employee handbook](/docs/intro) — the quick-reference overview

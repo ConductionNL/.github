@@ -114,7 +114,7 @@ All Conduction passwords must be at least **10 characters** and contain:
 - A number
 - A special character
 
-Store all credentials in [Passwork](https://www.passwork.me/). Never share passwords through Slack, email, or any other communication channel.
+Store all credentials in [Passwork](https://www.passwork.me/). Never share passwords through Slack, email, or any other communication channel. When sharing credentials with a colleague or external party, use a **Passwork share-link** — these are one-time use and time-limited.
 
 ### Data Handling
 
@@ -154,9 +154,11 @@ ESET must be activated on all devices used for Conduction work, at all times. Re
 
 **Linux users:** ESET has limited Linux support. Install the [workstation-security](https://github.com/MWest2020/workstation-security) tooling instead. Ask your team lead for setup guidance if needed. Your security logs may be requested at any time.
 
-### AI Tooling (Claude Code)
+### AI Tooling
 
-We use Claude Code for development. AI tooling inherits the permissions of the user session it runs in. The following controls are mandatory (based on documented deviation ISO-723):
+Every employee receives a paid **Claude.ai** account. This account does not store conversation data. Use it for day-to-day work — never paste client credentials or personal data into any AI tool.
+
+**Claude Code** is used for development. AI tooling inherits the permissions of the user session it runs in. The following controls are mandatory (based on documented deviation ISO-723):
 
 - **Separate accounts** — Claude Code must use a dedicated GitHub account with standard developer permissions. Never use an admin account in the same session as Claude Code
 - **Git restrictions** — `settings.json` must restrict Git operations: Claude may only push to `feature/*` branches. Direct push to `development`, `beta`, or `main` is blocked
