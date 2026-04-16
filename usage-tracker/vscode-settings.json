@@ -1,0 +1,13 @@
+{
+  "// Claude Usage Tracker — recommended VS Code settings": "",
+  "// No logging changes needed; the tracker reads ~/.claude/projects/ directly.": "",
+
+  "// Keep the terminal panel visible for live monitoring output":
+  "",
+  "terminal.integrated.scrollback": 10000,
+  "terminal.integrated.fontSize": 13,
+
+  "// Ensure notifications are not silenced":
+  "",
+  "notifications.alwaysOnTop": false
+}
