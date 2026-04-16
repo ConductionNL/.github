@@ -237,7 +237,102 @@ Test scenarios (`{APP}/test-scenarios/TS-NNN-slug.md`) are reusable, Gherkin-sty
 | `/test-persona-*` | Scans for scenarios matching that persona's slug. Asks to run them before free exploration. |
 | `/test-scenario-run` | Runs scenarios directly (by ID, tag, persona, or all) |
 
-See [commands.md](commands.md#test-scenario-commands) for the full reference on `/test-scenario-create`, `/test-scenario-run`, and `/test-scenario-edit`.
+### `/test-scenario-create`
+
+Guided wizard for creating a well-structured test scenario for a Nextcloud app.
+
+**Usage:**
+```
+/test-scenario-create
+/test-scenario-create openregister
+```
+
+**What it does:**
+1. Determines the next ID (`TS-NNN`) by scanning existing scenarios
+2. Asks for title, goal, category (functional/api/security/accessibility/performance/ux/integration), and priority
+3. Shows relevant personas and asks which this scenario targets
+4. Suggests which test commands should automatically include it
+5. Auto-suggests tags based on category and title
+6. Guides through Gherkin steps (Given/When/Then), test data, and acceptance criteria
+7. Generates persona-specific notes for each linked persona
+8. Saves to `{APP}/test-scenarios/TS-NNN-slug.md`
+
+**Scenario categories and suggested personas:**
+
+| Category | Suggested personas |
+|---|---|
+| functional | Mark Visser, Sem de Jong |
+| api | Priya Ganpat, Annemarie de Vries |
+| security | Noor Yilmaz |
+| accessibility | Henk Bakker, Fatima El-Amrani |
+| ux | Henk Bakker, Jan-Willem, Mark Visser |
+| performance | Sem de Jong, Priya Ganpat |
+| integration | Priya Ganpat, Annemarie de Vries |
+
+---
+
+### `/test-scenario-run`
+
+Execute one or more test scenarios against the live Nextcloud environment using a browser agent.
+
+**Usage:**
+```
+/test-scenario-run                        # list and choose
+/test-scenario-run TS-001                 # run specific scenario
+/test-scenario-run openregister TS-001    # run from specific app
+/test-scenario-run --tag smoke            # run all smoke-tagged scenarios
+/test-scenario-run --all openregister     # run all scenarios for an app
+/test-scenario-run --persona priya-ganpat # run all Priya's scenarios
+```
+
+**What it does:**
+1. Discovers scenario files in `{APP}/test-scenarios/`
+2. Filters by tag, persona, or ID as specified
+3. Asks which environment to test against (local or custom URL)
+4. Asks whether to use Haiku (default, cost-efficient) or Sonnet (for complex flows)
+5. Launches a browser agent per scenario (parallelised up to 5 for multiple)
+6. Agent verifies preconditions, follows Given-When-Then steps, checks each acceptance criterion
+7. Writes results to `{APP}/test-results/scenarios/`
+8. Synthesises a summary report for multiple runs
+
+**Model:** Asked at run time. **Haiku** (default) — fast, cost-efficient. **Sonnet** — for complex multi-step flows or ambiguous UI states where Haiku may misread the interface. Cap cost scales with the number of scenarios run in parallel.
+
+**Cap impact:** Low for single scenario; medium for multiple. See [parallel-agents.md](parallel-agents.md).
+
+**Result statuses**: PASS / FAIL / PARTIAL / BLOCKED
+
+---
+
+### `/test-scenario-edit`
+
+Edit an existing test scenario — update any field (metadata or content) interactively.
+
+**Usage:**
+```
+/test-scenario-edit                      # list all scenarios, pick one
+/test-scenario-edit TS-001               # open specific scenario
+/test-scenario-edit openregister TS-001  # open from specific app
+```
+
+**What it does:**
+1. Locates the scenario file
+2. Shows a summary of current values (status, priority, category, personas, tags, spec refs)
+3. Asks what scope to edit: metadata only / content only / both / status only / tags only
+4. Walks through each field in scope, showing the current value and asking for the new one
+5. Supports `+tag` / `-tag` syntax for incremental tag changes, same for personas
+6. Regenerates persona notes if the personas list changed
+7. Optionally renames the file if the title changed
+8. Writes the updated file and shows a diff-style summary
+
+---
+
+### How existing test commands use scenarios
+
+| Command | Behaviour when scenarios exist |
+|---|---|
+| `/test-app` | Asks to include active scenarios before launching agents. Agents execute scenario steps before free exploration. |
+| `/test-counsel` | Asks to include scenarios, grouped by persona. Each persona agent receives only the scenarios tagged with their slug. |
+| `/test-persona-*` | Scans for scenarios matching that persona's slug. Asks to run them before free exploration in Step 2. |
 
 ---
 

@@ -252,6 +252,30 @@ See [writing-specs.md](writing-specs.md) for the complete guide — RFC 2119 key
 | `/opsx-verify` | Review | Verify implementation against specs |
 | `/opsx-archive` | Archive | Complete and preserve change |
 
+## Team Role Commands
+
+Specialist agents representing different roles on the development team. Useful for getting a focused perspective on a change — architecture review, QA, product sign-off, etc.
+
+| Command | Role | Focus |
+|---------|------|-------|
+| `/team-architect` | Architect | API design, data models, cross-app dependencies |
+| `/team-backend` | Backend Developer | PHP implementation, entities, services, tests |
+| `/team-frontend` | Frontend Developer | Vue components, state management, UX |
+| `/team-po` | Product Owner | Business value, acceptance criteria, priority |
+| `/team-qa` | QA Engineer | Test coverage, edge cases, regression risk |
+| `/team-reviewer` | Code Reviewer | Standards, conventions, security, code quality |
+| `/team-sm` | Scrum Master | Progress tracking, blockers, sprint health |
+
+**Usage:**
+```
+/team-architect    # review the API design for the active change
+/team-qa          # get QA perspective on test coverage
+```
+
+**Model for `/team-architect`:** Checked at run time — stops if on Haiku. Asks which model to use and explains how to switch if the choice differs from the active model. **Opus** recommended — best multi-framework reasoning across NLGov, BIO2/NIS2, WCAG, Haven, AVG/GDPR. **Sonnet** not recommended — may miss nuances in complex compliance scenarios.
+
+---
+
 ## Tips
 
 - **Start small**: Try the flow on a small feature first to build muscle memory

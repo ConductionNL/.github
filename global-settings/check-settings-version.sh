@@ -30,11 +30,34 @@ REPO_PATH_FILE="$HOME/.claude/settings-repo-path"
 REPO_REF_FILE="$HOME/.claude/settings-repo-ref"
 VERSION_FILE="$HOME/.claude/settings-version"
 
+# ── Input validation ─────────────────────────────────────────────────────────
+# All config values read from files are validated before use — prevents prompt
+# injection via crafted config files and API endpoint abuse via repo slug.
+validate_ref() { [[ "$1" =~ ^[a-zA-Z0-9._/-]+$ ]]; }
+validate_repo_slug() { [[ "$1" =~ ^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$ ]]; }
+validate_semver() { [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; }
+
+# ── timeout wrapper (falls back to direct execution if timeout is missing) ───
+run_with_timeout() {
+    local secs="$1"; shift
+    if command -v timeout >/dev/null 2>&1; then
+        timeout "$secs" "$@"
+    else
+        "$@"
+    fi
+}
+
 # ── Tracking ref (branch/tag/sha) — defaults to "main" when unset ────────────
 tracking_ref="main"
 if [ -f "$REPO_REF_FILE" ]; then
-    _ref=$(cat "$REPO_REF_FILE" | tr -d '[:space:]')
-    [ -n "$_ref" ] && tracking_ref="$_ref"
+    _ref=$(tr -d '[:space:]' < "$REPO_REF_FILE")
+    if [ -n "$_ref" ]; then
+        if validate_ref "$_ref"; then
+            tracking_ref="$_ref"
+        else
+            echo "WARNING: ~/.claude/settings-repo-ref contains invalid characters — ignoring, using 'main'." >&2
+        fi
+    fi
 fi
 
 # ── Session-once guard ────────────────────────────────────────────────────────
@@ -44,15 +67,18 @@ if [ -z "$transcript_path" ]; then
     exit 0
 fi
 session_key=$(echo "$transcript_path" | md5sum | cut -c1-12)
-flag_file="/tmp/claude-version-warned-${session_key}"
+_flag_dir="${XDG_RUNTIME_DIR:-$HOME/.claude}"
+flag_file="${_flag_dir}/claude-version-warned-${session_key}"
 [ -f "$flag_file" ] && exit 0
-touch "$flag_file"
+touch "$flag_file" && chmod 600 "$flag_file" 2>/dev/null
 
 # ── Semver helpers ────────────────────────────────────────────────────────────
 semver_gt() {
     [ "$1" = "$2" ] && return 1
-    local IFS=.
-    local i ver1=($1) ver2=($2)
+    local IFS=. i
+    local -a ver1 ver2
+    read -ra ver1 <<< "$1"
+    read -ra ver2 <<< "$2"
     for ((i = 0; i < ${#ver1[@]}; i++)); do
         local a=${ver1[i]:-0} b=${ver2[i]:-0}
         if ((10#$a > 10#$b)); then return 0; fi
@@ -62,19 +88,29 @@ semver_gt() {
 }
 semver_eq() { [ "$1" = "$2" ]; }
 
+# ── Config warnings array (populated throughout, displayed at the end) ────────
+config_warnings=()
+
 # ── Installed version ─────────────────────────────────────────────────────────
 installed_version="(not set)"
 installed_ok=false
 if [ -f "$VERSION_FILE" ]; then
-    installed_version=$(cat "$VERSION_FILE" | tr -d '[:space:]')
-    [ -n "$installed_version" ] && installed_ok=true
+    _iv=$(tr -d '[:space:]' < "$VERSION_FILE")
+    if [ -n "$_iv" ]; then
+        if validate_semver "$_iv"; then
+            installed_version="$_iv"
+            installed_ok=true
+        else
+            installed_version="(invalid: $_iv)"
+            config_warnings+=("~/.claude/settings-version contains invalid value '$_iv' — expected semver (e.g. 1.2.3).")
+        fi
+    fi
 fi
 
 # ── Repo dir resolution ───────────────────────────────────────────────────────
-config_warnings=()
 REPO_DIR=""
 if [ -f "$REPO_PATH_FILE" ]; then
-    REPO_DIR=$(cat "$REPO_PATH_FILE" | tr -d '[:space:]')
+    REPO_DIR=$(tr -d '[:space:]' < "$REPO_PATH_FILE")
     if [ ! -d "$REPO_DIR" ]; then
         config_warnings+=("Repo directory '${REPO_DIR}' from ~/.claude/settings-repo-path does not exist.")
         REPO_DIR=""
@@ -95,7 +131,7 @@ if [ -n "$REPO_DIR" ]; then
 
     REPO_VERSION_FILE="$REPO_DIR/global-settings/VERSION"
     if [ -f "$REPO_VERSION_FILE" ]; then
-        local_version=$(cat "$REPO_VERSION_FILE" | tr -d '[:space:]')
+        local_version=$(tr -d '[:space:]' < "$REPO_VERSION_FILE")
     else
         local_version="(missing)"
         config_warnings+=("global-settings/VERSION not found at '${REPO_DIR}/global-settings/VERSION'.")
@@ -109,13 +145,20 @@ online_source=""
 online_repo_slug=""
 
 if [ -f "$REPO_URL_FILE" ]; then
-    online_repo_slug=$(cat "$REPO_URL_FILE" | tr -d '[:space:]')
+    _slug=$(tr -d '[:space:]' < "$REPO_URL_FILE")
+    if [ -n "$_slug" ]; then
+        if validate_repo_slug "$_slug"; then
+            online_repo_slug="$_slug"
+        else
+            config_warnings+=("~/.claude/settings-repo-url contains invalid value '$_slug' — expected owner/repo format.")
+        fi
+    fi
 fi
 
 if [ -n "$online_repo_slug" ]; then
     if command -v gh >/dev/null 2>&1; then
         _api_path="repos/${online_repo_slug}/contents/global-settings/VERSION?ref=${tracking_ref}"
-        _gh_result=$(timeout 5 gh api "$_api_path" -H "Accept: application/vnd.github.raw+json" 2>/dev/null | tr -d '[:space:]')
+        _gh_result=$(run_with_timeout 5 gh api "$_api_path" -H "Accept: application/vnd.github.raw+json" 2>/dev/null | tr -d '[:space:]')
         if [ -n "$_gh_result" ] && echo "$_gh_result" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
             online_version="$_gh_result"
             online_fetch_ok=true
@@ -132,7 +175,7 @@ fi
 if ! $online_fetch_ok && [ -n "$REPO_DIR" ] && [ -n "$git_root" ]; then
     rel_path=$(realpath --relative-to="$git_root" "$REPO_DIR/global-settings/VERSION" 2>/dev/null)
 
-    if timeout 5 git -C "$git_root" fetch origin "${tracking_ref}" --quiet --depth=1 2>/dev/null; then
+    if run_with_timeout 5 git -C "$git_root" fetch origin "${tracking_ref}" --quiet --depth=1 2>/dev/null; then
         fetched=$(git -C "$git_root" show "origin/${tracking_ref}:${rel_path}" 2>/dev/null | tr -d '[:space:]')
         if [ -n "$fetched" ]; then
             online_version="$fetched"

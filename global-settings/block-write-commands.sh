@@ -12,12 +12,12 @@ cmd=$(echo "$input" | jq -r '.tool_input.command // ""')
 transcript_path=$(echo "$input" | jq -r '.transcript_path // ""')
 
 deny() {
-    printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\n' "$1"
+    printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\n' "$*"
     exit 0
 }
 
 ask() {
-    printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"%s"}}\n' "$1"
+    printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"%s"}}\n' "$*"
     exit 0
 }
 
@@ -46,8 +46,8 @@ _h=$(printf '%s' "$HOME" | sed 's/[.[\*^$()+?{}|]/\\&/g')
 _prot="(~|\\\$HOME|${_h})/\.claude/(settings\.json|hooks/|settings-version|settings-repo-path|settings-repo-url|settings-repo-ref)"
 
 # chmod guard: deny write-enabling permissions on protected files
-if echo "$cmd" | grep -qE "^\s*chmod\b" && echo "$cmd" | grep -qE "${_prot}"; then
-    if echo "$cmd" | grep -qE "^\s*chmod\s+(444|555|-w|\+x)(\s|$)"; then
+if echo "$cmd" | grep -qE "(^|[;&|]\s*)chmod\b" && echo "$cmd" | grep -qE "${_prot}"; then
+    if echo "$cmd" | grep -qE "(^|[;&|]\s*)chmod\s+(444|555|-w|\+x)(\s|$)"; then
         : # read-only or execute-only — allowed
     else
         deny "BLOCKED: Claude cannot make ~/.claude/ config files writable. Run chmod manually in your own terminal if an update requires it."
@@ -90,7 +90,7 @@ fi
 if $_is_config_write; then
     if echo "$cmd" | grep -qE "\bgit\b.*\bshow\b.*\borigin/main:"; then
         # Method 1: git show origin/main — verify canonical repo
-        _repo_path=$(cat "$HOME/.claude/settings-repo-path" 2>/dev/null | tr -d '[:space:]')
+        _repo_path=$(tr -d '[:space:]' < "$HOME/.claude/settings-repo-path" 2>/dev/null)
         _git_root=""
         [ -n "$_repo_path" ] && [ -d "$_repo_path" ] && \
             _git_root=$(git -C "$_repo_path" rev-parse --show-toplevel 2>/dev/null)
@@ -113,7 +113,7 @@ if $_is_config_write; then
 fi
 
 # ── curl ──────────────────────────────────────────────────────────────────────
-if echo "$cmd" | grep -qE '^\s*curl\b'; then
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)curl\b'; then
     # Unambiguous write flags — check the full command string so that piped curl
     # invocations are also caught (e.g. curl url | curl -X POST url2).
     if echo "$cmd" | grep -qiE '(^|\s)(-[sviIkLSfnN]*X\s*(POST|PUT|DELETE|PATCH)|--request\s+(POST|PUT|DELETE|PATCH))' \
@@ -157,7 +157,7 @@ if echo "$cmd" | grep -qE '\bdocker\b'; then
 fi
 
 # ── gh api ────────────────────────────────────────────────────────────────────
-if echo "$cmd" | grep -qE '^\s*gh\s+api\b'; then
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)gh\s+api\b'; then
     if echo "$cmd" | grep -qiE '(^|\s)(--method\s+(POST|PUT|DELETE|PATCH)|-X\s*(POST|PUT|DELETE|PATCH))' \
     || echo "$cmd" | grep -qiE '(^|\s)--input(=|\s)' \
     || echo "$cmd" | grep -qiE '(^|\s)(--field|--raw-field)(=|\s)' \
@@ -181,7 +181,7 @@ if echo "$cmd" | grep -qE '\bgh\s+pr\s+(merge|close|edit|review|comment|create|r
 fi
 
 # ── git -C (allowlist — known read-only subcommands pass silently; write ops prompt) ──
-if echo "$cmd" | grep -qE '^\s*git\b' && echo "$cmd" | grep -qE '\s-C\s'; then
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)git\b' && echo "$cmd" | grep -qE '\s-C\s'; then
     # Extract subcommand: strip 'git', all '-C <path>' pairs, then leading flags
     subcmd=$(echo "$cmd" \
         | sed 's/^\s*git\s*//' \
@@ -249,7 +249,7 @@ if echo "$cmd" | grep -qE '\bgit\s+push\b'; then
 fi
 
 # ── git branch (prompt for write flags, bare — without -C) ───────────────────
-if echo "$cmd" | grep -qE '^\s*git\s+branch\b' && ! echo "$cmd" | grep -qE '\s-C\s'; then
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)git\s+branch\b' && ! echo "$cmd" | grep -qE '\s-C\s'; then
     if echo "$cmd" | grep -qE '\bbranch\b.*-[a-zA-Z]*[dDmMcC]' \
     || echo "$cmd" | grep -qiE '(^|\s)(--delete|--move|--copy|--force-create)(\s|=|$)'; then
         ask "git branch with write flags (-d/-D/-m/-M/-c/-C) modifies branches — approve to proceed."
@@ -257,14 +257,14 @@ if echo "$cmd" | grep -qE '^\s*git\s+branch\b' && ! echo "$cmd" | grep -qE '\s-C
 fi
 
 # ── git remote (prompt for write subcommands, bare — without -C) ─────────────
-if echo "$cmd" | grep -qE '^\s*git\s+remote\b' && ! echo "$cmd" | grep -qE '\s-C\s'; then
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)git\s+remote\b' && ! echo "$cmd" | grep -qE '\s-C\s'; then
     if echo "$cmd" | grep -qE '\bremote\s+(add|remove|rename|set-url|set-head|prune|update)\b'; then
         ask "git remote add/remove/rename/set-url/prune/update modifies remotes — approve to proceed."
     fi
 fi
 
 # ── env (prompt when used to execute a command) ───────────────────────────────
-if echo "$cmd" | grep -qE '^\s*env\b'; then
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)env\b'; then
     remainder=$(echo "$cmd" | sed 's/^\s*env\s*//')
     if [ -n "$remainder" ] && echo "$remainder" | tr ' \t' '\n' | grep -qE '^([a-z][a-zA-Z0-9_.-]*|[./][^[:space:]]*)$'; then
         ask "env used to execute a command — approve to proceed."
@@ -272,21 +272,21 @@ if echo "$cmd" | grep -qE '^\s*env\b'; then
 fi
 
 # ── date (HARD BLOCK: modifying system time — no legitimate use case) ─────────
-if echo "$cmd" | grep -qE '^\s*date\b'; then
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)date\b'; then
     if echo "$cmd" | grep -qE '(^|\s)(-s\s|--set[[:space:]=])'; then
         deny "Blocked: date -s / --set modifies the system clock. This is never allowed."
     fi
 fi
 
 # ── cat (prompt for output redirection) ──────────────────────────────────────
-if echo "$cmd" | grep -qE '^\s*cat\b'; then
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)cat\b'; then
     if echo "$cmd" | grep -qE '(^|[[:space:]])>{1,2}[[:space:]]*[^[:space:]]'; then
         ask "cat with output redirection (> or >>) would write to a file — approve to proceed."
     fi
 fi
 
 # ── find (prompt for destructive operations) ──────────────────────────────────
-if echo "$cmd" | grep -qE '^\s*find\b'; then
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)find\b'; then
     if echo "$cmd" | grep -qE '(^|\s)-delete\b' \
     || echo "$cmd" | grep -qE '(^|\s)-exec(dir)?\b'; then
         ask "find with -delete or -exec/-execdir can modify the filesystem — approve to proceed."
@@ -294,7 +294,7 @@ if echo "$cmd" | grep -qE '^\s*find\b'; then
 fi
 
 # ── sort (prompt for file output flags) ───────────────────────────────────────
-if echo "$cmd" | grep -qE '^\s*sort\b'; then
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)sort\b'; then
     if echo "$cmd" | grep -qE '(^|\s)(-o[[:space:]]|--output[[:space:]=])' \
     || echo "$cmd" | grep -qE '(^|[[:space:]])>{1,2}[[:space:]]*[^[:space:]]'; then
         ask "sort with -o/--output or output redirection writes to a file — approve to proceed."
@@ -302,7 +302,7 @@ if echo "$cmd" | grep -qE '^\s*sort\b'; then
 fi
 
 # ── awk (prompt for file output operations) ───────────────────────────────────
-if echo "$cmd" | grep -qE '^\s*awk\b'; then
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)awk\b'; then
     if echo "$cmd" | grep -qE 'print[[:space:]]*>{1,2}' \
     || echo "$cmd" | grep -qE "['\"][[:space:]]*>{1,2}[[:space:]]*[^[:space:]]"; then
         ask "awk with output redirection or print > file may write files — approve to proceed."
@@ -323,7 +323,7 @@ if echo "$cmd" | grep -qE '\btee\b'; then
 fi
 
 # ── hostname (prompt when setting system hostname) ────────────────────────────
-if echo "$cmd" | grep -qE '^\s*hostname\b'; then
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)hostname\b'; then
     remainder=$(echo "$cmd" | sed 's/^\s*hostname\s*//' | tr ' \t' '\n' | grep -vE '^-' | tr -d '[:space:]')
     if [ -n "$remainder" ]; then
         ask "hostname with a name argument sets the system hostname — approve to proceed."
@@ -331,7 +331,7 @@ if echo "$cmd" | grep -qE '^\s*hostname\b'; then
 fi
 
 # ── rm (prompt for all deletions) ────────────────────────────────────────────
-if echo "$cmd" | grep -qE '^\s*rm\b'; then
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)rm\b'; then
     if echo "$cmd" | grep -qE '(^|\s)-[a-zA-Z]*[rRfFdi]'; then
         ask "rm with recursive/force/directory flags detected — approve to proceed."
     else
@@ -340,12 +340,12 @@ if echo "$cmd" | grep -qE '^\s*rm\b'; then
 fi
 
 # ── rmdir (prompt — removes directories) ─────────────────────────────────────
-if echo "$cmd" | grep -qE '^\s*rmdir\b'; then
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)rmdir\b'; then
     ask "rmdir will remove directories — approve to proceed."
 fi
 
 # ── npm audit (prompt for fix — modifies package.json and lock file) ─────────
-if echo "$cmd" | grep -qE '^\s*npm\s+audit\b'; then
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)npm\s+audit\b'; then
     if echo "$cmd" | grep -qE '\baudit\b.*\bfix\b'; then
         ask "npm audit fix modifies package.json and lock file — approve to proceed."
     fi
@@ -359,6 +359,38 @@ fi
 if echo "$cmd" | grep -qE '>{1,2}[[:space:]]*[^[:space:]&>/]' \
 && ! echo "$cmd" | grep -qE '>{1,2}[[:space:]]*/dev/null'; then
     ask "Output redirection to a file detected — approve to proceed."
+fi
+
+# ── ln (symlink/hardlink guard — blocks links targeting protected paths) ──────
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)ln\b'; then
+    if echo "$cmd" | grep -qE "${_prot}"; then
+        deny "BLOCKED: Creating symlinks or hardlinks to ~/.claude/ config files is not allowed."
+    else
+        ask "ln creates a link — approve to proceed."
+    fi
+fi
+
+# ── sed -i (in-place file editing) ───────────────────────────────────────────
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)sed\b' && echo "$cmd" | grep -qE "(^|\s)-[a-zA-Z]*i"; then
+    ask "sed -i edits files in place — approve to proceed."
+fi
+
+# ── chown (change file ownership) ────────────────────────────────────────────
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)chown\b'; then
+    ask "chown changes file ownership — approve to proceed."
+fi
+
+# ── install (copy files with permissions) ────────────────────────────────────
+if echo "$cmd" | grep -qE '(^|[;&|]\s*)install\b'; then
+    ask "install copies files and sets permissions — approve to proceed."
+fi
+
+# ── Pipe-to-shell and obfuscation guard ──────────────────────────────────────
+# Catches common obfuscation techniques that bypass command-specific guards.
+if echo "$cmd" | grep -qE '\|\s*(bash|sh|zsh|dash)\b' \
+|| echo "$cmd" | grep -qE '\bbase64\s+(-d|--decode)\b' \
+|| echo "$cmd" | grep -qE '(^|[;&|]\s*)eval\b'; then
+    ask "Potential command obfuscation detected (pipe to shell, base64 decode, or eval) — approve to proceed."
 fi
 
 WSL_DENY_MSG="BLOCKED: This command would leave the WSL Ubuntu workspace. Claude must never navigate to, execute from, or access the Windows filesystem or Windows processes. All work must stay within the WSL Linux environment."
