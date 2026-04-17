@@ -44,21 +44,6 @@ cp "$REPO_ROOT/global-settings/settings-repo-url.example" ~/.claude/settings-rep
 
 Restart Claude Code after installing. Requires `jq`, `md5sum`, and `gh` (GitHub CLI) on `PATH`.
 
-## Online version checking
-
-When `~/.claude/settings-repo-url` is configured, the version check uses the GitHub API (`gh api`) as its primary method. This means you get accurate online version checks even without a local clone of the `.github` repo.
-
-If the GitHub API is unavailable or `gh` is not installed, the hook falls back to `git fetch` via `~/.claude/settings-repo-path` (if configured).
-
-The status panel at session start shows which method was used:
-
-```
-│     Global Claude Settings Status            │
-  Installed  : v1.4.0 ✓
-  Local repo : (not configured)
-  Online     : v1.4.0  (via GitHub API)
-```
-
 ## Updating
 
 When you see a version warning at session start:
@@ -80,6 +65,16 @@ Semver rules:
 - `1.0.0 → 2.0.0` — breaking change requiring manual migration (e.g. settings restructure)
 
 Use the `/verify-global-settings-version` command to check whether a version bump is needed before creating a PR.
+
+## Security model — defense in depth
+
+The settings use three independent layers of protection, each catching what the others miss:
+
+1. **Deny-list** (`settings.json` deny rules) — hard-blocks Edit/Write to `~/.claude/` config files and destructive Bash commands. These cannot be overridden.
+2. **Hook** (`block-write-commands.sh`) — runs on every Bash command. Catches write operations, command chaining, obfuscation, and symlink attacks. Can deny (hard block) or ask (prompt the user).
+3. **File permissions** (`chmod 444`/`555`) — OS-level protection on installed config files. Prevents writes even if both deny-list and hook fail.
+
+The Edit/Write deny rules on `~/.claude/` files (lines 4-15 in settings.json) intentionally overlap with the hook's config write guard. This redundancy is deliberate — if one layer is bypassed, the other still blocks the write. Do not remove one layer because the other "already handles it."
 
 ## Full documentation
 

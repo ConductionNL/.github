@@ -20,7 +20,7 @@ Make **Claude token usage limits visible inside VS Code** with real-time monitor
 
 The Claude Code extension writes full API responses (including token counts) to `~/.claude/projects/**/*.jsonl` as you work. The tracker reads those files directly — no log configuration needed, no extensions to install beyond Claude Code itself.
 
-**What gets tracked:** every Claude Code API call made through VS Code (slash commands, agent tasks, inline chat). Today's usage and this week's running total are both shown.
+**What gets tracked:** every Claude Code API call made through VS Code (slash commands, agent tasks, inline chat). Session usage (~5h rolling window) and this week's running total are both shown.
 
 > **Cursor user?** The tracker works identically in Cursor — see the note at the bottom of [SETUP.md](SETUP.md).
 
@@ -29,20 +29,22 @@ The Claude Code extension writes full API responses (including token counts) to 
 ## What's Included
 
 ```
-usage-tracker/
-├── claude-usage-tracker.py    ← Main tracker script
-├── claude-track.py            ← CLI launcher wrapper
-├── install.sh                 ← Installation script
-├── limits.json                ← Your plan limits (git-ignored, copy from limits.example.json)
-├── limits.example.json        ← Template with default limits
-├── SETUP.md                   ← Complete setup guide
-├── QUICKSTART.md              ← 30-second quick start
-├── MODELS.md                  ← Multi-model tracking guide
-├── vscode-settings.json       ← Recommended VS Code settings
-├── Makefile                   ← Convenient make commands
-└── logs/                      ← Runtime data (git-ignored)
-    ├── session.json           ← Last saved session snapshot (auto-created)
-    └── session-state.json     ← Calibrated session reset time (auto-created)
+usage-tracker/                        ← Code & docs (in repo)
+├── claude-usage-tracker.py           ← Main tracker script
+├── claude-track.py                   ← CLI launcher wrapper
+├── install.sh                        ← Installation script
+├── limits.example.json               ← Template with default limits
+├── CALIBRATE.md                      ← Calibration guide (for humans & AI assistants)
+├── SETUP.md                          ← Complete setup guide
+├── QUICKSTART.md                     ← 30-second quick start
+├── MODELS.md                         ← Multi-model tracking guide
+├── vscode-settings.json              ← Recommended VS Code settings
+└── Makefile                          ← Convenient make commands
+
+~/.claude/usage-tracker/              ← User data (shared across projects)
+├── limits.json                       ← Calibrated limits + config (written by --calibrate)
+├── session.json                      ← Last saved session snapshot (auto-created)
+└── session-state.json                ← Calibrated session reset time (auto-created)
 ```
 
 ---
@@ -92,7 +94,7 @@ python3 usage-tracker/claude-usage-tracker.py --status-bar --all-models
 # Continuous monitoring — one model
 python3 usage-tracker/claude-usage-tracker.py --monitor
 
-# Continuous monitoring — all models, 30s refresh
+# Continuous monitoring — all models, 5-minute refresh
 python3 usage-tracker/claude-usage-tracker.py --monitor --all-models --interval 300
 
 # Show configured limits
@@ -109,6 +111,16 @@ python3 usage-tracker/claude-usage-tracker.py --mark-session-start
 
 # Calibrate session reset time (when claude.ai/settings/usage shows a known remaining time)
 python3 usage-tracker/claude-usage-tracker.py --set-session-reset "4h 50m"
+
+# Calibrate ALL limits from a claude.ai/settings/usage screenshot (recommended)
+python3 usage-tracker/claude-usage-tracker.py --calibrate \
+  --session-pct 27 --weekly-all-pct 3 --session-reset "1h 48m" --weekly-all-reset "fri:08"
+
+# JSON output (for scripts or AI assistants)
+python3 usage-tracker/claude-usage-tracker.py --json --all-models
+
+# Fetch usage from Anthropic API (experimental, requires config)
+python3 usage-tracker/claude-usage-tracker.py --fetch-usage
 ```
 
 ### Via Make Commands
@@ -216,18 +228,22 @@ Color scale: 🔵 0% · 🟢 >0–50% · 🟡 50–75% · 🟠 75–90% · 🔴 
 
 ## Configuration
 
-### Update Your Plan Limits
+### Calibrate Your Plan Limits (Recommended)
+
+The easiest way: share a screenshot of [claude.ai/settings/usage](https://claude.ai/settings/usage) with Claude and ask it to update the usage tracker. Or run the calibration command yourself:
 
 ```bash
-cp usage-tracker/limits.example.json usage-tracker/limits.json
-# Edit limits.json with your values — see SETUP.md for full instructions
+python3 usage-tracker/claude-usage-tracker.py --calibrate \
+  --session-pct 27 --weekly-all-pct 3 --session-reset "1h 48m" --weekly-all-reset "fri:08"
 ```
 
-`limits.json` is git-ignored so it stays personal. The tracker shows `(cfg)` when configured and `(est)` when using defaults.
+This reads the tracker's current token counts, back-calculates limits from the observed percentages, and writes `~/.claude/usage-tracker/limits.json` automatically.
 
-**Calibrating subscription quota limits:** divide the tracker's current token count by the percentage shown on [claude.ai/settings/usage](https://claude.ai/settings/usage). Example: tracker shows 286K tokens, page shows 24% → 286K ÷ 0.24 = ~1.2M quota limit. You can share a screenshot with Claude and it will calculate everything for you. (These are subscription quota limits, not model context windows — see [Two Kinds of Token Limits](../docs/claude/parallel-agents.md#two-kinds-of-token-limits).)
+See [CALIBRATE.md](CALIBRATE.md) for the complete guide (also optimized for AI assistants).
 
-**Weekly reset times:** the "Sonnet only" and "All models" bars reset on different days — configure `weekly_reset_day` and `weekly_reset_hour_utc` in `limits.json` to get accurate weekly percentages. See [SETUP.md](SETUP.md) for the conversion guide.
+**Data location:** all calibration data lives in `~/.claude/usage-tracker/` — shared across all project instances. The tracker shows `(cfg)` when configured and `(est)` when using defaults.
+
+**Cache token note:** JSONL files include `cache_read` tokens, but Anthropic discounts cached tokens for quota tracking. This means calibrated limits will appear higher than the raw Anthropic quota. This is correct — both the tracker's counts and the calibrated limits use the same unit. Re-calibrate weekly as cache hit rates change.
 
 ### Change Notification Thresholds
 Edit `claude-usage-tracker.py`:
@@ -241,7 +257,7 @@ notification_percentages = [25, 50, 75, 90]
 
 | Issue | Solution |
 |-------|----------|
-| "Today: 0.0%" but you've been working | Check `ls ~/.claude/projects/` — Claude Code must be installed and have run at least once |
+| "Session: 0.0%" but you've been working | Check `ls ~/.claude/projects/` — Claude Code must be installed and have run at least once |
 | Python not found | Use `python3` explicitly |
 | Notifications not showing | Install `notify-send`: `sudo apt install libnotify-bin` |
 
@@ -277,6 +293,7 @@ graph LR
 
 - 📖 **[SETUP.md](SETUP.md)** — Complete installation & configuration guide
 - ⚡ **[QUICKSTART.md](QUICKSTART.md)** — 30-second quick start
+- 🎯 **[CALIBRATE.md](CALIBRATE.md)** — Calibration guide (for humans & AI assistants)
 - 🎓 **[MODELS.md](MODELS.md)** — Multi-model tracking (Haiku, Sonnet, Opus)
 - 📋 **[vscode-settings.json](vscode-settings.json)** — Recommended VS Code settings
 

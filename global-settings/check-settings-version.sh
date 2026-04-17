@@ -102,7 +102,7 @@ if [ -f "$VERSION_FILE" ]; then
             installed_ok=true
         else
             installed_version="(invalid: $_iv)"
-            config_warnings+=("~/.claude/settings-version contains invalid value '$_iv' — expected semver (e.g. 1.2.3).")
+            config_warnings+=("$HOME/.claude/settings-version contains invalid value '$_iv' — expected semver (e.g. 1.2.3).")
         fi
     fi
 fi
@@ -150,7 +150,7 @@ if [ -f "$REPO_URL_FILE" ]; then
         if validate_repo_slug "$_slug"; then
             online_repo_slug="$_slug"
         else
-            config_warnings+=("~/.claude/settings-repo-url contains invalid value '$_slug' — expected owner/repo format.")
+            config_warnings+=("$HOME/.claude/settings-repo-url contains invalid value '$_slug' — expected owner/repo format.")
         fi
     fi
 fi
@@ -313,7 +313,8 @@ if $online_fetch_ok && semver_gt "$online_version" "$installed_version"; then
         echo "        README.md) continue ;;"
         echo "        *) dest=\"\$HOME/.claude/\$f\" ;;"
         echo "      esac"
-        echo "      printf '%s\n' \"\$content\" > \"\$dest\""
+        # shellcheck disable=SC2016 # variables are meant for the generated script, not this one
+        printf '      printf '"'"'%%s\\n'"'"' "$content" > "$dest"\n'
         echo "      if [[ \"\$f\" == *.sh ]]; then chmod 555 \"\$dest\"; elif [[ \"\$f\" == \"settings.json\" ]]; then chmod 644 \"\$dest\"; else chmod 444 \"\$dest\"; fi"
         echo "    done"
         echo "  This pulls files directly from GitHub (ref: ${tracking_ref}) — no local repo clone needed."

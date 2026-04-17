@@ -31,7 +31,7 @@ bash usage-tracker/install.sh
 ```
 
 This will:
-- ✅ Create log storage directory (`usage-tracker/logs/`, git-ignored)
+- ✅ Create log storage directory (`usage-tracker/logs/`, gitignored via `.gitignore`)
 - ✅ Make scripts executable
 - ✅ Create a symlink at `~/.local/bin/claude-usage-tracker`
 - ✅ Self-test the configuration
@@ -51,7 +51,7 @@ python3 usage-tracker/claude-usage-tracker.py --status-bar --all-models
 python3 usage-tracker/claude-usage-tracker.py
 ```
 
-If you see `Today: 0.0%`, that's normal until you make Claude Code API calls today. The weekly total should show data if you've used Claude Code this week.
+If you see `Session: 0.0%`, that's normal until you make Claude Code API calls in this session. The weekly total should show data if you've used Claude Code this week.
 
 Output shows `(cfg)` if your limits are configured, or `(est)` if using built-in defaults. `Session~` = last 5h; `Week~` = since Mon UTC — both are approximations.
 
@@ -66,7 +66,7 @@ cp usage-tracker/limits.example.json usage-tracker/limits.json
 # Open and edit the values to match your actual plan
 ```
 
-`limits.json` is git-ignored so it stays personal to your machine. The tracker shows `(cfg)` when it's loaded and `(est)` when falling back to defaults.
+`limits.json` is gitignored (via `.gitignore`) so it stays personal to your machine. The tracker shows `(cfg)` when it's loaded and `(est)` when falling back to defaults.
 
 ### Token limits
 
@@ -302,7 +302,7 @@ python3 usage-tracker/claude-usage-tracker.py \
 
 ## Troubleshooting
 
-### "Today: 0.0%" when you've been working
+### "Session: 0.0%" when you've been working
 
 Check if JSONL files exist:
 ```bash
@@ -335,7 +335,7 @@ sudo apt install libnotify-bin   # installs notify-send
 | **Weekly tokens** | Same, filtered to Mon UTC–now | ~100% |
 | **Cache tokens** | Not counted (cheaper tier) | — |
 
-The only inaccuracy comes from the **limit numbers** — the defaults are estimates. Configure your limits in `limits.json` (see Step 2.5). Use [claude.ai/settings/usage](https://claude.ai/settings/usage) to see live percentages and calibrate your values. Note that Anthropic tracks a session limit + weekly limits (not daily), so "Today" in the tracker is an approximation based on UTC midnight.
+The only inaccuracy comes from the **limit numbers** — the defaults are estimates. Configure your limits in `limits.json` (see Step 2.5). Use [claude.ai/settings/usage](https://claude.ai/settings/usage) to see live percentages and calibrate your values. The tracker uses a ~5h rolling session window and weekly totals — both match Anthropic's actual limit structure.
 
 ---
 

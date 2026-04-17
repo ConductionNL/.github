@@ -43,11 +43,19 @@ python3 usage-tracker/claude-usage-tracker.py --monitor --all-models --interval 
 python3 usage-tracker/claude-usage-tracker.py --monitor --all-models --active-only             # Hide idle models
 ```
 
-### Check / Update Limits
+### Calibrate Limits
 ```bash
 python3 usage-tracker/claude-usage-tracker.py --limits   # show current limits
-# Edit limits.json to set your real plan limits (copy from limits.example.json first)
+
+# Calibrate from claude.ai/settings/usage screenshot:
+python3 usage-tracker/claude-usage-tracker.py --calibrate \
+  --session-pct 27 --weekly-all-pct 3 --session-reset "1h 48m" --weekly-all-reset "fri:08"
+
+# JSON output (for scripts / AI assistants):
+python3 usage-tracker/claude-usage-tracker.py --json --all-models
 ```
+
+Data is stored in `~/.claude/usage-tracker/` (shared across all projects). See [CALIBRATE.md](CALIBRATE.md) for details.
 
 ### Calibrate Session Reset Time
 ```bash
@@ -78,7 +86,7 @@ Run the monitor automatically every time you open the workspace.
 
 **Step 2** — A **"Select a Task Template"** dropdown appears → click **Others**
 
-**Step 3** — Replace the entire file content with:
+**Step 3** — If you already have tasks, add the task entries below to your existing `tasks` array. If the file is empty or new, use this content:
 
 ```json
 {
@@ -152,8 +160,8 @@ Run the monitor automatically every time you open the workspace.
 
 ## Troubleshooting
 
-### "Today: 0.0%"
-Normal if no Claude Code API calls have been made today. Use any slash command or run a task from the agent, then re-check.
+### "Session: 0.0%"
+Normal if no Claude Code API calls have been made in the current session (~5h rolling window). Use any slash command or run a task from the agent, then re-check.
 
 ### No `~/.claude/projects/` directory
 Claude Code CLI is not installed or hasn't been run yet. Install it from [claude.ai/code](https://claude.ai/code).
@@ -164,11 +172,7 @@ Claude Code CLI is not installed or hasn't been run yet. Install it from [claude
 
 **Note on limits:** Usage counts are accurate (read directly from JSONL files). The limits are estimates — Anthropic does not publish exact token budgets. Check [claude.ai/settings/usage](https://claude.ai/settings/usage) for live percentages to help calibrate your `limits.json`.
 
-| Metric | Claude Sonnet (approx.) |
-|--------|------------------------|
-| Session limit | Varies by plan — calibrate via `limits.json` (see SETUP.md) |
-| Weekly limit | Varies by plan — calibrate via `limits.json` |
-| Weekly reset | Varies by plan — check claude.ai/settings/usage |
+Limits vary by plan and are not published by Anthropic. Calibrate your personal limits in `limits.json` using the live percentages at [claude.ai/settings/usage](https://claude.ai/settings/usage). See [SETUP.md](SETUP.md) for calibration instructions.
 
 ---
 

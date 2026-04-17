@@ -38,7 +38,16 @@
       "Bash(git update-ref -d:*)",
       "Bash(git config --global:*)",
       "Bash(git checkout --:*)",
-      "Bash(git restore:*)"
+      "Bash(git restore --:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git rebase:*)",
+
+      "Bash(rm -rf:*)",
+      "Bash(rm -Rf:*)",
+
+      "Bash(pip install:*)",
+      "Bash(npm install:*)"
     ],
     "allow": [
       "Bash(ls:*)",
@@ -60,7 +69,6 @@
       "Bash(diff:*)",
       "Bash(grep:*)",
       "Bash(egrep:*)",
-      "Bash(awk:*)",
       "Bash(tr:*)",
       "Bash(sort:*)",
       "Bash(jq:*)",
@@ -82,7 +90,6 @@
       "Bash(env:*)",
       "Bash(date:*)",
 
-      "Bash(git -C:*)",
       "Bash(git log:*)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
@@ -94,8 +101,11 @@
       "Bash(git describe:*)",
       "Bash(git shortlog:*)",
       "Bash(git cat-file:*)",
-      "Bash(git branch:*)",
-      "Bash(git remote:*)",
+      "Bash(git branch --list:*)",
+      "Bash(git branch -a:*)",
+      "Bash(git branch -v:*)",
+      "Bash(git remote -v:*)",
+      "Bash(git remote show:*)",
       "Bash(git fetch:*)",
       "Bash(git stash list:*)",
       "Bash(git stash show:*)",
@@ -135,7 +145,6 @@
       "Bash(gh workflow list:*)",
       "Bash(gh workflow view:*)",
       "Bash(gh auth status:*)",
-      "Bash(gh api:*)",
 
       "Bash(composer --version:*)",
       "Bash(composer show:*)",
@@ -159,8 +168,6 @@
       "Bash(php -m:*)",
       "Bash(php -i:*)",
       "Bash(php --version:*)",
-
-      "Bash(curl:*)",
 
       "Bash(sha256sum:*)",
       "Bash(md5sum:*)",

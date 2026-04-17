@@ -11,9 +11,9 @@ input=$(cat)
 cmd=$(echo "$input" | jq -r '.tool_input.command // ""')
 transcript_path=$(echo "$input" | jq -r '.transcript_path // ""')
 
-deny() {
+hard_deny() {
     printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\n' "$*"
-    exit 0
+    exit 2  # exit 2 = hard block — tool call refused even if JSON parsing fails
 }
 
 ask() {
@@ -42,6 +42,7 @@ PUSH_DENY_MSG="Blocked: git push requires explicit authorization. Include one of
 # Detects writes via: output redirect, cp/mv, variable+redirect (same command),
 # tee, eval, bash/sh -c, and inline scripting (python, perl, node).
 # Also hard-blocks chmod that makes protected files writable.
+# shellcheck disable=SC2016 # single quotes intentional: literal regex for sed
 _h=$(printf '%s' "$HOME" | sed 's/[.[\*^$()+?{}|]/\\&/g')
 _prot="(~|\\\$HOME|${_h})/\.claude/(settings\.json|hooks/|settings-version|settings-repo-path|settings-repo-url|settings-repo-ref)"
 
@@ -50,7 +51,7 @@ if echo "$cmd" | grep -qE "(^|[;&|]\s*)chmod\b" && echo "$cmd" | grep -qE "${_pr
     if echo "$cmd" | grep -qE "(^|[;&|]\s*)chmod\s+(444|555|-w|\+x)(\s|$)"; then
         : # read-only or execute-only — allowed
     else
-        deny "BLOCKED: Claude cannot make ~/.claude/ config files writable. Run chmod manually in your own terminal if an update requires it."
+        hard_deny "BLOCKED: Claude cannot make ~/.claude/ config files writable. Run chmod manually in your own terminal if an update requires it."
     fi
 fi
 
@@ -99,16 +100,16 @@ if $_is_config_write; then
             if echo "$_remote" | grep -qE "ConductionNL/\.github(\.git|/|$)"; then
                 : # canonical repo and main branch verified — allow
             else
-                deny "BLOCKED: Config update rejected. Remote '${_remote:-unknown}' is not the canonical repo (ConductionNL/.github, main branch only)."
+                hard_deny "BLOCKED: Config update rejected. Remote '${_remote:-unknown}' is not the canonical repo (ConductionNL/.github, main branch only)."
             fi
         else
-            deny "BLOCKED: ~/.claude/settings-repo-path is missing or invalid. Cannot verify canonical repo."
+            hard_deny "BLOCKED: ~/.claude/settings-repo-path is missing or invalid. Cannot verify canonical repo."
         fi
     elif echo "$cmd" | grep -qE "\bgh\s+api\b.*ConductionNL/\.github.*contents/global-settings/"; then
         # Method 2: gh api — canonical repo verified by URL path
         : # canonical repo via GitHub API — allow
     else
-        deny "BLOCKED: Claude cannot write to ~/.claude/ config files. Updates must use git show origin/main or gh api from ConductionNL/.github only."
+        hard_deny "BLOCKED: Claude cannot write to ~/.claude/ config files. Updates must use git show origin/main or gh api from ConductionNL/.github only."
     fi
 fi
 
@@ -215,7 +216,7 @@ if echo "$cmd" | grep -qE '(^|[;&|]\s*)git\b' && echo "$cmd" | grep -qE '\s-C\s'
             if git_push_authorized; then
                 : # authorized by user message — allow
             else
-                deny "$PUSH_DENY_MSG"
+                hard_deny "$PUSH_DENY_MSG"
             fi
             ;;
         branch)
@@ -244,7 +245,7 @@ if echo "$cmd" | grep -qE '\bgit\s+push\b'; then
     if git_push_authorized; then
         : # authorized by user message — allow
     else
-        deny "$PUSH_DENY_MSG"
+        hard_deny "$PUSH_DENY_MSG"
     fi
 fi
 
@@ -265,7 +266,9 @@ fi
 
 # ── env (prompt when used to execute a command) ───────────────────────────────
 if echo "$cmd" | grep -qE '(^|[;&|]\s*)env\b'; then
-    remainder=$(echo "$cmd" | sed 's/^\s*env\s*//')
+    remainder="${cmd#"${cmd%%[![:space:]]*}"}"  # strip leading whitespace
+    remainder="${remainder#env}"                # strip 'env'
+    remainder="${remainder#"${remainder%%[![:space:]]*}"}"  # strip whitespace after 'env'
     if [ -n "$remainder" ] && echo "$remainder" | tr ' \t' '\n' | grep -qE '^([a-z][a-zA-Z0-9_.-]*|[./][^[:space:]]*)$'; then
         ask "env used to execute a command — approve to proceed."
     fi
@@ -274,7 +277,7 @@ fi
 # ── date (HARD BLOCK: modifying system time — no legitimate use case) ─────────
 if echo "$cmd" | grep -qE '(^|[;&|]\s*)date\b'; then
     if echo "$cmd" | grep -qE '(^|\s)(-s\s|--set[[:space:]=])'; then
-        deny "Blocked: date -s / --set modifies the system clock. This is never allowed."
+        hard_deny "Blocked: date -s / --set modifies the system clock. This is never allowed."
     fi
 fi
 
@@ -301,11 +304,14 @@ if echo "$cmd" | grep -qE '(^|[;&|]\s*)sort\b'; then
     fi
 fi
 
-# ── awk (prompt for file output operations) ───────────────────────────────────
+# ── awk (prompt for file output and command execution) ───────────────────────
 if echo "$cmd" | grep -qE '(^|[;&|]\s*)awk\b'; then
     if echo "$cmd" | grep -qE 'print[[:space:]]*>{1,2}' \
     || echo "$cmd" | grep -qE "['\"][[:space:]]*>{1,2}[[:space:]]*[^[:space:]]"; then
         ask "awk with output redirection or print > file may write files — approve to proceed."
+    fi
+    if echo "$cmd" | grep -qE '\bsystem\s*\('; then
+        ask "awk with system() can execute arbitrary commands — approve to proceed."
     fi
 fi
 
@@ -364,7 +370,7 @@ fi
 # ── ln (symlink/hardlink guard — blocks links targeting protected paths) ──────
 if echo "$cmd" | grep -qE '(^|[;&|]\s*)ln\b'; then
     if echo "$cmd" | grep -qE "${_prot}"; then
-        deny "BLOCKED: Creating symlinks or hardlinks to ~/.claude/ config files is not allowed."
+        hard_deny "BLOCKED: Creating symlinks or hardlinks to ~/.claude/ config files is not allowed."
     else
         ask "ln creates a link — approve to proceed."
     fi
@@ -403,25 +409,25 @@ WSL_DENY_MSG="BLOCKED: This command would leave the WSL Ubuntu workspace. Claude
 # Block cd to Windows drive mount points (/mnt/c/, /mnt/d/, etc.)
 # Matches: cd /mnt/c  |  cd /mnt/c/  |  cd /mnt/c/Users/...  (single-letter drive only)
 if echo "$cmd" | grep -qE '(^|[;&|[:space:]])(cd)[[:space:]]+/mnt/[a-zA-Z](/|[[:space:]]|$)'; then
-    deny "$WSL_DENY_MSG"
+    hard_deny "$WSL_DENY_MSG"
 fi
 
 # Block any command that references a Windows drive mount path (/mnt/<letter>/)
 # Catches file reads, writes, cp, mv, rsync, etc. targeting Windows filesystem.
 if echo "$cmd" | grep -qE '(^|[[:space:]])/mnt/[a-zA-Z](/|[[:space:]]|$)'; then
-    deny "$WSL_DENY_MSG"
+    hard_deny "$WSL_DENY_MSG"
 fi
 
 # Block Windows executables run via WSL interop (named or path-referenced *.exe)
 # Covers: cmd.exe, powershell.exe, pwsh.exe, explorer.exe, wsl.exe, notepad.exe, etc.
 if echo "$cmd" | grep -qiE '(^|[[:space:]/])[^[:space:]]*\.exe([[:space:]]|$)'; then
-    deny "$WSL_DENY_MSG"
+    hard_deny "$WSL_DENY_MSG"
 fi
 
 # Block wsl / wsl.exe without extension (e.g. `wsl --exec`, `wsl -e cmd`)
 # The wsl binary itself can run commands on the Windows host or switch distros.
 if echo "$cmd" | grep -qiE '(^|[[:space:]])(wsl)([[:space:]]|$)'; then
-    deny "$WSL_DENY_MSG"
+    hard_deny "$WSL_DENY_MSG"
 fi
 
 exit 0
