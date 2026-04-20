@@ -12,6 +12,8 @@ Current version: see [`VERSION`](VERSION)
 | `block-write-commands.sh` | `~/.claude/hooks/block-write-commands.sh` | Guards write operations, prompts for approval |
 | `check-settings-version.sh` | `~/.claude/hooks/check-settings-version.sh` | Warns at session start if settings are outdated |
 | `VERSION` | `~/.claude/settings-version` | Installed version tracker (semver) |
+| `settings-repo-url.example` | `~/.claude/settings-repo-url` | GitHub repo slug for online version checking |
+| `settings-repo-ref.example` | `~/.claude/settings-repo-ref` | Branch/tag/SHA to track (defaults to `main` when absent) |
 
 ## Install
 
@@ -31,7 +33,13 @@ cp "$REPO_ROOT/global-settings/VERSION" ~/.claude/settings-version
 echo "$REPO_ROOT" > ~/.claude/settings-repo-path
 
 # Online version checking via GitHub API (recommended — no local repo required):
-echo "ConductionNL/.github" > ~/.claude/settings-repo-url
+cp "$REPO_ROOT/global-settings/settings-repo-url.example" ~/.claude/settings-repo-url
+
+# Optional: track a branch other than main (tag or SHA also accepted).
+# Defaults to "main" when this file is absent.
+# To track a specific branch, copy and edit:
+# cp "$REPO_ROOT/global-settings/settings-repo-ref.example" ~/.claude/settings-repo-ref
+# echo "feature/your-branch" > ~/.claude/settings-repo-ref
 ```
 
 Restart Claude Code after installing. Requires `jq`, `md5sum`, and `gh` (GitHub CLI) on `PATH`.
@@ -73,6 +81,16 @@ Semver rules:
 
 Use the `/verify-global-settings-version` command to check whether a version bump is needed before creating a PR.
 
+## Security model — defense in depth
+
+The settings use three independent layers of protection, each catching what the others miss:
+
+1. **Deny-list** (`settings.json` deny rules) — hard-blocks Edit/Write to `~/.claude/` config files and destructive Bash commands. These cannot be overridden.
+2. **Hook** (`block-write-commands.sh`) — runs on every Bash command. Catches write operations, command chaining, obfuscation, and symlink attacks. Can deny (hard block) or ask (prompt the user).
+3. **File permissions** (`chmod 444`/`555`) — OS-level protection on installed config files. Prevents writes even if both deny-list and hook fail.
+
+The Edit/Write deny rules on `~/.claude/` files (lines 4-15 in settings.json) intentionally overlap with the hook's config write guard. This redundancy is deliberate — if one layer is bypassed, the other still blocks the write. Do not remove one layer because the other "already handles it."
+
 ## Full documentation
 
-See [`docs/global-claude-settings.md`](../docs/global-claude-settings.md) for the complete reference including the permissions list, hook behavior table, and troubleshooting.
+See [`docs/claude/global-claude-settings.md`](../docs/claude/global-claude-settings.md) for the complete reference including the permissions list, hook behavior table, and troubleshooting.

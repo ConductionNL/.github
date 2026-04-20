@@ -61,7 +61,7 @@ When content is duplicated, it will eventually diverge. One copy gets updated; t
 | Project vision and phases                                   | `openspec/ROADMAP.md` (if present)                                       |
 | Target audience and personas                                | `openspec/audience.md` (if present)                                      |
 | Architectural decisions (why)                               | `openspec/architecture/adr-{NNN}-*.md`                                   |
-| Architecture decisions index                                | `.claude/openspec/architecture/README.md`                                |
+| Architecture decisions index                                | `hydra/openspec/architecture/README.md`                                  |
 | Technical decisions and constraints                         | `openspec/architecture/` ADRs                                            |
 | **Standards & Patterns**                                    |                                                                          |
 | NL Design System and UI standards                           | `openspec/specs/{domain}/spec.md` (app-specific) or company ADR-003      |
@@ -73,21 +73,21 @@ When content is duplicated, it will eventually diverge. One copy gets updated; t
 | App administrator procedures                                | `docs/admin-guide.md` (if present)                                       |
 | Developer setup and environment                             | `README.md`                                                              |
 | Available `make` commands and scripts                       | workspace root `Makefile`                                                |
-| Developer workflow and commands                             | `.claude/docs/commands.md`, `.claude/docs/workflow.md`                   |
-| Testing conventions and persona usage                       | `.claude/docs/testing.md`                                                |
-| Docker environment and setup                                | `.claude/docs/docker.md`, `.claude/docs/getting-started.md`              |
-| Frontend standards                                          | `.claude/docs/frontend-standards.md`                                     |
+| Developer workflow and commands                             | `.github/docs/claude/commands.md`, `.github/docs/claude/workflow.md`     |
+| Testing conventions and persona usage                       | `.github/docs/claude/testing.md`                                         |
+| Docker environment and setup                                | `.github/docs/claude/docker.md`, `.github/docs/claude/getting-started.md`|
+| Frontend standards                                          | `.github/docs/claude/frontend-standards.md`                              |
 | Standards compliance references                             | `docs/features/README.md` (GEMMA, ZGW, Forum Standaardisatie)            |
 | **Testing**                                                 |                                                                          |
-| Persona testing behavior and scripts                        | `.claude/personas/`                                                      |
+| Persona testing behavior and scripts                        | `hydra/personas/`                                                        |
 | Reusable test scenarios (Gherkin)                           | `test-scenarios/TS-*.md`                                                 |
 | **Meta**                                                    |                                                                          |
-| Spec and doc writing conventions                            | `.claude/docs/writing-specs.md`, `.claude/docs/writing-docs.md`          |
-| OpenSpec schema and artifact templates                      | `.claude/openspec/schemas/conduction/schema.yaml`, `templates/`          |
-| Parallel agent conventions                                  | `.claude/docs/parallel-agents.md`                                        |
-| Claude harness configuration (permissions, hooks, env vars) | `.claude/global-settings/settings.json`                                  |
-| Global Claude settings guide                                | `.claude/docs/global-claude-settings.md`                                 |
-| Claude usage tracking documentation                         | `.claude/usage-tracker/README.md`                                        |
+| Spec and doc writing conventions                            | `.github/docs/claude/writing-specs.md`, `.github/docs/claude/writing-docs.md` |
+| OpenSpec schema and artifact templates                      | `openspec/schemas/conduction/schema.yaml`, `templates/`                  |
+| Parallel agent conventions                                  | `.github/docs/claude/parallel-agents.md`                                 |
+| Claude harness configuration (permissions, hooks, env vars) | `.github/global-settings/settings.json`                                  |
+| Global Claude settings guide                                | `.github/docs/claude/global-claude-settings.md`                          |
+| Claude usage tracking documentation                         | `.github/usage-tracker/README.md`                                        |
 
 ---
 
@@ -100,10 +100,10 @@ Each document has one target audience. Don't mix them.
 | End users / citizens                  | `docs/` feature docs                                     | Plain language, no jargon, task-oriented                                     |
 | App administrator                     | `docs/admin-guide.md` (if present)                       | Task-oriented, step-by-step                                                  |
 | Developer (setup, environment)        | `README.md`                                              | Technical, precise                                                           |
-| Claude / spec workflow                | `.claude/docs/`, `.claude/skills/`                       | Instruction-style, precise — Claude reads this at runtime                    |
+| Claude / spec workflow                | `.github/docs/`, `hydra/.claude/skills/`                 | Instruction-style, precise — Claude reads this at runtime                    |
 | Spec / requirements                   | `openspec/specs/`                                        | RFC 2119, Gherkin — see [writing-specs.md](writing-specs.md)                 |
 | Architectural decisions (why)         | `openspec/architecture/`                                 | ADR format — context, decision, consequences; written for future developers  |
-| Claude test agents (persona testers)  | `.claude/personas/`                                      | Persona cards — behavior, goals, device preference; loaded by test commands at runtime |
+| Claude test agents (persona testers)  | `hydra/personas/`                                        | Persona cards — behavior, goals, device preference; loaded by test commands at runtime |
 | Claude test agents (scenario execution) | `test-scenarios/`                                      | Gherkin-style test scenarios; loaded by `/test-scenario-run`                 |
 
 **Developer/technical content does not belong in `docs/`.** If you find implementation details, class names, or spec requirements in a user-facing guide, replace them with plain-language descriptions or links to the spec.
@@ -112,7 +112,7 @@ Each document has one target audience. Don't mix them.
 
 ## Language
 
-**All documentation is written in English** — `docs/`, `.claude/docs/`, `openspec/`, `README.md`.
+**All documentation is written in English** — `docs/`, `.github/docs/`, `openspec/`, `README.md`.
 
 **Filenames** also MUST be English — `user-guide.md`, not `handleiding.md`.
 
@@ -124,13 +124,13 @@ Each document has one target audience. Don't mix them.
 
 Use this when you're not sure which file to write new content into. These rules cover the most common cases without needing to cross-reference both tables above.
 
-1. **Is it _why_ a decision was made?** → `.claude/openspec/architecture/adr-{NNN}-*.md`
-2. **Is it _what must be true_ (a requirement, acceptance criterion, or constraint)?** → `.claude/openspec/specs/{domain}/spec.md` (or per-project `openspec/specs/{domain}/spec.md`)
+1. **Is it _why_ a decision was made?** → `hydra/openspec/architecture/adr-{NNN}-*.md` (company-wide) or `{app}/openspec/architecture/` (app-specific)
+2. **Is it _what must be true_ (a requirement, acceptance criterion, or constraint)?** → `hydra/openspec/specs/{domain}/spec.md` (company-wide) or `{app}/openspec/specs/{domain}/spec.md` (app-specific)
 3. **Is it instructions for an _end user or citizen_ using an app?** → `docs/` feature docs for that app
 4. **Is it instructions for an _app administrator_?** → `docs/admin-guide.md` (if present in that app)
 5. **Is it _developer setup_ or environment instructions?** → `README.md`
-6. **Is it instructions for _Claude_ at runtime (workflow, testing, commands, spec writing)?** → `.claude/docs/`
-7. **Is it about _project direction, phase goals, or technical strategy_?** → `.claude/openspec/ROADMAP.md` (if present)
+6. **Is it instructions for _Claude_ at runtime (workflow, testing, commands, spec writing)?** → `.github/docs/`
+7. **Is it about _project direction, phase goals, or technical strategy_?** → `hydra/openspec/ROADMAP.md` (if present)
 8. **Is it _standards compliance_ information (GEMMA, ZGW, Forum Standaardisatie)?** → `docs/features/README.md`
 9. **Is it a reusable _test flow_ (Given/When/Then)?** → `test-scenarios/TS-*.md`
 
@@ -155,7 +155,7 @@ Users will be able to export publications to PDF format.
 ```
 
 **Adding the marker:**
-- Only use `[Future]` in `docs/` files — not in specs or `.claude/docs/`
+- Only use `[Future]` in `docs/` files — not in specs or `.github/docs/`
 - Only mark features on the active roadmap. Don't document speculative or far-future items — if you don't know when they'll ship, don't document them yet
 - Write the section body in future tense: "Users will be able to..."
 
@@ -304,10 +304,10 @@ Use screenshots to illustrate UI steps that are genuinely hard to describe in te
 | Purpose                                                  | Location                                   | Committed? |
 |----------------------------------------------------------|--------------------------------------------|------------|
 | Documentation screenshots for `docs/` guides             | `docs/images/`                             | Yes — commit alongside the doc |
-| Documentation screenshots for `.claude/docs/`            | `.claude/docs/images/`                     | Yes — commit alongside the doc |
+| Documentation screenshots for `.github/docs/`            | `.github/docs/images/`                     | Yes — commit alongside the doc |
 | Automated test screenshots (browser tests)               | `{app}/test-results/`                      | **No** — gitignored |
 
-The `docs/images/` and `.claude/docs/images/` directories do not exist yet — create them when you add the first image.
+The `docs/images/` and `.github/docs/images/` directories do not exist yet — create them when you add the first image.
 
 **The gitignore boundary:**
 
@@ -340,7 +340,7 @@ Always use relative paths and write meaningful alt text:
 ```
 
 - `docs/` docs: path is relative to the doc file, so `images/filename.png` resolves to `docs/images/filename.png`
-- `.claude/docs/` docs: same pattern — `images/filename.png` resolves to `.claude/docs/images/filename.png`
+- `.github/docs/` docs: same pattern — `images/filename.png` resolves to `.github/docs/images/filename.png`
 - Never use absolute paths (see [Link Structure](#link-structure))
 
 **Keeping screenshots current:**
@@ -440,8 +440,8 @@ When reading or reviewing documentation, certain patterns are signals to stop an
 | Links to other docs                                                           | Whether the linked file and section still exist                                         |
 | Phase references ("In Phase 1", "POC phase")                                  | `openspec/ROADMAP.md` to see if the phase has advanced                                  |
 | App or tool names ("OpenCatalogi", "OpenConnector")                           | App install scripts or `apps-extra/` to confirm still active                            |
-| Persona names                                                                 | `.claude/personas/` to confirm the persona still exists                                 |
-| Command names (`/opsx-archive`, `make reset`)                                 | `.claude/skills/` or `Makefile` to confirm still valid                                  |
+| Persona names                                                                 | `hydra/personas/` to confirm the persona still exists                                   |
+| Command names (`/opsx-archive`, `make reset`)                                 | `hydra/.claude/skills/` or `Makefile` to confirm still valid                            |
 | Table of Contents entries                                                     | Whether each linked section still exists with the same heading                          |
 | "See [document title]" cross-references                                       | Whether the referenced doc still has the described content                              |
 | Screenshot references (`![alt](images/...)`)                                  | Whether the file exists AND whether the UI has changed since the screenshot was taken   |
@@ -473,7 +473,7 @@ Update a section when the underlying facts changed but the content's purpose and
 Move content when it is in the right state but the wrong place — usually because the audience changed or the project structure evolved:
 
 - Technical steps that ended up in a user-facing guide → move to `README.md` or a developer doc
-- A section in a user guide that only makes sense to a developer → move to `.claude/docs/` or `README.md`
+- A section in a user guide that only makes sense to a developer → move to `.github/docs/` or `README.md`
 - A spec requirement copy-pasted into a guide → replace with a link, remove the copy
 
 When moving, always replace the old location with a short link to the new one. Never just delete without redirecting.

@@ -8,7 +8,7 @@ Monitor Claude token usage directly in VS Code with real-time status indicators 
 
 The Claude Code extension writes full API responses (including token counts) to `~/.claude/projects/**/*.jsonl` as you work. The tracker reads those files directly — no verbose logging, no extra configuration.
 
-**What gets tracked:** every Claude Code API call made through VS Code (slash commands like `/opsx-apply`, agent tasks, inline chat). The tracker shows the last ~5 hours (approximating Anthropic's 5h rolling session window) and this week's running total.
+**What gets tracked:** every Claude Code API call made through VS Code (slash commands, agent tasks, inline chat). The tracker shows the last ~5 hours (approximating Anthropic's 5h rolling session window) and this week's running total.
 
 ---
 
@@ -27,11 +27,11 @@ ls ~/.claude/projects/    # should list project directories after first use
 ## Step 1: Install Tracker Script
 
 ```bash
-bash .claude/usage-tracker/install.sh
+bash usage-tracker/install.sh
 ```
 
 This will:
-- ✅ Create log storage directory (`.claude/usage-tracker/logs/`, git-ignored)
+- ✅ Create log storage directory (`usage-tracker/logs/`, gitignored via `.gitignore`)
 - ✅ Make scripts executable
 - ✅ Create a symlink at `~/.local/bin/claude-usage-tracker`
 - ✅ Self-test the configuration
@@ -42,16 +42,16 @@ This will:
 
 ```bash
 # Quick one-line status (Sonnet)
-python3 .claude/usage-tracker/claude-usage-tracker.py --status-bar
+python3 usage-tracker/claude-usage-tracker.py --status-bar
 
 # All three models at once
-python3 .claude/usage-tracker/claude-usage-tracker.py --status-bar --all-models
+python3 usage-tracker/claude-usage-tracker.py --status-bar --all-models
 
 # Full report
-python3 .claude/usage-tracker/claude-usage-tracker.py
+python3 usage-tracker/claude-usage-tracker.py
 ```
 
-If you see `Today: 0.0%`, that's normal until you make Claude Code API calls today. The weekly total should show data if you've used Claude Code this week.
+If you see `Session: 0.0%`, that's normal until you make Claude Code API calls in this session. The weekly total should show data if you've used Claude Code this week.
 
 Output shows `(cfg)` if your limits are configured, or `(est)` if using built-in defaults. `Session~` = last 5h; `Week~` = since Mon UTC — both are approximations.
 
@@ -61,12 +61,12 @@ Output shows `(cfg)` if your limits are configured, or `(est)` if using built-in
 
 ```bash
 # Copy the example file
-cp .claude/usage-tracker/limits.example.json .claude/usage-tracker/limits.json
+cp usage-tracker/limits.example.json usage-tracker/limits.json
 
 # Open and edit the values to match your actual plan
 ```
 
-`limits.json` is git-ignored so it stays personal to your machine. The tracker shows `(cfg)` when it's loaded and `(est)` when falling back to defaults.
+`limits.json` is gitignored (via `.gitignore`) so it stays personal to your machine. The tracker shows `(cfg)` when it's loaded and `(est)` when falling back to defaults.
 
 ### Token limits
 
@@ -113,7 +113,7 @@ Omit `weekly_reset_day` / `weekly_reset_hour_utc` to fall back to Monday 00:00 U
 
 To verify your configuration:
 ```bash
-python3 .claude/usage-tracker/claude-usage-tracker.py --limits
+python3 usage-tracker/claude-usage-tracker.py --limits
 ```
 
 ### Session reset calibration
@@ -122,12 +122,12 @@ The session window is a rolling 5-hour window — there's no fixed start time in
 
 **At the start of a new session:**
 ```bash
-python3 .claude/usage-tracker/claude-usage-tracker.py --mark-session-start
+python3 usage-tracker/claude-usage-tracker.py --mark-session-start
 ```
 
 **When [claude.ai/settings/usage](https://claude.ai/settings/usage) shows a known remaining time:**
 ```bash
-python3 .claude/usage-tracker/claude-usage-tracker.py --set-session-reset "4h 50m"
+python3 usage-tracker/claude-usage-tracker.py --set-session-reset "4h 50m"
 # Also accepts: "4:50" or plain minutes ("290")
 ```
 
@@ -162,7 +162,7 @@ This creates an always-on monitor that displays in a dedicated Terminal panel.
       "type": "shell",
       "command": "python3",
       "args": [
-        "${workspaceFolder}/.claude/usage-tracker/claude-usage-tracker.py",
+        "${workspaceFolder}/usage-tracker/claude-usage-tracker.py",
         "--monitor",
         "--all-models",
         "--interval",
@@ -213,15 +213,15 @@ Press `Ctrl+Shift+U` to start the monitor at any time.
 ### One-time Report
 
 ```bash
-python3 .claude/usage-tracker/claude-usage-tracker.py                # Sonnet only
-python3 .claude/usage-tracker/claude-usage-tracker.py --all-models   # All three models
+python3 usage-tracker/claude-usage-tracker.py                # Sonnet only
+python3 usage-tracker/claude-usage-tracker.py --all-models   # All three models
 ```
 
 ### Status Bar (Compact, One Line per Model)
 
 ```bash
-python3 .claude/usage-tracker/claude-usage-tracker.py --status-bar             # Sonnet
-python3 .claude/usage-tracker/claude-usage-tracker.py --status-bar --all-models # All models
+python3 usage-tracker/claude-usage-tracker.py --status-bar             # Sonnet
+python3 usage-tracker/claude-usage-tracker.py --status-bar --all-models # All models
 ```
 
 Output (all models):
@@ -240,23 +240,23 @@ First circle = Session · Second circle = Weekly · `(cfg)` = limits.json loaded
 ### Continuous Monitoring
 
 ```bash
-python3 .claude/usage-tracker/claude-usage-tracker.py --monitor                          # Sonnet, 5 min
-python3 .claude/usage-tracker/claude-usage-tracker.py --monitor --all-models             # All models
-python3 .claude/usage-tracker/claude-usage-tracker.py --monitor --all-models --interval 300
-python3 .claude/usage-tracker/claude-usage-tracker.py --monitor --all-models --active-only  # Hide idle models
+python3 usage-tracker/claude-usage-tracker.py --monitor                          # Sonnet, 5 min
+python3 usage-tracker/claude-usage-tracker.py --monitor --all-models             # All models
+python3 usage-tracker/claude-usage-tracker.py --monitor --all-models --interval 300
+python3 usage-tracker/claude-usage-tracker.py --monitor --all-models --active-only  # Hide idle models
 ```
 
 ### Check Configured Limits
 
 ```bash
-python3 .claude/usage-tracker/claude-usage-tracker.py --limits
+python3 usage-tracker/claude-usage-tracker.py --limits
 ```
 
 ### Calibrate Session Reset
 
 ```bash
-python3 .claude/usage-tracker/claude-usage-tracker.py --mark-session-start          # new session
-python3 .claude/usage-tracker/claude-usage-tracker.py --set-session-reset "4h 50m"  # known time remaining
+python3 usage-tracker/claude-usage-tracker.py --mark-session-start          # new session
+python3 usage-tracker/claude-usage-tracker.py --set-session-reset "4h 50m"  # known time remaining
 ```
 
 ---
@@ -267,21 +267,21 @@ python3 .claude/usage-tracker/claude-usage-tracker.py --set-session-reset "4h 50
 
 ```bash
 # Sonnet (default)
-python3 .claude/usage-tracker/claude-usage-tracker.py --monitor
+python3 usage-tracker/claude-usage-tracker.py --monitor
 
 # Haiku
-python3 .claude/usage-tracker/claude-usage-tracker.py --model haiku --monitor
+python3 usage-tracker/claude-usage-tracker.py --model haiku --monitor
 
 # Opus
-python3 .claude/usage-tracker/claude-usage-tracker.py --model opus --monitor
+python3 usage-tracker/claude-usage-tracker.py --model opus --monitor
 
 # All three simultaneously
-python3 .claude/usage-tracker/claude-usage-tracker.py --monitor --all-models
+python3 usage-tracker/claude-usage-tracker.py --monitor --all-models
 ```
 
 ### Update Plan Limits
 
-Default limits are approximate **subscription quota** estimates (not model context windows — see [Two Kinds of Token Limits](../../.claude/docs/parallel-agents.md#two-kinds-of-token-limits)). To set your real limits, edit `limits.json` (see Step 2.5). Default values:
+Default limits are approximate **subscription quota** estimates (not model context windows — see [Two Kinds of Token Limits](../docs/claude/parallel-agents.md#two-kinds-of-token-limits)). To set your real limits, edit `limits.json` (see Step 2.5). Default values:
 
 | Model | Daily | Weekly |
 |-------|-------|--------|
@@ -294,7 +294,7 @@ Default limits are approximate **subscription quota** estimates (not model conte
 If your Claude Code data is in a non-default location:
 
 ```bash
-python3 .claude/usage-tracker/claude-usage-tracker.py \
+python3 usage-tracker/claude-usage-tracker.py \
   --projects-dir /path/to/.claude/projects
 ```
 
@@ -302,7 +302,7 @@ python3 .claude/usage-tracker/claude-usage-tracker.py \
 
 ## Troubleshooting
 
-### "Today: 0.0%" when you've been working
+### "Session: 0.0%" when you've been working
 
 Check if JSONL files exist:
 ```bash
@@ -335,7 +335,7 @@ sudo apt install libnotify-bin   # installs notify-send
 | **Weekly tokens** | Same, filtered to Mon UTC–now | ~100% |
 | **Cache tokens** | Not counted (cheaper tier) | — |
 
-The only inaccuracy comes from the **limit numbers** — the defaults are estimates. Configure your limits in `limits.json` (see Step 2.5). Use [claude.ai/settings/usage](https://claude.ai/settings/usage) to see live percentages and calibrate your values. Note that Anthropic tracks a session limit + weekly limits (not daily), so "Today" in the tracker is an approximation based on UTC midnight.
+The only inaccuracy comes from the **limit numbers** — the defaults are estimates. Configure your limits in `limits.json` (see Step 2.5). Use [claude.ai/settings/usage](https://claude.ai/settings/usage) to see live percentages and calibrate your values. The tracker uses a ~5h rolling session window and weekly totals — both match Anthropic's actual limit structure.
 
 ---
 

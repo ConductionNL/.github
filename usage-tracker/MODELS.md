@@ -8,13 +8,15 @@ Track **Haiku, Sonnet, and Opus** simultaneously with separate usage monitoring.
 
 ## Model Limits Overview
 
-> These are **subscription quota** limits (how many tokens you can use across all conversations before hitting your cap), NOT model context windows. Context windows are a separate, per-conversation limit. See [Two Kinds of Token Limits](../../.claude/docs/parallel-agents.md#two-kinds-of-token-limits) for the full explanation.
+> These are **subscription quota** limits (how many tokens you can use across all conversations before hitting your cap), NOT model context windows. Context windows are a separate, per-conversation limit. See [Two Kinds of Token Limits](../docs/claude/parallel-agents.md#two-kinds-of-token-limits) for the full explanation.
 
-| Model | Session (~5h) | Weekly (~7d) | Best For |
-|-------|--------------|-------------|----------|
-| **Haiku** | ~1.2M tokens | ~6M tokens | ⚡ Quick tasks, high volume |
-| **Sonnet** | ~400K tokens | ~2M tokens | 🎯 Balanced, most tasks |
-| **Opus** | ~200K tokens | ~1M tokens | 🧠 Complex reasoning |
+> **Model matching:** The tracker matches by substring — `haiku` matches `claude-haiku-4-5-20251001`, `sonnet` matches `claude-sonnet-4-6`, `opus` matches `claude-opus-4-6`. New model versions are picked up automatically as long as the family name is in the model ID.
+
+| Model | Model ID | Session (~5h) | Weekly (~7d) | Best For |
+|-------|----------|--------------|-------------|----------|
+| **Haiku** (`--model haiku`) | `claude-haiku-4-5` | ~1.2M tokens | ~6M tokens | ⚡ Quick tasks, high volume |
+| **Sonnet** (`--model sonnet`) | `claude-sonnet-4-6` | ~400K tokens | ~2M tokens | 🎯 Balanced, most tasks |
+| **Opus** (`--model opus`) | `claude-opus-4-6` | ~200K tokens | ~1M tokens | 🧠 Complex reasoning |
 
 **Important:** The session limit is **shared across all models** — it's one combined 5-hour rolling window, not separate per-model buckets. The per-model session values above are estimates; only Anthropic knows the exact combined pool size for your plan.
 
@@ -26,13 +28,13 @@ Track **Haiku, Sonnet, and Opus** simultaneously with separate usage monitoring.
 
 ```bash
 # Track Sonnet (default)
-python3 .claude/usage-tracker/claude-usage-tracker.py --status-bar
+python3 usage-tracker/claude-usage-tracker.py --status-bar
 
 # Track Haiku (1.2M session / 6M weekly)
-python3 .claude/usage-tracker/claude-usage-tracker.py --model haiku --status-bar
+python3 usage-tracker/claude-usage-tracker.py --model haiku --status-bar
 
 # Track Opus (200K session / 1M weekly)
-python3 .claude/usage-tracker/claude-usage-tracker.py --model opus --status-bar
+python3 usage-tracker/claude-usage-tracker.py --model opus --status-bar
 ```
 
 ---
@@ -43,13 +45,13 @@ Open 3 VS Code terminal tabs and run one per tab:
 
 ```bash
 # Tab 1: Sonnet
-python3 .claude/usage-tracker/claude-usage-tracker.py --model sonnet --monitor --interval 300
+python3 usage-tracker/claude-usage-tracker.py --model sonnet --monitor --interval 300
 
 # Tab 2: Haiku
-python3 .claude/usage-tracker/claude-usage-tracker.py --model haiku --monitor --interval 300
+python3 usage-tracker/claude-usage-tracker.py --model haiku --monitor --interval 300
 
 # Tab 3: Opus
-python3 .claude/usage-tracker/claude-usage-tracker.py --model opus --monitor --interval 300
+python3 usage-tracker/claude-usage-tracker.py --model opus --monitor --interval 300
 ```
 
 ---
@@ -57,9 +59,9 @@ python3 .claude/usage-tracker/claude-usage-tracker.py --model opus --monitor --i
 ## Full Reports for Each Model
 
 ```bash
-python3 .claude/usage-tracker/claude-usage-tracker.py                  # Sonnet
-python3 .claude/usage-tracker/claude-usage-tracker.py --model haiku    # Haiku
-python3 .claude/usage-tracker/claude-usage-tracker.py --model opus     # Opus
+python3 usage-tracker/claude-usage-tracker.py                  # Sonnet
+python3 usage-tracker/claude-usage-tracker.py --model haiku    # Haiku
+python3 usage-tracker/claude-usage-tracker.py --model opus     # Opus
 ```
 
 ---
@@ -71,7 +73,7 @@ Check all models before starting work:
 ```bash
 for model in haiku sonnet opus; do
   echo "$model:"
-  python3 .claude/usage-tracker/claude-usage-tracker.py --model $model --status-bar
+  python3 usage-tracker/claude-usage-tracker.py --model $model --status-bar
 done
 ```
 
@@ -79,7 +81,7 @@ End-of-session summary across all models:
 
 ```bash
 for model in haiku sonnet opus; do
-  echo "=== $model ===" && python3 .claude/usage-tracker/claude-usage-tracker.py --model $model
+  echo "=== $model ===" && python3 usage-tracker/claude-usage-tracker.py --model $model
 done
 ```
 
@@ -103,9 +105,9 @@ Both yellow = both at the same limit percentage, even though token counts differ
 Add to `~/.bashrc` or `~/.zshrc`:
 
 ```bash
-alias claude-haiku="python3 /path/to/project/.claude/usage-tracker/claude-usage-tracker.py --model haiku --status-bar"
-alias claude-sonnet="python3 /path/to/project/.claude/usage-tracker/claude-usage-tracker.py --status-bar"
-alias claude-opus="python3 /path/to/project/.claude/usage-tracker/claude-usage-tracker.py --model opus --status-bar"
+alias claude-haiku="python3 /path/to/project/usage-tracker/claude-usage-tracker.py --model haiku --status-bar"
+alias claude-sonnet="python3 /path/to/project/usage-tracker/claude-usage-tracker.py --status-bar"
+alias claude-opus="python3 /path/to/project/usage-tracker/claude-usage-tracker.py --model opus --status-bar"
 ```
 
 ---
@@ -114,21 +116,18 @@ alias claude-opus="python3 /path/to/project/.claude/usage-tracker/claude-usage-t
 
 ### Can I track across VS Code sessions?
 
-Yes — session data per model is saved automatically (git-ignored):
-- `.claude/usage-tracker/logs/session-sonnet.json`
-- `.claude/usage-tracker/logs/session-haiku.json`
-- `.claude/usage-tracker/logs/session-opus.json`
+Yes — the tracker reads JSONL files that Claude Code writes persistently to `~/.claude/projects/`. As long as those files exist, any run of the tracker can reconstruct historical usage for any window.
 
 ### Get total tokens across all models
 
 Use the built-in combined view:
 
 ```bash
-python3 .claude/usage-tracker/claude-usage-tracker.py --status-bar --all-models
+python3 usage-tracker/claude-usage-tracker.py --status-bar --all-models
 ```
 
 Or for a full report across all models at once:
 
 ```bash
-python3 .claude/usage-tracker/claude-usage-tracker.py --all-models
+python3 usage-tracker/claude-usage-tracker.py --all-models
 ```

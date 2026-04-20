@@ -379,7 +379,7 @@ After completing the steps above, confirm:
 
 App-specific ADRs live in `openspec/architecture/` and document why the app is built the way it is. They are created and explored during `/app-explore` sessions.
 
-> **Company-wide ADRs** (ADR-001 through ADR-015) live in `apps-extra/.claude/openspec/architecture/` and apply to all Conduction apps. Only create an app-specific ADR when the decision is unique to that app.
+> **Company-wide ADRs** (ADR-001 through ADR-015) live in `hydra/openspec/architecture/` and apply to all Conduction apps. Only create an app-specific ADR when the decision is unique to that app.
 
 Good candidates for app-specific ADRs:
 - Data storage approach (OpenRegister vs own tables)
