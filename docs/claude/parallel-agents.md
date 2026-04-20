@@ -14,7 +14,7 @@ When you run a command that launches 8 agents in parallel, all 8 agents start si
 **Example: `/test-counsel` on a single project**
 - 8 agents × ~30 tool calls each = ~240 API calls
 - Each call carries CLAUDE.md + MEMORY.md + the agent's conversation history
-- This can consume as much as a full day of normal usage in one run
+- This can consume as much as a full session (~5h rolling window) of normal usage in one run
 
 When you see: `You've hit your limit · resets 3pm (Europe/Amsterdam)` — that's your Claude subscription's rolling usage cap, not a rate limit.
 

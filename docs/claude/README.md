@@ -13,11 +13,26 @@ Architecture overview of the full system: how specs, GitHub Issues, and plan.jso
 ### [Command Reference](./commands.md)
 Detailed reference for every skill — OpenSpec built-ins (`/opsx-new`, `/opsx-ff`, etc.) and custom Conduction skills (`/opsx-plan-to-issues`, `/opsx-apply-loop`, `/opsx-pipeline`). Includes expected output and usage tips.
 
+### [OpenSpec Command Reference](./commands-openspec.md)
+Focused reference for the per-project OpenSpec commands installed by `openspec init`. Split out from the main command reference for quick lookup.
+
+### [Tender & Ecosystem Commands](./commands-tender.md)
+Reference for the competitive analysis and ecosystem gap-finding commands (`/tender-scan`, `/tender-status`, `/tender-gap-report`, `/ecosystem-investigate`) that operate on the `concurrentie-analyse/intelligence.db` SQLite database.
+
 ### [Writing Specs](./writing-specs.md)
 In-depth guide on writing effective specifications: RFC 2119 keywords, Gherkin scenarios, delta specs, shared spec references, task breakdown, and common mistakes to avoid.
 
 ### [Writing Skills](./writing-skills.md)
 How to create and structure skills: folder layout (`templates/`, `references/`, `examples/`, `assets/`), SKILL.md format, naming conventions, common patterns, and the extraction threshold rule.
+
+### [Skill Checklist](./skill-checklist.md)
+Quick validation checklist to run before adding or reviewing a skill, organized by maturity level (L1–L7).
+
+### [Skill Patterns](./skill-patterns.md)
+Proven L3 building blocks for skills — description writing, subfolder layout (`templates/`, `references/`, `examples/`, `assets/`), and reusable patterns to apply consistently.
+
+### [Skill Evaluation](./skill-evals.md)
+Detailed L5 reference for evaluating, measuring, and improving skills with data — `evals.json` format, baseline scoring, trigger tests, and the iteration workflow.
 
 ### [Writing ADRs](./writing-adrs.md)
 How to write Architectural Decision Records: structure, format, when to create one, and how ADRs feed into the OpenSpec workflow.
@@ -30,6 +45,9 @@ Creating and managing Nextcloud apps: design research (`/app-design`), bootstrap
 
 ### [Docker Environment](./docker.md)
 Available docker-compose profiles, reset instructions, and environment setup.
+
+### [Workstation Setup](./workstation-setup.md)
+How to set up a new machine — Windows + WSL2 + Docker Desktop + VS Code installation, required/recommended extensions, Claude Code authentication, and WSL prerequisites (Node.js, PHP, Composer, GitHub CLI, Playwright, OpenSpec CLI).
 
 ### [Global Claude settings (`~/.claude`)](./global-claude-settings.md)
 **Mandatory** user-level settings enforcing a read-only Bash policy and write-approval hooks. Versioned — Claude warns you at session start when an update is available. Install once per machine; see the doc for the full guide and update instructions.
@@ -64,8 +82,7 @@ A complete worked example showing every phase of the flow on a realistic feature
   - [Stage 2: Specify](#stage-2-specify--writing-openspec-artifacts)
   - [Stage 3: Build](#stage-3-build--configuration-not-code)
   - [Stage 4: Validate](#stage-4-validate--quality-assurance--verification)
-- [Workstation Setup (Windows)](#workstation-setup-windows)
-- [Prerequisites (WSL)](#prerequisites-wsl)
+- [Workstation Setup](#workstation-setup) _(new-machine setup → [workstation-setup.md](./workstation-setup.md))_
 - [Local Configuration](#local-configuration)
 - [Playwright MCP Browser Setup](#playwright-mcp-browser-setup)
 - [Directory Structure](#directory-structure)
@@ -297,260 +314,9 @@ composer phpcs && composer phpmd           # Code quality gates
 
 ---
 
-## Workstation Setup (Windows)
+## Workstation Setup
 
-Our development environment runs on **Windows + WSL2 + Docker Desktop + VS Code**. Follow these steps on a fresh Windows machine.
-
-### 1. Install WSL2
-
-Open PowerShell as Administrator:
-
-```powershell
-wsl --install -d Ubuntu-24.04
-```
-
-Restart your machine when prompted. After reboot, Ubuntu will ask you to create a Linux username and password.
-
-### 2. Install Docker Desktop
-
-Download and install [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop/).
-
-After installation:
-1. Open Docker Desktop > **Settings** > **Resources** > **WSL Integration**
-2. Enable integration with your Ubuntu distro
-3. Click **Apply & Restart**
-
-Verify in WSL:
-```bash
-docker --version
-docker compose version
-```
-
-### 3. Install VS Code
-
-Download and install [Visual Studio Code](https://code.visualstudio.com/).
-
-### 4. Install VS Code Extensions
-
-Open VS Code and install these extensions (`Ctrl+Shift+X`):
-
-**Required:**
-
-| Extension        | ID                           | Purpose                                              |
-| ---------------- | ---------------------------- | ---------------------------------------------------- |
-| Claude Code      | anthropic.claude-code        | AI coding assistant — core to this setup             |
-| WSL              | ms-vscode-remote.remote-wsl  | Connect VS Code to WSL (Windows side)                |
-| Docker           | ms-azuretools.vscode-docker  | Dockerfile syntax, container management              |
-| PHP Intelephense | bmewburn.vscode-intelephense | PHP autocompletion, type checking, go-to-definition  |
-| Volar            | vue.volar                    | Vue 2/3 language support (templates, script, style)  |
-| ESLint           | dbaeumer.vscode-eslint       | JavaScript/Vue linting                               |
-| Python           | ms-python.python             | Python language support (for ExApp sidecar wrappers) |
-
-**Recommended:**
-
-| Extension           | ID                           | Purpose                                                        |
-| ------------------- | ---------------------------- | -------------------------------------------------------------- |
-| PowerShell          | ms-vscode.powershell         | PowerShell 7 scripting (`.ps1` files)                          |
-| GitLens             | eamodio.gitlens              | Advanced Git history, blame, line annotations                  |
-| GitHub Copilot Chat | github.copilot-chat          | AI pair programmer (requires Copilot license)                  |
-| YAML                | redhat.vscode-yaml           | Syntax & validation for `docker-compose.yml` and OpenSpec YAML |
-| GitHub Actions      | github.vscode-github-actions | View and validate CI/CD workflows                              |
-| Makefile Tools      | ms-vscode.makefile-tools     | Makefile support (`make check-strict`)                         |
-| Pylance             | ms-python.vscode-pylance     | Enhanced Python type checking and IntelliSense                 |
-
-**Optional:**
-
-| Extension     | ID                      | Purpose                                                                 |
-| ------------- | ----------------------- | ----------------------------------------------------------------------- |
-| Git Assistant | ivanhofer.git-assistant | Commit message suggestions + uncommitted changes warnings on branch switch |
-| Rainbow CSV   | mechatroner.rainbow-csv | Color-coded CSV/TSV highlighting                                        |
-| Live Preview  | ms-vscode.live-server   | Preview HTML files directly inside VS Code (right-click → Show Preview) |
-
-Or install all required + recommended at once from the CLI (run inside WSL terminal):
-
-```bash
-code --install-extension anthropic.claude-code
-code --install-extension ms-azuretools.vscode-docker
-code --install-extension bmewburn.vscode-intelephense
-code --install-extension vue.volar
-code --install-extension dbaeumer.vscode-eslint
-code --install-extension ms-python.python
-code --install-extension ms-vscode.powershell
-code --install-extension eamodio.gitlens
-code --install-extension github.copilot-chat
-code --install-extension redhat.vscode-yaml
-code --install-extension github.vscode-github-actions
-code --install-extension ms-vscode.makefile-tools
-code --install-extension ms-python.vscode-pylance
-```
-
-> **Note:** `ms-vscode-remote.remote-wsl` must be installed on the **Windows side** of VS Code, not inside WSL. Install it from VS Code on Windows before connecting to WSL.
-
-### 4a. Extension Setup After Installing
-
-Most extensions work immediately after install, but a few need a small configuration step.
-
-#### PHP Intelephense
-
-Intelephense indexes your PHP files automatically on first open. No configuration needed for basic usage. A few tips:
-
-- The free tier covers autocompletion, go-to-definition, and diagnostics — enough for Nextcloud app development.
-- If VS Code shows duplicate PHP suggestions, disable the built-in PHP extension: `Ctrl+Shift+P` → **"Extensions: Disable (Workspace)"** → search **PHP** → disable `vscode.php-language-features`.
-- Premium license (one-time purchase) adds rename, code folding, and type inference across files — optional.
-
-#### GitLens vs. GitKraken
-
-**GitLens** (VS Code extension) gives you inline blame, commit history, and file/line comparisons directly in the editor — no separate app needed.
-
-**GitKraken** is a standalone GUI Git client with a visual branch graph, interactive rebase, and team features. It runs alongside GitLens (they don't conflict). Install it **inside WSL** so it runs natively against your Linux repos — this avoids path translation issues that occur when a Windows-installed GitKraken tries to open `\\wsl$\` paths:
-
-```bash
-wget https://release.gitkraken.com/linux/gitkraken-amd64.deb
-sudo dpkg -i gitkraken-amd64.deb && rm gitkraken-amd64.deb
-# Fix any missing dependencies:
-sudo apt-get install -f
-# Launch:
-gitkraken &
-```
-
-> Requires **WSLg** (Windows 11 with WSL 2.0+) for the GUI window to appear. Run `wsl --version` in PowerShell to confirm — look for `WSLg version`.
-
-### 5. Connect VS Code to WSL
-
-1. Open VS Code
-2. Press `Ctrl+Shift+P` > **"WSL: Connect to WSL"**
-3. Choose your Ubuntu distro
-4. VS Code will install its server component in WSL automatically
-
-From here, all VS Code terminal work happens inside WSL.
-
-### 6. Claude Code Authentication
-
-After installing the Claude Code extension, authenticate:
-
-1. Open the Claude Code panel in VS Code (sidebar icon)
-2. Sign in with your Anthropic account
-3. Or from the terminal: `claude auth login`
-
-### 7. Configure Global Claude Settings
-
-Before using Claude in this workspace, set up user-level permissions and a safety hook that restricts which shell commands Claude can run automatically.
-
-See **[global-claude-settings.md](./global-claude-settings.md)** for the full guide, including copy-ready example files and a new-machine checklist.
-
-Quick install:
-
-```bash
-mkdir -p ~/.claude/hooks
-cp global-settings/settings.json ~/.claude/settings.json
-cp global-settings/block-write-commands.sh ~/.claude/hooks/block-write-commands.sh
-chmod +x ~/.claude/hooks/block-write-commands.sh
-```
-
----
-
-## Prerequisites (WSL)
-
-Run these commands inside WSL (the VS Code terminal after connecting to WSL).
-
-### Node.js (via nvm)
-
-```bash
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
-source ~/.bashrc
-nvm install 20
-```
-
-### PHP 8.1+ & Composer
-
-```bash
-sudo apt update
-sudo apt install -y php8.1-cli php8.1-xml php8.1-mbstring php8.1-curl php8.1-zip unzip
-curl -sS https://getcomposer.org/installer | php
-sudo mv composer.phar /usr/local/bin/composer
-```
-
-### GitHub CLI
-
-```bash
-sudo apt install -y gh
-gh auth login
-```
-
-### PHP Quality Tools (phpcs, phpmd, psalm, phpstan)
-
-Run `composer install` once after cloning an app to install PHP dev dependencies locally:
-
-```bash
-composer install
-```
-
-For commands, see [Code Quality](#code-quality) in the Stage 4 section above.
-
-If `composer install` fails because `vendor/` is owned by root (common when Docker first creates it):
-
-```bash
-# Option 1 — fix vendor ownership (requires sudo password)
-sudo chown -R $USER:$USER vendor/
-composer install
-
-# Option 2 — install phpcs globally (no sudo needed)
-composer global require "squizlabs/php_codesniffer:^3.9"
-~/.config/composer/vendor/bin/phpcs --standard=phpcs.xml
-```
-
-> **Important:** Use phpcs v3 (`^3.9`) — the CI uses v3. phpcs v4 is incompatible with the project's `phpcs.xml` config.
-
-### Playwright Browsers
-
-The Playwright MCP servers use the Playwright-managed Chromium binary. Install it once:
-
-```bash
-npx playwright install chromium
-```
-
-> If the MCP server reports a different revision is needed (e.g. after a `@playwright/mcp` update), run the install from the npx cache that the MCP server uses. You can find it at `~/.npm/_npx/` — look for the directory containing `@playwright/mcp`.
-
-### OpenSpec CLI
-
-Used by all `/opsx-*` commands for spec-driven development:
-
-```bash
-npm install -g @fission-ai/openspec
-```
-
-> **Do NOT run `openspec init`** in an existing Conduction project — it already has a customized `openspec/` directory with Conduction-specific schemas, shared specs, and project changes. Running `init` would overwrite them.
-
-**OpenSpec documentation:**
-- [Official site](https://openspec.dev/) — Getting started, concepts, customization
-- [GitHub](https://github.com/Fission-AI/OpenSpec) — Source, issues, releases
-- [npm](https://www.npmjs.com/package/@fission-ai/openspec) — Package info
-- [Workflow docs](./workflow.md) — Our workspace-specific workflow
-
-### Claude Code CLI (optional, for terminal use)
-
-```bash
-npm install -g @anthropic-ai/claude-code
-```
-
-### Ollama + Qwen (optional, local LLM)
-
-For running Claude Code with a local Qwen model (privacy, cost reduction, offline use), see **[local-llm.md](./local-llm.md)**. That guide covers Ollama installation, model selection, performance benchmarks, the Qwen Code CLI, and the Double Dutch RAD workflow for pairing Claude (day shift) with Qwen (overnight batch jobs).
-
-### Summary Checklist
-
-```bash
-# Verify everything is installed
-node --version        # v20.x+
-php --version         # 8.1+
-composer --version    # 2.x
-docker --version      # 24+
-gh --version          # 2.x+
-openspec --version    # 1.x
-npx playwright --version  # 1.x
-```
-
-Your machine is ready. See [Getting Started](./getting-started.md) to complete your first spec-driven change.
+For new-machine setup instructions — Windows + WSL2 + Docker Desktop + VS Code installation, extensions, Claude Code authentication, and WSL prerequisites (Node.js, PHP, Composer, GitHub CLI, Playwright, OpenSpec CLI, etc.) — see **[workstation-setup.md](./workstation-setup.md)**.
 
 ---
 
@@ -644,9 +410,14 @@ This repo contains **documentation**, **global settings**, and **project templat
 │       ├── getting-started.md            # First-change walkthrough
 │       ├── workflow.md                   # Spec-driven architecture reference
 │       ├── commands.md                   # Full command reference
+│       ├── commands-openspec.md         # OpenSpec per-project commands
+│       ├── commands-tender.md           # Tender & ecosystem intelligence commands
 │       ├── testing.md                    # Testing commands and skills
 │       ├── writing-specs.md              # How to write specs
 │       ├── writing-skills.md             # How to create skills
+│       ├── skill-checklist.md           # Pre-add / review checklist by maturity level
+│       ├── skill-patterns.md            # Reusable L3 skill patterns and subfolder guide
+│       ├── skill-evals.md               # Skill evaluation & measurement (L5 reference)
 │       ├── writing-adrs.md              # How to write ADRs
 │       ├── writing-docs.md              # Documentation standards
 │       ├── app-lifecycle.md             # Nextcloud app lifecycle
@@ -697,68 +468,17 @@ Each Conduction project (Nextcloud apps, WordPress sites, etc.) has its own `.cl
 
 Each project defines its own user personas in `personas/`. Personas drive multi-perspective analysis via `/feature-counsel` and testing via `/test-counsel`.
 
-**Nextcloud workspace** — 8 Dutch government user personas representing public sector users:
+The Nextcloud workspace uses 8 Dutch government personas (retired citizens, low-literate migrants, digital natives, CISOs, standards architects, MKB vendors, ZZP developers, small business owners). Other projects define personas relevant to their domain (e.g., [wordpress-docker](https://github.com/ConductionNL/wordpress-docker) uses shopper and admin personas).
 
-| Persona | Age | Role | Perspective |
-|---------|-----|------|-------------|
-| Henk Bakker | 78 | Retired citizen | Accessibility, simple Dutch |
-| Fatima El-Amrani | 52 | Low-literate migrant | Icons, mobile-first, B1 language |
-| Sem de Jong | 22 | Digital native student | Performance, keyboard, dark mode |
-| Noor Yilmaz | 36 | Municipal CISO | Security, BIO2, audit trails |
-| Annemarie de Vries | 38 | VNG standards architect | GEMMA, NLGov API, interoperability |
-| Mark Visser | 48 | MKB software vendor | CRUD efficiency, bulk operations |
-| Priya Ganpat | 34 | ZZP developer | API quality, OpenAPI, DX |
-| Jan-Willem van der Berg | 55 | Small business owner | Plain language, findability |
-
-Other projects define personas relevant to their domain (e.g., the [wordpress-docker](https://github.com/ConductionNL/wordpress-docker) project uses shopper and admin personas). The [Hydra](https://github.com/ConductionNL/hydra) CI/CD pipeline also maintains its own copy of personas for automated testing.
+For the full persona table with testing command mapping, see **[testing.md](./testing.md#commands-single-agent)**.
 
 ---
 
 ## Architectural Design Rules (ADRs)
 
-ADRs define constraints that all OpenSpec artifacts must comply with. Company-wide ADRs live in `openspec/architecture/`; app-specific ADRs live in `{app}/openspec/architecture/`. They are enforced at two points:
+ADRs define constraints that all OpenSpec artifacts must comply with. Company-wide ADRs live in `openspec/architecture/` (ADR-001 through ADR-016); app-specific ADRs live in `{app}/openspec/architecture/`. They are enforced during artifact creation (via `config.yaml` rules injected into `openspec instructions` output) and during verification (via `/opsx-verify`).
 
-1. **During artifact creation** — `config.yaml` rules reference ADRs, which get injected into `openspec instructions` output
-2. **During verification** — `/opsx-verify` checks ADR compliance as a report dimension
-
-### Current ADRs
-
-| ADR | Title | Enforced In |
-|-----|-------|-------------|
-| 001 | OpenRegister as Universal Data Layer | design: no custom DB tables |
-| 002 | REST API Conventions | specs: URL patterns, error format |
-| 003 | NL Design System for All UI | design: CSS variables only |
-| 004 | Nextcloud App Framework Patterns | design: DI, annotations |
-| 005 | i18n — Dutch and English Required | tasks: translation tasks |
-| 006 | OpenRegister Schema Standards | specs: schema definitions |
-| 007 | Security and Authentication | specs: auth requirements |
-| 008 | Backend Layering (Controller -> Service -> Mapper) | design: layer structure |
-| 009 | Mandatory Test Coverage (75%) | tasks: test tasks |
-| 010 | Documentation with Screenshots | tasks: docs + Playwright screenshots |
-| 011 | Deduplication Check Against OR Core | proposal: check existing features |
-| 012 | Frontend Patterns (@conduction/nextcloud-vue) | design: component reuse |
-| 013 | Loadable Register Templates | specs: register JSON format |
-| 014 | Per-App Register Content i18n | specs: translatable fields |
-| 015 | Per-App Prometheus Metrics | specs: metrics endpoints |
-| 016 | Mandatory Seed Data for Testability | design: seed data section; tasks: seed data task |
-
-### How ADRs Flow Into Work
-
-```
-config.yaml rules -> openspec instructions -> artifact content -> verify checks
-```
-
-ADRs are referenced in each app's `openspec/config.yaml` under the `rules:` section per artifact type. When an agent creates a proposal, design, spec, or task list, the CLI injects these rules into the instructions. The agent MUST follow them.
-
-### Adding a New ADR
-
-See [writing-adrs.md](./writing-adrs.md) for the full guide on structure, format, and when to create one.
-
-Quick start:
-
-1. Create `openspec/architecture/adr-NNN-title.md` (company-wide) or `{app}/openspec/architecture/adr-NNN-title.md` (app-specific) following the template in `openspec/architecture/README.md`
-2. Add reference rules to `config.yaml` for the relevant artifact types
-3. Update this table
+For the full guide on ADR structure, format, the current list of company-wide ADRs, and when to create a new one, see **[writing-adrs.md](./writing-adrs.md)**.
 
 ---
 

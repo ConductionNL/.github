@@ -44,6 +44,21 @@ cp "$REPO_ROOT/global-settings/settings-repo-url.example" ~/.claude/settings-rep
 
 Restart Claude Code after installing. Requires `jq`, `md5sum`, and `gh` (GitHub CLI) on `PATH`.
 
+## Online version checking
+
+When `~/.claude/settings-repo-url` is configured, the version check uses the GitHub API (`gh api`) as its primary method. This means you get accurate online version checks even without a local clone of the `.github` repo.
+
+If the GitHub API is unavailable or `gh` is not installed, the hook falls back to `git fetch` via `~/.claude/settings-repo-path` (if configured).
+
+The status panel at session start shows which method was used:
+
+```
+│     Global Claude Settings Status            │
+  Installed  : v1.4.0 ✓
+  Local repo : (not configured)
+  Online     : v1.4.0  (via GitHub API)
+```
+
 ## Updating
 
 When you see a version warning at session start:

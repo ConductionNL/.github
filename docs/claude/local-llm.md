@@ -137,8 +137,10 @@ Benchmarked on an RTX 3070 (8GB VRAM) with 24GB WSL memory:
 Qwen has its own dedicated CLI tool (v0.11+) with an interface similar to Claude Code, optimized for Qwen models:
 
 ```bash
-sudo npm install -g @qwen-code/qwen-code@latest
+npm install -g @qwen-code/qwen-code
 ```
+
+> **Note:** `npm install -g` runs lifecycle scripts during install. Avoid `sudo` — use a user-level npm prefix (`npm config set prefix ~/.npm-global`) or `npx @qwen-code/qwen-code` to run it without a global install.
 
 **Configure it to use your local Ollama** by editing `~/.qwen/settings.json`:
 

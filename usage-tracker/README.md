@@ -36,7 +36,6 @@ usage-tracker/                        ← Code & docs (in repo)
 ├── limits.example.json               ← Template with default limits
 ├── CALIBRATE.md                      ← Calibration guide (for humans & AI assistants)
 ├── SETUP.md                          ← Complete setup guide
-├── QUICKSTART.md                     ← 30-second quick start
 ├── MODELS.md                         ← Multi-model tracking guide
 ├── vscode-settings.json              ← Recommended VS Code settings
 └── Makefile                          ← Convenient make commands
@@ -179,6 +178,21 @@ Color scale: 🔵 0% · 🟢 >0–50% · 🟡 50–75% · 🟠 75–90% · 🔴 
 
 `(calibrated)` in the header means the session reset time was set via `--set-session-reset`; `(approx)` means it is estimated as now − 5h.
 
+#### Understanding the Status Bar
+
+| Part | Meaning |
+|------|---------|
+| 1st circle | Session usage: 🔵 0% · 🟢 >0–50% · 🟡 50–75% · 🟠 75–90% · 🔴 90–99% · ⚫ 99%+ |
+| 2nd circle | Weekly usage: same color scale |
+| `83.6K ss` | Tokens used in last ~5h (session window) |
+| `2.34M wk` | Tokens used this week |
+| `Sess~: 10.0%` | % of **shared** session pool used (all models combined) |
+| `Week~: 10.4%` | % of weekly limit used |
+| `(X left)` | Remaining tokens — shown only at 🟠 75%+ for session (All Models row) and weekly |
+| `(calibrated)` / `(approx)` | Session reset: stored via `--set-session-reset` vs. estimated as now − 5h |
+| Weekly resets footer | Countdown to next reset for All Models and Sonnet weekly windows |
+| `(cfg)` / `(est)` | `limits.json` loaded vs. using built-in defaults |
+
 ### Full report
 ```
 ============================================================
@@ -258,6 +272,7 @@ notification_percentages = [25, 50, 75, 90]
 | Issue | Solution |
 |-------|----------|
 | "Session: 0.0%" but you've been working | Check `ls ~/.claude/projects/` — Claude Code must be installed and have run at least once |
+| No `~/.claude/projects/` directory | Claude Code CLI is not installed or hasn't been run yet. Install it from [claude.ai/code](https://claude.ai/code) |
 | Python not found | Use `python3` explicitly |
 | Notifications not showing | Install `notify-send`: `sudo apt install libnotify-bin` |
 
@@ -292,7 +307,6 @@ graph LR
 ## Docs
 
 - 📖 **[SETUP.md](SETUP.md)** — Complete installation & configuration guide
-- ⚡ **[QUICKSTART.md](QUICKSTART.md)** — 30-second quick start
 - 🎯 **[CALIBRATE.md](CALIBRATE.md)** — Calibration guide (for humans & AI assistants)
 - 🎓 **[MODELS.md](MODELS.md)** — Multi-model tracking (Haiku, Sonnet, Opus)
 - 📋 **[vscode-settings.json](vscode-settings.json)** — Recommended VS Code settings
