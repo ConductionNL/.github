@@ -44,7 +44,13 @@ PUSH_DENY_MSG="Blocked: git push requires explicit authorization. Include one of
 # Also hard-blocks chmod that makes protected files writable.
 # shellcheck disable=SC2016 # single quotes intentional: literal regex for sed
 _h=$(printf '%s' "$HOME" | sed 's/[.[\*^$()+?{}|]/\\&/g')
-_prot="(~|\\\$HOME|${_h})/\.claude/(settings\.json|hooks/|settings-version|settings-repo-path|settings-repo-url|settings-repo-ref)"
+# Protected-path regex. Recognized home-dir forms: ~, $HOME, ${HOME}, or the literal expanded
+# path. The trailing slash after `hooks` is optional so that `rm -rf ~/.claude/hooks` (the
+# directory itself) is also matched — not only files inside it.
+# Optional quote between the home-form and `/.claude/` catches patterns where the quote
+# wraps only the home variable — e.g. `"$HOME"/.claude/...`, `"${HOME}"/.claude/...`,
+# `'/home/wilco'/.claude/...` — rather than the whole path.
+_prot="(~|\\\$HOME|\\\$\\{HOME\\}|${_h})[\"']?/\.claude/(settings\.json|hooks/?|settings-version|settings-repo-path|settings-repo-url|settings-repo-ref)"
 
 # chmod guard: deny write-enabling permissions on protected files
 if echo "$cmd" | grep -qE "(^|[;&|]\s*)chmod\b" && echo "$cmd" | grep -qE "${_prot}"; then
@@ -55,19 +61,33 @@ if echo "$cmd" | grep -qE "(^|[;&|]\s*)chmod\b" && echo "$cmd" | grep -qE "${_pr
     fi
 fi
 
+# Destructive/in-place guard: in-place edits, truncation, and deletion of protected files
+# have NO canonical path — they are never allowed. The only permitted operation is a full
+# overwrite sourced from the canonical repo (enforced by the write guard below). This is a
+# HARD BLOCK regardless of source, because these operations cannot carry canonical content.
+if echo "$cmd" | grep -qE "\b(sed|perl|awk|gawk|ruby)\b[^|]*[[:space:]]-i\b[^|]*${_prot}" \
+|| echo "$cmd" | grep -qE "\b(truncate|shred|unlink)\b[^|]*${_prot}" \
+|| echo "$cmd" | grep -qE "(^|[;&|]\s*)rm\b[^|]*${_prot}"; then
+    hard_deny "BLOCKED: in-place edits, truncation, or deletion of ~/.claude/ config files are not permitted. The only allowed operation is a full overwrite with canonical content from the configured source."
+fi
+
 # Write guard: detect content writes to protected files
 _is_config_write=false
 
-# 1. Literal output redirect to a protected file
-if echo "$cmd" | grep -qE ">{1,2}[[:space:]]*${_prot}"; then
+# 1. Literal output redirect to a protected file.
+#    An optional leading quote is allowed before the path so that writes such as
+#    `>> "$HOME/.claude/settings.json"` (with the quote between the redirect and $HOME) are caught.
+if echo "$cmd" | grep -qE ">{1,2}[[:space:]]*[\"']?${_prot}"; then
     _is_config_write=true
 fi
-# 2. cp/mv with a protected file as destination
-if echo "$cmd" | grep -qE "^\s*(cp|mv)\b" && echo "$cmd" | grep -qE "[[:space:]]${_prot}"; then
+# 2. cp/mv with a protected file as destination.
+#    Same quote allowance as rule #1 — the destination may be quoted.
+#    Command-segment boundary (not ^) so chained commands like `foo && cp …` are caught.
+if echo "$cmd" | grep -qE "(^|[;&|]\s*)(cp|mv)\b" && echo "$cmd" | grep -qE "[[:space:]][\"']?${_prot}"; then
     _is_config_write=true
 fi
 # 3. Variable assigned to a protected path and used as redirect target (same command)
-if echo "$cmd" | grep -qE "[a-zA-Z_][a-zA-Z0-9_]*=[\"']?(~|\\\$HOME|${_h})/\.claude/(settings\.json|hooks|settings-version|settings-repo-path|settings-repo-url|settings-repo-ref)" \
+if echo "$cmd" | grep -qE "[a-zA-Z_][a-zA-Z0-9_]*=[\"']?(~|\\\$HOME|\\\$\\{HOME\\}|${_h})[\"']?/\.claude/(settings\.json|hooks|settings-version|settings-repo-path|settings-repo-url|settings-repo-ref)" \
 && echo "$cmd" | grep -qE ">[[:space:]]*[\"']?\\\$[a-zA-Z_][a-zA-Z0-9_]*"; then
     _is_config_write=true
 fi
@@ -75,16 +95,27 @@ fi
 if echo "$cmd" | grep -qE "\btee\b.*${_prot}"; then
     _is_config_write=true
 fi
-if echo "$cmd" | grep -qE "[a-zA-Z_][a-zA-Z0-9_]*=[\"']?(~|\\\$HOME|${_h})/\.claude/(settings\.json|hooks|settings-version|settings-repo-path|settings-repo-url|settings-repo-ref)" \
+if echo "$cmd" | grep -qE "[a-zA-Z_][a-zA-Z0-9_]*=[\"']?(~|\\\$HOME|\\\$\\{HOME\\}|${_h})[\"']?/\.claude/(settings\.json|hooks|settings-version|settings-repo-path|settings-repo-url|settings-repo-ref)" \
 && echo "$cmd" | grep -qE "\btee\b[^|]*\\\$[a-zA-Z_][a-zA-Z0-9_]*"; then
     _is_config_write=true
 fi
-# 5. eval / bash -c / sh -c with a literal protected path
-if echo "$cmd" | grep -qE "\b(eval|bash|sh)\b.*${_prot}"; then
+# 5. eval / bash -c / sh -c with a literal protected path.
+#    Require the -c flag (or bare `eval`) so that file paths ending in .sh
+#    do not trigger a false positive via the `\bsh\b` word boundary — e.g.
+#    `diff a/foo.sh b/foo.sh` where one path is also under ~/.claude/.
+if echo "$cmd" | grep -qE "(\beval\b|\b(bash|sh)\b[[:space:]]+-c\b).*${_prot}"; then
     _is_config_write=true
 fi
 # 6. Inline scripting languages with a literal protected path
 if echo "$cmd" | grep -qiE "\b(python3?|perl|ruby|node|nodejs)\b.*-[ce]\b.*${_prot}"; then
+    _is_config_write=true
+fi
+# 7. Direct-to-file download/copy tools that write via flag rather than via redirect —
+#    wget -O, wget --output-document=, curl -o, curl --output, dd of=. These bypass rules
+#    #1–#2 because there is no `>` or cp/mv in the command.
+if echo "$cmd" | grep -qE "\bwget\b[^|]*([[:space:]]-O[[:space:]]|--output-document[= ])[^|]*${_prot}" \
+|| echo "$cmd" | grep -qE "\bcurl\b[^|]*([[:space:]]-o[[:space:]]|--output[= ])[^|]*${_prot}" \
+|| echo "$cmd" | grep -qE "\bdd\b[^|]*[[:space:]]of=[\"']?${_prot}"; then
     _is_config_write=true
 fi
 
@@ -96,6 +127,14 @@ if $_is_config_write; then
         [ -n "$_repo_path" ] && [ -d "$_repo_path" ] && \
             _git_root=$(git -C "$_repo_path" rev-parse --show-toplevel 2>/dev/null)
         if [ -n "$_git_root" ]; then
+            # The command must explicitly use -C "<_repo_path>" so that it can only read from
+            # the validated canonical repo. Without this, a `git -C /tmp/evilrepo show origin/main:…`
+            # would slip through because the canonical-repo check only consults settings-repo-path,
+            # not the actual -C argument in the command.
+            _esc_repo=$(printf '%s' "$_repo_path" | sed 's/[.[\*^$()+?{}|/-]/\\&/g')
+            if ! echo "$cmd" | grep -qE "\bgit\b[^|]*-C[[:space:]]+[\"']?${_esc_repo}([[:space:]\"'/]|$)"; then
+                hard_deny "BLOCKED: git show for config updates must use -C ${_repo_path} (the validated canonical repo)."
+            fi
             _remote=$(git -C "$_git_root" remote get-url origin 2>/dev/null)
             if echo "$_remote" | grep -qE "ConductionNL/\.github(\.git|/|$)"; then
                 : # canonical repo and main branch verified — allow
@@ -105,8 +144,11 @@ if $_is_config_write; then
         else
             hard_deny "BLOCKED: ~/.claude/settings-repo-path is missing or invalid. Cannot verify canonical repo."
         fi
-    elif echo "$cmd" | grep -qE "\bgh\s+api\b.*ConductionNL/\.github.*contents/global-settings/"; then
-        # Method 2: gh api — canonical repo verified by URL path
+    elif echo "$cmd" | grep -qE "\bgh\s+api\s+['\"]?repos/ConductionNL/\.github/contents/global-settings/"; then
+        # Method 2: gh api — canonical repo verified by literal URL-path prefix.
+        # The regex pins 'repos/<org>/<repo>/contents/<base_path>/' immediately after
+        # `gh api` (with an optional opening quote) so that the canonical string cannot
+        # be smuggled via headers, query params, or unrelated pipeline segments.
         : # canonical repo via GitHub API — allow
     else
         hard_deny "BLOCKED: Claude cannot write to ~/.claude/ config files. Updates must use git show origin/main or gh api from ConductionNL/.github only."
