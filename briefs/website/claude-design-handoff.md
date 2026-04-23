@@ -35,7 +35,7 @@ Dit document bevat de **kant-en-klare prompt** die je aan Claude Design (Claude 
 >
 > **Referentie-materiaal (lezen en bekijken):**
 > 11. `briefs/website/references/` — screenshots van referentie-sites. **Specifiek**: `ref-a-honeycomb-3d-platform.png` is dé referentie voor de homepage-hero — dat is exact de visuele taal die we willen. Bestudeer die grondig.
-> 12. `briefs/website/illustration-batch-1.md` — 12 illustratie-scènes met Midjourney-prompts die separaat worden gegenereerd. Voor de mock gebruik je **placeholder-blokken** met SVG-frames in cobalt en een label-text die beschrijft wat er komt te staan (bv. `<div class="illus-placeholder">[Scène 1: Platform overview — flat-isometric hex-prism composition]</div>`).
+> 12. `briefs/website/illustration-batch-1.md` — 12 illustratie-scènes. **Belangrijk: scène 1 (homepage hero) is een UITZONDERING en wordt niet via Midjourney gemaakt** — die bouw je direct als inline interactieve SVG+foreignObject-component (zie hierboven). Scènes 2–12 worden separaat via Midjourney gegenereerd; voor de mock gebruik je daarvoor **placeholder-blokken** met SVG-frames in cobalt en een label-text die beschrijft wat er komt te staan (bv. `<div class="illus-placeholder">[Scène 2: Open source — hex with open top, particles flowing out]</div>`).
 >
 > **Harde constraints (niet afwijken):**
 >
@@ -50,7 +50,7 @@ Dit document bevat de **kant-en-klare prompt** die je aan Claude Design (Claude 
 >
 > **Homepage-structuur** (in deze volgorde, zie `briefs/website/visual-motifs.md §Sectie 1-7`):
 >
-> 1. **Hero** — platform-overview placeholder-beeld (Honeycomb-stijl) rechts/midden, headline links: *"Een ecosysteem van Nextcloud-apps voor MKB en overheid"*, primaire CTA *"Browse our apps"* → `/apps`, secundaire CTA *"Solve a problem"* → `/solutions`
+> 1. **Hero** — **interactieve SVG platform-overview** (Honeycomb-stijl, zie `briefs/website/references/ref-a-honeycomb-3d-platform.png` + `visual-motifs.md §Implementatie`). **Géén rasterized image — bouw hem direct als inline SVG met `<foreignObject>`-HTML-pills zodat hij accessible, editeerbaar, i18n-ready en interactief is.** 6 hex-prisms voor categorieën (Data Foundation / Integration / Documents / Case & Process / Insights / Design), elk met pill-labels voor de apps erin. Externe rechthoeken links ("Je bestaande systemen": Nextcloud, BAG, BRK, PDOK) en rechts ("Integraties": Nextcloud app store, gov-portals, email). Dashed data-flow-paths tussen elementen. Pills zijn `<a>` met `cursor: pointer` + CSS `transition-colors` bij hover. Headline links van het beeld: *"Een ecosysteem van Nextcloud-apps voor MKB en overheid"*, primaire CTA *"Browse our apps"* → `/apps`, secundaire CTA *"Solve a problem"* → `/solutions`.
 > 2. **Waarde-teasers** — horizontale honeycomb-row van 4 hex-cards: "Open source" / "Eigen Nextcloud" / "Geen vendor lock-in" / "NL Design"
 > 3. **Apps-grid** — offset honeycomb van 11 core apps; elke hex toont icoon + naam op hover/tap-overlay; taglines uit `app-taglines.md`
 > 4. **Solutions-teasers** — 3–5 solution-cards met hex-stack-diagram-visual showing de app-stack per solution

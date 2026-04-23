@@ -150,11 +150,67 @@ Binnen elke categorie-hex labels die de **apps** zelf noemen (niet de features) 
 - **Maximaal brand-consistent:** hexagons overal, kleurpalet uitgebreid naar pastel-familie (cobalt-kern + aanvullende pastels binnen ons merk)
 - **Interactief te maken:** categorie-hex → klik/hover toont de apps erin; pill → klik naar app-detail-pagina. Dit is de **homepage-hero als navigation-device** in plaats van een scrollende feature-lijst.
 
-**Implementatie-opties:**
+**Implementatie — bevestigd via reverse-engineering van honeycomb.io (2026-04-23):**
 
-- **SVG met interactieve hotspots** — hoge pixel-kwaliteit, zoekbaar, a11y vriendelijk. Aanbevolen.
-- **Lottie-animatie** — mooie subtiele animatie bij eerste scroll-in. Maar groter bestand en minder toegankelijk.
-- **Pure HTML+CSS** — met SVG-hexagons als componenten, hover-states. Aanbevolen voor eenvoud, progressive enhancement.
+Honeycomb heeft hun platform-diagram gebouwd als **pure SVG met `<foreignObject>`-HTML-overlays voor de labels**. Geen rasterized image, geen Lottie, geen animatie-library. Gewoon SVG + HTML + CSS. Exact de techniek die we zelf moeten gebruiken.
+
+Concrete structuur van hun implementatie:
+
+- **Eén root `<svg viewBox="0 0 1290 780">`** met responsieve wrapper `class="lg:w-[1000px] xl:w-[1280px]"`
+- **119 `<path>`-elementen** die de hex-prism-geometrie opbouwen. Elke prisma bestaat uit meerdere paden (bovenvlak, linker-zijvlak, rechter-zijvlak) die samen de isometrische diepte-illusie creëren
+- **77 `<rect>`-elementen** met rounded corners voor externe info-boxes ("Your Data Sources", "60+ Integrations") en pill-containers
+- **8 `<foreignObject>`-elementen** — één per categorie-hex. Elk bevat een HTML `<div>` met gestapelde `<span>`-pills als feature-labels
+- **87 elementen** met `cursor: pointer` — bijna alles is klikbaar. Pills zijn `<a>`-elementen die naar sub-pagina's navigeren (`/platform/distributed-tracing`, `/platform/canvas`, etc.)
+- **CSS-hover via Tailwind `transition-colors`** — geen JS-animatie; alleen kleur-verloop over 150ms bij hover
+- **Category-kleuren via design-tokens** — `hc-sky-100`, `hc-purple-200`, `hc-gold-200`, `hc-red-100`, `hc-green-200`, `hc-gray-200` — eigen Honeycomb-palet, genest in Tailwind-config
+
+Dit is **exact buildable door Claude Design** zonder speciale libraries:
+
+```html
+<svg viewBox="0 0 1290 780" class="w-full">
+  <!-- Hex-prism geometry (paths voor elke zijde van elke prisma) -->
+  <g class="hex-prism hex-data-foundation">
+    <path d="..." fill="var(--color-green-100)"/>  <!-- top face -->
+    <path d="..." fill="var(--color-green-300)"/>  <!-- left face -->
+    <path d="..." fill="var(--color-green-500)"/>  <!-- right face -->
+  </g>
+  <!-- ... andere hex-prisms ... -->
+
+  <!-- HTML overlays voor pills via foreignObject -->
+  <foreignObject x="650" y="350" width="340" height="220">
+    <div xmlns="http://www.w3.org/1999/xhtml" class="flex flex-col gap-1.5">
+      <a href="/apps/openregister" class="pill pill-green">OpenRegister</a>
+      <a href="/apps/opencatalogi" class="pill pill-green">OpenCatalogi</a>
+      <span class="category-label">DATA FOUNDATION</span>
+    </div>
+  </foreignObject>
+  <!-- ... andere foreignObjects per categorie ... -->
+
+  <!-- Dashed data-flow connectors tussen categorieën -->
+  <path d="..." stroke="var(--color-cobalt-400)" stroke-dasharray="4 4" fill="none"/>
+</svg>
+```
+
+**Voordelen van deze aanpak:**
+
+- **Crisp op elke schaal** — pure vector, geen retina-issues
+- **Accessible** — pills zijn echte `<a>`-elementen met focus-states, screen-reader-leesbaar, keyboard-navigeerbaar
+- **SEO-friendly** — tekst staat in de DOM, niet gebakken in een image
+- **Interactief zonder JS** — hover via CSS, navigation via standaard links
+- **i18n-ready** — pills zijn HTML-tekst, dus vertalen via Docusaurus-i18n-patroon
+- **Editable zonder design-tool** — labels wijzigen = HTML-tekst aanpassen; kleuren wijzigen = CSS custom properties
+- **Bouwbaar door Claude Design** — alle onderdelen zijn standaard web-technieken
+
+**Wat dit NIET is:**
+
+- Niet een rasterized PNG/JPG-image (wat je met Midjourney zou genereren)
+- Niet een Lottie JSON-animatie
+- Niet een React-component-library met kant-en-klare hex-prism-componenten
+- Niet een externe service / embed
+
+**Consequentie voor productie:**
+
+De homepage-hero (scène 1 in [`illustration-batch-1.md`](./illustration-batch-1.md)) wordt dus **niet via Midjourney gegenereerd als rasterized image** — Claude Design bouwt hem direct als interactieve SVG+HTML-component. Midjourney kan wel worden gebruikt om een *visuele referentie* te genereren (waar moeten de hex-prisms staan, welke hoek, welk palet) waar we de SVG-paden op ijken; maar het eindproduct is SVG.
 
 **Flat sub-variant voor andere pagina's:**
 

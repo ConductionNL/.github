@@ -22,20 +22,37 @@ Voor scènes waar je labels nodig hebt, voeg na de prompt toe:
 
 ## Scène 1: Homepage hero — Platform overview
 
+> **⚠ UITZONDERING: scène 1 wordt niet primair via Midjourney gerealiseerd.**
+>
+> Reverse-engineering van honeycomb.io (zie [`visual-motifs.md`](./visual-motifs.md#implementatie--bevestigd-via-reverse-engineering-van-honeycombio-2026-04-23)) heeft bevestigd dat hun platform-diagram een **pure SVG met `foreignObject`-HTML-pills** is — geen rasterized image. Dat willen wij ook, omdat het: accessible is, crisp op elke schaal, tekst-editeerbaar zonder design-tool, interactief zonder JS-library, SEO-friendly, en i18n-ready.
+>
+> **Workflow:**
+> 1. Midjourney levert een **visuele referentie** (rasterized) voor hoek, hex-placement, palet — niet een eindproduct
+> 2. Claude Design (of een illustrator) **traced/bouwt** de compositie als SVG, inclusief de hex-prism-paden (3 paden per prisma voor top/links/rechts-vlak)
+> 3. HTML-pills komen in `<foreignObject>` binnen de SVG
+> 4. CSS custom properties voor categorie-kleuren
+> 5. `<a>`-pills linken naar app-detail-pagina's; dashed lines als `<path>` met `stroke-dasharray`
+>
+> Gebruik onderstaande Midjourney-prompt dus alleen om een *referentiebeeld* te genereren waar de SVG op gebaseerd wordt — niet als eindproduct. De screenshot van honeycomb.io in [`references/ref-a-honeycomb-3d-platform.png`](./references/ref-a-honeycomb-3d-platform.png) is eigenlijk al voldoende referentie; Midjourney is optioneel voor deze scène.
+
 **Waar:** `/` hero-sectie (boven de fold, centraal)
-**Formaat:** 16:9, 2400×1350px min
+**Formaat in SVG:** viewBox `0 0 1290 780` (dezelfde ratio als Honeycomb), responsive via container
 **Prioriteit:** Hoogste — dit is THE visual van de hele site
 
-**Prompt:**
+**Optionele Midjourney-referentieprompt (niet voor eindproduct, alleen voor inspiratie):**
 
 ```
 platform overview diagram, 6 hexagonal prisms arranged in central cluster with one dominant green hexagon in middle, labeled feature-pill badges floating near each hex showing app names, external rectangular boxes on left and right connected by thin dashed data-flow lines, left box labeled "Your systems" with small logo placeholders for Nextcloud BAG BRK PDOK, right box labeled "Integrations" with placeholders for app store and gov portals, [MASTER PROMPT]
 ```
 
-**Post-productie-notities:**
-- Midjourney output zal waarschijnlijk generieke labels genereren; vervang labels in Figma met onze echte pill-tekst: `OpenRegister`, `OpenCatalogi`, `OpenConnector`, `DocuDesk`, `MyDash`, `NLDesign`, plus categorie-titels `Data Foundation`, `Integration`, `Documents`, `Case & Process`, `Insights`, `Design`
-- Categorie-kleuren per [`visual-motifs.md Platform overview pattern`](./visual-motifs.md#platform-overview-pattern--honeycomb-stijl-als-hero) toepassen in post
-- Externe boxes (links Nextcloud/BAG/BRK, rechts app store/gov portals) verder invullen met echte tekst en mini-iconen
+**SVG-bouwinstructies voor Claude Design / illustrator:**
+- Traceer 6 hex-prisms op de posities in de Honeycomb-referentie; pas categorie-toekenning aan naar Conduction-mapping (Data Foundation / Integration / Documents / Case & Process / Insights / Design)
+- Elke prisma = 3 `<path>`'s (top-face, left-face, right-face) met drie kleur-tinten van dezelfde pastel-familie voor diepte
+- Feature-pills als `<a>` binnen `<foreignObject>` per categorie
+- Links-box "Je bestaande systemen": Nextcloud, BAG, BRK, PDOK, Basisregistraties (als kleine icoon-placeholders)
+- Rechts-box "Integraties": Nextcloud app store, gov-portals, email, LLM-tools
+- Dashed data-flow-lijnen als `<path>` met `stroke-dasharray="4 4"`
+- Pills krijgen `cursor: pointer`, CSS `transition-colors` voor hover (150ms)
 
 ## Scène 2: Waarde-teaser — "Open source"
 
