@@ -4,7 +4,11 @@
 # Source code - always use LF
 *.py text eol=lf
 *.js text eol=lf
+*.jsx text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
 *.mjs text eol=lf
+*.cjs text eol=lf
 
 # Configuration files - always use LF
 *.json text eol=lf
@@ -15,20 +19,25 @@
 
 # Styles - always use LF
 *.css text eol=lf
+*.scss text eol=lf
+*.sass text eol=lf
+*.less text eol=lf
 
 # HTML and templates - always use LF
+*.html text eol=lf
+*.htm text eol=lf
 *.svg text eol=lf
 
 # Documentation - always use LF
 *.md text eol=lf
 *.txt text eol=lf
+*.rtf text eol=lf
 
-# Shell scripts - always use LF
-*.sh text eol=lf
-
-# Dockerfiles - always use LF
+# Docker and shell scripts - always use LF
 Dockerfile text eol=lf
 Dockerfile.* text eol=lf
+*.dockerfile text eol=lf
+*.sh text eol=lf
 
 # Git files - always use LF
 .gitattributes text eol=lf
@@ -51,6 +60,7 @@ Dockerfile.* text eol=lf
 *.woff binary
 *.woff2 binary
 *.ttf binary
+*.eot binary
 *.zip binary
 *.gz binary
 *.tar binary

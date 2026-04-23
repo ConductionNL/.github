@@ -42,25 +42,19 @@
      - Returns with feedback
      - Sets to "Selected for Development" and unassigns himself
 
-## Code Development 
+## Code Development
 
 1. Developers can pick up unassigned issues in "Selected for Development"
-2. After completion and code merge to development branch:
+2. After completion and code merge to `development` branch:
    - Status changes to "Review"
-   - Tester can test from development branch
+   - Tester can test from the beta channel (merges to `beta` trigger a beta build)
 3. After successful testing, completed issues are:
    - Presented to Product Owner during sprint review (Friday)
-   - Released to master branch on Monday morning following successful review
+   - Released to `main` on Monday morning following successful review (triggers a stable release)
 
-## Development Process
+### PR Labels for Versioning
 
-1. Developers can pick up unassigned issues in "Selected for Development"
-2. After completion and code merge to development branch:
-   - Status changes to "Review"
-   - Tester can test from development branch
-3. After successful testing, completed issues are:
-   - Presented to Product Owner during sprint review (Friday)
-   - Released to master branch on Monday morning following successful review
+Every pull request should be labeled with `major`, `minor`, or `patch` to control the version bump. If no label is set, it defaults to `patch`. See the [Release Process](./release-process) for full details on branching, versioning, and deployment.
 
 ## Sprint Closure
 
