@@ -57,7 +57,7 @@ Our core competencies are the backbone of our company's success:
 
 ## 🎨 Design & Brand
 
-Our visual identity is grounded in Dutch heritage: cobalt blue from the national flag, windmill orange as our distinctive accent, and a hexagon that wraps every Conduction product. Full guidelines, logos and tokens live in this repo:
+Our visual identity is grounded in Dutch heritage: cobalt blue from the national flag, KNVB orange as our distinctive accent, and a hexagon that wraps every Conduction product. Full guidelines, logos and tokens live in this repo:
 
 - [BRAND.md](../BRAND.md) — brand guide (values, logo, colours, typography, do's & don'ts)
 - [DESIGN.md](../DESIGN.md) — rationale behind our design choices

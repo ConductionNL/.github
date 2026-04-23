@@ -62,15 +62,28 @@ Onze kleuren zijn gebaseerd op de **officiële Nederlandse vlagkleuren**.
 | Rol | Naam | Hex | RGB | Gebruik |
 |---|---|---|---|---|
 | **Primary** | Kobaltblauw | `#21468B` | 33, 70, 139 | Merk, links, CTA's, koppen |
-| **Secondary** | Windmolen-oranje | `#FF7F00` | 255, 127, 0 | Accenten, highlights, hover |
-| **Tertiary** | Helder vermiljoen | `#AE1C28` | 173, 28, 40 | Spaarzaam — attentie, error-state |
+| **Secondary** | KNVB-oranje | `#F36C21` | 243, 108, 33 | Accenten, highlights, hover — spaarzaam |
+| **Tertiary** | Helder vermiljoen | `#AE1C28` | 173, 28, 40 | Zeer spaarzaam — attentie, error-state |
 | **Background** | Wit | `#FFFFFF` | 255, 255, 255 | Default achtergrond |
 
 ### Waarom deze drie?
 
 - **Kobaltblauw** is officieel de blauwtint van de Nederlandse vlag. Donkerder dan onze oude lichtblauw, straalt betrouwbaarheid en stabiliteit uit.
-- **Oranje** is expliciet *niet* het Rijkshuisstijl-oranje — we kiezen windmolen-oranje als onderscheidende accentkleur. Zo blijven we herkenbaar als bedrijf, niet als overheid.
+- **KNVB-oranje** is het meest universeel herkenbare "Nederlands oranje" — het oranje van het nationale elftal. Warm, toegankelijk, emotioneel geladen. Expliciet *niet* het Rijkshuisstijl-oranje (`#E17000`), en ook niet de letterlijke wimpel-tint (`#FF7F00`): de KNVB-variant pairt zachter met cobalt en signaleert "Nederlands maar niet overheid, trots maar niet stoffig".
 - **Vermiljoen** is de officiële rode vlagkleur. Spaarzaam in te zetten voor attentie en error-states.
+
+Zie [DESIGN.md](./DESIGN.md#waarom-knvb-oranje-f36c21-als-secundair) voor de volledige afweging, inclusief vergelijking met Rabobank, ING en Rijkshuisstijl.
+
+### Wat oranje betekent voor Conduction
+
+KNVB-oranje is onze **accent**-kleur, niet onze hoofdkleur. Het staat symbool voor:
+
+- **Warmte en toegankelijkheid** — we zijn een bedrijf van mensen, niet een monolithisch instituut
+- **Nederlandse identiteit op mass-appeal niveau** — iedereen herkent "Oranje" (elftal, Koningsdag, Oranjegekte), zonder overheidsverwijzing
+- **Pragmatisch optimisme** — energie, actie, "we bouwen dingen die werken"
+- **Focus** — in UI trekt oranje het oog naar één ding tegelijk
+
+Oranje is daarmee het tegengewicht van cobalt: cobalt draagt structuur en vertrouwen, oranje draagt beweging en menselijkheid.
 
 ### Proportie
 
@@ -83,16 +96,38 @@ Richtlijn voor balans in vlakverdeling:
 
 Oranje en vermiljoen zijn **krachtige** kleuren — gebruik ze als bijspeler, niet als hoofdrolspeler.
 
+### Subtiel gebruik van oranje — concreet
+
+Oranje werkt wanneer het **één ding** accentueert. Plaatsen waar het goed past:
+
+- **Focus rings** rond formulier-inputs en buttons
+- **Hover states** voor links en interactieve elementen (link default = cobalt, hover = oranje)
+- **Badges** voor "nieuw", "beta", "featured" (max. één per scherm)
+- **Iconografie-accenten** — een icoon in cobalt met één oranje detail, niet een volledig oranje icoon
+- **Onderstrepingen** of markers bij headings van de kern-boodschap (één per pagina)
+- **Call-to-action-randjes** — primary button blijft cobalt met witte tekst; oranje kan als border, shadow of micro-accent
+- **Illustraties** — als highlight-kleur binnen een cobalt-dominant illustratiestijl
+- **Grafiek-hoogtepunten** — één datapunt of lijn in oranje, rest in cobalt-tinten
+
+Plaatsen waar oranje **niet** werkt:
+
+- Grote vlakken (hero-achtergrond, sidebar-fill, card-background)
+- Primary fill van een knop (oranje op wit kan druk ogen; gebruik cobalt-fill met wit)
+- Body-tekst (te weinig contrast op wit)
+- Meer dan één accent per scherm (oranje werkt door spaarzaamheid; twee oranje elementen concurreren)
+
 ### Do's
 
 - ✅ Gebruik cobalt voor structuur en primaire acties
-- ✅ Gebruik oranje voor attentie zonder alarm (hover, nieuwe badge, highlight)
+- ✅ Gebruik oranje voor attentie zonder alarm (hover, nieuwe badge, focus ring)
 - ✅ Gebruik vermiljoen alléén voor echte attentie (error, destructieve actie)
+- ✅ Max. één oranje accent per scherm — spaarzaamheid is de bron van zijn kracht
 
 ### Don'ts
 
 - ❌ Meng oranje en rood nooit in hetzelfde oppervlak
 - ❌ Gebruik geen oranje voor grote vlakken (hero-achtergrond, sidebar)
+- ❌ Maak geen primary buttons met oranje fill — dat behoort cobalt toe
 - ❌ Introduceer geen nieuwe tinten blauw — alles gaat via `theme.conduction-2026.color.brand.primary`
 
 ---

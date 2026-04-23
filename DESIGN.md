@@ -37,15 +37,82 @@ Kobaltblauw `#21468B`:
 - *Midnight / navy (`#0C2D48`)*: te donker, gaat richting zwart, verliest kleuridentiteit.
 - *Huidige lichtblauw behouden met extra gewicht via typografie*: overwogen, maar onvoldoende signaal van de gewenste richting.
 
-### Waarom windmolen-oranje `#FF7F00` als secundair, en niet rijkshuisstijl-oranje?
+### Waarom KNVB-oranje `#F36C21` als secundair?
 
-Rijkshuisstijl-oranje (`#E17000`) is de accentkleur van de Nederlandse overheid. Als wij dat overnemen, worden we visueel verward met een overheidsdienst — ongewenst. Windmolen-oranje (`#FF7F00`) is:
+We hebben drie oranjetinten overwogen: wimpel-oranje `#FF7F00` (de letterlijke wimpel die boven de Nederlandse vlag wappert bij staatsaangelegenheden), Rijkshuisstijl-oranje `#E17000` (de accent­kleur van de Nederlandse overheid), en KNVB-oranje `#F36C21` (het oranje van het nationale elftal en bij uitbreiding de "Oranje"-beleving).
 
-- Iets feller, duidelijk anders dan rijksoranje
-- Associatief met Nederland (Oranje-boven, windmolens) zonder de Rijkshuisstijl-implicatie
-- Een heldere accentkleur die op wit goed opvalt maar niet agressief is
+**Rijkshuisstijl-oranje valt meteen af.** Die kleur is geassocieerd met "de overheid", en onze apps worden weliswaar *door* overheden gebruikt, maar Conduction is een bedrijf. Verwarring met een overheidsdienst is positionerings-schadelijk.
 
-Oranje blijft beperkt tot ~8% van een oppervlak. Het is **accent**, geen hoofdkleur.
+Tussen wimpel en KNVB gaat het om karakter en harmonie met cobalt:
+
+| Eigenschap | Wimpel `#FF7F00` | KNVB `#F36C21` |
+|---|---|---|
+| Hue | 30° (puur oranje) | 22° (licht rood-leanend) |
+| Saturatie | 100% | 90% |
+| Luminantie (L in HSL) | 50% | 54% |
+| WCAG-contrast op cobalt | 3.58:1 | 3.01:1 (net 3:1-grens voor UI-accents) |
+| Pairing met cobalt | Letterlijk complement — kan "buzzen" | Zachter, iets warmer, minder vibratie |
+| Signaal | Officieel, institutioneel, "vlag-poster" | Warm, mass-appeal, "Oranjegekte" |
+| Culturele lading | Wimpel = staatsaangelegenheden, ceremonieel | Elftal = toegankelijke patriottisme |
+
+KNVB wint op drie fronten:
+
+1. **Zachtere harmonie met cobalt.** De lichte rood-lean en iets lagere saturatie geven een volwassener, minder hard-contrasterende pairing. Minder "posterkleur", meer "professioneel bedrijf met Nederlandse identiteit".
+2. **Emotionele resonantie zonder Rijks-associatie.** KNVB-oranje is het meest universeel herkenbare "Nederlands oranje" — toegankelijker dan wimpel — maar zonder de overheidslading van rijksoranje.
+3. **Past bij "innovatief / handelsgedreven / menselijk".** Wimpel leunt naar formeel; KNVB leunt naar energiek-toegankelijk. De briefing vraagt om het tweede.
+
+Prijs die we betalen: ~0.57 contrast-punten minder op cobalt (3.01 vs 3.58). Voor icoon- en accent-gebruik is 3:1 voldoende (WCAG AA voor non-text). Voor grotere oranje elementen waarin leesbaarheid ertoe doet, gebruiken we oranje *op wit* (contrast 4.96:1, AAA voor grote tekst), niet *op cobalt*.
+
+### Wat oranje betekent voor Conduction
+
+KNVB-oranje is onze **accent**-kleur, niet onze hoofdkleur. Semantisch staat het voor:
+
+- **Warmte en toegankelijkheid** — we zijn een bedrijf van mensen, niet een monolithisch instituut
+- **Nederlandse identiteit op mass-appeal niveau** — "Oranje" (elftal, Koningsdag, Oranjegekte) herkent iedereen, zonder overheidsverwijzing
+- **Pragmatisch optimisme** — energie, actie, "we bouwen dingen die werken"
+- **Aandacht-focus** — in UI trekt oranje het oog naar één ding tegelijk
+
+Oranje is daarmee het **tegengewicht** van cobalt: cobalt draagt structuur en vertrouwen, oranje draagt beweging en menselijkheid. Samen zeggen ze: *stabiel én benaderbaar*.
+
+### Subtiel gebruik: de 8%-regel
+
+Proportioneel houden we oranje op **maximaal ~8%** van een gegeven oppervlak. Dat is geen toevallige grens — het is de hoeveelheid waarbij accentkleur als accent ervaren wordt en niet als secondary brand-kleur. Boven de 10% begint oranje te concurreren met cobalt en verliest het zijn attention-werking.
+
+Concrete plaatsen waar oranje werkt (zie [BRAND.md](./BRAND.md#subtiel-gebruik-van-oranje--concreet) voor de volledige lijst):
+
+- Focus rings, hover states, "nieuw"-badges
+- Één datapunt in een grafiek, één icoon-detail, één highlight-woord
+- Randen, schaduwen, micro-accenten op cobalt-dominante elementen
+- Illustratie-highlights binnen een cobalt-palet
+
+Waar oranje uitdrukkelijk **niet** werkt:
+
+- Grote vlakken (hero-backgrounds, sidebar-fills, card-backgrounds)
+- Primary button fill (dat is cobalt-gebied)
+- Body-tekst op wit (wel voldoende contrast, maar te druk)
+- Meer dan één accent per scherm
+
+### Overwogen kleurcombinaties — hoe staan wij tussen andere Nederlandse identiteiten?
+
+Cobalt + KNVB-oranje is geen onontgonnen terrein; meerdere Nederlandse merken combineren donkerblauw met een oranje-accent. De vraag is of onze combinatie voldoende **onderscheidend** is.
+
+| Identiteit | Blauw | Oranje | Karakter | Onderscheid t.o.v. Conduction 2026 |
+|---|---|---|---|---|
+| **Conduction 2026** (voorstel) | `#21468B` kobalt (L=34%) | `#F36C21` KNVB (H=22°) | Warm-professioneel, Nederlands-toegankelijk | — |
+| **Rabobank** | `#000066` donker navy (L=20%) | `#FF6600` | Conservatief, bancair, traditioneel | Rabo's navy is véél donkerder (bijna zwart-blauw); hun oranje is feller en meer pure 30°. Bank-feel, niet product-feel. |
+| **ING** | `#000066` donker navy (L=20%) | `#FF6200` | Modern bancair, fintech | Vrijwel identiek aan Rabobank qua blauw; iets roodder oranje. Blauw veel donkerder dan cobalt. |
+| **Rijkshuisstijl** | `#154273` rijksblauw (L=27%) | `#E17000` rijksoranje (L=44%) | Formeel, overheid, institutioneel | Blauw iets donkerder dan cobalt; oranje duidelijk donkerder en bruiner. Overheids­associatie uitgesloten voor ons. |
+| **KNVB / Oranje-elftal** | `#19284B` navy (L=20%) | `#F36C21` KNVB | Sport, nationale trots | Ons blauw is lichter en herkenbaarder als vlag-cobalt; oranje is identiek. |
+| **Nederlandse vlag (officieel)** | `#21468B` kobalt | *(geen oranje; rood `#AE1C28`)* | Staatsembleem | Wij gebruiken exact hetzelfde blauw; oranje is voor ons secundair. |
+
+**Conclusie uit de tabel:**
+
+- Banken (Rabobank, ING) claimen het **donkerste** navy-oranje register. Hun navy (`#000066`) is ruwweg 14 L-punten donkerder dan onze cobalt — dat is een zichtbaar andere categorie. Onze cobalt ademt meer "daglicht" en ligt dichter bij de vlagtint.
+- Rijkshuisstijl zit ertussen qua blauw maar kiest een bruiner oranje. Wij vermijden hun oranje.
+- KNVB gebruikt ons exacte oranje, maar met donkerder navy. Het elftal-combo is niet verwarrend met ons, maar "borrowt" wel dezelfde Nederlandse warmte — dat is een feature, geen bug.
+- Onze pairing (lichter cobalt + warmer oranje) zit in een "gat" tussen banken (te donker, te formeel) en overheid (te bruin, te institutioneel). Dat gat is precies waar een open-source-productbedrijf thuishoort: Nederlands, professioneel, maar niet corporate-stoffig of staatsdienst-streng.
+
+Als in de toekomst een concurrent in hetzelfde register komt, kunnen we onderscheiden via **toepassing en proportie** (de 8%-regel, hexagon-wrapper, typografie) — het is niet alleen het kleurenpalet dat ons kenbaar maakt.
 
 ### Waarom vermiljoen `#AE1C28` als tertiair?
 
@@ -189,7 +256,7 @@ Het thema landt niet in één klap overal. Drie soorten oppervlakken met elk een
 
 ### Waarom deze volgorde
 
-- **`www.conduction.nl` eerst** omdat merk-uitstraling het grootste effect heeft op prospects die ons nog niet kennen. De donkerdere kobalt plus windmolen-oranje vertelt een ander verhaal over wie we zijn — die boodschap landt het eerst op de marketingsite.
+- **`www.conduction.nl` eerst** omdat merk-uitstraling het grootste effect heeft op prospects die ons nog niet kennen. De donkerdere kobalt plus KNVB-oranje vertelt een ander verhaal over wie we zijn — die boodschap landt het eerst op de marketingsite.
 - **`docs.conduction.nl` als parallelle technische proef.** Technisch laagdrempelig (één Docusaurus `custom.css` vervangen, fonts toevoegen via `stylesheets` in `docusaurus.config.js`) en laag visueel risico — docs mogen iteratief. Het legt bovendien bloot welke scope-B tokens (spacing, radii, shadows) als eerste nodig zijn zodra een echte site ze consumeert.
 - **Apps per stuk, op eigen tempo.** De harde switch betreft het *thema-contract* (`theme-conduction-2026`), niet een gedeelde deadline voor alle apps. Elke app-repo landt zijn eigen migratie-PR.
 
@@ -227,4 +294,4 @@ Deze noteren we alvast, maar lossen we niet in deze ronde op:
 
 | Datum | Wijziging | Besluit door |
 |---|---|---|
-| 2026-04-23 | Introductie `theme-conduction-2026`: kobalt + windmolen + vermiljoen, Figtree + IBM Plex Mono, zeshoek-wrapper behouden | Brand-initiatief |
+| 2026-04-23 | Introductie `theme-conduction-2026`: kobalt + KNVB-oranje + vermiljoen, Figtree + IBM Plex Mono, zeshoek-wrapper behouden. Wimpel-oranje (`#FF7F00`) en Rijkshuisstijl-oranje (`#E17000`) overwogen en afgewezen; KNVB gekozen om warmere harmonie met cobalt en mass-appeal "Oranje"-associatie zonder overheidslading. | Brand-initiatief |

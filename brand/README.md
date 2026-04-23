@@ -30,7 +30,7 @@ Genereer met [Style Dictionary](https://amzn.github.io/style-dictionary/) of een
 ```css
 :root {
   --conduction-color-brand-primary:   #21468B;
-  --conduction-color-brand-secondary: #FF7F00;
+  --conduction-color-brand-secondary: #F36C21;
   --conduction-color-brand-tertiary:  #AE1C28;
   --conduction-color-background-default: #FFFFFF;
   --conduction-color-text-default:    #21468B;
@@ -77,7 +77,7 @@ Conduction volgt NL Design System waar een equivalent token bestaat, en definiee
 | Conduction token | NLDS equivalent | Opmerking |
 |---|---|---|
 | `theme.conduction-2026.color.brand.primary` | `--nl-color-primary` | Onze waarde (kobaltblauw) is strikt gelijk aan de Nederlandse vlag; NLDS utrecht-theme gebruikt andere tint. |
-| `theme.conduction-2026.color.brand.secondary` | — | NLDS heeft geen vaste accentkleur; Conduction kiest `#FF7F00` (windmolen-oranje) om te onderscheiden van Rijkshuisstijl. |
+| `theme.conduction-2026.color.brand.secondary` | — | NLDS heeft geen vaste accentkleur; Conduction kiest `#F36C21` (KNVB-oranje) om warm-toegankelijk Nederlands te signaleren zonder Rijkshuisstijl-associatie. |
 | `theme.conduction-2026.color.brand.tertiary` | — | Eigen token; vermiljoen is officiële NL-vlagkleur, NLDS definieert dit niet. |
 | `theme.conduction-2026.color.background.default` | `--nl-color-bg-default` | Gelijk (wit). |
 | `theme.conduction-2026.typography.font-family.body` | Theme-afhankelijk in NLDS | Conduction fixeert op Figtree. |
