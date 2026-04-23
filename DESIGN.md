@@ -259,6 +259,49 @@ Spacing/radii/shadows (scope B) en componenttokens (scope C) volgen op basis van
 
 ---
 
+## Tone & visuele richting — implicaties van de positioneringsshift
+
+Conduction verschuift van *consultancy* naar *productbedrijf* (zie [BRAND.md](./BRAND.md#wat-we-bouwen--een-app-ecosysteem-geen-consultancy)) en van *overheid-first* naar *MKB-first* (zie [BRAND.md](./BRAND.md#voor-wie-we-bouwen)). Die twee shifts hebben consequenties voor hoe we **schrijven** en **beelden gebruiken** — niet alleen op de website, maar in alle communicatie.
+
+### Tone-verschuiving
+
+| Oud (overheid-dienstverlener) | Nieuw (MKB-productbedrijf) |
+|---|---|
+| Formele aanspreekvorm ("u", 3e persoon) | Directe aanspreekvorm ("je", "jij") |
+| Abstracte ambitie ("digitale transformatie", "ketensamenwerking") | Concrete uitkomst ("installeer OpenCatalogi in 2 minuten") |
+| Proces-centraal ("onze implementatie­methodologie") | Resultaat-centraal ("deze app lost dit probleem op") |
+| Neutrale dienstverlening-taal | Zelfbewust product-taal ("we bouwen X, en het werkt") |
+| Jargon als vakbekwaamheids-signaal | Jargon als exclusie — alleen als het écht nodig is, met uitleg |
+| Lange, volledige zinnen | Korte zinnen, witregels, scanbaarheid |
+
+Dit geldt in alle kanalen: website, offertes, presentaties, blogposts, social. Overheidsklanten begrijpen directe taal prima; MKB-klanten zouden afhaken bij de oude tone.
+
+### Visuele richting
+
+De positionerings-shift van *dienstverlener* naar *productbedrijf* heeft visuele gevolgen. Wat we *tonen* verandert:
+
+| Oud (dienstverlener) | Nieuw (productbedrijf) |
+|---|---|
+| Stockfoto's van mensen in vergaderzalen, handdrukken, whiteboards | App-screenshots, UI-fragmenten, productdemo's |
+| "Onze expertise" in tekst + team-portretten als bewijs | "Wat onze apps doen" in visuele demo's |
+| Abstracte netwerk-iconografie (knooppunten, verbindingen) | Concrete app-iconografie (apps in hexagon-wrapper, features als beeld) |
+| Casefoto's van klantenprojecten | Installed-count, app-metrics, gebruikersaantallen |
+| "Team Conduction" als hero-element | "Apps Conduction" als hero-element |
+
+Team-foto's en mensen verdwijnen niet helemaal — ze horen thuis op *over-ons*-pagina's, in jaarverslag-achtige content, en in contactvormen — maar ze zijn niet meer het eerste wat een bezoeker of lezer ziet.
+
+**Richtlijn voor imagery:** liever een illustratie in het cobalt-palet dan een stockfoto. Liever een app-screenshot dan een generiek "platform"-beeld. Liever een getekend icoon dan een 3D-render. Als je twijfelt: kan dit beeld ook bij een willekeurig ander IT-dienstverlener-bedrijf staan? Dan moet het niet op Conduction-materiaal.
+
+### Apps-vs-Solutions framing (taalgebruik)
+
+Zie de terminologie-sectie in [BRAND.md](./BRAND.md#apps--solutions--onze-terminologie). Kort samengevat voor ontwerp:
+
+- Spreek nooit over "onze WOO-app" of "onze zaakafhandel-app" — er zijn geen WOO- of zaakafhandeling-apps. Dat zijn *solutions* (oplossingen voor problemen); de apps die ze realiseren zijn *OpenCatalogi*, *OpenRegister*, etc.
+- Solution-pagina's zijn probleem-gericht ("Wat is WOO-compliance en hoe los je het op?"); app-pagina's zijn product-gericht ("Wat is OpenCatalogi en wat kan het?").
+- In visuele voorstellingen kunnen apps en solutions samen getoond worden: solution als doel, apps als bouwstenen. Bijvoorbeeld een "stack-diagram" per solution.
+
+---
+
 ## Rollout — welke oppervlakken, in welke volgorde
 
 Het thema landt niet in één klap overal. Drie soorten oppervlakken met elk een eigen prioriteit en complexiteit:

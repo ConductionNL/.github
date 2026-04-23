@@ -9,13 +9,46 @@ Voor **machine-leesbare tokens**: zie [`brand/tokens.json`](./brand/tokens.json)
 
 ## Wie we zijn
 
-Conduction is een **Nederlands open-source-bedrijf** dat ICT-oplossingen bouwt voor overheid en maatschappelijk domein. Onze identiteit leunt bewust op Nederlandse kernwaardes:
+Conduction is een **Nederlands open-source-productbedrijf**. We bouwen een ecosysteem van samenwerkende Nextcloud-apps. Onze identiteit leunt bewust op Nederlandse kernwaardes:
 
 - **Trots Nederlands.** We ontwerpen vanuit Nederlandse standaarden (NL Design System, Common Ground, API-principes) en dragen dat uit.
 - **Innovatief.** We lopen voorop in open source, API-first architectuur, en federatieve datamodellen.
 - **Handelsgedreven.** Pragmatisch, doelgericht, resultaatgericht. Oplossingen die werken, niet vertoningen.
 - **Penny-wise.** Open source, hergebruik, zuinig met publieke middelen — dezelfde discipline die onze software kenmerkt.
 - **Betrouwbaar.** Stabiel, transparant, voorspelbaar. De dieper-blauwe huisstijl onderstreept dat.
+
+## Wat we bouwen — een app-ecosysteem, geen consultancy
+
+Ons model verschuift. Historisch kwam ons werk voort uit *projecten, training en advies*: opdrachten waarin een klant ons inhuurde om iets te bouwen, implementeren of begeleiden. Dat bestaat nog, maar is niet meer waar Conduction om draait.
+
+**Conduction is een productbedrijf.** We bouwen een **ecosysteem van samenwerkende Nextcloud-apps** — OpenRegister, OpenCatalogi, OpenConnector, DocuDesk, MyDash, en meer. Onze klanten kunnen ons gebruiken **zonder ons te hoeven spreken**: ze downloaden de apps uit de Nextcloud app store, installeren, en zijn klaar. Dat is de kern van wat we nu zijn.
+
+Projecten, training en advies bestaan als **ondersteunende diensten** rondom het ecosysteem — voor klanten die extra hulp willen bij implementatie, maatwerk of opleiding. Ze zijn secundair, niet leading. Alle merkcommunicatie (website, drukwerk, presentaties) leidt met de apps en het ecosysteem; services worden discreet vermeld voor wie er specifiek naar zoekt.
+
+## Voor wie we bouwen
+
+Onze doelgroep is in transitie:
+
+- **Primair: MKB.** Ons toekomstbeeld. Kleine en middelgrote organisaties die open-source-oplossingen willen gebruiken zonder dure integrator-trajecten. Directe taal, concreet resultaat, zelf installeren.
+- **Secundair: Overheid.** Het merendeel van onze **huidige klanten** is nog overheid (gemeenten, samenwerkingsverbanden). We dragen ze niet weg — ze blijven welkom — maar ons zwaartepunt schuift.
+- **Tertiair: Ontwikkelaars en integrators.** De open-source-community die bijdraagt aan onze apps, forks maakt, of ze integreert in eigen stacks.
+
+We zijn eerlijk over waar we staan: overheid *is* nog de meerderheid, MKB *is* het doel. De communicatie en het product laten die richting zien zonder de huidige klantenbasis te verloochenen.
+
+## Apps & Solutions — onze terminologie
+
+Dit onderscheid is geldig voor *alle* Conduction-communicatie (website, marketing, sales, documentatie, support), niet alleen voor de website:
+
+- **App** = een stuk software dat we bouwen en uitleveren. Concrete, installeerbare producten. Voorbeeld: *OpenCatalogi*, *OpenRegister*, *DocuDesk*.
+- **Solution** = wat een klant ermee kan bereiken. Een oplossing voor een concreet probleem. Voorbeeld: *WOO-compliance*, *organisatieregister*, *zaakafhandeling*.
+
+De relatie tussen beide:
+
+- Eén **app** kan aan meerdere **solutions** bijdragen (OpenCatalogi is relevant voor WOO-compliance én voor softwarecatalogi)
+- Eén **solution** vraagt vaak meerdere **apps** (WOO-compliance combineert OpenCatalogi + OpenConnector + DocuDesk)
+- We communiceren vanuit beide kanten: apps voor wie weet welk product hij zoekt; solutions voor wie een probleem heeft en de weg naar de juiste app-stack nodig heeft
+
+Consequentie voor taalgebruik: vermijd zinsconstructies als *"onze WOO-app"* (er is geen WOO-app, WOO is een solution die meerdere apps vraagt). Zeg in plaats daarvan *"onze WOO-solution, gebouwd op OpenCatalogi en OpenConnector"*.
 
 ---
 
