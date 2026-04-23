@@ -201,6 +201,21 @@ De zeshoek is in alle huidige Conduction-apps het herkenbaar omkapsel. Hem behou
 - **Schaalt over het portfolio** — elk app-icon past binnen dezelfde vorm, maakt portfolio-pagina's rustig
 - **Heeft geen gevestigde associatie** in overheidsland — geen botsing met Rijkshuisstijl-iconografie
 
+### Van wrapper naar systematisch motief
+
+De zeshoek is niet langer alléén het omkapsel rond het logo. Vanaf `theme-conduction-2026` wordt ze een **systematisch motief** dat door de hele UI terugkomt: bulletjes in lijsten, paginering-dots, step-indicators, process-statussen, avatar-frames, badges, dividers, loaders, category-tags, rating-schalen, timeline-kralen. Overal waar een vorm *iets aanduidt* (status, volgorde, categorie, accent) — daar mag een hex gebruikt worden.
+
+**Regel — hexagon voor accenten, niet voor functionele containers.** De zeshoek gaat op elementen waar een vorm betekenis heeft. Elementen waar een mens *iets mee doet* (inputs, buttons, modals, content-cards, tables) blijven rechthoekig, omdat dat beter klikt, tikt, leest en invult. De mix van rechthoekige containers met hex-accenten is bewust: functionaliteit en merkidentiteit beide verdedigen.
+
+Volledige catalogus van toepassingen (met wanneer en hoe) staat in de surface-specifieke [`briefs/website/visual-motifs.md`](./briefs/website/visual-motifs.md). Die catalogus is oorspronkelijk voor de website geschreven maar geldt **company-wide** — dezelfde hex-toepassingen gelden ook voor app-UI's, drukwerk, presentaties en toekomstige oppervlakken.
+
+**Twee oriëntaties:**
+
+- **Flat-top** (platte zijde boven) — voor logo-wrappers en alle formele merk-momenten (avatars, app-iconen, hero-constellaties)
+- **Pointy-top** (punt boven) — voor UI-elementen (bullets, badges, step-indicators) omdat die visueel iets vriendelijker en opvallender zijn
+
+Eén brand, beide oriëntaties. Dat is geen inconsistentie, het is bewuste functionele differentiatie.
+
 ### Waarom twee logo-varianten (op wit, op blauw)?
 
 - **Op wit** is de default — documenten, lichte UI, website
