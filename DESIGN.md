@@ -177,6 +177,41 @@ Spacing/radii/shadows (scope B) en componenttokens (scope C) volgen op basis van
 
 ---
 
+## Rollout — welke oppervlakken, in welke volgorde
+
+Het thema landt niet in één klap overal. Drie soorten oppervlakken met elk een eigen prioriteit en complexiteit:
+
+| Oppervlak | Doel | Codebase | Prioriteit |
+|---|---|---|---|
+| `www.conduction.nl` | Marketing, wervend, eerste indruk | Aparte codebase (stack nader te bepalen) | **Hoog** — grootste merkimpact richting (potentiële) klanten |
+| `docs.conduction.nl` | Technische documentatie voor integrators | Docusaurus in [`.github/website/`](./website/) | **Middel** — goede eerste testcase voor de tokens |
+| App-UI's (OpenRegister, OpenCatalogi, …) | Productgebruik | Per app-repo | **Middel-hoog** — dagelijks zichtbaar voor eindgebruikers |
+
+### Waarom deze volgorde
+
+- **`www.conduction.nl` eerst** omdat merk-uitstraling het grootste effect heeft op prospects die ons nog niet kennen. De donkerdere kobalt plus windmolen-oranje vertelt een ander verhaal over wie we zijn — die boodschap landt het eerst op de marketingsite.
+- **`docs.conduction.nl` als parallelle technische proef.** Technisch laagdrempelig (één Docusaurus `custom.css` vervangen, fonts toevoegen via `stylesheets` in `docusaurus.config.js`) en laag visueel risico — docs mogen iteratief. Het legt bovendien bloot welke scope-B tokens (spacing, radii, shadows) als eerste nodig zijn zodra een echte site ze consumeert.
+- **Apps per stuk, op eigen tempo.** De harde switch betreft het *thema-contract* (`theme-conduction-2026`), niet een gedeelde deadline voor alle apps. Elke app-repo landt zijn eigen migratie-PR.
+
+### De "docs-first vs marketing-first"-afweging
+
+Vanuit techniek is docs-first logisch (kleiner, overzichtelijker, snel klaar). Vanuit positionering is marketing-first logisch (merkimpact). We kiezen **marketing-first**, met docs als parallelle technische proef.
+
+Als de marketing-site echter op een platform draait dat moeilijk tokens consumeert (bv. Webflow of een WordPress-theme zonder build-pipeline), draait de volgorde om — dan is `docs.conduction.nl` het eerste formele bewijs van het thema in gebruik, en landt de marketingsite via export van dezelfde waardes.
+
+### Wat telt als "gemigreerd"?
+
+Een oppervlak is pas gemigreerd wanneer:
+
+1. Alle merkkleuren via `theme.conduction-2026.color.brand.*` worden geconsumeerd (geen hardcoded hex)
+2. Typografie via de `theme.conduction-2026.typography.font-family.*` tokens loopt
+3. Het avatar in de juiste variant (op-wit of op-blauw) gebruikt wordt
+4. Er geen `#4376FC` of andere legacy-blauwtint meer in het oppervlak voorkomt
+
+Tot die tijd is het oppervlak "in transitie".
+
+---
+
 ## Open vragen / toekomstige beslissingen
 
 Deze noteren we alvast, maar lossen we niet in deze ronde op:
