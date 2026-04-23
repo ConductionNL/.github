@@ -422,6 +422,41 @@ A skill for `/app-explore` (thinking mode) should have high degrees of freedom �
 
 ---
 
+## Path Conventions in Skill Content
+
+When a SKILL.md instructs Claude to read a file (persona card, shared doc, spec), the path is resolved against **Claude's current working directory at invocation time** — not relative to the SKILL.md file itself. This makes paths workspace-sensitive, and getting them wrong is one of the most common silent failures in this project.
+
+### Rules by target location
+
+| Target | Canonical path form | Example |
+|---|---|---|
+| **Personas in `hydra/personas/`** (Nextcloud workspace) | `hydra/personas/<slug>.md` | `hydra/personas/henk-bakker.md` |
+| **Personas inside a `.claude`-centered workspace** (e.g. wordpress-docker) | `.claude/personas/<slug>.md` | `.claude/personas/shop-owner.md` |
+| **Company-wide specs** (hydra `openspec/specs/`) | `hydra/openspec/specs/<capability>/spec.md` | `hydra/openspec/specs/nextcloud-app/spec.md` |
+| **Company-wide ADRs** (hydra `openspec/architecture/`) | `hydra/openspec/architecture/adr-<NNN>-*.md` | `hydra/openspec/architecture/adr-001-data-layer.md` |
+| **Developer/Claude docs** (lives in `ConductionNL/.github` repo, cloned separately — **not** a subdir of any project workspace) | Full GitHub URL | `https://github.com/ConductionNL/.github/blob/main/docs/claude/writing-specs.md` |
+| **App-specific docs** (inside the current app) | Workspace-relative | `{APP_DIR}/docs/features/README.md` |
+| **App-specific specs** | Workspace-relative | `openspec/specs/<capability>/spec.md` |
+
+### Why not `.claude/personas/` or `.claude/docs/` in hydra skills?
+
+- `.claude/personas/` exists in `.claude`-centered workspaces (e.g. wordpress-docker) but **not** in hydra — hydra keeps personas at `hydra/personas/`. Using the `.claude/` prefix in a hydra skill silently fails whenever the skill is invoked from a workspace where that directory doesn't exist.
+- `.claude/docs/` is a workspace-local cache of dev docs. It exists in wordpress-docker (copies of guides from `.github`). It does **not** exist in hydra. Skills in hydra that read dev docs should link to the canonical `.github` repo URL — it's the only form that resolves everywhere.
+
+### Exception: skills intended to be copied into a workspace
+
+Skills authored inside a `.claude`-centered workspace (wordpress-docker) may legitimately use `.claude/personas/` and `.claude/docs/` — those paths match the workspace they run in. When such a skill is copied to another workspace, the paths must be rewritten to match the destination convention. Don't cross-pollinate paths: a skill living in hydra's `.claude/skills/` uses hydra conventions; a skill living in wordpress-docker's `.claude/skills/` uses WP conventions.
+
+### Checklist when authoring a new skill
+
+1. Where will this skill be invoked from? (workspace root CWD = what?)
+2. Do every `Read` / file reference match that CWD?
+3. If the target is in `.github`, use a GitHub URL — never assume the `.github` repo is cloned as a subdir.
+4. If the target is in sibling workspaces (like personas in `hydra/personas/`), use the workspace-prefixed path.
+5. Run `/sync-docs dev` → Phase 6 Part B to catch any drift after the skill is added.
+
+---
+
 ## Naming Conventions
 
 Skills use the `namespace-action` format with lowercase letters, numbers, and hyphens only.
