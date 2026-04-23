@@ -275,6 +275,43 @@ Foundation: zie [../DESIGN.md](../DESIGN.md#visuele-richting). Website-aanvullin
 - **App-screenshots** met lichte omlijsting (1–2px cobalt) of schaduw voor diepte. Niet tilt-geroteerd; strak recht.
 - **Geen** stockfoto's. Geen 3D-renders van abstract netwerken. Geen "diverse team werkt samen"-foto's.
 
+### Referentie-sites (positief + anti)
+
+Kritische invoer voor de designer om de **toon en sfeer** te kunnen ankeren. Zonder deze referenties produceert een one-shot een gemiddelde-van-alles-ontwerp dat nergens helemaal op past.
+
+Bron: onze competitive-intelligence database (`concurrentie-analyse/intelligence.db` en uitgebreidere Postgres — 1.088 gecatalogeerde competitors met relatie `competitor` / `ally` / `initiative`, binnen een bredere pool van ~32K GitHub-repos en ~17K organisaties). De onderstaande selectie is een handmatige curatie uit die data — vijf positieve referenties die elk een ander aspect raken, plus twee anti-referenties als duidelijke "niet dit".
+
+#### Positief — vijf richtingen om naartoe te bewegen
+
+| Site | Relatie in DB | Wat we ervan overnemen |
+|---|---|---|
+| [**Nextcloud**](https://nextcloud.com) | ally | **Tonale aansluiting + app-store-model.** We leven letterlijk in hun ecosysteem en onze bezoekers komen (of zouden moeten komen) daar vandaan. Bij elke design-beslissing de sanity-check: "zou deze pagina naast Nextcloud's eigen site werken?" Hun app-store-IA is wat wij voortzetten. |
+| [**Decidim**](https://decidim.org) | initiative | **Civic-OSS-toon en solution-first-IA.** AGPL, Barcelona, multilingual, government-adjacent. Hun solution-pagina's leggen echt een maatschappelijk probleem uit voor ze naar de software gaan — exact het patroon voor onze WOO/zaakafhandeling-landingspagina's. Dichtst-bij-buurman op missie. |
+| [**Supabase**](https://supabase.com) | competitor (openregister) | **Gouden standaard voor OSS-productbedrijf + ecosystem-catalogus.** Hun Extensions-sectie is structureel vergelijkbaar met onze apps-catalogus. Open source plus commercial add-ons — net als ons model (apps + ondersteunende services). Sterke typografische hiërarchie, dichtheid zonder drukte. |
+| [**Backstage**](https://backstage.io) | competitor (internal developer portal) | **Ecosystem- en plugin-framing.** Spotify's portal framework is expliciet "core + plugins = ecosystem". Onze apps zijn onze plugins. Meest directe conceptuele peer voor het verhaal "install what you need uit een groeiende catalogus". Het model dat zij verkopen, bouwen wij. |
+| [**PostHog**](https://posthog.com) | competitor (marketing-suite) | **Persoonlijkheid zonder corporate-saaiheid.** Bewijst dat open-source niet zakelijk-droog hoeft. GitHub-trots zichtbaar, humor in microcopy, maar professioneel. MKB-vriendelijke toon. |
+
+Twee observaties bij deze selectie:
+- Geen van deze vijf is een traditionele NL-overheidsleverancier. Dat is bewust — de markt is gevuld met traditionele leveranciers (zie anti-referenties), en we willen juist *niet* zo ogen.
+- **Decidim** is de enige EU/NL-aangrensde referentie. Als er tussen de designs een "te anglo-tech-SaaS" spanning ontstaat, trek dan richting Decidim's register.
+
+#### Anti — twee sites waar we expliciet van wegbewegen
+
+Classic NL-gov-vendor-sites: beleidsterrein-georiënteerde IA, corporate-blauw, stockfoto's van mensen in pakken, "vraag een demo aan"-flow, lange sales-cycles. Uit onze DB zijn dit de meest archetypische voorbeelden (beide `proprietary` / `subscription`, beide gericht op dezelfde NL-gov-afnemers die *wij* anders willen benaderen):
+
+| Site | Relatie in DB | Waarom anti-referentie |
+|---|---|---|
+| [**PinkRoccade Local Government**](https://www.pinkroccadelocalgovernment.nl) | competitor (Sociaal Domein, CiVision Midoffice) | Prototype NL-gov-vendor-site: sector-gerangschikte IA ("beleidsterreinen"), corporate-blauwe stockfoto's, "neem contact op voor een offerte". Alles wat wij *niet* zijn. Wij installeer-je-direct, zij verkoop-cycle. |
+| [**BCT**](https://www.bct.nl) (Corsa ECM) | competitor (Corsa, GeoVacs VTH) | Traditionele document-management-vendor voor gemeentes. Enterprise-layout, dienstverlener-visual-language, geen spoor van "product eerst". Exact de look waar we in de tone-shift (BRAND.md / DESIGN.md) vanaf willen. |
+
+#### Gebruiksinstructie voor de designer
+
+- Positief-referenties zijn **aspect-bronnen**, geen copy-bronnen. Per ontwerpbeslissing: welk aspect is hier leidend?
+- Als een mock "tussen PinkRoccade en Supabase" zit: altijd verder richting Supabase.
+- Als een mock té developer-gericht wordt (docs-dichtheid, code-blokken overal): terug richting Nextcloud/PostHog om de MKB-toon te herstellen.
+- Als een mock stoffig/overheidsformeel oogt: naar Decidim voor het civic-OSS-register; weg van PinkRoccade/BCT.
+- De hexagon-wrapper en kobalt+oranje zijn *onze*. Geen enkel referentie-site heeft die — borrow structurele patronen, geen visual-brand-elementen.
+
 ## 10. Internationalisatie (bilingual NL/EN)
 
 - **URL-structuur:** expliciete locale-prefix. `/nl/...` en `/en/...`. Root `/` redirect op basis van browser-taal.
