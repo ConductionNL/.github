@@ -1,0 +1,1407 @@
+##############################################################################
+# Conduction Nextcloud Development Environment
+#
+# Shared docker-compose for all ConductionNL Nextcloud app development.
+# Lives in the ConductionNL/.github repository so every project can use it.
+#
+# Quick start:
+#   docker compose -f .github/docker-compose.yml up -d
+#
+# With profiles:
+#   docker compose -f .github/docker-compose.yml --profile mail up -d
+#   docker compose -f .github/docker-compose.yml --profile ai --profile mail up -d
+#
+# See docs/development-environment.md for full documentation.
+##############################################################################
+
+volumes:
+  nextcloud:
+  apps:
+  db:
+  config:
+  ollama:
+  presidio-models:
+  n8n:
+  tgi-models:
+  openllm-models:
+  openllm-cache:
+  solr:
+  zookeeper:
+  elasticsearch:
+  open-webui:
+  harp-data:
+  openproject-pgdata:
+  openproject-assets:
+  xwiki-data:
+  exapp-n8n:
+  exapp-openwebui:
+  exapp-keycloak:
+  exapp-redis:
+  exapp-openklant:
+  exapp-openzaak:
+  exapp-opentalk:
+  exapp-valtimo:
+  exapp-livekit:
+  exapp-minio:
+  ox-db:
+  ox-etc:
+  ox-data:
+  valtimo-data:
+  openzaak-data:
+  openklant-data:
+
+networks:
+  default:
+    name: conduction-network
+
+services:
+  # ===========================================================================
+  # Core Services (start by default)
+  # ===========================================================================
+
+  # PostgreSQL Database (default)
+  # Recommended for production use with vector search capabilities
+  db:
+    image: pgvector/pgvector:pg16
+    restart: always
+    container_name: conduction-postgres
+    volumes:
+      - db:/var/lib/postgresql/data
+      - ./docker/postgres/init-extensions.sql:/docker-entrypoint-initdb.d/01-init-extensions.sql:ro
+      - ./docker/postgres/init-exapps.sh:/docker-entrypoint-initdb.d/02-init-exapps.sh:ro
+    environment:
+      - POSTGRES_DB=nextcloud
+      - POSTGRES_USER=nextcloud
+      - POSTGRES_PASSWORD=!ChangeMe!
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nextcloud -d nextcloud"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: >
+      postgres
+      -c shared_preload_libraries=pg_trgm,vector
+      -c max_connections=200
+      -c shared_buffers=256MB
+      -c effective_cache_size=1GB
+      -c maintenance_work_mem=64MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c work_mem=4MB
+      -c min_wal_size=1GB
+      -c max_wal_size=4GB
+
+  # Nextcloud Application Server (PostgreSQL - Default)
+  # Access at: http://localhost:8080
+  # Default credentials: admin / admin
+  nextcloud:
+    user: root
+    container_name: nextcloud
+    image: nextcloud
+    restart: always
+    ports:
+      - 8080:80
+    links:
+      - db
+    volumes:
+      - nextcloud:/var/www/html:rw
+      # App mounts — each app directory is a sibling of .github in the workspace
+      - ../openregister:/var/www/html/custom_apps/openregister
+      - ../opencatalogi:/var/www/html/custom_apps/opencatalogi
+      - ../softwarecatalog:/var/www/html/custom_apps/softwarecatalog
+      - ../nldesign:/var/www/html/custom_apps/nldesign
+      - ../mydash:/var/www/html/custom_apps/mydash
+      - ../opentalk:/var/www/html/custom_apps/opentalk
+      - ../valtimo:/var/www/html/custom_apps/valtimo
+      - ../openzaak:/var/www/html/custom_apps/openzaak
+      - ../openklant:/var/www/html/custom_apps/openklant
+      - ../docudesk:/var/www/html/custom_apps/docudesk
+      - ../procest:/var/www/html/custom_apps/procest
+      - ../pipelinq:/var/www/html/custom_apps/pipelinq
+      - ../zaakafhandelapp:/var/www/html/custom_apps/zaakafhandelapp
+      - ../larpingapp:/var/www/html/custom_apps/larpingapp
+      # Custom apps directory from openregister (contains pre-installed apps)
+      - ../openregister/custom_apps:/var/www/html/custom_apps
+    environment:
+      # Database configuration (PostgreSQL)
+      - POSTGRES_DB=nextcloud
+      - POSTGRES_USER=nextcloud
+      - POSTGRES_PASSWORD=!ChangeMe!
+      - POSTGRES_HOST=db
+      - TZ=Europe/Amsterdam
+      - NEXTCLOUD_ADMIN_USER=admin
+      - NEXTCLOUD_ADMIN_PASSWORD=admin
+      # PHP Configuration
+      - PHP_MEMORY_LIMIT=4G
+      - PHP_UPLOAD_LIMIT=2G
+      - PHP_POST_MAX_SIZE=2G
+      # AI Service endpoints (when using --profile ai)
+      - TGI_LLM_URL=http://conduction-tgi-llm:80
+      - DOLPHIN_VLM_URL=http://conduction-dolphin-vlm:5000
+      - PRESIDIO_URL=http://conduction-presidio-analyzer:5001
+      - N8N_URL=http://conduction-n8n:5678
+      # AppAPI ExApp endpoints (when using --profile exapps)
+      - EXAPP_N8N_URL=http://conduction-exapp-n8n:23000
+      - EXAPP_OPENWEBUI_URL=http://conduction-exapp-openwebui:23000
+      - EXAPP_KEYCLOAK_URL=http://conduction-exapp-keycloak:23000
+      - EXAPP_OPENKLANT_URL=http://conduction-exapp-openklant:23000
+      - EXAPP_OPENZAAK_URL=http://conduction-exapp-openzaak:23000
+      - EXAPP_OPENTALK_URL=http://conduction-exapp-opentalk:23000
+      - EXAPP_VALTIMO_URL=http://conduction-exapp-valtimo:23000
+
+  # n8n ExApp - Workflow Automation (starts by default)
+  # Access via Nextcloud: /index.php/apps/app_api/proxy/n8n
+  exapp-n8n:
+    image: ghcr.io/conductionnl/n8n-nextcloud:latest
+    container_name: conduction-exapp-n8n
+    restart: always
+    volumes:
+      - exapp-n8n:/data
+    environment:
+      - APP_ID=n8n
+      - APP_VERSION=1.0.0
+      - APP_HOST=0.0.0.0
+      - APP_PORT=23000
+      - APP_PERSISTENT_STORAGE=/data
+      - APP_SECRET=00iz5gkT+brtNwjpZR/28ttzZFdEFo9elARhgMQd0cMu7Kq6OF63KMFwFbxZTx9VbgsNBTVKhHnLUBo4RYg2pjINRluTUj0Vwb2aQDG0ffT4/8TX1UZC8tU42oi5MuV6
+      - NEXTCLOUD_URL=http://nextcloud
+      - N8N_TIMEZONE=Europe/Amsterdam
+      - N8N_PATH_PREFIX=/index.php/apps/app_api/proxy/n8n
+    depends_on:
+      - db
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import os,urllib.request,urllib.error\ntry: urllib.request.urlopen('http://127.0.0.1:'+os.environ.get('APP_PORT','23000')+'/heartbeat')\nexcept urllib.error.HTTPError: pass"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ===========================================================================
+  # Demo Mode (use --profile demo)
+  # Self-contained demo that installs apps from the Nextcloud app store.
+  # No source code mounts needed — just run and demo.
+  # ===========================================================================
+
+  # Nextcloud Demo (installs apps from app store, no volume mounts)
+  # Access at: http://localhost:8080
+  nextcloud-demo:
+    profiles:
+      - demo
+    user: root
+    container_name: nextcloud
+    image: nextcloud
+    restart: always
+    ports:
+      - 8080:80
+    links:
+      - db
+    volumes:
+      - nextcloud:/var/www/html:rw
+    environment:
+      - POSTGRES_DB=nextcloud
+      - POSTGRES_USER=nextcloud
+      - POSTGRES_PASSWORD=!ChangeMe!
+      - POSTGRES_HOST=db
+      - TZ=Europe/Amsterdam
+      - NEXTCLOUD_ADMIN_USER=admin
+      - NEXTCLOUD_ADMIN_PASSWORD=admin
+      - PHP_MEMORY_LIMIT=4G
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        # Start Apache in background
+        apache2-foreground &
+        # Wait for Nextcloud to initialize
+        until php occ status 2>/dev/null | grep -q "installed: true"; do sleep 5; done
+        # Set trusted domain
+        php occ config:system:set trusted_domains 1 --value="localhost:8080"
+        # Install apps from store
+        php occ app:install openregister --allow-unstable || true
+        php occ app:install opencatalogi --allow-unstable || true
+        php occ app:install softwarecatalog --allow-unstable || true
+        # Keep container running
+        wait
+
+  # ===========================================================================
+  # Alternative Database (use --profile mariadb)
+  # ===========================================================================
+
+  # MariaDB Database (for compatibility testing)
+  # Note: Vector search features will not be available with MariaDB
+  db-mariadb:
+    profiles:
+      - mariadb
+    image: mariadb:11.2
+    restart: always
+    container_name: conduction-mariadb
+    volumes:
+      - db:/var/lib/mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=!ChangeMe!
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=nextcloud
+      - MYSQL_PASSWORD=!ChangeMe!
+    ports:
+      - "3306:3306"
+    command: >
+      --transaction-isolation=READ-COMMITTED
+      --log-bin=binlog
+      --binlog-format=ROW
+      --innodb-file-per-table=1
+      --max-connections=200
+      --innodb-buffer-pool-size=256M
+      --innodb-log-file-size=64M
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Nextcloud with MariaDB (use --profile mariadb)
+  nextcloud-mariadb:
+    profiles:
+      - mariadb
+    user: root
+    container_name: nextcloud-mariadb
+    image: nextcloud
+    restart: always
+    ports:
+      - 8080:80
+    links:
+      - db-mariadb
+    volumes:
+      - nextcloud:/var/www/html:rw
+      - ../openregister/custom_apps:/var/www/html/custom_apps
+      - ../openregister:/var/www/html/custom_apps/openregister
+    environment:
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=nextcloud
+      - MYSQL_PASSWORD=!ChangeMe!
+      - MYSQL_HOST=db-mariadb
+      - TZ=Europe/Amsterdam
+      - NEXTCLOUD_ADMIN_USER=admin
+      - NEXTCLOUD_ADMIN_PASSWORD=admin
+      - PHP_MEMORY_LIMIT=4G
+      - PHP_UPLOAD_LIMIT=2G
+      - PHP_POST_MAX_SIZE=2G
+    depends_on:
+      db-mariadb:
+        condition: service_healthy
+
+  # ===========================================================================
+  # Mail (use --profile mail)
+  # ===========================================================================
+
+  # GreenMail - Lightweight SMTP/IMAP/POP3 test mail server
+  # Web UI at: http://localhost:8085
+  # SMTP: localhost:3025, IMAP: localhost:3143
+  # Accounts auto-created on first login (user=password=email address)
+  # Seed data: bash .github/docker/mail/seed-mail.sh
+  # Documentation: https://greenmail-mail-test.github.io/greenmail/
+  greenmail:
+    profiles:
+      - mail
+      - ox
+    image: greenmail/standalone:2.1.2
+    container_name: conduction-greenmail
+    restart: always
+    ports:
+      - "3025:3025"    # SMTP
+      - "3143:3143"    # IMAP
+      - "3110:3110"    # POP3
+      - "8085:8080"    # Web UI / REST API
+    environment:
+      GREENMAIL_OPTS: "-Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.auth.disabled"
+      JAVA_OPTS: "-Xmx256m"
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 3025 && nc -z localhost 3143"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+
+  # Open-Xchange App Suite - Full Email and Groupware (use --profile ox)
+  # Access at: http://localhost:8087/appsuite
+  # Login: oxadmin / oxadmin (context admin) or created users
+  # Uses GreenMail as IMAP/SMTP backend (starts automatically with ox profile)
+  # Image: jamesregis/open-xchange-appsuite (community, includes OX Text + Spreadsheet)
+  # Seed data: see docs/development-environment.md
+  # Documentation: https://documentation.open-xchange.com/
+
+  # OX requires its own MariaDB (uses MySQL-specific init tools)
+  ox-mariadb:
+    profiles:
+      - ox
+    image: mariadb:11.2
+    container_name: conduction-ox-mariadb
+    restart: always
+    volumes:
+      - ox-db:/var/lib/mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=root_password
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  open-xchange:
+    profiles:
+      - ox
+    image: jamesregis/open-xchange-appsuite:latest
+    container_name: conduction-open-xchange
+    restart: always
+    ports:
+      - "8087:80"
+    volumes:
+      - ox-etc:/ox/etc
+      - ox-data:/var/opt/filestore
+    environment:
+      # Database (points to dedicated OX MariaDB)
+      - OX_CONFIG_DATABASE_HOST=conduction-ox-mariadb
+      - OX_CONFIG_DATABASE_ROOT_PASSWORD=root_password
+      - OX_CONFIG_DATABASE_USER=openxchange
+      - OX_CONFIG_DATABASE_PASSWORD=ox_db_password
+      # Admin credentials
+      - OX_ADMIN_MASTER_LOGIN=oxadminmaster
+      - OX_ADMIN_MASTER_PASSWORD=admin_master_password
+      # Context admin (login to web UI with these)
+      - OX_CONTEXT_ADMIN_LOGIN=oxadmin
+      - OX_CONTEXT_ADMIN_PASSWORD=oxadmin
+      - OX_CONTEXT_ADMIN_EMAIL=admin@test.local
+      - OX_CONTEXT_ID=1
+      # Server config
+      - OX_SERVER_NAME=oxserver
+      - OX_SERVER_MEMORY=2048
+      # IMAP authentication (points to shared GreenMail service)
+      - IMAP_SERVER=conduction-greenmail
+      - IMAP_SERVER_PORT=3143
+      # Document collaboration DB (same MariaDB)
+      - OX_DCSDB_DB_HOST=conduction-ox-mariadb
+      - OX_DCSDB_DB_USER=dcsdb
+      - OX_DCSDB_DB_PASSWORD=dcsdb_password
+    depends_on:
+      ox-mariadb:
+        condition: service_healthy
+      greenmail:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+
+  # ===========================================================================
+  # Search Engines (use --profile solr or --profile elasticsearch)
+  # ===========================================================================
+
+  # ZooKeeper for SolrCloud coordination
+  zookeeper:
+    profiles:
+      - solr
+      - search
+    image: zookeeper:3.8
+    container_name: conduction-zookeeper
+    restart: always
+    environment:
+      - ZOO_MY_ID=1
+      - ZOO_SERVERS=server.1=0.0.0.0:2888:3888;2181
+    volumes:
+      - zookeeper:/data
+    ports:
+      - "2181:2181"
+    healthcheck:
+      test: ["CMD-SHELL", "echo stat | nc localhost 2181"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Solr in SolrCloud mode
+  # Access at: http://localhost:8983
+  solr:
+    profiles:
+      - solr
+      - search
+    image: solr:9-slim
+    container_name: conduction-solr
+    restart: always
+    ports:
+      - "8983:8983"
+    volumes:
+      - solr:/var/solr
+    environment:
+      - SOLR_HEAP=512m
+      - ZK_HOST=zookeeper:2181
+    depends_on:
+      - zookeeper
+    command:
+      - bash
+      - -c
+      - |
+        echo "Waiting for ZooKeeper..."
+        while ! nc -z zookeeper 2181; do sleep 1; done
+        echo "ZooKeeper is ready!"
+        solr-foreground -c -z zookeeper:2181
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8983/solr/admin/info/system || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Elasticsearch
+  # Access at: http://localhost:9200
+  elasticsearch:
+    profiles:
+      - elasticsearch
+      - search
+    image: elasticsearch:8.11.3
+    container_name: conduction-elasticsearch
+    restart: always
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - elasticsearch:/usr/share/elasticsearch/data
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - cluster.name=conduction-cluster
+      - node.name=conduction-node-1
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ===========================================================================
+  # AI Services (use --profile ai)
+  # ===========================================================================
+
+  # Ollama for local LLM inference (use --profile ollama)
+  # Access at: http://localhost:11434
+  # Pull models: docker exec conduction-ollama ollama pull llama3.2
+  ollama:
+    profiles:
+      - ollama
+    image: ollama/ollama:latest
+    container_name: conduction-ollama
+    restart: always
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_NUM_PARALLEL=2
+      - OLLAMA_KEEP_ALIVE=15m
+    deploy:
+      resources:
+        limits:
+          memory: 16G
+        reservations:
+          memory: 8G
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    shm_size: '2gb'
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:11434/api/tags || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # OpenAnonymiser - PII detection and anonymisation
+  # Access at: http://localhost:5002
+  openanonymiser:
+    profiles:
+      - ai
+    image: mwest2020/openanonymiser:dev
+    container_name: conduction-openanonymiser
+    restart: always
+    ports:
+      - "5002:8080"
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/api/v1/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Presidio Analyzer - Microsoft PII detection (recommended for production)
+  # Access at: http://localhost:5001
+  presidio-analyzer:
+    profiles:
+      - ai
+    image: mcr.microsoft.com/presidio-analyzer:latest
+    container_name: conduction-presidio-analyzer
+    restart: always
+    ports:
+      - "5001:3000"
+    environment:
+      - PORT=3000
+      - LOG_LEVEL=INFO
+      - PRESIDIO_ANALYZER_LANGUAGES=en,nl,de,fr,es
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import requests; requests.get('http://localhost:3000/health')\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Hugging Face Text Generation Inference (TGI) with OpenAI-compatible API
+  # Access at: http://localhost:8081
+  tgi-llm:
+    profiles:
+      - ai
+    image: ghcr.io/huggingface/text-generation-inference:latest
+    container_name: conduction-tgi-llm
+    restart: always
+    ports:
+      - "8081:80"
+    volumes:
+      - tgi-models:/data
+    environment:
+      - MODEL_ID=mistralai/Mistral-7B-Instruct-v0.2
+      - MAX_INPUT_LENGTH=4096
+      - MAX_TOTAL_TOKENS=8192
+      - MAX_BATCH_PREFILL_TOKENS=4096
+      - MAX_CONCURRENT_REQUESTS=128
+      - MAX_WAITING_TOKENS=20
+    deploy:
+      resources:
+        limits:
+          memory: 16G
+        reservations:
+          memory: 8G
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    shm_size: '2gb'
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:80/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  # Dolphin VLM - Document parsing via Vision-Language Model
+  # Access at: http://localhost:8083
+  dolphin-vlm:
+    profiles:
+      - ai
+    build:
+      context: ./docker/dolphin
+      dockerfile: Dockerfile
+    container_name: conduction-dolphin-vlm
+    restart: always
+    ports:
+      - "8083:5000"
+    volumes:
+      - ./docker/dolphin/models:/app/models
+    environment:
+      - MODEL_PATH=/app/models
+      - LOG_LEVEL=INFO
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 4G
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  # Open WebUI + Ollama ExApp - AI Chat with built-in LLM inference
+  # Access via Nextcloud: /index.php/apps/app_api/proxy/open_webui
+  exapp-openwebui:
+    profiles:
+      - ai
+    image: ghcr.io/conductionnl/open-webui-nextcloud:latest
+    container_name: conduction-exapp-openwebui
+    restart: always
+    volumes:
+      - exapp-openwebui:/data
+    environment:
+      - APP_ID=open_webui
+      - APP_VERSION=1.0.0
+      - APP_HOST=0.0.0.0
+      - APP_PORT=23000
+      - APP_PERSISTENT_STORAGE=/data
+      - APP_SECRET=${OPENWEBUI_APP_SECRET:-dev-secret}
+      - NEXTCLOUD_URL=http://nextcloud
+      - OLLAMA_DEFAULT_MODEL=llama3.2:1b
+      - OLLAMA_NUM_PARALLEL=2
+      - OLLAMA_KEEP_ALIVE=15m
+    deploy:
+      resources:
+        limits:
+          memory: 16G
+        reservations:
+          memory: 4G
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    shm_size: '2gb'
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import os,urllib.request,urllib.error\ntry: urllib.request.urlopen('http://127.0.0.1:'+os.environ.get('APP_PORT','23000')+'/heartbeat')\nexcept urllib.error.HTTPError: pass"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  # ===========================================================================
+  # Standalone Services (use --profile standalone)
+  # Use these instead of ExApps for standalone testing
+  # ===========================================================================
+
+  # n8n Standalone - Workflow Automation
+  # Access at: http://localhost:5678
+  # Default credentials: admin / admin
+  n8n:
+    profiles:
+      - standalone
+    image: n8nio/n8n:latest
+    container_name: conduction-n8n
+    restart: always
+    user: root
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n:/root/.n8n
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=conduction-postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=n8n
+      - DB_POSTGRESDB_USER=nextcloud
+      - DB_POSTGRESDB_PASSWORD=!ChangeMe!
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=admin
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=Europe/Amsterdam
+      - TZ=Europe/Amsterdam
+      - EXECUTIONS_PROCESS=main
+      - EXECUTIONS_DATA_SAVE_ON_ERROR=all
+      - EXECUTIONS_DATA_SAVE_ON_SUCCESS=all
+      - EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS=true
+      - WORKFLOWS_DEFAULT_NAME=My Workflow
+      - N8N_DIAGNOSTICS_ENABLED=false
+      - N8N_API_KEYS_ENABLED=true
+    depends_on:
+      - db
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:5678/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Open WebUI Standalone - Web interface for LLMs
+  # Access at: http://localhost:3000
+  open-webui:
+    profiles:
+      - standalone
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: conduction-open-webui
+    restart: always
+    ports:
+      - "3000:8080"
+    volumes:
+      - open-webui:/app/backend/data
+    environment:
+      - OPENAI_API_BASE_URL=http://conduction-tgi-llm:80/v1
+      - OPENAI_API_KEY=not-needed
+      - OLLAMA_BASE_URL=http://conduction-ollama:11434
+      - WEBUI_AUTH=true
+      - ENABLE_SIGNUP=true
+      - WEBUI_SECRET_KEY=conduction-secret-key-change-me
+    depends_on:
+      - tgi-llm
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # OpenLLM Management Interface (use --profile llm-management)
+  # Access at: http://localhost:3002
+  openllm:
+    profiles:
+      - llm-management
+    image: ghcr.io/bentoml/openllm:latest
+    container_name: conduction-openllm
+    restart: always
+    ports:
+      - "3002:3000"
+      - "8082:8082"
+    volumes:
+      - openllm-models:/models
+      - openllm-cache:/root/.cache
+    environment:
+      - OPENLLM_MODEL=mistralai/Mistral-7B-Instruct-v0.2
+      - OPENLLM_BACKEND=vllm
+      - OPENLLM_PORT=3000
+      - OPENLLM_API_PORT=8082
+      - CUDA_VISIBLE_DEVICES=0
+      - OPENLLM_MAX_MODEL_LEN=4096
+      - OPENLLM_GPU_MEMORY_UTILIZATION=0.9
+    deploy:
+      resources:
+        limits:
+          memory: 16G
+        reservations:
+          memory: 8G
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    shm_size: '2gb'
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 180s
+    command: start mistralai/Mistral-7B-Instruct-v0.2 --backend vllm
+
+  # ===========================================================================
+  # UI Frontends (use --profile ui)
+  # ===========================================================================
+
+  # Tilburg WOO UI - Public interface for WOO documents
+  # Access at: http://localhost:3000
+  tilburg-woo-ui:
+    profiles:
+      - ui
+    build:
+      context: ../tilburg-woo-ui
+      dockerfile: Dockerfile.dev
+      target: development
+    container_name: conduction-tilburg-woo-ui
+    restart: always
+    ports:
+      - "3000:81"
+    volumes:
+      - ../tilburg-woo-ui/src:/app/src
+    environment:
+      - NGINX_ROOT_DIR=/app/public_html
+      - NGINX_NEXTCLOUD_UPSTREAM=http://nextcloud:80
+      - NGINX_TARGET_HOST=nextcloud
+      - SITE_TITLE=Softwarecatalogus
+    depends_on:
+      - nextcloud
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:81/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    command:
+      - /bin/sh
+      - -c
+      - |
+        envsubst '$$NGINX_OPENCONNECTOR_UPSTREAM $$NGINX_NEXTCLOUD_UPSTREAM $$NGINX_NEXTCLOUD_DOMAIN $$NGINX_TARGET_HOST $$NGINX_ROOT_DIR' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
+        nginx
+        node scripts/generate-runtime-config.js /app/public_html/runtime-config.js
+        NODE_ENV=development yarn build:web
+        echo "Initial build complete. Watching for changes..."
+        while true; do
+          inotifywait -r -e modify,create,delete --exclude '\.tmp' src/ public/ package.json
+          sleep 2
+          echo "Change detected, rebuilding..."
+          NODE_ENV=development yarn build:web
+          echo "Rebuild complete."
+        done
+
+  # ===========================================================================
+  # External Service Integrations (use --profile <name> or --profile integrations)
+  # ===========================================================================
+
+  # OpenProject - Project Management
+  # Access at: http://localhost:8086
+  openproject:
+    profiles:
+      - openproject
+      - integrations
+    image: openproject/openproject:15
+    container_name: conduction-openproject
+    restart: always
+    ports:
+      - "8086:80"
+    volumes:
+      - openproject-pgdata:/var/openproject/pgdata
+      - openproject-assets:/var/openproject/assets
+    environment:
+      - OPENPROJECT_SECRET_KEY_BASE=secret-change-me
+      - OPENPROJECT_HOST__NAME=localhost:8086
+      - OPENPROJECT_HTTPS=false
+      - OPENPROJECT_DEFAULT__LANGUAGE=nl
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 1G
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:80/health_checks/default || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  # XWiki - Wiki Platform
+  # Access at: http://localhost:8088
+  xwiki:
+    profiles:
+      - xwiki
+      - integrations
+    image: xwiki:lts-postgres-tomcat
+    container_name: conduction-xwiki
+    restart: always
+    ports:
+      - "8088:8080"
+    volumes:
+      - xwiki-data:/usr/local/xwiki
+    environment:
+      - DB_USER=nextcloud
+      - DB_PASSWORD=!ChangeMe!
+      - DB_HOST=db
+      - DB_DATABASE=xwiki
+    depends_on:
+      - db
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 1G
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/rest || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  # ===========================================================================
+  # Common Ground Services (use --profile commonground or individual profiles)
+  # ===========================================================================
+
+  # Valtimo - BPM and Case Management
+  # Access at: http://localhost:8089
+  valtimo:
+    profiles:
+      - valtimo
+      - commonground
+      - integrations
+    image: ritense/gzac-backend:latest
+    container_name: conduction-valtimo
+    restart: always
+    ports:
+      - "8089:8080"
+    volumes:
+      - valtimo-data:/data
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/valtimo
+      - SPRING_DATASOURCE_USERNAME=nextcloud
+      - SPRING_DATASOURCE_PASSWORD=!ChangeMe!
+      - VALTIMO_APP_HOSTNAME=http://localhost:8089
+    depends_on:
+      - db
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  # OpenZaak - ZGW API Case Management Backend
+  # Access at: http://localhost:8090
+  openzaak:
+    profiles:
+      - openzaak
+      - commonground
+      - integrations
+    image: openzaak/open-zaak:latest
+    container_name: conduction-openzaak
+    restart: always
+    ports:
+      - "8090:8000"
+    volumes:
+      - openzaak-data:/app/private-media
+    environment:
+      - DB_HOST=db
+      - DB_NAME=openzaak
+      - DB_USER=nextcloud
+      - DB_PASSWORD=!ChangeMe!
+      - SECRET_KEY=openzaak-secret-change-me
+      - ALLOWED_HOSTS=*
+      - DJANGO_SETTINGS_MODULE=openzaak.conf.docker
+      - IS_HTTPS=no
+      - CACHE_DEFAULT=db
+      - CACHE_AXES=db
+    depends_on:
+      - db
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # OpenKlant - Customer Interaction Registry
+  # Access at: http://localhost:8091
+  openklant:
+    profiles:
+      - openklant
+      - commonground
+      - integrations
+    image: maykinmedia/open-klant:latest
+    container_name: conduction-openklant
+    restart: always
+    ports:
+      - "8091:8000"
+    volumes:
+      - openklant-data:/app/private-media
+    environment:
+      - DB_HOST=db
+      - DB_NAME=openklant
+      - DB_USER=nextcloud
+      - DB_PASSWORD=!ChangeMe!
+      - SECRET_KEY=openklant-secret-change-me
+      - ALLOWED_HOSTS=*
+      - DJANGO_SETTINGS_MODULE=openklant.conf.docker
+      - IS_HTTPS=no
+      - CACHE_DEFAULT=db
+      - CACHE_AXES=db
+    depends_on:
+      - db
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ===========================================================================
+  # AppAPI Infrastructure (use --profile exapps)
+  # ===========================================================================
+
+  # HaRP - High-performance AppAPI Reverse Proxy
+  harp:
+    profiles:
+      - exapps
+    image: ghcr.io/nextcloud/nextcloud-appapi-harp:release
+    container_name: conduction-harp
+    restart: always
+    ports:
+      - "8780:8780"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - harp-data:/data
+    environment:
+      - HP_SHARED_KEY=harp-secret-change-me
+      - NC_INSTANCE_URL=http://nextcloud
+      - HP_EXAPPS_ADDRESS=0.0.0.0:8780
+      - HP_FRP_ADDRESS=0.0.0.0:8782
+      - HP_LOG_LEVEL=info
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8780/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Docker Socket Proxy - Alternative Deploy Daemon (Legacy)
+  docker-socket-proxy:
+    profiles:
+      - exapps-legacy
+    image: ghcr.io/nextcloud/docker-socket-proxy:latest
+    container_name: conduction-docker-socket-proxy
+    restart: always
+    ports:
+      - "2375:2375"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - HAPROXY_PASSWORD=docker-proxy-secret-change-me
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:2375/_ping || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ===========================================================================
+  # ExApp Shared Infrastructure (use --profile commonground or --profile exapps)
+  # ===========================================================================
+
+  # Redis - Shared cache for ExApp services
+  exapp-redis:
+    profiles:
+      - commonground
+      - exapps
+    image: redis:7-alpine
+    container_name: conduction-exapp-redis
+    restart: always
+    volumes:
+      - exapp-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # LiveKit - WebRTC media server for OpenTalk
+  exapp-livekit:
+    profiles:
+      - commonground
+      - exapps
+    image: livekit/livekit-server:latest
+    container_name: conduction-exapp-livekit
+    restart: always
+    command: ["--keys", "devkey: secret", "--dev"]
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7880/ || true"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # MinIO - Object storage for OpenTalk
+  exapp-minio:
+    profiles:
+      - commonground
+      - exapps
+    image: minio/minio:latest
+    container_name: conduction-exapp-minio
+    restart: always
+    command: server /data --console-address ":9001"
+    volumes:
+      - exapp-minio:/data
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ===========================================================================
+  # ExApp Services - Common Ground / Identity (use --profile commonground)
+  # ===========================================================================
+
+  # Keycloak ExApp - Identity and Access Management
+  # Access at: http://localhost:8180
+  exapp-keycloak:
+    profiles:
+      - commonground
+      - exapps
+    image: ghcr.io/conductionnl/keycloak-nextcloud:latest
+    container_name: conduction-exapp-keycloak
+    restart: always
+    volumes:
+      - exapp-keycloak:/data
+    environment:
+      - APP_ID=keycloak
+      - APP_VERSION=1.0.0
+      - APP_HOST=0.0.0.0
+      - APP_PORT=23002
+      - APP_PERSISTENT_STORAGE=/data
+      - APP_SECRET=kgPs6ikvLhHMAuC3havDYDvvWw/CYjmlfBMDpYfBY73WgRjdPL6naVC7IGV30D3/5DvNyLGPHrfrln/GYQO80CJzgexWN+1M11FsOt6cljd7EI9T0AZeShEQVt2BAzCM
+      - NEXTCLOUD_URL=http://nextcloud
+      - KC_DB=postgres
+      - KC_DB_URL=jdbc:postgresql://conduction-postgres:5432/keycloak
+      - KC_DB_USERNAME=nextcloud
+      - KC_DB_PASSWORD=!ChangeMe!
+      - KC_BOOTSTRAP_ADMIN_USERNAME=admin
+      - KC_BOOTSTRAP_ADMIN_PASSWORD=admin
+      - KC_HEALTH_ENABLED=true
+      - KC_HTTP_ENABLED=true
+      - KC_HOSTNAME_STRICT=false
+      - KC_HOSTNAME=http://localhost:8180
+      - KC_PROXY_HEADERS=xforwarded
+      - KEYCLOAK_REALM=commonground
+      - KEYCLOAK_API_SECRET=keycloak-exapp-internal-secret
+    ports:
+      - "8180:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import os,urllib.request,urllib.error\ntry: urllib.request.urlopen('http://127.0.0.1:'+os.environ.get('APP_PORT','23000')+'/heartbeat')\nexcept urllib.error.HTTPError: pass"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  # ===========================================================================
+  # ExApp Services - Common Ground Applications (use --profile commonground)
+  # ===========================================================================
+
+  # OpenKlant ExApp - Customer Interaction Registry
+  exapp-openklant:
+    profiles:
+      - commonground
+      - exapps
+    image: ghcr.io/conductionnl/openklant-exapp:latest
+    container_name: conduction-exapp-openklant
+    restart: always
+    volumes:
+      - exapp-openklant:/data
+    environment:
+      - APP_ID=openklant
+      - APP_VERSION=1.0.0
+      - APP_HOST=0.0.0.0
+      - APP_PORT=23005
+      - APP_PERSISTENT_STORAGE=/data
+      - APP_SECRET=qM1kgYpOVLEDCILz/2v4t9eSRdt1JKZTuxFNQbyveVC3QurU6zpdOWyIgRzd0nNxba7q7al6cX9bkWNbkkEdd3uQ9uyt4pgaxjfkozaub/fphD0h2dB5RIBD6wC4C1qW
+      - NEXTCLOUD_URL=http://nextcloud
+      - DB_HOST=conduction-postgres
+      - DB_NAME=openklant
+      - DB_USER=nextcloud
+      - DB_PASSWORD=!ChangeMe!
+      - SECRET_KEY=openklant-exapp-secret-change-me
+      - ALLOWED_HOSTS=*
+      - DJANGO_SETTINGS_MODULE=openklant.conf.docker
+      - IS_HTTPS=no
+      - CACHE_DEFAULT=conduction-exapp-redis:6379/0
+      - CACHE_AXES=conduction-exapp-redis:6379/0
+      - KEYCLOAK_URL=http://conduction-exapp-keycloak:8080
+      - KEYCLOAK_REALM=commonground
+      - KEYCLOAK_CLIENT_ID=openklant
+    depends_on:
+      db:
+        condition: service_healthy
+      exapp-redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import os,urllib.request,urllib.error\ntry: urllib.request.urlopen('http://127.0.0.1:'+os.environ.get('APP_PORT','23000')+'/heartbeat')\nexcept urllib.error.HTTPError: pass"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+  # OpenZaak ExApp - ZGW API Case Management
+  exapp-openzaak:
+    profiles:
+      - commonground
+      - exapps
+    image: ghcr.io/conductionnl/openzaak-exapp:latest
+    container_name: conduction-exapp-openzaak
+    restart: always
+    volumes:
+      - exapp-openzaak:/data
+    environment:
+      - APP_ID=openzaak
+      - APP_VERSION=1.0.0
+      - APP_HOST=0.0.0.0
+      - APP_PORT=23003
+      - APP_PERSISTENT_STORAGE=/data
+      - APP_SECRET=GV7aEmqVY/NXnA0adbIhQsl0QL9XoUEtr611xlwVU3G4D7t5Xv4pscZ+8sRb4k2LKCDDTrbDWowIwOkhSs5s/czEN+M2TPSPq2Y6Xgd4VSFZfi1Rdofvc1WtBlmPrQYQ
+      - NEXTCLOUD_URL=http://nextcloud
+      - DB_HOST=conduction-postgres
+      - DB_NAME=openzaak
+      - DB_USER=nextcloud
+      - DB_PASSWORD=!ChangeMe!
+      - SECRET_KEY=openzaak-exapp-secret-change-me
+      - ALLOWED_HOSTS=*
+      - DJANGO_SETTINGS_MODULE=openzaak.conf.docker
+      - IS_HTTPS=no
+      - CACHE_DEFAULT=conduction-exapp-redis:6379/1
+      - CACHE_AXES=conduction-exapp-redis:6379/1
+      - KEYCLOAK_URL=http://conduction-exapp-keycloak:8080
+      - KEYCLOAK_REALM=commonground
+      - KEYCLOAK_CLIENT_ID=openzaak
+    depends_on:
+      db:
+        condition: service_healthy
+      exapp-redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import os,urllib.request,urllib.error\ntry: urllib.request.urlopen('http://127.0.0.1:'+os.environ.get('APP_PORT','23000')+'/heartbeat')\nexcept urllib.error.HTTPError: pass"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+  # Valtimo ExApp - BPM and Case Management
+  exapp-valtimo:
+    profiles:
+      - commonground
+      - exapps
+    image: ghcr.io/conductionnl/valtimo-exapp:latest
+    container_name: conduction-exapp-valtimo
+    restart: always
+    volumes:
+      - exapp-valtimo:/data
+    environment:
+      - APP_ID=valtimo
+      - APP_VERSION=1.0.0
+      - APP_HOST=0.0.0.0
+      - APP_PORT=23004
+      - APP_PERSISTENT_STORAGE=/data
+      - APP_SECRET=piXIP+iaGAvzbULzEXtwAUZAAuybaS0tUwAe1JFxQqmhemQHbUqF7teFxsWq/ydjUXbC84ZXRfQyS3c88ObBwhALLdPoAKDBzUn1a+d2ghRoYkInoMUde1QzncFFfOWt
+      - NEXTCLOUD_URL=http://nextcloud
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://conduction-postgres:5432/valtimo
+      - SPRING_DATASOURCE_USERNAME=nextcloud
+      - SPRING_DATASOURCE_PASSWORD=!ChangeMe!
+      - SERVER_PORT=8080
+      - JAVA_OPTS=-Xmx512m -Xms256m
+      - KEYCLOAK_AUTH_SERVER_URL=http://conduction-exapp-keycloak:8080
+      - KEYCLOAK_REALM=commonground
+      - KEYCLOAK_RESOURCE=valtimo
+    depends_on:
+      db:
+        condition: service_healthy
+      exapp-keycloak:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import os,urllib.request,urllib.error\ntry: urllib.request.urlopen('http://127.0.0.1:'+os.environ.get('APP_PORT','23000')+'/heartbeat')\nexcept urllib.error.HTTPError: pass"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 180s
+
+  # OpenTalk ExApp - Secure Video Conferencing
+  exapp-opentalk:
+    profiles:
+      - commonground
+      - exapps
+    image: ghcr.io/conductionnl/opentalk-exapp:latest
+    container_name: conduction-exapp-opentalk
+    restart: always
+    volumes:
+      - exapp-opentalk:/data
+    environment:
+      - APP_ID=opentalk
+      - APP_VERSION=1.0.0
+      - APP_HOST=0.0.0.0
+      - APP_PORT=23005
+      - APP_PERSISTENT_STORAGE=/data
+      - APP_SECRET=HGF41cZ42HnNoA4eWUqhMquI9RFnk206ZVtJyT/1xK+X3u1bvSiyRdlfJlxL7YLn8uTMpKh/Bqb9VGKkRYAaoQUj6xtIcCdx4hTBJDrspEPTBgVbAF6/sg/VL6oNdhmv
+      - NEXTCLOUD_URL=http://nextcloud
+      - KEYCLOAK_URL=http://conduction-exapp-keycloak:8080
+      - KEYCLOAK_REALM=commonground
+      - KEYCLOAK_CLIENT_ID=opentalk-controller
+      - KEYCLOAK_CLIENT_SECRET=opentalk-secret
+      - KEYCLOAK_BROWSER_URL=http://localhost:8180
+      - KEYCLOAK_EXAPP_URL=http://conduction-exapp-keycloak:23002
+      - KEYCLOAK_API_SECRET=keycloak-exapp-internal-secret
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      db:
+        condition: service_healthy
+      exapp-redis:
+        condition: service_healthy
+      exapp-keycloak:
+        condition: service_healthy
+      exapp-livekit:
+        condition: service_healthy
+      exapp-minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import os,urllib.request,urllib.error\ntry: urllib.request.urlopen('http://127.0.0.1:'+os.environ.get('APP_PORT','23000')+'/heartbeat')\nexcept urllib.error.HTTPError: pass"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
