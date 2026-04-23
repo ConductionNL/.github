@@ -55,6 +55,15 @@ Our core competencies are the backbone of our company's success:
 - We offer knowledge and work collaboratively.
 - We prioritize integration, making systems work seamlessly together.
 
+## 🎨 Design & Brand
+
+Our visual identity is grounded in Dutch heritage: cobalt blue from the national flag, windmill orange as our distinctive accent, and a hexagon that wraps every Conduction product. Full guidelines, logos and tokens live in this repo:
+
+- [BRAND.md](../BRAND.md) — brand guide (values, logo, colours, typography, do's & don'ts)
+- [DESIGN.md](../DESIGN.md) — rationale behind our design choices
+- [`brand/tokens.json`](../brand/tokens.json) — machine-readable design tokens (DTCG format)
+- [`brand/assets/`](../brand/assets/) — logo SVGs (cobalt-on-white, white-on-cobalt, transparent)
+
 ## 🌈 Join Our Team at Conduction
 
 Are you passionate about making the digital world more democratic, inclusive, and transparent? Do you thrive in an innovative and collaborative environment? If so, we'd love to have you join our team at Conduction!
