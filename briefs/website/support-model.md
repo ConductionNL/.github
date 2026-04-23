@@ -258,5 +258,5 @@ Voor pad 2 (self-managed) is er een **in-app-formulier** in de Admin-instellinge
 - **Bundle-korting-percentage** — 20% is placeholder; echte waarde bepalen op basis van marge-ruimte en strategische doelen (ecosystem-adoptie aanmoedigen vs. revenue optimaliseren).
 - **Revenue-share met Nextcloud** voor pad 1 — hoe werkt de verrekening precies? Af te stemmen met Nextcloud.
 - **Minimum user-count** — 10 (Standard) en 25 (Premium) zijn voorstellen; kan lager als MKB-toegankelijkheid zwaarder weegt dan operationele haalbaarheid.
-- **Maatwerk-tier** — 24/7, kortere responstijden. Aparte prijsstructuur of "contact us for quote"?
+- **Maatwerk-tier** — 24/7, kortere responstijden. **Beantwoord:** wordt per offerte afgeprijsd op basis van Services-tarieven (Consultancy €150/uur voor contract-ontwerp + extra uren-inschatting voor out-of-hours-dekking). Zie [`services-model.md`](./services-model.md) voor de onderliggende tarievenkaart.
 - **Geautomatiseerde intake** — gaat het in-app-formulier auto-ticket maken in ons CRM, of handmatig via mail? Business-proces-keuze.

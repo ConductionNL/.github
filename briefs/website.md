@@ -21,6 +21,7 @@
 - [`website/icon-library.md`](./website/icon-library.md) — iconen-bibliotheek-keuze (aanbevolen: Lucide)
 - [`website/platform-benchmarks.md`](./website/platform-benchmarks.md) — uitgebreide deep-dive-analyse van Odoo, WooCommerce en Nextcloud als app-platform-referenties; concrete IA-/layout-/CTA-patronen om over te nemen, aan te passen, of bewust níet over te nemen gegeven ons gratis + optionele-Support-model. Bevat ook Nextcloud's exacte pricing-structuur (€71–205/user/jaar, tiers Standard/Premium/Ultimate, 100-user-minimum) als benchmark voor onze eigen pricing-tabel.
 - [`website/support-model.md`](./website/support-model.md) — het Conduction Support-model: twee paden (via Nextcloud-leverancier of rechtstreeks via app-admin-formulier), wat er concreet in Support zit (helpdesk + proactieve telemetry-ondersteuning), pricing-structuur (per app × per user × per jaar × 2 tiers Standard/Premium) en wat dat betekent voor de Support-pagina-structuur. *Pricing-waarden in de tabel zijn placeholders en moeten door Conduction-leiding bevestigd worden.*
+- [`website/services-model.md`](./website/services-model.md) — het Conduction Services-model: volledige tarievenkaart (Development €125/uur, Consultancy €150/uur, strippenkaart €15K/10% korting, fysieke training €1.000–€1.200/dagdeel, online training gratis, certificering variabel), strippenkaart-uitleg, training-varianten (fysiek/online/certificering), en Services-pagina-structuur.
 
 **Deze brief beschrijft alleen het website-specifieke.** Alles wat Conduction-wide geldt (wie we zijn, hoe we eruitzien, welke woorden we gebruiken) staat in de foundation-documenten. Als iets uit deze brief toch company-wide blijkt, lift het terug naar BRAND.md of DESIGN.md.
 
@@ -221,18 +222,20 @@ Volledige structuur (6 secties) en pricing-structuur: zie [`website/support-mode
 
 ### 6.8 Services (`/services`)
 
-**Job:** voor wie specifiek **maatwerk-ontwikkeling** of **training** zoekt. Niet in hoofdmenu, wel in footer. Onderscheid met Support: Support is doorlopende ondersteuning op geïnstalleerde apps (abonnement); Services zijn projectmatige activiteiten (één-op-één opdracht, projectprijs of uurtarief).
+**Job:** voor wie specifiek **maatwerk-ontwikkeling**, **consultancy**, **training** of **certificering** zoekt. Niet in hoofdmenu, wel in footer. Volledig transparant qua tarieven — geen "vraag een offerte aan"-wall.
 
-Structuur:
+Onderscheid met Support: Support is doorlopende ondersteuning op geïnstalleerde apps (abonnement per app × per user × per jaar); Services zijn projectmatige activiteiten (uurtarief, per dagdeel bij training, per certificaat).
 
-- "Het ecosysteem staat centraal, maar we helpen je graag ook met maatwerk of training"
-- Services-scope:
-  - **Maatwerk-ontwikkeling** — klant-specifieke features, custom integraties, eigen apps bovenop OpenRegister
-  - **Training** — opleidingssessies voor implementatie-teams, admin-trainingen, eindgebruikers-sessies
-  - **Implementatie-begeleiding** (indien nodig) — eenmalige hulp bij opzet van de app-stack
-- Voor welke doelgroep (voornamelijk overheid, maar open voor MKB)
-- Contact-formulier of -CTA
-- Link naar Support-pagina: *"Ook op zoek naar doorlopende ondersteuning? Bekijk onze Support-tiers."*
+Volledige structuur (6 secties) en tarievenkaart: zie [`website/services-model.md`](./website/services-model.md). Kort:
+
+1. Hero — *"Meer dan de apps — wij bouwen en leren ook mee wanneer je dat wilt."*
+2. Wat biedt Services? (Development, Consultancy, Training, Certificering)
+3. **Tarievenkaart** — Development €125/uur, Consultancy €150/uur, Strippenkaart €15.000 vooraf (10% korting), Fysieke training €1.000–€1.200 per dagdeel (4u les + 4u voorbereiding/verwerking), Online training gratis, Certificering €150–€500 per certificaat (indicatief)
+4. Strippenkaart-uitleg (waarom, wanneer interessant, hoe werkt afboeken)
+5. Training-details (fysiek/online/certificering apart uitgelegd)
+6. Contact & aanvragen-formulier
+
+Link onderaan: *"Ook op zoek naar doorlopende ondersteuning? Bekijk onze [Support-tiers](/support)."*
 
 ### 6.9 Contact (`/contact`)
 
