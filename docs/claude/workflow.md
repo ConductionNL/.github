@@ -22,7 +22,7 @@ apps-extra/                         # Workspace root
 │   ├── .claude/
 │   │   └── skills/                 # OpenSpec skills (opsx-new, opsx-ff, etc.)
 │   └── openspec/
-│       ├── architecture/           # Company-wide ADRs (ADR-001 through ADR-015)
+│       ├── architecture/           # Company-wide ADRs
 │       └── schemas/conduction/     # Shared workflow schema
 │
 ├── openregister/                   # FOUNDATION REPO
@@ -59,6 +59,8 @@ apps-extra/                         # Workspace root
 - `pipelinq` — `pipeline/`, `pipeline-views/`
 
 ## The Full Flow
+
+> **Legacy app?** This flow assumes the app is spec-first — methods carry `@spec` tags that `/opsx-verify` walks at review time. Apps that predate the convention ([ADR-003](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-003-backend.md)) need a one-time retrofit pass before normal feature work. See the [Retrofit Playbook](retrofit.md).
 
 ### Phase 1: Spec Building
 

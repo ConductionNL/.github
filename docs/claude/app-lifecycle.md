@@ -365,6 +365,8 @@ After completing the steps above, confirm:
 /app-verify my-app         # Verify
 ```
 
+> **Legacy app without `@spec` annotations?** If the app predates the spec traceability convention ([ADR-003](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-003-backend.md)), run the [Retrofit Playbook](retrofit.md) before feature work — `/opsx-coverage-scan` → `/opsx-annotate` → `/opsx-reverse-spec`.
+
 ### Periodic health check
 
 ```
@@ -379,7 +381,7 @@ After completing the steps above, confirm:
 
 App-specific ADRs live in `openspec/architecture/` and document why the app is built the way it is. They are created and explored during `/app-explore` sessions.
 
-> **Company-wide ADRs** (ADR-001 through ADR-015) live in `hydra/openspec/architecture/` and apply to all Conduction apps. Only create an app-specific ADR when the decision is unique to that app.
+> **Company-wide ADRs** live in `hydra/openspec/architecture/` and apply to all Conduction apps. Only create an app-specific ADR when the decision is unique to that app.
 
 Good candidates for app-specific ADRs:
 - Data storage approach (OpenRegister vs own tables)

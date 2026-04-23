@@ -173,32 +173,6 @@ Usually done automatically during archive.
 
 ---
 
-### `/sync-docs`
-
-**Phase:** Maintenance
-
-Check and sync documentation to reflect the current project state. Two targets: **app docs** (`{app}/docs/`) for a specific Nextcloud app's users and admins, and **dev docs** (`.github/docs/claude/`) for Claude and developers.
-
-**Usage:**
-```
-/sync-docs                       # prompts for target
-/sync-docs app                   # prompts for which app, then syncs its docs/
-/sync-docs app openregister      # sync docs for a specific app
-/sync-docs dev                   # sync developer/Claude docs (.github/docs/claude/)
-```
-
-Before syncing, runs 4 preliminary checks in parallel — config.yaml rules vs writing-docs.md/writing-specs.md, Sources of Truth accuracy, writing-specs.md vs schema template alignment (`openspec/schemas/conduction/`), and forked schema drift from the upstream `spec-driven` schema. Reports gaps and asks whether to fix before proceeding.
-
-**App docs mode** (`{app}/docs/`) — checks the app's `README.md` (root), `docs/features/`, `docs/ARCHITECTURE.md`, `docs/FEATURES.md`, `docs/GOVERNMENT-FEATURES.md`, and any other user-facing `.md` files against the app's current specs. Also loads all company-wide ADRs from `hydra/openspec/architecture/` and any app-level ADRs as auditing context (never as link targets in app docs). Flags outdated descriptions, missing features, stale `[Future]` markers (with full removal checklist), broken links, duplicated content, writing anti-patterns, ADR compliance gaps (screenshots, i18n, API conventions), and missing GEMMA/ZGW/Forum Standaardisatie standards references. Never inserts links into `.claude/` paths. Always shows a diff and asks for confirmation before writing.
-
-**Dev docs mode** (`.github/docs/`) — checks `commands.md`, `workflow.md`, `writing-specs.md`, `writing-docs.md`, `testing.md`, `getting-started.md`, `README.md`, plus the conduction schema (`hydra/openspec/schemas/conduction/schema.yaml`) and its `templates/spec.md` for alignment with `writing-specs.md`. Never changes intent without user confirmation. After syncing, runs a Phase 6 review of all commands and skills for stale references, outdated instructions, and redundant inline content — and asks whether to update them.
-
-Both modes enforce the [Documentation Principles](writing-docs.md) — duplication and wrong-audience content are flagged as issues, with direct links to the relevant writing-docs.md sections.
-
-**When to use:** After a significant batch of changes — new commands, archived features, updated specs, or structural changes to the project.
-
----
-
 ### `/opsx-archive`
 
 **Phase:** Archive
@@ -260,7 +234,7 @@ Automated apply→verify loop for a single change in a specific app. Runs the im
 8. Inside the container: runs `/opsx-apply` → `/opsx-verify` in a loop (max 5 iterations)
    - CRITICAL issues retrigger the loop; WARNING issues also retrigger but never block archive
    - At max iterations with only warnings remaining, archive still proceeds
-   - Seed data (ADR-016) is created/updated during apply as required
+   - Seed data (ADR-001) is created/updated during apply as required
 9. Captures container logs to `.claude/logs/`, then removes container
 10. **If test cycle enabled:** runs targeted single-agent test commands on the host (max 3 test iterations); failures loop back into apply→verify
 11. **If test cycle enabled and deferred tests exist:** asks about multi-agent/broad tests from the test-plan that were excluded from the loop; runs them once if confirmed, with one final apply→verify if they fail
@@ -337,6 +311,122 @@ Get an overview of the current project's OpenSpec setup and active changes.
 ```
 /opsx-onboard
 ```
+
+---
+
+## Retrofit Commands
+
+Used to bring legacy apps under the `@spec` annotation convention defined in [ADR-003 §Spec traceability](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-003-backend.md). Apps built spec-first via `/opsx-apply` already carry the tags — retrofit is the one-time pass for apps that predate the convention. Run the three skills in order: scan → annotate → reverse-spec. See the [Retrofit Playbook](retrofit.md) for prerequisites, bucket definitions, and roll-out order.
+
+---
+
+### `/opsx-coverage-scan`
+
+**Phase:** Retrofit (experimental)
+
+Audits an app for spec ↔ code coverage. **Read-only** — writes two report files and never touches code. Buckets every method into one of six categories to plan the retrofit work. Run this before `/opsx-annotate` or `/opsx-reverse-spec`.
+
+**Usage:**
+```
+/opsx-coverage-scan                 # prompts for app (lists apps with populated specs)
+/opsx-coverage-scan opencatalogi    # scan a specific app
+```
+
+**Writes:**
+- `{app}/openspec/coverage-report.md` — human-readable report
+- `{app}/openspec/coverage-report.json` — machine-readable sidecar consumed by `/opsx-annotate`
+
+**Buckets produced:**
+- **1** — Methods cleanly matched to an existing REQ (high confidence ≥0.85). Ready to annotate.
+- **2a** — Methods in an existing capability but no REQ covers the behavior. Extend the spec.
+- **2b** — Methods with no capability owner. New capability spec needed.
+- **3a** — REQs whose implementation appears to have been removed (git history evidence).
+- **3b** — REQs never implemented.
+- **4** — ADR conformance issues (missing headers, hardcoded strings) — surfaced only.
+
+**When to use:** Before starting a retrofit pass on any app. Re-run after each reverse-spec merge to refresh the picture.
+
+**Guardrails:**
+- Refuses to run on Haiku — REQ-matching needs Sonnet or Opus reasoning.
+- Does not touch code or commit anything.
+- `NEEDS-REVIEW` flag surfaces matches in the 0.70–0.85 confidence window.
+
+**Model:** Sonnet or Opus. Haiku stops immediately.
+
+---
+
+### `/opsx-annotate`
+
+**Phase:** Retrofit (experimental)
+
+Applies the Bucket 1 matches from a recent coverage report as `@spec` tags. Creates a single **ghost change** (`retrofit-annotate-{app}-{YYYY-MM-DD}`) whose `tasks.md` is what the annotations point at, then opens an **annotation-only PR** — no logic changes, no refactors, no formatting.
+
+**Usage:**
+```
+/opsx-annotate opencatalogi
+```
+
+**What it does:**
+1. Reads `coverage-report.json` (must exist and be <24h old)
+2. Refuses dirty working trees
+3. Creates ghost change with one task per REQ with Bucket 1 matches
+4. Edits each file in a single pass — file-docblock `@spec` tags + per-method `@spec` tags
+5. Runs `composer phpcs` / `npm run lint` + `/hydra-gates`
+6. Commits, appends the annotation commit to `.git-blame-ignore-revs`
+7. Archives the ghost change
+8. Pushes `retrofit/annotate-{app}-{YYYY-MM-DD}` and opens a PR (labels: `retrofit`, `annotation-only`)
+
+**When to use:** Immediately after reviewing a coverage report's Bucket 1. Do not mix with logic changes.
+
+**Guardrails:**
+- Idempotent on already-annotated code (detects and asks before creating a fresh ghost change).
+- Skips `NEEDS-REVIEW` entries — human triage first.
+- Never reorders existing tags to satisfy the linter — fix the PHPCS config instead.
+- Prefers Edit tool; falls back to full-file Write if a hook reverts. Never sed/awk.
+
+**Model:** Sonnet or Opus. Haiku stops immediately.
+
+---
+
+### `/opsx-reverse-spec`
+
+**Phase:** Retrofit (experimental)
+
+Drafts a retrofit spec from observed code for **one Bucket 2 cluster per run**. Creates a ghost change with the spec delta + tasks + inline annotations in a single PR. Cap: 5 REQs per run — split larger clusters across multiple runs.
+
+**Usage:**
+```
+/opsx-reverse-spec opencatalogi --extend admin-settings   # add REQs to an existing capability
+/opsx-reverse-spec opencatalogi --cluster app-lifecycle   # create a brand-new capability spec
+/opsx-reverse-spec opencatalogi                           # prompts — lists Bucket 2 clusters from report
+```
+
+**Flags (mutually exclusive, one required):**
+- `--extend <capability>` — append REQs to an existing capability spec. Use for Bucket 2a clusters.
+- `--cluster <name>` — create a new capability spec. Use for Bucket 2b clusters.
+
+**Bias toward `--extend`.** Minting a new capability is a design decision; extending is cheaper and safer.
+
+**What it does:**
+1. Validates coverage report (<24h, matching branch)
+2. Reads the cluster's methods — captures observed inputs, outputs, pre/postconditions, failure modes
+3. Drafts REQs that describe **observed behavior, not aspirational intent** (bugs stay bugs; notes flag them)
+4. Creates ghost change with spec delta (`retrofit_extensions: [...]` for extend, `retrofit: true` for cluster)
+5. Runs `/opsx-ff` to fill in design.md
+6. Annotates the cluster's methods inline (does NOT call `/opsx-annotate` — that would create a parallel ghost change)
+7. Runs `sync_spec_content.py` to register with Specter's `app_specs` table
+8. Archives the change (merges delta into main specs)
+9. Pushes and opens a PR (labels: `retrofit`, `reverse-spec`)
+
+**When to use:** After `/opsx-annotate` has merged. One cluster per run — each cluster is its own review cycle because REQ language is the review surface.
+
+**Guardrails:**
+- Refuses to batch clusters.
+- Caps at 5 REQs per run — split larger clusters.
+- Fails loudly if Specter sync fails — don't leave specs in-tree but missing from dashboards.
+- Writes `retrofit: true` / `retrofit_extensions: [...]` to spec frontmatter so dashboards can filter retrofit cohorts.
+
+**Model:** Sonnet or Opus. Haiku stops immediately — drafting REQs from code is the highest-reasoning step in the retrofit flow.
 
 ---
 

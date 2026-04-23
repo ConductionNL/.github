@@ -61,7 +61,6 @@ When content is duplicated, it will eventually diverge. One copy gets updated; t
 | Project vision and phases                                   | `openspec/ROADMAP.md` (if present)                                       |
 | Target audience and personas                                | `openspec/audience.md` (if present)                                      |
 | Architectural decisions (why)                               | `openspec/architecture/adr-{NNN}-*.md`                                   |
-| Architecture decisions index                                | `hydra/openspec/architecture/README.md`                                  |
 | Technical decisions and constraints                         | `openspec/architecture/` ADRs                                            |
 | **Standards & Patterns**                                    |                                                                          |
 | NL Design System and UI standards                           | `openspec/specs/{domain}/spec.md` (app-specific) or company ADR-003      |
@@ -83,6 +82,8 @@ When content is duplicated, it will eventually diverge. One copy gets updated; t
 | Reusable test scenarios (Gherkin)                           | `test-scenarios/TS-*.md`                                                 |
 | **Meta**                                                    |                                                                          |
 | Spec and doc writing conventions                            | `.github/docs/claude/writing-specs.md`, `.github/docs/claude/writing-docs.md` |
+| ADR writing conventions                                     | `.github/docs/claude/writing-adrs.md`                                    |
+| Skill writing conventions                                   | `.github/docs/claude/writing-skills.md`                                  |
 | OpenSpec schema and artifact templates                      | `openspec/schemas/conduction/schema.yaml`, `templates/`                  |
 | Parallel agent conventions                                  | `.github/docs/claude/parallel-agents.md`                                 |
 | Claude harness configuration (permissions, hooks, env vars) | `.github/global-settings/settings.json`                                  |
@@ -539,6 +540,26 @@ Run `/sync-docs` to surface large duplicates automatically.
 ## Writing Anti-Patterns
 
 The mistakes above are structural — wrong place, wrong audience, wrong format. These are writing-style patterns that make documentation go stale faster or harder to read.
+
+### Before removing an anti-pattern, check the note's purpose
+
+Anti-pattern detection (especially time-sensitive language and forward-looking statements) is a heuristic, not a verdict. Some notes that *look* like an anti-pattern are actually load-bearing context that future readers need:
+
+- **A note that explains *why* something is the way it is today** ("the gate name is `spdx-headers` but it enforces PHPDoc tags — the naming will migrate once all legacy tooling is updated") communicates a known mismatch and its rationale. Stripping it leaves the inconsistency unexplained.
+- **A note acknowledging a current model behaviour** ("Claude currently undertriggers skills, so write descriptions slightly pushy") flags that the *advice* depends on an *observation*. Removing the qualifier converts an observation into a permanent claim and the advice can age into nonsense if the observation no longer holds.
+- **A note pointing at a known-broken state** ("this is a workaround until upstream PR #123 lands") is the only signal that the workaround is temporary. Without it, future readers may treat the workaround as the intended design.
+
+Before rephrasing or deleting any time-sensitive line, ask:
+
+1. **Does the line carry a *reason* (a "why")?** If yes, preserve the reason even if you reword the temporal qualifier.
+2. **Does the line flag a *known mismatch* between names, behaviour, or state?** If yes, keep the mismatch flagged (with a softer qualifier like "as of writing" or by attaching a tracking link).
+3. **Would removing it make the surrounding text confusing or misleading?** If yes, restructure rather than delete.
+
+Only when a note adds zero load-bearing context (pure decoration like "Observed today (2026-04-19) on issue #71") is straight deletion safe — and even then, replace the date with a stable issue reference rather than dropping the provenance entirely.
+
+`/sync-docs dev` Phase 6 Part B applies this check before flagging an anti-pattern as fixable; agents running ad-hoc reviews should do the same.
+
+
 
 | Anti-pattern                                                        | Why it's a problem                                              | Fix                                                                          |
 |---------------------------------------------------------------------|-----------------------------------------------------------------|------------------------------------------------------------------------------|

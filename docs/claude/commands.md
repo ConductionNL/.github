@@ -17,12 +17,13 @@ For the complete reference, see [commands-openspec.md](commands-openspec.md).
 | `/opsx-apply` | Implement | Implement tasks from plan.json |
 | `/opsx-verify` | Review | Verify implementation against specs |
 | `/opsx-sync` | Archive | Merge delta specs into main specs |
-| `/sync-docs` | Maintenance | Check and sync documentation to current project state |
 | `/opsx-archive` | Archive | Complete and preserve change |
 | `/opsx-bulk-archive` | Archive | Archive multiple completed changes at once |
 | `/opsx-apply-loop` | Full Lifecycle | Automated apply→verify loop in Docker container |
 | `/opsx-pipeline` | Full Lifecycle | Parallel multi-change lifecycle (up to 5 agents) |
 | `/opsx-onboard` | Setup | Overview of current OpenSpec setup |
+
+**Retrofit commands** (bringing legacy apps under [ADR-003 §Spec traceability](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-003-backend.md)): `/opsx-coverage-scan`, `/opsx-annotate`, `/opsx-reverse-spec` — see [retrofit.md](retrofit.md) for the full playbook.
 
 **OpenSpec CLI** (terminal commands, not slash commands): `openspec init`, `openspec list`, `openspec validate`, etc. — see [commands-openspec.md](commands-openspec.md#openspec-cli-commands).
 
@@ -292,6 +293,32 @@ Create new skills, modify and improve existing skills, and measure skill perform
 7. Can also optimize a skill's `description` field for better triggering accuracy
 
 **When to use:** When adding a new capability, when an existing skill is misfiring or producing inconsistent results, or when you want to verify a recent skill change hasn't regressed behavior.
+
+---
+
+### `/sync-docs`
+
+**Phase:** Maintenance
+
+Check and sync documentation to reflect the current project state. Two targets: **app docs** (`{app}/docs/`) for a specific Nextcloud app's users and admins, and **dev docs** (`.github/docs/claude/`) for Claude and developers.
+
+**Usage:**
+```
+/sync-docs                       # prompts for target
+/sync-docs app                   # prompts for which app, then syncs its docs/
+/sync-docs app openregister      # sync docs for a specific app
+/sync-docs dev                   # sync developer/Claude docs (.github/docs/claude/)
+```
+
+Before syncing, runs 4 preliminary checks in parallel — config.yaml rules vs writing-docs.md/writing-specs.md, Sources of Truth accuracy, writing-specs.md vs schema template alignment (`openspec/schemas/conduction/`), and forked schema drift from the upstream `spec-driven` schema. Reports gaps and asks whether to fix before proceeding.
+
+**App docs mode** (`{app}/docs/`) — checks the app's `README.md` (root), `docs/features/`, `docs/ARCHITECTURE.md`, `docs/FEATURES.md`, `docs/GOVERNMENT-FEATURES.md`, and any other user-facing `.md` files against the app's current specs. Also loads all company-wide ADRs from `hydra/openspec/architecture/` and any app-level ADRs as auditing context (never as link targets in app docs). Flags outdated descriptions, missing features, stale `[Future]` markers (with full removal checklist), broken links, duplicated content, writing anti-patterns, ADR compliance gaps (screenshots, i18n, API conventions), and missing GEMMA/ZGW/Forum Standaardisatie standards references. Never inserts links into `.claude/` paths. Always shows a diff and asks for confirmation before writing.
+
+**Dev docs mode** (`.github/docs/`) — checks `commands.md`, `workflow.md`, `writing-specs.md`, `writing-docs.md`, `testing.md`, `getting-started.md`, `README.md`, plus the conduction schema (`hydra/openspec/schemas/conduction/schema.yaml`) and its `templates/spec.md` for alignment with `writing-specs.md`. Never changes intent without user confirmation. After syncing, runs a Phase 6 review of all commands and skills for stale references, outdated instructions, and redundant inline content — and asks whether to update them.
+
+Both modes enforce the [Documentation Principles](writing-docs.md) — duplication and wrong-audience content are flagged as issues, with direct links to the relevant writing-docs.md sections.
+
+**When to use:** After a significant batch of changes — new commands, archived features, updated specs, or structural changes to the project.
 
 ---
 

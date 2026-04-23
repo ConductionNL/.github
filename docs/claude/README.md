@@ -73,6 +73,9 @@ Real-time Claude token usage monitoring in VS Code — color-coded status, thres
 ### [End-to-End Walkthrough](./walkthrough.md)
 A complete worked example showing every phase of the flow on a realistic feature (adding a search endpoint to OpenCatalogi). Shows exactly what you type and what happens.
 
+### [Retrofit Playbook](./retrofit.md)
+Bringing legacy apps under [ADR-003 §Spec traceability](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-003-backend.md) — the three retrofit skills (`/opsx-coverage-scan`, `/opsx-annotate`, `/opsx-reverse-spec`) in order, plus the six coverage buckets and when to extend vs create new specs.
+
 ---
 
 ## Table of Contents
@@ -428,6 +431,7 @@ This repo contains **documentation**, **global settings**, and **project templat
 │       ├── walkthrough.md               # End-to-end worked example
 │       ├── docker.md                    # Docker environment
 │       ├── global-claude-settings.md    # Global settings reference
+│       ├── retrofit.md                  # Legacy app retrofit playbook
 │       └── examples/                    # Project-level template files
 │           ├── CLAUDE.local.md.example      # Template for project .claude/CLAUDE.local.md
 │           └── .mcp.json.example            # Template for project root .mcp.json (7 browsers)
@@ -476,7 +480,7 @@ For the full persona table with testing command mapping, see **[testing.md](./te
 
 ## Architectural Design Rules (ADRs)
 
-ADRs define constraints that all OpenSpec artifacts must comply with. Company-wide ADRs live in `openspec/architecture/` (ADR-001 through ADR-016); app-specific ADRs live in `{app}/openspec/architecture/`. They are enforced during artifact creation (via `config.yaml` rules injected into `openspec instructions` output) and during verification (via `/opsx-verify`).
+ADRs define constraints that all OpenSpec artifacts must comply with. Company-wide ADRs live in `hydra/openspec/architecture/`; app-specific ADRs live in `{app}/openspec/architecture/`. They are enforced during artifact creation (via `config.yaml` rules injected into `openspec instructions` output) and during verification (via `/opsx-verify`).
 
 For the full guide on ADR structure, format, the current list of company-wide ADRs, and when to create a new one, see **[writing-adrs.md](./writing-adrs.md)**.
 
