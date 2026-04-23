@@ -60,12 +60,11 @@ De regel: als iemand *iets doet* met het element (typen, klikken, lezen), is het
 - **Design-token** `shape.hexagon` in scope-B tokens met 2 varianten: `pointy-top` en `flat-top` (verschillende oriëntaties voor verschillende toepassingen)
 - **Accessibility:** hex-vormen zijn puur decoratief; screen-readers negeren ze via `aria-hidden="true"`. Functie-dragend hex-icoon krijgt `aria-label`.
 
-**Oriëntatie-keuze:**
+**Oriëntatie: altijd pointy-top.**
 
-- **Flat-top** (platte zijde boven) — standaard voor het Conduction-logo (bestaande avatar) en voor alle logo-wrappers
-- **Pointy-top** (punt boven) — voor UI-elementen (bullets, badges) omdat die visueel iets vriendelijker en opvallender zijn
+De Conduction-zeshoek heeft altijd de **punt naar boven**. Geen uitzonderingen, geen flat-top-varianten. Reden: één consistente oriëntatie maakt de vorm onmiddellijk herkenbaar als "Conduction" op elk oppervlak. Het bestaande logo is pointy-top; de bestaande portret-frames zijn pointy-top; dus alles blijft pointy-top.
 
-Één project, beide oriëntaties. Dit is geen probleem zolang het bewust is.
+Bij honeycomb-patronen (meerdere hexagons aaneengesloten) stapelen pointy-top-hexes in offset rijen horizontaal — dat werkt qua layout prima.
 
 ---
 
@@ -225,54 +224,185 @@ Waarom: afsluiting als "je zit nog steeds op een Conduction-pagina" zonder op te
 
 ---
 
-## 3. Illustratie-stijl — named style te bevestigen
+## 3. Illustratie-stijl — expliciete breuk met het huidige, fresh direction
 
-De huidige conduction.nl gebruikt vector-based line-figuren. Welke **named style** precies — moeten we vastleggen zodat de designer (of AI) reproduceerbare resultaten levert. Ik kon via web-fetch de afbeeldingen zelf niet zien (tool ziet alleen HTML-tekst); daarom de kandidaten hieronder — bevestig welke overeenkomt, of beschrijf de stijl zodat we hem kunnen benoemen.
+### Wat de huidige stijl is (ter documentatie, we bewegen eraf)
 
-### Kandidaat-stijlen (vector-based line-figures)
+De huidige conduction.nl-illustraties zijn **gedetailleerde flat vector characters** in wat in de stock-industrie bekend staat als "Freepik / Vectorjuice / Upklyak-achtige stijl" — vaak verkocht via Freepik-marketplace, Adobe Stock, Vecteezy. Kenmerken:
 
-| # | Stijl | Beschrijving | Link | Commercieel bruikbaar? |
+- **Filled shapes** (géén line-art zoals ik eerder aannam) — vormen worden gedefinieerd door kleur-contrast, niet door outlines
+- **Gedetailleerde gezichten** — uitgewerkte ogen met pupillen, tanden zichtbaar bij glimlach, realistische wenkbrauwen
+- **Shading binnen kleur** — haar heeft highlights, kleding heeft vouwen en schaduwen
+- **Realistische proporties** — armen en benen hebben normale lengte, niet overdreven stretch
+- **Felle kleurvlakken** — kobalt-blauw kleding, rode vesten, geel-oranje accenten
+- **Getilte gekleurde achtergrondrechthoeken** — lichtblauw, geel, oranje parallellogrammen achter de figuren
+- **Bestaande hexagon-portretten** — in de hex-frames (cobalt achtergrond) is het character-onderdeel van dezelfde stijl
+
+Vergelijkbaar met illustratie-sets als "Upklyak – Business People", "Vectorjuice – Team Scenes", of de betaalde Freepik-vendor-stijl packs.
+
+### Waarom we hier bewust van wegbewegen
+
+Drie inhoudelijke redenen:
+
+1. **Te "stock-foto" qua gevoel.** De huidige illustraties voelen als generieke marketing-stock: de bandleden, de mensen-met-map, de man-die-naar-zichzelf-wijst — ze kunnen op elke SaaS-website of consultancy-brochure staan. Dat botst met het onderscheidende merk dat we bouwen.
+2. **Te veel detail voor product-first-positionering.** De realistische gezichten en shading trekken aandacht naar *de mensen*, niet naar *de apps*. Bij een productbedrijf wil je illustraties die het product ondersteunen, niet afleiden.
+3. **Niet opnieuw te produceren zonder stockbibliotheek-afhankelijkheid.** Elke keer dat we een nieuwe illustratie nodig hebben, moeten we op de Freepik-marketplace zoeken naar een asset die "ongeveer past". Dat leidt onvermijdelijk tot inconsistentie (licht andere outline, licht andere paletten, licht andere proporties). Een fresh direction moet **reproduceerbaar** zijn — door ons of door een AI.
+
+Plus een eerder argument uit [DESIGN.md](../../DESIGN.md#visuele-richting): bij een **productbedrijf** horen illustraties die **software tonen en abstracte concepten visualiseren**, niet "blije mensen in pakken" — dat was het dienstverlener-tijdperk.
+
+**Het hexagon-portret-concept (zoals in de 3 portret-voorbeelden) blijft overeind.** Het frame + cobalt-achtergrond is goed en on-brand. Alleen het **character-binnenwerk** wordt opnieuw: geen Freepik-flat-vector-character meer, maar de stijl die we hieronder kiezen.
+
+### Fresh direction — vier richtingen om uit te kiezen
+
+Omdat we alles opnieuw doen, ligt het veld open. Hieronder vier genuinely verschillende richtingen met hun eigen feel. Per richting: wat het is, waarom het bij ons zou passen, en wat we ervoor nodig hebben.
+
+#### Richting A — **Hex-first geometric** (mijn aanrader)
+
+**Wat:** illustraties gebouwd uit hexagons en eenvoudige geometrische vormen. Géén (of zeer minimaal) mensen. Concepten worden visueel uitgelegd met hex-composities, verbindingslijntjes, gestapelde vormen.
+
+**Voorbeelden:**
+- "Ecosystem" = centrale hex + satellite-hexes + verbindingen
+- "Integration" = twee hex-groepen die via een hex-brug verbinden
+- "WOO-compliance" = fragmentarisch hex-veld dat consolideert tot één hex-cluster
+- "Open source" = hex met open bovenkant, content stroomt eruit
+
+**Palet:** cobalt #21468B dominant, KNVB oranje #F36C21 als accent, wit als adem. Geen andere kleuren.
+
+**Waarom het past:**
+- Maximaal merk-consistent — onze hex-motief wordt de illustratie-taal
+- Zero stock-foto-risico
+- Oneindig schaalbaar — elke nieuwe illustratie is gewoon een nieuwe hex-compositie
+- Past bij product-first-positionering (technisch, niet emotioneel)
+- Distinctief — niemand anders bouwt zijn illustratie-taal rond hexagons
+- Makkelijk produceerbaar: een ontwerper, AI-tool (Midjourney, Figma), of zelfs een technisch-onderlegde developer kan ze maken
+
+**Wat we ervoor nodig hebben:**
+- Een master-briefing-tekst (zie onder)
+- 4–6 example-illustraties om de stijl te ankeren
+- SVG-bibliotheek met herbruikbare hex-primitieven
+
+**Risico:** te koel, te technisch — als het palet te spaarzaam is, kan de site koud aanvoelen. Mitigatie: KNVB-oranje accents en warme Figtree-typografie doen het meeste emotionele werk. Illustraties zijn dan het "rustige rechtopstaande" element.
+
+#### Richting B — **Minimal line-art characters** (karakters-variant)
+
+**Wat:** als we echt menselijke figuren willen tonen (team, samenwerking, klant-sfeer), dan in de absolute tegenpool van de huidige stijl: **pure outline-only**, zero fill, dunne consistente lijnen. Stijlreferentie: Open Peeps of een eigen versie ervan.
+
+**Voorbeelden:**
+- Één persoon die naar een laptop kijkt (line-art, cobalt outline)
+- Twee mensen die praten (line-art, geen shading)
+- Eén persoon in hex-portret-frame (alleen contour zichtbaar tegen cobalt-fill)
+
+**Palet:** cobalt #21468B outline, white fill (niks gekleurd aan de figuur zelf). Oranje accents alleen voor attributen (bv. een map, een laptop-scherm).
+
+**Waarom het past:**
+- Warmer dan richting A
+- Past bij About-pagina's, testimonials, team-sectie
+- Extreem consistent te produceren (lijn-stijl is reproduceerbaar)
+- Compleet weg van "Freepik-detail"-feel
+
+**Wat we ervoor nodig hebben:**
+- Keuze tussen Open Peeps (CC0, kant-en-klaar) of custom-drawn (meer karakter, meer werk)
+- Briefing-tekst voor consistentie
+
+**Risico:** line-art-characters kunnen **saai** worden als ze overal verschijnen — ze leven in hun sobere lijn-esthetiek. Best mix met richting A (concept-illustraties in hex, mens-illustraties in line-art).
+
+#### Richting C — **Editorial / paper-cut** (sophisticated variant)
+
+**Wat:** gelaagde platte vormen die lijken op papiersnijkunst. Elk element is een geometrische vorm (rechthoek, cirkel, hex) met een subtiele textuur of lichte schaduw, die de indruk wekt dat ze op elkaar gelijmd zijn. Stijlreferentie: The New Yorker covers, moderne redactionele illustratie, Tom Froese-achtig.
+
+**Voorbeelden:**
+- "Data-catalogi" = gelaagde cirkels en hexagons met subtiele shadow
+- "Open source" = een opengewerkte compositie waar je lagen kunt zien
+
+**Palet:** cobalt + oranje + heel subtiele off-white accentlaag. Misschien een textuur-overlay (grain, noise).
+
+**Waarom het past:**
+- Sophisticated, volwassen — past bij een MKB-doelgroep die kwaliteit zoekt
+- Distinctief — niet veel SaaS gebruikt editorial-stijl
+- Duurzaam — editorial-illustraties verouderen minder snel
+
+**Wat we ervoor nodig hebben:**
+- Een illustrator of AI-tool die deze stijl kan reproduceren
+- Waarschijnlijk duurder en trager te produceren dan richting A
+
+**Risico:** voelt mogelijk te "kunst" voor MKB — kan als "highbrow" ervaren worden door praktisch-ingesteld publiek.
+
+#### Richting D — **Riso / two-color print** (indie-craft variant)
+
+**Wat:** illustraties in de stijl van risograph-prints. Twee kleuren (cobalt + oranje), subtiele offset en grain-textuur, handgemaakt gevoel. Stijlreferentie: moderne OSS-producten als Obsidian, indie dev-sites, zine-cultuur.
+
+**Voorbeelden:**
+- Karakters of abstracte scenes, altijd in twee kleuren
+- Licht-afwijkende registratie (oranje laag minimaal verschoven t.o.v. cobalt)
+- Korrel-textuur over het geheel
+
+**Palet:** strikt cobalt + oranje + wit. Texturen simuleren inkt-overlap.
+
+**Waarom het past:**
+- Indie / OSS / crafted-feel — past bij onze community-kant
+- Eerlijk en niet-corporate
+- Distinctief
+
+**Wat we ervoor nodig hebben:**
+- AI-tool (Midjourney met riso-prompt) of een illustrator die dit beheerst
+- Textuur-assets (grain overlays) die we als CSS-/SVG-filters consistent toepassen
+
+**Risico:** kan te artsy-fartsy voelen voor conservatievere MKB-doelgroep; kan dated raken als riso-trend verdwijnt.
+
+### Vergelijkingstabel
+
+| Richting | Feel | Productie | Merkconsistentie | Risico |
 |---|---|---|---|---|
-| 1 | **Open Peeps** | Thick-outline line-art characters, zwart-op-transparant default, aanpasbaar. Gemaakt door Pablo Stanley. Losse lichaamsonderdelen die je kunt combineren. | [openpeeps.com](https://openpeeps.com) | Ja (CC0-licentie — helemaal vrij) |
-| 2 | **Humaaans** | Mix-and-match character-illustraties; gedeeltelijk gevuld met vlakken, met dunne outline-accenten. Ook van Pablo Stanley. | [humaaans.com](https://humaaans.com) | Ja (CC BY 4.0) |
-| 3 | **Blush** | Collectie scènes van Pablo Stanley + andere kunstenaars. Thick-outline figuren, vaak met warmere kleurvlakken. | [blush.design](https://blush.design) | Ja (gemengd; sommige scenes gratis, sommige paid) |
-| 4 | **Storyset Line** | Freepik's line-only variant — complete scenes, geen zwart-vlak, alleen lijnen in één kleur. | [storyset.com](https://storyset.com) | Ja (gratis met attributie, paid voor zonder) |
-| 5 | **Drawkit Line** | Line-based illustrations met ronde vormen, iets cleaner dan Blush. | [drawkit.com](https://drawkit.com) | Ja (paid-tier ruim beschikbaar) |
-| 6 | **Icons8 Ouch! Lineal** | Massive illustratie-library met line-stijl variant; goede dekking van scenes en characters. | [icons8.com/illustrations/style--lineal](https://icons8.com/illustrations/style--lineal) | Ja (paid of free met attribution) |
-| 7 | **Streamline Line** | Enterprise-grade illustratie-library, >30k assets in consistente line-stijl. | [streamlinehq.com](https://streamlinehq.com) | Ja (paid) |
+| **A — Hex-first geometric** | Product, technisch, clean, Dutch-design | Laag — reproduceerbaar door iedereen | Maximaal (hex-motief overal) | Kan koel overkomen |
+| **B — Minimal line-art** | Warm, menselijk, friendly | Middel — vraagt consistentie | Goed (cobalt-outline) | Kan saai worden bij overgebruik |
+| **C — Editorial** | Sophisticated, redactioneel, volwassen | Hoog — vraagt illustrator | Goed (palet-restrictie) | Kan highbrow voelen voor MKB |
+| **D — Riso** | Indie, crafted, OSS-spirit | Middel — vraagt tooling | Goed (twee-kleur-principe) | Kan trendy voelen |
 
-### Mijn aanrader: **Open Peeps** of **Storyset Line**
+### Mijn aanrader: **Richting A (primair) + B (secundair, alleen voor mensen-momenten)**
 
-Beide passen bij vector-based-line-figures + zijn licensing-clean:
+Primair **A**, omdat:
+- Onze apps zijn producten, geen emotionele diensten — illustraties moeten het product ondersteunen
+- Hex-motief wordt zo fundamenteel dat elke nieuwe pagina automatisch "Conduction" voelt
+- Laagste productie-friction — een AI of designer kan nieuwe hex-illustraties in minuten maken
+- Compleet weg van stock-feel
 
-- **Open Peeps** als we karakters willen (mensen in verschillende poses — samenwerken, werken achter computer, brainstormen). Thick-outline, zwart default maar recolorable → we kunnen alles in kobalt outlinen met KNVB-oranje accents.
-- **Storyset Line** als we complete scènes willen (workflow-visualisaties, abstract concepten, niet alleen mensen). Eén-kleur-line-scenes die we ook kobalt kunnen maken.
+Secundair **B** voor specifieke momenten waar een mens-aanwezigheid onmisbaar is:
+- About-pagina — team-portretten in hex-frames (behoud huidig concept, nieuwe character-stijl)
+- Testimonials — klant-avatars in line-art
+- Eén of twee plekken op de homepage als het puur-hex te koel wordt
 
-**Ideaal:** mix van beide — Open Peeps voor character-moments (About, testimonials, "meekijkend support"), Storyset Line voor concept-illustraties (homepage-waardes, solution-pagina's).
+**Niet gelijktijdig C of D** — die zijn elk een heel andere wereld en beperken de reproduceerbaarheid.
 
-### Alternatief: custom illustratie-stijl (described for reproducibility)
+### Master-briefing-tekst voor richting A (hex-first geometric)
 
-Als we geen gekende library overnemen, maar een eigen stijl willen laten maken door een illustrator of AI, is dit de briefing-tekst die we aan de illustrator/AI geven zodat het consistent wordt:
+Bewaar als "master-prompt" voor illustrators en AI-tools. Kan gebruikt in Midjourney, DALL-E, Figma, of als briefing aan een freelance-illustrator.
 
-> *"Vector-based line illustrations of human figures and abstract scenes. Thick uniform outline weight (2–3px at source scale). Rounded, friendly shapes. Minimal facial features (two dots for eyes, simple line for mouth). Limbs proportional but slightly elongated for elegance. Colors: cobalt blue (#21468B) outline with KNVB orange (#F36C21) accents only, on white background. No 3D, no shading, no gradients. Style reference: Open Peeps and Storyset Line hybrid. Composition: one or two figures per illustration, sometimes with geometric props (hexagons, stacked shapes) as environment. Dutch-inflected feel: unpretentious, competent, warm."*
+> *"Vector-based geometric illustrations built from hexagons and simple geometric primitives (circles, rectangles, triangles). No human figures or faces. Pointy-top hexagons only (point at the top). Clean flat shapes, no gradients, no 3D, no shadows except subtle 2D drop-shadows where needed for depth. Colors: cobalt blue (#21468B) as dominant fill or outline; KNVB orange (#F36C21) as accent (maximum 10% of surface); white (#FFFFFF) as background. No other colors. Thin uniform line weight where lines are used (2px at source scale, consistent). Compositions should visualize abstract concepts: ecosystem (central hex with satellite hexes connected by thin lines), integration (two hex-groups joined by a hex-bridge), transparency (hexagons arranged in a visible layered grid), flow (hexagons arranged along a path or funnel). Feel: quiet, competent, Dutch-design-adjacent. Anti-references: no Freepik-style characters, no isometric, no 3D, no faces, no stock-photo feel, no gradients."*
 
-Dit is genoeg voor een AI-tool als Midjourney (met `--style raw`) of voor een freelance-illustrator als briefing. Bewaar deze briefing-tekst als de "master-prompt" voor alle toekomstige illustraties.
+### Master-briefing-tekst voor richting B (minimal line-art characters) — secundair
 
-### Wat zeker **niet** werkt
+Voor de momenten waar we mensen moeten tonen:
 
-- **"Corporate Memphis"** / Alegria-stijl (vlakke character-illustraties met overdreven lange ledematen, felle pastels) — te corporate-bland, te vaak gedaan, matcht onze trotse-Nederlandse-identiteit niet
-- **Isometrische illustraties** — te "enterprise-saaS", niet warm genoeg
-- **3D-render-stijl** (Lottiefiles-type) — botst met onze flat-plus-hexagon-richting
-- **Karikatuur of cartoon** — te informeel voor MKB-beslissers
-- **Foto-realistische stockillustraties** — past niet bij line-art-stijl
+> *"Minimal outline-only character illustrations. Pure line art, no fill inside the figure (just white). Thin uniform stroke weight (2px at source scale, consistent). Minimal facial features: two dots for eyes, simple curve for mouth, single lines for eyebrows only when expression is needed. Limbs proportional, not stretched. Simple clothing suggested with 2–3 outline details. Colors: cobalt blue (#21468B) outline only; KNVB orange (#F36C21) accent on small objects (a book, a laptop screen, a badge) — never on the figure itself. White (#FFFFFF) background, or placed inside a cobalt-fill hexagon frame for portraits. Style reference: Open Peeps minimalism. No shading, no gradients. One or two figures per illustration, never crowds. Feel: warm but restrained, friendly without being childish."*
 
-### Open vraag voor je
+### Licentie-overwegingen bij assets
 
-1. Welke stijl staat er nu op conduction.nl? Is het één van de 7 genoemde kandidaten, of iets anders?
-2. Als het iets anders is — kun je de stijl beschrijven of een voorbeeld-URL delen zodat ik hem kan benoemen?
-3. Willen we meegaan met de huidige stijl, of is dit het moment om te vernieuwen?
+Als we directe librararies gebruiken in plaats van custom:
 
-Zodra deze vraag beantwoord is, documenteer ik de definitieve named-style in BRAND.md (company-wide) zodat elke toekomstige bron (website, drukwerk, apps, presentaties) consistent is.
+- **Richting A**: geen bekende library heeft specifiek "hex-first geometric" — moeten we zelf creëren of via AI. Geen licentie-issue.
+- **Richting B**: **Open Peeps** is CC0 (volledig vrij, inclusief commercieel gebruik, geen attributie). Dat is de kant-en-klare optie.
+- **Richting C**: editorial is typisch custom werk per illustrator. Contract regelt de rechten.
+- **Richting D**: riso is typisch custom werk of via Midjourney (check Midjourney-TOS voor commercial use).
+
+Voor richting A + B is er dus geen licensing-probleem.
+
+### Open vraag voor jou
+
+1. **Bevestig je richting A + B als de primair/secundair-combinatie?** Of wil je uit een van de andere richtingen kiezen?
+2. **Willen we met een illustrator werken**, of laten we de eerste batch via AI-tools genereren (Midjourney met de master-prompt)?
+3. **Hoeveel illustraties hebben we concreet nodig voor de MVP-launch?** Schatting: 8–12 (homepage-values, 3–5 solutions, About-team, 404, één hero-visual). Bevestigen.
+
+Zodra bevestigd, documenteer ik de definitieve richting in BRAND.md en schrappen we dit document in de overgebleven onzekerheid-teksten.
 
 ---
 

@@ -209,12 +209,17 @@ De zeshoek is niet langer alléén het omkapsel rond het logo. Vanaf `theme-cond
 
 Volledige catalogus van toepassingen (met wanneer en hoe) staat in de surface-specifieke [`briefs/website/visual-motifs.md`](./briefs/website/visual-motifs.md). Die catalogus is oorspronkelijk voor de website geschreven maar geldt **company-wide** — dezelfde hex-toepassingen gelden ook voor app-UI's, drukwerk, presentaties en toekomstige oppervlakken.
 
-**Twee oriëntaties:**
+**Eén oriëntatie: altijd pointy-top.**
 
-- **Flat-top** (platte zijde boven) — voor logo-wrappers en alle formele merk-momenten (avatars, app-iconen, hero-constellaties)
-- **Pointy-top** (punt boven) — voor UI-elementen (bullets, badges, step-indicators) omdat die visueel iets vriendelijker en opvallender zijn
+De Conduction-zeshoek heeft altijd de punt naar boven. Dat is de oriëntatie van het bestaande Conduction-logo en van alle portret-frames die we tot nu toe gebruikten. Consistentie boven alles — geen mix van punt-boven en plat-boven in dezelfde UI.
 
-Eén brand, beide oriëntaties. Dat is geen inconsistentie, het is bewuste functionele differentiatie.
+Waarom deze keuze:
+
+- **Merkherkenning**: elke hexagon die je tegenkomt op een Conduction-oppervlak heeft dezelfde oriëntatie, wat de vorm direct als "Conduction" laadt
+- **Visuele rust**: gemixte oriëntaties leiden tot een druk honeycomb-patroon; één oriëntatie is rustiger en formeler
+- **Consistent over surfaces**: van logo tot bullet tot avatar tot pagination — allemaal pointy-top
+
+Bij honeycomb-patronen (meerdere hexagons aaneengesloten) werken pointy-top-hexes prima — ze stapelen in offset rijen horizontaal.
 
 ### Waarom twee logo-varianten (op wit, op blauw)?
 

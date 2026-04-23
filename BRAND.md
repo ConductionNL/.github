@@ -74,7 +74,7 @@ Het Conduction-avatar bestaat uit een **dubbele zeshoek** (hexagon-in-hexagon) m
 Applicaties (OpenRegister, OpenCatalogi, OpenConnector, DocuDesk, …) krijgen hun eigen iconografie **binnen** de kenmerkende zeshoek-wrapper. Zo blijft het Conduction-merk zichtbaar zonder dat app-identiteiten in elkaar overlopen.
 
 Richtlijnen:
-- De wrapper is altijd een zeshoek.
+- De wrapper is altijd een zeshoek, **altijd pointy-top** (punt naar boven). Geen flat-top-varianten in onze huisstijl.
 - App-icon mag in de primary-brand-kleur, tertiary-brand-kleur of wit — nooit in oranje (oranje is accent, geen kernkleur).
 - Minimale grootte: 32×32px. Kleiner wordt de zeshoek onleesbaar.
 
