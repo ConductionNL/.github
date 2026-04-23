@@ -7,9 +7,18 @@
 
 ## Waar deze brief op bouwt
 
+**Foundation (company-wide):**
+
 - [../BRAND.md](../BRAND.md) — merkwaardes, logo, kleurpalet, typografie, Apps-vs-Solutions terminologie
 - [../DESIGN.md](../DESIGN.md) — rationale achter kleur/typo, tone-shift MKB-direct, visuele richting productbedrijf
 - [../brand/tokens.json](../brand/tokens.json) — DTCG tokens (kleur + typografie, scope A)
+
+**Content-appendix (website-specifiek, gemined uit onze intelligence-DB):**
+
+- [`website/app-taglines.md`](./website/app-taglines.md) — tagline-library voor alle 11 core apps (NL + EN)
+- [`website/solution-woo.md`](./website/solution-woo.md) — volledige WOO-solution-pagina als template voor andere solutions
+- [`website/tone-samples.md`](./website/tone-samples.md) — NL tone-calibratie met drie registers en rewrite-recepten
+- [`website/icon-library.md`](./website/icon-library.md) — iconen-bibliotheek-keuze (aanbevolen: Lucide)
 
 **Deze brief beschrijft alleen het website-specifieke.** Alles wat Conduction-wide geldt (wie we zijn, hoe we eruitzien, welke woorden we gebruiken) staat in de foundation-documenten. Als iets uit deze brief toch company-wide blijkt, lift het terug naar BRAND.md of DESIGN.md.
 
@@ -215,6 +224,8 @@ Structuur:
 
 ### App
 
+Voor alle 11 core apps staan naam, categorie en tagline (NL + EN) klaar in [`website/app-taglines.md`](./website/app-taglines.md) — gemined uit de intelligence-DB (top-features per app). Designer kan hieruit direct werken bij de app-catalogus-mock.
+
 | Veld | Type | Verplicht |
 |---|---|---|
 | name | string | ja |
@@ -236,6 +247,8 @@ Structuur:
 
 ### Solution
 
+Een volledig uitgewerkte WOO-solution-pagina (inclusief hero, probleem-uitleg, aanpak, app-stack-tabel, FAQ en SEO-metadata) staat als **template** in [`website/solution-woo.md`](./website/solution-woo.md). De andere solutions volgen diezelfde structuur. Bron: 1.031 NL-tenders + 5.992 Woo-requirements uit onze intelligence-DB.
+
 | Veld | Type | Verplicht |
 |---|---|---|
 | name | string | ja |
@@ -254,7 +267,7 @@ Niet voor MVP. Later toevoegen als er content is.
 
 ## 8. Tone & voice — website-specifiek
 
-Foundation: zie [../DESIGN.md](../DESIGN.md#tone--visuele-richting--implicaties-van-de-positioneringsshift). Website-aanvullingen:
+Foundation: zie [../DESIGN.md](../DESIGN.md#tone--visuele-richting--implicaties-van-de-positioneringsshift). Kalibratie met authentieke NL-tender-taal staat in [`website/tone-samples.md`](./website/tone-samples.md) — drie registers herkennen plus rewrite-recepten van overheid-taal naar Conduction-taal. Website-aanvullingen:
 
 - **Lead met het resultaat, niet het proces.** *"Installeer in 2 minuten"* > *"Onze implementatie-methodologie"*.
 - **Gebruik cijfers.** *"100+ gemeenten"*, *"bespaart 20 uur per maand"*. Vage superlatieven zijn verboden.
@@ -274,6 +287,7 @@ Foundation: zie [../DESIGN.md](../DESIGN.md#visuele-richting). Website-aanvullin
 - **Illustraties** in cobalt-palet met oranje highlights. Eén stijl door de hele site; geen mix van 3D-renders, flat-illustrations en isometrische diagrammen door elkaar.
 - **App-screenshots** met lichte omlijsting (1–2px cobalt) of schaduw voor diepte. Niet tilt-geroteerd; strak recht.
 - **Geen** stockfoto's. Geen 3D-renders van abstract netwerken. Geen "diverse team werkt samen"-foto's.
+- **Iconen:** [Lucide](https://lucide.dev) als standaard-bibliotheek (ISC, lijn-iconen, peer-group-adoptie). Volledig afwegingskader en implementatie-notities in [`website/icon-library.md`](./website/icon-library.md).
 
 ### Referentie-sites (positief + anti)
 
