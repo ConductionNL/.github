@@ -396,6 +396,126 @@ Als we directe librararies gebruiken in plaats van custom:
 
 Voor richting A + B is er dus geen licensing-probleem.
 
+### Voorbeelden per richting — echte referentie-sites
+
+Per richting: 3–5 echte websites of illustrators waarvan de stijl matcht, plus concrete Conduction-scènes beschreven in die stijl zodat je kunt voorstellen hoe "onze" illustraties eruit zouden zien.
+
+#### Richting A — Hex-first geometric
+
+**Bestaande sites/merken die dit register raken:**
+
+- [honeycomb.io](https://honeycomb.io) — letterlijk hexagon-branding, mooi voorbeeld van hoe ver je kunt komen met alleen hex-vormen
+- [supabase.com](https://supabase.com) (vooral de feature-pagina's) — pure geometrische composities, modulair
+- [hashicorp.com](https://www.hashicorp.com) — abstracte geometrische tech-illustraties
+- [fly.io](https://fly.io) — sterk geometrisch, eenvoudig
+- [cloudflare.com](https://www.cloudflare.com) (product-pagina's) — abstracte geometrische vormen als illustratie
+- [plausible.io](https://plausible.io) — minimalistisch geometrisch
+- [prisma.io](https://www.prisma.io) — technische geometrische visuals
+
+**Pinterest/Dribbble voor "hex-based" en "geometric tech illustration":**
+
+- [dribbble.com/tags/hexagon](https://dribbble.com/tags/hexagon)
+- [dribbble.com/tags/geometric-illustration](https://dribbble.com/tags/geometric-illustration)
+
+**Concrete Conduction-scènes in deze stijl:**
+
+- **Homepage hero** — centrale cobalt hex met de C-logo erin; 11 kleinere app-hexen eromheen in een rustige constellatie; dunne cobalt-lijnen verbinden centrum met apps; enkele verbindingen ook app-aan-app; één oranje hex-accent ergens subtiel
+- **Solution "WOO-compliance"** — links een fragmentarisch veld van losse, ongekleurde hex-outlines (= versnipperde informatie in silo's); een dunne-lijn-overgang naar rechts; rechts een geconsolideerd hex-cluster in cobalt (= publicatie-platform), één oranje hex bovenop (= de Woo-index harvester die binnenkomt)
+- **About-pagina hero** — hex-raster, 5 hexen ingekleurd (onze 5 kernwaardes), verbonden tot een compositie; rest van het raster in outline-only
+- **Support-pagina Standard vs Premium** — twee hex-stapels naast elkaar; Standard = 2 hexen gestapeld; Premium = 3 hexen plus een oranje accent-hex bovenop (proactief monitoring-signaal)
+- **404** — één eenzame outline-hex "zwevend" links, een geconsolideerd hex-cluster rechts. Copy: *"Lost in the grid."*
+- **Footer-achtergrond** — honeycomb-patroon van outline-hexes op 5–8% cobalt-opacity over de hele footer-breedte
+
+**AI-prompt voor Midjourney/DALL-E:**
+
+> *"Flat vector illustration, geometric composition built from hexagons and simple primitives (circles, rectangles, lines). Central large hexagon with smaller hexagons connected by thin lines forming a constellation. Cobalt blue #21468B as primary color, KNVB orange #F36C21 as accent (< 10% of surface), white background. No human figures. No gradients. No 3D. Pointy-top hexagon orientation (point at top). Clean, technical, Dutch-design feel. Style reference: honeycomb.io and supabase.com feature illustrations. --ar 16:9 --style raw"*
+
+#### Richting B — Minimal line-art characters
+
+**Bestaande sites/merken:**
+
+- [openpeeps.com](https://www.openpeeps.com) — de library zelf, met een live preview die de stijl toont
+- [icons8.com/illustrations/style--outline](https://icons8.com/illustrations/style--outline) — Icons8's outline-style pagina met honderden voorbeelden
+- [storyset.com](https://storyset.com) — filter op "Line Color" variant voor de minimalistische line-versies
+- [linear.app](https://linear.app) — soms line-art characters op landings-/feature-pagina's
+- [lobste.rs](https://lobste.rs) — illustraties in comments/posts zijn vaak minimal line-art (community-vibe)
+
+**Dribbble-tag:**
+
+- [dribbble.com/tags/open-peeps](https://dribbble.com/tags/open-peeps)
+- [dribbble.com/tags/line-illustration](https://dribbble.com/tags/line-illustration)
+
+**Concrete Conduction-scènes in deze stijl:**
+
+- **About-pagina team-portretten** — 4–8 line-art silhouetten, één per teamlid, in de bestaande cobalt hex-frames. Alleen contour zichtbaar, plus minimale facial features (twee stippen = ogen, kort boogje = mond). Eventueel één KNVB-oranje accent per portret (bril, haarlok, baard-hint) om te individualiseren.
+- **Testimonials** — klant-avatar in hex-frame naast quote; zelfde line-art-principe. "Karin, IT-manager Gemeente X" — minimal line van een hoofd en schouders, hex-frame.
+- **Support-pagina "twee paden"-illustratie** — links een line-art persoon naast een kleine gebouw-outline (Nextcloud-leverancier) met handdruk-motion; rechts een line-art persoon alleen met laptop (self-managed). Compositie toont "jij kiest je pad".
+- **Contact-pagina** — één minimal line-art figuur met hand opgestoken in welkom-gebaar, subtiele KNVB-oranje achter een gelezen tablet.
+
+**AI-prompt voor Midjourney/DALL-E:**
+
+> *"Minimal line-art illustration of a single human figure. Outline only, no fill inside the figure. Uniform thin stroke weight. Minimal facial features: two small dots for eyes, simple curve for mouth. Proportional limbs, friendly posture. Cobalt blue #21468B outline only. KNVB orange #F36C21 accent on one small object or element (glasses, a book, a badge). White background. No shading, no gradients, no 3D. Style reference: Open Peeps illustrations. --ar 1:1 --style raw"*
+
+#### Richting C — Editorial / paper-cut
+
+**Bestaande sites/merken:**
+
+- [newyorker.com](https://www.newyorker.com) — klassieke editorial cover-illustraties
+- [tomfroese.com](https://www.tomfroese.com) — portfolio van Tom Froese, groot-format geometrisch-editorial
+- [malikafavre.com](https://www.malikafavre.com) — Malika Favre, bekend om minimalistisch-editorial geometrie
+- [owendavey.com](https://www.owendavey.com) — Owen Davey, retro-editorial, veelgebruikt door redacties
+- [charliedavis.co.uk](https://www.charliedavis.co.uk) — Charlie Davis, paper-cut-achtige composities
+- Mailchimp's 2018 rebrand (Kind of Collective's werk ervoor) — heeft editorial-elementen
+
+**Dribbble:**
+
+- [dribbble.com/tags/editorial-illustration](https://dribbble.com/tags/editorial-illustration)
+- [dribbble.com/tags/paper-cut](https://dribbble.com/tags/paper-cut)
+
+**Concrete Conduction-scènes in deze stijl:**
+
+- **Homepage hero** — een gelaagde paper-cut-compositie: cobalt-achtergrond met een oranje-paper-cut "zon" erboven, daaronder drie gestapelde hex-vormen in verschillende cobalt-tinten (licht/medium/donker), elk met een subtiele drop-shadow zodat ze als losgeknipt papier voelen. Suggestie: "een ecosysteem in lagen."
+- **Solution-landing "Zaakafhandeling"** — een abstract burgemeester-bureau-scène in paper-cut: een bureau als rechthoek, gelaagde papierstapels in cobalt-tinten, één document met oranje-hoek dat eruit springt, alles met subtiele shadow-offsets.
+- **About hero** — abstracte "Nederland"-paper-cut: horizon van cobalt-heuvels, een stilistische windmolen uit papier geknipt, hex-gestalten in de lucht als wolken. Gecultiveerd, verfijnd. Geen pannekoek-Nederland-kitsch.
+- **Blog post headers** — typische editorial-illustraties (gelaagd, geometrisch, subtiel shadowed) van thema-specifieke concepten.
+
+**AI-prompt voor Midjourney/DALL-E:**
+
+> *"Editorial paper-cut illustration. Layered geometric shapes (hexagons, circles, rectangles) with subtle drop shadows creating a sense of cut paper layered on top of each other. Limited palette: cobalt blue #21468B, KNVB orange #F36C21, off-white. Subtle grain or paper texture. Composition feels curated, deliberate, sophisticated. Style reference: The New Yorker covers, Tom Froese, Malika Favre. No human figures unless as silhouettes. Flat but with depth through layering. --ar 3:2 --style raw"*
+
+#### Richting D — Riso / two-color print
+
+**Bestaande sites/merken:**
+
+- [risotto.studio](https://www.risotto.studio) — riso print studio in Edinburgh, met illustraties en prints van eigen werk + klanten
+- [riso.party](https://riso.party) — showcase van risograph-prints van kunstenaars wereldwijd
+- [peopleofprint.com](https://www.peopleofprint.com/tag/risograph/) — riso-tag van People of Print
+- [obsidian.md](https://obsidian.md) — hun illustraties hebben een riso-leunende kwaliteit (grain, twee-kleur-vibe)
+- [drawdown.org](https://drawdown.org) — subtiele riso-feel op hun klimaat-website
+- Etsy "risograph print" sellers — duizenden voorbeelden
+
+**Pinterest/Dribbble:**
+
+- [pinterest.com/search/pins/?q=risograph+illustration](https://www.pinterest.com/search/pins/?q=risograph%20illustration)
+- [dribbble.com/tags/riso](https://dribbble.com/tags/riso)
+
+**Concrete Conduction-scènes in deze stijl:**
+
+- **Homepage hero** — een twee-kleurs-scène van een hex-constellatie, cobalt als primaire inkt, oranje als secundaire met lichte misregistratie (oranje-laag staat 1–2px verschoven t.o.v. cobalt-laag), grain-textuur over het geheel die suggereert dat het geprint is op papier
+- **Solutions-sectie** — elk solution-icon als riso-tinten-composite; cobalt + oranje + off-white met subtiel gestippelde textuur
+- **Blog/pulse-illustraties** — karakters of scenes (kunnen meer expressief zijn dan in richting A) in twee-kleurs-riso-stijl; één karakter per illustratie, zonder achtergrond of met heel simpele riso-textuur achtergrond
+- **Merchandise/gifts** — riso-stijl vertaalt uitstekend naar gedrukte stickers, postkaarten, t-shirts; past bij een OSS-community-gevoel
+
+**AI-prompt voor Midjourney/DALL-E:**
+
+> *"Risograph print style illustration. Two-color print effect with cobalt blue #21468B and KNVB orange #F36C21 inks slightly misregistered (offset 1-2 pixels) creating the characteristic riso look. Subtle grain and paper texture overlay. Limited, somewhat flat and chunky shapes. White or off-white paper background. Indie, crafted, hand-printed feel. Style reference: risograph prints, Risotto Studio, zine aesthetic. --ar 16:9 --style raw"*
+
+### Hoe deze voorbeelden te gebruiken
+
+- **Bij bevestiging van richting A + B** (mijn aanrader): de honeycomb.io- en openpeeps.com-referenties zijn genoeg vertrekpunt. Prompt + 2–3 referentie-screenshots aan de illustrator of AI-tool, en eerste batch is binnen in een dag.
+- **Bij twijfel tussen richtingen**: deze lijst biedt genoeg materiaal om op een moodboard (Figma / Miro / Pinterest) te organiseren en één-op-één te vergelijken. Plaats 3–4 voorbeelden per richting naast elkaar, kijk welke het best bij de Conduction-tone en doelgroep past, kies.
+- **Als extern illustratie-team gebruikt wordt**: stuur de relevante richting's master-prompt + referenties als brief. Dat geeft ze een concreet houvast om binnen 1–2 iteraties aan te landen.
+
 ### Open vraag voor jou
 
 1. **Bevestig je richting A + B als de primair/secundair-combinatie?** Of wil je uit een van de andere richtingen kiezen?
