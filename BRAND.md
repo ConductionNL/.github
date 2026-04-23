@@ -25,10 +25,10 @@ Ons model verschuift. Historisch kwam ons werk voort uit *projecten, training en
 
 We verdienen ons brood via twee ondersteunende lagen rondom het ecosysteem:
 
-- **SLA (Service Level Agreement).** Optionele zekerheid-laag bovenop de gratis software: helpdesk-ondersteuning en proactieve begeleiding op basis van telemetry. Klanten krijgen hun SLA via twee paden — via hun eigen Nextcloud-leverancier (voor managed-Nextcloud-gebruikers, met één contract en één factuur), of rechtstreeks via een formulier in de admin-instellingen van de app zelf (voor self-managed Nextcloud). De SLA is *altijd optioneel* en blokkeert geen enkele feature.
-- **Services.** Projectmatige activiteiten: implementatie-begeleiding, training, maatwerk-ontwikkeling, advies. Voor klanten met een specifieke behoefte die méér vraagt dan zelfstandig installeren + reactieve support.
+- **Support** (technisch: een SLA-contract). Optionele zekerheid-laag bovenop de gratis software met twee componenten: helpdesk-ondersteuning (reactief) en proactieve begeleiding op basis van telemetry (wij zien problemen voordat de klant belt). Afgerekend *per app × per gebruiker × per jaar* met twee tiers (Standard en Premium). Klanten krijgen Support via twee paden — via hun eigen Nextcloud-leverancier (voor managed-Nextcloud-gebruikers, met één contract en één factuur), of rechtstreeks via een formulier in de admin-instellingen van de app zelf (voor self-managed Nextcloud). Support is *altijd optioneel* en blokkeert geen enkele feature.
+- **Services.** Projectmatige activiteiten: maatwerk-ontwikkeling, training, en implementatie-begeleiding. Afgerekend per project of op uurtarief. Voor klanten met een specifieke behoefte die méér vraagt dan zelfstandig installeren + doorlopende Support.
 
-Beide zijn **secundair**, niet leading. Alle merkcommunicatie (website, drukwerk, presentaties) leidt met de apps en het ecosysteem; SLA en Services worden discreet vermeld voor wie er specifiek naar zoekt — nooit als verplichte funnel of upgrade-druk.
+Beide zijn **secundair**, niet leading. In klant-communicatie gebruiken we het woord **"Support"** in plaats van "SLA" — Support is toegankelijker en is wat klanten zoeken; SLA is de technische term voor het onderliggende contract. Alle merkcommunicatie (website, drukwerk, presentaties) leidt met de apps en het ecosysteem; Support en Services worden eerlijk en transparant uitgelegd waar relevant, maar nooit als verplichte funnel of upgrade-druk.
 
 ## Voor wie we bouwen
 

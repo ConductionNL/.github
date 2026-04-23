@@ -19,8 +19,8 @@
 - [`website/solution-woo.md`](./website/solution-woo.md) — volledige WOO-solution-pagina als template voor andere solutions
 - [`website/tone-samples.md`](./website/tone-samples.md) — NL tone-calibratie met drie registers en rewrite-recepten
 - [`website/icon-library.md`](./website/icon-library.md) — iconen-bibliotheek-keuze (aanbevolen: Lucide)
-- [`website/platform-benchmarks.md`](./website/platform-benchmarks.md) — uitgebreide deep-dive-analyse van Odoo en WooCommerce als app-platform-referenties; concrete IA-/layout-/CTA-patronen om over te nemen, aan te passen, of bewust níet over te nemen gegeven ons gratis + optionele-SLA-model
-- [`website/sla-model.md`](./website/sla-model.md) — het Conduction SLA-model: twee paden (via Nextcloud-leverancier of rechtstreeks via app-admin-formulier), wat er concreet in de SLA zit (helpdesk + proactieve telemetry-ondersteuning), en wat dat betekent voor de SLA-pagina-structuur
+- [`website/platform-benchmarks.md`](./website/platform-benchmarks.md) — uitgebreide deep-dive-analyse van Odoo, WooCommerce en Nextcloud als app-platform-referenties; concrete IA-/layout-/CTA-patronen om over te nemen, aan te passen, of bewust níet over te nemen gegeven ons gratis + optionele-Support-model. Bevat ook Nextcloud's exacte pricing-structuur (€71–205/user/jaar, tiers Standard/Premium/Ultimate, 100-user-minimum) als benchmark voor onze eigen pricing-tabel.
+- [`website/support-model.md`](./website/support-model.md) — het Conduction Support-model: twee paden (via Nextcloud-leverancier of rechtstreeks via app-admin-formulier), wat er concreet in Support zit (helpdesk + proactieve telemetry-ondersteuning), pricing-structuur (per app × per user × per jaar × 2 tiers Standard/Premium) en wat dat betekent voor de Support-pagina-structuur. *Pricing-waarden in de tabel zijn placeholders en moeten door Conduction-leiding bevestigd worden.*
 
 **Deze brief beschrijft alleen het website-specifieke.** Alles wat Conduction-wide geldt (wie we zijn, hoe we eruitzien, welke woorden we gebruiken) staat in de foundation-documenten. Als iets uit deze brief toch company-wide blijkt, lift het terug naar BRAND.md of DESIGN.md.
 
@@ -85,12 +85,12 @@ De site heeft één primaire taak: **installeer een app vanuit de Nextcloud app 
 | 2 | **Try the demo** (indien beschikbaar) | App-pagina's |
 | 3 | **Read the docs** (→ docs.conduction.nl) | App-pagina's, footer |
 | 4 | **View on GitHub** | App-pagina's, footer |
-| 5 | **Learn about the SLA** (discreet) | Footer, één homepage-strip |
+| 5 | **View Support tiers & pricing** | Hoofdnavigatie (Support-link), één homepage-strip |
 | 6 | **Contact us** (discreet) | Footer |
 
-**Regel:** CTA 1 is op elke app/solution-pagina zichtbaar zonder te scrollen. Andere CTA's mogen verderop. Contact en SLA-leren staan in de footer, niet in de hoofdnavigatie. **Géén** add-to-cart-achtige UI, **géén** urgency-tactics, **géén** pricing-pagina in de hoofdnav.
+**Regel:** CTA 1 is op elke app/solution-pagina zichtbaar zonder te scrollen. Andere CTA's mogen verderop. Contact staat in de footer. **Géén** add-to-cart-achtige UI, **géén** urgency-tactics ("limited time offer", "last chance"), **géén** exit-intent-popups, **géén** sticky CTA-bars met upgrade-messaging.
 
-**SLA is géén conversiepunt op de website.** Het aanvragen van een SLA gebeurt buiten onze site — óf via de Nextcloud-leverancier van de klant (pad 1), óf via een formulier in de admin-instellingen van de geïnstalleerde app zelf (pad 2). Onze site *legt uit* dat de SLA bestaat en hoe je 'm krijgt, maar bevat geen shopping-cart. Zie [`website/sla-model.md`](./website/sla-model.md) voor de volledige uitleg.
+**Support is géén conversiepunt op de website.** Het aanvragen van Support gebeurt buiten onze site — óf via de Nextcloud-leverancier van de klant (pad 1), óf via een formulier in de admin-instellingen van de geïnstalleerde app zelf (pad 2). Onze Support-pagina (`/support` in de hoofdnav) *legt uit* wat Support is, toont pricing-tiers, en stuurt door naar de juiste aanvraagroute — maar bevat geen shopping-cart. Zie [`website/support-model.md`](./website/support-model.md) voor de volledige uitleg inclusief pricing-structuur.
 
 ## 5. Information Architecture
 
@@ -98,15 +98,17 @@ De site heeft één primaire taak: **installeer een app vanuit de Nextcloud app 
 
 1. **Apps** — de app-catalogus
 2. **Solutions** — probleem-georiënteerde landingspagina's (WOO, registers, zaakafhandeling, ...)
-3. **About** — wie we zijn, waardes, team
-4. **Docs** (extern, → docs.conduction.nl)
-5. **GitHub** (extern, → github.com/ConductionNL)
-6. *(taalwisselaar NL/EN)*
+3. **Support** — uitleg van Support-tiers + pricing-tabel (alléén voor Support, software is gratis)
+4. **About** — wie we zijn, waardes, team
+5. **Docs** (extern, → docs.conduction.nl)
+6. **GitHub** (extern, → github.com/ConductionNL)
+7. *(taalwisselaar NL/EN)*
+
+**Opmerking over Support in hoofdnav:** eerder aangemerkt als "alleen footer" om upgrade-druk te vermijden. Herzien: Support mag in de hoofdnav omdat bezoekers die prijzen willen weten niet naar de footer moeten zoeken. De mitigatie zit in de pagina-content zelf (prominente disclaimer dat software gratis is en Support optioneel). Alternatief nav-label "Pricing" is ook acceptabel; voor nu gekozen "Support" als inhoudelijk accurater. Zie [`website/support-model.md`](./website/support-model.md).
 
 ### Footer
 
-- SLA (pagina, niet in hoofdnavigatie) — "Meer zekerheid nodig? Zo werkt onze SLA."
-- Services (pagina, niet in hoofdnavigatie) — implementatie, training, maatwerk
+- Services (pagina, niet in hoofdnavigatie) — maatwerk-ontwikkeling, training, implementatie-begeleiding
 - Contact
 - Privacy / Legal
 - GitHub, LinkedIn, andere social
@@ -120,9 +122,9 @@ De site heeft één primaire taak: **installeer een app vanuit de Nextcloud app 
 /apps/{app-slug}                         app-detail
 /solutions                               solution-catalogus
 /solutions/{solution-slug}               solution-landing
+/support                                 Support-pagina in hoofdnav — tiers, pricing-tabel, twee aanvraagpaden
 /about                                   wie we zijn
-/sla                                     (discreet; niet in hoofdmenu) — SLA uitleg + twee aanvraagpaden
-/services                                (discreet; niet in hoofdmenu) — implementatie, training, maatwerk
+/services                                (discreet; niet in hoofdmenu) — maatwerk-dev, training, implementatie-begeleiding
 /contact                                 contactformulier
 /404                                     fallback
 
@@ -204,31 +206,33 @@ Structuur:
 - Roadmap-link (indien publiek)
 - Contact-CTA
 
-### 6.7 SLA (`/sla`)
+### 6.7 Support (`/support`)
 
-**Job:** voor wie meer zekerheid wil dan "installeer en draai zelf". Niet in hoofdmenu, wel in footer, wel indexeerbaar. Geen bestelformulier — wel een heldere uitleg van de twee paden waarop je een SLA kunt krijgen (via je Nextcloud-leverancier of rechtstreeks via het formulier in de app-admin-instellingen).
+**Job:** voor wie meer zekerheid wil dan "installeer en draai zelf". **In de hoofdnavigatie**, inclusief pricing-tabel. Geen bestelformulier op de pagina — wel een heldere uitleg van de twee paden waarop je Support kunt krijgen (via je Nextcloud-leverancier of rechtstreeks via het formulier in de app-admin-instellingen).
 
-Volledige structuur (7 secties) en inhoudelijke invulling: zie [`website/sla-model.md`](./website/sla-model.md). Kort:
+Volledige structuur (6 secties) en pricing-structuur: zie [`website/support-model.md`](./website/support-model.md). Kort:
 
-- Wat is onze SLA? (hero, korte uitleg)
-- Wat zit erin? (helpdesk + proactieve telemetry-ondersteuning)
-- Hoe vraag ik 'm aan? (pad 1 via leverancier, pad 2 via app-admin-formulier)
-- Voorwaarden (hoog-over)
-- Kosten (geen prijslijst — "neem contact op voor een offerte")
-- FAQ (6–8 vragen)
-- Contact-CTA (discreet)
+1. Hero — *"Onze apps zijn altijd gratis. Support is optioneel."*
+2. Wat zit in Support? (helpdesk-ondersteuning + proactieve telemetry-monitoring)
+3. Pricing-tabel (per app × per user × per jaar × 2 tiers Standard/Premium) mét prominente disclaimer *"Software is en blijft gratis. Onderstaande prijzen gelden alléén voor Support."*
+4. Hoe vraag ik Support aan? (pad 1 via leverancier, pad 2 via app-admin-formulier — twee routes zij-aan-zij)
+5. FAQ (6–8 vragen)
+6. Contact-CTA (discreet)
 
 ### 6.8 Services (`/services`)
 
-**Job:** voor wie specifiek naar implementatie-hulp, training of maatwerk zoekt. Niet in hoofdmenu, wel in footer. Onderscheid met SLA: SLA is doorlopende support op geïnstalleerde apps; Services zijn projectmatige activiteiten (implementatie-traject, training-sessie, maatwerk-ontwikkeling).
+**Job:** voor wie specifiek **maatwerk-ontwikkeling** of **training** zoekt. Niet in hoofdmenu, wel in footer. Onderscheid met Support: Support is doorlopende ondersteuning op geïnstalleerde apps (abonnement); Services zijn projectmatige activiteiten (één-op-één opdracht, projectprijs of uurtarief).
 
 Structuur:
 
-- "Het ecosysteem staat centraal, maar we helpen je graag ook met implementatie, training of maatwerk"
-- Services: implementatie-ondersteuning, training, maatwerkadvies, integratie-projecten
+- "Het ecosysteem staat centraal, maar we helpen je graag ook met maatwerk of training"
+- Services-scope:
+  - **Maatwerk-ontwikkeling** — klant-specifieke features, custom integraties, eigen apps bovenop OpenRegister
+  - **Training** — opleidingssessies voor implementatie-teams, admin-trainingen, eindgebruikers-sessies
+  - **Implementatie-begeleiding** (indien nodig) — eenmalige hulp bij opzet van de app-stack
 - Voor welke doelgroep (voornamelijk overheid, maar open voor MKB)
 - Contact-formulier of -CTA
-- Link naar SLA-pagina als "Ook op zoek naar doorlopende support? Bekijk de SLA."
+- Link naar Support-pagina: *"Ook op zoek naar doorlopende ondersteuning? Bekijk onze Support-tiers."*
 
 ### 6.9 Contact (`/contact`)
 
@@ -477,8 +481,9 @@ Dit wordt bevestigd in een aparte session voordat solution-pagina's ontworpen wo
 Deze noteren we maar lossen we niet nu op:
 
 - **Apps-catalogus via OpenCatalogi (eat-our-own-dog-food)** — wij hebben een product dat federated data-catalogi publiceert (OpenCatalogi). De apps-catalogus op www.conduction.nl is per definitie zo'n catalogus. Overwegen: bouwen we de `/apps`-pagina als een OpenCatalogi-deployment (publiceer-vanuit-de-bron), waarbij de website zelf een live-demo is van wat OpenCatalogi doet? Voordeel: authenticiteit, demonstratie, Common Ground-congruentie. Nadeel: meer architectuur-complexiteit, koppelt website-uptime aan OpenCatalogi-runtime. **Besluit voor later** — eerst HTML+CSS-mock van de catalogus, dan bekijken of OpenCatalogi-rendering haalbaar en wenselijk is voor de implementatie-fase.
-- **SLA in-app-formulier UX** — voor pad 2 (self-managed Nextcloud) zit het SLA-aanvraag-formulier in de admin-instellingen van elke Conduction-app. Dat is niet deze brief, maar vraagt om een aparte app-UI-brief met template en velden. Koppeling met ons CRM (PipelinQ?) ook openstaand.
-- **Nextcloud-leveranciers-lijst** — welke leveranciers ondersteunen pad 1 van onze SLA? Nog op te stellen. Relevant voor de SLA-pagina.
+- **Support in-app-formulier UX** — voor pad 2 (self-managed Nextcloud) zit het Support-aanvraag-formulier in de admin-instellingen van elke Conduction-app. Dat is niet deze brief, maar vraagt om een aparte app-UI-brief met template en velden. Koppeling met ons CRM (PipelinQ?) ook openstaand.
+- **Nextcloud-leveranciers-lijst** — welke leveranciers ondersteunen pad 1 van onze Support? Nog op te stellen. Relevant voor de Support-pagina.
+- **Daadwerkelijke pricing-waardes** — de pricing-tabel in [`website/support-model.md`](./website/support-model.md) heeft placeholders (€TBD). Conduction-leiding moet reële bedragen vaststellen, bij voorkeur gebenchmarked tegen Nextcloud Enterprise (€71–205/user/jaar) en onze cost-to-serve per app.
 - **Nextcloud app store koppeling** — directe deeplinks per app, of een embed-widget? Hangt af van wat de Nextcloud app store ondersteunt.
 - **Demo-omgeving** — self-hosted op `demo.conduction.nl` met reset-na-24u, of gewoon screenshot-first en doorverwijzing naar docs?
 - **Customer stories** — welke klanten mogen we noemen, per wanneer, met welke content?

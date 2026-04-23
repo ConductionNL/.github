@@ -1,6 +1,8 @@
-# Platform benchmarks — Odoo & WooCommerce
+# Platform benchmarks — Odoo, WooCommerce & Nextcloud
 
-Uitgebreide analyse van twee volwassen app-/extensie-platforms: **Odoo** (odoo.com, ERP-ecosystem met 30.000+ apps) en **WooCommerce** (woocommerce.com, e-commerce-plugin voor WordPress met een extensie-marketplace). Allebei open-source-cores met een uitgebreide catalogus. Allebei benadrukken *catalog-discovery* en *install-flow* op een manier die voor ons relevant is.
+Uitgebreide analyse van drie volwassen app-/extensie-platforms: **Odoo** (odoo.com, ERP-ecosystem met 30.000+ apps), **WooCommerce** (woocommerce.com, e-commerce-plugin voor WordPress met een extensie-marketplace), en **Nextcloud** (nextcloud.com — het moeder-platform waarop onze apps draaien en dat structureel het dichtst bij ons model zit: free core + paid support).
+
+Alle drie: open-source-cores met een uitgebreide catalogus, en duidelijke discovery-/install-flows die voor ons relevant zijn. Nextcloud is tegelijk onze **directe benchmark voor het verdienmodel** (vrije software + betaald support/SLA-abonnement) én onze **host-ecosystem** (we zitten erin).
 
 ## Context — ons model vs het hunne
 
@@ -10,14 +12,14 @@ Voordat we patronen overnemen: hun business-model is fundamenteel anders dan het
 |---|---|---|---|
 | Core-prijs | **Gratis** (altijd) | Community Edition gratis; Enterprise betaald (per user/mo) | Core-plugin gratis |
 | App/extensie-prijs | **Gratis** (altijd) | Community apps gratis; Enterprise apps achter paywall; 3rd-party apps betaald of gratis | Meeste extensies betaald (abonnement of one-time) |
-| Support-model | **Optionele SLA** tegen betaling (zekerheid + support) | SLA gekoppeld aan Enterprise-abonnement | Individuele extensie-vendors leveren support |
+| Support-model | **Optioneel Support-abonnement** (technisch: SLA) tegen betaling | SLA gekoppeld aan Enterprise-abonnement | Individuele extensie-vendors leveren support |
 | "Add to cart"-flow nodig? | Nee — install via Nextcloud app store | Ja — trial/buy flow | Ja — e-commerce |
 | User accounts op de site nodig? | Nee — alles public | Ja voor trial + portal | Ja voor aankopen + downloads |
 | Partner-directory? | Optioneel later | Ja, uitgebreid ("Find a partner") | Ja ("Agency directory") |
 
 **Implicatie:** we nemen structurele patronen over (IA, catalogus-UX, detail-pagina-template, filter-systemen) maar **niet** commerciële mechanica (cart, checkout, subscription-management, in-site-accounts). Onze "conversie" is niet een aankoop — het is een klik naar de Nextcloud app store. Dat maakt onze site *eenvoudiger* dan die van hen.
 
-**Bijkomstige implicatie:** waar zij hun "free core" als **acquisition-funnel** gebruiken (gratis om je te laten upgraden), is bij ons de "free" niet een trechter maar de **eindstaat**. Dat geeft ons de vrijheid om de commerciële druk weg te laten — geen "Talk to sales"-CTA's op elke pagina, geen urgency-gedrag, geen "Upgrade"-toasts. Onze SLA-boodschap mag bescheiden in de footer of op een discrete "Services"-achtige pagina.
+**Bijkomstige implicatie:** waar zij hun "free core" als **acquisition-funnel** gebruiken (gratis om je te laten upgraden), is bij ons de "free" niet een trechter maar de **eindstaat**. Dat geeft ons de vrijheid om de commerciële druk weg te laten — geen "Talk to sales"-CTA's op elke pagina, geen urgency-gedrag, geen "Upgrade"-toasts. De Support-pagina mag gewoon in de hoofdnav staan zolang de pagina-content zelf duidelijk maakt dat het optioneel is en de software altijd gratis blijft.
 
 ---
 
@@ -70,7 +72,7 @@ De homepage is een scroll-marathon met ruwweg 8–12 secties in vaste volgorde:
 
 - **Demo-CTA strip** (sectie 5) — Odoo pusht "try with your data". Bij ons is de equivalente stap "install from app store" en dat kan gewoon op de app-pagina zelf, niet als aparte hero-strip.
 - **Testimonial-logo-wall** (sectie 6) — goed patroon op zich, maar vraagt klantlogo-toestemming die we nog niet hebben. Voor nu een placeholder of plaatsen in een "proof"-sectie later.
-- **Pricing-teaser** (sectie 7) — wij hebben geen prijs per app. Wat wij hier zouden kunnen zetten is een **SLA-teaser**: "Alles gratis. Zelfstandig genoeg? Perfect. Meer zekerheid nodig? Kies een SLA." Dat draait de conversatie om — géén prijs-wall, maar optionele bovenlaag.
+- **Pricing-teaser** (sectie 7) — wij hebben geen prijs per app voor de software zelf. Wat wij hier zouden kunnen zetten is een **Support-teaser**: *"Alles gratis. Zelfstandig genoeg? Perfect. Meer zekerheid nodig? Bekijk onze Support-tiers."* Dat draait de conversatie om — géén prijs-wall, maar optionele bovenlaag.
 
 ### Apps-catalogus (apps.odoo.com en /apps)
 
@@ -145,13 +147,14 @@ Twee kolommen zij-aan-zij. Vinkjes per kolom per feature. Enterprise staat recht
 
 **Wat wij hieruit meenemen:**
 
-Ons model is géén feature-gated-split. Alle features van alle apps zijn altijd open source en gratis. Maar wij hebben wél een optionele SLA-laag. Dat kunnen we visueel op een soortgelijke manier presenteren *als we dat willen*:
+Ons model is géén feature-gated-split. Alle features van alle apps zijn altijd open source en gratis. Maar wij hebben wél een optionele Support-laag met twee tiers (Standard en Premium, zie [`support-model.md`](./support-model.md)). Die kunnen we visueel op een soortgelijke manier presenteren als Nextcloud's tier-kolommen:
 
-Twee kolommen:
-- **"Self-hosted"** (gratis, altijd) — de default, links
-- **"Conduction SLA"** (betaald, optioneel) — de premium-optie met support-SLA, uptime-garantie, snellere bug-fix-prioriteit, implementatie-hulp, rechts
+Drie kolommen:
+- **"Self-hosted"** (gratis, altijd) — geen Support-abonnement, de default
+- **"Support Standard"** (betaald, optioneel) — helpdesk + proactieve rapporten
+- **"Support Premium"** (betaald, optioneel) — helpdesk + proactieve alerts + upgrade-begeleiding
 
-Beide kolommen moeten **alle features** tonen (want ze zijn echt hetzelfde product). Het verschil zit in support, SLA, uptime, prioriteit. Niet in functionaliteit.
+Alle drie kolommen tonen **dezelfde software-features** (want de software is identiek). Het verschil zit uitsluitend in *support-response-tijden, proactieve monitoring, en upgrade-assistentie*. Niet in functionaliteit van de apps.
 
 **Kritisch verschil:** bij Odoo lees je op de feature-pagina's subtiel "alleen in Enterprise". Bij ons mag dat nooit voorkomen — dat zou ons model tegenspreken. Elke app-feature moet *onvoorwaardelijk* beschikbaar zijn.
 
@@ -175,7 +178,7 @@ Dit is hun implementatie-net, niet een vervanger voor Enterprise maar een aanvul
 | 3 | Multi-facet filter op apps-catalogus | Ja — categorie × status × Nextcloud-versie × NLDS-compliance |
 | 4 | Detail-pagina met sticky intra-page-nav | Ja voor app-detail, alternerende feature-blokken |
 | 5 | Alternerend tekst/beeld in feature-secties | Ja |
-| 6 | Community/Enterprise-kolom-vergelijking op pricing | **Aangepast: Self-host/SLA-kolom** met dezelfde features-lijst voor beide |
+| 6 | Community/Enterprise-kolom-vergelijking op pricing | **Aangepast: Self-host / Support Standard / Support Premium** met dezelfde software-features-lijst voor alle kolommen; verschil alleen in support-response-tijd en proactieve monitoring |
 | 7 | Integration-strip op app-pagina | Ja — andere Conduction-apps als logo-strip |
 | 8 | Footer met 6–8 kolommen | Ja, maar compacter (4–5 kolommen lijkt ons voldoende) |
 
@@ -327,7 +330,75 @@ WooCommerce heeft een "WooExperts"-programma — geverifieerde agencies en freel
 
 ---
 
-## Odoo + WooCommerce vs Conduction — synthese
+## Nextcloud — derde benchmark (free core + paid support)
+
+### Platform-context
+
+Nextcloud is waar onze apps in draaien, en structureel de benchmark die het dichtst bij ons model staat: **core is gratis en open source, support wordt verkocht als abonnement**. De app-store (apps.nextcloud.com) is volledig gratis; hun omzet komt uit Enterprise-subscriptions met SLA-support.
+
+Dat maakt Nextcloud specifiek relevant voor onze Support-pagina en pricing-structuur. Voor de app-catalogus-UX is Nextcloud's app store (apps.nextcloud.com) óók leerzaam — dat is de plek waar onze apps feitelijk gedownload worden.
+
+### Nextcloud's pricing-structuur (exact, per `/pricing` op nextcloud.com)
+
+Nextcloud rekent **per user per jaar** met drie tiers en een **100-user-minimum** (met volume-korting vanaf 200):
+
+| Tier | Files-subscription | Talk-subscription | Minimum | Inclusief |
+|---|---|---|---|---|
+| **Standard** | €71,29/user/year (100 users)<br>€53,17/user/year (200+ users) | €42/user/year (100 users)<br>€31,50/user/year (250+ users) | 100 users | File sync & share, enterprise-capabilities, portal + email support (business hours), 2 werkdagen responstijd, 1-jaar maintenance-lifecycle |
+| **Premium** | €104,99/user/year (100)<br>€81,99/user/year (200+) | — | 100 users | Alles van Standard + extended support, clustered instances, 5+ jaar maintenance, 1 werkdag responstijd, extended business hours email |
+| **Ultimate** | €204,75/user/year (100)<br>€183,75/user/year (200+) | — | 100 users | Alles van Premium + Nextcloud Assistant, Flow, Whiteboard, SIP-bridge, MS-integraties, advanced apps, 1-24/7 telefoon-support |
+
+Alle prijzen **ex. BTW**, jaarlijkse contracten, volume-korting vanaf 200 users, "contact us for quotes" voor grotere organisaties. Add-ons (Talk, Groupware, Office) apart verkrijgbaar.
+
+### Structurele observaties voor ons
+
+**Wat Nextcloud goed doet en we overnemen:**
+
+- **Per user × per jaar** als billing-eenheid — standaard in deze markt, makkelijk te begrijpen, past bij software-as-subscription-verwachtingen.
+- **Tiers met escalerende responstijden** — Standard 2 werkdagen → Premium 1 werkdag → Ultimate 24/7. Duidelijke ladder, elke klant vindt z'n plek.
+- **Volume-korting** via user-count-tranches (100 vs 200+). Rechtvaardigt hogere prijs bij lage aantallen (kosten om te serveren is relatief hoog bij kleine klanten) en beloont grotere deployments.
+- **"Contact us" voor Ultimate/custom** — hoog-volume en maatwerk onttrekken zich aan de prijslijst.
+- **Transparante prijzen op de site** — geen "call sales to get a quote" voor de standaardtiers. Dat vertrouwen geven wij ook.
+- **Comparison-tabel met drie kolommen** als visuele structuur — werkt goed voor "kies jouw tier"-keuze.
+
+**Waar wij structureel afwijken:**
+
+| | Nextcloud | Conduction |
+|---|---|---|
+| **Wat wordt verkocht?** | Software + support, gebundeld | Alléén support — software is en blijft gratis |
+| **Minimum user-count** | 100 users | 10 users (Standard), 25 users (Premium) — MKB-toegankelijker |
+| **Aantal tiers** | 3 (Standard/Premium/Ultimate) | 2 (Standard/Premium) — eenvoudiger |
+| **Per app of per stack?** | Per stack (Files-subscription dekt alle apps) | Per app — kies welke apps je onder Support wilt |
+| **Bundel-korting** | Impliciet (tiers dekken alles) | Expliciet (20% bij 3+ apps) — beloont ecosystem-adoptie |
+| **"Software is gratis"-framing** | Impliciet (community edition bestaat) | Expliciet (headline op pricing-pagina) |
+
+De kern-framing-verschil: bij Nextcloud koop je een abonnement dat *toegang* geeft tot enterprise-features én support. Bij ons koop je alleen support; toegang tot alles is altijd gratis. Dat moet prominent en eerlijk gecommuniceerd op onze Support-pagina.
+
+### Nextcloud's pricing-pagina als visueel referentiepunt
+
+- **3-kolommen-layout** met tier-vergelijking (Standard / Premium / Ultimate)
+- **Prijs vet boven**, per-user-year-notatie consistent
+- **Features-lijst per kolom** met vinkjes/bullets; expliciet welke features bij welke tier
+- **"Most popular"-badge** op Premium (middelste kolom)
+- **"Contact us" CTA's** op pricing-tiers voor >200 users
+- **Toggle** tussen annual / monthly billing (waar van toepassing)
+
+Wij lenen het 2-kolommen-patroon (Standard/Premium) + prijs-vet-boven + features-per-kolom. Toegevoegd: een 3e dimensie voor **app-keuze** (tabel in plaats van drie kolommen, of toggle per app-categorie — zie [`support-model.md`](./support-model.md)).
+
+### Nextcloud's app store (apps.nextcloud.com)
+
+Dit is waar onze apps daadwerkelijk gedownload worden. Structuur van apps.nextcloud.com is vrij simpel:
+
+- Hoofdnav: categorieën (Files, Productivity, Tools, Social, Multimedia, Games, etc.)
+- Grid met app-kaarten: icoon, naam, publisher, rating, korte tagline
+- App-detail-pagina: hero + description + screenshots + version-history + ratings + comments + install-instructions
+- Zoek + filter op compatibiliteit met Nextcloud-versie
+
+**Voor ons relevant:** onze apps zullen hier verschijnen. De "Install from Nextcloud app store"-CTA op onze eigen site linkt naar een van deze detail-pagina's. Consistentie tussen onze site en de Nextcloud-app-store-pagina (logo, tagline, screenshots) is een UX-goed: de bezoeker herkent de app van onze site terug op de app-store-pagina.
+
+**Actie-item voor de roll-out:** zorg dat onze Nextcloud-app-store-entries dezelfde tagline, korte beschrijving en screenshots gebruiken als de app-detail-pagina op www.conduction.nl. Gedefinieerd in [`app-taglines.md`](./app-taglines.md).
+
+## Odoo + WooCommerce + Nextcloud vs Conduction — synthese
 
 Beide platforms delen, ondanks hun verschillen, een paar kernpatronen:
 
@@ -347,7 +418,7 @@ Deze **zeven patronen nemen we één-op-één over**, met aanpassingen voor onze
 |---|---|---|
 | Primaire conversie | Trial / aankoop / abonnement | Klik naar Nextcloud app store |
 | Account-concept | Inlog + portal noodzakelijk | Geen; alles public |
-| Pricing-pagina | Centraal element van het verhaal | Vervangen door discrete SLA-pagina |
+| Pricing-pagina | Centraal element van het verhaal, prijzen voor software + support bundled | Pricing-pagina bestaat (als Support-pagina) in hoofdnav, maar prijzen zijn uitsluitend voor optionele Support — software blijft gratis |
 | "Try it free"-CTA | Prominent, overal | Niet aanwezig; installatie is de trial |
 | Upgrade-druk | Structureel (Enterprise / Paid) | Nul; ons model sluit het uit |
 | Commerciële mechaniek | Volledig (cart / checkout / billing) | Afwezig |
@@ -383,7 +454,7 @@ Deze reframing is niet alleen taalkundig. Ze bepaalt **hoe elke pagina eindigt**
 - Geen pricing page in de hoofdnav (er is geen prijs)
 - Secundaire CTA's zijn óf "Read docs", óf "View on GitHub" — altijd informatief, nooit commercieel
 
-## Hoe ons gratis + SLA-model de site fundamenteel anders maakt
+## Hoe ons gratis + Support-model de site fundamenteel anders maakt
 
 ### Odoo's feature-gating-model
 
@@ -393,18 +464,18 @@ Odoo **gebruikt** de Community-vs-Enterprise-split actief op bijna elke product-
 
 WooCommerce is opener: core is gratis, extensies zijn grotendeels betaald. Elke extensie heeft een prijs. De marketplace is onmiskenbaar een commerciële plek.
 
-### Ons model: altijd-gratis-software met optionele SLA via twee paden
+### Ons model: altijd-gratis-software met optioneel Support via twee paden
 
 Ons verhaal is eenvoudiger *én* unieker. **Elke app, elke feature, altijd gratis, altijd open source.** Geen feature-gate, geen access-voorwaarde.
 
-De **SLA** is een zekerheid-laag die op *twee* manieren verkrijgbaar is — een voor onze markt kenmerkend model dat we op de site expliciet moeten uitleggen:
+**Support** (technisch: een SLA-contract) is een zekerheid-laag die op *twee* manieren verkrijgbaar is — een voor onze markt kenmerkend model dat we op de site expliciet moeten uitleggen:
 
 - **Pad 1:** via een (officiële) Nextcloud-leverancier die de klant al heeft. Eén contract, één factuur, één aanspreekpartij — wij verrekenen achter de schermen via Nextcloud.
 - **Pad 2:** rechtstreeks met ons, via een formulier in de admin-instellingen van de app zelf. Voor self-managed Nextcloud-omgevingen.
 
-Volledige uitleg in [`sla-model.md`](./sla-model.md).
+Volledige uitleg, pricing-tiers en pricing-tabel-structuur in [`support-model.md`](./support-model.md).
 
-**Inhoud van de SLA (beide paden, zelfde inhoud):**
+**Inhoud van Support (beide paden, zelfde inhoud):**
 
 - Helpdesk-ondersteuning (reactief, contractuele responstijden)
 - Proactieve ondersteuning op basis van telemetry (wij zien problemen voordat de klant erover belt, en waarschuwen actief)
@@ -412,34 +483,32 @@ Volledige uitleg in [`sla-model.md`](./sla-model.md).
 Concreet wat dit betekent voor de site:
 
 1. **Geen "Enterprise-only" of "Pro-only"-badges** ergens op een app- of solution-pagina. Alles wat je ziet is beschikbaar voor iedereen.
-2. **Pricing-pagina vervangen door SLA-pagina.** Niet "hoeveel kost het om de software te gebruiken" maar "hoeveel kost het om er zekerheid op te hebben". Heel ander gesprek.
-3. **SLA-pagina is informatief, geen bestelformulier.** Het bestelproces zit *niet* op onze site: pad 1 regelt de klant bij z'n eigen Nextcloud-leverancier, pad 2 via het formulier in de app-admin-instellingen. Onze site legt de twee paden uit en stuurt door — geen shopping-cart.
-4. **SLA-teaser discreet, niet centraal.** "SLA" staat in de footer, plus één strip op de homepage. Geen sticky CTA, geen hoofdnav-item.
-5. **Hero-tone is uitnodigend, niet sellend.** *"Installeer OpenCatalogi in 2 minuten"* werkt bij ons; *"Start your free trial"* niet (niets is een trial; het is gewoon de software).
-6. **"Contact us" is niet de conversie.** Bij Odoo/Woo belandt elke doodlopende flow vaak op een contact-sales-formulier. Bij ons is "Contact us" een laatste-redmiddel, niet een funnel-doel. De conversie is *installeren*.
-7. **Proof is gebruik, niet omzet.** Bij Odoo: "7 million users, 200 countries". Bij ons gebruik-georiënteerd: aantal installaties, aantal gemeenten, aantal forks op GitHub. Niet "omzet" of "klant-tevredenheid in sterren".
+2. **Support-pagina mét volledige pricing, in de hoofdnavigatie.** Bezoekers die kosten willen weten moeten niet via een footer-link hoeven zoeken. De mitigatie zit in de pagina-content zelf: prominent *"Software is en blijft gratis. Onderstaande prijzen gelden alléén voor het Support-abonnement (facultatief)."*
+3. **Support-pagina is informatief met pricing-tabel, maar géén bestelformulier.** Het bestelproces zit *niet* op onze site: pad 1 regelt de klant bij z'n eigen Nextcloud-leverancier, pad 2 via het formulier in de admin-instellingen van de geïnstalleerde app zelf. Onze site legt de twee paden uit en stuurt door — geen shopping-cart.
+4. **Hero-tone is uitnodigend, niet sellend.** *"Installeer OpenCatalogi in 2 minuten"* werkt bij ons; *"Start your free trial"* niet (niets is een trial; het is gewoon de software).
+5. **"Contact us" is niet de conversie.** Bij Odoo/Woo belandt elke doodlopende flow vaak op een contact-sales-formulier. Bij ons is "Contact us" een laatste-redmiddel, niet een funnel-doel. De conversie is *installeren*.
+6. **Proof is gebruik, niet omzet.** Bij Odoo: "7 million users, 200 countries". Bij ons gebruik-georiënteerd: aantal installaties, aantal gemeenten, aantal forks op GitHub. Niet "omzet" of "klant-tevredenheid in sterren".
 
-### Hoe de SLA te positioneren in copy
+### Hoe Support te positioneren in copy
 
 Niet als upsell. Als **bijproduct** van het open-source-verhaal. Ruwweg dit:
 
-> *"Onze apps zijn altijd gratis. Je installeert ze uit de Nextcloud app store, je draait ze, je beheert ze. Klaar. Wil je meer zekerheid — helpdesk, proactieve monitoring, iemand die meekijkt bij problemen — dan hebben we een SLA. Je regelt die bij je Nextcloud-leverancier als je er een hebt; anders rechtstreeks met ons via de admin-instellingen in de app. Dat is hoe wij ons brood verdienen: niet door de software achter een paywall te zetten, maar door gemoedsrust te bieden voor wie dat nodig heeft."*
+> *"Onze apps zijn altijd gratis. Je installeert ze uit de Nextcloud app store, je draait ze, je beheert ze. Klaar. Wil je meer zekerheid — helpdesk, proactieve monitoring, iemand die meekijkt bij problemen — dan hebben we Support. Je regelt het bij je Nextcloud-leverancier als je er een hebt; anders rechtstreeks met ons via de admin-instellingen in de app. Dat is hoe wij ons brood verdienen: niet door de software achter een paywall te zetten, maar door gemoedsrust te bieden voor wie dat nodig heeft."*
 
 Dit is eerlijk, niet-bedreigend, legt het verdienmodel uit, erkent dat het een keuze is, en respecteert de intelligentie van de bezoeker.
 
-### SLA-pagina-structuur (samenvatting)
+### Support-pagina-structuur (samenvatting)
 
-Zeven secties, in deze volgorde:
+Zes secties, in deze volgorde:
 
-1. Wat is onze SLA? (korte hero-uitleg)
-2. Wat zit erin? (helpdesk + proactieve telemetry-ondersteuning)
-3. Hoe vraag ik een SLA aan? (twee paden expliciet naast elkaar)
-4. Wat zijn de voorwaarden? (hoog-over; contract-details niet op deze pagina)
-5. Wat zijn de kosten? (niet op de pagina — "neem contact op voor een offerte")
-6. FAQ (6–8 vragen die in [`sla-model.md §SLA-pagina`](./sla-model.md#wat-de-sla-pagina-op-de-website-moet-bevatten) staan)
-7. Contact-CTA (discreet einde van de pagina)
+1. Hero — *"Onze apps zijn altijd gratis. Support is optioneel."*
+2. Wat zit in Support? (helpdesk + proactieve telemetry-ondersteuning)
+3. Pricing-tabel (per app × per user × per jaar × 2 tiers, met prominente "software is gratis"-disclaimer)
+4. Hoe vraag ik Support aan? (twee paden expliciet naast elkaar)
+5. FAQ (6–8 vragen die in [`support-model.md`](./support-model.md) staan)
+6. Contact-CTA (discreet einde van de pagina)
 
-Voor de volledige uitwerking van elke sectie, zie [`sla-model.md`](./sla-model.md).
+Voor de volledige uitwerking van elke sectie, inclusief pricing-structuur-keuzes per tier, zie [`support-model.md`](./support-model.md).
 
 ---
 
@@ -451,7 +520,7 @@ Voor de volledige uitwerking van elke sectie, zie [`sla-model.md`](./sla-model.m
    3. Apps-grid (6–8 featured core apps met tagline)
    4. Solutions-teasers (3–4 top solutions)
    5. Stats-strip (GitHub-stars, gemeenten, installed-counts)
-   6. SLA-teaser (discreet, één strip)
+   6. Support-teaser (discreet, één strip linkend naar /support)
    7. Footer
 
 2. **Apps-catalogus:** filter-sidebar + grid, facets = categorie × status × Nextcloud-versie × NLDS-compliance. Sortering: Featured / Alphabetical / Newest.
@@ -460,11 +529,11 @@ Voor de volledige uitwerking van elke sectie, zie [`sla-model.md`](./sla-model.m
 
 4. **Solution-pagina:** het template uit [`solution-woo.md`](./solution-woo.md) staat al goed — dat volgt precies het "problem → approach → app-stack → FAQ"-patroon dat Odoo's industry-pagina's ook gebruiken.
 
-5. **SLA-pagina:** één pagina, discreet gelinkt vanuit footer. Structuur: "Wat is onze SLA? / Voor wie is dit? / Wat zit erin? / Hoe vraag ik 'm aan?". Geen prijslijst op de pagina zelf (dat komt in een offerte-gesprek) — alleen "vanaf €X/mo" of "neem contact op voor een offerte". Bewust bescheiden.
+5. **Support-pagina:** één pagina, in de hoofdnavigatie. Structuur: Hero ("Apps zijn gratis, Support is optioneel") / Wat zit in Support? / Pricing-tabel (per app × per user × per jaar × 2 tiers) / Hoe vraag ik 'm aan? (twee paden) / FAQ / Contact-CTA. Prijzen staan op de pagina mét prominente "software is gratis"-disclaimer. Zie [`support-model.md`](./support-model.md) voor de volledige invulling.
 
 6. **Services-pagina:** zoals in §6.7 van de brief — discreet in footer, niet in hoofdnav.
 
-7. **Navigation:** Apps / Solutions / About / Docs (extern) / GitHub (extern) in header. Services, SLA, Contact, Privacy, Legal, Taalwisselaar in footer.
+7. **Navigation:** Apps / Solutions / Support / About / Docs (extern) / GitHub (extern) in header. Services, Contact, Privacy, Legal, Taalwisselaar in footer.
 
 8. **Mega-menu voor Apps:** alleen als we er visueel iets aan toevoegen (preview-kaarten met screenshot). Als het een platte link-lijst wordt, hoeft het geen mega-menu te zijn.
 
