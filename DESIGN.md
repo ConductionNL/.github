@@ -30,32 +30,47 @@ Kobaltblauw `#21468B`:
 
 - **Is officieel de blauwtint van de Nederlandse vlag.** Dat past bij onze positionering: een trots Nederlands open-source-bedrijf.
 - **Is donker.** Donkerdere blauwen worden als betrouwbaarder, stabieler, serieuzer ervaren — precies wat we willen uitdragen.
-- **Heeft uitstekend contrast** op wit (≈ 9.2:1, WCAG AAA). We kunnen cobalt dus óók voor body-tekst gebruiken, wat het merk consistenter maakt.
+- **Heeft uitstekend contrast** op wit (≈ 9.05:1, WCAG AAA). We kunnen cobalt dus óók voor body-tekst gebruiken, wat het merk consistenter maakt.
 
-**Afgewezen alternatieven:**
-- *NLDS utrecht-blauw (`#154273`)*: ook donker, ook mooi — maar niet de officiële vlagkleur, dus geen Nederlandse associatie.
-- *Midnight / navy (`#0C2D48`)*: te donker, gaat richting zwart, verliest kleuridentiteit.
-- *Huidige lichtblauw behouden met extra gewicht via typografie*: overwogen, maar onvoldoende signaal van de gewenste richting.
+We hebben vijf blauwtinten tegen elkaar afgezet voor we kobalt kozen:
+
+| Eigenschap | Legacy `#4376FC` | **Kobalt `#21468B`** (gekozen) | NLDS utrecht `#154273` | Rijks-lint `#01689B` | Midnight `#0C2D48` |
+|---|---|---|---|---|---|
+| Hue | 223° | 219° | 211° | 200° | 207° |
+| Saturatie | 97% | 62% | 69% | 99% | 71% |
+| Luminantie (HSL L) | 63% | 34% | 27% | 31% | 17% |
+| Contrast op wit | 3.99:1 | **9.05:1** | 10.19:1 | 6.07:1 | 14.19:1 |
+| Body-tekst bruikbaar? | Nee (fails AA) | Ja (AAA) | Ja (AAA) | Marginaal (AA, niet AAA) | Ja (AAA) |
+| Culturele verwijzing | Generieke "cloud/SaaS" | Nederlandse vlag | NLDS / Gemeente Utrecht | Rijksoverheid-identiteit | Klassiek banking/corporate |
+| Reden | Onze legacy-kleur — te licht, te "tech", te weinig gewicht | **Gekozen**: vlag-referentie + donker genoeg voor body-tekst | Mooi maar geen vlag-associatie; NLDS-signaal zonder Nederlandse symboliek | Sterk overheid-signaal — verwarrend voor ons als bedrijf | Te donker; verliest kleuridentiteit en begint op zwart te lijken |
+
+**Waarom kobalt wint:**
+
+1. **Enige kandidaat met directe vlag-associatie.** `#21468B` is letterlijk de blauwtint van de Nederlandse vlag. Dat is geen coïncidentie die we kunnen claimen met NLDS utrecht of een bancair navy.
+2. **Juiste donkerheids­niveau.** Licht genoeg om blauw te blijven (L=34% vs navy L=17-20%), donker genoeg om betrouwbaar te voelen en body-tekst-contrast te halen.
+3. **Niet bancair, niet overheid.** Zit in een gat tussen bank-navy's (`#000066`, L=20%) en Rijks-blauwen (`#154273`/`#01689B`). Dat gat past ons: Nederlands, zakelijk, maar geen bank en geen dienst.
 
 ### Waarom KNVB-oranje `#F36C21` als secundair?
 
-We hebben drie oranjetinten overwogen: wimpel-oranje `#FF7F00` (de letterlijke wimpel die boven de Nederlandse vlag wappert bij staatsaangelegenheden), Rijkshuisstijl-oranje `#E17000` (de accent­kleur van de Nederlandse overheid), en KNVB-oranje `#F36C21` (het oranje van het nationale elftal en bij uitbreiding de "Oranje"-beleving).
+We hebben drie oranjetinten tegen elkaar afgezet:
 
-**Rijkshuisstijl-oranje valt meteen af.** Die kleur is geassocieerd met "de overheid", en onze apps worden weliswaar *door* overheden gebruikt, maar Conduction is een bedrijf. Verwarring met een overheidsdienst is positionerings-schadelijk.
+| Eigenschap | Wimpel `#FF7F00` | Rijkshuisstijl `#E17000` | **KNVB `#F36C21`** (gekozen) |
+|---|---|---|---|
+| Hue | 30° (puur oranje) | 30° (puur oranje) | 22° (licht rood-leanend) |
+| Saturatie | 100% | 100% | 90% |
+| Luminantie (HSL L) | 50% | 44% | 54% |
+| WCAG-contrast op cobalt | 3.58:1 | 2.82:1 (faalt 3:1) | 3.01:1 (net haalbaar) |
+| Pairing met cobalt | Letterlijk complement — kan "buzzen" | Te donker, te weinig pop tegen cobalt | Zachter, iets warmer, minder vibratie |
+| Signaal | Officieel, institutioneel, "vlag-poster" | Overheid, formeel, bureaucratisch | Warm, mass-appeal, "Oranjegekte" |
+| Culturele lading | Staatsaangelegenheden, ceremonieel | Rijksoverheid-merk | Nationale elftal, toegankelijke patriottisme |
+| Positionerings-risico | Gering | **Hoog** — verwarring met overheidsmerk | Laag — elftal is bedrijfsneutraal |
 
-Tussen wimpel en KNVB gaat het om karakter en harmonie met cobalt:
+**Rijkshuisstijl-oranje faalt op drie fronten tegelijk:**
+- Slechtste contrast op cobalt (2.82:1, onder de WCAG 3:1-drempel voor UI-accents)
+- Hoogste positionerings-risico (direct overheidssignaal voor een bedrijf dat bewust *niet* als overheid wil ogen)
+- Donkerste luminantie van de drie, "zinkt" visueel weg tegen cobalt in plaats van eruit te springen
 
-| Eigenschap | Wimpel `#FF7F00` | KNVB `#F36C21` |
-|---|---|---|
-| Hue | 30° (puur oranje) | 22° (licht rood-leanend) |
-| Saturatie | 100% | 90% |
-| Luminantie (L in HSL) | 50% | 54% |
-| WCAG-contrast op cobalt | 3.58:1 | 3.01:1 (net 3:1-grens voor UI-accents) |
-| Pairing met cobalt | Letterlijk complement — kan "buzzen" | Zachter, iets warmer, minder vibratie |
-| Signaal | Officieel, institutioneel, "vlag-poster" | Warm, mass-appeal, "Oranjegekte" |
-| Culturele lading | Wimpel = staatsaangelegenheden, ceremonieel | Elftal = toegankelijke patriottisme |
-
-KNVB wint op drie fronten:
+Tussen wimpel en KNVB gaat het niet meer om uitsluiting maar om karakter en harmonie. KNVB wint op drie fronten:
 
 1. **Zachtere harmonie met cobalt.** De lichte rood-lean en iets lagere saturatie geven een volwassener, minder hard-contrasterende pairing. Minder "posterkleur", meer "professioneel bedrijf met Nederlandse identiteit".
 2. **Emotionele resonantie zonder Rijks-associatie.** KNVB-oranje is het meest universeel herkenbare "Nederlands oranje" — toegankelijker dan wimpel — maar zonder de overheidslading van rijksoranje.
@@ -92,28 +107,6 @@ Waar oranje uitdrukkelijk **niet** werkt:
 - Body-tekst op wit (wel voldoende contrast, maar te druk)
 - Meer dan één accent per scherm
 
-### Overwogen kleurcombinaties — hoe staan wij tussen andere Nederlandse identiteiten?
-
-Cobalt + KNVB-oranje is geen onontgonnen terrein; meerdere Nederlandse merken combineren donkerblauw met een oranje-accent. De vraag is of onze combinatie voldoende **onderscheidend** is.
-
-| Identiteit | Blauw | Oranje | Karakter | Onderscheid t.o.v. Conduction 2026 |
-|---|---|---|---|---|
-| **Conduction 2026** (voorstel) | `#21468B` kobalt (L=34%) | `#F36C21` KNVB (H=22°) | Warm-professioneel, Nederlands-toegankelijk | — |
-| **Rabobank** | `#000066` donker navy (L=20%) | `#FF6600` | Conservatief, bancair, traditioneel | Rabo's navy is véél donkerder (bijna zwart-blauw); hun oranje is feller en meer pure 30°. Bank-feel, niet product-feel. |
-| **ING** | `#000066` donker navy (L=20%) | `#FF6200` | Modern bancair, fintech | Vrijwel identiek aan Rabobank qua blauw; iets roodder oranje. Blauw veel donkerder dan cobalt. |
-| **Rijkshuisstijl** | `#154273` rijksblauw (L=27%) | `#E17000` rijksoranje (L=44%) | Formeel, overheid, institutioneel | Blauw iets donkerder dan cobalt; oranje duidelijk donkerder en bruiner. Overheids­associatie uitgesloten voor ons. |
-| **KNVB / Oranje-elftal** | `#19284B` navy (L=20%) | `#F36C21` KNVB | Sport, nationale trots | Ons blauw is lichter en herkenbaarder als vlag-cobalt; oranje is identiek. |
-| **Nederlandse vlag (officieel)** | `#21468B` kobalt | *(geen oranje; rood `#AE1C28`)* | Staatsembleem | Wij gebruiken exact hetzelfde blauw; oranje is voor ons secundair. |
-
-**Conclusie uit de tabel:**
-
-- Banken (Rabobank, ING) claimen het **donkerste** navy-oranje register. Hun navy (`#000066`) is ruwweg 14 L-punten donkerder dan onze cobalt — dat is een zichtbaar andere categorie. Onze cobalt ademt meer "daglicht" en ligt dichter bij de vlagtint.
-- Rijkshuisstijl zit ertussen qua blauw maar kiest een bruiner oranje. Wij vermijden hun oranje.
-- KNVB gebruikt ons exacte oranje, maar met donkerder navy. Het elftal-combo is niet verwarrend met ons, maar "borrowt" wel dezelfde Nederlandse warmte — dat is een feature, geen bug.
-- Onze pairing (lichter cobalt + warmer oranje) zit in een "gat" tussen banken (te donker, te formeel) en overheid (te bruin, te institutioneel). Dat gat is precies waar een open-source-productbedrijf thuishoort: Nederlands, professioneel, maar niet corporate-stoffig of staatsdienst-streng.
-
-Als in de toekomst een concurrent in hetzelfde register komt, kunnen we onderscheiden via **toepassing en proportie** (de 8%-regel, hexagon-wrapper, typografie) — het is niet alleen het kleurenpalet dat ons kenbaar maakt.
-
 ### Waarom vermiljoen `#AE1C28` als tertiair?
 
 Helder vermiljoen is de officiële rode vlagkleur. We nemen het op omdat:
@@ -127,6 +120,28 @@ Vermiljoen is **nog spaarzamer** dan oranje (~2%). Overmatig rood voelt alarmere
 ### Waarom geen neutrale grijzen in scope A?
 
 Scope A is bewust minimaal. Voor body-tekst gebruiken we kobalt op wit (contrast is ruim voldoende). Voor muted/secondary tekst, borders, subtle backgrounds hebben we grijzen nodig — dat komt in **scope B**. Voor nu kunnen apps tijdelijk hun eigen neutrale grijs gebruiken; we standaardiseren dat zodra meerdere apps ermee werken.
+
+### Positie tegenover andere Nederlandse merken
+
+Cobalt + KNVB-oranje is geen onontgonnen terrein. Meerdere Nederlandse merken combineren donkerblauw met een oranje-accent — banken, overheid, sport. De vraag is niet óf we in dit register opereren, maar of onze specifieke pairing voldoende **onderscheidend** is van hen.
+
+| Identiteit | Blauw | Oranje | Karakter | Onderscheid t.o.v. Conduction 2026 |
+|---|---|---|---|---|
+| **Conduction 2026** (voorstel) | `#21468B` kobalt (L=34%) | `#F36C21` KNVB (H=22°, L=54%) | Warm-professioneel, Nederlands-toegankelijk | — |
+| **Rabobank** | `#000066` donker navy (L=20%) | `#FF6600` (H=24°) | Conservatief, bancair, traditioneel | Rabo's navy is ~14 L-punten donkerder dan cobalt (bijna zwart-blauw); hun oranje is feller en puurder. Bank-feel, niet product-feel. |
+| **ING** | `#000066` donker navy (L=20%) | `#FF6200` (H=23°) | Modern bancair, fintech | Vrijwel identiek blauw aan Rabobank; iets roodder oranje. Beiden zitten in het donkere bank-register, wij niet. |
+| **Rijkshuisstijl** | `#154273` rijksblauw (L=27%) | `#E17000` rijksoranje (L=44%) | Formeel, overheid, institutioneel | Blauw iets donkerder dan cobalt én zonder vlag-referentie; oranje duidelijk donkerder en bruiner. Overheidsassociatie bewust uitgesloten. |
+| **KNVB / Oranje-elftal** | `#19284B` navy (L=20%) | `#F36C21` KNVB | Sport, nationale trots | Identiek oranje — dat is geen ongeluk maar een associatie-keuze. Hun blauw is donkerder; ons blauw is herkenbaar vlag-cobalt. |
+| **Nederlandse vlag (officieel)** | `#21468B` kobalt | *(geen oranje; rood `#AE1C28`)* | Staatsembleem | Exact hetzelfde blauw; oranje is voor ons secundair, niet vlag-onderdeel. |
+
+**Wat deze tabel laat zien:**
+
+- **Banken claimen het donkerste register.** Rabobank en ING delen praktisch hetzelfde `#000066`-navy — extreem donker, bijna zwart. Onze cobalt (L=34%) zit ~14 L-punten lichter. Dat is een ander visueel register: "daglicht / vlag" versus "bank-corporate".
+- **Rijkshuisstijl zit tussenin qua blauw**, maar onderscheidt zich met een donkerder, bruiner oranje. Wij vermijden hun oranje bewust om overheidverwarring uit te sluiten.
+- **KNVB gebruikt ons exacte oranje**, maar combineert het met veel donkerder navy. Het elftal-merk "leent" niet ons palet — wij lenen hun oranje, bewust, om toegankelijke Nederlandse warmte te signaleren zonder overheidsverwijzing.
+- **Onze positie ligt in een "gat"** tussen bank-navy (te donker, te corporate) en Rijks (te bruin, te institutioneel). Dat gat is precies waar een Nederlands open-source-productbedrijf thuishoort: helder genoeg om niet corporate te ogen, donker genoeg om betrouwbaar te zijn, en warmer dan overheid.
+
+**Risico: verwarring via associatie, niet via identieke waardes.** Geen enkel merk hier heeft *exact* ons paar (cobalt + KNVB-oranje). Maar als een bezoeker snel langs komt, kan de combinatie aan Rabobank, ING of "iets van de overheid" doen denken. Onze onderscheiding moet daarom niet alleen uit kleur komen maar ook uit **proportie en toepassing**: de 8%-regel voor oranje, de zeshoek-wrapper, Figtree-typografie, en de witte-dominantie. Dat samen maakt ons kenbaar, niet de hex-waardes alleen.
 
 ---
 
