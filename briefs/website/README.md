@@ -9,7 +9,8 @@ Content-bestanden die horen bij [../website.md](../website.md). Deze bestanden v
 | [`app-taglines.md`](./app-taglines.md) | #17 | MKB-directe tagline (NL + EN) per core app, gekalibreerd op top-features uit de DB. Inclusief review-checklist en verbannen-lijst. |
 | [`solution-woo.md`](./solution-woo.md) | #18 | Volledige WOO-solution-pagina als **template** voor alle andere solution-pagina's. Authentieke stakeholder-taal uit 1.031 NL tenders en 5.992 requirements. Dekt hero, probleem, aanpak, app-stack, FAQ, SEO-metadata. |
 | [`tone-samples.md`](./tone-samples.md) | #16 (deel) | NL tone-calibratie: drie registers (tender-/systeem-/user-story-taal), rewrite-recepten naar MKB-direct, 7 gouden regels, verbannen-lijst. |
-| [`icon-library.md`](./icon-library.md) | #12 (deel) | Afwegingskader + aanbeveling (Lucide). Kandidaten vergeleken op licentie, stijl, peer-group-adoptie, bundle. |
+| [`icon-library.md`](./icon-library.md) | #12 (deel) | Afwegingskader + aanbeveling (Lucide). Kandidaten vergeleken op licentie, stijl, peer-group-adoptie, bundle. Inclusief expliciete "Waarom niet Font Awesome?"-sectie. |
+| [`platform-benchmarks.md`](./platform-benchmarks.md) | — (aanvulling op #20) | Uitgebreide analyse van **Odoo** en **WooCommerce** als app-platform-referenties. Per platform: IA, homepage, catalogus-UX, detail-pagina-template, pricing/paid-patronen, community-model. Eindigt met 7 concrete ontwerp-beslissingen voor ons + analyse van hoe ons gratis + SLA-model de IA fundamenteel anders maakt dan die van hen. |
 
 ## Wat hier nog bij komt (later)
 

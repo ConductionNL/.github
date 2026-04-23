@@ -19,6 +19,7 @@
 - [`website/solution-woo.md`](./website/solution-woo.md) — volledige WOO-solution-pagina als template voor andere solutions
 - [`website/tone-samples.md`](./website/tone-samples.md) — NL tone-calibratie met drie registers en rewrite-recepten
 - [`website/icon-library.md`](./website/icon-library.md) — iconen-bibliotheek-keuze (aanbevolen: Lucide)
+- [`website/platform-benchmarks.md`](./website/platform-benchmarks.md) — uitgebreide deep-dive-analyse van Odoo en WooCommerce als app-platform-referenties; concrete IA-/layout-/CTA-patronen om over te nemen, aan te passen, of bewust níet over te nemen gegeven ons gratis + optionele-SLA-model
 
 **Deze brief beschrijft alleen het website-specifieke.** Alles wat Conduction-wide geldt (wie we zijn, hoe we eruitzien, welke woorden we gebruiken) staat in de foundation-documenten. Als iets uit deze brief toch company-wide blijkt, lift het terug naar BRAND.md of DESIGN.md.
 
