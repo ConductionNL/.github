@@ -356,9 +356,34 @@ Deze **zeven patronen nemen we één-op-één over**, met aanpassingen voor onze
 
 ---
 
-## Hoe het gratis + SLA-model onze site-structuur beïnvloedt
+## Van *upgrade-druk* naar *download-druk* — de kern-reframing
 
-Dit verdient een eigen sectie omdat het verschil zo fundamenteel is.
+Als één inzicht uit deze analyse mee naar huis moet, is het dit: Odoo en WooCommerce werken met **upgrade/koop-druk** door hun hele UX heen. Alles leidt naar een aankoopbeslissing — trial starten, upgrade naar Enterprise, koop een extensie, betaal een abonnement. Hun CTA-psychologie draait om *"neem die stap, geef je geld uit, krijg meer"*.
+
+Bij ons is die druk **download-druk**. Alles op onze site leidt naar één ding: **de app downloaden uit de Nextcloud app store**. Dat is een kosteloos, frictieloze actie. We zetten geen trial-urgency in, geen prijs-vergelijkingen, geen upgrade-nags. Gewoon: *"Hier is de app. Klik om te installeren. Klaar."*
+
+**Concrete verschillen in CTA-psychologie:**
+
+| | Odoo / Woo (upgrade-druk) | Conduction (download-druk) |
+|---|---|---|
+| Primaire verb | *"Try"* / *"Buy"* / *"Start"* / *"Upgrade"* | *"Installeer"* / *"Install"* / *"Download"* |
+| Friction-niveau | Hoog (account aanmaken, betaling, trial-limiet) | Laag (één klik naar app store) |
+| Urgentie-signalen | *"Save 20% this month"*, *"Free for 14 days"* | Geen — er is niks te haasten |
+| Prijs-communicatie | Prominent op bijna elke pagina | Afwezig; software heeft geen prijs |
+| Social proof | Omzet, klanten, revenue | Installs, gemeenten, forks |
+| Eindpunt van elke flow | Aankoop of trial-signup | Doorklikken naar app store |
+
+Deze reframing is niet alleen taalkundig. Ze bepaalt **hoe elke pagina eindigt**, wat "conversie" betekent, en welke UX-patronen we *niet* mogen kopiëren van Odoo en Woo (zelfs als ze visueel mooi zijn).
+
+**Wat dat betekent voor layout-details:**
+
+- Primary button zegt altijd *"Install from Nextcloud app store"* (of in EN dezelfde zin), nooit *"Get started"* of *"Sign up"*
+- Geen floating/sticky CTA-bars met urgentie-tekst
+- Geen exit-intent-popups met "last chance" boodschappen
+- Geen pricing page in de hoofdnav (er is geen prijs)
+- Secundaire CTA's zijn óf "Read docs", óf "View on GitHub" — altijd informatief, nooit commercieel
+
+## Hoe ons gratis + SLA-model de site fundamenteel anders maakt
 
 ### Odoo's feature-gating-model
 
@@ -368,26 +393,53 @@ Odoo **gebruikt** de Community-vs-Enterprise-split actief op bijna elke product-
 
 WooCommerce is opener: core is gratis, extensies zijn grotendeels betaald. Elke extensie heeft een prijs. De marketplace is onmiskenbaar een commerciële plek.
 
-### Ons model: altijd-gratis-core met optionele SLA-bovenlaag
+### Ons model: altijd-gratis-software met optionele SLA via twee paden
 
-Ons verhaal is eenvoudiger: **elke app, elke feature, altijd gratis, altijd open source**. De SLA is geen feature-gate, geen access-voorwaarde, maar een **zekerheid-laag** voor organisaties die het niet alleen willen dragen.
+Ons verhaal is eenvoudiger *én* unieker. **Elke app, elke feature, altijd gratis, altijd open source.** Geen feature-gate, geen access-voorwaarde.
+
+De **SLA** is een zekerheid-laag die op *twee* manieren verkrijgbaar is — een voor onze markt kenmerkend model dat we op de site expliciet moeten uitleggen:
+
+- **Pad 1:** via een (officiële) Nextcloud-leverancier die de klant al heeft. Eén contract, één factuur, één aanspreekpartij — wij verrekenen achter de schermen via Nextcloud.
+- **Pad 2:** rechtstreeks met ons, via een formulier in de admin-instellingen van de app zelf. Voor self-managed Nextcloud-omgevingen.
+
+Volledige uitleg in [`sla-model.md`](./sla-model.md).
+
+**Inhoud van de SLA (beide paden, zelfde inhoud):**
+
+- Helpdesk-ondersteuning (reactief, contractuele responstijden)
+- Proactieve ondersteuning op basis van telemetry (wij zien problemen voordat de klant erover belt, en waarschuwen actief)
 
 Concreet wat dit betekent voor de site:
 
 1. **Geen "Enterprise-only" of "Pro-only"-badges** ergens op een app- of solution-pagina. Alles wat je ziet is beschikbaar voor iedereen.
 2. **Pricing-pagina vervangen door SLA-pagina.** Niet "hoeveel kost het om de software te gebruiken" maar "hoeveel kost het om er zekerheid op te hebben". Heel ander gesprek.
-3. **SLA-teaser discreet, niet centraal.** Waar Odoo een pricing-pagina in de hoofdnav heeft, staat bij ons "SLA" of "Support" in de footer, met hooguit een kleine link vanuit de Services-pagina. Niet geforceerd.
-4. **Hero-tone is uitnodigend, niet sellend.** "Installeer OpenCatalogi in 2 minuten" werkt bij ons; "Start your free trial" niet (niets is een trial; het is gewoon de software).
-5. **"Contact us" is niet de conversie.** Bij Odoo/Woo belandt elke doodlopende flow vaak op een contact-sales-formulier. Bij ons is "Contact us" een laatste-redmiddel, niet een funnel-doel. De conversie is *installeren*.
-6. **Proof is gebruik, niet omzet.** Bij Odoo: "7 million users, 200 countries". Bij ons ook gebruik-georiënteerd: aantal installaties, aantal gemeenten, aantal forks op GitHub. Niet "omzet" of "klant-tevredenheid in sterren".
+3. **SLA-pagina is informatief, geen bestelformulier.** Het bestelproces zit *niet* op onze site: pad 1 regelt de klant bij z'n eigen Nextcloud-leverancier, pad 2 via het formulier in de app-admin-instellingen. Onze site legt de twee paden uit en stuurt door — geen shopping-cart.
+4. **SLA-teaser discreet, niet centraal.** "SLA" staat in de footer, plus één strip op de homepage. Geen sticky CTA, geen hoofdnav-item.
+5. **Hero-tone is uitnodigend, niet sellend.** *"Installeer OpenCatalogi in 2 minuten"* werkt bij ons; *"Start your free trial"* niet (niets is een trial; het is gewoon de software).
+6. **"Contact us" is niet de conversie.** Bij Odoo/Woo belandt elke doodlopende flow vaak op een contact-sales-formulier. Bij ons is "Contact us" een laatste-redmiddel, niet een funnel-doel. De conversie is *installeren*.
+7. **Proof is gebruik, niet omzet.** Bij Odoo: "7 million users, 200 countries". Bij ons gebruik-georiënteerd: aantal installaties, aantal gemeenten, aantal forks op GitHub. Niet "omzet" of "klant-tevredenheid in sterren".
 
-### Hoe de SLA te positioneren
+### Hoe de SLA te positioneren in copy
 
-Niet als upsell. Als **bijproduct**. Ruwweg dit verhaal:
+Niet als upsell. Als **bijproduct** van het open-source-verhaal. Ruwweg dit:
 
-> *"Onze apps zijn altijd gratis. Je installeert ze, je draait ze, je beheert ze. Prima. Maar als je in jouw organisatie meer zekerheid nodig hebt — een garantie dat bugs binnen 24u worden opgepakt, dat je support krijgt als je vastloopt, dat er iemand meekijkt bij je implementatie — dan hebben we een SLA. Dat is hoe wij ons brood verdienen: niet door de software achter een paywall te zetten, maar door de gemoedsrust te bieden die sommige organisaties willen."*
+> *"Onze apps zijn altijd gratis. Je installeert ze uit de Nextcloud app store, je draait ze, je beheert ze. Klaar. Wil je meer zekerheid — helpdesk, proactieve monitoring, iemand die meekijkt bij problemen — dan hebben we een SLA. Je regelt die bij je Nextcloud-leverancier als je er een hebt; anders rechtstreeks met ons via de admin-instellingen in de app. Dat is hoe wij ons brood verdienen: niet door de software achter een paywall te zetten, maar door gemoedsrust te bieden voor wie dat nodig heeft."*
 
-Dit is eerlijk, niet-bedreigend, en legt het verdienmodel uit zonder de gratis-natuur te compromitteren.
+Dit is eerlijk, niet-bedreigend, legt het verdienmodel uit, erkent dat het een keuze is, en respecteert de intelligentie van de bezoeker.
+
+### SLA-pagina-structuur (samenvatting)
+
+Zeven secties, in deze volgorde:
+
+1. Wat is onze SLA? (korte hero-uitleg)
+2. Wat zit erin? (helpdesk + proactieve telemetry-ondersteuning)
+3. Hoe vraag ik een SLA aan? (twee paden expliciet naast elkaar)
+4. Wat zijn de voorwaarden? (hoog-over; contract-details niet op deze pagina)
+5. Wat zijn de kosten? (niet op de pagina — "neem contact op voor een offerte")
+6. FAQ (6–8 vragen die in [`sla-model.md §SLA-pagina`](./sla-model.md#wat-de-sla-pagina-op-de-website-moet-bevatten) staan)
+7. Contact-CTA (discreet einde van de pagina)
+
+Voor de volledige uitwerking van elke sectie, zie [`sla-model.md`](./sla-model.md).
 
 ---
 

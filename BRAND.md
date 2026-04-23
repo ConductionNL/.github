@@ -21,9 +21,14 @@ Conduction is een **Nederlands open-source-productbedrijf**. We bouwen een ecosy
 
 Ons model verschuift. Historisch kwam ons werk voort uit *projecten, training en advies*: opdrachten waarin een klant ons inhuurde om iets te bouwen, implementeren of begeleiden. Dat bestaat nog, maar is niet meer waar Conduction om draait.
 
-**Conduction is een productbedrijf.** We bouwen een **ecosysteem van samenwerkende Nextcloud-apps** — OpenRegister, OpenCatalogi, OpenConnector, DocuDesk, MyDash, en meer. Onze klanten kunnen ons gebruiken **zonder ons te hoeven spreken**: ze downloaden de apps uit de Nextcloud app store, installeren, en zijn klaar. Dat is de kern van wat we nu zijn.
+**Conduction is een productbedrijf.** We bouwen een **ecosysteem van samenwerkende Nextcloud-apps** — OpenRegister, OpenCatalogi, OpenConnector, DocuDesk, MyDash, en meer. Onze klanten kunnen ons gebruiken **zonder ons te hoeven spreken**: ze downloaden de apps uit de Nextcloud app store, installeren, en zijn klaar. Dat is de kern van wat we nu zijn. Alle apps zijn en blijven **altijd gratis en open source** — geen Community/Enterprise-split, geen feature-gating, geen "Pro"-tier.
 
-Projecten, training en advies bestaan als **ondersteunende diensten** rondom het ecosysteem — voor klanten die extra hulp willen bij implementatie, maatwerk of opleiding. Ze zijn secundair, niet leading. Alle merkcommunicatie (website, drukwerk, presentaties) leidt met de apps en het ecosysteem; services worden discreet vermeld voor wie er specifiek naar zoekt.
+We verdienen ons brood via twee ondersteunende lagen rondom het ecosysteem:
+
+- **SLA (Service Level Agreement).** Optionele zekerheid-laag bovenop de gratis software: helpdesk-ondersteuning en proactieve begeleiding op basis van telemetry. Klanten krijgen hun SLA via twee paden — via hun eigen Nextcloud-leverancier (voor managed-Nextcloud-gebruikers, met één contract en één factuur), of rechtstreeks via een formulier in de admin-instellingen van de app zelf (voor self-managed Nextcloud). De SLA is *altijd optioneel* en blokkeert geen enkele feature.
+- **Services.** Projectmatige activiteiten: implementatie-begeleiding, training, maatwerk-ontwikkeling, advies. Voor klanten met een specifieke behoefte die méér vraagt dan zelfstandig installeren + reactieve support.
+
+Beide zijn **secundair**, niet leading. Alle merkcommunicatie (website, drukwerk, presentaties) leidt met de apps en het ecosysteem; SLA en Services worden discreet vermeld voor wie er specifiek naar zoekt — nooit als verplichte funnel of upgrade-druk.
 
 ## Voor wie we bouwen
 
