@@ -79,16 +79,92 @@ Elke sectie van de website verdient een eigen doordenking — niet *"hero + teks
 **Opties:**
 
 - **A. Screenshot van één app** — conservatief, gebruiksgericht, saai
-- **B. Ecosystem-constellatie** — centrale hex ("Conduction") met satellite-hexes (apps) eromheen, verbindingslijntjes, rustige animatie
-- **C. Gelaagde hex-grid** — hexagonaal patroon op achtergrond, morphing of subtiel scrollend parallax
+- **B. Ecosystem-constellatie (flat)** — centrale hex met satellite-hexes, verbindingslijntjes, rustige animatie
+- **C. Isometrisch platform-overview** (Honeycomb-stijl) — 3D-geëxtrudeerde hex-prisma's in verschillende pastel-kleuren, elk gelabeld met een app-categorie; externe "data sources" en "integrations" in rechthoeken links en rechts; dunne stippel-lijnen tonen data-flows
 - **D. Eén grote hex met screenshot erin gecropt** — boldere statement maar beperkt tot één app
 - **E. Typografie-eerst** — grote headline, geen beeld-hero, slechts hex-accenten
 
-**Aanbevolen: B — Ecosystem-constellatie.**
+**Aanbevolen: C — Isometrisch platform-overview.**
 
-Waarom: communiceert in één oogopslag de kern-boodschap ("apps die samenwerken in een ecosystem") zonder text. Hex-vorm-herhaling versterkt merk. Animeert rustig (≤ 1 keer per 10s) zodat het niet afleidt. Mobile-fallback: kleinere, statische versie of alleen de centrale hex met app-namen in cirkel eromheen.
+Waarom: communiceert in één oogopslag hoe **alle apps met elkaar samenhangen** — de meest belangrijke boodschap die we moeten overbrengen. Dat is precies de reden waarom honeycomb.io deze visualisatie gebruikt op hun homepage en /platform-pagina. Zie [referentie-screenshot](./references/ref-a-honeycomb-3d-platform.png) en [volledige platform-overview-sectie](#platform-overview-pattern--honeycomb-stijl-als-hero) hieronder voor concrete Conduction-vertaling.
 
-Escape-hatch: als B te technisch ogend wordt, terug naar A met hex-frame om de screenshot.
+Escape-hatch: als C te technisch-zakelijk ogend is, terug naar B (flat constellatie, zelfde boodschap maar minder visueel gewicht). A is alleen acceptabel als het onmogelijk blijkt om een goede overview-diagram te maken.
+
+---
+
+### Platform overview pattern — Honeycomb-stijl als hero
+
+Honeycomb.io heeft één van de sterkste visuele patronen voor het tonen van "hoe een platform van samenwerkende modules in elkaar steekt" — en hun visualisatie-taal is letterlijk hexagonen. Dat is zo fundamenteel relevant voor ons dat het een eigen sectie verdient.
+
+**De referentie:**
+
+![Honeycomb.io 3D platform-overview — isometrisch-geëxtrudeerde hexagons per product-categorie, met data-sources links en integraties rechts, verbonden door stippel-data-flows](./references/ref-a-honeycomb-3d-platform.png)
+
+Wat deze visualisatie zo krachtig maakt:
+
+1. **Data-flow-structuur:** links "Your Data Sources" (aws, Google Cloud, kubernetes, OpenTelemetry) → door "Telemetry Pipelines" → centrale "Unified Datastore" → verdeeld over "Realtime Access" + "Honeycomb Intelligence" → rechts "60+ Integrations" (Claude, Slack, PagerDuty, Cursor). De lezer volgt het pad van data-in tot actie-uit.
+2. **Hexagon-prismatische extrusie** geeft diepte zonder foto-realistisch 3D te worden. Elke hex is duidelijk een "module" — een container voor functies.
+3. **Kleur-codering per categorie** — blauw, paars, geel, groen, rood zijn zachte pastels, ieder eentje voor één product-gebied. Kleur navigeert de lezer.
+4. **Feature-labels binnen elke hex** — kleine afgeronde pillen (Logs, Traces, Metrics; Canvas, MCP Server, Anomaly Detection; Triggers, Service Map, SLOs, …). Per hex zie je *wat erin zit*.
+5. **Externe boxes** met integratie-logo's (aws, kubernetes, Claude, slack) staan expliciet buiten de platform-grens — een duidelijke scheiding tussen "wat is van ons" en "wat verbinden we".
+
+Honeycomb.io heeft ook een **flat horizontale variant** van dezelfde boodschap (verder op de /platform-pagina) waar de hexen niet extrudeerd zijn maar op dezelfde manier data-flow tonen — zie [referentie-screenshot (flat-variant)](./references/ref-a1-honeycomb-section-3400.png). Die flat-variant is handig voor delen van de site waar minder visuele ruimte is.
+
+**Conduction-vertaling — concrete voorstel:**
+
+Onze 11 core apps groeperen we in 5–6 categorie-hexagons (niet allemaal apart tonen; dat wordt te druk). Voorgestelde mapping:
+
+| Categorie-hex | Kleur | Apps binnen |
+|---|---|---|
+| **Data Foundation** | Cobalt/groen | OpenRegister, OpenCatalogi |
+| **Integration** | Geel | OpenConnector |
+| **Documents** | Rood/roze | DocuDesk |
+| **Case & Process** | Blauw | Procest, ZaakAfhandelApp, Pipelinq |
+| **Insights & Dashboards** | Paars | MyDash, SoftwareCatalog |
+| **Design & Theming** | Subtiel grijs | NLDesign, LarpingApp |
+
+Externe boxes:
+
+- **Links — "Je bestaande systemen":** Nextcloud zelf (als platform), BAG, BRK, PDOK, DSO, Basisregistraties, externe databases, Common Ground-componenten
+- **Rechts — "Integraties & uitvoer":** Nextcloud app store, gov-portals (MijnOverheid, DigiD), e-mail / kalender, LLM-tools (Claude, GPT), PostNL / ondertekenen-apps
+
+Stippel-lijnen tonen data-flow tussen categorieën (data komt uit bron-systemen binnen bij Data Foundation; Integration-hex distribueert naar andere categorieën; output gaat via Integrations naar externe tools).
+
+Binnen elke categorie-hex labels die de **apps** zelf noemen (niet de features) — bij Data Foundation dus `OpenRegister` en `OpenCatalogi` als pillen; bij Integration alleen `OpenConnector`; etc. Klik-bare links naar de app-detail-pagina per pill.
+
+**Een concreet feature-mapping voorbeeld per categorie-hex:**
+
+- *"Data Foundation" hex*:
+  - Pill: `OpenRegister` → schema-beheer, object-opslag, audit-trail
+  - Pill: `OpenCatalogi` → federated catalogus, publicatie, harvester
+- *"Integration" hex*:
+  - Pill: `OpenConnector` → API-gateway, transformaties, webhook-fan-out
+- *"Documents" hex*:
+  - Pill: `DocuDesk` → document-generatie, anonimisering, sjablonen
+
+**Waarom dit werkt voor ons:**
+
+- **Claim stakes als "platform", niet als "losse apps":** bezoekers zien direct dat we een ecosystem zijn
+- **Geeft ruimte voor groei:** nieuwe apps passen in bestaande categorieën zonder dat de hero herontworpen hoeft worden
+- **Visualiseert data-flow** — nieuwe klanten begrijpen meteen hoe hun bestaande systemen verbinden met onze apps
+- **Maximaal brand-consistent:** hexagons overal, kleurpalet uitgebreid naar pastel-familie (cobalt-kern + aanvullende pastels binnen ons merk)
+- **Interactief te maken:** categorie-hex → klik/hover toont de apps erin; pill → klik naar app-detail-pagina. Dit is de **homepage-hero als navigation-device** in plaats van een scrollende feature-lijst.
+
+**Implementatie-opties:**
+
+- **SVG met interactieve hotspots** — hoge pixel-kwaliteit, zoekbaar, a11y vriendelijk. Aanbevolen.
+- **Lottie-animatie** — mooie subtiele animatie bij eerste scroll-in. Maar groter bestand en minder toegankelijk.
+- **Pure HTML+CSS** — met SVG-hexagons als componenten, hover-states. Aanbevolen voor eenvoud, progressive enhancement.
+
+**Flat sub-variant voor andere pagina's:**
+
+Dezelfde compositie maar zonder extrusie kan gebruikt worden op:
+
+- **App-detail-pagina's** — "Hoe deze app in het ecosystem past" als mini-diagram
+- **Solution-landing-pagina's** — "De app-stack voor deze solution" gehighlight in een flat overview
+- **About-pagina** — onze positie in het bredere NL-gov-ecosysteem (Common Ground, NL Design System)
+
+Eenzelfde visuele taal, gewoon minder dominant visueel (geen grote hero).
 
 #### Sectie 2: Waarde-teasers (4 blokken: "Open source" / "Eigen Nextcloud" / "Geen vendor lock-in" / "NL Design")
 
@@ -260,11 +336,19 @@ Omdat we alles opnieuw doen, ligt het veld open. Hieronder vier genuinely versch
 
 **Wat:** illustraties gebouwd uit hexagons en eenvoudige geometrische vormen. Géén (of zeer minimaal) mensen. Concepten worden visueel uitgelegd met hex-composities, verbindingslijntjes, gestapelde vormen.
 
+**Twee sub-varianten:**
+
+- **A1 — Flat** (voor gewone illustraties): zuivere 2D hex-composities zonder diepte, cobalt en oranje op wit. Voor solution-pagina-illustraties, icoon-accenten, decoratieve elementen, 404, empty-states.
+- **A2 — Flat-isometric** (voor platform-/architectuur-diagrammen): hexagons geëxtrudeerd tot prisma's vanuit isometrisch perspectief (~30° hoek), subtiele diepte, pastel-kleur-codering per categorie. Voor de homepage-hero platform-overview en ecosystem-diagrammen. Referentie: Honeycomb.io (zie [platform-overview pattern](#platform-overview-pattern--honeycomb-stijl-als-hero)).
+
+A2 is **technisch nog steeds flat** (geen photorealistisch 3D, geen lighting, geen gradients) — alleen isometrisch geconstrueerd. Dat onderscheidt het van "echt 3D" (Lottie-renders, Octane-renders) dat in onze anti-lijst staat.
+
 **Voorbeelden:**
-- "Ecosystem" = centrale hex + satellite-hexes + verbindingen
-- "Integration" = twee hex-groepen die via een hex-brug verbinden
-- "WOO-compliance" = fragmentarisch hex-veld dat consolideert tot één hex-cluster
-- "Open source" = hex met open bovenkant, content stroomt eruit
+- "Ecosystem" = centrale hex + satellite-hexes + verbindingen (A1 of A2)
+- "Integration" = twee hex-groepen die via een hex-brug verbinden (A1)
+- "WOO-compliance" = fragmentarisch hex-veld dat consolideert tot één hex-cluster (A1)
+- "Open source" = hex met open bovenkant, content stroomt eruit (A1)
+- "Platform overview" = Honeycomb-stijl isometrische composities (A2)
 
 **Palet:** cobalt #21468B dominant, KNVB oranje #F36C21 als accent, wit als adem. Geen andere kleuren.
 
@@ -396,17 +480,29 @@ Als we directe librararies gebruiken in plaats van custom:
 
 Voor richting A + B is er dus geen licensing-probleem.
 
-### Voorbeelden per richting — echte referentie-sites
+### Voorbeelden per richting — echte referentie-sites + screenshots
 
-Per richting: 3–5 echte websites of illustrators waarvan de stijl matcht, plus concrete Conduction-scènes beschreven in die stijl zodat je kunt voorstellen hoe "onze" illustraties eruit zouden zien.
+Per richting: 3–5 echte websites of illustrators waarvan de stijl matcht, een **lokaal opgeslagen screenshot** als visuele anker, plus concrete Conduction-scènes beschreven in die stijl zodat je kunt voorstellen hoe "onze" illustraties eruit zouden zien. Alle screenshots staan in [`briefs/website/references/`](./references/).
 
 #### Richting A — Hex-first geometric
 
+**Screenshot — Honeycomb.io platform-overview (3D-isometrisch, A2):**
+
+![Honeycomb.io 3D-isometrische hexagon-prisma platform-overview](./references/ref-a-honeycomb-3d-platform.png)
+
+**Screenshot — Honeycomb.io platform-flow (flat horizontaal, A1):**
+
+![Honeycomb.io flat horizontal data-flow met hexagons](./references/ref-a1-honeycomb-section-3400.png)
+
+**Screenshot — Supabase hero (typografie-led met technische visual-hints):**
+
+![Supabase homepage hero](./references/ref-a-supabase-hero.png)
+
 **Bestaande sites/merken die dit register raken:**
 
-- [honeycomb.io](https://honeycomb.io) — letterlijk hexagon-branding, mooi voorbeeld van hoe ver je kunt komen met alleen hex-vormen
+- [honeycomb.io](https://honeycomb.io) en [honeycomb.io/platform](https://www.honeycomb.io/platform) — **topreferentie**, letterlijk hexagon-branding met zowel A1 flat- als A2 isometrische varianten
 - [supabase.com](https://supabase.com) (vooral de feature-pagina's) — pure geometrische composities, modulair
-- [hashicorp.com](https://www.hashicorp.com) — abstracte geometrische tech-illustraties
+- [hashicorp.com](https://www.hashicorp.com) — abstracte geometrische tech-illustraties (let op: gebruikt meer gradient/glow dan wij willen)
 - [fly.io](https://fly.io) — sterk geometrisch, eenvoudig
 - [cloudflare.com](https://www.cloudflare.com) (product-pagina's) — abstracte geometrische vormen als illustratie
 - [plausible.io](https://plausible.io) — minimalistisch geometrisch
@@ -432,9 +528,13 @@ Per richting: 3–5 echte websites of illustrators waarvan de stijl matcht, plus
 
 #### Richting B — Minimal line-art characters
 
+**Screenshot — Open Peeps showcase:**
+
+![Open Peeps illustraties — zwart-op-wit line-art karakters met variatie in leeftijd, haarstijl, kleding](./references/ref-b-openpeeps.png)
+
 **Bestaande sites/merken:**
 
-- [openpeeps.com](https://www.openpeeps.com) — de library zelf, met een live preview die de stijl toont
+- [openpeeps.com](https://www.openpeeps.com) — de CC0-library zelf, met een live preview die de stijl toont
 - [icons8.com/illustrations/style--outline](https://icons8.com/illustrations/style--outline) — Icons8's outline-style pagina met honderden voorbeelden
 - [storyset.com](https://storyset.com) — filter op "Line Color" variant voor de minimalistische line-versies
 - [linear.app](https://linear.app) — soms line-art characters op landings-/feature-pagina's
@@ -458,10 +558,14 @@ Per richting: 3–5 echte websites of illustrators waarvan de stijl matcht, plus
 
 #### Richting C — Editorial / paper-cut
 
+**Screenshot — Tom Froese portfolio (editorial work grid):**
+
+![Tom Froese editorial portfolio — gedetailleerde editorial illustraties met karakters, steden, kaarten; rijk palet, stijl-accent per werk](./references/ref-c-tomfroese-work.png)
+
 **Bestaande sites/merken:**
 
 - [newyorker.com](https://www.newyorker.com) — klassieke editorial cover-illustraties
-- [tomfroese.com](https://www.tomfroese.com) — portfolio van Tom Froese, groot-format geometrisch-editorial
+- [tomfroese.com/work](https://www.tomfroese.com/work) — portfolio van Tom Froese, groot-format geometrisch-editorial
 - [malikafavre.com](https://www.malikafavre.com) — Malika Favre, bekend om minimalistisch-editorial geometrie
 - [owendavey.com](https://www.owendavey.com) — Owen Davey, retro-editorial, veelgebruikt door redacties
 - [charliedavis.co.uk](https://www.charliedavis.co.uk) — Charlie Davis, paper-cut-achtige composities
@@ -485,9 +589,13 @@ Per richting: 3–5 echte websites of illustrators waarvan de stijl matcht, plus
 
 #### Richting D — Riso / two-color print
 
+**Screenshot — Risotto Studio (riso prints en stationery):**
+
+![Risotto Studio riso kalenders en prints — bold colors, print-feel, texture, typografische focus](./references/ref-d-risotto.png)
+
 **Bestaande sites/merken:**
 
-- [risotto.studio](https://www.risotto.studio) — riso print studio in Edinburgh, met illustraties en prints van eigen werk + klanten
+- [risottostudio.com](https://risottostudio.com) — riso print studio in Edinburgh, met illustraties en prints van eigen werk + klanten
 - [riso.party](https://riso.party) — showcase van risograph-prints van kunstenaars wereldwijd
 - [peopleofprint.com](https://www.peopleofprint.com/tag/risograph/) — riso-tag van People of Print
 - [obsidian.md](https://obsidian.md) — hun illustraties hebben een riso-leunende kwaliteit (grain, twee-kleur-vibe)
