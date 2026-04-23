@@ -221,6 +221,21 @@ Waarom deze keuze:
 
 Bij honeycomb-patronen (meerdere hexagons aaneengesloten) werken pointy-top-hexes prima — ze stapelen in offset rijen horizontaal.
 
+### Illustratie-stijl — gekozen richting
+
+Per 2026-04-23 vastgelegd: **alle illustraties** op alle Conduction-oppervlakken gebruiken de **flat-isometric hex-prism-stijl** (richting A2 in [`briefs/website/visual-motifs.md`](./briefs/website/visual-motifs.md#gekozen-richting-a2--flat-isometric-hex-prism-overall)). Referentie: honeycomb.io platform-overview-visualisatie.
+
+Kenmerken:
+
+- Hexagons geëxtrudeerd tot prisma's vanuit ~30° isometrisch perspectief
+- Flat kleurvlakken — geen gradients, geen lighting, geen photorealistisch 3D
+- Cobalt #21468B dominant, KNVB-oranje accent ≤10%, pastel categorie-kleuren voor differentiatie
+- Witte achtergrond, subtiele 2D drop-shadow voor diepte
+- Geen mensen, geen gezichten, geen karakters
+- Eén visuele taal door alle oppervlakken (website, drukwerk, presentaties, app-UI's)
+
+Productie: Midjourney eerste batch met master-prompt; per-scène-prompts in [`briefs/website/illustration-batch-1.md`](./briefs/website/illustration-batch-1.md).
+
 ### Waarom twee logo-varianten (op wit, op blauw)?
 
 - **Op wit** is de default — documenten, lichte UI, website

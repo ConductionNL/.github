@@ -442,20 +442,29 @@ A2 is **technisch nog steeds flat** (geen photorealistisch 3D, geen lighting, ge
 | **C — Editorial** | Sophisticated, redactioneel, volwassen | Hoog — vraagt illustrator | Goed (palet-restrictie) | Kan highbrow voelen voor MKB |
 | **D — Riso** | Indie, crafted, OSS-spirit | Middel — vraagt tooling | Goed (twee-kleur-principe) | Kan trendy voelen |
 
-### Mijn aanrader: **Richting A (primair) + B (secundair, alleen voor mensen-momenten)**
+### Gekozen: **Richting A2 — flat-isometric hex-prism, overall**
 
-Primair **A**, omdat:
-- Onze apps zijn producten, geen emotionele diensten — illustraties moeten het product ondersteunen
-- Hex-motief wordt zo fundamenteel dat elke nieuwe pagina automatisch "Conduction" voelt
-- Laagste productie-friction — een AI of designer kan nieuwe hex-illustraties in minuten maken
-- Compleet weg van stock-feel
+**Definitieve keuze (2026-04-23):** alle illustraties op de site krijgen de **flat-isometric hex-prism-behandeling** in de stijl van honeycomb.io. Geen richting B, geen line-art-karakters, geen editorial, geen riso. **A2 voor alles.**
 
-Secundair **B** voor specifieke momenten waar een mens-aanwezigheid onmisbaar is:
-- About-pagina — team-portretten in hex-frames (behoud huidig concept, nieuwe character-stijl)
-- Testimonials — klant-avatars in line-art
-- Eén of twee plekken op de homepage als het puur-hex te koel wordt
+Rationale:
+- **Maximale merk-consistentie.** Eén visuele taal door de hele site; elke nieuwe pagina voelt automatisch "Conduction".
+- **Eén reproduceerbare stijl** = één master-prompt voor Midjourney; geen gewrikte keuzes per scène over "is dit een A of B moment?".
+- **Product-first positionering.** Hex-prism-diagrammen tonen software-structuur, niet emoties — exact passend bij waar we heen gaan.
+- **Schaalbaar.** Nieuwe illustraties zijn variaties op hetzelfde patroon, niet nieuwe stijlen.
 
-**Niet gelijktijdig C of D** — die zijn elk een heel andere wereld en beperken de reproduceerbaarheid.
+### Hoe "menselijke momenten" gerenderd worden in A2
+
+We hebben soms mens-aanwezigheid nodig (About team-portretten, testimonials, "meekijkend support"-visuals). Binnen A2 doen we dat als volgt:
+
+1. **Abstracte hex-figuren** — een hex-prism-torso met kleinere hex-prism-hoofd, geen gezichten, geen details. Meer een "iemand" dan "een persoon". Staat los van stock-photo-gevoel.
+2. **Blanked hex-portretten** — behoud het bestaande hex-portret-concept (zie de huidige conduction.nl) maar vul de hex met een **abstracte silhouette** of **alleen de initialen** in plaats van een gedetailleerd getekend figuur. Functioneel als avatar, stilistisch consistent.
+3. **Skip mens-depictie helemaal** — About-pagina toont organisaties en rollen via abstracte hex-composities (een "team"-hex met sub-hexen voor rollen); testimonials tonen alleen logo + tekst + titel zonder avatar.
+
+Voor de eerste iteratie kiezen we **optie 3 (skip)**: team-details via tekst, testimonials zonder avatar. Dat houdt A2 schoon en vermijdt de complexiteit van abstracte figuren tekenen. Bij latere iteraties evalueren we of optie 1 of 2 nodig is.
+
+### Nederlaag-scenario — wanneer terugvallen
+
+Als A2 na 2–3 iteraties met Midjourney niet voldoende karakter oplevert (alles lijkt op hetzelfde hex-blob), overwegen we een **secundair spoor** voor 1–2 specifieke use-cases. Dat besluit nemen we ná de eerste batch, niet vooraf.
 
 ### Master-briefing-tekst voor richting A (hex-first geometric)
 
@@ -624,13 +633,11 @@ Per richting: 3–5 echte websites of illustrators waarvan de stijl matcht, een 
 - **Bij twijfel tussen richtingen**: deze lijst biedt genoeg materiaal om op een moodboard (Figma / Miro / Pinterest) te organiseren en één-op-één te vergelijken. Plaats 3–4 voorbeelden per richting naast elkaar, kijk welke het best bij de Conduction-tone en doelgroep past, kies.
 - **Als extern illustratie-team gebruikt wordt**: stuur de relevante richting's master-prompt + referenties als brief. Dat geeft ze een concreet houvast om binnen 1–2 iteraties aan te landen.
 
-### Open vraag voor jou
+### Beantwoorde vragen (2026-04-23)
 
-1. **Bevestig je richting A + B als de primair/secundair-combinatie?** Of wil je uit een van de andere richtingen kiezen?
-2. **Willen we met een illustrator werken**, of laten we de eerste batch via AI-tools genereren (Midjourney met de master-prompt)?
-3. **Hoeveel illustraties hebben we concreet nodig voor de MVP-launch?** Schatting: 8–12 (homepage-values, 3–5 solutions, About-team, 404, één hero-visual). Bevestigen.
-
-Zodra bevestigd, documenteer ik de definitieve richting in BRAND.md en schrappen we dit document in de overgebleven onzekerheid-teksten.
+1. **Richting:** A2 (flat-isometric hex-prism). Geen B als secundair. Mens-momenten behandelen volgens optie 3 ("skip" in eerste iteratie).
+2. **Productie:** Midjourney voor eerste batch. Concrete prompts per illustratie: zie [`illustration-batch-1.md`](./illustration-batch-1.md).
+3. **MVP-count:** 10–12 illustraties bevestigd.
 
 ---
 
