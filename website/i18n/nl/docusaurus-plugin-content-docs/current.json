@@ -1,0 +1,18 @@
+{
+  "sidebar.tutorialSidebar.link.Employee Handbook": {
+    "message": "Medewerkershandboek",
+    "description": "Sidebar label for Employee Handbook landing page"
+  },
+  "sidebar.tutorialSidebar.category.Working at Conduction": {
+    "message": "Werken bij Conduction",
+    "description": "Sidebar category for HR, onboarding, organisation"
+  },
+  "sidebar.tutorialSidebar.category.Building Software": {
+    "message": "Software Bouwen",
+    "description": "Sidebar category for development, contributing, releases"
+  },
+  "sidebar.tutorialSidebar.category.Support & Safety": {
+    "message": "Support & Veiligheid",
+    "description": "Sidebar category for customer support, ISO, incidents, security"
+  }
+}

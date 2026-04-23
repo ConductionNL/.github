@@ -1,2 +1,26 @@
-
+# IDE
 .idea/
+.vscode/
+*.swp
+*.swo
+
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+*_rsa
+*.crt
+*.p12
+
+# Build artifacts
+website/build/
+website/.docusaurus/
+website/node_modules/
+node_modules/
+dist/
+*.tgz
+
+# OS
+.DS_Store
+Thumbs.db

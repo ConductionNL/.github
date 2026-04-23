@@ -1,0 +1,57 @@
+name: Docs Sync Check
+
+on:
+  pull_request:
+    paths:
+      - 'CONTRIBUTING.md'
+      - 'SECURITY.md'
+      - 'CODE_OF_CONDUCT.md'
+      - 'website/docs/WayOfWork/contributing.md'
+      - 'website/docs/ISO/security.md'
+      - 'website/docs/WayOfWork/code-of-conduct.md'
+
+jobs:
+  check-sync:
+    name: Verify repo docs match website docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check CONTRIBUTING.md sync
+        run: |
+          # Strip frontmatter and sync comment from docs version
+          sed '1,/^---$/d' website/docs/WayOfWork/contributing.md | sed '/^{\/\*.*\*\/}$/d' | sed '/^$/N;/^\n$/d' > /tmp/docs-contributing.md
+          # Compare content sections (ignore minor whitespace)
+          # The docs version should contain all content from the repo version
+          echo "Checking CONTRIBUTING.md sync..."
+          if ! diff -q <(grep -c '^## ' CONTRIBUTING.md) <(grep -c '^## ' /tmp/docs-contributing.md) > /dev/null 2>&1; then
+            echo "::warning::CONTRIBUTING.md and website/docs/WayOfWork/contributing.md have different section counts. They may be out of sync."
+          fi
+          echo "CONTRIBUTING.md section count: $(grep -c '^## ' CONTRIBUTING.md)"
+          echo "Docs version section count: $(grep -c '^## ' /tmp/docs-contributing.md)"
+
+      - name: Check SECURITY.md sync
+        run: |
+          sed '1,/^---$/d' website/docs/ISO/security.md | sed '/^{\/\*.*\*\/}$/d' | sed '/^$/N;/^\n$/d' > /tmp/docs-security.md
+          echo "Checking SECURITY.md sync..."
+          if ! diff -q <(grep -c '^## ' SECURITY.md) <(grep -c '^## ' /tmp/docs-security.md) > /dev/null 2>&1; then
+            echo "::warning::SECURITY.md and website/docs/ISO/security.md have different section counts. They may be out of sync."
+          fi
+          echo "SECURITY.md section count: $(grep -c '^## ' SECURITY.md)"
+          echo "Docs version section count: $(grep -c '^## ' /tmp/docs-security.md)"
+
+      - name: Check CODE_OF_CONDUCT.md sync
+        run: |
+          sed '1,/^---$/d' website/docs/WayOfWork/code-of-conduct.md | sed '/^{\/\*.*\*\/}$/d' | sed '/^$/N;/^\n$/d' > /tmp/docs-coc.md
+          echo "Checking CODE_OF_CONDUCT.md sync..."
+          # Strict check for CoC — content should be nearly identical
+          repo_hash=$(sed 's/^# .*//' CODE_OF_CONDUCT.md | md5sum | cut -d' ' -f1)
+          docs_hash=$(sed 's/^# .*//' /tmp/docs-coc.md | md5sum | cut -d' ' -f1)
+          if [ "$repo_hash" != "$docs_hash" ]; then
+            echo "::warning::CODE_OF_CONDUCT.md and website/docs/WayOfWork/code-of-conduct.md content differs. Please sync them."
+            echo ""
+            echo "Diff:"
+            diff <(sed 's/^# .*//' CODE_OF_CONDUCT.md) <(sed 's/^# .*//' /tmp/docs-coc.md) || true
+          else
+            echo "CODE_OF_CONDUCT.md is in sync."
+          fi

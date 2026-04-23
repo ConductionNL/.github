@@ -1,4 +1,46 @@
+---
+id: way-of-working
+title: Issue Flow and Sprint Planning
+sidebar_label: Way of Working
+sidebar_position: 3
+description: How Conduction plans sprints, manages issues, and ships software
+---
+
 # Issue Flow and Sprint Planning Process
+
+## Scrum Ceremonies
+
+We follow Scrum with two-week sprints. Here's the recurring rhythm:
+
+| Ceremony | When | What |
+|---|---|---|
+| **Retrospective & Sprint Planning** | Monday 09:00 | Review last sprint on Miro (what went well / could be better), then plan the next sprint |
+| **Standup** | Daily 10:00 (except Monday) | Quick round: what are you working on, any blockers? |
+| **Report-out** | Daily 16:30 (except Friday) | Written in Slack #general — what you did, any impediments |
+| **Sprint Review & Presentations** | Friday (every 2 weeks) | Demo your work to the team, followed by a borrel |
+
+**Office attendance:** at least one day per week in the office. If you're scheduled for the office and can't make it, notify before the workday starts.
+
+**Rescheduling meetings:** whoever cancels is responsible for rescheduling immediately.
+
+## Story Points
+
+We estimate complexity, not time. Story points measure how hard something is — a senior may finish faster than a junior, but the complexity is the same.
+
+| Size | Story Points | Roughly |
+|---|---|---|
+| Small | 5 | Half a day |
+| Medium | 10 | A day |
+| Large | 20 | Half a week |
+| XL | 40 | A week |
+| XXL | 80 | Two weeks |
+| XXXL | 160 | A month |
+
+**Rules:**
+- A single story should not exceed 10 story points — break it down
+- Anything above 10 points is an epic
+- Use timeboxing: if you've spent a full day on a 10-point story, escalate at the standup
+- Average burn rate: **10 story points per developer per day**
 
 ## Epic Creation and Sizing
 

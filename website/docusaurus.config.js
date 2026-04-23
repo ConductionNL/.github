@@ -20,7 +20,7 @@ const config = {
   // metadata like html lang
   i18n: {
     defaultLocale: 'en',
-    locales: ['en'],
+    locales: ['en', 'nl'],
   },
 
   presets: [
@@ -58,6 +58,10 @@ const config = {
             label: 'Documentation',
           },
           {
+            type: 'localeDropdown',
+            position: 'right',
+          },
+          {
             href: 'https://github.com/conductionnl',
             label: 'GitHub',
             position: 'right',
@@ -87,6 +91,13 @@ const config = {
       prism: {
         theme: require('prism-react-renderer/themes/github'),
         darkTheme: require('prism-react-renderer/themes/dracula'),
+      },
+      algolia: {
+        appId: 'JGCIQ1UR7T',
+        apiKey: 'ee1e114882295e88b9a457a6ace461f3',
+        indexName: 'conduction-docs',
+        contextualSearch: true,
+        searchParameters: {},
       },
     })
 };

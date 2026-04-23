@@ -1,3 +1,11 @@
+---
+id: vacancies
+title: Vacancies at Conduction
+sidebar_label: Vacancies
+sidebar_position: 5
+description: Open positions and how to apply at Conduction
+---
+
 # Vacancies at Conduction
 
 Welcome to the career section of Conduction! We are a dynamic Dutch ICT company specializing in open-source software solutions for government agencies. At Conduction, we are on a mission to transform the digital world into a fair, inclusive, and transparent environment for everyone. If you are passionate about technology and share our vision, we invite you to explore our current vacancies.
@@ -21,9 +29,7 @@ As a Senior Backend Developer at Conduction, you will play a key role in develop
 
 #### How to Apply
 
-To apply for this position, create an **application issue** in this repository with the title "Application - Senior Backend Developer (PHP Symfony)". Include your CV and a brief cover letter in the issue description explaining why you are suitable for this role.
-
----
+Send your CV and a brief cover letter to **[info@conduction.nl](mailto:info@conduction.nl)** with the subject "Application — Senior Backend Developer (PHP Symfony)".
 
 ### Senior Frontend Developer (React / NL Design)
 
@@ -42,9 +48,7 @@ As a Senior Frontend Developer at Conduction, you will be responsible for creati
 
 #### How to Apply
 
-To apply for this position, create an **application issue** in this repository with the title "Application - Senior Frontend Developer (React / NL Design)". Include your CV and a brief cover letter in the issue description explaining why you are suitable for this role.
-
----
+Send your CV and a brief cover letter to **[info@conduction.nl](mailto:info@conduction.nl)** with the subject "Application — Senior Frontend Developer (React / NL Design)".
 
 ## Why Join Conduction?
 
@@ -59,13 +63,10 @@ Conduction follows the ICT NL CAO (Collective Labor Agreement) to ensure fair an
 
 ## How to Apply
 
-If you are interested in any of the above positions or think you can contribute to our team in other ways, follow these steps to apply:
+Interested in one of the positions above, or think you can contribute in other ways? Send your CV and a brief motivation to **[info@conduction.nl](mailto:info@conduction.nl)**. We will get back to you within 5 business days.
 
-1. Click on the "Issues" tab in this repository.
-2. Click the "New Issue" button.
-3. Use the relevant job title (e.g., "Application - Senior Backend Developer (PHP Symfony)" or "Application - Senior Frontend Developer (React / NL Design)") as the issue title.
-4. In the issue description, include your CV and a brief cover letter explaining your interest in the role and why you are a strong candidate.
+No suitable vacancy listed? Open applications are welcome at the same address.
 
-Our HR team will review your application and contact you. Thank you for considering a career at Conduction. We look forward to welcoming talented individuals to our team!
+## About Conduction
 
----
+Want to learn more about what we build? Check our [GitHub organisation](https://github.com/ConductionNL) for our open-source projects, or browse this handbook for how we work.

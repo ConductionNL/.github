@@ -2,75 +2,54 @@ import React from 'react';
 import clsx from 'clsx';
 import styles from './styles.module.css';
 import Link from '@docusaurus/Link';
+import Translate from '@docusaurus/Translate';
 
-/**
- * List of features displayed on the homepage
- * Each feature represents a main section of Conduction's documentation
- */
 const FeatureList = [
   {
-    title: 'How We Work',
-    description: (
-      <>
-        Comprehensive user manuals and organizational information to understand our processes, 
-        methodologies, and company culture. Learn how we operate and collaborate effectively.
-      </>
-    ),
-    link: '/docs/intro',
-    buttonText: 'Learn How We Work',
+    titleId: 'homepage.feature.howWeWork.title',
+    titleDefault: 'How We Work',
+    descriptionId: 'homepage.feature.howWeWork.description',
+    descriptionDefault: 'Our employee handbook: processes, culture, and how we collaborate. Everything you need to get started and stay aligned.',
+    link: '/docs/WayOfWork/way-of-work',
+    buttonId: 'homepage.feature.howWeWork.button',
+    buttonDefault: 'Learn How We Work',
   },
   {
-    title: 'ISO Certification',
-    description: (
-      <>
-        Our commitment to quality and security standards through ISO certification. 
-        Detailed information about our quality management system and security practices.
-      </>
-    ),
-    link: '/docs/intro',
-    buttonText: 'View ISO Documentation',
+    titleId: 'homepage.feature.iso.title',
+    titleDefault: 'ISO & Quality',
+    descriptionId: 'homepage.feature.iso.description',
+    descriptionDefault: 'Our commitment to quality and security through ISO 9001 and 27001 certification. Incident reporting, security policy, and quality management.',
+    link: '/docs/ISO/iso-intro',
+    buttonId: 'homepage.feature.iso.button',
+    buttonDefault: 'View ISO Documentation',
   },
   {
-    title: 'Products & Services',
-    description: (
-      <>
-        Explore our suite of components and services. Detailed documentation about our 
-        solutions, technical specifications, and implementation guides.
-      </>
-    ),
-    link: '/docs/intro',
-    buttonText: 'Explore Products',
+    titleId: 'homepage.feature.products.title',
+    titleDefault: 'Products & Services',
+    descriptionId: 'homepage.feature.products.description',
+    descriptionDefault: 'Our open-source components and services for digital government infrastructure. Technical documentation and implementation guides.',
+    link: '/docs/Products/products-overview',
+    buttonId: 'homepage.feature.products.button',
+    buttonDefault: 'Explore Products',
   },
 ];
 
-/**
- * Component to render a single feature
- * @param {string} title - The title of the feature
- * @param {JSX.Element} description - The description of the feature
- * @param {string} link - The URL to navigate to when clicking the button
- * @param {string} buttonText - The text to display on the button
- * @returns {JSX.Element} Feature component
- */
-function Feature({title, description, link, buttonText}) {
+function Feature({titleId, titleDefault, descriptionId, descriptionDefault, link, buttonId, buttonDefault}) {
   return (
     <div className={clsx('col col--4')}>
       <div className="text--center padding-horiz--md">
-        <h3>{title}</h3>
-        <p>{description}</p>
+        <h3><Translate id={titleId}>{titleDefault}</Translate></h3>
+        <p><Translate id={descriptionId}>{descriptionDefault}</Translate></p>
         <Link
           className="button button--secondary button--lg"
           to={link}>
-          {buttonText}
+          <Translate id={buttonId}>{buttonDefault}</Translate>
         </Link>
       </div>
     </div>
   );
 }
 
-/**
- * Main component that displays all features on the homepage
- * @returns {JSX.Element} HomepageFeatures component
- */
 export default function HomepageFeatures() {
   return (
     <section className={styles.features}>
