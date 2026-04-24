@@ -131,6 +131,7 @@ if $_is_config_write; then
             # the validated canonical repo. Without this, a `git -C /tmp/evilrepo show origin/main:…`
             # would slip through because the canonical-repo check only consults settings-repo-path,
             # not the actual -C argument in the command.
+            # shellcheck disable=SC2016 # sed expression must be single-quoted; \& is a sed backreference, not a shell variable
             _esc_repo=$(printf '%s' "$_repo_path" | sed 's/[.[\*^$()+?{}|/-]/\\&/g')
             if ! echo "$cmd" | grep -qE "\bgit\b[^|]*-C[[:space:]]+[\"']?${_esc_repo}([[:space:]\"'/]|$)"; then
                 hard_deny "BLOCKED: git show for config updates must use -C ${_repo_path} (the validated canonical repo)."

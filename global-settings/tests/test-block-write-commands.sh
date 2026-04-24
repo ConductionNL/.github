@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016,SC2088 # literal $VAR / ~ tokens are intentional test fixtures fed to the hook as data
 # test-block-write-commands.sh — synthetic test harness for block-write-commands.sh.
 #
 # Feeds synthetic PreToolUse inputs to the hook and asserts the permissionDecision.
@@ -51,8 +52,6 @@ PROT_FILES=(
   "settings-repo-url"
   "settings-repo-ref"
 )
-# Home-dir forms: every spelling the hook must recognize.
-HOMES_BARE=('~' '$HOME' '${HOME}' '/home/wilco')
 # Quote placements to build paths: bare, home-wrapped (quote only around home form),
 # and whole-path-wrapped (quote covers the entire path). Each varies with " and '.
 path_variants() { # args: file
