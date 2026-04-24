@@ -141,7 +141,7 @@ The skill has been systematically tested with evaluation scenarios. Its performa
 - Skill has been through at least **one improve cycle** based on eval results
 - `evals/` folder with `evals.json`; `timing.json` and `grading.json` produced after running evals
 
-> **What the script auto-detects for L5:** 3+ evals (checks `evals` key, falls back to `scenarios`), 10+/10+ trigger tests, and `last_validated` non-null in evals.json. Baseline measurement and improve cycles are required for true L5 but not auto-checked by the script.
+> **What the script auto-detects for L5:** 3+ evals (checks `evals` key, falls back to `scenarios`), 10+/10+ trigger tests, `last_validated` non-null in `evals.json`, **`grading.json` present** in the `evals/` folder, **and `timing.json` found anywhere under `evals/`**. Both files are produced by running evals via `/skill-creator` — `grading.json` alone (from a read-only simulation) is not sufficient. `timing.json` is evidence that the skill was actually executed via the eval runner, not just graded from a static spec read. Baseline measurement and improve cycles are required for true L5 but not auto-checked by the script.
 
 For the full evals.json schema, Skill Creator setup guide, and baseline_score usage, see [skill-evals.md](skill-evals.md).
 
@@ -272,7 +272,7 @@ Skills degrade over time. Schedule periodic reviews:
 
 ### Common Upgrade Paths
 
-**L4 -> L5 (most common need):** Create 3 eval scenarios from real usage. Run the skill, grade output, identify one weakness, improve, re-eval.
+**L4 -> L5 (most common need):** Create 3 eval scenarios from real usage. Use `/skill-creator` to run the evals — it spawns with-skill and baseline subagents, captures `timing.json` from task notifications, grades assertions into `grading.json`, and launches the benchmark viewer. Both files must exist under `evals/` for the script to grant L5. Identify one weakness from the benchmark, improve the skill, re-eval.
 
 **L5 -> L6:** Add `learnings.md` and a "capture learnings" step to SKILL.md. After 5-10 executions, review learnings and promote validated patterns to standing rules.
 

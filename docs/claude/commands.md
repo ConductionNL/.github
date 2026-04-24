@@ -168,6 +168,45 @@ Create a Pull Request from a branch in any repo. Handles the full flow interacti
 
 ---
 
+### `/review-pr`
+
+**Phase:** Delivery / Code Review
+
+Review one or more GitHub Pull Requests. Fetches the diff, detects prior reviews (skips if nothing has changed since last review), asks for strictness level, posts inline findings with emoji severity markers (🔴 blocker / 🟡 warning / 🟢 suggestion), and submits a formal APPROVE or REQUEST_CHANGES decision.
+
+**Usage:**
+```
+/review-pr 123                                               # single PR, infer repo from git remote
+/review-pr https://github.com/org/repo/pull/123             # single PR, explicit URL
+/review-pr 123 456                                           # batch: two PRs reviewed in parallel
+/review-pr https://github.com/org/repo/pull/123 https://github.com/org/repo/pull/456
+```
+
+**Strictness modes:**
+
+| Mode | Use when |
+|------|----------|
+| **Quick** | Hotfix or trivial change — check for obvious blockers only |
+| **Standard** | Everyday feature PR — balanced depth |
+| **Thorough** | Large or complex PR — full analysis |
+| **Strict** | Security-sensitive code (auth, RBAC, CI) — maximum depth; auto-suggested when sensitive code is detected |
+
+**What it does:**
+1. **Detects re-reviews** — checks if anything has changed since your last review; skips if not
+2. **Classifies sensitivity** — auto-detects auth/RBAC/CI code and recommends Strict mode
+3. **Asks strictness** — Quick, Standard, Thorough, or Strict
+4. **Analyzes the diff** — runs in parallel sub-agents for batch mode; looks for bugs, null-safety issues, SQL parity, test coverage gaps, and more
+5. **Posts inline comments** — one finding per comment, severity marked with 🔴/🟡/🟢; never bundles multiple findings in one comment
+6. **Checks CI** — blocks APPROVE if required CI checks are failing
+7. **Submits formal review** — APPROVE (no blockers) or REQUEST_CHANGES (one or more 🔴 findings)
+8. **Resolves addressed threads** — replies "✅ Resolved in {sha}" to previously raised comments now fixed, and marks threads closed
+
+**Model:** Requires Sonnet or Opus — stops immediately on Haiku. Batch mode lets you choose the model for parallel analysis agents (Sonnet default, Opus for security-sensitive batches).
+
+**Requires:** `gh` CLI authenticated (`gh auth login`)
+
+---
+
 ### `/verify-global-settings-version`
 
 **Phase:** Git / Delivery

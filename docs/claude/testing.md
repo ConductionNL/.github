@@ -50,6 +50,24 @@ For a quicker pass when you're confident in the implementation:
 
 ---
 
+### When reviewing someone else's PR
+
+When a colleague or CI agent hands you a PR to review:
+
+```
+/review-pr <PR#>                # fetches diff, asks strictness, posts 🔴/🟡/🟢 inline comments, submits APPROVE or REQUEST_CHANGES
+```
+
+Review multiple PRs in parallel by passing more than one:
+
+```
+/review-pr 123 456              # both reviewed simultaneously
+```
+
+The skill detects re-reviews (skips if nothing has changed since your last pass), auto-suggests **Strict** mode on security-sensitive code (auth, RBAC, CI), and blocks APPROVE if required CI checks are failing.
+
+---
+
 ### Full regression sweep (before a release or major merge)
 
 When you want comprehensive coverage — correctness, user experience, and technical quality:
