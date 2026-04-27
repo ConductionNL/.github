@@ -369,6 +369,163 @@ Dit kan de designer impliciet "veiliger" maken in keuzes — gewoon CSS, geen li
 
 ---
 
+## 6.5. Animatie-analyse — wat beweegt er werkelijk? (2e sessie deep-dive)
+
+In een vervolgonderzoek (sessie van 2026-04-27) hebben we via Playwright **alle CSS-keyframes en transitions** in de pagina geïnventariseerd, **elk dashed-pad in het diagram geïnspecteerd**, en de **default state vs hover state** vergeleken. Conclusie: het diagram is opvallend stil. Vrijwel alle "beweging" zit in één pure-CSS interactie.
+
+### Wat we vonden
+
+**Globale CSS @keyframes-rules in de pagina** (gedefinieerd, maar bijna allemaal voor andere onderdelen):
+
+| Keyframe | Waar gebruikt |
+|---|---|
+| `swiper-preloader-spin` | Carousel-spinners |
+| `logoScroll` / `logoScrollReverse` | De marquee van klant-logo's onderaan |
+| `spin` | Loading-spinners |
+| `accordion-down` / `accordion-up` | Radix-UI accordion-componenten elders |
+| `fadeIn`, `fadeInScale`, `ring` | Generieke utility-klassen, **niet** toegepast op het diagram |
+
+Geen enkele van deze keyframes is op het diagram zelf actief.
+
+**Op het platform-diagram zelf** vonden we exact deze CSS:
+
+- **Pill-spans** (`<span>` met Tailwind-klasse `transition-colors duration-150`):
+  - `transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to`
+  - `transition-duration: 0.15s`
+  - **Geen `animation`** (animationName: `none`)
+- **Hex-prism path-elementen** (`<path>` met Tailwind-klasse `transition-all group-hover:opacity-100`):
+  - `transition-property: all`
+  - `transition-duration: 0.15s`
+  - **Geen `animation`**
+  - Default `opacity` < 1; bij `:hover` op de groepscontainer wordt `opacity` 1
+- **Dashed flow-paden** (8 stuks): `stroke-dasharray: 2.41px, 3.85px`, **`stroke-dashoffset: 0px`**, **geen animation**, **geen transitie**. Statische dashed-lijntjes zonder beweging.
+- **Geen `<circle>`-elementen** in het diagram (de "dotjes" die je in screenshots ziet zijn de korte segmenten van de stroke-dasharray, niet aparte circles)
+- **Geen `<animate>` / `<animateTransform>` / `<animateMotion>` SMIL-elementen** in de SVG
+- **Geen `IntersectionObserver`-class-toggle** op de SVG: er is geen `data-aos`, geen `.in-view`, geen entrance-fade
+
+### Het werkelijke "magische" effect: spotlight via `group-hover`
+
+Het ene effect dat het diagram echt **levend** maakt zit in de Tailwind **`group-hover:opacity-100`** modifier op de hex-prism-paden:
+
+1. In default-state staan alle hex-prism-paden op een **lagere opacity** (zo'n 60–70%) — alle hexen zijn licht-translucent
+2. Elke hex-groep is een `<g class="group">` (of een `<a class="group">`) met daarbinnen zowel de hex-paden als de foreignObject-pills
+3. Bij hover op enige content binnen de group (een pill, of de hex zelf) wordt de **hele groep** als hovered geïnterpreteerd, en de paden gaan via `group-hover:opacity-100` naar 100% opacity
+4. Resultaat: de gehover-de hex springt uit, de andere hexen voelen alsof ze "opzij stappen" (niet écht; ze veranderen niet, maar de relatieve helderheid van de gehoverde hex maakt dat zo)
+5. Transitie-tijd: 0.15s — kort genoeg om snappy te voelen
+
+Vergelijk de twee screenshots:
+
+| Default (alle hexes ~70%) | Hover op "Distributed Tracing" (REALTIME ACCESS-hex naar 100%) |
+|---|---|
+| ![Default state](./references/ref-a-honeycomb-default-state.png) | ![Hover state](./references/ref-a-honeycomb-hover-state.png) |
+
+In de hover-screenshot is de blauwe REALTIME ACCESS-hex (links-boven) duidelijk feller, terwijl de andere hexen relatieve "achtergrond" worden. Dit is de **enige** echte interactie van het diagram.
+
+### Wat er dus NIET gebeurt (ondanks visuele suggestie)
+
+- ❌ Geen flow-line-animatie — de dashed connectoren zijn statisch, geen bewegende stippels
+- ❌ Geen entrance-fade-in als je naar het diagram scrollt
+- ❌ Geen ademhalings-loop op de hexen (puls, glow, etc.)
+- ❌ Geen circle-dots die door de paden bewegen
+- ❌ Geen automatische cyclus die elk hex om beurten "demonstreert"
+- ❌ Geen Lottie / Framer Motion / GSAP / SVG-SMIL ergens betrokken
+
+**De totale animatie-budget op het hele diagram bedraagt 0.15s color-transitions plus 0.15s opacity-transitions.** Dat is alles.
+
+### Wat dit voor ons betekent
+
+Goed nieuws: het effect is **trivial te reproduceren** met Tailwind (of plain CSS). Geen library, geen JS-driver. Concrete recept voor onze versie:
+
+```html
+<svg viewBox="0 0 1290 780" class="platform-diagram">
+  <!-- Per categorie een group; default opacity lager -->
+  <a href="/apps/openregister" class="group hex-data-foundation">
+    <path class="hex-path top transition-opacity duration-150
+                 opacity-70 group-hover:opacity-100"
+          d="..." fill="var(--cat-foundation-100)"/>
+    <path class="hex-path left transition-opacity duration-150
+                 opacity-70 group-hover:opacity-100"
+          d="..." fill="var(--cat-foundation-300)"/>
+    <path class="hex-path right transition-opacity duration-150
+                 opacity-70 group-hover:opacity-100"
+          d="..." fill="var(--cat-foundation-500)"/>
+    <foreignObject x="..." y="..." width="..." height="...">
+      <div xmlns="http://www.w3.org/1999/xhtml" class="pills">
+        <span class="pill transition-colors duration-150">OpenRegister</span>
+        <span class="pill transition-colors duration-150">OpenCatalogi</span>
+        <span class="category-label">DATA FOUNDATION</span>
+      </div>
+    </foreignObject>
+  </a>
+  <!-- ... 5 meer category groups ... -->
+
+  <!-- Statische dashed flow-paden, geen animatie -->
+  <path d="..." stroke="var(--color-cobalt-300)"
+        stroke-dasharray="2.41 3.85" fill="none"/>
+</svg>
+```
+
+Plus optionele entrance-animatie als we die wel willen (Honeycomb heeft 'm niet, maar wij mogen 'm toevoegen):
+
+```css
+@media (prefers-reduced-motion: no-preference) {
+  .platform-diagram {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 600ms ease-out, transform 600ms ease-out;
+  }
+  .platform-diagram.in-view {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+```
+
+```js
+new IntersectionObserver((entries) => {
+  entries.forEach(e => e.isIntersecting && e.target.classList.add('in-view'));
+}, { threshold: 0.3 }).observe(document.querySelector('.platform-diagram'));
+```
+
+Dat zijn ~10 regels JS plus 8 regels CSS — geen library nodig.
+
+### Het "moving dots"-misverstand
+
+Op de screenshots lijken er soms dotjes langs de dashed lines te liggen. Het gebruikelijke instinct is "die zullen bewegen!" — maar nee. Het is gewoon de stroke-dasharray die elke gap-pixels-met-color-pixels-streepje rendert. Voor een viewer-met-bewegingsperceptie kan dit **statisch lijnen-met-puntjes** zijn, en niet "dots that flow".
+
+Als wij wél een flow-animatie willen (om "data stroomt door het systeem" te suggereren), kunnen we die simpel toevoegen via:
+
+```css
+.flow-line {
+  stroke-dasharray: 2.41 3.85;
+  animation: flow 1.2s linear infinite;
+}
+@keyframes flow {
+  to { stroke-dashoffset: -6.26; }  /* 2.41 + 3.85 = één periode */
+}
+@media (prefers-reduced-motion: reduce) {
+  .flow-line { animation: none; }
+}
+```
+
+Dat is **8 regels CSS** voor een effect dat Honeycomb niet eens gebruikt. Wij kunnen optioneel meer beweging dan zij toevoegen — voor *minder* gebruikersmoeite (geen JS-library). Onze keuze.
+
+### Aanbeveling — wat we wél/niet doen
+
+| Effect | Honeycomb | Ons advies | Implementatie |
+|---|---|---|---|
+| Spotlight bij hover op category | ✅ | ✅ Overnemen | `group-hover:opacity-100` |
+| Color-transition op pills | ✅ | ✅ Overnemen | `transition-colors duration-150` |
+| Entrance-fade-in bij scroll | ❌ | ✅ Toevoegen (subtle) | IntersectionObserver + 600ms transition |
+| Flow-line motion | ❌ | ❓ Optioneel — alleen als het de "data-flow"-boodschap echt versterkt | `@keyframes` op `stroke-dashoffset`, 8 regels CSS |
+| Hex-pulsation / breathing | ❌ | ❌ Niet doen — over-ge-animeerd | — |
+| Lottie of Framer Motion | ❌ | ❌ Niet toevoegen | — |
+| Auto-rotate categorie-cyclus | ❌ | ❌ Niet doen — afleidend | — |
+
+Lichte hand. Eén of twee subtiele animaties zijn meer dan genoeg.
+
+---
+
 ## 7. Conclusie in één zin
 
 Honeycomb's krachtige platform-diagram is **een hand-getekende inline SVG met HTML-pills via `<foreignObject>`, gestyled met Tailwind CSS, geanimeerd met pure CSS `transition-colors`, en gehost binnen een Next.js App Router-app**. Geen Framer Motion, geen GSAP, geen 3D-engine. Wij kunnen het op identieke wijze bouwen binnen Docusaurus 3.x — en *moeten* dat doen, want de "static SVG-as-img"-variant die ze tegenwoordig op /platform tonen is technisch inferieur (361 KB asset, geen accessibility, geen interactiviteit).
