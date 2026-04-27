@@ -46,6 +46,7 @@ Dit document bevat de **kant-en-klare prompt** die je aan Claude Design (Claude 
 > - **Hexagon voor accenten, niet voor functionele containers.** Buttons / inputs / modals / cards blijven rechthoekig. Hex voor bullets, badges, pagination, avatars, step-indicators, dividers, timeline-kralen, empty-states, loading-spinners.
 > - **Tone**: MKB-direct ("je/jij", concreet resultaat, scanbaar). Geen "digitale transformatie", "ketensamenwerking", "toekomstbestendig" — zie `tone-samples.md` voor de verbannen-lijst.
 > - **Geen add-to-cart of account-flow**: onze conversie is een klik naar de Nextcloud app store. Geen login, geen signup, geen billing-UI.
+> - **Geen JS-animatie-bibliotheek toevoegen**: het platform-diagram (en alle andere animaties op de site) heeft *geen* Framer Motion / GSAP / React Spring / AOS / tailwindcss-animate / Three.js nodig. Pure CSS `transition-colors` + IntersectionObserver is genoeg, dat is ook wat onze referentie Honeycomb gebruikt (zie [`website/honeycomb-teardown.md`](./website/honeycomb-teardown.md)). Voeg geen anim-library toe tenzij expliciet gevraagd.
 > - **Bilingual NL/EN**: de mock hoeft maar één taal te tonen, begin met NL. Structuur moet zo zijn dat `/nl/` en `/en/` routes gemakkelijk later kunnen landen (geen hardcoded texts in HTML voor belangrijke content-slots, of wel hardcoded maar met duidelijke `data-i18n`-markers).
 >
 > **Homepage-structuur** (in deze volgorde, zie `briefs/website/visual-motifs.md §Sectie 1-7`):
