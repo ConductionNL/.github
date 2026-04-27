@@ -45,14 +45,51 @@ Voor scènes waar je labels nodig hebt, voeg na de prompt toe:
 platform overview diagram, 6 hexagonal prisms arranged in central cluster with one dominant green hexagon in middle, labeled feature-pill badges floating near each hex showing app names, external rectangular boxes on left and right connected by thin dashed data-flow lines, left box labeled "Your systems" with small logo placeholders for Nextcloud BAG BRK PDOK, right box labeled "Integrations" with placeholders for app store and gov portals, [MASTER PROMPT]
 ```
 
-**SVG-bouwinstructies voor Claude Design / illustrator:**
-- Traceer 6 hex-prisms op de posities in de Honeycomb-referentie; pas categorie-toekenning aan naar Conduction-mapping (Data Foundation / Integration / Documents / Case & Process / Insights / Design)
-- Elke prisma = 3 `<path>`'s (top-face, left-face, right-face) met drie kleur-tinten van dezelfde pastel-familie voor diepte
-- Feature-pills als `<a>` binnen `<foreignObject>` per categorie
-- Links-box "Je bestaande systemen": Nextcloud, BAG, BRK, PDOK, Basisregistraties (als kleine icoon-placeholders)
-- Rechts-box "Integraties": Nextcloud app store, gov-portals, email, LLM-tools
-- Dashed data-flow-lijnen als `<path>` met `stroke-dasharray="4 4"`
-- Pills krijgen `cursor: pointer`, CSS `transition-colors` voor hover (150ms)
+**SVG-bouwinstructies voor Claude Design / illustrator (definitief, 4-laagse architectuur — zie [`app-architecture.md`](./app-architecture.md) voor volledige context):**
+
+**Centrum — Core-cluster (3 hex-prisms aaneengesloten, cobalt-dominant):**
+- `OpenRegister` — pill: "Schemas, Objects, Audit"
+- `OpenConnector` — pill: "API gateway, Transformations"
+- `DocuDesk` — pill: "Generate, Sign, Anonymize"
+
+**Ring rond de Core — Implementations (8–11 hex-prisms, elk pastel-tint, met pill-labels per app):**
+- OpenCatalogi (groen) — pills: "Federated catalog, WOO, Harvester"
+- PipelinQ (blauw) — pills: "Contacts, Quotes, Invoicing"
+- ZaakAfhandelApp (paars) — pills: "Mijn Zaken, Status"
+- Procest (geel) — pills: "VTH, Forms, Cases"
+- MyDash (roze) — pills: "Dashboards, Workflows"
+- SoftwareCatalog (oker) — pills: "ITAM, Contracts"
+- DeciDesk (lichtblauw) — pills: "Voting, Boards"
+- ShillinQ (terracotta) — pills: "Accounting, Invoices"
+- LarpingApp (mint) — pills: "Worlds, Campaigns"
+- *(NLDesign + OpenWoo plaatsing wachten op gebruikersbevestiging)*
+
+**Off-center, kleinere tegels — Extra apps (drie hex-tegels, teal of grijs):**
+- OpenTalk (video)
+- Matrix (chat)
+- n8n (automation)
+
+**Links-box — Bron-systemen "Je bestaande omgeving":**
+- Nextcloud (logo)
+- BAG / BRK / PDOK / BRP / KvK / DSO (overheid bron-iconen)
+
+**Rechts-box — Output-integraties "Werkt naast":**
+- Nextcloud Mail / Calendar / Talk / Office / Files / Contacts
+- OpenProject (project management)
+- XWiki (kennisbank)
+- GitLab / Mattermost (optioneel)
+
+**Verbindingen:**
+- Stippeltjes-flow-lijnen (`stroke-dasharray="2.41 3.85"`, geen animation per Honeycomb-conventie) van Bron-systemen → Core (input)
+- Stippeltjes-flow-lijnen van Core → Implementations (gebruik)
+- Stippeltjes-flow-lijnen van Implementations → Output-integraties (samenwerking)
+- Subtiele lijntjes tussen Implementations onderling die echt veel samenwerken (bv. ZaakAfhandelApp ↔ Procest, OpenCatalogi ↔ DocuDesk)
+
+**Per-element styling:**
+- Hex-prism = 3 `<path>`'s (top, links, rechts) met drie kleur-tinten van dezelfde pastel-familie voor isometrische diepte
+- Default opacity ~70% op alle hex-paden, `group-hover:opacity-100` voor spotlight (zie [`honeycomb-teardown.md §6.5`](./honeycomb-teardown.md))
+- Pills als `<a href>` binnen `<foreignObject>` — clickable, focus-bare, screen-reader-leesbaar
+- CSS `transition-colors duration-150` op pill-hover
 
 ## Scène 2: Waarde-teaser — "Open source"
 

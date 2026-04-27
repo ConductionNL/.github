@@ -110,18 +110,16 @@ Wat deze visualisatie zo krachtig maakt:
 
 Honeycomb.io heeft ook een **flat horizontale variant** van dezelfde boodschap (verder op de /platform-pagina) waar de hexen niet extrudeerd zijn maar op dezelfde manier data-flow tonen — zie [referentie-screenshot (flat-variant)](./references/ref-a1-honeycomb-section-3400.png). Die flat-variant is handig voor delen van de site waar minder visuele ruimte is.
 
-**Conduction-vertaling — concrete voorstel:**
+**Conduction-vertaling — definitieve 4-laagse architectuur** (zie [`app-architecture.md`](./app-architecture.md) voor de volledige uitleg per laag, alle apps, en alle integraties):
 
-Onze 11 core apps groeperen we in 5–6 categorie-hexagons (niet allemaal apart tonen; dat wordt te druk). Voorgestelde mapping:
-
-| Categorie-hex | Kleur | Apps binnen |
+| Laag | Hexagon-rol in diagram | Apps |
 |---|---|---|
-| **Data Foundation** | Cobalt/groen | OpenRegister, OpenCatalogi |
-| **Integration** | Geel | OpenConnector |
-| **Documents** | Rood/roze | DocuDesk |
-| **Case & Process** | Blauw | Procest, ZaakAfhandelApp, Pipelinq |
-| **Insights & Dashboards** | Paars | MyDash, SoftwareCatalog |
-| **Design & Theming** | Subtiel grijs | NLDesign, LarpingApp |
+| **Core** | Centrale cluster van 3 hex-prisms (cobalt-dominant) | OpenRegister, OpenConnector, DocuDesk |
+| **Implementations** | Ring van hex-prisms rond de Core, elk een eigen pastel-tint | OpenCatalogi, PipelinQ, ZaakAfhandelApp, Procest, MyDash, SoftwareCatalog, LarpingApp, DeciDesk, ShillinQ, OpenWoo, NLDesign |
+| **Extra apps** | Kleine hex-tegels off-center, eigen palet (teal/grijs) | OpenTalk, Matrix, n8n |
+| **Integrations** | Externe rechthoeken links/rechts | Links: bron-systemen (BAG, BRK, PDOK, BRP, KvK, DSO + Nextcloud-storage). Rechts: output-integraties (Nextcloud Mail/Cal/Talk/Office, OpenProject, XWiki, GitLab, Mattermost) |
+
+Dit vervangt de eerder voorgestelde 6-categorie-mapping (Data Foundation / Integration / Documents / Case & Process / Insights / Design) — die mengde architectuur-laag en categorie door elkaar. De 4-laag-versie hier scheidt **wat het is** (Core / Implementation / Extra / Integration) van **wat het oplost** (de cross-cutting "solutions" zoals WOO/zaakafhandeling, die meerdere Implementations kunnen bestrijken).
 
 Externe boxes:
 
