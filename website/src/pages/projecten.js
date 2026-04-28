@@ -31,7 +31,7 @@ export default function Projecten() {
         {
             title: 'VNG Softwarecatalogus',
             paragraphs: ['De VNG Softwarecatalogus helpt gemeenten bij het beheren en inzichtelijk maken van hun applicatielandschap. Gemeenten registreren hier welke software ze gebruiken, hoe deze is gekoppeld, welke oplossingen beschikbaar zijn en welke standaarden worden toegepast.', 'Zo ontstaat er een gedeeld overzicht dat samenwerking, inkoop en interoperabiliteit binnen het gemeentelijk domein versterkt.', 'De vernieuwing van de Softwarecatalogus wordt ontwikkeld in opdracht van VNG Realisatie en is gebaseerd op OpenCatalogi. Onderliggend maakt het gebruik van dezelfde modulaire componenten als OpenWoo.app. Dit zorgt voor een samenhangende en herbruikbare infrastructuur, volledig open source.'],
-            mainImage: '/img/dashkube.png',
+            mainImage: '/img/beheerCarousel/openCatalogi.png',
             partners: ['/img/partners/vng.png']
         },
         {
