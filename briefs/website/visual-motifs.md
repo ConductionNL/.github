@@ -132,7 +132,7 @@ Wij volgen Honeycomb's pattern letterlijker dan onze eerdere 4-laag-versie: **é
 
 | Component-card | Kleur-familie | Pills (apps + features) | Status |
 |---|---|---|---|
-| **Nextcloud-kernel** *(centraal)* | Cobalt + Nextcloud-blauw gradient | Files · Mail · Calendar · Contacts · Talk · Office · Apps & SSO | Bestaand platform |
+| **Nextcloud-kernel** *(centraal)* | Nextcloud-blauw gradient (officieel `#0082C9 → #1CAFFF` 45°) | Files · Mail · Calendar · Contacts · Talk · Office · Apps & SSO | Bestaand platform |
 | **Technical Core** | Cobalt-diep | OpenRegister (data) · OpenConnector (integratie) · DocuDesk (documenten) · **NLDesign Theme** (theming) · **MyDash** (dashboards) | Live — 5 foundational capabilities |
 | **Workplace App** | Coral / rood-oranje | OpenCatalogi · PipelinQ · Procest · ZaakAfhandelApp · DeciDesk · ShillinQ · LarpingApp · OpenWoo · SoftwareCatalog | Live — 9 user-facing apps |
 | **AI** | Paars / lavendel | Automation · Agents · Intelligence | Cross-cutting capability |
@@ -145,7 +145,7 @@ Wij volgen Honeycomb's pattern letterlijker dan onze eerdere 4-laag-versie: **é
 - **Your data sources / Bron-systemen**: BAG · BRK · PDOK · BRP · KvK · DSO + bestaande Nextcloud-Files / -Contacts
 - Externe productivity-apps (OpenProject, XWiki, etc.) zitten **niet** meer als rechter side-box — die zitten nu in de **Integrated Apps** component-card
 
-**Visuele behandeling van Nextcloud-kernel**: groter dan de zes component-cards eromheen; gradient van cobalt (Conduction) naar Nextcloud-blauw `#0082C9` om de Conduction-Nextcloud-relatie visueel te coderen. Label *"Nextcloud"* in Nextcloud-blauw eronder.
+**Visuele behandeling van Nextcloud-kernel**: groter dan de zes component-cards eromheen; gebruikt Nextcloud's officiële gradient `#0082C9 → #1CAFFF` (45°) op de top-face om de Nextcloud-identiteit te respecteren. Left- en right-face: cobalt-tinten `#21468B` (Conduction-context). Label *"Nextcloud"* eronder in Nextcloud-blauw `#0082C9`. Compositie codeert: *"Nextcloud is de kernel, Conduction is wat eromheen zit."*
 
 **Visuele behandeling van App Builder Coming soon-badge**: standalone `<span class="badge badge-coming-soon">` in KNVB-oranje, niet-clickable, met `aria-label`. Past bij de attention-functie van oranje in onze huisstijl.
 

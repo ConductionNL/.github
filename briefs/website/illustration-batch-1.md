@@ -49,10 +49,11 @@ platform overview diagram, 6 hexagonal prisms arranged in central cluster with o
 
 **Strategische narrative**: ConNext is Conduction's propositie die Nextcloud doorontwikkelt van *office suite* naar *workspace*. De 6 component-cards rondom de Nextcloud-kernel laten zien wat die uitbreiding inhoudt.
 
-**Centrum — Nextcloud kernel (één grote hex-prism, cobalt + Nextcloud-blauw gradient):**
+**Centrum — Nextcloud kernel (één grote hex-prism, Nextcloud-officiële gradient + cobalt context):**
 - Pills binnen Nextcloud-kernel: `Files` · `Mail` · `Calendar` · `Contacts` · `Talk` · `Office` · `Apps & SSO`
-- Visuele behandeling: iets groter dan de component-cards eromheen; gebruikt Nextcloud-blauw `#0082C9` als secundaire tint (top-face) bovenop cobalt (left/right faces)
-- Label onder de hex: "Nextcloud" (in Nextcloud-blauw)
+- Visuele behandeling: iets groter dan de component-cards eromheen; **top-face** gebruikt Nextcloud's officiële brand-gradient `#0082C9 → #1CAFFF` (45°). **Left- en right-face** gebruiken cobalt `#21468B` (Conduction-context)
+- Label onder de hex: "Nextcloud" in Nextcloud-blauw `#0082C9`
+- Compositie-betekenis: Nextcloud is letterlijk de kernel (eigen brand-identiteit zichtbaar), Conduction is wat eromheen zit (cobalt op alle component-cards)
 
 **Zes component-cards rondom de kernel** (in Honeycomb-stijl arrangement, elk een hex-prism met pastel-tint en pill-labels):
 
