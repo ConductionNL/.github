@@ -40,16 +40,6 @@ export default function CommonGround() {
             }
         },
         {
-            title: 'Trainingen',
-            description: 'Conduction heeft veel ervaring opgedaan rondom Common Ground ontwikkeling, beheer van omgevingen en software. Wij hebben daarom trainingen ontwikkeld op deze gebieden. De trainingen zijn niet alleen voor gemeenten en overheden, maar ook voor Common Ground minded leveranciers.',
-            image: '/img/commonGround/commonGround3.png',
-            background: 'neutral',
-            button: {
-                title: 'Lees meer',
-                link: '/trainingen'
-            }
-        },
-        {
             title: 'Development',
             description: 'Conduction ontwikkelt open source software op basis van Common Ground en moderne standaarden. Van maatwerk tot modulaire componenten: we bouwen oplossingen die passen bij de behoeften van gemeenten en publieke organisaties. Onze ervaring zetten we graag in voor jouw project of productidee.',
             image: '/img/commonGround/commonGround4.png',

@@ -59,7 +59,6 @@ const config = {
           { to: '/beheer', label: 'Beheer', position: 'right' },
           { to: '/projecten', label: 'Projecten', position: 'right' },
           { to: '/common-ground', label: 'Common Ground', position: 'right' },
-          { to: '/trainingen', label: 'Trainingen', position: 'right' },
           { to: '/contact', label: 'Contact', position: 'right' },
         ],
       },

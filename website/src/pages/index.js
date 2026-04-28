@@ -91,11 +91,6 @@ export default function Home() {
       title: 'Ontwikkelen',
       description: 'Conduction ontwikkelt open source software voor overheden en leveranciers. Als idealistische partij werken wij aan innovatie van diensten en doen mee aan innovatieprojecten. <Link to="/projecten">Lees meer</Link>'
     },
-    
-    {
-      title: 'Trainingen',
-      description: 'Conduction heeft veel ervaring opgedaan rondom Common Ground ontwikkeling, beheer van omgevingen en software. Deze ervaring delen wij graag met u in de vorm van trainingen en adviezen. Benieuwd hoe wij u kunnen helpen? <Link to="/trainingen">Lees meer</Link>'
-    },
   ]
   return (
     <Layout title={siteConfig.title} description="Conduction | Public Tech">
