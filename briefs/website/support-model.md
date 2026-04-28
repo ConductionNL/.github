@@ -130,40 +130,79 @@ Conduction Support wordt afgerekend **per app × per gebruiker × per jaar** met
 
 Beide tiers: **jaarlijks contract**, **ex. BTW**, **bundel-korting** van 20% bij Support op 3+ apps, **maatwerk-tier** (24/7, kortere responstijden) op aanvraag voor grotere organisaties.
 
-### Pricing-tabel per app
+### Pricing-tabel per component-card
 
 > **⚠ Placeholder-waarden.** Onderstaande prijzen zijn **voorlopig** en moeten worden bevestigd vóór publicatie. De structuur (groepering, tier-verhoudingen) kan worden overgenomen; de exacte getallen moet Conduction-leiding vaststellen op basis van gewenste marge, markt-positie en Nextcloud-revenue-share-afspraken.
 
-De 11 core apps zijn gegroepeerd in drie klassen op basis van operationele complexiteit (hoe kritisch een incident is voor de klant, hoeveel support-inzet per klant gemiddeld).
+Pricing-categorieën volgen de **ConNext-component-architectuur** (zie [`app-architecture.md`](./app-architecture.md) en [`visual-motifs.md §Platform overview`](./visual-motifs.md#platform-overview-pattern--honeycomb-stijl-als-hero)) — niet de oude ad-hoc Foundation/Core/Ondersteunend-indeling. Dat houdt het narratief consistent: dezelfde architectuur die je op de hero-diagram ziet, is de architectuur waarop je je Support-keuze maakt.
 
-| App | Categorie | Standard | Premium |
+#### Technical Core (5 apps — fundationele capabilities)
+
+Mid-to-high prijspunt: deze apps zijn de fundering en incidenten zijn kritisch.
+
+| App | Capability | Standard | Premium |
 |---|---|---|---|
-| **OpenRegister** | Foundation | €TBD / user / year | €TBD / user / year |
-| **OpenCatalogi** | Foundation | €TBD / user / year | €TBD / user / year |
-| **OpenConnector** | Core integratie | €TBD / user / year | €TBD / user / year |
-| **DocuDesk** | Core | €TBD / user / year | €TBD / user / year |
-| **ZaakAfhandelApp** | Core | €TBD / user / year | €TBD / user / year |
-| **Procest** | Core | €TBD / user / year | €TBD / user / year |
-| **PipelinQ** | Core | €TBD / user / year | €TBD / user / year |
-| **MyDash** | Ondersteunend | €TBD / user / year | €TBD / user / year |
-| **SoftwareCatalog** | Ondersteunend | €TBD / user / year | €TBD / user / year |
-| **LarpingApp** | Ondersteunend | €TBD / user / year | €TBD / user / year |
-| **NL Design** | Ondersteunend | €TBD / user / year | €TBD / user / year |
+| **OpenRegister** | data | €TBD / user / year | €TBD / user / year |
+| **OpenConnector** | integratie | €TBD / user / year | €TBD / user / year |
+| **DocuDesk** | documenten | €TBD / user / year | €TBD / user / year |
+| **NLDesign Theme** | theming | €TBD / user / year | €TBD / user / year |
+| **MyDash** | dashboards | €TBD / user / year | €TBD / user / year |
 
-**Indicatieve range als input voor bevestiging** (niet publiceren zonder bevestiging):
+Indicatieve range: Standard **€15–20/user/year**, Premium **€30–40/user/year**.
 
-- Foundation-apps: Standard ca. €15–20/user/year, Premium ca. €30–40/user/year
-- Core-apps: Standard ca. €10–15/user/year, Premium ca. €20–30/user/year
-- Ondersteunend: Standard ca. €5–10/user/year, Premium ca. €10–20/user/year
+#### Workplace App (9 apps — user-facing apps)
 
-Rekenvoorbeeld (indicatief, niet-bindend): gemeente met 150 gebruikers die Support Standard wil op OpenRegister + OpenCatalogi + DocuDesk → (150 × €17,50) + (150 × €17,50) + (150 × €12,50) = ~€7.125/jaar, met 20% bundel-korting (3+ apps) = **~€5.700/jaar**. Voor dezelfde gemeente Premium zou ca. €12.000–13.000/jaar zijn.
+Mid prijspunt: belangrijke apps voor dagelijks werk maar specifieker dan Core.
 
-**Opmerkingen bij de structuur:**
+| App | Use case | Standard | Premium |
+|---|---|---|---|
+| **OpenCatalogi** | Federated data-catalogus, WOO | €TBD / user / year | €TBD / user / year |
+| **PipelinQ** | CRM, sales-pipeline | €TBD / user / year | €TBD / user / year |
+| **Procest** | Case-management, VTH | €TBD / user / year | €TBD / user / year |
+| **ZaakAfhandelApp** | Citizen-case-status portal | €TBD / user / year | €TBD / user / year |
+| **DeciDesk** | Decision-support, voting, boards | €TBD / user / year | €TBD / user / year |
+| **ShillinQ** | ERP, accounting | €TBD / user / year | €TBD / user / year |
+| **LarpingApp** | Worldbuilding, campaign-management | €TBD / user / year | €TBD / user / year |
+| **OpenWoo** | WOO-publicatie | €TBD / user / year | €TBD / user / year |
+| **SoftwareCatalog** | IT-asset-management | €TBD / user / year | €TBD / user / year |
 
-- **Minimum 10 users per app** (Standard) / **25 users** (Premium) gebruikt hetzelfde patroon als Nextcloud maar met MKB-toegankelijkere drempels dan hun 100-user-minimum.
-- **Bundle-korting 20% bij 3+ apps** beloont ecosystem-adoptie (dat is immers de propositie).
-- **"Contact us voor een offerte"** bij 500+ users of maatwerk-tier, net als Nextcloud hun "Ultimate" en "Contact us" doet.
-- **Per user = named user** (niet concurrent); standaard Nextcloud-billing-patroon.
+Indicatieve range: Standard **€10–15/user/year**, Premium **€20–30/user/year**.
+
+#### AI (capability-bundel — toekomstige pricing)
+
+AI is een **cross-cutting capability**, geen afzonderlijke app. Wanneer concrete AI-producten of -diensten landen (Automation/Agents/Intelligence), bepalen we een eigen pricing-mechanisme — bijvoorbeeld per organisatie of per actief AI-gebruikende user, niet per-app. **Pricing TBD — komt zodra AI-roadmap concreter wordt.**
+
+#### Integrated Apps (geen Conduction-Support)
+
+OpenTalk, Matrix, n8n, OpenProject, XWiki, GitLab, Mattermost zijn **third-party open-source apps**. Conduction levert **geen directe Support** op deze apps — die wordt geleverd door de eigen community of commerciële partners van die projecten. Wat wij wél leveren onder OpenConnector-Support: **de integratie-laag** tussen deze apps en de rest van je ConNext-stack.
+
+→ Klanten die Support willen op de Integrated Apps zelf: doorverwijzen naar de respectievelijke maintainers.
+
+#### App Builder (Coming soon)
+
+Pre-launch. Pricing TBD bij introductie. Verwachte structuur: per organisatie i.p.v. per user (vergelijkbaar met low-code-platforms als Airtable / Bubble).
+
+#### Admin Tools (gratis, community-supported)
+
+App-versions en Crontab zijn admin-utilities die we als gratis open-source-add-ons leveren — geen Support-tier. Vragen over deze tools: GitHub Issues op de respectieve repos.
+
+---
+
+**Algemeen — voorwaarden voor alle bovenstaande tiers** (Technical Core + Workplace App):
+
+- **Minimum 10 users per app** (Standard) / **25 users** (Premium) — MKB-toegankelijke drempels, lager dan Nextcloud's eigen 100-user-minimum
+- **Bundle-korting 20% bij 3+ apps** uit dezelfde of gemengde categorie — beloont ecosystem-adoptie
+- **"Contact us voor een offerte"** bij 500+ users of bij maatwerk-tier (24/7, kortere responstijden) — net als Nextcloud's "Ultimate" en "Contact us" voor enterprises
+- **Per user = named user**, niet concurrent; standaard Nextcloud-billing-patroon
+- **Per jaar contract**, ex. BTW
+
+**Rekenvoorbeeld** (indicatief, niet-bindend): gemeente met 150 gebruikers die Support Standard wil op OpenRegister (Core) + OpenCatalogi (Workplace) + DocuDesk (Core) → 150 × €17,50 (Core) + 150 × €12,50 (Workplace) + 150 × €17,50 (Core) = ~€7.125/jaar, met 20% bundel-korting (3+ apps) = **~€5.700/jaar**. Voor dezelfde gemeente Premium zou ca. €12.000–13.000/jaar zijn.
+
+---
+
+**Toekomstige optie — ConNext Platform-tier (begin niet ermee, alleen als markt erom vraagt):**
+
+Een all-in *"ConNext Platform Support"*-tier die alle Technical Core + alle Workplace Apps dekt voor één per-user-prijs (bv. €40–60/user/year all-in). Voordeel voor klanten die meer dan 5 apps willen: eenvoudiger contract, automatisch bundel-voordeel ingebouwd. We **introduceren deze tier niet bij launch** — eerst luisteren of klanten hierom vragen. Als de markt aangeeft dat er behoefte is, voegen we 'm toe. Tot die tijd: per-app + bundel-korting.
 
 ### Wat de pricing-tabel NIET moet suggereren
 
