@@ -88,11 +88,13 @@ Elke sectie van de website verdient een eigen doordenking — niet *"hero + teks
 
 Waarom: communiceert in één oogopslag hoe **ConNext de Nextcloud-kernel doorontwikkelt van office suite naar workspace** — de strategische kern-boodschap. De 6 component-cards rondom de Nextcloud-kernel zijn de directe Conduction-vertaling van Honeycomb's pattern. Zie [referentie-screenshot](./references/ref-a-honeycomb-3d-platform.png) en [volledige platform-overview-sectie](#platform-overview-pattern--honeycomb-stijl-als-hero) hieronder voor de volledige vertaling.
 
-**Hero-tagline (werkende keuze, te bevestigen)**: 
+**Hero-tagline (definitief, vastgelegd 2026-04-28):**
 
 > # Make Nextcloud your workspace, not just your office suite
 > 
 > *ConNext is Conduction's set of open-source components that bring data, processes, AI, and integrations to your Nextcloud — turning a file-sync platform into your actual workplace.*
+
+Markup-conventie per [`§3 Illustratie / Nextcloud-blauw-rule (vraag 5 c)`](#voorbeelden-per-richting--echte-referentie-sites): elke voorkomen van **Nextcloud** in deze copy krijgt `<span class="next-blue">` zodat *Next* visueel rijmt met de wordmark. Dat geldt zowel voor "Nextcloud" als zelfstandig brand-citation, en zou "next" idiomatisch ook kunnen krijgen waar het direct over Nextcloud-as-platform gaat.
 
 Boven de tagline: ConNext-wordmark in cobalt (`Con`) + Nextcloud-blauw (`Next`), met "*by Conduction*" subtitel + Conduction-hexagon-icoon klein ernaast.
 
