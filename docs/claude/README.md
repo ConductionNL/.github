@@ -472,7 +472,7 @@ Each Conduction project (Nextcloud apps, WordPress sites, etc.) has its own `.cl
 
 Each project defines its own user personas in `personas/`. Personas drive multi-perspective analysis via `/feature-counsel` and testing via `/test-counsel`.
 
-The Nextcloud workspace uses 8 Dutch government personas (retired citizens, low-literate migrants, digital natives, CISOs, standards architects, MKB vendors, ZZP developers, small business owners). Other projects define personas relevant to their domain (e.g., [wordpress-docker](https://github.com/ConductionNL/wordpress-docker) uses shopper and admin personas).
+The Nextcloud workspace uses 8 Dutch government personas (retired citizens, low-literate migrants, digital natives, CISOs, standards architects, MKB vendors, ZZP developers, small business owners). Other workspaces define personas relevant to their domain — e.g., a webshop workspace would carry shopper, returning-customer, and shop-owner personas instead.
 
 For the full persona table with testing command mapping, see **[testing.md](./testing.md#commands-single-agent)**.
 

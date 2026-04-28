@@ -28,7 +28,7 @@ ask() {
 git_push_authorized() {
     [[ -z "$transcript_path" || ! -f "$transcript_path" ]] && return 1
     local last_msg
-    last_msg=$(jq -r 'select(.type == "user") | [.message.content[] | select(.type == "text") | .text] | join(" ")' \
+    last_msg=$(jq -r 'select(.type == "user") | [.message.content[]? | select(.type == "text") | .text] | join(" ")' \
         "$transcript_path" 2>/dev/null | grep -v '^[[:space:]]*$' | tail -1)
     echo "$last_msg" | grep -qiE '(push for me|commit and push|please git push|push my changes)'
 }

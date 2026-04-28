@@ -292,12 +292,15 @@ Skills degrade over time. Schedule periodic reviews:
     references/           <- standards and guides Claude reads for context (L3+)
     examples/             <- worked output demonstrations and few-shot patterns (L3+)
     assets/               <- non-markdown static files (SVG, JS, YAML, JSON)
+    scripts/              <- executable code the skill invokes (.py, .sh) — see below
     evals/                <- evaluation scenarios and results (L5+)
     learnings.md          <- accumulated execution insights (L6+)
     learning-candidates.md <- unverified observations awaiting promotion (L6+)
 ```
 
 Not every skill needs all subfolders. Create them only when content qualifies. A skill with no supporting files is just a `SKILL.md` — no subfolders needed.
+
+**Script convention**: Any executable that the skill invokes (`.py`, `.sh`, etc.) lives in `scripts/`. SKILL.md and reference files invoke them via `python -m scripts.<name>` or `bash scripts/<name>.sh`. Don't put scripts in `assets/` (which is for non-executable static files like SVG/JSON) or `references/` (which is for content Claude reads, not runs). The one exception is vendored upstream skills (e.g., `skill-creator`) where the layout is dictated by upstream and may differ.
 
 **Extraction threshold**: Extract content from `SKILL.md` into a subfolder when the block is:
 - 10%+ of the total file size, AND
@@ -431,7 +434,7 @@ When a SKILL.md instructs Claude to read a file (persona card, shared doc, spec)
 | Target | Canonical path form | Example |
 |---|---|---|
 | **Personas in `hydra/personas/`** (Nextcloud workspace) | `hydra/personas/<slug>.md` | `hydra/personas/henk-bakker.md` |
-| **Personas inside a `.claude`-centered workspace** (e.g. wordpress-docker) | `.claude/personas/<slug>.md` | `.claude/personas/shop-owner.md` |
+| **Personas inside a `.claude`-centered workspace** (where `.claude/` lives at the project root) | `.claude/personas/<slug>.md` | `.claude/personas/<role>.md` |
 | **Company-wide specs** (hydra `openspec/specs/`) | `hydra/openspec/specs/<capability>/spec.md` | `hydra/openspec/specs/nextcloud-app/spec.md` |
 | **Company-wide ADRs** (hydra `openspec/architecture/`) | `hydra/openspec/architecture/adr-<NNN>-*.md` | `hydra/openspec/architecture/adr-001-data-layer.md` |
 | **Developer/Claude docs** (lives in `ConductionNL/.github` repo, cloned separately — **not** a subdir of any project workspace) | Full GitHub URL | `https://github.com/ConductionNL/.github/blob/main/docs/claude/writing-specs.md` |
@@ -440,12 +443,12 @@ When a SKILL.md instructs Claude to read a file (persona card, shared doc, spec)
 
 ### Why not `.claude/personas/` or `.claude/docs/` in hydra skills?
 
-- `.claude/personas/` exists in `.claude`-centered workspaces (e.g. wordpress-docker) but **not** in hydra — hydra keeps personas at `hydra/personas/`. Using the `.claude/` prefix in a hydra skill silently fails whenever the skill is invoked from a workspace where that directory doesn't exist.
-- `.claude/docs/` is a workspace-local cache of dev docs. It exists in wordpress-docker (copies of guides from `.github`). It does **not** exist in hydra. Skills in hydra that read dev docs should link to the canonical `.github` repo URL — it's the only form that resolves everywhere.
+- `.claude/personas/` exists in `.claude`-centered workspaces but **not** in hydra — hydra keeps personas at `hydra/personas/`. Using the `.claude/` prefix in a hydra skill silently fails whenever the skill is invoked from a workspace where that directory doesn't exist.
+- `.claude/docs/` is a workspace-local cache of dev docs. Some workspaces keep copies of the `.github` guides locally; hydra does not. Skills in hydra that read dev docs should link to the canonical `.github` repo URL — it's the only form that resolves everywhere.
 
 ### Exception: skills intended to be copied into a workspace
 
-Skills authored inside a `.claude`-centered workspace (wordpress-docker) may legitimately use `.claude/personas/` and `.claude/docs/` — those paths match the workspace they run in. When such a skill is copied to another workspace, the paths must be rewritten to match the destination convention. Don't cross-pollinate paths: a skill living in hydra's `.claude/skills/` uses hydra conventions; a skill living in wordpress-docker's `.claude/skills/` uses WP conventions.
+Skills authored inside a `.claude`-centered workspace may legitimately use `.claude/personas/` and `.claude/docs/` — those paths match the workspace they run in. When such a skill is copied to another workspace, the paths must be rewritten to match the destination convention. Don't cross-pollinate paths: a skill living in hydra's `.claude/skills/` uses hydra conventions; a skill in another workspace's `.claude/skills/` uses that workspace's conventions.
 
 ### Checklist when authoring a new skill
 

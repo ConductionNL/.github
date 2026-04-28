@@ -1,6 +1,6 @@
 # Playwright MCP Browser Setup
 
-Each project workspace configures its own Playwright MCP browser sessions in a `.mcp.json` file at the project root. The Nextcloud workspace uses 7 browsers; other projects (e.g., [wordpress-docker](https://github.com/ConductionNL/wordpress-docker)) may use fewer. An [example .mcp.json](./examples/.mcp.json.example) with the 7-browser configuration is available as a starting point.
+Each project workspace configures its own Playwright MCP browser sessions in a `.mcp.json` file at the project root. The Nextcloud workspace uses 7 browsers; other workspaces may use fewer depending on the parallelism their tests demand. An [example .mcp.json](./examples/.mcp.json.example) with the 7-browser configuration is available as a starting point.
 
 ## Browser Pool (Nextcloud workspace)
 

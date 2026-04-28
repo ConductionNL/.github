@@ -64,19 +64,21 @@ The [Anthropic Skill Creator](https://github.com/anthropics/skills/blob/main/ski
 
 ### Installation
 
-The Skill Creator lives at `.claude/skills/skill-creator/` in each repo (hydra and wordpress-docker). It's a vendored copy of [`anthropics/skills/skills/skill-creator/`](https://github.com/anthropics/skills/tree/main/skills/skill-creator) with one local modification: the eval workspace lives **inside** each skill rather than as a sibling folder.
+The Skill Creator lives at `.claude/skills/skill-creator/` in the hydra repo. It's a vendored copy of [`anthropics/skills/skills/skill-creator/`](https://github.com/anthropics/skills/tree/main/skills/skill-creator) with local modifications: the eval workspace lives **inside** each skill rather than as a sibling folder, and the long-form eval-runner protocol is extracted from `SKILL.md` into `references/eval-runner.md` to keep `SKILL.md` lean.
 
 ### Keeping it up to date
 
-Run `bash .claude/skills/update-skill-creator.sh` from the repo root. This script:
-- Sparse-clones `anthropics/skills` to a tempdir
-- Compares the upstream commit hash against `.claude/skills/skill-creator/.upstream-version`
-- Backs up the current copy, rsyncs upstream files in, then re-applies `local-mods.patch`
-- Updates `.upstream-version` to the new commit hash
+Run `bash .claude/skills/skill-creator/update.sh` for a dry-run preview, then `--apply` to write changes. The script delegates to `update_from_upstream.py`, which performs a per-file 3-way merge between three trees:
 
-If `local-mods.patch` no longer applies cleanly (upstream rewrote the relevant section), the script aborts and points you at the backup + `.rej` files so you can hand-merge. We use this script-based approach because `anthropics/skills` keeps `skill-creator/` as a subdirectory, which makes pure `git subtree` impractical for tracking just that one folder.
+- **base** — upstream snapshot at the pin recorded in `.upstream-version`
+- **theirs** — upstream HEAD
+- **ours** — your current local files
 
-**Why we deviate from upstream:** Upstream Skill Creator writes eval results to `<skill-name>-workspace/` as a sibling to the skill folder. We patch this so results live at `<skill-dir>/evals/workspace/iteration-N/`, keeping eval artifacts adjacent to the skill they belong to. The patch is recorded in `.claude/skills/skill-creator/local-mods.patch`.
+For each file path it picks the right outcome (add, modify, delete, conflict, keep, unchanged) using `git merge-file`, so local edits, local additions (e.g. `references/eval-runner.md`), and locally-deleted files are all preserved without a separate patch file. Conflicts are listed in the dry-run report; running `--apply` alone leaves conflicting files untouched, while `--apply --force-conflicts` writes standard `<<<<<<<` markers into them for editor-driven resolution.
+
+The previous `local-mods.patch` mechanism is gone — the merge replaces it. If you find that file in an old checkout, delete it. The new flow needs no manual patch maintenance: as long as `.upstream-version` accurately records the last applied commit, the merge is reproducible.
+
+**Why we deviate from upstream:** Upstream Skill Creator writes eval results to `<skill-name>-workspace/` as a sibling to the skill folder. We keep them at `<skill-dir>/evals/workspace/iteration-N/` so eval artifacts stay adjacent to the skill they belong to.
 
 ### Running evals step-by-step
 
@@ -122,20 +124,40 @@ This gives you a paper trail of "this skill scored 0.67 on these expectations on
 
 ## Eval Workspace Layout
 
+The workspace is bounded to **3 live iterations max**. Older iterations are summarized into `archived-iterations/` automatically at the end of every eval cycle (Step 6 in `references/eval-runner.md`).
+
 ```
 <skill-dir>/
   evals/
     evals.json                          # eval definitions + trigger tests
     workspace/
-      iteration-1/
+      archived-iterations/              # sorts above iteration-N alphabetically
+        INDEX.md                        # one-line-per-iteration summary table
+        index.json                      # machine-readable equivalent
+        iteration-1/
+          summary.json                  # pass rates, tokens, durations, failed assertions
+          benchmark.json                # preserved verbatim
+          benchmark.md
+          embedded_data.json            # extracted from HTML viewer; re-render on demand
+          notable/                      # full eval dirs ONLY for regressions
+            eval-some-name/...          # OR same_as.json pointer if dedup'd vs earlier archive
+      iteration-5/                      # live (full data)
         eval-basic-usage/
-          grading.json
-          timing.json
-        eval-edge-case/
-          grading.json
-          timing.json
-        benchmark.json                  # aggregate for this iteration
-      iteration-2/                      # after improvements
-        ...
-      eval-review-iteration-1.html      # static viewer
+          eval_metadata.json
+          with_skill/run-1/{grading,timing}.json + outputs/
+          without_skill/run-1/{grading,timing}.json + outputs/
+        eval-edge-case/...
+        benchmark.json
+      iteration-6/...                   # live
+      iteration-7/...                   # live (current)
+      eval-review-iteration-7.html      # static viewer for current iteration
 ```
+
+**Rotation rules** (run by `python -m scripts.rotate_workspace <workspace> --keep 3` at end of each eval cycle):
+- Iterations beyond the keep window are archived into `archived-iterations/iteration-N/` and removed from the live tree.
+- Iteration numbering keeps incrementing forever — `iteration-8`, `iteration-9` — never reused.
+- "Notable" detection (which evals get full output preserved in `notable/`): a regression vs. the previous iteration (assertion that passed before now fails, OR `with_skill` pass_rate dropped). For iteration 1 the fallback is "any failed assertion".
+- **Dedup across archives:** if an earlier archived iteration already preserved the same eval with an identical with_skill failed-assertion signature, a new notable entry is replaced by a `same_as.json` pointer to that earlier iteration — no duplicated outputs.
+- The rendered HTML viewer is NOT preserved as HTML — only its `EMBEDDED_DATA` JSON is. To inspect an archived iteration in the browser, feed `embedded_data.json` back through `eval-viewer/generate_review.py`.
+
+Typical archived iteration size: ~30-50 KB (vs. ~250 KB for a live one).
