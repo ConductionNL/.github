@@ -60,7 +60,7 @@ platform overview diagram, 6 hexagonal prisms arranged in central cluster with o
    - Pills: `OpenRegister` · `OpenConnector` · `DocuDesk`
 
 2. **Workplace App** (warm coral / rood-oranje) — *user-facing apps voor concrete use cases*
-   - Pills: `OpenCatalogi` · `PipelinQ` · `Procest` · `ZaakAfhandelApp` · `DeciDesk` · `ShillinQ` · `MyDash` · `SoftwareCatalog` · `LarpingApp` · `OpenWoo`
+   - Pills: `OpenCatalogi` · `PipelinQ` · `Procest` · `ZaakAfhandelApp` · `DeciDesk` · `ShillinQ` · `MyDash` · `SoftwareCatalog` · `LarpingApp` · `OpenWoo` · `NLDesign Theme` *(theming/customization app — niet te verwarren met NL Design System zelf, dat is onze identiteits-overlay over de hele site)*
    - Bij té veel pills voor één hex: split visueel in "Workplace App" hex met top-5 pills + "View all" pill, of tweede partner-hex
 
 3. **AI** (paars / lavendel) — *AI-capabilities cross-cutting over de stack*

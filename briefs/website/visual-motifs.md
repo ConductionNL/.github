@@ -132,7 +132,7 @@ Wij volgen Honeycomb's pattern letterlijker dan onze eerdere 4-laag-versie: **é
 |---|---|---|---|
 | **Nextcloud-kernel** *(centraal)* | Cobalt + Nextcloud-blauw gradient | Files · Mail · Calendar · Contacts · Talk · Office · Apps & SSO | Bestaand platform |
 | **Technical Core** | Cobalt-diep | OpenRegister · OpenConnector · DocuDesk | Live |
-| **Workplace App** | Coral / rood-oranje | OpenCatalogi · PipelinQ · Procest · ZaakAfhandelApp · DeciDesk · ShillinQ · MyDash · SoftwareCatalog · LarpingApp · OpenWoo | Live |
+| **Workplace App** | Coral / rood-oranje | OpenCatalogi · PipelinQ · Procest · ZaakAfhandelApp · DeciDesk · ShillinQ · MyDash · SoftwareCatalog · LarpingApp · OpenWoo · **NLDesign Theme** | Live |
 | **AI** | Paars / lavendel | Automation · Agents · Intelligence | Cross-cutting capability |
 | **Integrated Apps** | Geel / oker | OpenTalk · Matrix · n8n · OpenProject · XWiki · GitLab · Mattermost | Externe OSS-apps die we koppelen |
 | **App Builder** | Groen / mint | Schema-driven · Low-code *(TBC)* | **Coming soon** — in actieve ontwikkeling |
@@ -147,9 +147,15 @@ Wij volgen Honeycomb's pattern letterlijker dan onze eerdere 4-laag-versie: **é
 
 **Visuele behandeling van App Builder Coming soon-badge**: standalone `<span class="badge badge-coming-soon">` in KNVB-oranje, niet-clickable, met `aria-label`. Past bij de attention-functie van oranje in onze huisstijl.
 
+**NLDesign — twee verschillende dingen, niet verwarren:**
+
+| Wat | Plek in de architectuur |
+|---|---|
+| **NLDesign-de-design-system** (NL Design System tokens, accessibility, government-standards) | Identiteits-overlay over de hele ConNext-site en alle apps. **Geen** component-card — zit overal in (typografie, kleuren, components). Vergelijkbaar met Material Design dat niet als component op een Google-platform-diagram verschijnt. |
+| **NLDesign Theme app** (configurable theming voor je Nextcloud-instance, multiple themes) | Wél een component-card pill — als één van de **Workplace Apps**, naast OpenCatalogi, PipelinQ, etc. Het is een echte Conduction-app die klanten installeren en gebruiken. |
+
 **Pos-noot — open punten** (vraag de gebruiker bij volgende ronde te bevestigen):
-- NLDesign — eigen component-card, onderdeel van Technical Core, of cross-cutting overlay (geen card)?
-- Workplace App overflow — als 10 pills te veel zijn voor één hex: split in twee hex-cards, of "View all"-pill aan einde lijst?
+- Workplace App overflow — met NLDesign Theme erbij hebben we nu **11 pills** in één hex. Te veel: split in twee hex-cards (bv. "Workplace App — Records" + "Workplace App — Process"), of "View all → /apps" pill aan einde lijst?
 - App Builder pill-content — wat zijn de werkelijke pills bij launch? (Schema-driven en Low-code zijn placeholders)
 
 Externe boxes:

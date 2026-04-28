@@ -8,7 +8,9 @@
 > |---|---|
 > | **Nextcloud-kernel** *(centraal)* | Files · Mail · Calendar · Contacts · Talk · Office · Apps & SSO |
 > | **Technical Core** | OpenRegister · OpenConnector · DocuDesk |
-> | **Workplace App** | OpenCatalogi · PipelinQ · Procest · ZaakAfhandelApp · DeciDesk · ShillinQ · MyDash · SoftwareCatalog · LarpingApp · OpenWoo |
+> | **Workplace App** | OpenCatalogi · PipelinQ · Procest · ZaakAfhandelApp · DeciDesk · ShillinQ · MyDash · SoftwareCatalog · LarpingApp · OpenWoo · **NLDesign Theme** |
+>
+> **NLDesign — twee dingen, niet verwarren:** *NLDesign-de-design-system* (NL Design System tokens, accessibility) is identiteits-overlay over alles, **geen** component-card. *NLDesign Theme app* is wél een component (in Workplace App), een echte Conduction-app voor theming/customization van je Nextcloud-instance.
 > | **AI** | Automation · Agents · Intelligence |
 > | **Integrated Apps** | OpenTalk · Matrix · n8n · OpenProject · XWiki · GitLab · Mattermost |
 > | **App Builder** *(Coming soon)* | Schema-driven · Low-code *(TBC)* |
