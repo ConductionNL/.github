@@ -259,7 +259,7 @@ At this point, **you read through all four files** and make adjustments:
 - Is the task breakdown granular enough?
 - Are the spec keywords right (MUST vs SHOULD)?
 
-Edit the files directly if needed. Once you're satisfied, move to phase 2.
+Edit the files directly if needed. Once you're satisfied, move to Phase 2.
 
 ## Phase 2: Plan to GitHub Issues
 
@@ -288,8 +288,6 @@ Now you can see progress on GitHub! Open the tracking issue to see the full chec
 ```
 /opsx-apply
 ```
-
-> **Note:** `/opsx-ralph-start` is not yet implemented. Use `/opsx-apply` — it reads `plan.json` and handles GitHub Issues sync.
 
 ### Iteration 1: SearchService
 
@@ -367,8 +365,6 @@ Claude reads plan.json, finds Task 1 (pending), reads the spec section, and impl
 ```
 /opsx-verify
 ```
-
-> **Note:** `/opsx-ralph-review` is not yet implemented. Use `/opsx-verify` — it checks every spec requirement against the implementation and supports GitHub Issues sync via `plan.json`.
 
 Claude loads ALL the specs and checks every requirement:
 

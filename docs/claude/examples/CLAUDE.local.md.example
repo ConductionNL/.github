@@ -1,6 +1,6 @@
 # Local Credentials (DO NOT COMMIT)
 
-Copy this file to `CLAUDE.local.md` and fill in your values:
+Copy this file to `.claude/CLAUDE.local.md` in your project and fill in your values:
 
 ```bash
 cp CLAUDE.local.md.example CLAUDE.local.md

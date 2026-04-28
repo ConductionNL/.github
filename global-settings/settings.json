@@ -10,7 +10,44 @@
       "Edit(~/.claude/settings-repo-path)",
       "Write(~/.claude/settings-repo-path)",
       "Edit(~/.claude/settings-repo-url)",
-      "Write(~/.claude/settings-repo-url)"
+      "Write(~/.claude/settings-repo-url)",
+      "Edit(~/.claude/settings-repo-ref)",
+      "Write(~/.claude/settings-repo-ref)",
+
+      "Bash(sudo:*)",
+      "Bash(su:*)",
+      "Bash(shutdown:*)",
+      "Bash(reboot:*)",
+      "Bash(halt:*)",
+      "Bash(poweroff:*)",
+      "Bash(mkfs:*)",
+      "Bash(dd if=:*)",
+
+      "Bash(gh pr merge:*)",
+      "Bash(gh repo delete:*)",
+      "Bash(gh release delete:*)",
+
+      "Bash(git reset --hard:*)",
+      "Bash(git clean -f:*)",
+      "Bash(git clean -fd:*)",
+      "Bash(git clean -fdx:*)",
+      "Bash(git filter-branch:*)",
+      "Bash(git filter-repo:*)",
+      "Bash(git reflog expire:*)",
+      "Bash(git reflog delete:*)",
+      "Bash(git update-ref -d:*)",
+      "Bash(git config --global:*)",
+      "Bash(git checkout --:*)",
+      "Bash(git restore --:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git rebase:*)",
+
+      "Bash(rm -rf:*)",
+      "Bash(rm -Rf:*)",
+
+      "Bash(pip install:*)",
+      "Bash(npm install:*)"
     ],
     "allow": [
       "Bash(ls:*)",
@@ -32,7 +69,6 @@
       "Bash(diff:*)",
       "Bash(grep:*)",
       "Bash(egrep:*)",
-      "Bash(awk:*)",
       "Bash(tr:*)",
       "Bash(sort:*)",
       "Bash(jq:*)",
@@ -54,7 +90,6 @@
       "Bash(env:*)",
       "Bash(date:*)",
 
-      "Bash(git -C:*)",
       "Bash(git log:*)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
@@ -66,8 +101,11 @@
       "Bash(git describe:*)",
       "Bash(git shortlog:*)",
       "Bash(git cat-file:*)",
-      "Bash(git branch:*)",
-      "Bash(git remote:*)",
+      "Bash(git branch --list:*)",
+      "Bash(git branch -a:*)",
+      "Bash(git branch -v:*)",
+      "Bash(git remote -v:*)",
+      "Bash(git remote show:*)",
       "Bash(git fetch:*)",
       "Bash(git stash list:*)",
       "Bash(git stash show:*)",
@@ -107,7 +145,6 @@
       "Bash(gh workflow list:*)",
       "Bash(gh workflow view:*)",
       "Bash(gh auth status:*)",
-      "Bash(gh api:*)",
 
       "Bash(composer --version:*)",
       "Bash(composer show:*)",
@@ -131,8 +168,6 @@
       "Bash(php -m:*)",
       "Bash(php -i:*)",
       "Bash(php --version:*)",
-
-      "Bash(curl:*)",
 
       "Bash(sha256sum:*)",
       "Bash(md5sum:*)",

@@ -1,5 +1,5 @@
 {
-  "_note": "Copy this file to limits.json and edit the values for your plan. limits.json is git-ignored (personal). See SETUP.md for calibration instructions.",
+  "_note": "Copy this file to limits.json and edit the values for your plan. limits.json is gitignored (via .gitignore). See SETUP.md for calibration instructions.",
   "_structure": {
     "session": "5h rolling window, shared across ALL models — only all_models.session matters for the combined bar; per-model session values are rough estimates for relative display only.",
     "weekly": "7-day rolling window per bar. Anthropic shows two weekly bars: 'All models' (combined) and 'Sonnet only'. Their reset days/times differ and do NOT necessarily fall on Monday.",

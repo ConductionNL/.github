@@ -9,6 +9,9 @@
 #   settings-repo-url     — (optional) GitHub repo slug for online version check
 #                           (e.g. "ConductionNL/.github")
 #                           If present, checks VERSION via GitHub API first.
+#   settings-repo-ref     — (optional) Git ref (branch/tag/sha) to track.
+#                           Defaults to "main" when absent. Applies to both
+#                           GitHub API and git-fetch lookup paths.
 #   settings-repo-path    — absolute path to the root of the canonical repo
 #                           (e.g. ~/path/to/.github)
 #                           Used as fallback when settings-repo-url is absent or fails.
@@ -24,7 +27,38 @@ NC='\033[0m'
 
 REPO_URL_FILE="$HOME/.claude/settings-repo-url"
 REPO_PATH_FILE="$HOME/.claude/settings-repo-path"
+REPO_REF_FILE="$HOME/.claude/settings-repo-ref"
 VERSION_FILE="$HOME/.claude/settings-version"
+
+# ── Input validation ─────────────────────────────────────────────────────────
+# All config values read from files are validated before use — prevents prompt
+# injection via crafted config files and API endpoint abuse via repo slug.
+validate_ref() { [[ "$1" =~ ^[a-zA-Z0-9._/-]+$ ]]; }
+validate_repo_slug() { [[ "$1" =~ ^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$ ]]; }
+validate_semver() { [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; }
+
+# ── timeout wrapper (falls back to direct execution if timeout is missing) ───
+run_with_timeout() {
+    local secs="$1"; shift
+    if command -v timeout >/dev/null 2>&1; then
+        timeout "$secs" "$@"
+    else
+        "$@"
+    fi
+}
+
+# ── Tracking ref (branch/tag/sha) — defaults to "main" when unset ────────────
+tracking_ref="main"
+if [ -f "$REPO_REF_FILE" ]; then
+    _ref=$(tr -d '[:space:]' < "$REPO_REF_FILE")
+    if [ -n "$_ref" ]; then
+        if validate_ref "$_ref"; then
+            tracking_ref="$_ref"
+        else
+            echo "WARNING: ~/.claude/settings-repo-ref contains invalid characters — ignoring, using 'main'." >&2
+        fi
+    fi
+fi
 
 # ── Session-once guard ────────────────────────────────────────────────────────
 input=$(cat)
@@ -33,15 +67,18 @@ if [ -z "$transcript_path" ]; then
     exit 0
 fi
 session_key=$(echo "$transcript_path" | md5sum | cut -c1-12)
-flag_file="/tmp/claude-version-warned-${session_key}"
+_flag_dir="${XDG_RUNTIME_DIR:-$HOME/.claude}"
+flag_file="${_flag_dir}/claude-version-warned-${session_key}"
 [ -f "$flag_file" ] && exit 0
-touch "$flag_file"
+touch "$flag_file" && chmod 600 "$flag_file" 2>/dev/null
 
 # ── Semver helpers ────────────────────────────────────────────────────────────
 semver_gt() {
     [ "$1" = "$2" ] && return 1
-    local IFS=.
-    local i ver1=($1) ver2=($2)
+    local IFS=. i
+    local -a ver1 ver2
+    read -ra ver1 <<< "$1"
+    read -ra ver2 <<< "$2"
     for ((i = 0; i < ${#ver1[@]}; i++)); do
         local a=${ver1[i]:-0} b=${ver2[i]:-0}
         if ((10#$a > 10#$b)); then return 0; fi
@@ -51,19 +88,29 @@ semver_gt() {
 }
 semver_eq() { [ "$1" = "$2" ]; }
 
+# ── Config warnings array (populated throughout, displayed at the end) ────────
+config_warnings=()
+
 # ── Installed version ─────────────────────────────────────────────────────────
 installed_version="(not set)"
 installed_ok=false
 if [ -f "$VERSION_FILE" ]; then
-    installed_version=$(cat "$VERSION_FILE" | tr -d '[:space:]')
-    [ -n "$installed_version" ] && installed_ok=true
+    _iv=$(tr -d '[:space:]' < "$VERSION_FILE")
+    if [ -n "$_iv" ]; then
+        if validate_semver "$_iv"; then
+            installed_version="$_iv"
+            installed_ok=true
+        else
+            installed_version="(invalid: $_iv)"
+            config_warnings+=("$HOME/.claude/settings-version contains invalid value '$_iv' — expected semver (e.g. 1.2.3).")
+        fi
+    fi
 fi
 
 # ── Repo dir resolution ───────────────────────────────────────────────────────
-config_warnings=()
 REPO_DIR=""
 if [ -f "$REPO_PATH_FILE" ]; then
-    REPO_DIR=$(cat "$REPO_PATH_FILE" | tr -d '[:space:]')
+    REPO_DIR=$(tr -d '[:space:]' < "$REPO_PATH_FILE")
     if [ ! -d "$REPO_DIR" ]; then
         config_warnings+=("Repo directory '${REPO_DIR}' from ~/.claude/settings-repo-path does not exist.")
         REPO_DIR=""
@@ -84,7 +131,7 @@ if [ -n "$REPO_DIR" ]; then
 
     REPO_VERSION_FILE="$REPO_DIR/global-settings/VERSION"
     if [ -f "$REPO_VERSION_FILE" ]; then
-        local_version=$(cat "$REPO_VERSION_FILE" | tr -d '[:space:]')
+        local_version=$(tr -d '[:space:]' < "$REPO_VERSION_FILE")
     else
         local_version="(missing)"
         config_warnings+=("global-settings/VERSION not found at '${REPO_DIR}/global-settings/VERSION'.")
@@ -98,13 +145,20 @@ online_source=""
 online_repo_slug=""
 
 if [ -f "$REPO_URL_FILE" ]; then
-    online_repo_slug=$(cat "$REPO_URL_FILE" | tr -d '[:space:]')
+    _slug=$(tr -d '[:space:]' < "$REPO_URL_FILE")
+    if [ -n "$_slug" ]; then
+        if validate_repo_slug "$_slug"; then
+            online_repo_slug="$_slug"
+        else
+            config_warnings+=("$HOME/.claude/settings-repo-url contains invalid value '$_slug' — expected owner/repo format.")
+        fi
+    fi
 fi
 
 if [ -n "$online_repo_slug" ]; then
     if command -v gh >/dev/null 2>&1; then
-        _api_path="repos/${online_repo_slug}/contents/global-settings/VERSION?ref=main"
-        _gh_result=$(timeout 5 gh api "$_api_path" -H "Accept: application/vnd.github.raw+json" 2>/dev/null | tr -d '[:space:]')
+        _api_path="repos/${online_repo_slug}/contents/global-settings/VERSION?ref=${tracking_ref}"
+        _gh_result=$(run_with_timeout 5 gh api "$_api_path" -H "Accept: application/vnd.github.raw+json" 2>/dev/null | tr -d '[:space:]')
         if [ -n "$_gh_result" ] && echo "$_gh_result" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
             online_version="$_gh_result"
             online_fetch_ok=true
@@ -121,15 +175,15 @@ fi
 if ! $online_fetch_ok && [ -n "$REPO_DIR" ] && [ -n "$git_root" ]; then
     rel_path=$(realpath --relative-to="$git_root" "$REPO_DIR/global-settings/VERSION" 2>/dev/null)
 
-    if timeout 5 git -C "$git_root" fetch origin main --quiet --depth=1 2>/dev/null; then
-        fetched=$(git -C "$git_root" show "origin/main:${rel_path}" 2>/dev/null | tr -d '[:space:]')
+    if run_with_timeout 5 git -C "$git_root" fetch origin "${tracking_ref}" --quiet --depth=1 2>/dev/null; then
+        fetched=$(git -C "$git_root" show "origin/${tracking_ref}:${rel_path}" 2>/dev/null | tr -d '[:space:]')
         if [ -n "$fetched" ]; then
             online_version="$fetched"
             online_fetch_ok=true
             online_source="git-fetch"
         else
             online_version="(not on remote)"
-            config_warnings+=("global-settings/VERSION not found on origin/main (path: ${rel_path}). The canonical global settings may not be committed to this remote — your settings may be outdated.")
+            config_warnings+=("global-settings/VERSION not found on origin/${tracking_ref} (path: ${rel_path}). The canonical global settings may not be committed to this remote — your settings may be outdated.")
         fi
     else
         online_version="(fetch failed)"
@@ -175,10 +229,12 @@ fi
 
 # ── Online source label ──────────────────────────────────────────────────────
 online_label=""
+ref_suffix=""
+[ "$tracking_ref" != "main" ] && ref_suffix=" @${tracking_ref}"
 if [ "$online_source" = "github-api" ]; then
-    online_label="  ${DIM}(via GitHub API)${NC}"
+    online_label="  ${DIM}(via GitHub API${ref_suffix})${NC}"
 elif [ "$online_source" = "git-fetch" ]; then
-    online_label="  ${DIM}(via git fetch)${NC}"
+    online_label="  ${DIM}(via git fetch${ref_suffix})${NC}"
 fi
 
 # ── Status panel → stderr (displayed directly in the UI) ─────────────────────
@@ -236,46 +292,80 @@ if $online_fetch_ok && semver_gt "$online_version" "$installed_version"; then
     echo "=========================================="
     echo ""
     echo "  Installed : v${installed_version}  ❌ (outdated)"
-    echo "  Latest    : v${online_version}  ✅ (on origin/main)"
+    echo "  Latest    : v${online_version}  ✅ (on origin/${tracking_ref})"
     echo ""
     echo "  To apply the update:"
     echo "  1. First, in your own terminal (not through Claude), unlock the config files:"
-    echo "       chmod 644 \$HOME/.claude/settings-version \$HOME/.claude/settings-repo-path \$HOME/.claude/hooks/*.sh"
+    echo "       chmod 644 \$HOME/.claude/settings-version \$HOME/.claude/hooks/*.sh"
     echo "  2. Then say: \"update my global settings to ${online_version}\""
 
+    echo ""
+    echo "  CONTRACT (must be respected by every emitted command, or block-write-commands.sh will deny it):"
+    echo "    (a) Every gh-api write must use the literal prefix 'repos/ConductionNL/.github/contents/global-settings/'"
+    echo "        immediately after 'gh api' (no intermediate flags, headers, or variables). Every git-show write"
+    echo "        must use the 'origin/main:' path literally in the same command — no variable indirection."
+    echo "    (b) Never run 'chmod 644' on ~/.claude/ files. settings.json is already 644 by default"
+    echo "        (not part of the step-1 unlock); a '>' redirect preserves that mode. Only chmod 444 / 555 are permitted."
+    echo "    (c) Emit one file per command block (flat, no loops) so a single denial does not abort the"
+    echo "        whole update and leave ~/.claude/ in a half-installed state."
+    echo "    (d) The git-fetch fallback always pulls from 'origin/main:' regardless of the tracked ref"
+    echo "        (the hook only allows that literal). If you are tracking a non-main branch, the update"
+    echo "        you get via git-fetch reflects main — merge your branch to main first, or use the gh-api"
+    echo "        path (which honors ?ref=<branch>) by ensuring ~/.claude/settings-repo-url is set."
+    echo ""
     if [ "$online_source" = "github-api" ]; then
-        echo "  When they do, run the following to pull all files directly from GitHub (${online_repo_slug}, main branch):"
-        echo "    repo_slug=\"${online_repo_slug}\""
-        echo "    base_path=\"global-settings\""
+        echo "  When they do, run each block below (one per file) to pull files directly from GitHub"
+        echo "  (${online_repo_slug}, ref: ${tracking_ref}). URLs are inlined so the hook can verify the canonical source:"
+        echo ""
+        echo "    # settings.json — already 644 by default (not part of the step-1 unlock); no chmod needed"
+        echo "    content=\$(gh api 'repos/${online_repo_slug}/contents/global-settings/settings.json?ref=${tracking_ref}' -H 'Accept: application/vnd.github.raw+json')"
+        printf '%s\n' "    printf '%s\\n' \"\$content\" > \"\$HOME/.claude/settings.json\""
+        echo ""
+        echo "    # block-write-commands.sh"
         echo "    mkdir -p ~/.claude/hooks"
-        echo "    for f in settings.json block-write-commands.sh check-settings-version.sh VERSION README.md; do"
-        echo "      content=\$(gh api \"repos/\${repo_slug}/contents/\${base_path}/\${f}?ref=main\" -H \"Accept: application/vnd.github.raw+json\")"
-        echo "      case \"\$f\" in"
-        echo "        *.sh) dest=\"\$HOME/.claude/hooks/\$f\" ;;"
-        echo "        VERSION) dest=\"\$HOME/.claude/settings-version\" ;;"
-        echo "        README.md) continue ;;"
-        echo "        *) dest=\"\$HOME/.claude/\$f\" ;;"
-        echo "      esac"
-        echo "      printf '%s\n' \"\$content\" > \"\$dest\""
-        echo "      if [[ \"\$f\" == *.sh ]]; then chmod 555 \"\$dest\"; elif [[ \"\$f\" == \"settings.json\" ]]; then chmod 644 \"\$dest\"; else chmod 444 \"\$dest\"; fi"
-        echo "    done"
-        echo "  This pulls files directly from GitHub — no local repo clone needed."
+        echo "    content=\$(gh api 'repos/${online_repo_slug}/contents/global-settings/block-write-commands.sh?ref=${tracking_ref}' -H 'Accept: application/vnd.github.raw+json')"
+        printf '%s\n' "    printf '%s\\n' \"\$content\" > \"\$HOME/.claude/hooks/block-write-commands.sh\""
+        echo "    chmod 555 \"\$HOME/.claude/hooks/block-write-commands.sh\""
+        echo ""
+        echo "    # check-settings-version.sh"
+        echo "    content=\$(gh api 'repos/${online_repo_slug}/contents/global-settings/check-settings-version.sh?ref=${tracking_ref}' -H 'Accept: application/vnd.github.raw+json')"
+        printf '%s\n' "    printf '%s\\n' \"\$content\" > \"\$HOME/.claude/hooks/check-settings-version.sh\""
+        echo "    chmod 555 \"\$HOME/.claude/hooks/check-settings-version.sh\""
+        echo ""
+        echo "    # VERSION → settings-version (write last, so the version bump only lands if all files succeeded)"
+        echo "    content=\$(gh api 'repos/${online_repo_slug}/contents/global-settings/VERSION?ref=${tracking_ref}' -H 'Accept: application/vnd.github.raw+json')"
+        printf '%s\n' "    printf '%s\\n' \"\$content\" > \"\$HOME/.claude/settings-version\""
+        echo "    chmod 444 \"\$HOME/.claude/settings-version\""
+        echo ""
+        echo "  This pulls files directly from GitHub (ref: ${tracking_ref}) — no local repo clone needed."
     else
-        echo "  When they do, run the following to pull all files directly from origin/main (not the local branch):"
-        echo "    git_root=\$(git -C \"${REPO_DIR}\" rev-parse --show-toplevel)"
-        echo "    rel_base=\$(realpath --relative-to=\"\$git_root\" \"${REPO_DIR}/global-settings\")"
+        echo "  When they do, run each block below (one per file) to pull files directly from origin/${tracking_ref}"
+        echo "  (not the local branch). Paths are inlined so the hook can verify the canonical source:"
+        _git_root_resolved=$(git -C "${REPO_DIR}" rev-parse --show-toplevel 2>/dev/null)
+        _rel_base=$(realpath --relative-to="${_git_root_resolved:-${REPO_DIR}}" "${REPO_DIR}/global-settings" 2>/dev/null)
+        [ -z "$_rel_base" ] && _rel_base="global-settings"
+        echo ""
+        echo "    # Refresh origin/${tracking_ref} once before the copies below"
+        echo "    git -C '${REPO_DIR}' fetch origin '${tracking_ref}' --depth=1"
+        echo ""
+        echo "    # settings.json — already 644 by default (not part of the step-1 unlock); no chmod needed"
+        echo "    git -C '${REPO_DIR}' show 'origin/main:${_rel_base}/settings.json' > \"\$HOME/.claude/settings.json\""
+        echo ""
+        echo "    # block-write-commands.sh"
         echo "    mkdir -p ~/.claude/hooks"
-        echo "    git -C \"\$git_root\" ls-tree --name-only \"origin/main:\${rel_base}/\" | while read f; do"
-        echo "      src=\"origin/main:\${rel_base}/\${f}\""
-        echo "      case \"\$f\" in"
-        echo "        *.sh) dest=\"\$HOME/.claude/hooks/\$f\" ;;"
-        echo "        VERSION) dest=\"\$HOME/.claude/settings-version\" ;;"
-        echo "        *) dest=\"\$HOME/.claude/\$f\" ;;"
-        echo "      esac"
-        echo "      git -C \"\$git_root\" show \"\$src\" > \"\$dest\""
-        echo "      if [[ \"\$f\" == *.sh ]]; then chmod 555 \"\$dest\"; elif [[ \"\$f\" == \"settings.json\" ]]; then chmod 644 \"\$dest\"; else chmod 444 \"\$dest\"; fi"
-        echo "    done"
-        echo "  Do NOT copy from the local repo directory — always use origin/main to get the correct version."
+        echo "    git -C '${REPO_DIR}' show 'origin/main:${_rel_base}/block-write-commands.sh' > \"\$HOME/.claude/hooks/block-write-commands.sh\""
+        echo "    chmod 555 \"\$HOME/.claude/hooks/block-write-commands.sh\""
+        echo ""
+        echo "    # check-settings-version.sh"
+        echo "    git -C '${REPO_DIR}' show 'origin/main:${_rel_base}/check-settings-version.sh' > \"\$HOME/.claude/hooks/check-settings-version.sh\""
+        echo "    chmod 555 \"\$HOME/.claude/hooks/check-settings-version.sh\""
+        echo ""
+        echo "    # VERSION → settings-version (write last)"
+        echo "    git -C '${REPO_DIR}' show 'origin/main:${_rel_base}/VERSION' > \"\$HOME/.claude/settings-version\""
+        echo "    chmod 444 \"\$HOME/.claude/settings-version\""
+        echo ""
+        echo "  Note: the hook only accepts 'origin/main:' (not 'origin/${tracking_ref}:') for git-show writes."
+        echo "  Do NOT copy from the local working tree — always use the origin/main: ref."
     fi
     echo ""
     echo "INSTRUCTION FOR CLAUDE: At the very start of your response, mention that a new session has"
@@ -283,6 +373,8 @@ if $online_fetch_ok && semver_gt "$online_version" "$installed_version"; then
     echo "notice as a clearly visible warning block — bold, a header, or a highlighted quote block."
     echo "The user must not be able to overlook it. Do not bury it in the middle of your response."
     echo "Also remind the user that they must first run the chmod 644 unlock command in their own terminal before asking Claude to update (settings.json does not need unlocking as it is already writable)."
+    echo "When you proceed with the update, emit each file's command block as a separate Bash call, verbatim"
+    echo "from the blocks above — do not introduce loops, variables for the repo slug, or chmod 644."
     echo "=========================================="
     echo ""
 
@@ -294,7 +386,7 @@ elif $online_fetch_ok && semver_eq "$online_version" "$installed_version"; then
 
 # Online version unknown but no other warning — still note session start
 else
-    echo "NEW SESSION — Global Claude Settings checked. Version comparison unavailable (could not reach origin/main)."
+    echo "NEW SESSION — Global Claude Settings checked. Version comparison unavailable (could not reach origin/${tracking_ref})."
     echo "Briefly mention this at the start of your response, and suggest the user run /verify-global-settings-version to retry the check."
     echo ""
 fi

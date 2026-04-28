@@ -51,15 +51,15 @@ source ~/.bashrc
 
 > Neither variable is needed for interactive commands like `/opsx-apply` or `/opsx-verify` — only for the containerized automation commands.
 
-**Optional — VS Code extensions:** See the [main README](../README.md#4-install-vs-code-extensions) for the full list of required, recommended, and optional VS Code extensions.
+**Optional — VS Code extensions:** See the [main README](../../README.md#4-install-vs-code-extensions) for the full list of required, recommended, and optional VS Code extensions.
 
 **Optional — Usage monitoring:** Install the usage tracker to watch your Claude token consumption in real time inside VS Code. Especially useful before running multi-agent commands (see [parallel-agents.md](parallel-agents.md)).
 
 ```bash
-bash .claude/usage-tracker/install.sh
+bash usage-tracker/install.sh
 ```
 
-See [`.claude/usage-tracker/README.md`](../usage-tracker/README.md) for setup details.
+See [`usage-tracker/README.md`](../../usage-tracker/README.md) for setup details.
 
 ## Step 1: Install OpenSpec
 
@@ -80,13 +80,17 @@ The workspace has two levels of spec management:
 ### Workspace level (shared)
 
 ```
-apps-extra/
-├── project.md              # Coding standards for ALL projects
-├── openspec/
-│   ├── config.yaml         # Shared context and rules
-│   ├── schemas/conduction/ # Our custom workflow schema
-│   ├── specs/              # Cross-project specs (NC conventions, APIs, etc.)
-│   └── docs/               # You are here
+apps-extra/                     # Workspace root
+├── project.md                  # Coding standards for ALL projects
+├── hydra/                      # Automation, skills & shared config
+│   ├── .claude/
+│   │   └── skills/             # OpenSpec skills (opsx-new, opsx-ff, etc.)
+│   └── openspec/
+│       ├── architecture/       # Company-wide ADRs
+│       └── schemas/conduction/ # Shared workflow schema
+│
+~/.github/                      # Developer documentation (standalone repo)
+└── docs/claude/                # You are here
 ```
 
 These files define the patterns and conventions that apply to every project.
@@ -178,8 +182,6 @@ This starts the implementation loop. Each iteration:
 
 The key benefit: each iteration works with minimal context, preventing AI "amnesia" on large changes.
 
-> **Note:** `/opsx-ralph-start` is a planned dedicated implementation loop with deeper minimal-context loading and tighter GitHub integration — not yet implemented. Use `/opsx-apply` for now.
-
 ### 4f. Review your work
 
 After all tasks are done:
@@ -192,8 +194,6 @@ This checks every spec requirement against your implementation and reports:
 - **CRITICAL** findings that must be fixed
 - **WARNING** findings that should be addressed
 - **SUGGESTION** findings that are nice-to-have
-
-> **Note:** `/opsx-ralph-review` is a planned dedicated review command — not yet implemented. Use `/opsx-verify` for now.
 
 ### 4g. Archive the change
 
@@ -213,8 +213,8 @@ This merges your delta specs into the main specs and preserves the change for hi
 | Generate all specs at once | `/opsx-ff` |
 | Generate specs one at a time | `/opsx-continue` |
 | Convert tasks to GitHub Issues | `/opsx-plan-to-issues` |
-| Start implementing | `/opsx-apply` *(or `/opsx-ralph-start` once built)* |
-| Review implementation | `/opsx-verify` *(or `/opsx-ralph-review` once built)* |
+| Start implementing | `/opsx-apply` |
+| Review implementation | `/opsx-verify` |
 | Complete and archive | `/opsx-archive` |
 
 ## Next Steps
