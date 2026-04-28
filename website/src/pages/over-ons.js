@@ -81,6 +81,11 @@ function MeetTheTeam() {
                                         </a>
                                     </div>
                                     <div className={styles.teamMemberSocialsItem}>
+                                        <a className={styles.teamMemberSocialButton} href="https://github.com/rubenvdlinde" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+                                            GitHub
+                                        </a>
+                                    </div>
+                                    <div className={styles.teamMemberSocialsItem}>
                                         <a className={styles.teamMemberSocialButton} href="mailto:ruben@conduction.nl" target="_blank" rel="noopener noreferrer" aria-label="Email">
                                             Email
                                         </a>
@@ -107,6 +112,11 @@ function MeetTheTeam() {
                                         </a>
                                     </div>
                                     <div className={styles.teamMemberSocialsItem}>
+                                        <a className={styles.teamMemberSocialButton} href="https://github.com/Marleen73" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+                                            GitHub
+                                        </a>
+                                    </div>
+                                    <div className={styles.teamMemberSocialsItem}>
                                         <a className={styles.teamMemberSocialButton} href="mailto:marleen@conduction.nl" target="_blank" rel="noopener noreferrer" aria-label="Email">
                                             Email
                                         </a>
@@ -117,23 +127,23 @@ function MeetTheTeam() {
                     </div>
                     <div className="col">
                         <div className={styles.teamMember}>
-                            <h3>Matthias</h3>
+                            <h3>Remco</h3>
                             <div className={styles.teamMemberImage}>
-                                <img src="/img/team/matthias.png" alt="Team" />
+                                <img src="/img/team/remco.png" alt="Team" />
                             </div>
                             <div className={styles.teamMemberContent}>
                                 <h3 className={styles.teamMemberPosition}>
-                                    BEWAKER VAN DE KWALITEIT EN COMMERCIEEL
+                                    MOTOR ACHTER COMMERCIE EN OPERATIES
                                 </h3>
-                                <p>Matthias kenmerkt zich door zijn sterke interesse in techniek, zijn pragmatische instelling, zijn hoge doorzettingsvermogen en zijn goede communicatieve vaardigheden. Matthias komt met ongewone oplossingen voor hardnekkige problemen.</p>
+                                <p>Remco brengt structuur en daadkracht in onze sales en operations. Hij vertaalt klantvragen naar concrete trajecten en houdt de organisatie soepel draaiend.</p>
                                 <div className={styles.teamMemberSocials}>
                                     <div className={styles.teamMemberSocialsItem}>
-                                        <a className={styles.teamMemberSocialButton} href="https://www.linkedin.com/in/matthiasoliveiro/" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn">
-                                            LinkedIn
+                                        <a className={styles.teamMemberSocialButton} href="https://github.com/Rem-Dam" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+                                            GitHub
                                         </a>
                                     </div>
                                     <div className={styles.teamMemberSocialsItem}>
-                                        <a className={styles.teamMemberSocialButton} href="mailto:matthias@conduction.nl" target="_blank" rel="noopener noreferrer" aria-label="Email">
+                                        <a className={styles.teamMemberSocialButton} href="mailto:remco@conduction.nl" target="_blank" rel="noopener noreferrer" aria-label="Email">
                                             Email
                                         </a>
                                     </div>
@@ -143,6 +153,32 @@ function MeetTheTeam() {
                     </div>
                 </div>
                 <div className="row">
+                    <div className="col">
+                        <div className={styles.teamMember}>
+                            <h3>Mark</h3>
+                            <div className={styles.teamMemberImage}>
+                                <img src="/img/team/mark.png" alt="Team" />
+                            </div>
+                            <div className={styles.teamMemberContent}>
+                                <h3 className={styles.teamMemberPosition}>
+                                    OPLOSSINGSARCHITECT MET OOG VOOR HET GEHEEL
+                                </h3>
+                                <p>Mark vertaalt complexe vraagstukken naar werkbare oplossingen. Hij combineert techniek met praktijk en weet wat er nodig is om iets écht te laten werken bij gemeenten en partners.</p>
+                                <div className={styles.teamMemberSocials}>
+                                    <div className={styles.teamMemberSocialsItem}>
+                                        <a className={styles.teamMemberSocialButton} href="https://github.com/MWest2020" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+                                            GitHub
+                                        </a>
+                                    </div>
+                                    <div className={styles.teamMemberSocialsItem}>
+                                        <a className={styles.teamMemberSocialButton} href="mailto:mark@conduction.nl" target="_blank" rel="noopener noreferrer" aria-label="Email">
+                                            Email
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     <div className="col">
                         <div className={styles.teamMember}>
                             <h3>Robert</h3>
@@ -158,6 +194,11 @@ function MeetTheTeam() {
                                     <div className={styles.teamMemberSocialsItem}>
                                         <a className={styles.teamMemberSocialButton} href="https://www.linkedin.com/in/robert-zondervan-21ab85193/" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn">
                                             LinkedIn
+                                        </a>
+                                    </div>
+                                    <div className={styles.teamMemberSocialsItem}>
+                                        <a className={styles.teamMemberSocialButton} href="https://github.com/rjzondervan" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+                                            GitHub
                                         </a>
                                     </div>
                                     <div className={styles.teamMemberSocialsItem}>
@@ -187,6 +228,11 @@ function MeetTheTeam() {
                                         </a>
                                     </div>
                                     <div className={styles.teamMemberSocialsItem}>
+                                        <a className={styles.teamMemberSocialButton} href="https://github.com/WilcoLouwerse" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+                                            GitHub
+                                        </a>
+                                    </div>
+                                    <div className={styles.teamMemberSocialsItem}>
                                         <a className={styles.teamMemberSocialButton} href="mailto:wilco@conduction.nl" target="_blank" rel="noopener noreferrer" aria-label="Email">
                                             Email
                                         </a>
@@ -195,6 +241,8 @@ function MeetTheTeam() {
                             </div>
                         </div>
                     </div>
+                </div>
+                <div className="row">
                     <div className="col">
                         <div className={styles.teamMember}>
                             <h3>Barry</h3>
@@ -207,9 +255,65 @@ function MeetTheTeam() {
                                 </h3>
                                 <p>Barry is nieuwsgierig en open. Hij heeft een enorme drive. He gets things done!</p>
                                 <div className={styles.teamMemberSocials}>
-                                    <div className={styles.teamMemberSocialsItem} />
+                                    <div className={styles.teamMemberSocialsItem}>
+                                        <a className={styles.teamMemberSocialButton} href="https://github.com/bbrands02" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+                                            GitHub
+                                        </a>
+                                    </div>
                                     <div className={styles.teamMemberSocialsItem}>
                                         <a className={styles.teamMemberSocialButton} href="mailto:barry@conduction.nl" target="_blank" rel="noopener noreferrer" aria-label="Email">
+                                            Email
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="col">
+                        <div className={styles.teamMember}>
+                            <h3>Remko</h3>
+                            <div className={styles.teamMemberImage}>
+                                <img src="/img/team/remko.png" alt="Team" />
+                            </div>
+                            <div className={styles.teamMemberContent}>
+                                <h3 className={styles.teamMemberPosition}>
+                                    FRONTEND DEVELOPER MET OOG VOOR DETAIL
+                                </h3>
+                                <p>Remko bouwt de interfaces waar gebruikers dagelijks mee werken. Hij combineert oog voor detail met een pragmatische manier van bouwen, zodat het zowel mooi als bruikbaar wordt.</p>
+                                <div className={styles.teamMemberSocials}>
+                                    <div className={styles.teamMemberSocialsItem}>
+                                        <a className={styles.teamMemberSocialButton} href="https://github.com/remko48" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+                                            GitHub
+                                        </a>
+                                    </div>
+                                    <div className={styles.teamMemberSocialsItem}>
+                                        <a className={styles.teamMemberSocialButton} href="mailto:remko@conduction.nl" target="_blank" rel="noopener noreferrer" aria-label="Email">
+                                            Email
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="col">
+                        <div className={styles.teamMember}>
+                            <h3>Thijn</h3>
+                            <div className={styles.teamMemberImage}>
+                                <img src="/img/team/thijn.png" alt="Team" />
+                            </div>
+                            <div className={styles.teamMemberContent}>
+                                <h3 className={styles.teamMemberPosition}>
+                                    FRONTEND DEVELOPER EN PROBLEEMOPLOSSER
+                                </h3>
+                                <p>Thijn duikt graag in technische puzzels. Met een nieuwsgierige instelling en oog voor detail werkt hij aan frontend-oplossingen die het verschil maken voor de eindgebruiker.</p>
+                                <div className={styles.teamMemberSocials}>
+                                    <div className={styles.teamMemberSocialsItem}>
+                                        <a className={styles.teamMemberSocialButton} href="https://github.com/SudoThijn" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+                                            GitHub
+                                        </a>
+                                    </div>
+                                    <div className={styles.teamMemberSocialsItem}>
+                                        <a className={styles.teamMemberSocialButton} href="mailto:thijn@conduction.nl" target="_blank" rel="noopener noreferrer" aria-label="Email">
                                             Email
                                         </a>
                                     </div>
