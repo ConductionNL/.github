@@ -50,12 +50,6 @@ export default function Trainingen() {
             image: '/img/training/kubernetes.png'
         },
         {
-            title: 'DashKube',
-            subtitle: 'Voor beheerders en informatiemanagers',
-            description: 'Een in depth training in het beheren van je eigen Common Ground ecosysteem door middel van van Dashkube.',
-            image: '/img/training/dashkube.png'
-        },
-        {
             title: 'Tenderen',
             subtitle: 'Voor inkoopmanagers van overheden',
             description: 'Hoe schrijf je nu een goede tender als je een (open source) oplossing wil op basis van Common Ground.',
