@@ -1,4 +1,7 @@
-# Website Design Brief — www.conduction.nl (2026)
+# Website Design Brief — `connext.conduction.nl` (2026, ConNext public site)
+
+> **Brand-update 2026-04-28**: deze brief beschrijft de ConNext-website (`connext.conduction.nl`), Conduction's publieke productbrand voor het Nextcloud-ecosystem. ConNext = "a Conduction proposition for Nextcloud". Drie merken in driehoeksverhouding zichtbaar op de site: Conduction (zeer zichtbaar als bouwer), ConNext (primaire productbrand), Nextcloud (geciteerd als platform). Zie [`BRAND.md §ConNext`](../BRAND.md#connext--onze-publieke-productbrand) voor volledige uitleg. De rest van dit document gebruikt nog regelmatig de term "Conduction-website" — die referenties betreffen historisch het project, niet de uiteindelijke brand-positie.
+
 
 **Status:** Concept, ronde 1
 **Laatste update:** 2026-04-23
@@ -30,7 +33,7 @@
 
 ## 1. Doel
 
-Een nieuwe **www.conduction.nl** die bezoekers zo kort mogelijk naar de **Nextcloud app store** leidt. De site is de produkt-etalage van het Conduction-ecosysteem.
+Een nieuwe **`connext.conduction.nl`** (de ConNext-site) die bezoekers zo kort mogelijk naar de **Nextcloud app store** leidt. De site is de productbrand-etalage van het ConNext-ecosystem (Conduction's apps op Nextcloud).
 
 Wat deze site **niet** is:
 - Geen corporate brochure (dienstverlener-site)

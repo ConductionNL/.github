@@ -1,6 +1,6 @@
 # Claude Design handoff-prompt
 
-Dit document bevat de **kant-en-klare prompt** die je aan Claude Design (Claude gebruikt als website-designer) geeft om de eerste design-mock van www.conduction.nl te laten maken.
+Dit document bevat de **kant-en-klare prompt** die je aan Claude Design (Claude gebruikt als website-designer) geeft om de eerste design-mock van **`connext.conduction.nl`** te laten maken — de publieke ConNext-site (Conduction's product-brand voor het Nextcloud-ecosystem).
 
 ## Hoe te gebruiken
 
@@ -13,33 +13,35 @@ Dit document bevat de **kant-en-klare prompt** die je aan Claude Design (Claude 
 
 ## Master-prompt — copy-paste deze
 
-> Je bent de lead-designer van www.conduction.nl — de nieuwe marketing-site voor Conduction, een Nederlands open-source-productbedrijf dat een ecosysteem van Nextcloud-apps bouwt.
+> Je bent de lead-designer van **`connext.conduction.nl`** — de publieke website voor **ConNext**, Conduction's productbrand voor het Nextcloud-ecosystem. ConNext is een Conduction-propositie die Nextcloud doorontwikkelt van office suite naar workplace. Drie merken in driehoeksverhouding: **Conduction** (het bedrijf, zeer zichtbaar), **ConNext** (de propositie/productbrand, primair op de site), **Nextcloud** (het host-platform, eerbiedig geciteerd).
 >
 > Ik wil dat je een **statische HTML+CSS mock** maakt van de **homepage**. Geen React, geen build-stap, geen Docusaurus nog — puur `index.html` + `styles.css` met SVG-illustraties inline of als losse bestanden. Pixel-accuraat op desktop (1440px breed), tablet (768px) en mobile (375px). Gebruik echte content, geen lorem ipsum. Output in een dedicated folder: `briefs/website/design/homepage/`.
 >
 > Lees deze documenten **vóór je ook maar één regel CSS schrijft**, in deze volgorde:
 >
 > **Foundation (verplicht lezen, company-wide):**
-> 1. `BRAND.md` — wie we zijn, wat we bouwen (ecosystem, niet consultancy), doelgroep (MKB-first, overheid in afbouw), Apps-vs-Solutions terminologie, Support- en Services-proposities
-> 2. `DESIGN.md` — kleur-rationale (cobalt `#21468B` + KNVB-oranje `#F36C21` + vermiljoen `#AE1C28`), typografie (Figtree + IBM Plex Mono), tone-shift (MKB-direct, geen "u"/"toekomstbestendig"/"digitale transformatie"), hexagon als systematisch motief (altijd pointy-top, voor accenten niet containers)
-> 3. `brand/tokens.json` — DTCG-tokens voor kleur + typografie (scope A). Gebruik deze als CSS custom properties — géén hardcoded hex-waardes in de mock.
+> 1. `BRAND.md` — wie we zijn, **wat ConNext is en hoe het zich verhoudt tot Conduction-de-company en Nextcloud-het-platform**, doelgroep (MKB-first, overheid in afbouw), Apps-vs-Solutions terminologie, Support- en Services-proposities, **ConNext-wordmark-spec**, **"Next" in Nextcloud-blauw markup-conventie**
+> 2. `DESIGN.md` — kleur-rationale (cobalt `#21468B` + KNVB-oranje `#F36C21` + vermiljoen `#AE1C28` + **Nextcloud-blauw `#0082C9` als gast-kleur in ConNext-context**), typografie (Figtree + IBM Plex Mono), tone-shift (MKB-direct, geen "u"/"toekomstbestendig"/"digitale transformatie"), hexagon als systematisch motief (altijd pointy-top, voor accenten niet containers), **ConNext-wordmark typografische keuze**
+> 3. `brand/tokens.json` — DTCG-tokens voor kleur + typografie (scope A) inclusief de nieuwe Nextcloud-tokens (`color.primitive.nextcloud.blue` `#0082C9`, `color.primitive.nextcloud.cyan` `#1CAFFF`, `gradient.nextcloud`). Gebruik deze als CSS custom properties — géén hardcoded hex-waardes in de mock.
 >
 > **Website-specifiek (verplicht lezen):**
-> 4. `briefs/website.md` — de volledige website-brief: IA, pagina-types, content-types, CTA-hiërarchie (primair = "Install from Nextcloud app store"; download-druk niet upgrade-druk), homepage-structuur in 7 secties, navigation
-> 5. `briefs/website/visual-motifs.md` — hexagon-catalogus (bullets, pagination, status, avatars, badges, dividers, timeline-kralen, empty-states), per-sectie-treatments, **gekozen illustratie-stijl A2 (flat-isometric hex-prism)**, Platform-overview-pattern voor homepage-hero
-> 6. `briefs/website/app-taglines.md` — tagline per app (NL + EN) voor de apps-grid-sectie
-> 7. `briefs/website/platform-benchmarks.md` — reframing "upgrade-druk naar download-druk", zeven patronen om over te nemen van Odoo/WooCommerce/Nextcloud, patterns om níet over te nemen
-> 8. `briefs/website/support-model.md` — Support-pagina-structuur + pricing-tabel-structuur (placeholder-waardes, niet blootstellen in mock zonder disclaimer)
-> 9. `briefs/website/services-model.md` — Services-tarievenkaart (dev €125, consultancy €150, strippenkaart, training, certificering)
-> 10. `briefs/website/tone-samples.md` — NL tone-calibratie: drie registers herkennen, rewrite-recepten naar Conduction-copy
+> 4. `briefs/website.md` — de volledige website-brief: IA, pagina-types, content-types, CTA-hiërarchie (primair = "Install from Nextcloud app store"; download-druk niet upgrade-druk), homepage-structuur, navigation. **§6.1 Homepage** beschrijft de hero met 6 component-cards rondom Nextcloud-kernel.
+> 5. `briefs/website/app-architecture.md` — **canonieke ConNext-architectuur**: 6 component-cards rondom Nextcloud-kernel (Technical Core / Workplace App / AI / Integrated Apps / App Builder / Admin Tools), wat in elke component zit, side-box met bron-systemen
+> 6. `briefs/website/visual-motifs.md` — hexagon-catalogus, per-sectie-treatments, **platform-overview-pattern (Honeycomb-stijl)** voor homepage-hero met component-card mapping
+> 7. `briefs/website/honeycomb-teardown.md` — technische deep-dive van Honeycomb's platform-diagram (Next.js + Tailwind + GEEN animation-library; pure SVG met `<foreignObject>`-HTML-pills + CSS `transition-colors` + `group-hover:opacity-100` spotlight-effect). **§6.5 animation analysis**: dit is de techniek die we letterlijk volgen voor onze hero
+> 8. `briefs/website/illustration-batch-1.md` — 12 illustratie-scènes. **Belangrijk: scène 1 (homepage hero platform-overview) wordt niet via Midjourney gemaakt** — die bouw je direct als inline interactieve SVG+foreignObject-component (zie hierboven). Scènes 2–12 worden separaat via Midjourney gegenereerd; voor de mock gebruik je daarvoor placeholder-blokken
+> 9. `briefs/website/app-taglines.md` — tagline per app (NL + EN) voor de apps-grid-sectie
+> 10. `briefs/website/platform-benchmarks.md` — reframing "upgrade-druk naar download-druk", zeven patronen om over te nemen van Odoo/WooCommerce/Nextcloud, patterns om níet over te nemen
+> 11. `briefs/website/support-model.md` — Support-pagina-structuur + pricing-tabel **uitgelijnd op ConNext-component-architectuur** (Technical Core / Workplace App / etc.)
+> 12. `briefs/website/services-model.md` — Services-tarievenkaart (dev €125, consultancy €150, strippenkaart, training, certificering)
+> 13. `briefs/website/tone-samples.md` — NL tone-calibratie: drie registers herkennen, rewrite-recepten naar Conduction-copy
 >
 > **Referentie-materiaal (lezen en bekijken):**
-> 11. `briefs/website/references/` — screenshots van referentie-sites. **Specifiek**: `ref-a-honeycomb-3d-platform.png` is dé referentie voor de homepage-hero — dat is exact de visuele taal die we willen. Bestudeer die grondig.
-> 12. `briefs/website/illustration-batch-1.md` — 12 illustratie-scènes. **Belangrijk: scène 1 (homepage hero) is een UITZONDERING en wordt niet via Midjourney gemaakt** — die bouw je direct als inline interactieve SVG+foreignObject-component (zie hierboven). Scènes 2–12 worden separaat via Midjourney gegenereerd; voor de mock gebruik je daarvoor **placeholder-blokken** met SVG-frames in cobalt en een label-text die beschrijft wat er komt te staan (bv. `<div class="illus-placeholder">[Scène 2: Open source — hex with open top, particles flowing out]</div>`).
+> 14. `briefs/website/references/` — screenshots van referentie-sites. **Specifiek**: `ref-a-honeycomb-3d-platform.png` is dé referentie voor de homepage-hero — dat is exact de visuele taal die we willen. Plus `ref-a-honeycomb-default-state.png` en `ref-a-honeycomb-hover-state.png` tonen de spotlight-interactie.
 >
 > **Harde constraints (niet afwijken):**
 >
-> - **Kleuren**: alleen cobalt (`#21468B`), KNVB-oranje (`#F36C21`), vermiljoen (`#AE1C28`) voor brand-kleuren. Wit (`#FFFFFF`) als achtergrond. Geen andere tinten blauw introduceren. Proportie: ~70% wit, 20% cobalt, 8% oranje, 2% rood.
+> - **Kleuren**: cobalt (`#21468B`), KNVB-oranje (`#F36C21`), vermiljoen (`#AE1C28`) als Conduction-brand-kleuren. **Nextcloud-blauw (`#0082C9`) en Nextcloud-cyan (`#1CAFFF`)** als gast-kleuren in ConNext-context: (1) op het *Next* deel van de ConNext-wordmark, (2) op brand-citation van *"Nextcloud"* in copy en idiomatische *"next"* die over Nextcloud-as-platform of ConNext-connectiviteit gaat, (3) op de top-face van de Nextcloud-kernel-hex op het platform-overview-diagram (officiële gradient `#0082C9 → #1CAFFF`). Wit (`#FFFFFF`) als achtergrond. Geen andere tinten blauw introduceren. Proportie: ~70% wit, 20% cobalt, 8% oranje, 5% Nextcloud-blauw (bewust en betekenisvol), 2% rood.
 > - **Typografie**: Figtree (body + headings), IBM Plex Mono (code). Fonts laden via self-hosted of Google Fonts-CDN; in de mock mag een Google Fonts-link prima.
 > - **Hexagon altijd pointy-top** (punt boven). Geen flat-top-varianten. Gebruik SVG-clip-paths of inline SVG-hexagons.
 > - **Geen "upgrade-druk"**: geen "Try it free"-CTA's, geen "Start your trial", geen pricing-pagina-nags, geen exit-intent-popups, geen urgency-tactics. Primary button zegt altijd *"Install from Nextcloud app store"*, nooit *"Get started"* of *"Sign up"*.
@@ -51,7 +53,29 @@ Dit document bevat de **kant-en-klare prompt** die je aan Claude Design (Claude 
 >
 > **Homepage-structuur** (in deze volgorde, zie `briefs/website/visual-motifs.md §Sectie 1-7`):
 >
-> 1. **Hero** — **interactieve SVG platform-overview** (Honeycomb-stijl, zie `briefs/website/references/ref-a-honeycomb-3d-platform.png` + `visual-motifs.md §Implementatie`). **Géén rasterized image — bouw hem direct als inline SVG met `<foreignObject>`-HTML-pills zodat hij accessible, editeerbaar, i18n-ready en interactief is.** 6 hex-prisms voor categorieën (Data Foundation / Integration / Documents / Case & Process / Insights / Design), elk met pill-labels voor de apps erin. Externe rechthoeken links ("Je bestaande systemen": Nextcloud, BAG, BRK, PDOK) en rechts ("Integraties": Nextcloud app store, gov-portals, email). Dashed data-flow-paths tussen elementen. Pills zijn `<a>` met `cursor: pointer` + CSS `transition-colors` bij hover. Headline links van het beeld: *"Een ecosysteem van Nextcloud-apps voor MKB en overheid"*, primaire CTA *"Browse our apps"* → `/apps`, secundaire CTA *"Solve a problem"* → `/solutions`.
+> 1. **Hero** — **interactieve SVG platform-overview** (Honeycomb-stijl, zie `briefs/website/references/ref-a-honeycomb-3d-platform.png` + `honeycomb-teardown.md §6.5` voor de exacte techniek). **Géén rasterized image — bouw hem direct als inline SVG met `<foreignObject>`-HTML-pills zodat hij accessible, editeerbaar, i18n-ready en interactief is.**
+>
+>    **Centrum — Nextcloud-kernel** (groter dan omliggende cards): top-face met Nextcloud-officiële gradient `#0082C9 → #1CAFFF` (45°), left/right-faces in cobalt-tinten. Pills binnen: `Files` · `Mail` · `Calendar` · `Contacts` · `Talk` · `Office` · `Apps & SSO`. Label "Nextcloud" eronder in Nextcloud-blauw.
+>
+>    **Zes component-cards rondom de Nextcloud-kernel**, elk met eigen pastel-familie:
+>      1. **Technical Core** (cobalt-diep): `OpenRegister` · `OpenConnector` · `DocuDesk` · `NLDesign Theme` · `MyDash`
+>      2. **Workplace App** (coral): `OpenCatalogi` · `PipelinQ` · `Procest` · `ZaakAfhandelApp` · `DeciDesk` · `ShillinQ` · `LarpingApp` · `OpenWoo` · `SoftwareCatalog`
+>      3. **AI** (paars): `Automation` · `Agents` · `Intelligence`
+>      4. **Integrated Apps** (geel): `OpenTalk` · `Matrix` · `n8n` · `OpenProject` · `XWiki` · `GitLab` · `Mattermost`
+>      5. **App Builder** (groen, **`Coming soon`-badge** in KNVB-oranje): `Build your own` · `Customize ConNext apps` · `No code, just configure`
+>      6. **Admin Tools** (grijs, gedempte opacity): `App-versions` · `Crontab`
+>
+>    **Side-box links** ("Your data sources"): BAG · BRK · PDOK · BRP · KvK · DSO + Nextcloud-Files. Géén rechts-side-box; externe productivity-tools zitten in Integrated Apps.
+>
+>    **Verbindingen**: stippeltjes-flow-lijnen (`stroke-dasharray="2.41 3.85"`, statisch zoals Honeycomb) van side-box → Nextcloud-kernel, en van kernel → alle component-cards.
+>
+>    **Hover-interactie**: spotlight-effect via `group-hover:opacity-100` op hex-paden — gehoverde hex springt naar 100% opacity, andere blijven op ~70%. Pills zijn `<a>` met `cursor: pointer` + CSS `transition-colors duration-150`.
+>
+>    **Wordmark + lockup boven het diagram**: ConNext-wordmark prominent (`Con` in cobalt + `Next` in Nextcloud-blauw), met "*by Conduction*" subtitel + Conduction-hexagon-avatar als kleine icoon links.
+>
+>    **Tagline**: H1 *"Make Nextcloud your workspace, not just your office suite"* + lead *"ConNext is Conduction's set of open-source components that bring data, processes, AI, and integrations to your Nextcloud — turning a file-sync platform into your actual workplace."* — beide voorkomens van *"Nextcloud"* gestyled met `<span class="next-blue">`.
+>
+>    **CTA's**: primair *"Browse our apps"* → `/apps`, secundair *"How does ConNext work?"* (scroll naar de component-overview-uitleg).
 > 2. **Waarde-teasers** — horizontale honeycomb-row van 4 hex-cards: "Open source" / "Eigen Nextcloud" / "Geen vendor lock-in" / "NL Design"
 > 3. **Apps-grid** — offset honeycomb van 11 core apps; elke hex toont icoon + naam op hover/tap-overlay; taglines uit `app-taglines.md`
 > 4. **Solutions-teasers** — 3–5 solution-cards met hex-stack-diagram-visual showing de app-stack per solution

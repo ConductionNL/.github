@@ -30,6 +30,64 @@ We verdienen ons brood via twee ondersteunende lagen rondom het ecosysteem:
 
 Beide zijn **secundair**, niet leading. In klant-communicatie gebruiken we het woord **"Support"** in plaats van "SLA" — Support is toegankelijker en is wat klanten zoeken; SLA is de technische term voor het onderliggende contract. Alle merkcommunicatie (website, drukwerk, presentaties) leidt met de apps en het ecosysteem; Support en Services worden eerlijk en transparant uitgelegd waar relevant, maar nooit als verplichte funnel of upgrade-druk.
 
+## ConNext — onze publieke productbrand
+
+Per 2026-04-28 is **ConNext** onze publieke productbrand. Het is de naam waaronder klanten ons ecosysteem leren kennen, gebruiken en aanbevelen.
+
+### De relatie in één regel
+
+> **ConNext is a Conduction proposition for Nextcloud.**
+
+Drie merken in driehoeksverhouding:
+
+- **Conduction** — het Nederlandse open-source-productbedrijf dat ConNext bouwt. Juridische entiteit, contracten-partner voor Support, werkgever, contributor in OSS-communities. Blijft **zeer zichtbaar** op de site (footer, About-pagina, Support-contracten).
+- **ConNext** — de **publieke productbrand** voor het hele Conduction-on-Nextcloud-ecosysteem. Het is **pure positionering** (geen aparte software-laag, geen nieuwe code) — de naam waaronder Conduction de bestaande Core-apps + Workplace Apps + AI + integraties als één samenhangend platform aan klanten presenteert.
+- **Nextcloud** — het host-platform waarop ConNext draait. Geen Conduction-eigendom, wel essentieel: ConNext extends Nextcloud van *office suite* naar *workplace*.
+
+### Hernoeming van ConNext (intern → publiek)
+
+Tot voor kort was *"ConNext"* een **interne programmanaam** voor onze AI-pipeline (Specter + Hydra + Medusa). Per 2026-04-28 is dat traject hernoemd naar **RAD** (Rapid Application Development) en is *"ConNext"* vrijgemaakt als publieke productbrand. RAD blijft intern; ConNext gaat naar buiten.
+
+### Wat ConNext concreet betekent voor klanten
+
+ConNext = Conduction's bundel van open-source-componenten die Nextcloud doorontwikkelt van office suite naar workplace. Concreet bestaat ConNext uit **zes component-cards** rondom de Nextcloud-kernel:
+
+1. **Technical Core** — OpenRegister · OpenConnector · DocuDesk · NLDesign Theme · MyDash (5 fundationele capabilities: data, integratie, documenten, theming, dashboards)
+2. **Workplace App** — OpenCatalogi · PipelinQ · Procest · ZaakAfhandelApp · DeciDesk · ShillinQ · LarpingApp · OpenWoo · SoftwareCatalog (9 user-facing apps voor concrete use cases)
+3. **AI** — Automation · Agents · Intelligence (cross-cutting AI-capabilities)
+4. **Integrated Apps** — OpenTalk · Matrix · n8n · OpenProject · XWiki · GitLab · Mattermost (third-party OSS-apps die ConNext via OpenConnector in jouw Nextcloud integreert)
+5. **App Builder** *(Coming soon)* — UI waarmee klanten zelf (mini) Nextcloud-apps bouwen of bestaande ConNext-apps customizen. Empowerment-tagline: *"The client is always right — and now they have the tools to make it true."*
+6. **Admin Tools** — App-versions · Crontab (gratis open-source admin-utilities, geen primair product)
+
+Volledige uitleg per component-card en alle apps: [`briefs/website/app-architecture.md`](./briefs/website/app-architecture.md).
+
+### ConNext-wordmark
+
+De wordmark is **pure typografie**:
+
+> **<span style="color: #21468B">Con</span><span style="color: #0082C9">Next</span>**
+
+- *Con* in cobalt `#21468B` (Conduction-primair)
+- *Next* in Nextcloud-blauw `#0082C9` (Nextcloud-officieel)
+- Geen icoon vóór de wordmark; de typografische kleurwissel doet het brand-werk
+
+In headers en op de homepage-hero: ConNext-wordmark prominent, met *"by Conduction"* subtitel klein eronder + Conduction-hexagon-avatar als kleine icoon links ernaast. Zo blijft Conduction zichtbaar en is de drie-merken-relatie meteen visueel duidelijk.
+
+### Domein
+
+ConNext leeft op **`connext.conduction.nl`** (subdomein van Conduction). De bestaande `www.conduction.nl` blijft als slim corporate site bestaan — wordt later vernieuwd met dezelfde Conduction-huisstijl die we nu via ConNext uitrollen.
+
+### Conduction-huisstijl is gedeeld
+
+Belangrijk: de visuele identiteit die we hier in BRAND.md beschrijven (cobalt + KNVB-oranje + vermiljoen + Figtree + IBM Plex Mono + hexagon-motief + Nextcloud-blauw) is de **Conduction-huisstijl** in algemene zin — **niet** ConNext-specifiek. ConNext is het eerste public-facing product dat deze huisstijl draagt; toekomstig vernieuwd www.conduction.nl-corporate krijgt diezelfde huisstijl.
+
+Eén huisstijl, twee submerken:
+
+- **ConNext-product-brand** — typografische wordmark (Con-cobalt + Next-Nextcloud-blue), gericht op klanten van het platform
+- **Conduction-corporate-brand** — hexagon-avatar als bedrijfsmerk-mark, gericht op community/contributors/stakeholders
+
+Beide gebruiken hetzelfde palet, dezelfde typografie, hetzelfde hexagon-motief — alleen de wordmark/mark verschilt.
+
 ## Voor wie we bouwen
 
 Onze doelgroep is in transitie:
@@ -95,7 +153,7 @@ Richtlijnen:
 
 ## Kleurpalet
 
-Onze kleuren zijn gebaseerd op de **officiële Nederlandse vlagkleuren**.
+Onze primaire kleuren zijn gebaseerd op de **officiële Nederlandse vlagkleuren**. Daarnaast hebben we Nextcloud-blauw als brand-kleur voor alle ConNext-context (zie hieronder).
 
 | Rol | Naam | Hex | RGB | Gebruik |
 |---|---|---|---|---|
@@ -103,14 +161,34 @@ Onze kleuren zijn gebaseerd op de **officiële Nederlandse vlagkleuren**.
 | **Secondary** | KNVB-oranje | `#F36C21` | 243, 108, 33 | Accenten, highlights, hover — spaarzaam |
 | **Tertiary** | Helder vermiljoen | `#AE1C28` | 173, 28, 40 | Zeer spaarzaam — attentie, error-state |
 | **Background** | Wit | `#FFFFFF` | 255, 255, 255 | Default achtergrond |
+| **Nextcloud Blue** | Nextcloud-blauw | `#0082C9` | 0, 130, 201 | "Next" in ConNext-wordmark · brand-citation van "Nextcloud" in copy · idiomatische "next" waar het over Nextcloud-as-platform gaat · top-face van de Nextcloud-kernel-hex op platform-overview-diagrammen |
+| **Nextcloud Cyan** | Nextcloud-cyan | `#1CAFFF` | 28, 175, 255 | Lichter einde van Nextcloud's officiële brand-gradient (`#0082C9 → #1CAFFF`, 45°). Alleen samen met Nextcloud-blauw als gradient-tint, niet als losse brand-kleur |
 
-### Waarom deze drie?
+### Waarom deze kleuren?
 
-- **Kobaltblauw** is officieel de blauwtint van de Nederlandse vlag. Donkerder dan onze oude lichtblauw, straalt betrouwbaarheid en stabiliteit uit.
+- **Kobaltblauw** is officieel de blauwtint van de Nederlandse vlag. Donkerder dan onze oude lichtblauw, straalt betrouwbaarheid en stabiliteit uit. **Onze primaire merkkleur.**
 - **KNVB-oranje** is het meest universeel herkenbare "Nederlands oranje" — het oranje van het nationale elftal. Warm, toegankelijk, emotioneel geladen. Expliciet *niet* het Rijkshuisstijl-oranje (`#E17000`), en ook niet de letterlijke wimpel-tint (`#FF7F00`): de KNVB-variant pairt zachter met cobalt en signaleert "Nederlands maar niet overheid, trots maar niet stoffig".
 - **Vermiljoen** is de officiële rode vlagkleur. Spaarzaam in te zetten voor attentie en error-states.
+- **Nextcloud-blauw** is geen Conduction-kleur — het is de **officiële brand-kleur van Nextcloud**, opgenomen in onze huisstijl voor specifieke contextuele inzet. Wij claimen het niet, we citeren het. Net zoals andere merken gerespecteerd worden in hun eigen brand-context.
 
 Zie [DESIGN.md](./DESIGN.md#waarom-knvb-oranje-f36c21-als-secundair) voor de volledige afweging, inclusief vergelijking met Rabobank, ING en Rijkshuisstijl.
+
+### "Next" in Nextcloud-blauw — markup-conventie
+
+Drie plekken in copy waar **Nextcloud-blauw `#0082C9`** wordt toegepast op tekst (niet op visuele elementen):
+
+| Toepassing | Voorbeeld | Markup |
+|---|---|---|
+| **ConNext-wordmark** — "Next" deel altijd Nextcloud-blauw | <span style="color: #21468B">Con</span><span style="color: #0082C9">Next</span> | Twee `<span>`'s met respectievelijk Conduction-cobalt en Nextcloud-blauw kleur |
+| **Brand-citation van "Nextcloud"** — elke voorkomen in copy | "ConNext extends [Nextcloud]{.next-blue} into a workspace" | `<span class="next-blue">Nextcloud</span>` |
+| **Idiomatische "next"** — wanneer het direct over Nextcloud-as-platform of ConNext-connectiviteit gaat | "Take Nextcloud to the [next]{.next-blue} level" | `<span class="next-blue">next</span>` (handmatig per redactioneel oordeel) |
+
+**Niet** toepassen op:
+- Generieke "next" in functionele context (*"next page"*, *"next year"*, *"next step"*) — dat is gewone Nederlandse/Engelse tekst, niet brand-citation
+- Andere woorden die toevallig "next" bevatten (*"Annexed"*, *"Index"*) — letter-strings tellen niet, alleen losstaande woorden
+- Body-tekst-decoratie zonder brand-betekenis — Nextcloud-blauw moet bewust en betekenisvol blijven
+
+Zie [DESIGN.md §Nextcloud-blauw als secundaire brand-kleur](./DESIGN.md) voor de full rationale en visuele voorbeelden.
 
 ### Wat oranje betekent voor Conduction
 

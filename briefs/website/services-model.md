@@ -2,6 +2,8 @@
 
 Dit document beschrijft hoe Conduction Services factureert: projectmatige activiteiten (maatwerk-ontwikkeling, consultancy, training) die op uurtarief of per dagdeel worden afgerekend. Parallel aan [`support-model.md`](./support-model.md), dat ons Support-abonnement beschrijft (per app × per user × per jaar).
 
+> **Brand-context (per 2026-04-28):** Services worden contractueel geleverd door **Conduction** (de juridische entiteit). Op de **`connext.conduction.nl`**-site verschijnt Services als een discrete sectie/footer-pagina met de melding *"Services worden geleverd door Conduction, de bouwer van ConNext."*. De tarieven en het model in dit document zijn ongewijzigd door de ConNext-rebrand — alleen de positionering op de website verschuift: Services is nu een service rondom het ConNext-ecosysteem, geleverd door Conduction.
+
 **Kernverschil met Support:**
 
 | | Support | Services |
@@ -153,7 +155,7 @@ Alle prijzen **ex. BTW**. Reis-/verblijfkosten separaat. Grotere projecten (>€
 
 ## Services-pagina op de website
 
-URL: **`/services`**. Linkt vanuit footer (niet hoofdnav — zie [`platform-benchmarks.md`](./platform-benchmarks.md) over waarom we bewust weg bewegen van dienstverlener-prominentie). Wél transparant indexeerbaar.
+URL: **`/services`** op `connext.conduction.nl`. Linkt vanuit footer (niet hoofdnav — zie [`platform-benchmarks.md`](./platform-benchmarks.md) over waarom we bewust weg bewegen van dienstverlener-prominentie). Wél transparant indexeerbaar. Pagina-toon: *"Conduction levert Services rondom het ConNext-ecosystem"* — niet *"ConNext biedt Services"* (de Services-relatie is met Conduction-de-bedrijf, niet met de productbrand).
 
 Zes secties, in deze volgorde:
 

@@ -117,6 +117,41 @@ Helder vermiljoen is de officiële rode vlagkleur. We nemen het op omdat:
 
 Vermiljoen is **nog spaarzamer** dan oranje (~2%). Overmatig rood voelt alarmerend.
 
+### Nextcloud-blauw `#0082C9` als secundaire brand-kleur (voor ConNext-context)
+
+Per 2026-04-28 voegen we **Nextcloud-blauw** toe aan onze huisstijl als kleur die specifiek wordt gebruikt in **ConNext-context**. Dit is een uitbreiding op het Conduction-vlagkleur-palet, niet een vervanging.
+
+**Waarom Nextcloud-blauw opnemen:**
+
+ConNext is een Conduction-propositie *voor Nextcloud*. Het hele product-narratief hangt op de connectiviteit tussen Conduction (cobalt) en Nextcloud (Nextcloud-blauw). Door Nextcloud's eigen brand-kleur op te nemen — niet te claimen, maar te citeren — eerbiedigen we hun merk en maken we de partnerrelatie visueel zichtbaar. Het is een design-equivalent van *"powered by Nextcloud"*: wij blijven Conduction in vorm en kleur, maar erkennen Nextcloud waar dat hoort.
+
+**De officiële waardes** (vastgelegd via `nextcloud.com/brand`):
+
+| Token | Hex | RGB | HSL | Pantone |
+|---|---|---|---|---|
+| Nextcloud Blue (primair) | `#0082C9` | 0, 130, 201 | 201° / 100% / 39% | 285C |
+| Nextcloud Cyan (gradient-eind) | `#1CAFFF` | 28, 175, 255 | 201° / 100% / 55% | — |
+| Nextcloud Gradient | `linear-gradient(45deg, #0082C9, #1CAFFF)` | — | — | — |
+
+**Drie strikte gebruiksregels:**
+
+1. **In de ConNext-wordmark** — *"Next"* altijd in `#0082C9`, *"Con"* altijd in cobalt `#21468B`. Dat creëert de typografische rijm die de Conduction-Nextcloud-relatie zichtbaar maakt zonder een woord uit te leggen.
+2. **In tekst** — toegepast als markup-conventie op:
+   - elke voorkomen van het brand-woord *"Nextcloud"* (consistent brand-citation)
+   - idiomatische *"next"* waar het direct gaat over Nextcloud-as-platform of over ConNext-connectiviteit (*"take Nextcloud to the next level"* — beide woorden krijgen blauw)
+   - Niet toegepast op generieke *"next"* zonder brand-betekenis (*"next page"*, *"next year"*) of op letterstrings binnen andere woorden (*"index"*, *"annexed"*)
+3. **Op platform-overview-diagrammen** — de Nextcloud-kernel-hex gebruikt Nextcloud's officiële gradient (`#0082C9 → #1CAFFF`, 45°) op de top-face. De omliggende component-cards gebruiken cobalt-tinten (Conduction-context). Compositie codeert: *"Nextcloud is de kernel, Conduction is wat eromheen zit."*
+
+**Niet toepassen op:**
+
+- Conduction-corporate communicatie waar Nextcloud niet betrokken is (CV's, contracten, NL Design System co-werk-presentaties zonder ConNext-context)
+- UI-componenten op apps die niet specifiek Nextcloud-gerelateerd zijn (buttons, links, etc. — die blijven cobalt)
+- Decoratief — Nextcloud-blauw moet bewust en betekenisvol blijven; willekeurige plaatsing watert de symboliek uit
+
+**Verschil met cobalt:** cobalt `#21468B` is *onze* hoofdkleur (alle UI, alle copy, alle merken), Nextcloud-blauw `#0082C9` is een *gast-kleur* die we citeren in specifieke ConNext-context. Cobalt blijft 70%+ van de zichtbare brand-kleur; Nextcloud-blauw verschijnt op gerichte plekken (~5% van zichtbare kleur, alleen waar het symbolisch hoort).
+
+Volledige catalogus van toepassingen plus markup-voorbeelden: zie [BRAND.md §"Next" in Nextcloud-blauw — markup-conventie](./BRAND.md#next-in-nextcloud-blauw--markup-conventie).
+
 ### Waarom geen neutrale grijzen in scope A?
 
 Scope A is bewust minimaal. Voor body-tekst gebruiken we kobalt op wit (contrast is ruim voldoende). Voor muted/secondary tekst, borders, subtle backgrounds hebben we grijzen nodig — dat komt in **scope B**. Voor nu kunnen apps tijdelijk hun eigen neutrale grijs gebruiken; we standaardiseren dat zodra meerdere apps ermee werken.
@@ -235,6 +270,35 @@ Kenmerken:
 - Eén visuele taal door alle oppervlakken (website, drukwerk, presentaties, app-UI's)
 
 Productie: Midjourney eerste batch met master-prompt; per-scène-prompts in [`briefs/website/illustration-batch-1.md`](./briefs/website/illustration-batch-1.md).
+
+### ConNext-wordmark — typografische keuze
+
+Per 2026-04-28 introduceren we **ConNext** als publieke productbrand (zie [BRAND.md §ConNext](./BRAND.md#connext--onze-publieke-productbrand)). De wordmark is bewust **pure typografie**, geen icoon of monogram:
+
+> **<span style="color: #21468B">Con</span><span style="color: #0082C9">Next</span>**
+
+**Waarom geen icoon vóór de wordmark:**
+
+- De **typografische kleurwissel zelf** doet al het zware merkwerk: *Con* in Conduction-cobalt, *Next* in Nextcloud-blauw. Geen icoon nodig om die boodschap te dragen — de letters zijn de boodschap.
+- **Conduction's hexagon-avatar bestaat al** als bedrijfsmerk-mark. Een tweede icoon erbij voor ConNext zou brand-versplintering geven (twee marks om te onderhouden, te tonen, te beschermen).
+- **Eenvoud schaalt beter**: pure tekst werkt op elke achtergrond, in elke grootte, op elk medium. Geen pixel-tweaks per platform.
+- **Past bij de tech-product-categorie**: Stripe, Linear, Vercel, Plausible — allemaal product-brands waarvan de wordmark zelf voldoende is.
+
+**Typografische details:**
+
+- Lettertype: **Figtree** (zelfde body-font als de rest van de huisstijl) — zorgt voor visuele cohesie
+- Gewicht: **bold** (700) op grote weergave (header, hero), **semibold** (600) op kleinere plekken
+- Kerning: licht aaneengesloten — *Con* en *Next* moeten visueel één woord vormen, ook al zijn de kleuren anders. Geen extra spatie.
+- Hoofdletter-conventie: alleen de **C** en **N** zijn hoofdletter (camelCase met capital N). Niet *"connext"* (te plat), niet *"CONNEXT"* (te schreeuwerig), niet *"Connext"* (te gewoon).
+
+**Lockup-context:**
+
+In headers en op de homepage-hero verschijnt de ConNext-wordmark **prominent**, met:
+
+- *"by Conduction"* subtitel klein eronder (zelfde Figtree-font, regular gewicht, cobalt-tint, ~50% van wordmark-grootte)
+- Conduction-hexagon-avatar als kleine icoon (~24px) links naast de subtitel — als subtle bedrijfsmerk-anchor
+
+Zo staan alle drie de brand-actoren (Conduction · ConNext · Nextcloud) zichtbaar zonder dat één element het beeld domineert.
 
 ### Waarom twee logo-varianten (op wit, op blauw)?
 
