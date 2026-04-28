@@ -45,51 +45,60 @@ Voor scènes waar je labels nodig hebt, voeg na de prompt toe:
 platform overview diagram, 6 hexagonal prisms arranged in central cluster with one dominant green hexagon in middle, labeled feature-pill badges floating near each hex showing app names, external rectangular boxes on left and right connected by thin dashed data-flow lines, left box labeled "Your systems" with small logo placeholders for Nextcloud BAG BRK PDOK, right box labeled "Integrations" with placeholders for app store and gov portals, [MASTER PROMPT]
 ```
 
-**SVG-bouwinstructies voor Claude Design / illustrator (definitief, 4-laagse architectuur — zie [`app-architecture.md`](./app-architecture.md) voor volledige context):**
+**SVG-bouwinstructies voor Claude Design / illustrator (definitief, 6-component-card-architectuur rondom Nextcloud-kernel):**
 
-**Centrum — Core-cluster (3 hex-prisms aaneengesloten, cobalt-dominant):**
-- `OpenRegister` — pill: "Schemas, Objects, Audit"
-- `OpenConnector` — pill: "API gateway, Transformations"
-- `DocuDesk` — pill: "Generate, Sign, Anonymize"
+**Strategische narrative**: ConNext is Conduction's propositie die Nextcloud doorontwikkelt van *office suite* naar *workspace*. De 6 component-cards rondom de Nextcloud-kernel laten zien wat die uitbreiding inhoudt.
 
-**Ring rond de Core — Implementations (8–11 hex-prisms, elk pastel-tint, met pill-labels per app):**
-- OpenCatalogi (groen) — pills: "Federated catalog, WOO, Harvester"
-- PipelinQ (blauw) — pills: "Contacts, Quotes, Invoicing"
-- ZaakAfhandelApp (paars) — pills: "Mijn Zaken, Status"
-- Procest (geel) — pills: "VTH, Forms, Cases"
-- MyDash (roze) — pills: "Dashboards, Workflows"
-- SoftwareCatalog (oker) — pills: "ITAM, Contracts"
-- DeciDesk (lichtblauw) — pills: "Voting, Boards"
-- ShillinQ (terracotta) — pills: "Accounting, Invoices"
-- LarpingApp (mint) — pills: "Worlds, Campaigns"
-- *(NLDesign + OpenWoo plaatsing wachten op gebruikersbevestiging)*
+**Centrum — Nextcloud kernel (één grote hex-prism, cobalt + Nextcloud-blauw gradient):**
+- Pills binnen Nextcloud-kernel: `Files` · `Mail` · `Calendar` · `Contacts` · `Talk` · `Office` · `Apps & SSO`
+- Visuele behandeling: iets groter dan de component-cards eromheen; gebruikt Nextcloud-blauw `#0082C9` als secundaire tint (top-face) bovenop cobalt (left/right faces)
+- Label onder de hex: "Nextcloud" (in Nextcloud-blauw)
 
-**Off-center, kleinere tegels — Extra apps (drie hex-tegels, teal of grijs):**
-- OpenTalk (video)
-- Matrix (chat)
-- n8n (automation)
+**Zes component-cards rondom de kernel** (in Honeycomb-stijl arrangement, elk een hex-prism met pastel-tint en pill-labels):
 
-**Links-box — Bron-systemen "Je bestaande omgeving":**
-- Nextcloud (logo)
-- BAG / BRK / PDOK / BRP / KvK / DSO (overheid bron-iconen)
+1. **Technical Core** (cobalt-diep / donkerblauw) — *Conduction's fundering-laag*
+   - Pills: `OpenRegister` · `OpenConnector` · `DocuDesk`
 
-**Rechts-box — Output-integraties "Werkt naast":**
-- Nextcloud Mail / Calendar / Talk / Office / Files / Contacts
-- OpenProject (project management)
-- XWiki (kennisbank)
-- GitLab / Mattermost (optioneel)
+2. **Workplace App** (warm coral / rood-oranje) — *user-facing apps voor concrete use cases*
+   - Pills: `OpenCatalogi` · `PipelinQ` · `Procest` · `ZaakAfhandelApp` · `DeciDesk` · `ShillinQ` · `MyDash` · `SoftwareCatalog` · `LarpingApp` · `OpenWoo`
+   - Bij té veel pills voor één hex: split visueel in "Workplace App" hex met top-5 pills + "View all" pill, of tweede partner-hex
 
-**Verbindingen:**
-- Stippeltjes-flow-lijnen (`stroke-dasharray="2.41 3.85"`, geen animation per Honeycomb-conventie) van Bron-systemen → Core (input)
-- Stippeltjes-flow-lijnen van Core → Implementations (gebruik)
-- Stippeltjes-flow-lijnen van Implementations → Output-integraties (samenwerking)
-- Subtiele lijntjes tussen Implementations onderling die echt veel samenwerken (bv. ZaakAfhandelApp ↔ Procest, OpenCatalogi ↔ DocuDesk)
+3. **AI** (paars / lavendel) — *AI-capabilities cross-cutting over de stack*
+   - Pills: `Automation` · `Agents` · `Intelligence`
+
+4. **Integrated Apps** (geel / oker) — *externe open-source apps in jouw Nextcloud*
+   - Pills: `OpenTalk` · `Matrix` · `n8n` · `OpenProject` · `XWiki` · `GitLab` · `Mattermost`
+
+5. **App Builder** (groen / mint) — *capability voor app-creatie* — **`Coming soon`-badge** zichtbaar
+   - Pills: tijdelijk leeg of placeholder (`Schema-driven` · `Low-code` — TBC)
+   - Visueel: zelfde stijl als de andere component-cards maar met een kleine, opvallende `Coming soon`-pill in oranje (KNVB) of een speciale badge-shape rechts-bovenin de hex
+
+6. **Admin Tools** (grijs / lichtblauw, gedempt) — *utilities voor admins, geen primair product*
+   - Pills: `App-versions` · `Crontab`
+   - Visueel: iets kleiner of met lagere opacity dan de andere component-cards om "ondersteunend, niet voorgrond"-status duidelijk te maken
+
+**Side-box — Links: "Your data sources" / "Je bestaande omgeving":**
+- BAG · BRK · PDOK · BRP · KvK · DSO (overheid bron-iconen)
+- Plus: existing Nextcloud-data (Files, Contacts) als ingang
+- Geen rechts-side-box meer — externe productivity-apps (OpenProject, XWiki, etc.) zitten nu in de **Integrated Apps** component-card
+
+**Verbindingen / data-flow:**
+- Stippeltjes-flow-lijnen (`stroke-dasharray="2.41 3.85"`, statisch zoals Honeycomb) van **Side-box** → **Nextcloud kernel** (data-input)
+- Stippeltjes van **Nextcloud kernel** → **alle component-cards** rondom (kernel voedt componenten)
+- Subtiele cross-component-lijntjes tussen sterk-samenwerkende paren (bv. **Workplace App** ↔ **AI**, **Technical Core** ↔ **Integrated Apps**)
+- Geen flow-lijn richting **Admin Tools** of vanaf **App Builder** — die zijn voorlopig non-data-flow
 
 **Per-element styling:**
-- Hex-prism = 3 `<path>`'s (top, links, rechts) met drie kleur-tinten van dezelfde pastel-familie voor isometrische diepte
-- Default opacity ~70% op alle hex-paden, `group-hover:opacity-100` voor spotlight (zie [`honeycomb-teardown.md §6.5`](./honeycomb-teardown.md))
+- Hex-prism = 3 `<path>`'s (top, links, rechts) met drie tinten van dezelfde pastel-familie voor isometrische diepte
+- Default opacity ~70% op alle hex-paden, `group-hover:opacity-100` voor spotlight-effect (zie [`honeycomb-teardown.md §6.5`](./honeycomb-teardown.md))
 - Pills als `<a href>` binnen `<foreignObject>` — clickable, focus-bare, screen-reader-leesbaar
 - CSS `transition-colors duration-150` op pill-hover
+- App-Builder `Coming soon`-badge: standalone `<span class="badge badge-coming-soon">` in oranje, niet-clickable, `aria-label="App Builder is in active development; subscribe to the newsletter for launch notice"`
+
+**Wordmark + lockup boven de diagram:**
+- ConNext-wordmark in cobalt+Nextcloud-blauw, prominent
+- "by Conduction" subtitel onder de wordmark, klein en in cobalt
+- Conduction-hexagon-avatar als kleine icoon naast de "by Conduction"-tekst, links
 
 ## Scène 2: Waarde-teaser — "Open source"
 

@@ -137,18 +137,27 @@ De site heeft één primaire taak: **installeer een app vanuit de Nextcloud app 
 
 ### 6.1 Homepage
 
-**Job:** in ≤ 10 seconden duidelijk maken wat Conduction is, welke apps bestaan, en hoe je verder komt.
+**Job:** in ≤ 10 seconden duidelijk maken wat **ConNext** is — Conduction's propositie die Nextcloud doorontwikkelt van *office suite* naar *workspace*. Bezoeker begrijpt de pitch en heeft een directe stap (browse apps) of begrijpt de architectuur (scroll naar component-overview).
 
 Structuur van boven naar beneden:
 
-- **Hero** — korte pitch ("We bouwen een ecosysteem van Nextcloud-apps voor MKB en overheid") + primaire CTA ("Browse our apps" → /apps) + secundaire CTA ("Solve a problem" → /solutions). Visueel: app-screenshot of hexagon-compositie, geen teamfoto.
-- **Featured apps** — 4–6 core apps in kaartvorm met hexagon-logo, naam, tagline, "Install" CTA
-- **Top solutions** — 3–4 meest relevante solutions als teasers met "Read more" naar solution-pagina
-- **Ecosystem-strip** — één beeld dat het verband toont tussen apps (interconnected, hexagon-rooster)
-- **Proof** — installed-count, gemeenten/organisaties die ons gebruiken, GitHub-sterren
-- **Footer** — zie boven
+- **Hero** —
+  - ConNext-wordmark prominent (Con cobalt + Next Nextcloud-blauw) met *"by Conduction"* subtitel + kleine Conduction-hexagon-avatar links
+  - **H1**: *"Make Nextcloud your workspace, not just your office suite"*
+  - **Lead**: *"ConNext is Conduction's set of open-source components that bring data, processes, AI, and integrations to your Nextcloud — turning a file-sync platform into your actual workplace."*
+  - **Primaire CTA**: *"Browse our apps"* → `/apps`
+  - **Secundaire CTA**: *"How does ConNext work?"* (scrolt naar component-overview hieronder)
+  - **Visueel**: het isometrische **platform-overview-diagram** (Honeycomb-stijl) met **Nextcloud-kernel** in centrum + **6 component-cards** rondom (Technical Core · Workplace App · AI · Integrated Apps · App Builder *(Coming soon)* · Admin Tools) + **side-box links** met bron-systemen (BAG/BRK/PDOK/etc.). Volledige spec: zie [`website/visual-motifs.md §Platform overview pattern`](./website/visual-motifs.md#platform-overview-pattern--honeycomb-stijl-als-hero) en [`website/illustration-batch-1.md scène 1`](./website/illustration-batch-1.md).
 
-**Geen** op de homepage: teamfoto, mission-statement lang verhaal, "onze diensten"-sectie, blog-feed als hero.
+- **Featured apps** — selectie uit Workplace App component (4–6 stuks) als kaarten met hexagon-icon, naam, tagline, "Install" CTA. Linken door naar app-detail-pagina's.
+- **Top solutions** — 3–4 meest relevante solutions als teasers met "Read more" naar solution-pagina
+- **Ecosystem-strip** — vereenvoudigde versie van de hero-component-overview, zonder pills, alleen de zes component-cards en hun rol; nodigt uit om door te klikken naar /apps voor details
+- **Proof** — installed-count, gemeenten/organisaties die ConNext gebruiken, GitHub-sterren, *"X apps live in Nextcloud's app store"*
+- **Footer** — zie hoofdsite-structuur
+
+**Geen** op de homepage: teamfoto, mission-statement lang verhaal, "onze diensten"-sectie als hoofd-CTA, blog-feed als hero.
+
+**Architecturele context** voor de hero: zie [`website/app-architecture.md`](./website/app-architecture.md) voor de volledige beschrijving van de zes component-cards rondom Nextcloud-kernel + alle apps + integraties. Dit document is de canonieke bron voor wat in elke component zit.
 
 ### 6.2 App-catalogus (`/apps`)
 

@@ -84,9 +84,21 @@ Elke sectie van de website verdient een eigen doordenking — niet *"hero + teks
 - **D. Eén grote hex met screenshot erin gecropt** — boldere statement maar beperkt tot één app
 - **E. Typografie-eerst** — grote headline, geen beeld-hero, slechts hex-accenten
 
-**Aanbevolen: C — Isometrisch platform-overview.**
+**Aanbevolen: C — Isometrisch platform-overview, ConNext-stijl.**
 
-Waarom: communiceert in één oogopslag hoe **alle apps met elkaar samenhangen** — de meest belangrijke boodschap die we moeten overbrengen. Dat is precies de reden waarom honeycomb.io deze visualisatie gebruikt op hun homepage en /platform-pagina. Zie [referentie-screenshot](./references/ref-a-honeycomb-3d-platform.png) en [volledige platform-overview-sectie](#platform-overview-pattern--honeycomb-stijl-als-hero) hieronder voor concrete Conduction-vertaling.
+Waarom: communiceert in één oogopslag hoe **ConNext de Nextcloud-kernel doorontwikkelt van office suite naar workspace** — de strategische kern-boodschap. De 6 component-cards rondom de Nextcloud-kernel zijn de directe Conduction-vertaling van Honeycomb's pattern. Zie [referentie-screenshot](./references/ref-a-honeycomb-3d-platform.png) en [volledige platform-overview-sectie](#platform-overview-pattern--honeycomb-stijl-als-hero) hieronder voor de volledige vertaling.
+
+**Hero-tagline (werkende keuze, te bevestigen)**: 
+
+> # Make Nextcloud your workspace, not just your office suite
+> 
+> *ConNext is Conduction's set of open-source components that bring data, processes, AI, and integrations to your Nextcloud — turning a file-sync platform into your actual workplace.*
+
+Boven de tagline: ConNext-wordmark in cobalt (`Con`) + Nextcloud-blauw (`Next`), met "*by Conduction*" subtitel + Conduction-hexagon-icoon klein ernaast.
+
+Onder de tagline: het isometrische platform-overview-diagram met Nextcloud-kernel + 6 component-cards + side-box.
+
+CTA's: primair *"Browse our apps"* (→ /apps), secundair *"How does ConNext work?"* (scroll naar architecture-uitleg).
 
 Escape-hatch: als C te technisch-zakelijk ogend is, terug naar B (flat constellatie, zelfde boodschap maar minder visueel gewicht). A is alleen acceptabel als het onmogelijk blijkt om een goede overview-diagram te maken.
 
@@ -110,16 +122,35 @@ Wat deze visualisatie zo krachtig maakt:
 
 Honeycomb.io heeft ook een **flat horizontale variant** van dezelfde boodschap (verder op de /platform-pagina) waar de hexen niet extrudeerd zijn maar op dezelfde manier data-flow tonen — zie [referentie-screenshot (flat-variant)](./references/ref-a1-honeycomb-section-3400.png). Die flat-variant is handig voor delen van de site waar minder visuele ruimte is.
 
-**Conduction-vertaling — definitieve 4-laagse architectuur** (zie [`app-architecture.md`](./app-architecture.md) voor de volledige uitleg per laag, alle apps, en alle integraties):
+**Conduction-vertaling — definitieve component-architectuur (6 component-cards rondom Nextcloud-kernel):**
 
-| Laag | Hexagon-rol in diagram | Apps |
-|---|---|---|
-| **Core** | Centrale cluster van 3 hex-prisms (cobalt-dominant) | OpenRegister, OpenConnector, DocuDesk |
-| **Implementations** | Ring van hex-prisms rond de Core, elk een eigen pastel-tint | OpenCatalogi, PipelinQ, ZaakAfhandelApp, Procest, MyDash, SoftwareCatalog, LarpingApp, DeciDesk, ShillinQ, OpenWoo, NLDesign |
-| **Extra apps** | Kleine hex-tegels off-center, eigen palet (teal/grijs) | OpenTalk, Matrix, n8n |
-| **Integrations** | Externe rechthoeken links/rechts | Links: bron-systemen (BAG, BRK, PDOK, BRP, KvK, DSO + Nextcloud-storage). Rechts: output-integraties (Nextcloud Mail/Cal/Talk/Office, OpenProject, XWiki, GitLab, Mattermost) |
+> **Strategische narrative**: ConNext is Conduction's propositie die Nextcloud doorontwikkelt **van office suite naar workspace**. De 6 component-cards rondom de Nextcloud-kernel laten zien wat die uitbreiding inhoudt.
 
-Dit vervangt de eerder voorgestelde 6-categorie-mapping (Data Foundation / Integration / Documents / Case & Process / Insights / Design) — die mengde architectuur-laag en categorie door elkaar. De 4-laag-versie hier scheidt **wat het is** (Core / Implementation / Extra / Integration) van **wat het oplost** (de cross-cutting "solutions" zoals WOO/zaakafhandeling, die meerdere Implementations kunnen bestrijken).
+Wij volgen Honeycomb's pattern letterlijker dan onze eerdere 4-laag-versie: **één centrale kerncomponent** (Nextcloud) **met daaromheen samenwerkende peer-component-cards** (geen lagen, geen hiërarchie). Elke card is een coherente capability-bundel. Dit vervangt zowel de eerdere 6-categorie-mapping als de tussenstap met 4-lagen.
+
+| Component-card | Kleur-familie | Pills (apps + features) | Status |
+|---|---|---|---|
+| **Nextcloud-kernel** *(centraal)* | Cobalt + Nextcloud-blauw gradient | Files · Mail · Calendar · Contacts · Talk · Office · Apps & SSO | Bestaand platform |
+| **Technical Core** | Cobalt-diep | OpenRegister · OpenConnector · DocuDesk | Live |
+| **Workplace App** | Coral / rood-oranje | OpenCatalogi · PipelinQ · Procest · ZaakAfhandelApp · DeciDesk · ShillinQ · MyDash · SoftwareCatalog · LarpingApp · OpenWoo | Live |
+| **AI** | Paars / lavendel | Automation · Agents · Intelligence | Cross-cutting capability |
+| **Integrated Apps** | Geel / oker | OpenTalk · Matrix · n8n · OpenProject · XWiki · GitLab · Mattermost | Externe OSS-apps die we koppelen |
+| **App Builder** | Groen / mint | Schema-driven · Low-code *(TBC)* | **Coming soon** — in actieve ontwikkeling |
+| **Admin Tools** *(gedempt)* | Grijs | App-versions · Crontab | Beheerder-utilities, geen primair product |
+
+**Side-box (alleen links — rechts vervalt)**:
+
+- **Your data sources / Bron-systemen**: BAG · BRK · PDOK · BRP · KvK · DSO + bestaande Nextcloud-Files / -Contacts
+- Externe productivity-apps (OpenProject, XWiki, etc.) zitten **niet** meer als rechter side-box — die zitten nu in de **Integrated Apps** component-card
+
+**Visuele behandeling van Nextcloud-kernel**: groter dan de zes component-cards eromheen; gradient van cobalt (Conduction) naar Nextcloud-blauw `#0082C9` om de Conduction-Nextcloud-relatie visueel te coderen. Label *"Nextcloud"* in Nextcloud-blauw eronder.
+
+**Visuele behandeling van App Builder Coming soon-badge**: standalone `<span class="badge badge-coming-soon">` in KNVB-oranje, niet-clickable, met `aria-label`. Past bij de attention-functie van oranje in onze huisstijl.
+
+**Pos-noot — open punten** (vraag de gebruiker bij volgende ronde te bevestigen):
+- NLDesign — eigen component-card, onderdeel van Technical Core, of cross-cutting overlay (geen card)?
+- Workplace App overflow — als 10 pills te veel zijn voor één hex: split in twee hex-cards, of "View all"-pill aan einde lijst?
+- App Builder pill-content — wat zijn de werkelijke pills bij launch? (Schema-driven en Low-code zijn placeholders)
 
 Externe boxes:
 

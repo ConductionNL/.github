@@ -1,4 +1,21 @@
-# Conduction app-architectuur — vier lagen
+# Conduction app-architectuur — zes component-cards rondom Nextcloud-kernel
+
+> **Update 2026-04-28** — Architecturele reframe: weg van "vier lagen" naar **zes component-cards rondom de Nextcloud-kernel**, in lijn met Honeycomb's pattern. Strategische narrative: ConNext is Conduction's propositie die Nextcloud doorontwikkelt van *office suite* naar *workspace*. Onderstaande tekst beschrijft nog de oude 4-laag-versie; volledige doc-rewrite naar 6-component volgt zodra alle openstaande beslissingen (NLDesign-placement, App Builder pills, etc.) zijn bevestigd.
+>
+> **Korte definitieve mapping (canoniek per 2026-04-28):**
+>
+> | Component-card | Pills |
+> |---|---|
+> | **Nextcloud-kernel** *(centraal)* | Files · Mail · Calendar · Contacts · Talk · Office · Apps & SSO |
+> | **Technical Core** | OpenRegister · OpenConnector · DocuDesk |
+> | **Workplace App** | OpenCatalogi · PipelinQ · Procest · ZaakAfhandelApp · DeciDesk · ShillinQ · MyDash · SoftwareCatalog · LarpingApp · OpenWoo |
+> | **AI** | Automation · Agents · Intelligence |
+> | **Integrated Apps** | OpenTalk · Matrix · n8n · OpenProject · XWiki · GitLab · Mattermost |
+> | **App Builder** *(Coming soon)* | Schema-driven · Low-code *(TBC)* |
+> | **Admin Tools** *(gedempt)* | App-versions · Crontab |
+> | **Side-box links** | BAG · BRK · PDOK · BRP · KvK · DSO + Nextcloud-Files / -Contacts |
+>
+> ---
 
 Hoe alle Conduction-apps in elkaar passen, in vier duidelijke lagen. Deze indeling vervangt de ad-hoc 6-categorie-mapping die eerder in [`visual-motifs.md`](./visual-motifs.md) stond, en is de canonieke architectuur die we hanteren in alle communicatie (homepage-hero, app-detail-pagina's, About, presentaties, drukwerk).
 
