@@ -137,7 +137,7 @@ Wij volgen Honeycomb's pattern letterlijker dan onze eerdere 4-laag-versie: **é
 | **Workplace App** | Coral / rood-oranje | OpenCatalogi · PipelinQ · Procest · ZaakAfhandelApp · DeciDesk · ShillinQ · LarpingApp · OpenWoo · SoftwareCatalog | Live — 9 user-facing apps |
 | **AI** | Paars / lavendel | Automation · Agents · Intelligence | Cross-cutting capability |
 | **Integrated Apps** | Geel / oker | OpenTalk · Matrix · n8n · OpenProject · XWiki · GitLab · Mattermost | Externe OSS-apps die we koppelen |
-| **App Builder** | Groen / mint | Schema-driven · Low-code *(TBC)* | **Coming soon** — in actieve ontwikkeling |
+| **App Builder** | Groen / mint | `Build your own` · `Customize ConNext apps` · `No code, just configure` | **Coming soon** — in actieve ontwikkeling. UI die de Technical Core gebruikt om eigen mini-Nextcloud-apps te bouwen of ConNext-apps te customizen. Tagline: *"The client is always right — and now they have the tools to make it true."* |
 | **Admin Tools** *(gedempt)* | Grijs | App-versions · Crontab | Beheerder-utilities, geen primair product |
 
 **Side-box (alleen links — rechts vervalt)**:

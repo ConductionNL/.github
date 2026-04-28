@@ -69,8 +69,9 @@ platform overview diagram, 6 hexagonal prisms arranged in central cluster with o
 4. **Integrated Apps** (geel / oker) — *externe open-source apps in jouw Nextcloud*
    - Pills: `OpenTalk` · `Matrix` · `n8n` · `OpenProject` · `XWiki` · `GitLab` · `Mattermost`
 
-5. **App Builder** (groen / mint) — *capability voor app-creatie* — **`Coming soon`-badge** zichtbaar
-   - Pills: tijdelijk leeg of placeholder (`Schema-driven` · `Low-code` — TBC)
+5. **App Builder** (groen / mint) — *vitaal ecosystem-onderdeel: een UI waarmee klanten zelf (mini) Nextcloud-apps bouwen of bestaande ConNext-apps customizen, gebruikmakend van de Technical Core* — **`Coming soon`-badge** zichtbaar
+   - Pills: `Build your own` · `Customize ConNext apps` · `No code, just configure`
+   - **Strategische narrative**: *"The client is always right — and now they have the tools to make it true."* — empowerment-pitch die op de App-Builder-detail-pagina prominent terugkomt
    - Visueel: zelfde stijl als de andere component-cards maar met een kleine, opvallende `Coming soon`-pill in oranje (KNVB) of een speciale badge-shape rechts-bovenin de hex
 
 6. **Admin Tools** (grijs / lichtblauw, gedempt) — *utilities voor admins, geen primair product*

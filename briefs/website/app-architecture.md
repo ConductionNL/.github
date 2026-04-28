@@ -13,7 +13,9 @@
 > **NLDesign — twee dingen, niet verwarren:** *NLDesign-de-design-system* (NL Design System tokens, accessibility) is identiteits-overlay over alles, **geen** component-card. *NLDesign Theme app* is wél een component (in Workplace App), een echte Conduction-app voor theming/customization van je Nextcloud-instance.
 > | **AI** | Automation · Agents · Intelligence |
 > | **Integrated Apps** | OpenTalk · Matrix · n8n · OpenProject · XWiki · GitLab · Mattermost |
-> | **App Builder** *(Coming soon)* | Schema-driven · Low-code *(TBC)* |
+> | **App Builder** *(Coming soon)* | `Build your own` · `Customize ConNext apps` · `No code, just configure` |
+>
+> **App Builder strategische narrative:** een UI die de Technical Core gebruikt om klanten zelf (mini) Nextcloud-apps te laten bouwen of ConNext-apps te customizen. Tagline: *"The client is always right — and now they have the tools to make it true."*
 > | **Admin Tools** *(gedempt)* | App-versions · Crontab |
 > | **Side-box links** | BAG · BRK · PDOK · BRP · KvK · DSO + Nextcloud-Files / -Contacts |
 >
