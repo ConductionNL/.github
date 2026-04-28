@@ -131,8 +131,8 @@ Wij volgen Honeycomb's pattern letterlijker dan onze eerdere 4-laag-versie: **é
 | Component-card | Kleur-familie | Pills (apps + features) | Status |
 |---|---|---|---|
 | **Nextcloud-kernel** *(centraal)* | Cobalt + Nextcloud-blauw gradient | Files · Mail · Calendar · Contacts · Talk · Office · Apps & SSO | Bestaand platform |
-| **Technical Core** | Cobalt-diep | OpenRegister · OpenConnector · DocuDesk | Live |
-| **Workplace App** | Coral / rood-oranje | OpenCatalogi · PipelinQ · Procest · ZaakAfhandelApp · DeciDesk · ShillinQ · MyDash · SoftwareCatalog · LarpingApp · OpenWoo · **NLDesign Theme** | Live |
+| **Technical Core** | Cobalt-diep | OpenRegister (data) · OpenConnector (integratie) · DocuDesk (documenten) · **NLDesign Theme** (theming) · **MyDash** (dashboards) | Live — 5 foundational capabilities |
+| **Workplace App** | Coral / rood-oranje | OpenCatalogi · PipelinQ · Procest · ZaakAfhandelApp · DeciDesk · ShillinQ · LarpingApp · OpenWoo · SoftwareCatalog | Live — 9 user-facing apps |
 | **AI** | Paars / lavendel | Automation · Agents · Intelligence | Cross-cutting capability |
 | **Integrated Apps** | Geel / oker | OpenTalk · Matrix · n8n · OpenProject · XWiki · GitLab · Mattermost | Externe OSS-apps die we koppelen |
 | **App Builder** | Groen / mint | Schema-driven · Low-code *(TBC)* | **Coming soon** — in actieve ontwikkeling |
@@ -155,7 +155,7 @@ Wij volgen Honeycomb's pattern letterlijker dan onze eerdere 4-laag-versie: **é
 | **NLDesign Theme app** (configurable theming voor je Nextcloud-instance, multiple themes) | Wél een component-card pill — als één van de **Workplace Apps**, naast OpenCatalogi, PipelinQ, etc. Het is een echte Conduction-app die klanten installeren en gebruiken. |
 
 **Pos-noot — open punten** (vraag de gebruiker bij volgende ronde te bevestigen):
-- Workplace App overflow — met NLDesign Theme erbij hebben we nu **11 pills** in één hex. Te veel: split in twee hex-cards (bv. "Workplace App — Records" + "Workplace App — Process"), of "View all → /apps" pill aan einde lijst?
+- Workplace App overflow — Technical Core absorbeert nu MyDash en NLDesign Theme, dus Workplace App heeft **9 pills**. Acceptabel als hex groot genoeg is; wordt actief problem zodra het naar >10 groeit. Split-strategie (twee thematische hexen of "View all" pill) blijft optie voor later.
 - App Builder pill-content — wat zijn de werkelijke pills bij launch? (Schema-driven en Low-code zijn placeholders)
 
 Externe boxes:

@@ -7,8 +7,8 @@
 > | Component-card | Pills |
 > |---|---|
 > | **Nextcloud-kernel** *(centraal)* | Files · Mail · Calendar · Contacts · Talk · Office · Apps & SSO |
-> | **Technical Core** | OpenRegister · OpenConnector · DocuDesk |
-> | **Workplace App** | OpenCatalogi · PipelinQ · Procest · ZaakAfhandelApp · DeciDesk · ShillinQ · MyDash · SoftwareCatalog · LarpingApp · OpenWoo · **NLDesign Theme** |
+> | **Technical Core** | OpenRegister (data) · OpenConnector (integratie) · DocuDesk (documenten) · **NLDesign Theme** (theming) · **MyDash** (dashboards) |
+> | **Workplace App** | OpenCatalogi · PipelinQ · Procest · ZaakAfhandelApp · DeciDesk · ShillinQ · LarpingApp · OpenWoo · SoftwareCatalog |
 >
 > **NLDesign — twee dingen, niet verwarren:** *NLDesign-de-design-system* (NL Design System tokens, accessibility) is identiteits-overlay over alles, **geen** component-card. *NLDesign Theme app* is wél een component (in Workplace App), een echte Conduction-app voor theming/customization van je Nextcloud-instance.
 > | **AI** | Automation · Agents · Intelligence |

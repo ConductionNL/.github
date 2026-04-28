@@ -56,12 +56,12 @@ platform overview diagram, 6 hexagonal prisms arranged in central cluster with o
 
 **Zes component-cards rondom de kernel** (in Honeycomb-stijl arrangement, elk een hex-prism met pastel-tint en pill-labels):
 
-1. **Technical Core** (cobalt-diep / donkerblauw) — *Conduction's fundering-laag*
-   - Pills: `OpenRegister` · `OpenConnector` · `DocuDesk`
+1. **Technical Core** (cobalt-diep / donkerblauw) — *Conduction's fundering-laag (5 fundamentele capabilities)*
+   - Pills: `OpenRegister` (data) · `OpenConnector` (integratie) · `DocuDesk` (documenten) · `NLDesign Theme` (theming) · `MyDash` (dashboards)
 
-2. **Workplace App** (warm coral / rood-oranje) — *user-facing apps voor concrete use cases*
-   - Pills: `OpenCatalogi` · `PipelinQ` · `Procest` · `ZaakAfhandelApp` · `DeciDesk` · `ShillinQ` · `MyDash` · `SoftwareCatalog` · `LarpingApp` · `OpenWoo` · `NLDesign Theme` *(theming/customization app — niet te verwarren met NL Design System zelf, dat is onze identiteits-overlay over de hele site)*
-   - Bij té veel pills voor één hex: split visueel in "Workplace App" hex met top-5 pills + "View all" pill, of tweede partner-hex
+2. **Workplace App** (warm coral / rood-oranje) — *user-facing apps voor concrete use cases (9 pills)*
+   - Pills: `OpenCatalogi` · `PipelinQ` · `Procest` · `ZaakAfhandelApp` · `DeciDesk` · `ShillinQ` · `LarpingApp` · `OpenWoo` · `SoftwareCatalog`
+   - Bij verdere groei van Workplace Apps boven ~10 pills: overweeg split in twee thematische hexen (records vs process) of *"View all → /apps"*-pill aan einde lijst
 
 3. **AI** (paars / lavendel) — *AI-capabilities cross-cutting over de stack*
    - Pills: `Automation` · `Agents` · `Intelligence`
