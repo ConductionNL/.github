@@ -1,0 +1,139 @@
+.slider-container {
+    position: relative;
+    margin-bottom: 100px;
+}
+
+.carouselSection {
+    background-color: #f5fafd;
+    padding: 4rem 0;
+}
+
+/* Arrows */
+.slick-prev, .slick-next {
+    color: var(--ifm-color-primary);
+    z-index: 2;
+    transition: .3s;
+    cursor: pointer;
+}
+
+.slick-prev.MuiSvgIcon-root, .slick-next.MuiSvgIcon-root {
+    font-size: 36px;
+}
+
+.slick-prev:hover, .slick-next:hover {
+    color: var(--ifm-color-primary-dark);
+}
+
+.slick-prev {
+    left: 20px;
+}
+
+.slick-next {
+    right: 20px;
+}
+
+.slick-prev:before, .slick-next:before {
+    color: var(--ifm-color-primary);
+    font-size: 36px;
+    line-height: 1;
+    opacity: 1;
+}
+
+.slick-prev:hover:before, .slick-next:hover:before {
+    color: var(--ifm-color-primary-dark);
+}
+
+/* Slide wrapper */
+.slick-list {
+    background-color: var(--ifm-color-section-background-light-grey-97);
+}
+
+.slick-slide {
+    padding: 30px 75px;
+}
+
+/* Slide content */
+.carouselSlide {
+    display: flex;
+    align-items: center;
+    gap: 40px;
+    text-decoration: none;
+}
+
+.carouselSlide:hover {
+    text-decoration: none;
+}
+
+.carouselText {
+    flex: 1 1 50%;
+}
+
+.carouselTitle {
+    font-size: 2.5rem;
+    color: var(--ifm-color-primary);
+    font-weight: 500;
+    margin: 0 0 16px 0;
+    position: relative;
+}
+
+.carouselTitle::after {
+    content: '';
+    display: block;
+    width: 80px;
+    height: 3px;
+    background: var(--ifm-color-primary);
+    margin-top: 12px;
+}
+
+.carouselDescription {
+    color: var(--ifm-color-card-text);
+    font-weight: 500;
+    line-height: 1.6;
+}
+
+.carouselImageWrap {
+    flex: 1 1 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.carouselImageWrap img {
+    max-width: 100%;
+    height: 420px;
+    width: auto;
+    object-fit: contain;
+}
+
+/* Dots */
+.slick-dots {
+    bottom: 10px;
+}
+
+.slick-dots li {
+    margin: 0;
+}
+
+.slick-dots li button:before {
+    font-size: 10px;
+    color: var(--ifm-color-primary-lightest);
+}
+
+.slick-dots li.slick-active button:before {
+    color: var(--ifm-color-primary);
+}
+
+@media screen and (max-width: 996px) {
+    .slick-slide {
+        padding: 24px;
+    }
+    .carouselSlide {
+        flex-direction: column;
+        gap: 24px;
+    }
+    .carouselImageWrap img {
+        height: auto;
+        max-height: 360px;
+        width: 100%;
+    }
+}

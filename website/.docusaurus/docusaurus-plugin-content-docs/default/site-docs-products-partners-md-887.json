@@ -1,0 +1,24 @@
+{
+  "unversionedId": "Products/Partners",
+  "id": "Products/Partners",
+  "title": "Partners",
+  "description": "",
+  "source": "@site/docs/Products/Partners.md",
+  "sourceDirName": "Products",
+  "slug": "/Products/Partners",
+  "permalink": "/docs/Products/Partners",
+  "draft": false,
+  "editUrl": "https://github.com/conductionnl/docs/tree/main/website/docs/Products/Partners.md",
+  "tags": [],
+  "version": "current",
+  "frontMatter": {},
+  "sidebar": "tutorialSidebar",
+  "previous": {
+    "title": "Partners",
+    "permalink": "/docs/Products/Market"
+  },
+  "next": {
+    "title": "Rates at Conduction",
+    "permalink": "/docs/Products/Pricing"
+  }
+}

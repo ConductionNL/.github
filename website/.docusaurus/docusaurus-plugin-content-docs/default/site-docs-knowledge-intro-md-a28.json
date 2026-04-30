@@ -1,0 +1,20 @@
+{
+  "unversionedId": "knowledge/intro",
+  "id": "knowledge/intro",
+  "title": "THe conduction knowledge base",
+  "description": "",
+  "source": "@site/docs/knowledge/intro.md",
+  "sourceDirName": "knowledge",
+  "slug": "/knowledge/intro",
+  "permalink": "/docs/knowledge/intro",
+  "draft": false,
+  "editUrl": "https://github.com/conductionnl/docs/tree/main/website/docs/knowledge/intro.md",
+  "tags": [],
+  "version": "current",
+  "frontMatter": {},
+  "sidebar": "tutorialSidebar",
+  "previous": {
+    "title": "Issue Flow and Sprint Planning Process",
+    "permalink": "/docs/WayOfWork/join"
+  }
+}

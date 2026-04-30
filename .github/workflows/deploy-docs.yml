@@ -1,0 +1,19 @@
+name: Deploy docs.conduction.nl
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - '.github/workflows/deploy-docs.yml'
+      - '.github/workflows/documentation.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/documentation.yml
+    with:
+      cname: docs.conduction.nl
+      source-folder: website

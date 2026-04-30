@@ -12,3 +12,5 @@ usage-tracker/limits.json
 # Python bytecode cache (auto-generated, never commit)
 __pycache__/
 *.pyc
+
+**/node_modules/
