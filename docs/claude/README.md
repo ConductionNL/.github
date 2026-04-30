@@ -222,10 +222,10 @@ Turn discoveries into structured specifications. This stage produces the bluepri
 **Artifact progression:**
 
 ```
-proposal.md ──► specs.md ──► design.md ──► tasks.md ──► plan.json
-                                                          │
-                                                          ▼
-                                                    GitHub Issues
+proposal.md ──► specs/*.md ──► design.md ──► tasks.md ──► plan.json
+                                                            │
+                                                            ▼
+                                                      GitHub Issues
 ```
 
 **Typical spec session:**
@@ -430,6 +430,7 @@ This repo contains **documentation**, **global settings**, and **project templat
 │       ├── playwright-setup.md          # Playwright browser configuration
 │       ├── walkthrough.md               # End-to-end worked example
 │       ├── docker.md                    # Docker environment
+│       ├── workstation-setup.md         # New machine setup (WSL2, VS Code, tools)
 │       ├── global-claude-settings.md    # Global settings reference
 │       ├── retrofit.md                  # Legacy app retrofit playbook
 │       └── examples/                    # Project-level template files

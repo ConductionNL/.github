@@ -2,6 +2,8 @@
 
 _This is the **setup guide** — see [Workflow Overview](./workflow.md) for the architecture reference, and [End-to-End Walkthrough](./walkthrough.md) for a complete concrete example._
 
+Setting up a new machine? Start with [workstation-setup.md](workstation-setup.md) first — it covers Windows + WSL2 + Docker Desktop + VS Code from a fresh install. Come back here once your machine is ready.
+
 This guide walks you through setting up the spec-driven development workflow and completing your first change.
 
 ## Prerequisites

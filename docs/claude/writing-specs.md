@@ -126,6 +126,8 @@ The API should handle errors properly.
 
 Scenarios use the Gherkin format (GIVEN/WHEN/THEN) to describe specific behaviors. They serve as both documentation and acceptance criteria for implementation.
 
+> **CRITICAL:** Scenario headings MUST use exactly 4 hashtags (`####`), not 3. Using `###` instead of `####`, or bullet points, will fail silently — the spec parser won't recognize them as scenarios.
+
 ### Good Scenarios
 
 ```markdown

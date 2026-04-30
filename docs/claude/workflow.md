@@ -93,7 +93,7 @@ proposal  →  specs   →  design  →  tasks
  (why)       (what)      (how)     (steps)
 ```
 
-Three optional artifacts can be inserted when needed:
+Four optional artifacts can be inserted when needed:
 
 ```
 proposal  →  discovery  →  specs        (use when approach or NC API availability is uncertain)

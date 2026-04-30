@@ -22,14 +22,19 @@ ask() {
 }
 
 # Returns 0 (true) if the last user message in the transcript contains an authorized push phrase.
-# Authorized phrases (case-insensitive, words must appear in this order):
-#   "push for me" | "commit and push" | "please push" | "push my changes"
+# Authorized phrases (case-insensitive):
+#   "push for me" | "commit and push" | "please git push" | "push my changes"
 # The transcript is a JSONL file; content may be a string or an array of content blocks.
+# NOTE: reads the FULL content of the last user message (not just the last line), so
+# multi-paragraph messages with the auth phrase on any line work correctly.
 git_push_authorized() {
     [[ -z "$transcript_path" || ! -f "$transcript_path" ]] && return 1
+    # Pipe: (1) emit each user message as compact JSON, one per line
+    #       (2) slurp all, take the last, join all text blocks into one searchable string
     local last_msg
-    last_msg=$(jq -r 'select(.type == "user") | [.message.content[]? | select(.type == "text") | .text] | join(" ")' \
-        "$transcript_path" 2>/dev/null | grep -v '^[[:space:]]*$' | tail -1)
+    last_msg=$(jq -rc 'select(.type == "user")' "$transcript_path" 2>/dev/null \
+        | jq -rs 'last | [.message.content[]? | select(.type == "text") | .text] | join(" ")' 2>/dev/null)
+    [[ -z "$last_msg" ]] && return 1
     echo "$last_msg" | grep -qiE '(push for me|commit and push|please git push|push my changes)'
 }
 
