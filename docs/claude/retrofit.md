@@ -1,13 +1,22 @@
-# Retrofit Playbook — bringing legacy apps under ADR-003
+# Retrofit Playbook — bringing legacy apps under ADR-003's `@spec` convention
 
-This playbook walks through retrofitting an app that predates the spec ↔ code annotation convention defined in [ADR-003 §Spec traceability](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-003-backend.md).
+This playbook walks through retrofitting an app that predates the spec ↔ code annotation convention defined in [hydra/openspec/architecture/adr-003-backend.md](../../../hydra/openspec/architecture/adr-003-backend.md).
 
-The convention: every class and every public method that implements a task carries a `@spec openspec/changes/{change-name}/tasks.md#task-N` PHPDoc/JSDoc tag pointing at the task it implements. The file's leading docblock carries one `@spec` tag per distinct task the file participates in (so a file touched by three tasks has three `@spec` tags in its header). Apps built spec-first via `/opsx-apply` get this for free. Apps that already exist need a one-time retrofit pass.
+**The convention** (also enforced by [hydra-gate-spdx](../../../hydra/.claude/skills/hydra-gate-spdx/SKILL.md)): every PHP file's main docblock and every public method's docblock carries one or more `@spec openspec/changes/{change-name}/tasks.md#task-N` tags pointing at the task(s) it implements. Apps built spec-first via `/opsx-apply` get this for free — the builder writes the tag as part of implementation. Apps that already exist need a one-time retrofit pass.
+
+## Ghost changes
+
+Legacy code was never written against a change, so there's no `tasks.md#task-N` for `@spec` to point at. Retrofit bridges this with **ghost changes**:
+
+- **`/opsx-annotate`** creates one ghost change per run: `retrofit-annotate-{app}-{YYYY-MM-DD}` with an empty spec delta and one task per Bucket 1 REQ.
+- **`/opsx-reverse-spec`** creates one ghost change per cluster: `retrofit-{capability-or-cluster}-{YYYY-MM-DD}` with a spec delta (new REQs) + one task per new REQ.
+
+Both changes are archived at the end of the run; annotations reference the ghost change's tasks.md by path. Because `@spec` is a textual reference rather than a live lookup, the path remains valid after archive. Retrofit cohort membership is flagged in spec.md frontmatter (`retrofit: true` or `retrofit_extensions: [REQ-NNN, ...]`) and synced to Specter via `sync_spec_content.py`.
 
 ## When to retrofit
 
 - App was built before the convention existed
-- App has `openspec/specs/**/spec.md` but no `@spec` annotations in code
+- App has `openspec/specs/**/spec.md` but no `@spec` annotations in code (or only partial)
 - `/opsx-verify` falls back to keyword-based REQ matching for this app
 
 If the app has full annotations already, skip this — `/opsx-verify` handles it.
@@ -16,83 +25,73 @@ If the app has full annotations already, skip this — `/opsx-verify` handles it
 
 | Skill | What it does | Writes |
 |---|---|---|
-| [`/opsx-coverage-scan {app}`](https://github.com/ConductionNL/hydra/blob/main/.claude/skills/opsx-coverage-scan/SKILL.md) | Audit only — produces a report bucketing every code unit | `{app}/openspec/coverage-report.md` + `.json` |
-| [`/opsx-annotate {app}`](https://github.com/ConductionNL/hydra/blob/main/.claude/skills/opsx-annotate/SKILL.md) | Applies file + method `@spec` tags for Bucket 1 via a ghost change | Annotation-only PR |
-| [`/opsx-reverse-spec {app} --cluster X` or `--extend Y`](https://github.com/ConductionNL/hydra/blob/main/.claude/skills/opsx-reverse-spec/SKILL.md) | Drafts a retrofit spec for one Bucket 2a/2b cluster, annotates its methods inline, registers with Specter, and archives the change | Spec PR |
+| [`/opsx-coverage-scan {app}`](../../../hydra/.claude/skills/opsx-coverage-scan/SKILL.md) | Audit only — produces a report bucketing every code unit | `{app}/openspec/coverage-report.md` + `.json` sidecar |
+| [`/opsx-annotate {app}`](../../../hydra/.claude/skills/opsx-annotate/SKILL.md) | Creates ghost change + applies `@spec` tags from Bucket 1 | Annotation-only PR |
+| [`/opsx-reverse-spec {app} --cluster X` or `--extend Y`](../../../hydra/.claude/skills/opsx-reverse-spec/SKILL.md) | Drafts REQs for one Bucket 2 entry via ghost change (spec delta + tasks + annotations), syncs to Specter | Spec PR |
 
 Run them in this exact order. Don't skip the audit step.
-
-## How ghost changes work
-
-Legacy code doesn't have a real change to point at — the `@spec openspec/changes/{change}/tasks.md#task-N` convention assumes a change exists. Retrofit skills solve this by creating a **ghost change** per run: a scaffold that gets archived immediately so annotations have something to reference.
-
-- `/opsx-annotate` creates `retrofit-annotate-{app}-{YYYY-MM-DD}` — one task per REQ with Bucket 1 matches, **empty spec delta** (all REQs already exist in `openspec/specs/`). All tasks arrive `[x]` because the code is pre-existing.
-- `/opsx-reverse-spec` creates `retrofit-{capability-or-cluster}-{YYYY-MM-DD}` — a spec delta (new REQs appended to an existing capability for `--extend`, or a whole new capability for `--cluster`) plus one task per new REQ. Annotations on the cluster's methods point at those tasks.
-
-Both are archived immediately after creation, so they land in `openspec/changes/archive/`. The `@spec` tag paths remain valid because they are textual references, not live lookups.
 
 ## Prerequisites
 
 - App has `openspec/specs/**/spec.md` files (at least one capability defined). If not, run `/app-explore` and `/app-design` first.
 - App working tree is clean. `/opsx-annotate` and `/opsx-reverse-spec` refuse dirty trees.
-- You are on the branch that carries the specs — usually `development`, but some apps keep specs on `beta` (e.g. decidesk). The skills create their own `retrofit/…` feature branch off that one.
-- Specter DB migration is applied: `python3 concurrentie-analyse/scripts/migrate_app_specs_retrofit.py` (idempotent — safe to re-run).
+- You are on a branch that contains the specs. Some apps keep specs on `beta` rather than `development` (e.g. decidesk) — check before scanning.
+- Specter DB migration applied: `python3 concurrentie-analyse/scripts/migrate_app_specs_retrofit.py`. Adds `retrofit` + `retrofit_extensions` + `spec_hash` columns to `app_specs`. Idempotent.
+- Optional: `{app}/.opsx-ignore` — one glob per line (`#` for comments) for paths the scan should skip. Useful for vendor code, deliberately-unspec'd internal tools.
 
 ## Step-by-step
 
 ### 1. Scan
 
 ```
-/opsx-coverage-scan opencatalogi
+/opsx-coverage-scan procest
 ```
 
-Produces `openspec/coverage-report.md` and a machine-readable `coverage-report.json` sidecar. The report categorises every code unit into one of six actionable buckets:
+Produces `openspec/coverage-report.md` (human) + `openspec/coverage-report.json` (parseable) with six buckets:
 
-- **1** — Files where method maps cleanly to an existing REQ-ID. **High confidence** matches only.
-- **2a** — Files belonging to an existing capability but performing behavior NO existing REQ describes. Need to extend the spec.
-- **2b** — Files with no existing capability owner. Need a brand-new spec.
-- **3a** — REQ-IDs whose code clearly used to exist but is now broken (route registered, handler removed). Fix the code.
-- **3b** — REQ-IDs whose implementation never existed. Mark `status: deferred` or remove the REQ.
-- **4** — ADR conformance issues spotted while scanning (missing EUPL header, hardcoded strings, etc.). Surface only — don't block.
-
-Plus two meta-buckets the report lists but that need no retrofit action: `annotated` (methods already carrying `@spec` tags) and `plumbing` (framework glue — empty constructors, listener dispatch, thin controllers — which never carries `@spec`).
+- **1** — Method maps cleanly to an existing REQ-ID. High confidence (≥ 0.85) or flagged `NEEDS-REVIEW` (0.70–0.85).
+- **2a** — File belongs to an existing capability but observed behavior is not covered by any REQ. Needs to extend the spec.
+- **2b** — File has no capability owner. Needs a brand-new spec.
+- **3a** — REQs with no code, but git history has matching keywords in removed lines (probably broken). Triage manually.
+- **3b** — REQs with no code and no historical trace. Never implemented — mark `status: deferred` or remove.
+- **4** — ADR conformance findings (missing license header, hardcoded strings, etc.). Surface only — non-blocking.
 
 **Read the report manually before proceeding.** The scan is heuristic — false positives in Bucket 1 produce wrong annotations downstream.
 
 ### 2. Annotate Bucket 1
 
 ```
-/opsx-annotate opencatalogi
+/opsx-annotate procest
 ```
 
-This creates the `retrofit-annotate-{app}-{YYYY-MM-DD}` ghost change, applies file-header and per-method `@spec openspec/changes/retrofit-annotate-.../tasks.md#task-N` tags for everything in Bucket 1, opens an annotation-only PR, and updates `.git-blame-ignore-revs` so blame still surfaces real authors. The skill is idempotent — re-running on already-annotated code produces no code diff (it will detect an existing dated ghost change and ask whether to reuse or create a fresh one).
+Creates the ghost change `retrofit-annotate-procest-{date}`, generates one task per REQ, adds `@spec openspec/changes/retrofit-annotate-procest-{date}/tasks.md#task-N` tags to every Bucket 1 file + method, archives the ghost change, updates `.git-blame-ignore-revs`, opens an annotation-only PR.
 
-If a linter rejects the annotation block (PHPCS rule requires specific tag order), the skill stops. Fix the linter config rather than reordering — the convention from ADR-003 is fixed.
+Idempotent: re-running with no code changes produces no new annotations. Re-running after code changes creates a new dated ghost change.
+
+If the PHPCS ruleset rejects the tag order or placement, the skill stops. **Fix the PHPCS config, never reorder tags** — the ADR-003 + hydra-gate-spdx format is fixed.
 
 ### 3. Reverse-spec Bucket 2 entries, one at a time
 
 For each Bucket 2a entry (extend existing capability):
 
 ```
-/opsx-reverse-spec opencatalogi --extend admin-settings
+/opsx-reverse-spec procest --extend admin-settings
 ```
 
 For each Bucket 2b entry (new capability):
 
 ```
-/opsx-reverse-spec opencatalogi --cluster app-lifecycle
+/opsx-reverse-spec procest --cluster app-lifecycle
 ```
 
-The skill reads the cluster from `coverage-report.json`, drafts REQs that describe **observed behavior** (not aspirational intent), writes a spec delta in a ghost change (`retrofit_extensions: [...]` for `--extend`, `retrofit: true` for `--cluster`), invokes `/opsx-ff` to fill in the design.md, annotates the cluster's methods inline with `@spec` tags pointing at the ghost change's tasks, runs `python3 concurrentie-analyse/scripts/sync_spec_content.py {app}` to register with Specter's `app_specs` table, and archives the change so the delta merges into the main spec.
-
-**One cluster per run** — never batch, and cap at 5 REQs per run. Each cluster is its own review cycle because REQ language is the review surface.
+The skill reads the cluster's code, drafts REQs describing observed behavior (capped at 5 REQs per run — split larger clusters), creates a ghost change with the spec delta + tasks, annotates the cluster's methods, runs `sync_spec_content.py` to mark the retrofit cohort in Specter, archives the change, opens one PR.
 
 **Bias toward `--extend`** — extending a capability is cheaper than minting a new one. Only use `--cluster` when the cluster is genuinely new behavior territory.
 
 ### 4. Address Bucket 3
 
-- **3a** — Open separate PRs to fix or remove the broken code. Don't bundle with annotation PRs.
-- **3b** — Open a PR that either marks the REQs `status: deferred` in spec.md, or removes them. Document the decision in the PR.
+- **3a** — Open separate PRs to fix or remove broken code. Don't bundle with annotation PRs.
+- **3b** — Open a PR that marks REQs `status: deferred` in spec.md or removes them. Document the decision in the PR.
 
 ### 5. Address Bucket 4
 
@@ -100,23 +99,38 @@ ADR conformance issues are noise during retrofit but worth tracking. Open a foll
 
 ## What goes back to Specter
 
-- `sync_spec_content.py` runs synchronously during `/opsx-reverse-spec`, so retrofit specs are visible in Specter dashboards within seconds. If the script fails (typically missing DB column), the skill stops and surfaces the error — don't leave a spec in-tree but missing from Specter.
-- Retrofit cohorts are tracked in dedicated columns: `app_specs.retrofit` (set for `--cluster` runs that create a whole new capability) and `app_specs.retrofit_extensions` (list of REQ-IDs added by `--extend` runs). The skill writes these via spec frontmatter; `sync_spec_content.py` picks them up after archive.
-- Retrofit specs are necessarily lossy — they capture observed behavior, not original design intent. They warrant periodic re-review against current ADRs as the app evolves.
+- `sync_spec_content.py {app}` runs synchronously during `/opsx-reverse-spec` and reads `retrofit: true` / `retrofit_extensions: [...]` from spec.md frontmatter (applied post-archive when the delta merges). Retrofit specs are visible in Specter dashboards within seconds.
+- The existing Sunday sync picks up any specs created outside the retrofit flow as the safety net.
+- Prereq for the retrofit columns: `python3 concurrentie-analyse/scripts/migrate_app_specs_retrofit.py` (idempotent).
+- Retrofit specs are filterable via `/tender-status --retrofit-only` and `/readiness-report --retrofit-only`. They're necessarily lossy (capture observed behavior, not original intent) and warrant periodic re-review.
 
-## Common gotchas (from the opencatalogi pilot)
+## How Bucket 2 handles un-spec'd methods
 
-- **Helper methods are easy to miss.** Private helpers that implement a discrete REQ scenario step (e.g. `isObjectPublished()`) get the SAME REQ-ID as their primary caller, not their own. The scan flags these now; older runs may not have.
-- **Listener methods are not always plumbing.** `EventListener::handle()` is plumbing IF it only dispatches to a service. It's business logic IF it transforms data, filters events, or makes decisions. Read the body — listeners are small.
-- **Bucket 1 vs 2a for single-method gaps.** When in doubt, default to Bucket 1 with a NOTE recommending the spec be tightened later. Don't churn Specter with one-off REQ proposals.
-- **ElasticSearch-style "never implemented" REQs.** Bucket 3b. Don't try to reverse-spec them — the gap is a feature decision, not a documentation one.
-- **Nextcloud `appinfo/`** typically contains only auto-generated `routes.php` + `info.xml`. Empty of code units is normal — not an error.
-- **`.git-blame-ignore-revs`** must be configured on each cloning developer's machine: `git config blame.ignoreRevsFile .git-blame-ignore-revs`. The `/opsx-annotate` skill suggests this once but won't run it without confirmation.
+Bucket 2 is the whole reason retrofit is a three-step flow rather than one. `/opsx-annotate` deliberately does **not** touch methods without a REQ match — it would have nothing to point at. `/opsx-reverse-spec` handles those, one cluster at a time:
+
+| Situation | Which flag | What happens |
+|---|---|---|
+| Method belongs to an existing capability, no REQ covers it | `--extend <capability>` | Drafts new REQs appended to the capability spec, creates ghost change with delta + task per REQ, annotates the methods |
+| Method has no capability owner at all | `--cluster <name>` | Drafts whole new spec, creates ghost change with new spec + tasks, annotates the methods |
+| Method is plumbing (listener dispatch, framework `__call`) | — | Never annotated. Scanner flags as `plumbing`. |
+| Method is a private helper of an annotated method | — | Inherits caller's REQ(s). Annotated in the same pass as its caller. |
+| Method should deliberately never be specified (debug tooling, internal optimization) | — | Add to `{app}/.opsx-ignore` — scanner suppresses in future runs. |
+
+After Bucket 2 is drained, Bucket 1 is empty on the next scan, and all code units are either annotated, plumbing, or explicitly ignored. That's the success state.
+
+## Common gotchas
+
+- **Helper methods are easy to miss.** Private helpers that implement a discrete REQ scenario step get the SAME REQ-ID as their primary caller, not their own. The scan resolves these in Pass B after Pass A buckets primary methods.
+- **Listener methods are not always plumbing.** `EventListener::handle()` is plumbing IF it only dispatches to a service. It's business logic IF it transforms data, filters events, or makes decisions. Read the body.
+- **Bucket 1 vs 2a for single-method gaps.** When in doubt, default to Bucket 1 with a `NEEDS-REVIEW` flag — manual triage is cheaper than churning Specter with one-off REQ proposals.
+- **ElasticSearch-style "never implemented" REQs.** Bucket 3b. Don't reverse-spec them — the gap is a feature decision, not a documentation one.
+- **Nextcloud `appinfo/`** typically contains only `routes.php` + `info.xml`. Empty of code units is normal.
+- **`.git-blame-ignore-revs`** must be enabled on each cloning developer's machine once: `git config blame.ignoreRevsFile .git-blame-ignore-revs`. `/opsx-annotate` suggests this but won't run it without confirmation.
 
 ## When the retrofit is done
 
 - `/opsx-verify {app}` succeeds without falling back to keyword search
-- `app_specs.retrofit` and `app_specs.retrofit_extensions` columns populated for the app's retrofit cohort
+- `app_specs.retrofit` / `app_specs.retrofit_extensions` populated for the app's retrofit cohort
 - Annotation-only PR + per-cluster reverse-spec PRs all merged
 - Bucket 3 issues triaged
 - Bucket 4 follow-up issue opened
@@ -125,16 +139,17 @@ ADR conformance issues are noise during retrofit but worth tracking. Open a foll
 
 Recommended sequence:
 
-1. **opencatalogi** (pilot — done)
-2. **openregister** (foundation — high stakes, second after opencatalogi proves out)
-3. docudesk
-4. openconnector
-5. nldesign
-6. mydash
-7. softwarecatalog
-8. larpingapp
-9. zaakafhandelapp
-10. procest
-11. pipelinq
+1. **procest** (current testbed — 40+ specs, clean)
+2. **pipelinq** (second testbed — similar shape to procest, validates generality)
+3. opencatalogi
+4. openregister (foundation — high stakes; do after testbeds prove out)
+5. docudesk
+6. openconnector
+7. nldesign
+8. mydash
+9. softwarecatalog
+10. larpingapp
+11. zaakafhandelapp
+12. decidesk (specs on `beta` rather than `development` — resolve branch alignment first)
 
 ExApp Python wrappers (openklant, openzaak, opentalk, valtimo, n8n-nextcloud) need a parallel Python-flavored variant of these skills (module + function docstrings instead of PHPDoc). Defer until PHP roll-out is complete.
