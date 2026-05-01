@@ -152,9 +152,13 @@ if $_is_config_write; then
         fi
     elif echo "$cmd" | grep -qE "\bgh\s+api\s+['\"]?repos/ConductionNL/\.github/contents/global-settings/"; then
         # Method 2: gh api — canonical repo verified by literal URL-path prefix.
-        # The regex pins 'repos/<org>/<repo>/contents/<base_path>/' immediately after
-        # `gh api` (with an optional opening quote) so that the canonical string cannot
-        # be smuggled via headers, query params, or unrelated pipeline segments.
+        # Decoy protection: reject if any gh api call in the command fetches from a
+        # non-canonical repo. A single non-canonical call alongside the canonical one
+        # is enough to smuggle attacker-controlled content into the write target.
+        if echo "$cmd" | grep -oE "\bgh[[:space:]]+api[[:space:]]+['\"]?repos/[^[:space:]'\"&;|)]*" \
+           | grep -qvE "repos/ConductionNL/\.github/contents/global-settings/"; then
+            hard_deny "BLOCKED: Command mixes canonical and non-canonical gh api calls — possible decoy attack."
+        fi
         : # canonical repo via GitHub API — allow
     else
         hard_deny "BLOCKED: Claude cannot write to ~/.claude/ config files. Updates must use git show origin/main or gh api from ConductionNL/.github only."
@@ -405,13 +409,23 @@ if echo "$cmd" | grep -qE '(^|[;&|]\s*)npm\s+audit\b'; then
     fi
 fi
 
+# ── Package manager installs (npm/pnpm/yarn/bun) ──────────────────────────────
+# Word-boundary matching catches: npm i, npm add, cd && npm install, true && npm i,
+# and the same install verbs across pnpm, yarn, and bun.
+# npm ci is intentionally excluded — it is lockfile-pinned and safe without approval.
+if echo "$cmd" | grep -qiE '(^|[;&|]\s*)(npm\s+(install|i|add)\b|pnpm\s+(install|i|add)\b|yarn\s+(install|add)\b|bun\s+(install|add)\b)'; then
+    ask "Package manager install detected — approve to proceed."
+fi
+
 # ── Generic output redirect guard ────────────────────────────────────────────
 # Safety net: catch any command writing to a file via > or >> that was not
 # already handled by a specific guard above (those guards exit 0 on match,
 # so this only fires for unhandled commands).
-# Excludes: /dev/null (harmless), fd-to-fd redirects like 2>&1 and >&2.
-if echo "$cmd" | grep -qE '>{1,2}[[:space:]]*[^[:space:]&>/]' \
-&& ! echo "$cmd" | grep -qE '>{1,2}[[:space:]]*/dev/null'; then
+# The character class [^[:space:]&>/] already excludes fd-to-fd redirects
+# (>&2) and absolute paths (>/dev/null, >/tmp/…). Do NOT add a blanket
+# "skip if >/dev/null appears anywhere" — that suppresses the guard for
+# every other redirect in the same command (decoy /dev/null attack).
+if echo "$cmd" | grep -qE '>{1,2}[[:space:]]*[^[:space:]&>/]'; then
     ask "Output redirection to a file detected — approve to proceed."
 fi
 

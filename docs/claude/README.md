@@ -370,6 +370,8 @@ Optionally, bootstrap it upfront with common permissions to avoid approval promp
 
 Save this as `.claude/settings.local.json` in your project root. It is gitignored and will never be committed.
 
+> **Review before keeping:** entries like `Bash(bash:*)` and `Bash(rm:*)` are intentionally broad for initial setup — tighten or remove them once you know which commands Claude actually needs on your project.
+
 ### CLAUDE.local.md
 
 Contains environment-specific credentials and API tokens (passwords, keys, endpoints). **Never commit this file.**

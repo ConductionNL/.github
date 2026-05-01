@@ -53,7 +53,7 @@ source ~/.bashrc
 
 > Neither variable is needed for interactive commands like `/opsx-apply` or `/opsx-verify` — only for the containerized automation commands.
 
-**Optional — VS Code extensions:** See the [main README](../../README.md#4-install-vs-code-extensions) for the full list of required, recommended, and optional VS Code extensions.
+**Optional — VS Code extensions:** See [workstation-setup.md](./workstation-setup.md#4-install-vs-code-extensions) for the full list of required, recommended, and optional VS Code extensions.
 
 **Optional — Usage monitoring:** Install the usage tracker to watch your Claude token consumption in real time inside VS Code. Especially useful before running multi-agent commands (see [parallel-agents.md](parallel-agents.md)).
 

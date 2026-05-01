@@ -611,7 +611,13 @@ class ClaudeUsageTracker:
 
                 self._save_session_data(usages)
                 self._interruptible_sleep(interval)
-                # Reload limits and model config in case limits.json changed
+                # Reload limits and model config in case limits.json changed.
+                # Also reset the notification watermark when the weekly window rolls over
+                # so the 25/50/75% thresholds fire again in the new week.
+                new_week_start = self._week_start_for(COMBINED_KEY)
+                if not hasattr(self, "_last_week_start") or new_week_start != self._last_week_start:
+                    self.notify_state["last_notification"] = 0
+                    self._last_week_start = new_week_start
                 self.limits, self.limits_configured = load_limits()
                 self.model_config = self.limits[self.model]
 
@@ -887,13 +893,15 @@ class ClaudeUsageTracker:
             with urllib.request.urlopen(req, timeout=10) as resp:
                 data = json.loads(resp.read().decode())
 
-            # Cache the result
+            # Cache the result — chmod 600 because the response contains
+            # org-scoped account data fetched with the user's OAuth token.
             cache_file = DATA_DIR / "usage-api-cache.json"
             DATA_DIR.mkdir(parents=True, exist_ok=True)
             cache_file.write_text(json.dumps({
                 "fetched_at": datetime.now(timezone.utc).isoformat(),
                 "data": data,
             }, indent=2))
+            cache_file.chmod(0o600)
 
             print(f"✅ Usage fetched from Anthropic API")
             print(json.dumps(data, indent=2))

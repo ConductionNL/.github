@@ -40,7 +40,7 @@ Files with `{PLACEHOLDER}` variables that Claude fills in at runtime. Claude rea
 
 In `SKILL.md`, reference with:
 ```
-Write the file using the template in [templates/architecture-template.md](templates/architecture-template.md).
+Write the file using the template in `templates/architecture-template.md`.
 ```
 
 ### `references/`
@@ -57,7 +57,7 @@ Static content Claude reads to inform decisions — no placeholder variables, ne
 
 In `SKILL.md`, reference with:
 ```
-Follow the standards in [references/dutch-gov-backend-standards.md](references/dutch-gov-backend-standards.md).
+Follow the standards in `references/dutch-gov-backend-standards.md`.
 ```
 
 ### `examples/`
@@ -73,7 +73,7 @@ Worked demonstrations showing what expected output looks like. Used for few-shot
 
 In `SKILL.md`, reference with:
 ```
-For the expected output format, see [examples/output-templates.md](examples/output-templates.md).
+For the expected output format, see `examples/output-templates.md`.
 ```
 
 ### `assets/`
@@ -152,9 +152,9 @@ Options:
 Use relative markdown links — Claude resolves them relative to the skill folder:
 
 ```markdown
-Use the template in [templates/architecture-template.md](templates/architecture-template.md).
-Follow the standards in [references/dutch-gov-backend-standards.md](references/dutch-gov-backend-standards.md).
-For output examples, see [examples/output-templates.md](examples/output-templates.md).
+Use the template in `templates/architecture-template.md`.
+Follow the standards in `references/dutch-gov-backend-standards.md`.
+For output examples, see `examples/output-templates.md`.
 ```
 
 ### PHP quality checks (for skills that trigger implementation)
@@ -174,7 +174,7 @@ Add as the final step in skills that should self-improve:
 **Capture learnings**
 
 After execution, review what happened and append new observations to
-[learnings.md](learnings.md) under the appropriate section:
+`learnings.md` under the appropriate section:
 
 - **Patterns That Work** — approaches that produced good results
 - **Mistakes to Avoid** — errors encountered and how they were resolved

@@ -206,9 +206,9 @@ Do **not** put broad `Bash(*)` allow rules here.
 | **WSL boundary** | — | — | All paths/executables escaping the Linux filesystem |
 | Config writes (`~/.claude/`) | `git show origin/main:` from canonical repo; `gh api` from canonical repo | — | All other methods |
 
-All guards use `(^|[;&|]\s*)cmd\b` patterns to catch commands both at the start of a line and when chained via `&&`, `;`, or `||`.
+Most guards use `(^|[;&|]\s*)cmd\b` patterns to catch commands both at the start of a line and when chained via `&&`, `;`, or `||`. The exception is the canonical-source check for config-file writes (Method 2 — `gh api`), which validates via a URL-prefix match rather than a segment-boundary anchor, and is additionally hardened by a decoy-detection check that rejects any non-canonical `gh api` call present in the same command.
 
-Authorized git push phrases (case-insensitive): `push for me`, `commit and push`, `please push`, `push my changes`.
+Authorized git push phrases (case-insensitive): `push for me`, `commit and push`, `please git push`, `push my changes`.
 
 ## What `check-settings-version.sh` does
 

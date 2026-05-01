@@ -46,8 +46,7 @@
       "Bash(rm -rf:*)",
       "Bash(rm -Rf:*)",
 
-      "Bash(pip install:*)",
-      "Bash(npm install:*)"
+      "Bash(pip install:*)"
     ],
     "allow": [
       "Bash(ls:*)",
