@@ -1500,7 +1500,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref || github.ref_name }}
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -1575,20 +1574,12 @@ jobs:
         if: ${{ inputs.enable-frontend }}
         run: npm audit --audit-level=critical
 
-      # ── Commit validated SBOM ──
-
-      - name: Commit SBOM
-        if: ${{ github.ref == 'refs/heads/main' }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add sbom.cdx.json
-          if git diff --cached --quiet; then
-            echo "No SBOM changes to commit"
-          else
-            git commit -m "chore: update SBOM"
-            git push
-          fi
+      # ── Publish validated SBOM ──
+      # The SBOM is intentionally NOT committed back to the repo.
+      # It is published via two channels:
+      #   1. Workflow artifact (90-day retention) — used by CI debugging + audit replay
+      #   2. Release asset on every tag push — stable URL for downstream consumers
+      # See SECURITY.md "Software Bill of Materials" for the consumer contract.
 
       - name: Upload SBOM artifact
         uses: actions/upload-artifact@v4
