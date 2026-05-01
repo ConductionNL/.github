@@ -35,7 +35,7 @@ Run them in this exact order. Don't skip the audit step.
 
 - App has `openspec/specs/**/spec.md` files (at least one capability defined). If not, run `/app-explore` and `/app-design` first.
 - App working tree is clean. `/opsx-annotate` and `/opsx-reverse-spec` refuse dirty trees.
-- You are on a branch that contains the specs. Some apps keep specs on `beta` rather than `development` (e.g. decidesk) — check before scanning.
+- You are on a branch that contains the specs. Some apps keep specs on `beta` rather than `development` (e.g. decidesk) — check before scanning. The skills create their own `retrofit/…` feature branch off that one.
 - Specter DB migration applied: `python3 concurrentie-analyse/scripts/migrate_app_specs_retrofit.py`. Adds `retrofit` + `retrofit_extensions` + `spec_hash` columns to `app_specs`. Idempotent.
 - Optional: `{app}/.opsx-ignore` — one glob per line (`#` for comments) for paths the scan should skip. Useful for vendor code, deliberately-unspec'd internal tools.
 
@@ -56,6 +56,8 @@ Produces `openspec/coverage-report.md` (human) + `openspec/coverage-report.json`
 - **3b** — REQs with no code and no historical trace. Never implemented — mark `status: deferred` or remove.
 - **4** — ADR conformance findings (missing license header, hardcoded strings, etc.). Surface only — non-blocking.
 
+Plus two meta-buckets the report lists but that need no retrofit action: `annotated` (methods already carrying `@spec` tags) and `plumbing` (framework glue — empty constructors, listener dispatch, thin controllers — which never carry `@spec`).
+
 **Read the report manually before proceeding.** The scan is heuristic — false positives in Bucket 1 produce wrong annotations downstream.
 
 ### 2. Annotate Bucket 1
@@ -66,7 +68,7 @@ Produces `openspec/coverage-report.md` (human) + `openspec/coverage-report.json`
 
 Creates the ghost change `retrofit-annotate-procest-{date}`, generates one task per REQ, adds `@spec openspec/changes/retrofit-annotate-procest-{date}/tasks.md#task-N` tags to every Bucket 1 file + method, archives the ghost change, updates `.git-blame-ignore-revs`, opens an annotation-only PR.
 
-Idempotent: re-running with no code changes produces no new annotations. Re-running after code changes creates a new dated ghost change.
+Idempotent: re-running with no code changes produces no new annotations. If a dated ghost change already exists, the skill asks whether to reuse it or create a fresh one. Re-running after code changes creates a new dated ghost change.
 
 If the PHPCS ruleset rejects the tag order or placement, the skill stops. **Fix the PHPCS config, never reorder tags** — the ADR-003 + hydra-gate-spdx format is fixed.
 
@@ -84,7 +86,7 @@ For each Bucket 2b entry (new capability):
 /opsx-reverse-spec procest --cluster app-lifecycle
 ```
 
-The skill reads the cluster's code, drafts REQs describing observed behavior (capped at 5 REQs per run — split larger clusters), creates a ghost change with the spec delta + tasks, annotates the cluster's methods, runs `sync_spec_content.py` to mark the retrofit cohort in Specter, archives the change, opens one PR.
+The skill reads the cluster's code, drafts REQs describing observed behavior (capped at 5 REQs per run — split larger clusters), creates a ghost change with the spec delta + tasks, invokes `/opsx-ff` to fill in `design.md`, annotates the cluster's methods, runs `python3 concurrentie-analyse/scripts/sync_spec_content.py {app}` to register with Specter's `app_specs` table, archives the change, opens one PR.
 
 **Bias toward `--extend`** — extending a capability is cheaper than minting a new one. Only use `--cluster` when the cluster is genuinely new behavior territory.
 
@@ -99,7 +101,8 @@ ADR conformance issues are noise during retrofit but worth tracking. Open a foll
 
 ## What goes back to Specter
 
-- `sync_spec_content.py {app}` runs synchronously during `/opsx-reverse-spec` and reads `retrofit: true` / `retrofit_extensions: [...]` from spec.md frontmatter (applied post-archive when the delta merges). Retrofit specs are visible in Specter dashboards within seconds.
+- `sync_spec_content.py {app}` runs synchronously during `/opsx-reverse-spec` and reads `retrofit: true` / `retrofit_extensions: [...]` from spec.md frontmatter (applied post-archive when the delta merges). Retrofit specs are visible in Specter dashboards within seconds. If the script fails (typically a missing DB column), the skill stops and surfaces the error — don't leave a spec in-tree but missing from Specter.
+- Retrofit cohorts are tracked in dedicated columns: `app_specs.retrofit` (set for `--cluster` runs that create a whole new capability) and `app_specs.retrofit_extensions` (list of REQ-IDs added by `--extend` runs). The skill writes these via spec frontmatter; `sync_spec_content.py` picks them up after archive.
 - The existing Sunday sync picks up any specs created outside the retrofit flow as the safety net.
 - Prereq for the retrofit columns: `python3 concurrentie-analyse/scripts/migrate_app_specs_retrofit.py` (idempotent).
 - Retrofit specs are filterable via `/tender-status --retrofit-only` and `/readiness-report --retrofit-only`. They're necessarily lossy (capture observed behavior, not original intent) and warrant periodic re-review.
