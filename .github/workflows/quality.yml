@@ -1081,6 +1081,21 @@ jobs:
           npm install --save-dev @playwright/test
           npx playwright install --with-deps chromium
 
+      - name: Build app frontend
+        # Vue/React apps that mount via `Util::addScript()` need their
+        # webpack bundle on disk before specs render the page; without
+        # this step every selector waits times out because the script
+        # tag 404s and the SPA never mounts. Skip silently when the app
+        # has no `build` npm script (legacy apps without a frontend).
+        run: |
+          cd server/apps/${{ inputs.app-name }}
+          if [ -f "package.json" ] && node -e "process.exit(require('./package.json').scripts && require('./package.json').scripts.build ? 0 : 1)" 2>/dev/null; then
+            echo "Building app frontend with 'npm run build'…"
+            npm run build
+          else
+            echo "No 'build' script in package.json; skipping frontend build."
+          fi
+
       - name: Validate Playwright tests exist
         run: |
           cd server/apps/${{ inputs.app-name }}
@@ -1095,6 +1110,32 @@ jobs:
             exit 1
           fi
           echo "Found $TESTS Playwright test file(s) in $TEST_PATH."
+
+      - name: Verify PHP server still alive (restart if dead)
+        # The "Start PHP built-in server" step backgrounds `php -S` and
+        # exits; subsequent steps run in fresh shells. The orphaned
+        # process is normally reparented to init and survives, but on
+        # busy CI runners we've seen it gone by the time specs run
+        # (especially after a multi-minute frontend build). Probe for a
+        # live server here and re-start when needed so spec-phase
+        # navigations always reach a working backend.
+        run: |
+          cd server
+          if ! curl -sf -o /dev/null -m 5 http://localhost:8080/status.php; then
+            echo "::warning::PHP server not reachable at :8080 — re-starting."
+            # Kill any stale `php -S` processes that are stuck on the
+            # port without serving requests.
+            pkill -f "php -S 0.0.0.0:8080" || true
+            sleep 1
+            nohup php -S 0.0.0.0:8080 > /tmp/php-server.log 2>&1 &
+            disown
+            sleep 3
+            curl -sf -o /dev/null -m 5 http://localhost:8080/status.php \
+              || (echo "::error::PHP server still not reachable after re-start." && cat /tmp/php-server.log && exit 1)
+            echo "PHP server re-started successfully."
+          else
+            echo "PHP server is alive."
+          fi
 
       - name: Run Playwright tests
         run: |
