@@ -1,18 +1,26 @@
 # Conduction
 
-Welcome to Conduction's organization repository. This repository serves as the central hub for our corporate structure and internal documentation.
+Welcome to Conduction's organization repository. This is the central hub for our org-level defaults, developer and Claude Code guides, global tooling configuration, and shared documentation.
 
-## About this Repository
+## What's in this repository
 
-This repository contains:
-- Organizational defaults and templates
-- Issue and pull request templates
-- Internal documentation and guidelines
-- Corporate structure documentation
+| Path | Purpose |
+|------|---------|
+| [`docs/claude/`](./docs/claude/README.md) | Developer and Claude Code runtime guides — workflow, commands, spec/doc writing conventions, testing, setup, ADR authoring, skill authoring, retrofit playbook |
+| [`global-settings/`](./global-settings/README.md) | Mandatory user-level Claude Code settings — permissions policy, write-approval hooks, version check |
+| [`usage-tracker/`](./usage-tracker/README.md) | Real-time Claude token usage monitoring tool for VS Code / Cursor |
+| [`APPLICATION-ROADMAP.md`](./APPLICATION-ROADMAP.md) | Current Conduction app portfolio and proposed gap apps |
+| [`CONTRIBUTING.md`](./CONTRIBUTING.md) | How to contribute across Conduction projects |
+| [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md) | Community code of conduct |
+| [`SECURITY.md`](./SECURITY.md) | Security policy and vulnerability reporting |
+| [`SUPPORT.md`](./SUPPORT.md) | Where to ask for help |
+| `profile/`, `website/`, `HeaderContent.json`, `FooterContent.json` | Org-level GitHub profile and website assets |
+
+Start with [`docs/claude/README.md`](./docs/claude/README.md) if you are setting up a new workstation or onboarding onto a Conduction project.
 
 ## Our Open Source Philosophy
 
-At Conduction, we believe in the power of open collaboration. We see open source as more than just code sharing - it's a way to collaborate around shared values and principles. This is why we've made the deliberate choice to make our internal documentation publicly accessible.
+At Conduction, we believe in the power of open collaboration. We see open source as more than just code sharing — it's a way to collaborate around shared values and principles. This is why we've made the deliberate choice to make our internal documentation publicly accessible.
 
 By being transparent about our processes, guidelines, and organizational structure, we aim to:
 - Foster collaboration and knowledge sharing
@@ -22,13 +30,12 @@ By being transparent about our processes, guidelines, and organizational structu
 
 ## Contributing
 
-We welcome contributions from both our team members and the broader community. If you'd like to contribute, please feel free to:
+We welcome contributions from both our team members and the broader community. See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the full guide, or:
+
 - Open issues for questions or suggestions
 - Submit pull requests for improvements
 - Engage in discussions
 
-## License
+## Licensing
 
-This repository is available under [LICENSE_NAME]. See the LICENSE file for more details.
-
-
+Conduction's Nextcloud apps are released under EUPL-1.2. This meta-repo contains documentation and configuration only; individual Conduction repositories carry their own `LICENSE` file.

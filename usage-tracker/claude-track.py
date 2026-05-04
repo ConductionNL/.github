@@ -11,10 +11,11 @@ from pathlib import Path
 
 
 def load_tracker():
+    """Load claude-usage-tracker.py by path (filename has hyphens, so normal import won't work)."""
     tracker_path = Path(__file__).parent / "claude-usage-tracker.py"
     if not tracker_path.exists():
         print(f"❌ Tracker script not found at {tracker_path}")
-        print("Run: bash .claude/usage-tracker/install.sh")
+        print("Run: bash usage-tracker/install.sh")
         sys.exit(1)
     spec = importlib.util.spec_from_file_location("claude_usage_tracker", tracker_path)
     mod = importlib.util.module_from_spec(spec)
@@ -68,12 +69,16 @@ def main():
     elif args.command == "setup":
         import subprocess
         setup_script = Path(__file__).parent / "install.sh"
-        subprocess.run(["bash", str(setup_script)])
+        result = subprocess.run(["bash", str(setup_script)])
+        if result.returncode != 0:
+            print(f"\n❌ Installation failed (exit code {result.returncode})")
+            sys.exit(result.returncode)
 
     elif args.command == "info":
         projects_dir = Path.home() / ".claude" / "projects"
         tracker_path = Path(__file__).parent / "claude-usage-tracker.py"
-        limits_path = Path(__file__).parent / "limits.json"
+        data_dir = Path.home() / ".claude" / "usage-tracker"
+        limits_path = data_dir / "limits.json"
 
         print("🔍 Claude Usage Tracker — Configuration Info\n")
         print(f"📍 Tracker script : {tracker_path}")
@@ -85,12 +90,14 @@ def main():
             jsonl_files = list(projects_dir.glob("**/*.jsonl"))
             print(f"✅ JSONL files    : {len(jsonl_files)}")
 
-        print(f"\n⚙️  Limits file    : {limits_path}")
+        print(f"\n📁 Data directory  : {data_dir}")
+        print(f"⚙️  Limits file    : {limits_path}")
         print(f"✅ Configured     : {limits_path.exists()}")
         if not limits_path.exists():
-            print("   ⚠️  Copy limits.example.json → limits.json and edit values")
+            print("   ⚠️  Run --calibrate to create limits.json")
 
-        print("\n📖 Documentation  : .claude/usage-tracker/SETUP.md")
+        print("\n📖 Calibration    : usage-tracker/CALIBRATE.md")
+        print("📖 Documentation  : usage-tracker/SETUP.md")
         print("🆘 Help           : claude-track -h")
 
     else:

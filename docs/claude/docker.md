@@ -34,3 +34,5 @@ Add one or more profiles with `--profile <name>`:
 ```bash
 docker compose --profile ui --profile exapps up -d
 ```
+
+For MCP browser pool configuration (Playwright sessions used by testing commands), see [playwright-setup.md](playwright-setup.md).

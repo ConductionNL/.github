@@ -20,7 +20,7 @@ Every spec file at `openspec/specs/{domain}/spec.md` follows this structure:
 
 ## Requirements
 
-### REQ-{AREA}-{NNN}: <Name>
+### REQ-{NNN}: <Name>
 <Description using RFC 2119 keywords>
 
 #### Scenario: <Name>
@@ -49,7 +49,7 @@ Every spec file at `openspec/specs/{domain}/spec.md` follows this structure:
 | Field | Required | Notes |
 |-------|----------|-------|
 | `**Status**` | Yes | `idea` → `planned` → `in-progress` → `done` |
-| `**Scope**` | Yes | `company-wide` (in `.claude/openspec/specs/`) or app name (in `{app}/openspec/specs/`) |
+| `**Scope**` | Yes | `company-wide` (in `hydra/openspec/specs/`) or app name (in `{app}/openspec/specs/`) |
 | `**OpenSpec changes**` | Yes | Vertical list, one entry per line, oldest first. `_(none yet)_` until first change created. Archived entries include `_(archived YYYY-MM-DD)_`. See [Grouping rule](#openspec-changes-list-format) below. |
 | `## Non-Functional Requirements` | Yes | Always present, even if minimal |
 | `## Acceptance Criteria` | Yes | Placeholder OK for `idea` status; fill in before moving to `planned` |
@@ -126,6 +126,8 @@ The API should handle errors properly.
 
 Scenarios use the Gherkin format (GIVEN/WHEN/THEN) to describe specific behaviors. They serve as both documentation and acceptance criteria for implementation.
 
+> **CRITICAL:** Scenario headings MUST use exactly 4 hashtags (`####`), not 3. Using `###` instead of `####`, or bullet points, will fail silently — the spec parser won't recognize them as scenarios.
+
 ### Good Scenarios
 
 ```markdown
@@ -179,7 +181,7 @@ New requirements that didn't exist before:
 ```markdown
 ## ADDED Requirements
 
-### Requirement: Full-Text Search
+### REQ-001: Full-Text Search
 The system MUST support full-text search across publication titles and content bodies using PostgreSQL's tsvector.
 
 #### Scenario: Search returns matching publications
@@ -197,7 +199,7 @@ Changes to existing requirements. Always note what the previous behavior was:
 ```markdown
 ## MODIFIED Requirements
 
-### Requirement: Session Duration
+### REQ-003: Session Duration
 The system MUST expire user sessions after 15 minutes of inactivity.
 
 (Previously: sessions expired after 30 minutes of inactivity)
@@ -216,7 +218,7 @@ Requirements being deprecated. Always explain why:
 ```markdown
 ## REMOVED Requirements
 
-### Requirement: Remember Me Checkbox
+### REQ-002: Remember Me Checkbox
 (Deprecated: replaced by automatic session refresh on activity. Removing the checkbox simplifies the login form and improves security by eliminating long-lived sessions.)
 ```
 
@@ -227,7 +229,7 @@ Requirements whose name is changing but whose behavior is unchanged. Always use 
 ```markdown
 ## RENAMED Requirements
 
-### Requirement: Old Requirement Name
+### REQ-004: Old Requirement Name
 FROM: Old Requirement Name
 TO: New Requirement Name
 <!-- No behavior change — rename only -->
@@ -238,14 +240,33 @@ TO: New Requirement Name
 When your requirement relates to a cross-project convention, reference the shared spec:
 
 ```markdown
-### Requirement: Publication API Endpoint
+### REQ-005: Publication API Endpoint
 The system MUST provide a REST endpoint at `/index.php/apps/opencatalogi/api/publications`.
 
 See shared spec: `api-patterns/spec.md#requirement-url-structure` for URL conventions.
 See shared spec: `api-patterns/spec.md#requirement-cors-support` for CORS requirements.
 ```
 
-Shared specs live in `.claude/openspec/specs/` (company-wide, maintained by Conduction). Check that directory for currently available shared specs — the list evolves as new cross-app specs are added. Company-wide architectural decisions (NL Design System, API conventions, security, i18n) are captured in ADRs under `.claude/openspec/architecture/`.
+Shared specs live in `hydra/openspec/specs/` (company-wide, maintained by Conduction). Check that directory for currently available shared specs — the list evolves as new cross-app specs are added. Company-wide architectural decisions (NL Design System, API conventions, security, i18n) are captured in ADRs under `hydra/openspec/architecture/`.
+
+## Cross-Referencing Requirements
+
+`REQ-NNN` numbers are unique only within their own spec file. When referring to a requirement from **outside** its spec — in tasks.md, PR titles, GitHub issues, or other spec files — always prefix with the capability name:
+
+```
+{capability-name}#REQ-NNN
+```
+
+Examples:
+
+| Context | Format | Example |
+|---------|--------|---------|
+| tasks.md task entry | `{capability}#REQ-NNN — {title}` | `archival-destruction-workflow#REQ-009 — Advance Archivist Notifications` |
+| Cross-spec reference | `[capability/spec.md#req-nnn](../capability/spec.md#req-nnn)` | `[archival-destruction-workflow#REQ-006](../archival-destruction-workflow/spec.md#req-006-legal-hold-management)` |
+| PR title / issue | `{capability}#REQ-NNN` | `archival-destruction-workflow#REQ-003` |
+| `@spec` PHPDoc tag | `openspec/changes/{change}/tasks.md#task-N` | (points to tasks.md, not directly to REQ) |
+
+Inside the spec file itself, bare `REQ-NNN` is sufficient — the file location already provides the namespace.
 
 ## Organizing Specs
 

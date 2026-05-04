@@ -2,41 +2,21 @@
 
 These are **mandatory** settings for anyone working on Conduction projects with Claude Code. They enforce a read-first, write-with-approval policy at the user level, ensuring Claude cannot perform destructive operations without explicit confirmation. They also version-check themselves at the start of each session so you always know when an update is available.
 
-Project files under `.claude/` in this repo (for example `settings.json` with `enableAllProjectMcpServers` and MCP allowlists) **complement** this; they do not replace the global policy.
+Project files under `.claude/` in this repo (for example `settings.json` with MCP allowlists) **complement** this; they do not replace the global policy.
 
 ## Versioned canonical files
 
-The canonical files live under **[`global-settings/`](../global-settings/)**. The version is tracked in [`global-settings/VERSION`](../global-settings/VERSION).
+The canonical files live under **[`global-settings/`](../../global-settings/)**. The version is tracked in [`global-settings/VERSION`](../../global-settings/VERSION).
 
 | File | Install as |
 |------|------------|
-| [`global-settings/settings.json`](../global-settings/settings.json) | `~/.claude/settings.json` |
-| [`global-settings/block-write-commands.sh`](../global-settings/block-write-commands.sh) | `~/.claude/hooks/block-write-commands.sh` |
-| [`global-settings/check-settings-version.sh`](../global-settings/check-settings-version.sh) | `~/.claude/hooks/check-settings-version.sh` |
+| [`global-settings/settings.json`](../../global-settings/settings.json) | `~/.claude/settings.json` |
+| [`global-settings/block-write-commands.sh`](../../global-settings/block-write-commands.sh) | `~/.claude/hooks/block-write-commands.sh` |
+| [`global-settings/check-settings-version.sh`](../../global-settings/check-settings-version.sh) | `~/.claude/hooks/check-settings-version.sh` |
 
-## Install / update on a new machine
+## Install / update
 
-Run the following from the root of the `apps-extra` repo:
-
-```bash
-REPO_CLAUDE="$(pwd)/.claude"
-
-mkdir -p ~/.claude/hooks
-
-# Core settings and hooks
-cp "$REPO_CLAUDE/global-settings/settings.json" ~/.claude/settings.json
-cp "$REPO_CLAUDE/global-settings/block-write-commands.sh" ~/.claude/hooks/block-write-commands.sh
-cp "$REPO_CLAUDE/global-settings/check-settings-version.sh" ~/.claude/hooks/check-settings-version.sh
-chmod +x ~/.claude/hooks/block-write-commands.sh ~/.claude/hooks/check-settings-version.sh
-
-# Version tracking
-cp "$REPO_CLAUDE/global-settings/VERSION" ~/.claude/settings-version
-echo "$REPO_CLAUDE" > ~/.claude/settings-repo-path
-```
-
-Requirements: **`jq`** and **`md5sum`** on `PATH`. Restart Claude Code after installing.
-
-If `~` is not expanded in hook commands on your system, replace `~/.claude/hooks/…` with absolute paths in `~/.claude/settings.json`.
+See [`global-settings/README.md`](../../global-settings/README.md) for install commands, update instructions, and the VERSION bump policy.
 
 ## Session-start status panel
 
@@ -47,16 +27,22 @@ At the start of every Claude session, a live status panel is printed to the term
 │     Global Claude Settings Status            │
 └──────────────────────────────────────────────┘
   Installed   : v1.0.0  ✓
-  Local repo  : master               @ v1.0.0
-  Online      : v1.0.0
+  Local repo  : main                 @ v1.0.0
+  Online      : v1.0.0  (via GitHub API)
 ```
 
 Color coding:
 - **Green** — version matches / up to date
-- **Yellow** — local branch is ahead of installed (informational only, no action needed)
+- **Yellow** — local branch is ahead of installed (informational only)
 - **Red** — installed is behind online main (update required)
 
-If configuration issues are detected (missing `settings-repo-path`, missing `VERSION` file, unreachable remote), they are shown in red below the panel — never silently skipped.
+The "Online" line shows the fetch method used:
+- **(via GitHub API)** — fetched directly from GitHub using `gh api` (primary method, uses `settings-repo-url`)
+- **(via git fetch)** — fetched from `origin/main` of the local repo clone (fallback method, uses `settings-repo-path`)
+
+If no local repo is configured, "Local repo" shows "(not configured)" instead of branch info.
+
+If configuration issues are detected (missing config files, unreachable remote, `gh` not installed), they are shown in red below the panel — never silently skipped.
 
 > **Note:** The terminal panel is only visible when using Claude Code in the terminal (CLI). In the VS Code extension, hook stderr is not shown as a visible banner — see the Claude chat message below instead.
 
@@ -65,34 +51,57 @@ If configuration issues are detected (missing `settings-repo-path`, missing `VER
 In addition to the terminal panel, the hook always injects a message into Claude's context at the start of every session. Claude will relay this at the top of its first response:
 
 **Settings up to date:**
-> New session started — Global Claude Settings checked. ✅ Settings are up to date (v1.0.0).
+> New session started — Global Claude Settings checked. Settings are up to date (v1.0.0).
 
 **Update required** (prominently displayed, cannot be missed):
-> ⚠️ NEW SESSION — GLOBAL CLAUDE SETTINGS: UPDATE REQUIRED
-> Installed: v0.1.0 ❌ | Latest: v1.0.0 ✅
+> NEW SESSION — GLOBAL CLAUDE SETTINGS: UPDATE REQUIRED
+> Installed: v0.1.0 (outdated) | Latest: v1.0.0 (on origin/main)
 > Say "update my global settings to 1.0.0" to apply the update.
 
 **Configuration error** (prominently displayed):
-> 🚨 NEW SESSION — GLOBAL CLAUDE SETTINGS: CONFIGURATION ERROR
-> ❌ [description of the issue]
+> NEW SESSION — GLOBAL CLAUDE SETTINGS: CONFIGURATION ERROR
+> [description of the issue]
 
-## Keeping settings up to date
+## Online version checking
 
-When the online (origin/main) version is bumped, Claude displays a prominent warning at the start of its first response in the new session.
+The version check supports two methods for fetching the online version, tried in order:
 
-To update, tell Claude: **"update my global settings to [version]"** and Claude will pull all files directly from `origin/main` using `git show` — not from your local branch. This ensures you always get the exact online version regardless of which branch your local repo is on.
+### 1. GitHub API (primary — recommended)
 
-> **Note:** The version check fetches `VERSION` from `origin/main` via `git fetch`. It checks the local repo's configured remote, not a separate URL. If your remote is the upstream nextcloud/server and the global-settings aren't tracked there, the online check will warn about that too.
+If `~/.claude/settings-repo-url` contains a GitHub repo slug (e.g. `ConductionNL/.github`), the hook fetches `VERSION` via `gh api` from the configured ref (default: `main`). This method:
 
-### ⚠️ VERSION bump required on every change
+- Does **not** require a local clone of the repo
+- Uses the authenticated `gh` CLI (requires `gh auth login`)
+- Is faster than `git fetch` (single HTTP request)
+- Falls back gracefully if `gh` is not installed or the API call fails
 
-**Any commit that modifies a file in `global-settings/` MUST also increment `VERSION`.** Without a bump, users will not be warned to update and their installed settings will silently fall behind.
+### 2. Git fetch (fallback)
 
-Semver rules:
-- `1.0.0 → 1.1.0` — new permissions, guards, or behavior added
-- `1.0.0 → 2.0.0` — breaking change requiring manual migration
+If the GitHub API method is not configured or fails, and `~/.claude/settings-repo-path` points to a valid local clone, the hook falls back to `git fetch origin <ref> --depth=1` followed by `git show origin/<ref>:...`. This is the original method.
 
-Run `/verify-global-settings-version` before creating a PR to confirm the bump is correct.
+### Tracking a non-default branch
+
+By default, both methods track the `main` branch. To track a different branch, tag, or SHA, write it to `~/.claude/settings-repo-ref`:
+
+```bash
+echo "feature/claude-code-tooling" > ~/.claude/settings-repo-ref
+```
+
+When absent, the ref defaults to `main`.
+
+### Configuration options
+
+| Config file | Required? | Purpose |
+|-------------|-----------|---------|
+| `~/.claude/settings-repo-url` | Optional (recommended) | GitHub repo slug for online API check |
+| `~/.claude/settings-repo-path` | Optional (fallback) | Path to the root of the canonical repo for git-based check |
+| `~/.claude/settings-repo-ref` | Optional | Branch/tag/SHA to track (defaults to `main`) |
+
+You can configure:
+- **Both URL and path** (recommended): GitHub API is tried first, local git as fallback
+- **Only `settings-repo-url`**: Works without any local clone; no fallback if GitHub is unreachable
+- **Only `settings-repo-path`**: Original behavior; requires a local clone
+- **Neither**: Version check cannot run; a configuration warning is shown
 
 ## File locations
 
@@ -100,32 +109,48 @@ Run `/verify-global-settings-version` before creating a PR to confirm the bump i
 |------|------|
 | `~/.claude/settings.json` | User permissions allowlist, `PreToolUse` + `UserPromptSubmit` hooks, optional `mcpServers` |
 | `~/.claude/hooks/block-write-commands.sh` | Hook script invoked for every **Bash** tool use before it runs |
-| `~/.claude/hooks/check-settings-version.sh` | Hook script that warns on version mismatch at session start |
+| `~/.claude/hooks/check-settings-version.sh` | Hook script that shows the status panel and warns on version mismatch |
 | `~/.claude/settings-version` | Installed version (semver, matches repo `VERSION`) |
-| `~/.claude/settings-repo-path` | Absolute path to `apps-extra/.claude/` — tells the version hook where to find the canonical `VERSION` file |
+| `~/.claude/settings-repo-url` | GitHub repo slug for online version checking (e.g. `ConductionNL/.github`) |
+| `~/.claude/settings-repo-path` | Absolute path to the root of the canonical repo (fallback for git-based check) |
+| `~/.claude/settings-repo-ref` | Branch/tag/SHA to track for version checks (defaults to `main`) |
 
 ## Shape of `~/.claude/settings.json`
 
-### 1. `permissions.allow`
+### 1. `permissions.deny`
 
-List **Bash** permission patterns you want granted **without** prompting. Keep this aligned with the hook: anything you allow here should still pass `block-write-commands.sh`, or the hook will deny the command even if it is allowlisted.
+Hard-blocked patterns — Claude cannot perform these even with user approval:
+
+- **Config files**: `Edit`/`Write` of `~/.claude/settings.json`, `hooks/*`, `settings-version`, `settings-repo-path`, `settings-repo-url`, `settings-repo-ref`
+- **System**: `sudo`, `su`, `shutdown`, `reboot`, `halt`, `poweroff`, `mkfs`, `dd if=`
+- **GitHub destructive**: `gh pr merge`, `gh repo delete`, `gh release delete`
+- **Git destructive**: `git reset --hard`, `git clean -f/-fd/-fdx`, `git filter-branch`, `git filter-repo`, `git reflog expire/delete`, `git update-ref -d`, `git config --global`, `git checkout --`, `git restore --` (file restore; `git restore --staged` is allowed), `git push --force/-f`, `git rebase`
+- **Filesystem destructive**: `rm -rf`, `rm -Rf`
+- **Package managers (arbitrary code execution)**: `pip install`, `npm install`
+
+### 2. `permissions.allow`
+
+Bash permission patterns granted **without** prompting. Keep this aligned with the hook: anything allowed here should still pass `block-write-commands.sh`, or the hook will deny the command even if it is allowlisted.
 
 Allowed categories (all read-only; write operations are gated by the hook):
 
 - **Inspection**: `ls`, `cat`, `head`, `tail`, `wc`, `stat`, `file`, `du`, `df`, `pwd`, `tree`, `find`, `realpath`, `basename`, `dirname`
-- **Text processing**: `diff`, `grep`, `egrep`, `awk`, `tr`, `sort`, `jq`, `cut`, `uniq`, `column`
+- **Text processing**: `diff`, `grep`, `egrep`, `tr`, `sort`, `jq`, `cut`, `uniq`, `column`
 - **System info**: `which`, `whoami`, `uname`, `ps`, `free`, `lsof`, `ss`, `id`, `groups`, `uptime`, `hostname`, `env`, `date`
-- **Git (read-only)**: `git log`, `git status`, `git diff`, `git show`, `git blame`, `git ls-files`, `git rev-parse`, `git describe`, `git shortlog`, `git cat-file`, `git branch`, `git remote`, `git stash list`, `git config --list`
-- **`git -C`**: allow `Bash(git -C:*)` so agents can run git in arbitrary directories; the hook restricts **which** `git -C …` invocations are safe
-- **Docker (read)**: `docker ps`, `docker images`, `docker logs`, `docker inspect`, `docker stats`, `docker info`, `docker network ls/inspect`, `docker volume ls/inspect`, `docker compose ps/config`
-- **GitHub CLI (read)**: `gh pr list/view/checks/diff`, `gh issue list/view`, `gh repo view`, `gh run list/view`, `gh release list/view`, `gh workflow list`
-- **Package managers (read)**: `composer show/validate/diagnose/check-platform-reqs`, `npm list/outdated`, `pnpm list/outdated`, `yarn list`, `pip list/show/freeze`
+- **Checksums / misc**: `sha256sum`, `md5sum`, `nproc`, `printenv`
+- **Git (read-only)**: `git log`, `git status`, `git diff`, `git show`, `git blame`, `git ls-files`, `git ls-tree`, `git rev-parse`, `git describe`, `git shortlog`, `git cat-file`, `git branch --list/-a/-v`, `git remote -v/show`, `git fetch`, `git stash list`, `git stash show`, `git config --list`, `git config --get`
+- **Navigation**: `cd`
+- **Docker (read)**: `docker ps`, `docker images`, `docker image inspect`, `docker logs`, `docker inspect`, `docker stats`, `docker info`, `docker network ls/inspect`, `docker volume ls/inspect`, `docker --version`, `docker compose ps/config/logs/version`
+- **GitHub CLI (read)**: `gh pr list/view/checks/diff`, `gh issue list/view`, `gh repo view`, `gh run list/view`, `gh release list/view`, `gh workflow list/view`, `gh auth status`
+- **Package managers (read)**: `composer --version/show/validate/diagnose/audit/check-platform-reqs`, `node --version`, `npm --version/list/outdated/audit`, `pnpm list/outdated`, `yarn list`, `pip list/show/freeze`
 - **PHP**: `php -l/-m/-i/--version`
-- **HTTP / API (read; hook narrows further)**: `curl`, `gh api`
+- **Logs**: `Read(**/.claude/logs/**)`
+
+**Not auto-approved** (hook or user prompt required): `curl`, `gh api`, `awk`, `git -C`, broad `git branch`/`git remote` — these commands have dangerous modes that the hook cannot fully distinguish from safe usage. They go through the hook for write detection and prompt the user when needed.
 
 Do **not** put broad `Bash(*)` allow rules here.
 
-### 2. `hooks.PreToolUse`
+### 3. `hooks.PreToolUse`
 
 ```json
 "PreToolUse": [
@@ -136,7 +161,7 @@ Do **not** put broad `Bash(*)` allow rules here.
 ]
 ```
 
-### 3. `hooks.UserPromptSubmit`
+### 4. `hooks.UserPromptSubmit`
 
 ```json
 "UserPromptSubmit": [
@@ -146,7 +171,7 @@ Do **not** put broad `Bash(*)` allow rules here.
 ]
 ```
 
-### 4. `mcpServers` (optional)
+### 5. `mcpServers` (optional)
 
 7 Playwright browser instances (`browser-1` through `browser-7`). `browser-6` runs headed (no `--headless`). Adjust the count to match your actual usage.
 
@@ -159,43 +184,56 @@ Do **not** put broad `Bash(*)` allow rules here.
 
 | Area | Allowed silently | Prompts for approval | Hard blocked |
 |------|-----------------|---------------------|--------------|
-| **curl** | GET without file output | Non-GET methods, data flags, `-o` / `--output` | — |
-| **gh api** | GET | POST/PUT/PATCH/DELETE, `--input`, `--field` / `--raw-field` | — |
+| **curl** | — | All curl commands (not auto-approved) | — |
+| **gh api** | — | All gh api commands (not auto-approved) | — |
 | **git push** | Last user message contains authorized phrase | — | Blocked otherwise |
-| **git -C** | Read-only subcommands (`log`, `status`, `diff`, etc.) | Write subcommands, branch/remote writes, stash modifications, config writes | `push` (phrase-authorized) |
-| **git branch** (bare) | Listing | `-d/-D/-m/-M/-c/-C`, `--delete`, `--move`, `--copy` | — |
-| **git remote** (bare) | Listing, `show`, `get-url` | `add`, `remove`, `rename`, `set-url`, `prune`, `update` | — |
-| **env** | `env` alone or `VAR=value` assignments | Using `env` to execute another command | — |
+| **git -C** | Read-only subcommands | Write subcommands, branch/remote writes | `push` (phrase-authorized) |
+| **git branch** (bare) | `--list`, `-a`, `-v` (auto-approved) | `-d/-D/-m/-M/-c/-C`, `--delete`, `--move`, `--copy` | — |
+| **git remote** (bare) | `-v`, `show` (auto-approved) | `add`, `remove`, `rename`, `set-url`, `prune`, `update` | — |
+| **env** | `env` alone or `VAR=value` | Using `env` to execute another command | — |
 | **date** | Display time | — | `-s` / `--set` (system clock) |
-| **cat** | Normal stdout | Shell redirection `>` / `>>` to a file | — |
-| **find** | Normal path traversal | `-delete`, `-exec`, `-execdir` | — |
-| **sort** | Normal sort to stdout | `-o` / `--output`, shell `>` / `>>` | — |
-| **awk** | Normal processing | `print >` / `print >>` in script, shell `>` after script | — |
-| **hostname** | Read current hostname (no args) | Setting a new hostname (bare name argument) | — |
+| **cat** | Normal stdout | Shell redirection `>` / `>>` | — |
+| **find** | Normal traversal | `-delete`, `-exec`, `-execdir` | — |
+| **sort** | Normal sort | `-o` / `--output`, shell `>` / `>>` | — |
+| **awk** | — | All awk commands (not auto-approved); `system()` and file output caught | — |
+| **hostname** | Read hostname | Setting a new hostname (bare name argument) | — |
+| **rm** | — | All `rm` commands | `rm -rf` / `rm -Rf` (deny-list) |
+| **ln** | — | All `ln` commands | Symlinks/hardlinks to `~/.claude/` |
+| **sed -i** | — | In-place file editing | — |
+| **chown** | — | All `chown` commands | — |
+| **install** | — | All `install` commands | — |
+| **Pipe-to-shell** | — | `\| bash`, `\| sh`, `base64 -d`, `eval` | — |
+| **WSL boundary** | — | — | All paths/executables escaping the Linux filesystem |
+| Config writes (`~/.claude/`) | `git show origin/main:` from canonical repo; `gh api` from canonical repo | — | All other methods |
 
-Authorized git push phrases (case-insensitive): `push for me`, `commit and push`, `please push`, `push my changes`.
+Most guards use `(^|[;&|]\s*)cmd\b` patterns to catch commands both at the start of a line and when chained via `&&`, `;`, or `||`. The exception is the canonical-source check for config-file writes (Method 2 — `gh api`), which validates via a URL-prefix match rather than a segment-boundary anchor, and is additionally hardened by a decoy-detection check that rejects any non-canonical `gh api` call present in the same command.
+
+Authorized git push phrases (case-insensitive): `push for me`, `commit and push`, `please git push`, `push my changes`.
 
 ## What `check-settings-version.sh` does
 
-- Fires once per session (keyed to the transcript path via `/tmp/` flag file).
+- Fires once per session (keyed to the transcript path via a flag file in `$XDG_RUNTIME_DIR` or `~/.claude/`, with `chmod 600`).
+- **Validates all config values** from files before use — `tracking_ref` against `^[a-zA-Z0-9._/-]+$`, `online_repo_slug` against `^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$`, versions against `^[0-9]+\.[0-9]+\.[0-9]+$`. Invalid values are refused with a warning.
 - Reads the installed version from `~/.claude/settings-version`.
-- Reads the local branch version from `$REPO_DIR/global-settings/VERSION` (repo path from `~/.claude/settings-repo-path`).
-- Fetches the online version from `origin/main` via `git fetch --depth=1` and reads the `VERSION` file from that ref.
-- Compares all three versions using semver and prints a colored status panel to stderr (visible in the terminal/CLI).
+- Reads the tracking ref from `~/.claude/settings-repo-ref` (defaults to `main` when absent).
+- **Online check (primary):** If `~/.claude/settings-repo-url` is set, fetches `VERSION` via `gh api` from the GitHub repo's configured ref.
+- **Git fetch (fallback):** If the GitHub API method is not configured or fails, and `~/.claude/settings-repo-path` points to a valid local clone, fetches via `git fetch origin <ref> --depth=1` and reads the `VERSION` file from that ref.
+- Reads the local branch version from `$REPO_DIR/global-settings/VERSION` (if a local repo is configured).
+- Compares all versions using semver and prints a colored status panel to stderr (visible in the terminal/CLI).
 - Always injects a session-start message into Claude's context via stdout — "up to date", "update required", or "configuration error" — which Claude relays at the top of its first response.
-- Never silently skips: configuration issues (missing `settings-repo-path`, missing `VERSION` file, unreachable remote) are shown in the panel and forwarded to Claude.
+- Never silently skips: configuration issues (missing config files, unreachable remote, `gh` not installed) are shown in the panel and forwarded to Claude.
 
 ## Relationship to this repo's `.claude/settings.json`
 
-Under `apps-extra/.claude/`, project `settings.json` can enable project MCP servers and list allowed MCP tool names. That is separate from the **global** Bash policy above. For a consistent setup, use both:
+Project `settings.json` in `.claude/` enables MCP servers and project-specific permissions. That is separate from the global Bash policy above:
 
 1. Global `~/.claude/settings.json` + hooks for Bash safety and version checking.
-2. Project `.claude/settings.json` (and `settings.local.json` if used) for workspace-specific MCP and permissions.
+2. Project `.claude/settings.json` (and `settings.local.json` if used) for workspace-specific MCP.
 
-## Checklist for a new machine
+## Verification
 
-1. Run the install commands above (copies settings, hooks, version files).
-2. Confirm `jq` and `md5sum` are on `PATH`.
-3. Restart Claude Code so settings reload.
-4. Test: a denied pattern (e.g. `curl -X POST`) should be blocked with a clear reason. A `find . -exec` should prompt for approval.
-5. Verify the version hook fires: open a new session and confirm no warning (or update if one appears).
+After installing (see [README](../../global-settings/README.md)), verify:
+- `curl` should prompt (not auto-approved)
+- `find . -exec` should prompt
+- `rm -rf` should be hard-blocked
+- Status panel appears at session start

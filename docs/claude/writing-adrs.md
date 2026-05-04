@@ -67,7 +67,7 @@ Use this compact format — no headers, no essays, no "context" or "alternatives
 ### Don't
 
 ```markdown
-## ADR-008: Backend Layering — Controller, Service, and Mapper Separation
+## ADR-099: Backend Layering — Controller, Service, and Mapper Separation
 
 ### Context
 

@@ -20,7 +20,7 @@ on:
         description: "Node.js version for building"
         required: false
         type: string
-        default: "18"
+        default: "20"
       verify-vendor-deps:
         description: "Enable vendor dependency verification after composer install"
         required: false

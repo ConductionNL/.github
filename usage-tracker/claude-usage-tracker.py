@@ -14,15 +14,22 @@ the weekly window as "since Monday UTC" — both are approximations since the
 exact boundaries are not stored in the JSONL files.
 
 Works with VS Code (Claude Code extension) and Cursor (Claude Code CLI).
-Limits are loaded from limits.json next to this script; edit that file when
-your plan changes. Falls back to built-in defaults with an "(estimate)" label.
+All variable data (limits.json, session state) is stored centrally in
+~/.claude/usage-tracker/ so all project instances share the same calibration.
+Falls back to built-in defaults with an "(estimate)" label.
 """
 
 import json
+import sys
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import subprocess
+import urllib.request
+import urllib.error
+
+# Centralized data directory — all variable/user data lives here (not per-project)
+DATA_DIR = Path.home() / ".claude" / "usage-tracker"
 
 # ---------------------------------------------------------------------------
 # Built-in fallback limits (used when limits.json is absent or incomplete)
@@ -40,11 +47,11 @@ COMBINED_KEY = "all_models"
 
 def load_limits():
     """
-    Load limits from limits.json next to this script.
+    Load limits from ~/.claude/usage-tracker/limits.json.
     Returns (limits_dict, configured=True/False).
     configured=True means limits.json was found and used.
     """
-    limits_file = Path(__file__).parent / "limits.json"
+    limits_file = DATA_DIR / "limits.json"
     if not limits_file.exists():
         return DEFAULT_LIMITS, False
 
@@ -77,7 +84,7 @@ def load_limits():
             else DEFAULT_LIMITS[COMBINED_KEY]
         )
         return limits, True
-    except Exception:
+    except (json.JSONDecodeError, KeyError, ValueError, TypeError):
         return DEFAULT_LIMITS, False
 
 
@@ -88,7 +95,7 @@ class ClaudeUsageTracker:
         self.projects_dir = Path(projects_dir) if projects_dir else self._find_projects_dir()
         self.model = model.lower() if model in ALL_MODELS else "sonnet"
         self.model_config = self.limits[self.model]
-        self.log_file = Path(__file__).parent / "logs" / "session.json"
+        self.log_file = DATA_DIR / "session.json"
         self.notify_state = {
             "last_notification": 0,
             "notification_percentages": [25, 50, 75, 90],
@@ -103,7 +110,7 @@ class ClaudeUsageTracker:
 
     def _load_session_reset(self):
         """Return stored session_reset_at datetime if present and still in the future, else None."""
-        state_file = Path(__file__).parent / "logs" / "session-state.json"
+        state_file = DATA_DIR / "session-state.json"
         if not state_file.exists():
             return None
         try:
@@ -111,7 +118,7 @@ class ClaudeUsageTracker:
             reset_at = datetime.fromisoformat(data["session_reset_at"])
             if reset_at > datetime.now(timezone.utc):
                 return reset_at
-        except Exception:
+        except (json.JSONDecodeError, KeyError, ValueError):
             pass
         return None
 
@@ -135,7 +142,7 @@ class ClaudeUsageTracker:
                 print(f"❌ Cannot parse: {time_str!r}  (expected '4h 50m', '4:50', or minutes)")
                 return
         reset_at = datetime.now(timezone.utc) + timedelta(minutes=total)
-        state_file = Path(__file__).parent / "logs" / "session-state.json"
+        state_file = DATA_DIR / "session-state.json"
         state_file.parent.mkdir(parents=True, exist_ok=True)
         state_file.write_text(json.dumps({
             "session_reset_at": reset_at.isoformat(),
@@ -224,7 +231,7 @@ class ClaudeUsageTracker:
                                 ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
                                 if ts < since:
                                     continue
-                            except Exception:
+                            except (ValueError, TypeError):
                                 pass
 
                     requests.append({
@@ -237,7 +244,7 @@ class ClaudeUsageTracker:
                         "model":                model_name,
                         "source":               jsonl_file.name,
                     })
-            except Exception:
+            except (json.JSONDecodeError, OSError):
                 pass
 
         return requests
@@ -380,9 +387,9 @@ class ClaudeUsageTracker:
                             ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
                             if ts >= since and (oldest_ts is None or ts < oldest_ts):
                                 oldest_ts = ts
-                        except Exception:
+                        except (ValueError, TypeError):
                             pass
-            except Exception:
+            except (json.JSONDecodeError, OSError):
                 pass
 
         def fmt_td(td):
@@ -556,10 +563,9 @@ class ClaudeUsageTracker:
 
         print()
         print("=" * 60)
-        print("⚠️  Limits are estimates unless limits.json is configured.")
-        print("   Actual limits: 5h rolling session + 7-day weekly (varies by plan).")
-        print("   Check claude.ai/settings/usage for live percentages.")
-        print("   Edit limits.json with your own estimates when your plan changes.")
+        print("⚠️  Limits are estimates unless calibrated.")
+        print("   Run --calibrate with percentages from claude.ai/settings/usage.")
+        print("   Or edit ~/.claude/usage-tracker/limits.json directly.")
         print("=" * 60)
         print()
 
@@ -605,7 +611,13 @@ class ClaudeUsageTracker:
 
                 self._save_session_data(usages)
                 self._interruptible_sleep(interval)
-                # Reload limits and model config in case limits.json changed
+                # Reload limits and model config in case limits.json changed.
+                # Also reset the notification watermark when the weekly window rolls over
+                # so the 25/50/75% thresholds fire again in the new week.
+                new_week_start = self._week_start_for(COMBINED_KEY)
+                if not hasattr(self, "_last_week_start") or new_week_start != self._last_week_start:
+                    self.notify_state["last_notification"] = 0
+                    self._last_week_start = new_week_start
                 self.limits, self.limits_configured = load_limits()
                 self.model_config = self.limits[self.model]
 
@@ -624,7 +636,7 @@ class ClaudeUsageTracker:
         try:
             subprocess.run(["notify-send", "Claude Usage", message],
                            capture_output=True, timeout=3)
-        except Exception:
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
             pass
 
     def _save_session_data(self, usages):
@@ -636,8 +648,7 @@ class ClaudeUsageTracker:
 
     def _interruptible_sleep(self, interval):
         """Sleep for `interval` seconds, waking early if limits.json or session-state.json change."""
-        script_dir = Path(__file__).parent
-        watch = [script_dir / "limits.json", script_dir / "logs" / "session-state.json"]
+        watch = [DATA_DIR / "limits.json", DATA_DIR / "session-state.json"]
         mtimes = {f: (f.stat().st_mtime if f.exists() else 0) for f in watch}
         for _ in range(interval):
             time.sleep(1)
@@ -659,7 +670,7 @@ class ClaudeUsageTracker:
         return f"{names[day]} {hour:02d}:00 UTC (configured)"
 
     def print_limits(self):
-        limits_file = Path(__file__).parent / "limits.json"
+        limits_file = DATA_DIR / "limits.json"
         src = f"limits.json ({limits_file})" if self.limits_configured else "built-in defaults"
         print(f"\n⚙️  Current limits  [{src}]\n")
         print(f"  {'Model':<10}  {'Session (~5h)':>14}  {'Weekly':>10}  {'Weekly resets'}")
@@ -672,8 +683,239 @@ class ClaudeUsageTracker:
         print(f"\n  Session = last 5h rolling window (shared across all models).")
         print(f"  Weekly reset times from limits.json; defaults to Mon 00:00 UTC.")
         if not self.limits_configured:
-            print(f"\n  ⚠️  Using default estimates. Edit {limits_file} to set your real limits.")
+            print(f"\n  ⚠️  Using default estimates. Run --calibrate or edit {limits_file}.")
         print()
+
+    # ------------------------------------------------------------------
+    # Calibrate from observed percentages
+    # ------------------------------------------------------------------
+
+    def calibrate(self, session_pct=None, weekly_all_pct=None, weekly_sonnet_pct=None,
+                  session_reset=None, weekly_all_reset=None, weekly_sonnet_reset=None):
+        """
+        Back-calculate limits from observed claude.ai/settings/usage percentages.
+        Formula: limit = tracker_token_count / (observed_pct / 100)
+        Writes updated values to ~/.claude/usage-tracker/limits.json.
+        """
+        limits_file = DATA_DIR / "limits.json"
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+        # Load existing limits.json or start fresh
+        if limits_file.exists():
+            try:
+                data = json.loads(limits_file.read_text())
+            except (json.JSONDecodeError, OSError):
+                data = {}
+        else:
+            data = {}
+
+        # Remove non-config keys
+        data.pop("_calibrated", None)
+        data.pop("_note", None)
+        data.pop("_structure", None)
+
+        combined = self.get_combined_usage()
+        changes = []
+
+        # --- Session limit (shared pool) ---
+        if session_pct is not None and session_pct > 0:
+            session_tokens = combined["session"]["total"]
+            if session_tokens > 0:
+                limit = int(session_tokens / (session_pct / 100))
+                for key in ALL_MODELS + [COMBINED_KEY]:
+                    data.setdefault(key, {})["session"] = limit
+                changes.append(f"Session: {self.fmt(session_tokens)} tokens / {session_pct}% = {self.fmt(limit)} limit")
+            else:
+                print("⚠️  No session tokens found — cannot calibrate session limit. Use the tracker during an active session.")
+
+        # --- Weekly All Models limit ---
+        if weekly_all_pct is not None and weekly_all_pct > 0:
+            weekly_tokens = combined["week"]["total"]
+            if weekly_tokens > 0:
+                limit = int(weekly_tokens / (weekly_all_pct / 100))
+                data.setdefault(COMBINED_KEY, {})["weekly"] = limit
+                changes.append(f"Weekly All Models: {self.fmt(weekly_tokens)} tokens / {weekly_all_pct}% = {self.fmt(limit)} limit")
+            else:
+                print("⚠️  No weekly tokens found — cannot calibrate weekly limit.")
+
+        # --- Weekly Sonnet limit ---
+        if weekly_sonnet_pct is not None and weekly_sonnet_pct > 0:
+            sonnet_usage = self.get_usage("sonnet")
+            sonnet_tokens = sonnet_usage["week"]["total"]
+            if sonnet_tokens > 0:
+                limit = int(sonnet_tokens / (weekly_sonnet_pct / 100))
+                data.setdefault("sonnet", {})["weekly"] = limit
+                changes.append(f"Weekly Sonnet: {self.fmt(sonnet_tokens)} tokens / {weekly_sonnet_pct}% = {self.fmt(limit)} limit")
+            else:
+                print("⚠️  No Sonnet weekly tokens found — cannot calibrate Sonnet weekly limit.")
+
+        # --- Weekly reset times ---
+        if weekly_all_reset:
+            day, hour = weekly_all_reset
+            data.setdefault(COMBINED_KEY, {})["weekly_reset_day"] = day
+            data.setdefault(COMBINED_KEY, {})["weekly_reset_hour_utc"] = hour
+            names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+            changes.append(f"All Models weekly reset: {names[day]} {hour:02d}:00 UTC")
+
+        if weekly_sonnet_reset:
+            day, hour = weekly_sonnet_reset
+            data.setdefault("sonnet", {})["weekly_reset_day"] = day
+            data.setdefault("sonnet", {})["weekly_reset_hour_utc"] = hour
+            names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+            changes.append(f"Sonnet weekly reset: {names[day]} {hour:02d}:00 UTC")
+
+        if not changes:
+            print("⚠️  No calibration changes — provide at least one percentage flag.")
+            return
+
+        # Add calibration timestamp
+        now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        pcts = []
+        if session_pct is not None:
+            pcts.append(f"session {session_pct}%")
+        if weekly_all_pct is not None:
+            pcts.append(f"weekly all_models {weekly_all_pct}%")
+        if weekly_sonnet_pct is not None:
+            pcts.append(f"weekly sonnet {weekly_sonnet_pct}%")
+        data["_calibrated"] = f"{now_str} from claude.ai/settings/usage: {', '.join(pcts)}"
+
+        # Write
+        limits_file.write_text(json.dumps(data, indent=2) + "\n")
+
+        # Set session reset if provided
+        if session_reset:
+            self.set_session_reset(session_reset)
+
+        # Reload limits
+        self.limits, self.limits_configured = load_limits()
+        self.model_config = self.limits[self.model]
+
+        # Print summary
+        print(f"\n✅ Calibration saved to {limits_file}\n")
+        for c in changes:
+            print(f"   {c}")
+        print()
+
+        # Show verification
+        self.print_status_bar(all_models=True)
+
+    # ------------------------------------------------------------------
+    # JSON output
+    # ------------------------------------------------------------------
+
+    def get_json_output(self, all_models=False):
+        """Return structured dict suitable for JSON serialization."""
+        session_info = self.get_session_info()
+        combined = self.get_combined_usage()
+
+        result = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "session": {
+                "elapsed": session_info.get("elapsed_str", "—"),
+                "remaining": session_info.get("remaining_str", "—"),
+                "calibrated": session_info.get("calibrated", False),
+            },
+            "limits_configured": self.limits_configured,
+            "all_models": {
+                "session_tokens": combined["session"]["total"],
+                "session_pct": round(combined["session_pct"], 1),
+                "session_limit": combined["session_limit"],
+                "weekly_tokens": combined["week"]["total"],
+                "weekly_pct": round(combined["week_pct"], 1),
+                "weekly_limit": combined["weekly_limit"],
+            },
+        }
+
+        if all_models:
+            result["models"] = {}
+            for m in ALL_MODELS:
+                u = self.get_usage(m)
+                result["models"][m] = {
+                    "session_tokens": u["session"]["total"],
+                    "session_pct": round(u["session_pct"], 1),
+                    "weekly_tokens": u["week"]["total"],
+                    "weekly_pct": round(u["week_pct"], 1),
+                    "weekly_limit": u["weekly_limit"],
+                }
+
+        return result
+
+    # ------------------------------------------------------------------
+    # Fetch usage from Anthropic API (optional)
+    # ------------------------------------------------------------------
+
+    def fetch_usage(self):
+        """
+        Fetch real-time usage from the undocumented Anthropic OAuth usage endpoint.
+        Requires ~/.claude/.credentials.json (auto-created on Claude Code login).
+        Must be enabled in ~/.claude/usage-tracker/limits.json:
+          "fetch_usage": true
+        """
+        limits_file = DATA_DIR / "limits.json"
+        try:
+            data = json.loads(limits_file.read_text()) if limits_file.exists() else {}
+        except (json.JSONDecodeError, OSError):
+            data = {}
+
+        if not data.get("fetch_usage"):
+            print("⚠️  API usage fetching is not enabled.")
+            print(f"   Add '\"fetch_usage\": true' to {limits_file}")
+            print(f"   Or run: --calibrate first, then edit the file.")
+            return None
+
+        creds_file = Path.home() / ".claude" / ".credentials.json"
+        if not creds_file.exists():
+            print("❌ ~/.claude/.credentials.json not found.")
+            print("   Log in to Claude Code first (the extension creates this file).")
+            return None
+
+        try:
+            creds = json.loads(creds_file.read_text())
+            token = creds.get("claudeAiOauth", {}).get("accessToken")
+            if not token:
+                print("❌ No accessToken found in credentials file.")
+                return None
+        except Exception as e:
+            print(f"❌ Cannot read credentials: {e}")
+            return None
+
+        org_uuid = creds.get("organizationUuid", "")
+        # Try known endpoints — this API is undocumented and may change
+        url = f"https://claude.ai/api/organizations/{org_uuid}/usage"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "User-Agent": "claude-usage-tracker/1.0",
+        }
+
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode())
+
+            # Cache the result — chmod 600 because the response contains
+            # org-scoped account data fetched with the user's OAuth token.
+            cache_file = DATA_DIR / "usage-api-cache.json"
+            DATA_DIR.mkdir(parents=True, exist_ok=True)
+            cache_file.write_text(json.dumps({
+                "fetched_at": datetime.now(timezone.utc).isoformat(),
+                "data": data,
+            }, indent=2))
+            cache_file.chmod(0o600)
+
+            print(f"✅ Usage fetched from Anthropic API")
+            print(json.dumps(data, indent=2))
+            return data
+
+        except urllib.error.HTTPError as e:
+            body = e.read().decode() if e.fp else ""
+            print(f"❌ API request failed: HTTP {e.code}")
+            if body:
+                print(f"   {body[:200]}")
+            return None
+        except Exception as e:
+            print(f"❌ API request failed: {e}")
+            return None
 
 
 # ---------------------------------------------------------------------------
@@ -728,17 +970,94 @@ def main():
         help="Mark the start of a new session (sets reset time to 5h from now). "
              "Run this when you begin a fresh session.",
     )
+    parser.add_argument(
+        "--json", action="store_true",
+        help="Output in JSON format (works with --status-bar and default report).",
+    )
+
+    # --- Calibration flags ---
+    cal = parser.add_argument_group("calibration",
+        "Back-calculate limits from claude.ai/settings/usage percentages. "
+        "Run the tracker first to get current token counts, then provide the "
+        "observed percentages from the dashboard.")
+    cal.add_argument(
+        "--calibrate", action="store_true",
+        help="Calibrate limits from observed percentages. Requires at least one --*-pct flag.",
+    )
+    cal.add_argument(
+        "--session-pct", type=float, metavar="PCT",
+        help="Observed session usage percentage from claude.ai (e.g. 27).",
+    )
+    cal.add_argument(
+        "--weekly-all-pct", type=float, metavar="PCT",
+        help="Observed 'All models' weekly percentage from claude.ai (e.g. 3).",
+    )
+    cal.add_argument(
+        "--weekly-sonnet-pct", type=float, metavar="PCT",
+        help="Observed 'Sonnet only' weekly percentage from claude.ai (e.g. 15).",
+    )
+    cal.add_argument(
+        "--session-reset", metavar="TIME",
+        help="Session time remaining (e.g. '1h 48m'). Used with --calibrate or standalone.",
+    )
+    cal.add_argument(
+        "--weekly-all-reset", metavar="DAY:HOUR",
+        help="All Models weekly reset as 'day:hour_utc' (e.g. 'fri:08'). "
+             "Day: mon/tue/wed/thu/fri/sat/sun. Hour: UTC hour 0-23.",
+    )
+    cal.add_argument(
+        "--weekly-sonnet-reset", metavar="DAY:HOUR",
+        help="Sonnet weekly reset as 'day:hour_utc' (e.g. 'thu:08').",
+    )
+
+    # --- API fetch ---
+    parser.add_argument(
+        "--fetch-usage", action="store_true",
+        help="Fetch real-time usage from Anthropic API (requires config). "
+             "See SETUP.md for how to enable this.",
+    )
 
     args = parser.parse_args()
 
+    # --- Parse reset day:hour strings ---
+    def parse_reset(s):
+        """Parse 'fri:08' into (day_int, hour_int)."""
+        if not s:
+            return None
+        days = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
+        parts = s.lower().split(":")
+        if len(parts) != 2 or parts[0] not in days:
+            print(f"❌ Invalid reset format: {s!r}  (expected 'fri:08')")
+            sys.exit(1)
+        return (days[parts[0]], int(parts[1]))
+
     tracker = ClaudeUsageTracker(projects_dir=args.projects_dir, model=args.model)
 
-    if args.mark_session_start:
+    if args.calibrate:
+        weekly_all_reset = parse_reset(args.weekly_all_reset)
+        weekly_sonnet_reset = parse_reset(args.weekly_sonnet_reset)
+        tracker.calibrate(
+            session_pct=args.session_pct,
+            weekly_all_pct=args.weekly_all_pct,
+            weekly_sonnet_pct=args.weekly_sonnet_pct,
+            session_reset=args.session_reset,
+            weekly_all_reset=weekly_all_reset,
+            weekly_sonnet_reset=weekly_sonnet_reset,
+        )
+    elif args.fetch_usage:
+        tracker.fetch_usage()
+    elif args.mark_session_start:
         tracker.set_session_reset("5h")
     elif args.set_session_reset:
         tracker.set_session_reset(args.set_session_reset)
+    elif args.session_reset and not args.calibrate:
+        # --session-reset used standalone (not with --calibrate)
+        tracker.set_session_reset(args.session_reset)
     elif args.limits:
         tracker.print_limits()
+    elif args.json:
+        output = tracker.get_json_output(all_models=args.all_models)
+        print(json.dumps(output, indent=2))
     elif args.status_bar:
         tracker.print_status_bar(all_models=args.all_models, active_only=args.active_only)
     elif args.monitor:

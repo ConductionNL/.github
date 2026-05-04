@@ -2,6 +2,7 @@
 * text=auto
 
 # Source code - always use LF
+*.py text eol=lf
 *.js text eol=lf
 *.jsx text eol=lf
 *.ts text eol=lf
@@ -34,6 +35,7 @@
 
 # Docker and shell scripts - always use LF
 Dockerfile text eol=lf
+Dockerfile.* text eol=lf
 *.dockerfile text eol=lf
 *.sh text eol=lf
 
