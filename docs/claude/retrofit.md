@@ -8,8 +8,10 @@ This playbook walks through retrofitting an app that predates the spec ↔ code 
 
 Legacy code was never written against a change, so there's no `tasks.md#task-N` for `@spec` to point at. Retrofit bridges this with **ghost changes**:
 
-- **`/opsx-annotate`** creates one ghost change per run: `retrofit-annotate-{app}-{YYYY-MM-DD}` with an empty spec delta and one task per Bucket 1 REQ.
-- **`/opsx-reverse-spec`** creates one ghost change per cluster: `retrofit-{capability-or-cluster}-{YYYY-MM-DD}` with a spec delta (new REQs) + one task per new REQ.
+- **`/opsx-annotate`** creates one ghost change per run: `retrofit-{YYYY-MM-DD}-annotate-{app}` with an empty spec delta and one task per Bucket 1 REQ.
+- **`/opsx-reverse-spec`** creates one ghost change per cluster: `retrofit-{YYYY-MM-DD}-{capability-or-cluster}` with a spec delta (new REQs) + one task per new REQ.
+
+Naming convention: `retrofit-{YYYY-MM-DD}-{descriptor}` (date right after `retrofit-`). This matches the date-prefix convention used by non-retrofit OpenSpec changes (e.g. `2026-03-25-contacts-actions/`) so retrofit and non-retrofit changes sort chronologically together when the archive is listed alphabetically.
 
 Both changes are archived at the end of the run; annotations reference the ghost change's tasks.md by path. Because `@spec` is a textual reference rather than a live lookup, the path remains valid after archive. Retrofit cohort membership is flagged in spec.md frontmatter (`retrofit: true` or `retrofit_extensions: [REQ-NNN, ...]`) and synced to Specter via `sync_spec_content.py`.
 
@@ -37,7 +39,7 @@ Run them in this exact order. Don't skip the audit step.
 - App working tree is clean. `/opsx-annotate` and `/opsx-reverse-spec` refuse dirty trees.
 - You are on a branch that contains the specs. Some apps keep specs on `beta` rather than `development` (e.g. decidesk) — check before scanning. The skills create their own `retrofit/…` feature branch off that one.
 - Specter DB migration applied: `python3 concurrentie-analyse/scripts/migrate_app_specs_retrofit.py`. Adds `retrofit` + `retrofit_extensions` + `spec_hash` columns to `app_specs`. Idempotent.
-- Optional: `{app}/.opsx-ignore` — one glob per line (`#` for comments) for paths the scan should skip. Useful for vendor code, deliberately-unspec'd internal tools.
+- Optional: `{app}/.opsx-ignore` — one glob per line (`#` for comments) for paths the scan should skip. Useful for vendor code, deliberately-unspec'd internal tools, demo/example files, generated code. Honored by `/opsx-coverage-scan` (which filters buckets 1/2a/2b/4 — Bucket 3 is REQ-level and unaffected). `/opsx-annotate` and `/opsx-reverse-spec` honor it transitively via the report — if entries change, re-scan before annotating. See `openregister/.opsx-ignore` for a worked example.
 
 ## Step-by-step
 
@@ -66,7 +68,7 @@ Plus two meta-buckets the report lists but that need no retrofit action: `annota
 /opsx-annotate procest
 ```
 
-Creates the ghost change `retrofit-annotate-procest-{date}`, generates one task per REQ, adds `@spec openspec/changes/retrofit-annotate-procest-{date}/tasks.md#task-N` tags to every Bucket 1 file + method, archives the ghost change, updates `.git-blame-ignore-revs`, opens an annotation-only PR.
+Creates the ghost change `retrofit-{date}-annotate-procest`, generates one task per REQ, adds `@spec openspec/changes/retrofit-{date}-annotate-procest/tasks.md#task-N` tags to every Bucket 1 file + method, archives the ghost change, updates `.git-blame-ignore-revs`, opens an annotation-only PR.
 
 Idempotent: re-running with no code changes produces no new annotations. If a dated ghost change already exists, the skill asks whether to reuse it or create a fresh one. Re-running after code changes creates a new dated ghost change.
 
