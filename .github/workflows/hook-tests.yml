@@ -8,6 +8,9 @@ on:
     paths:
       - 'global-settings/**'
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
