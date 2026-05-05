@@ -1100,19 +1100,25 @@ jobs:
         # Started AFTER the slow setup phases (npm ci, playwright install,
         # frontend build) so the server is not idle for minutes — that's
         # what was causing the orphaned `php -S` process to disappear by
-        # the time specs ran. Probe right after start and fail fast if
-        # the server is not actually listening.
+        # the time specs ran.
+        #
+        # Polling loop (per @WilcoLouwerse's review): `curl -sf` returns
+        # failure immediately on connection refused — `-m 5` only applies
+        # AFTER the TCP connection is established. A single probe after
+        # `sleep 3` therefore fails spuriously when the runner is noisy
+        # and `php -S` hasn't bound :8080 yet. Poll every 0.5s with a
+        # 15s hard cap so the fail-fast path is honest.
         run: |
           cd server
           php -S 0.0.0.0:8080 > /tmp/php-server.log 2>&1 &
-          echo $! > /tmp/php-server.pid
-          sleep 3
-          if ! curl -sf -o /dev/null -m 5 http://localhost:8080/status.php; then
+          PHP_PID=$!
+          echo "${PHP_PID}" > /tmp/php-server.pid
+          timeout 15 bash -c 'until curl -sf -o /dev/null http://localhost:8080/status.php; do sleep 0.5; done' || {
             echo "::error::PHP built-in server failed to come up on :8080."
             cat /tmp/php-server.log
             exit 1
-          fi
-          echo "PHP built-in server alive (pid=$(cat /tmp/php-server.pid))."
+          }
+          echo "PHP built-in server alive (pid=${PHP_PID})."
 
       - name: Seed test data
         if: inputs.playwright-seed-command != ''
