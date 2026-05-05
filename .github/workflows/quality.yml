@@ -1048,21 +1048,6 @@ jobs:
           cd ../../
           php occ app:enable ${{ inputs.app-name }}
 
-      - name: Start PHP built-in server
-        run: |
-          cd server
-          php -S 0.0.0.0:8080 &
-          sleep 3
-          curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/status.php || echo "Server not ready"
-
-      - name: Seed test data
-        if: inputs.playwright-seed-command != ''
-        run: |
-          cd server
-          echo "Running seed command: ${{ inputs.playwright-seed-command }}"
-          eval ${{ inputs.playwright-seed-command }}
-          echo "Seed command completed."
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -1111,31 +1096,37 @@ jobs:
           fi
           echo "Found $TESTS Playwright test file(s) in $TEST_PATH."
 
-      - name: Verify PHP server still alive (restart if dead)
-        # The "Start PHP built-in server" step backgrounds `php -S` and
-        # exits; subsequent steps run in fresh shells. The orphaned
-        # process is normally reparented to init and survives, but on
-        # busy CI runners we've seen it gone by the time specs run
-        # (especially after a multi-minute frontend build). Probe for a
-        # live server here and re-start when needed so spec-phase
-        # navigations always reach a working backend.
+      - name: Start PHP built-in server
+        # Started AFTER the slow setup phases (npm ci, playwright install,
+        # frontend build) so the server is not idle for minutes — that's
+        # what was causing the orphaned `php -S` process to disappear by
+        # the time specs ran.
+        #
+        # Polling loop (per @WilcoLouwerse's review): `curl -sf` returns
+        # failure immediately on connection refused — `-m 5` only applies
+        # AFTER the TCP connection is established. A single probe after
+        # `sleep 3` therefore fails spuriously when the runner is noisy
+        # and `php -S` hasn't bound :8080 yet. Poll every 0.5s with a
+        # 15s hard cap so the fail-fast path is honest.
         run: |
           cd server
-          if ! curl -sf -o /dev/null -m 5 http://localhost:8080/status.php; then
-            echo "::warning::PHP server not reachable at :8080 — re-starting."
-            # Kill any stale `php -S` processes that are stuck on the
-            # port without serving requests.
-            pkill -f "php -S 0.0.0.0:8080" || true
-            sleep 1
-            nohup php -S 0.0.0.0:8080 > /tmp/php-server.log 2>&1 &
-            disown
-            sleep 3
-            curl -sf -o /dev/null -m 5 http://localhost:8080/status.php \
-              || (echo "::error::PHP server still not reachable after re-start." && cat /tmp/php-server.log && exit 1)
-            echo "PHP server re-started successfully."
-          else
-            echo "PHP server is alive."
-          fi
+          php -S 0.0.0.0:8080 > /tmp/php-server.log 2>&1 &
+          PHP_PID=$!
+          echo "${PHP_PID}" > /tmp/php-server.pid
+          timeout 15 bash -c 'until curl -sf -o /dev/null http://localhost:8080/status.php; do sleep 0.5; done' || {
+            echo "::error::PHP built-in server failed to come up on :8080."
+            cat /tmp/php-server.log
+            exit 1
+          }
+          echo "PHP built-in server alive (pid=${PHP_PID})."
+
+      - name: Seed test data
+        if: inputs.playwright-seed-command != ''
+        run: |
+          cd server
+          echo "Running seed command: ${{ inputs.playwright-seed-command }}"
+          eval ${{ inputs.playwright-seed-command }}
+          echo "Seed command completed."
 
       - name: Run Playwright tests
         run: |
