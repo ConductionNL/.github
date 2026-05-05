@@ -207,6 +207,55 @@ Review one or more GitHub Pull Requests. Fetches the diff, detects prior reviews
 
 ---
 
+### `/report-out`
+
+**Phase:** Reporting / End-of-day
+
+Daily end-of-day report. Scans local git repos for the user's commits and uncommitted changes, auto-discovers GitHub issues and PRs the user has interacted with today, surfaces actionable suggestions (PRs to create, issues to close, follow-up issues to draft), optionally applies them with confirmation, and ends with a single copy-paste-ready Dutch report-out message for Slack.
+
+**Usage:**
+```
+/report-out             # today
+/report-out 2026-04-30  # a specific date
+```
+
+**Hydra-specific scoping:** when invoked from inside the Hydra repo, the skill **always scans Hydra itself**. By default it excludes `wordpress-docker` (if present) and `claude-code-config` (if present). The wordpress-docker variant of this skill self-excludes; the Hydra variant does not.
+
+**What it does:**
+1. Resolves identity dynamically — `git config user.name`, `gh api user --jq .login`, `$HOME` (no hardcoded paths or usernames)
+2. Asks for any additional context to consider (start gate)
+3. Confirms scan scope (Hydra always included; default excludes `wordpress-docker` and `claude-code-config`)
+4. Discovers all local git repos (depth ≤ 6, skips `.local/share`, `.cache`, `node_modules`, `.nvm`, `vendor`)
+5. Scans each repo for today's commits (filtered by `git config user.name`, falls back to email) and uncommitted changes
+6. Auto-discovers GitHub interactions via `gh search prs/issues --author @me --updated >=$DATE`, dedups, classifies into created/merged/commented buckets
+7. **Detects branches with today's commits but no open PR** — flags each as a `→ suggest creating PR` candidate, skipping default branches (`main`/`master`/`development`/`beta`/`staging`) and branches whose PR was just merged today
+8. **Detects issue lifecycle hints** — tags issues as `close-suggested` (all linked PRs merged + user posted today), `closing-trailer-detected` (Dutch closing trailer in last 24h), `stale-and-busy` (>5 days old + >10 comments + open + no closing-trailer in last 7 days), or `needs-followup` (stale-and-busy >14 days)
+9. Shows the overview and asks what to do next (tracking issues / PR updates / both / skip-to-finale)
+10. **Tracking-issue updates**: before posting a new comment, checks for existing comments by the user within the last 24 hours; offers Edit / New / Skip
+11. **Issue status suggestions**: for `close-suggested` and `closing-trailer-detected`, asks Yes (completed) / Yes (not_planned) / Add label / Skip — only patches state after explicit approval
+12. **Follow-up issue suggestions**: for `stale-and-busy` and `needs-followup`, drafts a follow-up issue body (`Volgt op #N`, summarizes done + open work) and offers to create it; can also post a closing-trailer on the parent pointing to the new follow-up
+13. **Standalone new-issue prompt**: once per run, asks if today's work surfaced an insight that warrants its own new tracking issue (not a comment on an existing one)
+14. **PR updates**: prefers extending existing description bullets over adding new ones; uses `gh api ... -X PATCH` (never `gh pr edit`)
+15. **Uncommitted-changes handling**: for each repo with uncommitted files, lists them (modified/staged/untracked) and asks Commit (drafted message) / Commit (user-provided) / Stash WIP / Skip. After a successful commit, offers a separate Push prompt that respects the project's git-push authorization phrase. Never auto-commits; never uses `--no-verify` without explicit authorization.
+16. **PR creation suggestions**: for orphan branches, offers to delegate to `/create-pr` (recommended) or take a "quick PR via API" path that requires explicit push authorization
+17. Asks for any closing context (end gate)
+18. Produces a single copy-paste-ready Dutch report-out message in a fenced markdown block — heading is just `🗓️ Report out` (no day/date — Slack adds the timestamp)
+
+**Heuristic thresholds** (tunable via `learnings.md`):
+- 5 days + 10 comments → suggest follow-up
+- 14 days → upgrade to `needs-followup`
+- 24-hour comment window → offer Edit instead of New
+
+**Tracking issues:** uses dynamic discovery via `gh search` plus an optional saved mapping at `$HOME/.claude/report-out/tracking-issues.json`. The mapping file is per-user and not committed to any repo.
+
+**Guardrails:** Never posts, patches, creates, or closes without `AskUserQuestion` confirmation. Never `git push`/`commit` without explicit authorization phrase. Filter strictly to PRs the user authored or merged — team members' PRs do not appear in the report. Default branches never get PR suggestions. Dismissed suggestions are not re-surfaced in the same run.
+
+**Maturity:** L6 (9 evals, learnings.md with consolidation pipeline). See `hydra/.claude/skills/report-out/SKILL.md`.
+
+**Requires:** `gh` CLI authenticated (`gh auth login`), `git` configured with `user.name` and `user.email`.
+
+---
+
 ### `/verify-global-settings-version`
 
 **Phase:** Git / Delivery
@@ -415,3 +464,5 @@ Competitive analysis and ecosystem gap-finding workflow. For the complete refere
        ▼
 /opsx-archive           (complete & preserve)
 ```
+
+**End of day:** `/report-out` summarizes the day's commits and GitHub activity across local repos, optionally updates tracking-issue comments and open PR descriptions, and produces a copy-paste Dutch Slack message. Independent of the workflow chain above — run it whenever you want a daily wrap-up.
