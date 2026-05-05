@@ -134,11 +134,24 @@ After Bucket 2 is drained, Bucket 1 is empty on the next scan, and all code unit
 
 ## When the retrofit is done
 
-- `/opsx-verify {app}` succeeds without falling back to keyword search
-- `app_specs.retrofit` / `app_specs.retrofit_extensions` populated for the app's retrofit cohort
+Run `/opsx-verify --app {app}` and confirm a green report. App Mode is the canonical retrofit DoD audit — it walks every retrofit ghost change under `{app}/openspec/changes/archive/retrofit-*`, scans for dangling `@spec` paths, audits cohort frontmatter, validates naming convention, and prints a single pass/fail report. Do **not** use plain `/opsx-verify {change-name}` for this — that mode verifies a single (active) change against `openspec status`, which doesn't see archived retrofits.
+
+A retrofit is done when App Mode shows ✅ on every row of:
+
+- Retrofit ghost changes — all archived
+- Tasks completion — every retrofit's tasks all `[x]`
+- Dangling `@spec` paths — 0
+- Symlinks under `{app}/openspec/changes/` — 0
+- Naming convention — every retrofit folder matches `retrofit-{YYYY-MM-DD}-{descriptor}`
+- Cohort frontmatter — every retrofitted capability carries `retrofit:` or `retrofit_extensions:` on its master spec, in block-YAML form with bare REQ-IDs
+- Frontmatter format — block YAML, no inline lists, no full-text values
+
+Plus the workflow items that App Mode doesn't check:
+
 - Annotation-only PR + per-cluster reverse-spec PRs all merged
-- Bucket 3 issues triaged
+- Bucket 3 issues triaged (deferred / fixed / re-classified)
 - Bucket 4 follow-up issue opened
+- After all the above: re-run `python3 concurrentie-analyse/scripts/sync_spec_content.py {app}` so Specter's `app_specs.retrofit` / `app_specs.retrofit_extensions` columns are populated for every retrofitted capability
 
 ## Roll-out order
 
