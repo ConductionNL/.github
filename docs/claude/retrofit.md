@@ -109,6 +109,18 @@ ADR conformance issues are noise during retrofit but worth tracking. Open a foll
 - Prereq for the retrofit columns: `python3 concurrentie-analyse/scripts/migrate_app_specs_retrofit.py` (idempotent).
 - Retrofit specs are filterable via `/tender-status --retrofit-only` and `/readiness-report --retrofit-only`. They're necessarily lossy (capture observed behavior, not original intent) and warrant periodic re-review.
 
+## Documentation-only retrofits
+
+Not every retrofit ghost change adds new REQs. Three sub-patterns produce a ghost change without any spec delta — they are deliberate, supported, and **do not require cohort frontmatter** on the affected capabilities (the cohort flag is for tracking REQ provenance, not annotation provenance):
+
+| Pattern | When | Example |
+|---|---|---|
+| **Cross-capability annotation patch** | Bucket 2 cluster's methods turn out to map to *existing* REQs in *other* capabilities. The ghost change is one task per cross-cap reference; annotations point at those existing tasks. | `retrofit-{date}-b2b-crossrefs` — 33 tasks pointing across 15 sibling capabilities. |
+| **Private-helper inheritance** | Scanner couldn't follow the call chain into private helpers. Ghost change documents which existing parent task each helper belongs to. No new REQs. | `retrofit-{date}-schema-hooks` — 7 private helpers inherit parent annotate tasks 65/67/68/69. |
+| **Scanner misclassification cleanup** | Scanner placed methods under the wrong capability. Ghost change re-routes them to their actual home capabilities (whose REQs already cover the behavior). | `retrofit-{date}-tenant-isolation-audit` — 3 methods actually belong to `tenant-lifecycle` and `tenant-quotas`. |
+
+The proposal must explicitly say "no new REQs" / "no new REQs needed" / "no new REQs drafted" / "behaviors are fully covered" so `/opsx-verify --app` can detect the pattern. These ghost changes have no `specs/` folder.
+
 ## How Bucket 2 handles un-spec'd methods
 
 Bucket 2 is the whole reason retrofit is a three-step flow rather than one. `/opsx-annotate` deliberately does **not** touch methods without a REQ match — it would have nothing to point at. `/opsx-reverse-spec` handles those, one cluster at a time:
