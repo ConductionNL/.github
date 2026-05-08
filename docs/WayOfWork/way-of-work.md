@@ -50,9 +50,9 @@ Every project starts with a **kick-off**. If you haven't had one, ask for it —
 
 ## Further Reading
 
-- [Employee handbook](/docs/intro) — the quick-reference overview
-- [Organizational structure](organisation) — roles, responsibilities, team structure
-- [Way of working](way-of-working) — sprints, issue flow, code standards
-- [Release process](release-process) — branch model, versioning, deployment
-- [Onboarding](onboarding) — buddy system and getting started
-- [Customer support](customer-support) — support flow and complaints
+- [About this manual](about-this-manual.mdx) — meta-overview of the handbook itself
+- [Organizational structure](organisation.mdx) — roles, responsibilities, team structure
+- [Way of working](way-of-working.md) — sprints, issue flow, code standards
+- [Release process](release-process.md) — branch model, versioning, deployment
+- [Onboarding](onboarding.mdx) — buddy system and getting started
+- [Customer support](customer-support.md) — support flow and complaints

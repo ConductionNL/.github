@@ -16,11 +16,11 @@ These certifications mean that our processes, policies, and responsibilities are
 
 | Document | ISO Clause | Status |
 |---|---|---|
-| [Quality Policy](quality-policy) | ISO 9001:2015 §5.2 | Active |
-| [Information Security Policy](security-policy) | ISO 27001:2022 §5.2 | Active |
-| [Incident Reporting](incident-reporting) | ISO 27001:2022 A.6.8 / ISO 9001:2015 §10.2 | Active |
-| [Security Practices](security) | ISO 27001:2022 Annex A | Active |
-| [Privacy & AVG](privacy-policy) | AVG/GDPR, ISO 27001:2022 A.5.34 | Active |
+| [Quality Policy](quality-policy.md) | ISO 9001:2015 §5.2 | Active |
+| [Information Security Policy](security-policy.md) | ISO 27001:2022 §5.2 | Active |
+| [Incident Reporting](incident-reporting.md) | ISO 27001:2022 A.6.8 / ISO 9001:2015 §10.2 | Active |
+| [Security Practices](security.md) | ISO 27001:2022 Annex A | Active |
+| [Privacy & AVG](privacy-policy.md) | AVG/GDPR, ISO 27001:2022 A.5.34 | Active |
 
 ## The PDCA Cycle
 

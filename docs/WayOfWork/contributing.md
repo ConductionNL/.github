@@ -14,7 +14,7 @@ This document applies to all repositories under the [ConductionNL](https://githu
 
 ## Code of Conduct
 
-This project is governed by our [Code of Conduct(ion)](code-of-conduct). By participating, you are expected to uphold this code. Please report unacceptable behavior to [info@conduction.nl](mailto:info@conduction.nl).
+This project is governed by our [Code of Conduct(ion)](code-of-conduct.md). By participating, you are expected to uphold this code. Please report unacceptable behavior to [info@conduction.nl](mailto:info@conduction.nl).
 
 ## Ways to Contribute
 
@@ -180,7 +180,7 @@ Releases are fully automated via GitHub Actions on merge to `beta` (nightly) or 
 | `minor` | `1.0.0` → `1.1.0` |
 | `patch` (default) | `1.0.0` → `1.0.1` |
 
-See [Release Process](release-process) for full details.
+See [Release Process](release-process.md) for full details.
 
 ## Development Setup
 

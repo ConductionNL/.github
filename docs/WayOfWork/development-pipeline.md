@@ -83,6 +83,6 @@ Conduction is developing **Hydra**, an agentic spec-driven development pipeline 
 
 ## Further Reading
 
-- [Contributing guide](contributing) — PR checklist, commit conventions, DCO
-- [Release process](release-process) — full versioning and deployment details
-- [Spec-driven development](spec-driven-development) — how specs feed the pipeline
+- [Contributing guide](contributing.md) — PR checklist, commit conventions, DCO
+- [Release process](release-process.md) — full versioning and deployment details
+- [Spec-driven development](spec-driven-development.md) — how specs feed the pipeline
