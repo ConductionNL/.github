@@ -4,6 +4,13 @@ import Layout from '@theme/Layout';
 import { DetailHero } from '@conduction/docusaurus-preset/components';
 
 const ICONS = {
+  identity: (
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="9" r="3.2" />
+      <path d="M5.5 19c1.2-3 3.7-4.5 6.5-4.5s5.3 1.5 6.5 4.5" />
+      <path d="M4 4h3M17 4h3M4 20h3M17 20h3M4 4v3M20 4v3M4 17v3M20 17v3" />
+    </svg>
+  ),
   roadmap: (
     <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
       <path d="M4 7l5-2 6 2 5-2v12l-5 2-6-2-5 2z" />
@@ -44,6 +51,8 @@ const ICONS = {
 };
 
 const SECTIONS = [
+  { title: 'Identity', href: 'https://identity.conduction.nl/', icon: ICONS.identity,
+    blurb: 'Who Conduction is. Brand, voice, and visual identity for both our culture and our designs — the shared identity every (digital) employee carries.' },
   { title: 'Roadmap', href: '/ROADMAP/', icon: ICONS.roadmap,
     blurb: 'Approved direction for the Conduction app ecosystem. Next up, not yet planned as OpenSpec changes.' },
   { title: 'Claude workflow', href: '/claude/', icon: ICONS.claude,
@@ -60,25 +69,17 @@ const SECTIONS = [
 
 const HEX_CLIP = 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)';
 
-const HEX_GLYPH = (
-  <svg viewBox="0 0 32 32" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M8 12h16M8 16h16M8 20h10" />
-  </svg>
-);
-
 export default function Home() {
   return (
     <Layout
-      title="Conduction Docs"
-      description="Engineering, product, and ISO knowledge base for Conduction."
+      title="How We Work"
+      description="How Conduction operates — culture, roles, expectations, and the way our (digital) employees act."
     >
       <DetailHero
         background="cobalt"
-        title="Conduction Docs"
-        tagline="Engineering, product, and ISO knowledge base. Source markdown lives in the .github repo, served from /docs."
-        icon={HEX_GLYPH}
-        iconColor="var(--c-blue-cobalt)"
-        primaryCta={{ label: 'Open Claude workflow', href: '/claude/' }}
+        title="How We Work"
+        tagline="How Conduction operates — culture, roles, expectations, and the way our (digital) employees act."
+        primaryCta={{ label: 'Explore our identity', href: 'https://identity.conduction.nl/' }}
         secondaryCta={{ label: 'View on GitHub', href: 'https://github.com/ConductionNL/.github/tree/main/docs' }}
       />
 
