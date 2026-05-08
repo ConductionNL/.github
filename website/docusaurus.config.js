@@ -47,7 +47,7 @@ const config = createConfig({
 
   navbar: {
     items: [
-      { to: '/ROADMAP', label: 'Roadmap', position: 'left' },
+      { href: 'https://github.com/orgs/ConductionNL/projects/4', label: 'Roadmap', position: 'left' },
       { to: '/claude/', label: 'Claude workflow', position: 'left' },
       { to: '/iso/', label: 'ISO', position: 'left' },
       { href: 'https://www.conduction.nl/support/', label: 'Support', position: 'left' },
@@ -73,7 +73,7 @@ const config = createConfig({
       {
         title: 'Documentation',
         items: [
-          { label: 'Roadmap', to: '/ROADMAP' },
+          { label: 'Roadmap', href: 'https://github.com/orgs/ConductionNL/projects/4' },
           { label: 'Claude workflow', to: '/claude/' },
           { label: 'ISO compliance', to: '/iso/' },
         ],

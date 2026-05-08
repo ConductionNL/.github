@@ -48,8 +48,8 @@ const ICONS = {
 const SECTIONS = [
   { title: 'Identity', href: 'https://identity.conduction.nl/', icon: ICONS.identity,
     blurb: 'Who Conduction is. Brand, voice, and visual identity for both our culture and our designs — the shared identity every (digital) employee carries.' },
-  { title: 'Roadmap', href: '/ROADMAP/', icon: ICONS.roadmap,
-    blurb: 'Approved direction for the Conduction app ecosystem. Next up, not yet planned as OpenSpec changes.' },
+  { title: 'Roadmap', href: 'https://github.com/orgs/ConductionNL/projects/4', icon: ICONS.roadmap,
+    blurb: 'Where the Conduction app ecosystem is heading — tracked live on GitHub Projects. What’s next, what’s in flight, and what’s shipped, alongside the issues that drive each spec.' },
   { title: 'Claude workflow', href: '/claude/', icon: ICONS.claude,
     blurb: 'Spec-driven development with OpenSpec, GitHub Issues and Claude Code. Skills, commands, conventions, parallel agents.' },
   { title: 'ISO compliance', href: '/iso/', icon: ICONS.iso,
