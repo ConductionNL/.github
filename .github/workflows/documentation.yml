@@ -22,7 +22,10 @@ jobs:
   deploy:
     name: Deploy Documentation
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
+    # Deploy on direct pushes, scheduled rebuilds (cron-driven data
+    # refresh on conduction-website), and manual workflow_dispatch.
+    # PR runs still build but don't deploy.
+    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     permissions:
       contents: write
     steps:
@@ -37,7 +40,14 @@ jobs:
           node-version: ${{ inputs.node-version }}
 
       - name: Install dependencies and build
-        timeout-minutes: 5
+        timeout-minutes: 10
+        env:
+          # Pass the run-scoped token through so npm prebuild scripts
+          # that hit the GitHub API (e.g. conduction-website's nightly
+          # app-downloads fetch) authenticate and avoid 60-req/hr rate
+          # limits. Token is auto-scoped to the run, expires when the
+          # job ends.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cd ${{ inputs.source-folder }}
           rm -rf node_modules/.cache .docusaurus build
