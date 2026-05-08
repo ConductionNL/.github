@@ -47,6 +47,7 @@ const config = createConfig({
 
   navbar: {
     items: [
+      { to: '/WayOfWork/onboarding', label: 'Handbook', position: 'left' },
       { href: 'https://github.com/orgs/ConductionNL/projects/4', label: 'Roadmap', position: 'left' },
       { to: '/claude/', label: 'Claude workflow', position: 'left' },
       { to: '/iso/', label: 'ISO', position: 'left' },
@@ -83,13 +84,14 @@ const config = createConfig({
   },
 });
 
-/* docs/ is hand-written CommonMark with bare `<24h`, `<500`, `{sha}`,
-   `{app}` substrings that Docusaurus 3's default MDX parser misreads
-   as JSX. `format: 'md'` forces every doc to render as plain CommonMark,
-   so curly braces and angle brackets are literal text. createConfig()
-   doesn't pass the top-level `markdown` option through, so we set it
-   here. There are no .mdx files in docs/, so 'md' (vs 'detect') is
-   safe and the simplest fix. */
-config.markdown = { format: 'md' };
+/* docs/*.md files are hand-written CommonMark with bare `<24h`, `<500`,
+   `{sha}`, `{app}` substrings that Docusaurus 3's default MDX parser
+   misreads as JSX. `format: 'detect'` resolves per-extension: `.md`
+   stays CommonMark (curly braces and angle brackets are literal text)
+   while `.mdx` files in docs/WayOfWork/ (onboarding, organisation,
+   about-this-manual) opt in to MDX so they can use <Tabs>, <ToolList>,
+   etc. createConfig() doesn't pass the top-level `markdown` option
+   through, so we set it here. */
+config.markdown = { format: 'detect' };
 
 module.exports = config;

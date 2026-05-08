@@ -1,0 +1,36 @@
+{
+  "company": {
+    "name": "Conduction",
+    "github": "https://github.com/ConductionNL",
+    "website": "https://www.conduction.nl",
+    "linkedin": "https://www.linkedin.com/company/conduction-nl/"
+  },
+  "emails": {
+    "support": "support@conduction.nl",
+    "complaints": "klachten@conduction.nl",
+    "security": "security@conduction.nl",
+    "general": "info@conduction.nl"
+  },
+  "slack": {
+    "general": "#general",
+    "vacation": "#verlofaanvragen"
+  },
+  "schedule": {
+    "standup": "10:00",
+    "reportOut": "16:30",
+    "sickCallBefore": "09:00",
+    "retroAndPlanning": "Monday 09:00",
+    "sprintLength": "two weeks",
+    "vacationNotice": "2 weeks"
+  },
+  "tools": {
+    "onboarding": ["Google Workspace", "GitHub", "Jira", "Slack", "Passwork"],
+    "security": ["ESET", "NordLayer VPN", "BitLocker", "Passwork"],
+    "development": ["Docker", "PHPStorm", "GitKraken", "NodeJS", "Composer"]
+  },
+  "links": {
+    "passwork": "https://www.passwork.me/",
+    "nordlayer": "https://nordlayer.com/",
+    "eset": "https://www.eset.com/int/business/"
+  }
+}
