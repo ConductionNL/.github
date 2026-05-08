@@ -1,0 +1,10 @@
+# Docusaurus build artefacts
+build/
+.docusaurus/
+
+# Local env
+.env*
+
+# Editor
+.vscode/
+.idea/
