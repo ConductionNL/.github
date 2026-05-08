@@ -1,110 +1,112 @@
-import React, { useState } from 'react';
-import clsx from 'clsx';
+import React from 'react';
 import Link from '@docusaurus/Link';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Layout from '@theme/Layout';
-import Footer from '../components/Footer';
-import Socials from '../components/Socials';
-import ContactTeaser from '../components/Contact';
-import Hero from '../components/Hero';
-import CardsSection from '../components/CardsSection';
-import styles from './index.module.css';
 
-function WithWhom() {
-  return (
-    <section className={styles.sectionNeutral}>
-      <div className="container">
-        <h2 className={styles.sectionTitle}>Met wie doen we dat</h2>
-        <div className="row">
-          <div className={styles.withWhomImage + ' col'}>
-            <img src="/img/partners/vng.png" alt="VNG" />
-          </div>
-          <div className={styles.withWhomImage + ' col'}>
-            <img src="/img/partners/almere.png" alt="GemeenteAlmere" />
-          </div>
-          <div className={styles.withWhomImage + ' col'}>
-            <img src="/img/partners/denbosch.png" alt="Gemeente Den Bosch" />
-          </div>
-          <div className={styles.withWhomImage + ' col'}>
-            <img src="/img/partners/eindhoven.png" alt="Gemeente Eindhoven" />
-          </div>
-        </div>
-        <div className="row">
-          <div className={styles.withWhomImage + ' col'}>
-            <img src="/img/partners/io.webp" alt="IO" />
-          </div>
-          <div className={styles.withWhomImage + ' col'}>
-            <img src="/img/partners/rotterdam.png" alt="Gemeente Rotterdam" />
-          </div>
-          <div className={styles.withWhomImage + ' col'}>
-            <img src="/img/partners/tilburg.png" alt="Gemeente Tilburg" />
-          </div>
-          <div className={styles.withWhomImage + ' col'}>
-            <img src="/img/partners/utrecht.png" alt="Gemeente Utrecht" />
-          </div>
-        </div>
-        <div className="row">
-          <div className={styles.withWhomImage + ' col'}>
-            <img src="/img/partners/nextcloud.png" alt="Nextcloud" />
-          </div>
-          <div className={styles.withWhomImage + ' col'}>
-            <img src="/img/partners/yard.png" alt="YARD" />
-          </div>
-          <div className={styles.withWhomImage + ' col'}>
-            <img src="/img/partners/ritense.png" alt="RITENSE" />
-          </div>
-          <div className={styles.withWhomImage + ' col'}>
-            <img src="/img/partners/Shift2.png" alt="Shift2" />
-          </div>
-        </div>
-        <div className="row">
-          <div className={styles.withWhomImage + ' col'}>
-            <img src="/img/partners/open_webconcept.png" alt="Open Webconcept" />
-          </div>
-          <div className={styles.withWhomImage + ' col'}>
-            <img src="/img/partners/SIDN.png" alt="SIDN" />
-          </div>
-          <div className={styles.withWhomImage + ' col'}>
-            <img src="/img/partners/bct.png" alt="BCT" />
-          </div>
-          <div className={styles.withWhomImage + ' col'}>
-            <img src="/img/partners/hoorn.png" alt="Gemeente Hoorn" />
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
+const SECTIONS = [
+  {
+    title: 'Roadmap',
+    href: '/ROADMAP',
+    blurb: 'Approved direction for the Conduction app ecosystem. Items here are next, not yet planned as OpenSpec changes.',
+  },
+  {
+    title: 'Claude workflow',
+    href: '/claude/',
+    blurb: 'Spec-driven development with OpenSpec, GitHub Issues and Claude Code. Skills, commands, conventions, parallel agents.',
+  },
+  {
+    title: 'ISO compliance',
+    href: '/iso/',
+    blurb: 'Engineering pipeline mapped to ISO/IEC standards. Clause-by-clause coverage, with gaps surfaced as a first-class output.',
+  },
+  {
+    title: 'Services',
+    href: '/Services/CodebaseStewardship',
+    blurb: 'How Conduction maintains the open-source apps it ships. SLA, codebase stewardship, NL Design tokens.',
+  },
+  {
+    title: 'Catalog',
+    href: '/Catalogi',
+    blurb: 'The Conduction catalog: mission, core values, and the open-source software components that put them into practice.',
+  },
+  {
+    title: 'Products',
+    href: '/Products',
+    blurb: 'Productportfolio: SLA/SAAS, implementatie, training en consultancy.',
+  },
+];
+
 export default function Home() {
   const { siteConfig } = useDocusaurusContext();
-
-  const cards = [
-    {
-      title: 'Beheer',
-      description: 'Conduction beschikt over een brede kennis van Kubernetes en Haven. Wij helpen met het faciliteren en beheren van omgevingen en bieden ook ondersteuning bij implementaties. <Link to="/beheer">Lees meer</Link>',
-    },
-    {
-      title: 'Common Ground',
-      description: 'Conduction levert een actieve bijdrage aan het succes van Common Ground. Dit doen we door al onze techniek volgens de Common Ground principes te ontwikkelen. Wij adviseren overheden en leveranciers hoe zij succesvol kunnen zijn binnen Common Ground. <Link to="/common-ground">Lees meer</Link>'
-    },
-    {
-      title: 'Ontwikkelen',
-      description: 'Conduction ontwikkelt open source software voor overheden en leveranciers. Als idealistische partij werken wij aan innovatie van diensten en doen mee aan innovatieprojecten. <Link to="/projecten">Lees meer</Link>'
-    },
-  ]
   return (
-    <Layout title={siteConfig.title} description="Conduction | Public Tech">
-      <Hero title="Public Tech" subtitle="" paragraphs={['Wij zijn wat je zou kunnen noemen Digital Socials, wij ontwikkelen techniek volgens de Common Ground principes, waarbij mens en community centraal staan. Graag dragen we dan ook bij aan het ontwikkelen van digitale oplossingen voor maatschappelijke vraagstukken:','<strong>"Tech to serve people"</strong>', 'Meer weten over ons bedrijf? Plan een afspraak.']} image="/img/mainHero.png" button={{
-        title: 'Maak kennis met het bedrijf',
-        link: '/over-ons'
-      }}/>
-      <main>
-        <CardsSection title="Wat wij doen" image="/img/whatWeDo.png" cards={cards} cols={2}/>
-        <WithWhom />
-        <ContactTeaser />
-        <Socials />
-        <Footer />
+    <Layout
+      title={siteConfig.title}
+      description="Engineering, product, and ISO knowledge base for Conduction."
+    >
+      <main className="container" style={{ paddingBlock: '64px 96px' }}>
+        <header style={{ maxWidth: '720px', marginBottom: '48px' }}>
+          <p
+            style={{
+              fontFamily: 'var(--ff-mono, monospace)',
+              fontSize: '0.85rem',
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              color: 'var(--c-blue-cobalt, #25408F)',
+              marginBottom: '12px',
+            }}
+          >
+            docs.conduction.nl
+          </p>
+          <h1 style={{ marginBottom: '16px' }}>Conduction Docs</h1>
+          <p style={{ fontSize: '1.15rem', lineHeight: 1.6, opacity: 0.85 }}>
+            Engineering, product, and ISO knowledge base. Source markdown lives at{' '}
+            <Link to="https://github.com/ConductionNL/.github/tree/main/docs">
+              github.com/ConductionNL/.github/docs
+            </Link>
+            .
+          </p>
+        </header>
+
+        <section
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: '20px',
+          }}
+        >
+          {SECTIONS.map((s) => (
+            <Link
+              key={s.href}
+              to={s.href}
+              style={{
+                display: 'block',
+                padding: '24px',
+                borderRadius: '12px',
+                background: 'var(--ifm-card-background-color, #fff)',
+                border: '1px solid var(--ifm-color-emphasis-200, #e5e5e5)',
+                textDecoration: 'none',
+                color: 'inherit',
+                transition: 'transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.06)';
+                e.currentTarget.style.borderColor = 'var(--c-blue-cobalt, #25408F)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = '';
+                e.currentTarget.style.boxShadow = '';
+                e.currentTarget.style.borderColor = 'var(--ifm-color-emphasis-200, #e5e5e5)';
+              }}
+            >
+              <h2 style={{ fontSize: '1.25rem', marginBottom: '8px', marginTop: 0 }}>{s.title}</h2>
+              <p style={{ margin: 0, fontSize: '0.95rem', lineHeight: 1.5, opacity: 0.8 }}>
+                {s.blurb}
+              </p>
+            </Link>
+          ))}
+        </section>
       </main>
     </Layout>
   );
-} 
+}
