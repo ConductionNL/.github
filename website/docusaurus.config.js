@@ -50,7 +50,8 @@ const config = createConfig({
       { to: '/ROADMAP', label: 'Roadmap', position: 'left' },
       { to: '/claude/', label: 'Claude workflow', position: 'left' },
       { to: '/iso/', label: 'ISO', position: 'left' },
-      { to: '/Services/CodebaseStewardship', label: 'Services', position: 'left' },
+      { href: 'https://www.conduction.nl/support/', label: 'Support', position: 'left' },
+      { href: 'https://www.conduction.nl/apps/', label: 'Products', position: 'left' },
       {
         href: 'https://github.com/ConductionNL/.github',
         label: 'GitHub',
@@ -75,7 +76,6 @@ const config = createConfig({
           { label: 'Roadmap', to: '/ROADMAP' },
           { label: 'Claude workflow', to: '/claude/' },
           { label: 'ISO compliance', to: '/iso/' },
-          { label: 'Catalog', to: '/Catalogi' },
         ],
       },
       ...baseFooterLinks().filter((c) => c.title === 'Conduction' || c.title === 'Documentatie'),

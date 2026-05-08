@@ -29,16 +29,11 @@ const ICONS = {
       <path d="M9 12l2 2 4-4" />
     </svg>
   ),
-  services: (
+  support: (
     <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="3" />
-      <path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2" />
-    </svg>
-  ),
-  catalog: (
-    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 4h6a3 3 0 0 1 3 3v13a2 2 0 0 0-2-2H4z" />
-      <path d="M20 4h-6a3 3 0 0 0-3 3v13a2 2 0 0 1 2-2h7z" />
+      <path d="M18 8a6 6 0 1 0-12 0v4a3 3 0 0 0 3 3h1v-7H7" />
+      <path d="M18 8v4a3 3 0 0 1-3 3h-1v-7h3" />
+      <path d="M14 19h-1.5a2 2 0 0 1-2-2V15" />
     </svg>
   ),
   products: (
@@ -59,12 +54,10 @@ const SECTIONS = [
     blurb: 'Spec-driven development with OpenSpec, GitHub Issues and Claude Code. Skills, commands, conventions, parallel agents.' },
   { title: 'ISO compliance', href: '/iso/', icon: ICONS.iso,
     blurb: 'Engineering pipeline mapped to ISO/IEC standards. Clause-by-clause coverage, with gaps surfaced as a first-class output.' },
-  { title: 'Services', href: '/Services/CodebaseStewardship/', icon: ICONS.services,
-    blurb: 'How Conduction maintains the open-source apps it ships. SLA, codebase stewardship, NL Design tokens.' },
-  { title: 'Catalog', href: '/Catalogi/', icon: ICONS.catalog,
-    blurb: 'The Conduction catalog: mission, core values, and the open-source software components that put them into practice.' },
-  { title: 'Products', href: '/Products/', icon: ICONS.products,
-    blurb: 'Productportfolio: SLA/SAAS, implementatie, training en consultancy.' },
+  { title: 'Support', href: 'https://www.conduction.nl/support/', icon: ICONS.support,
+    blurb: 'How we keep customers running. SLA, incident response, and codebase stewardship — see the support plans on conduction.nl.' },
+  { title: 'Products', href: 'https://www.conduction.nl/apps/', icon: ICONS.products,
+    blurb: 'The Conduction app portfolio — see what we build and ship at conduction.nl/apps.' },
 ];
 
 const HEX_CLIP = 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)';
