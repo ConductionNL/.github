@@ -1,0 +1,636 @@
+<!doctype html>
+<html lang="en" dir="ltr" class="docs-wrapper plugin-docs plugin-id-default docs-version-current docs-doc-page docs-doc-id-claude/commands" data-has-hydrated="false">
+<head>
+<meta charset="UTF-8">
+<meta name="generator" content="Docusaurus v3.10.1">
+<title data-rh="true">Command Reference | Conduction Docs</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:url" content="https://docs.conduction.nl/claude/commands/"><meta data-rh="true" property="og:locale" content="en"><meta data-rh="true" name="docusaurus_locale" content="en"><meta data-rh="true" name="docsearch:language" content="en"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="Command Reference | Conduction Docs"><meta data-rh="true" name="description" content="Complete reference for all commands available in the spec-driven development workflow. Commands are organized by domain — click through to the detailed reference for each area."><meta data-rh="true" property="og:description" content="Complete reference for all commands available in the spec-driven development workflow. Commands are organized by domain — click through to the detailed reference for each area."><link data-rh="true" rel="icon" href="/img/favicon.svg"><link data-rh="true" rel="canonical" href="https://docs.conduction.nl/claude/commands/"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/claude/commands/" hreflang="en"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/claude/commands/" hreflang="x-default"><link data-rh="true" rel="stylesheet" href="/lib/canal-footer.css"><link data-rh="true" rel="stylesheet" href="/lib/kade-cyclist.css"><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Claude Code Developer Guide","item":"https://docs.conduction.nl/claude/"},{"@type":"ListItem","position":2,"name":"Command Reference","item":"https://docs.conduction.nl/claude/commands"}]}</script><link rel="stylesheet" href="/assets/css/styles.85005906.css">
+<script src="/assets/js/runtime~main.9ef72528.js" defer="defer"></script>
+<script src="/assets/js/main.ee9d83f1.js" defer="defer"></script>
+</head>
+<body>
+<svg style="display: none;"><defs>
+<symbol id="theme-svg-external-link" viewBox="0 0 24 24"><path fill="currentColor" d="M21 13v10h-21v-19h12v2h-10v15h17v-8h2zm3-12h-10.988l4.035 4-6.977 7.07 2.828 2.828 6.977-7.07 4.125 4.172v-11z"/></symbol>
+</defs></svg>
+<script>!function(){var t=function(){try{return new URLSearchParams(window.location.search).get("docusaurus-theme")}catch(t){}}()||function(){try{return window.localStorage.getItem("theme")}catch(t){}}();document.documentElement.setAttribute("data-theme",t||(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")),document.documentElement.setAttribute("data-theme-choice",t||"system")}(),function(){try{const c=new URLSearchParams(window.location.search).entries();for(var[t,e]of c)if(t.startsWith("docusaurus-data-")){var a=t.replace("docusaurus-data-","data-");document.documentElement.setAttribute(a,e)}}catch(t){}}()</script><div id="__docusaurus"><div role="region" aria-label="Skip to main content"><a class="skipToContent_fXgn" href="#__docusaurus_skipToContent_fallback">Skip to main content</a></div><nav class="navbar nav_MuJ0" role="navigation" aria-label="Main"><div class="left__6eY"><a class="wordmark_mhs1" href="/">Conduction Docs</a><div class="links_cXJT"><a class="link_CwQh" href="/ROADMAP/">Roadmap</a><a class="link_CwQh" href="/claude/">Claude workflow</a><a class="link_CwQh" href="/iso/">ISO</a><a class="link_CwQh" href="/Services/CodebaseStewardship/">Services</a></div></div><div class="ctas_jpo4"><a href="https://github.com/ConductionNL/.github" class="ghost_SGJf" target="_blank" rel="noopener noreferrer">GitHub</a></div></nav><div id="__docusaurus_skipToContent_fallback" class="theme-layout-main main-wrapper mainWrapper_z2l0"><div class="docsWrapper_hBAB"><button aria-label="Scroll back to top" class="clean-btn theme-back-to-top-button backToTopButton_sjWU" type="button"></button><div class="docRoot_UBD9"><aside class="theme-doc-sidebar-container docSidebarContainer_YfHR"><div class="sidebarViewport_aRkj"><div class="sidebar_njMd"><nav aria-label="Docs sidebar" class="menu thin-scrollbar menu_SIkG"><ul class="theme-doc-sidebar-menu menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-1 menu__list-item"><a class="menu__link" href="/Catalogi/"><span title="Welcome to the Conduction Catalog" class="linkLabel_WmDU">Welcome to the Conduction Catalog</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-1 menu__list-item"><a class="menu__link" href="/Products/"><span title="Overzicht van Conduction-producten" class="linkLabel_WmDU">Overzicht van Conduction-producten</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-1 menu__list-item"><a class="menu__link" href="/ROADMAP/"><span title="Conduction Product Roadmap" class="linkLabel_WmDU">Conduction Product Roadmap</span></a></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/Services/CodebaseStewardship/"><span title="Services" class="categoryLinkLabel_W154">Services</span></a></div></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-1 menu__list-item"><a class="menu__link" href="/archive/"><span title="ConductionNL Repository Archive Plan" class="linkLabel_WmDU">ConductionNL Repository Archive Plan</span></a></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--active" href="/claude/"><span title="Claude Code Developer Guide" class="categoryLinkLabel_W154">Claude Code Developer Guide</span></a><button aria-label="Collapse sidebar category &#x27;Claude Code Developer Guide&#x27;" aria-expanded="true" type="button" class="clean-btn menu__caret"></button></div><ul class="menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/claude/app-lifecycle/"><span title="App Lifecycle — Creating and Managing Nextcloud Apps" class="linkLabel_WmDU">App Lifecycle — Creating and Managing Nextcloud Apps</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/claude/commands-openspec/"><span title="OpenSpec Command Reference" class="linkLabel_WmDU">OpenSpec Command Reference</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/claude/commands-tender/"><span title="Tender &amp; Ecosystem Intelligence Commands" class="linkLabel_WmDU">Tender &amp; Ecosystem Intelligence Commands</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link menu__link--active" aria-current="page" tabindex="0" href="/claude/commands/"><span title="Command Reference" class="linkLabel_WmDU">Command Reference</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/claude/docker/"><span title="Docker Environment" class="linkLabel_WmDU">Docker Environment</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/claude/frontend-standards/"><span title="Frontend Standards" class="linkLabel_WmDU">Frontend Standards</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/claude/getting-started/"><span title="Getting Started" class="linkLabel_WmDU">Getting Started</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/claude/global-claude-settings/"><span title="Global Claude Code settings (~/.claude)" class="linkLabel_WmDU">Global Claude Code settings (~/.claude)</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/claude/local-llm/"><span title="Local LLM Setup (Ollama + Qwen)" class="linkLabel_WmDU">Local LLM Setup (Ollama + Qwen)</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/claude/parallel-agents/"><span title="Parallel Agents &amp; Subscription Cap" class="linkLabel_WmDU">Parallel Agents &amp; Subscription Cap</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/claude/playwright-setup/"><span title="Playwright MCP Browser Setup" class="linkLabel_WmDU">Playwright MCP Browser Setup</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/claude/retrofit/"><span title="Retrofit Playbook — bringing legacy apps under ADR-003&#x27;s @spec convention" class="linkLabel_WmDU">Retrofit Playbook — bringing legacy apps under ADR-003&#x27;s @spec convention</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/claude/skill-checklist/"><span title="Skill Checklist" class="linkLabel_WmDU">Skill Checklist</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/claude/skill-evals/"><span title="Skill Evaluation &amp; Measurement Guide" class="linkLabel_WmDU">Skill Evaluation &amp; Measurement Guide</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/claude/skill-patterns/"><span title="Skill Patterns &amp; Subfolder Guide" class="linkLabel_WmDU">Skill Patterns &amp; Subfolder Guide</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/claude/testing/"><span title="Testing Reference" class="linkLabel_WmDU">Testing Reference</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/claude/walkthrough/"><span title="End-to-End Walkthrough" class="linkLabel_WmDU">End-to-End Walkthrough</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/claude/workflow/"><span title="Spec-Driven Development Workflow" class="linkLabel_WmDU">Spec-Driven Development Workflow</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/claude/workstation-setup/"><span title="Workstation Setup" class="linkLabel_WmDU">Workstation Setup</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/claude/writing-adrs/"><span title="Writing ADRs for AI Agents" class="linkLabel_WmDU">Writing ADRs for AI Agents</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/claude/writing-docs/"><span title="Writing Documentation" class="linkLabel_WmDU">Writing Documentation</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/claude/writing-skills/"><span title="Writing Skills" class="linkLabel_WmDU">Writing Skills</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/claude/writing-specs/"><span title="Writing Specs" class="linkLabel_WmDU">Writing Specs</span></a></li></ul></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist" href="/iso/"><span title="ISO Compliance Documentation" class="categoryLinkLabel_W154">ISO Compliance Documentation</span></a><button aria-label="Expand sidebar category &#x27;ISO Compliance Documentation&#x27;" aria-expanded="false" type="button" class="clean-btn menu__caret"></button></div></li></ul></nav></div></div></aside><main class="docMainContainer_TBSr"><div class="container padding-top--md padding-bottom--lg"><div class="row"><div class="col docItemCol_VOVn"><div class="docItemContainer_Djhp"><article><nav class="theme-doc-breadcrumbs breadcrumbsContainer_Z_bl" aria-label="Breadcrumbs"><ul class="breadcrumbs"><li class="breadcrumbs__item"><a aria-label="Home page" class="breadcrumbs__link" href="/"><svg viewBox="0 0 24 24" class="breadcrumbHomeIcon_YNFT"><path d="M10 19v-5h4v5c0 .55.45 1 1 1h3c.55 0 1-.45 1-1v-7h1.7c.46 0 .68-.57.33-.87L12.67 3.6c-.38-.34-.96-.34-1.34 0l-8.36 7.53c-.34.3-.13.87.33.87H5v7c0 .55.45 1 1 1h3c.55 0 1-.45 1-1z" fill="currentColor"></path></svg></a></li><li class="breadcrumbs__item"><a class="breadcrumbs__link" href="/claude/"><span>Claude Code Developer Guide</span></a></li><li class="breadcrumbs__item breadcrumbs__item--active"><span class="breadcrumbs__link">Command Reference</span></li></ul></nav><div class="tocCollapsible_ETCw theme-doc-toc-mobile tocMobile_ITEo"><button type="button" class="clean-btn tocCollapsibleButton_TO0P">On this page</button></div><div class="theme-doc-markdown markdown"><header><h1>Command Reference</h1></header>
+<p>Complete reference for all commands available in the spec-driven development workflow. Commands are organized by domain — click through to the detailed reference for each area.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="openspec-commands">OpenSpec Commands<a href="#openspec-commands" class="hash-link" aria-label="Direct link to OpenSpec Commands" title="Direct link to OpenSpec Commands" translate="no">​</a></h2>
+<p>Full spec-driven workflow: create changes, generate artifacts, implement, verify, and archive.</p>
+<p>For the complete reference, see <a class="" href="/claude/commands-openspec/">commands-openspec.md</a>.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Command</th><th>Phase</th><th>Description</th></tr></thead><tbody><tr><td><code>/opsx-new &lt;name&gt;</code></td><td>Spec</td><td>Start a new change</td></tr><tr><td><code>/opsx-ff</code></td><td>Spec</td><td>Fast-forward all artifacts (proposal → specs → design → tasks)</td></tr><tr><td><code>/opsx-continue</code></td><td>Spec</td><td>Create next artifact in dependency chain</td></tr><tr><td><code>/opsx-explore</code></td><td>Pre-spec</td><td>Investigate before starting a formal change</td></tr><tr><td><code>/opsx-apply</code></td><td>Implement</td><td>Implement tasks from plan.json</td></tr><tr><td><code>/opsx-verify</code></td><td>Review</td><td>Verify implementation against specs</td></tr><tr><td><code>/opsx-sync</code></td><td>Archive</td><td>Merge delta specs into main specs</td></tr><tr><td><code>/opsx-archive</code></td><td>Archive</td><td>Complete and preserve change</td></tr><tr><td><code>/opsx-bulk-archive</code></td><td>Archive</td><td>Archive multiple completed changes at once</td></tr><tr><td><code>/opsx-apply-loop</code></td><td>Full Lifecycle</td><td>Automated apply→verify loop in Docker container</td></tr><tr><td><code>/opsx-pipeline</code></td><td>Full Lifecycle</td><td>Parallel multi-change lifecycle (up to 5 agents)</td></tr><tr><td><code>/opsx-onboard</code></td><td>Setup</td><td>Overview of current OpenSpec setup</td></tr></tbody></table>
+<p><strong>Retrofit commands</strong> (bringing legacy apps under <a href="https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-003-backend.md" target="_blank" rel="noopener noreferrer" class="">ADR-003 §Spec traceability</a>): <code>/opsx-coverage-scan</code>, <code>/opsx-annotate</code>, <code>/opsx-reverse-spec</code> — see <a class="" href="/claude/retrofit/">retrofit.md</a> for the full playbook.</p>
+<p><strong>OpenSpec CLI</strong> (terminal commands, not slash commands): <code>openspec init</code>, <code>openspec list</code>, <code>openspec validate</code>, etc. — see <a class="" href="/claude/commands-openspec/#openspec-cli-commands">commands-openspec.md</a>.</p>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="app-management-commands">App Management Commands<a href="#app-management-commands" class="hash-link" aria-label="Direct link to App Management Commands" title="Direct link to App Management Commands" translate="no">​</a></h2>
+<p>Commands for creating, configuring, and maintaining Nextcloud apps: <code>/app-design</code> → <code>/app-create</code> → <code>/app-explore</code> → <code>/app-apply</code> → <code>/app-verify</code>.</p>
+<p>For the full lifecycle guide, see <a class="" href="/claude/app-lifecycle/">app-lifecycle.md</a>.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Command</th><th>Phase</th><th>Description</th></tr></thead><tbody><tr><td><code>/app-design</code></td><td>Design</td><td>Full upfront design — architecture, competitors, wireframes</td></tr><tr><td><code>/app-create</code></td><td>Setup</td><td>Bootstrap or onboard a Nextcloud app</td></tr><tr><td><code>/app-explore</code></td><td>Design</td><td>Think through goals, features, and ADRs</td></tr><tr><td><code>/app-apply</code></td><td>Configuration</td><td>Apply <code>app-config.json</code> to tracked files</td></tr><tr><td><code>/app-verify</code></td><td>Audit</td><td>Read-only check for config drift</td></tr><tr><td><code>/clean-env</code></td><td>Reset</td><td>Fully reset Docker development environment</td></tr></tbody></table>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="testing-commands">Testing Commands<a href="#testing-commands" class="hash-link" aria-label="Direct link to Testing Commands" title="Direct link to Testing Commands" translate="no">​</a></h2>
+<p>All testing commands — persona-based sweeps, perspective-based sweeps, single-agent tests, and test scenario management.</p>
+<p>For the complete reference, workflows, and when-to-use guidance, see <a class="" href="/claude/testing/">testing.md</a>.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Command</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>/test-counsel</code></td><td>Skill (8 agents)</td><td>Persona-based testing — all 8 personas in parallel</td></tr><tr><td><code>/test-app</code></td><td>Skill (1 or 6)</td><td>Perspective-based sweep (functional, UX, a11y, perf, security, API)</td></tr><tr><td><code>/feature-counsel</code></td><td>Skill (8 agents)</td><td>Pre-build spec analysis from 8 persona perspectives</td></tr><tr><td><code>/test-functional</code></td><td>Command (1 agent)</td><td>Feature correctness via GIVEN/WHEN/THEN</td></tr><tr><td><code>/test-api</code></td><td>Command (1 agent)</td><td>REST API endpoint testing</td></tr><tr><td><code>/test-accessibility</code></td><td>Command (1 agent)</td><td>WCAG 2.1 AA compliance</td></tr><tr><td><code>/test-performance</code></td><td>Command (1 agent)</td><td>Load times and API response</td></tr><tr><td><code>/test-security</code></td><td>Command (1 agent)</td><td>OWASP Top 10, roles, authorization</td></tr><tr><td><code>/test-regression</code></td><td>Command (1 agent)</td><td>Cross-feature regression</td></tr><tr><td><code>/test-persona-*</code></td><td>Command (1 agent)</td><td>Single-persona deep dive</td></tr><tr><td><code>/test-scenario-create</code></td><td>Command</td><td>Create a reusable test scenario</td></tr><tr><td><code>/test-scenario-run</code></td><td>Command</td><td>Execute test scenarios against live env</td></tr><tr><td><code>/test-scenario-edit</code></td><td>Command</td><td>Edit an existing test scenario</td></tr></tbody></table>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="team-role-commands">Team Role Commands<a href="#team-role-commands" class="hash-link" aria-label="Direct link to Team Role Commands" title="Direct link to Team Role Commands" translate="no">​</a></h2>
+<p>Specialist agents for focused perspectives on a change. For full details, see <a class="" href="/claude/workflow/#team-role-commands">workflow.md</a>.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Command</th><th>Role</th><th>Focus</th></tr></thead><tbody><tr><td><code>/team-architect</code></td><td>Architect</td><td>API design, data models, cross-app dependencies</td></tr><tr><td><code>/team-backend</code></td><td>Backend Developer</td><td>PHP implementation, entities, services, tests</td></tr><tr><td><code>/team-frontend</code></td><td>Frontend Developer</td><td>Vue components, state management, UX</td></tr><tr><td><code>/team-po</code></td><td>Product Owner</td><td>Business value, acceptance criteria, priority</td></tr><tr><td><code>/team-qa</code></td><td>QA Engineer</td><td>Test coverage, edge cases, regression risk</td></tr><tr><td><code>/team-reviewer</code></td><td>Code Reviewer</td><td>Standards, conventions, security, code quality</td></tr><tr><td><code>/team-sm</code></td><td>Scrum Master</td><td>Progress tracking, blockers, sprint health</td></tr></tbody></table>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="softwarecatalogus-commands-swc">Softwarecatalogus Commands (<code>/swc:*</code>)<a href="#softwarecatalogus-commands-swc" class="hash-link" aria-label="Direct link to softwarecatalogus-commands-swc" title="Direct link to softwarecatalogus-commands-swc" translate="no">​</a></h2>
+<p>Commands specific to the VNG Softwarecatalogus client project. See <code>Softwarecatalogus/</code> (never commit to this repo).</p>
+<hr>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="swc-test"><code>/swc-test</code><a href="#swc-test" class="hash-link" aria-label="Direct link to swc-test" title="Direct link to swc-test" translate="no">​</a></h3>
+<p><strong>Phase:</strong> Testing</p>
+<p>Run automated tests for the GEMMA Softwarecatalogus — API tests (Postman/Newman), browser tests (persona agents), or both.</p>
+<p><strong>Usage:</strong></p>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">/swc-test           # choose mode interactively</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">/swc-test api       # API tests only</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">/swc-test browser   # browser tests only</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">/swc-test personas  # all 8 persona agents</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">/swc-test all       # everything</span><br></div></code></pre></div></div>
+<hr>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="swc-update"><code>/swc-update</code><a href="#swc-update" class="hash-link" aria-label="Direct link to swc-update" title="Direct link to swc-update" translate="no">​</a></h3>
+<p><strong>Phase:</strong> Maintenance</p>
+<p>Sync GitHub issues from VNG-Realisatie/Softwarecatalogus, auto-generate acceptance criteria, and update test infrastructure to reflect current issue state.</p>
+<p><strong>Usage:</strong></p>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">/swc-update</span><br></div></code></pre></div></div>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="custom-conduction-commands">Custom Conduction Commands<a href="#custom-conduction-commands" class="hash-link" aria-label="Direct link to Custom Conduction Commands" title="Direct link to Custom Conduction Commands" translate="no">​</a></h2>
+<p>These commands are workspace-level and available from any project within <code>apps-extra/</code>. They extend OpenSpec with GitHub Issues integration.</p>
+<hr>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="create-pr"><code>/create-pr</code><a href="#create-pr" class="hash-link" aria-label="Direct link to create-pr" title="Direct link to create-pr" translate="no">​</a></h3>
+<p><strong>Phase:</strong> Git / Delivery</p>
+<p>Create a Pull Request from a branch in any repo. Handles the full flow interactively.</p>
+<p><strong>Usage:</strong></p>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">/create-pr</span><br></div></code></pre></div></div>
+<p><strong>What it does:</strong></p>
+<ol>
+<li class=""><strong>Selects the repository</strong> — scans for available git repos in the workspace, asks you to pick one (never assumes the current directory)</li>
+<li class=""><strong>Confirms the source branch</strong> — shows the current branch, lets you override</li>
+<li class=""><strong>Recommends a target branch</strong> based on the branching strategy; checks GitHub for an existing open PR on the same branch pair — if found, offers to view or update it instead</li>
+<li class=""><strong>Checks for uncommitted or unpushed changes</strong> — if any are found, offers to commit, stash, or continue; offers to push unpushed commits before continuing</li>
+<li class=""><strong>Verifies global settings version</strong> <em>(.github repo only)</em> — delegates to <code>/verify-global-settings-version</code>; pauses and offers a fix if a VERSION bump is missing</li>
+<li class=""><strong>Discovers CI checks from <code>.github/workflows/</code></strong> — reads the repo&#x27;s workflow files to determine exactly which checks CI will run, then mirrors them locally (never hardcodes a list)</li>
+<li class=""><strong>Installs missing dependencies</strong> (<code>vendor/</code>, <code>node_modules/</code>) if needed before running checks</li>
+<li class=""><strong>Runs all discovered checks</strong> — nothing skipped; slow checks (e.g. test suites) ask for confirmation first; shows a pass/fail table when done</li>
+<li class=""><strong>Reads all commits and diffs</strong> on the branch to draft a PR title and description from the actual changes</li>
+<li class=""><strong>Shows the draft in chat</strong> for review — you can ask to change or shorten it; the loop repeats until you approve</li>
+<li class=""><strong>Pushes the branch and creates the PR</strong> via <code>gh pr create</code></li>
+<li class="">Reports the PR URL and next steps</li>
+</ol>
+<p><strong>Branching strategy:</strong></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Source</th><th>Recommended target</th></tr></thead><tbody><tr><td><code>feature/*</code>, <code>bugfix/*</code></td><td><code>development</code></td></tr><tr><td><code>development</code></td><td><code>beta</code></td></tr><tr><td><code>beta</code></td><td><code>main</code></td></tr><tr><td><code>hotfix/*</code></td><td><code>main</code> (or <code>beta</code>/<code>development</code>)</td></tr></tbody></table>
+<p><strong>Model:</strong> Checked at run time — the command reads your active model from context and stops automatically if you&#x27;re on Haiku (or anything weaker than Sonnet). Involves parsing CI workflows, detecting branch-protection rules, and reasoning about code diffs where mistakes have real consequences. <strong>Sonnet</strong> for most PRs. <strong>Opus</strong> when the repo uses reusable CI workflows, branch-protection rulesets, or a complex branching strategy — that&#x27;s where it pays off most.</p>
+<p><strong>Requires:</strong> <code>gh</code> CLI authenticated (<code>gh auth login</code>)</p>
+<hr>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="review-pr"><code>/review-pr</code><a href="#review-pr" class="hash-link" aria-label="Direct link to review-pr" title="Direct link to review-pr" translate="no">​</a></h3>
+<p><strong>Phase:</strong> Delivery / Code Review</p>
+<p>Review one or more GitHub Pull Requests. Fetches the diff, detects prior reviews (skips if nothing has changed since last review), asks for strictness level, posts inline findings with emoji severity markers (🔴 blocker / 🟡 warning / 🟢 suggestion), and submits a formal APPROVE or REQUEST_CHANGES decision.</p>
+<p><strong>Usage:</strong></p>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">/review-pr 123                                               # single PR, infer repo from git remote</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">/review-pr https://github.com/org/repo/pull/123             # single PR, explicit URL</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">/review-pr 123 456                                           # batch: two PRs reviewed in parallel</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">/review-pr https://github.com/org/repo/pull/123 https://github.com/org/repo/pull/456</span><br></div></code></pre></div></div>
+<p><strong>Strictness modes:</strong></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Mode</th><th>Use when</th></tr></thead><tbody><tr><td><strong>Quick</strong></td><td>Hotfix or trivial change — check for obvious blockers only</td></tr><tr><td><strong>Standard</strong></td><td>Everyday feature PR — balanced depth</td></tr><tr><td><strong>Thorough</strong></td><td>Large or complex PR — full analysis</td></tr><tr><td><strong>Strict</strong></td><td>Security-sensitive code (auth, RBAC, CI) — maximum depth; auto-suggested when sensitive code is detected</td></tr></tbody></table>
+<p><strong>What it does:</strong></p>
+<ol>
+<li class=""><strong>Detects re-reviews</strong> — checks if anything has changed since your last review; skips if not</li>
+<li class=""><strong>Classifies sensitivity</strong> — auto-detects auth/RBAC/CI code and recommends Strict mode</li>
+<li class=""><strong>Asks strictness</strong> — Quick, Standard, Thorough, or Strict</li>
+<li class=""><strong>Analyzes the diff</strong> — runs in parallel sub-agents for batch mode; looks for bugs, null-safety issues, SQL parity, test coverage gaps, and more</li>
+<li class=""><strong>Posts inline comments</strong> — one finding per comment, severity marked with 🔴/🟡/🟢; never bundles multiple findings in one comment</li>
+<li class=""><strong>Checks CI</strong> — blocks APPROVE if required CI checks are failing</li>
+<li class=""><strong>Submits formal review</strong> — APPROVE (no blockers) or REQUEST_CHANGES (one or more 🔴 findings)</li>
+<li class=""><strong>Resolves addressed threads</strong> — replies &quot;✅ Resolved in {sha}&quot; to previously raised comments now fixed, and marks threads closed</li>
+</ol>
+<p><strong>Model:</strong> Requires Sonnet or Opus — stops immediately on Haiku. Batch mode lets you choose the model for parallel analysis agents (Sonnet default, Opus for security-sensitive batches).</p>
+<p><strong>Requires:</strong> <code>gh</code> CLI authenticated (<code>gh auth login</code>)</p>
+<hr>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="report-out"><code>/report-out</code><a href="#report-out" class="hash-link" aria-label="Direct link to report-out" title="Direct link to report-out" translate="no">​</a></h3>
+<p><strong>Phase:</strong> Reporting / End-of-day</p>
+<p>Daily end-of-day report. Scans local git repos for the user&#x27;s commits and uncommitted changes, auto-discovers GitHub issues and PRs the user has interacted with today, surfaces actionable suggestions (PRs to create, issues to close, follow-up issues to draft), optionally applies them with confirmation, and ends with a single copy-paste-ready Dutch report-out message for Slack.</p>
+<p><strong>Usage:</strong></p>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">/report-out             # today</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">/report-out 2026-04-30  # a specific date</span><br></div></code></pre></div></div>
+<p><strong>Hydra-specific scoping:</strong> when invoked from inside the Hydra repo, the skill <strong>always scans Hydra itself</strong>. By default it excludes <code>wordpress-docker</code> (if present) and <code>claude-code-config</code> (if present). The wordpress-docker variant of this skill self-excludes; the Hydra variant does not.</p>
+<p><strong>What it does:</strong></p>
+<ol>
+<li class="">Resolves identity dynamically — <code>git config user.name</code>, <code>gh api user --jq .login</code>, <code>$HOME</code> (no hardcoded paths or usernames)</li>
+<li class="">Asks for any additional context to consider (start gate)</li>
+<li class="">Confirms scan scope (Hydra always included; default excludes <code>wordpress-docker</code> and <code>claude-code-config</code>)</li>
+<li class="">Discovers all local git repos (depth ≤ 6, skips <code>.local/share</code>, <code>.cache</code>, <code>node_modules</code>, <code>.nvm</code>, <code>vendor</code>)</li>
+<li class="">Scans each repo for today&#x27;s commits (filtered by <code>git config user.name</code>, falls back to email) and uncommitted changes</li>
+<li class="">Auto-discovers GitHub interactions via <code>gh search prs/issues --author @me --updated &gt;=$DATE</code>, dedups, classifies into created/merged/commented buckets</li>
+<li class=""><strong>Detects branches with today&#x27;s commits but no open PR</strong> — flags each as a <code>→ suggest creating PR</code> candidate, skipping default branches (<code>main</code>/<code>master</code>/<code>development</code>/<code>beta</code>/<code>staging</code>) and branches whose PR was just merged today</li>
+<li class=""><strong>Detects issue lifecycle hints</strong> — tags issues as <code>close-suggested</code> (all linked PRs merged + user posted today), <code>closing-trailer-detected</code> (Dutch closing trailer in last 24h), <code>stale-and-busy</code> (&gt;5 days old + &gt;10 comments + open + no closing-trailer in last 7 days), or <code>needs-followup</code> (stale-and-busy &gt;14 days)</li>
+<li class="">Shows the overview and asks what to do next (tracking issues / PR updates / both / skip-to-finale)</li>
+<li class=""><strong>Tracking-issue updates</strong>: before posting a new comment, checks for existing comments by the user within the last 24 hours; offers Edit / New / Skip</li>
+<li class=""><strong>Issue status suggestions</strong>: for <code>close-suggested</code> and <code>closing-trailer-detected</code>, asks Yes (completed) / Yes (not_planned) / Add label / Skip — only patches state after explicit approval</li>
+<li class=""><strong>Follow-up issue suggestions</strong>: for <code>stale-and-busy</code> and <code>needs-followup</code>, drafts a follow-up issue body (<code>Volgt op #N</code>, summarizes done + open work) and offers to create it; can also post a closing-trailer on the parent pointing to the new follow-up</li>
+<li class=""><strong>Standalone new-issue prompt</strong>: once per run, asks if today&#x27;s work surfaced an insight that warrants its own new tracking issue (not a comment on an existing one)</li>
+<li class=""><strong>PR updates</strong>: prefers extending existing description bullets over adding new ones; uses <code>gh api ... -X PATCH</code> (never <code>gh pr edit</code>)</li>
+<li class=""><strong>Uncommitted-changes handling</strong>: for each repo with uncommitted files, lists them (modified/staged/untracked) and asks Commit (drafted message) / Commit (user-provided) / Stash WIP / Skip. After a successful commit, offers a separate Push prompt that respects the project&#x27;s git-push authorization phrase. Never auto-commits; never uses <code>--no-verify</code> without explicit authorization.</li>
+<li class=""><strong>PR creation suggestions</strong>: for orphan branches, offers to delegate to <code>/create-pr</code> (recommended) or take a &quot;quick PR via API&quot; path that requires explicit push authorization</li>
+<li class="">Asks for any closing context (end gate)</li>
+<li class="">Produces a single copy-paste-ready Dutch report-out message in a fenced markdown block — heading is just <code>🗓️ Report out</code> (no day/date — Slack adds the timestamp)</li>
+</ol>
+<p><strong>Heuristic thresholds</strong> (tunable via <code>learnings.md</code>):</p>
+<ul>
+<li class="">5 days + 10 comments → suggest follow-up</li>
+<li class="">14 days → upgrade to <code>needs-followup</code></li>
+<li class="">24-hour comment window → offer Edit instead of New</li>
+</ul>
+<p><strong>Tracking issues:</strong> uses dynamic discovery via <code>gh search</code> plus an optional saved mapping at <code>$HOME/.claude/report-out/tracking-issues.json</code>. The mapping file is per-user and not committed to any repo.</p>
+<p><strong>Guardrails:</strong> Never posts, patches, creates, or closes without <code>AskUserQuestion</code> confirmation. Never <code>git push</code>/<code>commit</code> without explicit authorization phrase. Filter strictly to PRs the user authored or merged — team members&#x27; PRs do not appear in the report. Default branches never get PR suggestions. Dismissed suggestions are not re-surfaced in the same run.</p>
+<p><strong>Maturity:</strong> L6 (9 evals, learnings.md with consolidation pipeline). See <code>hydra/.claude/skills/report-out/SKILL.md</code>.</p>
+<p><strong>Requires:</strong> <code>gh</code> CLI authenticated (<code>gh auth login</code>), <code>git</code> configured with <code>user.name</code> and <code>user.email</code>.</p>
+<hr>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="verify-global-settings-version"><code>/verify-global-settings-version</code><a href="#verify-global-settings-version" class="hash-link" aria-label="Direct link to verify-global-settings-version" title="Direct link to verify-global-settings-version" translate="no">​</a></h3>
+<p><strong>Phase:</strong> Git / Delivery</p>
+<p>Checks whether <code>global-settings/VERSION</code> has been correctly bumped after any changes to files in the <code>global-settings/</code> directory. Run this before creating a PR on the <code>ConductionNL/.github</code> repo.</p>
+<p><strong>Usage:</strong></p>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">/verify-global-settings-version</span><br></div></code></pre></div></div>
+<p><strong>What it does:</strong></p>
+<ol>
+<li class="">Fetches <code>origin/main</code> to get the latest published version</li>
+<li class="">Diffs <code>global-settings/</code> between the current branch and <code>origin/main</code></li>
+<li class="">Compares the branch <code>VERSION</code> against the <code>origin/main</code> <code>VERSION</code></li>
+<li class="">Reports one of four outcomes:
+<ul>
+<li class="">No changes to <code>global-settings/</code> — no bump needed</li>
+<li class="">Changes found and <code>VERSION</code> correctly bumped</li>
+<li class="">Changes found but <code>VERSION</code> not bumped — suggests the next semver and the command to apply it</li>
+<li class=""><code>VERSION</code> bumped but no other files changed — flags as unusual</li>
+</ul>
+</li>
+</ol>
+<p><strong>When to use:</strong></p>
+<ul>
+<li class="">Standalone: any time you modify a file in <code>global-settings/</code> and want to confirm the bump is in place before committing</li>
+<li class="">Automatically: called by <code>/create-pr</code> when the selected repo is <code>ConductionNL/.github</code> — no need to run it separately in that flow</li>
+</ul>
+<p><strong>Semver rules for <code>global-settings/</code>:</strong></p>
+<ul>
+<li class=""><code>1.0.0 → 1.1.0</code> — new permissions, guards, or behavior added</li>
+<li class=""><code>1.0.0 → 2.0.0</code> — breaking change requiring manual migration</li>
+</ul>
+<p><strong>Model:</strong> Checked at run time when invoked standalone — stops if on Opus (no reasoning needed, wastes quota), warns if on Sonnet and offers to switch. <strong>Haiku</strong> is the right fit for this task. Model check is skipped when this skill is called from within another skill.</p>
+<hr>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="opsx-plan-to-issues"><code>/opsx-plan-to-issues</code><a href="#opsx-plan-to-issues" class="hash-link" aria-label="Direct link to opsx-plan-to-issues" title="Direct link to opsx-plan-to-issues" translate="no">​</a></h3>
+<p><strong>Phase:</strong> Planning → GitHub</p>
+<p>Converts an OpenSpec change&#x27;s <code>tasks.md</code> into structured <code>plan.json</code> and creates corresponding GitHub Issues.</p>
+<p><strong>Usage:</strong></p>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">/opsx-plan-to-issues</span><br></div></code></pre></div></div>
+<p><strong>Prerequisites:</strong></p>
+<ul>
+<li class="">A change with completed <code>tasks.md</code></li>
+<li class="">GitHub MCP server active or <code>gh</code> CLI authenticated</li>
+<li class="">Git remote pointing to a ConductionNL repository</li>
+</ul>
+<p><strong>What it does:</strong></p>
+<ol>
+<li class=""><strong>Finds the active change</strong> in the current project&#x27;s <code>openspec/changes/</code></li>
+<li class=""><strong>Detects the GitHub repo</strong> from <code>git remote get-url origin</code></li>
+<li class=""><strong>Parses tasks.md</strong> into structured JSON</li>
+<li class=""><strong>Creates GitHub Issues:</strong>
+<ul>
+<li class="">One <strong>tracking issue</strong> (epic) with:
+<ul>
+<li class="">Title: <code>[OpenSpec] &lt;change-name&gt;</code></li>
+<li class="">Body: proposal summary + task checklist</li>
+<li class="">Labels: <code>openspec</code>, <code>tracking</code></li>
+</ul>
+</li>
+<li class="">One <strong>issue per task</strong> with:
+<ul>
+<li class="">Title: <code>[&lt;change-name&gt;] &lt;task title&gt;</code></li>
+<li class="">Body: description, acceptance criteria, spec ref, affected files</li>
+<li class="">Labels: <code>openspec</code>, <code>&lt;change-name&gt;</code></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class=""><strong>Saves <code>plan.json</code></strong> with all issue numbers linked</li>
+</ol>
+<p><strong>Output example:</strong></p>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">Created tracking issue: https://github.com/ConductionNL/opencatalogi/issues/42</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">Created 5 task issues: #43, #44, #45, #46, #47</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">Saved plan.json at: openspec/changes/add-search/plan.json</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">Run /opsx-apply to begin implementation.</span><br></div></code></pre></div></div>
+<p><strong>The plan.json it creates:</strong></p>
+<div class="language-json codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-json codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token punctuation" style="color:rgb(199, 146, 234)">{</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">  </span><span class="token property">&quot;change&quot;</span><span class="token operator" style="color:rgb(137, 221, 255)">:</span><span class="token plain"> </span><span class="token string" style="color:rgb(195, 232, 141)">&quot;add-search&quot;</span><span class="token punctuation" style="color:rgb(199, 146, 234)">,</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">  </span><span class="token property">&quot;project&quot;</span><span class="token operator" style="color:rgb(137, 221, 255)">:</span><span class="token plain"> </span><span class="token string" style="color:rgb(195, 232, 141)">&quot;opencatalogi&quot;</span><span class="token punctuation" style="color:rgb(199, 146, 234)">,</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">  </span><span class="token property">&quot;repo&quot;</span><span class="token operator" style="color:rgb(137, 221, 255)">:</span><span class="token plain"> </span><span class="token string" style="color:rgb(195, 232, 141)">&quot;ConductionNL/opencatalogi&quot;</span><span class="token punctuation" style="color:rgb(199, 146, 234)">,</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">  </span><span class="token property">&quot;created&quot;</span><span class="token operator" style="color:rgb(137, 221, 255)">:</span><span class="token plain"> </span><span class="token string" style="color:rgb(195, 232, 141)">&quot;2026-02-15T10:00:00Z&quot;</span><span class="token punctuation" style="color:rgb(199, 146, 234)">,</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">  </span><span class="token property">&quot;tracking_issue&quot;</span><span class="token operator" style="color:rgb(137, 221, 255)">:</span><span class="token plain"> </span><span class="token number" style="color:rgb(247, 140, 108)">42</span><span class="token punctuation" style="color:rgb(199, 146, 234)">,</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">  </span><span class="token property">&quot;tasks&quot;</span><span class="token operator" style="color:rgb(137, 221, 255)">:</span><span class="token plain"> </span><span class="token punctuation" style="color:rgb(199, 146, 234)">[</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    </span><span class="token punctuation" style="color:rgb(199, 146, 234)">{</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">      </span><span class="token property">&quot;id&quot;</span><span class="token operator" style="color:rgb(137, 221, 255)">:</span><span class="token plain"> </span><span class="token number" style="color:rgb(247, 140, 108)">1</span><span class="token punctuation" style="color:rgb(199, 146, 234)">,</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">      </span><span class="token property">&quot;title&quot;</span><span class="token operator" style="color:rgb(137, 221, 255)">:</span><span class="token plain"> </span><span class="token string" style="color:rgb(195, 232, 141)">&quot;Create SearchController&quot;</span><span class="token punctuation" style="color:rgb(199, 146, 234)">,</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">      </span><span class="token property">&quot;description&quot;</span><span class="token operator" style="color:rgb(137, 221, 255)">:</span><span class="token plain"> </span><span class="token string" style="color:rgb(195, 232, 141)">&quot;Add new controller for search API endpoint&quot;</span><span class="token punctuation" style="color:rgb(199, 146, 234)">,</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">      </span><span class="token property">&quot;github_issue&quot;</span><span class="token operator" style="color:rgb(137, 221, 255)">:</span><span class="token plain"> </span><span class="token number" style="color:rgb(247, 140, 108)">43</span><span class="token punctuation" style="color:rgb(199, 146, 234)">,</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">      </span><span class="token property">&quot;status&quot;</span><span class="token operator" style="color:rgb(137, 221, 255)">:</span><span class="token plain"> </span><span class="token string" style="color:rgb(195, 232, 141)">&quot;pending&quot;</span><span class="token punctuation" style="color:rgb(199, 146, 234)">,</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">      </span><span class="token property">&quot;spec_ref&quot;</span><span class="token operator" style="color:rgb(137, 221, 255)">:</span><span class="token plain"> </span><span class="token string" style="color:rgb(195, 232, 141)">&quot;openspec/specs/search/spec.md#requirement-search-api&quot;</span><span class="token punctuation" style="color:rgb(199, 146, 234)">,</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">      </span><span class="token property">&quot;acceptance_criteria&quot;</span><span class="token operator" style="color:rgb(137, 221, 255)">:</span><span class="token plain"> </span><span class="token punctuation" style="color:rgb(199, 146, 234)">[</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">        </span><span class="token string" style="color:rgb(195, 232, 141)">&quot;GIVEN a search query WHEN GET /api/search?q=test THEN returns matching results&quot;</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">      </span><span class="token punctuation" style="color:rgb(199, 146, 234)">]</span><span class="token punctuation" style="color:rgb(199, 146, 234)">,</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">      </span><span class="token property">&quot;files_likely_affected&quot;</span><span class="token operator" style="color:rgb(137, 221, 255)">:</span><span class="token plain"> </span><span class="token punctuation" style="color:rgb(199, 146, 234)">[</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">        </span><span class="token string" style="color:rgb(195, 232, 141)">&quot;lib/Controller/SearchController.php&quot;</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">      </span><span class="token punctuation" style="color:rgb(199, 146, 234)">]</span><span class="token punctuation" style="color:rgb(199, 146, 234)">,</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">      </span><span class="token property">&quot;labels&quot;</span><span class="token operator" style="color:rgb(137, 221, 255)">:</span><span class="token plain"> </span><span class="token punctuation" style="color:rgb(199, 146, 234)">[</span><span class="token string" style="color:rgb(195, 232, 141)">&quot;openspec&quot;</span><span class="token punctuation" style="color:rgb(199, 146, 234)">,</span><span class="token plain"> </span><span class="token string" style="color:rgb(195, 232, 141)">&quot;add-search&quot;</span><span class="token punctuation" style="color:rgb(199, 146, 234)">]</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    </span><span class="token punctuation" style="color:rgb(199, 146, 234)">}</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">  </span><span class="token punctuation" style="color:rgb(199, 146, 234)">]</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"></span><span class="token punctuation" style="color:rgb(199, 146, 234)">}</span><br></div></code></pre></div></div>
+<hr>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="skill-creator"><code>/skill-creator</code><a href="#skill-creator" class="hash-link" aria-label="Direct link to skill-creator" title="Direct link to skill-creator" translate="no">​</a></h3>
+<p><strong>Phase:</strong> Maintenance / Meta</p>
+<p>Create new skills, modify and improve existing skills, and measure skill performance with evals. Use when you want to build a new skill from scratch, refine an existing skill&#x27;s behavior, or benchmark a skill&#x27;s accuracy with quantitative evaluation runs.</p>
+<p><strong>Usage:</strong></p>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">/skill-creator</span><br></div></code></pre></div></div>
+<p><strong>What it does:</strong></p>
+<ol>
+<li class="">Helps you decide what the skill should do and roughly how</li>
+<li class="">Drafts the SKILL.md</li>
+<li class="">Generates a small set of test prompts and runs them against <code>claude-with-access-to-the-skill</code></li>
+<li class="">Drafts quantitative evals (or uses existing ones) and reports the metrics</li>
+<li class="">Iterates on the skill based on qualitative and quantitative feedback</li>
+<li class="">Optionally expands the test set for larger-scale benchmarking</li>
+<li class="">Can also optimize a skill&#x27;s <code>description</code> field for better triggering accuracy</li>
+</ol>
+<p><strong>When to use:</strong> When adding a new capability, when an existing skill is misfiring or producing inconsistent results, or when you want to verify a recent skill change hasn&#x27;t regressed behavior.</p>
+<hr>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="sync-docs"><code>/sync-docs</code><a href="#sync-docs" class="hash-link" aria-label="Direct link to sync-docs" title="Direct link to sync-docs" translate="no">​</a></h3>
+<p><strong>Phase:</strong> Maintenance</p>
+<p>Check and sync documentation to reflect the current project state. Two targets: <strong>app docs</strong> (<code>{app}/docs/</code>) for a specific Nextcloud app&#x27;s users and admins, and <strong>dev docs</strong> (<code>.github/docs/claude/</code>) for Claude and developers.</p>
+<p><strong>Usage:</strong></p>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">/sync-docs                       # prompts for target</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">/sync-docs app                   # prompts for which app, then syncs its docs/</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">/sync-docs app openregister      # sync docs for a specific app</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">/sync-docs dev                   # sync developer/Claude docs (.github/docs/claude/)</span><br></div></code></pre></div></div>
+<p>Before syncing, runs 4 preliminary checks in parallel — config.yaml rules vs writing-docs.md/writing-specs.md, Sources of Truth accuracy, writing-specs.md vs schema template alignment (<code>openspec/schemas/conduction/</code>), and forked schema drift from the upstream <code>spec-driven</code> schema. Reports gaps and asks whether to fix before proceeding.</p>
+<p><strong>App docs mode</strong> (<code>{app}/docs/</code>) — checks the app&#x27;s <code>README.md</code> (root), <code>docs/features/</code>, <code>docs/ARCHITECTURE.md</code>, <code>docs/FEATURES.md</code>, <code>docs/GOVERNMENT-FEATURES.md</code>, and any other user-facing <code>.md</code> files against the app&#x27;s current specs. Also loads all company-wide ADRs from <code>hydra/openspec/architecture/</code> and any app-level ADRs as auditing context (never as link targets in app docs). Flags outdated descriptions, missing features, stale <code>[Future]</code> markers (with full removal checklist), broken links, duplicated content, writing anti-patterns, ADR compliance gaps (screenshots, i18n, API conventions), and missing GEMMA/ZGW/Forum Standaardisatie standards references. Never inserts links into <code>.claude/</code> paths. Always shows a diff and asks for confirmation before writing.</p>
+<p><strong>Dev docs mode</strong> (<code>.github/docs/</code>) — checks <code>commands.md</code>, <code>workflow.md</code>, <code>writing-specs.md</code>, <code>writing-docs.md</code>, <code>testing.md</code>, <code>getting-started.md</code>, <code>global-claude-settings.md</code>, <code>README.md</code>, plus the conduction schema (<code>hydra/openspec/schemas/conduction/schema.yaml</code>) and its <code>templates/spec.md</code> for alignment with <code>writing-specs.md</code>. Never changes intent without user confirmation. After syncing, runs a Phase 6 review of all commands and skills for stale references, outdated instructions, and redundant inline content — and asks whether to update them.</p>
+<p>Both modes enforce the <a class="" href="/claude/writing-docs/">Documentation Principles</a> — duplication and wrong-audience content are flagged as issues, with direct links to the relevant writing-docs.md sections.</p>
+<p><strong>When to use:</strong> After a significant batch of changes — new commands, archived features, updated specs, or structural changes to the project.</p>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="tender--ecosystem-intelligence-commands">Tender &amp; Ecosystem Intelligence Commands<a href="#tender--ecosystem-intelligence-commands" class="hash-link" aria-label="Direct link to Tender &amp; Ecosystem Intelligence Commands" title="Direct link to Tender &amp; Ecosystem Intelligence Commands" translate="no">​</a></h2>
+<p>Competitive analysis and ecosystem gap-finding workflow. For the complete reference, see <a class="" href="/claude/commands-tender/">commands-tender.md</a>.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Command</th><th>Phase</th><th>Description</th></tr></thead><tbody><tr><td><code>/tender-scan</code></td><td>Intelligence</td><td>Scrape TenderNed, import, classify by category</td></tr><tr><td><code>/tender-status</code></td><td>Monitoring</td><td>Dashboard of tender intelligence database</td></tr><tr><td><code>/tender-gap-report</code></td><td>Gap Analysis</td><td>Categories with tenders but no Conduction product</td></tr><tr><td><code>/ecosystem-investigate</code></td><td>Research</td><td>Deep-dive into a software category&#x27;s competitors</td></tr><tr><td><code>/ecosystem-propose-app</code></td><td>Planning</td><td>Generate full app proposal for a gap</td></tr><tr><td><code>/intelligence-update</code></td><td>Maintenance</td><td>Pull latest data from external sources</td></tr></tbody></table>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="command-flow-cheat-sheet">Command Flow Cheat Sheet<a href="#command-flow-cheat-sheet" class="hash-link" aria-label="Direct link to Command Flow Cheat Sheet" title="Direct link to Command Flow Cheat Sheet" translate="no">​</a></h2>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">/opsx-explore           (optional: investigate first)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">       │</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">       ▼</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">/opsx-new &lt;name&gt;        (start a change)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">       │</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">       ▼</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">/opsx-ff                (generate all specs at once)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">       │                   OR</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">/opsx-continue          (generate specs one by one)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">       │</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">       ▼</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">  [Human review &amp; edit specs]</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">       │</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">       ▼</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">/feature-counsel        (optional: 8-persona feedback on specs)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">       │</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">       ▼</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">/opsx-plan-to-issues    (optional: tasks → JSON + GitHub Issues)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">       │</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">       ▼</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">/opsx-apply             (implement tasks)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">       │</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">       ▼</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">/opsx-verify            (verify implementation against specs)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">       │</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">       ▼</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">/test-functional   (confirm feature behaves as specced)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">/test-counsel           (user acceptance — all 8 personas)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">/test-app               (optional: full technical sweep)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">       │</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">       ▼</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">/create-pr              (create PR on GitHub)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">       │</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">       ▼</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">/opsx-archive           (complete &amp; preserve)</span><br></div></code></pre></div></div>
+<p><strong>End of day:</strong> <code>/report-out</code> summarizes the day&#x27;s commits and GitHub activity across local repos, optionally updates tracking-issue comments and open PR descriptions, and produces a copy-paste Dutch Slack message. Independent of the workflow chain above — run it whenever you want a daily wrap-up.</p></div><footer class="theme-doc-footer docusaurus-mt-lg"><div class="row margin-top--sm theme-doc-footer-edit-meta-row"><div class="col noPrint_WFHX"><a href="https://github.com/ConductionNL/.github/tree/main/../docs/claude/commands.md" target="_blank" rel="noopener noreferrer" class="theme-edit-this-page"><svg fill="currentColor" height="20" width="20" viewBox="0 0 40 40" class="iconEdit_Z9Sw" aria-hidden="true"><g><path d="m34.5 11.7l-3 3.1-6.3-6.3 3.1-3q0.5-0.5 1.2-0.5t1.1 0.5l3.9 3.9q0.5 0.4 0.5 1.1t-0.5 1.2z m-29.5 17.1l18.4-18.5 6.3 6.3-18.4 18.4h-6.3v-6.2z"></path></g></svg>Edit this page</a></div><div class="col lastUpdated_JAkA"></div></div></footer></article><nav class="docusaurus-mt-lg pagination-nav" aria-label="Docs pages"><a class="pagination-nav__link pagination-nav__link--prev" href="/claude/commands-tender/"><div class="pagination-nav__sublabel">Previous</div><div class="pagination-nav__label">Tender &amp; Ecosystem Intelligence Commands</div></a><a class="pagination-nav__link pagination-nav__link--next" href="/claude/docker/"><div class="pagination-nav__sublabel">Next</div><div class="pagination-nav__label">Docker Environment</div></a></nav></div></div><div class="col col--3"><div class="tableOfContents_bqdL thin-scrollbar theme-doc-toc-desktop"><ul class="table-of-contents table-of-contents__left-border"><li><a href="#openspec-commands" class="table-of-contents__link toc-highlight">OpenSpec Commands</a></li><li><a href="#app-management-commands" class="table-of-contents__link toc-highlight">App Management Commands</a></li><li><a href="#testing-commands" class="table-of-contents__link toc-highlight">Testing Commands</a></li><li><a href="#team-role-commands" class="table-of-contents__link toc-highlight">Team Role Commands</a></li><li><a href="#softwarecatalogus-commands-swc" class="table-of-contents__link toc-highlight">Softwarecatalogus Commands (<code>/swc:*</code>)</a><ul><li><a href="#swc-test" class="table-of-contents__link toc-highlight"><code>/swc-test</code></a></li><li><a href="#swc-update" class="table-of-contents__link toc-highlight"><code>/swc-update</code></a></li></ul></li><li><a href="#custom-conduction-commands" class="table-of-contents__link toc-highlight">Custom Conduction Commands</a><ul><li><a href="#create-pr" class="table-of-contents__link toc-highlight"><code>/create-pr</code></a></li><li><a href="#review-pr" class="table-of-contents__link toc-highlight"><code>/review-pr</code></a></li><li><a href="#report-out" class="table-of-contents__link toc-highlight"><code>/report-out</code></a></li><li><a href="#verify-global-settings-version" class="table-of-contents__link toc-highlight"><code>/verify-global-settings-version</code></a></li><li><a href="#opsx-plan-to-issues" class="table-of-contents__link toc-highlight"><code>/opsx-plan-to-issues</code></a></li><li><a href="#skill-creator" class="table-of-contents__link toc-highlight"><code>/skill-creator</code></a></li><li><a href="#sync-docs" class="table-of-contents__link toc-highlight"><code>/sync-docs</code></a></li></ul></li><li><a href="#tender--ecosystem-intelligence-commands" class="table-of-contents__link toc-highlight">Tender &amp; Ecosystem Intelligence Commands</a></li><li><a href="#command-flow-cheat-sheet" class="table-of-contents__link toc-highlight">Command Flow Cheat Sheet</a></li></ul></div></div></div></div></main></div></div></div><footer class="canal-footer" aria-label="Site footer"><div class="skyline" role="presentation"></div><div class="kade"><div class="kade-items"><svg class="ki ki-bike-1" width="22" height="16" viewBox="0 -2 22 18" aria-hidden="true"><g stroke="var(--c-cobalt-900)" stroke-width="1.4" fill="none" stroke-linecap="round"><circle cx="4" cy="12" r="3"></circle><circle cx="18" cy="12" r="3"></circle><line x1="4" y1="12" x2="11" y2="6"></line><line x1="11" y1="6" x2="18" y2="12"></line><line x1="11" y1="6" x2="14" y2="12"></line><line x1="11" y1="6" x2="11" y2="3"></line><line x1="11" y1="3" x2="14" y2="6"></line></g><circle cx="11" cy="1.5" r="1.6" fill="var(--c-cobalt-900)"></circle></svg><svg class="ki ki-car-1" width="38" height="16" viewBox="0 0 38 16" aria-hidden="true"><rect x="0" y="6" width="38" height="6" rx="2" fill="#C8482F"></rect><path d="M 5,6 L 9,2 L 29,2 L 33,6 Z" fill="#C8482F"></path><rect x="11" y="3" width="6" height="3" fill="rgba(255,255,255,0.5)"></rect><rect x="20" y="3" width="6" height="3" fill="rgba(255,255,255,0.5)"></rect><circle cx="9" cy="13" r="2" fill="var(--c-cobalt-900)"></circle><circle cx="29" cy="13" r="2" fill="var(--c-cobalt-900)"></circle></svg><svg class="ki ki-bike-2" width="22" height="16" viewBox="0 -2 22 18" aria-hidden="true"><g stroke="var(--c-cobalt-900)" stroke-width="1.4" fill="none" stroke-linecap="round"><circle cx="4" cy="12" r="3"></circle><circle cx="18" cy="12" r="3"></circle><line x1="4" y1="12" x2="11" y2="6"></line><line x1="11" y1="6" x2="18" y2="12"></line><line x1="11" y1="6" x2="14" y2="12"></line><line x1="11" y1="6" x2="11" y2="3"></line><line x1="11" y1="3" x2="14" y2="6"></line></g><circle cx="11" cy="1.5" r="1.6" fill="var(--c-cobalt-900)"></circle></svg><svg class="ki ki-car-2" width="38" height="16" viewBox="0 0 38 16" aria-hidden="true"><rect x="0" y="6" width="38" height="6" rx="2" fill="var(--c-cobalt-900)"></rect><path d="M 5,6 L 9,2 L 29,2 L 33,6 Z" fill="var(--c-cobalt-900)"></path><rect x="11" y="3" width="6" height="3" fill="rgba(255,255,255,0.4)"></rect><rect x="20" y="3" width="6" height="3" fill="rgba(255,255,255,0.4)"></rect><circle cx="9" cy="13" r="2" fill="#C8482F"></circle><circle cx="29" cy="13" r="2" fill="#C8482F"></circle></svg></div></div><div class="water"><div class="canal-items"><svg class="ci ci-cruise" width="120" height="28" viewBox="0 -10 120 28" aria-hidden="true"><line x1="2" y1="14" x2="2" y2="-9" stroke="var(--c-orange-knvb)" stroke-width="0.9"></line><rect x="2.5" y="-9" width="9" height="2" fill="#AE1C28"></rect><rect x="2.5" y="-7" width="9" height="2" fill="#FFFFFF"></rect><rect x="2.5" y="-5" width="9" height="2" fill="#21468B"></rect><path d="M 0,16 L 6,18 L 114,18 L 120,16 L 120,11 L 0,11 Z" fill="var(--c-orange-knvb)"></path><rect x="8" y="5" width="104" height="6" fill="var(--c-orange-knvb)"></rect><path d="M 8,5 Q 60,0 112,5 L 8,5 Z" fill="var(--c-orange-knvb)"></path><g fill="rgba(255,247,210,0.85)"><rect x="14" y="7" width="6" height="3"></rect><rect x="22" y="7" width="6" height="3"></rect><rect x="30" y="7" width="6" height="3"></rect><rect x="38" y="7" width="6" height="3"></rect><rect x="46" y="7" width="6" height="3"></rect><rect x="54" y="7" width="6" height="3"></rect><rect x="62" y="7" width="6" height="3"></rect><rect x="70" y="7" width="6" height="3"></rect><rect x="78" y="7" width="6" height="3"></rect><rect x="86" y="7" width="6" height="3"></rect><rect x="94" y="7" width="6" height="3"></rect><rect x="102" y="7" width="6" height="3"></rect></g></svg><svg class="ci ci-sloep" width="50" height="20" viewBox="0 -2 50 20" aria-hidden="true"><path d="M 0,12 L 4,16 L 46,16 L 50,12 L 50,8 L 0,8 Z" fill="var(--c-orange-knvb)"></path><rect x="20" y="2" width="12" height="6" rx="1" fill="var(--c-orange-knvb)"></rect><circle cx="26" cy="0" r="1.4" fill="var(--c-orange-knvb)"></circle></svg><svg class="ci ci-row" width="44" height="16" viewBox="-2 0 48 16" aria-hidden="true"><path d="M 0,10 L 4,14 L 40,14 L 44,10 Z" fill="var(--c-orange-knvb)"></path><line x1="8" y1="10" x2="0" y2="3" stroke="var(--c-orange-knvb)" stroke-width="1.2" stroke-linecap="round"></line><line x1="36" y1="10" x2="44" y2="3" stroke="var(--c-orange-knvb)" stroke-width="1.2" stroke-linecap="round"></line><circle cx="22" cy="7" r="1.6" fill="var(--c-orange-knvb)"></circle></svg><svg class="ci ci-swim" width="26" height="10" viewBox="-3 0 30 10" aria-hidden="true"><ellipse cx="13" cy="6" rx="7" ry="1.4" fill="var(--c-orange-knvb)"></ellipse><circle cx="17" cy="4" r="1.7" fill="var(--c-orange-knvb)"></circle><line x1="13" y1="5" x2="11" y2="3" stroke="var(--c-orange-knvb)" stroke-width="1" stroke-linecap="round"></line><line x1="-3" y1="6" x2="2" y2="6" stroke="var(--c-orange-knvb)" stroke-width="0.7" opacity="0.55"></line><line x1="0" y1="8" x2="3" y2="8" stroke="var(--c-orange-knvb)" stroke-width="0.7" opacity="0.4"></line></svg><svg class="ci ci-periscope" width="14" height="26" viewBox="-3 -2 18 28" aria-hidden="true"><rect x="4" y="4" width="2" height="18" fill="var(--c-orange-knvb)"></rect><rect x="0" y="0" width="9" height="3" fill="var(--c-orange-knvb)"></rect><rect x="4" y="3" width="2" height="2" fill="var(--c-orange-knvb)"></rect><ellipse cx="5" cy="24" rx="7" ry="0.9" fill="var(--c-orange-knvb)" opacity="0.5"></ellipse></svg><svg class="ci ci-whale" width="76" height="18" viewBox="-3 -4 82 22" aria-hidden="true"><path d="M 0,12 Q 0,4 26,3 Q 54,2 64,7 L 72,4 L 68,9 L 72,14 L 64,11 Q 54,14 26,14 Q 6,14 0,12 Z" fill="var(--c-orange-knvb)"></path><g opacity="0.55" stroke="var(--c-orange-knvb)" stroke-width="1" stroke-linecap="round"><line x1="22" y1="2" x2="20" y2="-3"></line><line x1="25" y1="2" x2="25" y2="-4"></line><line x1="28" y1="2" x2="30" y2="-3"></line></g></svg><svg class="ci ci-hover" width="74" height="26" viewBox="0 -4 74 28" aria-hidden="true"><ellipse cx="37" cy="22" rx="37" ry="2.5" fill="var(--c-orange-knvb)" opacity="0.4"></ellipse><path d="M 6,18 L 10,10 L 64,10 L 68,18 Z" fill="var(--c-orange-knvb)"></path><path d="M 14,10 Q 37,-4 60,10 L 14,10 Z" fill="var(--c-orange-knvb)"></path><ellipse cx="37" cy="4" rx="16" ry="3.2" fill="rgba(255,247,210,0.7)"></ellipse><polygon points="37,11 42,13.5 42,16.5 37,19 32,16.5 32,13.5" fill="#FFFFFF"></polygon><text x="37" y="17.4" font-size="4" text-anchor="middle" fill="var(--c-orange-knvb)" font-family="sans-serif" font-weight="900">C</text><g stroke="var(--c-orange-knvb)" stroke-width="0.7" opacity="0.6"><line x1="8" y1="22" x2="12" y2="22"></line><line x1="16" y1="22" x2="20" y2="22"></line><line x1="26" y1="22" x2="30" y2="22"></line><line x1="36" y1="22" x2="40" y2="22"></line><line x1="46" y1="22" x2="50" y2="22"></line><line x1="56" y1="22" x2="60" y2="22"></line></g></svg></div><svg class="canal-waves" viewBox="0 0 1400 500" preserveAspectRatio="none" aria-hidden="true"><path class="w1" d="M 0,96 L 140,82 L 280,96 L 420,82 L 560,96 L 700,82 L 840,96 L 980,82 L 1120,96 L 1260,82 L 1400,96"></path><path class="w2" d="M 0,206 L 180,182 L 360,206 L 540,182 L 720,206 L 900,182 L 1080,206 L 1260,182 L 1400,200"></path><path class="w3" d="M 0,362 L 220,332 L 440,362 L 660,332 L 880,362 L 1100,332 L 1320,362 L 1400,348"></path></svg><div class="footer-grid"><div class="brand"><div class="wm">Conduction</div><p>Open-source apps for <span class="next-blue">Nextcloud</span>. Built and maintained by Conduction in Amsterdam, released under EUPL-1.2.</p><div class="triad"><span><span class="h"></span>Conduction<!-- --> <!-- -->· <span class="next-blue">Nextcloud</span></span></div><div class="socials"><a href="https://github.com/ConductionNL" aria-label="GitHub" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="filled" d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.04 1.53 1.04.9 1.53 2.36 1.09 2.93.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.6 9.6 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.93.36.31.68.92.68 1.86v2.76c0 .27.18.58.69.48A10 10 0 0 0 12 2z"></path></svg></a><a href="https://www.linkedin.com/company/conduction" aria-label="LinkedIn" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-4 0v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle class="filled" cx="4" cy="4" r="2"></circle></svg></a><a href="mailto:info@conduction.nl" aria-label="Email info@conduction.nl"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 7l9 6 9-6"></path></svg></a><a href="tel:+31853036840" aria-label="Phone +31 (0)85 303 6840"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.72 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0 1 22 16.92z"></path></svg></a><a href="https://maps.google.com/?q=Lauriergracht+14h+Amsterdam" aria-label="Lauriergracht 14h, Amsterdam, open in Google Maps" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg></a></div></div><div><h4>Documentation</h4><ul><li><a href="/ROADMAP/">Roadmap</a></li><li><a href="/claude/">Claude workflow</a></li><li><a href="/iso/">ISO compliance</a></li><li><a href="/Catalogi/">Catalog</a></li></ul></div><div><h4>Conduction</h4><ul><li><a href="https://conduction.nl/about" target="_blank" rel="noopener noreferrer">About</a></li><li><a href="https://conduction.nl/about#opensource" target="_blank" rel="noopener noreferrer">Open source</a></li><li><a href="https://conduction.nl/about#team" target="_blank" rel="noopener noreferrer">Team</a></li><li><a href="https://conduction.nl/iso" target="_blank" rel="noopener noreferrer">ISO</a></li></ul></div><div><h4>Documentatie</h4><ul><li><a href="https://identity.conduction.nl/" target="_blank" rel="noopener noreferrer">Brand book</a></li><li><a href="https://identity.conduction.nl/diagrams/" target="_blank" rel="noopener noreferrer">Diagram set</a></li></ul></div></div><div class="legal-bar"><div class="left"><span>Conduction B.V. · KvK 76741850 · BTW NL860784241B01 · IBAN NL51 ABNA 0868951550 · Lauriergracht 14h, 1016 RR Amsterdam · 2026</span><span class="legal-links"><a href="/privacy/">Privacy</a><span class="sep">·</span><a href="/terms/">Terms</a><span class="sep">·</span><a href="/iso/">ISO</a></span></div><div class="right"><a class="iso-badge" aria-label="ISO 9001:2015 certified, see details" href="/iso/"><span class="iso-mark">ISO</span><span class="iso-num">9001:2015</span></a><a class="iso-badge" aria-label="ISO 27001:2022 certified, see details" href="/iso/"><span class="iso-mark">ISO</span><span class="iso-num">27001:2022</span></a></div></div></div></footer><div style="display:none" aria-hidden="true">
+      <template id="tpl-h-a">
+        <svg class="house h-a" viewBox="0 -2 80 202" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,200 L 0,38 L 8,38 L 8,26 L 16,26 L 16,14 L 24,14 L 24,8 L 56,8 L 56,14 L 64,14 L 64,26 L 72,26 L 72,38 L 80,38 L 80,200 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="22" y="68" width="10" height="16" fill="rgba(255,247,210,0.95)"/>
+          <rect x="48" y="68" width="10" height="16" fill="rgba(11,32,73,0.35)"/>
+          <rect x="22" y="98" width="10" height="16" fill="rgba(11,32,73,0.35)"/>
+          <rect x="48" y="98" width="10" height="16" fill="rgba(255,247,210,0.6)"/>
+          <rect x="22" y="128" width="10" height="16" fill="rgba(11,32,73,0.35)"/>
+          <rect x="48" y="128" width="10" height="16" fill="rgba(11,32,73,0.35)"/>
+          <rect x="32" y="160" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+      <template id="tpl-h-b">
+        <svg class="house h-b" viewBox="0 0 100 220" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,220 L 0,58 L 8,58 L 8,47 L 16,47 L 16,36 L 24,36 L 24,25 L 32,25 L 32,14 L 50,4 L 68,14 L 68,25 L 76,25 L 76,36 L 84,36 L 84,47 L 92,47 L 92,58 L 100,58 L 100,220 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="14" y="80" width="14" height="20" fill="rgba(255,247,210,0.85)"/>
+          <rect x="43" y="80" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="72" y="80" width="14" height="20" fill="rgba(255,247,210,0.55)"/>
+          <rect x="14" y="115" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="43" y="115" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="72" y="115" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="14" y="150" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="43" y="150" width="14" height="20" fill="rgba(255,247,210,0.7)"/>
+          <rect x="72" y="150" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="42" y="180" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+      <template id="tpl-h-c">
+        <svg class="house h-c" viewBox="0 0 70 240" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,240 L 0,48 L 5,48 L 5,41 L 10,41 L 10,34 L 15,34 L 15,27 L 20,27 L 20,20 L 25,20 L 25,15 L 45,15 L 45,20 L 50,20 L 50,27 L 55,27 L 55,34 L 60,34 L 60,41 L 65,41 L 65,48 L 70,48 L 70,240 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="14" y="70" width="12" height="18" fill="rgba(255,247,210,0.55)"/>
+          <rect x="44" y="70" width="12" height="18" fill="rgba(255,247,210,0.85)"/>
+          <rect x="14" y="100" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="44" y="100" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="14" y="130" width="12" height="18" fill="rgba(255,247,210,0.7)"/>
+          <rect x="44" y="130" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="14" y="160" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="44" y="160" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="27" y="200" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+      <template id="tpl-h-d">
+        <svg class="house h-d" viewBox="0 -10 90 180" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,170 L 0,30 L 8,30 L 8,20 L 16,20 L 16,10 L 24,10 L 24,4 L 66,4 L 66,10 L 74,10 L 74,20 L 82,20 L 82,30 L 90,30 L 90,170 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="12" y="60" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="38" y="60" width="14" height="20" fill="rgba(255,247,210,0.85)"/>
+          <rect x="64" y="60" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="12" y="100" width="14" height="20" fill="rgba(255,247,210,0.6)"/>
+          <rect x="38" y="100" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="64" y="100" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="37" y="130" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+      <template id="tpl-h-e">
+        <svg class="house h-e" viewBox="0 0 95 210" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,210 L 0,55 L 8,55 L 8,44 L 16,44 L 16,33 L 24,33 L 24,22 L 32,22 L 32,11 L 35,11 L 35,6 L 59,6 L 59,11 L 63,11 L 63,22 L 71,22 L 71,33 L 79,33 L 79,44 L 87,44 L 87,55 L 95,55 L 95,210 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="13" y="75" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="40" y="75" width="14" height="20" fill="rgba(255,247,210,0.65)"/>
+          <rect x="68" y="75" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="13" y="110" width="14" height="20" fill="rgba(255,247,210,0.8)"/>
+          <rect x="40" y="110" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="68" y="110" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="13" y="145" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="40" y="145" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="68" y="145" width="14" height="20" fill="rgba(255,247,210,0.55)"/>
+          <rect x="39.5" y="175" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+</div></div>
+</body>
+</html>

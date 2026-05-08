@@ -1,0 +1,1505 @@
+<!doctype html>
+<html lang="en" dir="ltr" class="docs-wrapper plugin-docs plugin-id-default docs-version-current docs-doc-page docs-doc-id-iso/code" data-has-hydrated="false">
+<head>
+<meta charset="UTF-8">
+<meta name="generator" content="Docusaurus v3.10.1">
+<title data-rh="true">ISO 9001:2015 ↔ Code-Quality Pipeline | Conduction Docs</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:url" content="https://docs.conduction.nl/iso/code/"><meta data-rh="true" property="og:locale" content="en"><meta data-rh="true" name="docusaurus_locale" content="en"><meta data-rh="true" name="docsearch:language" content="en"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="ISO 9001:2015 ↔ Code-Quality Pipeline | Conduction Docs"><meta data-rh="true" name="description" content="This document maps every clause of ISO 9001 for each clause we say what we actually do, rate it Full / Partial / None / N/A, and — when we fall short — describe the shortest path to closing the gap."><meta data-rh="true" property="og:description" content="This document maps every clause of ISO 9001 for each clause we say what we actually do, rate it Full / Partial / None / N/A, and — when we fall short — describe the shortest path to closing the gap."><link data-rh="true" rel="icon" href="/img/favicon.svg"><link data-rh="true" rel="canonical" href="https://docs.conduction.nl/iso/code/"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/iso/code/" hreflang="en"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/iso/code/" hreflang="x-default"><link data-rh="true" rel="stylesheet" href="/lib/canal-footer.css"><link data-rh="true" rel="stylesheet" href="/lib/kade-cyclist.css"><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"ISO Compliance Documentation","item":"https://docs.conduction.nl/iso/"},{"@type":"ListItem","position":2,"name":"ISO 9001:2015 ↔ Code-Quality Pipeline","item":"https://docs.conduction.nl/iso/code"}]}</script><link rel="stylesheet" href="/assets/css/styles.85005906.css">
+<script src="/assets/js/runtime~main.9ef72528.js" defer="defer"></script>
+<script src="/assets/js/main.ee9d83f1.js" defer="defer"></script>
+</head>
+<body>
+<svg style="display: none;"><defs>
+<symbol id="theme-svg-external-link" viewBox="0 0 24 24"><path fill="currentColor" d="M21 13v10h-21v-19h12v2h-10v15h17v-8h2zm3-12h-10.988l4.035 4-6.977 7.07 2.828 2.828 6.977-7.07 4.125 4.172v-11z"/></symbol>
+</defs></svg>
+<script>!function(){var t=function(){try{return new URLSearchParams(window.location.search).get("docusaurus-theme")}catch(t){}}()||function(){try{return window.localStorage.getItem("theme")}catch(t){}}();document.documentElement.setAttribute("data-theme",t||(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")),document.documentElement.setAttribute("data-theme-choice",t||"system")}(),function(){try{const c=new URLSearchParams(window.location.search).entries();for(var[t,e]of c)if(t.startsWith("docusaurus-data-")){var a=t.replace("docusaurus-data-","data-");document.documentElement.setAttribute(a,e)}}catch(t){}}()</script><div id="__docusaurus"><div role="region" aria-label="Skip to main content"><a class="skipToContent_fXgn" href="#__docusaurus_skipToContent_fallback">Skip to main content</a></div><nav class="navbar nav_MuJ0" role="navigation" aria-label="Main"><div class="left__6eY"><a class="wordmark_mhs1" href="/">Conduction Docs</a><div class="links_cXJT"><a class="link_CwQh" href="/ROADMAP/">Roadmap</a><a class="link_CwQh" href="/claude/">Claude workflow</a><a class="link_CwQh" href="/iso/">ISO</a><a class="link_CwQh" href="/Services/CodebaseStewardship/">Services</a></div></div><div class="ctas_jpo4"><a href="https://github.com/ConductionNL/.github" class="ghost_SGJf" target="_blank" rel="noopener noreferrer">GitHub</a></div></nav><div id="__docusaurus_skipToContent_fallback" class="theme-layout-main main-wrapper mainWrapper_z2l0"><div class="docsWrapper_hBAB"><button aria-label="Scroll back to top" class="clean-btn theme-back-to-top-button backToTopButton_sjWU" type="button"></button><div class="docRoot_UBD9"><aside class="theme-doc-sidebar-container docSidebarContainer_YfHR"><div class="sidebarViewport_aRkj"><div class="sidebar_njMd"><nav aria-label="Docs sidebar" class="menu thin-scrollbar menu_SIkG"><ul class="theme-doc-sidebar-menu menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-1 menu__list-item"><a class="menu__link" href="/Catalogi/"><span title="Welcome to the Conduction Catalog" class="linkLabel_WmDU">Welcome to the Conduction Catalog</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-1 menu__list-item"><a class="menu__link" href="/Products/"><span title="Overzicht van Conduction-producten" class="linkLabel_WmDU">Overzicht van Conduction-producten</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-1 menu__list-item"><a class="menu__link" href="/ROADMAP/"><span title="Conduction Product Roadmap" class="linkLabel_WmDU">Conduction Product Roadmap</span></a></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/Services/CodebaseStewardship/"><span title="Services" class="categoryLinkLabel_W154">Services</span></a></div></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-1 menu__list-item"><a class="menu__link" href="/archive/"><span title="ConductionNL Repository Archive Plan" class="linkLabel_WmDU">ConductionNL Repository Archive Plan</span></a></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist" href="/claude/"><span title="Claude Code Developer Guide" class="categoryLinkLabel_W154">Claude Code Developer Guide</span></a><button aria-label="Expand sidebar category &#x27;Claude Code Developer Guide&#x27;" aria-expanded="false" type="button" class="clean-btn menu__caret"></button></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--active" href="/iso/"><span title="ISO Compliance Documentation" class="categoryLinkLabel_W154">ISO Compliance Documentation</span></a><button aria-label="Collapse sidebar category &#x27;ISO Compliance Documentation&#x27;" aria-expanded="true" type="button" class="clean-btn menu__caret"></button></div><ul class="menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link menu__link--active" aria-current="page" tabindex="0" href="/iso/code/"><span title="ISO 9001:2015 ↔ Code-Quality Pipeline" class="linkLabel_WmDU">ISO 9001:2015 ↔ Code-Quality Pipeline</span></a></li></ul></li></ul></nav></div></div></aside><main class="docMainContainer_TBSr"><div class="container padding-top--md padding-bottom--lg"><div class="row"><div class="col docItemCol_VOVn"><div class="docItemContainer_Djhp"><article><nav class="theme-doc-breadcrumbs breadcrumbsContainer_Z_bl" aria-label="Breadcrumbs"><ul class="breadcrumbs"><li class="breadcrumbs__item"><a aria-label="Home page" class="breadcrumbs__link" href="/"><svg viewBox="0 0 24 24" class="breadcrumbHomeIcon_YNFT"><path d="M10 19v-5h4v5c0 .55.45 1 1 1h3c.55 0 1-.45 1-1v-7h1.7c.46 0 .68-.57.33-.87L12.67 3.6c-.38-.34-.96-.34-1.34 0l-8.36 7.53c-.34.3-.13.87.33.87H5v7c0 .55.45 1 1 1h3c.55 0 1-.45 1-1z" fill="currentColor"></path></svg></a></li><li class="breadcrumbs__item"><a class="breadcrumbs__link" href="/iso/"><span>ISO Compliance Documentation</span></a></li><li class="breadcrumbs__item breadcrumbs__item--active"><span class="breadcrumbs__link">ISO 9001:2015 ↔ Code-Quality Pipeline</span></li></ul></nav><div class="tocCollapsible_ETCw theme-doc-toc-mobile tocMobile_ITEo"><button type="button" class="clean-btn tocCollapsibleButton_TO0P">On this page</button></div><div class="theme-doc-markdown markdown"><header><h1>ISO 9001:2015 ↔ Code-Quality Pipeline</h1></header>
+<p>This document maps every clause of ISO 9001:2015 (<em>Quality management systems — Requirements</em>) to concrete artefacts in the Conduction engineering pipeline. The pipeline itself has four cooperating layers — <strong>Specter</strong> (what &amp; why), <strong>Hydra</strong> (how), the <strong>Quality CI workflow</strong> (gatekeeper), and the <strong>human reviewer</strong> (release authority). The goal here is honest coverage: for each clause we say what we actually do, rate it <em>Full / Partial / None / N/A</em>, and — when we fall short — describe the shortest path to closing the gap.</p>
+<p>ISO 9001 is a generic quality-management standard. The software-specific interpretation lives in <strong>ISO/IEC 90003:2018</strong> (<em>Software engineering — Guidelines for the application of ISO 9001:2015 to computer software</em>). Where ISO/IEC 90003 adds software-specific guidance we note it inline.</p>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="0-the-pipeline-at-a-glance">0. The pipeline at a glance<a href="#0-the-pipeline-at-a-glance" class="hash-link" aria-label="Direct link to 0. The pipeline at a glance" title="Direct link to 0. The pipeline at a glance" translate="no">​</a></h2>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">What &amp; Why                     How                       Gatekeeper             Human</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">──────────                     ───                       ──────────             ─────</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">Specter     ────proposal────▶  Hydra    ────draft PR──▶  quality.yml  ──────▶  Reviewer</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">(intel,      OpenSpec          (builder,  code + tests    (PHPCS,               (approve /</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"> tenders,    change             reviewer,                  Psalm,                request</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"> features)   in openspec/        security,                 PHPStan,              changes)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">             changes/)           fixer)                    PHPMD,</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">                                                           ESLint,</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">                                                           Newman,</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">                                                           Playwright,</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">                                                           audits,</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">                                                           SBOM)</span><br></div></code></pre></div></div>
+<p>Every code line lands in the codebase via this sequence. Traceability is anchored by two cross-cuts: <code>@spec</code> PHPDoc tags in source files (enforced by ADR-003) and GitHub issue↔PR↔change-folder links.</p>
+<p>Pipeline artefact reference (cited throughout below):</p>
+<ul>
+<li class=""><strong>Hydra ADRs</strong> — <a class="" href="/hydra/openspec/architecture/">hydra/openspec/architecture/</a> — 23 architecture decision records (adr-001 … adr-023).</li>
+<li class=""><strong>OpenSpec changes</strong> — <code>hydra/openspec/changes/</code> — active change proposals; <code>hydra/openspec/changes/archive/</code> for completed.</li>
+<li class=""><strong>Quality workflow</strong> — <a href="/assets/files/quality-be5a546fd3f5cd049aac4f88e0c7d400.yml/" target="_blank" class="">.github/.github/workflows/quality.yml</a> — reusable workflow invoked per app.</li>
+<li class=""><strong>Branch-protection workflow</strong> — <a href="/assets/files/branch-protection-6b04f464e8c4357e313a6a9a30b6bab7.yml/" target="_blank" class="">.github/.github/workflows/branch-protection.yml</a> — validates source→target branch pairings.</li>
+<li class=""><strong>Hydra mechanical gates</strong> — <code>scripts/run-hydra-gates.sh</code> in hydra/ — 9 gates: <code>spdx</code>, <code>forbidden-patterns</code>, <code>stub-scan</code>, <code>composer-audit</code>, <code>route-auth</code>, <code>orphan-auth</code>, <code>no-admin-idor</code>, <code>unsafe-auth-resolver</code>, <code>semantic-auth</code>.</li>
+<li class=""><strong>Hydra record</strong> — <code>openspec/changes/{slug}/hydra.json</code> — atomic stage-level journal written by <code>scripts/lib/hydra_record.py</code>.</li>
+<li class=""><strong>Specter</strong> — <a class="" href="/concurrentie-analyse/">concurrentie-analyse/</a> — market-intelligence platform that turns procurement data, competitor signals, and government standards into OpenSpec change proposals. Remote: private GitHub repo <code>ConductionNL/market-intelligence</code>. Detailed in § 0a below.</li>
+<li class=""><strong>Org rulesets</strong> — 3 GitHub org-level rulesets: development (1 review), beta (1 review), main (2 reviews). Not stored in-repo.</li>
+</ul>
+<hr>
+<p>Specter and Hydra are peers. Neither is a subsystem of the other. Specter owns <em>what &amp; why</em>; Hydra owns <em>how</em>; between them runs a learning bridge that feeds each half&#x27;s outputs back into the other&#x27;s inputs. The three sections below — § 0a, § 0b, § 0c — describe the two halves and the bridge.</p>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="0a-specter--the-intelligence--spec-pipeline">0a. Specter — the intelligence → spec pipeline<a href="#0a-specter--the-intelligence--spec-pipeline" class="hash-link" aria-label="Direct link to 0a. Specter — the intelligence → spec pipeline" title="Direct link to 0a. Specter — the intelligence → spec pipeline" translate="no">​</a></h2>
+<p>Where Hydra is the &quot;how,&quot; Specter is the &quot;what and why.&quot; It is the evidence-gathering, requirement-tracking, competitor-scanning, spec-proposing half of the pipeline. Code lives at <a class="" href="/concurrentie-analyse/">concurrentie-analyse/</a> (remote: private repo <code>ConductionNL/market-intelligence</code>). The design principle, quoted from <code>concurrentie-analyse/README.md</code>:</p>
+<blockquote>
+<p><em>&quot;Every spec traces back to real tender requirements, real competitor gaps, and real government demand. No fiction.&quot;</em></p>
+</blockquote>
+<p>In ISO-9001 terms Specter operationalises the design-and-development <em>inputs</em> side of clause 8.3 (specifically 8.3.3), the customer/stakeholder-requirement side of 8.2, and — crucially for 8.5.2 — the <em>upstream</em> half of the traceability chain that ends at <code>@spec</code> tags in code.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="the-raw-material--the-intelligence-database">The raw material — the intelligence database<a href="#the-raw-material--the-intelligence-database" class="hash-link" aria-label="Direct link to The raw material — the intelligence database" title="Direct link to The raw material — the intelligence database" translate="no">​</a></h3>
+<p><strong>Location.</strong> <code>concurrentie-analyse/intelligence.db</code> — SQLite, generated from a PostgreSQL dump at <code>concurrentie-analyse/data/intelligence.pgdump</code>.</p>
+<p><strong>Schema.</strong> Django ORM migrations at <code>concurrentie-analyse/intelligence/migrations/0001_initial.py</code>. 58+ tables across 8 domains. Notable tables and their current row counts (from <code>README.md</code> sync-status block):</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Domain</th><th>Key tables</th><th>Rows</th></tr></thead><tbody><tr><td>Tender intelligence</td><td><code>tenders</code>, <code>requirements</code>, <code>tender_documents</code>, <code>tender_awards</code>, <code>tender_app_relevance</code></td><td>75.6K tenders / 151.4K requirements / 30K docs / 13K awards / 15.8K relevance rows</td></tr><tr><td>Canonical features</td><td><code>canonical_features</code>, <code>canonical_feature_sources</code>, <code>tec_features</code>, <code>category_features</code></td><td>6.8K canonical / 7 062 TEC features / 422 category features</td></tr><tr><td>Competitors</td><td><code>competitors</code>, <code>competitor_features</code>, <code>competitor_apps</code>, <code>github_repo_metrics</code></td><td>98 competitors / 938 features / 218 apps</td></tr><tr><td>App research</td><td><code>domains</code>, <code>stakeholders</code>, <code>customer_journeys</code>, <code>user_stories</code>, <code>external_sources</code></td><td>92 stakeholders / 285 journeys / 1.9K user stories / 459 external sources</td></tr><tr><td>Legal / standards</td><td><code>nl_standards</code>, <code>laws</code>, <code>law_articles</code>, <code>gemma_components</code>, <code>gemma_services</code></td><td>127 standards / 4.277K law articles / 254 components</td></tr><tr><td>Ecosystem</td><td><code>ecosystem_gaps</code>, <code>apps</code>, <code>nextcloud_marketplace</code></td><td>53 gaps / ~22 apps / 620 NC marketplace apps</td></tr><tr><td>Procurement</td><td><code>procurement_windows</code>, <code>source_syncs</code></td><td>833 windows / 36 source-sync records</td></tr><tr><td>Outputs</td><td><code>app_specs</code></td><td>per-change spec metadata incl. <code>status</code>, <code>depends_on_specs</code></td></tr></tbody></table>
+<p>(The numbers in the memory index — &quot;39 591 tenders, 17 338 requirements, 303 features&quot; — are stale; the figures here come from inspecting the current DB and README directly.)</p>
+<p><strong>Traceability key.</strong> <code>canonical_feature_sources</code> is the junction table that makes 8.5.2 work upstream: every canonical feature points back to a specific evidence row via <code>(source_table, source_id, confidence)</code>. One feature can have hundreds of sources. Example (from the audit): the <em>System Integration</em> feature has 221 tender sources, 89 competitor implementations, plus external-blog citations, aggregating to a <code>demand_score</code> of 8.7/10.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="the-7-specter--skills">The 7 <code>specter-*</code> skills<a href="#the-7-specter--skills" class="hash-link" aria-label="Direct link to the-7-specter--skills" title="Direct link to the-7-specter--skills" translate="no">​</a></h3>
+<p>Under <code>concurrentie-analyse/.claude/skills/</code>:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Skill</th><th>Job</th><th>Cadence</th></tr></thead><tbody><tr><td><code>specter-sync</code></td><td>Fetch new tenders from specific sources (27 procurement portals, 19 ecosystem catalogues); classify; update README status.</td><td>Ad-hoc, also invoked by <code>specter-pipeline</code></td></tr><tr><td><code>specter-pipeline</code></td><td>Main orchestrator — 13 global phases + 10 per-app phases: setup → sync → download → parse → analyse → cleanup → link → score → snapshot → context → report → dump → commit.</td><td>Weekly (Sun 02:00 UTC via GitHub Actions)</td></tr><tr><td><code>specter-research-app</code></td><td>Deep per-app research (9 phases: domains → stakeholder/journey → competitor → tender mining → external sources → sentiment → standards mapping → feature linking → briefs). Promotes an app from <code>concept</code> to <code>idea</code>.</td><td>Post-pipeline, per-app</td></tr><tr><td><code>specter-prepare-context</code></td><td>Query DB for an app (market, top-20 features, competitors, insights, standards, user stories) and produce a structured context markdown for <code>/opsx-explore</code> or <code>/app-design</code>.</td><td>Before spec writing</td></tr><tr><td><code>specter-concept</code></td><td>Exploratory — three parallel agents investigate market (competitors, demand, feasibility) for a rough product idea; recommends GO / EXPLORE / PARK.</td><td>Ad-hoc (ideation)</td></tr><tr><td><code>specter-analyze-docs</code></td><td>Download &amp; parse tender documents for a specific app, extract requirements, link to user stories. Used within phase 4 of <code>specter-research-app</code>.</td><td>Within research-app</td></tr><tr><td><code>specter-harvest</code></td><td>Batch-fetch full text from external source URLs and re-extract features — full text yields ~3–4× more features than summaries.</td><td>Post-source discovery</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="pipeline-phases-the-real-ones">Pipeline phases (the real ones)<a href="#pipeline-phases-the-real-ones" class="hash-link" aria-label="Direct link to Pipeline phases (the real ones)" title="Direct link to Pipeline phases (the real ones)" translate="no">​</a></h3>
+<p>Confirmed against <a class="" href="/concurrentie-analyse/scripts/pipeline.py/">concurrentie-analyse/scripts/pipeline.py</a> and <a class="" href="/concurrentie-analyse/.github/workflows/weekly-sync.yml/">concurrentie-analyse/.github/workflows/weekly-sync.yml</a>:</p>
+<ol>
+<li class=""><strong>Intelligence → DB</strong> — <code>specter-pipeline</code> phases 1-9 + the 46 &quot;tendril&quot; sync scripts. Weekly GitHub Actions on Sunday 02:00 UTC. 27 procurement sources + 19 ecosystem sources; Italy ANAC is slow (3–60 s/request); 5 endpoints currently dead and skipped.</li>
+<li class=""><strong>Per-app spec building</strong> — <code>specter-pipeline</code> per-app phases + <code>specter-research-app</code> (promotes concept → idea).</li>
+<li class=""><strong>Spec-to-Git push</strong> — <code>concurrentie-analyse/scripts/push_spec_pipeline.py</code> reads briefs from DB, runs <code>/opsx-ff</code> per spec, writes artefacts into <code>concurrentie-analyse/openspec/changes/{slug}/</code> (21 completed specs in this directory as of the audit). <code>concurrentie-analyse/scripts/push_roadmap_issues.py</code> opens GitHub issues, labelled <code>ready-to-build</code> (all deps met), <code>blocked</code> (unmet deps), or <code>yolo</code> (auto-merge candidate).</li>
+<li class=""><strong>Hydra pickup</strong> — Hydra&#x27;s supervisor polls for <code>ready-to-build</code> issues and runs the builder. Traceability continues in <code>hydra.json</code>.</li>
+</ol>
+<p><strong>Container layout.</strong> <code>concurrentie-analyse/Dockerfile.llm-worker</code> runs AI scripts (clean, classify, generate schemas) in isolated containers with the Claude Code CLI and no project-context injection. <code>Dockerfile.analysis</code> and <code>Dockerfile.spec-writer</code> are also present in the repo — their scopes are named in the filenames; their wiring into the pipeline should be verified before citing them as load-bearing.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="what-specter-records-that-is-directly-consumable">What Specter records that is directly consumable<a href="#what-specter-records-that-is-directly-consumable" class="hash-link" aria-label="Direct link to What Specter records that is directly consumable" title="Direct link to What Specter records that is directly consumable" translate="no">​</a></h3>
+<p>For clause 9.1.1 (monitoring) and 9.3 (management review) the interesting DB views are:</p>
+<ul>
+<li class=""><code>source_syncs.records_synced</code> + <code>source_syncs.last_sync</code> — per-source intake per week.</li>
+<li class=""><code>canonical_feature_sources</code> group-by <code>source_table</code> — new feature evidence per source per week.</li>
+<li class=""><code>competitor_features</code> filter on <code>category IN (&#x27;release-*&#x27;, &#x27;enhancement-issue&#x27;)</code> — competitor signal volume.</li>
+<li class=""><code>tender_awards.contract_value</code> JOIN <code>tender_app_relevance</code> — addressable market per app, in euros.</li>
+<li class=""><code>app_specs.status</code> — spec-pipeline throughput (<code>draft</code> / <code>created</code> / <code>pushed</code> / <code>merged</code>).</li>
+<li class=""><code>ecosystem_gaps</code> — demand areas with no matching product. Directly consumable for roadmap prioritisation.</li>
+</ul>
+<p>The README at <code>concurrentie-analyse/README.md</code> already renders a &quot;Sync Status&quot; section auto-populated by <code>scripts/update_readme_status.py</code> — the scaffolding for a management dashboard at the Specter end exists.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="traceability--the-upstream-half-of-852">Traceability — the upstream half of 8.5.2<a href="#traceability--the-upstream-half-of-852" class="hash-link" aria-label="Direct link to Traceability — the upstream half of 8.5.2" title="Direct link to Traceability — the upstream half of 8.5.2" translate="no">​</a></h3>
+<p><strong>Evidence chain that works today:</strong></p>
+<ol>
+<li class="">Tender or external source → ingested row in <code>tenders</code> / <code>external_sources</code> / <code>requirements</code>.</li>
+<li class="">Feature extraction → <code>canonical_features</code> row + one or more <code>canonical_feature_sources</code> junction rows (<code>source_table</code>, <code>source_id</code>, <code>confidence</code>).</li>
+<li class="">Brief assembly → <code>app_specs.brief_data</code> JSON embeds feature IDs; <code>generate_spec_content.py</code> (DB-only, no LLM) writes <code>context-brief.md</code>.</li>
+<li class="">Spec push → <code>openspec/changes/{slug}/proposal.md</code> + <code>design.md</code> + <code>tasks.md</code>.</li>
+<li class="">Issue push → <code>push_roadmap_issues.py</code> opens issue with body linking to the change directory.</li>
+</ol>
+<p><strong>Then Hydra picks up</strong> — issue → change folder → builder → <code>@spec</code> tag in source → tasks.md line.</p>
+<p><strong>Where the chain is broken:</strong></p>
+<ul>
+<li class=""><strong>No <code>feature_id</code> tag on the GitHub issue.</strong> The issue body mentions the brief in prose, but there is no machine-readable link back to <code>canonical_features.id</code>. Walking backwards from a merged PR through <code>Closes #N</code> lands on the issue — and the thread goes cold there.</li>
+<li class=""><strong>No automated Hydra → Specter feedback sync.</strong> <code>concurrentie-analyse/scripts/sync_hydra_feedback.py</code> exists but is not wired into a cron or workflow. So review findings, resolved-vs-unresolved counts, and cost-per-feature never flow back into the intelligence DB. Specter cannot currently answer &quot;which feature categories are hardest to ship?&quot;</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="specter-in-iso-9001-terms">Specter in ISO-9001 terms<a href="#specter-in-iso-9001-terms" class="hash-link" aria-label="Direct link to Specter in ISO-9001 terms" title="Direct link to Specter in ISO-9001 terms" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Clause</th><th>How Specter serves it</th></tr></thead><tbody><tr><td>4.1 Context of the organization</td><td>Weekly ingestion of 27 procurement sources + 19 ecosystem sources makes &quot;external issues&quot; a <em>measured</em> quantity, not an opinion.</td></tr><tr><td>4.2 Interested parties</td><td><code>stakeholders</code>, <code>customer_journeys</code>, <code>user_stories</code> tables name parties and what they require.</td></tr><tr><td>6.1 Risks and opportunities</td><td><code>ecosystem_gaps</code> + <code>competitor_features</code> together are the opportunity register. <code>tender_awards</code> is the addressable-market quantifier.</td></tr><tr><td>8.2.2 Determining requirements</td><td><code>requirements</code> table (151.4K rows) is the authoritative requirement source for tender-driven work.</td></tr><tr><td>8.3.3 D&amp;D inputs</td><td><code>canonical_features</code> + <code>canonical_feature_sources</code> furnish inputs with traceability to evidence.</td></tr><tr><td>8.5.2 Identification and traceability</td><td>Upstream half of the chain — see above. Gap at the issue-tagging step.</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="gaps-and-closure-proposals-specter-side">Gaps and closure proposals (Specter-side)<a href="#gaps-and-closure-proposals-specter-side" class="hash-link" aria-label="Direct link to Gaps and closure proposals (Specter-side)" title="Direct link to Gaps and closure proposals (Specter-side)" translate="no">​</a></h3>
+<p>Raised as OpenSpec changes in <code>concurrentie-analyse/openspec/changes/</code> (tracked on <code>spec/*</code> branches):</p>
+<ol>
+<li class=""><strong><code>embed-feature-id-in-issues</code></strong> — <code>push_roadmap_issues.py</code> already has the feature IDs in scope. Emit them in issue body front-matter / as labels so the 8.5.2 reverse-traceability chain closes.</li>
+<li class=""><strong><code>link-findings-to-features</code></strong> — Extend <code>HydraPipeline</code> (see § 0c) with <code>canonical_feature_id</code> FK; enrichment phase in <code>ingest_hydra_logs</code> recovers feature IDs from brief_data / proposal.md. Unlocks &quot;cost per feature category&quot; and &quot;findings density per feature&quot;.</li>
+<li class=""><strong><code>add-spec-pipeline-throughput-view</code></strong> — The <code>intelligence/</code> dashboard already covers most of Board-5 (addressable market per app, ecosystem gaps, new tenders last 7d, competitor activity last 7d, source-sync health). What&#x27;s still missing: a throughput view over <code>app_specs</code> + <code>HydraPipeline</code> showing proposed → created → pushed → merged per week with mean change age.</li>
+</ol>
+<p>Not raised as changes:</p>
+<ul>
+<li class="">The <code>sync_hydra_feedback.py</code> script still exists but is superseded by the <code>hydra_learning</code> ingest pipeline (see § 0c). Its role is unclear — either it is redundant or it covers a narrower slice than <code>hydra_learning.ingest_hydra_logs</code>. Worth a clean-up pass but not a blocking gap.</li>
+<li class=""><code>Dockerfile.analysis</code> and <code>Dockerfile.spec-writer</code> are present in the repo; their pipeline wiring should be verified before citing them as load-bearing, but this is a documentation tidy rather than an ISO gap.</li>
+</ul>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="0b-hydra--the-spec--code-pipeline">0b. Hydra — the spec → code pipeline<a href="#0b-hydra--the-spec--code-pipeline" class="hash-link" aria-label="Direct link to 0b. Hydra — the spec → code pipeline" title="Direct link to 0b. Hydra — the spec → code pipeline" translate="no">​</a></h2>
+<p>Where Specter is the <em>what &amp; why</em>, Hydra is the <em>how</em>. It takes an OpenSpec change (proposal.md + design.md + tasks.md + context-brief.md) and turns it into merged, reviewed, gate-passed code on the target app repo. Code lives at <a class="" href="/hydra/">hydra/</a>.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="pipeline-stages">Pipeline stages<a href="#pipeline-stages" class="hash-link" aria-label="Direct link to Pipeline stages" title="Direct link to Pipeline stages" translate="no">​</a></h3>
+<p>Four agent personas, each with its own container-pool budget (ADR-013):</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Stage</th><th>Persona</th><th>Input</th><th>Output</th><th>Key ADR</th></tr></thead><tbody><tr><td>Build</td><td><code>builder</code></td><td>change folder + target repo</td><td>draft PR with code + tests</td><td>ADR-003, ADR-015</td></tr><tr><td>Review</td><td><code>reviewer</code></td><td>builder&#x27;s PR</td><td>findings with <code>[fixed:…]</code> / <code>[unfixed:…]</code> markers</td><td>ADR-020, ADR-021</td></tr><tr><td>Security review</td><td><code>security-reviewer</code></td><td>builder&#x27;s PR</td><td>OWASP / auth findings</td><td>ADR-005, ADR-023</td></tr><tr><td>Fix</td><td><code>fixer</code></td><td><code>[unfixed:…]</code> markers</td><td>bounded-scope corrections</td><td>ADR-021</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="the-9-mechanical-gates">The 9 mechanical gates<a href="#the-9-mechanical-gates" class="hash-link" aria-label="Direct link to The 9 mechanical gates" title="Direct link to The 9 mechanical gates" translate="no">​</a></h3>
+<p>Run by <code>hydra/scripts/run-hydra-gates.sh</code>, invoked by the builder before push and by the reviewer as mandatory first step:</p>
+<p><code>spdx</code> · <code>forbidden-patterns</code> · <code>stub-scan</code> · <code>composer-audit</code> · <code>route-auth</code> · <code>orphan-auth</code> · <code>no-admin-idor</code> · <code>unsafe-auth-resolver</code> · <code>semantic-auth</code></p>
+<p>Four of the nine (<code>orphan-auth</code>, <code>no-admin-idor</code>, <code>unsafe-auth-resolver</code>, <code>semantic-auth</code>) were authored in April 2026 after specific decidesk incidents — the worked example of the corrective-action loop in clause 10.2.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="the-per-change-journal--hydrajson">The per-change journal — <code>hydra.json</code><a href="#the-per-change-journal--hydrajson" class="hash-link" aria-label="Direct link to the-per-change-journal--hydrajson" title="Direct link to the-per-change-journal--hydrajson" translate="no">​</a></h3>
+<p>Written by <code>hydra/scripts/lib/hydra_record.py</code> (exclusive <code>fcntl.flock</code> + write-temp-and-rename for atomic concurrent-safe updates), located at <code>hydra/openspec/changes/{slug}/hydra.json</code>. Schema v2, validated in code (no external JSON schema file).</p>
+<p>Fields per cycle:</p>
+<ul>
+<li class=""><code>trigger</code>, <code>started_at</code>, <code>ended_at</code>, <code>outcome</code>, <code>outcome_reason</code></li>
+<li class=""><code>pattern_tags[]</code> — free-form tags (e.g. <code>turn-budget-exhausted</code>, <code>recheck-caught-new-findings</code>, <code>container-crashed-mid-stage</code>)</li>
+<li class=""><code>stages[]</code> — one entry per run of builder / reviewer / security-reviewer / fixer</li>
+</ul>
+<p>Fields per stage:</p>
+<ul>
+<li class=""><code>stage</code>, <code>persona</code>, <code>model</code>, <code>turns_used</code>, <code>turns_budget</code>, <code>cost_usd</code></li>
+<li class=""><code>checks_run[]</code>, <code>checks_skipped[]</code>, <code>verdict</code></li>
+<li class=""><code>findings[]</code> — each finding carries <code>id</code>, <code>severity</code>, <code>gate</code>, <code>file</code>, <code>line</code>, <code>rule</code>, <code>status</code> (<code>fixed_in_stage</code> / <code>open</code> / <code>fixed_later</code> / <code>wontfix</code>), <code>autofixable</code></li>
+<li class=""><code>decisions[]</code> — fixer resolutions</li>
+</ul>
+<p>Plus the committed legacy-compatible sibling files: <code>reviews/*.json</code>, <code>builds/*.json</code>, <code>pipeline-logs/*.jsonl.gz</code> (gzipped agent transcripts), and the per-change <code>hydra.json</code> summary of costs.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="supervisor--cron">Supervisor + cron<a href="#supervisor--cron" class="hash-link" aria-label="Direct link to Supervisor + cron" title="Direct link to Supervisor + cron" translate="no">​</a></h3>
+<ul>
+<li class=""><code>hydra/scripts/hydra-supervisor.sh</code> — continuous 5-worker pool.</li>
+<li class=""><code>watchdog-supervisor.sh</code> — every minute; restarts the supervisor if dead.</li>
+<li class=""><code>reconcile.sh</code> — every 10 minutes; label validation + auto-recovery sweep.</li>
+<li class=""><code>cron-audit.sh</code> — every 30 minutes; full codebase audits.</li>
+<li class=""><code>cron-spec-from-issue.sh</code> — every 10 minutes; reverse pipeline (issue → spec).</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="non-conforming-outputs--needs-input">Non-conforming outputs — <code>needs-input</code><a href="#non-conforming-outputs--needs-input" class="hash-link" aria-label="Direct link to non-conforming-outputs--needs-input" title="Direct link to non-conforming-outputs--needs-input" translate="no">​</a></h3>
+<p>Terminal label set on specific triggers (detailed in 8.7); once applied, every handler short-circuits before any side effect. The invariant is pinned in <code>hydra/CLAUDE.md</code> lines 580–598.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="hydra-in-iso-9001-terms">Hydra in ISO-9001 terms<a href="#hydra-in-iso-9001-terms" class="hash-link" aria-label="Direct link to Hydra in ISO-9001 terms" title="Direct link to Hydra in ISO-9001 terms" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Clause</th><th>How Hydra serves it</th></tr></thead><tbody><tr><td>8.3.4 D&amp;D controls</td><td>9 mechanical gates + reviewer + security-reviewer + fixer; bounded fix scope (ADR-021).</td></tr><tr><td>8.5.1 Control of production</td><td>Quality.yml bank + gates + PHPUnit matrix.</td></tr><tr><td>8.5.2 Identification and traceability (downstream half)</td><td><code>@spec</code> tags (ADR-003) anchor every source line to <code>tasks.md#task-N</code>; <code>Closes #N</code> closes the issue chain.</td></tr><tr><td>8.7 Control of non-conforming outputs</td><td>Fixer for in-scope findings; <code>needs-input</code> terminal state with handler short-circuit for out-of-scope.</td></tr><tr><td>9.1.1 Monitoring (per-PR)</td><td>quality-report.md + <code>hydra.json</code> at every stage.</td></tr><tr><td>10.2 Corrective action</td><td>New mechanical gate per recurring class; ADR iteration.</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="gaps-and-closure-proposals-hydra-side">Gaps and closure proposals (Hydra-side)<a href="#gaps-and-closure-proposals-hydra-side" class="hash-link" aria-label="Direct link to Gaps and closure proposals (Hydra-side)" title="Direct link to Gaps and closure proposals (Hydra-side)" translate="no">​</a></h3>
+<p>These map directly to ISO clause gaps:</p>
+<ol>
+<li class=""><strong><code>needs-input</code> digest</strong> — data is in <code>HydraPipeline.final_status</code> (see § 0c) but there is no dedicated grouping view. A <code>/hydra/needs-input/</code> page in the Specter dashboard would close 8.7&#x27;s aggregate dimension.</li>
+<li class=""><strong>Link findings to canonical features</strong> — raised as the <code>link-findings-to-features</code> OpenSpec change (see § 0a and § 0c). Same gap, Hydra side.</li>
+</ol>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="0c-the-learning-bridge--hydra_learning-django-app">0c. The learning bridge — <code>hydra_learning</code> Django app<a href="#0c-the-learning-bridge--hydra_learning-django-app" class="hash-link" aria-label="Direct link to 0c-the-learning-bridge--hydra_learning-django-app" title="Direct link to 0c-the-learning-bridge--hydra_learning-django-app" translate="no">​</a></h2>
+<p>The clauses ISO 9001 treats as a connected loop — 9.1.1 monitoring, 9.1.3 analysis &amp; evaluation, 10.2 corrective action, 10.3 continual improvement — are served by a single subsystem: the <code>hydra_learning</code> Django app, shipped 2026-04-17, living inside Specter but operating on Hydra&#x27;s outputs.</p>
+<p>This section describes it in some detail because it is where the most important ISO-9001 work happens, and because earlier drafts of this document described it as &quot;designed, not shipped&quot; — which is no longer true.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="why-it-lives-in-specter">Why it lives in Specter<a href="#why-it-lives-in-specter" class="hash-link" aria-label="Direct link to Why it lives in Specter" title="Direct link to Why it lives in Specter" translate="no">​</a></h3>
+<p><code>hydra_learning</code> is analytics <em>about</em> Hydra&#x27;s pipeline output, not part of Hydra&#x27;s runtime. It belongs where Specter&#x27;s infrastructure already exists: PostgreSQL at port 5433, Django 5 admin, Jazzmin sidebar, AdminLTE + Chart.js templates, management-command cron pattern, <code>StaffRequiredMixin</code> auth.</p>
+<p>Code:</p>
+<ul>
+<li class=""><a class="" href="/concurrentie-analyse/hydra_learning/">concurrentie-analyse/hydra_learning/</a> — Django app.</li>
+<li class=""><a class="" href="/concurrentie-analyse/hydra_learning/management/commands/">concurrentie-analyse/hydra_learning/management/commands/</a> — 5 management commands.</li>
+<li class=""><a class="" href="/concurrentie-analyse/docs/hydra-learning/README.md/">concurrentie-analyse/docs/hydra-learning/README.md</a> — operator runbook.</li>
+<li class="">Original proposal: <a class="" href="/concurrentie-analyse/openspec/changes/hydra-learning-pipeline/proposal.md/">concurrentie-analyse/openspec/changes/hydra-learning-pipeline/proposal.md</a>.</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="data-model--5-postgresql-tables">Data model — 5 PostgreSQL tables<a href="#data-model--5-postgresql-tables" class="hash-link" aria-label="Direct link to Data model — 5 PostgreSQL tables" title="Direct link to Data model — 5 PostgreSQL tables" translate="no">​</a></h3>
+<p>All prefixed <code>hydra_</code> to stay in their namespace. Django-managed.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Table</th><th>Grain</th><th>Role in ISO</th></tr></thead><tbody><tr><td><code>hydra_pipelines</code></td><td>one row per pipeline run (build + fixes + reviews for one issue)</td><td>9.1.1 monitoring anchor; 8.7 <code>final_status</code> captures needs-input</td></tr><tr><td><code>hydra_phases</code></td><td>one row per phase of a pipeline (turns, cost, tokens, model, terminal reason)</td><td>9.1.1 cost + duration metrics</td></tr><tr><td><code>hydra_findings</code></td><td>one row per reviewer finding (severity, file, line, title, description, status, fixed_in_round)</td><td>10.2 corrective-action evidence</td></tr><tr><td><code>hydra_finding_clusters</code></td><td>normalised group of similar findings across pipelines (fingerprint, pipeline_count, first/last_seen, coverage flags)</td><td>9.1.3 analysis; 10.3 continual improvement signal</td></tr><tr><td><code>hydra_suggestions</code></td><td>LLM-generated improvement proposal per cluster (proposed patch, rationale, evidence, review status)</td><td>10.2 / 10.3 automated corrective-action proposals</td></tr></tbody></table>
+<p>The cluster table carries <code>covered_by_claude_md</code> + <code>covered_by_adr</code> flags — important: if a pattern is <em>already</em> documented in an ADR or CLAUDE.md, it won&#x27;t be re-proposed.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="the-5-management-commands">The 5 management commands<a href="#the-5-management-commands" class="hash-link" aria-label="Direct link to The 5 management commands" title="Direct link to The 5 management commands" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Command</th><th>Role</th></tr></thead><tbody><tr><td><code>ingest_hydra_logs</code></td><td>Reads <code>../hydra/logs/pipeline-*/</code>, target repos&#x27; <code>openspec/changes/*/hydra.json</code>, <code>reviews/*.json</code>, <code>pipeline-logs/*.jsonl.gz</code>, and GitHub issue events. Upserts into the <code>hydra_*</code> tables. Idempotent (unique_together on <code>repo, issue_num, log_dir</code>).</td></tr><tr><td><code>analyze_pipelines</code></td><td>Fingerprints finding titles, updates <code>HydraFindingCluster</code> with pipeline_count / severity_mix / first_seen / last_seen. Grep-based coverage detection against Hydra&#x27;s current CLAUDE.md + ADRs.</td></tr><tr><td><code>suggest_improvements</code></td><td>For uncovered high-frequency clusters (default threshold: 15% frequency, max 5 per run), invokes local <code>claude -p</code> with a scoped prompt carrying Hydra&#x27;s CLAUDE.md + the cluster&#x27;s example findings. Writes <code>HydraSuggestion</code> rows with <code>status=&#x27;proposed&#x27;</code>.</td></tr><tr><td><code>apply_hydra_suggestion</code></td><td>When a human clicks &quot;Apply&quot; on an accepted suggestion, clones Hydra, branches <code>learning/suggestion-&lt;id&gt;-&lt;slug&gt;</code>, applies the patch, opens a PR to development.</td></tr><tr><td><code>hydra_nightly</code></td><td>Orchestrates the three analytical commands. Registered as host cron at 03:00 UTC daily. Exits non-zero on any failure.</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="dashboard--the-user-facing-half">Dashboard — the user-facing half<a href="#dashboard--the-user-facing-half" class="hash-link" aria-label="Direct link to Dashboard — the user-facing half" title="Direct link to Dashboard — the user-facing half" translate="no">​</a></h3>
+<ul>
+<li class=""><strong>Dashboard home</strong> <code>/hydra/</code> — KPI grid (total pipelines, % done, % needs-input, median turns, median time-to-done), weekly first-pass-success rate chart, weekly findings-per-pipeline chart, top-10 recurring clusters, pending suggestions count.</li>
+<li class=""><strong>Pipeline list</strong> <code>/hydra/pipelines/</code> — per-pipeline rows with repo, issue, spec, duration, turns, cost, fix_iterations, status.</li>
+<li class=""><strong>Pipeline detail</strong> <code>/hydra/pipelines/&lt;id&gt;/</code> — phase timeline, findings by round, links to issue + PR + raw archives.</li>
+<li class=""><strong>Finding clusters</strong> <code>/hydra/findings/</code> — ranked by <code>pipeline_count</code>; filter by severity + coverage status.</li>
+<li class=""><strong>Suggestions queue</strong> <code>/hydra/suggestions/</code> — accept / reject / apply workflow.</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="as-shipped-numbers-2026-04-17-initial-backfill">As-shipped numbers (2026-04-17 initial backfill)<a href="#as-shipped-numbers-2026-04-17-initial-backfill" class="hash-link" aria-label="Direct link to As-shipped numbers (2026-04-17 initial backfill)" title="Direct link to As-shipped numbers (2026-04-17 initial backfill)" translate="no">​</a></h3>
+<ul>
+<li class="">978 existing Hydra log dirs scanned</li>
+<li class="">481 pipelines imported</li>
+<li class="">1 145 phases</li>
+<li class="">800 findings</li>
+<li class="">752 finding clusters (627 uncovered by existing CLAUDE.md/ADRs — these are the candidates for new gates or ADR updates)</li>
+<li class="">First LLM-generated suggestion produced</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="the-loop-in-one-picture">The loop in one picture<a href="#the-loop-in-one-picture" class="hash-link" aria-label="Direct link to The loop in one picture" title="Direct link to The loop in one picture" translate="no">​</a></h3>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">Hydra produces:  hydra.json + reviews/*.json + pipeline-logs/*.jsonl.gz</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">                     │</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">                     ▼  ingest_hydra_logs  (nightly)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">Specter DB:      hydra_pipelines, hydra_phases, hydra_findings</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">                     │</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">                     ▼  analyze_pipelines  (nightly)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">                 hydra_finding_clusters  (with coverage flags)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">                     │</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">                     ▼  suggest_improvements  (nightly, LLM-assisted)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">                 hydra_suggestions  (status=&#x27;proposed&#x27;)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">                     │</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">                     ▼  human review in /hydra/suggestions/</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">                 accepted → apply_hydra_suggestion</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">                     │</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">                     ▼</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">                 PR opened on Hydra repo with proposed CLAUDE.md / ADR patch</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">                     │</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">                     ▼  human review &amp; merge on Hydra</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">                 Hydra&#x27;s behaviour improves  ─── feeds back into the next Hydra run</span><br></div></code></pre></div></div>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="what-the-learning-bridge-does-for-iso-clauses">What the learning bridge does for ISO clauses<a href="#what-the-learning-bridge-does-for-iso-clauses" class="hash-link" aria-label="Direct link to What the learning bridge does for ISO clauses" title="Direct link to What the learning bridge does for ISO clauses" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Clause</th><th>What&#x27;s satisfied</th></tr></thead><tbody><tr><td>9.1.1 Monitoring and measurement</td><td><code>hydra_pipelines</code> + <code>hydra_phases</code> = cross-change cost, duration, turn count, findings density. Rendered on <code>/hydra/</code> dashboard.</td></tr><tr><td>9.1.3 Analysis and evaluation</td><td><code>analyze_pipelines</code> + <code>hydra_finding_clusters</code> = automated cross-pipeline pattern analysis. Weekly trend charts.</td></tr><tr><td>10.2 Corrective action</td><td><code>suggest_improvements</code> + <code>apply_hydra_suggestion</code> = automated proposal loop with HITL approval.</td></tr><tr><td>10.3 Continual improvement</td><td>Success metric: 30%+ drop in average reviewer findings per pipeline; 25%+ drop in median time-to-done; first-pass success from ~40% to &gt;60%. Measured from <code>HydraPipeline.findings.count()</code> and <code>HydraPipeline.ended_at - started_at</code>.</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="whats-still-missing">What&#x27;s still missing<a href="#whats-still-missing" class="hash-link" aria-label="Direct link to What&#x27;s still missing" title="Direct link to What&#x27;s still missing" translate="no">​</a></h3>
+<p>Three honest gaps remain. All are narrow. Each has an OpenSpec change raised under <code>concurrentie-analyse/openspec/changes/</code> on <code>spec/*</code> branches:</p>
+<ol>
+<li class=""><strong><code>link-findings-to-features</code></strong> — <code>HydraPipeline</code> has no FK to <code>canonical_features</code>. So we know &quot;cluster X recurred on 7 pipelines&quot; but not &quot;on pipelines building these 3 feature categories.&quot; Closes the analysis-side of 9.1.3 for feature-level queries.</li>
+<li class=""><strong><code>embed-feature-id-in-issues</code></strong> — complementary: have <code>push_roadmap_issues.py</code> emit <code>feature_id</code> on issues so the enrichment phase in change 1 has a machine-readable anchor.</li>
+<li class=""><strong><code>add-spec-pipeline-throughput-view</code></strong> — a view on <code>/specs/throughput/</code> showing <code>app_specs.status</code> transitions (proposed → created → pushed → merged) per week, joined to <code>hydra_pipelines</code> for mean change age. Closes Board-1 / Board-2 of the § 9.1.1 management metrics panel.</li>
+</ol>
+<p>A smaller residual gap: the operator cron entry (&quot;0 3 * * * cd … python3 manage.py hydra_nightly …&quot;) sits in the host crontab, not in a reproducible Ansible / Docker Compose manifest. Spelled out in <code>docs/hydra-learning/README.md</code> but not automated. This is 7.5.3 (control of documented information) adjacent — worth adding to the 27001 track.</p>
+<hr>
+<h1>Clause 4 — Context of the Organization</h1>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="41-understanding-the-organization-and-its-context">4.1 Understanding the organization and its context<a href="#41-understanding-the-organization-and-its-context" class="hash-link" aria-label="Direct link to 4.1 Understanding the organization and its context" title="Direct link to 4.1 Understanding the organization and its context" translate="no">​</a></h2>
+<p><em>What the standard asks.</em> Determine external and internal issues relevant to the organization&#x27;s purpose and its ability to achieve intended QMS results.</p>
+<p><strong>Our implementation.</strong> Conduction&#x27;s context — open-source ecosystem serving Dutch public administration — is recorded in the company-wide CLAUDE.md, in <a class="" href="/iso/claude/">.github/docs/claude/</a>, and in the roadmap at <a class="" href="/ROADMAP/">.github/docs/ROADMAP.md</a>. External context is <em>measured</em> — the Specter intelligence DB (see § 0a) currently holds 75.6K tenders, 151.4K requirements, 6.8K canonical features and 98 tracked competitors, refreshed weekly by the Sunday 02:00 UTC GitHub Actions sync.</p>
+<p><strong>Coverage.</strong> <em>Partial.</em></p>
+<p><strong>Gap &amp; how to close.</strong> There is no single &quot;context of the organization&quot; document. The information is spread across CLAUDE.md, the roadmap, and the intelligence DB. Closing the gap: produce one short summary (1–2 pages) at <code>.github/docs/iso/context.md</code> that names internal issues (team size, multi-repo sprawl, shared stack), external issues (VNG standards, EU tender directives, Nextcloud upstream), and links out to the authoritative sources.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="42-needs-and-expectations-of-interested-parties">4.2 Needs and expectations of interested parties<a href="#42-needs-and-expectations-of-interested-parties" class="hash-link" aria-label="Direct link to 4.2 Needs and expectations of interested parties" title="Direct link to 4.2 Needs and expectations of interested parties" translate="no">​</a></h2>
+<p><em>What the standard asks.</em> Identify interested parties relevant to the QMS and their requirements.</p>
+<p><strong>Our implementation.</strong> Interested parties are captured across three channels:</p>
+<ul>
+<li class=""><strong>Specter&#x27;s DB</strong> (§ 0a) — 92 <code>stakeholders</code>, 285 <code>customer_journeys</code>, 1.9K <code>user_stories</code>, 127 <code>nl_standards</code> rows. This is an interested-parties register in all but name.</li>
+<li class=""><strong>Persona skills</strong> — eight <code>test-persona-*</code> agents (Henk, Fatima, Sem, Annemarie, Jan-Willem, Mark, Priya, Noor) that name end-user archetypes used for testing.</li>
+<li class=""><strong>Standards</strong> — VNG, Logius, Forum Standaardisatie surface in the 127 imported <code>nl_standards</code> rows plus the <code>gemma_components</code> / <code>gemma_services</code> / <code>laws</code> / <code>law_articles</code> tables.</li>
+</ul>
+<p><strong>Coverage.</strong> <em>Partial.</em></p>
+<p><strong>Gap &amp; how to close.</strong> The data exists but is not presented as a single party register that names (a) the party, (b) the requirement they impose, (c) where we evidence satisfying it. A view / script against the existing DB — <code>scripts/specter-interested-parties.py</code> — could render the table directly. Low effort, no new data.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="43-determining-the-scope-of-the-quality-management-system">4.3 Determining the scope of the quality management system<a href="#43-determining-the-scope-of-the-quality-management-system" class="hash-link" aria-label="Direct link to 4.3 Determining the scope of the quality management system" title="Direct link to 4.3 Determining the scope of the quality management system" translate="no">​</a></h2>
+<p><em>What the standard asks.</em> Define boundaries and applicability of the QMS.</p>
+<p><strong>Our implementation.</strong> Implicit scope: the apps under <code>apps-extra/</code> plus the shared platforms (OpenRegister, Hydra, nextcloud-vue). External components such as <code>Softwarecatalogus/</code> (VNG client repo) are explicitly out of scope per the CLAUDE.md instruction <em>&quot;NEVER commit&quot;</em>.</p>
+<p><strong>Coverage.</strong> <em>Partial.</em></p>
+<p><strong>Gap &amp; how to close.</strong> The scope is known in practice but not written down as a QMS scope statement. One paragraph naming the apps in scope, the shared infrastructure, and the explicit exclusions (e.g. client repos, third-party submodules) would close this.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="44-quality-management-system-and-its-processes">4.4 Quality management system and its processes<a href="#44-quality-management-system-and-its-processes" class="hash-link" aria-label="Direct link to 4.4 Quality management system and its processes" title="Direct link to 4.4 Quality management system and its processes" translate="no">​</a></h2>
+<p><em>What the standard asks.</em> Establish, implement, maintain and continually improve a QMS, including the processes needed and their interactions.</p>
+<p><strong>Our implementation.</strong> The QMS <em>is</em> the pipeline in § 0. The processes and their interactions are specified by the 23 Hydra ADRs and the <code>/opsx-*</code> skill chain. Process ownership: Hydra owns code-review and security-review; Specter owns intelligence→spec; CI workflow owns quality gates; human reviewers own release.</p>
+<p><strong>Coverage.</strong> <em>Full.</em></p>
+<hr>
+<h1>Clause 5 — Leadership</h1>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="51-leadership-and-commitment-511-general--512-customer-focus">5.1 Leadership and commitment (5.1.1 General / 5.1.2 Customer focus)<a href="#51-leadership-and-commitment-511-general--512-customer-focus" class="hash-link" aria-label="Direct link to 5.1 Leadership and commitment (5.1.1 General / 5.1.2 Customer focus)" title="Direct link to 5.1 Leadership and commitment (5.1.1 General / 5.1.2 Customer focus)" translate="no">​</a></h2>
+<p><em>What the standard asks.</em> Top management must demonstrate leadership and commitment to the QMS and to customer focus.</p>
+<p><strong>Our implementation.</strong> Leadership commitment shows up in the ADRs themselves — ADR-014 mandates EUPL-1.2 licensing + SPDX headers on every file; ADR-015 codifies a 15-point pre-commit checklist evolved from 77 real review findings (<a class="" href="/.claude/memory/project_hydra-adr-iteration.md/">project_hydra-adr-iteration.md</a>). Customer focus is embodied in the 8 persona testers and the tender-driven roadmap.</p>
+<p><strong>Coverage.</strong> <em>Partial.</em></p>
+<p><strong>Gap &amp; how to close.</strong> We have actions but no explicit quality-commitment artefact. A signed-off one-pager from leadership — &quot;we commit to these ADRs, this pipeline, this review cadence&quot; — would take this to Full.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="52-policy-521-establish--522-communicate">5.2 Policy (5.2.1 Establish / 5.2.2 Communicate)<a href="#52-policy-521-establish--522-communicate" class="hash-link" aria-label="Direct link to 5.2 Policy (5.2.1 Establish / 5.2.2 Communicate)" title="Direct link to 5.2 Policy (5.2.1 Establish / 5.2.2 Communicate)" translate="no">​</a></h2>
+<p><em>What the standard asks.</em> A quality policy appropriate to the organization&#x27;s purpose, providing a framework for objectives, documented, communicated, understood, applied, available to interested parties.</p>
+<p><strong>Our implementation.</strong> None explicit.</p>
+<p><strong>Coverage.</strong> <em>None.</em></p>
+<p><strong>Gap &amp; how to close.</strong> Write and publish <code>.github/docs/iso/quality-policy.md</code>. It should be short (half a page), link into this folder, and be referenced from the top-level README. ISO/IEC 90003 §5.2 does not add software-specific requirements beyond 9001&#x27;s.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="53-organizational-roles-responsibilities-and-authorities">5.3 Organizational roles, responsibilities and authorities<a href="#53-organizational-roles-responsibilities-and-authorities" class="hash-link" aria-label="Direct link to 5.3 Organizational roles, responsibilities and authorities" title="Direct link to 5.3 Organizational roles, responsibilities and authorities" translate="no">​</a></h2>
+<p><em>What the standard asks.</em> Assign, communicate and understand responsibilities and authorities for QMS roles.</p>
+<p><strong>Our implementation.</strong> Roles are expressed through Hydra agent roles (builder, reviewer, security-reviewer, fixer) and the Scrum-team skills (<code>team-po</code>, <code>team-architect</code>, <code>team-backend</code>, <code>team-frontend</code>, <code>team-reviewer</code>, <code>team-qa</code>, <code>team-sm</code>). Branch-protection rulesets encode authority: who can approve for development / beta / main.</p>
+<p><strong>Coverage.</strong> <em>Partial.</em></p>
+<p><strong>Gap &amp; how to close.</strong> Write a short RACI-style table of human roles — who approves ADRs, who owns Hydra config, who signs off on a release — alongside the agent-role map.</p>
+<hr>
+<h1>Clause 6 — Planning</h1>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="61-actions-to-address-risks-and-opportunities">6.1 Actions to address risks and opportunities<a href="#61-actions-to-address-risks-and-opportunities" class="hash-link" aria-label="Direct link to 6.1 Actions to address risks and opportunities" title="Direct link to 6.1 Actions to address risks and opportunities" translate="no">​</a></h2>
+<p><em>What the standard asks.</em> Consider issues (4.1) and requirements (4.2), determine risks and opportunities, plan actions, evaluate effectiveness.</p>
+<p><strong>Our implementation.</strong> Risk-based thinking is baked into the pipeline: 9 mechanical Hydra gates address specific OWASP/CWE risks (e.g. <code>no-admin-idor</code> for A01:2021 IDOR, <code>unsafe-auth-resolver</code> for silent-fail-open auth, <code>semantic-auth</code> for annotation/body mismatch). Each new gate typically springs from a concrete incident — e.g. <code>semantic-auth</code> from decidesk#44 (2026-04-23). This is exactly the &quot;plan actions to address risks&quot; cycle, just executed at skill-definition level.</p>
+<p><strong>Coverage.</strong> <em>Full</em> for technical code-level risks; <em>Partial</em> for business/organizational risks (no risk register).</p>
+<p><strong>Gap &amp; how to close.</strong> A lightweight risk register at <code>.github/docs/iso/risks.md</code> capturing non-code risks: dependency on Nextcloud upstream, Cyso hosting, single-maintainer bus factor per app, EU tender deadlines. Re-evaluate quarterly.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="62-quality-objectives-and-planning-to-achieve-them">6.2 Quality objectives and planning to achieve them<a href="#62-quality-objectives-and-planning-to-achieve-them" class="hash-link" aria-label="Direct link to 6.2 Quality objectives and planning to achieve them" title="Direct link to 6.2 Quality objectives and planning to achieve them" translate="no">​</a></h2>
+<p><em>What the standard asks.</em> Establish measurable quality objectives at relevant functions; document them; plan what, who, when, resources, how evaluated.</p>
+<p><strong>Our implementation.</strong> Implicit objectives: <code>composer check:strict</code> passes, 75 % spec-to-test coverage threshold (per <a class="" href="/.claude/memory/project_testing-architecture.md/">project_testing-architecture.md</a>), Newman + Playwright both green, license allowlist clean, zero Psalm errors. These live in the quality.yml job definitions, not in a separate objectives document.</p>
+<p><strong>Coverage.</strong> <em>Partial.</em></p>
+<p><strong>Gap &amp; how to close.</strong> Extract the implicit objectives into <code>.github/docs/iso/objectives.md</code> with the 9001 format: objective, target, measurement method, review cadence. The numbers already exist; they just need collecting.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="63-planning-of-changes">6.3 Planning of changes<a href="#63-planning-of-changes" class="hash-link" aria-label="Direct link to 6.3 Planning of changes" title="Direct link to 6.3 Planning of changes" translate="no">​</a></h2>
+<p><em>What the standard asks.</em> When the QMS needs change, plan it — purpose, consequences, integrity, resources, responsibilities.</p>
+<p><strong>Our implementation.</strong> The OpenSpec <em>change</em> format. <code>hydra/openspec/changes/{slug}/</code> contains proposal.md (purpose), design.md (consequences), tasks.md (work breakdown). The <code>/opsx-*</code> skill chain enforces that every change goes through propose → plan → apply → verify → archive. ADR changes follow the same flow.</p>
+<p><strong>Coverage.</strong> <em>Full.</em></p>
+<hr>
+<h1>Clause 7 — Support</h1>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="71-resources">7.1 Resources<a href="#71-resources" class="hash-link" aria-label="Direct link to 7.1 Resources" title="Direct link to 7.1 Resources" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="711-general">7.1.1 General<a href="#711-general" class="hash-link" aria-label="Direct link to 7.1.1 General" title="Direct link to 7.1.1 General" translate="no">​</a></h3>
+<p><em>What.</em> Determine and provide resources needed for the QMS.</p>
+<p><strong>Our implementation.</strong> Resources = compute (Docker Compose dev env, CI runners), tooling (Composer, npm, Playwright, Psalm, PHPStan), data (intelligence DB, seed data), agents (Hydra, Specter). All tracked in <code>.github/docker-compose.yml</code>, <code>composer.json</code>, <code>package.json</code>, and the skills inventory.</p>
+<p><strong>Coverage.</strong> <em>Full.</em></p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="712-people">7.1.2 People<a href="#712-people" class="hash-link" aria-label="Direct link to 7.1.2 People" title="Direct link to 7.1.2 People" translate="no">​</a></h3>
+<p><em>What.</em> Determine and provide persons necessary.</p>
+<p><strong>Our implementation.</strong> Combination of human engineers and AI agents (the 9 Scrum-team skills, 8 persona testers, 7 testing-team agents). The agent inventory is the clearest record.</p>
+<p><strong>Coverage.</strong> <em>Full.</em></p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="713-infrastructure">7.1.3 Infrastructure<a href="#713-infrastructure" class="hash-link" aria-label="Direct link to 7.1.3 Infrastructure" title="Direct link to 7.1.3 Infrastructure" translate="no">​</a></h3>
+<p><em>What.</em> Determine, provide and maintain infrastructure (buildings, equipment, ICT, transport).</p>
+<p><strong>Our implementation.</strong> ICT infrastructure: GitHub (code + CI + issues + PRs), Cyso hosting (production, ISAE 3402), Docker Compose (dev/test), 7 Playwright MCP browser sessions (browser-1 … browser-7), Ollama + Qwen 3.5 for local LLM inference. Documented in CLAUDE.md and <a class="" href="/iso/claude/">.github/docs/claude/</a>.</p>
+<p><strong>Coverage.</strong> <em>Full.</em></p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="714-environment-for-the-operation-of-processes">7.1.4 Environment for the operation of processes<a href="#714-environment-for-the-operation-of-processes" class="hash-link" aria-label="Direct link to 7.1.4 Environment for the operation of processes" title="Direct link to 7.1.4 Environment for the operation of processes" translate="no">​</a></h3>
+<p><em>What.</em> Provide and maintain the environment needed for operation.</p>
+<p><strong>Our implementation.</strong> Dev environment reproducible via <code>bash clean-env.sh</code> / <code>/clean-env</code> skill. CI environment defined in quality.yml job containers (matrix of PHP × Nextcloud versions).</p>
+<p><strong>Coverage.</strong> <em>Full.</em></p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="715-monitoring-and-measuring-resources">7.1.5 Monitoring and measuring resources<a href="#715-monitoring-and-measuring-resources" class="hash-link" aria-label="Direct link to 7.1.5 Monitoring and measuring resources" title="Direct link to 7.1.5 Monitoring and measuring resources" translate="no">​</a></h3>
+<p><em>What.</em> Ensure resources are suitable for the monitoring/measurement activity and are maintained (in classic ISO 9001 this is about calibrating rulers and scales).</p>
+<p><strong>Our implementation.</strong> Software analogue: the test suites, linters, and static analysers are themselves &quot;measuring instruments&quot;. We pin their versions (composer.lock, package-lock.json), update them deliberately, and the PHPUnit baseline guard in quality.yml detects regressions in the measurement itself.</p>
+<p><strong>Coverage.</strong> <em>Partial — with interpretation.</em> ISO/IEC 90003 §7.1.5 explicitly allows this software reinterpretation; we do pin versions but do not formally document a tool-suitability check.</p>
+<p><strong>Gap &amp; how to close.</strong> A short &quot;tool-suitability&quot; note in <code>objectives.md</code> or a dedicated file: which tools we rely on, how we know the version is fit for purpose, how we handle updates.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="716-organizational-knowledge">7.1.6 Organizational knowledge<a href="#716-organizational-knowledge" class="hash-link" aria-label="Direct link to 7.1.6 Organizational knowledge" title="Direct link to 7.1.6 Organizational knowledge" translate="no">​</a></h3>
+<p><em>What.</em> Determine the knowledge necessary for operating processes, maintain it, make it available, and consider how to acquire additional knowledge.</p>
+<p><strong>Our implementation.</strong> This is one of our strongest clauses. Knowledge lives in:</p>
+<ul>
+<li class=""><strong>23 ADRs</strong> in <code>hydra/openspec/architecture/</code> — every architectural decision recorded with context and consequences.</li>
+<li class=""><strong>CLAUDE.md files</strong> — layered (root, per-repo, per-app) — provide instructions to both humans and agents.</li>
+<li class=""><strong><a class="" href="/iso/">.github/docs/</a></strong> — developer docs, pipeline overview, container architecture, deployment models, retrospectives.</li>
+<li class=""><strong>Shared OpenSpec</strong> — i18n specs, schemas, cross-app changes at <code>hydra/openspec/specs/</code>.</li>
+<li class=""><strong>Memory index</strong> — per-user memory under <code>~/.claude/projects/…/memory/MEMORY.md</code> preserves project-specific facts across sessions.</li>
+<li class=""><strong>Retrospectives</strong> — <code>hydra/docs/retrospectives/</code>.</li>
+</ul>
+<p><strong>Coverage.</strong> <em>Full.</em></p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="72-competence">7.2 Competence<a href="#72-competence" class="hash-link" aria-label="Direct link to 7.2 Competence" title="Direct link to 7.2 Competence" translate="no">​</a></h2>
+<p><em>What.</em> Determine required competence; ensure persons are competent; take actions to acquire it; evaluate effectiveness.</p>
+<p><strong>Our implementation.</strong> For humans: no formal competence matrix. For agents: each skill has an explicit description and — where applicable — a worked example. The Hydra pipeline is itself a forcing function: if an agent-produced PR fails the gates, the agent&#x27;s &quot;competence&quot; is measured objectively.</p>
+<p><strong>Coverage.</strong> <em>Partial</em> (humans) / <em>Full</em> (agents).</p>
+<p><strong>Gap &amp; how to close.</strong> A skills matrix for humans listing required competences per role (backend PHP, Vue, pipeline ops, security review) and recorded training. Not heavy — one table.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="73-awareness">7.3 Awareness<a href="#73-awareness" class="hash-link" aria-label="Direct link to 7.3 Awareness" title="Direct link to 7.3 Awareness" translate="no">​</a></h2>
+<p><em>What.</em> Persons doing work under the QMS are aware of the quality policy, relevant objectives, their contribution, implications of non-conformity.</p>
+<p><strong>Our implementation.</strong> CLAUDE.md loads on every session; MEMORY.md reinforces preferences; ADRs are referenced in issue templates and PR reviews. Non-conformity implications are very visible (the PR doesn&#x27;t merge).</p>
+<p><strong>Coverage.</strong> <em>Partial</em> — awareness of the implicit objectives is high; awareness of a formal <em>policy</em> is impossible because one doesn&#x27;t yet exist (see 5.2).</p>
+<p><strong>Gap &amp; how to close.</strong> Closes automatically once 5.2 (policy) and 6.2 (objectives) are written.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="74-communication">7.4 Communication<a href="#74-communication" class="hash-link" aria-label="Direct link to 7.4 Communication" title="Direct link to 7.4 Communication" translate="no">​</a></h2>
+<p><em>What.</em> Determine internal and external communications (what, when, with whom, how, who).</p>
+<p><strong>Our implementation.</strong> GitHub issues, PR comments, and review threads form the primary communication channel. Hydra comments are labelled with stage markers (<code>[fixed:…]</code>, <code>[unfixed:…]</code>). Specter-produced issues carry <code>ready-to-build</code> labels. Labels are the protocol.</p>
+<p><strong>Coverage.</strong> <em>Full</em> internally; <em>Partial</em> externally (no external-communication plan).</p>
+<p><strong>Gap &amp; how to close.</strong> If we begin communicating QMS status to external parties (customers, auditors), add an external-communication matrix. Until then this is fine.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="75-documented-information">7.5 Documented information<a href="#75-documented-information" class="hash-link" aria-label="Direct link to 7.5 Documented information" title="Direct link to 7.5 Documented information" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="751-general">7.5.1 General<a href="#751-general" class="hash-link" aria-label="Direct link to 7.5.1 General" title="Direct link to 7.5.1 General" translate="no">​</a></h3>
+<p><em>What.</em> The QMS shall include documented information required by the standard and information determined necessary for QMS effectiveness.</p>
+<p><strong>Our implementation.</strong> Documented information sits in predictable locations:</p>
+<ul>
+<li class="">Standards-mandated: policies/objectives (currently gaps — see 5.2, 6.2).</li>
+<li class="">Process-mandated: ADRs, OpenSpec changes, specs.</li>
+<li class="">Evidence: <code>hydra.json</code> per change, quality.yml artefacts, PR reviews.</li>
+</ul>
+<p><strong>Coverage.</strong> <em>Partial</em> pending the 5.2/6.2 artefacts.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="752-creating-and-updating">7.5.2 Creating and updating<a href="#752-creating-and-updating" class="hash-link" aria-label="Direct link to 7.5.2 Creating and updating" title="Direct link to 7.5.2 Creating and updating" translate="no">​</a></h3>
+<p><em>What.</em> Ensure appropriate identification, description, format, review, approval.</p>
+<p><strong>Our implementation.</strong> All documented information is versioned via Git. The standard file layout (ADR naming <code>adr-NNN-name.md</code>, changes <code>changes/{slug}/</code>, specs <code>specs/{area}/spec.md</code>) provides identification. Review/approval = PR approval.</p>
+<p><strong>Coverage.</strong> <em>Full.</em></p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="753-control-of-documented-information-availability-protection-distribution-retention-obsolete-handling">7.5.3 Control of documented information (availability, protection, distribution, retention, obsolete handling)<a href="#753-control-of-documented-information-availability-protection-distribution-retention-obsolete-handling" class="hash-link" aria-label="Direct link to 7.5.3 Control of documented information (availability, protection, distribution, retention, obsolete handling)" title="Direct link to 7.5.3 Control of documented information (availability, protection, distribution, retention, obsolete handling)" translate="no">​</a></h3>
+<p><em>What.</em> Control it — availability where needed, protection from loss, distribution, retention, handling of obsolete information.</p>
+<p><strong>Our implementation.</strong> Availability: Git + GitHub. Protection: org rulesets, 2-review gate on main. Retention: Git history is permanent; archived changes go to <code>changes/archive/</code>. Obsolete handling: <code>opsx-archive</code> skill; superseded ADRs are marked rather than deleted (convention).</p>
+<p><strong>Coverage.</strong> <em>Full.</em></p>
+<hr>
+<h1>Clause 8 — Operation</h1>
+<p>This is where the weight of the mapping sits. Clause 8 covers planning, requirements, design &amp; development, supply, production, release, and non-conformity — in software terms: the whole engineering loop.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="81-operational-planning-and-control">8.1 Operational planning and control<a href="#81-operational-planning-and-control" class="hash-link" aria-label="Direct link to 8.1 Operational planning and control" title="Direct link to 8.1 Operational planning and control" translate="no">​</a></h2>
+<p><em>What.</em> Plan, implement and control the processes needed to meet requirements for products and services.</p>
+<p><strong>Our implementation.</strong> The pipeline in § 0 is the operational plan, made executable by skill chains (<code>/opsx-new</code>, <code>/opsx-ff</code>, <code>/opsx-apply</code>, <code>/opsx-verify</code>, <code>/opsx-archive</code>). Quality.yml is the per-PR runtime control.</p>
+<p><strong>Coverage.</strong> <em>Full.</em></p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="82-requirements-for-products-and-services">8.2 Requirements for products and services<a href="#82-requirements-for-products-and-services" class="hash-link" aria-label="Direct link to 8.2 Requirements for products and services" title="Direct link to 8.2 Requirements for products and services" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="821-customer-communication">8.2.1 Customer communication<a href="#821-customer-communication" class="hash-link" aria-label="Direct link to 8.2.1 Customer communication" title="Direct link to 8.2.1 Customer communication" translate="no">​</a></h3>
+<p><em>What.</em> Provide product information, handle enquiries/contracts/orders/amendments, obtain feedback/complaints, handle customer property, establish contingency actions.</p>
+<p><strong>Our implementation.</strong> GitHub Issues + PR comments + labels serve as the primary customer-communication surface. Each OpenSpec change is linked to one or more issues (<code>opsx-plan-to-issues</code> skill). Tender intake is automated — Specter ingests tender data into the intelligence DB weekly (GitHub Actions Sunday 02:00 UTC sync).</p>
+<p><strong>Coverage.</strong> <em>Full</em> for software-project communication.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="822-determining-requirements-for-products-and-services">8.2.2 Determining requirements for products and services<a href="#822-determining-requirements-for-products-and-services" class="hash-link" aria-label="Direct link to 8.2.2 Determining requirements for products and services" title="Direct link to 8.2.2 Determining requirements for products and services" translate="no">​</a></h3>
+<p><em>What.</em> Ensure requirements, including applicable statutory/regulatory, are defined.</p>
+<p><strong>Our implementation.</strong> Specter&#x27;s <code>requirements</code> table (151.4K rows) is the authoritative source for tender-driven requirements. <code>canonical_features</code> (6.8K rows) de-duplicates and scores them; <code>canonical_feature_sources</code> links every canonical feature back to the specific tender / competitor / external evidence rows with a confidence score. Statutory / regulatory inputs come from the Forum Standaardisatie imports (127 <code>nl_standards</code> rows), the <code>laws</code> / <code>law_articles</code> tables (4.277K law articles), and the <code>gemma_components</code> / <code>gemma_services</code> tables (254 + 422 rows).</p>
+<p><strong>Coverage.</strong> <em>Full.</em></p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="823-review-of-requirements-for-products-and-services">8.2.3 Review of requirements for products and services<a href="#823-review-of-requirements-for-products-and-services" class="hash-link" aria-label="Direct link to 8.2.3 Review of requirements for products and services" title="Direct link to 8.2.3 Review of requirements for products and services" translate="no">​</a></h3>
+<p><em>What.</em> Review requirements before committing to provide; ensure requirements are resolved, organization has the capability, differences understood.</p>
+<p><strong>Our implementation.</strong> Two review gates: the <code>openspec-propose</code> / <code>opsx-ff</code> step forces a proposal document before any code is written; the human PO (via <code>team-po</code> skill or real person) approves the change before it leaves the <code>proposed</code> state.</p>
+<p><strong>Coverage.</strong> <em>Full.</em></p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="824-changes-to-requirements-for-products-and-services">8.2.4 Changes to requirements for products and services<a href="#824-changes-to-requirements-for-products-and-services" class="hash-link" aria-label="Direct link to 8.2.4 Changes to requirements for products and services" title="Direct link to 8.2.4 Changes to requirements for products and services" translate="no">​</a></h3>
+<p><em>What.</em> When requirements change, ensure documented information is amended and relevant persons are aware.</p>
+<p><strong>Our implementation.</strong> OpenSpec changes are first-class objects; amendments flow through the same lifecycle. <code>opsx-sync</code> syncs delta specs to main specs on archive. Awareness propagates via issue comments and label changes.</p>
+<p><strong>Coverage.</strong> <em>Full.</em></p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="83-design-and-development-of-products-and-services">8.3 Design and development of products and services<a href="#83-design-and-development-of-products-and-services" class="hash-link" aria-label="Direct link to 8.3 Design and development of products and services" title="Direct link to 8.3 Design and development of products and services" translate="no">​</a></h2>
+<p>This is the central clause for software engineering and the one ISO/IEC 90003 expands on most.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="831-general">8.3.1 General<a href="#831-general" class="hash-link" aria-label="Direct link to 8.3.1 General" title="Direct link to 8.3.1 General" translate="no">​</a></h3>
+<p><em>What.</em> Establish, implement and maintain a design and development process appropriate to ensure subsequent provision of products and services.</p>
+<p><strong>Our implementation.</strong> The Specter → Hydra → CI → reviewer chain <em>is</em> the D&amp;D process. It is maintained by the ADR set and evolved via the ADR iteration loop (see 10.3).</p>
+<p><strong>Coverage.</strong> <em>Full.</em></p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="832-design-and-development-planning">8.3.2 Design and development planning<a href="#832-design-and-development-planning" class="hash-link" aria-label="Direct link to 8.3.2 Design and development planning" title="Direct link to 8.3.2 Design and development planning" translate="no">​</a></h3>
+<p><em>What.</em> Plan stages, reviews, verification, validation, responsibilities, resources, interfaces, customer involvement, documented information needs.</p>
+<p><strong>Our implementation.</strong></p>
+<ul>
+<li class=""><strong>Stages</strong> — propose → design → plan → apply → verify → archive. Each stage has a named skill.</li>
+<li class=""><strong>Reviews</strong> — code-review + security-review agents, human approval.</li>
+<li class=""><strong>Verification</strong> — <code>/opsx-verify</code> checks implementation against tasks.md.</li>
+<li class=""><strong>Validation</strong> — Playwright E2E + Newman API tests + persona testers validate user-facing behaviour.</li>
+<li class=""><strong>Responsibilities</strong> — agent roles in <code>hydra.json</code>; human roles via org rulesets.</li>
+<li class=""><strong>Resources</strong> — container-pool model (ADR-013) bounds compute per stage.</li>
+<li class=""><strong>Interfaces</strong> — ADR-002 (API), ADR-022 (apps consume OR abstractions).</li>
+<li class=""><strong>Documented information</strong> — proposal.md, design.md, tasks.md per change.</li>
+</ul>
+<p><strong>Coverage.</strong> <em>Full.</em></p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="833-design-and-development-inputs">8.3.3 Design and development inputs<a href="#833-design-and-development-inputs" class="hash-link" aria-label="Direct link to 8.3.3 Design and development inputs" title="Direct link to 8.3.3 Design and development inputs" translate="no">​</a></h3>
+<p><em>What.</em> Determine requirements essential to the types being designed; consider functional/performance, applicable statutory/regulatory, standards, potential consequences of failure.</p>
+<p><strong>Our implementation.</strong> Inputs are assembled by <code>concurrentie-analyse/scripts/generate_spec_content.py</code> (pure DB → markdown, no LLM) into a <code>context-brief.md</code> per app, then carried into <code>hydra/openspec/changes/{slug}/proposal.md</code> + <code>design.md</code>. The brief draws from: <code>canonical_features</code> + <code>canonical_feature_sources</code> (functional requirements with evidence trail), <code>nl_standards</code> / <code>gemma_*</code> / <code>laws</code> (statutory &amp; regulatory), <code>competitor_features</code> (what peers ship), <code>ecosystem_gaps</code> (what is missing), ADR-005 (consequences-of-failure thinking for security-sensitive paths).</p>
+<p><strong>Coverage.</strong> <em>Full.</em></p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="834-design-and-development-controls">8.3.4 Design and development controls<a href="#834-design-and-development-controls" class="hash-link" aria-label="Direct link to 8.3.4 Design and development controls" title="Direct link to 8.3.4 Design and development controls" translate="no">​</a></h3>
+<p><em>What.</em> Apply controls to ensure D&amp;D results meet input requirements; reviews, verifications, validations, actions on problems.</p>
+<p><strong>Our implementation.</strong> This is where the bulk of the pipeline lives.</p>
+<ul>
+<li class=""><strong>Reviews</strong>: Hydra <code>reviewer</code> agent posts findings with <code>[fixed:…]</code> / <code>[unfixed:…]</code> markers; security-reviewer runs separately; human PR review gates merge.</li>
+<li class=""><strong>Verifications</strong>: 9 mechanical Hydra gates (<code>spdx</code>, <code>forbidden-patterns</code>, <code>stub-scan</code>, <code>composer-audit</code>, <code>route-auth</code>, <code>orphan-auth</code>, <code>no-admin-idor</code>, <code>unsafe-auth-resolver</code>, <code>semantic-auth</code>). Quality.yml static-analysis bank: PHPCS, PHPMD, Psalm, PHPStan, ESLint, Stylelint.</li>
+<li class=""><strong>Validations</strong>: PHPUnit (unit), Newman (integration), Playwright (E2E), persona testing (<code>test-persona-*</code> agents).</li>
+<li class=""><strong>Actions on problems</strong>: <code>needs-input</code> escalation pattern — on container crash or unresolvable finding, issue leaves the queue and is surfaced to humans. Fixer agent applies <code>[unfixed:…]</code> item resolutions within bounded scope (ADR-021).</li>
+</ul>
+<p><strong>Coverage.</strong> <em>Full</em> — this is the clause our pipeline was architected around.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="835-design-and-development-outputs">8.3.5 Design and development outputs<a href="#835-design-and-development-outputs" class="hash-link" aria-label="Direct link to 8.3.5 Design and development outputs" title="Direct link to 8.3.5 Design and development outputs" translate="no">​</a></h3>
+<p><em>What.</em> Ensure outputs meet input requirements; adequate for subsequent processes; include/reference monitoring &amp; measurement requirements and acceptance criteria; specify characteristics essential for intended purpose and safe/proper provision.</p>
+<p><strong>Our implementation.</strong> Outputs of each stage are named files: <code>proposal.md</code>, <code>design.md</code>, <code>tasks.md</code>, source files with <code>@spec</code> tags, tests, <code>hydra.json</code>. Acceptance criteria are the gate set + tasks.md checkboxes + reviewer approval. ADR-003 mandates <code>@spec</code> PHPDoc tags at file/class/method level — the traceability anchor.</p>
+<p><strong>Coverage.</strong> <em>Full.</em></p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="836-design-and-development-changes">8.3.6 Design and development changes<a href="#836-design-and-development-changes" class="hash-link" aria-label="Direct link to 8.3.6 Design and development changes" title="Direct link to 8.3.6 Design and development changes" translate="no">​</a></h3>
+<p><em>What.</em> Identify, review and control changes made during or after D&amp;D to avoid adverse impact; retain documented information on the changes, the results of reviews, authorisation, actions to prevent adverse impact.</p>
+<p><strong>Our implementation.</strong> OpenSpec changes are the unit of change. <code>hydra.json</code> stages record every action (locked writer, atomic via <code>scripts/lib/hydra_record.py</code>). Superseded ADRs are marked rather than deleted. <code>opsx-archive</code> + <code>opsx-sync</code> handle post-archive integrity.</p>
+<p><strong>Coverage.</strong> <em>Full.</em></p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="84-control-of-externally-provided-processes-products-and-services">8.4 Control of externally provided processes, products and services<a href="#84-control-of-externally-provided-processes-products-and-services" class="hash-link" aria-label="Direct link to 8.4 Control of externally provided processes, products and services" title="Direct link to 8.4 Control of externally provided processes, products and services" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="841-general">8.4.1 General<a href="#841-general" class="hash-link" aria-label="Direct link to 8.4.1 General" title="Direct link to 8.4.1 General" translate="no">​</a></h3>
+<p><em>What.</em> Ensure externally provided processes/products/services conform to requirements.</p>
+<p><strong>Our implementation.</strong> External dependencies flow through Composer (PHP) and npm (JS). Two controls: <code>composer audit</code> / <code>npm audit</code> at critical-level in quality.yml (a gate), and license checks against <code>.license-allowlist.json</code> with explicit overrides in <code>.license-overrides.json</code>. SBOM generation (CycloneDX) provides the external-inventory trail. External hosting: Cyso (ISAE 3402 Type II) provides the inherited control.</p>
+<p><strong>Coverage.</strong> <em>Full.</em></p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="842-type-and-extent-of-control">8.4.2 Type and extent of control<a href="#842-type-and-extent-of-control" class="hash-link" aria-label="Direct link to 8.4.2 Type and extent of control" title="Direct link to 8.4.2 Type and extent of control" translate="no">​</a></h3>
+<p><em>What.</em> Ensure externally provided processes remain within control of the QMS; define controls; consider impact on ability to meet requirements; take account of effectiveness of external provider&#x27;s own controls; determine verification.</p>
+<p><strong>Our implementation.</strong> Type-of-control is tiered: runtime libraries (Composer/npm) → automated audit + license gate; hosting (Cyso) → contractual ISAE 3402; shared upstream (Nextcloud) → version-pinning + PHPUnit matrix testing across supported NC versions.</p>
+<p><strong>Coverage.</strong> <em>Full.</em></p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="843-information-for-external-providers">8.4.3 Information for external providers<a href="#843-information-for-external-providers" class="hash-link" aria-label="Direct link to 8.4.3 Information for external providers" title="Direct link to 8.4.3 Information for external providers" translate="no">​</a></h3>
+<p><em>What.</em> Communicate requirements to the external provider for processes/products/services, approval, competence, interactions, control and monitoring, verification activities, activities at provider premises.</p>
+<p><strong>Our implementation.</strong> Not a strong suit — we mostly <em>consume</em> external providers rather than commissioning bespoke work from them. The information flow to Nextcloud upstream (bug reports, patches) is ad-hoc.</p>
+<p><strong>Coverage.</strong> <em>Partial.</em></p>
+<p><strong>Gap &amp; how to close.</strong> Short process note for the cases where it matters: how we interact with Nextcloud upstream, how we raise CVE issues with Composer package maintainers. Low priority — our external-provider surface is narrow.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="85-production-and-service-provision">8.5 Production and service provision<a href="#85-production-and-service-provision" class="hash-link" aria-label="Direct link to 8.5 Production and service provision" title="Direct link to 8.5 Production and service provision" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="851-control-of-production-and-service-provision">8.5.1 Control of production and service provision<a href="#851-control-of-production-and-service-provision" class="hash-link" aria-label="Direct link to 8.5.1 Control of production and service provision" title="Direct link to 8.5.1 Control of production and service provision" translate="no">​</a></h3>
+<p><em>What.</em> Implement production and service provision under controlled conditions: availability of documented information, monitoring &amp; measuring resources, monitoring &amp; measurement activities, suitable infrastructure &amp; environment, competence of persons, validation of processes where output cannot be verified, actions to prevent human error, release/delivery/post-delivery activities.</p>
+<p><strong>Our implementation.</strong> Controlled conditions for each PR: the 4-layer pipeline, the 9 mechanical gates, the full quality.yml bank, the PHPUnit matrix (PHP × Nextcloud backends). Actions to prevent human error: <em>everything</em> the pipeline catches before a human looks — the 15-point pre-commit checklist (ADR-015), the gate set, the forbidden-patterns scanner.</p>
+<p><strong>Coverage.</strong> <em>Full.</em></p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="852-identification-and-traceability">8.5.2 Identification and traceability<a href="#852-identification-and-traceability" class="hash-link" aria-label="Direct link to 8.5.2 Identification and traceability" title="Direct link to 8.5.2 Identification and traceability" translate="no">​</a></h3>
+<p><em>What.</em> Identify outputs by suitable means; identify the status of outputs with respect to monitoring &amp; measurement requirements; control unique identification of outputs when traceability is a requirement; retain documented information necessary for traceability.</p>
+<p><strong>Our implementation.</strong> The full evidence chain end-to-end — from tender in Brussels to a line of PHP in a Nextcloud app:</p>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">tenders / external_sources / requirements     (raw evidence)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">        │</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">        ▼  Specter feature extraction</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">canonical_features  ◀──  canonical_feature_sources  (source_table, source_id, confidence)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">        │</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">        ▼  app_specs.brief_data (JSON)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">context-brief.md                                (generate_spec_content.py, DB-only)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">        │</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">        ▼  /opsx-ff</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">hydra/openspec/changes/{slug}/proposal.md + design.md + tasks.md</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">        │</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">        ▼  push_roadmap_issues.py</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">GitHub issue  (labels: ready-to-build | blocked | yolo)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">        │</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">        ▼  Hydra supervisor picks up</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">hydra.json cycles[], stages[], findings[]        (atomic, locked writer)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">        │</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">        ▼  builder stage writes code with @spec tag</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">source file: @spec openspec/changes/{slug}/tasks.md#task-N</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">        │</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">        ▼  commit with (#N), PR with &quot;Closes #N&quot;</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">merged code on main</span><br></div></code></pre></div></div>
+<ul>
+<li class=""><strong>Unique IDs</strong> — slug at the change level; <code>canonical_features.id</code> at the evidence level; <code>@spec</code> tag at the source-line level; GitHub issue number at the workflow level.</li>
+<li class=""><strong>Status tracking</strong> — at the evidence level: <code>app_specs.status</code> (<code>draft</code> / <code>created</code> / <code>pushed</code> / <code>merged</code>). At the workflow level: issue labels (<code>proposed</code>, <code>in-progress</code>, <code>code-review:queued</code>, <code>needs-input</code>, <code>ready-to-merge</code>, etc.). At the code level: <code>findings[].status</code> in <code>hydra.json</code>.</li>
+<li class=""><strong>Reverse chain works</strong>: <code>git blame</code> → commit <code>(#N)</code> → PR <code>Closes #N</code> → issue → change folder → <code>@spec</code> tag matches tasks.md line.</li>
+</ul>
+<p><strong>Where the chain breaks (honest).</strong> Walking <em>backward</em> from a merged PR through the GitHub issue lands at a change folder — but the link to <code>canonical_features.id</code> is in prose in the issue body, not as a machine-readable label or front-matter key. So today the last hop from &quot;change folder&quot; back to &quot;the specific canonical feature and its source evidence&quot; is a human step, not an automated one.</p>
+<p><strong>Coverage.</strong> <em>Full</em> for forward traceability from any point in the chain onward. <em>Partial</em> for automated reverse traceability from code to the originating canonical-feature row (breaks at the issue ↔ feature_id hop).</p>
+<p><strong>Gap &amp; how to close.</strong> Two OpenSpec changes raised: <code>embed-feature-id-in-issues</code> (Specter-side: <code>push_roadmap_issues.py</code> emits <code>feature_id</code> in issue body front-matter / as a label) + <code>link-findings-to-features</code> (DB-side: <code>HydraPipeline.canonical_feature_id</code> FK + enrichment). Either alone closes the forward walk; together they close both directions and make feature-level metrics queryable.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="853-property-belonging-to-customers-or-external-providers">8.5.3 Property belonging to customers or external providers<a href="#853-property-belonging-to-customers-or-external-providers" class="hash-link" aria-label="Direct link to 8.5.3 Property belonging to customers or external providers" title="Direct link to 8.5.3 Property belonging to customers or external providers" translate="no">​</a></h3>
+<p><em>What.</em> Exercise care with property belonging to the customer or external providers while under the organization&#x27;s control.</p>
+<p><strong>Our implementation.</strong> Customer property in the software sense is the data users store in Nextcloud instances. Data-handling is out of scope for <em>code quality</em> and belongs in a future <code>security.md</code> (ISO 27001). Where customer repositories are involved (e.g. <code>Softwarecatalogus/</code>), the CLAUDE.md rule is explicit: <em>NEVER commit</em>.</p>
+<p><strong>Coverage.</strong> <em>N/A</em> for this document — covered under 27001 scope.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="854-preservation">8.5.4 Preservation<a href="#854-preservation" class="hash-link" aria-label="Direct link to 8.5.4 Preservation" title="Direct link to 8.5.4 Preservation" translate="no">​</a></h3>
+<p><em>What.</em> Preserve outputs during production and service provision to the extent necessary to maintain conformity.</p>
+<p><strong>Our implementation.</strong> Git preserves source. Build artefacts preserved via CI artefact upload. <code>hydra.json</code> preserves pipeline state atomically. Container images pinned by tag/digest.</p>
+<p><strong>Coverage.</strong> <em>Full.</em></p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="855-post-delivery-activities">8.5.5 Post-delivery activities<a href="#855-post-delivery-activities" class="hash-link" aria-label="Direct link to 8.5.5 Post-delivery activities" title="Direct link to 8.5.5 Post-delivery activities" translate="no">​</a></h3>
+<p><em>What.</em> Meet post-delivery requirements associated with the products/services; consider statutory/regulatory, potential consequences, nature/use/lifetime, customer requirements, customer feedback.</p>
+<p><strong>Our implementation.</strong> Bug fixes flow through the same pipeline as new work. Security CVEs in dependencies are surfaced by <code>composer audit</code> / <code>npm audit</code> at each CI run (not only on new work). Hotfix branch pattern is encoded in <code>branch-protection.yml</code> (<code>hotfix/*</code> allowed into main and beta).</p>
+<p><strong>Coverage.</strong> <em>Full.</em></p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="856-control-of-changes">8.5.6 Control of changes<a href="#856-control-of-changes" class="hash-link" aria-label="Direct link to 8.5.6 Control of changes" title="Direct link to 8.5.6 Control of changes" translate="no">​</a></h3>
+<p><em>What.</em> Review and control changes for production or service provision to ensure continuing conformity.</p>
+<p><strong>Our implementation.</strong> Same as 8.3.6 — change is the unit of production. Every production change is an OpenSpec change.</p>
+<p><strong>Coverage.</strong> <em>Full.</em></p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="86-release-of-products-and-services">8.6 Release of products and services<a href="#86-release-of-products-and-services" class="hash-link" aria-label="Direct link to 8.6 Release of products and services" title="Direct link to 8.6 Release of products and services" translate="no">​</a></h2>
+<p><em>What.</em> Implement planned arrangements at appropriate stages to verify product/service requirements are met; retain documented information on release — evidence of conformity, traceability to authorising person.</p>
+<p><strong>Our implementation.</strong></p>
+<ul>
+<li class=""><strong>Release gates</strong>: quality.yml green + Hydra <code>ready-for-code-review</code> complete + <code>ready-for-security-review</code> complete + human approval (1 reviewer for development, 1 for beta, 2 for main per org rulesets).</li>
+<li class=""><strong>Conformity evidence</strong>: quality-report.md + SBOM (CycloneDX) + Newman reports + Playwright reports + <code>hydra.json</code>.</li>
+<li class=""><strong>Authoriser traceability</strong>: PR approvals are GitHub-signed and retained.</li>
+</ul>
+<p><strong>Coverage.</strong> <em>Full.</em></p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="87-control-of-nonconforming-outputs">8.7 Control of nonconforming outputs<a href="#87-control-of-nonconforming-outputs" class="hash-link" aria-label="Direct link to 8.7 Control of nonconforming outputs" title="Direct link to 8.7 Control of nonconforming outputs" translate="no">​</a></h2>
+<p><em>What.</em> Ensure outputs not conforming to requirements are identified and controlled to prevent unintended use/delivery; take action based on nature; verify conformity after correction; retain documented information describing the nonconformity and actions taken.</p>
+<p><strong>Our implementation.</strong> Non-conformity handling is one of the pipeline&#x27;s defining features. It operates at two levels: <em>automated correction</em> of in-scope findings, and <em>terminal-state escalation</em> for anything the automation cannot handle safely.</p>
+<p><strong>Identification.</strong> Multiple detectors:</p>
+<ul>
+<li class="">9 mechanical Hydra gates and the quality.yml static bank emit findings with <code>severity</code>, <code>gate</code>, <code>rule</code>, <code>file</code>, <code>line</code>.</li>
+<li class="">Reviewer agent emits <code>[fixed:…]</code> / <code>[unfixed:…]</code> markers in PR comments.</li>
+<li class="">Playwright / Newman failures surface as failed CI jobs.</li>
+<li class="">Orchestrator emits <code>pattern_tags</code> on abnormal runs: <code>turn-budget-exhausted</code>, <code>recheck-caught-new-findings</code>, <code>container-crashed-mid-stage</code>.</li>
+</ul>
+<p><strong>Control — the <code>needs-input</code> terminal state.</strong> When automation cannot safely proceed, the issue is labelled <code>needs-input</code> and all automated handlers short-circuit before emitting further side-effects. The triggers, confirmed from <code>hydra/scripts/orchestrate.sh</code> and <code>hydra/CLAUDE.md</code>:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Trigger</th><th>Meaning</th></tr></thead><tbody><tr><td>Reviewer verdict = <code>fail</code></td><td>Reviewer could not approve after the fixer&#x27;s best attempt.</td></tr><tr><td>Applier verdict = <code>fail</code></td><td>The code applier failed to apply the proposed change.</td></tr><tr><td>Quality recheck post-review fails</td><td><code>recheck-caught-new-findings</code> — the post-fix gate pass surfaced new issues.</td></tr><tr><td>Container crashes mid-stage</td><td><code>container-crashed-mid-stage</code> — infrastructure fault, not a code fault.</td></tr><tr><td>Label-state contradiction</td><td>Both <code>:pass</code> and <code>:fail</code> present on the issue — internally inconsistent state.</td></tr></tbody></table>
+<p>The terminal-state invariant is encoded repeat-offender-proof in <code>hydra/CLAUDE.md</code> (lines 580–598):</p>
+<blockquote>
+<p><em>&quot;Labels like <code>needs-input</code>, <code>*:fail</code>, <code>*:pass</code>, <code>applier:*</code> are terminal — once set, the pipeline has made a decision and further state-machine side effects must not fire on that issue. Every handler that might emit a side effect (comment post, label swap, container dispatch) MUST short-circuit before the side effect if the issue is already in a terminal state.&quot;</em></p>
+</blockquote>
+<p>This rule exists because of the decidesk#44/#45 incident (2026-04-23) where 134+ duplicate escalation comments were posted by handlers re-entering on an already-terminal issue (fixed in hydra PR #133).</p>
+<p><strong>Action.</strong> In-scope findings are resolved by the fixer agent, bounded by change-shape per ADR-021 so the fixer cannot widen the blast radius. Out-of-scope findings, infrastructure faults, and unresolvable reviewer verdicts escalate to <code>needs-input</code> and wait for human intervention.</p>
+<p><strong>Verify after correction.</strong> Re-running the gate bank; reviewer re-runs after fixer passes.</p>
+<p><strong>Documented information.</strong> <code>hydra.json</code> records every finding (with <code>status</code> transitions: <code>open</code> → <code>fixed_in_stage</code> / <code>fixed_later</code> / <code>wontfix</code>) and every fixer decision. Per-change records are atomic (locked writer).</p>
+<p><strong>Coverage.</strong> <em>Full</em> for the per-issue handling of a single non-conformity.</p>
+<p><em>Partial</em> for the <strong>aggregate</strong> handling. The standard in 8.7 asks us to take action &quot;based on the nature&quot; of the non-conformity — at single-issue granularity we do; across issues we don&#x27;t yet see the pattern. There is no register of <code>needs-input</code> incidents, no recurrence analysis, no &quot;this trigger fired N times last month in N apps.&quot;</p>
+<p><strong>Gap &amp; how to close.</strong> A <code>/hydra/needs-input/</code> view on the Specter <code>hydra_learning</code> dashboard: query <code>hydra_pipelines.final_status=&#x27;needs-input&#x27;</code> grouped by <code>outcome_reason</code>. The data already exists (ingested nightly); only the view is missing. Small residual noted in the gap shortlist; could be folded into any of the three raised OpenSpec changes.</p>
+<hr>
+<h1>Clause 9 — Performance Evaluation</h1>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="91-monitoring-measurement-analysis-and-evaluation">9.1 Monitoring, measurement, analysis and evaluation<a href="#91-monitoring-measurement-analysis-and-evaluation" class="hash-link" aria-label="Direct link to 9.1 Monitoring, measurement, analysis and evaluation" title="Direct link to 9.1 Monitoring, measurement, analysis and evaluation" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="911-general">9.1.1 General<a href="#911-general" class="hash-link" aria-label="Direct link to 9.1.1 General" title="Direct link to 9.1.1 General" translate="no">​</a></h3>
+<p><em>What.</em> Determine what needs monitoring &amp; measurement, methods, when, when results analysed.</p>
+<p><strong>Our implementation — per-PR (works today).</strong> Monitored and published per PR: gate pass/fail, PHPUnit coverage, spec-to-test coverage (75 % threshold), Newman pass rate, Playwright pass rate, <code>composer audit</code> findings, <code>npm audit</code> findings, license-compliance result, SBOM. Measurements land in <code>quality-report.md</code> per PR and in <code>hydra.json</code> per change.</p>
+<p><strong>Our implementation — cross-change (gap).</strong> The single-PR view is complete. The cross-change view — what management should actually look at — does not exist today. The data is in <code>hydra.json</code> but no script aggregates it.</p>
+<p><strong>Management metrics panel.</strong> Five boards. Most are already rendered — Boards 1-3 land in the <code>hydra_learning</code> dashboard at <code>/hydra/</code> (§ 0c); most of Board 5 lands in the Specter intelligence dashboard (82 views, including addressable-market-per-app, ecosystem-gaps top-N, last-7-day tenders, competitor activity, source-sync health). Gaps are narrow and named below.</p>
+<p><strong>Board 1 — Throughput</strong></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Metric</th><th>Definition</th><th>Source</th><th>Status</th></tr></thead><tbody><tr><td>Specs closed per week</td><td>Count of changes moving <code>proposed</code> → <code>archived</code> per week</td><td><code>app_specs.status</code> transitions + <code>HydraPipeline.ended_at</code></td><td><strong>gap — raised as <code>add-spec-pipeline-throughput-view</code></strong></td></tr><tr><td>Mean change age</td><td>Median days from first <code>HydraPipeline.started_at</code> to archive</td><td><code>HydraPipeline.started_at</code> → archive event</td><td><strong>gap — same change</strong></td></tr><tr><td>Clean-archive rate</td><td>% of changes archived without ever entering <code>needs-input</code></td><td><code>HydraPipeline.final_status</code> history</td><td><strong>gap — same change</strong></td></tr><tr><td>Cycles per change</td><td>Median count of <code>HydraPipeline</code> rows per <code>repo,issue_num</code></td><td><code>HydraPipeline</code> group-by</td><td>today via dashboard</td></tr></tbody></table>
+<p><strong>Board 2 — Cost</strong></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Metric</th><th>Definition</th><th>Source</th><th>Status</th></tr></thead><tbody><tr><td>Tokens per pipeline</td><td>Sum of <code>HydraPhase.turns</code> across a pipeline</td><td><code>hydra_phases.turns</code></td><td>today via dashboard</td></tr><tr><td>USD per pipeline</td><td>Sum of <code>HydraPhase.cost_usd</code></td><td><code>hydra_phases.cost_usd</code></td><td>today via dashboard</td></tr><tr><td>USD per feature category</td><td>USD aggregated by the feature category the pipeline built</td><td><code>hydra_phases.cost_usd</code> + <em>(new)</em> <code>HydraPipeline.canonical_feature_id</code></td><td><strong>gap — raised as <code>link-findings-to-features</code></strong></td></tr><tr><td>Budget-exhaustion rate</td><td>% of phases with <code>terminal_reason=&#x27;max_turns&#x27;</code></td><td><code>hydra_phases.terminal_reason</code></td><td>today via dashboard</td></tr></tbody></table>
+<p><strong>Board 3 — Quality</strong></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Metric</th><th>Definition</th><th>Source</th><th>Status</th></tr></thead><tbody><tr><td>Findings per pipeline</td><td>Weekly trend of <code>hydra_findings</code> count per pipeline</td><td><code>hydra_findings</code></td><td>today — rendered on <code>/hydra/</code></td></tr><tr><td>First-pass success rate</td><td>% of pipelines reaching <code>final_status=&#x27;done&#x27;</code> on first iteration</td><td><code>hydra_pipelines</code> + <code>hydra_phases</code></td><td>today — rendered on <code>/hydra/</code></td></tr><tr><td>Autofix success rate</td><td>% of <code>hydra_findings</code> with <code>status=&#x27;fixed&#x27;</code> and <code>fixed_in_round=1</code></td><td><code>hydra_findings.status</code>, <code>fixed_in_round</code></td><td>today via dashboard</td></tr><tr><td>Cluster recurrence top-10</td><td>Top 10 <code>HydraFindingCluster</code> rows by <code>pipeline_count</code></td><td><code>hydra_finding_clusters</code></td><td>today — rendered on <code>/hydra/findings/</code></td></tr><tr><td><code>needs-input</code> incidence</td><td>Count of <code>HydraPipeline</code> rows with <code>final_status=&#x27;needs-input&#x27;</code> grouped by trigger</td><td><code>hydra_pipelines.final_status</code> + <code>outcome_reason</code></td><td><strong>gap — dashboard view not yet built</strong></td></tr><tr><td>Suggestion accept/reject ratio</td><td><code>HydraSuggestion.status</code> histogram over trailing 30 days</td><td><code>hydra_suggestions.status</code></td><td>today via dashboard</td></tr></tbody></table>
+<p><strong>Board 4 — Adoption</strong></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Metric</th><th>Definition</th><th>Source</th><th>Status</th></tr></thead><tbody><tr><td>Active instances per app</td><td>Count of NC instances with app installed and used in last 30 days</td><td><strong>New telemetry required</strong></td><td>not today</td></tr><tr><td>Feature-usage within app</td><td>Controller-level hit counts per feature</td><td><strong>New telemetry required</strong></td><td>not today</td></tr><tr><td>Time to first use after release</td><td>Days from app update to first production invocation</td><td><strong>New telemetry required</strong></td><td>not today</td></tr></tbody></table>
+<p><strong>Board 5 — Intelligence (Specter-side)</strong></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Metric</th><th>Definition</th><th>Source</th><th>Status</th></tr></thead><tbody><tr><td>Sources synced per week</td><td>Successful <code>source_syncs</code> rows in the last 7 days</td><td><code>source_syncs.last_sync</code>, <code>records_synced</code></td><td>today</td></tr><tr><td>Requirements ingested per week</td><td>New rows in <code>requirements</code> per week</td><td><code>requirements</code> timestamp</td><td>today</td></tr><tr><td>Features discovered per source</td><td><code>canonical_feature_sources</code> grouped by <code>source_table</code> over last 30 days</td><td><code>canonical_feature_sources</code></td><td>today</td></tr><tr><td>Competitor signals processed</td><td>Rows in <code>competitor_features</code> with <code>category</code> like <code>release-*</code> or <code>enhancement-issue</code>, weekly</td><td><code>competitor_features</code></td><td>today</td></tr><tr><td>Addressable market per app</td><td>Sum <code>tender_awards.contract_value</code> joined to <code>tender_app_relevance</code></td><td><code>tender_awards</code>, <code>tender_app_relevance</code></td><td>today</td></tr><tr><td>Spec-pipeline throughput</td><td>Count by <code>app_specs.status</code> (<code>draft</code> / <code>created</code> / <code>pushed</code> / <code>merged</code>)</td><td><code>app_specs</code></td><td>today</td></tr><tr><td>Open ecosystem gaps</td><td>Count of <code>ecosystem_gaps</code> without a matching app</td><td><code>ecosystem_gaps</code></td><td>today</td></tr></tbody></table>
+<p><strong>Where each board lives today.</strong></p>
+<ul>
+<li class="">Boards 2 &amp; 3 (cost &amp; quality) — <code>/hydra/</code> dashboard (§ 0c) renders them off the <code>hydra_*</code> tables. Shipped 2026-04-17.</li>
+<li class="">Most of Board 5 (Specter intelligence) — rendered on the intelligence home dashboard at <code>/</code> (82 views; KPIs for addressable market per app, ecosystem gaps, last-7-day tenders, competitor activity, source-sync health).</li>
+<li class="">Board 1 (throughput) — <strong>not yet rendered</strong>. Data exists across <code>app_specs.status</code> + <code>hydra_pipelines</code> but no view joins them. OpenSpec change raised: <code>add-spec-pipeline-throughput-view</code>.</li>
+<li class="">Board 2 cost-per-feature-category — <strong>not yet possible</strong>. Needs <code>HydraPipeline.canonical_feature_id</code> FK. Raised as <code>link-findings-to-features</code>.</li>
+<li class="">Board 3 <code>needs-input</code> incidence — <strong>not yet rendered</strong>. Data is in <code>hydra_pipelines.final_status</code>; a <code>/hydra/needs-input/</code> view would close it.</li>
+<li class="">Board 4 (adoption) — requires opt-in NC-instance telemetry. Separate roadmap decision; GDPR + user-trust tradeoffs.</li>
+</ul>
+<p><strong>Coverage.</strong> <em>Full</em> for per-PR monitoring. <em>Full</em> for cross-change monitoring on Boards 2, 3, and most of 5 (via <code>hydra_learning</code> + intelligence dashboards). <em>Partial</em> on Boards 1 and Board-2 feature-level (pending the three OpenSpec changes listed above). <em>None</em> on Board 4 (adoption).</p>
+<p><strong>Gap &amp; how to close.</strong> The three OpenSpec changes listed above close Boards 1 and the feature-level slice of Board 2. The <code>needs-input</code> dashboard view is a small residual. Board 4 stays a separate decision.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="912-customer-satisfaction">9.1.2 Customer satisfaction<a href="#912-customer-satisfaction" class="hash-link" aria-label="Direct link to 9.1.2 Customer satisfaction" title="Direct link to 9.1.2 Customer satisfaction" translate="no">​</a></h3>
+<p><em>What.</em> Monitor customers&#x27; perceptions of the degree to which their needs and expectations have been met.</p>
+<p><strong>Our implementation.</strong> Partial — persona testers serve as a proxy; real user feedback is not systematically gathered per release.</p>
+<p><strong>Coverage.</strong> <em>Partial.</em></p>
+<p><strong>Gap &amp; how to close.</strong> This is a genuinely harder clause for open-source projects. A minimal closure: track GitHub issues tagged <code>user-report</code> and <code>feature-request</code>; review trend quarterly. A stronger closure: embed feedback in the apps themselves and aggregate.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="913-analysis-and-evaluation">9.1.3 Analysis and evaluation<a href="#913-analysis-and-evaluation" class="hash-link" aria-label="Direct link to 9.1.3 Analysis and evaluation" title="Direct link to 9.1.3 Analysis and evaluation" translate="no">​</a></h3>
+<p><em>What.</em> Analyse and evaluate data from monitoring; use results to evaluate conformity, customer satisfaction, QMS performance/effectiveness, effectiveness of actions, external providers, need for improvement.</p>
+<p><strong>Our implementation.</strong> Analysis runs automatically via the <code>hydra_learning</code> learning bridge (§ 0c):</p>
+<ul>
+<li class=""><code>analyze_pipelines</code> management command runs nightly at 03:00 UTC, fingerprints <code>hydra_findings</code> titles, updates <code>hydra_finding_clusters</code> with <code>pipeline_count</code>, <code>severity_mix</code>, <code>first_seen</code>, <code>last_seen</code>.</li>
+<li class="">Coverage detection is grep-based against Hydra&#x27;s current CLAUDE.md + ADRs, setting <code>covered_by_claude_md</code> / <code>covered_by_adr</code> on each cluster.</li>
+<li class="">Uncovered high-frequency clusters flow into <code>suggest_improvements</code> → <code>hydra_suggestions</code>.</li>
+</ul>
+<p>Human-authored retrospectives live at <code>hydra/docs/retrospectives/</code> and complement the automated pass — 77 review findings (project_hydra-adr-iteration.md) drove the original ADR evolution.</p>
+<p><strong>Coverage.</strong> <em>Full</em> — automated cross-pipeline pattern analysis ships with <code>hydra_learning</code> (2026-04-17 backfill produced 752 clusters from 481 pipelines; 627 uncovered clusters flagged for potential gate / ADR updates).</p>
+<p>One residual gap — analysis by feature category is currently blocked because <code>hydra_pipelines</code> has no FK to <code>canonical_features</code>. Raised as <code>link-findings-to-features</code>.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="92-internal-audit">9.2 Internal audit<a href="#92-internal-audit" class="hash-link" aria-label="Direct link to 9.2 Internal audit" title="Direct link to 9.2 Internal audit" translate="no">​</a></h2>
+<p><em>What.</em> Conduct internal audits at planned intervals to provide information on whether the QMS conforms to its own requirements and to this standard, and is effectively implemented and maintained.</p>
+<p><strong>Our implementation.</strong></p>
+<ul>
+<li class=""><strong>Automated</strong>: <code>opsx-coverage-scan</code> audits legacy apps for spec↔code coverage (the retrofit pipeline).</li>
+<li class=""><strong>Workflow-internal</strong>: quality.yml itself is a continuous audit running on every PR.</li>
+<li class=""><strong>Process-level</strong>: no planned-interval internal audit of the QMS as a whole.</li>
+</ul>
+<p><strong>Coverage.</strong> <em>Partial.</em></p>
+<p><strong>Gap &amp; how to close.</strong> Schedule a quarterly QMS-audit pass: pick 5 merged PRs at random, walk them back from merged code → <code>@spec</code> → tasks.md → change → issue → Specter intelligence row, and confirm every link holds. Output: a short audit note per quarter in <code>.github/docs/iso/audits/</code>.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="93-management-review">9.3 Management review<a href="#93-management-review" class="hash-link" aria-label="Direct link to 9.3 Management review" title="Direct link to 9.3 Management review" translate="no">​</a></h2>
+<p><em>What.</em> Top management shall review the QMS at planned intervals; inputs and outputs as specified; retain documented information.</p>
+<p><strong>Our implementation.</strong> None as a formal activity.</p>
+<p><strong>Coverage.</strong> <em>None.</em></p>
+<p><strong>Gap &amp; how to close.</strong> Institute a quarterly (or whatever cadence fits) management review with a fixed agenda. Cadence and discipline matter more than length — ~2 hours per quarter is enough. Proposed agenda template, with each input tied back to its generating clause and, where relevant, the automation that feeds it:</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="management-review--agenda-template">Management review — agenda template<a href="#management-review--agenda-template" class="hash-link" aria-label="Direct link to Management review — agenda template" title="Direct link to Management review — agenda template" translate="no">​</a></h3>
+<p><strong>Inputs</strong> (read before the meeting):</p>
+<ol>
+<li class=""><strong>Status of actions from previous review</strong> — prior-quarter decisions and their state.</li>
+<li class=""><strong>Changes in external/internal issues</strong> — roadmap shifts, new tender-driven priorities, Nextcloud upstream movements (feeds 4.1).</li>
+<li class=""><strong>QMS performance</strong> — screenshot of <code>/hydra/</code> dashboard (cost, quality, trends) + intelligence home dashboard (addressable market, ecosystem gaps, source-sync health). Feeds 9.1.1.</li>
+<li class=""><strong>Non-conformities &amp; corrective actions</strong> — <code>hydra_pipelines</code> filter on <code>final_status=&#x27;needs-input&#x27;</code> grouped by <code>outcome_reason</code> + list of new gates / ADRs shipped as corrective actions (feeds 8.7, 10.2).</li>
+<li class=""><strong>Monitoring &amp; measurement results</strong> — <code>/hydra/findings/</code> top-10 <code>HydraFindingCluster</code> ranked by <code>pipeline_count</code> with coverage flags; this is the most important input because it names the next potential gates.</li>
+<li class=""><strong>Audit results</strong> — summary of any internal-audit notes from § 9.2 (quarterly 5-PR traceability walk) and results of the continuous per-PR audit implicit in quality.yml.</li>
+<li class=""><strong>External provider performance</strong> — CVE exposure from <code>composer audit</code> / <code>npm audit</code> trends; Cyso (hosting) incident log if any.</li>
+<li class=""><strong>Adequacy of resources</strong> — are the container pool budgets right (ADR-013)? Runner capacity? Maintainer bandwidth per app?</li>
+<li class=""><strong>Effectiveness of actions taken to address risks and opportunities</strong> — status of risk-register items (feeds 6.1).</li>
+<li class=""><strong>Opportunities for improvement</strong> — <code>/hydra/suggestions/</code> queue: pending suggestions + accept/reject ratio for the quarter.</li>
+</ol>
+<p><strong>Outputs</strong> (one short note per review, filed at <code>.github/docs/iso/reviews/YYYY-Qx.md</code>):</p>
+<ul>
+<li class="">Decisions on opportunities for improvement (new ADRs, new gates, new skills).</li>
+<li class="">Decisions on changes needed to the QMS (scope, roles, process).</li>
+<li class="">Decisions on resource needs (budgets, people, infra).</li>
+</ul>
+<p>All ten inputs are already backed by shipped dashboards or queryable tables. Running the first review is purely a scheduling decision — no engineering prerequisite.</p>
+<p>Coverage upgrade path: <em>None → Full</em> after the first review is held and the note is filed. No intermediate <em>Partial</em> step needed given the inputs are available.</p>
+<hr>
+<h1>Clause 10 — Improvement</h1>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="101-general">10.1 General<a href="#101-general" class="hash-link" aria-label="Direct link to 10.1 General" title="Direct link to 10.1 General" translate="no">​</a></h2>
+<p><em>What.</em> Determine and select opportunities for improvement; implement necessary actions to meet customer requirements and enhance customer satisfaction; improving products/services, correcting/preventing/reducing undesired effects, improving QMS performance/effectiveness.</p>
+<p><strong>Our implementation.</strong> Opportunities surface through: Specter-driven feature extraction, retrospectives, gate-failure patterns, user issues. Actions are implemented via new ADRs (e.g. ADR-020, ADR-021, ADR-022, ADR-023 all post-date the first 19), new gates (<code>semantic-auth</code> 2026-04-23), or new specs.</p>
+<p><strong>Coverage.</strong> <em>Full.</em></p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="102-nonconformity-and-corrective-action">10.2 Nonconformity and corrective action<a href="#102-nonconformity-and-corrective-action" class="hash-link" aria-label="Direct link to 10.2 Nonconformity and corrective action" title="Direct link to 10.2 Nonconformity and corrective action" translate="no">​</a></h2>
+<p><em>What.</em> React to the nonconformity; evaluate the need for action to eliminate the causes so it does not recur; implement actions; review effectiveness; update risks/opportunities; change the QMS if necessary; retain documented information on the nature of nonconformities, actions taken, results.</p>
+<p><strong>Our implementation.</strong> This is the clearest pattern we have.</p>
+<ul>
+<li class=""><strong>React</strong> — fixer agent (in-scope) or <code>needs-input</code> escalation (out-of-scope).</li>
+<li class=""><strong>Cause-elimination</strong> — when a class of finding recurs, a new mechanical gate is added. Worked example (all in April 2026): a reviewer-found IDOR on <code>decidesk#44</code> (2026-04-21) triggered <code>no-admin-idor</code>; a silent-fail-open auth resolver on <code>decidesk#45</code> (2026-04-21) triggered <code>unsafe-auth-resolver</code>; orphan auth methods on <code>decidesk#60</code> (2026-04-21) triggered <code>orphan-auth</code>; the <code>NoAdminRequired</code> annotation / <code>requireAdmin()</code> body mismatch on <code>decidesk#44</code> (2026-04-23) triggered <code>semantic-auth</code>. Four new gates in three weeks, each preventing recurrence of the specific class across the whole app portfolio.</li>
+<li class=""><strong>Effectiveness review</strong> — new gates run against subsequent PRs; false-positive and miss rates become visible over time in the <code>hydra.json</code> history.</li>
+<li class=""><strong>Documented information</strong> — gate skill definitions themselves record the triggering incident in their description. <code>hydra.json</code> records the resolved findings.</li>
+</ul>
+<p><strong>Systematic recurrence detection — automated as of 2026-04-17.</strong> Human-spotting still works but is no longer the only path. The <code>hydra_learning</code> learning bridge (§ 0c) fingerprints every finding, aggregates into <code>hydra_finding_clusters</code>, flags those not yet covered by existing CLAUDE.md or ADRs, and feeds the high-frequency uncovered ones into <code>suggest_improvements</code> which drafts a proposed CLAUDE.md or ADR patch using local <code>claude -p</code>. Humans review accept/reject in <code>/hydra/suggestions/</code>; <code>apply_hydra_suggestion</code> opens the PR on Hydra when accepted.</p>
+<p>As-shipped: 752 clusters from 481 pipelines (2026-04-17 backfill); 627 uncovered. First LLM-generated suggestion produced at the same backfill.</p>
+<p><strong>Coverage.</strong> <em>Full.</em></p>
+<p>One residual slice: analysis <em>by feature category</em> is currently not possible because <code>hydra_pipelines</code> has no FK to <code>canonical_features</code>. Raised as <code>link-findings-to-features</code>.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="103-continual-improvement">10.3 Continual improvement<a href="#103-continual-improvement" class="hash-link" aria-label="Direct link to 10.3 Continual improvement" title="Direct link to 10.3 Continual improvement" translate="no">​</a></h2>
+<p><em>What.</em> Continually improve the suitability, adequacy and effectiveness of the QMS.</p>
+<p><strong>Our implementation.</strong> The ADR iteration loop. 77 review findings → ADR set grew from an initial sketch to 23 ADRs. Gate set grew to 9. Skills inventory continues to grow. The <em>continual</em> part is evidenced in dated memory entries (<code>feedback_*.md</code>) tracking where the QMS bent to absorb an incident.</p>
+<p><strong>The loop in one sentence:</strong> incident → <code>hydra.json</code> evidence → <code>hydra_findings</code> row → fingerprint → cluster → nightly <code>analyze_pipelines</code> → coverage check against CLAUDE.md/ADRs → <code>suggest_improvements</code> drafts patch → human accept/reject in <code>/hydra/suggestions/</code> → <code>apply_hydra_suggestion</code> opens PR on Hydra → human merges → Hydra&#x27;s behaviour improves on next run.</p>
+<p><strong>Discovery is automated; design stays human.</strong> <code>hydra_learning</code> automates the discovery half (recurrence counting, cluster fingerprinting, coverage detection) while leaving the design half (patch wording, false-positive tolerance, scope) firmly with humans through the accept/reject/apply queue. That split is deliberate — gate design is judgment; recurrence counting is not.</p>
+<p><strong>Coverage.</strong> <em>Full.</em></p>
+<p>Residual: the loop measures itself via the target success metrics (30 %+ drop in average reviewer findings per pipeline; 25 %+ drop in median time-to-done; first-pass success from ~40 % to &gt;60 %; ≥5 merged suggestion PRs after 4 weeks of operation). These are the effectiveness metrics 10.3 asks for. Tracking them formally becomes easier once the quarterly management review (9.3) is running.</p>
+<hr>
+<h1>Coverage summary</h1>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Clause</th><th>Title</th><th>Coverage</th></tr></thead><tbody><tr><td>4.1</td><td>Understanding the organization and its context</td><td>Partial</td></tr><tr><td>4.2</td><td>Needs and expectations of interested parties</td><td>Partial</td></tr><tr><td>4.3</td><td>Scope of the QMS</td><td>Partial</td></tr><tr><td>4.4</td><td>QMS and its processes</td><td>Full</td></tr><tr><td>5.1</td><td>Leadership and commitment</td><td>Partial</td></tr><tr><td>5.2</td><td>Policy</td><td><strong>None</strong></td></tr><tr><td>5.3</td><td>Roles, responsibilities, authorities</td><td>Partial</td></tr><tr><td>6.1</td><td>Risks and opportunities</td><td>Full (tech) / Partial (business)</td></tr><tr><td>6.2</td><td>Quality objectives</td><td>Partial</td></tr><tr><td>6.3</td><td>Planning of changes</td><td>Full</td></tr><tr><td>7.1.1</td><td>Resources — general</td><td>Full</td></tr><tr><td>7.1.2</td><td>People</td><td>Full</td></tr><tr><td>7.1.3</td><td>Infrastructure</td><td>Full</td></tr><tr><td>7.1.4</td><td>Environment</td><td>Full</td></tr><tr><td>7.1.5</td><td>Monitoring/measuring resources</td><td>Partial</td></tr><tr><td>7.1.6</td><td>Organizational knowledge</td><td>Full</td></tr><tr><td>7.2</td><td>Competence</td><td>Partial (humans) / Full (agents)</td></tr><tr><td>7.3</td><td>Awareness</td><td>Partial</td></tr><tr><td>7.4</td><td>Communication</td><td>Full internal / Partial external</td></tr><tr><td>7.5.1</td><td>Documented information — general</td><td>Partial</td></tr><tr><td>7.5.2</td><td>Creating and updating</td><td>Full</td></tr><tr><td>7.5.3</td><td>Control of documented information</td><td>Full</td></tr><tr><td>8.1</td><td>Operational planning and control</td><td>Full</td></tr><tr><td>8.2.1</td><td>Customer communication</td><td>Full</td></tr><tr><td>8.2.2</td><td>Determining requirements</td><td>Full</td></tr><tr><td>8.2.3</td><td>Review of requirements</td><td>Full</td></tr><tr><td>8.2.4</td><td>Changes to requirements</td><td>Full</td></tr><tr><td>8.3.1</td><td>D&amp;D — general</td><td>Full</td></tr><tr><td>8.3.2</td><td>D&amp;D planning</td><td>Full</td></tr><tr><td>8.3.3</td><td>D&amp;D inputs</td><td>Full</td></tr><tr><td>8.3.4</td><td>D&amp;D controls</td><td>Full</td></tr><tr><td>8.3.5</td><td>D&amp;D outputs</td><td>Full</td></tr><tr><td>8.3.6</td><td>D&amp;D changes</td><td>Full</td></tr><tr><td>8.4.1</td><td>Externally provided — general</td><td>Full</td></tr><tr><td>8.4.2</td><td>Type and extent of control</td><td>Full</td></tr><tr><td>8.4.3</td><td>Information for external providers</td><td>Partial</td></tr><tr><td>8.5.1</td><td>Control of production</td><td>Full</td></tr><tr><td>8.5.2</td><td>Identification and traceability</td><td>Full (forward) / Partial (reverse, breaks at issue ↔ feature_id)</td></tr><tr><td>8.5.3</td><td>Property of customers / providers</td><td>N/A here (27001)</td></tr><tr><td>8.5.4</td><td>Preservation</td><td>Full</td></tr><tr><td>8.5.5</td><td>Post-delivery activities</td><td>Full</td></tr><tr><td>8.5.6</td><td>Control of changes</td><td>Full</td></tr><tr><td>8.6</td><td>Release</td><td>Full</td></tr><tr><td>8.7</td><td>Non-conforming outputs</td><td>Full (per-issue) / Partial (aggregate — <code>needs-input</code> dashboard view pending)</td></tr><tr><td>9.1.1</td><td>Monitoring — general</td><td>Full (per-PR + cross-change via hydra_learning) / Partial (throughput view pending) / None (adoption telemetry)</td></tr><tr><td>9.1.2</td><td>Customer satisfaction</td><td>Partial</td></tr><tr><td>9.1.3</td><td>Analysis and evaluation</td><td>Full (automated via <code>analyze_pipelines</code>; feature-level pending <code>link-findings-to-features</code>)</td></tr><tr><td>9.2</td><td>Internal audit</td><td>Partial</td></tr><tr><td>9.3</td><td>Management review</td><td><strong>None</strong> (inputs now exist; just needs the first meeting)</td></tr><tr><td>10.1</td><td>Improvement — general</td><td>Full</td></tr><tr><td>10.2</td><td>Nonconformity and corrective action</td><td>Full (automated via <code>suggest_improvements</code> + HITL)</td></tr><tr><td>10.3</td><td>Continual improvement</td><td>Full (measured via hydra_learning success metrics)</td></tr></tbody></table>
+<p><strong>Totals.</strong> 51 clauses/subclauses. Clauses fully None: 2 (5.2 Policy, 9.3 Management review — both close with documentation/scheduling, no engineering). N/A-here: 1 (8.5.3 customer property, covered under 27001 scope). The shipping of <code>hydra_learning</code> (§ 0c) on 2026-04-17 upgraded 9.1.3, 10.2, and 10.3 from Partial to Full. The remaining Partial ratings are nearly all documentation gaps (5.x policy/roles, 6.x objectives, 4.x context) or narrow items covered by the three raised OpenSpec changes.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="gap-priority-shortlist-close-these-first">Gap priority shortlist (close these first)<a href="#gap-priority-shortlist-close-these-first" class="hash-link" aria-label="Direct link to Gap priority shortlist (close these first)" title="Direct link to Gap priority shortlist (close these first)" translate="no">​</a></h2>
+<p><strong>Documentation-only closures (no engineering work):</strong></p>
+<ol>
+<li class=""><strong>5.2 Policy</strong> (None) — write <code>.github/docs/iso/quality-policy.md</code>. Half a page. Unblocks 7.3 Awareness.</li>
+<li class=""><strong>6.2 Quality objectives</strong> (Partial) — extract implicit numbers (75 % coverage, strict-check clean, audit-clean) into <code>.github/docs/iso/objectives.md</code>.</li>
+<li class=""><strong>4.1 / 4.2 / 4.3</strong> (Partial) — one consolidated <code>context.md</code> covering context, interested parties, and scope. Drawn from existing material.</li>
+</ol>
+<p><strong>Process closures (scheduling, no code):</strong></p>
+<ol start="4">
+<li class=""><strong>9.3 Management review</strong> (None) — institute a quarterly review with the agenda template from § 9.3. ~2 hours per quarter.</li>
+<li class=""><strong>9.2 Internal audit</strong> (Partial) — quarterly 5-PR traceability walk-back, one note per quarter in <code>.github/docs/iso/audits/</code>.</li>
+</ol>
+<p><strong>Pipeline gaps — raised as OpenSpec changes</strong> (the learning-bridge automation is shipped per § 0c; these are the narrow residuals):</p>
+<ol start="6">
+<li class=""><strong><a class="" href="/concurrentie-analyse/openspec/changes/link-findings-to-features/"><code>link-findings-to-features</code></a></strong> — add <code>canonical_feature_id</code> FK to <code>HydraPipeline</code>; enrichment phase in <code>ingest_hydra_logs</code>. Lifts 9.1.3 feature-level analysis and 8.5.2 reverse-traceability (DB side).</li>
+<li class=""><strong><a class="" href="/concurrentie-analyse/openspec/changes/embed-feature-id-in-issues/"><code>embed-feature-id-in-issues</code></a></strong> — <code>push_roadmap_issues.py</code> emits <code>feature_id</code> on the issue. Complementary to item 6; closes 8.5.2 reverse-traceability end-to-end.</li>
+<li class=""><strong><a class="" href="/concurrentie-analyse/openspec/changes/add-spec-pipeline-throughput-view/"><code>add-spec-pipeline-throughput-view</code></a></strong> — new view rendering Board-1 throughput metrics. Closes the cross-change throughput gap in 9.1.1.</li>
+</ol>
+<p><strong>Small residual cleanups</strong> (documentation / tidy):</p>
+<ol start="9">
+<li class=""><strong><code>/hydra/needs-input/</code> view</strong> — a grouping over <code>hydra_pipelines.final_status=&#x27;needs-input&#x27;</code>. Would close the aggregate slice of 8.7. Not raised as a formal change; small enough to add to one of the three changes above.</li>
+<li class=""><strong><code>sync_hydra_feedback.py</code> cleanup</strong> — redundant with <code>hydra_learning.ingest_hydra_logs</code>; either remove or document its narrower role.</li>
+<li class=""><strong><code>Dockerfile.analysis</code> / <code>Dockerfile.spec-writer</code> wiring check</strong> — confirm how they are invoked or remove them.</li>
+<li class=""><strong>Memory refresh</strong> — intelligence-DB row counts in the memory index are stale (see § 0a numbers).</li>
+</ol>
+<p><strong>Board-4 (adoption) telemetry</strong> — a separate roadmap decision about whether to build opt-in telemetry from installed NC instances. GDPR and user-trust trade-offs need leadership sign-off before any engineering.</p>
+<p>Items 1–5 are pure documentation / scheduling. Items 6–8 are tracked OpenSpec changes on <code>spec/*</code> branches in <code>concurrentie-analyse</code>, each PR&#x27;d to <code>development</code>. Items 9–12 are small cleanups. Together, closing 1–8 moves the document from two hard Nones and several Partials to a handful of deliberate Partials (7.1.5, 8.4.3, 9.1.2 — see below).</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="gaps-that-will-stay-partial-for-good-reason">Gaps that will stay <em>Partial</em> for good reason<a href="#gaps-that-will-stay-partial-for-good-reason" class="hash-link" aria-label="Direct link to gaps-that-will-stay-partial-for-good-reason" title="Direct link to gaps-that-will-stay-partial-for-good-reason" translate="no">​</a></h2>
+<ul>
+<li class=""><strong>7.1.5 Monitoring/measuring resources</strong> — we pin tool versions and run a PHPUnit baseline; formal &quot;tool suitability&quot; audits add more ceremony than value.</li>
+<li class=""><strong>8.4.3 Information for external providers</strong> — our external-provider surface is narrow (Composer, npm, Nextcloud upstream). Formal protocols here would be overkill.</li>
+<li class=""><strong>9.1.2 Customer satisfaction</strong> — open-source end-users are hard to survey. Issue-trend tracking is a reasonable proxy; a full satisfaction programme is not proportionate.</li>
+</ul>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="references">References<a href="#references" class="hash-link" aria-label="Direct link to References" title="Direct link to References" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="iso-90012015-clause-sources">ISO 9001:2015 clause sources<a href="#iso-90012015-clause-sources" class="hash-link" aria-label="Direct link to ISO 9001:2015 clause sources" title="Direct link to ISO 9001:2015 clause sources" translate="no">​</a></h3>
+<p>The clause titles used in this document were cross-referenced from open summaries at <a href="https://techqualitypedia.com/clauses-of-iso-9001/" target="_blank" rel="noopener noreferrer" class="">techqualitypedia.com</a> and <a href="https://blog.auditortrainingonline.com/blog/understanding-iso-90012015-clause-8.3-design-and-development" target="_blank" rel="noopener noreferrer" class="">Auditor Training Online</a>. The ISO text itself is copyrighted and not reproduced here — for formal audit work, obtain the standard from <a href="https://www.iso.org/standard/62085.html" target="_blank" rel="noopener noreferrer" class="">iso.org</a>. The software-specific interpretation is <strong>ISO/IEC 90003:2018</strong>.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="in-repo-artefacts--hydra-side">In-repo artefacts — Hydra side<a href="#in-repo-artefacts--hydra-side" class="hash-link" aria-label="Direct link to In-repo artefacts — Hydra side" title="Direct link to In-repo artefacts — Hydra side" translate="no">​</a></h3>
+<ul>
+<li class=""><a class="" href="/hydra/openspec/architecture/">hydra/openspec/architecture/</a> — 23 ADRs (adr-001 … adr-023).</li>
+<li class=""><a href="/assets/files/quality-be5a546fd3f5cd049aac4f88e0c7d400.yml/" target="_blank" class="">.github/.github/workflows/quality.yml</a> — quality gate workflow.</li>
+<li class=""><a href="/assets/files/branch-protection-6b04f464e8c4357e313a6a9a30b6bab7.yml/" target="_blank" class="">.github/.github/workflows/branch-protection.yml</a> — branch-transition rules.</li>
+<li class=""><code>hydra/scripts/run-hydra-gates.sh</code> — 9 mechanical gates entry point.</li>
+<li class=""><code>hydra/scripts/lib/hydra_record.py</code> — atomic stage record writer.</li>
+<li class=""><code>hydra/scripts/lib/aggregate-hydra-summary.py</code> — per-change cost/findings roll-up.</li>
+<li class=""><code>hydra/scripts/orchestrate.sh</code> — state-machine (terminal-state guards, <code>needs-input</code> escalation).</li>
+<li class=""><code>hydra/openspec/changes/{slug}/hydra.json</code> — per-change journal.</li>
+<li class=""><a class="" href="/ROADMAP/">.github/docs/ROADMAP.md</a> — product roadmap.</li>
+<li class=""><a class="" href="/iso/claude/">.github/docs/claude/</a> — developer + agent documentation.</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="in-repo-artefacts--specter-side">In-repo artefacts — Specter side<a href="#in-repo-artefacts--specter-side" class="hash-link" aria-label="Direct link to In-repo artefacts — Specter side" title="Direct link to In-repo artefacts — Specter side" translate="no">​</a></h3>
+<ul>
+<li class=""><a class="" href="/concurrentie-analyse/README.md/">concurrentie-analyse/README.md</a> — pipeline overview, live sync status.</li>
+<li class=""><a class="" href="/concurrentie-analyse/intelligence/migrations/0001_initial.py/">concurrentie-analyse/intelligence/migrations/0001_initial.py</a> — 58-table Django ORM schema.</li>
+<li class=""><a class="" href="/concurrentie-analyse/scripts/pipeline.py/">concurrentie-analyse/scripts/pipeline.py</a> — main 13 + 10-phase orchestrator.</li>
+<li class=""><a class="" href="/concurrentie-analyse/scripts/push_spec_pipeline.py/">concurrentie-analyse/scripts/push_spec_pipeline.py</a> — reads DB briefs, runs <code>/opsx-ff</code>, writes change artefacts.</li>
+<li class=""><a class="" href="/concurrentie-analyse/scripts/push_roadmap_issues.py/">concurrentie-analyse/scripts/push_roadmap_issues.py</a> — opens GitHub issues with <code>ready-to-build</code> / <code>blocked</code> / <code>yolo</code> labels.</li>
+<li class=""><a class="" href="/concurrentie-analyse/scripts/generate_spec_content.py/">concurrentie-analyse/scripts/generate_spec_content.py</a> — DB-only context-brief assembly.</li>
+<li class=""><a class="" href="/concurrentie-analyse/scripts/update_readme_status.py/">concurrentie-analyse/scripts/update_readme_status.py</a> — populates sync-status dashboard.</li>
+<li class=""><a class="" href="/concurrentie-analyse/.github/workflows/weekly-sync.yml/">concurrentie-analyse/.github/workflows/weekly-sync.yml</a> — Sunday 02:00 UTC intelligence refresh.</li>
+<li class=""><a class="" href="/concurrentie-analyse/.claude/skills/">concurrentie-analyse/.claude/skills/</a> — 7 <code>specter-*</code> skills.</li>
+<li class=""><code>concurrentie-analyse/intelligence.db</code> — SQLite DB (generated from pgdump).</li>
+<li class=""><code>concurrentie-analyse/scripts/sync_hydra_feedback.py</code> — feedback sync (exists, not wired into cron).</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="memory--context-files-referenced">Memory / context files referenced<a href="#memory--context-files-referenced" class="hash-link" aria-label="Direct link to Memory / context files referenced" title="Direct link to Memory / context files referenced" translate="no">​</a></h3>
+<ul>
+<li class=""><a class="" href="/.claude/memory/project_hydra-adr-iteration.md/">project_hydra-adr-iteration.md</a> — ADR evolution from review findings.</li>
+<li class=""><a class="" href="/.claude/memory/project_testing-architecture.md/">project_testing-architecture.md</a> — 75 % spec-to-test coverage threshold, Playwright + Newman parallel.</li>
+<li class=""><a class="" href="/.claude/memory/reference_conduction-roadmap.md/">reference_conduction-roadmap.md</a> — roadmap pointer.</li>
+</ul>
+<hr>
+<p><em>Last reviewed: 2026-04-23. Review trigger: any new ADR, new Hydra gate, change in branch-protection rulesets, or material change to quality.yml.</em></p></div><footer class="theme-doc-footer docusaurus-mt-lg"><div class="row margin-top--sm theme-doc-footer-edit-meta-row"><div class="col noPrint_WFHX"><a href="https://github.com/ConductionNL/.github/tree/main/../docs/iso/code.md" target="_blank" rel="noopener noreferrer" class="theme-edit-this-page"><svg fill="currentColor" height="20" width="20" viewBox="0 0 40 40" class="iconEdit_Z9Sw" aria-hidden="true"><g><path d="m34.5 11.7l-3 3.1-6.3-6.3 3.1-3q0.5-0.5 1.2-0.5t1.1 0.5l3.9 3.9q0.5 0.4 0.5 1.1t-0.5 1.2z m-29.5 17.1l18.4-18.5 6.3 6.3-18.4 18.4h-6.3v-6.2z"></path></g></svg>Edit this page</a></div><div class="col lastUpdated_JAkA"></div></div></footer></article><nav class="docusaurus-mt-lg pagination-nav" aria-label="Docs pages"><a class="pagination-nav__link pagination-nav__link--prev" href="/iso/"><div class="pagination-nav__sublabel">Previous</div><div class="pagination-nav__label">ISO Compliance Documentation</div></a></nav></div></div><div class="col col--3"><div class="tableOfContents_bqdL thin-scrollbar theme-doc-toc-desktop"><ul class="table-of-contents table-of-contents__left-border"><li><a href="#0-the-pipeline-at-a-glance" class="table-of-contents__link toc-highlight">0. The pipeline at a glance</a></li><li><a href="#0a-specter--the-intelligence--spec-pipeline" class="table-of-contents__link toc-highlight">0a. Specter — the intelligence → spec pipeline</a><ul><li><a href="#the-raw-material--the-intelligence-database" class="table-of-contents__link toc-highlight">The raw material — the intelligence database</a></li><li><a href="#the-7-specter--skills" class="table-of-contents__link toc-highlight">The 7 <code>specter-*</code> skills</a></li><li><a href="#pipeline-phases-the-real-ones" class="table-of-contents__link toc-highlight">Pipeline phases (the real ones)</a></li><li><a href="#what-specter-records-that-is-directly-consumable" class="table-of-contents__link toc-highlight">What Specter records that is directly consumable</a></li><li><a href="#traceability--the-upstream-half-of-852" class="table-of-contents__link toc-highlight">Traceability — the upstream half of 8.5.2</a></li><li><a href="#specter-in-iso-9001-terms" class="table-of-contents__link toc-highlight">Specter in ISO-9001 terms</a></li><li><a href="#gaps-and-closure-proposals-specter-side" class="table-of-contents__link toc-highlight">Gaps and closure proposals (Specter-side)</a></li></ul></li><li><a href="#0b-hydra--the-spec--code-pipeline" class="table-of-contents__link toc-highlight">0b. Hydra — the spec → code pipeline</a><ul><li><a href="#pipeline-stages" class="table-of-contents__link toc-highlight">Pipeline stages</a></li><li><a href="#the-9-mechanical-gates" class="table-of-contents__link toc-highlight">The 9 mechanical gates</a></li><li><a href="#the-per-change-journal--hydrajson" class="table-of-contents__link toc-highlight">The per-change journal — <code>hydra.json</code></a></li><li><a href="#supervisor--cron" class="table-of-contents__link toc-highlight">Supervisor + cron</a></li><li><a href="#non-conforming-outputs--needs-input" class="table-of-contents__link toc-highlight">Non-conforming outputs — <code>needs-input</code></a></li><li><a href="#hydra-in-iso-9001-terms" class="table-of-contents__link toc-highlight">Hydra in ISO-9001 terms</a></li><li><a href="#gaps-and-closure-proposals-hydra-side" class="table-of-contents__link toc-highlight">Gaps and closure proposals (Hydra-side)</a></li></ul></li><li><a href="#0c-the-learning-bridge--hydra_learning-django-app" class="table-of-contents__link toc-highlight">0c. The learning bridge — <code>hydra_learning</code> Django app</a><ul><li><a href="#why-it-lives-in-specter" class="table-of-contents__link toc-highlight">Why it lives in Specter</a></li><li><a href="#data-model--5-postgresql-tables" class="table-of-contents__link toc-highlight">Data model — 5 PostgreSQL tables</a></li><li><a href="#the-5-management-commands" class="table-of-contents__link toc-highlight">The 5 management commands</a></li><li><a href="#dashboard--the-user-facing-half" class="table-of-contents__link toc-highlight">Dashboard — the user-facing half</a></li><li><a href="#as-shipped-numbers-2026-04-17-initial-backfill" class="table-of-contents__link toc-highlight">As-shipped numbers (2026-04-17 initial backfill)</a></li><li><a href="#the-loop-in-one-picture" class="table-of-contents__link toc-highlight">The loop in one picture</a></li><li><a href="#what-the-learning-bridge-does-for-iso-clauses" class="table-of-contents__link toc-highlight">What the learning bridge does for ISO clauses</a></li><li><a href="#whats-still-missing" class="table-of-contents__link toc-highlight">What&#39;s still missing</a></li></ul></li><li><a href="#41-understanding-the-organization-and-its-context" class="table-of-contents__link toc-highlight">4.1 Understanding the organization and its context</a></li><li><a href="#42-needs-and-expectations-of-interested-parties" class="table-of-contents__link toc-highlight">4.2 Needs and expectations of interested parties</a></li><li><a href="#43-determining-the-scope-of-the-quality-management-system" class="table-of-contents__link toc-highlight">4.3 Determining the scope of the quality management system</a></li><li><a href="#44-quality-management-system-and-its-processes" class="table-of-contents__link toc-highlight">4.4 Quality management system and its processes</a></li><li><a href="#51-leadership-and-commitment-511-general--512-customer-focus" class="table-of-contents__link toc-highlight">5.1 Leadership and commitment (5.1.1 General / 5.1.2 Customer focus)</a></li><li><a href="#52-policy-521-establish--522-communicate" class="table-of-contents__link toc-highlight">5.2 Policy (5.2.1 Establish / 5.2.2 Communicate)</a></li><li><a href="#53-organizational-roles-responsibilities-and-authorities" class="table-of-contents__link toc-highlight">5.3 Organizational roles, responsibilities and authorities</a></li><li><a href="#61-actions-to-address-risks-and-opportunities" class="table-of-contents__link toc-highlight">6.1 Actions to address risks and opportunities</a></li><li><a href="#62-quality-objectives-and-planning-to-achieve-them" class="table-of-contents__link toc-highlight">6.2 Quality objectives and planning to achieve them</a></li><li><a href="#63-planning-of-changes" class="table-of-contents__link toc-highlight">6.3 Planning of changes</a></li><li><a href="#71-resources" class="table-of-contents__link toc-highlight">7.1 Resources</a><ul><li><a href="#711-general" class="table-of-contents__link toc-highlight">7.1.1 General</a></li><li><a href="#712-people" class="table-of-contents__link toc-highlight">7.1.2 People</a></li><li><a href="#713-infrastructure" class="table-of-contents__link toc-highlight">7.1.3 Infrastructure</a></li><li><a href="#714-environment-for-the-operation-of-processes" class="table-of-contents__link toc-highlight">7.1.4 Environment for the operation of processes</a></li><li><a href="#715-monitoring-and-measuring-resources" class="table-of-contents__link toc-highlight">7.1.5 Monitoring and measuring resources</a></li><li><a href="#716-organizational-knowledge" class="table-of-contents__link toc-highlight">7.1.6 Organizational knowledge</a></li></ul></li><li><a href="#72-competence" class="table-of-contents__link toc-highlight">7.2 Competence</a></li><li><a href="#73-awareness" class="table-of-contents__link toc-highlight">7.3 Awareness</a></li><li><a href="#74-communication" class="table-of-contents__link toc-highlight">7.4 Communication</a></li><li><a href="#75-documented-information" class="table-of-contents__link toc-highlight">7.5 Documented information</a><ul><li><a href="#751-general" class="table-of-contents__link toc-highlight">7.5.1 General</a></li><li><a href="#752-creating-and-updating" class="table-of-contents__link toc-highlight">7.5.2 Creating and updating</a></li><li><a href="#753-control-of-documented-information-availability-protection-distribution-retention-obsolete-handling" class="table-of-contents__link toc-highlight">7.5.3 Control of documented information (availability, protection, distribution, retention, obsolete handling)</a></li></ul></li><li><a href="#81-operational-planning-and-control" class="table-of-contents__link toc-highlight">8.1 Operational planning and control</a></li><li><a href="#82-requirements-for-products-and-services" class="table-of-contents__link toc-highlight">8.2 Requirements for products and services</a><ul><li><a href="#821-customer-communication" class="table-of-contents__link toc-highlight">8.2.1 Customer communication</a></li><li><a href="#822-determining-requirements-for-products-and-services" class="table-of-contents__link toc-highlight">8.2.2 Determining requirements for products and services</a></li><li><a href="#823-review-of-requirements-for-products-and-services" class="table-of-contents__link toc-highlight">8.2.3 Review of requirements for products and services</a></li><li><a href="#824-changes-to-requirements-for-products-and-services" class="table-of-contents__link toc-highlight">8.2.4 Changes to requirements for products and services</a></li></ul></li><li><a href="#83-design-and-development-of-products-and-services" class="table-of-contents__link toc-highlight">8.3 Design and development of products and services</a><ul><li><a href="#831-general" class="table-of-contents__link toc-highlight">8.3.1 General</a></li><li><a href="#832-design-and-development-planning" class="table-of-contents__link toc-highlight">8.3.2 Design and development planning</a></li><li><a href="#833-design-and-development-inputs" class="table-of-contents__link toc-highlight">8.3.3 Design and development inputs</a></li><li><a href="#834-design-and-development-controls" class="table-of-contents__link toc-highlight">8.3.4 Design and development controls</a></li><li><a href="#835-design-and-development-outputs" class="table-of-contents__link toc-highlight">8.3.5 Design and development outputs</a></li><li><a href="#836-design-and-development-changes" class="table-of-contents__link toc-highlight">8.3.6 Design and development changes</a></li></ul></li><li><a href="#84-control-of-externally-provided-processes-products-and-services" class="table-of-contents__link toc-highlight">8.4 Control of externally provided processes, products and services</a><ul><li><a href="#841-general" class="table-of-contents__link toc-highlight">8.4.1 General</a></li><li><a href="#842-type-and-extent-of-control" class="table-of-contents__link toc-highlight">8.4.2 Type and extent of control</a></li><li><a href="#843-information-for-external-providers" class="table-of-contents__link toc-highlight">8.4.3 Information for external providers</a></li></ul></li><li><a href="#85-production-and-service-provision" class="table-of-contents__link toc-highlight">8.5 Production and service provision</a><ul><li><a href="#851-control-of-production-and-service-provision" class="table-of-contents__link toc-highlight">8.5.1 Control of production and service provision</a></li><li><a href="#852-identification-and-traceability" class="table-of-contents__link toc-highlight">8.5.2 Identification and traceability</a></li><li><a href="#853-property-belonging-to-customers-or-external-providers" class="table-of-contents__link toc-highlight">8.5.3 Property belonging to customers or external providers</a></li><li><a href="#854-preservation" class="table-of-contents__link toc-highlight">8.5.4 Preservation</a></li><li><a href="#855-post-delivery-activities" class="table-of-contents__link toc-highlight">8.5.5 Post-delivery activities</a></li><li><a href="#856-control-of-changes" class="table-of-contents__link toc-highlight">8.5.6 Control of changes</a></li></ul></li><li><a href="#86-release-of-products-and-services" class="table-of-contents__link toc-highlight">8.6 Release of products and services</a></li><li><a href="#87-control-of-nonconforming-outputs" class="table-of-contents__link toc-highlight">8.7 Control of nonconforming outputs</a></li><li><a href="#91-monitoring-measurement-analysis-and-evaluation" class="table-of-contents__link toc-highlight">9.1 Monitoring, measurement, analysis and evaluation</a><ul><li><a href="#911-general" class="table-of-contents__link toc-highlight">9.1.1 General</a></li><li><a href="#912-customer-satisfaction" class="table-of-contents__link toc-highlight">9.1.2 Customer satisfaction</a></li><li><a href="#913-analysis-and-evaluation" class="table-of-contents__link toc-highlight">9.1.3 Analysis and evaluation</a></li></ul></li><li><a href="#92-internal-audit" class="table-of-contents__link toc-highlight">9.2 Internal audit</a></li><li><a href="#93-management-review" class="table-of-contents__link toc-highlight">9.3 Management review</a><ul><li><a href="#management-review--agenda-template" class="table-of-contents__link toc-highlight">Management review — agenda template</a></li></ul></li><li><a href="#101-general" class="table-of-contents__link toc-highlight">10.1 General</a></li><li><a href="#102-nonconformity-and-corrective-action" class="table-of-contents__link toc-highlight">10.2 Nonconformity and corrective action</a></li><li><a href="#103-continual-improvement" class="table-of-contents__link toc-highlight">10.3 Continual improvement</a></li><li><a href="#gap-priority-shortlist-close-these-first" class="table-of-contents__link toc-highlight">Gap priority shortlist (close these first)</a></li><li><a href="#gaps-that-will-stay-partial-for-good-reason" class="table-of-contents__link toc-highlight">Gaps that will stay <em>Partial</em> for good reason</a></li><li><a href="#references" class="table-of-contents__link toc-highlight">References</a><ul><li><a href="#iso-90012015-clause-sources" class="table-of-contents__link toc-highlight">ISO 9001:2015 clause sources</a></li><li><a href="#in-repo-artefacts--hydra-side" class="table-of-contents__link toc-highlight">In-repo artefacts — Hydra side</a></li><li><a href="#in-repo-artefacts--specter-side" class="table-of-contents__link toc-highlight">In-repo artefacts — Specter side</a></li><li><a href="#memory--context-files-referenced" class="table-of-contents__link toc-highlight">Memory / context files referenced</a></li></ul></li></ul></div></div></div></div></main></div></div></div><footer class="canal-footer" aria-label="Site footer"><div class="skyline" role="presentation"></div><div class="kade"><div class="kade-items"><svg class="ki ki-bike-1" width="22" height="16" viewBox="0 -2 22 18" aria-hidden="true"><g stroke="var(--c-cobalt-900)" stroke-width="1.4" fill="none" stroke-linecap="round"><circle cx="4" cy="12" r="3"></circle><circle cx="18" cy="12" r="3"></circle><line x1="4" y1="12" x2="11" y2="6"></line><line x1="11" y1="6" x2="18" y2="12"></line><line x1="11" y1="6" x2="14" y2="12"></line><line x1="11" y1="6" x2="11" y2="3"></line><line x1="11" y1="3" x2="14" y2="6"></line></g><circle cx="11" cy="1.5" r="1.6" fill="var(--c-cobalt-900)"></circle></svg><svg class="ki ki-car-1" width="38" height="16" viewBox="0 0 38 16" aria-hidden="true"><rect x="0" y="6" width="38" height="6" rx="2" fill="#C8482F"></rect><path d="M 5,6 L 9,2 L 29,2 L 33,6 Z" fill="#C8482F"></path><rect x="11" y="3" width="6" height="3" fill="rgba(255,255,255,0.5)"></rect><rect x="20" y="3" width="6" height="3" fill="rgba(255,255,255,0.5)"></rect><circle cx="9" cy="13" r="2" fill="var(--c-cobalt-900)"></circle><circle cx="29" cy="13" r="2" fill="var(--c-cobalt-900)"></circle></svg><svg class="ki ki-bike-2" width="22" height="16" viewBox="0 -2 22 18" aria-hidden="true"><g stroke="var(--c-cobalt-900)" stroke-width="1.4" fill="none" stroke-linecap="round"><circle cx="4" cy="12" r="3"></circle><circle cx="18" cy="12" r="3"></circle><line x1="4" y1="12" x2="11" y2="6"></line><line x1="11" y1="6" x2="18" y2="12"></line><line x1="11" y1="6" x2="14" y2="12"></line><line x1="11" y1="6" x2="11" y2="3"></line><line x1="11" y1="3" x2="14" y2="6"></line></g><circle cx="11" cy="1.5" r="1.6" fill="var(--c-cobalt-900)"></circle></svg><svg class="ki ki-car-2" width="38" height="16" viewBox="0 0 38 16" aria-hidden="true"><rect x="0" y="6" width="38" height="6" rx="2" fill="var(--c-cobalt-900)"></rect><path d="M 5,6 L 9,2 L 29,2 L 33,6 Z" fill="var(--c-cobalt-900)"></path><rect x="11" y="3" width="6" height="3" fill="rgba(255,255,255,0.4)"></rect><rect x="20" y="3" width="6" height="3" fill="rgba(255,255,255,0.4)"></rect><circle cx="9" cy="13" r="2" fill="#C8482F"></circle><circle cx="29" cy="13" r="2" fill="#C8482F"></circle></svg></div></div><div class="water"><div class="canal-items"><svg class="ci ci-cruise" width="120" height="28" viewBox="0 -10 120 28" aria-hidden="true"><line x1="2" y1="14" x2="2" y2="-9" stroke="var(--c-orange-knvb)" stroke-width="0.9"></line><rect x="2.5" y="-9" width="9" height="2" fill="#AE1C28"></rect><rect x="2.5" y="-7" width="9" height="2" fill="#FFFFFF"></rect><rect x="2.5" y="-5" width="9" height="2" fill="#21468B"></rect><path d="M 0,16 L 6,18 L 114,18 L 120,16 L 120,11 L 0,11 Z" fill="var(--c-orange-knvb)"></path><rect x="8" y="5" width="104" height="6" fill="var(--c-orange-knvb)"></rect><path d="M 8,5 Q 60,0 112,5 L 8,5 Z" fill="var(--c-orange-knvb)"></path><g fill="rgba(255,247,210,0.85)"><rect x="14" y="7" width="6" height="3"></rect><rect x="22" y="7" width="6" height="3"></rect><rect x="30" y="7" width="6" height="3"></rect><rect x="38" y="7" width="6" height="3"></rect><rect x="46" y="7" width="6" height="3"></rect><rect x="54" y="7" width="6" height="3"></rect><rect x="62" y="7" width="6" height="3"></rect><rect x="70" y="7" width="6" height="3"></rect><rect x="78" y="7" width="6" height="3"></rect><rect x="86" y="7" width="6" height="3"></rect><rect x="94" y="7" width="6" height="3"></rect><rect x="102" y="7" width="6" height="3"></rect></g></svg><svg class="ci ci-sloep" width="50" height="20" viewBox="0 -2 50 20" aria-hidden="true"><path d="M 0,12 L 4,16 L 46,16 L 50,12 L 50,8 L 0,8 Z" fill="var(--c-orange-knvb)"></path><rect x="20" y="2" width="12" height="6" rx="1" fill="var(--c-orange-knvb)"></rect><circle cx="26" cy="0" r="1.4" fill="var(--c-orange-knvb)"></circle></svg><svg class="ci ci-row" width="44" height="16" viewBox="-2 0 48 16" aria-hidden="true"><path d="M 0,10 L 4,14 L 40,14 L 44,10 Z" fill="var(--c-orange-knvb)"></path><line x1="8" y1="10" x2="0" y2="3" stroke="var(--c-orange-knvb)" stroke-width="1.2" stroke-linecap="round"></line><line x1="36" y1="10" x2="44" y2="3" stroke="var(--c-orange-knvb)" stroke-width="1.2" stroke-linecap="round"></line><circle cx="22" cy="7" r="1.6" fill="var(--c-orange-knvb)"></circle></svg><svg class="ci ci-swim" width="26" height="10" viewBox="-3 0 30 10" aria-hidden="true"><ellipse cx="13" cy="6" rx="7" ry="1.4" fill="var(--c-orange-knvb)"></ellipse><circle cx="17" cy="4" r="1.7" fill="var(--c-orange-knvb)"></circle><line x1="13" y1="5" x2="11" y2="3" stroke="var(--c-orange-knvb)" stroke-width="1" stroke-linecap="round"></line><line x1="-3" y1="6" x2="2" y2="6" stroke="var(--c-orange-knvb)" stroke-width="0.7" opacity="0.55"></line><line x1="0" y1="8" x2="3" y2="8" stroke="var(--c-orange-knvb)" stroke-width="0.7" opacity="0.4"></line></svg><svg class="ci ci-periscope" width="14" height="26" viewBox="-3 -2 18 28" aria-hidden="true"><rect x="4" y="4" width="2" height="18" fill="var(--c-orange-knvb)"></rect><rect x="0" y="0" width="9" height="3" fill="var(--c-orange-knvb)"></rect><rect x="4" y="3" width="2" height="2" fill="var(--c-orange-knvb)"></rect><ellipse cx="5" cy="24" rx="7" ry="0.9" fill="var(--c-orange-knvb)" opacity="0.5"></ellipse></svg><svg class="ci ci-whale" width="76" height="18" viewBox="-3 -4 82 22" aria-hidden="true"><path d="M 0,12 Q 0,4 26,3 Q 54,2 64,7 L 72,4 L 68,9 L 72,14 L 64,11 Q 54,14 26,14 Q 6,14 0,12 Z" fill="var(--c-orange-knvb)"></path><g opacity="0.55" stroke="var(--c-orange-knvb)" stroke-width="1" stroke-linecap="round"><line x1="22" y1="2" x2="20" y2="-3"></line><line x1="25" y1="2" x2="25" y2="-4"></line><line x1="28" y1="2" x2="30" y2="-3"></line></g></svg><svg class="ci ci-hover" width="74" height="26" viewBox="0 -4 74 28" aria-hidden="true"><ellipse cx="37" cy="22" rx="37" ry="2.5" fill="var(--c-orange-knvb)" opacity="0.4"></ellipse><path d="M 6,18 L 10,10 L 64,10 L 68,18 Z" fill="var(--c-orange-knvb)"></path><path d="M 14,10 Q 37,-4 60,10 L 14,10 Z" fill="var(--c-orange-knvb)"></path><ellipse cx="37" cy="4" rx="16" ry="3.2" fill="rgba(255,247,210,0.7)"></ellipse><polygon points="37,11 42,13.5 42,16.5 37,19 32,16.5 32,13.5" fill="#FFFFFF"></polygon><text x="37" y="17.4" font-size="4" text-anchor="middle" fill="var(--c-orange-knvb)" font-family="sans-serif" font-weight="900">C</text><g stroke="var(--c-orange-knvb)" stroke-width="0.7" opacity="0.6"><line x1="8" y1="22" x2="12" y2="22"></line><line x1="16" y1="22" x2="20" y2="22"></line><line x1="26" y1="22" x2="30" y2="22"></line><line x1="36" y1="22" x2="40" y2="22"></line><line x1="46" y1="22" x2="50" y2="22"></line><line x1="56" y1="22" x2="60" y2="22"></line></g></svg></div><svg class="canal-waves" viewBox="0 0 1400 500" preserveAspectRatio="none" aria-hidden="true"><path class="w1" d="M 0,96 L 140,82 L 280,96 L 420,82 L 560,96 L 700,82 L 840,96 L 980,82 L 1120,96 L 1260,82 L 1400,96"></path><path class="w2" d="M 0,206 L 180,182 L 360,206 L 540,182 L 720,206 L 900,182 L 1080,206 L 1260,182 L 1400,200"></path><path class="w3" d="M 0,362 L 220,332 L 440,362 L 660,332 L 880,362 L 1100,332 L 1320,362 L 1400,348"></path></svg><div class="footer-grid"><div class="brand"><div class="wm">Conduction</div><p>Open-source apps for <span class="next-blue">Nextcloud</span>. Built and maintained by Conduction in Amsterdam, released under EUPL-1.2.</p><div class="triad"><span><span class="h"></span>Conduction<!-- --> <!-- -->· <span class="next-blue">Nextcloud</span></span></div><div class="socials"><a href="https://github.com/ConductionNL" aria-label="GitHub" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="filled" d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.04 1.53 1.04.9 1.53 2.36 1.09 2.93.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.6 9.6 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.93.36.31.68.92.68 1.86v2.76c0 .27.18.58.69.48A10 10 0 0 0 12 2z"></path></svg></a><a href="https://www.linkedin.com/company/conduction" aria-label="LinkedIn" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-4 0v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle class="filled" cx="4" cy="4" r="2"></circle></svg></a><a href="mailto:info@conduction.nl" aria-label="Email info@conduction.nl"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 7l9 6 9-6"></path></svg></a><a href="tel:+31853036840" aria-label="Phone +31 (0)85 303 6840"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.72 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0 1 22 16.92z"></path></svg></a><a href="https://maps.google.com/?q=Lauriergracht+14h+Amsterdam" aria-label="Lauriergracht 14h, Amsterdam, open in Google Maps" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg></a></div></div><div><h4>Documentation</h4><ul><li><a href="/ROADMAP/">Roadmap</a></li><li><a href="/claude/">Claude workflow</a></li><li><a href="/iso/">ISO compliance</a></li><li><a href="/Catalogi/">Catalog</a></li></ul></div><div><h4>Conduction</h4><ul><li><a href="https://conduction.nl/about" target="_blank" rel="noopener noreferrer">About</a></li><li><a href="https://conduction.nl/about#opensource" target="_blank" rel="noopener noreferrer">Open source</a></li><li><a href="https://conduction.nl/about#team" target="_blank" rel="noopener noreferrer">Team</a></li><li><a href="https://conduction.nl/iso" target="_blank" rel="noopener noreferrer">ISO</a></li></ul></div><div><h4>Documentatie</h4><ul><li><a href="https://identity.conduction.nl/" target="_blank" rel="noopener noreferrer">Brand book</a></li><li><a href="https://identity.conduction.nl/diagrams/" target="_blank" rel="noopener noreferrer">Diagram set</a></li></ul></div></div><div class="legal-bar"><div class="left"><span>Conduction B.V. · KvK 76741850 · BTW NL860784241B01 · IBAN NL51 ABNA 0868951550 · Lauriergracht 14h, 1016 RR Amsterdam · 2026</span><span class="legal-links"><a href="/privacy/">Privacy</a><span class="sep">·</span><a href="/terms/">Terms</a><span class="sep">·</span><a href="/iso/">ISO</a></span></div><div class="right"><a class="iso-badge" aria-label="ISO 9001:2015 certified, see details" href="/iso/"><span class="iso-mark">ISO</span><span class="iso-num">9001:2015</span></a><a class="iso-badge" aria-label="ISO 27001:2022 certified, see details" href="/iso/"><span class="iso-mark">ISO</span><span class="iso-num">27001:2022</span></a></div></div></div></footer><div style="display:none" aria-hidden="true">
+      <template id="tpl-h-a">
+        <svg class="house h-a" viewBox="0 -2 80 202" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,200 L 0,38 L 8,38 L 8,26 L 16,26 L 16,14 L 24,14 L 24,8 L 56,8 L 56,14 L 64,14 L 64,26 L 72,26 L 72,38 L 80,38 L 80,200 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="22" y="68" width="10" height="16" fill="rgba(255,247,210,0.95)"/>
+          <rect x="48" y="68" width="10" height="16" fill="rgba(11,32,73,0.35)"/>
+          <rect x="22" y="98" width="10" height="16" fill="rgba(11,32,73,0.35)"/>
+          <rect x="48" y="98" width="10" height="16" fill="rgba(255,247,210,0.6)"/>
+          <rect x="22" y="128" width="10" height="16" fill="rgba(11,32,73,0.35)"/>
+          <rect x="48" y="128" width="10" height="16" fill="rgba(11,32,73,0.35)"/>
+          <rect x="32" y="160" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+      <template id="tpl-h-b">
+        <svg class="house h-b" viewBox="0 0 100 220" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,220 L 0,58 L 8,58 L 8,47 L 16,47 L 16,36 L 24,36 L 24,25 L 32,25 L 32,14 L 50,4 L 68,14 L 68,25 L 76,25 L 76,36 L 84,36 L 84,47 L 92,47 L 92,58 L 100,58 L 100,220 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="14" y="80" width="14" height="20" fill="rgba(255,247,210,0.85)"/>
+          <rect x="43" y="80" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="72" y="80" width="14" height="20" fill="rgba(255,247,210,0.55)"/>
+          <rect x="14" y="115" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="43" y="115" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="72" y="115" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="14" y="150" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="43" y="150" width="14" height="20" fill="rgba(255,247,210,0.7)"/>
+          <rect x="72" y="150" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="42" y="180" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+      <template id="tpl-h-c">
+        <svg class="house h-c" viewBox="0 0 70 240" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,240 L 0,48 L 5,48 L 5,41 L 10,41 L 10,34 L 15,34 L 15,27 L 20,27 L 20,20 L 25,20 L 25,15 L 45,15 L 45,20 L 50,20 L 50,27 L 55,27 L 55,34 L 60,34 L 60,41 L 65,41 L 65,48 L 70,48 L 70,240 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="14" y="70" width="12" height="18" fill="rgba(255,247,210,0.55)"/>
+          <rect x="44" y="70" width="12" height="18" fill="rgba(255,247,210,0.85)"/>
+          <rect x="14" y="100" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="44" y="100" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="14" y="130" width="12" height="18" fill="rgba(255,247,210,0.7)"/>
+          <rect x="44" y="130" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="14" y="160" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="44" y="160" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="27" y="200" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+      <template id="tpl-h-d">
+        <svg class="house h-d" viewBox="0 -10 90 180" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,170 L 0,30 L 8,30 L 8,20 L 16,20 L 16,10 L 24,10 L 24,4 L 66,4 L 66,10 L 74,10 L 74,20 L 82,20 L 82,30 L 90,30 L 90,170 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="12" y="60" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="38" y="60" width="14" height="20" fill="rgba(255,247,210,0.85)"/>
+          <rect x="64" y="60" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="12" y="100" width="14" height="20" fill="rgba(255,247,210,0.6)"/>
+          <rect x="38" y="100" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="64" y="100" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="37" y="130" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+      <template id="tpl-h-e">
+        <svg class="house h-e" viewBox="0 0 95 210" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,210 L 0,55 L 8,55 L 8,44 L 16,44 L 16,33 L 24,33 L 24,22 L 32,22 L 32,11 L 35,11 L 35,6 L 59,6 L 59,11 L 63,11 L 63,22 L 71,22 L 71,33 L 79,33 L 79,44 L 87,44 L 87,55 L 95,55 L 95,210 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="13" y="75" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="40" y="75" width="14" height="20" fill="rgba(255,247,210,0.65)"/>
+          <rect x="68" y="75" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="13" y="110" width="14" height="20" fill="rgba(255,247,210,0.8)"/>
+          <rect x="40" y="110" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="68" y="110" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="13" y="145" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="40" y="145" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="68" y="145" width="14" height="20" fill="rgba(255,247,210,0.55)"/>
+          <rect x="39.5" y="175" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+</div></div>
+</body>
+</html>
