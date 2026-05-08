@@ -1,72 +1,88 @@
 import React from 'react';
 import Link from '@docusaurus/Link';
-import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Layout from '@theme/Layout';
+import { DetailHero } from '@conduction/docusaurus-preset/components';
+
+const ICONS = {
+  roadmap: (
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 7l5-2 6 2 5-2v12l-5 2-6-2-5 2z" />
+      <path d="M9 5v14M15 7v14" />
+    </svg>
+  ),
+  claude: (
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 6h16M4 12h10M4 18h16" />
+      <circle cx="18" cy="12" r="2" fill="currentColor" />
+    </svg>
+  ),
+  iso: (
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2l9 4v6c0 5-4 9-9 10-5-1-9-5-9-10V6z" />
+      <path d="M9 12l2 2 4-4" />
+    </svg>
+  ),
+  services: (
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2" />
+    </svg>
+  ),
+  catalog: (
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 4h6a3 3 0 0 1 3 3v13a2 2 0 0 0-2-2H4z" />
+      <path d="M20 4h-6a3 3 0 0 0-3 3v13a2 2 0 0 1 2-2h7z" />
+    </svg>
+  ),
+  products: (
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 7l9-4 9 4-9 4z" />
+      <path d="M3 12l9 4 9-4" />
+      <path d="M3 17l9 4 9-4" />
+    </svg>
+  ),
+};
 
 const SECTIONS = [
-  {
-    title: 'Roadmap',
-    href: '/ROADMAP',
-    blurb: 'Approved direction for the Conduction app ecosystem. Items here are next, not yet planned as OpenSpec changes.',
-  },
-  {
-    title: 'Claude workflow',
-    href: '/claude/',
-    blurb: 'Spec-driven development with OpenSpec, GitHub Issues and Claude Code. Skills, commands, conventions, parallel agents.',
-  },
-  {
-    title: 'ISO compliance',
-    href: '/iso/',
-    blurb: 'Engineering pipeline mapped to ISO/IEC standards. Clause-by-clause coverage, with gaps surfaced as a first-class output.',
-  },
-  {
-    title: 'Services',
-    href: '/Services/CodebaseStewardship',
-    blurb: 'How Conduction maintains the open-source apps it ships. SLA, codebase stewardship, NL Design tokens.',
-  },
-  {
-    title: 'Catalog',
-    href: '/Catalogi',
-    blurb: 'The Conduction catalog: mission, core values, and the open-source software components that put them into practice.',
-  },
-  {
-    title: 'Products',
-    href: '/Products',
-    blurb: 'Productportfolio: SLA/SAAS, implementatie, training en consultancy.',
-  },
+  { title: 'Roadmap', href: '/ROADMAP/', icon: ICONS.roadmap,
+    blurb: 'Approved direction for the Conduction app ecosystem. Next up, not yet planned as OpenSpec changes.' },
+  { title: 'Claude workflow', href: '/claude/', icon: ICONS.claude,
+    blurb: 'Spec-driven development with OpenSpec, GitHub Issues and Claude Code. Skills, commands, conventions, parallel agents.' },
+  { title: 'ISO compliance', href: '/iso/', icon: ICONS.iso,
+    blurb: 'Engineering pipeline mapped to ISO/IEC standards. Clause-by-clause coverage, with gaps surfaced as a first-class output.' },
+  { title: 'Services', href: '/Services/CodebaseStewardship/', icon: ICONS.services,
+    blurb: 'How Conduction maintains the open-source apps it ships. SLA, codebase stewardship, NL Design tokens.' },
+  { title: 'Catalog', href: '/Catalogi/', icon: ICONS.catalog,
+    blurb: 'The Conduction catalog: mission, core values, and the open-source software components that put them into practice.' },
+  { title: 'Products', href: '/Products/', icon: ICONS.products,
+    blurb: 'Productportfolio: SLA/SAAS, implementatie, training en consultancy.' },
 ];
 
+const HEX_CLIP = 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)';
+
+const HEX_GLYPH = (
+  <svg viewBox="0 0 32 32" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M8 12h16M8 16h16M8 20h10" />
+  </svg>
+);
+
 export default function Home() {
-  const { siteConfig } = useDocusaurusContext();
   return (
     <Layout
-      title={siteConfig.title}
+      title="Conduction Docs"
       description="Engineering, product, and ISO knowledge base for Conduction."
     >
-      <main className="container" style={{ paddingBlock: '64px 96px' }}>
-        <header style={{ maxWidth: '720px', marginBottom: '48px' }}>
-          <p
-            style={{
-              fontFamily: 'var(--ff-mono, monospace)',
-              fontSize: '0.85rem',
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              color: 'var(--c-blue-cobalt, #25408F)',
-              marginBottom: '12px',
-            }}
-          >
-            docs.conduction.nl
-          </p>
-          <h1 style={{ marginBottom: '16px' }}>Conduction Docs</h1>
-          <p style={{ fontSize: '1.15rem', lineHeight: 1.6, opacity: 0.85 }}>
-            Engineering, product, and ISO knowledge base. Source markdown lives at{' '}
-            <Link to="https://github.com/ConductionNL/.github/tree/main/docs">
-              github.com/ConductionNL/.github/docs
-            </Link>
-            .
-          </p>
-        </header>
+      <DetailHero
+        background="cobalt"
+        title="Conduction Docs"
+        tagline="Engineering, product, and ISO knowledge base. Source markdown lives in the .github repo, served from /docs."
+        icon={HEX_GLYPH}
+        iconColor="var(--c-blue-cobalt)"
+        primaryCta={{ label: 'Open Claude workflow', href: '/claude/' }}
+        secondaryCta={{ label: 'View on GitHub', href: 'https://github.com/ConductionNL/.github/tree/main/docs' }}
+      />
 
+      <main className="container" style={{ paddingBlock: '48px 96px' }}>
         <section
           style={{
             display: 'grid',
@@ -88,19 +104,30 @@ export default function Home() {
                 color: 'inherit',
                 transition: 'transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease',
               }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-2px)';
-                e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.06)';
-                e.currentTarget.style.borderColor = 'var(--c-blue-cobalt, #25408F)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = '';
-                e.currentTarget.style.boxShadow = '';
-                e.currentTarget.style.borderColor = 'var(--ifm-color-emphasis-200, #e5e5e5)';
-              }}
             >
-              <h2 style={{ fontSize: '1.25rem', marginBottom: '8px', marginTop: 0 }}>{s.title}</h2>
-              <p style={{ margin: 0, fontSize: '0.95rem', lineHeight: 1.5, opacity: 0.8 }}>
+              <span
+                aria-hidden="true"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '44px',
+                  height: '50px',
+                  background: 'var(--c-blue-cobalt, #25408F)',
+                  color: '#fff',
+                  clipPath: HEX_CLIP,
+                  WebkitClipPath: HEX_CLIP,
+                  marginBottom: '14px',
+                }}
+              >
+                <span style={{ width: '22px', height: '22px', display: 'inline-block' }}>
+                  {s.icon}
+                </span>
+              </span>
+              <h2 style={{ fontSize: '1.2rem', margin: '0 0 6px', fontFamily: 'var(--ff-display, inherit)' }}>
+                {s.title}
+              </h2>
+              <p style={{ margin: 0, fontSize: '0.95rem', lineHeight: 1.5, opacity: 0.78 }}>
                 {s.blurb}
               </p>
             </Link>
