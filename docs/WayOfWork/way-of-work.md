@@ -3,28 +3,12 @@ id: way-of-work
 title: How We Work at Conduction
 sidebar_label: How We Work
 sidebar_position: 1
-description: Conduction's mission, values, and way of working
+description: How Conduction puts its identity into practice — daily operations, KPIs, and project management.
 ---
 
 # How We Work at Conduction
 
-## Who We Are
-
-Conduction builds open-source components for digital government infrastructure. We exist to make government services better for citizens — transparent, inclusive, and accessible by design.
-
-**Our Big Hairy Audacious Goal (2035):** Every resident of the Netherlands automatically receives the government services they are entitled to, without having to apply for them.
-
-## Our Values
-
-Everything we do is grounded in five core values:
-
-| Value | What it means in practice |
-|---|---|
-| **Democratic** | We build in the open. Decisions are made together, not top-down. |
-| **Inclusive** | Our software works for everyone, including people with disabilities or limited digital skills. |
-| **Transparent** | Our code, our roadmap, and our reasoning are public. No black boxes. |
-| **Responsible** | We build for the long term. Sustainable, maintainable, and trustworthy. |
-| **Innovative** | We challenge the status quo and explore better ways of working. |
+Conduction's mission, vision, and core values live on **[identity.conduction.nl](https://identity.conduction.nl/)** — the home of our brand and culture. This handbook covers how we put that identity into practice day-to-day: how we operate, how we measure ourselves, and how we run projects.
 
 ## How We Operate
 
@@ -38,7 +22,7 @@ We work in small, self-directed teams using agile methods. We prefer GitHub Issu
 
 We set yearly Key Performance Indicators to know if we're on track. KPIs may shift year to year, but the aim is steady improvement. Everyone should be aware of the current goals and KPIs — ask your team lead for the latest version.
 
-What we measure ties directly to our mission: publishing code that's actually used, building accessible software, and making customers happy.
+What we measure ties directly back to our identity: publishing code that's actually used, building accessible software, and making customers happy.
 
 ## Project Management
 
