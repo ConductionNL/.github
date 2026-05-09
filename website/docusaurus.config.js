@@ -47,7 +47,7 @@ const config = createConfig({
 
   navbar: {
     items: [
-      { to: '/WayOfWork/onboarding', label: 'Handbook', position: 'left' },
+      { to: '/WayOfWork/way-of-work', label: 'Way of Work', position: 'left' },
       { href: 'https://github.com/orgs/ConductionNL/projects/4', label: 'Roadmap', position: 'left' },
       { to: '/claude/', label: 'Claude workflow', position: 'left' },
       { to: '/iso/', label: 'ISO', position: 'left' },

@@ -11,6 +11,12 @@ const ICONS = {
       <path d="M4 4h3M17 4h3M4 20h3M17 20h3M4 4v3M20 4v3M4 17v3M20 17v3" />
     </svg>
   ),
+  wayofwork: (
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 4h11l3 3v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z" />
+      <path d="M8 9h8M8 13h8M8 17h5" />
+    </svg>
+  ),
   roadmap: (
     <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
       <path d="M4 7l5-2 6 2 5-2v12l-5 2-6-2-5 2z" />
@@ -48,6 +54,8 @@ const ICONS = {
 const SECTIONS = [
   { title: 'Identity', href: 'https://identity.conduction.nl/', icon: ICONS.identity,
     blurb: 'Who Conduction is. Brand, voice, and visual identity for both our culture and our designs — the shared identity every (digital) employee carries.' },
+  { title: 'Way of Work', href: '/WayOfWork/way-of-work/', icon: ICONS.wayofwork,
+    blurb: 'How Conduction operates day-to-day — onboarding, roles, building software, and customer support. The handbook every (digital) employee follows.' },
   { title: 'Roadmap', href: 'https://github.com/orgs/ConductionNL/projects/4', icon: ICONS.roadmap,
     blurb: 'Where the Conduction app ecosystem is heading — tracked live on GitHub Projects. What’s next, what’s in flight, and what’s shipped, alongside the issues that drive each spec.' },
   { title: 'Claude workflow', href: '/claude/', icon: ICONS.claude,
