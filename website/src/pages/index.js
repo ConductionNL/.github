@@ -29,6 +29,14 @@ const ICONS = {
       <circle cx="18" cy="12" r="2" fill="currentColor" />
     </svg>
   ),
+  hydra: (
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="5" cy="12" r="2" />
+      <circle cx="19" cy="6" r="2" />
+      <circle cx="19" cy="18" r="2" />
+      <path d="M7 12h4l4-6h2M11 12h4l4 6h2" />
+    </svg>
+  ),
   iso: (
     <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 2l9 4v6c0 5-4 9-9 10-5-1-9-5-9-10V6z" />
@@ -60,6 +68,8 @@ const SECTIONS = [
     blurb: 'Where the Conduction app ecosystem is heading — tracked live on GitHub Projects. What’s next, what’s in flight, and what’s shipped, alongside the issues that drive each spec.' },
   { title: 'Claude workflow', href: '/claude/', icon: ICONS.claude,
     blurb: 'Spec-driven development with OpenSpec, GitHub Issues and Claude Code. Skills, commands, conventions, parallel agents.' },
+  { title: 'Hydra', href: '/hydra/', icon: ICONS.hydra,
+    blurb: 'Conduction\'s agentic spec-driven CI/CD pipeline. From an OpenSpec change to a reviewed PR — Builder, parallel code + security review, with a human in the loop at the end.' },
   { title: 'ISO compliance', href: '/iso/', icon: ICONS.iso,
     blurb: 'Engineering pipeline mapped to ISO/IEC standards. Clause-by-clause coverage, with gaps surfaced as a first-class output.' },
   { title: 'Support', href: 'https://www.conduction.nl/support/', icon: ICONS.support,

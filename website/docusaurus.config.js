@@ -50,6 +50,7 @@ const config = createConfig({
       { to: '/WayOfWork/way-of-work', label: 'Way of Work', position: 'left' },
       { href: 'https://github.com/orgs/ConductionNL/projects/4', label: 'Roadmap', position: 'left' },
       { to: '/claude/', label: 'Claude workflow', position: 'left' },
+      { to: '/hydra/', label: 'Hydra', position: 'left' },
       { to: '/iso/', label: 'ISO', position: 'left' },
       { href: 'https://www.conduction.nl/support/', label: 'Support', position: 'left' },
       { href: 'https://www.conduction.nl/apps/', label: 'Products', position: 'left' },
