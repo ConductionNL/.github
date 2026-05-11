@@ -31,10 +31,15 @@ Browser UI tests            — Playwright MCP runs the GIVEN/WHEN/THEN
   │                           acceptance criteria against a live NC
   │  fail → Builder fix-browser (bounded, pre-review)
   │
-  ├── Code Reviewer        ─┐
-  └── Security Reviewer    ─┘ sequential — reviewers hold bounded fix authority
-  │
-  │  either fails → needs-input (no loop — ADR-013)
+  ▼
+Code Reviewer               — reviews + applies bounded in-scope fixes
+  │                           directly to the PR branch
+  │  fail → needs-input (no loop — ADR-013)
+  ▼
+Security Reviewer           — runs after the code reviewer hands off
+  │                           (sequential — reviewers share git state);
+  │                           same bounded fix authority
+  │  fail → needs-input
   ▼
 Draft PR (ready-for-review) — human reviews and merges
   │  with the `yolo` label: pipeline approves and merges automatically
@@ -45,7 +50,7 @@ Archive — sync specs, generate test scenarios, update changelog
 
 **Traceability.** Every line of code traces to its spec via two paths: a `@spec` PHPDoc tag pointing at `openspec/changes/{name}/tasks.md#task-N`, and `git blame` → commit `(#N)` → PR `Closes #N` → issue → spec. Branch naming is `feature/{issue-number}/{change-name}` and every commit includes `(#N)`.
 
-**Model selection.** Default model for every persona is Sonnet, with a deeper-model fallback (Haiku for the Builder; Opus for the reviewers and the Applier) when the weekly Sonnet quota runs out. Authoritative configuration lives in each persona's `agents/<persona>/config.yaml` in the hydra repo.
+**Model selection.** Default model for every persona is Sonnet. When the weekly Sonnet quota runs out, the Builder falls back to **Haiku** (cheaper, still good at pattern-following from `tasks.md`/`design.md`); the Reviewers and the Applier fall back to **Opus** (deeper, since judgment work is the last line of defense before human approval). Authoritative configuration lives in each persona's `agents/<persona>/config.yaml` in the hydra repo; runtime overrides via `HYDRA_BUILDER_MODEL`, `HYDRA_REVIEWER_MODEL`, `HYDRA_APPLIER_MODEL`, and their `*_FALLBACK_MODEL` counterparts.
 
 ## How to use Hydra on your PR
 
