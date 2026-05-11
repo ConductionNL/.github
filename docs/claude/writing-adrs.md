@@ -152,3 +152,61 @@ Before merging an ADR change:
 - [ ] No paragraphs — bullets only
 - [ ] Total ADR file is under 200 lines
 - [ ] Added rules have been tested by running the agent and verifying it follows them
+
+---
+
+## ADRs in practice — where they live
+
+Every Conduction app repo follows a clean split:
+
+| Location | Scope | Who writes |
+|---|---|---|
+| [`hydra/openspec/architecture/`](https://github.com/ConductionNL/hydra/tree/main/openspec/architecture) | **Org-wide ADRs** — apply to every Conduction app | Humans (architecture-level decisions) |
+| `<app>/openspec/architecture/` | **Repo-specific ADRs** — apply only to that app (data model choices, domain standards, storage decisions) | Authored by Specter during research; evolved by humans |
+
+App repos do **NOT** carry copies of the org-wide ADRs. Earlier they had stale duplicates that drifted (e.g. a copy saying `fetch()` while hydra's master said `axios`) — those copies were removed across every app repo that had them.
+
+**How agents see org-wide ADRs:**
+- Reviewer + builder containers copy the relevant ADRs from the hydra repo at image-build time.
+- Agents operating in an app repo outside a container (IDE humans, manual `/opsx-ff` runs) read them from hydra's `main` branch directly.
+- `specter-prepare-context` surfaces the applicable org-wide ADRs in `context-brief.md` for each spec so the builder sees them pre-loaded.
+
+**Rule of thumb for where a new ADR belongs:**
+- Applies to ≥2 Conduction apps → org-wide, in `hydra/openspec/architecture/`.
+- Applies only to one app's domain/storage/auth choice → app-specific, in `<app>/openspec/architecture/`.
+
+## The org-wide ADRs
+
+| ADR | Topic |
+|---|---|
+| [001](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-001-data-layer.md) | Data layer (OpenRegister, entities, mappers) |
+| [002](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-002-api.md) | API design (REST, Common Ground, NL API) |
+| [003](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-003-backend.md) | Backend (PHP, Nextcloud, services, spec traceability) |
+| [004](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-004-frontend.md) | Frontend (Vue, components, settings) |
+| [005](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-005-security.md) | Security (auth, CORS, input validation) |
+| [006](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-006-metrics.md) | Metrics & observability |
+| [007](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-007-i18n.md) | i18n (English primary, Dutch required) |
+| [008](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-008-testing.md) | Testing (PHPUnit, Newman, Playwright) |
+| [009](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-009-docs.md) | Documentation |
+| [010](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-010-nl-design.md) | NL Design System (government theming) |
+| [011](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-011-schema-standards.md) | Schema standards (schema.org, DCAT) |
+| [012](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-012-deduplication.md) | Deduplication |
+| [013](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-013-container-pool.md) | Container pool (model selection, turns, no-loop policy) |
+| [014](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-014-licensing.md) | Licensing (EUPL-1.2) |
+| [015](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-015-common-patterns.md) | Common patterns (rate-limit retry, dep enforcement) |
+| [016](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-016-routes.md) | Routes (`appinfo/routes.php` is the only registration path) |
+| [017](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-017-component-composition.md) | Component composition |
+| [018](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-018-widget-header-actions.md) | Widget header actions |
+| [019](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-019-integration-registry.md) | Integration registry |
+| [020](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-020-gate-scope-to-pr-diff.md) | Gate scope is the PR diff, not the whole repo |
+| [021](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-021-bounded-fix-scope-by-shape.md) | Reviewer bounded-fix scope is defined by change shape, not line count |
+| [022](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-022-apps-consume-or-abstractions.md) | Apps consume OpenRegister abstractions (RBAC, audit trail, archival, relations) |
+| [023](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-023-action-authorization.md) | Action-level authorization via admin-configured action/group mappings |
+| [024](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-024-app-manifest.md) | App manifest (fleet-wide adoption) |
+| [025](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-025-i18n-source-of-truth.md) | i18n source-of-truth |
+| [029](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-029-route-reachability-gate.md) | Route reachability gate |
+| [030](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-030-journeydoc-pattern.md) | Journeydoc — capture-driven user documentation |
+| [031](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-031-schema-declarative-business-logic.md) | Schema-declarative business logic over service classes |
+| [032](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-032-spec-sizing-and-chaining.md) | Spec sizing taxonomy and chained-spec routing |
+
+ADRs 026–028 are reserved for in-flight numbering.
