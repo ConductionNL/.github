@@ -172,7 +172,7 @@ Create a Pull Request from a branch in any repo. Handles the full flow interacti
 
 **Phase:** Delivery / Code Review
 
-Review one or more GitHub Pull Requests. Fetches the diff, detects prior reviews (skips if nothing has changed since last review), asks for strictness level, posts inline findings with emoji severity markers (🔴 blocker / 🟡 warning / 🟢 suggestion), and submits a formal APPROVE or REQUEST_CHANGES decision.
+Review one or more GitHub Pull Requests. Fetches the diff, detects prior reviews (skips if nothing has changed since last review), asks for strictness level, posts inline findings with emoji severity markers (🔴 blocker / 🟡 warning / 🟢 suggestion), optionally tests the PR's changes against a local clone (with Docker readiness checks), and submits a formal APPROVE or REQUEST_CHANGES decision.
 
 **Usage:**
 ```
@@ -197,9 +197,10 @@ Review one or more GitHub Pull Requests. Fetches the diff, detects prior reviews
 3. **Asks strictness** — Quick, Standard, Thorough, or Strict
 4. **Analyzes the diff** — runs in parallel sub-agents for batch mode; looks for bugs, null-safety issues, SQL parity, test coverage gaps, and more
 5. **Posts inline comments** — one finding per comment, severity marked with 🔴/🟡/🟢; never bundles multiple findings in one comment
-6. **Checks CI** — blocks APPROVE if required CI checks are failing
-7. **Submits formal review** — APPROVE (no blockers) or REQUEST_CHANGES (one or more 🔴 findings)
-8. **Resolves addressed threads** — replies "✅ Resolved in {sha}" to previously raised comments now fixed, and marks threads closed
+6. **Offers local testing (optional)** — when the PR touches frontend or backend code, asks whether to verify the changes locally; locates or clones the target repo, checks Docker is running (starts it or asks the user to), maps detected layers to applicable `/test-*` skills, builds a test plan, gets your approval, then executes — any new issues join the existing findings before the verdict
+7. **Checks CI** — blocks APPROVE if required CI checks are failing
+8. **Submits formal review** — APPROVE (no blockers) or REQUEST_CHANGES (one or more 🔴 findings)
+9. **Resolves addressed threads** — replies "✅ Resolved in {sha}" to previously raised comments now fixed, and marks threads closed
 
 **Model:** Requires Sonnet or Opus — stops immediately on Haiku. Batch mode lets you choose the model for parallel analysis agents (Sonnet default, Opus for security-sensitive batches).
 
