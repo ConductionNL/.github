@@ -512,15 +512,7 @@ See [usage-tracker/README.md](../../usage-tracker/README.md) for full documentat
 
 [Hydra](https://github.com/ConductionNL/hydra) is Conduction's agentic CI/CD platform that runs the same spec-driven workflow autonomously in Docker containers. It transforms OpenSpec change proposals into validated, security-scanned code on feature branches — with final human approval before merging.
 
-Hydra maintains its own skills, personas, and OpenSpec workflows in its repository, running them through three specialized agent containers:
-
-| Agent | Role | Permissions |
-|-------|------|-------------|
-| **Al Gorithm** (Builder) | Reads OpenSpec change, implements code, opens draft PR | Full: Read, Write, Edit, Bash |
-| **Juan Claude van Damme** (Reviewer) | Code review for correctness, style, architecture | Read-only |
-| **Clyde Barcode** (Security) | SAST analysis, secret detection, security hardening | Read-only |
-
-The workflow and commands documented in this guide apply to both interactive development and Hydra's automated agents. See the [Hydra repository](https://github.com/ConductionNL/hydra) for container architecture, agent configuration, deployment models, and operational guides.
+For an overview of the pipeline stages, the label-based triggers (`ready-to-build`, `code-review:queued`, `security-review:queued`), and how to put Hydra to work on your PR, see the **[Hydra docs](../hydra/README.md)**. For container architecture, image builds, orchestrator internals, and operator-level material, see the [Hydra repository](https://github.com/ConductionNL/hydra).
 
 ---
 
