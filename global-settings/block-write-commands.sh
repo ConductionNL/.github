@@ -561,7 +561,7 @@ while IFS= read -r _spath; do
     _spath="${_spath%\"}"; _spath="${_spath#\"}"
     _spath="${_spath%\'}"; _spath="${_spath#\'}"
     case "$_spath" in
-        '~/'*)         _spath="${HOME}/${_spath#~/}" ;;
+        '~/'*)         _spath="${HOME}/${_spath#'~'/}" ;;
         '$HOME/'*)     _spath="${HOME}/${_spath#'$HOME/'}" ;;
         '${HOME}/'*)   _spath="${HOME}/${_spath#'${HOME}/'}" ;;
     esac
