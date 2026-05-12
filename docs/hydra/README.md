@@ -71,7 +71,7 @@ The deep technical detail stays in the [hydra repo](https://github.com/Conductio
 
 - [hydra/README.md](https://github.com/ConductionNL/hydra/blob/main/README.md) — quickstart and full pipeline overview.
 - [hydra/docs/](https://github.com/ConductionNL/hydra/tree/main/docs) — pipeline-overview, agentic-workflow, container-architecture, github-workflow, deployment-models, agent-configuration.
-- [hydra/openspec/architecture/](https://github.com/ConductionNL/hydra/tree/main/openspec/architecture) — 29 ADRs covering data layer, API, backend, frontend, security, metrics, i18n, testing, docs, NL Design, schema standards, deduplication, container pool (model selection, no-loop policy), licensing, common patterns, routes, component composition, widget header actions, integration registry, gate scope, bounded fix scope, app manifest, journeydoc, schema-declarative business logic, and spec sizing.
+- [hydra/openspec/architecture/](https://github.com/ConductionNL/hydra/tree/main/openspec/architecture) — the org-wide ADRs (data layer, API, backend, frontend, security, container pool, and more). GitHub renders the directory as a browsable index; the directory itself is the authoritative list.
 - [hydra/.claude/skills/](https://github.com/ConductionNL/hydra/tree/main/.claude/skills) — every gate (`hydra-gate-*`), every opsx command (`opsx-*`), and the Hydra-specific tooling.
 
 For how Hydra fits into the broader Claude-driven development workflow, see [Claude workflow](/claude/).
