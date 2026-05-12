@@ -529,6 +529,7 @@ _extract_script_paths() {
         [ -z "$_seg" ] && continue
         _t1=$(echo "$_seg" | awk '{print $1}')
         _t2=$(echo "$_seg" | awk '{print $2}')
+        # shellcheck disable=SC2088,SC2016 # case patterns match literal tokens — tilde and $HOME are intentionally NOT expanded
         case "$_t1" in
             bash|sh|zsh|dash)
                 # `bash -c '…'` takes an inline string, no file to scan.
@@ -544,7 +545,6 @@ _extract_script_paths() {
             source|.)
                 [ -n "$_t2" ] && echo "$_t2"
                 ;;
-            # shellcheck disable=SC2088,SC2016 # case patterns match literal tokens — tilde and $HOME are intentionally NOT expanded
             ./*|/*|'~/'*|'$HOME/'*|'${HOME}/'*|'"$HOME"/'*|'"${HOME}"/'*)
                 # Bare path execution as a command. Quoted-home forms are
                 # already-stripped by the loop's case match.
