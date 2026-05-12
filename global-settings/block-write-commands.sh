@@ -544,6 +544,7 @@ _extract_script_paths() {
             source|.)
                 [ -n "$_t2" ] && echo "$_t2"
                 ;;
+            # shellcheck disable=SC2088,SC2016 # case patterns match literal tokens — tilde and $HOME are intentionally NOT expanded
             ./*|/*|'~/'*|'$HOME/'*|'${HOME}/'*|'"$HOME"/'*|'"${HOME}"/'*)
                 # Bare path execution as a command. Quoted-home forms are
                 # already-stripped by the loop's case match.
@@ -560,6 +561,7 @@ while IFS= read -r _spath; do
     # remain opaque and the file lookup silently no-ops.
     _spath="${_spath%\"}"; _spath="${_spath#\"}"
     _spath="${_spath%\'}"; _spath="${_spath#\'}"
+    # shellcheck disable=SC2088,SC2016 # case patterns and ${var#…} prefixes match literal tokens — intentional
     case "$_spath" in
         '~/'*)         _spath="${HOME}/${_spath#'~'/}" ;;
         '$HOME/'*)     _spath="${HOME}/${_spath#'$HOME/'}" ;;

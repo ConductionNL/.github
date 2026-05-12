@@ -37,6 +37,7 @@ _prot="(~|\\\$HOME|\\\$\\{HOME\\}|${_h})[\"']?/\.claude/(settings\.json|hooks/?|
 # so we also match the expanded literal path.
 if [ -n "$file_path" ]; then
     _expanded="$file_path"
+    # shellcheck disable=SC2088,SC2016 # case patterns and ${var#…} prefixes match literal tokens — tilde/$HOME are intentionally NOT expanded
     case "$_expanded" in
         '~/'*)         _expanded="${HOME}/${_expanded#'~'/}" ;;
         '$HOME/'*)     _expanded="${HOME}/${_expanded#'$HOME/'}" ;;

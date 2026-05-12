@@ -103,7 +103,6 @@ echo "Documentation says: see ~/.claude/settings.json"'
 
 # .sh extension → triggers content scan
 for badname in redirect cp rm chattr tee sed; do
-    var="BAD_${badname^^}"
     case "$badname" in
         redirect) val="$BAD_REDIRECT" ;;
         cp)       val="$BAD_CP" ;;
