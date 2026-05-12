@@ -21,19 +21,27 @@ ask() {
     exit 0
 }
 
-# Returns 0 (true) if the last user message in the transcript contains an authorized push phrase.
+# Returns 0 (true) if the last human-typed user message in the transcript contains
+# an authorized push phrase.
 # Authorized phrases (case-insensitive):
 #   "push for me" | "commit and push" | "please git push" | "push my changes"
-# The transcript is a JSONL file; content may be a string or an array of content blocks.
-# NOTE: reads the FULL content of the last user message (not just the last line), so
-# multi-paragraph messages with the auth phrase on any line work correctly.
+# The transcript is a JSONL file; user-role entries cover both human-typed text
+# blocks AND tool_result blocks emitted between turns. We must skip the latter:
+# after Claude runs any tool, the most-recent type=="user" entry is a tool_result
+# with no text block, which would otherwise erase a still-valid authorization
+# given by the human one turn earlier and deny every retry within the session.
+# NOTE: reads the FULL content of the last human-typed user message (not just
+# the last line), so multi-paragraph messages with the auth phrase on any line
+# work correctly.
 git_push_authorized() {
     [[ -z "$transcript_path" || ! -f "$transcript_path" ]] && return 1
-    # Pipe: (1) emit each user message as compact JSON, one per line
-    #       (2) slurp all, take the last, join all text blocks into one searchable string
+    # Pipe: (1) emit each user message that has at least one text block, one per
+    #           line (skips tool_result-only entries),
+    #       (2) slurp all, take the last, join all text blocks into one
+    #           searchable string.
     local last_msg
-    last_msg=$(jq -rc 'select(.type == "user")' "$transcript_path" 2>/dev/null \
-        | jq -rs 'last | [.message.content[]? | select(.type == "text") | .text] | join(" ")' 2>/dev/null)
+    last_msg=$(jq -rc 'select(.type == "user") | select([.message.content[]? | select(.type == "text")] | length > 0)' "$transcript_path" 2>/dev/null \
+        | jq -rs 'last | [.message.content[] | select(.type == "text") | .text] | join(" ")' 2>/dev/null)
     [[ -z "$last_msg" ]] && return 1
     echo "$last_msg" | grep -qiE '(push for me|commit and push|please git push|push my changes)'
 }

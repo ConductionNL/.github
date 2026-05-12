@@ -342,9 +342,130 @@ for t in "${TESTS_ASK[@]}"; do
 done
 ask_pass=$pass; ask_fail=$fail; ask_total=${#TESTS_ASK[@]}
 
-total=$((allow_total + deny_total + ask_total))
-total_pass=$((allow_pass + deny_pass + ask_pass))
-total_fail=$((allow_fail + deny_fail + ask_fail))
+# ── git push auth-phrase tests ────────────────────────────────────────────────
+# Verify that git_push_authorized() consults the last *human-typed* user message,
+# skipping intervening tool_result entries that Claude Code emits between turns.
+# Regression for the bug where a tool_result became the most-recent user-role
+# entry and the auth phrase was permanently lost within the session.
+
+declare -a TESTS_PUSH_ALLOW TESTS_PUSH_DENY
+add_push_allow() { TESTS_PUSH_ALLOW+=("$1"$'\t'"$2"); }
+add_push_deny()  { TESTS_PUSH_DENY+=("$1"$'\t'"$2"); }
+
+# Build a JSONL transcript fixture from a list of layout tokens. Tokens:
+#   user:<text>      → user-role message with one text content block
+#   tool_result      → user-role message with one tool_result content block
+#   assistant:<text> → assistant-role message (filler; not used by the hook)
+make_transcript() {
+    local out="$1"; shift
+    : > "$out"
+    local tok kind body
+    for tok in "$@"; do
+        kind="${tok%%:*}"
+        body="${tok#*:}"
+        case "$kind" in
+            user)
+                jq -nc --arg t "$body" '{type:"user", message:{role:"user", content:[{type:"text", text:$t}]}}' >> "$out"
+                ;;
+            tool_result)
+                jq -nc '{type:"user", message:{role:"user", content:[{type:"tool_result", tool_use_id:"x", content:"output"}]}}' >> "$out"
+                ;;
+            assistant)
+                jq -nc --arg t "$body" '{type:"assistant", message:{role:"assistant", content:[{type:"text", text:$t}]}}' >> "$out"
+                ;;
+        esac
+    done
+}
+
+# Run the hook against a `git push` invocation with a synthetic transcript.
+# Returns 0 if the hook allowed, 2 if the hook hard-denied.
+run_push_with_transcript() {
+    local transcript="$1"
+    jq -c -n --arg cmd "git push origin main" --arg tp "$transcript" \
+        '{tool_input:{command:$cmd}, transcript_path:$tp}' \
+        | bash "$HOOK" >/dev/null 2>&1
+    return $?
+}
+
+PUSH_TMP="$(mktemp -d)"
+trap 'rm -rf "$PUSH_TMP"' EXIT
+
+# Layout A — bug fixture: user said "please git push", then Claude ran a tool
+# (one tool_result entry now sits as the most recent user-role message). The
+# pre-fix hook saw an empty string here and denied; post-fix must allow.
+make_transcript "$PUSH_TMP/a.jsonl" \
+    "user:please git push origin main" \
+    "assistant:running" \
+    "tool_result"
+add_push_allow "auth phrase persists across one tool_result" "$PUSH_TMP/a.jsonl"
+
+# Layout B — auth phrase as the immediate last user message (the only case the
+# pre-fix hook honoured). Must remain allowed.
+make_transcript "$PUSH_TMP/b.jsonl" "user:please git push"
+add_push_allow "auth phrase is the last user message" "$PUSH_TMP/b.jsonl"
+
+# Layout C — auth phrase, tool noise, auth phrase again (still allowed).
+make_transcript "$PUSH_TMP/c.jsonl" \
+    "user:please git push" \
+    "tool_result" \
+    "user:please git push"
+add_push_allow "auth phrase after multiple tool_results" "$PUSH_TMP/c.jsonl"
+
+# Layout D — auth phrase mid-message; still allowed (we read the full body).
+make_transcript "$PUSH_TMP/d.jsonl" \
+    "user:do steps 1, 2, then please git push" \
+    "tool_result"
+add_push_allow "auth phrase mid-message" "$PUSH_TMP/d.jsonl"
+
+# Layout E — auth phrase superseded by a later user message (revocation).
+make_transcript "$PUSH_TMP/e.jsonl" \
+    "user:please git push" \
+    "tool_result" \
+    "user:wait, hold off"
+add_push_deny "auth phrase superseded by later user message" "$PUSH_TMP/e.jsonl"
+
+# Layout F — no auth phrase anywhere.
+make_transcript "$PUSH_TMP/f.jsonl" \
+    "user:please look at this PR" \
+    "tool_result"
+add_push_deny "no auth phrase in any user message" "$PUSH_TMP/f.jsonl"
+
+# Layout G — empty transcript (no user messages at all).
+: > "$PUSH_TMP/g.jsonl"
+add_push_deny "empty transcript" "$PUSH_TMP/g.jsonl"
+
+# Layout H — only tool_result entries (no human-typed text anywhere).
+make_transcript "$PUSH_TMP/h.jsonl" "tool_result" "tool_result"
+add_push_deny "transcript has only tool_results" "$PUSH_TMP/h.jsonl"
+
+push_pass=0; push_fail=0
+for t in "${TESTS_PUSH_ALLOW[@]}"; do
+    label="${t%%	*}"; transcript="${t#*	}"
+    run_push_with_transcript "$transcript"; ec=$?
+    if [[ $ec -eq 2 ]]; then
+        push_fail=$((push_fail+1)); fail_details+=("[PUSH ALLOW expected, DENIED] $label")
+        [[ $VERBOSE -eq 1 ]] && echo "FAIL: push allow → $label"
+    else
+        push_pass=$((push_pass+1))
+        [[ $VERBOSE -eq 1 ]] && echo "PASS: push allow → $label"
+    fi
+done
+for t in "${TESTS_PUSH_DENY[@]}"; do
+    label="${t%%	*}"; transcript="${t#*	}"
+    run_push_with_transcript "$transcript"; ec=$?
+    if [[ $ec -eq 2 ]]; then
+        push_pass=$((push_pass+1))
+        [[ $VERBOSE -eq 1 ]] && echo "PASS: push deny → $label"
+    else
+        push_fail=$((push_fail+1)); fail_details+=("[PUSH DENY expected, ALLOWED] $label")
+        [[ $VERBOSE -eq 1 ]] && echo "FAIL: push deny → $label"
+    fi
+done
+push_total=$(( ${#TESTS_PUSH_ALLOW[@]} + ${#TESTS_PUSH_DENY[@]} ))
+
+total=$((allow_total + deny_total + ask_total + push_total))
+total_pass=$((allow_pass + deny_pass + ask_pass + push_pass))
+total_fail=$((allow_fail + deny_fail + ask_fail + push_fail))
 
 echo
 echo "═══════════════════════════════════════════════════════════"
@@ -353,6 +474,7 @@ echo "TOTAL:  $total"
 echo "  ALLOW expected: $allow_total  (pass=$allow_pass, fail=$allow_fail)"
 echo "  DENY  expected: $deny_total  (pass=$deny_pass,  fail=$deny_fail)"
 echo "  ASK   expected: $ask_total   (pass=$ask_pass,   fail=$ask_fail)"
+echo "  PUSH  auth:     $push_total  (pass=$push_pass,  fail=$push_fail)"
 echo "  OVERALL:        $total_pass / $total"
 echo "═══════════════════════════════════════════════════════════"
 
