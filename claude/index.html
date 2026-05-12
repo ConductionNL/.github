@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="generator" content="Docusaurus v3.10.1">
 <title data-rh="true">Claude Code Developer Guide | Conduction Docs</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:url" content="https://docs.conduction.nl/claude/"><meta data-rh="true" property="og:locale" content="en"><meta data-rh="true" name="docusaurus_locale" content="en"><meta data-rh="true" name="docsearch:language" content="en"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="Claude Code Developer Guide | Conduction Docs"><meta data-rh="true" name="description" content="Documentation for Conduction&#x27;s spec-driven development workflow, combining OpenSpec, GitHub Issues, and Claude Code."><meta data-rh="true" property="og:description" content="Documentation for Conduction&#x27;s spec-driven development workflow, combining OpenSpec, GitHub Issues, and Claude Code."><link data-rh="true" rel="icon" href="/img/favicon.svg"><link data-rh="true" rel="canonical" href="https://docs.conduction.nl/claude/"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/claude/" hreflang="en"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/claude/" hreflang="x-default"><link data-rh="true" rel="stylesheet" href="/lib/canal-footer.css"><link data-rh="true" rel="stylesheet" href="/lib/kade-cyclist.css"><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Claude Code Developer Guide","item":"https://docs.conduction.nl/claude/"}]}</script><link rel="stylesheet" href="/assets/css/styles.c74b421a.css">
-<script src="/assets/js/runtime~main.0661ac13.js" defer="defer"></script>
+<script src="/assets/js/runtime~main.03567c2a.js" defer="defer"></script>
 <script src="/assets/js/main.dfda0429.js" defer="defer"></script>
 </head>
 <body>
@@ -433,34 +433,7 @@
 <hr>
 <h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="related-hydra-cicd-pipeline">Related: Hydra CI/CD Pipeline<a href="#related-hydra-cicd-pipeline" class="hash-link" aria-label="Direct link to Related: Hydra CI/CD Pipeline" title="Direct link to Related: Hydra CI/CD Pipeline" translate="no">​</a></h2>
 <p><a href="https://github.com/ConductionNL/hydra" target="_blank" rel="noopener noreferrer" class="">Hydra</a> is Conduction&#x27;s agentic CI/CD platform that runs the same spec-driven workflow autonomously in Docker containers. It transforms OpenSpec change proposals into validated, security-scanned code on feature branches — with final human approval before merging.</p>
-<p>Hydra maintains its own skills, personas, and OpenSpec workflows in its repository, running them through three specialized agent containers:</p>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-<table><thead><tr><th>Agent</th><th>Role</th><th>Permissions</th></tr></thead><tbody><tr><td><strong>Al Gorithm</strong> (Builder)</td><td>Reads OpenSpec change, implements code, opens draft PR</td><td>Full: Read, Write, Edit, Bash</td></tr><tr><td><strong>Juan Claude van Damme</strong> (Reviewer)</td><td>Code review for correctness, style, architecture</td><td>Read-only</td></tr><tr><td><strong>Clyde Barcode</strong> (Security)</td><td>SAST analysis, secret detection, security hardening</td><td>Read-only</td></tr></tbody></table>
-<p>The workflow and commands documented in this guide apply to both interactive development and Hydra&#x27;s automated agents. See the <a href="https://github.com/ConductionNL/hydra" target="_blank" rel="noopener noreferrer" class="">Hydra repository</a> for container architecture, agent configuration, deployment models, and operational guides.</p>
+<p>For an overview of the pipeline stages, the label-based triggers (<code>ready-to-build</code>, <code>code-review:queued</code>, <code>security-review:queued</code>), and how to put Hydra to work on your PR, see the <strong><a class="" href="/hydra/">Hydra docs</a></strong>. For container architecture, image builds, orchestrator internals, and operator-level material, see the <a href="https://github.com/ConductionNL/hydra" target="_blank" rel="noopener noreferrer" class="">Hydra repository</a>.</p>
 <hr>
 <h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="scripts">Scripts<a href="#scripts" class="hash-link" aria-label="Direct link to Scripts" title="Direct link to Scripts" translate="no">​</a></h2>
 <p>Each project may include shell scripts in its <code>.claude/scripts/</code> or <code>scripts/</code> directory, used by skills and developers. Common examples:</p>
