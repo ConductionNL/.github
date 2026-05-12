@@ -24,21 +24,25 @@ Builder                     — implements the change, pushes branch early,
 Quality tests               — lint, phpcs, phpmd, psalm, phpstan,
   │                           phpmetrics, composer audit, eslint,
   │                           stylelint, npm audit, PHPUnit, Newman
-  │  fail → Builder fix-quality (max 2 retries)
+  │  fail → Builder fix-quality (bounded, pre-review)
   │
   ▼
 Browser UI tests            — Playwright MCP runs the GIVEN/WHEN/THEN
   │                           acceptance criteria against a live NC
-  │  fail → Builder fix-browser (max 2 retries)
+  │  fail → Builder fix-browser (bounded, pre-review)
   │
-  ├── Code Reviewer        ─┐
-  └── Security Reviewer    ─┘ parallel — halves wall time
-  │
-  │  fail → Builder fix CRITICAL+WARNING (max 3 retries)
-  │         If fix budget exhausted → needs-input label
+  ▼
+Code Reviewer               — reviews + applies bounded in-scope fixes
+  │                           directly to the PR branch
+  │  fail → needs-input (no loop — ADR-013)
+  ▼
+Security Reviewer           — runs after the code reviewer hands off
+  │                           (sequential — reviewers share git state);
+  │                           same bounded fix authority
+  │  fail → needs-input
   ▼
 Draft PR (ready-for-review) — human reviews and merges
-  │  with full-auto label: pipeline approves and merges automatically
+  │  with the `yolo` label: pipeline approves and merges automatically
   │
   ▼ (after human merge)
 Archive — sync specs, generate test scenarios, update changelog
@@ -46,7 +50,7 @@ Archive — sync specs, generate test scenarios, update changelog
 
 **Traceability.** Every line of code traces to its spec via two paths: a `@spec` PHPDoc tag pointing at `openspec/changes/{name}/tasks.md#task-N`, and `git blame` → commit `(#N)` → PR `Closes #N` → issue → spec. Branch naming is `feature/{issue-number}/{change-name}` and every commit includes `(#N)`.
 
-**Model selection.** Builder uses Opus for implementation and Sonnet for fix modes. Reviewers and the Browser UI Tester use Sonnet.
+**Model selection.** Default model for every persona is Sonnet. When the weekly Sonnet quota runs out, the Builder falls back to **Haiku** (cheaper, still good at pattern-following from `tasks.md`/`design.md`); the Reviewers and the Applier fall back to **Opus** (deeper, since judgment work is the last line of defense before human approval). Authoritative configuration lives in each persona's `agents/<persona>/config.yaml` in the hydra repo; runtime overrides via `HYDRA_BUILDER_MODEL`, `HYDRA_REVIEWER_MODEL`, `HYDRA_APPLIER_MODEL`, and their `*_FALLBACK_MODEL` counterparts.
 
 ## How to use Hydra on your PR
 
@@ -58,8 +62,8 @@ You don't run Hydra yourself — you trigger it with labels.
    - `security-review:queued` — queue a security review.
 
    Reviews are **sequential** by design (the security review consumes the code review's git state). Setting both queued labels at once is not supported and will produce conflicts. Trigger them one at a time.
-3. **Crashes escalate to `needs-input`** rather than auto-retrying. If a Hydra container fails, you'll see a `needs-input` label so a human can investigate the root cause instead of looping.
-4. **PRs that only touch Markdown auto-merge.** Documentation-only changes don't need the full review cycle.
+3. **Crashes escalate to `needs-input`** rather than auto-retrying. If a Hydra container fails, or either reviewer emits a fail verdict, you'll see a `needs-input` label so a human can investigate. There is no retry loop ([ADR-013](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-013-container-pool.md)) — recovery is explicit via the `retry:queued` (fix the flagged findings) or `rebuild:queued` (start over) labels.
+4. **The `yolo` label means auto-merge after the pipeline passes.** All phases still run; `yolo` only removes the human approval gate at the end.
 
 ## Where to learn more
 
@@ -67,7 +71,7 @@ The deep technical detail stays in the [hydra repo](https://github.com/Conductio
 
 - [hydra/README.md](https://github.com/ConductionNL/hydra/blob/main/README.md) — quickstart and full pipeline overview.
 - [hydra/docs/](https://github.com/ConductionNL/hydra/tree/main/docs) — pipeline-overview, agentic-workflow, container-architecture, github-workflow, deployment-models, agent-configuration.
-- [hydra/openspec/architecture/](https://github.com/ConductionNL/hydra/tree/main/openspec/architecture) — 20+ ADRs covering data layer, API, backend, frontend, security, metrics, i18n, testing, docs, NL Design, schema standards, deduplication, container pool, licensing, common patterns, routes, component composition, widget header actions, integration registry, gate scope.
+- [hydra/openspec/architecture/](https://github.com/ConductionNL/hydra/tree/main/openspec/architecture) — the org-wide ADRs (data layer, API, backend, frontend, security, container pool, and more). GitHub renders the directory as a browsable index; the directory itself is the authoritative list.
 - [hydra/.claude/skills/](https://github.com/ConductionNL/hydra/tree/main/.claude/skills) — every gate (`hydra-gate-*`), every opsx command (`opsx-*`), and the Hydra-specific tooling.
 
 For how Hydra fits into the broader Claude-driven development workflow, see [Claude workflow](/claude/).

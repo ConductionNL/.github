@@ -152,3 +152,27 @@ Before merging an ADR change:
 - [ ] No paragraphs — bullets only
 - [ ] Total ADR file is under 200 lines
 - [ ] Added rules have been tested by running the agent and verifying it follows them
+
+---
+
+## ADRs in practice — where they live
+
+Every Conduction app repo follows a clean split:
+
+| Location | Scope | Who writes |
+|---|---|---|
+| [`hydra/openspec/architecture/`](https://github.com/ConductionNL/hydra/tree/main/openspec/architecture) | **Org-wide ADRs** — apply to every Conduction app | Humans (architecture-level decisions) |
+| `<app>/openspec/architecture/` | **Repo-specific ADRs** — apply only to that app (data model choices, domain standards, storage decisions) | Authored by Specter during research; evolved by humans |
+
+The authoritative org-wide list is the directory itself — [`hydra/openspec/architecture/`](https://github.com/ConductionNL/hydra/tree/main/openspec/architecture) on `main`. GitHub renders it as a browsable index, so we don't mirror it here (the mirror would drift the moment a new ADR lands).
+
+App repos do **NOT** carry copies of the org-wide ADRs. Earlier they had stale duplicates that drifted (e.g. a copy saying `fetch()` while hydra's master said `axios`) — those copies were removed across every app repo that had them.
+
+**How agents see org-wide ADRs:**
+- Reviewer + builder containers copy the relevant ADRs from the hydra repo at image-build time.
+- Agents operating in an app repo outside a container (IDE humans, manual `/opsx-ff` runs) read them from hydra's `main` branch directly.
+- `specter-prepare-context` surfaces the applicable org-wide ADRs in `context-brief.md` for each spec so the builder sees them pre-loaded.
+
+**Rule of thumb for where a new ADR belongs:**
+- Applies to ≥2 Conduction apps → org-wide, in `hydra/openspec/architecture/`.
+- Applies only to one app's domain/storage/auth choice → app-specific, in `<app>/openspec/architecture/`.

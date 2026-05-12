@@ -37,6 +37,14 @@ Enhancement suggestions are tracked as GitHub issues. When creating an enhanceme
 * Make sure your code lints (`composer cs:check`)
 * Create a pull request!
 
+### PR Size
+
+Prefer **one PR per logically-coherent finding or feature**. Each PR's commit message, checkbox, and inline-comment chain should map to a single change unit — reviewers hold a clearer mental model on focused PRs than on large ones.
+
+* When a PR's scope grows past **~10 commits or ~30 files**, consider splitting it before requesting review. The per-finding commits stay; the PR boundary moves.
+* **Exception:** release-promotion PRs (`development → beta`, `beta → main`) aggregate every change since the last cut and are expected to be larger.
+* PRs touching many files across unrelated subsystems tend to get reviewed paragraph-by-paragraph rather than holistically — that's a signal to split, not to push through.
+
 ## Branch Protection & Git Flow
 
 We use a structured branching model to ensure stability across environments. All branches are protected via **organization-wide rulesets** on the ConductionNL GitHub organization — direct pushes are not allowed. Every change flows through a pull request with peer review and CI checks.
