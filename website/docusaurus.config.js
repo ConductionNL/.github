@@ -17,9 +17,19 @@ const config = createConfig({
   organizationName: 'ConductionNL',
   projectName: '.github',
 
+  /* Two locales, English default. Dutch translations live under
+     i18n/nl/ and are seeded as a skeleton — Docusaurus falls back to
+     EN for any string that isn't yet translated, so /nl/ routes are
+     safe to expose even before a full translation pass. URL shape:
+       /         → English (canonical)
+       /nl/      → Nederlands */
   i18n: {
     defaultLocale: 'en',
-    locales: ['en'],
+    locales: ['en', 'nl'],
+    localeConfigs: {
+      en: { label: 'English',    htmlLang: 'en-GB', direction: 'ltr' },
+      nl: { label: 'Nederlands', htmlLang: 'nl-NL', direction: 'ltr' },
+    },
   },
 
   presets: [
@@ -54,6 +64,7 @@ const config = createConfig({
       { to: '/iso/', label: 'ISO', position: 'left' },
       { href: 'https://www.conduction.nl/support/', label: 'Support', position: 'left' },
       { href: 'https://www.conduction.nl/apps/', label: 'Products', position: 'left' },
+      { type: 'localeDropdown', position: 'right' },
       {
         href: 'https://github.com/ConductionNL/.github',
         label: 'GitHub',
