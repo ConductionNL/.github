@@ -186,6 +186,15 @@
             "command": "bash ~/.claude/hooks/block-write-commands.sh"
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/block-config-tool-writes.sh"
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
