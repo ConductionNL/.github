@@ -13,40 +13,26 @@ It is the factory, not the product. The applications Hydra builds live under [Co
 
 ## How it works
 
-```
-Todo (ready-to-build)
-  │
-  ▼
-Builder                     — implements the change, pushes branch early,
-  │                           opens draft PR
-  │
-  ▼
-Quality tests               — lint, phpcs, phpmd, psalm, phpstan,
-  │                           phpmetrics, composer audit, eslint,
-  │                           stylelint, npm audit, PHPUnit, Newman
-  │  fail → Builder fix-quality (bounded, pre-review)
-  │
-  ▼
-Browser UI tests            — Playwright MCP runs the GIVEN/WHEN/THEN
-  │                           acceptance criteria against a live NC
-  │  fail → Builder fix-browser (bounded, pre-review)
-  │
-  ▼
-Code Reviewer               — reviews + applies bounded in-scope fixes
-  │                           directly to the PR branch
-  │  fail → needs-input (no loop — ADR-013)
-  ▼
-Security Reviewer           — runs after the code reviewer hands off
-  │                           (sequential — reviewers share git state);
-  │                           same bounded fix authority
-  │  fail → needs-input
-  ▼
-Draft PR (ready-for-review) — human reviews and merges
-  │  with the `yolo` label: pipeline approves and merges automatically
-  │
-  ▼ (after human merge)
-Archive — sync specs, generate test scenarios, update changelog
-```
+<cn-arch-flow>
+  <span>Todo</span>
+  <span accent>Builder</span>
+  <span>Quality tests</span>
+  <span>Browser tests</span>
+</cn-arch-flow>
+<cn-arch-flow arrow="down">
+  <span>Code review</span>
+  <span hex>Security review</span>
+  <span>Draft PR</span>
+  <span>Archive</span>
+</cn-arch-flow>
+
+- **Builder** — implements the change, pushes the branch early, opens a draft PR. The accent of the build phase.
+- **Quality tests** — lint, phpcs, phpmd, psalm, phpstan, phpmetrics, composer audit, eslint, stylelint, npm audit, PHPUnit, Newman. A failure loops back to the Builder for a bounded `fix-quality` round.
+- **Browser tests** — Playwright MCP runs the GIVEN/WHEN/THEN acceptance criteria against a live Nextcloud. Failures loop back to the Builder for a bounded `fix-browser` round.
+- **Code review** — reads diff + ADRs, applies bounded in-scope fixes directly to the PR branch. A `fail` verdict escalates to `needs-input` — no retry loop ([ADR-013](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-013-container-pool.md)).
+- **Security review** — runs after the code reviewer hands off (sequential — reviewers share git state), same bounded fix authority. The orange-hex accent is here because security is the last gate before human approval.
+- **Draft PR** — a human reviews and merges. With the `yolo` label, the pipeline approves and merges automatically.
+- **Archive** — after merge, sync specs to Specter, generate test scenarios, update changelog.
 
 **Traceability.** Every line of code traces to its spec via two paths: a `@spec` PHPDoc tag pointing at `openspec/changes/{name}/tasks.md#task-N`, and `git blame` → commit `(#N)` → PR `Closes #N` → issue → spec. Branch naming is `feature/{issue-number}/{change-name}` and every commit includes `(#N)`.
 

@@ -49,29 +49,16 @@ Org-wide specs (test coverage baselines, API patterns, NL Design System complian
 
 We use [Claude Code](https://docs.anthropic.com/en/docs/claude-code) as our development orchestrator. Claude acts as an **architect and assembler** — it defines, configures, and validates, but delegates actual implementation to the platform's building blocks:
 
-```mermaid
-flowchart LR
-  subgraph logic ["Backend · logic"]
-    direction TB
-    L1["n8n workflows"]
-    L2["Triggers, mappings, automation"]
-    L1 --> L2
-  end
-  subgraph data ["Backend · data"]
-    direction TB
-    D1["OpenRegister"]:::accent
-    D2["Schemas, registers, validation"]
-    D1 --> D2
-  end
-  subgraph frontend ["Frontend layer"]
-    direction TB
-    F1["@conduction/nextcloud-vue"]
-    F2["Components, views, routing"]
-    F1 --> F2
-  end
-  frontend ~~~ data ~~~ logic
-  classDef accent fill:#F36C21,stroke:#F36C21,color:#fff;
-```
+<cn-arch-flow arrow="none">
+  <span>@conduction/nextcloud-vue</span>
+  <span accent>OpenRegister</span>
+  <span>n8n workflows</span>
+</cn-arch-flow>
+<cn-arch-flow arrow="none">
+  <span>Components &amp; routing</span>
+  <span accent>Schemas &amp; validation</span>
+  <span>Triggers &amp; mappings</span>
+</cn-arch-flow>
 
 - **Frontend** — Claude selects and configures `@conduction/nextcloud-vue` components, defines views and routing. It does not hand-write UI components from scratch.
 - **Backend data** — OpenRegister is the data spine. Claude defines schemas, registers, object structures, and validation rules. The runtime is the same across every app.

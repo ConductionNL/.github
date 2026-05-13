@@ -103,20 +103,20 @@
   stroke-dasharray: 4 4 !important;
 }
 
-/* Subgraph clusters: render as soft cobalt-100 cards, not the default
- * gray Mermaid box. Matches the `<div class="card">` chrome on the
- * design-system preview pages. */
+/* Subgraph clusters: transparent fill, cobalt-blue stroke. Groups read
+ * as outlined regions, not stacked cards — keeps the visual hierarchy
+ * (filled cobalt nodes > outlined groups > panel background). */
 .docusaurus-mermaid-container .cluster rect,
 .mermaid .cluster rect {
-  fill: #ffffff !important;
-  stroke: #DCE3F0 !important;
+  fill: transparent !important;
+  stroke: #21468B !important;
   stroke-width: 1 !important;
   rx: 8 !important;
   ry: 8 !important;
 }
 .docusaurus-mermaid-container .cluster text,
 .mermaid .cluster text {
-  fill: #4D69A4 !important;
+  fill: #21468B !important;
   font-size: 11px !important;
   font-family: 'IBM Plex Mono', ui-monospace, monospace !important;
   text-transform: uppercase !important;
