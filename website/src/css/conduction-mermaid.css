@@ -1,0 +1,156 @@
+/* Conduction-branded Mermaid theme.
+ *
+ * Mermaid renders inline SVG and inlines fills via the `themeVariables`
+ * passed in docusaurus.config.js. This file handles what theme-variables
+ * cannot: container chrome, accent class shapes, font tightening, and
+ * the one-orange-per-scene `:::accent` rule.
+ *
+ * Token mirror (kept in sync with design-system/tokens.css):
+ *   --c-blue-cobalt   #21468B   primary
+ *   --c-orange-knvb   #F36C21   accent (used once per diagram)
+ *   --c-cobalt-50     #EEF2F8   node fill
+ *   --c-cobalt-100    #DCE3F0   container fill
+ *   --c-cobalt-200    #B6C2DD   border
+ *   --c-cobalt-400    #4D69A4   edges
+ *   --c-cobalt-700    #152D5C   text
+ *   --c-cobalt-900    #0A172F   strong text
+ *   --c-mint-500      #2E9866   success/built marker (sparingly)
+ */
+
+/* Container: matches the cobalt-50 panel style used in the product-page
+ * mockups so a Mermaid block reads as one of "our" diagrams, not a generic
+ * embed. Border-radius matches --radius-md (8px). */
+.docusaurus-mermaid-container,
+[class*="mermaid"][class*="container"] {
+  background: #EEF2F8;
+  border: 1px solid #DCE3F0;
+  border-radius: 8px;
+  padding: 24px;
+  margin: 20px 0;
+  overflow-x: auto;
+}
+
+/* Sharper text inside Mermaid SVGs. Mermaid sets font-family inline
+ * (via themeVariables) but font-weight + letter-spacing need CSS. */
+.docusaurus-mermaid-container svg text,
+.mermaid svg text {
+  font-weight: 500;
+  letter-spacing: -0.005em;
+}
+
+/* The `accent` classDef paints one node KNVB orange. Use sparingly:
+ * one node per diagram, on the term the reader should land on.
+ *
+ *   ```mermaid
+ *   flowchart LR
+ *     A[Obtain] --> B[Specify]
+ *     B --> C[Build]:::accent
+ *     C --> D[Validate]
+ *   ```
+ *
+ * The classDef declaration lives inside each diagram (themeVariables
+ * can't reach class-scoped fills). This block hardens it against the
+ * `theme: base` defaults so orange wins even when nodes are restyled
+ * mid-render. */
+.docusaurus-mermaid-container .node.accent rect,
+.docusaurus-mermaid-container .node.accent polygon,
+.docusaurus-mermaid-container .node.accent path,
+.mermaid .node.accent rect,
+.mermaid .node.accent polygon,
+.mermaid .node.accent path {
+  fill: #F36C21 !important;
+  stroke: #F36C21 !important;
+}
+.docusaurus-mermaid-container .node.accent .nodeLabel,
+.docusaurus-mermaid-container .node.accent text,
+.mermaid .node.accent .nodeLabel,
+.mermaid .node.accent text {
+  color: #fff !important;
+  fill: #fff !important;
+}
+
+/* `stage` classDef paints a node cobalt-cobalt (filled brand primary).
+ * Used for "system" nodes in layered architecture diagrams — the same
+ * role .arch-diagram .node.accent plays in the static product pages. */
+.docusaurus-mermaid-container .node.stage rect,
+.docusaurus-mermaid-container .node.stage polygon,
+.docusaurus-mermaid-container .node.stage path,
+.mermaid .node.stage rect,
+.mermaid .node.stage polygon,
+.mermaid .node.stage path {
+  fill: #21468B !important;
+  stroke: #21468B !important;
+}
+.docusaurus-mermaid-container .node.stage .nodeLabel,
+.docusaurus-mermaid-container .node.stage text,
+.mermaid .node.stage .nodeLabel,
+.mermaid .node.stage text {
+  color: #fff !important;
+  fill: #fff !important;
+}
+
+/* `muted` classDef: dashed cobalt-100 outline for "external" or
+ * "out-of-scope" nodes that exist in the picture but aren't owned by
+ * the system being described. */
+.docusaurus-mermaid-container .node.muted rect,
+.docusaurus-mermaid-container .node.muted polygon,
+.docusaurus-mermaid-container .node.muted path,
+.mermaid .node.muted rect,
+.mermaid .node.muted polygon,
+.mermaid .node.muted path {
+  fill: #ffffff !important;
+  stroke: #B6C2DD !important;
+  stroke-dasharray: 4 4 !important;
+}
+
+/* Subgraph clusters: render as soft cobalt-100 cards, not the default
+ * gray Mermaid box. Matches the `<div class="card">` chrome on the
+ * design-system preview pages. */
+.docusaurus-mermaid-container .cluster rect,
+.mermaid .cluster rect {
+  fill: #ffffff !important;
+  stroke: #DCE3F0 !important;
+  stroke-width: 1 !important;
+  rx: 8 !important;
+  ry: 8 !important;
+}
+.docusaurus-mermaid-container .cluster text,
+.mermaid .cluster text {
+  fill: #4D69A4 !important;
+  font-size: 11px !important;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.06em !important;
+}
+
+/* Edges: slimmer, brand-cobalt arrows. Default Mermaid lineColor is set
+ * via themeVariables, but stroke-width needs CSS. */
+.docusaurus-mermaid-container .edgePath .path,
+.mermaid .edgePath .path {
+  stroke-width: 1.5 !important;
+}
+.docusaurus-mermaid-container .marker,
+.mermaid .marker {
+  fill: #4D69A4 !important;
+  stroke: #4D69A4 !important;
+}
+
+/* Edge labels (the small "1 → 2" or stage-number captions) read as code
+ * voice, like our static-kit captions. */
+.docusaurus-mermaid-container .edgeLabel,
+.mermaid .edgeLabel {
+  background: #EEF2F8 !important;
+  color: #4D69A4 !important;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace !important;
+  font-size: 11px !important;
+  padding: 2px 6px !important;
+}
+
+/* Dark mode (Docusaurus toggles data-theme=dark on <html>): invert the
+ * container without changing node fills — Mermaid keeps its own dark
+ * theme; we just retint the wrapper so it doesn't fight the page. */
+[data-theme='dark'] .docusaurus-mermaid-container,
+[data-theme='dark'] [class*="mermaid"][class*="container"] {
+  background: #0A172F;
+  border-color: #152D5C;
+}
