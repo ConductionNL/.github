@@ -204,7 +204,10 @@ jobs:
               fi
               # Exit code 0 = clean, 1 = warnings only, 2 = errors found.
               # We treat warnings as non-blocking (exit 1 → success).
-              composer phpcs; RC=$?
+              # NB: capture via `|| RC=$?` — a bare `composer phpcs; RC=$?`
+              # is killed by `set -e` before RC is ever assigned.
+              RC=0
+              composer phpcs || RC=$?
               if [ "$RC" -eq 1 ]; then
                 echo "::warning::PHPCS found warnings but no errors — passing."
                 exit 0
@@ -1296,7 +1299,11 @@ jobs:
           else
             git add .coverage-baseline
             git commit -m "ci: update coverage baseline [skip ci]"
-            git push
+            # Non-blocking: branch-protection rulesets reject the bot push on
+            # repos with a protected development/main. Surface a warning instead
+            # of failing the whole workflow over an auto-committed convenience
+            # file. Tracked in ConductionNL/.github#61 (add bot as a bypass actor).
+            git push || echo "::warning::Could not push the updated coverage baseline — branch protection rejected the bot push (see ConductionNL/.github#61). Commit .coverage-baseline manually."
           fi
 
   report:
@@ -1565,7 +1572,12 @@ jobs:
 
       - name: Generate npm SBOM
         if: ${{ inputs.enable-frontend }}
-        run: npx @cyclonedx/cyclonedx-npm --output-file bom-npm.cdx.json --spec-version 1.5 --omit dev
+        # --package-lock-only: build the SBOM from package-lock.json rather than
+        # `npm ls`. `npm ls` exits non-zero (ELSPROBLEMS) on benign tree quirks —
+        # peer/version mismatches in transitive deps, a hard dependency declared
+        # by a lib but deduped away, etc. — which has nothing to do with the SBOM.
+        # The lockfile is the deterministic source of truth for what gets installed.
+        run: npx @cyclonedx/cyclonedx-npm --package-lock-only --output-file bom-npm.cdx.json --spec-version 1.5 --omit dev
 
       - name: Merge PHP + npm SBOMs
         if: ${{ inputs.enable-frontend }}

@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="generator" content="Docusaurus v3.10.1">
 <title data-rh="true">ISO 9001:2015 ↔ Code-Quality Pipeline | Conduction Docs</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:url" content="https://docs.conduction.nl/iso/code/"><meta data-rh="true" property="og:locale" content="en"><meta data-rh="true" name="docusaurus_locale" content="en"><meta data-rh="true" name="docsearch:language" content="en"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="ISO 9001:2015 ↔ Code-Quality Pipeline | Conduction Docs"><meta data-rh="true" name="description" content="This document maps every clause of ISO 9001 for each clause we say what we actually do, rate it Full / Partial / None / N/A, and — when we fall short — describe the shortest path to closing the gap."><meta data-rh="true" property="og:description" content="This document maps every clause of ISO 9001 for each clause we say what we actually do, rate it Full / Partial / None / N/A, and — when we fall short — describe the shortest path to closing the gap."><link data-rh="true" rel="icon" href="/img/favicon.svg"><link data-rh="true" rel="canonical" href="https://docs.conduction.nl/iso/code/"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/iso/code/" hreflang="en"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/iso/code/" hreflang="x-default"><link data-rh="true" rel="stylesheet" href="/lib/canal-footer.css"><link data-rh="true" rel="stylesheet" href="/lib/kade-cyclist.css"><link rel="stylesheet" href="/assets/css/styles.c74b421a.css">
-<script src="/assets/js/runtime~main.03567c2a.js" defer="defer"></script>
-<script src="/assets/js/main.dfda0429.js" defer="defer"></script>
+<script src="/assets/js/runtime~main.cf373574.js" defer="defer"></script>
+<script src="/assets/js/main.cb62b030.js" defer="defer"></script>
 </head>
 <body>
 <svg style="display: none;"><defs>
@@ -22,7 +22,7 @@
 <ul>
 <li class=""><strong>Hydra ADRs</strong> — <a class="" href="/hydra/openspec/architecture/">hydra/openspec/architecture/</a> — 23 architecture decision records (adr-001 … adr-023).</li>
 <li class=""><strong>OpenSpec changes</strong> — <code>hydra/openspec/changes/</code> — active change proposals; <code>hydra/openspec/changes/archive/</code> for completed.</li>
-<li class=""><strong>Quality workflow</strong> — <a href="/assets/files/quality-be5a546fd3f5cd049aac4f88e0c7d400.yml/" target="_blank" class="">.github/.github/workflows/quality.yml</a> — reusable workflow invoked per app.</li>
+<li class=""><strong>Quality workflow</strong> — <a href="/assets/files/quality-35eec5d995aa8afceae9b1296e23e9ef.yml/" target="_blank" class="">.github/.github/workflows/quality.yml</a> — reusable workflow invoked per app.</li>
 <li class=""><strong>Branch-protection workflow</strong> — <a href="/assets/files/branch-protection-6b04f464e8c4357e313a6a9a30b6bab7.yml/" target="_blank" class="">.github/.github/workflows/branch-protection.yml</a> — validates source→target branch pairings.</li>
 <li class=""><strong>Hydra mechanical gates</strong> — <code>scripts/run-hydra-gates.sh</code> in hydra/ — 9 gates: <code>spdx</code>, <code>forbidden-patterns</code>, <code>stub-scan</code>, <code>composer-audit</code>, <code>route-auth</code>, <code>orphan-auth</code>, <code>no-admin-idor</code>, <code>unsafe-auth-resolver</code>, <code>semantic-auth</code>.</li>
 <li class=""><strong>Hydra record</strong> — <code>openspec/changes/{slug}/hydra.json</code> — atomic stage-level journal written by <code>scripts/lib/hydra_record.py</code>.</li>
@@ -1400,7 +1400,7 @@
 <h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="in-repo-artefacts--hydra-side">In-repo artefacts — Hydra side<a href="#in-repo-artefacts--hydra-side" class="hash-link" aria-label="Direct link to In-repo artefacts — Hydra side" title="Direct link to In-repo artefacts — Hydra side" translate="no">​</a></h3>
 <ul>
 <li class=""><a class="" href="/hydra/openspec/architecture/">hydra/openspec/architecture/</a> — 23 ADRs (adr-001 … adr-023).</li>
-<li class=""><a href="/assets/files/quality-be5a546fd3f5cd049aac4f88e0c7d400.yml/" target="_blank" class="">.github/.github/workflows/quality.yml</a> — quality gate workflow.</li>
+<li class=""><a href="/assets/files/quality-35eec5d995aa8afceae9b1296e23e9ef.yml/" target="_blank" class="">.github/.github/workflows/quality.yml</a> — quality gate workflow.</li>
 <li class=""><a href="/assets/files/branch-protection-6b04f464e8c4357e313a6a9a30b6bab7.yml/" target="_blank" class="">.github/.github/workflows/branch-protection.yml</a> — branch-transition rules.</li>
 <li class=""><code>hydra/scripts/run-hydra-gates.sh</code> — 9 mechanical gates entry point.</li>
 <li class=""><code>hydra/scripts/lib/hydra_record.py</code> — atomic stage record writer.</li>
