@@ -1,0 +1,18 @@
+{
+  "sidebar.tutorialSidebar.category.Working at Conduction": {
+    "message": "Werken bij Conduction",
+    "description": "The label for category Working at Conduction in sidebar tutorialSidebar"
+  },
+  "sidebar.tutorialSidebar.category.Building Software": {
+    "message": "Software bouwen",
+    "description": "The label for category Building Software in sidebar tutorialSidebar"
+  },
+  "sidebar.tutorialSidebar.category.Support & Safety": {
+    "message": "Ondersteuning & Veiligheid",
+    "description": "The label for category Support & Safety in sidebar tutorialSidebar"
+  },
+  "sidebar.tutorialSidebar.category.Claude workflow": {
+    "message": "Claude-workflow",
+    "description": "The label for category Claude workflow in sidebar tutorialSidebar"
+  }
+}

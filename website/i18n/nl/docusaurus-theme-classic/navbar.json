@@ -1,0 +1,34 @@
+{
+  "item.label.Way of Work": {
+    "message": "Manier van Werken",
+    "description": "Navbar item with label Way of Work"
+  },
+  "item.label.Roadmap": {
+    "message": "Roadmap",
+    "description": "Navbar item with label Roadmap"
+  },
+  "item.label.Claude workflow": {
+    "message": "Claude-workflow",
+    "description": "Navbar item with label Claude workflow"
+  },
+  "item.label.Hydra": {
+    "message": "Hydra",
+    "description": "Navbar item with label Hydra"
+  },
+  "item.label.ISO": {
+    "message": "ISO",
+    "description": "Navbar item with label ISO"
+  },
+  "item.label.Support": {
+    "message": "Ondersteuning",
+    "description": "Navbar item with label Support"
+  },
+  "item.label.Products": {
+    "message": "Producten",
+    "description": "Navbar item with label Products"
+  },
+  "item.label.GitHub": {
+    "message": "GitHub",
+    "description": "Navbar item with label GitHub"
+  }
+}
