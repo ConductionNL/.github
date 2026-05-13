@@ -1,0 +1,787 @@
+<!doctype html>
+<html lang="nl-NL" dir="ltr" class="docs-wrapper plugin-docs plugin-id-default docs-version-current docs-doc-page docs-doc-id-development-environment" data-has-hydrated="false">
+<head>
+<meta charset="UTF-8">
+<meta name="generator" content="Docusaurus v3.10.1">
+<title data-rh="true">Conduction Development Environment | Conduction Docs</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:url" content="https://docs.conduction.nl/nl/development-environment/"><meta data-rh="true" property="og:locale" content="nl_NL"><meta data-rh="true" property="og:locale:alternate" content="en_GB"><meta data-rh="true" name="docusaurus_locale" content="nl"><meta data-rh="true" name="docsearch:language" content="nl"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="Conduction Development Environment | Conduction Docs"><meta data-rh="true" name="description" content="Shared Docker Compose setup for all ConductionNL Nextcloud app development. The compose file lives in this repository (.github/docker-compose.yml) and is used by all Conduction apps."><meta data-rh="true" property="og:description" content="Shared Docker Compose setup for all ConductionNL Nextcloud app development. The compose file lives in this repository (.github/docker-compose.yml) and is used by all Conduction apps."><link data-rh="true" rel="icon" href="/nl/img/favicon.svg"><link data-rh="true" rel="canonical" href="https://docs.conduction.nl/nl/development-environment/"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/development-environment/" hreflang="en-GB"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/nl/development-environment/" hreflang="nl-NL"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/development-environment/" hreflang="x-default"><link data-rh="true" rel="stylesheet" href="/lib/canal-footer.css"><link data-rh="true" rel="stylesheet" href="/lib/kade-cyclist.css"><link rel="stylesheet" href="/nl/assets/css/styles.946aaa0a.css">
+<script src="/nl/assets/js/runtime~main.0a602cc7.js" defer="defer"></script>
+<script src="/nl/assets/js/main.aea7aa93.js" defer="defer"></script>
+</head>
+<body>
+<svg style="display: none;"><defs>
+<symbol id="theme-svg-external-link" viewBox="0 0 24 24"><path fill="currentColor" d="M21 13v10h-21v-19h12v2h-10v15h17v-8h2zm3-12h-10.988l4.035 4-6.977 7.07 2.828 2.828 6.977-7.07 4.125 4.172v-11z"/></symbol>
+</defs></svg>
+<script>!function(){var t=function(){try{return new URLSearchParams(window.location.search).get("docusaurus-theme")}catch(t){}}()||function(){try{return window.localStorage.getItem("theme")}catch(t){}}();document.documentElement.setAttribute("data-theme",t||(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")),document.documentElement.setAttribute("data-theme-choice",t||"system")}(),function(){try{const c=new URLSearchParams(window.location.search).entries();for(var[t,e]of c)if(t.startsWith("docusaurus-data-")){var a=t.replace("docusaurus-data-","data-");document.documentElement.setAttribute(a,e)}}catch(t){}}()</script><div id="__docusaurus"><div role="region" aria-label="Ga naar hoofdinhoud"><a class="skipToContent_fXgn" href="#__docusaurus_skipToContent_fallback">Ga naar hoofdinhoud</a></div><nav class="navbar nav_MuJ0" role="navigation" aria-label="Main"><div class="left__6eY"><a class="wordmark_mhs1" href="/nl/">Conduction Docs</a><div class="links_cXJT"><a class="link_CwQh" href="/nl/WayOfWork/way-of-work/">Manier van Werken</a><a href="https://github.com/orgs/ConductionNL/projects/4" class="ghost_SGJf" target="_blank" rel="noopener noreferrer">Roadmap</a><a class="link_CwQh" href="/nl/claude/">Claude-workflow</a><a class="link_CwQh" href="/nl/hydra/">Hydra</a><a class="link_CwQh" href="/nl/iso/">ISO</a><a href="https://www.conduction.nl/support/" class="ghost_SGJf" target="_blank" rel="noopener noreferrer">Ondersteuning</a><a href="https://www.conduction.nl/apps/" class="ghost_SGJf" target="_blank" rel="noopener noreferrer">Producten</a></div></div><div class="ctas_jpo4"><div class="localeWrapper__Pip"><div class="navbar__item dropdown dropdown--hoverable dropdown--right"><a href="#" aria-haspopup="true" aria-expanded="false" role="button" class="navbar__link" type="localeDropdown"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" class="iconLanguage_nlXk"><path fill="currentColor" d="M12.87 15.07l-2.54-2.51.03-.03c1.74-1.94 2.98-4.17 3.71-6.53H17V4h-7V2H8v2H1v1.99h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z"></path></svg>Nederlands</a><ul class="dropdown__menu"><li><a href="/development-environment/" target="_self" rel="noopener noreferrer" class="dropdown__link" lang="en-GB">English</a></li><li><a href="/nl/development-environment/" target="_self" rel="noopener noreferrer" class="dropdown__link dropdown__link--active" lang="nl-NL">Nederlands</a></li></ul></div></div><a href="https://github.com/ConductionNL/.github" class="ghost_SGJf" target="_blank" rel="noopener noreferrer">GitHub</a></div></nav><div id="__docusaurus_skipToContent_fallback" class="theme-layout-main main-wrapper mainWrapper_z2l0"><div class="docsWrapper_hBAB"><button aria-label="Terug naar boven" class="clean-btn theme-back-to-top-button backToTopButton_sjWU" type="button"></button><div class="docRoot_UBD9"><main class="docMainContainer_TBSr docMainContainerEnhanced_lQrH"><div class="container padding-top--md padding-bottom--lg"><div class="row"><div class="col docItemCol_VOVn"><div class="docItemContainer_Djhp"><article><div class="tocCollapsible_ETCw theme-doc-toc-mobile tocMobile_ITEo"><button type="button" class="clean-btn tocCollapsibleButton_TO0P">Op deze pagina</button></div><div class="theme-doc-markdown markdown"><header><h1>Conduction Development Environment</h1></header>
+<p>Shared Docker Compose setup for all ConductionNL Nextcloud app development. The compose file lives in this repository (<code>.github/docker-compose.yml</code>) and is used by all Conduction apps.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="prerequisites">Prerequisites<a href="#prerequisites" class="hash-link" aria-label="Directe link naar Prerequisites" title="Directe link naar Prerequisites" translate="no">​</a></h2>
+<ul>
+<li class="">Docker and Docker Compose v2+</li>
+<li class="">The workspace directory should contain all app repos as siblings of <code>.github/</code>:
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">apps-extra/</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">├── .github/              ← this repo (contains docker-compose.yml)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">├── openregister/</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">├── opencatalogi/</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">├── softwarecatalog/</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">├── nldesign/</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">├── mydash/</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">├── docudesk/</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">├── procest/</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">├── pipelinq/</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">├── zaakafhandelapp/</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">├── larpingapp/</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">└── ...</span><br></div></code></pre></div></div>
+</li>
+</ul>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="quick-start">Quick Start<a href="#quick-start" class="hash-link" aria-label="Directe link naar Quick Start" title="Directe link naar Quick Start" translate="no">​</a></h2>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain"># Start the core environment (db + nextcloud + n8n)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">docker compose -f .github/docker-compose.yml up -d</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"># Nextcloud is available at http://localhost:8080</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"># Login: admin / admin</span><br></div></code></pre></div></div>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="profiles">Profiles<a href="#profiles" class="hash-link" aria-label="Directe link naar Profiles" title="Directe link naar Profiles" translate="no">​</a></h2>
+<p>The compose file uses Docker profiles to organize optional services. Only the core services (db, nextcloud, exapp-n8n) start by default.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="starting-with-profiles">Starting with profiles<a href="#starting-with-profiles" class="hash-link" aria-label="Directe link naar Starting with profiles" title="Directe link naar Starting with profiles" translate="no">​</a></h3>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain"># Single profile</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">docker compose -f .github/docker-compose.yml --profile mail up -d</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"># Multiple profiles</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">docker compose -f .github/docker-compose.yml --profile mail --profile ai up -d</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"># Everything (not recommended — very resource heavy)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">docker compose -f .github/docker-compose.yml --profile mail --profile ai --profile commonground --profile integrations up -d</span><br></div></code></pre></div></div>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="available-profiles">Available profiles<a href="#available-profiles" class="hash-link" aria-label="Directe link naar Available profiles" title="Directe link naar Available profiles" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Profile</th><th>Services</th><th>Purpose</th><th>Resources</th></tr></thead><tbody><tr><td><em>(default)</em></td><td>db, nextcloud, exapp-n8n</td><td>Core dev environment</td><td>~1 GB</td></tr><tr><td><code>demo</code></td><td>nextcloud-demo</td><td>Self-contained demo (installs from app store)</td><td>~1 GB</td></tr><tr><td><code>mail</code></td><td>greenmail</td><td>Test mail server (SMTP/IMAP)</td><td>~512 MB</td></tr><tr><td><code>ai</code></td><td>presidio, tgi-llm, dolphin-vlm, openanonymiser, exapp-openwebui</td><td>AI/LLM services</td><td>~40 GB + GPU</td></tr><tr><td><code>ollama</code></td><td>ollama</td><td>Standalone LLM inference</td><td>~16 GB + GPU</td></tr><tr><td><code>ui</code></td><td>tilburg-woo-ui</td><td>Public WOO document frontend</td><td>~256 MB</td></tr><tr><td><code>exapps</code></td><td>harp, redis, livekit, minio</td><td>AppAPI infrastructure</td><td>~1 GB</td></tr><tr><td><code>commonground</code></td><td>keycloak, redis, livekit, minio, exapp-openklant, exapp-openzaak, exapp-valtimo, exapp-opentalk</td><td>Common Ground ExApps</td><td>~10 GB</td></tr><tr><td><code>solr</code> / <code>search</code></td><td>solr, zookeeper</td><td>Solr search engine</td><td>~1 GB</td></tr><tr><td><code>elasticsearch</code></td><td>elasticsearch</td><td>Elasticsearch backend</td><td>~1 GB</td></tr><tr><td><code>standalone</code></td><td>n8n, open-webui</td><td>Standalone versions (not ExApps)</td><td>~1 GB</td></tr><tr><td><code>llm-management</code></td><td>openllm</td><td>LLM model management</td><td>~16 GB + GPU</td></tr><tr><td><code>mariadb</code></td><td>db-mariadb, nextcloud-mariadb</td><td>MariaDB compatibility testing</td><td>~1 GB</td></tr><tr><td><code>openproject</code> / <code>integrations</code></td><td>openproject</td><td>Project management</td><td>~4 GB</td></tr><tr><td><code>xwiki</code> / <code>integrations</code></td><td>xwiki</td><td>Wiki platform</td><td>~4 GB</td></tr><tr><td><code>ox</code> / <code>integrations</code></td><td>open-xchange</td><td>Email and groupware (requires registry access)</td><td>~4 GB</td></tr><tr><td><code>valtimo</code> / <code>commonground</code></td><td>valtimo</td><td>BPM and case management</td><td>~2 GB</td></tr><tr><td><code>openzaak</code> / <code>commonground</code></td><td>openzaak</td><td>ZGW API case management</td><td>~2 GB</td></tr><tr><td><code>openklant</code> / <code>commonground</code></td><td>openklant</td><td>Customer interaction registry</td><td>~1 GB</td></tr><tr><td><code>exapps-legacy</code></td><td>docker-socket-proxy</td><td>Legacy AppAPI deploy daemon</td><td>~128 MB</td></tr></tbody></table>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="service-details">Service Details<a href="#service-details" class="hash-link" aria-label="Directe link naar Service Details" title="Directe link naar Service Details" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="core-nextcloud--postgresql">Core: Nextcloud + PostgreSQL<a href="#core-nextcloud--postgresql" class="hash-link" aria-label="Directe link naar Core: Nextcloud + PostgreSQL" title="Directe link naar Core: Nextcloud + PostgreSQL" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Service</th><th>Container</th><th>Port</th><th>Notes</th></tr></thead><tbody><tr><td>PostgreSQL</td><td><code>conduction-postgres</code></td><td>5432</td><td>pgvector enabled, shared by all services</td></tr><tr><td>Nextcloud</td><td><code>nextcloud</code></td><td>8080</td><td>Admin: <code>admin</code> / <code>admin</code></td></tr><tr><td>n8n ExApp</td><td><code>conduction-exapp-n8n</code></td><td>—</td><td>Via Nextcloud AppAPI proxy</td></tr></tbody></table>
+<p>All Conduction apps are mounted as volumes into Nextcloud&#x27;s <code>custom_apps</code> directory. Changes to app source code are immediately reflected.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="mail--groupware">Mail &amp; Groupware<a href="#mail--groupware" class="hash-link" aria-label="Directe link naar Mail &amp; Groupware" title="Directe link naar Mail &amp; Groupware" translate="no">​</a></h3>
+<p>Two options are available depending on your needs:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th></th><th>GreenMail (<code>--profile mail</code>)</th><th>Open-Xchange (<code>--profile ox</code>)</th></tr></thead><tbody><tr><td><strong>Use for</strong></td><td>Day-to-day development, quick testing</td><td>Production-like integration, client demos</td></tr><tr><td><strong>Complexity</strong></td><td>Zero config, works immediately</td><td>Multi-service, requires registry access</td></tr><tr><td><strong>Mail</strong></td><td>SMTP + IMAP (auto-create accounts)</td><td>Full IMAP/SMTP via Dovecot/Postfix</td></tr><tr><td><strong>Calendar</strong></td><td>Use Nextcloud Calendar (CalDAV)</td><td>Built-in calendar + CalDAV</td></tr><tr><td><strong>Contacts</strong></td><td>Use Nextcloud Contacts (CardDAV)</td><td>Built-in contacts + CardDAV</td></tr><tr><td><strong>Web UI</strong></td><td>REST API at :8085</td><td>Full webmail at :8087</td></tr><tr><td><strong>Seed data</strong></td><td>Scripts included</td><td>CLI user/context creation</td></tr></tbody></table>
+<h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="option-a-greenmail-recommended-for-development">Option A: GreenMail (recommended for development)<a href="#option-a-greenmail-recommended-for-development" class="hash-link" aria-label="Directe link naar Option A: GreenMail (recommended for development)" title="Directe link naar Option A: GreenMail (recommended for development)" translate="no">​</a></h4>
+<p>Lightweight test mail server. Accounts auto-created on first email. No configuration needed.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Service</th><th>Container</th><th>Port</th><th>Protocol</th></tr></thead><tbody><tr><td>GreenMail</td><td><code>conduction-greenmail</code></td><td>3025</td><td>SMTP</td></tr><tr><td></td><td></td><td>3143</td><td>IMAP</td></tr><tr><td></td><td></td><td>3110</td><td>POP3</td></tr><tr><td></td><td></td><td>8085</td><td>Web UI / REST API</td></tr></tbody></table>
+<p><strong>Setup:</strong></p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain"># 1. Start</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">docker compose -f .github/docker-compose.yml --profile mail up -d</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"># 2. Seed test emails (creates accounts automatically)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">bash .github/docker/mail/seed-mail.sh</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"># 3. Seed contacts and calendar events into Nextcloud</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">bash .github/docker/mail/seed-pim.sh</span><br></div></code></pre></div></div>
+<p><strong>Configure Nextcloud Mail app:</strong></p>
+<ul>
+<li class="">Go to Nextcloud (<a href="http://localhost:8080" target="_blank" rel="noopener noreferrer" class="">http://localhost:8080</a>) → Mail app → Settings</li>
+<li class="">Add account:
+<ul>
+<li class=""><strong>IMAP</strong>: Host <code>greenmail</code>, Port <code>3143</code>, Security <code>None</code></li>
+<li class=""><strong>SMTP</strong>: Host <code>greenmail</code>, Port <code>3025</code>, Security <code>None</code></li>
+<li class=""><strong>User</strong>: <code>behandelaar@test.local</code> (or any seeded address)</li>
+<li class=""><strong>Password</strong>: same as the email address</li>
+</ul>
+</li>
+</ul>
+<p><strong>Test accounts</strong> (auto-created by seed script):</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Email</th><th>Role</th><th>Description</th></tr></thead><tbody><tr><td><code>admin@test.local</code></td><td>System admin</td><td>Administrative notifications</td></tr><tr><td><code>behandelaar@test.local</code></td><td>Case handler</td><td>Processes applications and cases</td></tr><tr><td><code>coordinator@test.local</code></td><td>Team coordinator</td><td>Planning, oversight, IT liaison</td></tr><tr><td><code>burger@test.local</code></td><td>Citizen</td><td>Submits applications and complaints</td></tr><tr><td><code>leverancier@test.local</code></td><td>Supplier/vendor</td><td>External IT partner</td></tr></tbody></table>
+<p><strong>Seed data includes:</strong></p>
+<ul>
+<li class="">12 emails: case applications, status updates, internal coordination, complaints, deadlines</li>
+<li class="">6 contacts: citizens, civil servants, VNG architect, supplier (CardDAV)</li>
+<li class="">5 calendar events: sprint review, welstandscommissie, IT overleg, deadlines, retrospective (CalDAV)</li>
+</ul>
+<p>All seed data is interconnected around realistic Dutch municipal case management scenarios (omgevingsvergunning, kapvergunning, IT-migratie).</p>
+<h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="option-b-open-xchange-for-production-like-testing">Option B: Open-Xchange (for production-like testing)<a href="#option-b-open-xchange-for-production-like-testing" class="hash-link" aria-label="Directe link naar Option B: Open-Xchange (for production-like testing)" title="Directe link naar Option B: Open-Xchange (for production-like testing)" translate="no">​</a></h4>
+<p>Full groupware suite with integrated webmail, calendar, contacts, and document editing (OX Text + Spreadsheet). Uses GreenMail as its IMAP/SMTP backend — the same mail server, so both OX and Nextcloud Mail see the same emails.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Service</th><th>Container</th><th>Port</th><th>Purpose</th></tr></thead><tbody><tr><td>Open-Xchange</td><td><code>conduction-open-xchange</code></td><td>8087</td><td>Web UI (AppSuite)</td></tr><tr><td>OX MariaDB</td><td><code>conduction-ox-mariadb</code></td><td>—</td><td>Dedicated database for OX</td></tr><tr><td>GreenMail</td><td><code>conduction-greenmail</code></td><td>3025/3143/8085</td><td>Shared IMAP/SMTP (auto-starts)</td></tr></tbody></table>
+<p><strong>Architecture:</strong></p>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">GreenMail (IMAP/SMTP)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">├── OX AppSuite → authenticates + reads/sends mail via IMAP/SMTP</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">└── Nextcloud Mail → reads/sends mail via IMAP/SMTP</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    Both see the same mailboxes and emails.</span><br></div></code></pre></div></div>
+<p><strong>Setup:</strong></p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain"># 1. Start OX (also starts GreenMail + OX MariaDB automatically)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">docker compose -f .github/docker-compose.yml --profile ox up -d</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"># 2. Wait for OX to finish initialization (first boot takes 2-3 minutes)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">docker logs -f conduction-open-xchange</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"># Wait for: &quot;*** Restart completed ***&quot;</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"># 3. Seed test emails into GreenMail</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">bash .github/docker/mail/seed-mail.sh</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"># 4. Create OX users and seed contacts/calendar</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">bash .github/docker/mail/seed-ox.sh</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"># 5. Access OX at http://localhost:8087/appsuite</span><br></div></code></pre></div></div>
+<p><strong>Login credentials:</strong></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Username</th><th>Password</th><th>Role</th></tr></thead><tbody><tr><td><code>oxadmin</code></td><td><code>oxadmin</code></td><td>Context admin</td></tr><tr><td><code>behandelaar</code></td><td><code>behandelaar@test.local</code></td><td>Case handler</td></tr><tr><td><code>coordinator</code></td><td><code>coordinator@test.local</code></td><td>Team coordinator</td></tr><tr><td><code>burger</code></td><td><code>burger@test.local</code></td><td>Citizen</td></tr><tr><td><code>leverancier</code></td><td><code>leverancier@test.local</code></td><td>Supplier</td></tr></tbody></table>
+<p>Note: User passwords match their GreenMail email addresses because OX authenticates via IMAP against GreenMail.</p>
+<p><strong>What&#x27;s included after seeding:</strong></p>
+<ul>
+<li class="">5 user accounts with Dutch names and roles</li>
+<li class="">4 contacts (citizens, supplier, VNG architect)</li>
+<li class="">2 calendar appointments (welstandscommissie, IT-overleg)</li>
+<li class="">12 emails visible in OX webmail (from seed-mail.sh via GreenMail)</li>
+<li class="">OX Text and Spreadsheet editors enabled</li>
+</ul>
+<p><strong>Connecting Nextcloud to OX:</strong></p>
+<ul>
+<li class="">Both OX and Nextcloud Mail share the same GreenMail IMAP server</li>
+<li class="">Configure Nextcloud Mail with: IMAP host <code>greenmail</code>, port <code>3143</code> (same as standalone mail profile)</li>
+<li class="">OX can mount Nextcloud files via WebDAV for document collaboration</li>
+</ul>
+<p><strong>Resource requirements:</strong></p>
+<ul>
+<li class="">OX needs ~2-4 GB RAM</li>
+<li class="">First boot initializes databases and takes 2-3 minutes</li>
+<li class="">Subsequent boots are faster (config is persisted in <code>ox-etc</code> volume)</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="ai-services---profile-ai">AI Services (--profile ai)<a href="#ai-services---profile-ai" class="hash-link" aria-label="Directe link naar AI Services (--profile ai)" title="Directe link naar AI Services (--profile ai)" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Service</th><th>Container</th><th>Port</th><th>Purpose</th></tr></thead><tbody><tr><td>Presidio</td><td><code>conduction-presidio-analyzer</code></td><td>5001</td><td>PII detection (Microsoft)</td></tr><tr><td>TGI LLM</td><td><code>conduction-tgi-llm</code></td><td>8081</td><td>Text generation (HuggingFace)</td></tr><tr><td>Dolphin VLM</td><td><code>conduction-dolphin-vlm</code></td><td>8083</td><td>Document parsing (Vision LM)</td></tr><tr><td>OpenAnonymiser</td><td><code>conduction-openanonymiser</code></td><td>5002</td><td>PII anonymisation</td></tr><tr><td>OpenWebUI ExApp</td><td><code>conduction-exapp-openwebui</code></td><td>—</td><td>AI chat via Nextcloud</td></tr></tbody></table>
+<p>Requires NVIDIA GPU with Docker GPU support configured.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="common-ground---profile-commonground">Common Ground (--profile commonground)<a href="#common-ground---profile-commonground" class="hash-link" aria-label="Directe link naar Common Ground (--profile commonground)" title="Directe link naar Common Ground (--profile commonground)" translate="no">​</a></h3>
+<p>Dutch government Common Ground services, running as Nextcloud ExApps:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Service</th><th>Container</th><th>Port</th><th>Purpose</th></tr></thead><tbody><tr><td>Keycloak</td><td><code>conduction-exapp-keycloak</code></td><td>8180</td><td>Identity management (OIDC)</td></tr><tr><td>OpenKlant ExApp</td><td><code>conduction-exapp-openklant</code></td><td>—</td><td>Customer interaction registry</td></tr><tr><td>OpenZaak ExApp</td><td><code>conduction-exapp-openzaak</code></td><td>—</td><td>ZGW case management</td></tr><tr><td>Valtimo ExApp</td><td><code>conduction-exapp-valtimo</code></td><td>—</td><td>BPM and case management</td></tr><tr><td>OpenTalk ExApp</td><td><code>conduction-exapp-opentalk</code></td><td>—</td><td>Video conferencing</td></tr><tr><td>Redis</td><td><code>conduction-exapp-redis</code></td><td>—</td><td>Shared cache</td></tr><tr><td>LiveKit</td><td><code>conduction-exapp-livekit</code></td><td>7880</td><td>WebRTC media server</td></tr><tr><td>MinIO</td><td><code>conduction-exapp-minio</code></td><td>—</td><td>Object storage</td></tr></tbody></table>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="common-operations">Common Operations<a href="#common-operations" class="hash-link" aria-label="Directe link naar Common Operations" title="Directe link naar Common Operations" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="reset-the-environment">Reset the environment<a href="#reset-the-environment" class="hash-link" aria-label="Directe link naar Reset the environment" title="Directe link naar Reset the environment" translate="no">​</a></h3>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain"># Stop everything and remove volumes (full reset)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">docker compose -f .github/docker-compose.yml down -v</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"># Restart</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">docker compose -f .github/docker-compose.yml up -d</span><br></div></code></pre></div></div>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="install-apps-after-reset">Install apps after reset<a href="#install-apps-after-reset" class="hash-link" aria-label="Directe link naar Install apps after reset" title="Directe link naar Install apps after reset" translate="no">​</a></h3>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">docker exec nextcloud php occ app:enable openregister</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">docker exec nextcloud php occ app:enable opencatalogi</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">docker exec nextcloud php occ app:enable softwarecatalog</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">docker exec nextcloud php occ app:enable nldesign</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">docker exec nextcloud php occ app:enable mydash</span><br></div></code></pre></div></div>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="clear-caches">Clear caches<a href="#clear-caches" class="hash-link" aria-label="Directe link naar Clear caches" title="Directe link naar Clear caches" translate="no">​</a></h3>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain"># OPcache (after PHP changes)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">docker exec nextcloud apache2ctl graceful</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"># APCu</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">docker exec nextcloud php -r &quot;apcu_clear_cache();&quot;</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"># Brute force protection</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">docker exec nextcloud php occ security:bruteforce:reset 127.0.0.1</span><br></div></code></pre></div></div>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="fix-file-permissions">Fix file permissions<a href="#fix-file-permissions" class="hash-link" aria-label="Directe link naar Fix file permissions" title="Directe link naar Fix file permissions" translate="no">​</a></h3>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">docker exec -u root nextcloud chown -R www-data:www-data /var/www/html/custom_apps/</span><br></div></code></pre></div></div>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="view-logs">View logs<a href="#view-logs" class="hash-link" aria-label="Directe link naar View logs" title="Directe link naar View logs" translate="no">​</a></h3>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain"># Nextcloud log</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">docker exec nextcloud tail -f /var/www/html/data/nextcloud.log</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"># Specific container</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">docker logs -f conduction-postgres</span><br></div></code></pre></div></div>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="port-map">Port Map<a href="#port-map" class="hash-link" aria-label="Directe link naar Port Map" title="Directe link naar Port Map" translate="no">​</a></h2>
+<p>Quick reference for all service ports:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Port</th><th>Service</th><th>Profile</th></tr></thead><tbody><tr><td>2181</td><td>ZooKeeper</td><td>solr</td></tr><tr><td>2375</td><td>Docker Socket Proxy</td><td>exapps-legacy</td></tr><tr><td>3025</td><td>GreenMail SMTP</td><td>mail</td></tr><tr><td>3110</td><td>GreenMail POP3</td><td>mail</td></tr><tr><td>3143</td><td>GreenMail IMAP</td><td>mail</td></tr><tr><td>3306</td><td>MariaDB</td><td>mariadb</td></tr><tr><td>5001</td><td>Presidio Analyzer</td><td>ai</td></tr><tr><td>5002</td><td>OpenAnonymiser</td><td>ai</td></tr><tr><td>5432</td><td>PostgreSQL</td><td><em>(default)</em></td></tr><tr><td>5678</td><td>n8n (standalone)</td><td>standalone</td></tr><tr><td>7880</td><td>LiveKit</td><td>commonground</td></tr><tr><td>8080</td><td><strong>Nextcloud</strong></td><td><em>(default)</em></td></tr><tr><td>8081</td><td>TGI LLM</td><td>ai</td></tr><tr><td>8083</td><td>Dolphin VLM</td><td>ai</td></tr><tr><td>8085</td><td>GreenMail Web UI</td><td>mail</td></tr><tr><td>8086</td><td>OpenProject</td><td>openproject</td></tr><tr><td>8087</td><td>Open-Xchange</td><td>ox</td></tr><tr><td>8088</td><td>XWiki</td><td>xwiki</td></tr><tr><td>8089</td><td>Valtimo</td><td>valtimo</td></tr><tr><td>8090</td><td>OpenZaak</td><td>openzaak</td></tr><tr><td>8091</td><td>OpenKlant</td><td>openklant</td></tr><tr><td>8180</td><td>Keycloak</td><td>commonground</td></tr><tr><td>8780</td><td>HaRP</td><td>exapps</td></tr><tr><td>8983</td><td>Solr</td><td>solr</td></tr><tr><td>9200</td><td>Elasticsearch</td><td>elasticsearch</td></tr><tr><td>11434</td><td>Ollama</td><td>ollama</td></tr></tbody></table>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="demo-mode---profile-demo">Demo Mode (--profile demo)<a href="#demo-mode---profile-demo" class="hash-link" aria-label="Directe link naar Demo Mode (--profile demo)" title="Directe link naar Demo Mode (--profile demo)" translate="no">​</a></h2>
+<p>Self-contained demo environment that installs apps from the Nextcloud app store. No source code needed — just start and demo.</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">docker compose -f .github/docker-compose.yml --profile demo up -d</span><br></div></code></pre></div></div>
+<p>This starts a Nextcloud instance that automatically installs OpenRegister, OpenCatalogi, and SoftwareCatalog from the app store. Useful for demos, stakeholder reviews, and quick testing without a full development setup.</p>
+<p><strong>Note</strong>: The <code>demo</code> profile uses a different Nextcloud service than the default. Do not combine <code>demo</code> with the default profile.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="database-testing---profile-mariadb">Database Testing (--profile mariadb)<a href="#database-testing---profile-mariadb" class="hash-link" aria-label="Directe link naar Database Testing (--profile mariadb)" title="Directe link naar Database Testing (--profile mariadb)" translate="no">​</a></h2>
+<p>The MariaDB profile provides compatibility testing against MariaDB instead of PostgreSQL.</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain"># Start with MariaDB</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">docker compose -f .github/docker-compose.yml --profile mariadb up -d</span><br></div></code></pre></div></div>
+<p>An automated test script is available for running integration tests against both databases:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">bash .github/docker/test-database-compatibility.sh</span><br></div></code></pre></div></div>
+<p>Key differences between PostgreSQL and MariaDB:</p>
+<ul>
+<li class=""><strong>Vector search</strong>: Only available with PostgreSQL (pgvector)</li>
+<li class=""><strong>Full-text search</strong>: Both supported, different syntax</li>
+<li class=""><strong>JSON operations</strong>: PostgreSQL has richer JSON support</li>
+<li class=""><strong>Boolean handling</strong>: MariaDB uses 0/1, PostgreSQL uses true/false</li>
+</ul>
+<p>See <a class="" href="/nl/docker/README-DATABASE-TESTING.md/">docker/README-DATABASE-TESTING.md</a> for detailed documentation.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="migrating-from-openregister-docker-compose">Migrating from OpenRegister docker-compose<a href="#migrating-from-openregister-docker-compose" class="hash-link" aria-label="Directe link naar Migrating from OpenRegister docker-compose" title="Directe link naar Migrating from OpenRegister docker-compose" translate="no">​</a></h2>
+<p>If you were previously using <code>openregister/docker-compose.yml</code>, update your commands:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain"># Old</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">docker compose -f openregister/docker-compose.yml up -d</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"># New</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">docker compose -f .github/docker-compose.yml up -d</span><br></div></code></pre></div></div>
+<p>Container names have changed from <code>openregister-*</code> to <code>conduction-*</code> (except <code>nextcloud</code> which stays the same). The network is now <code>conduction-network</code> instead of <code>openregister-network</code>.</p>
+<p><strong>Note</strong>: You may need to remove old volumes if switching:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">docker compose -f openregister/docker-compose.yml down -v</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">docker compose -f .github/docker-compose.yml up -d</span><br></div></code></pre></div></div></div><footer class="theme-doc-footer docusaurus-mt-lg"><div class="row margin-top--sm theme-doc-footer-edit-meta-row"><div class="col noPrint_WFHX"><a href="https://github.com/ConductionNL/.github/tree/main/../docs/development-environment.md" target="_blank" rel="noopener noreferrer" class="theme-edit-this-page"><svg fill="currentColor" height="20" width="20" viewBox="0 0 40 40" class="iconEdit_Z9Sw" aria-hidden="true"><g><path d="m34.5 11.7l-3 3.1-6.3-6.3 3.1-3q0.5-0.5 1.2-0.5t1.1 0.5l3.9 3.9q0.5 0.4 0.5 1.1t-0.5 1.2z m-29.5 17.1l18.4-18.5 6.3 6.3-18.4 18.4h-6.3v-6.2z"></path></g></svg>Deze pagina bewerken</a></div><div class="col lastUpdated_JAkA"></div></div></footer></article><nav class="docusaurus-mt-lg pagination-nav" aria-label="Documentatiepagina&#x27;s"></nav></div></div><div class="col col--3"><div class="tableOfContents_bqdL thin-scrollbar theme-doc-toc-desktop"><ul class="table-of-contents table-of-contents__left-border"><li><a href="#prerequisites" class="table-of-contents__link toc-highlight">Prerequisites</a></li><li><a href="#quick-start" class="table-of-contents__link toc-highlight">Quick Start</a></li><li><a href="#profiles" class="table-of-contents__link toc-highlight">Profiles</a><ul><li><a href="#starting-with-profiles" class="table-of-contents__link toc-highlight">Starting with profiles</a></li><li><a href="#available-profiles" class="table-of-contents__link toc-highlight">Available profiles</a></li></ul></li><li><a href="#service-details" class="table-of-contents__link toc-highlight">Service Details</a><ul><li><a href="#core-nextcloud--postgresql" class="table-of-contents__link toc-highlight">Core: Nextcloud + PostgreSQL</a></li><li><a href="#mail--groupware" class="table-of-contents__link toc-highlight">Mail &amp; Groupware</a></li><li><a href="#ai-services---profile-ai" class="table-of-contents__link toc-highlight">AI Services (--profile ai)</a></li><li><a href="#common-ground---profile-commonground" class="table-of-contents__link toc-highlight">Common Ground (--profile commonground)</a></li></ul></li><li><a href="#common-operations" class="table-of-contents__link toc-highlight">Common Operations</a><ul><li><a href="#reset-the-environment" class="table-of-contents__link toc-highlight">Reset the environment</a></li><li><a href="#install-apps-after-reset" class="table-of-contents__link toc-highlight">Install apps after reset</a></li><li><a href="#clear-caches" class="table-of-contents__link toc-highlight">Clear caches</a></li><li><a href="#fix-file-permissions" class="table-of-contents__link toc-highlight">Fix file permissions</a></li><li><a href="#view-logs" class="table-of-contents__link toc-highlight">View logs</a></li></ul></li><li><a href="#port-map" class="table-of-contents__link toc-highlight">Port Map</a></li><li><a href="#demo-mode---profile-demo" class="table-of-contents__link toc-highlight">Demo Mode (--profile demo)</a></li><li><a href="#database-testing---profile-mariadb" class="table-of-contents__link toc-highlight">Database Testing (--profile mariadb)</a></li><li><a href="#migrating-from-openregister-docker-compose" class="table-of-contents__link toc-highlight">Migrating from OpenRegister docker-compose</a></li></ul></div></div></div></div></main></div></div></div><footer class="canal-footer" aria-label="Site footer"><div class="skyline" role="presentation"></div><div class="kade"><div class="kade-items"><svg class="ki ki-bike-1" width="22" height="16" viewBox="0 -2 22 18" aria-hidden="true"><g stroke="var(--c-cobalt-900)" stroke-width="1.4" fill="none" stroke-linecap="round"><circle cx="4" cy="12" r="3"></circle><circle cx="18" cy="12" r="3"></circle><line x1="4" y1="12" x2="11" y2="6"></line><line x1="11" y1="6" x2="18" y2="12"></line><line x1="11" y1="6" x2="14" y2="12"></line><line x1="11" y1="6" x2="11" y2="3"></line><line x1="11" y1="3" x2="14" y2="6"></line></g><circle cx="11" cy="1.5" r="1.6" fill="var(--c-cobalt-900)"></circle></svg><svg class="ki ki-car-1" width="38" height="16" viewBox="0 0 38 16" aria-hidden="true"><rect x="0" y="6" width="38" height="6" rx="2" fill="#C8482F"></rect><path d="M 5,6 L 9,2 L 29,2 L 33,6 Z" fill="#C8482F"></path><rect x="11" y="3" width="6" height="3" fill="rgba(255,255,255,0.5)"></rect><rect x="20" y="3" width="6" height="3" fill="rgba(255,255,255,0.5)"></rect><circle cx="9" cy="13" r="2" fill="var(--c-cobalt-900)"></circle><circle cx="29" cy="13" r="2" fill="var(--c-cobalt-900)"></circle></svg><svg class="ki ki-bike-2" width="22" height="16" viewBox="0 -2 22 18" aria-hidden="true"><g stroke="var(--c-cobalt-900)" stroke-width="1.4" fill="none" stroke-linecap="round"><circle cx="4" cy="12" r="3"></circle><circle cx="18" cy="12" r="3"></circle><line x1="4" y1="12" x2="11" y2="6"></line><line x1="11" y1="6" x2="18" y2="12"></line><line x1="11" y1="6" x2="14" y2="12"></line><line x1="11" y1="6" x2="11" y2="3"></line><line x1="11" y1="3" x2="14" y2="6"></line></g><circle cx="11" cy="1.5" r="1.6" fill="var(--c-cobalt-900)"></circle></svg><svg class="ki ki-car-2" width="38" height="16" viewBox="0 0 38 16" aria-hidden="true"><rect x="0" y="6" width="38" height="6" rx="2" fill="var(--c-cobalt-900)"></rect><path d="M 5,6 L 9,2 L 29,2 L 33,6 Z" fill="var(--c-cobalt-900)"></path><rect x="11" y="3" width="6" height="3" fill="rgba(255,255,255,0.4)"></rect><rect x="20" y="3" width="6" height="3" fill="rgba(255,255,255,0.4)"></rect><circle cx="9" cy="13" r="2" fill="#C8482F"></circle><circle cx="29" cy="13" r="2" fill="#C8482F"></circle></svg></div></div><div class="water"><div class="canal-items"><svg class="ci ci-cruise" width="120" height="28" viewBox="0 -10 120 28" aria-hidden="true"><line x1="2" y1="14" x2="2" y2="-9" stroke="var(--c-orange-knvb)" stroke-width="0.9"></line><rect x="2.5" y="-9" width="9" height="2" fill="#AE1C28"></rect><rect x="2.5" y="-7" width="9" height="2" fill="#FFFFFF"></rect><rect x="2.5" y="-5" width="9" height="2" fill="#21468B"></rect><path d="M 0,16 L 6,18 L 114,18 L 120,16 L 120,11 L 0,11 Z" fill="var(--c-orange-knvb)"></path><rect x="8" y="5" width="104" height="6" fill="var(--c-orange-knvb)"></rect><path d="M 8,5 Q 60,0 112,5 L 8,5 Z" fill="var(--c-orange-knvb)"></path><g fill="rgba(255,247,210,0.85)"><rect x="14" y="7" width="6" height="3"></rect><rect x="22" y="7" width="6" height="3"></rect><rect x="30" y="7" width="6" height="3"></rect><rect x="38" y="7" width="6" height="3"></rect><rect x="46" y="7" width="6" height="3"></rect><rect x="54" y="7" width="6" height="3"></rect><rect x="62" y="7" width="6" height="3"></rect><rect x="70" y="7" width="6" height="3"></rect><rect x="78" y="7" width="6" height="3"></rect><rect x="86" y="7" width="6" height="3"></rect><rect x="94" y="7" width="6" height="3"></rect><rect x="102" y="7" width="6" height="3"></rect></g></svg><svg class="ci ci-sloep" width="50" height="20" viewBox="0 -2 50 20" aria-hidden="true"><path d="M 0,12 L 4,16 L 46,16 L 50,12 L 50,8 L 0,8 Z" fill="var(--c-orange-knvb)"></path><rect x="20" y="2" width="12" height="6" rx="1" fill="var(--c-orange-knvb)"></rect><circle cx="26" cy="0" r="1.4" fill="var(--c-orange-knvb)"></circle></svg><svg class="ci ci-row" width="44" height="16" viewBox="-2 0 48 16" aria-hidden="true"><path d="M 0,10 L 4,14 L 40,14 L 44,10 Z" fill="var(--c-orange-knvb)"></path><line x1="8" y1="10" x2="0" y2="3" stroke="var(--c-orange-knvb)" stroke-width="1.2" stroke-linecap="round"></line><line x1="36" y1="10" x2="44" y2="3" stroke="var(--c-orange-knvb)" stroke-width="1.2" stroke-linecap="round"></line><circle cx="22" cy="7" r="1.6" fill="var(--c-orange-knvb)"></circle></svg><svg class="ci ci-swim" width="26" height="10" viewBox="-3 0 30 10" aria-hidden="true"><ellipse cx="13" cy="6" rx="7" ry="1.4" fill="var(--c-orange-knvb)"></ellipse><circle cx="17" cy="4" r="1.7" fill="var(--c-orange-knvb)"></circle><line x1="13" y1="5" x2="11" y2="3" stroke="var(--c-orange-knvb)" stroke-width="1" stroke-linecap="round"></line><line x1="-3" y1="6" x2="2" y2="6" stroke="var(--c-orange-knvb)" stroke-width="0.7" opacity="0.55"></line><line x1="0" y1="8" x2="3" y2="8" stroke="var(--c-orange-knvb)" stroke-width="0.7" opacity="0.4"></line></svg><svg class="ci ci-periscope" width="14" height="26" viewBox="-3 -2 18 28" aria-hidden="true"><rect x="4" y="4" width="2" height="18" fill="var(--c-orange-knvb)"></rect><rect x="0" y="0" width="9" height="3" fill="var(--c-orange-knvb)"></rect><rect x="4" y="3" width="2" height="2" fill="var(--c-orange-knvb)"></rect><ellipse cx="5" cy="24" rx="7" ry="0.9" fill="var(--c-orange-knvb)" opacity="0.5"></ellipse></svg><svg class="ci ci-whale" width="76" height="18" viewBox="-3 -4 82 22" aria-hidden="true"><path d="M 0,12 Q 0,4 26,3 Q 54,2 64,7 L 72,4 L 68,9 L 72,14 L 64,11 Q 54,14 26,14 Q 6,14 0,12 Z" fill="var(--c-orange-knvb)"></path><g opacity="0.55" stroke="var(--c-orange-knvb)" stroke-width="1" stroke-linecap="round"><line x1="22" y1="2" x2="20" y2="-3"></line><line x1="25" y1="2" x2="25" y2="-4"></line><line x1="28" y1="2" x2="30" y2="-3"></line></g></svg><svg class="ci ci-hover" width="74" height="26" viewBox="0 -4 74 28" aria-hidden="true"><ellipse cx="37" cy="22" rx="37" ry="2.5" fill="var(--c-orange-knvb)" opacity="0.4"></ellipse><path d="M 6,18 L 10,10 L 64,10 L 68,18 Z" fill="var(--c-orange-knvb)"></path><path d="M 14,10 Q 37,-4 60,10 L 14,10 Z" fill="var(--c-orange-knvb)"></path><ellipse cx="37" cy="4" rx="16" ry="3.2" fill="rgba(255,247,210,0.7)"></ellipse><polygon points="37,11 42,13.5 42,16.5 37,19 32,16.5 32,13.5" fill="#FFFFFF"></polygon><text x="37" y="17.4" font-size="4" text-anchor="middle" fill="var(--c-orange-knvb)" font-family="sans-serif" font-weight="900">C</text><g stroke="var(--c-orange-knvb)" stroke-width="0.7" opacity="0.6"><line x1="8" y1="22" x2="12" y2="22"></line><line x1="16" y1="22" x2="20" y2="22"></line><line x1="26" y1="22" x2="30" y2="22"></line><line x1="36" y1="22" x2="40" y2="22"></line><line x1="46" y1="22" x2="50" y2="22"></line><line x1="56" y1="22" x2="60" y2="22"></line></g></svg></div><svg class="canal-waves" viewBox="0 0 1400 500" preserveAspectRatio="none" aria-hidden="true"><path class="w1" d="M 0,96 L 140,82 L 280,96 L 420,82 L 560,96 L 700,82 L 840,96 L 980,82 L 1120,96 L 1260,82 L 1400,96"></path><path class="w2" d="M 0,206 L 180,182 L 360,206 L 540,182 L 720,206 L 900,182 L 1080,206 L 1260,182 L 1400,200"></path><path class="w3" d="M 0,362 L 220,332 L 440,362 L 660,332 L 880,362 L 1100,332 L 1320,362 L 1400,348"></path></svg><div class="footer-grid"><div class="brand"><div class="wm">Conduction</div><p>Open-source apps for <span class="next-blue">Nextcloud</span>. Built and maintained by Conduction in Amsterdam, released under EUPL-1.2.</p><div class="triad"><span><span class="h"></span>Conduction<!-- --> <!-- -->· <span class="next-blue">Nextcloud</span></span></div><div class="socials"><a href="https://github.com/ConductionNL" aria-label="GitHub" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="filled" d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.04 1.53 1.04.9 1.53 2.36 1.09 2.93.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.6 9.6 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.93.36.31.68.92.68 1.86v2.76c0 .27.18.58.69.48A10 10 0 0 0 12 2z"></path></svg></a><a href="https://www.linkedin.com/company/conduction" aria-label="LinkedIn" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-4 0v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle class="filled" cx="4" cy="4" r="2"></circle></svg></a><a href="mailto:info@conduction.nl" aria-label="Email info@conduction.nl"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 7l9 6 9-6"></path></svg></a><a href="tel:+31853036840" aria-label="Phone +31 (0)85 303 6840"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.72 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0 1 22 16.92z"></path></svg></a><a href="https://maps.google.com/?q=Lauriergracht+14h+Amsterdam" aria-label="Lauriergracht 14h, Amsterdam, open in Google Maps" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg></a></div></div><div><h4>Documentatie</h4><ul><li><a href="https://github.com/orgs/ConductionNL/projects/4" target="_blank" rel="noopener noreferrer">Roadmap</a></li><li><a href="/nl/claude/">Claude-workflow</a></li><li><a href="/nl/iso/">ISO-compliance</a></li></ul></div><div><h4>Conduction</h4><ul><li><a href="https://conduction.nl/about" target="_blank" rel="noopener noreferrer">About</a></li><li><a href="https://conduction.nl/about#opensource" target="_blank" rel="noopener noreferrer">Open source</a></li><li><a href="https://conduction.nl/about#team" target="_blank" rel="noopener noreferrer">Team</a></li><li><a href="https://conduction.nl/iso" target="_blank" rel="noopener noreferrer">ISO</a></li></ul></div><div><h4>Documentatie</h4><ul><li><a href="https://identity.conduction.nl/" target="_blank" rel="noopener noreferrer">Brand book</a></li><li><a href="https://identity.conduction.nl/diagrams/" target="_blank" rel="noopener noreferrer">Diagram set</a></li></ul></div></div><div class="legal-bar"><div class="left"><span>Conduction B.V. · KvK 76741850 · BTW NL860784241B01 · IBAN NL51 ABNA 0868951550 · Lauriergracht 14h, 1016 RR Amsterdam · 2026</span><span class="legal-links"><a href="/nl/privacy/">Privacy</a><span class="sep">·</span><a href="/nl/terms/">Terms</a><span class="sep">·</span><a href="/nl/iso/">ISO</a></span></div><div class="right"><a class="iso-badge" aria-label="ISO 9001:2015 certified, see details" href="/nl/iso/"><span class="iso-mark">ISO</span><span class="iso-num">9001:2015</span></a><a class="iso-badge" aria-label="ISO 27001:2022 certified, see details" href="/nl/iso/"><span class="iso-mark">ISO</span><span class="iso-num">27001:2022</span></a></div></div></div></footer><div style="display:none" aria-hidden="true">
+      <template id="tpl-h-a">
+        <svg class="house h-a" viewBox="0 -2 80 202" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,200 L 0,38 L 8,38 L 8,26 L 16,26 L 16,14 L 24,14 L 24,8 L 56,8 L 56,14 L 64,14 L 64,26 L 72,26 L 72,38 L 80,38 L 80,200 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="22" y="68" width="10" height="16" fill="rgba(255,247,210,0.95)"/>
+          <rect x="48" y="68" width="10" height="16" fill="rgba(11,32,73,0.35)"/>
+          <rect x="22" y="98" width="10" height="16" fill="rgba(11,32,73,0.35)"/>
+          <rect x="48" y="98" width="10" height="16" fill="rgba(255,247,210,0.6)"/>
+          <rect x="22" y="128" width="10" height="16" fill="rgba(11,32,73,0.35)"/>
+          <rect x="48" y="128" width="10" height="16" fill="rgba(11,32,73,0.35)"/>
+          <rect x="32" y="160" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+      <template id="tpl-h-b">
+        <svg class="house h-b" viewBox="0 0 100 220" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,220 L 0,58 L 8,58 L 8,47 L 16,47 L 16,36 L 24,36 L 24,25 L 32,25 L 32,14 L 50,4 L 68,14 L 68,25 L 76,25 L 76,36 L 84,36 L 84,47 L 92,47 L 92,58 L 100,58 L 100,220 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="14" y="80" width="14" height="20" fill="rgba(255,247,210,0.85)"/>
+          <rect x="43" y="80" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="72" y="80" width="14" height="20" fill="rgba(255,247,210,0.55)"/>
+          <rect x="14" y="115" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="43" y="115" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="72" y="115" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="14" y="150" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="43" y="150" width="14" height="20" fill="rgba(255,247,210,0.7)"/>
+          <rect x="72" y="150" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="42" y="180" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+      <template id="tpl-h-c">
+        <svg class="house h-c" viewBox="0 0 70 240" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,240 L 0,48 L 5,48 L 5,41 L 10,41 L 10,34 L 15,34 L 15,27 L 20,27 L 20,20 L 25,20 L 25,15 L 45,15 L 45,20 L 50,20 L 50,27 L 55,27 L 55,34 L 60,34 L 60,41 L 65,41 L 65,48 L 70,48 L 70,240 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="14" y="70" width="12" height="18" fill="rgba(255,247,210,0.55)"/>
+          <rect x="44" y="70" width="12" height="18" fill="rgba(255,247,210,0.85)"/>
+          <rect x="14" y="100" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="44" y="100" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="14" y="130" width="12" height="18" fill="rgba(255,247,210,0.7)"/>
+          <rect x="44" y="130" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="14" y="160" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="44" y="160" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="27" y="200" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+      <template id="tpl-h-d">
+        <svg class="house h-d" viewBox="0 -10 90 180" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,170 L 0,30 L 8,30 L 8,20 L 16,20 L 16,10 L 24,10 L 24,4 L 66,4 L 66,10 L 74,10 L 74,20 L 82,20 L 82,30 L 90,30 L 90,170 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="12" y="60" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="38" y="60" width="14" height="20" fill="rgba(255,247,210,0.85)"/>
+          <rect x="64" y="60" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="12" y="100" width="14" height="20" fill="rgba(255,247,210,0.6)"/>
+          <rect x="38" y="100" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="64" y="100" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="37" y="130" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+      <template id="tpl-h-e">
+        <svg class="house h-e" viewBox="0 0 95 210" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,210 L 0,55 L 8,55 L 8,44 L 16,44 L 16,33 L 24,33 L 24,22 L 32,22 L 32,11 L 35,11 L 35,6 L 59,6 L 59,11 L 63,11 L 63,22 L 71,22 L 71,33 L 79,33 L 79,44 L 87,44 L 87,55 L 95,55 L 95,210 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="13" y="75" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="40" y="75" width="14" height="20" fill="rgba(255,247,210,0.65)"/>
+          <rect x="68" y="75" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="13" y="110" width="14" height="20" fill="rgba(255,247,210,0.8)"/>
+          <rect x="40" y="110" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="68" y="110" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="13" y="145" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="40" y="145" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="68" y="145" width="14" height="20" fill="rgba(255,247,210,0.55)"/>
+          <rect x="39.5" y="175" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+</div></div>
+</body>
+</html>

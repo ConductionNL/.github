@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="nl-NL" dir="ltr" class="docs-wrapper plugin-docs plugin-id-default docs-version-current docs-doc-page docs-doc-id-claude/global-claude-settings" data-has-hydrated="false">
+<head>
+<meta charset="UTF-8">
+<meta name="generator" content="Docusaurus v3.10.1">
+<title data-rh="true">Global Claude Code settings (~/.claude) | Conduction Docs</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:url" content="https://docs.conduction.nl/nl/claude/global-claude-settings/"><meta data-rh="true" property="og:locale" content="nl_NL"><meta data-rh="true" property="og:locale:alternate" content="en_GB"><meta data-rh="true" name="docusaurus_locale" content="nl"><meta data-rh="true" name="docsearch:language" content="nl"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="Global Claude Code settings (~/.claude) | Conduction Docs"><meta data-rh="true" name="description" content="These are mandatory settings for anyone working on Conduction projects with Claude Code. They enforce a read-first, write-with-approval policy at the user level, ensuring Claude cannot perform destructive operations without explicit confirmation. They also version-check themselves at the start of each session so you always know when an update is available."><meta data-rh="true" property="og:description" content="These are mandatory settings for anyone working on Conduction projects with Claude Code. They enforce a read-first, write-with-approval policy at the user level, ensuring Claude cannot perform destructive operations without explicit confirmation. They also version-check themselves at the start of each session so you always know when an update is available."><link data-rh="true" rel="icon" href="/nl/img/favicon.svg"><link data-rh="true" rel="canonical" href="https://docs.conduction.nl/nl/claude/global-claude-settings/"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/claude/global-claude-settings/" hreflang="en-GB"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/nl/claude/global-claude-settings/" hreflang="nl-NL"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/claude/global-claude-settings/" hreflang="x-default"><link data-rh="true" rel="stylesheet" href="/lib/canal-footer.css"><link data-rh="true" rel="stylesheet" href="/lib/kade-cyclist.css"><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Global Claude Code settings (~/.claude)","item":"https://docs.conduction.nl/nl/claude/global-claude-settings"}]}</script><link rel="stylesheet" href="/nl/assets/css/styles.946aaa0a.css">
+<script src="/nl/assets/js/runtime~main.0a602cc7.js" defer="defer"></script>
+<script src="/nl/assets/js/main.aea7aa93.js" defer="defer"></script>
+</head>
+<body>
+<svg style="display: none;"><defs>
+<symbol id="theme-svg-external-link" viewBox="0 0 24 24"><path fill="currentColor" d="M21 13v10h-21v-19h12v2h-10v15h17v-8h2zm3-12h-10.988l4.035 4-6.977 7.07 2.828 2.828 6.977-7.07 4.125 4.172v-11z"/></symbol>
+</defs></svg>
+<script>!function(){var t=function(){try{return new URLSearchParams(window.location.search).get("docusaurus-theme")}catch(t){}}()||function(){try{return window.localStorage.getItem("theme")}catch(t){}}();document.documentElement.setAttribute("data-theme",t||(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")),document.documentElement.setAttribute("data-theme-choice",t||"system")}(),function(){try{const c=new URLSearchParams(window.location.search).entries();for(var[t,e]of c)if(t.startsWith("docusaurus-data-")){var a=t.replace("docusaurus-data-","data-");document.documentElement.setAttribute(a,e)}}catch(t){}}()</script><div id="__docusaurus"><div role="region" aria-label="Ga naar hoofdinhoud"><a class="skipToContent_fXgn" href="#__docusaurus_skipToContent_fallback">Ga naar hoofdinhoud</a></div><nav class="navbar nav_MuJ0" role="navigation" aria-label="Main"><div class="left__6eY"><a class="wordmark_mhs1" href="/nl/">Conduction Docs</a><div class="links_cXJT"><a class="link_CwQh" href="/nl/WayOfWork/way-of-work/">Manier van Werken</a><a href="https://github.com/orgs/ConductionNL/projects/4" class="ghost_SGJf" target="_blank" rel="noopener noreferrer">Roadmap</a><a class="link_CwQh" href="/nl/claude/">Claude-workflow</a><a class="link_CwQh" href="/nl/hydra/">Hydra</a><a class="link_CwQh" href="/nl/iso/">ISO</a><a href="https://www.conduction.nl/support/" class="ghost_SGJf" target="_blank" rel="noopener noreferrer">Ondersteuning</a><a href="https://www.conduction.nl/apps/" class="ghost_SGJf" target="_blank" rel="noopener noreferrer">Producten</a></div></div><div class="ctas_jpo4"><div class="localeWrapper__Pip"><div class="navbar__item dropdown dropdown--hoverable dropdown--right"><a href="#" aria-haspopup="true" aria-expanded="false" role="button" class="navbar__link" type="localeDropdown"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" class="iconLanguage_nlXk"><path fill="currentColor" d="M12.87 15.07l-2.54-2.51.03-.03c1.74-1.94 2.98-4.17 3.71-6.53H17V4h-7V2H8v2H1v1.99h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z"></path></svg>Nederlands</a><ul class="dropdown__menu"><li><a href="/claude/global-claude-settings/" target="_self" rel="noopener noreferrer" class="dropdown__link" lang="en-GB">English</a></li><li><a href="/nl/claude/global-claude-settings/" target="_self" rel="noopener noreferrer" class="dropdown__link dropdown__link--active" lang="nl-NL">Nederlands</a></li></ul></div></div><a href="https://github.com/ConductionNL/.github" class="ghost_SGJf" target="_blank" rel="noopener noreferrer">GitHub</a></div></nav><div id="__docusaurus_skipToContent_fallback" class="theme-layout-main main-wrapper mainWrapper_z2l0"><div class="docsWrapper_hBAB"><button aria-label="Terug naar boven" class="clean-btn theme-back-to-top-button backToTopButton_sjWU" type="button"></button><div class="docRoot_UBD9"><aside class="theme-doc-sidebar-container docSidebarContainer_YfHR"><div class="sidebarViewport_aRkj"><div class="sidebar_njMd"><nav aria-label="Docs zijbalk" class="menu thin-scrollbar menu_SIkG"><ul class="theme-doc-sidebar-menu menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-1 menu__list-item"><a class="menu__link" href="/nl/WayOfWork/way-of-work/"><span title="How We Work" class="linkLabel_WmDU">How We Work</span></a></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="true" href="/nl/WayOfWork/onboarding/"><span title="Werken bij Conduction" class="categoryLinkLabel_W154">Werken bij Conduction</span></a></div><ul class="menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/WayOfWork/onboarding/"><span title="Onboarding" class="linkLabel_WmDU">Onboarding</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/WayOfWork/organisation/"><span title="Organization" class="linkLabel_WmDU">Organization</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/WayOfWork/code-of-conduct/"><span title="Code of Conduct" class="linkLabel_WmDU">Code of Conduct</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/WayOfWork/vacancies/"><span title="Vacancies" class="linkLabel_WmDU">Vacancies</span></a></li></ul></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="true" href="/nl/WayOfWork/spec-driven-development/"><span title="Software bouwen" class="categoryLinkLabel_W154">Software bouwen</span></a></div><ul class="menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/WayOfWork/spec-driven-development/"><span title="Spec-Driven Development" class="linkLabel_WmDU">Spec-Driven Development</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/WayOfWork/development-pipeline/"><span title="Development Pipeline" class="linkLabel_WmDU">Development Pipeline</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/WayOfWork/way-of-working/"><span title="Way of Working" class="linkLabel_WmDU">Way of Working</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/WayOfWork/contributing/"><span title="Contributing" class="linkLabel_WmDU">Contributing</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/WayOfWork/release-process/"><span title="Release Process" class="linkLabel_WmDU">Release Process</span></a></li></ul></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="true" href="/nl/WayOfWork/customer-support/"><span title="Ondersteuning &amp; Veiligheid" class="categoryLinkLabel_W154">Ondersteuning &amp; Veiligheid</span></a></div><ul class="menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/WayOfWork/customer-support/"><span title="Customer Support" class="linkLabel_WmDU">Customer Support</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/iso/iso-intro/"><span title="ISO &amp; Quality" class="linkLabel_WmDU">ISO &amp; Quality</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/iso/incident-reporting/"><span title="Incident Reporting" class="linkLabel_WmDU">Incident Reporting</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/iso/security/"><span title="Security Policy" class="linkLabel_WmDU">Security Policy</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/iso/quality-policy/"><span title="Quality Policy" class="linkLabel_WmDU">Quality Policy</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/iso/security-policy/"><span title="Security Policy" class="linkLabel_WmDU">Security Policy</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/iso/privacy-policy/"><span title="Privacy &amp; AVG" class="linkLabel_WmDU">Privacy &amp; AVG</span></a></li></ul></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret menu__link--active" role="button" aria-expanded="true" href="/nl/claude/"><span title="Claude-workflow" class="categoryLinkLabel_W154">Claude-workflow</span></a></div><ul class="menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/claude/"><span title="Claude Code Developer Guide" class="linkLabel_WmDU">Claude Code Developer Guide</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/claude/app-lifecycle/"><span title="App Lifecycle — Creating and Managing Nextcloud Apps" class="linkLabel_WmDU">App Lifecycle — Creating and Managing Nextcloud Apps</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/claude/commands-openspec/"><span title="OpenSpec Command Reference" class="linkLabel_WmDU">OpenSpec Command Reference</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/claude/commands-tender/"><span title="Tender &amp; Ecosystem Intelligence Commands" class="linkLabel_WmDU">Tender &amp; Ecosystem Intelligence Commands</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/claude/commands/"><span title="Command Reference" class="linkLabel_WmDU">Command Reference</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/claude/docker/"><span title="Docker Environment" class="linkLabel_WmDU">Docker Environment</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/claude/frontend-standards/"><span title="Frontend Standards" class="linkLabel_WmDU">Frontend Standards</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/claude/getting-started/"><span title="Getting Started" class="linkLabel_WmDU">Getting Started</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link menu__link--active" aria-current="page" tabindex="0" href="/nl/claude/global-claude-settings/"><span title="Global Claude Code settings (~/.claude)" class="linkLabel_WmDU">Global Claude Code settings (~/.claude)</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/claude/local-llm/"><span title="Local LLM Setup (Ollama + Qwen)" class="linkLabel_WmDU">Local LLM Setup (Ollama + Qwen)</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/claude/parallel-agents/"><span title="Parallel Agents &amp; Subscription Cap" class="linkLabel_WmDU">Parallel Agents &amp; Subscription Cap</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/claude/playwright-setup/"><span title="Playwright MCP Browser Setup" class="linkLabel_WmDU">Playwright MCP Browser Setup</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/claude/rad-platform/"><span title="Conduction RAD Platform" class="linkLabel_WmDU">Conduction RAD Platform</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/claude/retrofit/"><span title="Retrofit Playbook — bringing legacy apps under ADR-003&#x27;s @spec convention" class="linkLabel_WmDU">Retrofit Playbook — bringing legacy apps under ADR-003&#x27;s @spec convention</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/claude/skill-checklist/"><span title="Skill Checklist" class="linkLabel_WmDU">Skill Checklist</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/claude/skill-evals/"><span title="Skill Evaluation &amp; Measurement Guide" class="linkLabel_WmDU">Skill Evaluation &amp; Measurement Guide</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/claude/skill-patterns/"><span title="Skill Patterns &amp; Subfolder Guide" class="linkLabel_WmDU">Skill Patterns &amp; Subfolder Guide</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/claude/testing/"><span title="Testing Reference" class="linkLabel_WmDU">Testing Reference</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/claude/walkthrough/"><span title="End-to-End Walkthrough" class="linkLabel_WmDU">End-to-End Walkthrough</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/claude/workflow/"><span title="Spec-Driven Development Workflow" class="linkLabel_WmDU">Spec-Driven Development Workflow</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/claude/workstation-setup/"><span title="Workstation Setup" class="linkLabel_WmDU">Workstation Setup</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/claude/writing-adrs/"><span title="Writing ADRs for AI Agents" class="linkLabel_WmDU">Writing ADRs for AI Agents</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/claude/writing-docs/"><span title="Writing Documentation" class="linkLabel_WmDU">Writing Documentation</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/claude/writing-skills/"><span title="Writing Skills" class="linkLabel_WmDU">Writing Skills</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/nl/claude/writing-specs/"><span title="Writing Specs" class="linkLabel_WmDU">Writing Specs</span></a></li></ul></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-1 menu__list-item"><a class="menu__link" href="/nl/hydra/"><span title="Hydra" class="linkLabel_WmDU">Hydra</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-1 menu__list-item"><a class="menu__link" href="/nl/WayOfWork/about-this-manual/"><span title="About This Manual" class="linkLabel_WmDU">About This Manual</span></a></li></ul></nav></div></div></aside><main class="docMainContainer_TBSr"><div class="container padding-top--md padding-bottom--lg"><div class="row"><div class="col docItemCol_VOVn"><div class="docItemContainer_Djhp"><article><nav class="theme-doc-breadcrumbs breadcrumbsContainer_Z_bl" aria-label="Broodkruimels"><ul class="breadcrumbs"><li class="breadcrumbs__item"><a aria-label="Hoofdpagina" class="breadcrumbs__link" href="/nl/"><svg viewBox="0 0 24 24" class="breadcrumbHomeIcon_YNFT"><path d="M10 19v-5h4v5c0 .55.45 1 1 1h3c.55 0 1-.45 1-1v-7h1.7c.46 0 .68-.57.33-.87L12.67 3.6c-.38-.34-.96-.34-1.34 0l-8.36 7.53c-.34.3-.13.87.33.87H5v7c0 .55.45 1 1 1h3c.55 0 1-.45 1-1z" fill="currentColor"></path></svg></a></li><li class="breadcrumbs__item"><span class="breadcrumbs__link">Claude-workflow</span></li><li class="breadcrumbs__item breadcrumbs__item--active"><span class="breadcrumbs__link">Global Claude Code settings (~/.claude)</span></li></ul></nav><div class="tocCollapsible_ETCw theme-doc-toc-mobile tocMobile_ITEo"><button type="button" class="clean-btn tocCollapsibleButton_TO0P">Op deze pagina</button></div><div class="theme-doc-markdown markdown"><header><h1>Global Claude Code settings (<code>~/.claude</code>)</h1></header>
+<p>These are <strong>mandatory</strong> settings for anyone working on Conduction projects with Claude Code. They enforce a read-first, write-with-approval policy at the user level, ensuring Claude cannot perform destructive operations without explicit confirmation. They also version-check themselves at the start of each session so you always know when an update is available.</p>
+<p>Project files under <code>.claude/</code> in this repo (for example <code>settings.json</code> with MCP allowlists) <strong>complement</strong> this; they do not replace the global policy.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="versioned-canonical-files">Versioned canonical files<a href="#versioned-canonical-files" class="hash-link" aria-label="Directe link naar Versioned canonical files" title="Directe link naar Versioned canonical files" translate="no">​</a></h2>
+<p>The canonical files live under <strong><a class="" href="/nl/global-settings/"><code>global-settings/</code></a></strong>. The version is tracked in <a class="" href="/nl/global-settings/VERSION/"><code>global-settings/VERSION</code></a>.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>File</th><th>Install as</th></tr></thead><tbody><tr><td><a href="/nl/assets/files/settings-b660033ffc379f66425b22ae7cec3fb1.json/" target="_blank" class=""><code>global-settings/settings.json</code></a></td><td><code>~/.claude/settings.json</code></td></tr><tr><td><a href="/nl/assets/files/block-write-commands-436c7f6fd3ed9aa531ea28a1688cf3bc.sh/" target="_blank" class=""><code>global-settings/block-write-commands.sh</code></a></td><td><code>~/.claude/hooks/block-write-commands.sh</code></td></tr><tr><td><a href="/nl/assets/files/check-settings-version-5f56eca3e652acb54769c7182c6b1cd3.sh/" target="_blank" class=""><code>global-settings/check-settings-version.sh</code></a></td><td><code>~/.claude/hooks/check-settings-version.sh</code></td></tr></tbody></table>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="install--update">Install / update<a href="#install--update" class="hash-link" aria-label="Directe link naar Install / update" title="Directe link naar Install / update" translate="no">​</a></h2>
+<p>See <a class="" href="/nl/global-settings/README.md/"><code>global-settings/README.md</code></a> for install commands, update instructions, and the VERSION bump policy.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="session-start-status-panel">Session-start status panel<a href="#session-start-status-panel" class="hash-link" aria-label="Directe link naar Session-start status panel" title="Directe link naar Session-start status panel" translate="no">​</a></h2>
+<p>At the start of every Claude session, a live status panel is printed to the terminal (stderr):</p>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">┌──────────────────────────────────────────────┐</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">│     Global Claude Settings Status            │</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">└──────────────────────────────────────────────┘</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">  Installed   : v1.0.0  ✓</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">  Local repo  : main                 @ v1.0.0</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">  Online      : v1.0.0  (via GitHub API)</span><br></div></code></pre></div></div>
+<p>Color coding:</p>
+<ul>
+<li class=""><strong>Green</strong> — version matches / up to date</li>
+<li class=""><strong>Yellow</strong> — local branch is ahead of installed (informational only)</li>
+<li class=""><strong>Red</strong> — installed is behind online main (update required)</li>
+</ul>
+<p>The &quot;Online&quot; line shows the fetch method used:</p>
+<ul>
+<li class=""><strong>(via GitHub API)</strong> — fetched directly from GitHub using <code>gh api</code> (primary method, uses <code>settings-repo-url</code>)</li>
+<li class=""><strong>(via git fetch)</strong> — fetched from <code>origin/main</code> of the local repo clone (fallback method, uses <code>settings-repo-path</code>)</li>
+</ul>
+<p>If no local repo is configured, &quot;Local repo&quot; shows &quot;(not configured)&quot; instead of branch info.</p>
+<p>If configuration issues are detected (missing config files, unreachable remote, <code>gh</code> not installed), they are shown in red below the panel — never silently skipped.</p>
+<blockquote>
+<p><strong>Note:</strong> The terminal panel is only visible when using Claude Code in the terminal (CLI). In the VS Code extension, hook stderr is not shown as a visible banner — see the Claude chat message below instead.</p>
+</blockquote>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="session-start-message-in-claude-chat">Session-start message in Claude chat<a href="#session-start-message-in-claude-chat" class="hash-link" aria-label="Directe link naar Session-start message in Claude chat" title="Directe link naar Session-start message in Claude chat" translate="no">​</a></h2>
+<p>In addition to the terminal panel, the hook always injects a message into Claude&#x27;s context at the start of every session. Claude will relay this at the top of its first response:</p>
+<p><strong>Settings up to date:</strong></p>
+<blockquote>
+<p>New session started — Global Claude Settings checked. Settings are up to date (v1.0.0).</p>
+</blockquote>
+<p><strong>Update required</strong> (prominently displayed, cannot be missed):</p>
+<blockquote>
+<p>NEW SESSION — GLOBAL CLAUDE SETTINGS: UPDATE REQUIRED
+Installed: v0.1.0 (outdated) | Latest: v1.0.0 (on origin/main)
+Say &quot;update my global settings to 1.0.0&quot; to apply the update.</p>
+</blockquote>
+<p><strong>Configuration error</strong> (prominently displayed):</p>
+<blockquote>
+<p>NEW SESSION — GLOBAL CLAUDE SETTINGS: CONFIGURATION ERROR
+[description of the issue]</p>
+</blockquote>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="online-version-checking">Online version checking<a href="#online-version-checking" class="hash-link" aria-label="Directe link naar Online version checking" title="Directe link naar Online version checking" translate="no">​</a></h2>
+<p>The version check supports two methods for fetching the online version, tried in order:</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="1-github-api-primary--recommended">1. GitHub API (primary — recommended)<a href="#1-github-api-primary--recommended" class="hash-link" aria-label="Directe link naar 1. GitHub API (primary — recommended)" title="Directe link naar 1. GitHub API (primary — recommended)" translate="no">​</a></h3>
+<p>If <code>~/.claude/settings-repo-url</code> contains a GitHub repo slug (e.g. <code>ConductionNL/.github</code>), the hook fetches <code>VERSION</code> via <code>gh api</code> from the configured ref (default: <code>main</code>). This method:</p>
+<ul>
+<li class="">Does <strong>not</strong> require a local clone of the repo</li>
+<li class="">Uses the authenticated <code>gh</code> CLI (requires <code>gh auth login</code>)</li>
+<li class="">Is faster than <code>git fetch</code> (single HTTP request)</li>
+<li class="">Falls back gracefully if <code>gh</code> is not installed or the API call fails</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="2-git-fetch-fallback">2. Git fetch (fallback)<a href="#2-git-fetch-fallback" class="hash-link" aria-label="Directe link naar 2. Git fetch (fallback)" title="Directe link naar 2. Git fetch (fallback)" translate="no">​</a></h3>
+<p>If the GitHub API method is not configured or fails, and <code>~/.claude/settings-repo-path</code> points to a valid local clone, the hook falls back to <code>git fetch origin &lt;ref&gt; --depth=1</code> followed by <code>git show origin/&lt;ref&gt;:...</code>. This is the original method.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="tracking-a-non-default-branch">Tracking a non-default branch<a href="#tracking-a-non-default-branch" class="hash-link" aria-label="Directe link naar Tracking a non-default branch" title="Directe link naar Tracking a non-default branch" translate="no">​</a></h3>
+<p>By default, both methods track the <code>main</code> branch. To track a different branch, tag, or SHA, write it to <code>~/.claude/settings-repo-ref</code>:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">echo &quot;feature/claude-code-tooling&quot; &gt; ~/.claude/settings-repo-ref</span><br></div></code></pre></div></div>
+<p>When absent, the ref defaults to <code>main</code>.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="configuration-options">Configuration options<a href="#configuration-options" class="hash-link" aria-label="Directe link naar Configuration options" title="Directe link naar Configuration options" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Config file</th><th>Required?</th><th>Purpose</th></tr></thead><tbody><tr><td><code>~/.claude/settings-repo-url</code></td><td>Optional (recommended)</td><td>GitHub repo slug for online API check</td></tr><tr><td><code>~/.claude/settings-repo-path</code></td><td>Optional (fallback)</td><td>Path to the root of the canonical repo for git-based check</td></tr><tr><td><code>~/.claude/settings-repo-ref</code></td><td>Optional</td><td>Branch/tag/SHA to track (defaults to <code>main</code>)</td></tr></tbody></table>
+<p>You can configure:</p>
+<ul>
+<li class=""><strong>Both URL and path</strong> (recommended): GitHub API is tried first, local git as fallback</li>
+<li class=""><strong>Only <code>settings-repo-url</code></strong>: Works without any local clone; no fallback if GitHub is unreachable</li>
+<li class=""><strong>Only <code>settings-repo-path</code></strong>: Original behavior; requires a local clone</li>
+<li class=""><strong>Neither</strong>: Version check cannot run; a configuration warning is shown</li>
+</ul>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="file-locations">File locations<a href="#file-locations" class="hash-link" aria-label="Directe link naar File locations" title="Directe link naar File locations" translate="no">​</a></h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Path</th><th>Role</th></tr></thead><tbody><tr><td><code>~/.claude/settings.json</code></td><td>User permissions allowlist, <code>PreToolUse</code> + <code>UserPromptSubmit</code> hooks, optional <code>mcpServers</code></td></tr><tr><td><code>~/.claude/hooks/block-write-commands.sh</code></td><td>Hook script invoked for every <strong>Bash</strong> tool use before it runs</td></tr><tr><td><code>~/.claude/hooks/check-settings-version.sh</code></td><td>Hook script that shows the status panel and warns on version mismatch</td></tr><tr><td><code>~/.claude/settings-version</code></td><td>Installed version (semver, matches repo <code>VERSION</code>)</td></tr><tr><td><code>~/.claude/settings-repo-url</code></td><td>GitHub repo slug for online version checking (e.g. <code>ConductionNL/.github</code>)</td></tr><tr><td><code>~/.claude/settings-repo-path</code></td><td>Absolute path to the root of the canonical repo (fallback for git-based check)</td></tr><tr><td><code>~/.claude/settings-repo-ref</code></td><td>Branch/tag/SHA to track for version checks (defaults to <code>main</code>)</td></tr></tbody></table>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="shape-of-claudesettingsjson">Shape of <code>~/.claude/settings.json</code><a href="#shape-of-claudesettingsjson" class="hash-link" aria-label="Directe link naar shape-of-claudesettingsjson" title="Directe link naar shape-of-claudesettingsjson" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="1-permissionsdeny">1. <code>permissions.deny</code><a href="#1-permissionsdeny" class="hash-link" aria-label="Directe link naar 1-permissionsdeny" title="Directe link naar 1-permissionsdeny" translate="no">​</a></h3>
+<p>Hard-blocked patterns — Claude cannot perform these even with user approval:</p>
+<ul>
+<li class=""><strong>Config files</strong>: <code>Edit</code>/<code>Write</code> of <code>~/.claude/settings.json</code>, <code>hooks/*</code>, <code>settings-version</code>, <code>settings-repo-path</code>, <code>settings-repo-url</code>, <code>settings-repo-ref</code></li>
+<li class=""><strong>System</strong>: <code>sudo</code>, <code>su</code>, <code>shutdown</code>, <code>reboot</code>, <code>halt</code>, <code>poweroff</code>, <code>mkfs</code>, <code>dd if=</code></li>
+<li class=""><strong>GitHub destructive</strong>: <code>gh pr merge</code>, <code>gh repo delete</code>, <code>gh release delete</code></li>
+<li class=""><strong>Git destructive</strong>: <code>git reset --hard</code>, <code>git clean -f/-fd/-fdx</code>, <code>git filter-branch</code>, <code>git filter-repo</code>, <code>git reflog expire/delete</code>, <code>git update-ref -d</code>, <code>git config --global</code>, <code>git checkout --</code>, <code>git restore --</code> (file restore; <code>git restore --staged</code> is allowed), <code>git push --force/-f</code>, <code>git rebase</code></li>
+<li class=""><strong>Filesystem destructive</strong>: <code>rm -rf</code>, <code>rm -Rf</code></li>
+<li class=""><strong>Package managers (arbitrary code execution)</strong>: <code>pip install</code>, <code>npm install</code></li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="2-permissionsallow">2. <code>permissions.allow</code><a href="#2-permissionsallow" class="hash-link" aria-label="Directe link naar 2-permissionsallow" title="Directe link naar 2-permissionsallow" translate="no">​</a></h3>
+<p>Bash permission patterns granted <strong>without</strong> prompting. Keep this aligned with the hook: anything allowed here should still pass <code>block-write-commands.sh</code>, or the hook will deny the command even if it is allowlisted.</p>
+<p>Allowed categories (all read-only; write operations are gated by the hook):</p>
+<ul>
+<li class=""><strong>Inspection</strong>: <code>ls</code>, <code>cat</code>, <code>head</code>, <code>tail</code>, <code>wc</code>, <code>stat</code>, <code>file</code>, <code>du</code>, <code>df</code>, <code>pwd</code>, <code>tree</code>, <code>find</code>, <code>realpath</code>, <code>basename</code>, <code>dirname</code></li>
+<li class=""><strong>Text processing</strong>: <code>diff</code>, <code>grep</code>, <code>egrep</code>, <code>tr</code>, <code>sort</code>, <code>jq</code>, <code>cut</code>, <code>uniq</code>, <code>column</code></li>
+<li class=""><strong>System info</strong>: <code>which</code>, <code>whoami</code>, <code>uname</code>, <code>ps</code>, <code>free</code>, <code>lsof</code>, <code>ss</code>, <code>id</code>, <code>groups</code>, <code>uptime</code>, <code>hostname</code>, <code>env</code>, <code>date</code></li>
+<li class=""><strong>Checksums / misc</strong>: <code>sha256sum</code>, <code>md5sum</code>, <code>nproc</code>, <code>printenv</code></li>
+<li class=""><strong>Git (read-only)</strong>: <code>git log</code>, <code>git status</code>, <code>git diff</code>, <code>git show</code>, <code>git blame</code>, <code>git ls-files</code>, <code>git ls-tree</code>, <code>git rev-parse</code>, <code>git describe</code>, <code>git shortlog</code>, <code>git cat-file</code>, <code>git branch --list/-a/-v</code>, <code>git remote -v/show</code>, <code>git fetch</code>, <code>git stash list</code>, <code>git stash show</code>, <code>git config --list</code>, <code>git config --get</code></li>
+<li class=""><strong>Navigation</strong>: <code>cd</code></li>
+<li class=""><strong>Docker (read)</strong>: <code>docker ps</code>, <code>docker images</code>, <code>docker image inspect</code>, <code>docker logs</code>, <code>docker inspect</code>, <code>docker stats</code>, <code>docker info</code>, <code>docker network ls/inspect</code>, <code>docker volume ls/inspect</code>, <code>docker --version</code>, <code>docker compose ps/config/logs/version</code></li>
+<li class=""><strong>GitHub CLI (read)</strong>: <code>gh pr list/view/checks/diff</code>, <code>gh issue list/view</code>, <code>gh repo view</code>, <code>gh run list/view</code>, <code>gh release list/view</code>, <code>gh workflow list/view</code>, <code>gh auth status</code></li>
+<li class=""><strong>Package managers (read)</strong>: <code>composer --version/show/validate/diagnose/audit/check-platform-reqs</code>, <code>node --version</code>, <code>npm --version/list/outdated/audit</code>, <code>pnpm list/outdated</code>, <code>yarn list</code>, <code>pip list/show/freeze</code></li>
+<li class=""><strong>PHP</strong>: <code>php -l/-m/-i/--version</code></li>
+<li class=""><strong>Logs</strong>: <code>Read(**/.claude/logs/**)</code></li>
+</ul>
+<p><strong>Not auto-approved</strong> (hook or user prompt required): <code>curl</code>, <code>gh api</code>, <code>awk</code>, <code>git -C</code>, broad <code>git branch</code>/<code>git remote</code> — these commands have dangerous modes that the hook cannot fully distinguish from safe usage. They go through the hook for write detection and prompt the user when needed.</p>
+<p>Do <strong>not</strong> put broad <code>Bash(*)</code> allow rules here.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="3-hookspretooluse">3. <code>hooks.PreToolUse</code><a href="#3-hookspretooluse" class="hash-link" aria-label="Directe link naar 3-hookspretooluse" title="Directe link naar 3-hookspretooluse" translate="no">​</a></h3>
+<div class="language-json codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-json codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token property">&quot;PreToolUse&quot;</span><span class="token operator" style="color:rgb(137, 221, 255)">:</span><span class="token plain"> </span><span class="token punctuation" style="color:rgb(199, 146, 234)">[</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">  </span><span class="token punctuation" style="color:rgb(199, 146, 234)">{</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    </span><span class="token property">&quot;matcher&quot;</span><span class="token operator" style="color:rgb(137, 221, 255)">:</span><span class="token plain"> </span><span class="token string" style="color:rgb(195, 232, 141)">&quot;Bash&quot;</span><span class="token punctuation" style="color:rgb(199, 146, 234)">,</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    </span><span class="token property">&quot;hooks&quot;</span><span class="token operator" style="color:rgb(137, 221, 255)">:</span><span class="token plain"> </span><span class="token punctuation" style="color:rgb(199, 146, 234)">[</span><span class="token punctuation" style="color:rgb(199, 146, 234)">{</span><span class="token plain"> </span><span class="token property">&quot;type&quot;</span><span class="token operator" style="color:rgb(137, 221, 255)">:</span><span class="token plain"> </span><span class="token string" style="color:rgb(195, 232, 141)">&quot;command&quot;</span><span class="token punctuation" style="color:rgb(199, 146, 234)">,</span><span class="token plain"> </span><span class="token property">&quot;command&quot;</span><span class="token operator" style="color:rgb(137, 221, 255)">:</span><span class="token plain"> </span><span class="token string" style="color:rgb(195, 232, 141)">&quot;bash ~/.claude/hooks/block-write-commands.sh&quot;</span><span class="token plain"> </span><span class="token punctuation" style="color:rgb(199, 146, 234)">}</span><span class="token punctuation" style="color:rgb(199, 146, 234)">]</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">  </span><span class="token punctuation" style="color:rgb(199, 146, 234)">}</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"></span><span class="token punctuation" style="color:rgb(199, 146, 234)">]</span><br></div></code></pre></div></div>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="4-hooksuserpromptsubmit">4. <code>hooks.UserPromptSubmit</code><a href="#4-hooksuserpromptsubmit" class="hash-link" aria-label="Directe link naar 4-hooksuserpromptsubmit" title="Directe link naar 4-hooksuserpromptsubmit" translate="no">​</a></h3>
+<div class="language-json codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-json codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token property">&quot;UserPromptSubmit&quot;</span><span class="token operator" style="color:rgb(137, 221, 255)">:</span><span class="token plain"> </span><span class="token punctuation" style="color:rgb(199, 146, 234)">[</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">  </span><span class="token punctuation" style="color:rgb(199, 146, 234)">{</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    </span><span class="token property">&quot;hooks&quot;</span><span class="token operator" style="color:rgb(137, 221, 255)">:</span><span class="token plain"> </span><span class="token punctuation" style="color:rgb(199, 146, 234)">[</span><span class="token punctuation" style="color:rgb(199, 146, 234)">{</span><span class="token plain"> </span><span class="token property">&quot;type&quot;</span><span class="token operator" style="color:rgb(137, 221, 255)">:</span><span class="token plain"> </span><span class="token string" style="color:rgb(195, 232, 141)">&quot;command&quot;</span><span class="token punctuation" style="color:rgb(199, 146, 234)">,</span><span class="token plain"> </span><span class="token property">&quot;command&quot;</span><span class="token operator" style="color:rgb(137, 221, 255)">:</span><span class="token plain"> </span><span class="token string" style="color:rgb(195, 232, 141)">&quot;bash ~/.claude/hooks/check-settings-version.sh&quot;</span><span class="token plain"> </span><span class="token punctuation" style="color:rgb(199, 146, 234)">}</span><span class="token punctuation" style="color:rgb(199, 146, 234)">]</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">  </span><span class="token punctuation" style="color:rgb(199, 146, 234)">}</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"></span><span class="token punctuation" style="color:rgb(199, 146, 234)">]</span><br></div></code></pre></div></div>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="5-mcpservers-optional">5. <code>mcpServers</code> (optional)<a href="#5-mcpservers-optional" class="hash-link" aria-label="Directe link naar 5-mcpservers-optional" title="Directe link naar 5-mcpservers-optional" translate="no">​</a></h3>
+<p>7 Playwright browser instances (<code>browser-1</code> through <code>browser-7</code>). <code>browser-6</code> runs headed (no <code>--headless</code>). Adjust the count to match your actual usage.</p>
+<hr>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="what-block-write-commandssh-does">What <code>block-write-commands.sh</code> does<a href="#what-block-write-commandssh-does" class="hash-link" aria-label="Directe link naar what-block-write-commandssh-does" title="Directe link naar what-block-write-commandssh-does" translate="no">​</a></h2>
+<ul>
+<li class="">Reads <strong>JSON from stdin</strong> once into a variable, then extracts <code>cmd</code> and <code>transcript_path</code>.</li>
+<li class="">On deny, prints <code>permissionDecision: &quot;deny&quot;</code> JSON. On ask, prints <code>permissionDecision: &quot;ask&quot;</code> JSON. On allow, exits <code>0</code>.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Area</th><th>Allowed silently</th><th>Prompts for approval</th><th>Hard blocked</th></tr></thead><tbody><tr><td><strong>curl</strong></td><td>—</td><td>All curl commands (not auto-approved)</td><td>—</td></tr><tr><td><strong>gh api</strong></td><td>—</td><td>All gh api commands (not auto-approved)</td><td>—</td></tr><tr><td><strong>git push</strong></td><td>Last user message contains authorized phrase</td><td>—</td><td>Blocked otherwise</td></tr><tr><td><strong>git -C</strong></td><td>Read-only subcommands</td><td>Write subcommands, branch/remote writes</td><td><code>push</code> (phrase-authorized)</td></tr><tr><td><strong>git branch</strong> (bare)</td><td><code>--list</code>, <code>-a</code>, <code>-v</code> (auto-approved)</td><td><code>-d/-D/-m/-M/-c/-C</code>, <code>--delete</code>, <code>--move</code>, <code>--copy</code></td><td>—</td></tr><tr><td><strong>git remote</strong> (bare)</td><td><code>-v</code>, <code>show</code> (auto-approved)</td><td><code>add</code>, <code>remove</code>, <code>rename</code>, <code>set-url</code>, <code>prune</code>, <code>update</code></td><td>—</td></tr><tr><td><strong>env</strong></td><td><code>env</code> alone or <code>VAR=value</code></td><td>Using <code>env</code> to execute another command</td><td>—</td></tr><tr><td><strong>date</strong></td><td>Display time</td><td>—</td><td><code>-s</code> / <code>--set</code> (system clock)</td></tr><tr><td><strong>cat</strong></td><td>Normal stdout</td><td>Shell redirection <code>&gt;</code> / <code>&gt;&gt;</code></td><td>—</td></tr><tr><td><strong>find</strong></td><td>Normal traversal</td><td><code>-delete</code>, <code>-exec</code>, <code>-execdir</code></td><td>—</td></tr><tr><td><strong>sort</strong></td><td>Normal sort</td><td><code>-o</code> / <code>--output</code>, shell <code>&gt;</code> / <code>&gt;&gt;</code></td><td>—</td></tr><tr><td><strong>awk</strong></td><td>—</td><td>All awk commands (not auto-approved); <code>system()</code> and file output caught</td><td>—</td></tr><tr><td><strong>hostname</strong></td><td>Read hostname</td><td>Setting a new hostname (bare name argument)</td><td>—</td></tr><tr><td><strong>rm</strong></td><td>—</td><td>All <code>rm</code> commands</td><td><code>rm -rf</code> / <code>rm -Rf</code> (deny-list)</td></tr><tr><td><strong>ln</strong></td><td>—</td><td>All <code>ln</code> commands</td><td>Symlinks/hardlinks to <code>~/.claude/</code></td></tr><tr><td><strong>sed -i</strong></td><td>—</td><td>In-place file editing</td><td>—</td></tr><tr><td><strong>chown</strong></td><td>—</td><td>All <code>chown</code> commands</td><td>—</td></tr><tr><td><strong>install</strong></td><td>—</td><td>All <code>install</code> commands</td><td>—</td></tr><tr><td><strong>Pipe-to-shell</strong></td><td>—</td><td><code>| bash</code>, <code>| sh</code>, <code>base64 -d</code>, <code>eval</code></td><td>—</td></tr><tr><td><strong>WSL boundary</strong></td><td>—</td><td>—</td><td>All paths/executables escaping the Linux filesystem</td></tr><tr><td>Config writes (<code>~/.claude/</code>)</td><td><code>git show origin/main:</code> from canonical repo; <code>gh api</code> from canonical repo</td><td>—</td><td>All other methods</td></tr></tbody></table>
+<p>Most guards use <code>(^|[;&amp;|]\s*)cmd\b</code> patterns to catch commands both at the start of a line and when chained via <code>&amp;&amp;</code>, <code>;</code>, or <code>||</code>. The exception is the canonical-source check for config-file writes (Method 2 — <code>gh api</code>), which validates via a URL-prefix match rather than a segment-boundary anchor, and is additionally hardened by a decoy-detection check that rejects any non-canonical <code>gh api</code> call present in the same command.</p>
+<p>Authorized git push phrases (case-insensitive): <code>push for me</code>, <code>commit and push</code>, <code>please git push</code>, <code>push my changes</code>.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="what-check-settings-versionsh-does">What <code>check-settings-version.sh</code> does<a href="#what-check-settings-versionsh-does" class="hash-link" aria-label="Directe link naar what-check-settings-versionsh-does" title="Directe link naar what-check-settings-versionsh-does" translate="no">​</a></h2>
+<ul>
+<li class="">Fires once per session (keyed to the transcript path via a flag file in <code>$XDG_RUNTIME_DIR</code> or <code>~/.claude/</code>, with <code>chmod 600</code>).</li>
+<li class=""><strong>Validates all config values</strong> from files before use — <code>tracking_ref</code> against <code>^[a-zA-Z0-9._/-]+$</code>, <code>online_repo_slug</code> against <code>^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$</code>, versions against <code>^[0-9]+\.[0-9]+\.[0-9]+$</code>. Invalid values are refused with a warning.</li>
+<li class="">Reads the installed version from <code>~/.claude/settings-version</code>.</li>
+<li class="">Reads the tracking ref from <code>~/.claude/settings-repo-ref</code> (defaults to <code>main</code> when absent).</li>
+<li class=""><strong>Online check (primary):</strong> If <code>~/.claude/settings-repo-url</code> is set, fetches <code>VERSION</code> via <code>gh api</code> from the GitHub repo&#x27;s configured ref.</li>
+<li class=""><strong>Git fetch (fallback):</strong> If the GitHub API method is not configured or fails, and <code>~/.claude/settings-repo-path</code> points to a valid local clone, fetches via <code>git fetch origin &lt;ref&gt; --depth=1</code> and reads the <code>VERSION</code> file from that ref.</li>
+<li class="">Reads the local branch version from <code>$REPO_DIR/global-settings/VERSION</code> (if a local repo is configured).</li>
+<li class="">Compares all versions using semver and prints a colored status panel to stderr (visible in the terminal/CLI).</li>
+<li class="">Always injects a session-start message into Claude&#x27;s context via stdout — &quot;up to date&quot;, &quot;update required&quot;, or &quot;configuration error&quot; — which Claude relays at the top of its first response.</li>
+<li class="">Never silently skips: configuration issues (missing config files, unreachable remote, <code>gh</code> not installed) are shown in the panel and forwarded to Claude.</li>
+</ul>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="relationship-to-this-repos-claudesettingsjson">Relationship to this repo&#x27;s <code>.claude/settings.json</code><a href="#relationship-to-this-repos-claudesettingsjson" class="hash-link" aria-label="Directe link naar relationship-to-this-repos-claudesettingsjson" title="Directe link naar relationship-to-this-repos-claudesettingsjson" translate="no">​</a></h2>
+<p>Project <code>settings.json</code> in <code>.claude/</code> enables MCP servers and project-specific permissions. That is separate from the global Bash policy above:</p>
+<ol>
+<li class="">Global <code>~/.claude/settings.json</code> + hooks for Bash safety and version checking.</li>
+<li class="">Project <code>.claude/settings.json</code> (and <code>settings.local.json</code> if used) for workspace-specific MCP.</li>
+</ol>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="verification">Verification<a href="#verification" class="hash-link" aria-label="Directe link naar Verification" title="Directe link naar Verification" translate="no">​</a></h2>
+<p>After installing (see <a class="" href="/nl/global-settings/README.md/">README</a>), verify:</p>
+<ul>
+<li class=""><code>curl</code> should prompt (not auto-approved)</li>
+<li class=""><code>find . -exec</code> should prompt</li>
+<li class=""><code>rm -rf</code> should be hard-blocked</li>
+<li class="">Status panel appears at session start</li>
+</ul></div><footer class="theme-doc-footer docusaurus-mt-lg"><div class="row margin-top--sm theme-doc-footer-edit-meta-row"><div class="col noPrint_WFHX"><a href="https://github.com/ConductionNL/.github/tree/main/../docs/claude/global-claude-settings.md" target="_blank" rel="noopener noreferrer" class="theme-edit-this-page"><svg fill="currentColor" height="20" width="20" viewBox="0 0 40 40" class="iconEdit_Z9Sw" aria-hidden="true"><g><path d="m34.5 11.7l-3 3.1-6.3-6.3 3.1-3q0.5-0.5 1.2-0.5t1.1 0.5l3.9 3.9q0.5 0.4 0.5 1.1t-0.5 1.2z m-29.5 17.1l18.4-18.5 6.3 6.3-18.4 18.4h-6.3v-6.2z"></path></g></svg>Deze pagina bewerken</a></div><div class="col lastUpdated_JAkA"></div></div></footer></article><nav class="docusaurus-mt-lg pagination-nav" aria-label="Documentatiepagina&#x27;s"><a class="pagination-nav__link pagination-nav__link--prev" href="/nl/claude/getting-started/"><div class="pagination-nav__sublabel">Vorige</div><div class="pagination-nav__label">Getting Started</div></a><a class="pagination-nav__link pagination-nav__link--next" href="/nl/claude/local-llm/"><div class="pagination-nav__sublabel">Volgende</div><div class="pagination-nav__label">Local LLM Setup (Ollama + Qwen)</div></a></nav></div></div><div class="col col--3"><div class="tableOfContents_bqdL thin-scrollbar theme-doc-toc-desktop"><ul class="table-of-contents table-of-contents__left-border"><li><a href="#versioned-canonical-files" class="table-of-contents__link toc-highlight">Versioned canonical files</a></li><li><a href="#install--update" class="table-of-contents__link toc-highlight">Install / update</a></li><li><a href="#session-start-status-panel" class="table-of-contents__link toc-highlight">Session-start status panel</a></li><li><a href="#session-start-message-in-claude-chat" class="table-of-contents__link toc-highlight">Session-start message in Claude chat</a></li><li><a href="#online-version-checking" class="table-of-contents__link toc-highlight">Online version checking</a><ul><li><a href="#1-github-api-primary--recommended" class="table-of-contents__link toc-highlight">1. GitHub API (primary — recommended)</a></li><li><a href="#2-git-fetch-fallback" class="table-of-contents__link toc-highlight">2. Git fetch (fallback)</a></li><li><a href="#tracking-a-non-default-branch" class="table-of-contents__link toc-highlight">Tracking a non-default branch</a></li><li><a href="#configuration-options" class="table-of-contents__link toc-highlight">Configuration options</a></li></ul></li><li><a href="#file-locations" class="table-of-contents__link toc-highlight">File locations</a></li><li><a href="#shape-of-claudesettingsjson" class="table-of-contents__link toc-highlight">Shape of <code>~/.claude/settings.json</code></a><ul><li><a href="#1-permissionsdeny" class="table-of-contents__link toc-highlight">1. <code>permissions.deny</code></a></li><li><a href="#2-permissionsallow" class="table-of-contents__link toc-highlight">2. <code>permissions.allow</code></a></li><li><a href="#3-hookspretooluse" class="table-of-contents__link toc-highlight">3. <code>hooks.PreToolUse</code></a></li><li><a href="#4-hooksuserpromptsubmit" class="table-of-contents__link toc-highlight">4. <code>hooks.UserPromptSubmit</code></a></li><li><a href="#5-mcpservers-optional" class="table-of-contents__link toc-highlight">5. <code>mcpServers</code> (optional)</a></li></ul></li><li><a href="#what-block-write-commandssh-does" class="table-of-contents__link toc-highlight">What <code>block-write-commands.sh</code> does</a></li><li><a href="#what-check-settings-versionsh-does" class="table-of-contents__link toc-highlight">What <code>check-settings-version.sh</code> does</a></li><li><a href="#relationship-to-this-repos-claudesettingsjson" class="table-of-contents__link toc-highlight">Relationship to this repo&#39;s <code>.claude/settings.json</code></a></li><li><a href="#verification" class="table-of-contents__link toc-highlight">Verification</a></li></ul></div></div></div></div></main></div></div></div><footer class="canal-footer" aria-label="Site footer"><div class="skyline" role="presentation"></div><div class="kade"><div class="kade-items"><svg class="ki ki-bike-1" width="22" height="16" viewBox="0 -2 22 18" aria-hidden="true"><g stroke="var(--c-cobalt-900)" stroke-width="1.4" fill="none" stroke-linecap="round"><circle cx="4" cy="12" r="3"></circle><circle cx="18" cy="12" r="3"></circle><line x1="4" y1="12" x2="11" y2="6"></line><line x1="11" y1="6" x2="18" y2="12"></line><line x1="11" y1="6" x2="14" y2="12"></line><line x1="11" y1="6" x2="11" y2="3"></line><line x1="11" y1="3" x2="14" y2="6"></line></g><circle cx="11" cy="1.5" r="1.6" fill="var(--c-cobalt-900)"></circle></svg><svg class="ki ki-car-1" width="38" height="16" viewBox="0 0 38 16" aria-hidden="true"><rect x="0" y="6" width="38" height="6" rx="2" fill="#C8482F"></rect><path d="M 5,6 L 9,2 L 29,2 L 33,6 Z" fill="#C8482F"></path><rect x="11" y="3" width="6" height="3" fill="rgba(255,255,255,0.5)"></rect><rect x="20" y="3" width="6" height="3" fill="rgba(255,255,255,0.5)"></rect><circle cx="9" cy="13" r="2" fill="var(--c-cobalt-900)"></circle><circle cx="29" cy="13" r="2" fill="var(--c-cobalt-900)"></circle></svg><svg class="ki ki-bike-2" width="22" height="16" viewBox="0 -2 22 18" aria-hidden="true"><g stroke="var(--c-cobalt-900)" stroke-width="1.4" fill="none" stroke-linecap="round"><circle cx="4" cy="12" r="3"></circle><circle cx="18" cy="12" r="3"></circle><line x1="4" y1="12" x2="11" y2="6"></line><line x1="11" y1="6" x2="18" y2="12"></line><line x1="11" y1="6" x2="14" y2="12"></line><line x1="11" y1="6" x2="11" y2="3"></line><line x1="11" y1="3" x2="14" y2="6"></line></g><circle cx="11" cy="1.5" r="1.6" fill="var(--c-cobalt-900)"></circle></svg><svg class="ki ki-car-2" width="38" height="16" viewBox="0 0 38 16" aria-hidden="true"><rect x="0" y="6" width="38" height="6" rx="2" fill="var(--c-cobalt-900)"></rect><path d="M 5,6 L 9,2 L 29,2 L 33,6 Z" fill="var(--c-cobalt-900)"></path><rect x="11" y="3" width="6" height="3" fill="rgba(255,255,255,0.4)"></rect><rect x="20" y="3" width="6" height="3" fill="rgba(255,255,255,0.4)"></rect><circle cx="9" cy="13" r="2" fill="#C8482F"></circle><circle cx="29" cy="13" r="2" fill="#C8482F"></circle></svg></div></div><div class="water"><div class="canal-items"><svg class="ci ci-cruise" width="120" height="28" viewBox="0 -10 120 28" aria-hidden="true"><line x1="2" y1="14" x2="2" y2="-9" stroke="var(--c-orange-knvb)" stroke-width="0.9"></line><rect x="2.5" y="-9" width="9" height="2" fill="#AE1C28"></rect><rect x="2.5" y="-7" width="9" height="2" fill="#FFFFFF"></rect><rect x="2.5" y="-5" width="9" height="2" fill="#21468B"></rect><path d="M 0,16 L 6,18 L 114,18 L 120,16 L 120,11 L 0,11 Z" fill="var(--c-orange-knvb)"></path><rect x="8" y="5" width="104" height="6" fill="var(--c-orange-knvb)"></rect><path d="M 8,5 Q 60,0 112,5 L 8,5 Z" fill="var(--c-orange-knvb)"></path><g fill="rgba(255,247,210,0.85)"><rect x="14" y="7" width="6" height="3"></rect><rect x="22" y="7" width="6" height="3"></rect><rect x="30" y="7" width="6" height="3"></rect><rect x="38" y="7" width="6" height="3"></rect><rect x="46" y="7" width="6" height="3"></rect><rect x="54" y="7" width="6" height="3"></rect><rect x="62" y="7" width="6" height="3"></rect><rect x="70" y="7" width="6" height="3"></rect><rect x="78" y="7" width="6" height="3"></rect><rect x="86" y="7" width="6" height="3"></rect><rect x="94" y="7" width="6" height="3"></rect><rect x="102" y="7" width="6" height="3"></rect></g></svg><svg class="ci ci-sloep" width="50" height="20" viewBox="0 -2 50 20" aria-hidden="true"><path d="M 0,12 L 4,16 L 46,16 L 50,12 L 50,8 L 0,8 Z" fill="var(--c-orange-knvb)"></path><rect x="20" y="2" width="12" height="6" rx="1" fill="var(--c-orange-knvb)"></rect><circle cx="26" cy="0" r="1.4" fill="var(--c-orange-knvb)"></circle></svg><svg class="ci ci-row" width="44" height="16" viewBox="-2 0 48 16" aria-hidden="true"><path d="M 0,10 L 4,14 L 40,14 L 44,10 Z" fill="var(--c-orange-knvb)"></path><line x1="8" y1="10" x2="0" y2="3" stroke="var(--c-orange-knvb)" stroke-width="1.2" stroke-linecap="round"></line><line x1="36" y1="10" x2="44" y2="3" stroke="var(--c-orange-knvb)" stroke-width="1.2" stroke-linecap="round"></line><circle cx="22" cy="7" r="1.6" fill="var(--c-orange-knvb)"></circle></svg><svg class="ci ci-swim" width="26" height="10" viewBox="-3 0 30 10" aria-hidden="true"><ellipse cx="13" cy="6" rx="7" ry="1.4" fill="var(--c-orange-knvb)"></ellipse><circle cx="17" cy="4" r="1.7" fill="var(--c-orange-knvb)"></circle><line x1="13" y1="5" x2="11" y2="3" stroke="var(--c-orange-knvb)" stroke-width="1" stroke-linecap="round"></line><line x1="-3" y1="6" x2="2" y2="6" stroke="var(--c-orange-knvb)" stroke-width="0.7" opacity="0.55"></line><line x1="0" y1="8" x2="3" y2="8" stroke="var(--c-orange-knvb)" stroke-width="0.7" opacity="0.4"></line></svg><svg class="ci ci-periscope" width="14" height="26" viewBox="-3 -2 18 28" aria-hidden="true"><rect x="4" y="4" width="2" height="18" fill="var(--c-orange-knvb)"></rect><rect x="0" y="0" width="9" height="3" fill="var(--c-orange-knvb)"></rect><rect x="4" y="3" width="2" height="2" fill="var(--c-orange-knvb)"></rect><ellipse cx="5" cy="24" rx="7" ry="0.9" fill="var(--c-orange-knvb)" opacity="0.5"></ellipse></svg><svg class="ci ci-whale" width="76" height="18" viewBox="-3 -4 82 22" aria-hidden="true"><path d="M 0,12 Q 0,4 26,3 Q 54,2 64,7 L 72,4 L 68,9 L 72,14 L 64,11 Q 54,14 26,14 Q 6,14 0,12 Z" fill="var(--c-orange-knvb)"></path><g opacity="0.55" stroke="var(--c-orange-knvb)" stroke-width="1" stroke-linecap="round"><line x1="22" y1="2" x2="20" y2="-3"></line><line x1="25" y1="2" x2="25" y2="-4"></line><line x1="28" y1="2" x2="30" y2="-3"></line></g></svg><svg class="ci ci-hover" width="74" height="26" viewBox="0 -4 74 28" aria-hidden="true"><ellipse cx="37" cy="22" rx="37" ry="2.5" fill="var(--c-orange-knvb)" opacity="0.4"></ellipse><path d="M 6,18 L 10,10 L 64,10 L 68,18 Z" fill="var(--c-orange-knvb)"></path><path d="M 14,10 Q 37,-4 60,10 L 14,10 Z" fill="var(--c-orange-knvb)"></path><ellipse cx="37" cy="4" rx="16" ry="3.2" fill="rgba(255,247,210,0.7)"></ellipse><polygon points="37,11 42,13.5 42,16.5 37,19 32,16.5 32,13.5" fill="#FFFFFF"></polygon><text x="37" y="17.4" font-size="4" text-anchor="middle" fill="var(--c-orange-knvb)" font-family="sans-serif" font-weight="900">C</text><g stroke="var(--c-orange-knvb)" stroke-width="0.7" opacity="0.6"><line x1="8" y1="22" x2="12" y2="22"></line><line x1="16" y1="22" x2="20" y2="22"></line><line x1="26" y1="22" x2="30" y2="22"></line><line x1="36" y1="22" x2="40" y2="22"></line><line x1="46" y1="22" x2="50" y2="22"></line><line x1="56" y1="22" x2="60" y2="22"></line></g></svg></div><svg class="canal-waves" viewBox="0 0 1400 500" preserveAspectRatio="none" aria-hidden="true"><path class="w1" d="M 0,96 L 140,82 L 280,96 L 420,82 L 560,96 L 700,82 L 840,96 L 980,82 L 1120,96 L 1260,82 L 1400,96"></path><path class="w2" d="M 0,206 L 180,182 L 360,206 L 540,182 L 720,206 L 900,182 L 1080,206 L 1260,182 L 1400,200"></path><path class="w3" d="M 0,362 L 220,332 L 440,362 L 660,332 L 880,362 L 1100,332 L 1320,362 L 1400,348"></path></svg><div class="footer-grid"><div class="brand"><div class="wm">Conduction</div><p>Open-source apps for <span class="next-blue">Nextcloud</span>. Built and maintained by Conduction in Amsterdam, released under EUPL-1.2.</p><div class="triad"><span><span class="h"></span>Conduction<!-- --> <!-- -->· <span class="next-blue">Nextcloud</span></span></div><div class="socials"><a href="https://github.com/ConductionNL" aria-label="GitHub" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="filled" d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.04 1.53 1.04.9 1.53 2.36 1.09 2.93.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.6 9.6 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.93.36.31.68.92.68 1.86v2.76c0 .27.18.58.69.48A10 10 0 0 0 12 2z"></path></svg></a><a href="https://www.linkedin.com/company/conduction" aria-label="LinkedIn" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-4 0v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle class="filled" cx="4" cy="4" r="2"></circle></svg></a><a href="mailto:info@conduction.nl" aria-label="Email info@conduction.nl"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 7l9 6 9-6"></path></svg></a><a href="tel:+31853036840" aria-label="Phone +31 (0)85 303 6840"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.72 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0 1 22 16.92z"></path></svg></a><a href="https://maps.google.com/?q=Lauriergracht+14h+Amsterdam" aria-label="Lauriergracht 14h, Amsterdam, open in Google Maps" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg></a></div></div><div><h4>Documentatie</h4><ul><li><a href="https://github.com/orgs/ConductionNL/projects/4" target="_blank" rel="noopener noreferrer">Roadmap</a></li><li><a href="/nl/claude/">Claude-workflow</a></li><li><a href="/nl/iso/">ISO-compliance</a></li></ul></div><div><h4>Conduction</h4><ul><li><a href="https://conduction.nl/about" target="_blank" rel="noopener noreferrer">About</a></li><li><a href="https://conduction.nl/about#opensource" target="_blank" rel="noopener noreferrer">Open source</a></li><li><a href="https://conduction.nl/about#team" target="_blank" rel="noopener noreferrer">Team</a></li><li><a href="https://conduction.nl/iso" target="_blank" rel="noopener noreferrer">ISO</a></li></ul></div><div><h4>Documentatie</h4><ul><li><a href="https://identity.conduction.nl/" target="_blank" rel="noopener noreferrer">Brand book</a></li><li><a href="https://identity.conduction.nl/diagrams/" target="_blank" rel="noopener noreferrer">Diagram set</a></li></ul></div></div><div class="legal-bar"><div class="left"><span>Conduction B.V. · KvK 76741850 · BTW NL860784241B01 · IBAN NL51 ABNA 0868951550 · Lauriergracht 14h, 1016 RR Amsterdam · 2026</span><span class="legal-links"><a href="/nl/privacy/">Privacy</a><span class="sep">·</span><a href="/nl/terms/">Terms</a><span class="sep">·</span><a href="/nl/iso/">ISO</a></span></div><div class="right"><a class="iso-badge" aria-label="ISO 9001:2015 certified, see details" href="/nl/iso/"><span class="iso-mark">ISO</span><span class="iso-num">9001:2015</span></a><a class="iso-badge" aria-label="ISO 27001:2022 certified, see details" href="/nl/iso/"><span class="iso-mark">ISO</span><span class="iso-num">27001:2022</span></a></div></div></div></footer><div style="display:none" aria-hidden="true">
+      <template id="tpl-h-a">
+        <svg class="house h-a" viewBox="0 -2 80 202" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,200 L 0,38 L 8,38 L 8,26 L 16,26 L 16,14 L 24,14 L 24,8 L 56,8 L 56,14 L 64,14 L 64,26 L 72,26 L 72,38 L 80,38 L 80,200 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="22" y="68" width="10" height="16" fill="rgba(255,247,210,0.95)"/>
+          <rect x="48" y="68" width="10" height="16" fill="rgba(11,32,73,0.35)"/>
+          <rect x="22" y="98" width="10" height="16" fill="rgba(11,32,73,0.35)"/>
+          <rect x="48" y="98" width="10" height="16" fill="rgba(255,247,210,0.6)"/>
+          <rect x="22" y="128" width="10" height="16" fill="rgba(11,32,73,0.35)"/>
+          <rect x="48" y="128" width="10" height="16" fill="rgba(11,32,73,0.35)"/>
+          <rect x="32" y="160" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+      <template id="tpl-h-b">
+        <svg class="house h-b" viewBox="0 0 100 220" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,220 L 0,58 L 8,58 L 8,47 L 16,47 L 16,36 L 24,36 L 24,25 L 32,25 L 32,14 L 50,4 L 68,14 L 68,25 L 76,25 L 76,36 L 84,36 L 84,47 L 92,47 L 92,58 L 100,58 L 100,220 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="14" y="80" width="14" height="20" fill="rgba(255,247,210,0.85)"/>
+          <rect x="43" y="80" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="72" y="80" width="14" height="20" fill="rgba(255,247,210,0.55)"/>
+          <rect x="14" y="115" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="43" y="115" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="72" y="115" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="14" y="150" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="43" y="150" width="14" height="20" fill="rgba(255,247,210,0.7)"/>
+          <rect x="72" y="150" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="42" y="180" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+      <template id="tpl-h-c">
+        <svg class="house h-c" viewBox="0 0 70 240" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,240 L 0,48 L 5,48 L 5,41 L 10,41 L 10,34 L 15,34 L 15,27 L 20,27 L 20,20 L 25,20 L 25,15 L 45,15 L 45,20 L 50,20 L 50,27 L 55,27 L 55,34 L 60,34 L 60,41 L 65,41 L 65,48 L 70,48 L 70,240 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="14" y="70" width="12" height="18" fill="rgba(255,247,210,0.55)"/>
+          <rect x="44" y="70" width="12" height="18" fill="rgba(255,247,210,0.85)"/>
+          <rect x="14" y="100" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="44" y="100" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="14" y="130" width="12" height="18" fill="rgba(255,247,210,0.7)"/>
+          <rect x="44" y="130" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="14" y="160" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="44" y="160" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="27" y="200" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+      <template id="tpl-h-d">
+        <svg class="house h-d" viewBox="0 -10 90 180" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,170 L 0,30 L 8,30 L 8,20 L 16,20 L 16,10 L 24,10 L 24,4 L 66,4 L 66,10 L 74,10 L 74,20 L 82,20 L 82,30 L 90,30 L 90,170 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="12" y="60" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="38" y="60" width="14" height="20" fill="rgba(255,247,210,0.85)"/>
+          <rect x="64" y="60" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="12" y="100" width="14" height="20" fill="rgba(255,247,210,0.6)"/>
+          <rect x="38" y="100" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="64" y="100" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="37" y="130" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+      <template id="tpl-h-e">
+        <svg class="house h-e" viewBox="0 0 95 210" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,210 L 0,55 L 8,55 L 8,44 L 16,44 L 16,33 L 24,33 L 24,22 L 32,22 L 32,11 L 35,11 L 35,6 L 59,6 L 59,11 L 63,11 L 63,22 L 71,22 L 71,33 L 79,33 L 79,44 L 87,44 L 87,55 L 95,55 L 95,210 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="13" y="75" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="40" y="75" width="14" height="20" fill="rgba(255,247,210,0.65)"/>
+          <rect x="68" y="75" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="13" y="110" width="14" height="20" fill="rgba(255,247,210,0.8)"/>
+          <rect x="40" y="110" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="68" y="110" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="13" y="145" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="40" y="145" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="68" y="145" width="14" height="20" fill="rgba(255,247,210,0.55)"/>
+          <rect x="39.5" y="175" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+</div></div>
+</body>
+</html>
