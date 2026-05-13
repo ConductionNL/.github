@@ -1,2 +1,7 @@
 /* Site-specific overrides for docs.conduction.nl.
  * Brand tokens + base typography come from @conduction/docusaurus-preset. */
+
+/* Conduction-branded Mermaid theme. Authors write plain ```mermaid blocks;
+ * this stylesheet applies the cobalt/orange palette, container chrome,
+ * and the :::accent / :::stage / :::muted classDef hardening. */
+@import './conduction-mermaid.css';

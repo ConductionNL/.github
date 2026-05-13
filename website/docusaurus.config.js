@@ -53,7 +53,7 @@ const config = createConfig({
     ],
   ],
 
-  themes: [BRAND_THEME],
+  themes: [BRAND_THEME, '@docusaurus/theme-mermaid'],
 
   navbar: {
     items: [
@@ -81,6 +81,36 @@ const config = createConfig({
      (no partner pairing on the docs site). */
   footerBrand: { wordmark: 'Conduction' },
 
+  /* Mermaid: Conduction brand theme applied site-wide so authors write
+     plain ```mermaid blocks. Colours track the design-system tokens in
+     tokens.css; the `accent` classDef is the one-orange-per-scene knob
+     (use `:::accent` on a single node per diagram).
+     Goes into themeConfig (not top-level) — the preset's createConfig
+     only forwards themeConfig.mermaid to @docusaurus/theme-mermaid. */
+  themeConfig: {
+    mermaid: {
+      /* Theme must live here (not inside options) — the theme-mermaid
+         client spreads options first and then overlays
+         themeConfig.mermaid.theme[colorMode] last, so options.theme is
+         always overridden. */
+      theme: { light: 'base', dark: 'base' },
+      options: {
+        themeVariables: {
+          background:        '#ffffff',
+          primaryColor:      '#21468B', // cobalt-blue — solid node fill
+          primaryTextColor:  '#ffffff', // white — readable on cobalt
+          primaryBorderColor:'#21468B', // = fill, so no visible border
+          secondaryColor:    '#152D5C', // cobalt-700
+          tertiaryColor:     '#ffffff',
+          lineColor:         '#4D69A4', // cobalt-400 — edges
+          textColor:         '#152D5C', // cobalt-700 — labels outside nodes
+          fontFamily:        "'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+          fontSize:          '14px',
+        },
+      },
+    },
+  },
+
   footer: {
     links: [
       {
@@ -105,6 +135,19 @@ const config = createConfig({
    about-this-manual) opt in to MDX so they can use <Tabs>, <ToolList>,
    etc. createConfig() doesn't pass the top-level `markdown` option
    through, so we set it here. */
-config.markdown = { format: 'detect' };
+/* Mermaid: enable on both .md and .mdx. The theme registers a remark
+   plugin that picks up ```mermaid fenced blocks regardless of extension.
+   The brand theme is set inside each diagram via an %%{init}%% block so
+   nodes inherit Conduction cobalt/orange tokens; see
+   src/css/conduction-mermaid.css for the rendered-SVG overrides. */
+config.markdown = { format: 'detect', mermaid: true };
+
+/* Site-wide client-side modules. src/diagrams/index.js is a
+   side-effect import that registers Conduction diagram custom
+   elements (<cn-arch-flow>, …) on every page so authors can use
+   them directly in MDX/Markdown without per-page imports.
+   Set here (not inside createConfig) because the preset's
+   createConfig wrapper doesn't forward clientModules through. */
+config.clientModules = [require.resolve('./src/diagrams/index.js')];
 
 module.exports = config;
