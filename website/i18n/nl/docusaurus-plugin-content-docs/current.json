@@ -11,8 +11,44 @@
     "message": "Ondersteuning & Veiligheid",
     "description": "The label for category Support & Safety in sidebar tutorialSidebar"
   },
+  "sidebar.tutorialSidebar.category.Hydra": {
+    "message": "Hydra",
+    "description": "The label for category Hydra in sidebar tutorialSidebar"
+  },
+  "sidebar.tutorialSidebar.category.Pipeline": {
+    "message": "Pipeline",
+    "description": "The label for category Pipeline in sidebar tutorialSidebar"
+  },
+  "sidebar.tutorialSidebar.category.Operations": {
+    "message": "Operaties",
+    "description": "The label for category Operations in sidebar tutorialSidebar"
+  },
+  "sidebar.tutorialSidebar.category.Retrospectives": {
+    "message": "Retrospectives",
+    "description": "The label for category Retrospectives in sidebar tutorialSidebar"
+  },
+  "sidebar.tutorialSidebar.category.Using Claude": {
+    "message": "Claude gebruiken",
+    "description": "The label for category Using Claude in sidebar tutorialSidebar"
+  },
+  "sidebar.tutorialSidebar.category.Setup": {
+    "message": "Installatie",
+    "description": "The label for category Setup in sidebar tutorialSidebar"
+  },
+  "sidebar.tutorialSidebar.category.Workflow": {
+    "message": "Workflow",
+    "description": "The label for category Workflow in sidebar tutorialSidebar"
+  },
+  "sidebar.tutorialSidebar.category.Writing": {
+    "message": "Schrijven",
+    "description": "The label for category Writing in sidebar tutorialSidebar"
+  },
+  "sidebar.tutorialSidebar.category.Quality & testing": {
+    "message": "Kwaliteit & testen",
+    "description": "The label for category Quality & testing in sidebar tutorialSidebar"
+  },
   "sidebar.tutorialSidebar.category.Claude workflow": {
     "message": "Claude-workflow",
-    "description": "The label for category Claude workflow in sidebar tutorialSidebar"
+    "description": "The label for category Claude workflow in sidebar tutorialSidebar (legacy, kept for safety)"
   }
 }
