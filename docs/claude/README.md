@@ -1,6 +1,8 @@
-# Claude Code Developer Guide
+# Using Hydra
 
-Documentation for Conduction's spec-driven development workflow, combining OpenSpec, GitHub Issues, and Claude Code.
+Developer-facing guide to Conduction's spec-driven workflow. This is the *driver's seat* view of the [Hydra pipeline](../hydra/) — how to set your workstation up, write specs and skills, hand a change off to the pipeline, and run reviews. The pipeline internals (Builder / Reviewer / Applier agents, container architecture, deployment models, operations) are documented in the sibling [Hydra](../hydra/) section.
+
+Underneath, the tool is **Claude Code** with the Conduction skills catalogue; this section was previously titled *Claude Code Developer Guide* before being folded into the Hydra umbrella.
 
 ## Guides
 
