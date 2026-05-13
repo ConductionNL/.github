@@ -7,13 +7,13 @@
     "message": "Roadmap",
     "description": "Navbar item with label Roadmap"
   },
-  "item.label.Claude workflow": {
-    "message": "Claude-workflow",
-    "description": "Navbar item with label Claude workflow"
-  },
   "item.label.Hydra": {
     "message": "Hydra",
     "description": "Navbar item with label Hydra"
+  },
+  "item.label.Using Hydra": {
+    "message": "Hydra gebruiken",
+    "description": "Navbar item with label Using Hydra"
   },
   "item.label.ISO": {
     "message": "ISO",

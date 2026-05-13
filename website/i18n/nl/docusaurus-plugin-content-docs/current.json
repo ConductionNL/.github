@@ -27,9 +27,9 @@
     "message": "Retrospectives",
     "description": "The label for category Retrospectives in sidebar tutorialSidebar"
   },
-  "sidebar.tutorialSidebar.category.Using Claude": {
-    "message": "Claude gebruiken",
-    "description": "The label for category Using Claude in sidebar tutorialSidebar"
+  "sidebar.tutorialSidebar.category.Using Hydra": {
+    "message": "Hydra gebruiken",
+    "description": "The label for category Using Hydra in sidebar tutorialSidebar"
   },
   "sidebar.tutorialSidebar.category.Setup": {
     "message": "Installatie",
