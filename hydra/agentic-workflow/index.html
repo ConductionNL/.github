@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="en-GB" dir="ltr" class="docs-wrapper plugin-docs plugin-id-default docs-version-current docs-doc-page docs-doc-id-hydra/agentic-workflow" data-has-hydrated="false">
+<head>
+<meta charset="UTF-8">
+<meta name="generator" content="Docusaurus v3.10.1">
+<title data-rh="true">Agentic Workflow | Conduction Docs</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:url" content="https://docs.conduction.nl/hydra/agentic-workflow/"><meta data-rh="true" property="og:locale" content="en_GB"><meta data-rh="true" property="og:locale:alternate" content="nl_NL"><meta data-rh="true" name="docusaurus_locale" content="en"><meta data-rh="true" name="docsearch:language" content="en"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="Agentic Workflow | Conduction Docs"><meta data-rh="true" name="description" content="This document describes the automated steps that agents execute within the Hydra pipeline. Each step maps to a stage on the GitHub project board."><meta data-rh="true" property="og:description" content="This document describes the automated steps that agents execute within the Hydra pipeline. Each step maps to a stage on the GitHub project board."><link data-rh="true" rel="icon" href="/img/favicon.svg"><link data-rh="true" rel="canonical" href="https://docs.conduction.nl/hydra/agentic-workflow/"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/hydra/agentic-workflow/" hreflang="en-GB"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/nl/hydra/agentic-workflow/" hreflang="nl-NL"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/hydra/agentic-workflow/" hreflang="x-default"><link data-rh="true" rel="stylesheet" href="/lib/canal-footer.css"><link data-rh="true" rel="stylesheet" href="/lib/kade-cyclist.css"><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Hydra","item":"https://docs.conduction.nl/hydra/"},{"@type":"ListItem","position":2,"name":"Agentic Workflow","item":"https://docs.conduction.nl/hydra/agentic-workflow"}]}</script><link rel="stylesheet" href="/assets/css/styles.946aaa0a.css">
+<script src="/assets/js/runtime~main.c778b9e6.js" defer="defer"></script>
+<script src="/assets/js/main.d3fb0ff4.js" defer="defer"></script>
+</head>
+<body>
+<svg style="display: none;"><defs>
+<symbol id="theme-svg-external-link" viewBox="0 0 24 24"><path fill="currentColor" d="M21 13v10h-21v-19h12v2h-10v15h17v-8h2zm3-12h-10.988l4.035 4-6.977 7.07 2.828 2.828 6.977-7.07 4.125 4.172v-11z"/></symbol>
+</defs></svg>
+<script>!function(){var t=function(){try{return new URLSearchParams(window.location.search).get("docusaurus-theme")}catch(t){}}()||function(){try{return window.localStorage.getItem("theme")}catch(t){}}();document.documentElement.setAttribute("data-theme",t||(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")),document.documentElement.setAttribute("data-theme-choice",t||"system")}(),function(){try{const c=new URLSearchParams(window.location.search).entries();for(var[t,e]of c)if(t.startsWith("docusaurus-data-")){var a=t.replace("docusaurus-data-","data-");document.documentElement.setAttribute(a,e)}}catch(t){}}()</script><div id="__docusaurus"><div role="region" aria-label="Skip to main content"><a class="skipToContent_fXgn" href="#__docusaurus_skipToContent_fallback">Skip to main content</a></div><nav class="navbar nav_MuJ0" role="navigation" aria-label="Main"><div class="left__6eY"><a class="wordmark_mhs1" href="/">Conduction Docs</a><div class="links_cXJT"><a class="link_CwQh" href="/WayOfWork/way-of-work/">Way of Work</a><a href="https://github.com/orgs/ConductionNL/projects/4" class="ghost_SGJf" target="_blank" rel="noopener noreferrer">Roadmap</a><a class="link_CwQh" href="/claude/">Claude workflow</a><a class="link_CwQh" href="/hydra/">Hydra</a><a class="link_CwQh" href="/iso/">ISO</a><a href="https://www.conduction.nl/support/" class="ghost_SGJf" target="_blank" rel="noopener noreferrer">Support</a><a href="https://www.conduction.nl/apps/" class="ghost_SGJf" target="_blank" rel="noopener noreferrer">Products</a></div></div><div class="ctas_jpo4"><div class="localeWrapper__Pip"><div class="navbar__item dropdown dropdown--hoverable dropdown--right"><a href="#" aria-haspopup="true" aria-expanded="false" role="button" class="navbar__link" type="localeDropdown"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" class="iconLanguage_nlXk"><path fill="currentColor" d="M12.87 15.07l-2.54-2.51.03-.03c1.74-1.94 2.98-4.17 3.71-6.53H17V4h-7V2H8v2H1v1.99h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z"></path></svg>English</a><ul class="dropdown__menu"><li><a href="/hydra/agentic-workflow/" target="_self" rel="noopener noreferrer" class="dropdown__link dropdown__link--active" lang="en-GB">English</a></li><li><a href="/nl/hydra/agentic-workflow/" target="_self" rel="noopener noreferrer" class="dropdown__link" lang="nl-NL">Nederlands</a></li></ul></div></div><a href="https://github.com/ConductionNL/.github" class="ghost_SGJf" target="_blank" rel="noopener noreferrer">GitHub</a></div></nav><div id="__docusaurus_skipToContent_fallback" class="theme-layout-main main-wrapper mainWrapper_z2l0"><div class="docsWrapper_hBAB"><button aria-label="Scroll back to top" class="clean-btn theme-back-to-top-button backToTopButton_sjWU" type="button"></button><div class="docRoot_UBD9"><aside class="theme-doc-sidebar-container docSidebarContainer_YfHR"><div class="sidebarViewport_aRkj"><div class="sidebar_njMd"><nav aria-label="Docs sidebar" class="menu thin-scrollbar menu_SIkG"><ul class="theme-doc-sidebar-menu menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-1 menu__list-item"><a class="menu__link" href="/WayOfWork/way-of-work/"><span title="How We Work" class="linkLabel_WmDU">How We Work</span></a></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="true" href="/WayOfWork/onboarding/"><span title="Working at Conduction" class="categoryLinkLabel_W154">Working at Conduction</span></a></div><ul class="menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/WayOfWork/onboarding/"><span title="Onboarding" class="linkLabel_WmDU">Onboarding</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/WayOfWork/organisation/"><span title="Organization" class="linkLabel_WmDU">Organization</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/WayOfWork/code-of-conduct/"><span title="Code of Conduct" class="linkLabel_WmDU">Code of Conduct</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/WayOfWork/vacancies/"><span title="Vacancies" class="linkLabel_WmDU">Vacancies</span></a></li></ul></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="true" href="/WayOfWork/spec-driven-development/"><span title="Building Software" class="categoryLinkLabel_W154">Building Software</span></a></div><ul class="menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/WayOfWork/spec-driven-development/"><span title="Spec-Driven Development" class="linkLabel_WmDU">Spec-Driven Development</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/WayOfWork/development-pipeline/"><span title="Development Pipeline" class="linkLabel_WmDU">Development Pipeline</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/WayOfWork/way-of-working/"><span title="Way of Working" class="linkLabel_WmDU">Way of Working</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/WayOfWork/contributing/"><span title="Contributing" class="linkLabel_WmDU">Contributing</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/WayOfWork/release-process/"><span title="Release Process" class="linkLabel_WmDU">Release Process</span></a></li></ul></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="true" href="/WayOfWork/customer-support/"><span title="Support &amp; Safety" class="categoryLinkLabel_W154">Support &amp; Safety</span></a></div><ul class="menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/WayOfWork/customer-support/"><span title="Customer Support" class="linkLabel_WmDU">Customer Support</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/iso/iso-intro/"><span title="ISO &amp; Quality" class="linkLabel_WmDU">ISO &amp; Quality</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/iso/incident-reporting/"><span title="Incident Reporting" class="linkLabel_WmDU">Incident Reporting</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/iso/security/"><span title="Security Policy" class="linkLabel_WmDU">Security Policy</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/iso/quality-policy/"><span title="Quality Policy" class="linkLabel_WmDU">Quality Policy</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/iso/security-policy/"><span title="Security Policy" class="linkLabel_WmDU">Security Policy</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/iso/privacy-policy/"><span title="Privacy &amp; AVG" class="linkLabel_WmDU">Privacy &amp; AVG</span></a></li></ul></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--active" href="/hydra/"><span title="Hydra" class="categoryLinkLabel_W154">Hydra</span></a><button aria-label="Collapse sidebar category &#x27;Hydra&#x27;" aria-expanded="true" type="button" class="clean-btn menu__caret"></button></div><ul class="menu__list"><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-2 menu__list-item"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret menu__link--active" role="button" aria-expanded="true" tabindex="0" href="/hydra/pipeline-overview/"><span title="Pipeline" class="categoryLinkLabel_W154">Pipeline</span></a></div><ul class="menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-3 menu__list-item"><a class="menu__link" tabindex="0" href="/hydra/pipeline-overview/"><span title="Pipeline Overview" class="linkLabel_WmDU">Pipeline Overview</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-3 menu__list-item"><a class="menu__link menu__link--active" aria-current="page" tabindex="0" href="/hydra/agentic-workflow/"><span title="Agentic Workflow" class="linkLabel_WmDU">Agentic Workflow</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-3 menu__list-item"><a class="menu__link" tabindex="0" href="/hydra/agent-configuration/"><span title="Agent Configuration" class="linkLabel_WmDU">Agent Configuration</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-3 menu__list-item"><a class="menu__link" tabindex="0" href="/hydra/container-architecture/"><span title="Container Architecture" class="linkLabel_WmDU">Container Architecture</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-3 menu__list-item"><a class="menu__link" tabindex="0" href="/hydra/deployment-models/"><span title="Deployment Models" class="linkLabel_WmDU">Deployment Models</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-3 menu__list-item"><a class="menu__link" tabindex="0" href="/hydra/github-workflow/"><span title="GitHub Workflow" class="linkLabel_WmDU">GitHub Workflow</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-3 menu__list-item"><a class="menu__link" tabindex="0" href="/hydra/context/"><span title="Context — Hydra Platform" class="linkLabel_WmDU">Context — Hydra Platform</span></a></li></ul></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-2 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" tabindex="0" href="/hydra/operations/"><span title="Operations" class="categoryLinkLabel_W154">Operations</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-2 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" tabindex="0" href="/hydra/retrospectives/decidesk-44-45-phase-g/"><span title="Retrospectives" class="categoryLinkLabel_W154">Retrospectives</span></a></div></li></ul></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist" href="/claude/"><span title="Using Claude" class="categoryLinkLabel_W154">Using Claude</span></a><button aria-label="Collapse sidebar category &#x27;Using Claude&#x27;" aria-expanded="true" type="button" class="clean-btn menu__caret"></button></div><ul class="menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/claude/getting-started/"><span title="Getting Started" class="linkLabel_WmDU">Getting Started</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/claude/walkthrough/"><span title="End-to-End Walkthrough" class="linkLabel_WmDU">End-to-End Walkthrough</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/claude/agents/"><span title="Available agents &amp; skills" class="linkLabel_WmDU">Available agents &amp; skills</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/claude/rad-platform/"><span title="Conduction RAD Platform" class="linkLabel_WmDU">Conduction RAD Platform</span></a></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-2 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" tabindex="0" href="/claude/workstation-setup/"><span title="Setup" class="categoryLinkLabel_W154">Setup</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-2 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" tabindex="0" href="/claude/workflow/"><span title="Workflow" class="categoryLinkLabel_W154">Workflow</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-2 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" tabindex="0" href="/claude/writing-specs/"><span title="Writing" class="categoryLinkLabel_W154">Writing</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-2 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" tabindex="0" href="/claude/testing/"><span title="Quality &amp; testing" class="categoryLinkLabel_W154">Quality &amp; testing</span></a></div></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/claude/retrofit/"><span title="Retrofit Playbook — bringing legacy apps under ADR-003&#x27;s @spec convention" class="linkLabel_WmDU">Retrofit Playbook — bringing legacy apps under ADR-003&#x27;s @spec convention</span></a></li></ul></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-1 menu__list-item"><a class="menu__link" href="/WayOfWork/about-this-manual/"><span title="About This Manual" class="linkLabel_WmDU">About This Manual</span></a></li></ul></nav></div></div></aside><main class="docMainContainer_TBSr"><div class="container padding-top--md padding-bottom--lg"><div class="row"><div class="col docItemCol_VOVn"><div class="docItemContainer_Djhp"><article><nav class="theme-doc-breadcrumbs breadcrumbsContainer_Z_bl" aria-label="Breadcrumbs"><ul class="breadcrumbs"><li class="breadcrumbs__item"><a aria-label="Home page" class="breadcrumbs__link" href="/"><svg viewBox="0 0 24 24" class="breadcrumbHomeIcon_YNFT"><path d="M10 19v-5h4v5c0 .55.45 1 1 1h3c.55 0 1-.45 1-1v-7h1.7c.46 0 .68-.57.33-.87L12.67 3.6c-.38-.34-.96-.34-1.34 0l-8.36 7.53c-.34.3-.13.87.33.87H5v7c0 .55.45 1 1 1h3c.55 0 1-.45 1-1z" fill="currentColor"></path></svg></a></li><li class="breadcrumbs__item"><a class="breadcrumbs__link" href="/hydra/"><span>Hydra</span></a></li><li class="breadcrumbs__item"><span class="breadcrumbs__link">Pipeline</span></li><li class="breadcrumbs__item breadcrumbs__item--active"><span class="breadcrumbs__link">Agentic Workflow</span></li></ul></nav><div class="tocCollapsible_ETCw theme-doc-toc-mobile tocMobile_ITEo"><button type="button" class="clean-btn tocCollapsibleButton_TO0P">On this page</button></div><div class="theme-doc-markdown markdown"><header><h1>Agentic Workflow</h1></header>
+<p>This document describes the automated steps that agents execute within the Hydra pipeline. Each step maps to a stage on the GitHub project board.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="pipeline-stages">Pipeline Stages<a href="#pipeline-stages" class="hash-link" aria-label="Direct link to Pipeline Stages" title="Direct link to Pipeline Stages" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="1-specs-input">1. Specs (Input)<a href="#1-specs-input" class="hash-link" aria-label="Direct link to 1. Specs (Input)" title="Direct link to 1. Specs (Input)" translate="no">​</a></h3>
+<p><strong>Triggered by:</strong> Card appearing in the Specs/Todo column
+<strong>Agent role:</strong> Builder (Al Gorithm)</p>
+<p>The Builder reads the OpenSpec change directory (<code>openspec/changes/&lt;name&gt;/</code>) and prepares the implementation context:</p>
+<ul>
+<li class="">Reads <code>tasks.md</code> — the canonical task list authored during the spec phase</li>
+<li class="">Parses requirements (MUST, SHOULD, MAY per RFC 2119) from <code>design.md</code> and <code>specs/</code></li>
+<li class="">Extracts acceptance criteria (GIVEN/WHEN/THEN scenarios) from task definitions</li>
+<li class="">Identifies files likely affected based on task scope</li>
+<li class="">Checks for conflicts with existing specs or in-progress changes</li>
+</ul>
+<blockquote>
+<p><strong>Note on tasks.md vs plan.json:</strong> OpenSpec uses <code>tasks.md</code> as the primary authoring
+artifact. A <code>plan.json</code> can optionally be generated from <code>tasks.md</code> by running
+<code>/opsx-plan-to-issues</code>, which adds GitHub Issue links and structured metadata for
+implementation tracking. The Builder reads <code>tasks.md</code> directly — <code>plan.json</code> is not
+required for the pipeline to function.</p>
+</blockquote>
+<p><strong>Output:</strong> Implementation context ready for the Apply stage</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="2-apply-build">2. Apply (Build)<a href="#2-apply-build" class="hash-link" aria-label="Direct link to 2. Apply (Build)" title="Direct link to 2. Apply (Build)" translate="no">​</a></h3>
+<p><strong>Triggered by:</strong> Plan ready
+<strong>Agent role:</strong> Builder (opus model)</p>
+<p>The agent implements the change:</p>
+<ul>
+<li class="">Creates the feature branch (<code>hydra/{spec-name}</code>) and pushes early (enables quality tests)</li>
+<li class="">Scaffolds new files if needed (controllers, views, stores, tests)</li>
+<li class="">Implements the feature following project conventions</li>
+<li class="">Writes tests matching the acceptance criteria</li>
+<li class="">Commits incrementally (one commit per logical unit of work)</li>
+<li class="">Spec path is auto-detected from the issue body (or overridden via <code>--spec-repo</code> flag)</li>
+</ul>
+<p><strong>Constraints:</strong></p>
+<ul>
+<li class="">Must follow the target app&#x27;s coding standards (PHPCS, ESLint, etc.)</li>
+<li class="">Must not introduce new linting errors</li>
+<li class="">Must not break existing tests</li>
+<li class="">Each commit must have a meaningful message</li>
+</ul>
+<p><strong>Output:</strong> Feature branch with implementation commits</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="3-automated-quality-tests">3. Automated Quality Tests<a href="#3-automated-quality-tests" class="hash-link" aria-label="Direct link to 3. Automated Quality Tests" title="Direct link to 3. Automated Quality Tests" translate="no">​</a></h3>
+<p><strong>Triggered by:</strong> Apply completes (branch pushed)
+<strong>Script:</strong> <code>scripts/run-quality.sh</code>
+<strong>Environment:</strong> Docker <code>php:X.Y-cli</code> container (PHP version read from <code>app-config.json</code>)
+<strong>Fix agent model:</strong> sonnet (targeted fixes)</p>
+<p>All quality checks run inside a Docker container -- nothing runs on the host PHP. The automated quality gate covers:</p>
+<ul>
+<li class=""><strong>PHP linting</strong> — <code>php -l</code> (syntax check)</li>
+<li class=""><strong>PHP code style</strong> — PHPCS (PHP_CodeSniffer)</li>
+<li class=""><strong>PHP mess detection</strong> — PHPMD</li>
+<li class=""><strong>PHP static analysis</strong> — Psalm, PHPStan</li>
+<li class=""><strong>PHP metrics</strong> — phpmetrics (complexity, coupling, maintainability)</li>
+<li class=""><strong>PHP dependency audit</strong> — <code>composer audit</code></li>
+<li class=""><strong>Frontend linting</strong> — ESLint, Stylelint</li>
+<li class=""><strong>Frontend dependency audit</strong> — <code>npm audit</code></li>
+<li class=""><strong>Unit tests</strong> — PHPUnit running inside a containerized Nextcloud + SQLite environment</li>
+<li class=""><strong>API tests</strong> — Newman collections via PHP built-in server (when enabled)</li>
+<li class=""><strong>Build verification</strong> — <code>npm run build</code> / <code>composer install</code> must succeed</li>
+</ul>
+<p>The <code>--keep-server</code> flag keeps the containerized Nextcloud instance running so the subsequent browser test stage can use it.</p>
+<blockquote>
+<p>SBOM generation, CVE scanning, and license compliance are handled by the organisation-wide quality workflow, not by this stage.</p>
+</blockquote>
+<p>If quality tests fail:</p>
+<ul>
+<li class="">Builder is re-launched in <strong>fix-quality mode</strong> (sonnet model, max 2 retries)</li>
+<li class="">If still failing after retries, the issue is labelled <code>needs-input</code> and escalated to a human</li>
+</ul>
+<p><strong>Output:</strong> Clean build with passing checks</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="3a-browser-ui-tests">3a. Browser UI Tests<a href="#3a-browser-ui-tests" class="hash-link" aria-label="Direct link to 3a. Browser UI Tests" title="Direct link to 3a. Browser UI Tests" translate="no"> ​</a></h3>
+<p><strong>Triggered by:</strong> Quality tests pass
+<strong>Script:</strong> <code>scripts/run-browser-tests.sh</code> (runs on HOST, not in Docker)
+<strong>Skill:</strong> <code>images/builder/skills/hydra-ui-test/SKILL.md</code>
+<strong>Model:</strong> sonnet
+<strong>Fix agent model:</strong> sonnet (targeted fixes)</p>
+<p>Browser UI tests run on the host machine using Claude CLI with Playwright MCP (headless Chromium). The script pre-extracts acceptance criteria from the spec into the prompt to avoid wasting tokens on file reading.</p>
+<p>The browser tester:</p>
+<ul>
+<li class="">Logs into Nextcloud and navigates to the target app</li>
+<li class="">Tests acceptance criteria (GIVEN/WHEN/THEN scenarios from the spec)</li>
+<li class="">Tests CRUD flows, navigation, forms, and error states</li>
+<li class="">Checks for console errors and network failures</li>
+<li class="">Returns a structured verdict JSON with CRITICAL/WARNING findings</li>
+</ul>
+<p>If browser tests fail:</p>
+<ul>
+<li class="">Builder is re-launched in <strong>fix-browser mode</strong> (sonnet model, max 2 retries)</li>
+<li class="">If still failing after retries, the issue is labelled <code>needs-input</code> and escalated to a human</li>
+</ul>
+<p><strong>Output:</strong> Structured verdict JSON confirming UI works as specified</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="4-archive">4. Archive<a href="#4-archive" class="hash-link" aria-label="Direct link to 4. Archive" title="Direct link to 4. Archive" translate="no">​</a></h3>
+<p><strong>Triggered by:</strong> Validation passes
+<strong>Agent role:</strong> Publisher</p>
+<p>The agent packages the change for review:</p>
+<ul>
+<li class="">Creates the Pull Request with structured description</li>
+<li class="">Links the PR back to the GitHub Issue / board card</li>
+<li class="">Moves the card to In Progress</li>
+<li class="">Updates the OpenSpec change status to <code>pr-created</code></li>
+</ul>
+<p><strong>PR description format:</strong></p>
+<div class="language-markdown codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-markdown codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token title important punctuation" style="color:rgb(199, 146, 234)">##</span><span class="token title important"> Summary</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"></span><span class="token comment" style="color:rgb(105, 112, 152);font-style:italic">&lt;!-- What this change does, in 1-3 bullets --&gt;</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"></span><span class="token title important punctuation" style="color:rgb(199, 146, 234)">##</span><span class="token title important"> Spec Reference</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"></span><span class="token comment" style="color:rgb(105, 112, 152);font-style:italic">&lt;!-- Link to the OpenSpec document --&gt;</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"></span><span class="token title important punctuation" style="color:rgb(199, 146, 234)">##</span><span class="token title important"> Changes</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"></span><span class="token comment" style="color:rgb(105, 112, 152);font-style:italic">&lt;!-- File-level summary of what changed --&gt;</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"></span><span class="token title important punctuation" style="color:rgb(199, 146, 234)">##</span><span class="token title important"> Test Coverage</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"></span><span class="token comment" style="color:rgb(105, 112, 152);font-style:italic">&lt;!-- Which acceptance criteria are covered by tests --&gt;</span><br></div></code></pre></div></div>
+<p><strong>Output:</strong> Open PR ready for review</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="5-code-review">5. Code Review<a href="#5-code-review" class="hash-link" aria-label="Direct link to 5. Code Review" title="Direct link to 5. Code Review" translate="no">​</a></h3>
+<p><strong>Triggered by:</strong> Quality tests pass
+<strong>Agent role:</strong> Code Reviewer (sonnet model)
+<strong>Runs in parallel with:</strong> Security Review (stage 6)</p>
+<p>The agent reviews the PR for:</p>
+<ul>
+<li class=""><strong>Correctness</strong> — Does the implementation match the spec?</li>
+<li class=""><strong>Style</strong> — Does it follow project conventions?</li>
+<li class=""><strong>Architecture</strong> — Are patterns used correctly? Any unnecessary complexity?</li>
+<li class=""><strong>Edge cases</strong> — Are error paths handled? Are inputs validated at boundaries?</li>
+<li class=""><strong>Performance</strong> — Any obvious N+1 queries, unnecessary re-renders, or heavy operations?</li>
+</ul>
+<p>Review results are posted as PR comments. Issues are categorised:</p>
+<ul>
+<li class=""><strong>CRITICAL</strong> — Must fix before merge</li>
+<li class=""><strong>WARNING</strong> — Should fix, but not a blocker</li>
+<li class=""><strong>SUGGESTION</strong> — Nice to have, at reviewer&#x27;s discretion</li>
+</ul>
+<p>If CRITICAL or WARNING issues are found, the Builder is re-launched in fix mode (sonnet model, max 3 retries). If the fix budget is exhausted, the issue is labelled <code>needs-input</code> and escalated to a human. Round-based verdict pairing uses marker comments to track which review round each fix addresses.</p>
+<p><strong>Output:</strong> Review comments on the PR</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="6-security">6. Security<a href="#6-security" class="hash-link" aria-label="Direct link to 6. Security" title="Direct link to 6. Security" translate="no">​</a></h3>
+<p><strong>Triggered by:</strong> Quality tests pass (runs in parallel with Code Review)
+<strong>Agent role:</strong> Security Reviewer (Clyde Barcode, sonnet model)</p>
+<p>The agent reviews the new/changed code for security vulnerabilities:</p>
+<ul>
+<li class=""><strong>OWASP Top 10</strong> — SQL injection, XSS, command injection, LDAP injection, etc.</li>
+<li class=""><strong>Secret detection</strong> — No API keys, passwords, or tokens hardcoded in code</li>
+<li class=""><strong>Unsafe patterns</strong> — Insecure deserialization, broken auth, missing input validation</li>
+<li class=""><strong>SAST scanning</strong> — Semgrep with OWASP rules against the changed files</li>
+</ul>
+<blockquote>
+<p>Dependency CVE scanning, SBOM generation, and license compliance are handled by the organisation-wide quality workflow, not by this agent.</p>
+</blockquote>
+<p>Security findings are posted as PR comments with severity ratings (CRITICAL / WARNING / INFO). WARNING-level findings also generate separate GitHub Issues labelled <code>finding</code> for tracking.</p>
+<p><strong>Output:</strong> Security code review on the PR, finding issues for WARNINGs</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="7-pr-assigned-human-gate">7. PR Assigned (Human Gate)<a href="#7-pr-assigned-human-gate" class="hash-link" aria-label="Direct link to 7. PR Assigned (Human Gate)" title="Direct link to 7. PR Assigned (Human Gate)" translate="no">​</a></h3>
+<p><strong>Triggered by:</strong> Both Code Review and Security pass
+<strong>Board column:</strong> Review</p>
+<p>The PR is assigned to a human reviewer. This is the single mandatory human approval point in the pipeline. The human reviews:</p>
+<ul>
+<li class="">Does the change make sense for the product?</li>
+<li class="">Are there concerns the agents missed?</li>
+<li class="">Is this the right time to ship this change?</li>
+</ul>
+<p>The human approves, requests changes, or rejects.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="8-merge-human">8. Merge (Human)<a href="#8-merge-human" class="hash-link" aria-label="Direct link to 8. Merge (Human)" title="Direct link to 8. Merge (Human)" translate="no">​</a></h3>
+<p><strong>Triggered by:</strong> Human approves the PR
+<strong>Agent role:</strong> None — auto-merge intentionally disabled, humans must review and merge</p>
+<p>The human merges the PR (squash or merge commit per project convention).</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="9-archive-post-merge">9. Archive (post-merge)<a href="#9-archive-post-merge" class="hash-link" aria-label="Direct link to 9. Archive (post-merge)" title="Direct link to 9. Archive (post-merge)" translate="no">​</a></h3>
+<p><strong>Triggered by:</strong> Human has merged the PR
+<strong>Script:</strong> <code>scripts/run-archive.sh</code></p>
+<p>After the PR is merged, run the archive step to formalize the change:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">scripts/run-archive.sh --app-path &lt;path&gt; --change-name &lt;name&gt; [--repo-path owner/repo] [--issue-number N]</span><br></div></code></pre></div></div>
+<p>The archive step:</p>
+<ol>
+<li class=""><strong>Sync delta specs</strong> — copies specs from the change&#x27;s <code>specs/</code> directory to the
+app&#x27;s main <code>openspec/specs/</code> directory</li>
+<li class=""><strong>Generate test scenarios</strong> — converts acceptance criteria from <code>tasks.md</code> into
+reusable <code>TS-NNN-*.md</code> files in <code>{app}/test-scenarios/</code>. These are auto-picked
+up by <code>/test-functional</code>, <code>/test-app</code>, and <code>/test-scenario-run</code> in future runs.</li>
+<li class=""><strong>Update CHANGELOG.md</strong> — adds completed tasks under the current version
+(Keep a Changelog format)</li>
+<li class=""><strong>Move to archive</strong> — moves the change to <code>openspec/changes/archive/YYYY-MM-DD-{name}/</code></li>
+<li class=""><strong>Close GitHub issue</strong> — if <code>--issue-number</code> and <code>--repo-path</code> are provided</li>
+</ol>
+<p>Test scenarios accumulate over time — each archived change adds scenarios, building
+a regression test library that future browser tests can execute.</p>
+<p><strong>Output:</strong> Archived change, test scenarios, updated changelog</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="traceability">Traceability<a href="#traceability" class="hash-link" aria-label="Direct link to Traceability" title="Direct link to Traceability" translate="no">​</a></h2>
+<p>Every code change is traceable to its spec through two independent paths:</p>
+<p><strong>Path 1: Git history</strong></p>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">code line → git blame → commit &quot;feat: add columns (#82)&quot; → PR &quot;Closes #82&quot; → Issue #82 → spec</span><br></div></code></pre></div></div>
+<p><strong>Path 2: PHPDoc <code>@spec</code> tag</strong></p>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">code line → docblock @spec openspec/changes/kanban-mvp/tasks.md#task-1 → spec</span><br></div></code></pre></div></div>
+<p>The Builder adds <code>@spec</code> tags at three levels:</p>
+<ul>
+<li class=""><strong>File docblock</strong>: links the file to the change that created it</li>
+<li class=""><strong>Class docblock</strong>: links the class to the spec requirement</li>
+<li class=""><strong>Method docblock</strong>: links each method to the specific task</li>
+</ul>
+<p>Multiple <code>@spec</code> tags are supported (code touched by multiple changes over time).
+The Code Reviewer checks for missing <code>@spec</code> tags as part of architecture compliance.</p>
+<p>Branch naming follows: <code>feature/{issue-number}/{change-name}</code> (e.g., <code>feature/82/kanban-mvp</code>).
+All commits include <code>(#issue-number)</code>. PR body starts with <code>Closes #N</code>.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="agent-personas">Agent Personas<a href="#agent-personas" class="hash-link" aria-label="Direct link to Agent Personas" title="Direct link to Agent Personas" translate="no">​</a></h2>
+<p>Each pipeline stage is handled by a named agent persona. These personas have Conduction company profiles and contribute visibly to the repository. See <a class="" href="/hydra/agent-configuration/">Agent Configuration</a> for persona details.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="error-handling">Error Handling<a href="#error-handling" class="hash-link" aria-label="Direct link to Error Handling" title="Direct link to Error Handling" translate="no">​</a></h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Scenario</th><th>Response</th></tr></thead><tbody><tr><td>Build fails</td><td>Agent retries up to 3 times with different approaches</td></tr><tr><td>Quality tests fail</td><td>Builder fix-quality mode (sonnet, max 2 retries); escalates with <code>needs-input</code> label</td></tr><tr><td>Browser UI tests fail</td><td>Builder fix-browser mode (sonnet, max 2 retries); escalates with <code>needs-input</code> label</td></tr><tr><td>Review finds CRITICAL/WARNING</td><td>Builder fix mode (sonnet, max 3 retries); escalates with <code>needs-input</code> label if budget exhausted</td></tr><tr><td>Security vulnerability found in code</td><td>PR blocked; Builder attempts fix based on Security Reviewer&#x27;s findings</td></tr><tr><td>Spec ambiguity</td><td>Agent flags the ambiguity as a PR comment; human resolves</td></tr><tr><td>Rate limit hit</td><td>Agent backs off and retries after cooldown</td></tr><tr><td>Container crash</td><td>Pipeline retries once, then logs the failure; card stays in current column</td></tr><tr><td>OAuth token expired</td><td>Token is refreshed before each container launch</td></tr></tbody></table>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="concurrency">Concurrency<a href="#concurrency" class="hash-link" aria-label="Direct link to Concurrency" title="Direct link to Concurrency" translate="no">​</a></h2>
+<p>Multiple changes can be in-progress simultaneously. Each change operates on its own branch and its own board card. Concurrent pipeline isolation is achieved through issue-based temp directories (<code>/tmp/hydra-{issue-number}/</code>). Agents must:</p>
+<ul>
+<li class="">Use git worktrees for parallel same-repo work</li>
+<li class="">Not modify shared configuration without coordination</li>
+<li class="">Detect and flag merge conflicts early</li>
+</ul>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="implementation-status">Implementation Status<a href="#implementation-status" class="hash-link" aria-label="Direct link to Implementation Status" title="Direct link to Implementation Status" translate="no">​</a></h2>
+<p>The following stages are fully implemented in the current pipeline:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Stage</th><th>Status</th><th>Notes</th></tr></thead><tbody><tr><td>1. Specs (Input)</td><td>Implemented</td><td>Builder reads <code>tasks.md</code>; spec path auto-detected from issue body</td></tr><tr><td>2. Apply (Build)</td><td>Implemented</td><td>Feature branch creation, code implementation (opus), early branch push</td></tr><tr><td>3. Automated Quality Tests</td><td>Implemented</td><td><code>scripts/run-quality.sh</code> — all checks inside Docker php:X.Y-cli; <code>--keep-server</code> flag</td></tr><tr><td>3a. Fix Quality</td><td>Implemented</td><td>Builder fix-quality mode (sonnet, max 2 retries)</td></tr><tr><td>3b. Browser UI Tests</td><td>Implemented</td><td><code>scripts/run-browser-tests.sh</code> — Playwright MCP on host; structured verdict JSON</td></tr><tr><td>3c. Fix Browser</td><td>Implemented</td><td>Builder fix-browser mode (sonnet, max 2 retries)</td></tr><tr><td>4. Archive</td><td>Implemented</td><td>Draft PR creation with structured description</td></tr><tr><td>5. Code Review</td><td>Implemented</td><td>Parallel with Security (sonnet); posts CRITICAL/WARNING/SUGGESTION</td></tr><tr><td>6. Security</td><td>Implemented</td><td>Parallel with Code Review (sonnet); Semgrep + Gitleaks + Trivy</td></tr><tr><td>6a. Fix Review Findings</td><td>Implemented</td><td>Builder fix mode (sonnet, max 3 retries); escalates with <code>needs-input</code> label</td></tr><tr><td>7. PR Assigned</td><td>Implemented</td><td>Human gate — manual review required</td></tr><tr><td>8. Merge</td><td>Manual</td><td>Auto-merge intentionally disabled -- humans must review and merge</td></tr></tbody></table>
+<p>Additional implemented features:</p>
+<ul>
+<li class=""><strong>Parallel reviewer execution</strong> — Code Review and Security Review run simultaneously (halves wall time)</li>
+<li class=""><strong>Browser UI testing</strong> — Playwright MCP on host with pre-extracted acceptance criteria; structured CRITICAL/WARNING verdicts</li>
+<li class=""><strong>Board card auto-movement</strong> — via GitHub Projects v2 API (<code>docs/templates/hydra-board-sync.yml</code>)</li>
+<li class=""><strong>Findings as separate issues</strong> — WARNING-level findings create standalone <code>finding</code>-labelled issues</li>
+<li class=""><strong>Pipeline status comment</strong> — <code>scripts/lib/pipeline-comment.sh</code> posts progress updates on the issue</li>
+<li class=""><strong>Retry on container crash</strong> — 1 automatic retry before escalation</li>
+<li class=""><strong>OAuth token refresh</strong> — token refreshed before each container launch</li>
+<li class=""><strong>Round-based verdict pairing</strong> — marker comments track which review round each fix addresses</li>
+<li class=""><strong>Structured log aggregation</strong> — logs written to <code>logs/pipeline-{timestamp}/</code></li>
+<li class=""><strong>Poll mode</strong> — <code>--poll</code> flag for continuous board monitoring</li>
+<li class=""><strong>Multi-repo spec support</strong> — <code>--spec-repo</code> flag for specs in a different repository</li>
+<li class=""><strong>Concurrent pipeline isolation</strong> — issue-based temp directories for parallel runs</li>
+</ul>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="open-questions">Open Questions<a href="#open-questions" class="hash-link" aria-label="Direct link to Open Questions" title="Direct link to Open Questions" translate="no">​</a></h2>
+<ul>
+<li class="">Should agents be able to split a spec into multiple PRs if it&#x27;s too large?</li>
+<li class="">How do we handle cross-app changes that span multiple repositories?</li>
+</ul></div><footer class="theme-doc-footer docusaurus-mt-lg"><div class="row margin-top--sm theme-doc-footer-edit-meta-row"><div class="col noPrint_WFHX"><a href="https://github.com/ConductionNL/.github/tree/main/../docs/hydra/agentic-workflow.md" target="_blank" rel="noopener noreferrer" class="theme-edit-this-page"><svg fill="currentColor" height="20" width="20" viewBox="0 0 40 40" class="iconEdit_Z9Sw" aria-hidden="true"><g><path d="m34.5 11.7l-3 3.1-6.3-6.3 3.1-3q0.5-0.5 1.2-0.5t1.1 0.5l3.9 3.9q0.5 0.4 0.5 1.1t-0.5 1.2z m-29.5 17.1l18.4-18.5 6.3 6.3-18.4 18.4h-6.3v-6.2z"></path></g></svg>Edit this page</a></div><div class="col lastUpdated_JAkA"></div></div></footer></article><nav class="docusaurus-mt-lg pagination-nav" aria-label="Docs pages"><a class="pagination-nav__link pagination-nav__link--prev" href="/hydra/pipeline-overview/"><div class="pagination-nav__sublabel">Previous</div><div class="pagination-nav__label">Pipeline Overview</div></a><a class="pagination-nav__link pagination-nav__link--next" href="/hydra/agent-configuration/"><div class="pagination-nav__sublabel">Next</div><div class="pagination-nav__label">Agent Configuration</div></a></nav></div></div><div class="col col--3"><div class="tableOfContents_bqdL thin-scrollbar theme-doc-toc-desktop"><ul class="table-of-contents table-of-contents__left-border"><li><a href="#pipeline-stages" class="table-of-contents__link toc-highlight">Pipeline Stages</a><ul><li><a href="#1-specs-input" class="table-of-contents__link toc-highlight">1. Specs (Input)</a></li><li><a href="#2-apply-build" class="table-of-contents__link toc-highlight">2. Apply (Build)</a></li><li><a href="#3-automated-quality-tests" class="table-of-contents__link toc-highlight">3. Automated Quality Tests</a></li><li><a href="#3a-browser-ui-tests" class="table-of-contents__link toc-highlight">3a. Browser UI Tests</a></li><li><a href="#4-archive" class="table-of-contents__link toc-highlight">4. Archive</a></li><li><a href="#5-code-review" class="table-of-contents__link toc-highlight">5. Code Review</a></li><li><a href="#6-security" class="table-of-contents__link toc-highlight">6. Security</a></li><li><a href="#7-pr-assigned-human-gate" class="table-of-contents__link toc-highlight">7. PR Assigned (Human Gate)</a></li><li><a href="#8-merge-human" class="table-of-contents__link toc-highlight">8. Merge (Human)</a></li><li><a href="#9-archive-post-merge" class="table-of-contents__link toc-highlight">9. Archive (post-merge)</a></li></ul></li><li><a href="#traceability" class="table-of-contents__link toc-highlight">Traceability</a></li><li><a href="#agent-personas" class="table-of-contents__link toc-highlight">Agent Personas</a></li><li><a href="#error-handling" class="table-of-contents__link toc-highlight">Error Handling</a></li><li><a href="#concurrency" class="table-of-contents__link toc-highlight">Concurrency</a></li><li><a href="#implementation-status" class="table-of-contents__link toc-highlight">Implementation Status</a></li><li><a href="#open-questions" class="table-of-contents__link toc-highlight">Open Questions</a></li></ul></div></div></div></div></main></div></div></div><footer class="canal-footer" aria-label="Site footer"><div class="skyline" role="presentation"></div><div class="kade"><div class="kade-items"><svg class="ki ki-bike-1" width="22" height="16" viewBox="0 -2 22 18" aria-hidden="true"><g stroke="var(--c-cobalt-900)" stroke-width="1.4" fill="none" stroke-linecap="round"><circle cx="4" cy="12" r="3"></circle><circle cx="18" cy="12" r="3"></circle><line x1="4" y1="12" x2="11" y2="6"></line><line x1="11" y1="6" x2="18" y2="12"></line><line x1="11" y1="6" x2="14" y2="12"></line><line x1="11" y1="6" x2="11" y2="3"></line><line x1="11" y1="3" x2="14" y2="6"></line></g><circle cx="11" cy="1.5" r="1.6" fill="var(--c-cobalt-900)"></circle></svg><svg class="ki ki-car-1" width="38" height="16" viewBox="0 0 38 16" aria-hidden="true"><rect x="0" y="6" width="38" height="6" rx="2" fill="#C8482F"></rect><path d="M 5,6 L 9,2 L 29,2 L 33,6 Z" fill="#C8482F"></path><rect x="11" y="3" width="6" height="3" fill="rgba(255,255,255,0.5)"></rect><rect x="20" y="3" width="6" height="3" fill="rgba(255,255,255,0.5)"></rect><circle cx="9" cy="13" r="2" fill="var(--c-cobalt-900)"></circle><circle cx="29" cy="13" r="2" fill="var(--c-cobalt-900)"></circle></svg><svg class="ki ki-bike-2" width="22" height="16" viewBox="0 -2 22 18" aria-hidden="true"><g stroke="var(--c-cobalt-900)" stroke-width="1.4" fill="none" stroke-linecap="round"><circle cx="4" cy="12" r="3"></circle><circle cx="18" cy="12" r="3"></circle><line x1="4" y1="12" x2="11" y2="6"></line><line x1="11" y1="6" x2="18" y2="12"></line><line x1="11" y1="6" x2="14" y2="12"></line><line x1="11" y1="6" x2="11" y2="3"></line><line x1="11" y1="3" x2="14" y2="6"></line></g><circle cx="11" cy="1.5" r="1.6" fill="var(--c-cobalt-900)"></circle></svg><svg class="ki ki-car-2" width="38" height="16" viewBox="0 0 38 16" aria-hidden="true"><rect x="0" y="6" width="38" height="6" rx="2" fill="var(--c-cobalt-900)"></rect><path d="M 5,6 L 9,2 L 29,2 L 33,6 Z" fill="var(--c-cobalt-900)"></path><rect x="11" y="3" width="6" height="3" fill="rgba(255,255,255,0.4)"></rect><rect x="20" y="3" width="6" height="3" fill="rgba(255,255,255,0.4)"></rect><circle cx="9" cy="13" r="2" fill="#C8482F"></circle><circle cx="29" cy="13" r="2" fill="#C8482F"></circle></svg></div></div><div class="water"><div class="canal-items"><svg class="ci ci-cruise" width="120" height="28" viewBox="0 -10 120 28" aria-hidden="true"><line x1="2" y1="14" x2="2" y2="-9" stroke="var(--c-orange-knvb)" stroke-width="0.9"></line><rect x="2.5" y="-9" width="9" height="2" fill="#AE1C28"></rect><rect x="2.5" y="-7" width="9" height="2" fill="#FFFFFF"></rect><rect x="2.5" y="-5" width="9" height="2" fill="#21468B"></rect><path d="M 0,16 L 6,18 L 114,18 L 120,16 L 120,11 L 0,11 Z" fill="var(--c-orange-knvb)"></path><rect x="8" y="5" width="104" height="6" fill="var(--c-orange-knvb)"></rect><path d="M 8,5 Q 60,0 112,5 L 8,5 Z" fill="var(--c-orange-knvb)"></path><g fill="rgba(255,247,210,0.85)"><rect x="14" y="7" width="6" height="3"></rect><rect x="22" y="7" width="6" height="3"></rect><rect x="30" y="7" width="6" height="3"></rect><rect x="38" y="7" width="6" height="3"></rect><rect x="46" y="7" width="6" height="3"></rect><rect x="54" y="7" width="6" height="3"></rect><rect x="62" y="7" width="6" height="3"></rect><rect x="70" y="7" width="6" height="3"></rect><rect x="78" y="7" width="6" height="3"></rect><rect x="86" y="7" width="6" height="3"></rect><rect x="94" y="7" width="6" height="3"></rect><rect x="102" y="7" width="6" height="3"></rect></g></svg><svg class="ci ci-sloep" width="50" height="20" viewBox="0 -2 50 20" aria-hidden="true"><path d="M 0,12 L 4,16 L 46,16 L 50,12 L 50,8 L 0,8 Z" fill="var(--c-orange-knvb)"></path><rect x="20" y="2" width="12" height="6" rx="1" fill="var(--c-orange-knvb)"></rect><circle cx="26" cy="0" r="1.4" fill="var(--c-orange-knvb)"></circle></svg><svg class="ci ci-row" width="44" height="16" viewBox="-2 0 48 16" aria-hidden="true"><path d="M 0,10 L 4,14 L 40,14 L 44,10 Z" fill="var(--c-orange-knvb)"></path><line x1="8" y1="10" x2="0" y2="3" stroke="var(--c-orange-knvb)" stroke-width="1.2" stroke-linecap="round"></line><line x1="36" y1="10" x2="44" y2="3" stroke="var(--c-orange-knvb)" stroke-width="1.2" stroke-linecap="round"></line><circle cx="22" cy="7" r="1.6" fill="var(--c-orange-knvb)"></circle></svg><svg class="ci ci-swim" width="26" height="10" viewBox="-3 0 30 10" aria-hidden="true"><ellipse cx="13" cy="6" rx="7" ry="1.4" fill="var(--c-orange-knvb)"></ellipse><circle cx="17" cy="4" r="1.7" fill="var(--c-orange-knvb)"></circle><line x1="13" y1="5" x2="11" y2="3" stroke="var(--c-orange-knvb)" stroke-width="1" stroke-linecap="round"></line><line x1="-3" y1="6" x2="2" y2="6" stroke="var(--c-orange-knvb)" stroke-width="0.7" opacity="0.55"></line><line x1="0" y1="8" x2="3" y2="8" stroke="var(--c-orange-knvb)" stroke-width="0.7" opacity="0.4"></line></svg><svg class="ci ci-periscope" width="14" height="26" viewBox="-3 -2 18 28" aria-hidden="true"><rect x="4" y="4" width="2" height="18" fill="var(--c-orange-knvb)"></rect><rect x="0" y="0" width="9" height="3" fill="var(--c-orange-knvb)"></rect><rect x="4" y="3" width="2" height="2" fill="var(--c-orange-knvb)"></rect><ellipse cx="5" cy="24" rx="7" ry="0.9" fill="var(--c-orange-knvb)" opacity="0.5"></ellipse></svg><svg class="ci ci-whale" width="76" height="18" viewBox="-3 -4 82 22" aria-hidden="true"><path d="M 0,12 Q 0,4 26,3 Q 54,2 64,7 L 72,4 L 68,9 L 72,14 L 64,11 Q 54,14 26,14 Q 6,14 0,12 Z" fill="var(--c-orange-knvb)"></path><g opacity="0.55" stroke="var(--c-orange-knvb)" stroke-width="1" stroke-linecap="round"><line x1="22" y1="2" x2="20" y2="-3"></line><line x1="25" y1="2" x2="25" y2="-4"></line><line x1="28" y1="2" x2="30" y2="-3"></line></g></svg><svg class="ci ci-hover" width="74" height="26" viewBox="0 -4 74 28" aria-hidden="true"><ellipse cx="37" cy="22" rx="37" ry="2.5" fill="var(--c-orange-knvb)" opacity="0.4"></ellipse><path d="M 6,18 L 10,10 L 64,10 L 68,18 Z" fill="var(--c-orange-knvb)"></path><path d="M 14,10 Q 37,-4 60,10 L 14,10 Z" fill="var(--c-orange-knvb)"></path><ellipse cx="37" cy="4" rx="16" ry="3.2" fill="rgba(255,247,210,0.7)"></ellipse><polygon points="37,11 42,13.5 42,16.5 37,19 32,16.5 32,13.5" fill="#FFFFFF"></polygon><text x="37" y="17.4" font-size="4" text-anchor="middle" fill="var(--c-orange-knvb)" font-family="sans-serif" font-weight="900">C</text><g stroke="var(--c-orange-knvb)" stroke-width="0.7" opacity="0.6"><line x1="8" y1="22" x2="12" y2="22"></line><line x1="16" y1="22" x2="20" y2="22"></line><line x1="26" y1="22" x2="30" y2="22"></line><line x1="36" y1="22" x2="40" y2="22"></line><line x1="46" y1="22" x2="50" y2="22"></line><line x1="56" y1="22" x2="60" y2="22"></line></g></svg></div><svg class="canal-waves" viewBox="0 0 1400 500" preserveAspectRatio="none" aria-hidden="true"><path class="w1" d="M 0,96 L 140,82 L 280,96 L 420,82 L 560,96 L 700,82 L 840,96 L 980,82 L 1120,96 L 1260,82 L 1400,96"></path><path class="w2" d="M 0,206 L 180,182 L 360,206 L 540,182 L 720,206 L 900,182 L 1080,206 L 1260,182 L 1400,200"></path><path class="w3" d="M 0,362 L 220,332 L 440,362 L 660,332 L 880,362 L 1100,332 L 1320,362 L 1400,348"></path></svg><div class="footer-grid"><div class="brand"><div class="wm">Conduction</div><p>Open-source apps for <span class="next-blue">Nextcloud</span>. Built and maintained by Conduction in Amsterdam, released under EUPL-1.2.</p><div class="triad"><span><span class="h"></span>Conduction<!-- --> <!-- -->· <span class="next-blue">Nextcloud</span></span></div><div class="socials"><a href="https://github.com/ConductionNL" aria-label="GitHub" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="filled" d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.04 1.53 1.04.9 1.53 2.36 1.09 2.93.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.6 9.6 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.93.36.31.68.92.68 1.86v2.76c0 .27.18.58.69.48A10 10 0 0 0 12 2z"></path></svg></a><a href="https://www.linkedin.com/company/conduction" aria-label="LinkedIn" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-4 0v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle class="filled" cx="4" cy="4" r="2"></circle></svg></a><a href="mailto:info@conduction.nl" aria-label="Email info@conduction.nl"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 7l9 6 9-6"></path></svg></a><a href="tel:+31853036840" aria-label="Phone +31 (0)85 303 6840"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.72 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0 1 22 16.92z"></path></svg></a><a href="https://maps.google.com/?q=Lauriergracht+14h+Amsterdam" aria-label="Lauriergracht 14h, Amsterdam, open in Google Maps" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg></a></div></div><div><h4>Documentation</h4><ul><li><a href="https://github.com/orgs/ConductionNL/projects/4" target="_blank" rel="noopener noreferrer">Roadmap</a></li><li><a href="/claude/">Claude workflow</a></li><li><a href="/iso/">ISO compliance</a></li></ul></div><div><h4>Conduction</h4><ul><li><a href="https://conduction.nl/about" target="_blank" rel="noopener noreferrer">About</a></li><li><a href="https://conduction.nl/about#opensource" target="_blank" rel="noopener noreferrer">Open source</a></li><li><a href="https://conduction.nl/about#team" target="_blank" rel="noopener noreferrer">Team</a></li><li><a href="https://conduction.nl/iso" target="_blank" rel="noopener noreferrer">ISO</a></li></ul></div><div><h4>Documentatie</h4><ul><li><a href="https://identity.conduction.nl/" target="_blank" rel="noopener noreferrer">Brand book</a></li><li><a href="https://identity.conduction.nl/diagrams/" target="_blank" rel="noopener noreferrer">Diagram set</a></li></ul></div></div><div class="legal-bar"><div class="left"><span>Conduction B.V. · KvK 76741850 · BTW NL860784241B01 · IBAN NL51 ABNA 0868951550 · Lauriergracht 14h, 1016 RR Amsterdam · 2026</span><span class="legal-links"><a href="/privacy/">Privacy</a><span class="sep">·</span><a href="/terms/">Terms</a><span class="sep">·</span><a href="/iso/">ISO</a></span></div><div class="right"><a class="iso-badge" aria-label="ISO 9001:2015 certified, see details" href="/iso/"><span class="iso-mark">ISO</span><span class="iso-num">9001:2015</span></a><a class="iso-badge" aria-label="ISO 27001:2022 certified, see details" href="/iso/"><span class="iso-mark">ISO</span><span class="iso-num">27001:2022</span></a></div></div></div></footer><div style="display:none" aria-hidden="true">
+      <template id="tpl-h-a">
+        <svg class="house h-a" viewBox="0 -2 80 202" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,200 L 0,38 L 8,38 L 8,26 L 16,26 L 16,14 L 24,14 L 24,8 L 56,8 L 56,14 L 64,14 L 64,26 L 72,26 L 72,38 L 80,38 L 80,200 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="22" y="68" width="10" height="16" fill="rgba(255,247,210,0.95)"/>
+          <rect x="48" y="68" width="10" height="16" fill="rgba(11,32,73,0.35)"/>
+          <rect x="22" y="98" width="10" height="16" fill="rgba(11,32,73,0.35)"/>
+          <rect x="48" y="98" width="10" height="16" fill="rgba(255,247,210,0.6)"/>
+          <rect x="22" y="128" width="10" height="16" fill="rgba(11,32,73,0.35)"/>
+          <rect x="48" y="128" width="10" height="16" fill="rgba(11,32,73,0.35)"/>
+          <rect x="32" y="160" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+      <template id="tpl-h-b">
+        <svg class="house h-b" viewBox="0 0 100 220" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,220 L 0,58 L 8,58 L 8,47 L 16,47 L 16,36 L 24,36 L 24,25 L 32,25 L 32,14 L 50,4 L 68,14 L 68,25 L 76,25 L 76,36 L 84,36 L 84,47 L 92,47 L 92,58 L 100,58 L 100,220 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="14" y="80" width="14" height="20" fill="rgba(255,247,210,0.85)"/>
+          <rect x="43" y="80" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="72" y="80" width="14" height="20" fill="rgba(255,247,210,0.55)"/>
+          <rect x="14" y="115" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="43" y="115" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="72" y="115" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="14" y="150" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="43" y="150" width="14" height="20" fill="rgba(255,247,210,0.7)"/>
+          <rect x="72" y="150" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="42" y="180" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+      <template id="tpl-h-c">
+        <svg class="house h-c" viewBox="0 0 70 240" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,240 L 0,48 L 5,48 L 5,41 L 10,41 L 10,34 L 15,34 L 15,27 L 20,27 L 20,20 L 25,20 L 25,15 L 45,15 L 45,20 L 50,20 L 50,27 L 55,27 L 55,34 L 60,34 L 60,41 L 65,41 L 65,48 L 70,48 L 70,240 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="14" y="70" width="12" height="18" fill="rgba(255,247,210,0.55)"/>
+          <rect x="44" y="70" width="12" height="18" fill="rgba(255,247,210,0.85)"/>
+          <rect x="14" y="100" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="44" y="100" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="14" y="130" width="12" height="18" fill="rgba(255,247,210,0.7)"/>
+          <rect x="44" y="130" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="14" y="160" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="44" y="160" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="27" y="200" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+      <template id="tpl-h-d">
+        <svg class="house h-d" viewBox="0 -10 90 180" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,170 L 0,30 L 8,30 L 8,20 L 16,20 L 16,10 L 24,10 L 24,4 L 66,4 L 66,10 L 74,10 L 74,20 L 82,20 L 82,30 L 90,30 L 90,170 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="12" y="60" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="38" y="60" width="14" height="20" fill="rgba(255,247,210,0.85)"/>
+          <rect x="64" y="60" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="12" y="100" width="14" height="20" fill="rgba(255,247,210,0.6)"/>
+          <rect x="38" y="100" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="64" y="100" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="37" y="130" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+      <template id="tpl-h-e">
+        <svg class="house h-e" viewBox="0 0 95 210" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,210 L 0,55 L 8,55 L 8,44 L 16,44 L 16,33 L 24,33 L 24,22 L 32,22 L 32,11 L 35,11 L 35,6 L 59,6 L 59,11 L 63,11 L 63,22 L 71,22 L 71,33 L 79,33 L 79,44 L 87,44 L 87,55 L 95,55 L 95,210 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="13" y="75" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="40" y="75" width="14" height="20" fill="rgba(255,247,210,0.65)"/>
+          <rect x="68" y="75" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="13" y="110" width="14" height="20" fill="rgba(255,247,210,0.8)"/>
+          <rect x="40" y="110" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="68" y="110" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="13" y="145" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="40" y="145" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="68" y="145" width="14" height="20" fill="rgba(255,247,210,0.55)"/>
+          <rect x="39.5" y="175" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+</div></div>
+</body>
+</html>
