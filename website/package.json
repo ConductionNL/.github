@@ -13,7 +13,7 @@
     "serve": "docusaurus serve"
   },
   "dependencies": {
-    "@conduction/docusaurus-preset": "^2.6.1",
+    "@conduction/docusaurus-preset": "^2.10.2",
     "@docusaurus/core": "^3.5.0",
     "@docusaurus/preset-classic": "^3.5.0",
     "@docusaurus/theme-mermaid": "^3.10.1",
