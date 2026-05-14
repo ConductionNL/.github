@@ -18,7 +18,7 @@ All development follows four stages. Each stage feeds the next: discovery become
 flowchart LR
   A["<b>1 · Obtain</b><br/>Discover requirements"]
   B["<b>2 · Specify</b><br/>Write structured specs"]
-  C["<b>3 · Build</b>"]:::accent
+  C["<b>3 · Build</b><br/>Implement by assembly"]:::accent
   D["<b>4 · Validate</b><br/>Verify against specs"]
   A --> B --> C --> D
   classDef accent fill:#F36C21,stroke:#F36C21,color:#fff;
