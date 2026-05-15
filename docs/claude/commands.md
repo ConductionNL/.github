@@ -52,21 +52,23 @@ All testing commands — persona-based sweeps, perspective-based sweeps, single-
 
 For the complete reference, workflows, and when-to-use guidance, see [testing.md](testing.md).
 
-| Command | Type | Description |
-|---------|------|-------------|
-| `/test-counsel` | Skill (8 agents) | Persona-based testing — all 8 personas in parallel |
-| `/test-app` | Skill (1 or 6) | Perspective-based sweep (functional, UX, a11y, perf, security, API) |
-| `/feature-counsel` | Skill (8 agents) | Pre-build spec analysis from 8 persona perspectives |
-| `/test-functional` | Command (1 agent) | Feature correctness via GIVEN/WHEN/THEN |
-| `/test-api` | Command (1 agent) | REST API endpoint testing |
-| `/test-accessibility` | Command (1 agent) | WCAG 2.1 AA compliance |
-| `/test-performance` | Command (1 agent) | Load times and API response |
-| `/test-security` | Command (1 agent) | OWASP Top 10, roles, authorization |
-| `/test-regression` | Command (1 agent) | Cross-feature regression |
-| `/test-persona-*` | Command (1 agent) | Single-persona deep dive |
-| `/test-scenario-create` | Command | Create a reusable test scenario |
-| `/test-scenario-run` | Command | Execute test scenarios against live env |
-| `/test-scenario-edit` | Command | Edit an existing test scenario |
+All entries below are skills (the only mechanism we use — Anthropic merged custom commands into skills, and this workspace was never built on `.claude/commands/`). The **Agents** column shows how many parallel agents the skill orchestrates.
+
+| Command | Agents | Description |
+|---------|--------|-------------|
+| `/test-counsel` | 8 | Persona-based testing — all 8 personas in parallel |
+| `/test-app` | 1 or 6 | Perspective-based sweep (functional, UX, a11y, perf, security, API) |
+| `/feature-counsel` | 8 | Pre-build spec analysis from 8 persona perspectives |
+| `/test-functional` | 1 | Feature correctness via GIVEN/WHEN/THEN |
+| `/test-api` | 1 | REST API endpoint testing |
+| `/test-accessibility` | 1 | WCAG 2.1 AA compliance |
+| `/test-performance` | 1 | Load times and API response |
+| `/test-security` | 1 | OWASP Top 10, roles, authorization |
+| `/test-regression` | 1 | Cross-feature regression |
+| `/test-persona-*` | 1 | Single-persona deep dive |
+| `/test-scenario-create` | 1 | Create a reusable test scenario |
+| `/test-scenario-run` | 1 | Execute test scenarios against live env |
+| `/test-scenario-edit` | 1 | Edit an existing test scenario |
 
 ---
 
