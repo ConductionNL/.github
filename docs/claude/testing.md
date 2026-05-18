@@ -6,24 +6,26 @@ This document describes all testing commands and skills available in this worksp
 
 ## Quick Comparison
 
-| Command / Skill | Type | Focus | Agents | Output |
-|-----------------|------|-------|--------|--------|
-| `/test-counsel` | Skill | **Persona-based** — Would Henk/Fatima/Sem/… succeed? | 8 parallel | `{APP}/test-results/` |
-| `/test-app` | Skill | **Perspective-based** — Functional, UX, accessibility, performance, security, API | 1 or 6 parallel | `{APP}/test-results/README.md` |
-| `/test-functional` | Command | Feature correctness (GIVEN/WHEN/THEN) | 1 | Chat + optional evidence |
-| `/test-api` | Command | REST API endpoints | 1 | Chat + API report |
-| `/test-accessibility` | Command | WCAG 2.1 AA (axe-core) | 1 | Chat + a11y report |
-| `/test-performance` | Command | Load times, API response | 1 | Chat |
-| `/test-security` | Command | OWASP Top 10, Nextcloud roles | 1 | Chat |
-| `/test-regression` | Command | Cross-feature regression | 1 | Chat |
-| `/test-persona-henk` | Command | Henk's perspective only | 1 | Chat |
-| `/test-persona-fatima` | Command | Fatima's perspective only | 1 | Chat |
-| `/test-persona-sem` | Command | Sem's perspective only | 1 | Chat |
-| `/test-persona-noor` | Command | Noor's perspective only | 1 | Chat |
-| `/test-persona-annemarie` | Command | Annemarie's perspective only | 1 | Chat |
-| `/test-persona-mark` | Command | Mark's perspective only | 1 | Chat |
-| `/test-persona-priya` | Command | Priya's perspective only | 1 | Chat |
-| `/test-persona-janwillem` | Command | Jan-Willem's perspective only | 1 | Chat |
+All entries below are skills (the only mechanism we use — Anthropic merged custom commands into skills, and this workspace was never built on `.claude/commands/`). The **Agents** column shows how many parallel agents the skill orchestrates.
+
+| Command | Focus | Agents | Output |
+|---------|-------|--------|--------|
+| `/test-counsel` | **Persona-based** — Would Henk/Fatima/Sem/… succeed? | 8 | `{APP}/test-results/` |
+| `/test-app` | **Perspective-based** — Functional, UX, accessibility, performance, security, API | 1 / 6 | `{APP}/test-results/README.md` |
+| `/test-functional` | Feature correctness (GIVEN/WHEN/THEN) | 1 | Chat + optional evidence |
+| `/test-api` | REST API endpoints | 1 | Chat + API report |
+| `/test-accessibility` | WCAG 2.1 AA (axe-core) | 1 | Chat + a11y report |
+| `/test-performance` | Load times, API response | 1 | Chat |
+| `/test-security` | OWASP Top 10, Nextcloud roles | 1 | Chat |
+| `/test-regression` | Cross-feature regression | 1 | Chat |
+| `/test-persona-henk` | Henk's perspective only | 1 | Chat |
+| `/test-persona-fatima` | Fatima's perspective only | 1 | Chat |
+| `/test-persona-sem` | Sem's perspective only | 1 | Chat |
+| `/test-persona-noor` | Noor's perspective only | 1 | Chat |
+| `/test-persona-annemarie` | Annemarie's perspective only | 1 | Chat |
+| `/test-persona-mark` | Mark's perspective only | 1 | Chat |
+| `/test-persona-priya` | Priya's perspective only | 1 | Chat |
+| `/test-persona-janwillem` | Jan-Willem's perspective only | 1 | Chat |
 
 ---
 
@@ -167,7 +169,7 @@ This is the only testing-adjacent command that runs *before* implementation. It 
 |--------|-----------------|--------------------|
 | **Lens** | Persona — user goals and experience | Perspective — technical correctness |
 | **Question** | "Would Henk/Fatima/Priya/… complete their tasks?" | "Do features work, perform, and meet standards?" |
-| **Agents** | 8 (one per persona) | 1 or 6 (Quick or Full mode) |
+| **Agents** | 8 (one per persona) | 1 / 6 (Quick or Full mode) |
 | **Output style** | In-character findings, persona verdicts | PASS/PARTIAL/FAIL, technical notes |
 | **Best for** | User acceptance, UX feedback | Quality gates, regression, coverage |
 
