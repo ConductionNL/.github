@@ -18,16 +18,22 @@ on:
         type: string
         default: "20"
 
+# Two jobs so the AI-baseline validation gate runs on every event,
+# including pull_request, while the actual gh-pages deploy stays
+# gated to push / schedule / workflow_dispatch. Sites that ship the
+# postbuild validator from @conduction/docusaurus-preset (robots.txt,
+# llms.txt, sitemaps, JSON-LD, FAQPage, og:image, etc.) get PR-time
+# enforcement of the contract automatically.
+
 jobs:
-  deploy:
-    name: Deploy Documentation
+  build:
+    name: Build and validate
     runs-on: ubuntu-latest
-    # Deploy on direct pushes, scheduled rebuilds (cron-driven data
-    # refresh on conduction-website), and manual workflow_dispatch.
-    # PR runs still build but don't deploy.
-    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    timeout-minutes: 15
     permissions:
-      contents: write
+      contents: read
+    outputs:
+      built: ${{ steps.flag.outputs.built }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -59,6 +65,39 @@ jobs:
             echo "ERROR: index.html not found in build directory!"
             exit 1
           fi
+
+      - name: Upload build artifact for deploy job
+        if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: docusaurus-build
+          path: ${{ inputs.source-folder }}/build
+          retention-days: 1
+
+      - id: flag
+        run: echo "built=true" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    name: Deploy Documentation
+    needs: build
+    runs-on: ubuntu-latest
+    # Deploy only on direct pushes, scheduled rebuilds, and manual
+    # workflow_dispatch. PR runs stop after the build job, so the
+    # AI-baseline gate runs but no gh-pages push happens.
+    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download build artifact from build job
+        uses: actions/download-artifact@v4
+        with:
+          name: docusaurus-build
+          path: ${{ inputs.source-folder }}/build
 
       - name: Create .nojekyll and CNAME files
         run: |
