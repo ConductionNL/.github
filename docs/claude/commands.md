@@ -57,7 +57,7 @@ All entries below are skills (the only mechanism we use — Anthropic merged cus
 | Command | Agents | Description |
 |---------|--------|-------------|
 | `/test-counsel` | 8 | Persona-based testing — all 8 personas in parallel |
-| `/test-app` | 1 or 6 | Perspective-based sweep (functional, UX, a11y, perf, security, API) |
+| `/test-app` | 1 / 6 | Perspective-based sweep (functional, UX, a11y, perf, security, API) |
 | `/feature-counsel` | 8 | Pre-build spec analysis from 8 persona perspectives |
 | `/test-functional` | 1 | Feature correctness via GIVEN/WHEN/THEN |
 | `/test-api` | 1 | REST API endpoint testing |
