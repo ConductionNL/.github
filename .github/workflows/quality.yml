@@ -277,7 +277,7 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --legacy-peer-deps
 
       - name: Run ${{ matrix.tool }}
         run: |
@@ -341,7 +341,7 @@ jobs:
               composer audit --format=plain --abandoned=report
               ;;
             npm)
-              npm ci
+              npm ci --legacy-peer-deps
               npm audit --audit-level=critical --omit=dev
               ;;
           esac
@@ -435,7 +435,7 @@ jobs:
           if [ "${{ matrix.ecosystem }}" = "composer" ]; then
             composer install --no-progress --prefer-dist --optimize-autoloader
           else
-            npm ci
+            npm ci --legacy-peer-deps
             npm install -g license-checker
           fi
 
@@ -1060,7 +1060,7 @@ jobs:
         run: |
           cd server/apps/${{ inputs.app-name }}
           if [ -f "package.json" ]; then
-            npm ci
+            npm ci --legacy-peer-deps
           fi
 
       - name: Install Playwright
@@ -1568,7 +1568,7 @@ jobs:
 
       - name: Install npm dependencies
         if: ${{ inputs.enable-frontend }}
-        run: npm ci
+        run: npm ci --legacy-peer-deps
 
       - name: Generate npm SBOM
         if: ${{ inputs.enable-frontend }}
