@@ -6,6 +6,16 @@
  * directly now that 2.10.2 ships them as published subpath exports.
  * The local copy that previously lived next to this file was a stopgap
  * during the preset version bump and has been removed.
+ *
+ * SSR guard: clientModules are imported on both server and client by
+ * Docusaurus; cn-arch-flow uses `class extends HTMLElement` at module
+ * top-level which is undefined in Node. Gate on canUseDOM so the import
+ * only fires in the browser.
  */
 
-import '@conduction/docusaurus-preset/diagrams/cn-arch-flow';
+import ExecutionEnvironment from '@docusaurus/ExecutionEnvironment';
+
+if (ExecutionEnvironment.canUseDOM) {
+  // eslint-disable-next-line global-require
+  require('@conduction/docusaurus-preset/diagrams/cn-arch-flow');
+}

@@ -90,6 +90,14 @@ export default function Home() {
         background="cobalt"
         title="How We Work"
         tagline="How Conduction operates — culture, roles, expectations, and the way our (digital) employees act."
+        iconColor="var(--c-blue-cobalt)"
+        icon={
+          <svg viewBox="0 0 24 24">
+            <path d="M4 4h11l4 4v13a1 1 0 0 1-1 1H4z" />
+            <path d="M15 4v4h4" />
+            <path d="M8 12h8M8 16h8M8 20h5" />
+          </svg>
+        }
         primaryCta={{ label: 'Explore our identity', href: 'https://identity.conduction.nl/' }}
         secondaryCta={{ label: 'View on GitHub', href: 'https://github.com/ConductionNL/.github/tree/main/docs' }}
       />

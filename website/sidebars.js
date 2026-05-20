@@ -88,7 +88,6 @@ const sidebars = {
             'claude/getting-started',
             'claude/walkthrough',
             'claude/agents',
-            'claude/rad-platform',
 
             {
               type: 'category',
