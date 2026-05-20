@@ -80,6 +80,84 @@ const SECTIONS = [
 
 const HEX_CLIP = 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)';
 
+/**
+ * Hero-right illustration. Honeycomb of hex tiles around a central
+ * cobalt anchor, each surrounding tile holding one of the doc-section
+ * icons. Mirrors the brand `<HexNetwork/>` pattern; rendered inline
+ * to avoid needing logo SVG assets for a docs hub.
+ */
+function DocsHubMock() {
+  const ring = [
+    {icon: ICONS.identity,   row: 0, col: 0},
+    {icon: ICONS.wayofwork,  row: 0, col: 2},
+    {icon: ICONS.hydra,      row: 1, col: -1},
+    {icon: ICONS.claude,     row: 1, col: 3},
+    {icon: ICONS.iso,        row: 2, col: 0},
+    {icon: ICONS.products,   row: 2, col: 2},
+  ];
+  const W = 92;
+  const H = 106;
+  const VGAP = -28;
+  const HEX_FILL = 'rgba(255, 255, 255, 0.08)';
+  const HEX_STROKE = 'rgba(255, 255, 255, 0.45)';
+  const tileStyle = (row, col) => ({
+    position: 'absolute',
+    width: W,
+    height: H,
+    top: row * (H + VGAP),
+    left: col * (W / 2),
+    clipPath: HEX_CLIP,
+    WebkitClipPath: HEX_CLIP,
+    background: HEX_FILL,
+    border: `1px solid ${HEX_STROKE}`,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#fff',
+  });
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        position: 'relative',
+        width: W * 2,
+        height: 3 * H + 2 * VGAP,
+        marginLeft: 'auto',
+      }}
+    >
+      {ring.map((t, i) => (
+        <div key={i} style={tileStyle(t.row, t.col)}>
+          <span style={{width: 32, height: 32, display: 'inline-block', color: 'rgba(255,255,255,0.85)'}}>
+            {t.icon}
+          </span>
+        </div>
+      ))}
+      {/* Centre anchor: solid orange Conduction hex */}
+      <div
+        style={{
+          position: 'absolute',
+          width: W,
+          height: H,
+          top: 1 * (H + VGAP),
+          left: 1 * (W / 2),
+          clipPath: HEX_CLIP,
+          WebkitClipPath: HEX_CLIP,
+          background: 'var(--c-orange-knvb)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#fff',
+          fontFamily: 'var(--ff-display, inherit)',
+          fontWeight: 700,
+          fontSize: 22,
+        }}
+      >
+        C
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
   return (
     <Layout
@@ -90,7 +168,7 @@ export default function Home() {
         background="cobalt"
         title="How We Work"
         tagline="How Conduction operates — culture, roles, expectations, and the way our (digital) employees act."
-        iconColor="var(--c-blue-cobalt)"
+        iconColor="var(--c-orange-knvb)"
         icon={
           <svg viewBox="0 0 24 24">
             <path d="M4 4h11l4 4v13a1 1 0 0 1-1 1H4z" />
@@ -98,8 +176,9 @@ export default function Home() {
             <path d="M8 12h8M8 16h8M8 20h5" />
           </svg>
         }
-        primaryCta={{ label: 'Explore our identity', href: 'https://identity.conduction.nl/' }}
+        primaryCta={{ label: 'Explore our identity', href: 'https://identity.conduction.nl/', tone: 'orange' }}
         secondaryCta={{ label: 'View on GitHub', href: 'https://github.com/ConductionNL/.github/tree/main/docs' }}
+        illustration={<DocsHubMock />}
       />
 
       <main className="container" style={{ paddingBlock: '48px 96px' }}>
