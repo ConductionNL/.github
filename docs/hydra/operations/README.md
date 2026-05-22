@@ -10,4 +10,5 @@ How to run, debug, and understand the Hydra pipeline containers.
 | [logging.md](logging.md) | Log files, JSONL format, parsing |
 | [secrets.md](secrets.md) | File layout, .gitignore rules, per-deployment injection |
 | [networking.md](networking.md) | Container network, K8s NetworkPolicy, egress control |
+| [retry-and-rebuild.md](retry-and-rebuild.md) | When and how to apply `retry:queued` / `rebuild:queued`, label cleanup checklist |
 | [troubleshooting.md](troubleshooting.md) | Common errors and fixes |
