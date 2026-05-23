@@ -127,6 +127,11 @@ on:
         required: false
         type: boolean
         default: true
+      enable-features-extract:
+        description: "Scan openspec/specs/ and (re)generate docs/features.json — auto-commits on feature branches, warns on protected branches"
+        required: false
+        type: boolean
+        default: true
       database:
         description: "Database backend for integration tests (sqlite, pgsql, mysql)"
         required: false
@@ -1637,3 +1642,64 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: sbom.cdx.json
+
+  # ╔══════════════════════════════════════════════╗
+  # ║  STAGE 5 — Features extract & commit          ║
+  # ║                                               ║
+  # ║  Scans openspec/specs/*/spec.md for           ║
+  # ║  capabilities whose YAML frontmatter declares  ║
+  # ║  status: implemented OR reviewed, emits a      ║
+  # ║  sorted docs/features.json that the in-product ║
+  # ║  Features & Roadmap surface consumes via       ║
+  # ║  initial-state injection.                      ║
+  # ║                                               ║
+  # ║  Branch policy mirrors update-baseline:        ║
+  # ║  feature branches → auto-commit + push;        ║
+  # ║  protected branches → warn only (see           ║
+  # ║  ConductionNL/.github#61).                     ║
+  # ╚══════════════════════════════════════════════╝
+
+  features-extract:
+    if: ${{ inputs.enable-features-extract && !cancelled() && github.event_name != 'pull_request' }}
+    runs-on: ubuntu-latest
+    name: "Features Extract"
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          token: ${{ github.token }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyYAML
+        run: python -m pip install --quiet pyyaml
+
+      - name: Checkout shared scripts
+        uses: actions/checkout@v4
+        with:
+          repository: ConductionNL/.github
+          path: .conduction-shared
+          ref: main
+
+      - name: Regenerate docs/features.json
+        run: python .conduction-shared/scripts/extract-features.py --app-root .
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet docs/features.json 2>/dev/null && ! git status --porcelain docs/features.json | grep -q '^??'; then
+            echo "docs/features.json unchanged, nothing to commit."
+          else
+            git add docs/features.json
+            git commit -m "ci: regenerate docs/features.json from openspec/specs/ [skip ci]"
+            # Non-blocking on protected branches: branch-protection rulesets reject
+            # the bot push on main/beta/development. Tracked in ConductionNL/.github#61.
+            git push || echo "::warning::Could not push the regenerated docs/features.json — branch protection rejected the bot push (see ConductionNL/.github#61). Run scripts/extract-features.py locally and commit manually."
+          fi
