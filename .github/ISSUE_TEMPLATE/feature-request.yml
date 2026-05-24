@@ -70,7 +70,10 @@ body:
 
         The fields below are auto-filled when you suggest a feature from inside
         the app. They capture where you were when the idea hit so we can scope
-        the spec without a second round of questions. Leave them blank if
+        the spec without a second round of questions.
+
+        **We show them to you here on purpose**: you can see exactly what we
+        send and edit or clear any field before you submit. Leave them blank if
         you're filing directly from GitHub — we'll still triage it.
 
   - type: input
