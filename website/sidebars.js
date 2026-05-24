@@ -6,6 +6,14 @@ const sidebars = {
     'WayOfWork/way-of-work',
     {
       type: 'category',
+      label: 'Strategy',
+      collapsed: false,
+      items: [
+        'strategy/users-are-the-moat',
+      ],
+    },
+    {
+      type: 'category',
       label: 'Working at Conduction',
       collapsed: false,
       items: [
