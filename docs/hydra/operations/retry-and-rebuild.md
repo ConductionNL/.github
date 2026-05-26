@@ -4,11 +4,11 @@ When a Hydra pipeline issue is stuck at `needs-input`, there are two human-trigg
 
 ## Decision guide
 
-| Situation | Use |
-|---|---|
-| Reviewers flagged concrete findings that the builder can address (missing headers, style violations, clear logic bugs) | `retry:queued` |
-| The build output is fundamentally wrong — wrong approach, stub implementation, or the builder missed the spec entirely | `rebuild:queued` |
-| Development moved forward (new lint rules, new dependencies) and the open PR is just stale | Merge `development → PR` (free — no rebuild) |
+| Situation                                                                                                              | Use                                          |
+| ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| Reviewers flagged concrete findings that the builder can address (missing headers, style violations, clear logic bugs) | `retry:queued`                               |
+| The build output is fundamentally wrong — wrong approach, stub implementation, or the builder missed the spec entirely | `rebuild:queued`                             |
+| Development moved forward (new lint rules, new dependencies) and the open PR is just stale                             | Merge `development → PR` (free — no rebuild) |
 
 ## retry:queued — single-shot fixer
 
@@ -70,14 +70,14 @@ Do **not** close the PR manually — the orchestrator closes it as part of the r
 
 ## Label reference during recovery
 
-| Label | Set by | Cleared by |
-|---|---|---|
-| `needs-input` | Orchestrator (escalation) | **Human manually** before retry/rebuild |
-| `code-review:fail` | Orchestrator (review result) | **Human manually** before retry; or orchestrator on rebuild |
-| `security-review:fail` | Orchestrator (review result) | **Human manually** before retry; or orchestrator on rebuild |
-| `retry:queued` | **Human manually** | Orchestrator (transitions to `retry:running`) |
-| `retry:running` | Orchestrator | Orchestrator (transitions to `code-review:queued` or `needs-input`) |
-| `rebuild:queued` | **Human manually** | Orchestrator (transitions to `build:queued`) |
+| Label                  | Set by                       | Cleared by                                                          |
+| ---------------------- | ---------------------------- | ------------------------------------------------------------------- |
+| `needs-input`          | Orchestrator (escalation)    | **Human manually** before retry/rebuild                             |
+| `code-review:fail`     | Orchestrator (review result) | **Human manually** before retry; or orchestrator on rebuild         |
+| `security-review:fail` | Orchestrator (review result) | **Human manually** before retry; or orchestrator on rebuild         |
+| `retry:queued`         | **Human manually**           | Orchestrator (transitions to `retry:running`)                       |
+| `retry:running`        | Orchestrator                 | Orchestrator (transitions to `code-review:queued` or `needs-input`) |
+| `rebuild:queued`       | **Human manually**           | Orchestrator (transitions to `build:queued`)                        |
 
 ## Tip: use hydra-label.sh, not gh issue edit
 
