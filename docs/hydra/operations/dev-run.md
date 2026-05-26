@@ -32,15 +32,15 @@ Run one container directly, bypassing orchestration:
 
 ## Container flags
 
-| Flag | Purpose |
-|---|---|
-| `--rm` | Remove container after exit |
-| `--tmpfs /tmp:size=512M` | Ephemeral temp storage |
-| `--tmpfs /workspace:size=2G` | Ephemeral workspace (default) |
-| `--cap-drop ALL` | Drop all Linux capabilities |
+| Flag                                   | Purpose                            |
+| -------------------------------------- | ---------------------------------- |
+| `--rm`                                 | Remove container after exit        |
+| `--tmpfs /tmp:size=512M`               | Ephemeral temp storage             |
+| `--tmpfs /workspace:size=2G`           | Ephemeral workspace (default)      |
+| `--cap-drop ALL`                       | Drop all Linux capabilities        |
 | `--cap-add SETUID,SETGID,DAC_OVERRIDE` | Required for `gosu` user switching |
-| `--cpus 4 --memory 8g` | Resource limits |
-| `--network hydra-net` | Isolated bridge network |
+| `--cpus 4 --memory 8g`                 | Resource limits                    |
+| `--network hydra-net`                  | Isolated bridge network            |
 
 **Note:** `NET_ADMIN` is intentionally omitted. Internal iptables doesn't work reliably
 in rootless containers (conntrack in user namespaces). Egress is controlled by the
@@ -59,6 +59,7 @@ echo 'HYDRA_TRIGGER_LABEL=wilco-testing' >> secrets/.env
 ```
 
 When using `orchestrate.sh` directly, you can also pass `--trigger-label`:
+
 ```bash
 ./scripts/orchestrate.sh --issue-url ... --repo-url ... --trigger-label wilco-testing
 ```

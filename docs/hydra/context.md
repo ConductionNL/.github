@@ -21,11 +21,11 @@ It is the factory, not the product. The applications it builds live under `Condu
 Each container receives exactly the credentials it needs — no more. No shared org-admin
 tokens exist in the pipeline.
 
-| Container | Token variable | PAT scope | What it can do |
-|---|---|---|---|
-| Builder | `GIT_TOKEN` = `HYDRA_BUILDER_TOKEN` | `contents:write`, `pull-requests:write` | Clone, push branch, create draft PR, post issue comments |
-| Code Reviewer | `GIT_TOKEN` = `HYDRA_REVIEWER_TOKEN` | `pull-requests:write` | Post PR review comments only |
-| Security Reviewer | `GIT_TOKEN` = `HYDRA_SECURITY_TOKEN` | `pull-requests:write` | Post PR review comments only |
+| Container         | Token variable                       | PAT scope                               | What it can do                                           |
+| ----------------- | ------------------------------------ | --------------------------------------- | -------------------------------------------------------- |
+| Builder           | `GIT_TOKEN` = `HYDRA_BUILDER_TOKEN`  | `contents:write`, `pull-requests:write` | Clone, push branch, create draft PR, post issue comments |
+| Code Reviewer     | `GIT_TOKEN` = `HYDRA_REVIEWER_TOKEN` | `pull-requests:write`                   | Post PR review comments only                             |
+| Security Reviewer | `GIT_TOKEN` = `HYDRA_SECURITY_TOKEN` | `pull-requests:write`                   | Post PR review comments only                             |
 
 All containers also receive `ANTHROPIC_API_KEY` (same key, all containers).
 
@@ -112,11 +112,11 @@ The following are not secrets and may appear in logs:
 Every container receives its inputs as environment variables (never as command-line args
 or mounted config files, to avoid leakage via `/proc`):
 
-| Variable | Required by | Description |
-|---|---|---|
-| `ANTHROPIC_API_KEY` | all | Claude API key |
-| `GIT_TOKEN` | all | Scoped PAT for this persona |
-| `REPO_URL` | all | `https://github.com/ConductionNL/<app>` |
-| `ISSUE_URL` | Builder | GitHub issue that triggered the build |
-| `PR_URL` | Reviewers | GitHub PR to review |
-| `SPEC_PATH` | Builder | Path to `openspec/changes/<change-name>/` inside the container |
+| Variable            | Required by | Description                                                    |
+| ------------------- | ----------- | -------------------------------------------------------------- |
+| `ANTHROPIC_API_KEY` | all         | Claude API key                                                 |
+| `GIT_TOKEN`         | all         | Scoped PAT for this persona                                    |
+| `REPO_URL`          | all         | `https://github.com/ConductionNL/<app>`                        |
+| `ISSUE_URL`         | Builder     | GitHub issue that triggered the build                          |
+| `PR_URL`            | Reviewers   | GitHub PR to review                                            |
+| `SPEC_PATH`         | Builder     | Path to `openspec/changes/<change-name>/` inside the container |

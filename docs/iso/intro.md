@@ -14,24 +14,24 @@ These certifications mean that our processes, policies, and responsibilities are
 
 ## Policy Documents
 
-| Document | ISO Clause | Status |
-|---|---|---|
-| [Quality Policy](quality-policy.md) | ISO 9001:2015 §5.2 | Active |
-| [Information Security Policy](security-policy.md) | ISO 27001:2022 §5.2 | Active |
-| [Incident Reporting](incident-reporting.md) | ISO 27001:2022 A.6.8 / ISO 9001:2015 §10.2 | Active |
-| [Security Practices](security.md) | ISO 27001:2022 Annex A | Active |
-| [Privacy & AVG](privacy-policy.md) | AVG/GDPR, ISO 27001:2022 A.5.34 | Active |
+| Document                                          | ISO Clause                                 | Status |
+| ------------------------------------------------- | ------------------------------------------ | ------ |
+| [Quality Policy](quality-policy.md)               | ISO 9001:2015 §5.2                         | Active |
+| [Information Security Policy](security-policy.md) | ISO 27001:2022 §5.2                        | Active |
+| [Incident Reporting](incident-reporting.md)       | ISO 27001:2022 A.6.8 / ISO 9001:2015 §10.2 | Active |
+| [Security Practices](security.md)                 | ISO 27001:2022 Annex A                     | Active |
+| [Privacy & AVG](privacy-policy.md)                | AVG/GDPR, ISO 27001:2022 A.5.34            | Active |
 
 ## The PDCA Cycle
 
 Our quality and security management follows a Plan-Do-Check-Act cycle:
 
-| Phase | What we do | When |
-|---|---|---|
-| **Plan** | Annual planning, set objectives, update risk inventory | January |
-| **Do** | Daily operations following documented processes | Continuous |
-| **Check** | Internal audits, MT quality meetings, management review | Monthly / Quarterly / Annually |
-| **Act** | Corrective actions tracked in Jira, process improvements | As needed, reviewed monthly |
+| Phase     | What we do                                               | When                           |
+| --------- | -------------------------------------------------------- | ------------------------------ |
+| **Plan**  | Annual planning, set objectives, update risk inventory   | January                        |
+| **Do**    | Daily operations following documented processes          | Continuous                     |
+| **Check** | Internal audits, MT quality meetings, management review  | Monthly / Quarterly / Annually |
+| **Act**   | Corrective actions tracked in Jira, process improvements | As needed, reviewed monthly    |
 
 ## Management Review (§9.3)
 

@@ -19,29 +19,34 @@ Create DPIA templates and tooling that help organizations perform privacy impact
 ## Features
 
 ### DPIA Template per App
+
 - Standardized DPIA document template following Dutch AP (Autoriteit Persoonsgegevens) guidance
 - Pre-filled per app: what personal data is processed, legal basis options, identified risks, standard mitigations
 - Exportable as PDF for inclusion in tender responses and compliance dossiers
 
 ### Pre-filled DPIA from Data Model
+
 - Automated analysis of OpenRegister schemas to identify personal data fields
 - Classification of data sensitivity (regular personal data, special categories, BSN)
 - Mapping of data flows: where data enters, is stored, shared, and deleted
 - Retention period documentation per data type
 
 ### Privacy Dashboard (Nextcloud Admin)
+
 - Overview of all personal data stored across all Conduction apps
 - Data volume metrics: how many records, how many data subjects
 - Retention status: objects past retention date flagged
 - Data sharing overview: which external systems receive personal data (via OpenConnector)
 
 ### Data Subject Access Request (DSAR) Tooling
+
 - Search across all OpenRegister schemas for a specific person (by BSN, name, email)
 - Export all data for a data subject in machine-readable format (JSON, CSV)
 - Audit trail of who accessed the export
 - Configurable per organization: which fields to search, which schemas to include
 
 ### Right to Be Forgotten
+
 - Delete or anonymize all data for a specific person across OpenRegister
 - Configurable anonymization rules per schema (which fields to blank, hash, or delete)
 - Cascading deletion across related objects
@@ -49,18 +54,21 @@ Create DPIA templates and tooling that help organizations perform privacy impact
 - Legal hold override: prevent deletion when legal retention applies
 
 ### Data Processing Register (Verwerkingsregister)
+
 - Auto-generated from app configurations and OpenRegister schema metadata
 - Documents: purpose, legal basis, categories of data subjects, categories of personal data, recipients, transfers to third countries, retention periods, security measures
 - Exportable in standard format for submission to AP
 - Version history to track changes over time
 
 ### Retention Policy Enforcement
+
 - Define retention periods per schema/object type in OpenRegister
 - Automated flagging of objects past retention date
 - Optional automated deletion/anonymization with approval workflow
 - Dashboard widget showing retention status
 
 ### Privacy-by-Design CI Checklist
+
 - PR template checklist for privacy considerations
 - Automated check: new database fields/schema properties flagged for privacy review
 - Warning when personal data fields lack retention metadata
@@ -68,31 +76,34 @@ Create DPIA templates and tooling that help organizations perform privacy impact
 
 ## Standards
 
-| Standard | Article | Description | Tender Demand |
-|----------|---------|-------------|---------------|
-| AVG/GDPR | Art. 35 | Data Protection Impact Assessment | 25 sources |
-| AVG/GDPR | Art. 30 | Records of processing activities (verwerkingsregister) | included in 149 |
-| AVG/GDPR | Art. 15 | Right of access by the data subject | included in 149 |
-| AVG/GDPR | Art. 17 | Right to erasure (right to be forgotten) | included in 149 |
-| AVG/GDPR | Art. 20 | Right to data portability | included in 149 |
-| BIO | - | Baseline Informatiebeveiliging Overheid (privacy controls) | 170 sources |
+| Standard | Article | Description                                                | Tender Demand   |
+| -------- | ------- | ---------------------------------------------------------- | --------------- |
+| AVG/GDPR | Art. 35 | Data Protection Impact Assessment                          | 25 sources      |
+| AVG/GDPR | Art. 30 | Records of processing activities (verwerkingsregister)     | included in 149 |
+| AVG/GDPR | Art. 15 | Right of access by the data subject                        | included in 149 |
+| AVG/GDPR | Art. 17 | Right to erasure (right to be forgotten)                   | included in 149 |
+| AVG/GDPR | Art. 20 | Right to data portability                                  | included in 149 |
+| BIO      | -       | Baseline Informatiebeveiliging Overheid (privacy controls) | 170 sources     |
 
 ## Scope
 
 All Conduction apps, with priority on apps that handle personal data:
 
 **High priority (direct personal data processing):**
+
 - Procest (case management with citizen data)
 - Pipelinq (contact and workflow management)
 - Docudesk (document management, potentially sensitive content)
 - ZaakAfhandelApp (case handling with personal data)
 
 **Medium priority (indirect personal data):**
+
 - OpenRegister (foundation -- stores all structured data)
 - OpenConnector (data sharing with external systems)
 - OpenCatalogi (catalog may reference personal data schemas)
 
 **Lower priority (minimal personal data):**
+
 - NL Design (theming, no personal data)
 - MyDash (dashboard, displays data from other apps)
 - SoftwareCatalog (software metadata)

@@ -138,12 +138,14 @@ SELECT VERSION();                               # MariaDB version
 - **Optimizations:** Configured for high concurrency and performance
 
 **Connection String:**
+
 ```
 postgresql://nextcloud:!ChangeMe!@localhost:5432/nextcloud
 ```
 
 **Automatic Extension Setup:**
 The PostgreSQL container automatically installs and enables all required extensions on first startup:
+
 1. Extensions are created via `/docker-entrypoint-initdb.d/01-init-extensions.sql`
 2. Helper functions are created (`vector_cosine_distance`, `text_similarity_score`)
 3. Database parameters are optimized (similarity threshold, work_mem)
@@ -157,20 +159,21 @@ The PostgreSQL container automatically installs and enables all required extensi
 - **Optimizations:** InnoDB tuning for performance
 
 **Connection String:**
+
 ```
 mysql://nextcloud:!ChangeMe!@localhost:3306/nextcloud
 ```
 
 ## Feature Comparison
 
-| Feature | PostgreSQL | MariaDB |
-|---------|-----------|---------|
-| Vector Search (pgvector) | ✅ Yes | ❌ No |
-| Full-Text Search (native) | ✅ pg_trgm | ⚠️ Basic FULLTEXT |
-| JSON Operations | ✅ Advanced | ⚠️ Basic |
-| Performance | ✅ Excellent | ✅ Good |
-| Type Strictness | ✅ Strict (safer) | ⚠️ Permissive |
-| Production Ready | ✅ Recommended | ✅ Supported |
+| Feature                   | PostgreSQL        | MariaDB           |
+| ------------------------- | ----------------- | ----------------- |
+| Vector Search (pgvector)  | ✅ Yes            | ❌ No             |
+| Full-Text Search (native) | ✅ pg_trgm        | ⚠️ Basic FULLTEXT |
+| JSON Operations           | ✅ Advanced       | ⚠️ Basic          |
+| Performance               | ✅ Excellent      | ✅ Good           |
+| Type Strictness           | ✅ Strict (safer) | ⚠️ Permissive     |
+| Production Ready          | ✅ Recommended    | ✅ Supported      |
 
 ## Continuous Integration
 
@@ -230,11 +233,13 @@ docker-compose --profile mariadb up -d
 ### Type Handling
 
 **PostgreSQL:**
+
 - Strict type checking (strings ≠ integers)
 - Explicit casting required for type mismatches
 - JSON columns have specific operators
 
 **MariaDB:**
+
 - Permissive type coercion (strings can be compared to integers)
 - Implicit type conversion in most cases
 - JSON stored as TEXT internally
@@ -242,11 +247,13 @@ docker-compose --profile mariadb up -d
 ### Date/Time Functions
 
 **PostgreSQL:**
+
 - `TO_CHAR(date, format)` for formatting
 - `DATE_TRUNC()` for truncation
 - Timezone-aware types
 
 **MariaDB:**
+
 - `DATE_FORMAT(date, format)` for formatting
 - `DATE()`, `MONTH()`, etc. for extraction
 - Timezone support limited
@@ -254,10 +261,12 @@ docker-compose --profile mariadb up -d
 ### Boolean Values
 
 **PostgreSQL:**
+
 - Native boolean type
 - TRUE/FALSE literals
 
 **MariaDB:**
+
 - Stored as TINYINT(1)
 - 1/0 values
 
@@ -275,5 +284,3 @@ docker-compose --profile mariadb up -d
 - [MariaDB Documentation](https://mariadb.com/kb/en/)
 - [Nextcloud Database Configuration](https://docs.nextcloud.com/server/latest/admin_manual/configuration_database/)
 - [Docker Compose Profiles](https://docs.docker.com/compose/profiles/)
-
-

@@ -12,11 +12,11 @@ Track **Haiku, Sonnet, and Opus** simultaneously with separate usage monitoring.
 
 > **Model matching:** The tracker matches by substring — `haiku` matches `claude-haiku-4-5-20251001`, `sonnet` matches `claude-sonnet-4-6`, `opus` matches `claude-opus-4-6`. New model versions are picked up automatically as long as the family name is in the model ID.
 
-| Model | Model ID | Session (~5h) | Weekly (~7d) | Best For |
-|-------|----------|--------------|-------------|----------|
-| **Haiku** (`--model haiku`) | `claude-haiku-4-5` | ~1.2M tokens | ~6M tokens | ⚡ Quick tasks, high volume |
-| **Sonnet** (`--model sonnet`) | `claude-sonnet-4-6` | ~400K tokens | ~2M tokens | 🎯 Balanced, most tasks |
-| **Opus** (`--model opus`) | `claude-opus-4-6` | ~200K tokens | ~1M tokens | 🧠 Complex reasoning |
+| Model                         | Model ID            | Session (~5h) | Weekly (~7d) | Best For                    |
+| ----------------------------- | ------------------- | ------------- | ------------ | --------------------------- |
+| **Haiku** (`--model haiku`)   | `claude-haiku-4-5`  | ~1.2M tokens  | ~6M tokens   | ⚡ Quick tasks, high volume |
+| **Sonnet** (`--model sonnet`) | `claude-sonnet-4-6` | ~400K tokens  | ~2M tokens   | 🎯 Balanced, most tasks     |
+| **Opus** (`--model opus`)     | `claude-opus-4-6`   | ~200K tokens  | ~1M tokens   | 🧠 Complex reasoning        |
 
 **Important:** The session limit is **shared across all models** — it's one combined 5-hour rolling window, not separate per-model buckets. The per-model session values above are estimates; only Anthropic knows the exact combined pool size for your plan.
 

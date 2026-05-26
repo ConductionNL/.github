@@ -20,45 +20,49 @@ Replace `/path/to/hydra` with the actual path (e.g., `/home/wilco/hydra`).
 
 ## Cron Jobs
 
-| Script | Interval | What it does |
-|--------|----------|-------------|
-| `watchdog-supervisor.sh` | Every minute | Starts `hydra-supervisor.sh` if the daemon is not running |
-| `reconcile.sh` | Every 10 min | Label validation + auto-recovery sweep |
-| `cron-audit.sh` | Every 30 min | Full codebase audits on `ready-for-audit` issues |
-| `cron-spec-from-issue.sh` | Every 10 min | Converts `needs-spec` issues into OpenSpec changes |
-| `cron-update-prs.sh` | Every hour | Merges `development` into open `feature/<issue>/*` PRs that are `BEHIND` |
+| Script                    | Interval     | What it does                                                             |
+| ------------------------- | ------------ | ------------------------------------------------------------------------ |
+| `watchdog-supervisor.sh`  | Every minute | Starts `hydra-supervisor.sh` if the daemon is not running                |
+| `reconcile.sh`            | Every 10 min | Label validation + auto-recovery sweep                                   |
+| `cron-audit.sh`           | Every 30 min | Full codebase audits on `ready-for-audit` issues                         |
+| `cron-spec-from-issue.sh` | Every 10 min | Converts `needs-spec` issues into OpenSpec changes                       |
+| `cron-update-prs.sh`      | Every hour   | Merges `development` into open `feature/<issue>/*` PRs that are `BEHIND` |
 
 `scripts/cron-hydra.sh` is retained for manual dispatch runs but is **not** scheduled — the supervisor replaces it.
 
 ## Logs
 
-| File | Content |
-|------|---------|
-| `logs/cron.log` | Build pipeline dispatch log |
-| `logs/review-cron.log` | Review dispatch log |
-| `logs/pipeline-{issue}-{timestamp}/` | Per-pipeline stage logs (builder, quality, reviewer, etc.) |
-| `logs/reviews/{repo}-{pr}-{type}-{timestamp}.jsonl` | Per-review JSONL output |
+| File                                                | Content                                                    |
+| --------------------------------------------------- | ---------------------------------------------------------- |
+| `logs/cron.log`                                     | Build pipeline dispatch log                                |
+| `logs/review-cron.log`                              | Review dispatch log                                        |
+| `logs/pipeline-{issue}-{timestamp}/`                | Per-pipeline stage logs (builder, quality, reviewer, etc.) |
+| `logs/reviews/{repo}-{pr}-{type}-{timestamp}.jsonl` | Per-review JSONL output                                    |
 
 ## Trigger Label Configuration
 
 The label that triggers the build pipeline is configurable via the `HYDRA_TRIGGER_LABEL` environment variable. Default: `ready-to-build`.
 
 Set it in `secrets/.env`:
+
 ```bash
 HYDRA_TRIGGER_LABEL=wilco-testing
 ```
 
 Or pass it as an environment variable when running scripts directly:
+
 ```bash
 HYDRA_TRIGGER_LABEL=my-custom-label ./scripts/orchestrate.sh --poll --repo-url https://github.com/ConductionNL/myapp
 ```
 
 Or use the `--trigger-label` flag with `orchestrate.sh`:
+
 ```bash
 ./scripts/orchestrate.sh --issue-url ... --repo-url ... --trigger-label my-custom-label
 ```
 
 This is useful for:
+
 - **Testing**: Use a separate label (e.g. `wilco-testing`) to avoid interfering with production pipelines
 - **Multi-environment isolation**: Run separate Hydra instances that each watch for different labels
 - **Gradual rollout**: Only process issues you explicitly opt in
@@ -113,9 +117,9 @@ ls /tmp/hydra-slots/slot-*.lock 2>/dev/null
 
 ## Troubleshooting
 
-| Symptom | Fix |
-|---------|-----|
-| Cron not running | Check `crontab -l`, verify PATH in script header |
-| `No PRs with review labels found` | Expected when no reviews are pending |
-| Review label not removed | Check `logs/reviews/` for container errors |
-| Stale slot lock | `rm /tmp/hydra-slots/slot-N.lock` (cron auto-detects dead PIDs) |
+| Symptom                           | Fix                                                             |
+| --------------------------------- | --------------------------------------------------------------- |
+| Cron not running                  | Check `crontab -l`, verify PATH in script header                |
+| `No PRs with review labels found` | Expected when no reviews are pending                            |
+| Review label not removed          | Check `logs/reviews/` for container errors                      |
+| Stale slot lock                   | `rm /tmp/hydra-slots/slot-N.lock` (cron auto-detects dead PIDs) |

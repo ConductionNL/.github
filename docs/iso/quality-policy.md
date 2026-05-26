@@ -20,12 +20,12 @@ Conduction is committed to delivering high-quality open-source software and serv
 
 ## Quality Objectives (ISO 9001:2015 §6.2)
 
-| Objective | Measurable target | Responsible | Review |
-|---|---|---|---|
-| Issue response time | Support tickets acknowledged within 1 business day | Operations Lead | Monthly (MT quality meeting) |
-| Software quality | All PRs pass automated quality gates before merge | Development Lead | Continuous (CI/CD) |
-| Process improvement | ≥ 2 process improvements implemented per quarter | Quality Manager | Quarterly (internal audit) |
-| Employee competence | All employees reviewed annually against competence matrix | HR Lead | Annually (February) |
+| Objective           | Measurable target                                         | Responsible      | Review                       |
+| ------------------- | --------------------------------------------------------- | ---------------- | ---------------------------- |
+| Issue response time | Support tickets acknowledged within 1 business day        | Operations Lead  | Monthly (MT quality meeting) |
+| Software quality    | All PRs pass automated quality gates before merge         | Development Lead | Continuous (CI/CD)           |
+| Process improvement | ≥ 2 process improvements implemented per quarter          | Quality Manager  | Quarterly (internal audit)   |
+| Employee competence | All employees reviewed annually against competence matrix | HR Lead          | Annually (February)          |
 
 Actual performance against these targets is tracked in the internal monitoring spreadsheet and reviewed during MT quality meetings (last Monday of each month).
 

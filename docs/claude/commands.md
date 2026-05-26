@@ -8,20 +8,20 @@ Full spec-driven workflow: create changes, generate artifacts, implement, verify
 
 For the complete reference, see [commands-openspec.md](commands-openspec.md).
 
-| Command | Phase | Description |
-|---------|-------|-------------|
-| `/opsx-new <name>` | Spec | Start a new change |
-| `/opsx-ff` | Spec | Fast-forward all artifacts (proposal → specs → design → tasks) |
-| `/opsx-continue` | Spec | Create next artifact in dependency chain |
-| `/opsx-explore` | Pre-spec | Investigate before starting a formal change |
-| `/opsx-apply` | Implement | Implement tasks from plan.json |
-| `/opsx-verify` | Review | Verify implementation against specs |
-| `/opsx-sync` | Archive | Merge delta specs into main specs |
-| `/opsx-archive` | Archive | Complete and preserve change |
-| `/opsx-bulk-archive` | Archive | Archive multiple completed changes at once |
-| `/opsx-apply-loop` | Full Lifecycle | Automated apply→verify loop in Docker container |
-| `/opsx-pipeline` | Full Lifecycle | Parallel multi-change lifecycle (up to 5 agents) |
-| `/opsx-onboard` | Setup | Overview of current OpenSpec setup |
+| Command              | Phase          | Description                                                    |
+| -------------------- | -------------- | -------------------------------------------------------------- |
+| `/opsx-new <name>`   | Spec           | Start a new change                                             |
+| `/opsx-ff`           | Spec           | Fast-forward all artifacts (proposal → specs → design → tasks) |
+| `/opsx-continue`     | Spec           | Create next artifact in dependency chain                       |
+| `/opsx-explore`      | Pre-spec       | Investigate before starting a formal change                    |
+| `/opsx-apply`        | Implement      | Implement tasks from plan.json                                 |
+| `/opsx-verify`       | Review         | Verify implementation against specs                            |
+| `/opsx-sync`         | Archive        | Merge delta specs into main specs                              |
+| `/opsx-archive`      | Archive        | Complete and preserve change                                   |
+| `/opsx-bulk-archive` | Archive        | Archive multiple completed changes at once                     |
+| `/opsx-apply-loop`   | Full Lifecycle | Automated apply→verify loop in Docker container                |
+| `/opsx-pipeline`     | Full Lifecycle | Parallel multi-change lifecycle (up to 5 agents)               |
+| `/opsx-onboard`      | Setup          | Overview of current OpenSpec setup                             |
 
 **Retrofit commands** (bringing legacy apps under [ADR-003 §Spec traceability](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-003-backend.md)): `/opsx-coverage-scan`, `/opsx-annotate`, `/opsx-reverse-spec` — see [retrofit.md](retrofit.md) for the full playbook.
 
@@ -35,14 +35,14 @@ Commands for creating, configuring, and maintaining Nextcloud apps: `/app-design
 
 For the full lifecycle guide, see [app-lifecycle.md](app-lifecycle.md).
 
-| Command | Phase | Description |
-|---------|-------|-------------|
-| `/app-design` | Design | Full upfront design — architecture, competitors, wireframes |
-| `/app-create` | Setup | Bootstrap or onboard a Nextcloud app |
-| `/app-explore` | Design | Think through goals, features, and ADRs |
-| `/app-apply` | Configuration | Apply `app-config.json` to tracked files |
-| `/app-verify` | Audit | Read-only check for config drift |
-| `/clean-env` | Reset | Fully reset Docker development environment |
+| Command        | Phase         | Description                                                 |
+| -------------- | ------------- | ----------------------------------------------------------- |
+| `/app-design`  | Design        | Full upfront design — architecture, competitors, wireframes |
+| `/app-create`  | Setup         | Bootstrap or onboard a Nextcloud app                        |
+| `/app-explore` | Design        | Think through goals, features, and ADRs                     |
+| `/app-apply`   | Configuration | Apply `app-config.json` to tracked files                    |
+| `/app-verify`  | Audit         | Read-only check for config drift                            |
+| `/clean-env`   | Reset         | Fully reset Docker development environment                  |
 
 ---
 
@@ -54,21 +54,21 @@ For the complete reference, workflows, and when-to-use guidance, see [testing.md
 
 All entries below are skills (the only mechanism we use — Anthropic merged custom commands into skills, and this workspace was never built on `.claude/commands/`). The **Agents** column shows how many parallel agents the skill orchestrates.
 
-| Command | Agents | Description |
-|---------|--------|-------------|
-| `/test-counsel` | 8 | Persona-based testing — all 8 personas in parallel |
-| `/test-app` | 1 / 6 | Perspective-based sweep (functional, UX, a11y, perf, security, API) |
-| `/feature-counsel` | 8 | Pre-build spec analysis from 8 persona perspectives |
-| `/test-functional` | 1 | Feature correctness via GIVEN/WHEN/THEN |
-| `/test-api` | 1 | REST API endpoint testing |
-| `/test-accessibility` | 1 | WCAG 2.1 AA compliance |
-| `/test-performance` | 1 | Load times and API response |
-| `/test-security` | 1 | OWASP Top 10, roles, authorization |
-| `/test-regression` | 1 | Cross-feature regression |
-| `/test-persona-*` | 1 | Single-persona deep dive |
-| `/test-scenario-create` | 1 | Create a reusable test scenario |
-| `/test-scenario-run` | 1 | Execute test scenarios against live env |
-| `/test-scenario-edit` | 1 | Edit an existing test scenario |
+| Command                 | Agents | Description                                                         |
+| ----------------------- | ------ | ------------------------------------------------------------------- |
+| `/test-counsel`         | 8      | Persona-based testing — all 8 personas in parallel                  |
+| `/test-app`             | 1 / 6  | Perspective-based sweep (functional, UX, a11y, perf, security, API) |
+| `/feature-counsel`      | 8      | Pre-build spec analysis from 8 persona perspectives                 |
+| `/test-functional`      | 1      | Feature correctness via GIVEN/WHEN/THEN                             |
+| `/test-api`             | 1      | REST API endpoint testing                                           |
+| `/test-accessibility`   | 1      | WCAG 2.1 AA compliance                                              |
+| `/test-performance`     | 1      | Load times and API response                                         |
+| `/test-security`        | 1      | OWASP Top 10, roles, authorization                                  |
+| `/test-regression`      | 1      | Cross-feature regression                                            |
+| `/test-persona-*`       | 1      | Single-persona deep dive                                            |
+| `/test-scenario-create` | 1      | Create a reusable test scenario                                     |
+| `/test-scenario-run`    | 1      | Execute test scenarios against live env                             |
+| `/test-scenario-edit`   | 1      | Edit an existing test scenario                                      |
 
 ---
 
@@ -76,15 +76,15 @@ All entries below are skills (the only mechanism we use — Anthropic merged cus
 
 Specialist agents for focused perspectives on a change. For full details, see [workflow.md](workflow.md#team-role-commands).
 
-| Command | Role | Focus |
-|---------|------|-------|
-| `/team-architect` | Architect | API design, data models, cross-app dependencies |
-| `/team-backend` | Backend Developer | PHP implementation, entities, services, tests |
-| `/team-frontend` | Frontend Developer | Vue components, state management, UX |
-| `/team-po` | Product Owner | Business value, acceptance criteria, priority |
-| `/team-qa` | QA Engineer | Test coverage, edge cases, regression risk |
-| `/team-reviewer` | Code Reviewer | Standards, conventions, security, code quality |
-| `/team-sm` | Scrum Master | Progress tracking, blockers, sprint health |
+| Command           | Role               | Focus                                           |
+| ----------------- | ------------------ | ----------------------------------------------- |
+| `/team-architect` | Architect          | API design, data models, cross-app dependencies |
+| `/team-backend`   | Backend Developer  | PHP implementation, entities, services, tests   |
+| `/team-frontend`  | Frontend Developer | Vue components, state management, UX            |
+| `/team-po`        | Product Owner      | Business value, acceptance criteria, priority   |
+| `/team-qa`        | QA Engineer        | Test coverage, edge cases, regression risk      |
+| `/team-reviewer`  | Code Reviewer      | Standards, conventions, security, code quality  |
+| `/team-sm`        | Scrum Master       | Progress tracking, blockers, sprint health      |
 
 ---
 
@@ -101,6 +101,7 @@ Commands specific to the VNG Softwarecatalogus client project. See `Softwarecata
 Run automated tests for the GEMMA Softwarecatalogus — API tests (Postman/Newman), browser tests (persona agents), or both.
 
 **Usage:**
+
 ```
 /swc-test           # choose mode interactively
 /swc-test api       # API tests only
@@ -118,6 +119,7 @@ Run automated tests for the GEMMA Softwarecatalogus — API tests (Postman/Newma
 Sync GitHub issues from VNG-Realisatie/Softwarecatalogus, auto-generate acceptance criteria, and update test infrastructure to reflect current issue state.
 
 **Usage:**
+
 ```
 /swc-update
 ```
@@ -137,16 +139,18 @@ These commands are workspace-level and available from any project within `apps-e
 Create a Pull Request from a branch in any repo. Handles the full flow interactively.
 
 **Usage:**
+
 ```
 /create-pr
 ```
 
 **What it does:**
+
 1. **Selects the repository** — scans for available git repos in the workspace, asks you to pick one (never assumes the current directory)
 2. **Confirms the source branch** — shows the current branch, lets you override
 3. **Recommends a target branch** based on the branching strategy; checks GitHub for an existing open PR on the same branch pair — if found, offers to view or update it instead
 4. **Checks for uncommitted or unpushed changes** — if any are found, offers to commit, stash, or continue; offers to push unpushed commits before continuing
-5. **Verifies global settings version** *(.github repo only)* — delegates to `/verify-global-settings-version`; pauses and offers a fix if a VERSION bump is missing
+5. **Verifies global settings version** _(.github repo only)_ — delegates to `/verify-global-settings-version`; pauses and offers a fix if a VERSION bump is missing
 6. **Discovers CI checks from `.github/workflows/`** — reads the repo's workflow files to determine exactly which checks CI will run, then mirrors them locally (never hardcodes a list)
 7. **Installs missing dependencies** (`vendor/`, `node_modules/`) if needed before running checks
 8. **Runs all discovered checks** — nothing skipped; slow checks (e.g. test suites) ask for confirmation first; shows a pass/fail table when done
@@ -157,12 +161,12 @@ Create a Pull Request from a branch in any repo. Handles the full flow interacti
 
 **Branching strategy:**
 
-| Source | Recommended target |
-|---|---|
-| `feature/*`, `bugfix/*` | `development` |
-| `development` | `beta` |
-| `beta` | `main` |
-| `hotfix/*` | `main` (or `beta`/`development`) |
+| Source                  | Recommended target               |
+| ----------------------- | -------------------------------- |
+| `feature/*`, `bugfix/*` | `development`                    |
+| `development`           | `beta`                           |
+| `beta`                  | `main`                           |
+| `hotfix/*`              | `main` (or `beta`/`development`) |
 
 **Model:** Checked at run time — the command reads your active model from context and stops automatically if you're on Haiku (or anything weaker than Sonnet). Involves parsing CI workflows, detecting branch-protection rules, and reasoning about code diffs where mistakes have real consequences. **Sonnet** for most PRs. **Opus** when the repo uses reusable CI workflows, branch-protection rulesets, or a complex branching strategy — that's where it pays off most.
 
@@ -177,6 +181,7 @@ Create a Pull Request from a branch in any repo. Handles the full flow interacti
 Review one or more GitHub Pull Requests. Fetches the diff, detects prior reviews (skips if nothing has changed since last review), asks for strictness level, posts inline findings with emoji severity markers (🔴 blocker / 🟡 warning / 🟢 suggestion), optionally tests the PR's changes against a local clone (with Docker readiness checks), and submits a formal APPROVE or REQUEST_CHANGES decision.
 
 **Usage:**
+
 ```
 /review-pr 123                                               # single PR, infer repo from git remote
 /review-pr https://github.com/org/repo/pull/123             # single PR, explicit URL
@@ -186,14 +191,15 @@ Review one or more GitHub Pull Requests. Fetches the diff, detects prior reviews
 
 **Strictness modes:**
 
-| Mode | Use when |
-|------|----------|
-| **Quick** | Hotfix or trivial change — check for obvious blockers only |
-| **Standard** | Everyday feature PR — balanced depth |
-| **Thorough** | Large or complex PR — full analysis |
-| **Strict** | Security-sensitive code (auth, RBAC, CI) — maximum depth; auto-suggested when sensitive code is detected |
+| Mode         | Use when                                                                                                 |
+| ------------ | -------------------------------------------------------------------------------------------------------- |
+| **Quick**    | Hotfix or trivial change — check for obvious blockers only                                               |
+| **Standard** | Everyday feature PR — balanced depth                                                                     |
+| **Thorough** | Large or complex PR — full analysis                                                                      |
+| **Strict**   | Security-sensitive code (auth, RBAC, CI) — maximum depth; auto-suggested when sensitive code is detected |
 
 **What it does:**
+
 1. **Detects re-reviews** — checks if anything has changed since your last review; skips if not
 2. **Classifies sensitivity** — auto-detects auth/RBAC/CI code and recommends Strict mode
 3. **Asks strictness** — Quick, Standard, Thorough, or Strict
@@ -217,6 +223,7 @@ Review one or more GitHub Pull Requests. Fetches the diff, detects prior reviews
 Daily end-of-day report. Scans local git repos for the user's commits and uncommitted changes, auto-discovers GitHub issues and PRs the user has interacted with today, surfaces actionable suggestions (PRs to create, issues to close, follow-up issues to draft), optionally applies them with confirmation, and ends with a single copy-paste-ready Dutch report-out message for Slack.
 
 **Usage:**
+
 ```
 /report-out             # today
 /report-out 2026-04-30  # a specific date
@@ -225,6 +232,7 @@ Daily end-of-day report. Scans local git repos for the user's commits and uncomm
 **Hydra-specific scoping:** when invoked from inside the Hydra repo, the skill **always scans Hydra itself**. By default it excludes `wordpress-docker` (if present) and `claude-code-config` (if present). The wordpress-docker variant of this skill self-excludes; the Hydra variant does not.
 
 **What it does:**
+
 1. Resolves identity dynamically — `git config user.name`, `gh api user --jq .login`, `$HOME` (no hardcoded paths or usernames)
 2. Asks for any additional context to consider (start gate)
 3. Confirms scan scope (Hydra always included; default excludes `wordpress-docker` and `claude-code-config`)
@@ -245,6 +253,7 @@ Daily end-of-day report. Scans local git repos for the user's commits and uncomm
 18. Produces a single copy-paste-ready Dutch report-out message in a fenced markdown block — heading is just `🗓️ Report out` (no day/date — Slack adds the timestamp)
 
 **Heuristic thresholds** (tunable via `learnings.md`):
+
 - 5 days + 10 comments → suggest follow-up
 - 14 days → upgrade to `needs-followup`
 - 24-hour comment window → offer Edit instead of New
@@ -266,11 +275,13 @@ Daily end-of-day report. Scans local git repos for the user's commits and uncomm
 Checks whether `global-settings/VERSION` has been correctly bumped after any changes to files in the `global-settings/` directory. Run this before creating a PR on the `ConductionNL/.github` repo.
 
 **Usage:**
+
 ```
 /verify-global-settings-version
 ```
 
 **What it does:**
+
 1. Fetches `origin/main` to get the latest published version
 2. Diffs `global-settings/` between the current branch and `origin/main`
 3. Compares the branch `VERSION` against the `origin/main` `VERSION`
@@ -281,10 +292,12 @@ Checks whether `global-settings/VERSION` has been correctly bumped after any cha
    - `VERSION` bumped but no other files changed — flags as unusual
 
 **When to use:**
+
 - Standalone: any time you modify a file in `global-settings/` and want to confirm the bump is in place before committing
 - Automatically: called by `/create-pr` when the selected repo is `ConductionNL/.github` — no need to run it separately in that flow
 
 **Semver rules for `global-settings/`:**
+
 - `1.0.0 → 1.1.0` — new permissions, guards, or behavior added
 - `1.0.0 → 2.0.0` — breaking change requiring manual migration
 
@@ -299,11 +312,13 @@ Checks whether `global-settings/VERSION` has been correctly bumped after any cha
 Converts an OpenSpec change's `tasks.md` into structured `plan.json` and creates corresponding GitHub Issues.
 
 **Usage:**
+
 ```
 /opsx-plan-to-issues
 ```
 
 **Prerequisites:**
+
 - A change with completed `tasks.md`
 - GitHub MCP server active or `gh` CLI authenticated
 - Git remote pointing to a ConductionNL repository
@@ -325,6 +340,7 @@ Converts an OpenSpec change's `tasks.md` into structured `plan.json` and creates
 5. **Saves `plan.json`** with all issue numbers linked
 
 **Output example:**
+
 ```
 Created tracking issue: https://github.com/ConductionNL/opencatalogi/issues/42
 Created 5 task issues: #43, #44, #45, #46, #47
@@ -334,6 +350,7 @@ Run /opsx-apply to begin implementation.
 ```
 
 **The plan.json it creates:**
+
 ```json
 {
   "change": "add-search",
@@ -352,9 +369,7 @@ Run /opsx-apply to begin implementation.
       "acceptance_criteria": [
         "GIVEN a search query WHEN GET /api/search?q=test THEN returns matching results"
       ],
-      "files_likely_affected": [
-        "lib/Controller/SearchController.php"
-      ],
+      "files_likely_affected": ["lib/Controller/SearchController.php"],
       "labels": ["openspec", "add-search"]
     }
   ]
@@ -370,11 +385,13 @@ Run /opsx-apply to begin implementation.
 Create new skills, modify and improve existing skills, and measure skill performance with evals. Use when you want to build a new skill from scratch, refine an existing skill's behavior, or benchmark a skill's accuracy with quantitative evaluation runs.
 
 **Usage:**
+
 ```
 /skill-creator
 ```
 
 **What it does:**
+
 1. Helps you decide what the skill should do and roughly how
 2. Drafts the SKILL.md
 3. Generates a small set of test prompts and runs them against `claude-with-access-to-the-skill`
@@ -394,6 +411,7 @@ Create new skills, modify and improve existing skills, and measure skill perform
 Check and sync documentation to reflect the current project state. Two targets: **app docs** (`{app}/docs/`) for a specific Nextcloud app's users and admins, and **dev docs** (`.github/docs/claude/`) for Claude and developers.
 
 **Usage:**
+
 ```
 /sync-docs                       # prompts for target
 /sync-docs app                   # prompts for which app, then syncs its docs/
@@ -417,14 +435,14 @@ Both modes enforce the [Documentation Principles](writing-docs.md) — duplicati
 
 Competitive analysis and ecosystem gap-finding workflow. For the complete reference, see [commands-tender.md](commands-tender.md).
 
-| Command | Phase | Description |
-|---------|-------|-------------|
-| `/tender-scan` | Intelligence | Scrape TenderNed, import, classify by category |
-| `/tender-status` | Monitoring | Dashboard of tender intelligence database |
-| `/tender-gap-report` | Gap Analysis | Categories with tenders but no Conduction product |
-| `/ecosystem-investigate` | Research | Deep-dive into a software category's competitors |
-| `/ecosystem-propose-app` | Planning | Generate full app proposal for a gap |
-| `/intelligence-update` | Maintenance | Pull latest data from external sources |
+| Command                  | Phase        | Description                                       |
+| ------------------------ | ------------ | ------------------------------------------------- |
+| `/tender-scan`           | Intelligence | Scrape TenderNed, import, classify by category    |
+| `/tender-status`         | Monitoring   | Dashboard of tender intelligence database         |
+| `/tender-gap-report`     | Gap Analysis | Categories with tenders but no Conduction product |
+| `/ecosystem-investigate` | Research     | Deep-dive into a software category's competitors  |
+| `/ecosystem-propose-app` | Planning     | Generate full app proposal for a gap              |
+| `/intelligence-update`   | Maintenance  | Pull latest data from external sources            |
 
 ---
 

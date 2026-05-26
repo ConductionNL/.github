@@ -10,16 +10,16 @@ Instead, please email us at: **security@conduction.nl**
 
 Include the following in your report:
 
-* Description of the vulnerability
-* Steps to reproduce the issue
-* Potential impact
-* Suggested fix (if any)
+- Description of the vulnerability
+- Steps to reproduce the issue
+- Potential impact
+- Suggested fix (if any)
 
 ## Response Timeline
 
-* **Acknowledgement:** Within 48 hours of receiving your report
-* **Initial assessment:** Within 1 week
-* **Fix and disclosure:** We aim to resolve critical vulnerabilities within 30 days
+- **Acknowledgement:** Within 48 hours of receiving your report
+- **Initial assessment:** Within 1 week
+- **Fix and disclosure:** We aim to resolve critical vulnerabilities within 30 days
 
 ## Supported Versions
 
@@ -41,10 +41,10 @@ We publish a [CycloneDX](https://cyclonedx.org/) 1.5 JSON SBOM for every release
 
 For every app `<app>` under [ConductionNL](https://github.com/ConductionNL), two URLs always work:
 
-| Use case | URL pattern |
-|---|---|
+| Use case                                                           | URL pattern                                                                    |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
 | **Always-latest released SBOM** (auto-redirects to newest release) | `https://github.com/ConductionNL/<app>/releases/latest/download/sbom.cdx.json` |
-| **Specific release SBOM** (pinned, for compliance archives) | `https://github.com/ConductionNL/<app>/releases/download/<tag>/sbom.cdx.json` |
+| **Specific release SBOM** (pinned, for compliance archives)        | `https://github.com/ConductionNL/<app>/releases/download/<tag>/sbom.cdx.json`  |
 
 Example — fetch the latest mydash SBOM:
 

@@ -4,15 +4,15 @@ Each project workspace configures its own Playwright MCP browser sessions in a `
 
 ## Browser Pool (Nextcloud workspace)
 
-| Server | Mode | Purpose |
-|--------|------|---------|
-| `browser-1` | Headless | Main agent (default) |
-| `browser-2` | Headless | Sub-agent / parallel |
-| `browser-3` | Headless | Sub-agent / parallel |
-| `browser-4` | Headless | Sub-agent / parallel |
-| `browser-5` | Headless | Sub-agent / parallel |
+| Server      | Mode       | Purpose                           |
+| ----------- | ---------- | --------------------------------- |
+| `browser-1` | Headless   | Main agent (default)              |
+| `browser-2` | Headless   | Sub-agent / parallel              |
+| `browser-3` | Headless   | Sub-agent / parallel              |
+| `browser-4` | Headless   | Sub-agent / parallel              |
+| `browser-5` | Headless   | Sub-agent / parallel              |
 | `browser-6` | **Headed** | User observation (visible window) |
-| `browser-7` | Headless | Sub-agent / parallel |
+| `browser-7` | Headless   | Sub-agent / parallel              |
 
 ## VS Code Extension Setup
 
@@ -21,13 +21,82 @@ The VS Code extension loads MCP servers from `.mcp.json` in the **project root**
 ```json
 {
   "mcpServers": {
-    "browser-1": { "command": "npx", "args": ["-y", "@playwright/mcp@latest", "--browser", "chromium", "--headless", "--isolated"] },
-    "browser-2": { "command": "npx", "args": ["-y", "@playwright/mcp@latest", "--browser", "chromium", "--headless", "--isolated"] },
-    "browser-3": { "command": "npx", "args": ["-y", "@playwright/mcp@latest", "--browser", "chromium", "--headless", "--isolated"] },
-    "browser-4": { "command": "npx", "args": ["-y", "@playwright/mcp@latest", "--browser", "chromium", "--headless", "--isolated"] },
-    "browser-5": { "command": "npx", "args": ["-y", "@playwright/mcp@latest", "--browser", "chromium", "--headless", "--isolated"] },
-    "browser-6": { "command": "npx", "args": ["-y", "@playwright/mcp@latest", "--browser", "chromium", "--isolated"] },
-    "browser-7": { "command": "npx", "args": ["-y", "@playwright/mcp@latest", "--browser", "chromium", "--headless", "--isolated"] }
+    "browser-1": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest",
+        "--browser",
+        "chromium",
+        "--headless",
+        "--isolated"
+      ]
+    },
+    "browser-2": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest",
+        "--browser",
+        "chromium",
+        "--headless",
+        "--isolated"
+      ]
+    },
+    "browser-3": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest",
+        "--browser",
+        "chromium",
+        "--headless",
+        "--isolated"
+      ]
+    },
+    "browser-4": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest",
+        "--browser",
+        "chromium",
+        "--headless",
+        "--isolated"
+      ]
+    },
+    "browser-5": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest",
+        "--browser",
+        "chromium",
+        "--headless",
+        "--isolated"
+      ]
+    },
+    "browser-6": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest",
+        "--browser",
+        "chromium",
+        "--isolated"
+      ]
+    },
+    "browser-7": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest",
+        "--browser",
+        "chromium",
+        "--headless",
+        "--isolated"
+      ]
+    }
   }
 }
 ```
@@ -42,6 +111,7 @@ Then **reload the VS Code window**: `Ctrl+Shift+P` → type `reload window` → 
 ## Verification
 
 After reload, open the MCP servers panel to verify all 7 browsers show **Connected**. You can do this two ways:
+
 - Type `/MCP servers` in the Claude Code chat input
 - Or `Ctrl+Shift+P` → search **"MCP servers"**
 

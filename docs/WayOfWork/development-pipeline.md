@@ -20,43 +20,47 @@ hotfix/*  ──┘
 
 All branches are protected. No direct pushes. Every change flows through a pull request with peer review and CI.
 
-| Target | Reviews required | What triggers |
-|---|---|---|
-| `development` | 1 reviewer | Quality CI |
-| `beta` | 1 reviewer | Quality CI + beta release |
-| `main` | 2 reviewers | Full CI + stable release |
+| Target        | Reviews required | What triggers             |
+| ------------- | ---------------- | ------------------------- |
+| `development` | 1 reviewer       | Quality CI                |
+| `beta`        | 1 reviewer       | Quality CI + beta release |
+| `main`        | 2 reviewers      | Full CI + stable release  |
 
 ## Quality Gates
 
 Every PR triggers **four parallel quality gates** — all must pass before merge:
 
 ### PHP Quality
-| Check | Tool |
-|---|---|
-| Syntax | `php -l` |
-| Code style | PHPCS (PSR-12) |
+
+| Check           | Tool            |
+| --------------- | --------------- |
+| Syntax          | `php -l`        |
+| Code style      | PHPCS (PSR-12)  |
 | Static analysis | PHPStan + Psalm |
-| Mess detection | PHPMD |
-| Code metrics | PHPMetrics |
+| Mess detection  | PHPMD           |
+| Code metrics    | PHPMetrics      |
 
 ### Frontend Quality
-| Check | Tool |
-|---|---|
-| JavaScript/Vue | ESLint |
-| CSS/SCSS | Stylelint |
+
+| Check          | Tool      |
+| -------------- | --------- |
+| JavaScript/Vue | ESLint    |
+| CSS/SCSS       | Stylelint |
 
 ### Dependency Checks
-| Check | What it catches |
-|---|---|
+
+| Check              | What it catches                                 |
+| ------------------ | ----------------------------------------------- |
 | License compliance | Copyleft or restricted licenses in dependencies |
-| Vulnerability scan | Known CVEs in composer and npm packages |
-| SBOM generation | CycloneDX bill of materials for audit trail |
+| Vulnerability scan | Known CVEs in composer and npm packages         |
+| SBOM generation    | CycloneDX bill of materials for audit trail     |
 
 ### Security
-| Check | What it catches |
-|---|---|
+
+| Check            | What it catches                      |
+| ---------------- | ------------------------------------ |
 | `composer audit` | Known PHP dependency vulnerabilities |
-| `npm audit` | Known JS dependency vulnerabilities |
+| `npm audit`      | Known JS dependency vulnerabilities  |
 
 ## Automated Releases
 
@@ -67,10 +71,10 @@ Releases are fully automated via GitHub Actions:
 
 Version numbers are calculated from PR labels:
 
-| Label | Version bump |
-|---|---|
-| `major` | 1.0.0 → 2.0.0 |
-| `minor` | 1.0.0 → 1.1.0 |
+| Label             | Version bump  |
+| ----------------- | ------------- |
+| `major`           | 1.0.0 → 2.0.0 |
+| `minor`           | 1.0.0 → 1.1.0 |
 | `patch` (default) | 1.0.0 → 1.0.1 |
 
 ## Hydra — Agentic Development Pipeline

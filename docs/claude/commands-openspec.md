@@ -11,17 +11,20 @@ These commands are installed per-project when you run `openspec init`. They're a
 Start a new change. Creates the change directory with metadata.
 
 **Usage:**
+
 ```
 /opsx-new add-publication-search
 ```
 
 **What it creates:**
+
 ```
 openspec/changes/add-publication-search/
 └── .openspec.yaml      # Change metadata (schema, created date)
 ```
 
 **Tips:**
+
 - Use descriptive kebab-case names: `add-dark-mode`, `fix-cors-headers`, `refactor-object-service`
 - The name becomes a GitHub Issue label, so keep it readable
 
@@ -34,11 +37,13 @@ openspec/changes/add-publication-search/
 Fast-forward: generates ALL artifacts in dependency order (proposal → specs → design → tasks) in one go.
 
 **Usage:**
+
 ```
 /opsx-ff
 ```
 
 **What it creates:**
+
 ```
 openspec/changes/add-publication-search/
 ├── .openspec.yaml
@@ -65,6 +70,7 @@ openspec/changes/add-publication-search/
 Creates the next artifact in the dependency chain. Run repeatedly to build specs incrementally.
 
 **Usage:**
+
 ```
 /opsx-continue    # Creates proposal.md (first time)
 /opsx-continue    # Creates specs/ (second time)
@@ -73,6 +79,7 @@ Creates the next artifact in the dependency chain. Run repeatedly to build specs
 ```
 
 **Dependency chain:**
+
 ```
 proposal (root)
     ├── discovery  (optional — requires: proposal)
@@ -95,6 +102,7 @@ proposal (root)
 Think through ideas and investigate the codebase before starting a formal change. No artifacts are created.
 
 **Usage:**
+
 ```
 /opsx-explore
 ```
@@ -103,14 +111,14 @@ Think through ideas and investigate the codebase before starting a formal change
 
 **Comparison with `/app-explore`:**
 
-| | `/opsx-explore` | `/app-explore` |
-|---|---|---|
-| **Scope** | Any topic — a change, a bug, an idea | A specific Nextcloud app's configuration |
-| **Output** | None — thinking only | Writes to `openspec/app-config.json` |
+|                 | `/opsx-explore`                                                      | `/app-explore`                                                        |
+| --------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| **Scope**       | Any topic — a change, a bug, an idea                                 | A specific Nextcloud app's configuration                              |
+| **Output**      | None — thinking only                                                 | Writes to `openspec/app-config.json`                                  |
 | **When to use** | Before starting a change (`/opsx-new`) when requirements are unclear | When designing or refining an app's goals, architecture, and features |
-| **Phase** | Pre-spec | Design / Configuration |
+| **Phase**       | Pre-spec                                                             | Design / Configuration                                                |
 
-Use `/opsx-explore` to think through *what to build*. Use `/app-explore` to document *how an app is designed and configured*.
+Use `/opsx-explore` to think through _what to build_. Use `/app-explore` to document _how an app is designed and configured_.
 
 **Model:** Checked at run time — stops on Haiku. Asks which model to use and explains how to switch if the choice differs from the active model. **Sonnet** for most exploration sessions. **Opus** recommended — complex analysis, architecture decisions, and strategic thinking benefit from stronger reasoning.
 
@@ -123,6 +131,7 @@ Use `/opsx-explore` to think through *what to build*. Use `/app-explore` to docu
 OpenSpec's built-in implementation command. Reads `tasks.md` and works through tasks.
 
 **Usage:**
+
 ```
 /opsx-apply
 ```
@@ -138,11 +147,13 @@ OpenSpec's built-in implementation command. Reads `tasks.md` and works through t
 OpenSpec's built-in verification. Validates implementation against artifacts.
 
 **Usage:**
+
 ```
 /opsx-verify
 ```
 
 **Checks:**
+
 - **Completeness** — All tasks done, all requirements implemented
 - **Correctness** — Implementation matches spec intent
 - **Coherence** — Design decisions reflected in code
@@ -160,11 +171,13 @@ OpenSpec's built-in verification. Validates implementation against artifacts.
 Merges delta specs from the change into the main `openspec/specs/` directory.
 
 **Usage:**
+
 ```
 /opsx-sync
 ```
 
 **What it does:**
+
 - **ADDED** requirements → appended to main spec
 - **MODIFIED** requirements → replace existing in main spec
 - **REMOVED** requirements → deleted from main spec
@@ -180,11 +193,13 @@ Usually done automatically during archive.
 Complete a change and preserve it for the historical record.
 
 **Usage:**
+
 ```
 /opsx-archive
 ```
 
 **What it does:**
+
 1. Checks artifact and task completion
 2. Syncs delta specs into main specs (if not already done)
 3. Moves the change to `openspec/changes/archive/YYYY-MM-DD-<name>/`
@@ -202,6 +217,7 @@ Complete a change and preserve it for the historical record.
 Archive multiple completed changes at once.
 
 **Usage:**
+
 ```
 /opsx-bulk-archive
 ```
@@ -217,6 +233,7 @@ Archive multiple completed changes at once.
 Automated apply→verify loop for a single change in a specific app. Runs the implementation loop inside an isolated Docker container, optionally runs targeted tests on the host, then archives and syncs to GitHub.
 
 **Usage:**
+
 ```
 /opsx-apply-loop                          # asks which app + change to run
 /opsx-apply-loop procest add-sla-tracking # run a specific app/change
@@ -224,6 +241,7 @@ Automated apply→verify loop for a single change in a specific app. Runs the im
 ```
 
 **What it does:**
+
 1. Selects app and change (scans across all apps, or uses provided arguments)
 2. Checks for a GitHub tracking issue (runs `/opsx-plan-to-issues` first if missing)
 3. Creates a `feature/<issue-number>/<change-name>` branch in the app's git repo
@@ -255,6 +273,7 @@ Automated apply→verify loop for a single change in a specific app. Runs the im
 **Model:** Sonnet recommended for most changes; Opus for complex architectural work. Asked at run time.
 
 **Requires:**
+
 - Docker running
 - `gh` CLI authenticated on the host
 - Nextcloud containers up (auto-started if not running — uses `docker compose -f` pointed at the docker-dev root's `.github/docker-compose.yml`)
@@ -271,6 +290,7 @@ Automated apply→verify loop for a single change in a specific app. Runs the im
 Process one or more OpenSpec changes through the full lifecycle in parallel — each change gets its own subagent, git worktree, feature branch, and PR.
 
 **Usage:**
+
 ```
 /opsx-pipeline all                      # process all open proposals across all repos
 /opsx-pipeline procest                  # all open proposals in one app
@@ -278,6 +298,7 @@ Process one or more OpenSpec changes through the full lifecycle in parallel — 
 ```
 
 **What it does:**
+
 1. Discovers open proposals (changes with `proposal.md` but not yet archived)
 2. Presents an execution plan and asks for confirmation
 3. Creates a git worktree and feature branch per change
@@ -287,6 +308,7 @@ Process one or more OpenSpec changes through the full lifecycle in parallel — 
 7. Reports full results including tasks completed, quality checks, and PR links
 
 **Subagent lifecycle per change:**
+
 ```
 ff (artifacts) → plan-to-issues → apply (implement + tests + docs) → verify → archive → push + PR
 ```
@@ -308,6 +330,7 @@ ff (artifacts) → plan-to-issues → apply (implement + tests + docs) → verif
 Get an overview of the current project's OpenSpec setup and active changes.
 
 **Usage:**
+
 ```
 /opsx-onboard
 ```
@@ -327,16 +350,19 @@ Used to bring legacy apps under the `@spec` annotation convention defined in [AD
 Audits an app for spec ↔ code coverage. **Read-only** — writes two report files and never touches code. Buckets every method into one of six categories to plan the retrofit work. Run this before `/opsx-annotate` or `/opsx-reverse-spec`.
 
 **Usage:**
+
 ```
 /opsx-coverage-scan                 # prompts for app (lists apps with populated specs)
 /opsx-coverage-scan opencatalogi    # scan a specific app
 ```
 
 **Writes:**
+
 - `{app}/openspec/coverage-report.md` — human-readable report
 - `{app}/openspec/coverage-report.json` — machine-readable sidecar consumed by `/opsx-annotate`
 
 **Buckets produced:**
+
 - **1** — Methods cleanly matched to an existing REQ (high confidence ≥0.85). Ready to annotate.
 - **2a** — Methods in an existing capability but no REQ covers the behavior. Extend the spec.
 - **2b** — Methods with no capability owner. New capability spec needed.
@@ -347,6 +373,7 @@ Audits an app for spec ↔ code coverage. **Read-only** — writes two report fi
 **When to use:** Before starting a retrofit pass on any app. Re-run after each reverse-spec merge to refresh the picture.
 
 **Guardrails:**
+
 - Refuses to run on Haiku — REQ-matching needs Sonnet or Opus reasoning.
 - Does not touch code or commit anything.
 - `NEEDS-REVIEW` flag surfaces matches in the 0.70–0.85 confidence window.
@@ -362,11 +389,13 @@ Audits an app for spec ↔ code coverage. **Read-only** — writes two report fi
 Applies the Bucket 1 matches from a recent coverage report as `@spec` tags. Creates a single **ghost change** (`retrofit-annotate-{app}-{YYYY-MM-DD}`) whose `tasks.md` is what the annotations point at, then opens an **annotation-only PR** — no logic changes, no refactors, no formatting.
 
 **Usage:**
+
 ```
 /opsx-annotate opencatalogi
 ```
 
 **What it does:**
+
 1. Reads `coverage-report.json` (must exist and be <24h old)
 2. Refuses dirty working trees
 3. Creates ghost change with one task per REQ with Bucket 1 matches
@@ -379,6 +408,7 @@ Applies the Bucket 1 matches from a recent coverage report as `@spec` tags. Crea
 **When to use:** Immediately after reviewing a coverage report's Bucket 1. Do not mix with logic changes.
 
 **Guardrails:**
+
 - Idempotent on already-annotated code (detects and asks before creating a fresh ghost change).
 - Skips `NEEDS-REVIEW` entries — human triage first.
 - Never reorders existing tags to satisfy the linter — fix the PHPCS config instead.
@@ -395,6 +425,7 @@ Applies the Bucket 1 matches from a recent coverage report as `@spec` tags. Crea
 Drafts a retrofit spec from observed code for **one Bucket 2 cluster per run**. Creates a ghost change with the spec delta + tasks + inline annotations in a single PR. Cap: 5 REQs per run — split larger clusters across multiple runs.
 
 **Usage:**
+
 ```
 /opsx-reverse-spec opencatalogi --extend admin-settings   # add REQs to an existing capability
 /opsx-reverse-spec opencatalogi --cluster app-lifecycle   # create a brand-new capability spec
@@ -402,12 +433,14 @@ Drafts a retrofit spec from observed code for **one Bucket 2 cluster per run**. 
 ```
 
 **Flags (mutually exclusive, one required):**
+
 - `--extend <capability>` — append REQs to an existing capability spec. Use for Bucket 2a clusters.
 - `--cluster <name>` — create a new capability spec. Use for Bucket 2b clusters.
 
 **Bias toward `--extend`.** Minting a new capability is a design decision; extending is cheaper and safer.
 
 **What it does:**
+
 1. Validates coverage report (<24h, matching branch)
 2. Reads the cluster's methods — captures observed inputs, outputs, pre/postconditions, failure modes
 3. Drafts REQs that describe **observed behavior, not aspirational intent** (bugs stay bugs; notes flag them)
@@ -421,6 +454,7 @@ Drafts a retrofit spec from observed code for **one Bucket 2 cluster per run**. 
 **When to use:** After `/opsx-annotate` has merged. One cluster per run — each cluster is its own review cycle because REQ language is the review surface.
 
 **Guardrails:**
+
 - Refuses to batch clusters.
 - Caps at 5 REQs per run — split larger clusters.
 - Fails loudly if Specter sync fails — don't leave specs in-tree but missing from dashboards.
@@ -434,17 +468,17 @@ Drafts a retrofit spec from observed code for **one Bucket 2 cluster per run**. 
 
 These are terminal commands (not Claude slash commands) for managing specs directly.
 
-| Command | Description |
-|---------|-------------|
-| `openspec init --tools claude` | Initialize OpenSpec in a project |
-| `openspec list --changes` | List all active changes |
-| `openspec list --specs` | List all specs |
-| `openspec show <name>` | View details of a change or spec |
-| `openspec status --change <name>` | Show artifact completion status |
-| `openspec validate --all` | Validate all specs and changes |
-| `openspec validate --strict` | Strict validation (errors on warnings) |
-| `openspec update` | Regenerate AI tool config after CLI upgrade |
-| `openspec schema which` | Show which schema is being used |
-| `openspec config list` | Show all configuration |
+| Command                           | Description                                 |
+| --------------------------------- | ------------------------------------------- |
+| `openspec init --tools claude`    | Initialize OpenSpec in a project            |
+| `openspec list --changes`         | List all active changes                     |
+| `openspec list --specs`           | List all specs                              |
+| `openspec show <name>`            | View details of a change or spec            |
+| `openspec status --change <name>` | Show artifact completion status             |
+| `openspec validate --all`         | Validate all specs and changes              |
+| `openspec validate --strict`      | Strict validation (errors on warnings)      |
+| `openspec update`                 | Regenerate AI tool config after CLI upgrade |
+| `openspec schema which`           | Show which schema is being used             |
+| `openspec config list`            | Show all configuration                      |
 
 Add `--json` to any command for machine-readable output.

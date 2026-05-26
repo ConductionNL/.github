@@ -93,15 +93,15 @@ is written to the target repository or GitHub.
 
 Each pipeline stage uses the most cost-effective model for its task complexity:
 
-| Stage | Model | Rationale |
-|-------|-------|-----------|
-| Builder (build) | opus | Complex implementation requires deep reasoning |
-| Builder (fix-quality) | sonnet | Targeted lint/test fixes are straightforward |
-| Builder (fix-browser) | sonnet | Targeted UI fixes based on structured findings |
-| Builder (fix review findings) | sonnet | Targeted fixes for CRITICAL+WARNING findings |
-| Browser UI Tester | sonnet | Structured acceptance testing via Playwright MCP |
-| Code Reviewer | sonnet | Review is analytical, not generative |
-| Security Reviewer | sonnet | Pattern matching against known vulnerability classes |
+| Stage                         | Model  | Rationale                                            |
+| ----------------------------- | ------ | ---------------------------------------------------- |
+| Builder (build)               | opus   | Complex implementation requires deep reasoning       |
+| Builder (fix-quality)         | sonnet | Targeted lint/test fixes are straightforward         |
+| Builder (fix-browser)         | sonnet | Targeted UI fixes based on structured findings       |
+| Builder (fix review findings) | sonnet | Targeted fixes for CRITICAL+WARNING findings         |
+| Browser UI Tester             | sonnet | Structured acceptance testing via Playwright MCP     |
+| Code Reviewer                 | sonnet | Review is analytical, not generative                 |
+| Security Reviewer             | sonnet | Pattern matching against known vulnerability classes |
 
 Override: set `HYDRA_MODEL` environment variable to force a specific model for all stages.
 
@@ -111,20 +111,20 @@ Override: set `HYDRA_MODEL` environment variable to force a specific model for a
 
 These constraints are non-negotiable and apply to all containers in all deployment models.
 
-| Constraint | Value | Rationale |
-|---|---|---|
-| `--read-only` | always | Prevents the agent from modifying the container filesystem |
-| `--tmpfs /tmp:size=512M` | always | Writable scratch space with size cap |
-| `--tmpfs /workspace:size=2G` | always | Clone workspace with size cap |
-| `--security-opt no-new-privileges` | always | Prevents privilege escalation via setuid |
-| `--cap-drop ALL` | always | Removes all Linux capabilities |
-| `--cap-add NET_ADMIN` | local only | Required for iptables egress rules in entrypoint.sh |
-| `--cpus 4 --memory 8g` | Builder | Resource caps to prevent runaway builds |
-| `--cpus 2 --memory 4g` | Reviewers | Lower resource allocation for read-only review tasks |
-| `--network hydra-net` | local | Isolated Docker network |
-| `--output-format stream-json` | always | JSONL output for log parsing |
-| `--max-turns` | 80 / 30 / 20 | Hard turn limit prevents infinite loops (builder / reviewer / security) |
-| No `--dangerously-skip-permissions` | always | Explicit allowedTools required |
+| Constraint                          | Value        | Rationale                                                               |
+| ----------------------------------- | ------------ | ----------------------------------------------------------------------- |
+| `--read-only`                       | always       | Prevents the agent from modifying the container filesystem              |
+| `--tmpfs /tmp:size=512M`            | always       | Writable scratch space with size cap                                    |
+| `--tmpfs /workspace:size=2G`        | always       | Clone workspace with size cap                                           |
+| `--security-opt no-new-privileges`  | always       | Prevents privilege escalation via setuid                                |
+| `--cap-drop ALL`                    | always       | Removes all Linux capabilities                                          |
+| `--cap-add NET_ADMIN`               | local only   | Required for iptables egress rules in entrypoint.sh                     |
+| `--cpus 4 --memory 8g`              | Builder      | Resource caps to prevent runaway builds                                 |
+| `--cpus 2 --memory 4g`              | Reviewers    | Lower resource allocation for read-only review tasks                    |
+| `--network hydra-net`               | local        | Isolated Docker network                                                 |
+| `--output-format stream-json`       | always       | JSONL output for log parsing                                            |
+| `--max-turns`                       | 80 / 30 / 20 | Hard turn limit prevents infinite loops (builder / reviewer / security) |
+| No `--dangerously-skip-permissions` | always       | Explicit allowedTools required                                          |
 
 **Origin of these constraints:** a prior Claude Code session inherited organisation-admin
 Git rights through a developer's WSL session and bypassed peer review. These constraints
@@ -141,28 +141,28 @@ store is required.
 
 #### Builder
 
-| Output | Location | Contains |
-|---|---|---|
-| Feature branch | `hydra/<change-name>` on target repo | All code changes |
-| Draft PR | Target repo PR | Structured description, spec reference, change list, test coverage |
-| PR description | PR body | Summary, Spec Reference, Changes, Test Coverage sections |
-| Commit messages | Git history | Task reference, what changed and why |
-| RFI comment | GitHub issue (if blocked) | Blocker reason, attempted fixes, what is needed |
-| Status update | `openspec/changes/<name>/design.md` | `status: pr-created` |
+| Output          | Location                             | Contains                                                           |
+| --------------- | ------------------------------------ | ------------------------------------------------------------------ |
+| Feature branch  | `hydra/<change-name>` on target repo | All code changes                                                   |
+| Draft PR        | Target repo PR                       | Structured description, spec reference, change list, test coverage |
+| PR description  | PR body                              | Summary, Spec Reference, Changes, Test Coverage sections           |
+| Commit messages | Git history                          | Task reference, what changed and why                               |
+| RFI comment     | GitHub issue (if blocked)            | Blocker reason, attempted fixes, what is needed                    |
+| Status update   | `openspec/changes/<name>/design.md`  | `status: pr-created`                                               |
 
 #### Code Reviewer
 
-| Output | Location | Contains |
-|---|---|---|
+| Output          | Location    | Contains                                           |
+| --------------- | ----------- | -------------------------------------------------- |
 | Review comments | PR comments | Findings with CRITICAL/WARNING/SUGGESTION severity |
-| Verdict comment | PR comment | `{ "pass": bool, "blocking": [...] }` |
+| Verdict comment | PR comment  | `{ "pass": bool, "blocking": [...] }`              |
 
 #### Security Reviewer
 
-| Output | Location | Contains |
-|---|---|---|
-| SAST findings | PR comments | Semgrep + Gitleaks + Trivy results with severity |
-| Security verdict | PR comment | `{ "pass": bool, "blocking": [...] }` |
+| Output           | Location    | Contains                                         |
+| ---------------- | ----------- | ------------------------------------------------ |
+| SAST findings    | PR comments | Semgrep + Gitleaks + Trivy results with severity |
+| Security verdict | PR comment  | `{ "pass": bool, "blocking": [...] }`            |
 
 ### Traceability chain
 
@@ -222,6 +222,7 @@ agents/
 scalars override, lists replace, maps deep-merge.
 
 Key settings in `base.yaml`:
+
 - `claude.permission_mode: acceptEdits` — allows containers to run headless without
   interactive permission prompts
 - `claude.output_format: stream-json` — JSONL output for log parsing
@@ -278,20 +279,20 @@ At build time, the Builder image copies the 12 compact ADRs from this repo's
 `openspec/architecture/` into `/home/claude/.claude/openspec/architecture/`. These define
 baseline conventions for all Conduction projects:
 
-| ADR | Topic |
-|-----|-------|
+| ADR     | Topic                                                          |
+| ------- | -------------------------------------------------------------- |
 | adr-001 | OpenRegister data layer (incl. register templates + seed data) |
-| adr-002 | API conventions (NL API strategie) |
-| adr-003 | Backend layering (Controller→Service→Mapper, DI, routing) |
-| adr-004 | Frontend patterns (Vue 2, Pinia, @conduction/nextcloud-vue) |
-| adr-005 | Security and auth |
-| adr-006 | Prometheus metrics and health checks |
-| adr-007 | i18n requirement (nl/en minimum, register i18n) |
-| adr-008 | Mandatory test coverage |
-| adr-009 | Documentation with screenshots |
-| adr-010 | NL Design System (CSS vars, WCAG AA) |
-| adr-011 | Schema standards (schema.org, vCard) |
-| adr-012 | Deduplication check against OpenRegister core |
+| adr-002 | API conventions (NL API strategie)                             |
+| adr-003 | Backend layering (Controller→Service→Mapper, DI, routing)      |
+| adr-004 | Frontend patterns (Vue 2, Pinia, @conduction/nextcloud-vue)    |
+| adr-005 | Security and auth                                              |
+| adr-006 | Prometheus metrics and health checks                           |
+| adr-007 | i18n requirement (nl/en minimum, register i18n)                |
+| adr-008 | Mandatory test coverage                                        |
+| adr-009 | Documentation with screenshots                                 |
+| adr-010 | NL Design System (CSS vars, WCAG AA)                           |
+| adr-011 | Schema standards (schema.org, vCard)                           |
+| adr-012 | Deduplication check against OpenRegister core                  |
 
 ### Layer 2: Project-specific ADRs (from target repo at runtime)
 

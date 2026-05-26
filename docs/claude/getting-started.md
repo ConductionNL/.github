@@ -18,10 +18,10 @@ This guide walks you through setting up the spec-driven development workflow and
 
 These commands run Claude CLI inside an isolated Docker container, which cannot use the interactive OAuth login your host session uses. You need one of these environment variables set in your shell:
 
-| Variable | Source | Cost |
-|----------|--------|------|
-| `CLAUDE_CODE_AUTH_TOKEN` (preferred) | Your existing Claude Max/Pro subscription | Free (included in subscription) |
-| `ANTHROPIC_API_KEY` (fallback) | Anthropic API console | Prepaid credits (billed per token) |
+| Variable                             | Source                                    | Cost                               |
+| ------------------------------------ | ----------------------------------------- | ---------------------------------- |
+| `CLAUDE_CODE_AUTH_TOKEN` (preferred) | Your existing Claude Max/Pro subscription | Free (included in subscription)    |
+| `ANTHROPIC_API_KEY` (fallback)       | Anthropic API console                     | Prepaid credits (billed per token) |
 
 **To set up `CLAUDE_CODE_AUTH_TOKEN` (recommended):**
 
@@ -139,6 +139,7 @@ Generate all planning artifacts at once:
 ```
 
 Claude will create:
+
 1. **`proposal.md`** — Why this change exists and what it covers
 2. **`specs/*.md`** — Detailed requirements with scenarios
 3. **`design.md`** — Technical approach and architecture
@@ -149,6 +150,7 @@ Claude will create:
 Read through each artifact. This is the most valuable step — catching issues in specs is much cheaper than catching them in code.
 
 Things to check:
+
 - Does the proposal cover the right scope?
 - Are the spec requirements using the right RFC 2119 keywords (MUST vs SHOULD)?
 - Do the scenarios cover edge cases?
@@ -163,6 +165,7 @@ Edit the artifacts directly if needed — they're just markdown files.
 ```
 
 This converts your tasks into GitHub Issues:
+
 - A **tracking issue** with a full checklist (your "epic")
 - **Individual issues** per task with acceptance criteria and spec references
 - A **`plan.json`** file linking everything together
@@ -176,6 +179,7 @@ Open the tracking issue URL to see your kanban view.
 ```
 
 This starts the implementation loop. Each iteration:
+
 1. Picks the next pending task from `plan.json`
 2. Reads ONLY the spec section that task references
 3. Implements the task
@@ -193,6 +197,7 @@ After all tasks are done:
 ```
 
 This checks every spec requirement against your implementation and reports:
+
 - **CRITICAL** findings that must be fixed
 - **WARNING** findings that should be addressed
 - **SUGGESTION** findings that are nice-to-have
@@ -209,15 +214,15 @@ This merges your delta specs into the main specs and preserves the change for hi
 
 ## Quick Reference
 
-| What you want to do | Command |
-|---------------------|---------|
-| Start a new feature | `/opsx-new <name>` |
-| Generate all specs at once | `/opsx-ff` |
-| Generate specs one at a time | `/opsx-continue` |
+| What you want to do            | Command                |
+| ------------------------------ | ---------------------- |
+| Start a new feature            | `/opsx-new <name>`     |
+| Generate all specs at once     | `/opsx-ff`             |
+| Generate specs one at a time   | `/opsx-continue`       |
 | Convert tasks to GitHub Issues | `/opsx-plan-to-issues` |
-| Start implementing | `/opsx-apply` |
-| Review implementation | `/opsx-verify` |
-| Complete and archive | `/opsx-archive` |
+| Start implementing             | `/opsx-apply`          |
+| Review implementation          | `/opsx-verify`         |
+| Complete and archive           | `/opsx-archive`        |
 
 ## Next Steps
 

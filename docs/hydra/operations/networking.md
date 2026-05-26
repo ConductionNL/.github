@@ -17,6 +17,7 @@ podman network create hydra-net
 ## Kubernetes
 
 Egress is controlled by `manifests/network-policy.yaml` — allows only:
+
 - DNS (UDP/TCP 53)
 - HTTPS (443) to `api.anthropic.com`, `github.com`, `api.github.com`
 

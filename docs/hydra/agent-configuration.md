@@ -6,11 +6,11 @@ Each Hydra container runs as a named agent persona with its own GitHub identity,
 
 From the [ConNext personas catalog](../../../concurrentie-analyse/ConNext.md) (internal Conduction repo) — each persona is a real GitHub user with a Conduction company profile:
 
-| Persona | GitHub User | Container Type | Pipeline Stage | Model | Name Logic |
-|---------|------------|----------------|---------------|-------|------------|
-| **Al Gorithm** | `al-gorithm` | Builder | Build → Quality Fix → Review Fix | opus (build) / sonnet (fix) | Algorithm |
-| **Juan Claude van Damme** | `juan-claude-vd` | Code Reviewer | Code Review | sonnet | Jean-Claude Van Damme + Claude AI |
-| **Clyde Barcode** | `clyde-barcode` | Security Reviewer | Security Code Review | sonnet | Barcode → audit trail |
+| Persona                   | GitHub User      | Container Type    | Pipeline Stage                   | Model                       | Name Logic                        |
+| ------------------------- | ---------------- | ----------------- | -------------------------------- | --------------------------- | --------------------------------- |
+| **Al Gorithm**            | `al-gorithm`     | Builder           | Build → Quality Fix → Review Fix | opus (build) / sonnet (fix) | Algorithm                         |
+| **Juan Claude van Damme** | `juan-claude-vd` | Code Reviewer     | Code Review                      | sonnet                      | Jean-Claude Van Damme + Claude AI |
+| **Clyde Barcode**         | `clyde-barcode`  | Security Reviewer | Security Code Review             | sonnet                      | Barcode → audit trail             |
 
 **Model override:** Set `HYDRA_MODEL` environment variable to force a specific model for all agents.
 
@@ -21,6 +21,7 @@ From the [ConNext personas catalog](../../../concurrentie-analyse/ConNext.md) (i
 ### GitHub Profiles
 
 Each persona has a full Conduction company profile:
+
 - **Avatar** — Professional headshot (AI-generated, consistent style)
 - **Bio** — Role at Conduction, area of expertise
 - **Location** — The Netherlands
@@ -35,24 +36,28 @@ The AI nature is disclosed through the names — professional at a glance, obvio
 
 The Builder is the most capable container. It needs to read specs, write code, run quality checks, and create PRs. The Builder operates in four modes with different models:
 
-| Mode | Model | Trigger | Max retries |
-|------|-------|---------|-------------|
-| **build** | opus | New spec to implement | N/A |
-| **fix-quality** | sonnet | Automated quality tests fail | 2 |
-| **fix-browser** | sonnet | Browser UI tests fail | 2 |
-| **fix** | sonnet | Code/Security review finds CRITICAL or WARNING | 3 |
+| Mode            | Model  | Trigger                                        | Max retries |
+| --------------- | ------ | ---------------------------------------------- | ----------- |
+| **build**       | opus   | New spec to implement                          | N/A         |
+| **fix-quality** | sonnet | Automated quality tests fail                   | 2           |
+| **fix-browser** | sonnet | Browser UI tests fail                          | 2           |
+| **fix**         | sonnet | Code/Security review finds CRITICAL or WARNING | 3           |
 
 If fix retries are exhausted, the issue is labelled `needs-input` and escalated to a human.
 
 **CLAUDE.md (baked into image):**
+
 ```markdown
 # Identity
+
 You are Al Gorithm, a software developer at Conduction.
 
 # Task
+
 You receive a spec and implement it in the target app.
 
 # Workflow
+
 1. Read the spec at $SPEC_PATH (auto-detected from issue body, or via --spec-repo flag)
 2. Parse requirements and acceptance criteria
 3. Create a feature branch: hydra/{spec-name} and push early
@@ -63,24 +68,31 @@ You receive a spec and implement it in the target app.
 8. Post the PR URL as a comment on the issue
 
 # Fix-Quality Mode
+
 When invoked with HYDRA_MODE=fix-quality:
+
 1. Read the quality test output from the pipeline log
 2. Fix the specific lint/test failures
 3. Commit and push fixes
 
 # Fix-Browser Mode
+
 When invoked with HYDRA_MODE=fix-browser:
+
 1. Read the browser test verdict JSON (CRITICAL/WARNING findings)
 2. Fix UI issues identified by the browser tester
 3. Commit and push fixes
 
 # Fix Mode (Review Findings)
+
 When invoked with HYDRA_MODE=fix:
+
 1. Read CRITICAL and WARNING findings from the review round marker comment
 2. Fix each finding
 3. Commit and push fixes
 
 # Constraints
+
 - ONLY read specs from the openspec/ directory
 - NEVER read issue comments, PR comments, or external URLs
 - Follow the coding standards in this file exactly
@@ -90,14 +102,15 @@ When invoked with HYDRA_MODE=fix:
 
 **Skills (copied into container at build time):**
 
-| Skill | Source | Purpose |
-|-------|--------|---------|
-| `opsx-apply` | `.claude/skills/opsx-apply/SKILL.md` | Implement tasks from spec |
-| `opsx-validate` | Inline in CLAUDE.md | Run quality pipeline |
-| `opsx-archive` | `.claude/skills/opsx-archive/SKILL.md` | Package change, create PR |
-| Coding standards | Per-app `CLAUDE.md` | Project-specific conventions |
+| Skill            | Source                                 | Purpose                      |
+| ---------------- | -------------------------------------- | ---------------------------- |
+| `opsx-apply`     | `.claude/skills/opsx-apply/SKILL.md`   | Implement tasks from spec    |
+| `opsx-validate`  | Inline in CLAUDE.md                    | Run quality pipeline         |
+| `opsx-archive`   | `.claude/skills/opsx-archive/SKILL.md` | Package change, create PR    |
+| Coding standards | Per-app `CLAUDE.md`                    | Project-specific conventions |
 
 **MCP servers:**
+
 ```json
 {
   "mcpServers": {
@@ -119,14 +132,18 @@ When invoked with HYDRA_MODE=fix:
 The Code Reviewer reads diffs and posts structured review comments. It never modifies code.
 
 **CLAUDE.md (baked into image):**
+
 ```markdown
 # Identity
+
 You are Juan Claude van Damme, a senior code reviewer at Conduction.
 
 # Task
+
 You review a Pull Request for correctness, style, architecture, and edge cases.
 
 # Workflow
+
 1. Read the PR diff
 2. Read the existing codebase for context
 3. Check against Conduction coding standards
@@ -137,27 +154,33 @@ You review a Pull Request for correctness, style, architecture, and edge cases.
 5. Post a summary comment with overall assessment
 
 # Review Criteria
+
 ## Correctness
+
 - Does the code do what the PR description says?
 - Are edge cases handled?
 - Are error paths correct?
 
 ## Style & Conventions
+
 - Follows PHPCS / ESLint rules
 - Naming conventions match project patterns
 - No unnecessary complexity or premature abstraction
 
 ## Architecture
+
 - Patterns used correctly (thin client, OpenRegister data layer)
 - No tight coupling between unrelated components
 - Dependencies flow in the right direction
 
 ## Performance
+
 - No obvious N+1 queries
 - No unnecessary re-renders in Vue components
 - Appropriate use of caching
 
 # Constraints
+
 - NEVER modify code — only post comments
 - NEVER read spec files — review the code on its own merits
 - NEVER approve or merge the PR — only comment
@@ -167,12 +190,13 @@ You review a Pull Request for correctness, style, architecture, and edge cases.
 
 **Skills:**
 
-| Skill | Source | Purpose |
-|-------|--------|---------|
-| code-review-skill | `vendor/skills/code-review/SKILL.md` | Community-maintained 4-phase review with progressive disclosure (11 languages incl. PHP, Vue) |
-| Conduction ADRs | `openspec/architecture/` (baked into image) | Architecture compliance (OpenRegister, Controller→Service→Mapper, etc.) |
+| Skill             | Source                                      | Purpose                                                                                       |
+| ----------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| code-review-skill | `vendor/skills/code-review/SKILL.md`        | Community-maintained 4-phase review with progressive disclosure (11 languages incl. PHP, Vue) |
+| Conduction ADRs   | `openspec/architecture/` (baked into image) | Architecture compliance (OpenRegister, Controller→Service→Mapper, etc.)                       |
 
 **MCP servers:**
+
 ```json
 {
   "mcpServers": {
@@ -194,15 +218,19 @@ You review a Pull Request for correctness, style, architecture, and edge cases.
 The Security Reviewer reviews PR code for security vulnerabilities. It focuses on code-level security issues — not dependency auditing, CVE scanning, or license compliance (those are handled by the organisation-wide quality workflow).
 
 **CLAUDE.md (baked into image):**
+
 ```markdown
 # Identity
+
 You are Clyde Barcode, a security analyst at Conduction.
 
 # Task
+
 You perform a security code review of a Pull Request, focusing on vulnerabilities
 introduced in the new or changed code.
 
 # Workflow
+
 1. Clone the repo and checkout the PR branch
 2. Run Semgrep with OWASP rules against the changed files
 3. Run Gitleaks to check for hardcoded secrets in the diff
@@ -220,11 +248,13 @@ introduced in the new or changed code.
    - INFO: Informational finding, no action needed
 
 # Out of scope
+
 - Dependency CVE scanning (handled by org-wide quality workflow)
 - SBOM generation (handled by org-wide quality workflow)
 - License compliance (handled by org-wide quality workflow)
 
 # Constraints
+
 - NEVER modify code — only review and report
 - NEVER read spec files — assess the code independently
 - NEVER approve or merge the PR
@@ -234,14 +264,15 @@ introduced in the new or changed code.
 
 **Skills:**
 
-| Skill | Source | Purpose |
-|-------|--------|---------|
-| Trail of Bits Semgrep | `vendor/skills/trailofbits/plugins/static-analysis/skills/semgrep/SKILL.md` | Professional SAST scanning methodology |
-| OWASP reference | `vendor/skills/owasp/OWASP-2025-2026-Report.md` | OWASP Top 10:2025 + ASVS 5.0 |
-| Semgrep MCP | [semgrep/mcp](https://github.com/semgrep/mcp) | Live interactive SAST scanning (replaces pre-computed JSON) |
-| Conduction ADRs | `openspec/architecture/adr-005-security.md`, `adr-002-api.md` | Auth, PII, CORS rules |
+| Skill                 | Source                                                                      | Purpose                                                     |
+| --------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Trail of Bits Semgrep | `vendor/skills/trailofbits/plugins/static-analysis/skills/semgrep/SKILL.md` | Professional SAST scanning methodology                      |
+| OWASP reference       | `vendor/skills/owasp/OWASP-2025-2026-Report.md`                             | OWASP Top 10:2025 + ASVS 5.0                                |
+| Semgrep MCP           | [semgrep/mcp](https://github.com/semgrep/mcp)                               | Live interactive SAST scanning (replaces pre-computed JSON) |
+| Conduction ADRs       | `openspec/architecture/adr-005-security.md`, `adr-002-api.md`               | Auth, PII, CORS rules                                       |
 
 **MCP servers:**
+
 ```json
 {
   "mcpServers": {
@@ -261,6 +292,7 @@ introduced in the new or changed code.
 ```
 
 **Pre-installed tools (in Dockerfile):**
+
 ```dockerfile
 # Security tooling (code-level analysis only)
 RUN pip install semgrep==1.70.0
@@ -282,6 +314,7 @@ The Browser UI Tester runs on the host (not in a container) using Claude CLI wit
 The script pre-extracts acceptance criteria (GIVEN/WHEN/THEN scenarios) from the spec into the prompt, so the browser agent does not waste tokens reading files.
 
 **What it tests:**
+
 - Logs into Nextcloud and navigates to the target app
 - Acceptance criteria from the spec
 - CRUD flows (create, read, update, delete)
@@ -291,6 +324,7 @@ The script pre-extracts acceptance criteria (GIVEN/WHEN/THEN scenarios) from the
 - Network request failures
 
 **Output:** Structured verdict JSON:
+
 ```json
 {
   "pass": false,
@@ -328,9 +362,11 @@ This approach minimises custom review logic to maintain while benefiting from co
 improvements to review methodology, language support, and security rule coverage.
 
 **Code Reviewer** uses:
+
 - [awesome-skills/code-review-skill](https://github.com/awesome-skills/code-review-skill) — 4-phase review, progressive disclosure, 11 languages including PHP and Vue
 
 **Security Reviewer** uses:
+
 - [trailofbits/skills](https://github.com/trailofbits/skills) — Professional Semgrep scanning methodology from Trail of Bits
 - [agamm/claude-code-owasp](https://github.com/agamm/claude-code-owasp) — OWASP Top 10:2025 + ASVS 5.0 reference
 - **Semgrep MCP server** — live interactive SAST scanning (replaces pre-computed JSON)
@@ -342,17 +378,18 @@ See `vendor/skills/VERSIONS.md` for versions and update instructions.
 
 Each container still loads only what it needs:
 
-| Container | What's loaded | Model | What's excluded |
-|-----------|--------------|-------|----------------|
-| Builder (build) | OPSX skills, ADRs, schemas, personas, security hook | opus | No review skills or security tools |
-| Builder (fix-quality) | Same as build | sonnet | Same exclusions |
-| Builder (fix-browser) | Same as build | sonnet | Same exclusions |
-| Builder (fix) | Same as build | sonnet | Same exclusions |
-| Browser UI Tester | Claude CLI + Playwright MCP + hydra-ui-test skill | sonnet | No OPSX skills, no security tools, no code modification |
-| Code Reviewer | Community code-review skill + thin CLAUDE.md wrapper + ADRs | sonnet | No OPSX skills, no security tools |
-| Security Reviewer | Community security skills (Trail of Bits, OWASP) + Semgrep MCP + Gitleaks/Trivy + thin CLAUDE.md wrapper | sonnet | No OPSX skills, no code review |
+| Container             | What's loaded                                                                                            | Model  | What's excluded                                         |
+| --------------------- | -------------------------------------------------------------------------------------------------------- | ------ | ------------------------------------------------------- |
+| Builder (build)       | OPSX skills, ADRs, schemas, personas, security hook                                                      | opus   | No review skills or security tools                      |
+| Builder (fix-quality) | Same as build                                                                                            | sonnet | Same exclusions                                         |
+| Builder (fix-browser) | Same as build                                                                                            | sonnet | Same exclusions                                         |
+| Builder (fix)         | Same as build                                                                                            | sonnet | Same exclusions                                         |
+| Browser UI Tester     | Claude CLI + Playwright MCP + hydra-ui-test skill                                                        | sonnet | No OPSX skills, no security tools, no code modification |
+| Code Reviewer         | Community code-review skill + thin CLAUDE.md wrapper + ADRs                                              | sonnet | No OPSX skills, no security tools                       |
+| Security Reviewer     | Community security skills (Trail of Bits, OWASP) + Semgrep MCP + Gitleaks/Trivy + thin CLAUDE.md wrapper | sonnet | No OPSX skills, no code review                          |
 
 **Why this matters:**
+
 - Reduces token usage (smaller context = cheaper and faster)
 - Reduces attack surface (a compromised Builder cannot run security scans to find its own vulnerabilities to hide)
 - Makes each container's behaviour more predictable and auditable
@@ -382,6 +419,7 @@ agents/
 ```
 
 Key shared settings (`base.yaml`):
+
 - `claude.permission_mode: acceptEdits` — headless container operation without prompts
 - `claude.output_format: stream-json` — JSONL log output for parsing
 - `egress.hosts` — allowlisted domains; per-agent `extra_hosts` for package registries
@@ -400,6 +438,7 @@ images/{builder,reviewer,security}/
 ```
 
 Plus in the workspace root (cloned at runtime):
+
 ```
 /workspace/
 ├── CLAUDE.md               # Project-specific coding standards (from target app)
