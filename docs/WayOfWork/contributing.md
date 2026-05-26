@@ -20,14 +20,14 @@ This project is governed by our [Code of Conduct(ion)](code-of-conduct.md). By p
 
 You don't need to write code to contribute:
 
-| Contribution type | Where |
-|---|---|
-| Report a bug | GitHub Issues |
-| Suggest a feature | GitHub Issues |
-| Improve documentation | PR to the relevant repo |
-| Translate content | PR to `.github` (docs site) |
-| Review a pull request | GitHub PR review |
-| Answer questions | GitHub Discussions / Issues |
+| Contribution type       | Where                                  |
+| ----------------------- | -------------------------------------- |
+| Report a bug            | GitHub Issues                          |
+| Suggest a feature       | GitHub Issues                          |
+| Improve documentation   | PR to the relevant repo                |
+| Translate content       | PR to `.github` (docs site)            |
+| Review a pull request   | GitHub PR review                       |
+| Answer questions        | GitHub Discussions / Issues            |
 | Report a security issue | See [Security Policy](../ISO/security) |
 
 ## First-Time Contributors
@@ -94,11 +94,11 @@ hotfix/*  ──┘                    ↑
                                  └── (hotfix can target beta or main directly)
 ```
 
-| Target | Allowed sources | Reviews required | CI required |
-|---|---|---|---|
-| `development` | `feature/*`, `bugfix/*` | 1 | Quality CI |
-| `beta` | `development`, `hotfix/*` | 1 | Quality CI |
-| `main` | `beta`, `hotfix/*` | 2 | Branch Protection CI |
+| Target        | Allowed sources           | Reviews required | CI required          |
+| ------------- | ------------------------- | ---------------- | -------------------- |
+| `development` | `feature/*`, `bugfix/*`   | 1                | Quality CI           |
+| `beta`        | `development`, `hotfix/*` | 1                | Quality CI           |
+| `main`        | `beta`, `hotfix/*`        | 2                | Branch Protection CI |
 
 All rulesets enforce: no force pushes, no branch deletion, stale reviews dismissed on new pushes, all threads resolved before merge.
 
@@ -108,19 +108,19 @@ Every PR triggers automated quality checks. **All must pass before merge.**
 
 ### PHP
 
-| Check | Tool |
-|---|---|
-| Syntax | `php -l` |
-| Code style | PHPCS (PSR-12) |
+| Check           | Tool                      |
+| --------------- | ------------------------- |
+| Syntax          | `php -l`                  |
+| Code style      | PHPCS (PSR-12)            |
 | Static analysis | PHPStan (level 5) + Psalm |
-| Mess detection | PHPMD |
+| Mess detection  | PHPMD                     |
 
 ### Frontend
 
-| Check | Tool |
-|---|---|
-| JavaScript/Vue | ESLint |
-| CSS/SCSS | Stylelint |
+| Check          | Tool      |
+| -------------- | --------- |
+| JavaScript/Vue | ESLint    |
+| CSS/SCSS       | Stylelint |
 
 ### Dependencies
 
@@ -174,10 +174,10 @@ If you forget, amend your last commit: `git commit --amend -s`
 
 Releases are fully automated via GitHub Actions on merge to `beta` (nightly) or `main` (stable). Version numbers are calculated from PR labels:
 
-| Label | Effect |
-|---|---|
-| `major` | `1.0.0` → `2.0.0` |
-| `minor` | `1.0.0` → `1.1.0` |
+| Label             | Effect            |
+| ----------------- | ----------------- |
+| `major`           | `1.0.0` → `2.0.0` |
+| `minor`           | `1.0.0` → `1.1.0` |
 | `patch` (default) | `1.0.0` → `1.0.1` |
 
 See [Release Process](release-process.md) for full details.
@@ -195,6 +195,7 @@ See [Release Process](release-process.md) for full details.
 Documentation source lives in `website/` (this repo) and is published to [docs.conduction.nl](https://docs.conduction.nl).
 
 To contribute to the docs:
+
 1. Edit the relevant Markdown files under `website/docs/`
 2. For Dutch translations, edit the corresponding file under `website/i18n/nl/`
 3. Test locally: `cd website && npm install && npm run start`

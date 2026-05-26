@@ -1,15 +1,15 @@
 # Troubleshooting
 
-| Symptom | Cause | Fix |
-|---|---|---|
-| `Not logged in · Please run /login` | `--bare` flag or missing credentials | Ensure entrypoint uses `--output-format stream-json`, not `--bare` |
-| `OAuth token has expired` | Static `CLAUDE_CODE_OAUTH_TOKEN` in `.env` | Use credentials.json instead (auto-refresh), or run `claude setup-token` |
-| `GIT_TOKEN does not have push access` | PAT lacks `contents:write` or no repo access | Regenerate PAT with correct scopes, verify repo collaborator access |
-| `Failed to connect to github.com port 443` | Egress blocked (iptables in rootless) | Remove `--cap-add NET_ADMIN` from run flags (done in current dev-run.sh) |
-| `EROFS: read-only file system` on `/spec/` | Spec mount is `:ro` by design | Expected — spec updates must happen outside the container |
-| Container exits immediately | Missing required env var | Check entrypoint output for `is required` error messages |
+| Symptom                                                   | Cause                                         | Fix                                                                                                                        |
+| --------------------------------------------------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `Not logged in · Please run /login`                       | `--bare` flag or missing credentials          | Ensure entrypoint uses `--output-format stream-json`, not `--bare`                                                         |
+| `OAuth token has expired`                                 | Static `CLAUDE_CODE_OAUTH_TOKEN` in `.env`    | Use credentials.json instead (auto-refresh), or run `claude setup-token`                                                   |
+| `GIT_TOKEN does not have push access`                     | PAT lacks `contents:write` or no repo access  | Regenerate PAT with correct scopes, verify repo collaborator access                                                        |
+| `Failed to connect to github.com port 443`                | Egress blocked (iptables in rootless)         | Remove `--cap-add NET_ADMIN` from run flags (done in current dev-run.sh)                                                   |
+| `EROFS: read-only file system` on `/spec/`                | Spec mount is `:ro` by design                 | Expected — spec updates must happen outside the container                                                                  |
+| Container exits immediately                               | Missing required env var                      | Check entrypoint output for `is required` error messages                                                                   |
 | `Bind for 0.0.0.0:808x failed: port is already allocated` | Orphaned NC container from a crashed pipeline | `docker ps -a --filter "name=hydra-nc" \| xargs docker rm -f`. The orchestrator now auto-cleans on startup (since v0.1.1). |
-| Browser tests fail with `Nextcloud not reachable` | NC server didn't start or port conflict | Check `browser-nc-setup.log` for errors. Verify port with `ss -tlnp \| grep 808`. |
+| Browser tests fail with `Nextcloud not reachable`         | NC server didn't start or port conflict       | Check `browser-nc-setup.log` for errors. Verify port with `ss -tlnp \| grep 808`.                                          |
 
 ---
 
@@ -40,6 +40,7 @@ for it before downloading. **Keep this directory** — without it, every quality
 Nextcloud from scratch, adding ~60 seconds per pipeline.
 
 The cache is safe to delete if disk space is needed:
+
 ```bash
 rm -rf /tmp/hydra-nc-cache
 ```

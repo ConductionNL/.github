@@ -48,6 +48,7 @@ You don't run Hydra yourself — you trigger it with labels.
    - `security-review:queued` — queue a security review.
 
    Reviews are **sequential** by design (the security review consumes the code review's git state). Setting both queued labels at once is not supported and will produce conflicts. Trigger them one at a time.
+
 3. **Crashes escalate to `needs-input`** rather than auto-retrying. If a Hydra container fails, or either reviewer emits a fail verdict, you'll see a `needs-input` label so a human can investigate. There is no retry loop ([ADR-013](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-013-container-pool.md)) — recovery is explicit via the `retry:queued` (fix the flagged findings) or `rebuild:queued` (start over) labels.
 4. **The `yolo` label means auto-merge after the pipeline passes.** All phases still run; `yolo` only removes the human approval gate at the end.
 

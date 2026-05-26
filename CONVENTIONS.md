@@ -12,12 +12,12 @@ Every Conduction app **must** consume the central workflow via a thin wrapper. *
 
 #### Wrapper convention
 
-| Property | Required value |
-|---|---|
-| Filename | `.github/workflows/code-quality.yml` |
-| `uses` | `ConductionNL/.github/.github/workflows/quality.yml@main` |
-| Trigger | `push` to `main` / `development` / `feature/**` / `bugfix/**` / `hotfix/**` + `pull_request` to `main` / `beta` / `development` |
-| Inputs | At minimum `app-name`. Optionally toggle the per-tool `enable-*` flags. |
+| Property | Required value                                                                                                                  |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Filename | `.github/workflows/code-quality.yml`                                                                                            |
+| `uses`   | `ConductionNL/.github/.github/workflows/quality.yml@main`                                                                       |
+| Trigger  | `push` to `main` / `development` / `feature/**` / `bugfix/**` / `hotfix/**` + `pull_request` to `main` / `beta` / `development` |
+| Inputs   | At minimum `app-name`. Optionally toggle the per-tool `enable-*` flags.                                                         |
 
 Reference template (use as-is, just change `app-name`):
 

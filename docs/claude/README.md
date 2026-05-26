@@ -1,81 +1,105 @@
 # Using Hydra
 
-Developer-facing guide to Conduction's spec-driven workflow. This is the *driver's seat* view of the [Hydra pipeline](../hydra/) — how to set your workstation up, write specs and skills, hand a change off to the pipeline, and run reviews. The pipeline internals (Builder / Reviewer / Applier agents, container architecture, deployment models, operations) are documented in the sibling [Hydra](../hydra/) section.
+Developer-facing guide to Conduction's spec-driven workflow. This is the _driver's seat_ view of the [Hydra pipeline](../hydra/) — how to set your workstation up, write specs and skills, hand a change off to the pipeline, and run reviews. The pipeline internals (Builder / Reviewer / Applier agents, container architecture, deployment models, operations) are documented in the sibling [Hydra](../hydra/) section.
 
-Underneath, the tool is **Claude Code** with the Conduction skills catalogue; this section was previously titled *Claude Code Developer Guide* before being folded into the Hydra umbrella.
+Underneath, the tool is **Claude Code** with the Conduction skills catalogue; this section was previously titled _Claude Code Developer Guide_ before being folded into the Hydra umbrella.
 
 ## Guides
 
 ### [Getting Started](./getting-started.md)
+
 Step-by-step guide from installation to your first completed change. Start here if you're new to the workflow.
 
 ### [Workflow Overview](./workflow.md)
+
 Architecture overview of the full system: how specs, GitHub Issues, and plan.json fit together. Includes the plan.json format and flow diagrams.
 
 ### [Command Reference](./commands.md)
+
 Detailed reference for every skill — OpenSpec built-ins (`/opsx-new`, `/opsx-ff`, etc.) and custom Conduction skills (`/opsx-plan-to-issues`, `/opsx-apply-loop`, `/opsx-pipeline`). Includes expected output and usage tips.
 
 ### [OpenSpec Command Reference](./commands-openspec.md)
+
 Focused reference for the per-project OpenSpec commands installed by `openspec init`. Split out from the main command reference for quick lookup.
 
 ### [Tender & Ecosystem Commands](./commands-tender.md)
+
 Reference for the competitive analysis and ecosystem gap-finding commands (`/tender-scan`, `/tender-status`, `/tender-gap-report`, `/ecosystem-investigate`) that operate on the `concurrentie-analyse/intelligence.db` SQLite database.
 
 ### [Writing Specs](./writing-specs.md)
+
 In-depth guide on writing effective specifications: RFC 2119 keywords, Gherkin scenarios, delta specs, shared spec references, task breakdown, and common mistakes to avoid.
 
 ### [Writing Skills](./writing-skills.md)
+
 How to create and structure skills: folder layout (`templates/`, `references/`, `examples/`, `assets/`), SKILL.md format, naming conventions, common patterns, and the extraction threshold rule.
 
 ### [Skill Checklist](./skill-checklist.md)
+
 Quick validation checklist to run before adding or reviewing a skill, organized by maturity level (L1–L7).
 
 ### [Skill Patterns](./skill-patterns.md)
+
 Proven L3 building blocks for skills — description writing, subfolder layout (`templates/`, `references/`, `examples/`, `assets/`), and reusable patterns to apply consistently.
 
 ### [Skill Evaluation](./skill-evals.md)
+
 Detailed L5 reference for evaluating, measuring, and improving skills with data — `evals.json` format, baseline scoring, trigger tests, and the iteration workflow.
 
 ### [Writing ADRs](./writing-adrs.md)
+
 How to write Architectural Decision Records: structure, format, when to create one, and how ADRs feed into the OpenSpec workflow.
 
 ### [Writing Docs](./writing-docs.md)
+
 Guidelines for writing and maintaining documentation within a project: structure, tone, what to document, and how docs connect to the spec-driven workflow.
 
 ### [App Lifecycle](./app-lifecycle.md)
+
 Creating and managing Nextcloud apps: design research (`/app-design`), bootstrapping from template or onboarding an existing repo (`/app-create`), thinking through goals and features (`/app-explore`), applying config to code (`/app-apply`), and auditing for drift (`/app-verify`). Includes `project.md` and `openspec/config.yaml` templates, and an onboarding checklist.
 
 ### [Docker Environment](./docker.md)
+
 Available docker-compose profiles, reset instructions, and environment setup.
 
 ### [Workstation Setup](./workstation-setup.md)
+
 How to set up a new machine — Windows + WSL2 + Docker Desktop + VS Code installation, required/recommended extensions, Claude Code authentication, and WSL prerequisites (Node.js, PHP, Composer, GitHub CLI, Playwright, OpenSpec CLI).
 
 ### [Global Claude settings (`~/.claude`)](./global-claude-settings.md)
+
 **Mandatory** user-level settings enforcing a read-only Bash policy and write-approval hooks. Versioned — Claude warns you at session start when an update is available. Install once per machine; see the doc for the full guide and update instructions.
 
 ### [Testing Reference](./testing.md)
+
 All testing commands and skills in one place — when to use each, typical workflows (pre-PR, regression sweep, smoke test), per-command "use when" guidance, test scenario integration, and browser pool rules.
 
 ### [Parallel Agents & Subscription Cap](./parallel-agents.md)
+
 How parallel agent commands (like `/test-counsel`, `/test-app`, and `/feature-counsel`) consume your Claude subscription cap, guidelines for responsible use, and which files to keep lean to reduce token usage.
 
 ### [Frontend Standards](./frontend-standards.md)
+
 Frontend development standards enforced across all Conduction apps: OpenRegister dependency checking, CSS scoping, admin detection patterns, and reference implementations.
 
 ### [Local LLM Setup (Ollama + Qwen)](./local-llm.md)
+
 How to run Claude Code with a local Qwen model via Ollama for privacy, cost reduction, and offline use. Includes the Double Dutch RAD workflow for pairing Claude (day shift) with Qwen (overnight batch jobs).
 
 ### [Playwright MCP Browser Setup](./playwright-setup.md)
+
 Detailed setup guide for the 7 independent Playwright browser sessions used for parallel testing, including VS Code extension configuration, CLI alternatives, and usage rules.
 
 ### [Usage Tracker](../../usage-tracker/README.md)
+
 Real-time Claude token usage monitoring in VS Code — color-coded status, threshold notifications, and multi-model support (Haiku, Sonnet, Opus). Reads Claude Code session files directly; no log configuration needed. Run `bash usage-tracker/install.sh` to get started.
 
 ### [End-to-End Walkthrough](./walkthrough.md)
+
 A complete worked example showing every phase of the flow on a realistic feature (adding a search endpoint to OpenCatalogi). Shows exactly what you type and what happens.
 
 ### [Retrofit Playbook](./retrofit.md)
+
 Bringing legacy apps under [ADR-003 §Spec traceability](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-003-backend.md) — the three retrofit skills (`/opsx-coverage-scan`, `/opsx-annotate`, `/opsx-reverse-spec`) in order, plus the six coverage buckets and when to extend vs create new specs.
 
 ---
@@ -189,13 +213,13 @@ graph TD
 
 Collect requirements, study existing solutions, and identify what to build. Claude explores without making changes.
 
-| Source | How | Commands / Tools |
-|--------|-----|------------------|
-| **GitHub issues** | Sync and analyze open issues from project repos | `/swc-update`, `gh issue list`, `gh issue view` |
-| **Other applications** | Crawl code or browse running apps to understand patterns | `/opsx-explore`, Playwright browsers (`browser-1`–`browser-7`) |
-| **Documentation** | Read docs from other platforms, APIs, standards | `WebFetch`, `WebSearch`, `/opsx-explore` |
-| **Tenders** | Scrape TenderNed, classify by category, analyze requirements and ecosystem gaps | `/tender-scan`, `/tender-status`, `/tender-gap-report`, `/ecosystem-investigate`, `Read` (PDF support) |
-| **App store scouting** | Spot interesting apps on WordPress plugin directory, GitHub trending, ArtifactHub, Nextcloud app store | `WebSearch`, `WebFetch`, Playwright browsers |
+| Source                 | How                                                                                                    | Commands / Tools                                                                                       |
+| ---------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| **GitHub issues**      | Sync and analyze open issues from project repos                                                        | `/swc-update`, `gh issue list`, `gh issue view`                                                        |
+| **Other applications** | Crawl code or browse running apps to understand patterns                                               | `/opsx-explore`, Playwright browsers (`browser-1`–`browser-7`)                                         |
+| **Documentation**      | Read docs from other platforms, APIs, standards                                                        | `WebFetch`, `WebSearch`, `/opsx-explore`                                                               |
+| **Tenders**            | Scrape TenderNed, classify by category, analyze requirements and ecosystem gaps                        | `/tender-scan`, `/tender-status`, `/tender-gap-report`, `/ecosystem-investigate`, `Read` (PDF support) |
+| **App store scouting** | Spot interesting apps on WordPress plugin directory, GitHub trending, ArtifactHub, Nextcloud app store | `WebSearch`, `WebFetch`, Playwright browsers                                                           |
 
 **Typical discovery session:**
 
@@ -210,16 +234,16 @@ Collect requirements, study existing solutions, and identify what to build. Clau
 
 Turn discoveries into structured specifications. This stage produces the blueprint that guides implementation.
 
-| Phase | Artifact | Command |
-|-------|----------|---------|
-| **Start** | Change directory + `proposal.md` | `/opsx-new <change-name>` |
-| **Proposal → Tasks** | All artifacts in one go (proposal, specs, design, tasks) | `/opsx-ff` |
-| **Incremental** | One artifact at a time | `/opsx-continue` |
-| **Review** | Multi-perspective feature analysis | `/feature-counsel` |
-| **Architecture** | Architecture review of specs | `/team-architect` |
-| **Business value** | Acceptance criteria and prioritization | `/team-po` |
-| **New app** | Full app design from scratch (architecture, features, wireframes) | `/app-design` |
-| **Track** | Convert tasks to GitHub Issues with epic | `/opsx-plan-to-issues` |
+| Phase                | Artifact                                                          | Command                   |
+| -------------------- | ----------------------------------------------------------------- | ------------------------- |
+| **Start**            | Change directory + `proposal.md`                                  | `/opsx-new <change-name>` |
+| **Proposal → Tasks** | All artifacts in one go (proposal, specs, design, tasks)          | `/opsx-ff`                |
+| **Incremental**      | One artifact at a time                                            | `/opsx-continue`          |
+| **Review**           | Multi-perspective feature analysis                                | `/feature-counsel`        |
+| **Architecture**     | Architecture review of specs                                      | `/team-architect`         |
+| **Business value**   | Acceptance criteria and prioritization                            | `/team-po`                |
+| **New app**          | Full app design from scratch (architecture, features, wireframes) | `/app-design`             |
+| **Track**            | Convert tasks to GitHub Issues with epic                          | `/opsx-plan-to-issues`    |
 
 **Artifact progression:**
 
@@ -244,21 +268,22 @@ proposal.md ──► specs/*.md ──► design.md ──► tasks.md ──�
 
 Claude acts as an **assembler**, not a coder. It defines schemas, configures workflows, and wires up components using the platform's three pillars:
 
-| Layer | Tool | Claude's Role |
-|-------|------|---------------|
-| **Frontend UI** | `@conduction/nextcloud-vue` | Select and configure components, define views and layouts, set up routing |
-| **Backend data** | OpenRegister | Define schemas, registers, and object structures; configure validation rules and relations |
-| **Backend logic** | n8n workflows | Design workflow logic, configure triggers, map data transformations |
+| Layer             | Tool                        | Claude's Role                                                                              |
+| ----------------- | --------------------------- | ------------------------------------------------------------------------------------------ |
+| **Frontend UI**   | `@conduction/nextcloud-vue` | Select and configure components, define views and layouts, set up routing                  |
+| **Backend data**  | OpenRegister                | Define schemas, registers, and object structures; configure validation rules and relations |
+| **Backend logic** | n8n workflows               | Design workflow logic, configure triggers, map data transformations                        |
 
 Claude does **not** write raw PHP business logic, custom Vue components from scratch, or manual SQL. Instead:
+
 - UI comes from the shared `@conduction/nextcloud-vue` component library
 - Data models are OpenRegister schemas (JSON-based configuration)
 - Business processes are n8n workflows (visual/JSON configuration)
 
-| Command | Purpose |
-|---------|---------|
+| Command       | Purpose                                                              |
+| ------------- | -------------------------------------------------------------------- |
 | `/opsx-apply` | Implement tasks from the change — assembles components per the specs |
-| `/opsx-sync` | Sync delta specs to main specs during implementation |
+| `/opsx-sync`  | Sync delta specs to main specs during implementation                 |
 
 **Typical build session:**
 
@@ -274,15 +299,15 @@ Verify that the implementation matches the specs, passes quality standards, and 
 
 #### Code Quality
 
-| Tool | Command | Checks |
-|------|---------|--------|
-| **PHPCS** | `composer phpcs` | Coding standards (auto-fix: `composer cs:fix`) |
-| **PHPMD** | `composer phpmd` | Complexity, naming, unused code |
-| **PHPStan** | `composer phpstan` | Static type analysis |
-| **Psalm** | `composer psalm` | Type analysis (stricter) |
-| **phpmetrics** | `composer phpmetrics` | Code metrics + violations |
-| **ESLint** | `npm run lint` | JavaScript/Vue linting (auto-fix: `npm run lint -- --fix`) |
-| **Stylelint** | `npm run stylelint` | CSS/SCSS linting |
+| Tool           | Command               | Checks                                                     |
+| -------------- | --------------------- | ---------------------------------------------------------- |
+| **PHPCS**      | `composer phpcs`      | Coding standards (auto-fix: `composer cs:fix`)             |
+| **PHPMD**      | `composer phpmd`      | Complexity, naming, unused code                            |
+| **PHPStan**    | `composer phpstan`    | Static type analysis                                       |
+| **Psalm**      | `composer psalm`      | Type analysis (stricter)                                   |
+| **phpmetrics** | `composer phpmetrics` | Code metrics + violations                                  |
+| **ESLint**     | `npm run lint`        | JavaScript/Vue linting (auto-fix: `npm run lint -- --fix`) |
+| **Stylelint**  | `npm run stylelint`   | CSS/SCSS linting                                           |
 
 > If `composer phpcs` fails due to a permissions error on `vendor/`, see [PHP Quality Tools setup](#php-quality-tools-phpcs-phpmd-psalm-phpstan) in Prerequisites.
 
@@ -295,17 +320,18 @@ Key commands: `/opsx-verify` (spec verification), `/test-counsel` (8-persona tes
 #### CI/CD
 
 All apps have `code-quality.yml` GitHub Actions workflows that block PRs on:
+
 - PHPCS + PHPMD + Psalm (PHP quality)
 - ESLint (frontend quality)
 - PHPUnit (unit tests)
 
 #### Completion
 
-| Command | Purpose |
-|---------|---------|
-| `/opsx-verify` | Final verification against specs — generates `review.md` |
-| `/opsx-archive` | Archive the change, merge delta specs into main specs |
-| `/opsx-bulk-archive` | Archive multiple completed changes at once |
+| Command              | Purpose                                                  |
+| -------------------- | -------------------------------------------------------- |
+| `/opsx-verify`       | Final verification against specs — generates `review.md` |
+| `/opsx-archive`      | Archive the change, merge delta specs into main specs    |
+| `/opsx-bulk-archive` | Archive multiple completed changes at once               |
 
 **Typical validation session:**
 
@@ -329,11 +355,11 @@ For new-machine setup instructions — Windows + WSL2 + Docker Desktop + VS Code
 
 Claude Code uses three settings files that work together. Understanding the difference prevents confusion:
 
-| File | Scope | Committed? | Purpose |
-|------|-------|------------|---------|
-| `~/.claude/settings.json` | Machine-wide, all projects | No — installed per developer | Global read-only policy and safety hooks. Installed from [`global-settings/`](../../global-settings/) in step 7 above. |
-| `.claude/settings.json` | Project-wide, all developers | **Yes** | Shared team permissions — MCP server approvals, `enableAllProjectMcpServers`. Do not edit locally. |
-| `.claude/settings.local.json` | Project, per developer | No — gitignored | Your personal tool approvals on top of the shared settings. Auto-generated by Claude Code. |
+| File                          | Scope                        | Committed?                   | Purpose                                                                                                                |
+| ----------------------------- | ---------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `~/.claude/settings.json`     | Machine-wide, all projects   | No — installed per developer | Global read-only policy and safety hooks. Installed from [`global-settings/`](../../global-settings/) in step 7 above. |
+| `.claude/settings.json`       | Project-wide, all developers | **Yes**                      | Shared team permissions — MCP server approvals, `enableAllProjectMcpServers`. Do not edit locally.                     |
+| `.claude/settings.local.json` | Project, per developer       | No — gitignored              | Your personal tool approvals on top of the shared settings. Auto-generated by Claude Code.                             |
 
 ### settings.local.json
 
@@ -363,9 +389,7 @@ Optionally, bootstrap it upfront with common permissions to avoid approval promp
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)"
     ],
-    "additionalDirectories": [
-      "/tmp"
-    ]
+    "additionalDirectories": ["/tmp"]
   }
 }
 ```
@@ -393,11 +417,11 @@ The workspace uses 7 independent Playwright browser sessions for parallel testin
 
 **Quick summary:**
 
-| Server | Mode | Purpose |
-|--------|------|---------|
-| `browser-1` | Headless | Main agent (default) |
-| `browser-2`–`browser-5`, `browser-7` | Headless | Sub-agent / parallel |
-| `browser-6` | **Headed** | User observation (visible window) |
+| Server                               | Mode       | Purpose                           |
+| ------------------------------------ | ---------- | --------------------------------- |
+| `browser-1`                          | Headless   | Main agent (default)              |
+| `browser-2`–`browser-5`, `browser-7` | Headless   | Sub-agent / parallel              |
+| `browser-6`                          | **Headed** | User observation (visible window) |
 
 **Usage rules:** Use `browser-1` for normal work. Assign `browser-2`–`browser-5` and `browser-7` to parallel sub-agents. Keep `browser-6` reserved for user observation only.
 
@@ -522,8 +546,8 @@ For an overview of the pipeline stages, the label-based triggers (`ready-to-buil
 
 Each project may include shell scripts in its `.claude/scripts/` or `scripts/` directory, used by skills and developers. Common examples:
 
-| Script | Description | Usage |
-|--------|-------------|-------|
+| Script         | Description                                                                                     | Usage                                       |
+| -------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------- |
 | `clean-env.sh` | Full Docker environment reset — stops containers, removes volumes, restarts, installs core apps | `bash scripts/clean-env.sh` or `/clean-env` |
 
 ---
@@ -617,6 +641,7 @@ This means you've reached your Claude subscription's usage cap. It can happen af
 See [parallel-agents.md](./parallel-agents.md) for an explanation of why parallel agents drain the cap, guidelines for careful use, and tips to reduce token usage (including always opening a fresh window before running these commands).
 
 To monitor your usage proactively before hitting the limit, use the [usage tracker](../../usage-tracker/README.md):
+
 ```bash
 python3 usage-tracker/claude-usage-tracker.py --status-bar --all-models
 ```

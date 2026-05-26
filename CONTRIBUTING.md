@@ -12,38 +12,38 @@ This project and everyone participating in it is governed by our [Code of Conduc
 
 Before creating bug reports, please check the issue list as you might find out that you don't need to create one. When you are creating a bug report, please include as many details as possible:
 
-* Use a clear and descriptive title
-* Describe the exact steps which reproduce the problem
-* Provide specific examples to demonstrate the steps
-* Describe the behavior you observed after following the steps
-* Explain which behavior you expected to see instead and why
-* Include screenshots if possible
+- Use a clear and descriptive title
+- Describe the exact steps which reproduce the problem
+- Provide specific examples to demonstrate the steps
+- Describe the behavior you observed after following the steps
+- Explain which behavior you expected to see instead and why
+- Include screenshots if possible
 
 ### Suggesting Enhancements
 
 Enhancement suggestions are tracked as GitHub issues. When creating an enhancement suggestion, please include:
 
-* Use a clear and descriptive title
-* Provide a step-by-step description of the suggested enhancement
-* Describe the current behavior and explain which behavior you expected to see instead
-* Explain why this enhancement would be useful
+- Use a clear and descriptive title
+- Provide a step-by-step description of the suggested enhancement
+- Describe the current behavior and explain which behavior you expected to see instead
+- Explain why this enhancement would be useful
 
 ### Pull Requests
 
-* Fork the repo and create your branch from `development`
-* If you've added code that should be tested, add tests
-* If you've changed APIs, update the documentation
-* Ensure the test suite passes
-* Make sure your code lints (`composer cs:check`)
-* Create a pull request!
+- Fork the repo and create your branch from `development`
+- If you've added code that should be tested, add tests
+- If you've changed APIs, update the documentation
+- Ensure the test suite passes
+- Make sure your code lints (`composer cs:check`)
+- Create a pull request!
 
 ### PR Size
 
 Prefer **one PR per logically-coherent finding or feature**. Each PR's commit message, checkbox, and inline-comment chain should map to a single change unit — reviewers hold a clearer mental model on focused PRs than on large ones.
 
-* When a PR's scope grows past **~10 commits or ~30 files**, consider splitting it before requesting review. The per-finding commits stay; the PR boundary moves.
-* **Exception:** release-promotion PRs (`development → beta`, `beta → main`) aggregate every change since the last cut and are expected to be larger.
-* PRs touching many files across unrelated subsystems tend to get reviewed paragraph-by-paragraph rather than holistically — that's a signal to split, not to push through.
+- When a PR's scope grows past **~10 commits or ~30 files**, consider splitting it before requesting review. The per-finding commits stay; the PR boundary moves.
+- **Exception:** release-promotion PRs (`development → beta`, `beta → main`) aggregate every change since the last cut and are expected to be larger.
+- PRs touching many files across unrelated subsystems tend to get reviewed paragraph-by-paragraph rather than holistically — that's a signal to split, not to push through.
 
 ## Branch Protection & Git Flow
 
@@ -68,11 +68,11 @@ graph LR
 
 These rules are enforced organization-wide across all ConductionNL repositories. They cannot be overridden at the repository level.
 
-| Target | Allowed Sources | Reviews | Required CI Checks |
-|--------|----------------|---------|-------------------|
-| `development` | `feature/*`, `bugfix/*` | 1 approving review | Quality CI (`lint-check`) |
-| `beta` | `development`, `hotfix/*`, `main` (backport) | 1 approving review | Quality CI (`lint-check`) |
-| `main` | `beta`, `hotfix/*` | 2 approving reviews | Branch Protection CI (`check-branch`, `lint-check`) |
+| Target        | Allowed Sources                              | Reviews             | Required CI Checks                                  |
+| ------------- | -------------------------------------------- | ------------------- | --------------------------------------------------- |
+| `development` | `feature/*`, `bugfix/*`                      | 1 approving review  | Quality CI (`lint-check`)                           |
+| `beta`        | `development`, `hotfix/*`, `main` (backport) | 1 approving review  | Quality CI (`lint-check`)                           |
+| `main`        | `beta`, `hotfix/*`                           | 2 approving reviews | Branch Protection CI (`check-branch`, `lint-check`) |
 
 ### Organization-Wide Rulesets
 
@@ -83,6 +83,7 @@ Branch protection is managed at the **organization level**, not per-repository. 
 3. **Main Branch Protection** — Stricter: requires 2 reviewers and branch-source validation before stable release
 
 All rulesets also enforce:
+
 - No force pushes
 - No branch deletion
 - Stale reviews dismissed on new pushes
@@ -107,28 +108,28 @@ Every pull request triggers our automated quality pipeline. **All checks must pa
 
 ### PHP Quality Checks
 
-| Check | Tool | What It Does |
-|-------|------|-------------|
-| **Lint** | `php -l` | Syntax validation — catches parse errors |
-| **Code Style** | PHPCS | Enforces coding standards (PSR-12 + custom rules) |
-| **Static Analysis** | PHPStan (level 5) | Type checking, undefined methods, dead code |
-| **Static Analysis** | Psalm | Additional type inference and security analysis |
-| **Mess Detection** | PHPMD | Complexity, naming, unused code, design problems |
-| **Metrics** | phpmetrics | Maintainability index, coupling, cyclomatic complexity |
+| Check               | Tool              | What It Does                                           |
+| ------------------- | ----------------- | ------------------------------------------------------ |
+| **Lint**            | `php -l`          | Syntax validation — catches parse errors               |
+| **Code Style**      | PHPCS             | Enforces coding standards (PSR-12 + custom rules)      |
+| **Static Analysis** | PHPStan (level 5) | Type checking, undefined methods, dead code            |
+| **Static Analysis** | Psalm             | Additional type inference and security analysis        |
+| **Mess Detection**  | PHPMD             | Complexity, naming, unused code, design problems       |
+| **Metrics**         | phpmetrics        | Maintainability index, coupling, cyclomatic complexity |
 
 ### Frontend Quality Checks
 
-| Check | Tool | What It Does |
-|-------|------|-------------|
-| **JavaScript** | ESLint | Enforces JS/Vue coding standards |
-| **CSS** | Stylelint | Enforces CSS/SCSS coding standards |
+| Check          | Tool      | What It Does                       |
+| -------------- | --------- | ---------------------------------- |
+| **JavaScript** | ESLint    | Enforces JS/Vue coding standards   |
+| **CSS**        | Stylelint | Enforces CSS/SCSS coding standards |
 
 ### Dependency Checks
 
-| Check | What It Does |
-|-------|-------------|
-| **License (npm + composer)** | Ensures all dependencies use approved open-source licenses |
-| **Security (npm + composer)** | Checks for known vulnerabilities in dependencies |
+| Check                         | What It Does                                               |
+| ----------------------------- | ---------------------------------------------------------- |
+| **License (npm + composer)**  | Ensures all dependencies use approved open-source licenses |
+| **Security (npm + composer)** | Checks for known vulnerabilities in dependencies           |
 
 ### Running Quality Checks Locally
 
@@ -190,15 +191,16 @@ graph TD
 
 Add a label to your PR to control the version bump:
 
-| Label | Version Change | When to Use |
-|-------|---------------|-------------|
-| `major` | `1.0.0` → `2.0.0` | Breaking changes, major redesigns |
-| `minor` | `1.0.0` → `1.1.0` | New features, non-breaking additions |
-| `patch` (default) | `1.0.0` → `1.0.1` | Bug fixes, small improvements |
+| Label             | Version Change    | When to Use                          |
+| ----------------- | ----------------- | ------------------------------------ |
+| `major`           | `1.0.0` → `2.0.0` | Breaking changes, major redesigns    |
+| `minor`           | `1.0.0` → `1.1.0` | New features, non-breaking additions |
+| `patch` (default) | `1.0.0` → `1.0.1` | Bug fixes, small improvements        |
 
 ### Release Artifacts
 
 Each release automatically:
+
 1. Bumps the version in `appinfo/info.xml`
 2. Builds the app (composer install, npm build)
 3. Creates a signed tarball
@@ -231,23 +233,23 @@ Each app has its own documentation site — see the app's README for its URL.
 
 We use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/):
 
-* `feat:` for new features
-* `fix:` for bug fixes
-* `chore:` for maintenance tasks
-* `docs:` for documentation changes
-* `refactor:` for code refactoring
-* Use the present tense and imperative mood
-* Limit the first line to 72 characters
+- `feat:` for new features
+- `fix:` for bug fixes
+- `chore:` for maintenance tasks
+- `docs:` for documentation changes
+- `refactor:` for code refactoring
+- Use the present tense and imperative mood
+- Limit the first line to 72 characters
 
 ### PR Labels for Changelogs
 
 Add labels to categorize your PR in the automated changelog:
 
-* **`feature`** / **`enhancement`** — New features (appears under "Added")
-* **`bug`** / **`fix`** — Bug fixes (appears under "Fixed")
-* **`docs`** — Documentation updates
-* **`refactor`** / **`chore`** — Code improvements (appears under "Changed")
-* **`skip-changelog`** — Exclude from changelog
+- **`feature`** / **`enhancement`** — New features (appears under "Added")
+- **`bug`** / **`fix`** — Bug fixes (appears under "Fixed")
+- **`docs`** — Documentation updates
+- **`refactor`** / **`chore`** — Code improvements (appears under "Changed")
+- **`skip-changelog`** — Exclude from changelog
 
 ## Development Setup
 
@@ -259,9 +261,9 @@ Add labels to categorize your PR in the automated changelog:
 
 ## Community
 
-* Join the [Common Ground Slack](https://commonground.nl)
-* Follow us on [X](https://x.com/conduction_nl)
-* Read our updates on [LinkedIn](https://www.linkedin.com/company/conduction/)
+- Join the [Common Ground Slack](https://commonground.nl)
+- Follow us on [X](https://x.com/conduction_nl)
+- Read our updates on [LinkedIn](https://www.linkedin.com/company/conduction/)
 
 ## License
 

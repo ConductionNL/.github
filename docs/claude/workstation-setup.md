@@ -21,11 +21,13 @@ Restart your machine when prompted. After reboot, Ubuntu will ask you to create 
 Download and install [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop/).
 
 After installation:
+
 1. Open Docker Desktop > **Settings** > **Resources** > **WSL Integration**
 2. Enable integration with your Ubuntu distro
 3. Click **Apply & Restart**
 
 Verify in WSL:
+
 ```bash
 docker --version
 docker compose version
@@ -65,11 +67,11 @@ Open VS Code and install these extensions (`Ctrl+Shift+X`):
 
 **Optional:**
 
-| Extension     | ID                      | Purpose                                                                 |
-| ------------- | ----------------------- | ----------------------------------------------------------------------- |
+| Extension     | ID                      | Purpose                                                                    |
+| ------------- | ----------------------- | -------------------------------------------------------------------------- |
 | Git Assistant | ivanhofer.git-assistant | Commit message suggestions + uncommitted changes warnings on branch switch |
-| Rainbow CSV   | mechatroner.rainbow-csv | Color-coded CSV/TSV highlighting                                        |
-| Live Preview  | ms-vscode.live-server   | Preview HTML files directly inside VS Code (right-click → Show Preview) |
+| Rainbow CSV   | mechatroner.rainbow-csv | Color-coded CSV/TSV highlighting                                           |
+| Live Preview  | ms-vscode.live-server   | Preview HTML files directly inside VS Code (right-click → Show Preview)    |
 
 Or install all required + recommended at once from the CLI (run inside WSL terminal):
 
@@ -227,6 +229,7 @@ npm install -g @fission-ai/openspec
 > **Do NOT run `openspec init`** in an existing Conduction project — it already has a customized `openspec/` directory with Conduction-specific schemas, shared specs, and project changes. Running `init` would overwrite them.
 
 **OpenSpec documentation:**
+
 - [Official site](https://openspec.dev/) — Getting started, concepts, customization
 - [GitHub](https://github.com/Fission-AI/OpenSpec) — Source, issues, releases
 - [npm](https://www.npmjs.com/package/@fission-ai/openspec) — Package info

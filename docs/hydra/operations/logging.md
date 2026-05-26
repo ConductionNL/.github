@@ -17,12 +17,12 @@ Timestamps are UTC. The `logs/` directory is gitignored.
 Output is JSONL (one JSON object per line, flushed immediately). This is produced by
 Claude Code's `--output-format stream-json` flag. Key event types:
 
-| `type` | Description |
-|---|---|
-| `system` | Init event — session ID, available tools, model |
-| `assistant` | Agent response — text or tool use |
-| `user` | Tool results returned to the agent |
-| `result` | Final summary — `is_error`, `result`, `total_cost_usd`, `num_turns` |
+| `type`      | Description                                                         |
+| ----------- | ------------------------------------------------------------------- |
+| `system`    | Init event — session ID, available tools, model                     |
+| `assistant` | Agent response — text or tool use                                   |
+| `user`      | Tool results returned to the agent                                  |
+| `result`    | Final summary — `is_error`, `result`, `total_cost_usd`, `num_turns` |
 
 ## Parsing logs
 

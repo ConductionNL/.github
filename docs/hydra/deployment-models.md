@@ -70,6 +70,7 @@ docker run --rm \
 > rules. In Kubernetes, NetworkPolicy handles egress instead and this flag is omitted.
 
 Create the Docker network once:
+
 ```bash
 docker network create hydra-net
 ```
@@ -97,28 +98,31 @@ Add to crontab (`crontab -e`):
 Set these under **Settings → Secrets and variables → Actions** in the `ConductionNL`
 organisation:
 
-| Secret name | Value | PAT scopes required |
-|---|---|---|
-| `HYDRA_ANTHROPIC_KEY` | Anthropic API key | — |
-| `HYDRA_BUILDER_TOKEN` | PAT for Al Gorithm | `contents:write`, `pull-requests:write` on target repo |
-| `HYDRA_REVIEWER_TOKEN` | PAT for Juan Claude van Damme | `pull-requests:write` on target repo |
-| `HYDRA_SECURITY_TOKEN` | PAT for Clyde Barcode | `pull-requests:write` on target repo |
-| `GITHUB_ORG` | `ConductionNL` | — |
-| `HYDRA_PROJECT_NUMBER` | Project board number | — |
+| Secret name            | Value                         | PAT scopes required                                    |
+| ---------------------- | ----------------------------- | ------------------------------------------------------ |
+| `HYDRA_ANTHROPIC_KEY`  | Anthropic API key             | —                                                      |
+| `HYDRA_BUILDER_TOKEN`  | PAT for Al Gorithm            | `contents:write`, `pull-requests:write` on target repo |
+| `HYDRA_REVIEWER_TOKEN` | PAT for Juan Claude van Damme | `pull-requests:write` on target repo                   |
+| `HYDRA_SECURITY_TOKEN` | PAT for Clyde Barcode         | `pull-requests:write` on target repo                   |
+| `GITHUB_ORG`           | `ConductionNL`                | —                                                      |
+| `HYDRA_PROJECT_NUMBER` | Project board number          | —                                                      |
 
 ### PAT scopes per persona
 
 **Al Gorithm (Builder):**
+
 - `contents:write` — clone, push feature branch
 - `pull-requests:write` — create draft PR, post RFI comment
 - Scoped to: `ConductionNL/<target-repo>` only (fine-grained PAT preferred)
 
 **Juan Claude van Damme (Code Reviewer):**
+
 - `pull-requests:write` — post review comments, post verdict
 - No `contents` scope — cannot push code
 - Scoped to: `ConductionNL/<target-repo>` only
 
 **Clyde Barcode (Security Reviewer):**
+
 - `pull-requests:write` — post security findings, post verdict
 - No `contents` scope — cannot push code
 - Scoped to: `ConductionNL/<target-repo>` only

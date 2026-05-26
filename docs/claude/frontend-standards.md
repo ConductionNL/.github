@@ -33,6 +33,7 @@ The controller should also have the standardized `getObjectService()` and `getCo
 ### Frontend Store (Pinia)
 
 The settings store must expose:
+
 - `openRegisters: false` in state
 - `isAdmin: false` in state
 - `hasOpenRegisters` getter
@@ -48,6 +49,7 @@ Three-state conditional in the template:
 3. **Loading** (else): centered `NcLoadingIcon`
 
 The empty state uses:
+
 - `NcEmptyContent` with `:name` and `:description` props
 - `#icon` slot with the app's own icon (`imagePath('<appname>', 'app-dark.svg')`)
 - `#action` slot with `NcButton` linking to app store (admin) or text hint (non-admin)
@@ -67,6 +69,7 @@ All `<style>` blocks in `.vue` files **must** use the `scoped` attribute. Global
 **Why**: Unscoped styles leak into other components and cause hard-to-debug styling issues. The `scoped` attribute ensures styles only affect the component they belong to.
 
 **Enforced by**: ESLint rule `vue/enforce-style-attribute`:
+
 ```js
 'vue/enforce-style-attribute': ['error', { allow: ['scoped'] }]
 ```
@@ -80,6 +83,7 @@ All `<style>` blocks in `.vue` files **must** use the `scoped` attribute. Global
 ## Admin Detection
 
 Never use `OC.isAdmin` — it doesn't exist in Nextcloud's frontend JavaScript API. Instead:
+
 - Pass `isAdmin` from the backend via the settings endpoint using `IGroupManager::isAdmin()`
 - Store it in the Pinia settings store
 - Access via computed property in components
@@ -87,6 +91,7 @@ Never use `OC.isAdmin` — it doesn't exist in Nextcloud's frontend JavaScript A
 ## Reference Implementation
 
 Pipelinq is the reference implementation for all these patterns:
+
 - Backend: `pipelinq/lib/Controller/SettingsController.php`
 - Store: `pipelinq/src/store/modules/settings.js`
 - App.vue: `pipelinq/src/App.vue`

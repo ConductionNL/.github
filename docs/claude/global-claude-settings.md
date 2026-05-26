@@ -8,10 +8,10 @@ Project files under `.claude/` in this repo (for example `settings.json` with MC
 
 The canonical files live under **[`global-settings/`](../../global-settings/)**. The version is tracked in [`global-settings/VERSION`](../../global-settings/VERSION).
 
-| File | Install as |
-|------|------------|
-| [`global-settings/settings.json`](../../global-settings/settings.json) | `~/.claude/settings.json` |
-| [`global-settings/block-write-commands.sh`](../../global-settings/block-write-commands.sh) | `~/.claude/hooks/block-write-commands.sh` |
+| File                                                                                           | Install as                                  |
+| ---------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| [`global-settings/settings.json`](../../global-settings/settings.json)                         | `~/.claude/settings.json`                   |
+| [`global-settings/block-write-commands.sh`](../../global-settings/block-write-commands.sh)     | `~/.claude/hooks/block-write-commands.sh`   |
 | [`global-settings/check-settings-version.sh`](../../global-settings/check-settings-version.sh) | `~/.claude/hooks/check-settings-version.sh` |
 
 ## Install / update
@@ -32,11 +32,13 @@ At the start of every Claude session, a live status panel is printed to the term
 ```
 
 Color coding:
+
 - **Green** — version matches / up to date
 - **Yellow** — local branch is ahead of installed (informational only)
 - **Red** — installed is behind online main (update required)
 
 The "Online" line shows the fetch method used:
+
 - **(via GitHub API)** — fetched directly from GitHub using `gh api` (primary method, uses `settings-repo-url`)
 - **(via git fetch)** — fetched from `origin/main` of the local repo clone (fallback method, uses `settings-repo-path`)
 
@@ -51,14 +53,17 @@ If configuration issues are detected (missing config files, unreachable remote, 
 In addition to the terminal panel, the hook always injects a message into Claude's context at the start of every session. Claude will relay this at the top of its first response:
 
 **Settings up to date:**
+
 > New session started — Global Claude Settings checked. Settings are up to date (v1.0.0).
 
 **Update required** (prominently displayed, cannot be missed):
+
 > NEW SESSION — GLOBAL CLAUDE SETTINGS: UPDATE REQUIRED
 > Installed: v0.1.0 (outdated) | Latest: v1.0.0 (on origin/main)
 > Say "update my global settings to 1.0.0" to apply the update.
 
 **Configuration error** (prominently displayed):
+
 > NEW SESSION — GLOBAL CLAUDE SETTINGS: CONFIGURATION ERROR
 > [description of the issue]
 
@@ -91,13 +96,14 @@ When absent, the ref defaults to `main`.
 
 ### Configuration options
 
-| Config file | Required? | Purpose |
-|-------------|-----------|---------|
-| `~/.claude/settings-repo-url` | Optional (recommended) | GitHub repo slug for online API check |
-| `~/.claude/settings-repo-path` | Optional (fallback) | Path to the root of the canonical repo for git-based check |
-| `~/.claude/settings-repo-ref` | Optional | Branch/tag/SHA to track (defaults to `main`) |
+| Config file                    | Required?              | Purpose                                                    |
+| ------------------------------ | ---------------------- | ---------------------------------------------------------- |
+| `~/.claude/settings-repo-url`  | Optional (recommended) | GitHub repo slug for online API check                      |
+| `~/.claude/settings-repo-path` | Optional (fallback)    | Path to the root of the canonical repo for git-based check |
+| `~/.claude/settings-repo-ref`  | Optional               | Branch/tag/SHA to track (defaults to `main`)               |
 
 You can configure:
+
 - **Both URL and path** (recommended): GitHub API is tried first, local git as fallback
 - **Only `settings-repo-url`**: Works without any local clone; no fallback if GitHub is unreachable
 - **Only `settings-repo-path`**: Original behavior; requires a local clone
@@ -105,15 +111,15 @@ You can configure:
 
 ## File locations
 
-| Path | Role |
-|------|------|
-| `~/.claude/settings.json` | User permissions allowlist, `PreToolUse` + `UserPromptSubmit` hooks, optional `mcpServers` |
-| `~/.claude/hooks/block-write-commands.sh` | Hook script invoked for every **Bash** tool use before it runs |
-| `~/.claude/hooks/check-settings-version.sh` | Hook script that shows the status panel and warns on version mismatch |
-| `~/.claude/settings-version` | Installed version (semver, matches repo `VERSION`) |
-| `~/.claude/settings-repo-url` | GitHub repo slug for online version checking (e.g. `ConductionNL/.github`) |
-| `~/.claude/settings-repo-path` | Absolute path to the root of the canonical repo (fallback for git-based check) |
-| `~/.claude/settings-repo-ref` | Branch/tag/SHA to track for version checks (defaults to `main`) |
+| Path                                        | Role                                                                                       |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `~/.claude/settings.json`                   | User permissions allowlist, `PreToolUse` + `UserPromptSubmit` hooks, optional `mcpServers` |
+| `~/.claude/hooks/block-write-commands.sh`   | Hook script invoked for every **Bash** tool use before it runs                             |
+| `~/.claude/hooks/check-settings-version.sh` | Hook script that shows the status panel and warns on version mismatch                      |
+| `~/.claude/settings-version`                | Installed version (semver, matches repo `VERSION`)                                         |
+| `~/.claude/settings-repo-url`               | GitHub repo slug for online version checking (e.g. `ConductionNL/.github`)                 |
+| `~/.claude/settings-repo-path`              | Absolute path to the root of the canonical repo (fallback for git-based check)             |
+| `~/.claude/settings-repo-ref`               | Branch/tag/SHA to track for version checks (defaults to `main`)                            |
 
 ## Shape of `~/.claude/settings.json`
 
@@ -182,29 +188,29 @@ Do **not** put broad `Bash(*)` allow rules here.
 - Reads **JSON from stdin** once into a variable, then extracts `cmd` and `transcript_path`.
 - On deny, prints `permissionDecision: "deny"` JSON. On ask, prints `permissionDecision: "ask"` JSON. On allow, exits `0`.
 
-| Area | Allowed silently | Prompts for approval | Hard blocked |
-|------|-----------------|---------------------|--------------|
-| **curl** | — | All curl commands (not auto-approved) | — |
-| **gh api** | — | All gh api commands (not auto-approved) | — |
-| **git push** | Last user message contains authorized phrase | — | Blocked otherwise |
-| **git -C** | Read-only subcommands | Write subcommands, branch/remote writes | `push` (phrase-authorized) |
-| **git branch** (bare) | `--list`, `-a`, `-v` (auto-approved) | `-d/-D/-m/-M/-c/-C`, `--delete`, `--move`, `--copy` | — |
-| **git remote** (bare) | `-v`, `show` (auto-approved) | `add`, `remove`, `rename`, `set-url`, `prune`, `update` | — |
-| **env** | `env` alone or `VAR=value` | Using `env` to execute another command | — |
-| **date** | Display time | — | `-s` / `--set` (system clock) |
-| **cat** | Normal stdout | Shell redirection `>` / `>>` | — |
-| **find** | Normal traversal | `-delete`, `-exec`, `-execdir` | — |
-| **sort** | Normal sort | `-o` / `--output`, shell `>` / `>>` | — |
-| **awk** | — | All awk commands (not auto-approved); `system()` and file output caught | — |
-| **hostname** | Read hostname | Setting a new hostname (bare name argument) | — |
-| **rm** | — | All `rm` commands | `rm -rf` / `rm -Rf` (deny-list) |
-| **ln** | — | All `ln` commands | Symlinks/hardlinks to `~/.claude/` |
-| **sed -i** | — | In-place file editing | — |
-| **chown** | — | All `chown` commands | — |
-| **install** | — | All `install` commands | — |
-| **Pipe-to-shell** | — | `\| bash`, `\| sh`, `base64 -d`, `eval` | — |
-| **WSL boundary** | — | — | All paths/executables escaping the Linux filesystem |
-| Config writes (`~/.claude/`) | `git show origin/main:` from canonical repo; `gh api` from canonical repo | — | All other methods |
+| Area                         | Allowed silently                                                          | Prompts for approval                                                    | Hard blocked                                        |
+| ---------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------- |
+| **curl**                     | —                                                                         | All curl commands (not auto-approved)                                   | —                                                   |
+| **gh api**                   | —                                                                         | All gh api commands (not auto-approved)                                 | —                                                   |
+| **git push**                 | Last user message contains authorized phrase                              | —                                                                       | Blocked otherwise                                   |
+| **git -C**                   | Read-only subcommands                                                     | Write subcommands, branch/remote writes                                 | `push` (phrase-authorized)                          |
+| **git branch** (bare)        | `--list`, `-a`, `-v` (auto-approved)                                      | `-d/-D/-m/-M/-c/-C`, `--delete`, `--move`, `--copy`                     | —                                                   |
+| **git remote** (bare)        | `-v`, `show` (auto-approved)                                              | `add`, `remove`, `rename`, `set-url`, `prune`, `update`                 | —                                                   |
+| **env**                      | `env` alone or `VAR=value`                                                | Using `env` to execute another command                                  | —                                                   |
+| **date**                     | Display time                                                              | —                                                                       | `-s` / `--set` (system clock)                       |
+| **cat**                      | Normal stdout                                                             | Shell redirection `>` / `>>`                                            | —                                                   |
+| **find**                     | Normal traversal                                                          | `-delete`, `-exec`, `-execdir`                                          | —                                                   |
+| **sort**                     | Normal sort                                                               | `-o` / `--output`, shell `>` / `>>`                                     | —                                                   |
+| **awk**                      | —                                                                         | All awk commands (not auto-approved); `system()` and file output caught | —                                                   |
+| **hostname**                 | Read hostname                                                             | Setting a new hostname (bare name argument)                             | —                                                   |
+| **rm**                       | —                                                                         | All `rm` commands                                                       | `rm -rf` / `rm -Rf` (deny-list)                     |
+| **ln**                       | —                                                                         | All `ln` commands                                                       | Symlinks/hardlinks to `~/.claude/`                  |
+| **sed -i**                   | —                                                                         | In-place file editing                                                   | —                                                   |
+| **chown**                    | —                                                                         | All `chown` commands                                                    | —                                                   |
+| **install**                  | —                                                                         | All `install` commands                                                  | —                                                   |
+| **Pipe-to-shell**            | —                                                                         | `\| bash`, `\| sh`, `base64 -d`, `eval`                                 | —                                                   |
+| **WSL boundary**             | —                                                                         | —                                                                       | All paths/executables escaping the Linux filesystem |
+| Config writes (`~/.claude/`) | `git show origin/main:` from canonical repo; `gh api` from canonical repo | —                                                                       | All other methods                                   |
 
 Most guards use `(^|[;&|]\s*)cmd\b` patterns to catch commands both at the start of a line and when chained via `&&`, `;`, or `||`. The exception is the canonical-source check for config-file writes (Method 2 — `gh api`), which validates via a URL-prefix match rather than a segment-boundary anchor, and is additionally hardened by a decoy-detection check that rejects any non-canonical `gh api` call present in the same command.
 
@@ -233,6 +239,7 @@ Project `settings.json` in `.claude/` enables MCP servers and project-specific p
 ## Verification
 
 After installing (see [README](../../global-settings/README.md)), verify:
+
 - `curl` should prompt (not auto-approved)
 - `find . -exec` should prompt
 - `rm -rf` should be hard-blocked

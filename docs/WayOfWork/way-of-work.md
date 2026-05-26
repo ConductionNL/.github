@@ -12,7 +12,7 @@ Conduction's mission, vision, and core values live on **[identity.conduction.nl]
 
 ## Being Open
 
-Conduction is an open company. Being open is about more than open-source code. It also means being open about *how we work* and *how we manage what we do*. That's why this handbook exists, and it's why it lives on a public site instead of an internal wiki.
+Conduction is an open company. Being open is about more than open-source code. It also means being open about _how we work_ and _how we manage what we do_. That's why this handbook exists, and it's why it lives on a public site instead of an internal wiki.
 
 In practice:
 

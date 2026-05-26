@@ -5,6 +5,7 @@ _This is the **architecture reference** — see [Getting Started](./getting-star
 ## Overview
 
 This workspace uses a spec-driven development workflow that combines:
+
 - **OpenSpec** — Structured specifications alongside code
 - **GitHub Issues** — Visual progress tracking via kanban boards
 - **Spec verification** — Automated review of code against specifications
@@ -54,6 +55,7 @@ apps-extra/                         # Workspace root
 ```
 
 **Primary spec ownership:**
+
 - `openregister` (foundation) — `nextcloud-app/`, `api-patterns/`, `docker/`, `release-workflows/`
 - `nldesign` — `nl-design/`
 - `pipelinq` — `pipeline/`, `pipeline-views/`
@@ -73,12 +75,15 @@ Start by defining what you're building. This creates structured, reviewable spec
 This creates `openspec/changes/add-woo-search/` with metadata. Then either:
 
 **Fast-forward (all at once):**
+
 ```
 /opsx-ff
 ```
+
 Creates proposal → specs → design → tasks in dependency order.
 
 **Or incrementally:**
+
 ```
 /opsx-continue    # Creates proposal
 /opsx-continue    # Creates specs
@@ -113,6 +118,7 @@ Once specs are reviewed and approved, convert them to trackable work items:
 ```
 
 This command:
+
 1. Parses `tasks.md` into structured JSON
 2. Creates a **tracking issue** (epic) on GitHub with a full task checklist
 3. Creates **individual issues** per task, each containing:
@@ -124,6 +130,7 @@ This command:
 4. Saves `plan.json` with all GitHub issue numbers linked
 
 **Why GitHub Issues?**
+
 - Visual kanban board (GitHub Projects)
 - Progress visible to the whole team
 - Each issue links back to specs for traceability
@@ -149,6 +156,7 @@ Runs Phases 3 → 4 → 5 in one hands-off command inside an isolated Docker con
 The loop runs `/opsx-apply` → `/opsx-verify` up to 5 times per app, optionally followed by targeted single-agent tests (max 3 test iterations), then archives when verify is clean and handles git commit and GitHub sync on the host. Use this when you want to walk away and let Claude work through the full cycle automatically. Requires a container authentication token — the Docker container cannot use interactive OAuth. Set `CLAUDE_CODE_AUTH_TOKEN` (preferred — free, uses your subscription) or `ANTHROPIC_API_KEY` (fallback — costs money) in your `~/.bashrc`. See [Getting Started — Container authentication](getting-started.md#prerequisites) for step-by-step setup.
 
 Each iteration of the loop:
+
 1. **Reads plan.json** — finds the next pending task
 2. **Reads ONLY the referenced spec section** — via `spec_ref` pointer
 3. **Implements the task** — following acceptance criteria, including:
@@ -161,6 +169,7 @@ Each iteration of the loop:
 7. **Moves to the next task** — or stops if all done
 
 **Why this works:**
+
 - Minimal context per iteration (just the task + its spec section)
 - No "amnesia" — plan.json tracks state across sessions
 - Visual progress — GitHub issues close as work completes
@@ -176,6 +185,7 @@ After all tasks are complete, verify the implementation:
 ```
 
 This command:
+
 1. Reads ALL spec requirements (ADDED/MODIFIED/REMOVED)
 2. Checks each against the actual implementation
 3. Cross-references with shared specs (NC conventions, API patterns, etc.)
@@ -195,6 +205,7 @@ Once review passes:
 ```
 
 This:
+
 - Merges delta specs into the app's `openspec/specs/` directory
 - Moves the change to `openspec/changes/archive/YYYY-MM-DD-<name>/`
 - Creates or updates `CHANGELOG.md` with the completed tasks as versioned entries
@@ -232,6 +243,7 @@ This:
 ```
 
 **Key design decisions:**
+
 - `spec_ref` uses `file#anchor` format so the AI can read just that section
 - `acceptance_criteria` are extracted from spec scenarios, ready for verification
 - `files_likely_affected` scopes the search space for implementation
@@ -244,31 +256,32 @@ See [writing-specs.md](writing-specs.md) for the complete guide — RFC 2119 key
 
 ## Commands Reference
 
-| Command | Phase | Description |
-|---------|-------|-------------|
-| `/opsx-new <name>` | Spec | Start a new change |
-| `/opsx-ff` | Spec | Fast-forward all artifacts |
-| `/opsx-continue` | Spec | Create next artifact |
-| `/opsx-plan-to-issues` | Plan | Tasks → JSON + GitHub Issues |
-| `/opsx-apply` | Implement | Implement tasks from plan.json |
-| `/opsx-verify` | Review | Verify implementation against specs |
-| `/opsx-archive` | Archive | Complete and preserve change |
+| Command                | Phase     | Description                         |
+| ---------------------- | --------- | ----------------------------------- |
+| `/opsx-new <name>`     | Spec      | Start a new change                  |
+| `/opsx-ff`             | Spec      | Fast-forward all artifacts          |
+| `/opsx-continue`       | Spec      | Create next artifact                |
+| `/opsx-plan-to-issues` | Plan      | Tasks → JSON + GitHub Issues        |
+| `/opsx-apply`          | Implement | Implement tasks from plan.json      |
+| `/opsx-verify`         | Review    | Verify implementation against specs |
+| `/opsx-archive`        | Archive   | Complete and preserve change        |
 
 ## Team Role Commands
 
 Specialist agents representing different roles on the development team. Useful for getting a focused perspective on a change — architecture review, QA, product sign-off, etc.
 
-| Command | Role | Focus |
-|---------|------|-------|
-| `/team-architect` | Architect | API design, data models, cross-app dependencies |
-| `/team-backend` | Backend Developer | PHP implementation, entities, services, tests |
-| `/team-frontend` | Frontend Developer | Vue components, state management, UX |
-| `/team-po` | Product Owner | Business value, acceptance criteria, priority |
-| `/team-qa` | QA Engineer | Test coverage, edge cases, regression risk |
-| `/team-reviewer` | Code Reviewer | Standards, conventions, security, code quality |
-| `/team-sm` | Scrum Master | Progress tracking, blockers, sprint health |
+| Command           | Role               | Focus                                           |
+| ----------------- | ------------------ | ----------------------------------------------- |
+| `/team-architect` | Architect          | API design, data models, cross-app dependencies |
+| `/team-backend`   | Backend Developer  | PHP implementation, entities, services, tests   |
+| `/team-frontend`  | Frontend Developer | Vue components, state management, UX            |
+| `/team-po`        | Product Owner      | Business value, acceptance criteria, priority   |
+| `/team-qa`        | QA Engineer        | Test coverage, edge cases, regression risk      |
+| `/team-reviewer`  | Code Reviewer      | Standards, conventions, security, code quality  |
+| `/team-sm`        | Scrum Master       | Progress tracking, blockers, sprint health      |
 
 **Usage:**
+
 ```
 /team-architect    # review the API design for the active change
 /team-qa          # get QA perspective on test coverage

@@ -33,11 +33,11 @@ hotfix/*  ─┘        │              │        │
 
 ### Branch Rules
 
-| Target branch | Allowed source branches | What happens on merge |
-|---------------|------------------------|----------------------|
-| `development` | `feature/*`, `bugfix/*`, `hotfix/*` | Nothing — no builds triggered |
-| `beta` | `development`, `hotfix/*`, `main` | Beta release built and pushed as nightly to App Store |
-| `main` | `beta`, `hotfix/*` | Stable release built and pushed to App Store |
+| Target branch | Allowed source branches             | What happens on merge                                 |
+| ------------- | ----------------------------------- | ----------------------------------------------------- |
+| `development` | `feature/*`, `bugfix/*`, `hotfix/*` | Nothing — no builds triggered                         |
+| `beta`        | `development`, `hotfix/*`, `main`   | Beta release built and pushed as nightly to App Store |
+| `main`        | `beta`, `hotfix/*`                  | Stable release built and pushed to App Store          |
 
 These rules are enforced by the centralized **branch-protection** workflow. PRs from disallowed branches are blocked automatically.
 
@@ -57,17 +57,18 @@ We use [Semantic Versioning](https://semver.org/) (semver). Versions are **calcu
 
 Every PR should have one of these labels:
 
-| Label | When to use | Example |
-|-------|-------------|---------|
+| Label   | When to use                                       | Example             |
+| ------- | ------------------------------------------------- | ------------------- |
 | `patch` | Bug fixes, small improvements, dependency updates | `0.2.13` → `0.2.14` |
-| `minor` | New features, significant enhancements | `0.2.13` → `0.3.0` |
-| `major` | Breaking changes, major rewrites | `0.2.13` → `1.0.0` |
+| `minor` | New features, significant enhancements            | `0.2.13` → `0.3.0`  |
+| `major` | Breaking changes, major rewrites                  | `0.2.13` → `1.0.0`  |
 
 If no label is set, the version defaults to a **patch** bump.
 
 ### How Versions Are Calculated
 
 **Stable releases** (on merge to `main`):
+
 1. The workflow reads the latest stable git tag (e.g., `v0.2.13`)
 2. It checks the PR labels for `major`, `minor`, or `patch`
 3. It bumps the version accordingly (e.g., `0.2.14` for patch)
@@ -75,6 +76,7 @@ If no label is set, the version defaults to a **patch** bump.
 5. A git tag `v0.2.14` is created
 
 **Beta releases** (on merge to `beta`):
+
 1. The workflow reads the latest stable git tag (e.g., `v0.2.13`)
 2. It always bumps the patch version by one (e.g., `0.2.14`)
 3. It appends a beta suffix with a UTC timestamp: `0.2.14-beta.20260313143022`
@@ -91,10 +93,10 @@ The `appinfo/info.xml` in your repository is **never modified** by the release w
 
 ## Release Channels
 
-| Channel | Branch | App Store flag | Who uses it |
-|---------|--------|---------------|-------------|
-| **Stable** | `main` | `nightly: false` | Production users, default install |
-| **Beta** | `beta` | `nightly: true` | Testers, early adopters (opt-in via App Store settings) |
+| Channel    | Branch | App Store flag   | Who uses it                                             |
+| ---------- | ------ | ---------------- | ------------------------------------------------------- |
+| **Stable** | `main` | `nightly: false` | Production users, default install                       |
+| **Beta**   | `beta` | `nightly: true`  | Testers, early adopters (opt-in via App Store settings) |
 
 There are no development builds. The `development` branch is for integration only — developers test locally or install from the beta channel.
 
@@ -191,9 +193,9 @@ jobs:
 
 Each app repository needs these secrets configured:
 
-| Secret | Purpose |
-|--------|---------|
-| `NEXTCLOUD_SIGNING_KEY` | Private key for signing the release tarball |
+| Secret                     | Purpose                                            |
+| -------------------------- | -------------------------------------------------- |
+| `NEXTCLOUD_SIGNING_KEY`    | Private key for signing the release tarball        |
 | `NEXTCLOUD_APPSTORE_TOKEN` | API token for uploading to the Nextcloud App Store |
 
 ## Migration from Old Workflows
@@ -201,6 +203,7 @@ Each app repository needs these secrets configured:
 If your app currently has its own release workflows (e.g., `release-workflow.yaml`, `beta-release.yaml`, `unstable-release.yaml`):
 
 1. **Tag your current version**: Before switching, create a git tag on `main` for the current version:
+
    ```bash
    git tag v$(grep -oP '(?<=<version>)[^<]+' appinfo/info.xml | sed 's/-.*//') main
    git push origin --tags

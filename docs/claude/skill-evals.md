@@ -83,6 +83,7 @@ The previous `local-mods.patch` mechanism is gone — the merge replaces it. If 
 ### Running evals step-by-step
 
 1. **Invoke**: In a Claude Code session, ask Claude to evaluate the skill:
+
    > "Run evals on the test-app skill" or "Use the skill creator to evaluate and improve my X skill"
 
    Claude picks up the skill-creator and guides the process. The skill-creator's `evals/evals.json` format uses `evals[]` with `id`, `prompt`, `expected_output`, and `expectations`. We adopted this format across all our skills.
@@ -90,7 +91,7 @@ The previous `local-mods.patch` mechanism is gone — the merge replaces it. If 
 2. **What happens**: Two parallel subagents run each eval:
    - **With-skill agent**: runs the scenario with the skill active
    - **Baseline agent**: runs the same scenario without the skill
-   Results are saved to `<skill-dir>/evals/workspace/iteration-N/eval-<name>/` (inside the skill folder, per our local convention).
+     Results are saved to `<skill-dir>/evals/workspace/iteration-N/eval-<name>/` (inside the skill folder, per our local convention).
 
 3. **Review results**: The Skill Creator runs `eval-viewer/generate_review.py` and opens a browser tab (or generates a static HTML file with `--static`) with two tabs: **Outputs** (click through each eval, leave qualitative feedback) and **Benchmark** (pass rates, timing, tokens with-skill vs baseline).
 
@@ -101,10 +102,12 @@ The previous `local-mods.patch` mechanism is gone — the merge replaces it. If 
    - `eval-review-iteration-N.html` — static viewer (one level up, at `evals/workspace/`)
 
 5. **Update `last_validated` and `baseline_score`** in `evals.json` after a successful run:
+
    ```json
    "last_validated": "2026-04-13",
    "baseline_score": 0.67
    ```
+
    `last_validated` unlocks the L5 green circle in the skill overview dashboard. `baseline_score` records the with-skill pass rate at the time of validation — used as a regression guardrail when re-running evals (see below).
 
 6. **Improve cycle**: The Skill Creator's analyzer flags non-discriminating assertions, flaky evals, and skill improvement suggestions. Update `SKILL.md` and re-run as iteration-2 (and so on, in the same `evals/workspace/` folder).
@@ -154,6 +157,7 @@ The workspace is bounded to **3 live iterations max**. Older iterations are summ
 ```
 
 **Rotation rules** (run by `python -m scripts.rotate_workspace <workspace> --keep 3` at end of each eval cycle):
+
 - Iterations beyond the keep window are archived into `archived-iterations/iteration-N/` and removed from the live tree.
 - Iteration numbering keeps incrementing forever — `iteration-8`, `iteration-9` — never reused.
 - "Notable" detection (which evals get full output preserved in `notable/`): a regression vs. the previous iteration (assertion that passed before now fails, OR `with_skill` pass_rate dropped). For iteration 1 the fallback is "any failed assertion".

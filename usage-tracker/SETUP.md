@@ -18,6 +18,7 @@ The Claude Code extension writes full API responses (including token counts) to 
 - **Claude Code** extension installed in VS Code and signed in
 
 Verify Claude Code is working:
+
 ```bash
 ls ~/.claude/projects/    # should list project directories after first use
 ```
@@ -31,6 +32,7 @@ bash usage-tracker/install.sh
 ```
 
 This will:
+
 - ✅ Create log storage directory (`usage-tracker/logs/`, gitignored via `.gitignore`)
 - ✅ Make scripts executable
 - ✅ Create a symlink at `~/.local/bin/claude-usage-tracker`
@@ -86,6 +88,7 @@ The page shows three bars: **Current session**, **All models** (weekly combined)
 This matters: the **"Sonnet only" bar resets on a different day than "All models"**, and neither necessarily resets on Monday. Without the correct reset times, the weekly percentages can be significantly off.
 
 For each weekly bar, `claude.ai/settings/usage` shows either:
+
 - A countdown: **"Resets in 17 hr 27 min"** — add that to the current UTC time to get the next reset, then subtract 7 days for the reset day/hour
 - A day and time: **"Resets Thu 5:00 PM"** — use that day and convert the time to UTC
 
@@ -105,6 +108,7 @@ Set `weekly_reset_day` (0=Mon … 6=Sun) and `weekly_reset_hour_utc` for both `s
 ```
 
 **Converting local time to UTC:**
+
 - CET (Central European, UTC+1): subtract 1 hour. "Thu 5:00 PM CET" → Thu 16:00 UTC → `"weekly_reset_day": 3, "weekly_reset_hour_utc": 16`
 - CEST (Central European Summer, UTC+2): subtract 2 hours
 - EST (UTC-5): add 5 hours
@@ -112,6 +116,7 @@ Set `weekly_reset_day` (0=Mon … 6=Sun) and `weekly_reset_hour_utc` for both `s
 Omit `weekly_reset_day` / `weekly_reset_hour_utc` to fall back to Monday 00:00 UTC.
 
 To verify your configuration:
+
 ```bash
 python3 usage-tracker/claude-usage-tracker.py --limits
 ```
@@ -121,11 +126,13 @@ python3 usage-tracker/claude-usage-tracker.py --limits
 The session window is a rolling 5-hour window — there's no fixed start time in the JSONL files, so the tracker approximates it as "now − 5h". You can calibrate this two ways:
 
 **At the start of a new session:**
+
 ```bash
 python3 usage-tracker/claude-usage-tracker.py --mark-session-start
 ```
 
 **When [claude.ai/settings/usage](https://claude.ai/settings/usage) shows a known remaining time:**
+
 ```bash
 python3 usage-tracker/claude-usage-tracker.py --set-session-reset "4h 50m"
 # Also accepts: "4:50" or plain minutes ("290")
@@ -187,6 +194,7 @@ This creates an always-on monitor that displays in a dedicated Terminal panel.
 **Step 3 — Save the file** (`Ctrl + S`).
 
 **Step 4 — Run it:**
+
 - `Ctrl + Shift + P` → `Tasks: Run Task` → select **Claude Usage Monitor**
 - A dedicated Terminal panel opens with live output
 
@@ -225,6 +233,7 @@ python3 usage-tracker/claude-usage-tracker.py --status-bar --all-models # All mo
 ```
 
 Output (all models):
+
 ```
 ─── 16:42:17 UTC ─── Session: 1h 33m elapsed  ·  3h 27m until reset  ·  5h (calibrated)
 🟢🟢  All Models    │   83.6K ss │   2.34M wk │ Sess~:  10.0% │ Week~:  10.4% (cfg)
@@ -233,6 +242,7 @@ Output (all models):
 🔵🔵  Claude Opus   │  (no usage this period)
    Weekly resets: All Models in 16h 25m · Sonnet in 165h 25m
 ```
+
 First circle = Session · Second circle = Weekly · `(cfg)` = limits.json loaded · `(est)` = using defaults
 
 `(X left)` appears only at 🟠 75%+ · `(calibrated)` = reset time set via `--set-session-reset` · `(approx)` = estimated as now − 5h
@@ -283,11 +293,11 @@ python3 usage-tracker/claude-usage-tracker.py --monitor --all-models
 
 Default limits are approximate **subscription quota** estimates (not model context windows — see [Two Kinds of Token Limits](../docs/claude/parallel-agents.md#two-kinds-of-token-limits)). To set your real limits, edit `limits.json` (see Step 2.5). Default values:
 
-| Model | Daily | Weekly |
-|-------|-------|--------|
-| **Haiku** | ~1.2M | ~6M |
-| **Sonnet** | ~400K | ~2M |
-| **Opus** | ~200K | ~1M |
+| Model      | Daily | Weekly |
+| ---------- | ----- | ------ |
+| **Haiku**  | ~1.2M | ~6M    |
+| **Sonnet** | ~400K | ~2M    |
+| **Opus**   | ~200K | ~1M    |
 
 ### Custom Projects Directory
 
@@ -305,6 +315,7 @@ python3 usage-tracker/claude-usage-tracker.py \
 ### "Session: 0.0%" when you've been working
 
 Check if JSONL files exist:
+
 ```bash
 ls ~/.claude/projects/
 find ~/.claude/projects -name "*.jsonl" | head -5
@@ -329,11 +340,11 @@ sudo apt install libnotify-bin   # installs notify-send
 
 ## What Gets Tracked
 
-| Metric | Source | Accuracy |
-|--------|--------|----------|
-| **Session tokens** | JSONL entries in last 5h, `input_tokens` + `output_tokens` | ~100% |
-| **Weekly tokens** | Same, filtered to Mon UTC–now | ~100% |
-| **Cache tokens** | Not counted (cheaper tier) | — |
+| Metric             | Source                                                     | Accuracy |
+| ------------------ | ---------------------------------------------------------- | -------- |
+| **Session tokens** | JSONL entries in last 5h, `input_tokens` + `output_tokens` | ~100%    |
+| **Weekly tokens**  | Same, filtered to Mon UTC–now                              | ~100%    |
+| **Cache tokens**   | Not counted (cheaper tier)                                 | —        |
 
 The only inaccuracy comes from the **limit numbers** — the defaults are estimates. Configure your limits in `limits.json` (see Step 2.5). Use [claude.ai/settings/usage](https://claude.ai/settings/usage) to see live percentages and calibrate your values. The tracker uses a ~5h rolling session window and weekly totals — both match Anthropic's actual limit structure.
 
@@ -368,7 +379,6 @@ for f in sorted(pathlib.Path.home().glob('.claude/projects/**/*.jsonl'))[-3:]:
 1. Open the workspace — monitor starts automatically (if task is configured)
 2. Keep the dedicated Terminal panel visible while working
 3. Check [claude.ai/settings/usage](https://claude.ai/settings/usage) for authoritative usage percentages
-
 
 ---
 

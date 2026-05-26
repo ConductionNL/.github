@@ -109,15 +109,16 @@ scripts/lib/credentials.sh
 ```
 
 Sourced by:
+
 - `scripts/orchestrate.sh` — builder, fix, fix-quality, fix-browser containers
 - `scripts/hydra-supervisor.sh` — code review, security review, applier containers
 
 ## Per-Deployment Injection
 
-| Variable | Local (`cron`) | GitHub Actions | Kubernetes |
-|---|---|---|---|
+| Variable     | Local (`cron`)             | GitHub Actions                    | Kubernetes                      |
+| ------------ | -------------------------- | --------------------------------- | ------------------------------- |
 | Claude OAuth | `secrets/credentials.json` | `secrets.CLAUDE_CODE_OAUTH_TOKEN` | K8s secret `hydra-claude-oauth` |
-| GitHub PATs | `secrets/.env` | `secrets.HYDRA_*_TOKEN` | K8s secrets per agent |
+| GitHub PATs  | `secrets/.env`             | `secrets.HYDRA_*_TOKEN`           | K8s secrets per agent           |
 
 ## Security Notes
 

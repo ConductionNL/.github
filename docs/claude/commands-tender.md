@@ -11,11 +11,13 @@ These commands support the competitive analysis and ecosystem gap-finding workfl
 Scrape TenderNed for new tenders, import them into SQLite, and classify unclassified tenders by software category using a local Qwen model.
 
 **Usage:**
+
 ```
 /tender-scan
 ```
 
 **What it does:**
+
 1. Runs `concurrentie-analyse/tenders/scrape_tenderned.py` to fetch fresh data
 2. Imports new tenders into the intelligence database
 3. Classifies unclassified tenders using Qwen via `localhost:11434`
@@ -32,11 +34,13 @@ Scrape TenderNed for new tenders, import them into SQLite, and classify unclassi
 Show a dashboard of the tender intelligence database — totals by source, category, status, gaps, and recent activity.
 
 **Usage:**
+
 ```
 /tender-status
 ```
 
 **What it does:**
+
 - Queries `concurrentie-analyse/intelligence.db` for live stats
 - Shows tenders by source, status, and category (top 15)
 - Highlights categories with Conduction coverage vs gaps
@@ -53,11 +57,13 @@ Show a dashboard of the tender intelligence database — totals by source, categ
 Generate a gap analysis report — software categories that appear in government tenders but have no Conduction product.
 
 **Usage:**
+
 ```
 /tender-gap-report
 ```
 
 **What it does:**
+
 1. Queries the database for categories with tenders but no `conduction_product`
 2. Generates a markdown report at `concurrentie-analyse/reports/gap-report-{date}.md`
 3. Includes top 5 gaps with tender details, organisations, and key requirements
@@ -73,11 +79,13 @@ Generate a gap analysis report — software categories that appear in government
 Deep-dive research into a software category — find and analyze open-source competitors using GitHub, G2, Capterra, AlternativeTo, and TEC.
 
 **Usage:**
+
 ```
 /ecosystem-investigate bookkeeping
 ```
 
 **What it does:**
+
 1. Loads category context and related tenders from the intelligence database
 2. Uses the browser pool (browser-1 through browser-5) to scrape 5-10 competitors from multiple source types
 3. Creates competitor profiles in `concurrentie-analyse/{category}/{competitor-slug}/`
@@ -95,11 +103,13 @@ Deep-dive research into a software category — find and analyze open-source com
 Generate a full app proposal for a software category gap, using tender requirements and competitor research as input.
 
 **Usage:**
+
 ```
 /ecosystem-propose-app bookkeeping
 ```
 
 **What it does:**
+
 1. Gathers all tenders, requirements, competitors, and integrations for the category
 2. Generates a structured proposal following the template in `concurrentie-analyse/application-roadmap.md`
 3. Appends the proposal to `application-roadmap.md`
@@ -117,6 +127,7 @@ Generate a full app proposal for a software category gap, using tender requireme
 Pull latest data from external sources into the intelligence database. Syncs sources that are past their scheduled interval.
 
 **Usage:**
+
 ```
 /intelligence-update              # sync all sources that are due
 /intelligence-update all          # force sync every source
@@ -125,18 +136,19 @@ Pull latest data from external sources into the intelligence database. Syncs sou
 
 **Sources and intervals:**
 
-| Source | Interval |
-|--------|----------|
-| `tenderned` | 24h |
-| `wikidata-software` | 7 days |
-| `wikipedia-comparisons` | 7 days |
-| `awesome-selfhosted` | 7 days |
-| `github-issues` | 7 days |
-| `dpg-registry` | 7 days |
-| `developers-italia` | 7 days |
-| `gemma-release` | yearly |
+| Source                  | Interval |
+| ----------------------- | -------- |
+| `tenderned`             | 24h      |
+| `wikidata-software`     | 7 days   |
+| `wikipedia-comparisons` | 7 days   |
+| `awesome-selfhosted`    | 7 days   |
+| `github-issues`         | 7 days   |
+| `dpg-registry`          | 7 days   |
+| `developers-italia`     | 7 days   |
+| `gemma-release`         | yearly   |
 
 **What it does:**
+
 1. Checks `source_syncs` table for overdue sources
 2. Runs `concurrentie-analyse/scripts/sync/sync_{source}.py` for each
 3. Updates sync status, records count, and error messages

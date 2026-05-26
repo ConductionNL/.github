@@ -31,6 +31,7 @@ description: A useful tool for managing code reviews   # passive, no specificity
 Files with `{PLACEHOLDER}` variables that Claude fills in at runtime. Claude reads the file, substitutes values, and either writes the result to the user's project or injects it into a sub-agent.
 
 **Use for:**
+
 - JSON/YAML/Markdown documents Claude writes to disk (e.g. `app-config.json`, `CHANGELOG.md`)
 - Sub-agent prompts with variable substitution
 - PR/issue body formats Claude fills in before creating
@@ -39,6 +40,7 @@ Files with `{PLACEHOLDER}` variables that Claude fills in at runtime. Claude rea
 **Do not use for:** documents Claude reads without modifying, or fixed reference material.
 
 In `SKILL.md`, reference with:
+
 ```
 Write the file using the template in `templates/architecture-template.md`.
 ```
@@ -48,6 +50,7 @@ Write the file using the template in `templates/architecture-template.md`.
 Static content Claude reads to inform decisions — no placeholder variables, never written to the user's project. This is a key subfolder for **L4 personalization** — business-specific standards, architecture docs, and domain knowledge live here.
 
 **Use for:**
+
 - Standards documents (Dutch government guidelines, GEMMA/ZGW compliance, coding standards)
 - Architecture guidelines and conventions
 - Spec excerpts or capability descriptions
@@ -56,6 +59,7 @@ Static content Claude reads to inform decisions — no placeholder variables, ne
 **Do not use for:** templates, examples, or binary files.
 
 In `SKILL.md`, reference with:
+
 ```
 Follow the standards in `references/dutch-gov-backend-standards.md`.
 ```
@@ -65,6 +69,7 @@ Follow the standards in `references/dutch-gov-backend-standards.md`.
 Worked demonstrations showing what expected output looks like. Used for few-shot guidance — Claude sees a concrete example and produces output in the same pattern. Critical for **L3** (proven patterns).
 
 **Use for:**
+
 - Output format blocks (e.g. "Archive Complete", "Implementation Paused")
 - Worked conflict resolution or decision examples
 - Sample report sections showing expected structure
@@ -72,6 +77,7 @@ Worked demonstrations showing what expected output looks like. Used for few-shot
 **Do not use for:** templates with placeholders (those go in `templates/`), or static reference docs.
 
 In `SKILL.md`, reference with:
+
 ```
 For the expected output format, see `examples/output-templates.md`.
 ```
@@ -81,6 +87,7 @@ For the expected output format, see `examples/output-templates.md`.
 Non-markdown static files that get copied as-is to the user's project or used by the skill tooling.
 
 **Use for:**
+
 - SVG illustrations or placeholder images
 - JavaScript/TypeScript config stubs (`webpack.config.js`, `docusaurus.config.js`)
 - YAML/JSON configuration stubs copied verbatim
@@ -92,6 +99,7 @@ Non-markdown static files that get copied as-is to the user's project or used by
 Evaluation scenarios and benchmark results for measured skills.
 
 **Use for:**
+
 - `evals.json` — test scenarios, `trigger_tests` (should/should-not-trigger examples), and `last_validated` (date of last eval run; required for L5 green circle)
 - `timing.json` — token usage and duration per eval run
 - `grading.json` — assertion pass/fail results with evidence
@@ -124,11 +132,13 @@ Use **AskUserQuestion** to ask:
 > "Which change should I archive?"
 
 Options:
+
 - **change-a** — description
 - **change-b** — description
 ```
 
 For multi-select prompts:
+
 ```markdown
 Use **AskUserQuestion** with `multiSelect: true` to let the user choose.
 ```
@@ -143,6 +153,7 @@ Show a preview of the changes, then use **AskUserQuestion**:
 > "Create these issues in `owner/repo`?"
 
 Options:
+
 - **Yes, proceed** — continue
 - **Cancel** — end without changes
 ```
@@ -192,6 +203,7 @@ For skills that are part of a workflow chain:
 **Next steps**
 
 Suggest the logical next action:
+
 - If tasks remain → "Run `/opsx-apply` to implement"
 - If implementation done → "Run `/opsx-verify` to validate"
 - If verified → "Run `/opsx-archive` to complete"
