@@ -37,7 +37,7 @@ Every spec file at `openspec/specs/{domain}/spec.md` follows this structure:
 
 - **Performance:** <measurable performance requirement>
 - **Accessibility:** <WCAG or usability requirement>
-- **Internationalization:** Dutch and English MUST be supported (ADR-005)
+- **Internationalization:** Dutch and English MUST be supported (ADR-007)
 
 ## Acceptance Criteria
 
