@@ -50,7 +50,7 @@ PUSH_DENY_MSG="Blocked: git push requires explicit authorization. Include one of
 
 # ── Claude config guard (HARD BLOCK) ─────────────────────────────────────────
 # Prevent writes to protected ~/.claude/ config files.
-# Canonical update source: ConductionNL/.github — origin/main only.
+# Canonical update source: codeberg.org/Conduction/.github — origin/main only.
 #
 # Detects writes via: output redirect, cp/mv, variable+redirect (same command),
 # tee, eval, bash/sh -c, and inline scripting (python, perl, node).
@@ -162,26 +162,31 @@ if $_is_config_write; then
                 hard_deny "BLOCKED: git show for config updates must use -C ${_repo_path} (the validated canonical repo)."
             fi
             _remote=$(git -C "$_git_root" remote get-url origin 2>/dev/null)
-            if echo "$_remote" | grep -qE "ConductionNL/\.github(\.git|/|$)"; then
+            # Accept Codeberg remote in any common form:
+            #   git@codeberg.org:Conduction/.github(.git)
+            #   https://codeberg.org/Conduction/.github(.git)
+            #   ssh://git@codeberg.org/Conduction/.github(.git)
+            if echo "$_remote" | grep -qE "codeberg\.org[:/]Conduction/\.github(\.git|/|$)"; then
                 : # canonical repo and main branch verified — allow
             else
-                hard_deny "BLOCKED: Config update rejected. Remote '${_remote:-unknown}' is not the canonical repo (ConductionNL/.github, main branch only)."
+                hard_deny "BLOCKED: Config update rejected. Remote '${_remote:-unknown}' is not the canonical repo (codeberg.org/Conduction/.github, main branch only)."
             fi
         else
             hard_deny "BLOCKED: ~/.claude/settings-repo-path is missing or invalid. Cannot verify canonical repo."
         fi
-    elif echo "$cmd" | grep -qE "\bgh\s+api\s+['\"]?repos/ConductionNL/\.github/contents/global-settings/"; then
-        # Method 2: gh api — canonical repo verified by literal URL-path prefix.
-        # Decoy protection: reject if any gh api call in the command fetches from a
-        # non-canonical repo. A single non-canonical call alongside the canonical one
+    elif echo "$cmd" | grep -qE "\bcurl\b[^|]*['\"]?https://codeberg\.org/Conduction/\.github/raw/branch/[^[:space:]'\"&;|)]+/global-settings/"; then
+        # Method 2: curl — canonical repo verified by literal URL-prefix match.
+        # The URL must appear as a literal in the same command — no variable indirection.
+        # Decoy protection: reject if any http(s) URL in the command points to a
+        # non-canonical source. A single non-canonical URL alongside the canonical one
         # is enough to smuggle attacker-controlled content into the write target.
-        if echo "$cmd" | grep -oE "\bgh[[:space:]]+api[[:space:]]+['\"]?repos/[^[:space:]'\"&;|)]*" \
-           | grep -qvE "repos/ConductionNL/\.github/contents/global-settings/"; then
-            hard_deny "BLOCKED: Command mixes canonical and non-canonical gh api calls — possible decoy attack."
+        if echo "$cmd" | grep -oE "https?://[^[:space:]'\"&;|)]+" \
+           | grep -qvE "^https://codeberg\.org/Conduction/\.github/raw/branch/[^[:space:]'\"&;|)]+/global-settings/"; then
+            hard_deny "BLOCKED: Command mixes canonical and non-canonical URLs — possible decoy attack."
         fi
-        : # canonical repo via GitHub API — allow
+        : # canonical repo via Codeberg raw URL — allow
     else
-        hard_deny "BLOCKED: Claude cannot write to ~/.claude/ config files. Updates must use git show origin/main or gh api from ConductionNL/.github only."
+        hard_deny "BLOCKED: Claude cannot write to ~/.claude/ config files. Updates must use git show origin/main or curl from codeberg.org/Conduction/.github only."
     fi
 fi
 

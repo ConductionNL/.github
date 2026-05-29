@@ -26,9 +26,9 @@ At the start of every Claude session, a live status panel is printed to the term
 ┌──────────────────────────────────────────────┐
 │     Global Claude Settings Status            │
 └──────────────────────────────────────────────┘
-  Installed   : v1.0.0  ✓
-  Local repo  : main                 @ v1.0.0
-  Online      : v1.0.0  (via GitHub API)
+  Installed   : v2.0.0  ✓
+  Local repo  : main                 @ v2.0.0
+  Online      : v2.0.0  (via Codeberg)
 ```
 
 Color coding:
@@ -39,12 +39,12 @@ Color coding:
 
 The "Online" line shows the fetch method used:
 
-- **(via GitHub API)** — fetched directly from GitHub using `gh api` (primary method, uses `settings-repo-url`)
+- **(via Codeberg)** — fetched directly from Codeberg using `curl` against the raw URL (primary method, uses `settings-repo-url`)
 - **(via git fetch)** — fetched from `origin/main` of the local repo clone (fallback method, uses `settings-repo-path`)
 
 If no local repo is configured, "Local repo" shows "(not configured)" instead of branch info.
 
-If configuration issues are detected (missing config files, unreachable remote, `gh` not installed), they are shown in red below the panel — never silently skipped.
+If configuration issues are detected (missing config files, unreachable remote, `curl` not installed), they are shown in red below the panel — never silently skipped.
 
 > **Note:** The terminal panel is only visible when using Claude Code in the terminal (CLI). In the VS Code extension, hook stderr is not shown as a visible banner — see the Claude chat message below instead.
 
@@ -71,22 +71,24 @@ In addition to the terminal panel, the hook always injects a message into Claude
 
 The version check supports two methods for fetching the online version, tried in order:
 
-### 1. GitHub API (primary — recommended)
+### 1. Codeberg raw URL (primary — recommended)
 
-If `~/.claude/settings-repo-url` contains a GitHub repo slug (e.g. `ConductionNL/.github`), the hook fetches `VERSION` via `gh api` from the configured ref (default: `main`). This method:
+If `~/.claude/settings-repo-url` contains a Codeberg repo slug (e.g. `Conduction/.github`), the hook fetches `VERSION` via `curl` from `https://codeberg.org/<slug>/raw/branch/<ref>/global-settings/VERSION` (default ref: `main`). This method:
 
 - Does **not** require a local clone of the repo
-- Uses the authenticated `gh` CLI (requires `gh auth login`)
+- Uses unauthenticated `curl` against the public raw URL (no token needed for public repos)
 - Is faster than `git fetch` (single HTTP request)
-- Falls back gracefully if `gh` is not installed or the API call fails
+- Falls back gracefully if `curl` is not installed or the HTTP fetch fails
+
+The Codeberg `/raw/branch/<ref>/` path resolves to the tip of `<ref>` on a branch — tag and SHA tracking are not supported via this method; configure `settings-repo-path` and use the git-fetch fallback for those cases.
 
 ### 2. Git fetch (fallback)
 
-If the GitHub API method is not configured or fails, and `~/.claude/settings-repo-path` points to a valid local clone, the hook falls back to `git fetch origin <ref> --depth=1` followed by `git show origin/<ref>:...`. This is the original method.
+If the Codeberg method is not configured or fails, and `~/.claude/settings-repo-path` points to a valid local clone, the hook falls back to `git fetch origin <ref> --depth=1` followed by `git show origin/<ref>:...`. This is the original method.
 
 ### Tracking a non-default branch
 
-By default, both methods track the `main` branch. To track a different branch, tag, or SHA, write it to `~/.claude/settings-repo-ref`:
+By default, both methods track the `main` branch. To track a different branch, write it to `~/.claude/settings-repo-ref`:
 
 ```bash
 echo "feature/claude-code-tooling" > ~/.claude/settings-repo-ref
@@ -98,14 +100,14 @@ When absent, the ref defaults to `main`.
 
 | Config file                    | Required?              | Purpose                                                    |
 | ------------------------------ | ---------------------- | ---------------------------------------------------------- |
-| `~/.claude/settings-repo-url`  | Optional (recommended) | GitHub repo slug for online API check                      |
+| `~/.claude/settings-repo-url`  | Optional (recommended) | Codeberg repo slug for online raw-URL check                |
 | `~/.claude/settings-repo-path` | Optional (fallback)    | Path to the root of the canonical repo for git-based check |
-| `~/.claude/settings-repo-ref`  | Optional               | Branch/tag/SHA to track (defaults to `main`)               |
+| `~/.claude/settings-repo-ref`  | Optional               | Branch to track (defaults to `main`)                       |
 
 You can configure:
 
-- **Both URL and path** (recommended): GitHub API is tried first, local git as fallback
-- **Only `settings-repo-url`**: Works without any local clone; no fallback if GitHub is unreachable
+- **Both URL and path** (recommended): Codeberg is tried first, local git as fallback
+- **Only `settings-repo-url`**: Works without any local clone; no fallback if Codeberg is unreachable
 - **Only `settings-repo-path`**: Original behavior; requires a local clone
 - **Neither**: Version check cannot run; a configuration warning is shown
 
@@ -117,7 +119,7 @@ You can configure:
 | `~/.claude/hooks/block-write-commands.sh`   | Hook script invoked for every **Bash** tool use before it runs                             |
 | `~/.claude/hooks/check-settings-version.sh` | Hook script that shows the status panel and warns on version mismatch                      |
 | `~/.claude/settings-version`                | Installed version (semver, matches repo `VERSION`)                                         |
-| `~/.claude/settings-repo-url`               | GitHub repo slug for online version checking (e.g. `ConductionNL/.github`)                 |
+| `~/.claude/settings-repo-url`               | Codeberg repo slug for online version checking (e.g. `Conduction/.github`)                 |
 | `~/.claude/settings-repo-path`              | Absolute path to the root of the canonical repo (fallback for git-based check)             |
 | `~/.claude/settings-repo-ref`               | Branch/tag/SHA to track for version checks (defaults to `main`)                            |
 
@@ -190,7 +192,7 @@ Do **not** put broad `Bash(*)` allow rules here.
 
 | Area                         | Allowed silently                                                          | Prompts for approval                                                    | Hard blocked                                        |
 | ---------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------- |
-| **curl**                     | —                                                                         | All curl commands (not auto-approved)                                   | —                                                   |
+| **curl**                     | —                                                                         | All curl write commands (data/output flags); canonical Codeberg raw URL passes when wrapped in a config-file write | —                                                   |
 | **gh api**                   | —                                                                         | All gh api commands (not auto-approved)                                 | —                                                   |
 | **git push**                 | Last user message contains authorized phrase                              | —                                                                       | Blocked otherwise                                   |
 | **git -C**                   | Read-only subcommands                                                     | Write subcommands, branch/remote writes                                 | `push` (phrase-authorized)                          |
@@ -210,9 +212,9 @@ Do **not** put broad `Bash(*)` allow rules here.
 | **install**                  | —                                                                         | All `install` commands                                                  | —                                                   |
 | **Pipe-to-shell**            | —                                                                         | `\| bash`, `\| sh`, `base64 -d`, `eval`                                 | —                                                   |
 | **WSL boundary**             | —                                                                         | —                                                                       | All paths/executables escaping the Linux filesystem |
-| Config writes (`~/.claude/`) | `git show origin/main:` from canonical repo; `gh api` from canonical repo | —                                                                       | All other methods                                   |
+| Config writes (`~/.claude/`) | `git show origin/main:` from canonical repo; `curl` from canonical Codeberg raw URL | —                                                                       | All other methods                                   |
 
-Most guards use `(^|[;&|]\s*)cmd\b` patterns to catch commands both at the start of a line and when chained via `&&`, `;`, or `||`. The exception is the canonical-source check for config-file writes (Method 2 — `gh api`), which validates via a URL-prefix match rather than a segment-boundary anchor, and is additionally hardened by a decoy-detection check that rejects any non-canonical `gh api` call present in the same command.
+Most guards use `(^|[;&|]\s*)cmd\b` patterns to catch commands both at the start of a line and when chained via `&&`, `;`, or `||`. The exception is the canonical-source check for config-file writes (Method 2 — Codeberg `curl`), which validates via a URL-prefix match rather than a segment-boundary anchor, and is additionally hardened by a decoy-detection check that rejects any non-canonical http(s) URL present in the same command.
 
 Authorized git push phrases (case-insensitive): `push for me`, `commit and push`, `please git push`, `push my changes`.
 
@@ -222,12 +224,12 @@ Authorized git push phrases (case-insensitive): `push for me`, `commit and push`
 - **Validates all config values** from files before use — `tracking_ref` against `^[a-zA-Z0-9._/-]+$`, `online_repo_slug` against `^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$`, versions against `^[0-9]+\.[0-9]+\.[0-9]+$`. Invalid values are refused with a warning.
 - Reads the installed version from `~/.claude/settings-version`.
 - Reads the tracking ref from `~/.claude/settings-repo-ref` (defaults to `main` when absent).
-- **Online check (primary):** If `~/.claude/settings-repo-url` is set, fetches `VERSION` via `gh api` from the GitHub repo's configured ref.
-- **Git fetch (fallback):** If the GitHub API method is not configured or fails, and `~/.claude/settings-repo-path` points to a valid local clone, fetches via `git fetch origin <ref> --depth=1` and reads the `VERSION` file from that ref.
+- **Online check (primary):** If `~/.claude/settings-repo-url` is set, fetches `VERSION` via `curl` from the Codeberg raw URL `https://codeberg.org/<slug>/raw/branch/<ref>/global-settings/VERSION`.
+- **Git fetch (fallback):** If the Codeberg method is not configured or fails, and `~/.claude/settings-repo-path` points to a valid local clone, fetches via `git fetch origin <ref> --depth=1` and reads the `VERSION` file from that ref.
 - Reads the local branch version from `$REPO_DIR/global-settings/VERSION` (if a local repo is configured).
 - Compares all versions using semver and prints a colored status panel to stderr (visible in the terminal/CLI).
 - Always injects a session-start message into Claude's context via stdout — "up to date", "update required", or "configuration error" — which Claude relays at the top of its first response.
-- Never silently skips: configuration issues (missing config files, unreachable remote, `gh` not installed) are shown in the panel and forwarded to Claude.
+- Never silently skips: configuration issues (missing config files, unreachable remote, `curl` not installed) are shown in the panel and forwarded to Claude.
 
 ## Relationship to this repo's `.claude/settings.json`
 
