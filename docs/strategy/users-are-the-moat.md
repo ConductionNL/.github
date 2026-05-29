@@ -279,8 +279,8 @@ Each open question is worth one short follow-up doc once the pilot generates rea
 
 ## Reference
 
-- Architecture: [ADR-033 Features & Roadmap menu](https://github.com/ConductionNL/hydra/blob/development/openspec/architecture/adr-033-features-roadmap-menu.md) (proposed)
+- Architecture: [ADR-033 Features & Roadmap menu](https://codeberg.org/Conduction/hydra/blob/development/openspec/architecture/adr-033-features-roadmap-menu.md) (proposed)
 - Frontend contract: [`CnFeaturesAndRoadmapView`](https://conduction.github.io/nextcloud-vue/components/cn-features-and-roadmap-view) in `@conduction/nextcloud-vue`
-- Backend contract: [`github-issue-proxy`](https://github.com/ConductionNL/openregister/tree/development/openspec/changes/add-features-roadmap-menu) in openregister
+- Backend contract: [`github-issue-proxy`](https://codeberg.org/Conduction/openregister/tree/development/openspec/changes/add-features-roadmap-menu) in openregister
 - Spec workflow: [Spec-Driven Development](./WayOfWork/spec-driven-development) on this site
 - Pipeline: [Hydra](./hydra/README) on this site

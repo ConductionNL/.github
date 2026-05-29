@@ -143,7 +143,7 @@ This is the only testing-adjacent command that runs _before_ implementation. It 
 
 **Cap impact:** Very high — 8 parallel agents. Open a fresh Claude window before running. See [parallel-agents.md](parallel-agents.md).
 
-**See:** [.claude/skills/test-counsel/SKILL.md](https://github.com/ConductionNL/hydra/blob/main/.claude/skills/test-counsel/SKILL.md)
+**See:** [.claude/skills/test-counsel/SKILL.md](https://codeberg.org/Conduction/hydra/blob/main/.claude/skills/test-counsel/SKILL.md)
 
 ---
 
@@ -159,7 +159,7 @@ This is the only testing-adjacent command that runs _before_ implementation. It 
 
 **Cap impact:** Low (Quick) to Very high (Full). See [parallel-agents.md](parallel-agents.md).
 
-**See:** [.claude/skills/test-app/SKILL.md](https://github.com/ConductionNL/hydra/blob/main/.claude/skills/test-app/SKILL.md)
+**See:** [.claude/skills/test-app/SKILL.md](https://codeberg.org/Conduction/hydra/blob/main/.claude/skills/test-app/SKILL.md)
 
 ---
 

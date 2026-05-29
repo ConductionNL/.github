@@ -40,7 +40,7 @@ Conduction's management commits to:
 
 ## Communication to Employees
 
-This policy is communicated to all employees via periodic quality sessions and is available as a reference on this documentation site. Employees are expected to understand this policy and apply its principles in their daily work. Questions or concerns can be directed to the Quality Manager or raised via a [GitHub Issue](https://github.com/ConductionNL/.github/issues).
+This policy is communicated to all employees via periodic quality sessions and is available as a reference on this documentation site. Employees are expected to understand this policy and apply its principles in their daily work. Questions or concerns can be directed to the Quality Manager or raised via [an issue on Codeberg](https://codeberg.org/Conduction/.github/issues).
 
 ## Applicability
 

@@ -84,19 +84,19 @@ These are the core apps that run on the Nextcloud platform. Actively developed a
 
 | Repository                                                         | Argumentation                                                                              |
 | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| [openregister](https://github.com/ConductionNL/openregister)       | Foundation repository for all Conduction apps — owns schemas, docker-compose, shared specs |
-| [opencatalogi](https://github.com/ConductionNL/opencatalogi)       | Catalogi app for federated metadata exchange — core product                                |
-| [openconnector](https://github.com/ConductionNL/openconnector)     | Gateway/service bus for mapping, translation, and data synchronisation                     |
-| [docudesk](https://github.com/ConductionNL/docudesk)               | Document generation and anonymisation — GDPR/WCAG compliant                                |
-| [nldesign](https://github.com/ConductionNL/nldesign)               | NL Design System theme for Nextcloud — government theming                                  |
-| [mydash](https://github.com/ConductionNL/mydash)                   | Custom dashboard app for Nextcloud                                                         |
-| [softwarecatalog](https://github.com/ConductionNL/softwarecatalog) | GEMMA Softwarecatalogus Nextcloud app                                                      |
-| [larpingapp](https://github.com/ConductionNL/larpingapp)           | Larping app — demo/reference app and active product                                        |
-| [zaakafhandelapp](https://github.com/ConductionNL/zaakafhandelapp) | Zaak handling for Dutch governmental institutions                                          |
-| [procest](https://github.com/ConductionNL/procest)                 | Case management — thin client on OpenRegister                                              |
-| [pipelinq](https://github.com/ConductionNL/pipelinq)               | CRM/pipeline management — thin client on OpenRegister                                      |
-| [nextcloud-vue](https://github.com/ConductionNL/nextcloud-vue)     | Shared Vue component library for all Conduction Nextcloud apps                             |
-| [tilburg-woo-ui](https://github.com/ConductionNL/tilburg-woo-ui)   | Tilburg WOO frontend — active deployment, used as submodule                                |
+| [openregister](https://codeberg.org/Conduction/openregister)       | Foundation repository for all Conduction apps — owns schemas, docker-compose, shared specs |
+| [opencatalogi](https://codeberg.org/Conduction/opencatalogi)       | Catalogi app for federated metadata exchange — core product                                |
+| [openconnector](https://codeberg.org/Conduction/openconnector)     | Gateway/service bus for mapping, translation, and data synchronisation                     |
+| [docudesk](https://codeberg.org/Conduction/docudesk)               | Document generation and anonymisation — GDPR/WCAG compliant                                |
+| [nldesign](https://codeberg.org/Conduction/nldesign)               | NL Design System theme for Nextcloud — government theming                                  |
+| [mydash](https://codeberg.org/Conduction/mydash)                   | Custom dashboard app for Nextcloud                                                         |
+| [softwarecatalog](https://codeberg.org/Conduction/softwarecatalog) | GEMMA Softwarecatalogus Nextcloud app                                                      |
+| [larpingapp](https://codeberg.org/Conduction/larpingapp)           | Larping app — demo/reference app and active product                                        |
+| [zaakafhandelapp](https://codeberg.org/Conduction/zaakafhandelapp) | Zaak handling for Dutch governmental institutions                                          |
+| [procest](https://codeberg.org/Conduction/procest)                 | Case management — thin client on OpenRegister                                              |
+| [pipelinq](https://codeberg.org/Conduction/pipelinq)               | CRM/pipeline management — thin client on OpenRegister                                      |
+| [nextcloud-vue](https://codeberg.org/Conduction/nextcloud-vue)     | Shared Vue component library for all Conduction Nextcloud apps                             |
+| [tilburg-woo-ui](https://codeberg.org/Conduction/tilburg-woo-ui)   | Tilburg WOO frontend — active deployment, used as submodule                                |
 
 ## Category 2: KEEP — ExApp Wrappers & Integrations (8 repos)
 
@@ -104,10 +104,10 @@ Nextcloud External App (ExApp) wrappers that integrate third-party services into
 
 | Repository                                                                   | Argumentation                                             |
 | ---------------------------------------------------------------------------- | --------------------------------------------------------- |
-| [openklant](https://github.com/ConductionNL/openklant)                       | OpenKlant customer interaction management — ExApp wrapper |
-| [opentalk](https://github.com/ConductionNL/opentalk)                         | OpenTalk video conferencing — ExApp wrapper               |
-| [openzaak](https://github.com/ConductionNL/openzaak)                         | OpenZaak ZGW API integration — ExApp wrapper              |
-| [valtimo](https://github.com/ConductionNL/valtimo)                           | Valtimo BPM/case management — ExApp wrapper               |
+| [openklant](https://codeberg.org/Conduction/openklant)                       | OpenKlant customer interaction management — ExApp wrapper |
+| [opentalk](https://codeberg.org/Conduction/opentalk)                         | OpenTalk video conferencing — ExApp wrapper               |
+| [openzaak](https://codeberg.org/Conduction/openzaak)                         | OpenZaak ZGW API integration — ExApp wrapper              |
+| [valtimo](https://codeberg.org/Conduction/valtimo)                           | Valtimo BPM/case management — ExApp wrapper               |
 | [n8n-nextcloud](https://github.com/ConductionNL/n8n-nextcloud)               | n8n workflow automation — ExApp wrapper                   |
 | [keycloak-nextcloud](https://github.com/ConductionNL/keycloak-nextcloud)     | Keycloak identity management — ExApp wrapper              |
 | [ollama-nextcloud](https://github.com/ConductionNL/ollama-nextcloud)         | Ollama local LLM — ExApp wrapper                          |
@@ -119,16 +119,16 @@ Repos that support the build, deploy, and operations pipeline.
 
 | Repository                                                                               | Argumentation                                                   |
 | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| [.github](https://github.com/ConductionNL/.github)                                       | Organization profile, community health files, this archive plan |
+| [.github](https://codeberg.org/Conduction/.github)                                       | Organization profile, community health files, this archive plan |
 | [claude-code-config](https://github.com/ConductionNL/claude-code-config)                 | Shared Claude Code configuration — active daily use (private)   |
-| [Nextcloud-base](https://github.com/ConductionNL/Nextcloud-base)                         | Base Nextcloud image — updated Mar 2026                         |
+| [Nextcloud-base](https://codeberg.org/Conduction/Nextcloud-base)                         | Base Nextcloud image — updated Mar 2026                         |
 | [nextcloud-images](https://github.com/ConductionNL/nextcloud-images)                     | Custom Nextcloud images — updated Mar 2026                      |
 | [nextcloud-release-actions](https://github.com/ConductionNL/nextcloud-release-actions)   | GitHub Actions for Nextcloud app store releases                 |
 | [cluster-infra](https://github.com/ConductionNL/cluster-infra)                           | GitOps K8s controllers and operators — updated Mar 2026         |
 | [monitoring](https://github.com/ConductionNL/monitoring)                                 | ArgoCD, Prometheus, Grafana — updated Mar 2026 (private)        |
 | [toolchain](https://github.com/ConductionNL/toolchain)                                   | Build toolchain — updated Mar 2026 (private)                    |
-| [conduction-theme](https://github.com/ConductionNL/conduction-theme)                     | Conduction design tokens — updated Mar 2026                     |
-| [conduction-components](https://github.com/ConductionNL/conduction-components)           | Component library — updated Feb 2026                            |
+| [conduction-theme](https://codeberg.org/Conduction/conduction-theme)                     | Conduction design tokens — updated Mar 2026                     |
+| [conduction-components](https://codeberg.org/Conduction/conduction-components)           | Component library — updated Feb 2026                            |
 | [Configurations](https://github.com/ConductionNL/Configurations)                         | Configuration management (private)                              |
 | [KeyCloak](https://github.com/ConductionNL/KeyCloak)                                     | KeyCloak configuration (private)                                |
 | [gitops-postgres](https://github.com/ConductionNL/gitops-postgres)                       | Zalando Postgres operator config (private)                      |
@@ -138,7 +138,7 @@ Repos that support the build, deploy, and operations pipeline.
 | [ggm-openregister](https://github.com/ConductionNL/ggm-openregister)                     | GGM → OpenRegister schema configs — updated Feb 2026            |
 | [Conduction-Workflows](https://github.com/ConductionNL/Conduction-Workflows)             | GitHub → Slack notifications (fork, active)                     |
 | [woo-website-template](https://github.com/ConductionNL/woo-website-template)             | WOO website base template — updated Feb 2026                    |
-| [woo-website-template-apiv2](https://github.com/ConductionNL/woo-website-template-apiv2) | WOO website API v2 template — updated Mar 2026                  |
+| [woo-website-template-apiv2](https://codeberg.org/Conduction/woo-website-template-apiv2) | WOO website API v2 template — updated Mar 2026                  |
 | [woo-website-migratie](https://github.com/ConductionNL/woo-website-migratie)             | WOO website migration tooling                                   |
 
 ## Category 4: KEEP — Active Research & Supporting (18 repos)
@@ -164,7 +164,7 @@ Repos that are actively used or referenced but are not core apps.
 | [archimate-diagram-engine](https://github.com/ConductionNL/archimate-diagram-engine)     | ArchiMate diagram fork — used for architecture docs             |
 | [Gemeentelijk-Gegevensmodel](https://github.com/ConductionNL/Gemeentelijk-Gegevensmodel) | GGM fork — reference for schema generation                      |
 | [product-website-template](https://github.com/ConductionNL/product-website-template)     | Product page template for open-source projects                  |
-| [openwoo-app-website](https://github.com/ConductionNL/openwoo-app-website)               | OpenWoo.app website                                             |
+| [openwoo-app-website](https://codeberg.org/Conduction/openwoo-app-website)               | OpenWoo.app website                                             |
 
 ## Category 5: ARCHIVE — Common Ground Gateway (The Old Platform) (5 repos)
 
@@ -280,7 +280,7 @@ Domain catalogues from the old platform. All replaced by OpenRegister schemas.
 | -------------------------------------------------------------------------------------------- | ----------- | --------------------------------------------------------------- |
 | [locatiecatalogus](https://github.com/ConductionNL/locatiecatalogus)                         | 4           | Location catalogue — replaced by OpenRegister location schema   |
 | [medewerkercatalogus](https://github.com/ConductionNL/medewerkercatalogus)                   | 6           | Employee catalogue — replaced by Nextcloud users + OpenRegister |
-| [procestypecatalogus](https://github.com/ConductionNL/procestypecatalogus)                   | 6           | Process type catalogue — replaced by Procest                    |
+| [procestypecatalogus](https://codeberg.org/Conduction/procestypecatalogus)                   | 6           | Process type catalogue — replaced by Procest                    |
 | [productenendienstencatalogus](https://github.com/ConductionNL/productenendienstencatalogus) | 14          | Products & services catalogue — replaced by OpenRegister schema |
 | [verzoektypecatalogus](https://github.com/ConductionNL/verzoektypecatalogus)                 | 4           | Request type catalogue — replaced by Pipelinq schemas           |
 | [webresourcecatalogus](https://github.com/ConductionNL/webresourcecatalogus)                 | 8           | Web resource catalogue — replaced by Nextcloud Files            |
@@ -496,7 +496,7 @@ Kubernetes configs from the old platform deployment. All replaced by current Git
 | Repository                                                                                         | Open Issues | Argumentation                                            |
 | -------------------------------------------------------------------------------------------------- | ----------- | -------------------------------------------------------- |
 | [commonground-kubernetes](https://github.com/ConductionNL/commonground-kubernetes)                 | 4           | Old CG K8s config (private) — replaced by cluster-infra  |
-| [conduction-website-kubernetes](https://github.com/ConductionNL/conduction-website-kubernetes)     | 4           | Old website K8s (private) — replaced                     |
+| [conduction-website-kubernetes](https://codeberg.org/Conduction/conduction-website-kubernetes)     | 4           | Old website K8s (private) — replaced                     |
 | [websites-kubernetes](https://github.com/ConductionNL/websites-kubernetes)                         | 0           | Old websites K8s (private) — replaced                    |
 | [utrecht-kubernetes](https://github.com/ConductionNL/utrecht-kubernetes)                           | 4           | Utrecht K8s (private) — project ended                    |
 | [utrecht-commonground-kubernetes](https://github.com/ConductionNL/utrecht-commonground-kubernetes) | 4           | Utrecht CG K8s (private) — project ended                 |
@@ -509,7 +509,7 @@ Kubernetes configs from the old platform deployment. All replaced by current Git
 | [nextcloud-argo-bootstrap](https://github.com/ConductionNL/nextcloud-argo-bootstrap)               | 0           | ArgoCD bootstrap (private) — superseded by cluster-infra |
 | [nextcloud-gitops-values](https://github.com/ConductionNL/nextcloud-gitops-values)                 | 0           | GitOps values (private) — superseded by cluster-infra    |
 | [tilburg-woo-helm](https://github.com/ConductionNL/tilburg-woo-helm)                               | 0           | Tilburg WOO Helm chart — deployment-specific             |
-| [openzaak-charts](https://github.com/ConductionNL/openzaak-charts)                                 | 0           | OpenZaak Helm charts (fork) — replaced by ExApp          |
+| [openzaak-charts](https://codeberg.org/Conduction/openzaak-charts)                                 | 0           | OpenZaak Helm charts (fork) — replaced by ExApp          |
 | [openstad-kubernetes](https://github.com/ConductionNL/openstad-kubernetes)                         | 0           | OpenStad K8s (fork) — project ended                      |
 
 ## Category 19: ARCHIVE — Old Forks & External Projects (17 repos)
@@ -591,7 +591,7 @@ Repos with no meaningful content. Safe to delete permanently.
 | [varnish-env](https://github.com/ConductionNL/varnish-env)                         | Varnish config — no longer using Varnish                       |
 | [conduction-loadbalancer](https://github.com/ConductionNL/conduction-loadbalancer) | Private, stale since 2019, already archived on GitHub          |
 | [conductionwebsite](https://github.com/ConductionNL/conductionwebsite)             | Private, already archived, old website                         |
-| [conduction-website](https://github.com/ConductionNL/conduction-website)           | Already archived, old website                                  |
+| [conduction-website](https://codeberg.org/Conduction/conduction-website)           | Already archived, old website                                  |
 | [docker-trouwplanner](https://github.com/ConductionNL/docker-trouwplanner)         | Private, already archived, old container                       |
 | [rag-dataset](https://github.com/ConductionNL/rag-dataset)                         | Private, empty dataset                                         |
 | [zuid-drecht-static](https://github.com/ConductionNL/zuid-drecht-static)           | Static page for fictional municipality — demo only             |
@@ -604,7 +604,7 @@ These repos are already archived — no action needed.
 | -------------------------------------------------------------------------------------------- | -------------------------- |
 | [ConductionNL.github.io](https://github.com/ConductionNL/ConductionNL.github.io)             | Old GitHub Pages           |
 | [contactcatalogus](https://github.com/ConductionNL/contactcatalogus)                         | Contact catalogue          |
-| [conduction-website](https://github.com/ConductionNL/conduction-website)                     | Old website                |
+| [conduction-website](https://codeberg.org/Conduction/conduction-website)                     | Old website                |
 | [conductionwebsite](https://github.com/ConductionNL/conductionwebsite)                       | Old website v2             |
 | [conduction-loadbalancer](https://github.com/ConductionNL/conduction-loadbalancer)           | Old load balancer          |
 | [docker-trouwplanner](https://github.com/ConductionNL/docker-trouwplanner)                   | Old trouwplanner container |

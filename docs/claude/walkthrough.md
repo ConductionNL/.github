@@ -301,7 +301,7 @@ Claude responds:
 
 > **Created GitHub Issues:**
 >
-> Tracking issue: https://github.com/ConductionNL/opencatalogi/issues/42
+> Tracking issue: https://codeberg.org/Conduction/opencatalogi/issues/42
 >
 > - `[OpenSpec] add-publication-search`
 >

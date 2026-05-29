@@ -25,7 +25,7 @@ flowchart LR
 ```
 
 - **1 · Obtain** — requirements come from issues, tenders, app research, and documentation. The output is a shared understanding of what to build.
-- **2 · Specify** — the chain of artifacts (`proposal.md` → `specs.md` → `design.md` → `tasks.md`) becomes a set of trackable GitHub Issues.
+- **2 · Specify** — the chain of artifacts (`proposal.md` → `specs.md` → `design.md` → `tasks.md`) becomes a set of trackable tracking issues.
 - **3 · Build** — implement by assembling components, schemas, and workflows. This is the stage where working software lands.
 - **4 · Validate** — run tests, check coverage, verify the implementation against the spec that produced it.
 
@@ -34,16 +34,16 @@ flowchart LR
 OpenSpec is our specification format. Every change produces a chain of artifacts:
 
 ```
-proposal.md ──► specs.md ──► design.md ──► tasks.md ──► GitHub Issues
+proposal.md ──► specs.md ──► design.md ──► tasks.md ──► tracking issues
 ```
 
 - **Proposal** — what and why (problem statement, scope, stakeholders)
 - **Specs** — detailed requirements with GIVEN/WHEN/THEN acceptance criteria
 - **Design** — technical approach, component selection, data model
 - **Tasks** — breakdown into implementable units
-- **Issues** — tasks become trackable GitHub Issues with an epic
+- **Issues** — tasks become trackable tracking issues with an epic
 
-Org-wide specs (test coverage baselines, API patterns, NL Design System compliance, i18n requirements) live in the [`openspec/`](https://github.com/ConductionNL/.github/tree/main/openspec) directory of this repository. Individual apps extend these with app-specific specs.
+Org-wide specs (test coverage baselines, API patterns, NL Design System compliance, i18n requirements) live in the [`openspec/`](https://codeberg.org/Conduction/.github/tree/main/openspec) directory of this repository. Individual apps extend these with app-specific specs.
 
 ## Claude Code
 
@@ -97,7 +97,7 @@ flowchart LR
 - **`/opsx-explore`** — investigate a topic or problem before committing to a change.
 - **`/opsx-new`** — start a new change with a proposal.
 - **`/opsx-ff`** — fast-forward: generate proposal, specs, design, and tasks in one pass.
-- **`/opsx-plan-to-issues`** — convert tasks to trackable GitHub Issues with an epic.
+- **`/opsx-plan-to-issues`** — convert tasks to trackable tracking issues with an epic.
 - **`/opsx-apply`** — implement the tasks from the specs.
 - **`/opsx-verify`** — check the implementation against the spec that produced it.
 - **`/opsx-archive`** — close out a completed change.

@@ -69,4 +69,4 @@ No suitable vacancy listed? Open applications are welcome at the same address.
 
 ## About Conduction
 
-Want to learn more about what we build? Check our [GitHub organisation](https://github.com/ConductionNL) for our open-source projects, or browse this handbook for how we work.
+Want to learn more about what we build? Check our [Codeberg organisation](https://codeberg.org/Conduction) (with legacy projects on the [GitHub org](https://github.com/ConductionNL)) for our open-source projects, or browse this handbook for how we work.

@@ -104,7 +104,7 @@ A complete worked example showing every phase of the flow on a realistic feature
 
 ### [Retrofit Playbook](./retrofit.md)
 
-Bringing legacy apps under [ADR-003 §Spec traceability](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-003-backend.md) — the three retrofit skills (`/opsx-coverage-scan`, `/opsx-annotate`, `/opsx-reverse-spec`) in order, plus the six coverage buckets and when to extend vs create new specs.
+Bringing legacy apps under [ADR-003 §Spec traceability](https://codeberg.org/Conduction/hydra/blob/main/openspec/architecture/adr-003-backend.md) — the three retrofit skills (`/opsx-coverage-scan`, `/opsx-annotate`, `/opsx-reverse-spec`) in order, plus the six coverage buckets and when to extend vs create new specs.
 
 ---
 
@@ -480,7 +480,7 @@ This repo contains **documentation**, **global settings**, and **project templat
 
 ### Typical project workspace
 
-Each Conduction project (Nextcloud apps, WordPress sites, etc.) has its own `.claude/` directory with skills, personas, and configuration. The [Hydra](https://github.com/ConductionNL/hydra) repo also maintains its own set of skills and personas for CI/CD agents.
+Each Conduction project (Nextcloud apps, WordPress sites, etc.) has its own `.claude/` directory with skills, personas, and configuration. The [Hydra](https://codeberg.org/Conduction/hydra) repo also maintains its own set of skills and personas for CI/CD agents.
 
 ```
 <project-root>/
@@ -540,9 +540,9 @@ See [usage-tracker/README.md](../../usage-tracker/README.md) for full documentat
 
 ## Related: Hydra CI/CD Pipeline
 
-[Hydra](https://github.com/ConductionNL/hydra) is Conduction's agentic CI/CD platform that runs the same spec-driven workflow autonomously in Docker containers. It transforms OpenSpec change proposals into validated, security-scanned code on feature branches — with final human approval before merging.
+[Hydra](https://codeberg.org/Conduction/hydra) is Conduction's agentic CI/CD platform that runs the same spec-driven workflow autonomously in Docker containers. It transforms OpenSpec change proposals into validated, security-scanned code on feature branches — with final human approval before merging.
 
-For an overview of the pipeline stages, the label-based triggers (`ready-to-build`, `code-review:queued`, `security-review:queued`), and how to put Hydra to work on your PR, see the **[Hydra docs](../hydra/README.md)**. For container architecture, image builds, orchestrator internals, and operator-level material, see the [Hydra repository](https://github.com/ConductionNL/hydra).
+For an overview of the pipeline stages, the label-based triggers (`ready-to-build`, `code-review:queued`, `security-review:queued`), and how to put Hydra to work on your PR, see the **[Hydra docs](../hydra/README.md)**. For container architecture, image builds, orchestrator internals, and operator-level material, see the [Hydra repository](https://codeberg.org/Conduction/hydra).
 
 ---
 

@@ -52,7 +52,7 @@ HYDRA_TRIGGER_LABEL=wilco-testing
 Or pass it as an environment variable when running scripts directly:
 
 ```bash
-HYDRA_TRIGGER_LABEL=my-custom-label ./scripts/orchestrate.sh --poll --repo-url https://github.com/ConductionNL/myapp
+HYDRA_TRIGGER_LABEL=my-custom-label ./scripts/orchestrate.sh --poll --repo-url https://codeberg.org/Conduction/myapp
 ```
 
 Or use the `--trigger-label` flag with `orchestrate.sh`:
@@ -91,7 +91,7 @@ For a one-off manual review on a specific PR, use `scripts/manual-review.sh`:
 
 ```bash
 ./scripts/manual-review.sh \
-    --pr-url https://github.com/ConductionNL/myapp/pull/42 \
+    --pr-url https://codeberg.org/Conduction/myapp/pull/42 \
     --review-type code
 ```
 

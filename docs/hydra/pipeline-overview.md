@@ -87,9 +87,9 @@ Each spec change has a `hydra.json` in `openspec/changes/{name}/`. This is Hydra
   "spec_slug": "accounts-payable-receivable",
   "title": "Accounts Payable & Receivable",
   "app": "shillinq",
-  "repo": "https://github.com/ConductionNL/shillinq",
+  "repo": "https://codeberg.org/Conduction/shillinq",
   "depends_on": ["core", "access-control-authorisation"],
-  "issue": "https://github.com/ConductionNL/shillinq/issues/49",
+  "issue": "https://codeberg.org/Conduction/shillinq/issues/49",
   "pipeline": {
     "code_review": {
       "pass": true,
