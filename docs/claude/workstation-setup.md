@@ -184,6 +184,17 @@ sudo apt install -y gh
 gh auth login
 ```
 
+### Codeberg CLI (`tea`) + SSH
+
+Conduction's primary git host is **Codeberg** (`codeberg.org/Conduction`), with GitHub as the secondary platform. See **[Codeberg Authentication Setup](./codeberg-auth-setup.md)** for the full guide — SSH key generation, `keychain` for passphrase persistence across shells, `tea` CLI install + token scopes, VS Code Gitea extension, and how to switch existing repo remotes.
+
+Quick smoke test after following that guide:
+
+```bash
+ssh -T git@codeberg.org   # expect: "Hi <user>! ... but Forgejo does not provide shell access."
+tea login list            # expect: one row, name=codeberg, your username
+```
+
 ### PHP Quality Tools (phpcs, phpmd, psalm, phpstan)
 
 Run `composer install` once after cloning an app to install PHP dev dependencies locally:
