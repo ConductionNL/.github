@@ -2,6 +2,8 @@
 
 Complete reference for all commands available in the spec-driven development workflow. Commands are organized by domain — click through to the detailed reference for each area.
 
+> **Platform policy.** Commands that interact with a git host (`/create-pr`, `/review-pr`, `/report-out`, `/opsx-plan-to-issues`, `/opsx-apply`, `/opsx-verify`, `/opsx-archive`, etc.) auto-detect the per-repo platform from `git remote get-url origin` and prefer **Codeberg / Gitea / Forgejo** *(primary)* over **GitHub** *(secondary/fallback)* over **GitLab** *(alternative)*. The `gh` calls shown below are the github form; on Codeberg they shell out to `tea` (or REST `POST /api/v1/...` when the operation requires a TTY that `tea` needs). Conduction is migrating to `codeberg.org/Conduction/*` (2026-05-29) — the chain is bidirectional. See [hydra/.claude/skills/PLATFORM-POLICY.md](https://github.com/ConductionNL/hydra/blob/main/.claude/skills/PLATFORM-POLICY.md) for the canonical reference.
+
 ## OpenSpec Commands
 
 Full spec-driven workflow: create changes, generate artifacts, implement, verify, and archive.
@@ -156,7 +158,7 @@ Create a Pull Request from a branch in any repo. Handles the full flow interacti
 8. **Runs all discovered checks** — nothing skipped; slow checks (e.g. test suites) ask for confirmation first; shows a pass/fail table when done
 9. **Reads all commits and diffs** on the branch to draft a PR title and description from the actual changes
 10. **Shows the draft in chat** for review — you can ask to change or shorten it; the loop repeats until you approve
-11. **Pushes the branch and creates the PR** via `gh pr create`
+11. **Pushes the branch and creates the PR/MR** via REST POST (or `gh pr create` / `tea pulls create` / `glab mr create` — but `tea` requires a TTY so Claude-driven runs use REST directly; see PLATFORM-POLICY.md)
 12. Reports the PR URL and next steps
 
 **Branching strategy:**
@@ -170,7 +172,7 @@ Create a Pull Request from a branch in any repo. Handles the full flow interacti
 
 **Model:** Checked at run time — the command reads your active model from context and stops automatically if you're on Haiku (or anything weaker than Sonnet). Involves parsing CI workflows, detecting branch-protection rules, and reasoning about code diffs where mistakes have real consequences. **Sonnet** for most PRs. **Opus** when the repo uses reusable CI workflows, branch-protection rulesets, or a complex branching strategy — that's where it pays off most.
 
-**Requires:** `gh` CLI authenticated (`gh auth login`)
+**Requires:** at least one platform CLI authenticated — `tea login add` (Codeberg, primary), `gh auth login` (GitHub, fallback), or `glab auth login` (GitLab, alternative)
 
 ---
 
@@ -212,7 +214,7 @@ Review one or more GitHub Pull Requests. Fetches the diff, detects prior reviews
 
 **Model:** Requires Sonnet or Opus — stops immediately on Haiku. Batch mode lets you choose the model for parallel analysis agents (Sonnet default, Opus for security-sensitive batches).
 
-**Requires:** `gh` CLI authenticated (`gh auth login`)
+**Requires:** at least one platform CLI authenticated — `tea login add` (Codeberg, primary), `gh auth login` (GitHub, fallback), or `glab auth login` (GitLab, alternative)
 
 ---
 
@@ -233,12 +235,12 @@ Daily end-of-day report. Scans local git repos for the user's commits and uncomm
 
 **What it does:**
 
-1. Resolves identity dynamically — `git config user.name`, `gh api user --jq .login`, `$HOME` (no hardcoded paths or usernames)
+1. Resolves identity dynamically per platform — `git config user.name`, plus `gh api user --jq .login` (github) / `glab api user --jq .username` (gitlab) / `tea logins default` (codeberg), `$HOME` (no hardcoded paths or usernames)
 2. Asks for any additional context to consider (start gate)
 3. Confirms scan scope (Hydra always included; default excludes `wordpress-docker` and `claude-code-config`)
 4. Discovers all local git repos (depth ≤ 6, skips `.local/share`, `.cache`, `node_modules`, `.nvm`, `vendor`)
 5. Scans each repo for today's commits (filtered by `git config user.name`, falls back to email) and uncommitted changes
-6. Auto-discovers GitHub interactions via `gh search prs/issues --author @me --updated >=$DATE`, dedups, classifies into created/merged/commented buckets
+6. Auto-discovers interactions per platform — `gh search prs/issues --author @me --updated >=$DATE` (github), REST `GET /repos/issues/search?type=pulls&created_by={login}&since=...` (codeberg, since `tea` has no search subcommand), `glab api "/merge_requests?scope=created_by_me&updated_after=..."` (gitlab) — dedups, classifies into created/merged/commented buckets
 7. **Detects branches with today's commits but no open PR** — flags each as a `→ suggest creating PR` candidate, skipping default branches (`main`/`master`/`development`/`beta`/`staging`) and branches whose PR was just merged today
 8. **Detects issue lifecycle hints** — tags issues as `close-suggested` (all linked PRs merged + user posted today), `closing-trailer-detected` (Dutch closing trailer in last 24h), `stale-and-busy` (>5 days old + >10 comments + open + no closing-trailer in last 7 days), or `needs-followup` (stale-and-busy >14 days)
 9. Shows the overview and asks what to do next (tracking issues / PR updates / both / skip-to-finale)
@@ -246,7 +248,7 @@ Daily end-of-day report. Scans local git repos for the user's commits and uncomm
 11. **Issue status suggestions**: for `close-suggested` and `closing-trailer-detected`, asks Yes (completed) / Yes (not_planned) / Add label / Skip — only patches state after explicit approval
 12. **Follow-up issue suggestions**: for `stale-and-busy` and `needs-followup`, drafts a follow-up issue body (`Volgt op #N`, summarizes done + open work) and offers to create it; can also post a closing-trailer on the parent pointing to the new follow-up
 13. **Standalone new-issue prompt**: once per run, asks if today's work surfaced an insight that warrants its own new tracking issue (not a comment on an existing one)
-14. **PR updates**: prefers extending existing description bullets over adding new ones; uses `gh api ... -X PATCH` (never `gh pr edit`)
+14. **PR updates**: prefers extending existing description bullets over adding new ones; uses `gh api ... -X PATCH` (github), `glab api ... -X PUT` with `description` field (gitlab), or REST `PATCH /api/v1/repos/.../pulls/{n}` (codeberg) — never `gh pr edit`
 15. **Uncommitted-changes handling**: for each repo with uncommitted files, lists them (modified/staged/untracked) and asks Commit (drafted message) / Commit (user-provided) / Stash WIP / Skip. After a successful commit, offers a separate Push prompt that respects the project's git-push authorization phrase. Never auto-commits; never uses `--no-verify` without explicit authorization.
 16. **PR creation suggestions**: for orphan branches, offers to delegate to `/create-pr` (recommended) or take a "quick PR via API" path that requires explicit push authorization
 17. Asks for any closing context (end gate)
@@ -258,13 +260,13 @@ Daily end-of-day report. Scans local git repos for the user's commits and uncomm
 - 14 days → upgrade to `needs-followup`
 - 24-hour comment window → offer Edit instead of New
 
-**Tracking issues:** uses dynamic discovery via `gh search` plus an optional saved mapping at `$HOME/.claude/report-out/tracking-issues.json`. The mapping file is per-user and not committed to any repo.
+**Tracking issues:** uses dynamic discovery via the per-platform search (REST `/repos/issues/search` on Codeberg, `gh search` on GitHub, `glab api /issues` on GitLab) plus an optional saved mapping at `$HOME/.claude/report-out/tracking-issues.json`. The mapping file is per-user and not committed to any repo.
 
 **Guardrails:** Never posts, patches, creates, or closes without `AskUserQuestion` confirmation. Never `git push`/`commit` without explicit authorization phrase. Filter strictly to PRs the user authored or merged — team members' PRs do not appear in the report. Default branches never get PR suggestions. Dismissed suggestions are not re-surfaced in the same run.
 
 **Maturity:** L6 (9 evals, learnings.md with consolidation pipeline). See `hydra/.claude/skills/report-out/SKILL.md`.
 
-**Requires:** `gh` CLI authenticated (`gh auth login`), `git` configured with `user.name` and `user.email`.
+**Requires:** at least one platform CLI authenticated — `tea login add` (Codeberg, primary), `gh auth login` (GitHub, fallback), or `glab auth login` (GitLab, alternative), `git` configured with `user.name` and `user.email`.
 
 ---
 
@@ -307,9 +309,9 @@ Checks whether `global-settings/VERSION` has been correctly bumped after any cha
 
 ### `/opsx-plan-to-issues`
 
-**Phase:** Planning → GitHub
+**Phase:** Planning → tracking issues (per-repo platform)
 
-Converts an OpenSpec change's `tasks.md` into structured `plan.json` and creates corresponding GitHub Issues.
+Converts an OpenSpec change's `tasks.md` into structured `plan.json` and creates corresponding tracking issues on whichever platform the target repo lives on (Codeberg primary, GitHub fallback, GitLab alternative — auto-detected from `git remote get-url origin`).
 
 **Usage:**
 
@@ -320,15 +322,15 @@ Converts an OpenSpec change's `tasks.md` into structured `plan.json` and creates
 **Prerequisites:**
 
 - A change with completed `tasks.md`
-- GitHub MCP server active or `gh` CLI authenticated
-- Git remote pointing to a ConductionNL repository
+- At least one platform CLI authenticated for the target repo's host — `tea login add` (Codeberg/Gitea/Forgejo, primary), `gh auth login` (GitHub, fallback), or `glab auth login` (GitLab, alternative)
+- Git remote pointing to a Conduction-org repository (`Conduction/*` on Codeberg as of 2026-05-29; legacy `ConductionNL/*` on github.com still supported)
 
 **What it does:**
 
 1. **Finds the active change** in the current project's `openspec/changes/`
-2. **Detects the GitHub repo** from `git remote get-url origin`
+2. **Detects the repo + platform** from `git remote get-url origin` (Codeberg / GitHub / GitLab)
 3. **Parses tasks.md** into structured JSON
-4. **Creates GitHub Issues:**
+4. **Creates tracking issues** on the detected platform:
    - One **tracking issue** (epic) with:
      - Title: `[OpenSpec] <change-name>`
      - Body: proposal summary + task checklist
@@ -339,15 +341,17 @@ Converts an OpenSpec change's `tasks.md` into structured `plan.json` and creates
      - Labels: `openspec`, `<change-name>`
 5. **Saves `plan.json`** with all issue numbers linked
 
-**Output example:**
+**Output example (Codeberg-hosted repo):**
 
 ```
-Created tracking issue: https://github.com/ConductionNL/opencatalogi/issues/42
+Created tracking issue: https://codeberg.org/Conduction/opencatalogi/issues/42
 Created 5 task issues: #43, #44, #45, #46, #47
 Saved plan.json at: openspec/changes/add-search/plan.json
 
 Run /opsx-apply to begin implementation.
 ```
+
+On legacy `github.com/ConductionNL/<app>` repos the URLs use `https://github.com/...` instead.
 
 **The plan.json it creates:**
 
@@ -466,7 +470,7 @@ Competitive analysis and ecosystem gap-finding workflow. For the complete refere
 /feature-counsel        (optional: 8-persona feedback on specs)
        │
        ▼
-/opsx-plan-to-issues    (optional: tasks → JSON + GitHub Issues)
+/opsx-plan-to-issues    (optional: tasks → JSON + tracking issues — Codeberg/GitHub/GitLab)
        │
        ▼
 /opsx-apply             (implement tasks)
@@ -480,10 +484,10 @@ Competitive analysis and ecosystem gap-finding workflow. For the complete refere
 /test-app               (optional: full technical sweep)
        │
        ▼
-/create-pr              (create PR on GitHub)
+/create-pr              (create PR/MR on the per-repo platform — Codeberg primary, GitHub fallback, GitLab alternative)
        │
        ▼
 /opsx-archive           (complete & preserve)
 ```
 
-**End of day:** `/report-out` summarizes the day's commits and GitHub activity across local repos, optionally updates tracking-issue comments and open PR descriptions, and produces a copy-paste Dutch Slack message. Independent of the workflow chain above — run it whenever you want a daily wrap-up.
+**End of day:** `/report-out` summarizes the day's commits and per-platform activity (Codeberg + GitHub + GitLab) across local repos, optionally updates tracking-issue comments and open PR descriptions, and produces a copy-paste Dutch Slack message. Independent of the workflow chain above — run it whenever you want a daily wrap-up.

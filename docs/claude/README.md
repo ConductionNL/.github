@@ -12,7 +12,9 @@ Step-by-step guide from installation to your first completed change. Start here 
 
 ### [Workflow Overview](./workflow.md)
 
-Architecture overview of the full system: how specs, GitHub Issues, and plan.json fit together. Includes the plan.json format and flow diagrams.
+Architecture overview of the full system: how specs, tracking issues (Codeberg primary, GitHub fallback per the platform-policy below), and plan.json fit together. Includes the plan.json format and flow diagrams.
+
+> **Platform policy (2026-05-29):** Conduction is migrating from `github.com/ConductionNL/*` to `codeberg.org/Conduction/*`. All Hydra skills and pipeline scripts auto-detect the per-repo platform from `git remote get-url origin` and prefer Codeberg/Gitea/Forgejo first, GitHub second (fallback), GitLab third (alternative). The migration is bidirectional. See [hydra/.claude/skills/PLATFORM-POLICY.md](https://github.com/ConductionNL/hydra/blob/main/.claude/skills/PLATFORM-POLICY.md) for the canonical reference.
 
 ### [Command Reference](./commands.md)
 
@@ -64,7 +66,7 @@ Available docker-compose profiles, reset instructions, and environment setup.
 
 ### [Workstation Setup](./workstation-setup.md)
 
-How to set up a new machine — Windows + WSL2 + Docker Desktop + VS Code installation, required/recommended extensions, Claude Code authentication, and WSL prerequisites (Node.js, PHP, Composer, GitHub CLI, Playwright, OpenSpec CLI).
+How to set up a new machine — Windows + WSL2 + Docker Desktop + VS Code installation, required/recommended extensions, Claude Code authentication, and WSL prerequisites (Node.js, PHP, Composer, git-host CLIs — `tea` for Codeberg/Gitea/Forgejo (primary), `gh` for GitHub (fallback), `glab` for GitLab — Playwright, OpenSpec CLI).
 
 ### [Global Claude settings (`~/.claude`)](./global-claude-settings.md)
 
@@ -133,7 +135,7 @@ Claude follows a four-stage pipeline for all development work. Each stage has de
 graph TD
     subgraph "1. OBTAIN"
         direction LR
-        O1[GitHub Issues]
+        O1[Tracking Issues (Codeberg/GitHub)]
         O2[App Crawling]
         O3[Documentation]
         O4[Tenders / RFPs]
@@ -146,7 +148,7 @@ graph TD
         S2[specs.md]
         S3[design.md]
         S4[tasks.md]
-        S5[GitHub Issues]
+        S5[Tracking Issues (Codeberg/GitHub)]
         S1 --> S2 --> S3 --> S4 --> S5
     end
 
@@ -161,7 +163,7 @@ graph TD
         direction TB
         V1["Code Quality<br/>PHPCS · PHPMD · Psalm"]
         V2["Testing<br/>API · Browser · Personas"]
-        V3["CI/CD<br/>GitHub Actions"]
+        V3["CI/CD<br/>GitHub Actions / Forgejo Actions"]
         V1 --> V2 --> V3
     end
 
@@ -215,11 +217,11 @@ Collect requirements, study existing solutions, and identify what to build. Clau
 
 | Source                 | How                                                                                                    | Commands / Tools                                                                                       |
 | ---------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| **GitHub issues**      | Sync and analyze open issues from project repos                                                        | `/swc-update`, `gh issue list`, `gh issue view`                                                        |
+| **Tracking issues**    | Sync and analyze open issues from project repos (Codeberg primary, GitHub fallback)                    | `/swc-update`, `tea issues list`, `gh issue list`                                                      |
 | **Other applications** | Crawl code or browse running apps to understand patterns                                               | `/opsx-explore`, Playwright browsers (`browser-1`–`browser-7`)                                         |
 | **Documentation**      | Read docs from other platforms, APIs, standards                                                        | `WebFetch`, `WebSearch`, `/opsx-explore`                                                               |
 | **Tenders**            | Scrape TenderNed, classify by category, analyze requirements and ecosystem gaps                        | `/tender-scan`, `/tender-status`, `/tender-gap-report`, `/ecosystem-investigate`, `Read` (PDF support) |
-| **App store scouting** | Spot interesting apps on WordPress plugin directory, GitHub trending, ArtifactHub, Nextcloud app store | `WebSearch`, `WebFetch`, Playwright browsers                                                           |
+| **App store scouting** | Spot interesting apps on WordPress plugin directory, GitHub/Codeberg trending, ArtifactHub, Nextcloud app store | `WebSearch`, `WebFetch`, Playwright browsers                                                  |
 
 **Typical discovery session:**
 
@@ -227,7 +229,7 @@ Collect requirements, study existing solutions, and identify what to build. Clau
 /opsx-explore                              # Investigate a topic or problem
 > "What calendar apps exist on ArtifactHub and WordPress that we could learn from?"
 > "Crawl the Nextcloud app store for document management apps"
-> "Analyze the GitHub issues for openregister and summarize themes"
+> "Analyze the tracking issues for openregister and summarize themes" (on the per-repo platform — Codeberg primary for `Conduction/*`, GitHub for legacy `ConductionNL/*` repos)
 ```
 
 ### Stage 2: Specify — Writing OpenSpec Artifacts
@@ -243,7 +245,7 @@ Turn discoveries into structured specifications. This stage produces the bluepri
 | **Architecture**     | Architecture review of specs                                      | `/team-architect`         |
 | **Business value**   | Acceptance criteria and prioritization                            | `/team-po`                |
 | **New app**          | Full app design from scratch (architecture, features, wireframes) | `/app-design`             |
-| **Track**            | Convert tasks to GitHub Issues with epic                          | `/opsx-plan-to-issues`    |
+| **Track**            | Convert tasks to tracking issues with epic (Codeberg/GitHub)      | `/opsx-plan-to-issues`    |
 
 **Artifact progression:**
 
@@ -251,7 +253,7 @@ Turn discoveries into structured specifications. This stage produces the bluepri
 proposal.md ──► specs/*.md ──► design.md ──► tasks.md ──► plan.json
                                                             │
                                                             ▼
-                                                      GitHub Issues
+                                                      Tracking Issues (Codeberg/GitHub)
 ```
 
 **Typical spec session:**
@@ -319,7 +321,7 @@ Key commands: `/opsx-verify` (spec verification), `/test-counsel` (8-persona tes
 
 #### CI/CD
 
-All apps have `code-quality.yml` GitHub Actions workflows that block PRs on:
+All apps have `code-quality.yml` workflows that block PRs on (GitHub Actions today; Forgejo Actions runs the same files natively on Codeberg-mirrored repos):
 
 - PHPCS + PHPMD + Psalm (PHP quality)
 - ESLint (frontend quality)
@@ -347,7 +349,7 @@ composer phpcs && composer phpmd           # Code quality gates
 
 ## Workstation Setup
 
-For new-machine setup instructions — Windows + WSL2 + Docker Desktop + VS Code installation, extensions, Claude Code authentication, and WSL prerequisites (Node.js, PHP, Composer, GitHub CLI, Playwright, OpenSpec CLI, etc.) — see **[workstation-setup.md](./workstation-setup.md)**.
+For new-machine setup instructions — Windows + WSL2 + Docker Desktop + VS Code installation, extensions, Claude Code authentication, and WSL prerequisites (Node.js, PHP, Composer, git-host CLIs — `tea` for Codeberg (primary), `gh` for GitHub (fallback), `glab` for GitLab — Playwright, OpenSpec CLI, etc.) — see **[workstation-setup.md](./workstation-setup.md)**.
 
 ---
 
@@ -386,6 +388,7 @@ Optionally, bootstrap it upfront with common permissions to avoid approval promp
       "Bash(mv:*)",
       "Bash(rm:*)",
       "WebFetch(domain:localhost)",
+      "WebFetch(domain:codeberg.org)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)"
     ],
@@ -620,11 +623,22 @@ npx -y @playwright/mcp@latest --headless --isolated --port 9999
 
 Ensure `.claude/` is at the workspace root and Claude Code is started from that directory.
 
-### `gh: not logged in`
+### `tea login list` empty / `gh: not logged in`
 
 ```bash
+# Codeberg / Gitea / Forgejo — PRIMARY
+tea login add --name codeberg --url https://codeberg.org --token <PAT>
+# Token from https://codeberg.org/user/settings/applications
+# Scopes: read:repository, write:repository, read:issue, write:issue
+
+# GitHub — SECONDARY (still required while migration is in progress)
 gh auth login
+
+# GitLab — ALTERNATIVE
+glab auth login
 ```
+
+Note: `tea pulls create` / `tea issues create` need a controlling TTY and fail from Claude Code's Bash tool. Claude-driven workflows use REST `POST /api/v1/...` with the token from `~/.config/tea/config.yml`. Read-only `tea login list/default`, `tea repos list`, `tea pulls list -o json` are TTY-safe.
 
 ### Docker environment not starting
 
