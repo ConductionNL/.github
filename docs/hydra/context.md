@@ -10,7 +10,7 @@ within Conduction B.V., how it receives work, and how credentials flow through t
 Hydra takes structured OpenSpec change proposals and turns them into validated, security-
 scanned code on a feature branch — ready for a single human approval.
 
-It is the factory, not the product. The applications it builds live under `ConductionNL`.
+It is the factory, not the product. The applications it builds live under `Conduction` on Codeberg (primary) with legacy projects under `ConductionNL` on GitHub.
 
 ---
 
@@ -116,7 +116,7 @@ or mounted config files, to avoid leakage via `/proc`):
 | ------------------- | ----------- | -------------------------------------------------------------- |
 | `ANTHROPIC_API_KEY` | all         | Claude API key                                                 |
 | `GIT_TOKEN`         | all         | Scoped PAT for this persona                                    |
-| `REPO_URL`          | all         | `https://github.com/ConductionNL/<app>`                        |
+| `REPO_URL`          | all         | `https://codeberg.org/Conduction/<app>`                        |
 | `ISSUE_URL`         | Builder     | GitHub issue that triggered the build                          |
 | `PR_URL`            | Reviewers   | GitHub PR to review                                            |
 | `SPEC_PATH`         | Builder     | Path to `openspec/changes/<change-name>/` inside the container |

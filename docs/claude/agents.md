@@ -6,7 +6,7 @@ The Hydra pipeline is built from four **agents** (containerised personas with sc
 
 ## Pipeline agents
 
-The four containerised personas that move a change from `ready-to-build` through code-review, security-review, and a binary apply gate to a draft PR ready for one human approval. Each agent runs in its own ephemeral container with scoped permissions and a single responsibility — see [`hydra/agents/README.md`](https://github.com/ConductionNL/hydra/tree/main/agents) for the directory layout and per-agent `purpose.md` / `behavior.md` / `constraints.md`.
+The four containerised personas that move a change from `ready-to-build` through code-review, security-review, and a binary apply gate to a draft PR ready for one human approval. Each agent runs in its own ephemeral container with scoped permissions and a single responsibility — see [`hydra/agents/README.md`](https://codeberg.org/Conduction/hydra/tree/main/agents) for the directory layout and per-agent `purpose.md` / `behavior.md` / `constraints.md`.
 
 | Persona                   | Slug                    | Role                                                                                                           | Container        | Model  | Turns |
 | ------------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------- | ---------------- | ------ | ----- |
@@ -15,7 +15,7 @@ The four containerised personas that move a change from `ready-to-build` through
 | **Clyde Barcode**         | `clyde-barcode`         | Security Reviewer — SAST analysis, posts findings, has fix authority                                           | `hydra-security` | sonnet | 150   |
 | **Axel Pliér**            | `axel-plier`            | Applier — binary go/no-go gate after both reviewers, no fix authority                                          | `hydra-applier`  | sonnet | 20    |
 
-Shared config lives in [`agents/base.yaml`](https://github.com/ConductionNL/hydra/tree/main/agents/base.yaml); each agent's `config.yaml` extends it kustomize-style.
+Shared config lives in [`agents/base.yaml`](https://codeberg.org/Conduction/hydra/tree/main/agents/base.yaml); each agent's `config.yaml` extends it kustomize-style.
 
 ## Hydra skills (`hydra/.claude/skills/`)
 
@@ -113,7 +113,7 @@ Personas are non-agent — they're test subjects representing real user archetyp
 | `priya-ganpat.md`           | Compliance officer, ISO / privacy lens              |
 | `sem-de-jong.md`            | Product manager, prioritisation lens                |
 
-Full persona files live in [`hydra/personas/`](https://github.com/ConductionNL/hydra/tree/main/personas).
+Full persona files live in [`hydra/personas/`](https://codeberg.org/Conduction/hydra/tree/main/personas).
 
 ## Going deeper
 

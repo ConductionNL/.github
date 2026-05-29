@@ -8,7 +8,7 @@ description: How to report vulnerabilities, our response timeline, and safe harb
 
 # Security Policy
 
-This security policy applies to all repositories under the [ConductionNL](https://github.com/ConductionNL) organization.
+This security policy applies to all repositories under the [Conduction](https://codeberg.org/Conduction) (Codeberg, primary) and legacy [ConductionNL](https://github.com/ConductionNL) (GitHub) organizations.
 
 ## Reporting a Vulnerability
 
@@ -59,7 +59,7 @@ We use [CVSSv3](https://www.first.org/cvss/calculator/3.1) to classify severity:
 
 ### In scope
 
-- All source code under [github.com/ConductionNL](https://github.com/ConductionNL)
+- All source code under [codeberg.org/Conduction](https://codeberg.org/Conduction) (primary) and the legacy [github.com/ConductionNL](https://github.com/ConductionNL)
 - APIs and integrations exposed by our apps
 - Authentication and authorization logic
 - Data handling and privacy controls
