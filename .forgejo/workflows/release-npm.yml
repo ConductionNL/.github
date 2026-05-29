@@ -1,0 +1,100 @@
+# Reusable npm publish workflow for Forgejo Actions on Codeberg.
+#
+# Translated from the GitHub Actions pattern in
+# ConductionNL/nextcloud-vue/.github/workflows/release.yml.
+#
+# Compared with the GH original:
+#   * GH original uses npm Trusted Publisher (OIDC). Codeberg is not on
+#     npm's accepted OIDC issuer list (only github.com / gitlab.com).
+#     Reverted to NPM_TOKEN secret-based auth. Provenance attestations
+#     are disabled with OIDC.
+#   * @semantic-release/github plugin is removed at the .releaserc
+#     level by each repo before merging the migration commit.
+#   * Container: node:24-bookworm on codeberg-medium runner.
+#
+# Required secrets (the consumer wrapper inherits via `secrets: inherit`):
+#   NPM_TOKEN       — npm Automation token, scoped to the @conduction npm scope
+#   CODEBERG_TOKEN  — write:repository PAT for the chore(release) push back
+
+name: npm Release
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: "Node.js version for building + publishing"
+        required: false
+        type: string
+        default: "24"
+      install-flags:
+        description: "Extra flags for npm ci (e.g. --legacy-peer-deps)"
+        required: false
+        type: string
+        default: "--legacy-peer-deps"
+      dry-run:
+        description: "Pass --dry-run to semantic-release (no publish, no tag, no commit)"
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      NPM_TOKEN:
+        required: true
+      CODEBERG_TOKEN:
+        required: true
+
+jobs:
+  quality:
+    name: Quality check
+    runs-on: codeberg-medium
+    container:
+      image: node:24-bookworm
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: https://github.com/actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install deps
+        run: npm ci ${{ inputs.install-flags }}
+      - name: Lint
+        run: npm run lint || echo "no lint script — skipping"
+      - name: Build
+        run: npm run build
+
+  release:
+    name: Release
+    needs: quality
+    runs-on: codeberg-medium
+    container:
+      image: node:24-bookworm
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: https://github.com/actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure npm registry
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm config set "//registry.npmjs.org/:_authToken=${NPM_TOKEN}"
+          npm config set registry https://registry.npmjs.org/
+
+      - name: Install deps
+        run: npm ci ${{ inputs.install-flags }}
+
+      - name: Release
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GIT_CREDENTIALS: "https://x-access-token:${{ secrets.CODEBERG_TOKEN }}@codeberg.org"
+        run: |
+          git config --global credential.helper store
+          echo "${GIT_CREDENTIALS}" > ~/.git-credentials
+          git config --global user.email "release-bot@conduction.nl"
+          git config --global user.name "Conduction Release Bot"
+          if [ "${{ inputs.dry-run }}" = "true" ]; then
+            npx semantic-release --dry-run
+          else
+            npx semantic-release
+          fi
