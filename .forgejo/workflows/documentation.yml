@@ -50,7 +50,7 @@ on:
 jobs:
   build:
     name: Build and validate
-    runs-on: docker
+    runs-on: codeberg-medium
     container:
       image: node:24-bookworm
     timeout-minutes: 10
@@ -101,7 +101,7 @@ jobs:
   deploy:
     name: Deploy to Cloudflare Pages
     needs: build
-    runs-on: docker
+    runs-on: codeberg-medium
     container:
       image: node:24-bookworm
     timeout-minutes: 10
