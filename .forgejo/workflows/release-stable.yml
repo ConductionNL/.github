@@ -7,7 +7,7 @@
 # to the Nextcloud App Store.
 #
 # Compared with the GH original:
-#   * Runs in a `php:8.3-cli` container on `runs-on: docker`.
+#   * Runs in a `php:8.3-cli` container on `runs-on: codeberg-medium`.
 #   * `actions-ecosystem/action-bump-semver` inlined as bash.
 #   * `gh api` replaced by curl against Codeberg's API.
 #   * `ncipollo/release-action` and `svenstaro/upload-release-action`
@@ -58,7 +58,7 @@ on:
 
 jobs:
   release:
-    runs-on: docker
+    runs-on: codeberg-medium
     container:
       image: php:8.3-cli
     timeout-minutes: 10
