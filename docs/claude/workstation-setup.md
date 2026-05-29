@@ -57,11 +57,12 @@ Open VS Code and install these extensions (`Ctrl+Shift+X`):
 
 | Extension           | ID                           | Purpose                                                        |
 | ------------------- | ---------------------------- | -------------------------------------------------------------- |
+| Gitea               | gitea.gitea-vscode           | Codeberg/Gitea PR + issue sidebar (Conduction's primary git host) — see [Codeberg Auth Setup](./codeberg-auth-setup.md) |
 | PowerShell          | ms-vscode.powershell         | PowerShell 7 scripting (`.ps1` files)                          |
 | GitLens             | eamodio.gitlens              | Advanced Git history, blame, line annotations                  |
 | GitHub Copilot Chat | github.copilot-chat          | AI pair programmer (requires Copilot license)                  |
 | YAML                | redhat.vscode-yaml           | Syntax & validation for `docker-compose.yml` and OpenSpec YAML |
-| GitHub Actions      | github.vscode-github-actions | View and validate CI/CD workflows                              |
+| GitHub Actions      | github.vscode-github-actions | View and validate CI/CD workflows (legacy GitHub repos)        |
 | Makefile Tools      | ms-vscode.makefile-tools     | Makefile support (`make check-strict`)                         |
 | Pylance             | ms-python.vscode-pylance     | Enhanced Python type checking and IntelliSense                 |
 
@@ -87,6 +88,7 @@ code --install-extension eamodio.gitlens
 code --install-extension github.copilot-chat
 code --install-extension redhat.vscode-yaml
 code --install-extension github.vscode-github-actions
+code --install-extension gitea.gitea-vscode
 code --install-extension ms-vscode.makefile-tools
 code --install-extension ms-python.vscode-pylance
 ```
@@ -177,7 +179,20 @@ curl -sS https://getcomposer.org/installer | php
 sudo mv composer.phar /usr/local/bin/composer
 ```
 
-### GitHub CLI
+### Codeberg CLI (`tea`) + SSH — primary git host
+
+Conduction's primary git host is **Codeberg** (`codeberg.org/Conduction`). See **[Codeberg Authentication Setup](./codeberg-auth-setup.md)** for the full guide — SSH key generation, `keychain` for passphrase persistence across shells, `tea` CLI install + token scopes, VS Code Gitea extension, and how to switch existing repo remotes.
+
+Quick smoke test after following that guide:
+
+```bash
+ssh -T git@codeberg.org   # expect: "Hi <user>! ... but Forgejo does not provide shell access."
+tea login list            # expect: one row, name=codeberg, your username
+```
+
+### GitHub CLI — secondary / legacy git host
+
+Still needed for legacy repos that haven't migrated yet (forks, third-party projects, archived `ConductionNL` repos). For Conduction's own repos, prefer Codeberg + `tea` above.
 
 ```bash
 sudo apt install -y gh

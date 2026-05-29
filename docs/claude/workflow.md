@@ -7,7 +7,7 @@ _This is the **architecture reference** — see [Getting Started](./getting-star
 This workspace uses a spec-driven development workflow that combines:
 
 - **OpenSpec** — Structured specifications alongside code
-- **GitHub Issues** — Visual progress tracking via kanban boards
+- **Issue tracker** — Visual progress tracking via kanban boards (Codeberg primary, GitHub for legacy/archived repos)
 - **Spec verification** — Automated review of code against specifications
 
 The key insight: **specs are written once, then broken into small JSON tasks** that each point back to a specific spec section. This means AI coding loops can work with minimal context (just the task + its spec ref) instead of loading entire spec documents.
@@ -109,7 +109,7 @@ specs     →  test-plan  →  tasks        (use to pre-define test cases before
 
 **test-plan and test scenarios:** A `test-plan.md` maps spec scenarios to named test cases (TC-1, TC-2, …) before any code is written — it answers "what does done look like?" After implementation, TCs that represent ongoing regression value should be promoted to reusable test scenarios via `/test-scenario-create`. Those `TS-NNN-slug.md` files persist after the change is archived and are automatically picked up by `/test-counsel`, `/test-app`, and `/test-persona-*`.
 
-### Phase 2: Plan to GitHub Issues
+### Phase 2: Plan to tracking issues
 
 Once specs are reviewed and approved, convert them to trackable work items:
 
@@ -120,18 +120,18 @@ Once specs are reviewed and approved, convert them to trackable work items:
 This command:
 
 1. Parses `tasks.md` into structured JSON
-2. Creates a **tracking issue** (epic) on GitHub with a full task checklist
+2. Creates a **tracking issue** (epic) on the platform that matches your repo's remote — Codeberg (primary) or GitHub (legacy) — with a full task checklist
 3. Creates **individual issues** per task, each containing:
    - Task description
    - Acceptance criteria (from spec scenarios)
    - Spec reference (link to the relevant spec section)
    - Files likely affected
    - Labels: `openspec`, `<change-name>`
-4. Saves `plan.json` with all GitHub issue numbers linked
+4. Saves `plan.json` with all issue numbers linked
 
-**Why GitHub Issues?**
+**Why an issue tracker?**
 
-- Visual kanban board (GitHub Projects)
+- Visual kanban board (Codeberg Projects or GitHub Projects, depending on host)
 - Progress visible to the whole team
 - Each issue links back to specs for traceability
 - Can be managed independently of Claude sessions
@@ -217,7 +217,7 @@ This:
 {
   "change": "add-woo-search",
   "project": "opencatalogi",
-  "repo": "ConductionNL/opencatalogi",
+  "repo": "Conduction/opencatalogi",
   "created": "2026-02-14T12:00:00Z",
   "tracking_issue": 42,
   "tasks": [
@@ -261,7 +261,7 @@ See [writing-specs.md](writing-specs.md) for the complete guide — RFC 2119 key
 | `/opsx-new <name>`     | Spec      | Start a new change                  |
 | `/opsx-ff`             | Spec      | Fast-forward all artifacts          |
 | `/opsx-continue`       | Spec      | Create next artifact                |
-| `/opsx-plan-to-issues` | Plan      | Tasks → JSON + GitHub Issues        |
+| `/opsx-plan-to-issues` | Plan      | Tasks → JSON + tracking issues (Codeberg / GitHub) |
 | `/opsx-apply`          | Implement | Implement tasks from plan.json      |
 | `/opsx-verify`         | Review    | Verify implementation against specs |
 | `/opsx-archive`        | Archive   | Complete and preserve change        |

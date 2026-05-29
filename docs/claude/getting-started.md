@@ -158,13 +158,13 @@ Things to check:
 
 Edit the artifacts directly if needed — they're just markdown files.
 
-### 4d. Create GitHub Issues
+### 4d. Create tracking issues
 
 ```
 /opsx-plan-to-issues
 ```
 
-This converts your tasks into GitHub Issues:
+This converts your tasks into issues on your repo's host — Codeberg (primary) or GitHub (legacy):
 
 - A **tracking issue** with a full checklist (your "epic")
 - **Individual issues** per task with acceptance criteria and spec references
@@ -219,7 +219,7 @@ This merges your delta specs into the main specs and preserves the change for hi
 | Start a new feature            | `/opsx-new <name>`     |
 | Generate all specs at once     | `/opsx-ff`             |
 | Generate specs one at a time   | `/opsx-continue`       |
-| Convert tasks to GitHub Issues | `/opsx-plan-to-issues` |
+| Convert tasks to tracking issues | `/opsx-plan-to-issues` |
 | Start implementing             | `/opsx-apply`          |
 | Review implementation          | `/opsx-verify`         |
 | Complete and archive           | `/opsx-archive`        |

@@ -66,6 +66,10 @@ Available docker-compose profiles, reset instructions, and environment setup.
 
 How to set up a new machine — Windows + WSL2 + Docker Desktop + VS Code installation, required/recommended extensions, Claude Code authentication, and WSL prerequisites (Node.js, PHP, Composer, GitHub CLI, Playwright, OpenSpec CLI).
 
+### [Codeberg Authentication Setup](./codeberg-auth-setup.md)
+
+End-to-end auth for Codeberg (the Conduction primary git host) from WSL: SSH key generation + Codeberg upload, `~/.ssh/config`, `keychain` for passphrase persistence, `tea` CLI install + token scopes, VS Code Gitea extension, switching existing repo remotes, and how Claude Code inherits the auth without re-prompting. Read this when setting up a new workstation or onboarding a new dev — the [Workstation Setup](./workstation-setup.md) doc points at this for the Codeberg-specific steps.
+
 ### [Global Claude settings (`~/.claude`)](./global-claude-settings.md)
 
 **Mandatory** user-level settings enforcing a read-only Bash policy and write-approval hooks. Versioned — Claude warns you at session start when an update is available. Install once per machine; see the doc for the full guide and update instructions.
