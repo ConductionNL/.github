@@ -43,7 +43,7 @@ on:
 jobs:
   build:
     name: Build and validate
-    runs-on: codeberg-medium
+    runs-on: codeberg-small
     container:
       image: node:24-bookworm
     timeout-minutes: 10
@@ -90,7 +90,7 @@ jobs:
   deploy:
     name: Deploy to Cloudflare Workers (Static Assets)
     needs: build
-    runs-on: codeberg-medium
+    runs-on: codeberg-small
     container:
       image: node:24-bookworm
     timeout-minutes: 10
