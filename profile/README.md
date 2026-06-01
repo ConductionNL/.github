@@ -1,72 +1,43 @@
-# Welcome to Conduction's GitHub Page 👋
+# Conduction
 
-## 🧙 Who is Conduction?
+Dutch open-source software company. We build [ConNext](https://www.conduction.nl/products), a stack of EUPL-1.2 Nextcloud apps for municipalities, provinces, and SMEs.
 
-At Conduction, we are driven by a vision that sees the digitization of the world as an extraordinary opportunity. It's a chance to transform our world into something more democratic, inclusive, and transparent. We understand that digitalization is not just inevitable but comes with immense potential and challenges.
+## What we ship
 
-**Our Mission** is to shape this new digital world into a fair and inclusive environment for everyone, while also safeguarding it against the threats posed by digitalization. We firmly believe that achieving this goal requires us to adhere to the fundamental principles and rights of humanity.
+- [**OpenRegister**](https://codeberg.org/Conduction/openregister): schema-driven object store with audit trail. The data foundation underneath every other app.
+- [**OpenCatalogi**](https://codeberg.org/Conduction/opencatalogi): federated catalogue and public publication for any register.
+- [**OpenConnector**](https://codeberg.org/Conduction/openconnector): integration layer for REST, SOAP, GraphQL, file drops, and message queues.
+- [**DocuDesk**](https://codeberg.org/Conduction/docudesk): anonymise, sign, and publish documents straight from your registers.
 
-Our mission is simple yet profound: **"Make the digital world a better place for its citizens by creating democratic, inclusive, transparent, understandable, and affordable software for citizens."**
+Plus [LaunchPad](https://codeberg.org/Conduction/launchpad), [LarpingApp](https://codeberg.org/Conduction/larpingapp), [PipelinQ](https://codeberg.org/Conduction/pipelinq), [Procest](https://codeberg.org/Conduction/procest), [Decidesk](https://codeberg.org/Conduction/decidesk), [Deskdesk](https://codeberg.org/Conduction/deskdesk), [ScholiQ](https://codeberg.org/Conduction/scholiq), [Shillinq](https://codeberg.org/Conduction/shillinq), [ZaakAfhandelApp](https://codeberg.org/Conduction/zaakafhandelapp), [OpenBuild](https://codeberg.org/Conduction/openbuild), and [NLDesign](https://codeberg.org/Conduction/nldesign).
 
-## Our (Big Hairy Audacious) Goal
+Every app is EUPL-1.2. Every register exports to JSON. Your data is yours. The day you uninstall is as easy as the day you installed.
 
-We have set a bold goal for ourselves: **We want to cut municipality ICT spending on software in half before the start of 2027.** Imagine reducing the cost from 36 euros per resident per year in 2022 to just 18.50 euros in 2027. We are committed to achieving this by replacing lock-in software and non-user-friendly applications with transparent, accessible, and innovative solutions. Fair contracting is at the heart of our strategy.
+## How we build
 
-## Our Core Values
+**Federated, not centralised.** Every install is sovereign. Catalogues federate via API. Nothing depends on a Conduction-hosted service to work.
 
-Our work is guided by core values that shape everything we do:
+**WOO, BIO, GDPR by default.** Audit log, retention, and citation-stable IDs ship with the install. Never a paid add-on.
 
-**Democratic:** Inclusivity and participation are fundamental to fairness. We actively seek input from all stakeholders, value feedback, and believe in the power of diverse perspectives.
-**Inclusive:** We're committed to creating an environment where everyone feels respected, supported, heard, and valued. Inclusion is not just a goal; it's a way of working.
-**Transparent:** Transparency is key to informed decision-making. We communicate openly, are receptive to others' viewpoints, and adhere to honesty in all aspects of our work.
-**Responsible and Sustainable:** We develop solutions that benefit both current and future generations. We are environmentally conscious and socially responsible.
-**Innovative:** Our commitment to innovation drives us to continually explore new ideas and implement creative solutions. We strive for efficiency and better products through technology.
+**Plain Dutch, plain English.** We write for the person who needs to make a decision today. Not the procurement officer who'll never use it. Docs and the website read the same.
 
-## Our Behavior
+**Install button, not procurement track.** The shortest path from "this looks useful" to "we're using it" is the install button. Apps install from the Nextcloud app store. No consultancy hours required.
 
-Our values translate into our behavior:
+## Where to find more
 
-- We actively seek and respect input from all parties.
-- Feedback is invaluable to us as it fosters growth.
-- We value different perspectives to create the best solutions.
+| | |
+|---|---|
+| Brand and design system | [identity.conduction.nl](https://identity.conduction.nl) |
+| Company site | [conduction.nl](https://www.conduction.nl) |
+| Documentation | [docs.conduction.nl](https://docs.conduction.nl) |
+| Academy (tutorials) | [conduction.nl/academy](https://www.conduction.nl/academy) |
+| Mail | [info@conduction.nl](mailto:info@conduction.nl) |
+| Phone | [+31 (0)85 303 6840](tel:+31853036840) |
 
-## ‍💻 Our Core Competencies
+ISO 9001:2015 and ISO 27001:2022 certified. KvK 76741850. BTW NL860784241B01. Lauriergracht 14h, 1016 RR Amsterdam.
 
-Our core competencies are the backbone of our company's success:
+## Working with us
 
-**1. Knowledge of Ecosystem and Architecture:** We possess a deep understanding of the digital ecosystem and architecture, enabling us to provide valuable insights.
-**2. Critical Approach:** We are not mere order-takers; we critically engage with our clients, ensuring the best outcomes.
-**3. Holistic Approach:** We connect our clients with other solutions and vendors, creating comprehensive solutions.
-**4. Integration:** We unite different systems and processes to deliver efficient, value-added solutions.
-**5. Continuous Innovation:** We constantly create innovative solutions that positively impact society and the digitization of our world.
+Self-service is free: docs, Codeberg issues, community channels. For paid implementation or support, [conduction.nl/support](https://www.conduction.nl/support) routes to a partner.
 
-## 👩 Our Market (Core Customers)
-
-- Small and medium-sized municipalities.
-- Government collaborations and alliances.
-- Partnering with other vendors rather than just being their contractors.
-- Various government bodies.
-
-## 🙋 Brand Promises
-
-- We are committed to being open and transparent in all our endeavors.
-- No lock-in – we provide solutions that are free from restrictions.
-- We offer knowledge and work collaboratively.
-- We prioritize integration, making systems work seamlessly together.
-
-## 🌈 Join Our Team at Conduction
-
-Are you passionate about making the digital world more democratic, inclusive, and transparent? Do you thrive in an innovative and collaborative environment? If so, we'd love to have you join our team at Conduction!
-
-Working at Conduction means being part of a dedicated group of professionals who are committed to driving positive change through technology. We value diversity, encourage open communication, and provide opportunities for growth and development.
-
-**Why Conduction?**
-
-- **Meaningful Work:** At Conduction, your work directly contributes to our mission of making the digital world a better place for all citizens.
-- **Innovation:** We are at the forefront of innovation, exploring new technologies and creative solutions to tackle complex challenges.
-- **Collaboration:** We believe in the power of collaboration and teamwork. Your ideas and input are valued here.
-- **Professional Growth:** We support your professional development and provide opportunities for advancement within the organization.
-
-If you're ready to be part of a team that's making a real difference in the world of technology, explore our [career opportunities](https://www.conduction.nl/careers) and join us on this exciting journey!
-
-For more information and updates, visit our website: [Conduction.nl](https://www.conduction.nl/)
+We're small on purpose. Every app has a named owner. Every customer talks to a person.
