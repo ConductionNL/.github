@@ -30,7 +30,7 @@ The day-to-day flow for spec-driven development. The canonical chain:
 | `/opsx-new`            | Scaffold a new change proposal (`openspec/changes/{slug}/`)    |
 | `/opsx-ff`             | Fast-forward — write proposal + spec delta + tasks in one pass |
 | `/opsx-continue`       | Resume an in-flight proposal where you left off                |
-| `/opsx-plan-to-issues` | Convert tasks.md into GitHub issues with proper labels         |
+| `/opsx-plan-to-issues` | Convert tasks.md into tracking issues with proper labels (per-repo platform — Codeberg primary, GitHub fallback, GitLab alternative) |
 | `/opsx-apply`          | Implement one task end-to-end                                  |
 | `/opsx-apply-loop`     | Loop `/opsx-apply` over remaining tasks                        |
 | `/opsx-verify`         | Validate the implementation matches the spec delta             |

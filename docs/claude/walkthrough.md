@@ -291,15 +291,15 @@ At this point, **you read through all four files** and make adjustments:
 
 Edit the files directly if needed. Once you're satisfied, move to Phase 2.
 
-## Phase 2: Plan to GitHub Issues
+## Phase 2: Plan to tracking issues
 
 ```
 /opsx-plan-to-issues
 ```
 
-Claude responds:
+Claude detects the per-repo platform from `git remote get-url origin` (Codeberg primary, GitHub fallback, GitLab alternative) and responds with the appropriate URLs:
 
-> **Created GitHub Issues:**
+> **Created tracking issues on Codeberg:**
 >
 > Tracking issue: https://codeberg.org/Conduction/opencatalogi/issues/42
 >
@@ -314,7 +314,7 @@ Claude responds:
 >
 > Saved: `openspec/changes/add-publication-search/plan.json`
 
-Now you can see progress on GitHub! Open the tracking issue to see the full checklist. You can also add these to a GitHub Project board for kanban visualization.
+On legacy `ConductionNL/*` repos still on github.com, the same skill returns `https://github.com/ConductionNL/<app>/issues/...` URLs instead. Open the tracking issue to see the full checklist; per-repo project boards work on both platforms (no cross-repo kanban on Codeberg yet).
 
 ## Phase 3: Implementation
 
@@ -339,7 +339,7 @@ Claude reads plan.json, finds Task 1 (pending), reads the spec section, and impl
 >
 > - SearchService::search("klimaat") returns matching objects
 >
-> Closing GitHub issue #43...
+> Closing tracking issue #43...
 > Updating tracking issue #42 checklist...
 >
 > **Task 1 complete.** Moving to Task 2...
@@ -358,7 +358,7 @@ Claude reads plan.json, finds Task 1 (pending), reads the spec section, and impl
 > - GET /api/search?q=klimaat returns JSON results
 > - GET /api/search (no q param) returns HTTP 400
 >
-> Closing GitHub issue #44...
+> Closing tracking issue #44...
 >
 > **Task 2 complete.** Moving to Task 3...
 
@@ -376,7 +376,7 @@ Claude reads plan.json, finds Task 1 (pending), reads the spec section, and impl
 > - 50 results, page=2, limit=10 returns items 11-20 with total=50
 > - No params defaults to page=1, limit=25
 >
-> Closing GitHub issue #45...
+> Closing tracking issue #45...
 >
 > **Task 3 complete.** Moving to Task 4...
 
@@ -394,7 +394,7 @@ Claude reads plan.json, finds Task 1 (pending), reads the spec section, and impl
 > - Cross-origin request includes CORS headers
 > - @CORS, @NoCSRFRequired, @PublicPage annotations present
 >
-> Closing GitHub issue #46...
+> Closing tracking issue #46...
 >
 > **All 4 tasks complete!** Run `/opsx-verify` to verify against specs.
 
@@ -409,7 +409,7 @@ Claude loads ALL the specs and checks every requirement:
 > **Review: add-publication-search**
 >
 > Tasks completed: 4/4
-> GitHub issues closed: 4/4
+> Tracking issues closed: 4/4
 >
 > **Spec Compliance Check:**
 >
@@ -467,7 +467,7 @@ After this flow, you have:
 1. **Working code** — SearchController and SearchService implemented
 2. **Spec documentation** — `openspec/specs/search/spec.md` describes the current behavior
 3. **Audit trail** — The full change preserved in `openspec/changes/archive/`
-4. **GitHub history** — Tracking issue #42 with all sub-issues closed
+4. **Tracking-issue history (Codeberg primary, GitHub for legacy repos)** — Tracking issue #42 with all sub-issues closed
 5. **Review report** — `review.md` confirming spec compliance
 
 The next time someone needs to modify search behavior, they'll find the spec, understand the current requirements, and write delta specs for their changes.

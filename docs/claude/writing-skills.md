@@ -72,7 +72,7 @@ The skill uses progressive disclosure and has a description optimized for reliab
 description: A skill that helps with various document-related tasks
 
 # Good: specific, third-person, front-loaded action + trigger terms
-description: Create a Pull Request from the current branch — runs local checks, picks target branch, and opens the PR on GitHub
+description: Create a Pull Request from the current branch — runs local checks, picks target branch, and opens the PR. Supports Codeberg (primary), GitHub (fallback) and GitLab (alternative).
 ```
 
 **Known limitation:** Multiple independent sources report ~50% auto-activation rates for skills. The `SLASH_COMMAND_TOOL_CHAR_BUDGET` defaults to 1% of context window, limiting how many descriptions fit. With large skill libraries, explicit `/skill-name` invocation is more reliable than auto-triggering.

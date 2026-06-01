@@ -179,9 +179,11 @@ curl -sS https://getcomposer.org/installer | php
 sudo mv composer.phar /usr/local/bin/composer
 ```
 
-### Codeberg CLI (`tea`) + SSH — primary git host
+### Git-host CLIs
 
-Conduction's primary git host is **Codeberg** (`codeberg.org/Conduction`). See **[Codeberg Authentication Setup](./codeberg-auth-setup.md)** for the full guide — SSH key generation, `keychain` for passphrase persistence across shells, `tea` CLI install + token scopes, VS Code Gitea extension, and how to switch existing repo remotes.
+Conduction's primary platform is **Codeberg / Gitea / Forgejo** (under the `Conduction` org as of 2026-05-29). GitHub is the secondary/fallback host (former primary; the migration is bidirectional). GitLab is an alternative for non-Conduction work. Install the CLIs you need:
+
+See **[Codeberg Authentication Setup](./codeberg-auth-setup.md)** for the full Codeberg onboarding guide — SSH key generation, `keychain` for passphrase persistence across shells, `tea` CLI install + token scopes, VS Code Gitea extension, and how to switch existing repo remotes.
 
 Quick smoke test after following that guide:
 
@@ -190,13 +192,39 @@ ssh -T git@codeberg.org   # expect: "Hi <user>! ... but Forgejo does not provide
 tea login list            # expect: one row, name=codeberg, your username
 ```
 
-### GitHub CLI — secondary / legacy git host
-
-Still needed for legacy repos that haven't migrated yet (forks, third-party projects, archived `ConductionNL` repos). For Conduction's own repos, prefer Codeberg + `tea` above.
-
 ```bash
+# Codeberg / Gitea / Forgejo — PRIMARY
+sudo apt install -y tea                          # if available, else:
+# wget -O /usr/local/bin/tea https://dl.gitea.com/tea/0.10.0/tea-0.10.0-linux-amd64
+# sudo chmod +x /usr/local/bin/tea
+tea login add --name codeberg --url https://codeberg.org --token <PAT>
+# Token from https://codeberg.org/user/settings/applications
+# Scopes: read:repository, write:repository, read:issue, write:issue
+
+# GitHub — SECONDARY (still required while migration is in progress)
 sudo apt install -y gh
 gh auth login
+
+# GitLab — ALTERNATIVE
+sudo apt install -y glab
+glab auth login
+```
+
+**Caveat for Claude Code users:** `tea pulls create` / `tea issues create` need a controlling TTY and fail from Claude's Bash tool. Claude-driven workflows fall back to REST `POST /api/v1/...` using the token from `~/.config/tea/config.yml`. Read-only `tea login list/default` is TTY-safe.
+
+**SSH for git ops on Codeberg:**
+
+```bash
+ssh-keygen -t ed25519 -C "you@conduction.nl" -f ~/.ssh/id_ed25519_codeberg
+cat ~/.ssh/id_ed25519_codeberg.pub
+# Paste the pubkey at https://codeberg.org/user/settings/keys
+# Then add a Host entry to ~/.ssh/config:
+#   Host codeberg.org
+#       HostName codeberg.org
+#       User git
+#       IdentityFile ~/.ssh/id_ed25519_codeberg
+#       IdentitiesOnly yes
+ssh -T git@codeberg.org  # "Hi <user>! You've successfully authenticated."
 ```
 
 ### PHP Quality Tools (phpcs, phpmd, psalm, phpstan)
@@ -268,7 +296,9 @@ node --version        # v20.x+
 php --version         # 8.1+
 composer --version    # 2.x
 docker --version      # 24+
-gh --version          # 2.x+
+tea --version         # 0.10+ — Codeberg/Gitea/Forgejo CLI (primary)
+gh --version          # 2.x+ — GitHub CLI (secondary/fallback)
+glab --version        # 1.x+ — GitLab CLI (alternative, optional)
 openspec --version    # 1.x
 npx playwright --version  # 1.x
 ```

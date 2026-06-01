@@ -7,8 +7,10 @@ _This is the **architecture reference** — see [Getting Started](./getting-star
 This workspace uses a spec-driven development workflow that combines:
 
 - **OpenSpec** — Structured specifications alongside code
-- **Issue tracker** — Visual progress tracking via kanban boards (Codeberg primary, GitHub for legacy/archived repos)
+- **Tracking issues** on Codeberg / Gitea / Forgejo (primary, under the `Conduction` org as of 2026-05-29) or GitHub (secondary/fallback) — visual progress tracking via per-repo project boards or kanban
 - **Spec verification** — Automated review of code against specifications
+
+**Platform note.** Conduction is migrating from `github.com/ConductionNL/*` to `codeberg.org/Conduction/*`. Skills and Hydra-pipeline scripts auto-detect the per-repo platform from `git remote get-url origin`; opsx-* skills create tracking issues on whichever host the target repo lives. The migration is bidirectional — every operation also supports GitHub fallback so the system can revert if needed.
 
 The key insight: **specs are written once, then broken into small JSON tasks** that each point back to a specific spec section. This means AI coding loops can work with minimal context (just the task + its spec ref) instead of loading entire spec documents.
 
@@ -109,7 +111,7 @@ specs     →  test-plan  →  tasks        (use to pre-define test cases before
 
 **test-plan and test scenarios:** A `test-plan.md` maps spec scenarios to named test cases (TC-1, TC-2, …) before any code is written — it answers "what does done look like?" After implementation, TCs that represent ongoing regression value should be promoted to reusable test scenarios via `/test-scenario-create`. Those `TS-NNN-slug.md` files persist after the change is archived and are automatically picked up by `/test-counsel`, `/test-app`, and `/test-persona-*`.
 
-### Phase 2: Plan to tracking issues
+### Phase 2: Plan to Tracking Issues
 
 Once specs are reviewed and approved, convert them to trackable work items:
 
@@ -120,7 +122,7 @@ Once specs are reviewed and approved, convert them to trackable work items:
 This command:
 
 1. Parses `tasks.md` into structured JSON
-2. Creates a **tracking issue** (epic) on the platform that matches your repo's remote — Codeberg (primary) or GitHub (legacy) — with a full task checklist
+2. Creates a **tracking issue** (epic) on the per-repo platform (Codeberg primary, GitHub fallback, GitLab alternative) with a full task checklist
 3. Creates **individual issues** per task, each containing:
    - Task description
    - Acceptance criteria (from spec scenarios)
@@ -129,9 +131,9 @@ This command:
    - Labels: `openspec`, `<change-name>`
 4. Saves `plan.json` with all issue numbers linked
 
-**Why an issue tracker?**
+**Why tracking issues?**
 
-- Visual kanban board (Codeberg Projects or GitHub Projects, depending on host)
+- Visual kanban board (per-repo on Codeberg; Codeberg has no cross-repo board yet — see [Codeberg Community #694](https://codeberg.org/Codeberg/Community/issues/694))
 - Progress visible to the whole team
 - Each issue links back to specs for traceability
 - Can be managed independently of Claude sessions
@@ -153,7 +155,7 @@ Runs Phases 3 → 4 → 5 in one hands-off command inside an isolated Docker con
 /opsx-apply-loop                           # asks which app + change
 ```
 
-The loop runs `/opsx-apply` → `/opsx-verify` up to 5 times per app, optionally followed by targeted single-agent tests (max 3 test iterations), then archives when verify is clean and handles git commit and GitHub sync on the host. Use this when you want to walk away and let Claude work through the full cycle automatically. Requires a container authentication token — the Docker container cannot use interactive OAuth. Set `CLAUDE_CODE_AUTH_TOKEN` (preferred — free, uses your subscription) or `ANTHROPIC_API_KEY` (fallback — costs money) in your `~/.bashrc`. See [Getting Started — Container authentication](getting-started.md#prerequisites) for step-by-step setup.
+The loop runs `/opsx-apply` → `/opsx-verify` up to 5 times per app, optionally followed by targeted single-agent tests (max 3 test iterations), then archives when verify is clean and handles git commit and per-platform issue sync on the host. Use this when you want to walk away and let Claude work through the full cycle automatically. Requires a container authentication token — the Docker container cannot use interactive OAuth. Set `CLAUDE_CODE_AUTH_TOKEN` (preferred — free, uses your subscription) or `ANTHROPIC_API_KEY` (fallback — costs money) in your `~/.bashrc`. See [Getting Started — Container authentication](getting-started.md#prerequisites) for step-by-step setup.
 
 Each iteration of the loop:
 
@@ -165,14 +167,14 @@ Each iteration of the loop:
    - **Tests**: unit tests (PHPUnit), API tests (Newman/Postman), browser tests (Playwright MCP)
 4. **Runs tests** — unit tests, Newman tests, and browser verification MUST pass before marking complete
 5. **Updates progress** — marks task done in plan.json and tasks.md
-6. **Closes the GitHub issue** — with a summary comment
+6. **Closes the tracking issue** — with a summary comment (Codeberg/GitHub/GitLab depending on the per-repo platform)
 7. **Moves to the next task** — or stops if all done
 
 **Why this works:**
 
 - Minimal context per iteration (just the task + its spec section)
 - No "amnesia" — plan.json tracks state across sessions
-- Visual progress — GitHub issues close as work completes
+- Visual progress — tracking issues close as work completes
 - Resumable — if interrupted, picks up where it left off
 - Tests catch regressions immediately — before moving to the next task
 
@@ -194,7 +196,7 @@ This command:
    - **WARNING** — Should fix (partial compliance)
    - **SUGGESTION** — Nice to have
 5. Generates `review.md` in the change directory
-6. Creates a GitHub issue if CRITICAL/WARNING findings exist
+6. Creates a tracking issue (on the per-repo platform — Codeberg primary, GitHub fallback) if CRITICAL/WARNING findings exist
 
 ### Phase 5: Archive
 
@@ -261,7 +263,7 @@ See [writing-specs.md](writing-specs.md) for the complete guide — RFC 2119 key
 | `/opsx-new <name>`     | Spec      | Start a new change                  |
 | `/opsx-ff`             | Spec      | Fast-forward all artifacts          |
 | `/opsx-continue`       | Spec      | Create next artifact                |
-| `/opsx-plan-to-issues` | Plan      | Tasks → JSON + tracking issues (Codeberg / GitHub) |
+| `/opsx-plan-to-issues` | Plan      | Tasks → JSON + tracking issues (per-repo platform — Codeberg primary, GitHub fallback) |
 | `/opsx-apply`          | Implement | Implement tasks from plan.json      |
 | `/opsx-verify`         | Review    | Verify implementation against specs |
 | `/opsx-archive`        | Archive   | Complete and preserve change        |
@@ -298,4 +300,4 @@ Specialist agents representing different roles on the development team. Useful f
 - **Keep tasks small**: Each task should be completable in one focused iteration (15-30 min of work)
 - **Use shared specs**: Reference cross-project specs in your delta specs to avoid reinventing patterns
 - **Trust the JSON**: The plan.json is your source of truth during implementation — it survives context window resets
-- **GitHub is your dashboard**: Use GitHub Projects to visualize progress across multiple changes and projects
+- **The tracking issue is your dashboard**: Use the per-repo project board (Codeberg primary, GitHub Projects on legacy repos) to visualize progress across multiple changes and projects. Codeberg has no cross-repo board yet — per-repo only.
