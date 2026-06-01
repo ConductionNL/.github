@@ -340,43 +340,7 @@ Rule of thumb:
 
 Either way, memory entries should link back to this canonical doc so the troubleshooting table stays the single source of truth.
 
-### Example `~/.claude/CLAUDE.md` snippet
-
-The Codeberg-auth section of a `~/.claude/CLAUDE.md` should contain — short, with commands as standalone fenced blocks so Claude can pick the right one without ambiguity:
-
-````markdown
-## Codeberg authentication
-
-Canonical doc: `~/.github/docs/claude/codeberg-auth-setup.md` (also at
-<https://codeberg.org/Conduction/.github/src/branch/main/docs/claude/codeberg-auth-setup.md>).
-Read it before guessing — do not investigate auth state from scratch.
-
-- **SSH key:** `~/.ssh/id_ed25519_codeberg` (ED25519, passphrase-protected). Not `id_rsa` / `id_ed25519`.
-- **`tea` CLI** login name: `codeberg`. Token in `~/.config/tea/config.yml`.
-
-Unlock the key for the WSL session (run in a fresh terminal):
-
-```bash
-keychain ~/.ssh/id_ed25519_codeberg
-```
-
-In-session recovery when Claude's `SSH_AUTH_SOCK` points at a dead agent
-(see Edge case 1 in the canonical doc). Source the keychain env into each
-Bash call instead of restarting Claude:
-
-```bash
-. ~/.keychain/$(hostname)-sh && git <command>
-```
-
-Verify:
-
-```bash
-ssh-add -l                  # expect: 256 SHA256:... <your-email> (ED25519)
-ssh -T git@codeberg.org     # expect: "Hi there, <YourCodebergUsername>!"
-```
-````
-
-Add this once per machine and every future Claude Code session — in any repo — reaches the right fix in one step instead of re-diagnosing from scratch.
+A ready-to-copy template for the Codeberg-auth section of `~/.claude/CLAUDE.md` lives in [example-claude-md-codeberg.md](./example-claude-md-codeberg.md). Copy that block once per machine and every future Claude Code session — in any repo — reaches the right fix in one step instead of re-diagnosing from scratch.
 
 ## Troubleshooting
 
@@ -402,6 +366,7 @@ The migration to Codeberg may reverse — Conduction's tooling is being kept **b
 
 ## See also
 
+- [Example `~/.claude/CLAUDE.md` snippet](./example-claude-md-codeberg.md) — ready-to-copy Codeberg-auth section for your global Claude memory
 - [Workstation Setup](./workstation-setup.md) — the broader new-machine guide; this doc plugs into the GitHub CLI / Codeberg CLI section
 - [Global Claude settings](./global-claude-settings.md) — read-only Bash policy + write-approval hooks (the source of the `push my changes` phrase)
 - [Codeberg user settings — Keys](https://codeberg.org/user/settings/keys)
