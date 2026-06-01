@@ -208,7 +208,7 @@ See `manifests/argocd-app.yaml`. The Application syncs `manifests/` from the `ma
 # Key fields
 spec:
   source:
-    repoURL: https://github.com/ConductionNL/hydra
+    repoURL: https://codeberg.org/Conduction/hydra
     targetRevision: main
     path: manifests
   destination:

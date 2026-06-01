@@ -10,7 +10,7 @@ description: How to contribute to Conduction's open-source projects — code, do
 
 Thank you for your interest in contributing! Conduction builds open-source components for digital government infrastructure. Every contribution — code, documentation, translation, issue report, or idea — helps us move toward our goal: ensuring every resident of the Netherlands automatically receives the government services they are entitled to.
 
-This document applies to all repositories under the [ConductionNL](https://github.com/ConductionNL) organization.
+This document applies to all repositories under the [Conduction](https://codeberg.org/Conduction) organization.
 
 ## Code of Conduct
 
@@ -20,19 +20,19 @@ This project is governed by our [Code of Conduct(ion)](code-of-conduct.md). By p
 
 You don't need to write code to contribute:
 
-| Contribution type       | Where                                  |
-| ----------------------- | -------------------------------------- |
-| Report a bug            | GitHub Issues                          |
-| Suggest a feature       | GitHub Issues                          |
-| Improve documentation   | PR to the relevant repo                |
-| Translate content       | PR to `.github` (docs site)            |
-| Review a pull request   | GitHub PR review                       |
-| Answer questions        | GitHub Discussions / Issues            |
-| Report a security issue | See [Security Policy](../ISO/security) |
+| Contribution type       | Where                                                      |
+| ----------------------- | ---------------------------------------------------------- |
+| Report a bug            | Codeberg Issues (or GitHub Issues on legacy repos)         |
+| Suggest a feature       | Codeberg Issues (or GitHub Issues on legacy repos)         |
+| Improve documentation   | PR to the relevant repo                                    |
+| Translate content       | PR to `.github` (docs site)                                |
+| Review a pull request   | Codeberg PR review (or GitHub PR review on legacy repos)   |
+| Answer questions        | Codeberg / GitHub Discussions / Issues                     |
+| Report a security issue | See [Security Policy](../ISO/security)                     |
 
 ## First-Time Contributors
 
-New to open source or to Conduction? Look for issues labeled [`good first issue`](https://github.com/search?q=org%3AConductionNL+label%3A%22good+first+issue%22&type=issues) — these are scoped to be approachable without deep context.
+New to open source or to Conduction? Look for issues labeled `good first issue` on [Codeberg](https://codeberg.org/Conduction) (primary) or via the legacy [GitHub search](https://github.com/search?q=org%3AConductionNL+label%3A%22good+first+issue%22&type=issues) — these are scoped to be approachable without deep context.
 
 If you're unsure where to start, open a discussion or leave a comment on an issue you're interested in. We'll help you get oriented.
 
@@ -50,7 +50,7 @@ Before filing a bug report, check existing issues — it may already be reported
 
 ## Suggesting Enhancements
 
-Enhancement suggestions are tracked as GitHub Issues. Include:
+Enhancement suggestions are tracked as issues on the repo's host — Codeberg (primary) or GitHub (legacy). Include:
 
 - A clear, descriptive title
 - The problem you are trying to solve (not just the solution)

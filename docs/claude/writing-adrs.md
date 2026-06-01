@@ -170,10 +170,10 @@ Every Conduction app repo follows a clean split:
 
 | Location                                                                                                | Scope                                                                                                     | Who writes                                             |
 | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| [`hydra/openspec/architecture/`](https://github.com/ConductionNL/hydra/tree/main/openspec/architecture) | **Org-wide ADRs** — apply to every Conduction app                                                         | Humans (architecture-level decisions)                  |
+| [`hydra/openspec/architecture/`](https://codeberg.org/Conduction/hydra/tree/main/openspec/architecture) | **Org-wide ADRs** — apply to every Conduction app                                                         | Humans (architecture-level decisions)                  |
 | `<app>/openspec/architecture/`                                                                          | **Repo-specific ADRs** — apply only to that app (data model choices, domain standards, storage decisions) | Authored by Specter during research; evolved by humans |
 
-The authoritative org-wide list is the directory itself — [`hydra/openspec/architecture/`](https://github.com/ConductionNL/hydra/tree/main/openspec/architecture) on `main`. GitHub renders it as a browsable index, so we don't mirror it here (the mirror would drift the moment a new ADR lands).
+The authoritative org-wide list is the directory itself — [`hydra/openspec/architecture/`](https://codeberg.org/Conduction/hydra/tree/main/openspec/architecture) on `main`. GitHub renders it as a browsable index, so we don't mirror it here (the mirror would drift the moment a new ADR lands).
 
 App repos do **NOT** carry copies of the org-wide ADRs. Earlier they had stale duplicates that drifted (e.g. a copy saying `fetch()` while hydra's master said `axios`) — those copies were removed across every app repo that had them.
 

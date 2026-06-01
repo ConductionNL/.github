@@ -69,7 +69,7 @@ The following controls are in effect (ISO 27001:2022 Annex A):
 
 ## Communication to Employees
 
-This policy is communicated to all employees via this documentation site and during onboarding. Employees are required to acknowledge this policy. Questions or concerns can be directed to the Quality & Safety Lead or raised via a [GitHub Issue](https://github.com/ConductionNL/.github/issues).
+This policy is communicated to all employees via this documentation site and during onboarding. Employees are required to acknowledge this policy. Questions or concerns can be directed to the Quality & Safety Lead or raised via [an issue on Codeberg](https://codeberg.org/Conduction/.github/issues).
 
 _ISO 27001:2022 reference: §5.2 — Information Security Policy; Annex A.5.1_
 _Last review: April 2026_

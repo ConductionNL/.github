@@ -135,4 +135,4 @@ Context analyses (SWOT, stakeholder analysis, competitive analysis) are maintain
 
 ## Questions?
 
-Any employee can raise concerns or suggest improvements via a [GitHub Issue](https://github.com/ConductionNL/.github/issues) or directly with the Quality Manager.
+Any employee can raise concerns or suggest improvements via [an issue on Codeberg](https://codeberg.org/Conduction/.github/issues) or directly with the Quality Manager.

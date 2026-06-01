@@ -25,7 +25,7 @@ For the complete reference, see [commands-openspec.md](commands-openspec.md).
 | `/opsx-pipeline`     | Full Lifecycle | Parallel multi-change lifecycle (up to 5 agents)               |
 | `/opsx-onboard`      | Setup          | Overview of current OpenSpec setup                             |
 
-**Retrofit commands** (bringing legacy apps under [ADR-003 §Spec traceability](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-003-backend.md)): `/opsx-coverage-scan`, `/opsx-annotate`, `/opsx-reverse-spec` — see [retrofit.md](retrofit.md) for the full playbook.
+**Retrofit commands** (bringing legacy apps under [ADR-003 §Spec traceability](https://codeberg.org/Conduction/hydra/blob/main/openspec/architecture/adr-003-backend.md)): `/opsx-coverage-scan`, `/opsx-annotate`, `/opsx-reverse-spec` — see [retrofit.md](retrofit.md) for the full playbook.
 
 **OpenSpec CLI** (terminal commands, not slash commands): `openspec init`, `openspec list`, `openspec validate`, etc. — see [commands-openspec.md](commands-openspec.md#openspec-cli-commands).
 

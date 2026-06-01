@@ -21,7 +21,7 @@ Before creating bug reports, please check the issue list as you might find out t
 
 ### Suggesting Enhancements
 
-Enhancement suggestions are tracked as GitHub issues. When creating an enhancement suggestion, please include:
+Enhancement suggestions are tracked as issues on the repo's host — Codeberg (`codeberg.org/Conduction`, primary) or GitHub (`github.com/ConductionNL`, legacy/archived). When creating an enhancement suggestion, please include:
 
 - Use a clear and descriptive title
 - Provide a step-by-step description of the suggested enhancement
@@ -47,7 +47,7 @@ Prefer **one PR per logically-coherent finding or feature**. Each PR's commit me
 
 ## Branch Protection & Git Flow
 
-We use a structured branching model to ensure stability across environments. All branches are protected via **organization-wide rulesets** on the ConductionNL GitHub organization — direct pushes are not allowed. Every change flows through a pull request with peer review and CI checks.
+We use a structured branching model to ensure stability across environments. All branches are protected via **organization-wide rulesets** on the `Conduction` Codeberg organization (primary) and the legacy `ConductionNL` GitHub organization — direct pushes are not allowed. Every change flows through a pull request with peer review and CI checks.
 
 ```mermaid
 graph LR
@@ -66,7 +66,7 @@ graph LR
 
 ### Branch Rules
 
-These rules are enforced organization-wide across all ConductionNL repositories. They cannot be overridden at the repository level.
+These rules are enforced organization-wide across all `Conduction` (Codeberg) and `ConductionNL` (GitHub, legacy) repositories. They cannot be overridden at the repository level.
 
 | Target        | Allowed Sources                              | Reviews             | Required CI Checks                                  |
 | ------------- | -------------------------------------------- | ------------------- | --------------------------------------------------- |

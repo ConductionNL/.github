@@ -64,7 +64,7 @@ apps-extra/                         # Workspace root
 
 ## The Full Flow
 
-> **Legacy app?** This flow assumes the app is spec-first — methods carry `@spec` tags that `/opsx-verify` walks at review time. Apps that predate the convention ([ADR-003](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-003-backend.md)) need a one-time retrofit pass before normal feature work. See the [Retrofit Playbook](retrofit.md).
+> **Legacy app?** This flow assumes the app is spec-first — methods carry `@spec` tags that `/opsx-verify` walks at review time. Apps that predate the convention ([ADR-003](https://codeberg.org/Conduction/hydra/blob/main/openspec/architecture/adr-003-backend.md)) need a one-time retrofit pass before normal feature work. See the [Retrofit Playbook](retrofit.md).
 
 ### Phase 1: Spec Building
 
@@ -219,7 +219,7 @@ This:
 {
   "change": "add-woo-search",
   "project": "opencatalogi",
-  "repo": "ConductionNL/opencatalogi",
+  "repo": "Conduction/opencatalogi",
   "created": "2026-02-14T12:00:00Z",
   "tracking_issue": 42,
   "tasks": [

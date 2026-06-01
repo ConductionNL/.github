@@ -17,7 +17,7 @@ keywords:
 
 # Release Process
 
-This document describes how we version, build, and release our Nextcloud apps. All release workflows are centralized in the [ConductionNL/.github](https://github.com/ConductionNL/.github) repository and shared across all app repositories.
+This document describes how we version, build, and release our Nextcloud apps. All release workflows are centralized in the [Conduction/.github](https://codeberg.org/Conduction/.github) repository and shared across all app repositories.
 
 ## Branch Model
 
@@ -123,7 +123,7 @@ on:
 
 jobs:
   release:
-    uses: ConductionNL/.github/.github/workflows/release-stable.yml@main
+    uses: Conduction/.github/.github/workflows/release-stable.yml@main
     with:
       app-name: your-app-name
     secrets: inherit
@@ -140,7 +140,7 @@ on:
 
 jobs:
   release:
-    uses: ConductionNL/.github/.github/workflows/release-beta.yml@main
+    uses: Conduction/.github/.github/workflows/release-beta.yml@main
     with:
       app-name: your-app-name
     secrets: inherit
@@ -157,7 +157,7 @@ on:
 
 jobs:
   check:
-    uses: ConductionNL/.github/.github/workflows/branch-protection.yml@main
+    uses: Conduction/.github/.github/workflows/branch-protection.yml@main
 ```
 
 ### Sync Development to Beta (`sync-to-beta.yml`)
@@ -171,7 +171,7 @@ on:
 
 jobs:
   sync:
-    uses: ConductionNL/.github/.github/workflows/sync-to-beta.yml@main
+    uses: Conduction/.github/.github/workflows/sync-to-beta.yml@main
 ```
 
 ### Apps With Special Vendor Dependencies
@@ -181,7 +181,7 @@ If your app has critical vendor dependencies that must be verified (like OpenReg
 ```yaml
 jobs:
   release:
-    uses: ConductionNL/.github/.github/workflows/release-stable.yml@main
+    uses: Conduction/.github/.github/workflows/release-stable.yml@main
     with:
       app-name: openregister
       verify-vendor-deps: true
@@ -234,7 +234,7 @@ A: This is still managed in your repo's `appinfo/info.xml`. Only the `<version>`
 
 ## Further Reading
 
-- **Centralized workflows**: [github.com/ConductionNL/.github](https://github.com/ConductionNL/.github/tree/main/.github/workflows) — all shared workflow definitions
-- **Branch protection**: [`.github/workflows/branch-protection.yml`](https://github.com/ConductionNL/.github/blob/main/.github/workflows/branch-protection.yml)
-- **Release workflows**: [`release.yml`](https://github.com/ConductionNL/.github/blob/main/.github/workflows/release.yml), [`release-beta.yml`](https://github.com/ConductionNL/.github/blob/main/.github/workflows/release-beta.yml), [`release-stable.yml`](https://github.com/ConductionNL/.github/blob/main/.github/workflows/release-stable.yml)
+- **Centralized workflows**: [codeberg.org/Conduction/.github](https://codeberg.org/Conduction/.github/tree/main/.github/workflows) — all shared workflow definitions
+- **Branch protection**: [`.github/workflows/branch-protection.yml`](https://codeberg.org/Conduction/.github/blob/main/.github/workflows/branch-protection.yml)
+- **Release workflows**: [`release.yml`](https://codeberg.org/Conduction/.github/blob/main/.github/workflows/release.yml), [`release-beta.yml`](https://codeberg.org/Conduction/.github/blob/main/.github/workflows/release-beta.yml), [`release-stable.yml`](https://codeberg.org/Conduction/.github/blob/main/.github/workflows/release-stable.yml)
 - **Semantic Versioning**: [semver.org](https://semver.org)

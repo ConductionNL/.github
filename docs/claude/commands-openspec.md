@@ -339,7 +339,7 @@ Get an overview of the current project's OpenSpec setup and active changes.
 
 ## Retrofit Commands
 
-Used to bring legacy apps under the `@spec` annotation convention defined in [ADR-003 §Spec traceability](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-003-backend.md). Apps built spec-first via `/opsx-apply` already carry the tags — retrofit is the one-time pass for apps that predate the convention. Run the three skills in order: scan → annotate → reverse-spec. See the [Retrofit Playbook](retrofit.md) for prerequisites, bucket definitions, and roll-out order.
+Used to bring legacy apps under the `@spec` annotation convention defined in [ADR-003 §Spec traceability](https://codeberg.org/Conduction/hydra/blob/main/openspec/architecture/adr-003-backend.md). Apps built spec-first via `/opsx-apply` already carry the tags — retrofit is the one-time pass for apps that predate the convention. Run the three skills in order: scan → annotate → reverse-spec. See the [Retrofit Playbook](retrofit.md) for prerequisites, bucket definitions, and roll-out order.
 
 ---
 
