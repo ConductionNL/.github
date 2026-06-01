@@ -260,10 +260,72 @@ For the missing pieces, Claude Code + `tea` + the REST API fills the gap from in
 Claude Code's Bash tool inherits your shell environment, including `SSH_AUTH_SOCK` from keychain and the `~/.config/tea/config.yml` token. That means:
 
 - `git clone`, `fetch`, `push`, `pull` against Codeberg — **just works** as long as you've entered the keychain passphrase since the last WSL boot.
-- `tea pulls create`, `tea pulls list`, `tea labels create`, etc. — **just works** because the token is already on disk.
-- REST calls via `curl https://codeberg.org/api/v1/...` with `-H "Authorization: token $(tea login default-token)"` — **just works**.
+- `tea` commands that don't prompt (e.g. `tea pulls list`, simple reads) — **just work** because the token is already on disk.
+- REST calls via `curl https://codeberg.org/api/v1/...` with `-H "Authorization: token <TOKEN>"` — **just work** once Claude can read the token (see the Bash permission rule below).
 
-The only edge case: if you launch Claude Code from a shell that **predates** the `keychain` line in `~/.bashrc` (or you've never entered the passphrase in this WSL boot yet), the agent has no key loaded and git operations will appear to hang on a silent passphrase prompt. Fix: in any shell, run `keychain ~/.ssh/id_ed25519_codeberg` once. New Claude Code sessions inherit it automatically.
+### Edge case 1: stale `SSH_AUTH_SOCK` from an old Claude Code launch
+
+Claude Code's *non-login non-interactive* Bash shells don't source `~/.bashrc` or `~/.profile`, so the `SSH_AUTH_SOCK` Claude inherits is whatever your shell environment had at Claude-launch time. If keychain's agent has since died (reboot) or the agent was replaced (running `eval $(ssh-agent)` manually in a sibling terminal), Claude's `git push` to Codeberg fails with `ssh_askpass: ... No such file` followed by `Permission denied (publickey)` — and there's no way to type the passphrase from Claude's TTY-less shell.
+
+**Two recoveries**:
+
+- **Sustainable**: close Claude Code, open a fresh terminal where `~/.bashrc` has run (you'll see "* ssh-agent / ssh-add ..." from keychain), then relaunch Claude Code. The new Claude inherits keychain's live `SSH_AUTH_SOCK`.
+- **In-session, if relaunching is inconvenient**: source the keychain env file at the start of any single Bash command that needs SSH:
+
+  ```bash
+  . ~/.keychain/$(hostname)-sh && git push codeberg <branch>
+  ```
+
+  Keychain writes a stable `$HOME/.keychain/<HOSTNAME>-sh` file with the current `SSH_AUTH_SOCK` / `SSH_AGENT_PID` `export` lines. Sourcing it gives the current Bash command access to the live agent without restarting Claude.
+
+### Edge case 2: `tea pulls create` cannot run from Claude Code
+
+`tea` v0.11.0 uses [`huh`](https://github.com/charmbracelet/huh) for its final confirmation prompt. `huh` opens `/dev/tty` directly — it does **not** read stdin — so piped input (`yes | tea ...`), `setsid -w bash -c 'tea ... < /dev/zero'`, `--login codeberg` + all fields specified, and any other way of avoiding a real interactive operator all fail with:
+
+```
+huh: could not open a new TTY: open /dev/tty: no such device or address
+```
+
+`script -q -c 'tea ...' /tmp/log` *does* create a PTY, but tea then hangs because there's still no operator typing y/n at the prompt. There is no `--non-interactive`, `--yes`, or env-var override in tea v0.11.0. Until upstream adds one, you cannot run `tea pulls create` (or any other tea command that confirms) from Claude Code.
+
+**Workaround — direct Codeberg REST API call**:
+
+The Codeberg REST API has no such prompt. Claude can create PRs, post comments, edit labels, etc. directly via `curl` using the same token tea has on disk. One-time setup:
+
+1. Add a Bash permission rule to your **global** `~/.claude/settings.json` so Claude can read the token. The auto-mode classifier blocks credential-file reads even when `Bash(cat:*)` is in the allow list — you need an explicit path rule:
+
+   ```json
+   {
+     "permissions": {
+       "allow": [
+         "Bash(cat:*)",
+         "Bash(cat:~/.config/tea/config.yml*)"
+       ]
+     }
+   }
+   ```
+
+   The settings file is often `chattr +i`'d for safety; remove with `sudo chattr -i ~/.claude/settings.json`, edit, optionally re-apply with `sudo chattr +i ...` after.
+
+2. Claude (and any team member's Claude) can now create PRs like this:
+
+   ```bash
+   TOKEN=$(grep -E "^\s*token:" ~/.config/tea/config.yml | head -1 | awk '{print $2}')
+   curl -sL -X POST \
+     -H "Content-Type: application/json" \
+     -H "Authorization: token ${TOKEN}" \
+     -d "$(jq -Rn '{
+       head: "<branch>",
+       base: "main",
+       title: "<title>",
+       body: "<markdown body>"
+     }')" \
+     "https://codeberg.org/api/v1/repos/Conduction/<repo>/pulls"
+   ```
+
+   HTTP `201` = created; the response JSON has `.html_url` pointing at the new PR. Sanitize any log echo with `sed 's/[a-f0-9]\{40\}/<TOKEN-REDACTED>/g'` to avoid leaking the token (or any 40-char hex like commit SHAs) in conversation history.
+
+### Edge case 3: the explicit push-authorization phrase
 
 Claude Code's safety hook may also block `git push` until you say one of the explicit phrases (`push my changes`, `push for me`, `commit and push`, `please git push`) in your message to it. That's a separate guardrail layered on top of authentication — auth determines *can*, the phrase determines *should*. Both must pass.
 
@@ -275,7 +337,8 @@ Claude Code's safety hook may also block `git push` until you say one of the exp
 | SSH config block is being interpreted as shell commands (`Host: command not found`) | Pasted block into the shell instead of into `~/.ssh/config` | Use the `cat >> ~/.ssh/config <<'EOF'` heredoc from Step 3. |
 | Every `git push` asks for the passphrase | `keychain` not installed or not added to `~/.bashrc` | Step 5. After editing `~/.bashrc`, **open a new terminal** — keychain only runs on shell start. |
 | Claude Code's Bash hangs on `git push` and never returns | Claude Code's shell doesn't have `SSH_AUTH_SOCK` — the WSL session it launched from had no agent | Run `keychain ~/.ssh/id_ed25519_codeberg` in any shell on the same WSL instance. New Claude Code Bash calls pick up the agent automatically. |
-| `tea pulls list` errors with `could not open a new TTY` | `tea` is asking for an interactive login selection because no default was set | Run `tea login default codeberg`. Or pass `--login codeberg` to every command. |
+| `tea pulls list` errors with `could not open a new TTY` and no default-login is set | `tea` is asking for an interactive login selection | Run `tea login default codeberg`, or pass `--login codeberg` to every command. |
+| `tea pulls create` errors with `could not open a new TTY` even with `--login codeberg` + all fields specified | tea's final confirmation prompt uses `huh`, which opens `/dev/tty` directly — there is no `--yes` / `--non-interactive` flag in v0.11.0 | Use the direct REST API workaround in [Edge case 2 above](#edge-case-2-tea-pulls-create-cannot-run-from-claude-code) — `curl` to `POST /api/v1/repos/<owner>/<repo>/pulls` with the tea-stored token. Requires the `Bash(cat:~/.config/tea/config.yml*)` permission rule. |
 | `tea login add` succeeds but `tea pulls create` says "401 Unauthorized" | Token lacks `write:repository` or `write:issue` | Regenerate the token with the scopes from Step 7. `tea login delete codeberg && tea login add ...`. |
 | Pushed a branch but no PR appears in the Codeberg UI | Branches and PRs are separate — pushing a branch never creates a PR by itself | Run `tea pulls create --base development --head <branch> --title "..." --description "..."` or open it via the web UI. |
 | Claude Code refuses to `git push` even though SSH works | The safety hook requires an explicit authorisation phrase | Reply to Claude with "push my changes", "push for me", "commit and push", or "please git push". |
