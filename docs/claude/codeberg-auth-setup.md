@@ -329,6 +329,55 @@ The Codeberg REST API has no such prompt. Claude can create PRs, post comments, 
 
 Claude Code's safety hook may also block `git push` until you say one of the explicit phrases (`push my changes`, `push for me`, `commit and push`, `please git push`) in your message to it. That's a separate guardrail layered on top of authentication — auth determines *can*, the phrase determines *should*. Both must pass.
 
+## Save your Codeberg setup facts to Claude memory
+
+Once this guide is working on your machine, save the host-specific facts (key path, `~/.keychain/$(hostname)-sh` env-file location, `~/.ssh/config` host alias) to **global** user memory at `~/.claude/CLAUDE.md`, **not** to a per-project auto-memory directory under `~/.claude/projects/<slug>/memory/`. Codeberg auth applies to every repo you touch, so a project-scoped file only fires when Claude is working in that one repo and misses every other Codeberg session.
+
+Rule of thumb:
+
+- **Global (`~/.claude/CLAUDE.md`)** — per-user, cross-project facts: SSH key path, keychain env-file location, copy-paste preferences, the `tea` login name. Loaded on every session.
+- **Project auto-memory (`~/.claude/projects/<slug>/memory/`)** — project-scoped facts: a repo's conventions, ongoing initiatives, recurring review nits in that codebase. Loaded only when Claude opens that repo.
+
+Either way, memory entries should link back to this canonical doc so the troubleshooting table stays the single source of truth.
+
+### Example `~/.claude/CLAUDE.md` snippet
+
+The Codeberg-auth section of a `~/.claude/CLAUDE.md` should contain — short, with commands as standalone fenced blocks so Claude can pick the right one without ambiguity:
+
+````markdown
+## Codeberg authentication
+
+Canonical doc: `~/.github/docs/claude/codeberg-auth-setup.md` (also at
+<https://codeberg.org/Conduction/.github/src/branch/main/docs/claude/codeberg-auth-setup.md>).
+Read it before guessing — do not investigate auth state from scratch.
+
+- **SSH key:** `~/.ssh/id_ed25519_codeberg` (ED25519, passphrase-protected). Not `id_rsa` / `id_ed25519`.
+- **`tea` CLI** login name: `codeberg`. Token in `~/.config/tea/config.yml`.
+
+Unlock the key for the WSL session (run in a fresh terminal):
+
+```bash
+keychain ~/.ssh/id_ed25519_codeberg
+```
+
+In-session recovery when Claude's `SSH_AUTH_SOCK` points at a dead agent
+(see Edge case 1 in the canonical doc). Source the keychain env into each
+Bash call instead of restarting Claude:
+
+```bash
+. ~/.keychain/$(hostname)-sh && git <command>
+```
+
+Verify:
+
+```bash
+ssh-add -l                  # expect: 256 SHA256:... <your-email> (ED25519)
+ssh -T git@codeberg.org     # expect: "Hi there, <YourCodebergUsername>!"
+```
+````
+
+Add this once per machine and every future Claude Code session — in any repo — reaches the right fix in one step instead of re-diagnosing from scratch.
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
