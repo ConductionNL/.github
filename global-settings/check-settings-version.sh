@@ -6,12 +6,13 @@
 #
 # Required setup in ~/.claude/:
 #   settings-version      — installed semver (e.g. "1.0.0")
-#   settings-repo-url     — (optional) GitHub repo slug for online version check
-#                           (e.g. "ConductionNL/.github")
-#                           If present, checks VERSION via GitHub API first.
-#   settings-repo-ref     — (optional) Git ref (branch/tag/sha) to track.
-#                           Defaults to "main" when absent. Applies to both
-#                           GitHub API and git-fetch lookup paths.
+#   settings-repo-url     — (optional) Codeberg repo slug for online version check
+#                           (e.g. "Conduction/.github")
+#                           If present, checks VERSION via Codeberg raw URL first.
+#   settings-repo-ref     — (optional) Git ref to track. Defaults to "main"
+#                           when absent. The Codeberg raw URL path uses the
+#                           literal branch name; for tag/SHA tracking, configure
+#                           settings-repo-path and rely on the git-fetch fallback.
 #   settings-repo-path    — absolute path to the root of the canonical repo
 #                           (e.g. ~/path/to/.github)
 #                           Used as fallback when settings-repo-url is absent or fails.
@@ -138,7 +139,7 @@ if [ -n "$REPO_DIR" ]; then
     fi
 fi
 
-# ── Online version (GitHub API — primary method) ─────────────────────────────
+# ── Online version (Codeberg raw URL — primary method) ──────────────────────
 online_version="(unknown)"
 online_fetch_ok=false
 online_source=""
@@ -156,18 +157,18 @@ if [ -f "$REPO_URL_FILE" ]; then
 fi
 
 if [ -n "$online_repo_slug" ]; then
-    if command -v gh >/dev/null 2>&1; then
-        _api_path="repos/${online_repo_slug}/contents/global-settings/VERSION?ref=${tracking_ref}"
-        _gh_result=$(run_with_timeout 5 gh api "$_api_path" -H "Accept: application/vnd.github.raw+json" 2>/dev/null | tr -d '[:space:]')
-        if [ -n "$_gh_result" ] && echo "$_gh_result" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-            online_version="$_gh_result"
+    if command -v curl >/dev/null 2>&1; then
+        _raw_url="https://codeberg.org/${online_repo_slug}/raw/branch/${tracking_ref}/global-settings/VERSION"
+        _curl_result=$(run_with_timeout 5 curl -fsSL --max-time 5 "$_raw_url" 2>/dev/null | tr -d '[:space:]')
+        if [ -n "$_curl_result" ] && echo "$_curl_result" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            online_version="$_curl_result"
             online_fetch_ok=true
-            online_source="github-api"
+            online_source="codeberg-raw"
         else
-            config_warnings+=("GitHub API fetch failed for '${online_repo_slug}' — falling back to local repo method.")
+            config_warnings+=("Codeberg raw URL fetch failed for '${online_repo_slug}' at branch '${tracking_ref}' — falling back to local repo method.")
         fi
     else
-        config_warnings+=("settings-repo-url is configured but 'gh' CLI is not installed — falling back to local repo method.")
+        config_warnings+=("settings-repo-url is configured but 'curl' is not installed — falling back to local repo method.")
     fi
 fi
 
@@ -231,8 +232,8 @@ fi
 online_label=""
 ref_suffix=""
 [ "$tracking_ref" != "main" ] && ref_suffix=" @${tracking_ref}"
-if [ "$online_source" = "github-api" ]; then
-    online_label="  ${DIM}(via GitHub API${ref_suffix})${NC}"
+if [ "$online_source" = "codeberg-raw" ]; then
+    online_label="  ${DIM}(via Codeberg${ref_suffix})${NC}"
 elif [ "$online_source" = "git-fetch" ]; then
     online_label="  ${DIM}(via git fetch${ref_suffix})${NC}"
 fi
@@ -303,8 +304,8 @@ if $online_fetch_ok && semver_gt "$online_version" "$installed_version"; then
 
     echo ""
     echo "  CONTRACT (must be respected by every emitted command, or block-write-commands.sh will deny it):"
-    echo "    (a) Every gh-api write must use the literal prefix 'repos/ConductionNL/.github/contents/global-settings/'"
-    echo "        immediately after 'gh api' (no intermediate flags, headers, or variables). Every git-show write"
+    echo "    (a) Every curl write must use the literal prefix 'https://codeberg.org/Conduction/.github/raw/branch/'"
+    echo "        in the same command (no variable indirection for the URL). Every git-show write"
     echo "        must use the 'origin/main:' path literally in the same command — no variable indirection."
     echo "    (b) Never run 'chmod 644' or 'chattr' on ~/.claude/ files. The user manages the immutable bit"
     echo "        themselves via sudo before/after the update. Only chmod 444 / 555 are permitted (cosmetic"
@@ -313,39 +314,40 @@ if $online_fetch_ok && semver_gt "$online_version" "$installed_version"; then
     echo "        whole update and leave ~/.claude/ in a half-installed state."
     echo "    (d) The git-fetch fallback always pulls from 'origin/main:' regardless of the tracked ref"
     echo "        (the hook only allows that literal). If you are tracking a non-main branch, the update"
-    echo "        you get via git-fetch reflects main — merge your branch to main first, or use the gh-api"
-    echo "        path (which honors ?ref=<branch>) by ensuring ~/.claude/settings-repo-url is set."
+    echo "        you get via git-fetch reflects main — merge your branch to main first, or use the"
+    echo "        Codeberg raw path (which uses the branch ref directly) by ensuring"
+    echo "        ~/.claude/settings-repo-url is set."
     echo ""
-    if [ "$online_source" = "github-api" ]; then
-        echo "  When they do, run each block below (one per file) to pull files directly from GitHub"
-        echo "  (${online_repo_slug}, ref: ${tracking_ref}). URLs are inlined so the hook can verify the canonical source:"
+    if [ "$online_source" = "codeberg-raw" ]; then
+        echo "  When they do, run each block below (one per file) to pull files directly from Codeberg"
+        echo "  (${online_repo_slug}, branch: ${tracking_ref}). URLs are inlined so the hook can verify the canonical source:"
         echo ""
         echo "    # settings.json"
-        echo "    content=\$(gh api 'repos/${online_repo_slug}/contents/global-settings/settings.json?ref=${tracking_ref}' -H 'Accept: application/vnd.github.raw+json')"
+        echo "    content=\$(curl -fsSL --max-time 10 'https://codeberg.org/${online_repo_slug}/raw/branch/${tracking_ref}/global-settings/settings.json')"
         printf '%s\n' "    printf '%s\\n' \"\$content\" > \"\$HOME/.claude/settings.json\""
         echo ""
         echo "    # block-write-commands.sh"
         echo "    mkdir -p ~/.claude/hooks"
-        echo "    content=\$(gh api 'repos/${online_repo_slug}/contents/global-settings/block-write-commands.sh?ref=${tracking_ref}' -H 'Accept: application/vnd.github.raw+json')"
+        echo "    content=\$(curl -fsSL --max-time 10 'https://codeberg.org/${online_repo_slug}/raw/branch/${tracking_ref}/global-settings/block-write-commands.sh')"
         printf '%s\n' "    printf '%s\\n' \"\$content\" > \"\$HOME/.claude/hooks/block-write-commands.sh\""
         echo "    chmod 555 \"\$HOME/.claude/hooks/block-write-commands.sh\""
         echo ""
         echo "    # check-settings-version.sh"
-        echo "    content=\$(gh api 'repos/${online_repo_slug}/contents/global-settings/check-settings-version.sh?ref=${tracking_ref}' -H 'Accept: application/vnd.github.raw+json')"
+        echo "    content=\$(curl -fsSL --max-time 10 'https://codeberg.org/${online_repo_slug}/raw/branch/${tracking_ref}/global-settings/check-settings-version.sh')"
         printf '%s\n' "    printf '%s\\n' \"\$content\" > \"\$HOME/.claude/hooks/check-settings-version.sh\""
         echo "    chmod 555 \"\$HOME/.claude/hooks/check-settings-version.sh\""
         echo ""
         echo "    # block-config-tool-writes.sh (added in v1.7.0)"
-        echo "    content=\$(gh api 'repos/${online_repo_slug}/contents/global-settings/block-config-tool-writes.sh?ref=${tracking_ref}' -H 'Accept: application/vnd.github.raw+json')"
+        echo "    content=\$(curl -fsSL --max-time 10 'https://codeberg.org/${online_repo_slug}/raw/branch/${tracking_ref}/global-settings/block-config-tool-writes.sh')"
         printf '%s\n' "    printf '%s\\n' \"\$content\" > \"\$HOME/.claude/hooks/block-config-tool-writes.sh\""
         echo "    chmod 555 \"\$HOME/.claude/hooks/block-config-tool-writes.sh\""
         echo ""
         echo "    # VERSION → settings-version (write last, so the version bump only lands if all files succeeded)"
-        echo "    content=\$(gh api 'repos/${online_repo_slug}/contents/global-settings/VERSION?ref=${tracking_ref}' -H 'Accept: application/vnd.github.raw+json')"
+        echo "    content=\$(curl -fsSL --max-time 10 'https://codeberg.org/${online_repo_slug}/raw/branch/${tracking_ref}/global-settings/VERSION')"
         printf '%s\n' "    printf '%s\\n' \"\$content\" > \"\$HOME/.claude/settings-version\""
         echo "    chmod 444 \"\$HOME/.claude/settings-version\""
         echo ""
-        echo "  This pulls files directly from GitHub (ref: ${tracking_ref}) — no local repo clone needed."
+        echo "  This pulls files directly from Codeberg (branch: ${tracking_ref}) — no local repo clone needed."
     else
         echo "  When they do, run each block below (one per file) to pull files directly from origin/${tracking_ref}"
         echo "  (not the local branch). Paths are inlined so the hook can verify the canonical source:"
@@ -389,7 +391,7 @@ if $online_fetch_ok && semver_gt "$online_version" "$installed_version"; then
     echo "re-apply the kernel-level lock. Without the chattr +i relock, the immutable protection is gone"
     echo "until next session. Claude cannot run sudo chattr (the hook hard-blocks it)."
     echo "When you proceed with the update, emit each file's command block as a separate Bash call, verbatim"
-    echo "from the blocks above — do not introduce loops, variables for the repo slug, or chmod 644/chattr."
+    echo "from the blocks above — do not introduce loops, variables for the repo slug or Codeberg URL, or chmod 644/chattr."
     echo "=========================================="
     echo ""
 

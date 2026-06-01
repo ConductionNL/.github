@@ -13,8 +13,8 @@ Current version: see [`VERSION`](VERSION)
 | `block-config-tool-writes.sh` | `~/.claude/hooks/block-config-tool-writes.sh` | Guards Write/Edit/MultiEdit calls — denies tools that write to `~/.claude/` or produce scripts that would (added in v1.7.0) |
 | `check-settings-version.sh`   | `~/.claude/hooks/check-settings-version.sh`   | Warns at session start if settings are outdated                                                                             |
 | `VERSION`                     | `~/.claude/settings-version`                  | Installed version tracker (semver)                                                                                          |
-| `settings-repo-url.example`   | `~/.claude/settings-repo-url`                 | GitHub repo slug for online version checking                                                                                |
-| `settings-repo-ref.example`   | `~/.claude/settings-repo-ref`                 | Branch/tag/SHA to track (defaults to `main` when absent)                                                                    |
+| `settings-repo-url.example`   | `~/.claude/settings-repo-url`                 | Codeberg repo slug for online version checking                                                                              |
+| `settings-repo-ref.example`   | `~/.claude/settings-repo-ref`                 | Branch to track (defaults to `main` when absent; the Codeberg raw URL uses `/raw/branch/<ref>/`)                            |
 
 ## Install
 
@@ -34,7 +34,7 @@ chmod +x ~/.claude/hooks/*.sh
 cp "$REPO_ROOT/global-settings/VERSION" ~/.claude/settings-version
 echo "$REPO_ROOT" > ~/.claude/settings-repo-path
 
-# Online version checking via GitHub API (recommended — no local repo required):
+# Online version checking via Codeberg (recommended — no local repo required):
 cp "$REPO_ROOT/global-settings/settings-repo-url.example" ~/.claude/settings-repo-url
 
 # Optional: track a branch other than main (tag or SHA also accepted).
@@ -49,21 +49,21 @@ cp "$REPO_ROOT/global-settings/settings-repo-url.example" ~/.claude/settings-rep
 sudo chattr +i ~/.claude/settings.json ~/.claude/hooks/*.sh ~/.claude/settings-version
 ```
 
-Restart Claude Code after installing. Requires `jq`, `md5sum`, `gh` (GitHub CLI), and `chattr` on `PATH` (chattr is part of `e2fsprogs` — present on every standard Linux distro).
+Restart Claude Code after installing. Requires `jq`, `md5sum`, `curl`, and `chattr` on `PATH` (chattr is part of `e2fsprogs` — present on every standard Linux distro).
 
 ## Online version checking
 
-When `~/.claude/settings-repo-url` is configured, the version check uses the GitHub API (`gh api`) as its primary method. This means you get accurate online version checks even without a local clone of the `.github` repo.
+When `~/.claude/settings-repo-url` is configured, the version check uses Codeberg's raw URL (`https://codeberg.org/<slug>/raw/branch/<ref>/global-settings/VERSION`) as its primary method. This means you get accurate online version checks even without a local clone of the `.github` repo.
 
-If the GitHub API is unavailable or `gh` is not installed, the hook falls back to `git fetch` via `~/.claude/settings-repo-path` (if configured).
+If Codeberg is unreachable or `curl` is not installed, the hook falls back to `git fetch` via `~/.claude/settings-repo-path` (if configured).
 
 The status panel at session start shows which method was used:
 
 ```
 │     Global Claude Settings Status            │
-  Installed  : v1.4.0 ✓
+  Installed  : v2.0.0 ✓
   Local repo : (not configured)
-  Online     : v1.4.0  (via GitHub API)
+  Online     : v2.0.0  (via Codeberg)
 ```
 
 ## Updating
@@ -74,7 +74,7 @@ When you see a version warning at session start:
    ```bash
    sudo chattr -i $HOME/.claude/settings.json $HOME/.claude/hooks/*.sh $HOME/.claude/settings-version
    ```
-2. Then say: **"update my global settings to \<version\>"** — Claude will pull the latest files from GitHub.
+2. Then say: **"update my global settings to \<version\>"** — Claude will pull the latest files from Codeberg.
 3. After Claude finishes, re-apply the immutable lock:
    ```bash
    sudo chattr +i $HOME/.claude/settings.json $HOME/.claude/hooks/*.sh $HOME/.claude/settings-version
