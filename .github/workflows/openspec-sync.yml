@@ -354,8 +354,33 @@ jobs:
                 } catch { /* no tasks.md yet — nothing to size-check */ }
               }
 
+              // Org-level labels (the Hydra/governance set: `spec:too-large`,
+              // `openspec`, build:*, code-review:*, etc.) are defined ONCE on
+              // the org and inherited by every repo. Attaching them to an issue
+              // by name already resolves to the org label (proven: `openspec`
+              // is org-level and is attached fine today). So we must NOT create
+              // a per-repo duplicate of any org label — doing so spawned
+              // duplicate `spec:too-large` labels across repos (2026-06-02) and
+              // muddied the board. Fetch the org label names once and skip them
+              // in the ensure-loop; only repo-specific labels (the per-phase
+              // `openspec:<phase>` taxonomy) are created at the repo level.
+              let orgLabelNames = new Set();
+              try {
+                const orgResp = await github.request('GET /orgs/{org}/labels', {
+                  org: repoOwner,
+                  per_page: 100,
+                });
+                for (const l of orgResp.data) orgLabelNames.add(l.name);
+              } catch (e) {
+                console.log(`  (could not list org labels: ${e.message} — falling back to per-repo ensure)`);
+              }
+
               // Ensure labels exist
               for (const label of labels) {
+                // Inherited from the org — never duplicate it at the repo level.
+                if (orgLabelNames.has(label)) {
+                  continue;
+                }
                 try {
                   await github.rest.issues.getLabel({
                     owner: repoOwner,
