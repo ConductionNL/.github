@@ -337,6 +337,23 @@ jobs:
               // Labels
               const labels = ['openspec', `openspec:${phase.toLowerCase().replace(' ', '-')}`];
 
+              // ADR-032: a change with >20 unchecked tasks is too large for the
+              // Hydra builder (it bounces oversized specs to needs-input). Flag it
+              // with `spec:too-large` so the builder skips it — it is built
+              // out-of-band by an operator or re-split into a <=20-task chain.
+              // The generator (opsx-ff/Specter) SHOULD chain instead of emitting a
+              // giant; this is the defensive net at sync time.
+              if (!change.archived) {
+                try {
+                  const tasksMd = fs.readFileSync(path.join(change.path, 'tasks.md'), 'utf8');
+                  const uncheckedTasks = (tasksMd.match(/^\s*-\s*\[ \]/gm) || []).length;
+                  if (uncheckedTasks > 20) {
+                    labels.push('spec:too-large');
+                    console.log(`  ${change.name}: ${uncheckedTasks} unchecked tasks > 20 → spec:too-large`);
+                  }
+                } catch { /* no tasks.md yet — nothing to size-check */ }
+              }
+
               // Ensure labels exist
               for (const label of labels) {
                 try {
@@ -350,10 +367,14 @@ jobs:
                     owner: repoOwner,
                     repo: repoName,
                     name: label,
-                    color: label === 'openspec' ? '6f42c1' : 'c5def5',
+                    color: label === 'openspec'
+                      ? '6f42c1'
+                      : (label === 'spec:too-large' ? 'd73a4a' : 'c5def5'),
                     description: label === 'openspec'
                       ? 'Managed by OpenSpec workflow'
-                      : `OpenSpec phase: ${phase}`,
+                      : (label === 'spec:too-large'
+                        ? 'Pre-flight gate / builder bounced: spec has >20 unchecked tasks — fallback: needs-input; operator runs local-builder out-of-band or re-splits via Specter'
+                        : `OpenSpec phase: ${phase}`),
                   });
                 }
               }
