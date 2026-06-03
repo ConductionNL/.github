@@ -255,6 +255,151 @@ What it doesn't give you:
 
 For the missing pieces, Claude Code + `tea` + the REST API fills the gap from inside your terminal.
 
+## Step 11 — Optional: web-session cookies for PR thread resolution
+
+**Skip this step unless you regularly do PR re-reviews on Codeberg.** It's a workaround for one specific gap in the Codeberg API; if you only push code and create PRs, the SSH key + `tea` token from Steps 1–8 are enough.
+
+### What this is for
+
+When you finish a re-review on a Codeberg PR and submit an APPROVE verdict, the inline-comment threads from your previous review stay open in the UI as unresolved "conversations" (Dutch: *Gesprekken*). On GitHub, the `/review-pr` skill closes these via the GraphQL `resolveReviewThread` mutation — but Codeberg's v1 REST API (`/api/v1/...`) has **no equivalent setter**. The `resolver` and `resolved_at` fields are exposed on `PullReviewComment` for reading but cannot be written.
+
+The only way to programmatically click "Gesprek oplossen" / "Resolve conversation" on Codeberg is via the same web-form endpoint the browser uses (`POST /<owner>/<repo>/issues/resolve_conversation`), which requires the **browser session cookies**, not the API token. Treating those cookies like a password and storing them encrypted with your existing Codeberg SSH key lets Claude resolve threads programmatically without you re-extracting from the browser every time.
+
+This is an alternative to manually clicking "Gesprek oplossen" on each thread. Pick this if either is true:
+
+- You re-review more than two or three Codeberg PRs per week.
+- You frequently have 5+ inline comments per re-review and the manual click-fest is painful.
+
+### How it works
+
+Four browser cookies authenticate the resolve endpoint (verified against Conduction/openregister on 2026-06-02):
+
+| Cookie | Lifetime | Purpose |
+|---|---|---|
+| `cb_sessionid` | Browser session | Codeberg session ID (Codeberg-specific name — vanilla Forgejo uses `i_like_gitea`) |
+| `persistent` | Weeks / months | "Remember me" token — this is what actually authenticates the request |
+| `techaro.lol-anubis-auth` | ~7 days (see JWT `exp`) | Anubis anti-bot JWT — without it the request gets redirected to a challenge page |
+| `x-robot-challenge-2` | Session | Secondary Anubis marker (literal value `passed`) |
+
+The `/issues/resolve_conversation` route does **not** require a CSRF token despite being state-changing — cookies alone are sufficient. (Other Codeberg form endpoints do require CSRF; this one is the exception.)
+
+The practical horizon is the Anubis JWT (~7 days). After it expires, calls start failing with `HTTP 302/303 → /user/login` and you re-extract from a fresh browser tab.
+
+### Setup
+
+1. **Install `age`** (modern file encryption, single binary):
+
+   ```bash
+   sudo apt install -y age
+   ```
+
+2. **Extract the four cookies from a logged-in Codeberg browser tab.** DevTools → **Application** (Chrome) or **Storage** (Firefox) → **Cookies** → `https://codeberg.org`. Copy the **Value** of each cookie above. Join them with `; ` into a single string:
+
+   ```
+   cb_sessionid=<v>; persistent=<v>; techaro.lol-anubis-auth=<v>; x-robot-challenge-2=passed
+   ```
+
+3. **Encrypt the cookie string to disk**, using your Codeberg SSH pubkey as the recipient so the same key that already secures `git push` also secures these cookies:
+
+   ```bash
+   age -R ~/.ssh/id_ed25519_codeberg.pub -o ~/.codeberg-cookies.age
+   # paste the cookie string above, press Enter, then Ctrl-D
+   chmod 600 ~/.codeberg-cookies.age
+   ```
+
+   The encrypted blob is ~800 bytes. Anyone reading the file without your SSH private key cannot decrypt it.
+
+4. **Add three shell helpers to `~/.bashrc`**:
+
+   ```bash
+   cat >> ~/.bashrc <<'EOF'
+
+   # ---- Codeberg web-session cookies (for resolve-conversation form posts) ----
+   # Encrypted at ~/.codeberg-cookies.age via the Codeberg SSH pubkey.
+   # Decryption prompts for the SSH passphrase once per terminal session.
+   # See ~/.github/docs/claude/codeberg-auth-setup.md Step 11.
+
+   cb-cookies-load() {
+       if [ -n "$CB_COOKIES" ]; then
+           echo "Codeberg cookies already loaded in this shell."
+           return 0
+       fi
+       if [ ! -f ~/.codeberg-cookies.age ]; then
+           echo "cb-cookies-load: ~/.codeberg-cookies.age not found." >&2
+           echo "  Re-extract from a logged-in Codeberg browser tab and run cb-cookies-refresh." >&2
+           return 1
+       fi
+       local out
+       out="$(age -d -i ~/.ssh/id_ed25519_codeberg ~/.codeberg-cookies.age)" || return 1
+       export CB_COOKIES="$out"
+       echo "Codeberg cookies loaded into \$CB_COOKIES (this shell only)."
+   }
+
+   cb-cookies-refresh() {
+       echo "Paste the full Codeberg cookie string (single line, semicolon-separated), then Enter:"
+       local new
+       IFS= read -rs new
+       echo
+       if [ -z "$new" ]; then
+           echo "cb-cookies-refresh: empty input, aborted." >&2
+           return 1
+       fi
+       printf '%s' "$new" | age -R ~/.ssh/id_ed25519_codeberg.pub -o ~/.codeberg-cookies.age || return 1
+       chmod 600 ~/.codeberg-cookies.age
+       unset new
+       export CB_COOKIES=""
+       echo "Codeberg cookies re-encrypted at ~/.codeberg-cookies.age. Run cb-cookies-load to use them."
+   }
+
+   cb-cookies-clear() {
+       unset CB_COOKIES
+       echo "Codeberg cookies cleared from this shell."
+   }
+   EOF
+   ```
+
+   Open a new terminal so `~/.bashrc` reloads.
+
+### Daily use
+
+```bash
+cb-cookies-load    # once per terminal session (prompts for SSH passphrase)
+# ... Claude or you can now POST to /issues/resolve_conversation with $CB_COOKIES ...
+cb-cookies-clear   # when done, hygiene
+```
+
+The `/review-pr` skill detects `~/.codeberg-cookies.age` automatically and, on a Codeberg re-review, prompts you to run `cb-cookies-load` instead of re-pasting cookies each time.
+
+### Refreshing when cookies expire (~7 days)
+
+```bash
+cb-cookies-refresh   # paste fresh cookie string from the browser, Enter
+```
+
+The function reads the new value with `IFS= read -rs` so the cookie string never appears on a command line, in process listings, or in shell history.
+
+### Reading the Anubis JWT expiry (sanity check)
+
+The `techaro.lol-anubis-auth` cookie is a JWT — decode it to know exactly when it expires:
+
+```bash
+python3 -c "
+import base64, json, sys
+jwt = sys.argv[1].split('.')[1]
+print(json.loads(base64.urlsafe_b64decode(jwt + '==')))
+" '<paste-jwt-here>'
+```
+
+Output includes `exp: <unix-timestamp>`; convert with `date -d @<ts>` to a human date.
+
+### Why an existing SSH key instead of `gpg` or a fresh `age` identity?
+
+- **`age` + SSH key** — re-uses the key you already have. The same `keychain`-unlocked passphrase that protects `git push` also protects the cookies. No new credential surface.
+- `gpg` / `pass` — works fine but requires a GPG keyring you may not have set up.
+- A fresh `age` identity (`age-keygen`) — adds another secret to store somewhere. Net loss of simplicity.
+
+The trade-off with the SSH key route: `age` reads the key file directly and cannot tap the SSH agent, so each shell session prompts for the SSH passphrase once on first `cb-cookies-load`. That's the same pattern as `git push` over SSH and acceptable for a once-per-terminal cost.
+
 ## How Claude Code uses this setup
 
 Claude Code's Bash tool inherits your shell environment, including `SSH_AUTH_SOCK` from keychain and the `~/.config/tea/config.yml` token. That means:
@@ -329,6 +474,19 @@ The Codeberg REST API has no such prompt. Claude can create PRs, post comments, 
 
 Claude Code's safety hook may also block `git push` until you say one of the explicit phrases (`push my changes`, `push for me`, `commit and push`, `please git push`) in your message to it. That's a separate guardrail layered on top of authentication — auth determines *can*, the phrase determines *should*. Both must pass.
 
+## Save your Codeberg setup facts to Claude memory
+
+Once this guide is working on your machine, save the host-specific facts (key path, `~/.keychain/$(hostname)-sh` env-file location, `~/.ssh/config` host alias) to **global** user memory at `~/.claude/CLAUDE.md`, **not** to a per-project auto-memory directory under `~/.claude/projects/<slug>/memory/`. Codeberg auth applies to every repo you touch, so a project-scoped file only fires when Claude is working in that one repo and misses every other Codeberg session.
+
+Rule of thumb:
+
+- **Global (`~/.claude/CLAUDE.md`)** — per-user, cross-project facts: SSH key path, keychain env-file location, copy-paste preferences, the `tea` login name. Loaded on every session.
+- **Project auto-memory (`~/.claude/projects/<slug>/memory/`)** — project-scoped facts: a repo's conventions, ongoing initiatives, recurring review nits in that codebase. Loaded only when Claude opens that repo.
+
+Either way, memory entries should link back to this canonical doc so the troubleshooting table stays the single source of truth.
+
+A ready-to-copy template for the Codeberg-auth section of `~/.claude/CLAUDE.md` lives in [example-claude-md-codeberg.md](./example-claude-md-codeberg.md). Copy that block once per machine and every future Claude Code session — in any repo — reaches the right fix in one step instead of re-diagnosing from scratch.
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
@@ -342,6 +500,8 @@ Claude Code's safety hook may also block `git push` until you say one of the exp
 | `tea login add` succeeds but `tea pulls create` says "401 Unauthorized" | Token lacks `write:repository` or `write:issue` | Regenerate the token with the scopes from Step 7. `tea login delete codeberg && tea login add ...`. |
 | Pushed a branch but no PR appears in the Codeberg UI | Branches and PRs are separate — pushing a branch never creates a PR by itself | Run `tea pulls create --base development --head <branch> --title "..." --description "..."` or open it via the web UI. |
 | Claude Code refuses to `git push` even though SSH works | The safety hook requires an explicit authorisation phrase | Reply to Claude with "push my changes", "push for me", "commit and push", or "please git push". |
+| `cb-cookies-load` succeeds but Claude's `/issues/resolve_conversation` POSTs return `HTTP 302/303 → /user/login` | Anubis JWT (`techaro.lol-anubis-auth`) has expired (~7-day lifetime), or the browser session was logged out | Re-extract all four cookies from a fresh logged-in Codeberg browser tab, then `cb-cookies-refresh` and `cb-cookies-load` again. Step 11. |
+| `age: failed to obtain passphrase: ... /dev/tty is not available` when running `cb-cookies-load` from a non-interactive shell | `age` reads the SSH key file directly and prompts for the passphrase via `/dev/tty`; it cannot use the `ssh-agent` | Run `cb-cookies-load` once in an interactive terminal *before* the non-interactive shell starts. The exported `$CB_COOKIES` is inherited by every child shell launched from there. |
 
 ## Bidirectional / migration notes
 
@@ -353,9 +513,11 @@ The migration to Codeberg may reverse — Conduction's tooling is being kept **b
 
 ## See also
 
+- [Example `~/.claude/CLAUDE.md` snippet](./example-claude-md-codeberg.md) — ready-to-copy Codeberg-auth section for your global Claude memory
 - [Workstation Setup](./workstation-setup.md) — the broader new-machine guide; this doc plugs into the GitHub CLI / Codeberg CLI section
 - [Global Claude settings](./global-claude-settings.md) — read-only Bash policy + write-approval hooks (the source of the `push my changes` phrase)
 - [Codeberg user settings — Keys](https://codeberg.org/user/settings/keys)
 - [Codeberg user settings — Applications](https://codeberg.org/user/settings/applications)
 - [`tea` documentation](https://gitea.com/gitea/tea) — full command reference for the Gitea CLI
 - [Codeberg API reference](https://codeberg.org/api/swagger) — Swagger UI for the REST API surface (for the operations `tea` does not yet wrap)
+- [`age` documentation](https://github.com/FiloSottile/age) — modern file encryption; used in Step 11 to protect the Codeberg web-session cookies with your existing Codeberg SSH key
