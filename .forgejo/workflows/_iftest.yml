@@ -1,7 +1,0 @@
-# TEMP diagnosis caller. workflow_dispatch only. DELETE after.
-name: _iftest
-on:
-  workflow_dispatch: {}
-jobs:
-  call:
-    uses: ./.forgejo/workflows/_iftest-target.yml
