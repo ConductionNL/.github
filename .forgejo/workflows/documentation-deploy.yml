@@ -20,7 +20,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Download build artifact from build job
-        uses: https://github.com/actions/download-artifact@v4
+        uses: https://github.com/actions/download-artifact@v3
         with:
           name: docusaurus-build
           path: ./build
