@@ -1,0 +1,9 @@
+# TEMP caller. workflow_dispatch only. DELETE after.
+name: _evt
+on:
+  workflow_dispatch: {}
+jobs:
+  call:
+    uses: ./.forgejo/workflows/_evt-target.yml
+    with:
+      evt: ${{ github.event_name }}
