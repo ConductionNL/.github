@@ -1,0 +1,20 @@
+# TEMP diagnosis: how does github.event_name resolve inside a workflow_call reusable,
+# and which if: form does Forgejo honor? DELETE after.
+name: _iftest-target
+on:
+  workflow_call: {}
+jobs:
+  always:
+    runs-on: codeberg-tiny
+    steps:
+      - run: 'echo "CTX event_name=[${{ github.event_name }}] gitea=[${{ gitea.event_name }}]"'
+  bare:
+    runs-on: codeberg-tiny
+    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - run: echo BARE-RAN
+  wrapped:
+    runs-on: codeberg-tiny
+    if: ${{ github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    steps:
+      - run: echo WRAPPED-RAN
