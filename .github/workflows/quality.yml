@@ -112,6 +112,21 @@ on:
         required: false
         type: number
         default: 75
+      enable-journeydoc-capture:
+        description: "Run the journeydoc Playwright capture spec (tests/e2e/docs-screenshots.spec.ts) against a freshly-installed Nextcloud and commit any new/changed screenshots back to the calling repo. Per ADR-030. Recommended to invoke from a dedicated docs-capture.yml workflow with schedule + workflow_dispatch triggers (not on every PR — too expensive)."
+        required: false
+        type: boolean
+        default: false
+      journeydoc-output-path:
+        description: "Path inside the app repo where the docs-capture Playwright project writes its screenshots. The diff/commit-back step monitors this path. Default matches the canonical journeydoc convention from ADR-030."
+        required: false
+        type: string
+        default: "docs/static/screenshots/tutorials"
+      journeydoc-deploy-workflow:
+        description: "Optional: name (or filename) of a workflow to dispatch via `gh workflow run` after the screenshot-refresh commit. Use this to trigger the docs deploy when screenshots actually changed (e.g. 'documentation.yml' or 'deploy.yml'). Empty = no dispatch."
+        required: false
+        type: string
+        default: ""
       additional-apps:
         description: "JSON array of additional app repos to checkout and enable (e.g. '[{\"repo\":\"ConductionNL/openregister\",\"app\":\"openregister\"}]')"
         required: false
@@ -1252,6 +1267,307 @@ jobs:
           tail -50 server/data/nextcloud.log 2>/dev/null | python3 -m json.tool --no-ensure-ascii 2>/dev/null || tail -50 server/data/nextcloud.log 2>/dev/null || echo "No log found"
 
   # ╔══════════════════════════════════════════════╗
+  # ║  STAGE 2 (cont.) — Journeydoc capture         ║
+  # ║                                               ║
+  # ║  Runs the docs-capture Playwright project     ║
+  # ║  (tests/e2e/docs-screenshots.spec.ts) against ║
+  # ║  a freshly-installed Nextcloud, then commits  ║
+  # ║  any new/changed screenshots back to the      ║
+  # ║  calling repo and optionally dispatches a     ║
+  # ║  docs-deploy workflow.                        ║
+  # ║                                               ║
+  # ║  Reference: ADR-030 (journeydoc pattern) in   ║
+  # ║  ConductionNL/hydra/openspec/architecture/.   ║
+  # ║                                               ║
+  # ║  Recommended invocation (per-app):            ║
+  # ║                                               ║
+  # ║    # .github/workflows/docs-capture.yml       ║
+  # ║    on:                                        ║
+  # ║      schedule:                                ║
+  # ║        - cron: "27 3 * * *"   # nightly       ║
+  # ║      workflow_dispatch:                       ║
+  # ║    jobs:                                      ║
+  # ║      capture:                                 ║
+  # ║        uses: ConductionNL/.github/            ║
+  # ║              .github/workflows/quality.yml@main║
+  # ║        with:                                  ║
+  # ║          app-name: <slug>                     ║
+  # ║          enable-journeydoc-capture: true      ║
+  # ║          enable-frontend: false               ║
+  # ║          enable-license-check: false          ║
+  # ║          enable-sbom: false                   ║
+  # ║          enable-features-extract: false       ║
+  # ║          journeydoc-deploy-workflow: \         ║
+  # ║            documentation.yml                  ║
+  # ║                                               ║
+  # ║  Don't enable in your main code-quality.yml — ║
+  # ║  it spins up a full Nextcloud + Postgres +    ║
+  # ║  Playwright for every run. Nightly is plenty. ║
+  # ╚══════════════════════════════════════════════╝
+
+  journeydoc-capture:
+    if: ${{ inputs.enable-journeydoc-capture && !cancelled() && needs.security.result != 'failure' }}
+    runs-on: ubuntu-latest
+    name: "Journeydoc Capture (screenshots)"
+    needs: [security]
+    permissions:
+      contents: write
+      actions: write
+
+    services:
+      postgres:
+        image: ${{ inputs.database == 'pgsql' && 'postgres:16' || '' }}
+        env:
+          POSTGRES_USER: nextcloud
+          POSTGRES_PASSWORD: nextcloud
+          POSTGRES_DB: nextcloud
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U nextcloud"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - name: Checkout Nextcloud server
+        uses: actions/checkout@v4
+        with:
+          repository: nextcloud/server
+          ref: ${{ fromJSON(inputs.nextcloud-test-refs)[0] }}
+          path: server
+
+      - name: Checkout server submodules
+        run: |
+          cd server
+          git submodule update --init 3rdparty
+
+      - name: Checkout app
+        # Default token (github.token) is the caller's GITHUB_TOKEN with
+        # contents:write — we need that for the screenshot commit-back later.
+        uses: actions/checkout@v4
+        with:
+          path: server/apps/${{ inputs.app-name }}
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php-version }}
+          extensions: mbstring, intl, sqlite3, pgsql, pdo_pgsql, zip, gd, curl, xml, json
+          tools: composer:v2
+
+      - name: Checkout additional apps
+        if: ${{ inputs.additional-apps != '[]' }}
+        run: |
+          echo '${{ inputs.additional-apps }}' | jq -c '.[]' | while read -r app; do
+            repo=$(echo "$app" | jq -r '.repo')
+            name=$(echo "$app" | jq -r '.app')
+            ref=$(echo "$app" | jq -r '.ref // "main"')
+            echo "Checking out $repo ($name) at $ref..."
+            git clone --depth 1 --branch "$ref" "https://github.com/$repo.git" "server/apps/$name"
+            if [ -f "server/apps/$name/composer.json" ]; then
+              cd "server/apps/$name"
+              composer install --no-progress --prefer-dist --optimize-autoloader --no-dev
+              cd -
+            fi
+          done
+
+      - name: Install Nextcloud
+        run: |
+          cd server
+          if [ "${{ inputs.database }}" = "pgsql" ]; then
+            php occ maintenance:install \
+              --database pgsql \
+              --database-host 127.0.0.1 \
+              --database-port 5432 \
+              --database-name nextcloud \
+              --database-user nextcloud \
+              --database-pass nextcloud \
+              --admin-user admin \
+              --admin-pass admin
+          else
+            php occ maintenance:install \
+              --database ${{ inputs.database }} \
+              --admin-user admin \
+              --admin-pass admin
+          fi
+          if [ '${{ inputs.additional-apps }}' != '[]' ]; then
+            echo '${{ inputs.additional-apps }}' | jq -r '.[].app' | while read -r name; do
+              echo "Enabling app: $name"
+              php occ app:enable "$name" || echo "::warning::Failed to enable $name, continuing..."
+            done
+          fi
+
+      - name: Install and enable app
+        run: |
+          cd server/apps/${{ inputs.app-name }}
+          composer install --no-progress --prefer-dist --optimize-autoloader
+          cd ../../
+          php occ app:enable ${{ inputs.app-name }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install app npm dependencies
+        run: |
+          cd server/apps/${{ inputs.app-name }}
+          if [ -f "package.json" ]; then
+            npm ci --legacy-peer-deps
+          fi
+
+      - name: Install Playwright
+        run: |
+          cd server/apps/${{ inputs.app-name }}
+          npm install --save-dev @playwright/test
+          npx playwright install --with-deps chromium
+
+      - name: Build app frontend
+        # Same rationale as the playwright job: SPA mount via Util::addScript()
+        # needs the bundle on disk before the docs-capture spec navigates.
+        run: |
+          cd server/apps/${{ inputs.app-name }}
+          if [ -f "package.json" ] && node -e "process.exit(require('./package.json').scripts && require('./package.json').scripts.build ? 0 : 1)" 2>/dev/null; then
+            echo "Building app frontend with 'npm run build'…"
+            npm run build
+          else
+            echo "No 'build' script in package.json; skipping frontend build."
+          fi
+
+      - name: Validate journeydoc capture spec exists
+        run: |
+          cd server/apps/${{ inputs.app-name }}
+          if [ ! -f "tests/e2e/docs-screenshots.spec.ts" ]; then
+            echo "::error::Journeydoc capture spec not found at tests/e2e/docs-screenshots.spec.ts. See ADR-030."
+            exit 1
+          fi
+          # Confirm playwright config declares a 'docs-capture' project — without it,
+          # `--project docs-capture` silently runs nothing and we'd commit nothing.
+          if ! grep -q "name: 'docs-capture'" playwright.config.ts 2>/dev/null && \
+             ! grep -q 'name: "docs-capture"' playwright.config.ts 2>/dev/null; then
+            echo "::error::playwright.config.ts does not declare a 'docs-capture' project. Run /journeydoc-init to regenerate the scaffold (ADR-030)."
+            exit 1
+          fi
+
+      - name: Start PHP built-in server
+        run: |
+          cd server
+          php -S 0.0.0.0:8080 > /tmp/php-server.log 2>&1 &
+          PHP_PID=$!
+          echo "${PHP_PID}" > /tmp/php-server.pid
+          timeout 15 bash -c 'until curl -sf -o /dev/null http://localhost:8080/status.php; do sleep 0.5; done' || {
+            echo "::error::PHP built-in server failed to come up on :8080."
+            cat /tmp/php-server.log
+            exit 1
+          }
+          echo "PHP built-in server alive (pid=${PHP_PID})."
+
+      - name: Seed test data
+        if: inputs.playwright-seed-command != ''
+        run: |
+          cd server
+          echo "Running seed command: ${{ inputs.playwright-seed-command }}"
+          eval ${{ inputs.playwright-seed-command }}
+          echo "Seed command completed."
+
+      - name: Run docs-capture Playwright project
+        run: |
+          cd server/apps/${{ inputs.app-name }}
+          npx playwright test --project docs-capture
+        env:
+          BASE_URL: http://localhost:8080
+          NEXTCLOUD_URL: http://localhost:8080
+          NC_BASE_URL: http://localhost:8080
+          ADMIN_USER: admin
+          ADMIN_PASSWORD: admin
+          NC_ADMIN_USER: admin
+          NC_ADMIN_PASS: admin
+
+      - name: Commit refreshed screenshots if changed
+        id: commit
+        run: |
+          set -euo pipefail
+          cd server/apps/${{ inputs.app-name }}
+          OUTPUT_PATH="${{ inputs.journeydoc-output-path }}"
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Stage anything under the journeydoc output path (new files + diffs).
+          git add "$OUTPUT_PATH" 2>/dev/null || true
+          if git diff --staged --quiet; then
+            echo "No screenshot changes — nothing to commit."
+            echo "changed=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Count what we're committing for the message.
+          CHANGED=$(git diff --staged --name-only -- "$OUTPUT_PATH" | wc -l)
+          git commit -m "docs(screenshots): refresh journeydoc captures (${CHANGED} files) [skip ci]"
+
+          # Push to the branch this workflow ran on. Use github.ref_name (e.g.
+          # "main") not github.ref (e.g. "refs/heads/main") — git push wants a
+          # bare branch.
+          REF_NAME="${{ github.ref_name }}"
+          # Non-blocking on protected branches per ConductionNL/.github#61.
+          if git push origin "HEAD:${REF_NAME}"; then
+            echo "Screenshots pushed to ${REF_NAME}."
+            echo "changed=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Could not push screenshot refresh — branch protection rejected the bot push (see ConductionNL/.github#61). Inspect the journeydoc-screenshots artifact and commit manually."
+            echo "changed=0" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Dispatch deploy workflow if screenshots changed
+        if: ${{ inputs.journeydoc-deploy-workflow != '' && steps.commit.outputs.changed == '1' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # GITHUB_TOKEN-driven pushes do NOT auto-trigger workflow_run on other
+        # workflows (anti-loop). Explicitly dispatch the docs-deploy workflow
+        # so the site rebuilds with the new screenshots.
+        run: |
+          gh workflow run "${{ inputs.journeydoc-deploy-workflow }}" \
+            --repo "${{ github.repository }}" \
+            --ref "${{ github.ref_name }}"
+
+      - name: Upload screenshots as workflow artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: journeydoc-screenshots
+          path: server/apps/${{ inputs.app-name }}/${{ inputs.journeydoc-output-path }}/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Upload Playwright trace on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: journeydoc-playwright-traces
+          path: server/apps/${{ inputs.app-name }}/test-results/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Show Nextcloud log on failure
+        if: failure()
+        run: |
+          echo "=== Last 50 lines of Nextcloud log ==="
+          tail -50 server/data/nextcloud.log 2>/dev/null | python3 -m json.tool --no-ensure-ascii 2>/dev/null || tail -50 server/data/nextcloud.log 2>/dev/null || echo "No log found"
+
+      - name: Record result
+        if: always()
+        run: |
+          mkdir -p quality-results
+          echo "${{ job.status }}" > quality-results/journeydoc-capture.txt
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-journeydoc-capture
+          path: quality-results/
+
+  # ╔══════════════════════════════════════════════╗
   # ║  STAGE 3 — Reporting & coverage baseline      ║
   # ╚══════════════════════════════════════════════╝
 
@@ -1314,7 +1630,7 @@ jobs:
   report:
     runs-on: ubuntu-latest
     name: "Quality Report"
-    needs: [php-quality, vue-quality, security, license, phpunit, newman, playwright, baseline-protection]
+    needs: [php-quality, vue-quality, security, license, phpunit, newman, playwright, journeydoc-capture, baseline-protection]
     if: always()
 
     steps:
