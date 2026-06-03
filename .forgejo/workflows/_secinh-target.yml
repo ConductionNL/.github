@@ -1,0 +1,13 @@
+# TEMP: does a reusable actually RECEIVE a secret via inherit vs explicit? DELETE after.
+name: _secinh-target
+on:
+  workflow_call: {}
+jobs:
+  check:
+    runs-on: codeberg-tiny
+    steps:
+      - name: secret present?
+        env:
+          TOK: ${{ secrets.CODEBERG_TOKEN }}
+        run: |
+          if [ -n "$TOK" ]; then echo "HAS_SECRET len=${#TOK}"; else echo "MISSING"; exit 1; fi
