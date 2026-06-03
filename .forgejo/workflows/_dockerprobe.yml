@@ -1,16 +1,28 @@
-# TEMP: can a Codeberg shared runner build container images? DELETE after.
+# TEMP: which image-build tool (if any) works on a Codeberg shared runner?
+# Job success/failure encodes availability (logs are member-gated). DELETE after.
 name: _dockerprobe
 on:
   workflow_dispatch: {}
 jobs:
-  probe:
+  docker_daemon:
     runs-on: codeberg-small
     steps:
-      - name: inspect builders available
-        run: |
-          echo "=== docker CLI ==="; which docker && docker version 2>&1 | head -20 || echo "NO_DOCKER_or_DAEMON"
-          echo "=== buildah ==="; which buildah || echo no-buildah
-          echo "=== podman ==="; which podman || echo no-podman
-          echo "=== kaniko ==="; ls /kaniko 2>/dev/null || echo no-kaniko
-          echo "=== /var/run/docker.sock ==="; ls -l /var/run/docker.sock 2>/dev/null || echo no-socket
-          echo "DONE"
+      - run: docker version
+  docker_socket:
+    runs-on: codeberg-small
+    steps:
+      - run: test -S /var/run/docker.sock
+  buildah:
+    runs-on: codeberg-small
+    steps:
+      - run: buildah --version
+  podman:
+    runs-on: codeberg-small
+    steps:
+      - run: podman --version
+  trivial_build:
+    runs-on: codeberg-small
+    steps:
+      - run: |
+          printf 'FROM scratch\n' > Dockerfile
+          docker build -t probe:t .
