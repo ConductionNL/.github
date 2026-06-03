@@ -39,6 +39,14 @@ on:
         required: false
         type: string
         default: "20"
+      event-name:
+        description: >-
+          Caller's github.event_name. Forgejo does NOT propagate the original
+          trigger event into workflow_call reusables, so the caller must pass it
+          for the deploy gate to work.
+        required: false
+        type: string
+        default: ""
 
 jobs:
   build:
@@ -77,7 +85,7 @@ jobs:
           fi
 
       - name: Upload build artifact for deploy job
-        if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        if: inputs.event-name == 'push' || inputs.event-name == 'schedule' || inputs.event-name == 'workflow_dispatch'
         uses: https://github.com/actions/upload-artifact@v4
         with:
           name: docusaurus-build
@@ -94,7 +102,7 @@ jobs:
     container:
       image: node:24-bookworm
     timeout-minutes: 10
-    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: inputs.event-name == 'push' || inputs.event-name == 'schedule' || inputs.event-name == 'workflow_dispatch'
     steps:
       - name: Download build artifact from build job
         uses: https://github.com/actions/download-artifact@v4
