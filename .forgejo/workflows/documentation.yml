@@ -43,7 +43,7 @@ on:
 jobs:
   build:
     name: Build and validate
-    runs-on: codeberg-small
+    runs-on: codeberg-medium
     container:
       image: node:24-bookworm
     timeout-minutes: 10
