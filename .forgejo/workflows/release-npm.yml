@@ -36,11 +36,6 @@ on:
         required: false
         type: boolean
         default: false
-    secrets:
-      NPM_TOKEN:
-        required: true
-      CODEBERG_TOKEN:
-        required: true
 
 jobs:
   quality:
