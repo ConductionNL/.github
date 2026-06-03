@@ -1,0 +1,37 @@
+# TEMP: pinpoint which registry credential is wrong (job success/fail = answer). DELETE after.
+name: _credprobe
+on:
+  workflow_dispatch: {}
+jobs:
+  username_nonempty:
+    runs-on: codeberg-small
+    container: { image: alpine:3.20 }
+    steps:
+      - shell: sh
+        env: { CB_USER: '${{ secrets.CODEBERG_USERNAME }}' }
+        run: test -n "$CB_USER"
+  token_nonempty:
+    runs-on: codeberg-small
+    container: { image: alpine:3.20 }
+    steps:
+      - shell: sh
+        env: { CB_TOKEN: '${{ secrets.CODEBERG_TOKEN }}' }
+        run: test -n "$CB_TOKEN"
+  registry_basic_auth:
+    runs-on: codeberg-small
+    container: { image: alpine:3.20 }
+    steps:
+      - shell: sh
+        env: { CB_USER: '${{ secrets.CODEBERG_USERNAME }}', CB_TOKEN: '${{ secrets.CODEBERG_TOKEN }}' }
+        run: |
+          AUTH=$(printf '%s:%s' "$CB_USER" "$CB_TOKEN" | base64 | tr -d '\n')
+          wget -q -O /dev/null --header="Authorization: Basic $AUTH" https://codeberg.org/v2/
+  registry_push_scope:
+    runs-on: codeberg-small
+    container: { image: alpine:3.20 }
+    steps:
+      - shell: sh
+        env: { CB_USER: '${{ secrets.CODEBERG_USERNAME }}', CB_TOKEN: '${{ secrets.CODEBERG_TOKEN }}' }
+        run: |
+          AUTH=$(printf '%s:%s' "$CB_USER" "$CB_TOKEN" | base64 | tr -d '\n')
+          wget -q -O /dev/null --header="Authorization: Basic $AUTH" "https://codeberg.org/v2/token?scope=repository:conduction/probe:push,pull&service=container_registry"
