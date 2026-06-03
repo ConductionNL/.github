@@ -39,7 +39,7 @@ on:
         description: "Node.js version for building"
         required: false
         type: string
-        default: "20"
+        default: "24"
       verify-vendor-deps:
         description: "Enable vendor dependency verification after composer install"
         required: false
@@ -77,7 +77,7 @@ jobs:
             --install-dir=/usr/local/bin --filename=composer
           # Node.js for actions/checkout@v4 + setup-node@v4 (JS actions):
           # php:8.3-cli has no node and Codeberg's runner does not inject it.
-          curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+          curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
           apt-get install -y nodejs
           # node will be installed by setup-node below; nothing to
           # do here.
@@ -193,7 +193,7 @@ jobs:
       - name: Install and build frontend
         run: |
           if [ -f "package.json" ]; then
-            npm ci
+            npm ci || npm install
             npm run build
           else
             echo "No package.json found, skipping frontend build"
