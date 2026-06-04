@@ -412,7 +412,7 @@ jobs:
               if echo "${REG_BODY}" | grep -qi "already"; then
                 echo "App already registered"
               else
-                echo "Registration returned HTTP ${REG_CODE}: ${REG_BODY}"
+                echo "=== App Store REGISTER HTTP ${REG_CODE} ==="; echo "${REG_BODY}"; echo "==="
                 echo "Continuing with release upload..."
               fi
               ;;
@@ -429,13 +429,15 @@ jobs:
             -H "Content-Type: application/json" \
             -d "{\"download\": \"${DOWNLOAD_URL}\", \"signature\": \"${SIGNATURE}\", \"nightly\": false}")
 
+          echo "=== App Store upload HTTP ${UPLOAD_CODE} ==="
+          echo "--- response body ---"
+          cat /tmp/upload-response.json 2>/dev/null; echo
+          echo "---------------------"
           if [ "${UPLOAD_CODE}" = "200" ] || [ "${UPLOAD_CODE}" = "201" ]; then
             echo "Release uploaded to App Store successfully"
           else
-            echo "::warning::App Store upload returned HTTP ${UPLOAD_CODE}"
-            cat /tmp/upload-response.json 2>/dev/null || true
-            echo ""
-            echo "The Codeberg release was created successfully. The App Store upload can be retried manually."
+            echo "ERROR: App Store upload failed (HTTP ${UPLOAD_CODE}) — see response body above"
+            exit 1
           fi
 
       - name: Verify release
