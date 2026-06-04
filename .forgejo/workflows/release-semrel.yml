@@ -94,7 +94,8 @@ jobs:
           # semantic-release already created+pushed tag ${TAG}; create the Codeberg release object for it.
           REL=$(curl -s -X POST "https://codeberg.org/api/v1/repos/${REPO}/releases" \
             -H "Authorization: token ${CODEBERG_TOKEN}" -H "Content-Type: application/json" \
-            -d "{\"tag_name\":\"${TAG}\",\"name\":\"Release ${VERSION}\",\"draft\":false,\"prerelease\":false}")
+            -d "{\"tag_name\":\"${TAG}\",\"target_commitish\":\"${GITHUB_SHA}\",\"name\":\"Release ${VERSION}\",\"draft\":false,\"prerelease\":false}")
+          echo "Codeberg release POST response: ${REL}" | head -c 400; echo
           REL_ID=$(echo "${REL}" | jq -r '.id // empty')
           if [ -z "${REL_ID}" ]; then
             REL_ID=$(curl -s -H "Authorization: token ${CODEBERG_TOKEN}" \
@@ -140,6 +141,7 @@ jobs:
           APP_NAME: ${{ inputs.app-name }}
           EXTRA_EXCLUDES: ${{ inputs.extra-rsync-excludes }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
           CODEBERG_USERNAME: ${{ secrets.CODEBERG_USERNAME }}
           CODEBERG_TOKEN: ${{ secrets.CODEBERG_TOKEN }}
           NEXTCLOUD_SIGNING_KEY: ${{ secrets.NEXTCLOUD_SIGNING_KEY }}
