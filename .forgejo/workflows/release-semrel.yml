@@ -76,7 +76,7 @@ jobs:
             --exclude='/.php-cs-fixer.dist.php' --exclude='/.nvmrc' --exclude='/changelog-ci-config.json' \
             --exclude='/coverage.txt' --exclude='/signing-key.key' --exclude='/signing-cert.crt' \
             --exclude='/openapi.json' --exclude='/CHANGELOG.md' --exclude='/CONTRIBUTING.md' \
-            ${EXTRA_EXCLUDES} \
+            ${EXTRA_EXCLUDES:-} \
             ./ "package/${APP_NAME}/"
           sed -i "s|<version>.*</version>|<version>${VERSION}</version>|" "package/${APP_NAME}/appinfo/info.xml"
           printf '%s' "${NEXTCLOUD_SIGNING_KEY}" > signing-key.key
@@ -138,7 +138,9 @@ jobs:
         env:
           CI: "true"
           APP_NAME: ${{ inputs.app-name }}
+          EXTRA_EXCLUDES: ${{ inputs.extra-rsync-excludes }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          CODEBERG_USERNAME: ${{ secrets.CODEBERG_USERNAME }}
           CODEBERG_TOKEN: ${{ secrets.CODEBERG_TOKEN }}
           NEXTCLOUD_SIGNING_KEY: ${{ secrets.NEXTCLOUD_SIGNING_KEY }}
           NEXTCLOUD_SIGNING_CERT: ${{ secrets.NEXTCLOUD_SIGNING_CERT }}
