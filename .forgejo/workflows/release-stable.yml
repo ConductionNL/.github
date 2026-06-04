@@ -387,11 +387,10 @@ jobs:
 
       - name: Register and upload to Nextcloud App Store
         run: |
-          DOWNLOAD_URL="${{ steps.cb_release.outputs.asset_url }}"
-
-          if [ -z "${DOWNLOAD_URL}" ]; then
-            DOWNLOAD_URL="https://codeberg.org/${{ github.repository }}/releases/download/v${NEW_VERSION}/${{ inputs.app-name }}-${NEW_VERSION}.tar.gz"
-          fi
+          # App Store requires a download URL ending in .tar.gz. Codeberg's asset
+          # browser_download_url is an /attachments/<uuid> URL (no extension), so
+          # always use the predictable release-download path.
+          DOWNLOAD_URL="https://codeberg.org/${{ github.repository }}/releases/download/v${NEW_VERSION}/${{ inputs.app-name }}-${NEW_VERSION}.tar.gz"
 
           echo "Ensuring ${{ inputs.app-name }} is registered on App Store..."
 
