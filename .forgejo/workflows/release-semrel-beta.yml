@@ -121,6 +121,7 @@ jobs:
           PUB
           cat > .releaserc.json <<RC
           {
+            "repositoryUrl": "https://codeberg.org/${{ github.repository }}.git",
             "branches": ["main", {"name": "beta", "prerelease": true}],
             "tagFormat": "v\${version}",
             "plugins": [
@@ -155,3 +156,4 @@ jobs:
           git config --global user.email "release-bot@conduction.nl"
           git config --global user.name "Conduction Release Bot"
           npx semantic-release
+
