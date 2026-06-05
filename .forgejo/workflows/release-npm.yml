@@ -48,33 +48,19 @@ on:
         default: false
 
 jobs:
-  quality:
-    name: Quality check
-    runs-on: codeberg-medium
-    container:
-      image: node:24-bookworm
-    timeout-minutes: 10
-    steps:
-      - name: Checkout
-        uses: https://github.com/actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Install deps
-        run: npm ${{ inputs.install-command }} ${{ inputs.install-flags }}
-      - name: Lint
-        working-directory: ${{ inputs.working-directory }}
-        run: npm run lint || echo "no lint script — skipping"
-      - name: Build
-        working-directory: ${{ inputs.working-directory }}
-        run: npm run build || echo "no build script — skipping"
-
+  # Single job on purpose: install -> lint -> build -> semantic-release as
+  # sequential steps. Codeberg's Forgejo scheduler reliably dispatches the
+  # first/independent job of a run but frequently never allocates a runner to
+  # a second `needs:`-dependent job (observed 2026-06-05: Quality always ran,
+  # the dependent Release job sat at 0s forever across many runs). Collapsing
+  # to one job keeps the same gate (lint/build fail -> the release step is
+  # never reached) without relying on cross-job scheduling.
   release:
     name: Release
-    needs: quality
     runs-on: codeberg-medium
     container:
       image: node:24-bookworm
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: https://github.com/actions/checkout@v4
@@ -90,6 +76,14 @@ jobs:
 
       - name: Install deps
         run: npm ${{ inputs.install-command }} ${{ inputs.install-flags }}
+
+      - name: Lint
+        working-directory: ${{ inputs.working-directory }}
+        run: npm run lint || echo "no lint script — skipping"
+
+      - name: Build
+        working-directory: ${{ inputs.working-directory }}
+        run: npm run build || echo "no build script — skipping"
 
       - name: Release
         working-directory: ${{ inputs.working-directory }}
