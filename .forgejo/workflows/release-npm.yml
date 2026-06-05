@@ -26,8 +26,13 @@ on:
         required: false
         type: string
         default: "24"
+      install-command:
+        description: "npm install subcommand: 'ci' (needs a committed lockfile) or 'install' (for repos without a root package-lock.json, e.g. monorepos)."
+        required: false
+        type: string
+        default: "ci"
       install-flags:
-        description: "Extra flags for npm ci (e.g. --legacy-peer-deps)"
+        description: "Extra flags for the install (e.g. --legacy-peer-deps)"
         required: false
         type: string
         default: "--legacy-peer-deps"
@@ -55,7 +60,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Install deps
-        run: npm ci ${{ inputs.install-flags }}
+        run: npm ${{ inputs.install-command }} ${{ inputs.install-flags }}
       - name: Lint
         working-directory: ${{ inputs.working-directory }}
         run: npm run lint || echo "no lint script — skipping"
@@ -84,7 +89,7 @@ jobs:
           npm config set registry https://registry.npmjs.org/
 
       - name: Install deps
-        run: npm ci ${{ inputs.install-flags }}
+        run: npm ${{ inputs.install-command }} ${{ inputs.install-flags }}
 
       - name: Release
         working-directory: ${{ inputs.working-directory }}
