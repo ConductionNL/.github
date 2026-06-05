@@ -112,9 +112,11 @@ jobs:
           echo "Codeberg release ${TAG} asset uploaded (id ${REL_ID})"
           # ---- Nextcloud App Store ----
           REG_SIG=$(printf '%s' "${APP_NAME}" | openssl dgst -sha512 -sign signing-key.key | openssl base64 -A)
-          curl -s -o /dev/null -X POST "https://apps.nextcloud.com/api/v1/apps" \
+          # Register the app (new apps) — non-fatal (already-registered returns an error), but SURFACE the response.
+          REG=$(curl -s -w $'\n[http %{http_code}]' -X POST "https://apps.nextcloud.com/api/v1/apps" \
             -H "Authorization: Token ${NEXTCLOUD_APPSTORE_TOKEN}" -H "Content-Type: application/json" \
-            -d "{\"certificate\": $(jq -Rs . < signing-cert.crt), \"signature\": \"${REG_SIG}\"}" || true
+            -d "{\"certificate\": $(jq -Rs . < signing-cert.crt), \"signature\": \"${REG_SIG}\"}" || true)
+          echo "App Store register (${APP_NAME}) response: ${REG}"
           SIGNATURE=$(openssl dgst -sha512 -sign signing-key.key nextcloud-release.tar.gz | openssl base64 -A)
           DOWNLOAD_URL="https://codeberg.org/${REPO}/releases/download/${TAG}/${ASSET}"
           UP=$(curl -s -o /tmp/up.json -w "%{http_code}" -X POST "https://apps.nextcloud.com/api/v1/apps/releases" \
