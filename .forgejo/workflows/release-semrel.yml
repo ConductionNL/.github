@@ -126,6 +126,7 @@ jobs:
           PUB
           cat > .releaserc.json <<RC
           {
+            "repositoryUrl": "https://codeberg.org/${{ github.repository }}.git",
             "branches": ["${{ inputs.release-branch }}"],
             "tagFormat": "v\${version}",
             "plugins": [
