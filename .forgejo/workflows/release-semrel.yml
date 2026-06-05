@@ -20,6 +20,11 @@ on:
         required: false
         type: string
         default: ""
+      release-branch:
+        description: "Branch semantic-release treats as the stable release branch (default main; nldesign uses master)"
+        required: false
+        type: string
+        default: "main"
 
 jobs:
   release:
@@ -121,7 +126,7 @@ jobs:
           PUB
           cat > .releaserc.json <<RC
           {
-            "branches": ["main"],
+            "branches": ["${{ inputs.release-branch }}"],
             "tagFormat": "v\${version}",
             "plugins": [
               "@semantic-release/commit-analyzer",
@@ -155,3 +160,4 @@ jobs:
           git config --global user.email "release-bot@conduction.nl"
           git config --global user.name "Conduction Release Bot"
           npx semantic-release
+
