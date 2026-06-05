@@ -148,73 +148,95 @@ npx stylelint "src/**/*.{css,scss,vue}"  # Stylelint
 
 ## App Store Release Process
 
-Releases to the Nextcloud App Store are fully automated via GitHub Actions. They are triggered by merging PRs into `beta` or `main`. Version numbers are calculated automatically from PR labels.
+Releases are fully automated via **Forgejo Actions on Codeberg** and **[semantic-release](https://semantic-release.gitbook.io/)**. **Version numbers are derived from your commit messages and the latest Git tag** — there is no manual version and no version label.
 
 ```mermaid
 graph TD
-    subgraph "Beta Release"
-        D[development] -->|"Developer creates PR"| BP1{"Quality CI\npasses?"}
-        BP1 -->|"Yes"| BM["Merge PR to beta"]
-        BP1 -->|"No"| BF["Fix issues\nre-push"]
-        BF --> BP1
-        BM --> BT{Version Bump\nfrom PR label}
-        BT -->|"label: major"| BV1["v2.0.0-beta.20260319"]
-        BT -->|"label: minor"| BV2["v1.1.0-beta.20260319"]
-        BT -->|"label: patch\n(default)"| BV3["v1.0.1-beta.20260319"]
-        BV1 & BV2 & BV3 --> BB["Build & Package"]
+    subgraph "Beta channel (branch: beta)"
+        D[development] -->|"PR + Quality CI"| BM["Merge PR to beta"]
+        BM --> BA{"Releasable commits?\n(feat/fix/BREAKING)"}
+        BA -->|"No"| BX["No release"]
+        BA -->|"Yes"| BV["semantic-release computes\nX.Y.Z-beta.N from latest tag"]
+        BV --> BT["Create + push tag vX.Y.Z-beta.N"]
+        BT --> BB["Build · sign · Codeberg pre-release"]
         BB --> BU["Upload to App Store\n(nightly channel)"]
-        BB --> BG["Create GitHub\npre-release"]
     end
 
-    subgraph "Stable Release"
-        B2[beta] -->|"Developer creates PR"| SP1{"Branch Protection\nCI passes?"}
-        SP1 -->|"Yes"| SM["Merge PR to main"]
-        SP1 -->|"No"| SF["Fix issues"]
-        SF --> SP1
-        SM --> ST{Version Bump\nfrom PR label}
-        ST -->|"from PR labels"| SV["v1.1.0"]
-        SV --> SB["Build & Package"]
+    subgraph "Stable channel (branch: main)"
+        B2[beta] -->|"PR + Branch-Protection CI"| SM["Merge PR to main"]
+        SM --> SA{"Releasable commits?"}
+        SA -->|"No"| SX["No release"]
+        SA -->|"Yes"| SV["semantic-release computes\nX.Y.Z from latest tag"]
+        SV --> ST["Create + push tag vX.Y.Z"]
+        ST --> SB["Build · sign · Codeberg release"]
         SB --> SU["Upload to App Store\n(stable channel)"]
-        SB --> SG["Create GitHub release\nwith changelog"]
     end
 
-    style D fill:#fff9c4
     style BM fill:#ffe0b2
     style SM fill:#c8e6c9
     style BU fill:#e1bee7
     style SU fill:#e1bee7
-    style BF fill:#ffcdd2
-    style SF fill:#ffcdd2
+    style BX fill:#eeeeee
+    style SX fill:#eeeeee
 ```
 
-### Version Labeling
+### How version numbers are established (Git tags + Conventional Commits)
 
-Add a label to your PR to control the version bump:
+1. **Git tags are the source of truth.** An app's current version is the highest `vX.Y.Z` tag in its repository. semantic-release reads that tag as the baseline for the next release. `appinfo/info.xml` is **not** the source of truth — its `<version>` is *injected* from the computed version at package time.
+2. **Your commit messages decide the bump** ([Conventional Commits](https://www.conventionalcommits.org/)):
 
-| Label             | Version Change    | When to Use                          |
-| ----------------- | ----------------- | ------------------------------------ |
-| `major`           | `1.0.0` → `2.0.0` | Breaking changes, major redesigns    |
-| `minor`           | `1.0.0` → `1.1.0` | New features, non-breaking additions |
-| `patch` (default) | `1.0.0` → `1.0.1` | Bug fixes, small improvements        |
+   | Commit type | Version bump | Example |
+   | --- | --- | --- |
+   | `fix:` | patch | `1.2.3` → `1.2.4` |
+   | `feat:` | minor | `1.2.3` → `1.3.0` |
+   | `feat!:` or a `BREAKING CHANGE:` footer | major | `1.2.3` → `2.0.0` |
+   | `chore:` `docs:` `ci:` `refactor:` `test:` `style:` | none | no release |
 
-### Release Artifacts
+3. **No releasable commits = no release.** A merge containing only `chore`/`docs`/`ci`/etc. builds and publishes **nothing**. This is intentional — version numbers only change when behaviour does.
+4. On a release, semantic-release **creates and pushes the new tag** (`vX.Y.Z` for stable, `vX.Y.Z-beta.N` for beta), then the app is built, signed, a Codeberg release is created, and the tarball is uploaded to the [Nextcloud App Store](https://apps.nextcloud.com). The new tag becomes the baseline for the *next* release.
 
-Each release automatically:
+### Two channels
 
-1. Bumps the version in `appinfo/info.xml`
-2. Builds the app (composer install, npm build)
-3. Creates a signed tarball
-4. Uploads to the [Nextcloud App Store](https://apps.nextcloud.com)
-5. Creates a GitHub release with auto-generated changelog
+| Branch | Channel | Version format | App Store channel |
+| --- | --- | --- | --- |
+| `beta` | prerelease | `X.Y.Z-beta.N` | nightly |
+| `main` | stable | `X.Y.Z` | stable |
+
+So the flow is: merge **dev → beta** for a beta build, and **beta → main** for a stable build — each fires only when the merge carries releasable commits.
+
+### Versions only ever go up (no downgrades)
+
+Each app's Git tags are kept **at or above** the version currently published on the Nextcloud App Store (a one-time alignment set the baseline). Because every release bumps from the **highest** tag, published versions are monotonic.
+
+> ⚠️ **Do not hand-create a `vX.Y.Z` tag lower than the app's current store version** — semantic-release would bump from it and publish a downgrade. If you ever need to reset the baseline, create a tag **at or above** the store version.
+
+### Per-app requirements for a successful publish
+
+An app builds + tags + creates a Codeberg release on any host, but reaching the **App Store** additionally needs:
+
+- `NEXTCLOUD_SIGNING_KEY` + `NEXTCLOUD_SIGNING_CERT` repo secrets — the **exact keypair registered for that app id** on the store (a mismatch fails signature verification).
+- The app registered on [apps.nextcloud.com](https://apps.nextcloud.com) (new apps are registered on first upload).
+- The caller's `app-name` = the `<id>` in `appinfo/info.xml` (it is the tarball's top-level directory, which the store requires).
+
+`NEXTCLOUD_APPSTORE_TOKEN` is provided org-wide; you do not set it per app.
+
+### Reusable workflows
+
+The release logic lives in `Conduction/.github`:
+
+- Stable: `.forgejo/workflows/release-semrel.yml`
+- Beta: `.forgejo/workflows/release-semrel-beta.yml`
+
+Each app's `.forgejo/workflows/release-stable.yml` (on `main`) and `release-beta.yml` (on `beta`) is a thin caller that passes `app-name` and `secrets: inherit`.
 
 ## Documentation Release Process
 
-Documentation is built with [Docusaurus](https://docusaurus.io/) and deployed to GitHub Pages.
+Documentation is built with [Docusaurus](https://docusaurus.io/) and deployed to **Cloudflare Workers (Static Assets)** via Forgejo Actions.
 
-1. Documentation source lives in the `docs/` (or `docusaurus/`) folder on any branch
-2. Push or merge to the `documentation` branch triggers the build
-3. Docusaurus builds the static site
-4. The site is deployed to GitHub Pages with a custom domain (e.g., `openregister.app`)
+1. Documentation source lives in the `docs/` folder.
+2. A push/merge to `documentation`, `main`, or `development` (or the daily schedule) triggers the build.
+3. Docusaurus builds the static site; the build is validated on every event (including PRs).
+4. On non-PR events it deploys to Cloudflare (project `<app>-docs`), reachable at the app's custom domain.
 
 Each app has its own documentation site — see the app's README for its URL.
 
