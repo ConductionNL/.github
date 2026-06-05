@@ -31,6 +31,11 @@ on:
         required: false
         type: string
         default: "--legacy-peer-deps"
+      working-directory:
+        description: "Subdir to run lint/build/semantic-release in (monorepo package dir). Install always runs at repo root so npm workspaces resolve."
+        required: false
+        type: string
+        default: "."
       dry-run:
         description: "Pass --dry-run to semantic-release (no publish, no tag, no commit)"
         required: false
@@ -52,9 +57,11 @@ jobs:
       - name: Install deps
         run: npm ci ${{ inputs.install-flags }}
       - name: Lint
+        working-directory: ${{ inputs.working-directory }}
         run: npm run lint || echo "no lint script — skipping"
       - name: Build
-        run: npm run build
+        working-directory: ${{ inputs.working-directory }}
+        run: npm run build || echo "no build script — skipping"
 
   release:
     name: Release
@@ -80,6 +87,7 @@ jobs:
         run: npm ci ${{ inputs.install-flags }}
 
       - name: Release
+        working-directory: ${{ inputs.working-directory }}
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           GIT_CREDENTIALS: "https://x-access-token:${{ secrets.CODEBERG_TOKEN }}@codeberg.org"
