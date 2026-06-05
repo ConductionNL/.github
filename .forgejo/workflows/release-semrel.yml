@@ -97,16 +97,21 @@ jobs:
           TAG="v${VERSION}"
           ASSET="${APP_NAME}-${VERSION}.tar.gz"
           # semantic-release already created+pushed tag ${TAG}; create the Codeberg release object for it.
-          REL=$(curl -s -X POST "https://codeberg.org/api/v1/repos/${REPO}/releases" \
-            -H "Authorization: token ${CODEBERG_TOKEN}" -H "Content-Type: application/json" \
-            -d "{\"tag_name\":\"${TAG}\",\"target_commitish\":\"${GITHUB_SHA}\",\"name\":\"Release ${VERSION}\",\"draft\":false,\"prerelease\":false}")
-          echo "Codeberg release POST response: ${REL}" | head -c 400; echo
-          REL_ID=$(echo "${REL}" | jq -r '.id // empty')
-          if [ -z "${REL_ID}" ]; then
+          # Retry transient Codeberg API errors (empty body / 5xx during instability) up to 5x.
+          REL_ID=""
+          for attempt in 1 2 3 4 5; do
+            REL=$(curl -s -X POST "https://codeberg.org/api/v1/repos/${REPO}/releases" \
+              -H "Authorization: token ${CODEBERG_TOKEN}" -H "Content-Type: application/json" \
+              -d "{\"tag_name\":\"${TAG}\",\"target_commitish\":\"${GITHUB_SHA}\",\"name\":\"Release ${VERSION}\",\"draft\":false,\"prerelease\":false}")
+            echo "Codeberg release POST attempt ${attempt}: $(printf '%s' "${REL}" | head -c 200)"
+            REL_ID=$(echo "${REL}" | jq -r '.id // empty')
+            [ -n "${REL_ID}" ] && break
             REL_ID=$(curl -s -H "Authorization: token ${CODEBERG_TOKEN}" \
               "https://codeberg.org/api/v1/repos/${REPO}/releases/tags/${TAG}" | jq -r '.id // empty')
-          fi
-          [ -n "${REL_ID}" ] || { echo "ERROR: no release id"; exit 1; }
+            [ -n "${REL_ID}" ] && break
+            sleep 6
+          done
+          [ -n "${REL_ID}" ] || { echo "ERROR: no release id after 5 attempts"; exit 1; }
           curl -s -X POST "https://codeberg.org/api/v1/repos/${REPO}/releases/${REL_ID}/assets?name=${ASSET}" \
             -H "Authorization: token ${CODEBERG_TOKEN}" -F "attachment=@nextcloud-release.tar.gz" >/dev/null
           echo "Codeberg release ${TAG} asset uploaded (id ${REL_ID})"
