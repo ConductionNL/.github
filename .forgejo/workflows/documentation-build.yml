@@ -39,6 +39,9 @@ jobs:
         env:
           CODEBERG_TOKEN: ${{ secrets.CODEBERG_TOKEN }}
         run: |
+          # Container checkout is often owned by a different uid than the build user; trust it so
+          # Docusaurus' sitemap lastmod 'git log' lookups don't abort with "detected dubious ownership".
+          git config --global --add safe.directory '*' || true
           cd "${{ inputs.source-folder }}"
           rm -rf node_modules/.cache .docusaurus build
           npm run ci
@@ -54,3 +57,4 @@ jobs:
           name: docusaurus-build
           path: ${{ inputs.source-folder }}/build
           retention-days: 1
+
