@@ -376,12 +376,18 @@ add_allow "bash <nonexistent>"      "bash /tmp/does-not-exist-fixture-$$.sh"
 add_allow "bash -c innocuous"       'bash -c "echo hi > /tmp/ok"'
 
 # --legacy-peer-deps must be hard-blocked (papers over real peer-dep mismatches).
+# Rule scope is npm/pnpm/yarn/bun — keep fixtures for all four so future regex
+# narrowing (e.g. `npm\s+install\s+--legacy-peer-deps`) can't silently drop coverage.
 add_deny "npm install --legacy-peer-deps" "npm install --legacy-peer-deps"
 add_deny "npm i --legacy-peer-deps" "npm i --legacy-peer-deps"
 add_deny "npm install --legacy-peer-deps=true" "npm install --legacy-peer-deps=true"
+add_deny "npm install --legacy-peer-deps=false" "npm install --legacy-peer-deps=false"
 add_deny "chained: cd && npm install --legacy-peer-deps" "cd /tmp/foo && npm install --legacy-peer-deps"
 add_deny "wrapped in bash -c" 'bash -c "npm install --legacy-peer-deps"'
 add_deny "wrapped in timeout + bash -c" 'timeout 500 bash -c "npm install --legacy-peer-deps 2>&1 | tail -15"'
+add_deny "pnpm i --legacy-peer-deps" "pnpm i --legacy-peer-deps"
+add_deny "yarn add --legacy-peer-deps" "yarn add lodash --legacy-peer-deps"
+add_deny "bun install --legacy-peer-deps" "bun install --legacy-peer-deps"
 
 # ── ASK fixtures ──────────────────────────────────────────────────────────────
 # Package manager installs — every form should prompt for approval, not pass silently.

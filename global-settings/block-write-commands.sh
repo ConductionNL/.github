@@ -439,6 +439,9 @@ fi
 # silently produces a lockfile that won't reproduce on a clean install. If a
 # real install needs this flag, the user runs it themselves from their own
 # terminal — Claude must not.
+# Intentionally also blocks --legacy-peer-deps=false (the safe explicit opt-out):
+# Claude should never type this flag at all, in any form; .npmrc edits go through
+# the user's own terminal too.
 if echo "$cmd" | grep -qE -- '(^|[^A-Za-z0-9_-])--legacy-peer-deps\b'; then
     hard_deny "BLOCKED: --legacy-peer-deps masks real peer-dependency conflicts and produces a non-reproducible lockfile. Run this manually in your own terminal if it is truly needed."
 fi
