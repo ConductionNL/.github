@@ -434,6 +434,15 @@ if echo "$cmd" | grep -qE '(^|[;&|]\s*)npm\s+audit\b'; then
     fi
 fi
 
+# ── --legacy-peer-deps hard block ────────────────────────────────────────────
+# The --legacy-peer-deps flag papers over real peer-dependency mismatches and
+# silently produces a lockfile that won't reproduce on a clean install. If a
+# real install needs this flag, the user runs it themselves from their own
+# terminal — Claude must not.
+if echo "$cmd" | grep -qE -- '(^|[^A-Za-z0-9_-])--legacy-peer-deps\b'; then
+    hard_deny "BLOCKED: --legacy-peer-deps masks real peer-dependency conflicts and produces a non-reproducible lockfile. Run this manually in your own terminal if it is truly needed."
+fi
+
 # ── Package manager installs (npm/pnpm/yarn/bun) ──────────────────────────────
 # Word-boundary matching catches: npm i, npm add, cd && npm install, true && npm i,
 # and the same install verbs across pnpm, yarn, and bun.

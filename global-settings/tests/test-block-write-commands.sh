@@ -375,6 +375,14 @@ add_allow "bash <nonexistent>"      "bash /tmp/does-not-exist-fixture-$$.sh"
 # ALLOW: bash -c form (inline string, no file to scan; existing inline guards cover it).
 add_allow "bash -c innocuous"       'bash -c "echo hi > /tmp/ok"'
 
+# --legacy-peer-deps must be hard-blocked (papers over real peer-dep mismatches).
+add_deny "npm install --legacy-peer-deps" "npm install --legacy-peer-deps"
+add_deny "npm i --legacy-peer-deps" "npm i --legacy-peer-deps"
+add_deny "npm install --legacy-peer-deps=true" "npm install --legacy-peer-deps=true"
+add_deny "chained: cd && npm install --legacy-peer-deps" "cd /tmp/foo && npm install --legacy-peer-deps"
+add_deny "wrapped in bash -c" 'bash -c "npm install --legacy-peer-deps"'
+add_deny "wrapped in timeout + bash -c" 'timeout 500 bash -c "npm install --legacy-peer-deps 2>&1 | tail -15"'
+
 # ── ASK fixtures ──────────────────────────────────────────────────────────────
 # Package manager installs — every form should prompt for approval, not pass silently.
 add_ask "npm install" "npm install lodash"
