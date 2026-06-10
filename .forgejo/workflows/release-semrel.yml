@@ -118,22 +118,35 @@ jobs:
           # ---- Nextcloud App Store (UPLOAD-FIRST: only register NEW apps, so UPDATES never hit the new-app rate limiter) ----
           SIGNATURE=$(openssl dgst -sha512 -sign signing-key.key nextcloud-release.tar.gz | openssl base64 -A)
           DOWNLOAD_URL="https://codeberg.org/${REPO}/releases/download/${TAG}/${ASSET}"
-          UP=$(curl -s -o /tmp/up.json -w "%{http_code}" -X POST "https://apps.nextcloud.com/api/v1/apps/releases" \
-            -H "Authorization: Token ${NEXTCLOUD_APPSTORE_TOKEN}" -H "Content-Type: application/json" \
-            -d "{\"download\": \"${DOWNLOAD_URL}\", \"signature\": \"${SIGNATURE}\", \"nightly\": false}")
-          if [ "${UP}" != "200" ] && [ "${UP}" != "201" ] && grep -qi "does not exist" /tmp/up.json; then
-            echo "App ${APP_NAME} not registered yet — registering (NEW-app endpoint is rate-limited)..."
-            REG_SIG=$(printf '%s' "${APP_NAME}" | openssl dgst -sha512 -sign signing-key.key | openssl base64 -A)
-            REG=$(curl -s -w $'\n[http %{http_code}]' -X POST "https://apps.nextcloud.com/api/v1/apps" \
+          post_release() {
+            curl -s -o /tmp/up.json -w "%{http_code}" -X POST "https://apps.nextcloud.com/api/v1/apps/releases" \
               -H "Authorization: Token ${NEXTCLOUD_APPSTORE_TOKEN}" -H "Content-Type: application/json" \
-              -d "{\"certificate\": $(jq -Rs . < signing-cert.crt), \"signature\": \"${REG_SIG}\"}" || true)
-            echo "App Store register (${APP_NAME}) response: ${REG}"
-            UP=$(curl -s -o /tmp/up.json -w "%{http_code}" -X POST "https://apps.nextcloud.com/api/v1/apps/releases" \
-              -H "Authorization: Token ${NEXTCLOUD_APPSTORE_TOKEN}" -H "Content-Type: application/json" \
-              -d "{\"download\": \"${DOWNLOAD_URL}\", \"signature\": \"${SIGNATURE}\", \"nightly\": false}")
-          fi
-          echo "=== App Store upload HTTP ${UP} ==="; cat /tmp/up.json; echo
-          [ "${UP}" = "200" ] || [ "${UP}" = "201" ] || { echo "ERROR: App Store upload failed (HTTP ${UP})"; exit 1; }
+              -d "{\"download\": \"${DOWNLOAD_URL}\", \"signature\": \"${SIGNATURE}\", \"nightly\": false}"
+          }
+          # The App Store fetches DOWNLOAD_URL the instant we POST, but the just-created Codeberg release
+          # asset is often not yet servable (replica lag) → transient non-200. Retry with backoff so a
+          # successful build+tag is not thrown away by a momentary download race. New-app registration
+          # (rate-limited) is attempted at most once. Keep the hard gate: still fail if all attempts fail.
+          REGISTERED=0
+          UP=""
+          for attempt in 1 2 3 4 5 6; do
+            UP=$(post_release)
+            echo "=== App Store upload attempt ${attempt}: HTTP ${UP} ==="; cat /tmp/up.json; echo
+            if [ "${UP}" = "200" ] || [ "${UP}" = "201" ]; then break; fi
+            if [ "${REGISTERED}" = "0" ] && grep -qi "does not exist" /tmp/up.json; then
+              echo "App ${APP_NAME} not registered yet — registering (NEW-app endpoint is rate-limited)..."
+              REG_SIG=$(printf '%s' "${APP_NAME}" | openssl dgst -sha512 -sign signing-key.key | openssl base64 -A)
+              REG=$(curl -s -w $'\n[http %{http_code}]' -X POST "https://apps.nextcloud.com/api/v1/apps" \
+                -H "Authorization: Token ${NEXTCLOUD_APPSTORE_TOKEN}" -H "Content-Type: application/json" \
+                -d "{\"certificate\": $(jq -Rs . < signing-cert.crt), \"signature\": \"${REG_SIG}\"}" || true)
+              echo "App Store register (${APP_NAME}) response: ${REG}"
+              REGISTERED=1
+              continue
+            fi
+            echo "App Store upload non-success (HTTP ${UP}); backing off before retry..."
+            sleep $((attempt * 10))
+          done
+          [ "${UP}" = "200" ] || [ "${UP}" = "201" ] || { echo "ERROR: App Store upload failed after retries (HTTP ${UP})"; exit 1; }
           echo "Published ${APP_NAME} ${VERSION} to the App Store"
           PUB
           cat > .releaserc.json <<RC
