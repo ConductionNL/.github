@@ -422,20 +422,29 @@ jobs:
             | openssl base64 -A)
 
           echo "Uploading release to App Store (nightly: false)..."
-          UPLOAD_CODE=$(curl -s -o /tmp/upload-response.json -w "%{http_code}" \
-            -X POST "https://apps.nextcloud.com/api/v1/apps/releases" \
-            -H "Authorization: Token ${{ secrets.NEXTCLOUD_APPSTORE_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            -d "{\"download\": \"${DOWNLOAD_URL}\", \"signature\": \"${SIGNATURE}\", \"nightly\": false}")
-
-          echo "=== App Store upload HTTP ${UPLOAD_CODE} ==="
-          echo "--- response body ---"
-          cat /tmp/upload-response.json 2>/dev/null; echo
-          echo "---------------------"
+          # The App Store fetches DOWNLOAD_URL the instant we POST, but the just-created
+          # Codeberg release asset can be briefly unservable (replica lag) -> transient
+          # non-200. Retry with backoff so a successful build+tag is not discarded by a
+          # momentary download race. Keep the hard gate: still fail if all attempts fail.
+          UPLOAD_CODE=""
+          for attempt in 1 2 3 4 5 6; do
+            UPLOAD_CODE=$(curl -s -o /tmp/upload-response.json -w "%{http_code}" \
+              -X POST "https://apps.nextcloud.com/api/v1/apps/releases" \
+              -H "Authorization: Token ${{ secrets.NEXTCLOUD_APPSTORE_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              -d "{\"download\": \"${DOWNLOAD_URL}\", \"signature\": \"${SIGNATURE}\", \"nightly\": false}")
+            echo "=== App Store upload attempt ${attempt}: HTTP ${UPLOAD_CODE} ==="
+            echo "--- response body ---"
+            cat /tmp/upload-response.json 2>/dev/null; echo
+            echo "---------------------"
+            if [ "${UPLOAD_CODE}" = "200" ] || [ "${UPLOAD_CODE}" = "201" ]; then break; fi
+            echo "Upload non-success; backing off before retry..."
+            sleep $((attempt * 10))
+          done
           if [ "${UPLOAD_CODE}" = "200" ] || [ "${UPLOAD_CODE}" = "201" ]; then
             echo "Release uploaded to App Store successfully"
           else
-            echo "ERROR: App Store upload failed (HTTP ${UPLOAD_CODE}) — see response body above"
+            echo "ERROR: App Store upload failed after retries (HTTP ${UPLOAD_CODE}) — see response body above"
             exit 1
           fi
 
