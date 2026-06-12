@@ -4,16 +4,16 @@ Claude Code can run with a **local LLM** instead of the Anthropic API, using [Ol
 
 ## When to use local vs Claude API
 
-| Use case | Recommendation |
-|----------|---------------|
-| **Data sovereignty** — code or data must stay in the EU / on-premise | Local Qwen |
-| **Security-sensitive work** — credentials, private APIs, client data | Local Qwen |
-| **Offline / air-gapped environments** | Local Qwen |
-| **Simple tasks** — formatting, renaming, small refactors, boilerplate | Local Qwen |
-| **Cost reduction** — high-volume, repetitive prompts | Local Qwen |
-| **Complex reasoning** — architecture, debugging, multi-file changes | Claude API |
-| **Large context** — analyzing entire codebases or long specs | Claude API |
-| **Quality-critical** — production code, specs, client deliverables | Claude API |
+| Use case                                                              | Recommendation |
+| --------------------------------------------------------------------- | -------------- |
+| **Data sovereignty** — code or data must stay in the EU / on-premise  | Local Qwen     |
+| **Security-sensitive work** — credentials, private APIs, client data  | Local Qwen     |
+| **Offline / air-gapped environments**                                 | Local Qwen     |
+| **Simple tasks** — formatting, renaming, small refactors, boilerplate | Local Qwen     |
+| **Cost reduction** — high-volume, repetitive prompts                  | Local Qwen     |
+| **Complex reasoning** — architecture, debugging, multi-file changes   | Claude API     |
+| **Large context** — analyzing entire codebases or long specs          | Claude API     |
+| **Quality-critical** — production code, specs, client deliverables    | Claude API     |
 
 > **Rule of thumb:** Use Qwen locally for work that is private, simple, or high-volume. Use Claude API when quality and reasoning depth matter most. You can switch between them freely — they use the same Claude Code interface, tools, and commands.
 
@@ -35,11 +35,11 @@ ollama --version    # Should show 0.14.0+
 
 Choose the right model for your GPU VRAM:
 
-| Model | Download | Size | Min VRAM | Speed (RTX 3070) | Tool calling? |
-|-------|----------|------|----------|-------------------|---------------|
-| `qwen3:8b` | `ollama pull qwen3:8b` | 5.2 GB | 8 GB (fits 100%) | ~12s | **No** (chat only) |
-| **`qwen3:14b`** | `ollama pull qwen3:14b` | **9.3 GB** | 12 GB | **~2min** (spills to CPU on 8GB) | **Yes** |
-| `qwen3-coder` | `ollama pull qwen3-coder` | 18 GB | 24 GB | ~6min (mostly CPU on 8GB) | Yes |
+| Model           | Download                  | Size       | Min VRAM         | Speed (RTX 3070)                 | Tool calling?      |
+| --------------- | ------------------------- | ---------- | ---------------- | -------------------------------- | ------------------ |
+| `qwen3:8b`      | `ollama pull qwen3:8b`    | 5.2 GB     | 8 GB (fits 100%) | ~12s                             | **No** (chat only) |
+| **`qwen3:14b`** | `ollama pull qwen3:14b`   | **9.3 GB** | 12 GB            | **~2min** (spills to CPU on 8GB) | **Yes**            |
+| `qwen3-coder`   | `ollama pull qwen3-coder` | 18 GB      | 24 GB            | ~6min (mostly CPU on 8GB)        | Yes                |
 
 **Recommended: `qwen3:14b`** — the smallest model that supports **tool calling** (reading files, editing code, running commands). On 8GB VRAM it's slow (~2min/response) but works as a batch/overnight agent. On 12GB+ VRAM it runs at interactive speed (~15s).
 
@@ -117,16 +117,17 @@ To go back to Claude API in any terminal, simply open a new terminal as normal �
 
 Benchmarked on an RTX 3070 (8GB VRAM) with 24GB WSL memory:
 
-| Model | Simple task | Tool calling | Fits in 8GB VRAM | Usable interactively? |
-|-------|-------------|-------------|------------------|----------------------|
-| qwen3:8b | ~12 seconds | No | Yes (100% GPU) | Chat only |
-| **qwen3:14b** | **~2 minutes** | **Yes** | No (spills to CPU) | **Batch/overnight** |
-| qwen3-coder (30B) | ~6 minutes | Yes | No (68% CPU) | No |
-| Claude API (Opus) | ~3 seconds | Yes | N/A (cloud) | Yes |
+| Model             | Simple task    | Tool calling | Fits in 8GB VRAM   | Usable interactively? |
+| ----------------- | -------------- | ------------ | ------------------ | --------------------- |
+| qwen3:8b          | ~12 seconds    | No           | Yes (100% GPU)     | Chat only             |
+| **qwen3:14b**     | **~2 minutes** | **Yes**      | No (spills to CPU) | **Batch/overnight**   |
+| qwen3-coder (30B) | ~6 minutes     | Yes          | No (68% CPU)       | No                    |
+| Claude API (Opus) | ~3 seconds     | Yes          | N/A (cloud)        | Yes                   |
 
 **Be honest about the trade-off:** The recommended local model (`qwen3:14b`) is **~40x slower** than Claude API on 8GB VRAM hardware. It's not viable for interactive coding — but it **does support tool calling**, which makes it a real coding agent that can read files, edit code, and run commands. Use it for batch jobs you kick off and walk away from (e.g., overnight PHPCS fixes, bulk refactors, code reviews).
 
 **Where local shines:**
+
 - **Nightly / batch jobs** — automated code reviews, linting suggestions, documentation generation, bulk refactors where you kick it off and walk away
 - **Cost** — completely free, no API usage, no token limits, run it as much as you want
 - **Privacy** — nothing leaves your machine, ideal for client code under NDA or government data
@@ -240,12 +241,12 @@ A two-shift Rapid Application Development cycle that pairs Claude (daytime, fast
 
 ### Division of Labor
 
-| | Claude (Day) | Qwen (Night) |
-|---|---|---|
+|               | Claude (Day)                                      | Qwen (Night)                                   |
+| ------------- | ------------------------------------------------- | ---------------------------------------------- |
 | **Strengths** | Reasoning, architecture, specs, multi-file design | Mechanical fixes, repetitive changes, bulk ops |
-| **Speed** | ~3s/response (cloud API) | ~2min/response (local 14b on 8GB VRAM) |
-| **Cost** | API tokens (Max plan) | Free (local GPU) |
-| **Best for** | Complex logic, code review, client deliverables | PHPCS fixes, boilerplate, test scaffolding |
+| **Speed**     | ~3s/response (cloud API)                          | ~2min/response (local 14b on 8GB VRAM)         |
+| **Cost**      | API tokens (Max plan)                             | Free (local GPU)                               |
+| **Best for**  | Complex logic, code review, client deliverables   | PHPCS fixes, boilerplate, test scaffolding     |
 
 ### Task File Format
 
@@ -257,16 +258,20 @@ Qwen works best with narrow, explicit task files. Example:
 Working directory: `/path/to/app`
 
 ## Files to fix
+
 1. `lib/Controller/FooController.php` (3 errors)
 2. `lib/Service/BarService.php` (1 error)
 
 ## How to fix
+
 Find function calls without named parameters. Look up the method signature
 and add the parameter name:
+
 - BEFORE: `$this->setName('value')` where signature is `setName(string $name)`
 - AFTER: `$this->setName(name: 'value')`
 
 ## Verification
+
 Run: `./vendor/bin/phpcs --standard=phpcs.xml <files>`
 Expected: 0 errors
 ```

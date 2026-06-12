@@ -337,8 +337,50 @@ jobs:
               // Labels
               const labels = ['openspec', `openspec:${phase.toLowerCase().replace(' ', '-')}`];
 
+              // ADR-032: a change with >20 unchecked tasks is too large for the
+              // Hydra builder (it bounces oversized specs to needs-input). Flag it
+              // with `spec:too-large` so the builder skips it — it is built
+              // out-of-band by an operator or re-split into a <=20-task chain.
+              // The generator (opsx-ff/Specter) SHOULD chain instead of emitting a
+              // giant; this is the defensive net at sync time.
+              if (!change.archived) {
+                try {
+                  const tasksMd = fs.readFileSync(path.join(change.path, 'tasks.md'), 'utf8');
+                  const uncheckedTasks = (tasksMd.match(/^\s*-\s*\[ \]/gm) || []).length;
+                  if (uncheckedTasks > 20) {
+                    labels.push('spec:too-large');
+                    console.log(`  ${change.name}: ${uncheckedTasks} unchecked tasks > 20 → spec:too-large`);
+                  }
+                } catch { /* no tasks.md yet — nothing to size-check */ }
+              }
+
+              // Org-level labels (the Hydra/governance set: `spec:too-large`,
+              // `openspec`, build:*, code-review:*, etc.) are defined ONCE on
+              // the org and inherited by every repo. Attaching them to an issue
+              // by name already resolves to the org label (proven: `openspec`
+              // is org-level and is attached fine today). So we must NOT create
+              // a per-repo duplicate of any org label — doing so spawned
+              // duplicate `spec:too-large` labels across repos (2026-06-02) and
+              // muddied the board. Fetch the org label names once and skip them
+              // in the ensure-loop; only repo-specific labels (the per-phase
+              // `openspec:<phase>` taxonomy) are created at the repo level.
+              let orgLabelNames = new Set();
+              try {
+                const orgResp = await github.request('GET /orgs/{org}/labels', {
+                  org: repoOwner,
+                  per_page: 100,
+                });
+                for (const l of orgResp.data) orgLabelNames.add(l.name);
+              } catch (e) {
+                console.log(`  (could not list org labels: ${e.message} — falling back to per-repo ensure)`);
+              }
+
               // Ensure labels exist
               for (const label of labels) {
+                // Inherited from the org — never duplicate it at the repo level.
+                if (orgLabelNames.has(label)) {
+                  continue;
+                }
                 try {
                   await github.rest.issues.getLabel({
                     owner: repoOwner,
@@ -350,10 +392,14 @@ jobs:
                     owner: repoOwner,
                     repo: repoName,
                     name: label,
-                    color: label === 'openspec' ? '6f42c1' : 'c5def5',
+                    color: label === 'openspec'
+                      ? '6f42c1'
+                      : (label === 'spec:too-large' ? 'd73a4a' : 'c5def5'),
                     description: label === 'openspec'
                       ? 'Managed by OpenSpec workflow'
-                      : `OpenSpec phase: ${phase}`,
+                      : (label === 'spec:too-large'
+                        ? 'Pre-flight gate / builder bounced: spec has >20 unchecked tasks — fallback: needs-input; operator runs local-builder out-of-band or re-splits via Specter'
+                        : `OpenSpec phase: ${phase}`),
                   });
                 }
               }

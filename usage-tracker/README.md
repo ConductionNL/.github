@@ -6,13 +6,13 @@ Make **Claude token usage limits visible inside VS Code** with real-time monitor
 
 ## Features
 
-| Feature | Details |
-|---------|---------|
-| 🟢 **Color-coded Status** | Live indicator: 🔵 0% · 🟢 active · 🟡 50%+ · 🟠 75%+ · 🔴 90%+ · ⚫ 99%+ |
-| 📊 **Detailed Reports** | Session tokens (last ~5h), input/output split, weekly totals |
-| 🔔 **Smart Notifications** | Alerts at 25%, 50%, 75%, 90% thresholds |
-| ⚡ **Continuous Monitoring** | Real-time tracking with configurable refresh intervals |
-| 📈 **Multi-Model Support** | Haiku, Sonnet, and Opus with model-specific limits |
+| Feature                      | Details                                                                   |
+| ---------------------------- | ------------------------------------------------------------------------- |
+| 🟢 **Color-coded Status**    | Live indicator: 🔵 0% · 🟢 active · 🟡 50%+ · 🟠 75%+ · 🔴 90%+ · ⚫ 99%+ |
+| 📊 **Detailed Reports**      | Session tokens (last ~5h), input/output split, weekly totals              |
+| 🔔 **Smart Notifications**   | Alerts at 25%, 50%, 75%, 90% thresholds                                   |
+| ⚡ **Continuous Monitoring** | Real-time tracking with configurable refresh intervals                    |
+| 📈 **Multi-Model Support**   | Haiku, Sonnet, and Opus with model-specific limits                        |
 
 ---
 
@@ -123,6 +123,7 @@ python3 usage-tracker/claude-usage-tracker.py --fetch-usage
 ```
 
 ### Via Make Commands
+
 ```bash
 make -C usage-tracker report              # Full report
 make -C usage-tracker status              # Status bar
@@ -136,17 +137,21 @@ make -C usage-tracker test                # Test setup
 ## Integration with VS Code
 
 ### Option A: Terminal Panel (Easiest)
+
 1. Open Terminal: `` Ctrl + ` ``
 2. Run: `python3 usage-tracker/claude-usage-tracker.py --monitor`
 3. Keep panel open for live updates
 
 ### Option B: VS Code Task (Recommended)
+
 1. `Ctrl + Shift + P` → `Tasks: Open User Tasks`
 2. Add task from `SETUP.md` — it auto-starts when you open the workspace
 3. Run manually: `Ctrl + Shift + P` → `Tasks: Run Task` → `Claude Usage Monitor`
 
 ### Option C: Custom Keyboard Shortcut
+
 Add to VS Code `keybindings.json`:
+
 ```json
 {
   "key": "ctrl+shift+u",
@@ -160,6 +165,7 @@ Add to VS Code `keybindings.json`:
 ## Output Examples
 
 ### Status bar — all models (`--all-models`)
+
 ```
 ─── 16:42:17 UTC ─── Session: 1h 33m elapsed  ·  3h 27m until reset  ·  5h (calibrated)
 🟢🟢  All Models    │   83.6K ss │   2.34M wk │ Sess~:  10.0% │ Week~:  10.4% (cfg)
@@ -168,6 +174,7 @@ Add to VS Code `keybindings.json`:
 🔵🔵  Claude Opus   │  (no usage this period)
    Weekly resets: All Models in 16h 25m · Sonnet in 165h 25m
 ```
+
 First circle = Session usage · Second circle = Weekly usage
 
 `(cfg)` = your `limits.json` is loaded · `(est)` = using built-in defaults
@@ -180,20 +187,21 @@ Color scale: 🔵 0% · 🟢 >0–50% · 🟡 50–75% · 🟠 75–90% · 🔴 
 
 #### Understanding the Status Bar
 
-| Part | Meaning |
-|------|---------|
-| 1st circle | Session usage: 🔵 0% · 🟢 >0–50% · 🟡 50–75% · 🟠 75–90% · 🔴 90–99% · ⚫ 99%+ |
-| 2nd circle | Weekly usage: same color scale |
-| `83.6K ss` | Tokens used in last ~5h (session window) |
-| `2.34M wk` | Tokens used this week |
-| `Sess~: 10.0%` | % of **shared** session pool used (all models combined) |
-| `Week~: 10.4%` | % of weekly limit used |
-| `(X left)` | Remaining tokens — shown only at 🟠 75%+ for session (All Models row) and weekly |
-| `(calibrated)` / `(approx)` | Session reset: stored via `--set-session-reset` vs. estimated as now − 5h |
-| Weekly resets footer | Countdown to next reset for All Models and Sonnet weekly windows |
-| `(cfg)` / `(est)` | `limits.json` loaded vs. using built-in defaults |
+| Part                        | Meaning                                                                          |
+| --------------------------- | -------------------------------------------------------------------------------- |
+| 1st circle                  | Session usage: 🔵 0% · 🟢 >0–50% · 🟡 50–75% · 🟠 75–90% · 🔴 90–99% · ⚫ 99%+   |
+| 2nd circle                  | Weekly usage: same color scale                                                   |
+| `83.6K ss`                  | Tokens used in last ~5h (session window)                                         |
+| `2.34M wk`                  | Tokens used this week                                                            |
+| `Sess~: 10.0%`              | % of **shared** session pool used (all models combined)                          |
+| `Week~: 10.4%`              | % of weekly limit used                                                           |
+| `(X left)`                  | Remaining tokens — shown only at 🟠 75%+ for session (All Models row) and weekly |
+| `(calibrated)` / `(approx)` | Session reset: stored via `--set-session-reset` vs. estimated as now − 5h        |
+| Weekly resets footer        | Countdown to next reset for All Models and Sonnet weekly windows                 |
+| `(cfg)` / `(est)`           | `limits.json` loaded vs. using built-in defaults                                 |
 
 ### Full report
+
 ```
 ============================================================
 📊 CLAUDE USAGE REPORT  —  CLAUDE SONNET
@@ -218,6 +226,7 @@ Color scale: 🔵 0% · 🟢 >0–50% · 🟡 50–75% · 🟠 75–90% · 🔴 
 ```
 
 ### Live monitoring (`--monitor --all-models`)
+
 ```
 🔍 Monitoring all models — refresh every 300s  |  Ctrl+C to stop
    Circles: 1st 🟢 = Session usage  ·  2nd 🟢 = Weekly usage
@@ -260,7 +269,9 @@ See [CALIBRATE.md](CALIBRATE.md) for the complete guide (also optimized for AI a
 **Cache token note:** JSONL files include `cache_read` tokens, but Anthropic discounts cached tokens for quota tracking. This means calibrated limits will appear higher than the raw Anthropic quota. This is correct — both the tracker's counts and the calibrated limits use the same unit. Re-calibrate weekly as cache hit rates change.
 
 ### Change Notification Thresholds
+
 Edit `claude-usage-tracker.py`:
+
 ```python
 notification_percentages = [25, 50, 75, 90]
 ```
@@ -269,12 +280,12 @@ notification_percentages = [25, 50, 75, 90]
 
 ## Troubleshooting
 
-| Issue | Solution |
-|-------|----------|
-| "Session: 0.0%" but you've been working | Check `ls ~/.claude/projects/` — Claude Code must be installed and have run at least once |
-| No `~/.claude/projects/` directory | Claude Code CLI is not installed or hasn't been run yet. Install it from [claude.ai/code](https://claude.ai/code) |
-| Python not found | Use `python3` explicitly |
-| Notifications not showing | Install `notify-send`: `sudo apt install libnotify-bin` |
+| Issue                                   | Solution                                                                                                          |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| "Session: 0.0%" but you've been working | Check `ls ~/.claude/projects/` — Claude Code must be installed and have run at least once                         |
+| No `~/.claude/projects/` directory      | Claude Code CLI is not installed or hasn't been run yet. Install it from [claude.ai/code](https://claude.ai/code) |
+| Python not found                        | Use `python3` explicitly                                                                                          |
+| Notifications not showing               | Install `notify-send`: `sudo apt install libnotify-bin`                                                           |
 
 For more help, see [`SETUP.md`](SETUP.md).
 

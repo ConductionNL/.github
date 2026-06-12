@@ -8,7 +8,7 @@ description: How to report vulnerabilities, our response timeline, and safe harb
 
 # Security Policy
 
-This security policy applies to all repositories under the [ConductionNL](https://github.com/ConductionNL) organization.
+This security policy applies to all repositories under the [Conduction](https://codeberg.org/Conduction) (Codeberg, primary) and legacy [ConductionNL](https://github.com/ConductionNL) (GitHub) organizations.
 
 ## Reporting a Vulnerability
 
@@ -36,30 +36,30 @@ Send your report to **security@conduction.nl**. For sensitive communications, re
 
 ## Response Timeline
 
-| Milestone | Target |
-|---|---|
-| Acknowledgement | Within **48 hours** |
-| Initial triage and severity assessment | Within **5 business days** |
-| Fix for critical / high severity | Within **30 days** |
-| Fix for medium severity | Within **90 days** |
-| Public disclosure | After fix is released, or at **90 days** from report |
+| Milestone                              | Target                                               |
+| -------------------------------------- | ---------------------------------------------------- |
+| Acknowledgement                        | Within **48 hours**                                  |
+| Initial triage and severity assessment | Within **5 business days**                           |
+| Fix for critical / high severity       | Within **30 days**                                   |
+| Fix for medium severity                | Within **90 days**                                   |
+| Public disclosure                      | After fix is released, or at **90 days** from report |
 
 ## Severity Classification
 
 We use [CVSSv3](https://www.first.org/cvss/calculator/3.1) to classify severity:
 
-| Severity | CVSS Score | Response |
-|---|---|---|
-| **Critical** | 9.0–10.0 | Fix within 14 days |
-| **High** | 7.0–8.9 | Fix within 30 days |
-| **Medium** | 4.0–6.9 | Fix within 90 days |
-| **Low** | 0.1–3.9 | Fixed in next scheduled release |
+| Severity     | CVSS Score | Response                        |
+| ------------ | ---------- | ------------------------------- |
+| **Critical** | 9.0–10.0   | Fix within 14 days              |
+| **High**     | 7.0–8.9    | Fix within 30 days              |
+| **Medium**   | 4.0–6.9    | Fix within 90 days              |
+| **Low**      | 0.1–3.9    | Fixed in next scheduled release |
 
 ## Scope
 
 ### In scope
 
-- All source code under [github.com/ConductionNL](https://github.com/ConductionNL)
+- All source code under [codeberg.org/Conduction](https://codeberg.org/Conduction) (primary) and the legacy [github.com/ConductionNL](https://github.com/ConductionNL)
 - APIs and integrations exposed by our apps
 - Authentication and authorization logic
 - Data handling and privacy controls

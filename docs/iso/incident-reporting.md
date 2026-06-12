@@ -28,11 +28,11 @@ When a serious incident occurs, these rules apply:
 
 We distinguish three types of findings, each with their own procedure:
 
-| Type | What is it | Examples | Procedure |
-|---|---|---|---|
-| **Incident** | Unexpected event with direct impact on continuity, safety, or quality | System outage, unauthorized access, data breach, broken production deployment | Register, impact analysis, resolve immediately, evaluate |
-| **Deviation** (afwijking) | Non-compliance with a standard without direct impact | Development procedure not fully followed, document stored incorrectly, test step skipped | Register, analyze if structural, corrective/preventive action if needed |
-| **Nonconformity** (tekortkoming) | Structural or severe deviation affecting compliance, certification, or legal obligations | Security protocol structurally not followed, audit reveals missing controls, contractual obligation breached | Register, root cause analysis, improvement plan, monitor effectiveness |
+| Type                             | What is it                                                                               | Examples                                                                                                     | Procedure                                                               |
+| -------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| **Incident**                     | Unexpected event with direct impact on continuity, safety, or quality                    | System outage, unauthorized access, data breach, broken production deployment                                | Register, impact analysis, resolve immediately, evaluate                |
+| **Deviation** (afwijking)        | Non-compliance with a standard without direct impact                                     | Development procedure not fully followed, document stored incorrectly, test step skipped                     | Register, analyze if structural, corrective/preventive action if needed |
+| **Nonconformity** (tekortkoming) | Structural or severe deviation affecting compliance, certification, or legal obligations | Security protocol structurally not followed, audit reveals missing controls, contractual obligation breached | Register, root cause analysis, improvement plan, monitor effectiveness  |
 
 ## What to Report
 
@@ -64,6 +64,7 @@ Not sure how? Ask a team member, your supervisor, or someone from management —
 Labeling an issue as an incident automatically triggers a Slack flow that requests a **root cause analysis template** to be filled in.
 
 **Response time expectation:**
+
 - Security incidents: acknowledged within **4 business hours**
 - Quality deviations: acknowledged within **1 business day**
 

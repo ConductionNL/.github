@@ -21,11 +21,13 @@ Restart your machine when prompted. After reboot, Ubuntu will ask you to create 
 Download and install [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop/).
 
 After installation:
+
 1. Open Docker Desktop > **Settings** > **Resources** > **WSL Integration**
 2. Enable integration with your Ubuntu distro
 3. Click **Apply & Restart**
 
 Verify in WSL:
+
 ```bash
 docker --version
 docker compose version
@@ -55,21 +57,22 @@ Open VS Code and install these extensions (`Ctrl+Shift+X`):
 
 | Extension           | ID                           | Purpose                                                        |
 | ------------------- | ---------------------------- | -------------------------------------------------------------- |
+| Gitea               | gitea.gitea-vscode           | Codeberg/Gitea PR + issue sidebar (Conduction's primary git host) — see [Codeberg Auth Setup](./codeberg-auth-setup.md) |
 | PowerShell          | ms-vscode.powershell         | PowerShell 7 scripting (`.ps1` files)                          |
 | GitLens             | eamodio.gitlens              | Advanced Git history, blame, line annotations                  |
 | GitHub Copilot Chat | github.copilot-chat          | AI pair programmer (requires Copilot license)                  |
 | YAML                | redhat.vscode-yaml           | Syntax & validation for `docker-compose.yml` and OpenSpec YAML |
-| GitHub Actions      | github.vscode-github-actions | View and validate CI/CD workflows                              |
+| GitHub Actions      | github.vscode-github-actions | View and validate CI/CD workflows (legacy GitHub repos)        |
 | Makefile Tools      | ms-vscode.makefile-tools     | Makefile support (`make check-strict`)                         |
 | Pylance             | ms-python.vscode-pylance     | Enhanced Python type checking and IntelliSense                 |
 
 **Optional:**
 
-| Extension     | ID                      | Purpose                                                                 |
-| ------------- | ----------------------- | ----------------------------------------------------------------------- |
+| Extension     | ID                      | Purpose                                                                    |
+| ------------- | ----------------------- | -------------------------------------------------------------------------- |
 | Git Assistant | ivanhofer.git-assistant | Commit message suggestions + uncommitted changes warnings on branch switch |
-| Rainbow CSV   | mechatroner.rainbow-csv | Color-coded CSV/TSV highlighting                                        |
-| Live Preview  | ms-vscode.live-server   | Preview HTML files directly inside VS Code (right-click → Show Preview) |
+| Rainbow CSV   | mechatroner.rainbow-csv | Color-coded CSV/TSV highlighting                                           |
+| Live Preview  | ms-vscode.live-server   | Preview HTML files directly inside VS Code (right-click → Show Preview)    |
 
 Or install all required + recommended at once from the CLI (run inside WSL terminal):
 
@@ -85,6 +88,7 @@ code --install-extension eamodio.gitlens
 code --install-extension github.copilot-chat
 code --install-extension redhat.vscode-yaml
 code --install-extension github.vscode-github-actions
+code --install-extension gitea.gitea-vscode
 code --install-extension ms-vscode.makefile-tools
 code --install-extension ms-python.vscode-pylance
 ```
@@ -175,11 +179,52 @@ curl -sS https://getcomposer.org/installer | php
 sudo mv composer.phar /usr/local/bin/composer
 ```
 
-### GitHub CLI
+### Git-host CLIs
+
+Conduction's primary platform is **Codeberg / Gitea / Forgejo** (under the `Conduction` org as of 2026-05-29). GitHub is the secondary/fallback host (former primary; the migration is bidirectional). GitLab is an alternative for non-Conduction work. Install the CLIs you need:
+
+See **[Codeberg Authentication Setup](./codeberg-auth-setup.md)** for the full Codeberg onboarding guide — SSH key generation, `keychain` for passphrase persistence across shells, `tea` CLI install + token scopes, VS Code Gitea extension, and how to switch existing repo remotes.
+
+Quick smoke test after following that guide:
 
 ```bash
+ssh -T git@codeberg.org   # expect: "Hi <user>! ... but Forgejo does not provide shell access."
+tea login list            # expect: one row, name=codeberg, your username
+```
+
+```bash
+# Codeberg / Gitea / Forgejo — PRIMARY
+sudo apt install -y tea                          # if available, else:
+# wget -O /usr/local/bin/tea https://dl.gitea.com/tea/0.10.0/tea-0.10.0-linux-amd64
+# sudo chmod +x /usr/local/bin/tea
+tea login add --name codeberg --url https://codeberg.org --token <PAT>
+# Token from https://codeberg.org/user/settings/applications
+# Scopes: read:repository, write:repository, read:issue, write:issue
+
+# GitHub — SECONDARY (still required while migration is in progress)
 sudo apt install -y gh
 gh auth login
+
+# GitLab — ALTERNATIVE
+sudo apt install -y glab
+glab auth login
+```
+
+**Caveat for Claude Code users:** `tea pulls create` / `tea issues create` need a controlling TTY and fail from Claude's Bash tool. Claude-driven workflows fall back to REST `POST /api/v1/...` using the token from `~/.config/tea/config.yml`. Read-only `tea login list/default` is TTY-safe.
+
+**SSH for git ops on Codeberg:**
+
+```bash
+ssh-keygen -t ed25519 -C "you@conduction.nl" -f ~/.ssh/id_ed25519_codeberg
+cat ~/.ssh/id_ed25519_codeberg.pub
+# Paste the pubkey at https://codeberg.org/user/settings/keys
+# Then add a Host entry to ~/.ssh/config:
+#   Host codeberg.org
+#       HostName codeberg.org
+#       User git
+#       IdentityFile ~/.ssh/id_ed25519_codeberg
+#       IdentitiesOnly yes
+ssh -T git@codeberg.org  # "Hi <user>! You've successfully authenticated."
 ```
 
 ### PHP Quality Tools (phpcs, phpmd, psalm, phpstan)
@@ -227,6 +272,7 @@ npm install -g @fission-ai/openspec
 > **Do NOT run `openspec init`** in an existing Conduction project — it already has a customized `openspec/` directory with Conduction-specific schemas, shared specs, and project changes. Running `init` would overwrite them.
 
 **OpenSpec documentation:**
+
 - [Official site](https://openspec.dev/) — Getting started, concepts, customization
 - [GitHub](https://github.com/Fission-AI/OpenSpec) — Source, issues, releases
 - [npm](https://www.npmjs.com/package/@fission-ai/openspec) — Package info
@@ -250,7 +296,9 @@ node --version        # v20.x+
 php --version         # 8.1+
 composer --version    # 2.x
 docker --version      # 24+
-gh --version          # 2.x+
+tea --version         # 0.10+ — Codeberg/Gitea/Forgejo CLI (primary)
+gh --version          # 2.x+ — GitHub CLI (secondary/fallback)
+glab --version        # 1.x+ — GitLab CLI (alternative, optional)
 openspec --version    # 1.x
 npx playwright --version  # 1.x
 ```

@@ -44,14 +44,14 @@ graph TD
 
 Run this **before** `/app-create` when building a brand new app from scratch. It does deep research and produces:
 
-| Artifact | Contents | Optional? |
-|----------|---------|-----------|
-| `docs/ARCHITECTURE.md` | Standards research, data model, entity definitions, OpenRegister schema, Vue component decisions | No |
-| `docs/FEATURES.md` | 10+ competitor analysis, feature matrix (MVP/V1/Enterprise), settings & notifications derived from features | No |
-| `docs/DESIGN-REFERENCES.md` | ASCII wireframes, UX inspiration, missing feature patterns | No |
-| `openspec/config.yaml` | OpenSpec CLI context — standards, architecture summary, rules for specs/design/tasks | No |
-| `img/app-store.svg` | Blue hexagon app logo | Yes _(asked during Phase 5)_ |
-| `docusaurus/` + `.github/workflows/documentation.yml` | Docusaurus documentation site, GitHub Pages deployment | Yes _(asked during Phase 5)_ |
+| Artifact                                              | Contents                                                                                                    | Optional?                    |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| `docs/ARCHITECTURE.md`                                | Standards research, data model, entity definitions, OpenRegister schema, Vue component decisions            | No                           |
+| `docs/FEATURES.md`                                    | 10+ competitor analysis, feature matrix (MVP/V1/Enterprise), settings & notifications derived from features | No                           |
+| `docs/DESIGN-REFERENCES.md`                           | ASCII wireframes, UX inspiration, missing feature patterns                                                  | No                           |
+| `openspec/config.yaml`                                | OpenSpec CLI context — standards, architecture summary, rules for specs/design/tasks                        | No                           |
+| `img/app-store.svg`                                   | Blue hexagon app logo                                                                                       | Yes _(asked during Phase 5)_ |
+| `docusaurus/` + `.github/workflows/documentation.yml` | Docusaurus documentation site, GitHub Pages deployment                                                      | Yes _(asked during Phase 5)_ |
 
 `/app-create` and `/app-explore` will automatically read these documents as context when they exist.
 
@@ -68,7 +68,7 @@ schema: conduction
 
 context: |
   Project: <Project Name>
-  Repo: ConductionNL/<repo-name>
+  Repo: Conduction/<repo-name>
   Type: Nextcloud App (PHP)
   Description: <one-line description>
   Key components: <list main components>
@@ -104,6 +104,7 @@ If not using `/app-design`, create this file manually before running `openspec v
 Starts the interactive setup process. Collects app identity, goal, dependency choices, and GitHub details — then either clones the template as a starting point or onboards an existing folder by comparing it against the template structure.
 
 Always creates an `openspec/` folder with:
+
 - `app-config.json` — the canonical config file for all decisions
 - `README.md` — documents the app's goal and structure
 
@@ -117,28 +118,33 @@ After `/app-create` you have a fully scaffolded app with all template placeholde
 
 Each app should have a `project.md` at its root. This file is loaded by Claude as context when working on the project. `/app-create` scaffolds a stub; complete it with the details below:
 
-```markdown
+````markdown
 # <Project Name>
 
 ## Overview
+
 <What this project does and why it exists>
 
 ## Repository
-- **GitHub**: https://github.com/ConductionNL/<repo-name>
-- **Organization**: ConductionNL
+
+- **GitHub**: https://codeberg.org/Conduction/<repo-name>
+- **Organization**: Conduction (Codeberg, primary) / ConductionNL (GitHub, legacy)
 - **Container mount**: /var/www/html/custom_apps/<appname>
 
 ## Architecture
 
 ### Key Components
+
 - **<Component A>** — <description>
 - **<Component B>** — <description>
 
 ### Important Patterns
+
 - <Pattern or gotcha worth knowing, e.g. "route ordering matters in routes.php">
 
 ### Directory Structure
-​```
+
+​`
 lib/
   Controller/
   Service/
@@ -146,20 +152,23 @@ lib/
 appinfo/
   info.xml
   routes.php
-​```
+​`
 
 ## Dependencies
+
 - **Depends on**: <list upstream dependencies>
 - **Depended on by**: <list downstream dependents>
 
 ## API
+
 - Base URL: `/index.php/apps/<appname>/api/`
 - Auth: <authentication method>
 - Format: JSON
 
 ## Testing
+
 - <How to run tests for this project>
-```
+````
 
 List known gotchas, dependencies in both directions, and any project-specific patterns that differ from the workspace-wide standards in `apps-extra/project.md`.
 
@@ -174,6 +183,7 @@ Opens an interactive exploration session. Acts as a thinking partner — questio
 Reads `openspec/app-config.json`, feature specs, ADRs, and — when present — `docs/ARCHITECTURE.md`, `docs/FEATURES.md`, and `docs/DESIGN-REFERENCES.md` from `/app-design`. Never writes application code.
 
 What you can do in explore mode:
+
 - Refine the app's goal or summary
 - Map out features and write `openspec/specs/{feature-name}/spec.md` files
 - Change category, OpenRegister dependency, CI settings
@@ -202,6 +212,7 @@ Always shows the change summary and asks for confirmation before modifying anyth
 **Audit the app files against `openspec/app-config.json`.**
 
 Read-only. Checks every tracked file and reports findings with severity:
+
 - **CRITICAL** — Identity mismatches that break CI or cause runtime errors
 - **WARNING** — Metadata drift that is incorrect but not breaking
 - **INFO** — Minor cosmetic differences
@@ -240,11 +251,15 @@ openspec/
   "version": "0.1.0",
   "license": "EUPL-1.2",
   "author": "Conduction B.V.",
-  "repository": "https://github.com/ConductionNL/my-app",
+  "repository": "https://codeberg.org/Conduction/my-app",
   "dependencies": {
     "requiresOpenRegister": true,
     "additionalCiApps": [
-      {"repo": "ConductionNL/openregister", "app": "openregister", "ref": "main"}
+      {
+        "repo": "Conduction/openregister",
+        "app": "openregister",
+        "ref": "main"
+      }
     ]
   },
   "cicd": {
@@ -275,9 +290,11 @@ What this feature does and why it matters to users.
 ## Requirements
 
 ### Requirement: {Requirement Name}
+
 The system MUST/SHOULD/MAY {requirement statement}.
 
 #### Scenario: {Scenario Name}
+
 - GIVEN {precondition}
 - WHEN {action}
 - THEN the system {MUST/SHOULD} {expected outcome}
@@ -303,20 +320,20 @@ Open questions, constraints, dependencies, related ADRs.
 
 `/app-apply` and `/app-verify` track the following files and keep them in sync with `app-config.json`:
 
-| File | What is tracked |
-|------|----------------|
-| `appinfo/info.xml` | App ID, name, summary, goal, namespace, category, GitHub URLs |
-| `lib/AppInfo/Application.php` | APP_ID constant, PHP namespace |
-| `composer.json` | Package name, PSR-4 namespace |
-| `package.json` | Package name |
-| `webpack.config.js` | App ID constant |
-| `src/App.vue` | OpenRegister gate (present/absent) |
-| `README.md` | Title, goal section |
-| `.github/workflows/code-quality.yml` | App name, PHP versions, NC refs, Newman flag, additional apps |
-| `.github/workflows/release-beta.yml` | App name |
-| `.github/workflows/release-stable.yml` | App name |
-| `.github/workflows/issue-triage.yml` | App name |
-| `.github/workflows/openspec-sync.yml` | App name |
+| File                                   | What is tracked                                               |
+| -------------------------------------- | ------------------------------------------------------------- |
+| `appinfo/info.xml`                     | App ID, name, summary, goal, namespace, category, GitHub URLs |
+| `lib/AppInfo/Application.php`          | APP_ID constant, PHP namespace                                |
+| `composer.json`                        | Package name, PSR-4 namespace                                 |
+| `package.json`                         | Package name                                                  |
+| `webpack.config.js`                    | App ID constant                                               |
+| `src/App.vue`                          | OpenRegister gate (present/absent)                            |
+| `README.md`                            | Title, goal section                                           |
+| `.github/workflows/code-quality.yml`   | App name, PHP versions, NC refs, Newman flag, additional apps |
+| `.github/workflows/release-beta.yml`   | App name                                                      |
+| `.github/workflows/release-stable.yml` | App name                                                      |
+| `.github/workflows/issue-triage.yml`   | App name                                                      |
+| `.github/workflows/openspec-sync.yml`  | App name                                                      |
 
 ---
 
@@ -365,7 +382,7 @@ After completing the steps above, confirm:
 /app-verify my-app         # Verify
 ```
 
-> **Legacy app without `@spec` annotations?** If the app predates the spec traceability convention ([ADR-003](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-003-backend.md)), run the [Retrofit Playbook](retrofit.md) before feature work — `/opsx-coverage-scan` → `/opsx-annotate` → `/opsx-reverse-spec`.
+> **Legacy app without `@spec` annotations?** If the app predates the spec traceability convention ([ADR-003](https://codeberg.org/Conduction/hydra/blob/main/openspec/architecture/adr-003-backend.md)), run the [Retrofit Playbook](retrofit.md) before feature work — `/opsx-coverage-scan` → `/opsx-annotate` → `/opsx-reverse-spec`.
 
 ### Periodic health check
 
@@ -384,6 +401,7 @@ App-specific ADRs live in `openspec/architecture/` and document why the app is b
 > **Company-wide ADRs** live in `hydra/openspec/architecture/` and apply to all Conduction apps. Only create an app-specific ADR when the decision is unique to that app.
 
 Good candidates for app-specific ADRs:
+
 - Data storage approach (OpenRegister vs own tables)
 - Frontend architecture choices unique to this app
 - Authentication and authorization model
@@ -431,17 +449,18 @@ The feature spec tracks the overall concept; the OpenSpec changes track implemen
 
 The two layers have distinct roles — duplication is avoided by keeping each layer at the right level of detail:
 
-| | `openspec/` (app config layer) | `openspec/changes/` (implementation layer) |
-|---|---|---|
-| **Question** | WHAT should this app do? | HOW should we build it? |
-| **Level** | Concept and goal | Technical specification |
-| **Feature detail** | User stories + acceptance criteria | Architecture, design, tasks |
-| **Decisions** | WHY (ADRs in `openspec/architecture/`) | HOW (design.md per change) |
-| **Output** | Input for OpenSpec | Output for development |
+|                    | `openspec/` (app config layer)         | `openspec/changes/` (implementation layer) |
+| ------------------ | -------------------------------------- | ------------------------------------------ |
+| **Question**       | WHAT should this app do?               | HOW should we build it?                    |
+| **Level**          | Concept and goal                       | Technical specification                    |
+| **Feature detail** | User stories + acceptance criteria     | Architecture, design, tasks                |
+| **Decisions**      | WHY (ADRs in `openspec/architecture/`) | HOW (design.md per change)                 |
+| **Output**         | Input for OpenSpec                     | Output for development                     |
 
 **Rule of thumb:**
-- If you are deciding *what* the app needs → `openspec/specs/{feature}/spec.md`
-- If you are deciding *how* to implement a specific change → `openspec/changes/{change}/`
+
+- If you are deciding _what_ the app needs → `openspec/specs/{feature}/spec.md`
+- If you are deciding _how_ to implement a specific change → `openspec/changes/{change}/`
 - If a decision is about the overall architecture of the app → `openspec/architecture/adr-NNN-*.md`
 - If a decision is about the design of a specific feature → `openspec/changes/{change}/design.md`
 
@@ -458,6 +477,7 @@ App Apply is deliberately narrow. It only touches scaffold and configuration fil
 ❌ **Does not touch:** Feature code, business logic, Vue components, controllers, OpenRegister schemas.
 
 If a user asks `/app-apply` to do something outside this scope, it redirects to the right tool:
+
 - Config decision → `/app-explore` to capture it, then `/app-apply`
 - Feature implementation → `/opsx-ff {feature-name}`
 
@@ -467,13 +487,13 @@ If a user asks `/app-apply` to do something outside this scope, it redirects to 
 
 These three commands can feel overlapping. Here's the clear distinction:
 
-| | `/app-design` | `/app-create` | `/app-explore` |
-|---|---|---|---|
-| **When** | Before the repo exists | Once, at bootstrap | Repeatedly throughout app lifetime |
-| **Does** | Research + document (architecture, competitors, wireframes) | Scaffold files + set up GitHub | Think + iterate on config and features |
-| **Writes to** | `docs/`, `openspec/config.yaml`, `openspec/specs/` | Template files, `openspec/app-config.json` | `openspec/app-config.json`, `openspec/specs/`, `openspec/architecture/` |
-| **Requires** | Nothing (pre-repo) | Git repo, optionally design docs | Existing app with `openspec/app-config.json` |
-| **Skip when** | Onboarding existing repo / simple app | Already done | Never — use it repeatedly |
+|               | `/app-design`                                               | `/app-create`                              | `/app-explore`                                                          |
+| ------------- | ----------------------------------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------- |
+| **When**      | Before the repo exists                                      | Once, at bootstrap                         | Repeatedly throughout app lifetime                                      |
+| **Does**      | Research + document (architecture, competitors, wireframes) | Scaffold files + set up GitHub             | Think + iterate on config and features                                  |
+| **Writes to** | `docs/`, `openspec/config.yaml`, `openspec/specs/`          | Template files, `openspec/app-config.json` | `openspec/app-config.json`, `openspec/specs/`, `openspec/architecture/` |
+| **Requires**  | Nothing (pre-repo)                                          | Git repo, optionally design docs           | Existing app with `openspec/app-config.json`                            |
+| **Skip when** | Onboarding existing repo / simple app                       | Already done                               | Never — use it repeatedly                                               |
 
 **Overlap note:** `/app-design` creates `openspec/config.yaml` and initial `openspec/specs/`. `/app-create` creates `openspec/app-config.json`. These are different files with different purposes — the design docs don't replace the machine-readable config file.
 
@@ -483,15 +503,16 @@ These three commands can feel overlapping. Here's the clear distinction:
 
 App lifecycle commands (`app-`) work alongside the OpenSpec workflow commands (`opsx-`), making the full workflow coherent:
 
-| | App Lifecycle commands | OpenSpec implementation commands |
-|---|---|---|
-| **Purpose** | Bootstrap, configure, and audit the app itself | Specify, implement, and validate features |
-| **Source of truth** | `openspec/app-config.json` | `openspec/changes/` directories |
-| **Writes to** | App files (metadata, CI, config) | Application code (PHP, Vue, schemas) |
-| **Start with** | A new or existing app repo | A specific feature or change to implement |
-| **ADR location** | `openspec/architecture/` (app-wide decisions) | `openspec/changes/*/design.md` (feature decisions) |
+|                     | App Lifecycle commands                         | OpenSpec implementation commands                   |
+| ------------------- | ---------------------------------------------- | -------------------------------------------------- |
+| **Purpose**         | Bootstrap, configure, and audit the app itself | Specify, implement, and validate features          |
+| **Source of truth** | `openspec/app-config.json`                     | `openspec/changes/` directories                    |
+| **Writes to**       | App files (metadata, CI, config)               | Application code (PHP, Vue, schemas)               |
+| **Start with**      | A new or existing app repo                     | A specific feature or change to implement          |
+| **ADR location**    | `openspec/architecture/` (app-wide decisions)  | `openspec/changes/*/design.md` (feature decisions) |
 
 Typical combined workflow:
+
 1. Design (optional): `/app-design`
 2. Bootstrap and configure: `/app-create` → `/app-explore` → `/app-apply`
 3. Define features and ADRs: `/app-explore` (repeated as the app evolves)

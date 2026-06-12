@@ -20,12 +20,12 @@ Conduction is committed to delivering high-quality open-source software and serv
 
 ## Quality Objectives (ISO 9001:2015 §6.2)
 
-| Objective | Measurable target | Responsible | Review |
-|---|---|---|---|
-| Issue response time | Support tickets acknowledged within 1 business day | Operations Lead | Monthly (MT quality meeting) |
-| Software quality | All PRs pass automated quality gates before merge | Development Lead | Continuous (CI/CD) |
-| Process improvement | ≥ 2 process improvements implemented per quarter | Quality Manager | Quarterly (internal audit) |
-| Employee competence | All employees reviewed annually against competence matrix | HR Lead | Annually (February) |
+| Objective           | Measurable target                                         | Responsible      | Review                       |
+| ------------------- | --------------------------------------------------------- | ---------------- | ---------------------------- |
+| Issue response time | Support tickets acknowledged within 1 business day        | Operations Lead  | Monthly (MT quality meeting) |
+| Software quality    | All PRs pass automated quality gates before merge         | Development Lead | Continuous (CI/CD)           |
+| Process improvement | ≥ 2 process improvements implemented per quarter          | Quality Manager  | Quarterly (internal audit)   |
+| Employee competence | All employees reviewed annually against competence matrix | HR Lead          | Annually (February)          |
 
 Actual performance against these targets is tracked in the internal monitoring spreadsheet and reviewed during MT quality meetings (last Monday of each month).
 
@@ -40,7 +40,7 @@ Conduction's management commits to:
 
 ## Communication to Employees
 
-This policy is communicated to all employees via periodic quality sessions and is available as a reference on this documentation site. Employees are expected to understand this policy and apply its principles in their daily work. Questions or concerns can be directed to the Quality Manager or raised via a [GitHub Issue](https://github.com/ConductionNL/.github/issues).
+This policy is communicated to all employees via periodic quality sessions and is available as a reference on this documentation site. Employees are expected to understand this policy and apply its principles in their daily work. Questions or concerns can be directed to the Quality Manager or raised via [an issue on Codeberg](https://codeberg.org/Conduction/.github/issues).
 
 ## Applicability
 

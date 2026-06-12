@@ -5,9 +5,12 @@ _This is the **architecture reference** — see [Getting Started](./getting-star
 ## Overview
 
 This workspace uses a spec-driven development workflow that combines:
+
 - **OpenSpec** — Structured specifications alongside code
-- **GitHub Issues** — Visual progress tracking via kanban boards
+- **Tracking issues** on Codeberg / Gitea / Forgejo (primary, under the `Conduction` org as of 2026-05-29) or GitHub (secondary/fallback) — visual progress tracking via per-repo project boards or kanban
 - **Spec verification** — Automated review of code against specifications
+
+**Platform note.** Conduction is migrating from `github.com/ConductionNL/*` to `codeberg.org/Conduction/*`. Skills and Hydra-pipeline scripts auto-detect the per-repo platform from `git remote get-url origin`; opsx-* skills create tracking issues on whichever host the target repo lives. The migration is bidirectional — every operation also supports GitHub fallback so the system can revert if needed.
 
 The key insight: **specs are written once, then broken into small JSON tasks** that each point back to a specific spec section. This means AI coding loops can work with minimal context (just the task + its spec ref) instead of loading entire spec documents.
 
@@ -54,13 +57,14 @@ apps-extra/                         # Workspace root
 ```
 
 **Primary spec ownership:**
+
 - `openregister` (foundation) — `nextcloud-app/`, `api-patterns/`, `docker/`, `release-workflows/`
 - `nldesign` — `nl-design/`
 - `pipelinq` — `pipeline/`, `pipeline-views/`
 
 ## The Full Flow
 
-> **Legacy app?** This flow assumes the app is spec-first — methods carry `@spec` tags that `/opsx-verify` walks at review time. Apps that predate the convention ([ADR-003](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-003-backend.md)) need a one-time retrofit pass before normal feature work. See the [Retrofit Playbook](retrofit.md).
+> **Legacy app?** This flow assumes the app is spec-first — methods carry `@spec` tags that `/opsx-verify` walks at review time. Apps that predate the convention ([ADR-003](https://codeberg.org/Conduction/hydra/blob/main/openspec/architecture/adr-003-backend.md)) need a one-time retrofit pass before normal feature work. See the [Retrofit Playbook](retrofit.md).
 
 ### Phase 1: Spec Building
 
@@ -73,12 +77,15 @@ Start by defining what you're building. This creates structured, reviewable spec
 This creates `openspec/changes/add-woo-search/` with metadata. Then either:
 
 **Fast-forward (all at once):**
+
 ```
 /opsx-ff
 ```
+
 Creates proposal → specs → design → tasks in dependency order.
 
 **Or incrementally:**
+
 ```
 /opsx-continue    # Creates proposal
 /opsx-continue    # Creates specs
@@ -104,7 +111,7 @@ specs     →  test-plan  →  tasks        (use to pre-define test cases before
 
 **test-plan and test scenarios:** A `test-plan.md` maps spec scenarios to named test cases (TC-1, TC-2, …) before any code is written — it answers "what does done look like?" After implementation, TCs that represent ongoing regression value should be promoted to reusable test scenarios via `/test-scenario-create`. Those `TS-NNN-slug.md` files persist after the change is archived and are automatically picked up by `/test-counsel`, `/test-app`, and `/test-persona-*`.
 
-### Phase 2: Plan to GitHub Issues
+### Phase 2: Plan to Tracking Issues
 
 Once specs are reviewed and approved, convert them to trackable work items:
 
@@ -113,18 +120,20 @@ Once specs are reviewed and approved, convert them to trackable work items:
 ```
 
 This command:
+
 1. Parses `tasks.md` into structured JSON
-2. Creates a **tracking issue** (epic) on GitHub with a full task checklist
+2. Creates a **tracking issue** (epic) on the per-repo platform (Codeberg primary, GitHub fallback, GitLab alternative) with a full task checklist
 3. Creates **individual issues** per task, each containing:
    - Task description
    - Acceptance criteria (from spec scenarios)
    - Spec reference (link to the relevant spec section)
    - Files likely affected
    - Labels: `openspec`, `<change-name>`
-4. Saves `plan.json` with all GitHub issue numbers linked
+4. Saves `plan.json` with all issue numbers linked
 
-**Why GitHub Issues?**
-- Visual kanban board (GitHub Projects)
+**Why tracking issues?**
+
+- Visual kanban board (per-repo on Codeberg; Codeberg has no cross-repo board yet — see [Codeberg Community #694](https://codeberg.org/Codeberg/Community/issues/694))
 - Progress visible to the whole team
 - Each issue links back to specs for traceability
 - Can be managed independently of Claude sessions
@@ -146,9 +155,10 @@ Runs Phases 3 → 4 → 5 in one hands-off command inside an isolated Docker con
 /opsx-apply-loop                           # asks which app + change
 ```
 
-The loop runs `/opsx-apply` → `/opsx-verify` up to 5 times per app, optionally followed by targeted single-agent tests (max 3 test iterations), then archives when verify is clean and handles git commit and GitHub sync on the host. Use this when you want to walk away and let Claude work through the full cycle automatically. Requires a container authentication token — the Docker container cannot use interactive OAuth. Set `CLAUDE_CODE_AUTH_TOKEN` (preferred — free, uses your subscription) or `ANTHROPIC_API_KEY` (fallback — costs money) in your `~/.bashrc`. See [Getting Started — Container authentication](getting-started.md#prerequisites) for step-by-step setup.
+The loop runs `/opsx-apply` → `/opsx-verify` up to 5 times per app, optionally followed by targeted single-agent tests (max 3 test iterations), then archives when verify is clean and handles git commit and per-platform issue sync on the host. Use this when you want to walk away and let Claude work through the full cycle automatically. Requires a container authentication token — the Docker container cannot use interactive OAuth. Set `CLAUDE_CODE_AUTH_TOKEN` (preferred — free, uses your subscription) or `ANTHROPIC_API_KEY` (fallback — costs money) in your `~/.bashrc`. See [Getting Started — Container authentication](getting-started.md#prerequisites) for step-by-step setup.
 
 Each iteration of the loop:
+
 1. **Reads plan.json** — finds the next pending task
 2. **Reads ONLY the referenced spec section** — via `spec_ref` pointer
 3. **Implements the task** — following acceptance criteria, including:
@@ -157,13 +167,14 @@ Each iteration of the loop:
    - **Tests**: unit tests (PHPUnit), API tests (Newman/Postman), browser tests (Playwright MCP)
 4. **Runs tests** — unit tests, Newman tests, and browser verification MUST pass before marking complete
 5. **Updates progress** — marks task done in plan.json and tasks.md
-6. **Closes the GitHub issue** — with a summary comment
+6. **Closes the tracking issue** — with a summary comment (Codeberg/GitHub/GitLab depending on the per-repo platform)
 7. **Moves to the next task** — or stops if all done
 
 **Why this works:**
+
 - Minimal context per iteration (just the task + its spec section)
 - No "amnesia" — plan.json tracks state across sessions
-- Visual progress — GitHub issues close as work completes
+- Visual progress — tracking issues close as work completes
 - Resumable — if interrupted, picks up where it left off
 - Tests catch regressions immediately — before moving to the next task
 
@@ -176,6 +187,7 @@ After all tasks are complete, verify the implementation:
 ```
 
 This command:
+
 1. Reads ALL spec requirements (ADDED/MODIFIED/REMOVED)
 2. Checks each against the actual implementation
 3. Cross-references with shared specs (NC conventions, API patterns, etc.)
@@ -184,7 +196,7 @@ This command:
    - **WARNING** — Should fix (partial compliance)
    - **SUGGESTION** — Nice to have
 5. Generates `review.md` in the change directory
-6. Creates a GitHub issue if CRITICAL/WARNING findings exist
+6. Creates a tracking issue (on the per-repo platform — Codeberg primary, GitHub fallback) if CRITICAL/WARNING findings exist
 
 ### Phase 5: Archive
 
@@ -195,6 +207,7 @@ Once review passes:
 ```
 
 This:
+
 - Merges delta specs into the app's `openspec/specs/` directory
 - Moves the change to `openspec/changes/archive/YYYY-MM-DD-<name>/`
 - Creates or updates `CHANGELOG.md` with the completed tasks as versioned entries
@@ -206,7 +219,7 @@ This:
 {
   "change": "add-woo-search",
   "project": "opencatalogi",
-  "repo": "ConductionNL/opencatalogi",
+  "repo": "Conduction/opencatalogi",
   "created": "2026-02-14T12:00:00Z",
   "tracking_issue": 42,
   "tasks": [
@@ -232,6 +245,7 @@ This:
 ```
 
 **Key design decisions:**
+
 - `spec_ref` uses `file#anchor` format so the AI can read just that section
 - `acceptance_criteria` are extracted from spec scenarios, ready for verification
 - `files_likely_affected` scopes the search space for implementation
@@ -244,31 +258,32 @@ See [writing-specs.md](writing-specs.md) for the complete guide — RFC 2119 key
 
 ## Commands Reference
 
-| Command | Phase | Description |
-|---------|-------|-------------|
-| `/opsx-new <name>` | Spec | Start a new change |
-| `/opsx-ff` | Spec | Fast-forward all artifacts |
-| `/opsx-continue` | Spec | Create next artifact |
-| `/opsx-plan-to-issues` | Plan | Tasks → JSON + GitHub Issues |
-| `/opsx-apply` | Implement | Implement tasks from plan.json |
-| `/opsx-verify` | Review | Verify implementation against specs |
-| `/opsx-archive` | Archive | Complete and preserve change |
+| Command                | Phase     | Description                         |
+| ---------------------- | --------- | ----------------------------------- |
+| `/opsx-new <name>`     | Spec      | Start a new change                  |
+| `/opsx-ff`             | Spec      | Fast-forward all artifacts          |
+| `/opsx-continue`       | Spec      | Create next artifact                |
+| `/opsx-plan-to-issues` | Plan      | Tasks → JSON + tracking issues (per-repo platform — Codeberg primary, GitHub fallback) |
+| `/opsx-apply`          | Implement | Implement tasks from plan.json      |
+| `/opsx-verify`         | Review    | Verify implementation against specs |
+| `/opsx-archive`        | Archive   | Complete and preserve change        |
 
 ## Team Role Commands
 
 Specialist agents representing different roles on the development team. Useful for getting a focused perspective on a change — architecture review, QA, product sign-off, etc.
 
-| Command | Role | Focus |
-|---------|------|-------|
-| `/team-architect` | Architect | API design, data models, cross-app dependencies |
-| `/team-backend` | Backend Developer | PHP implementation, entities, services, tests |
-| `/team-frontend` | Frontend Developer | Vue components, state management, UX |
-| `/team-po` | Product Owner | Business value, acceptance criteria, priority |
-| `/team-qa` | QA Engineer | Test coverage, edge cases, regression risk |
-| `/team-reviewer` | Code Reviewer | Standards, conventions, security, code quality |
-| `/team-sm` | Scrum Master | Progress tracking, blockers, sprint health |
+| Command           | Role               | Focus                                           |
+| ----------------- | ------------------ | ----------------------------------------------- |
+| `/team-architect` | Architect          | API design, data models, cross-app dependencies |
+| `/team-backend`   | Backend Developer  | PHP implementation, entities, services, tests   |
+| `/team-frontend`  | Frontend Developer | Vue components, state management, UX            |
+| `/team-po`        | Product Owner      | Business value, acceptance criteria, priority   |
+| `/team-qa`        | QA Engineer        | Test coverage, edge cases, regression risk      |
+| `/team-reviewer`  | Code Reviewer      | Standards, conventions, security, code quality  |
+| `/team-sm`        | Scrum Master       | Progress tracking, blockers, sprint health      |
 
 **Usage:**
+
 ```
 /team-architect    # review the API design for the active change
 /team-qa          # get QA perspective on test coverage
@@ -285,4 +300,4 @@ Specialist agents representing different roles on the development team. Useful f
 - **Keep tasks small**: Each task should be completable in one focused iteration (15-30 min of work)
 - **Use shared specs**: Reference cross-project specs in your delta specs to avoid reinventing patterns
 - **Trust the JSON**: The plan.json is your source of truth during implementation — it survives context window resets
-- **GitHub is your dashboard**: Use GitHub Projects to visualize progress across multiple changes and projects
+- **The tracking issue is your dashboard**: Use the per-repo project board (Codeberg primary, GitHub Projects on legacy repos) to visualize progress across multiple changes and projects. Codeberg has no cross-repo board yet — per-repo only.

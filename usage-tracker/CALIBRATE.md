@@ -40,19 +40,20 @@ Example: "Fri 10:00 AM" CEST → `fri:08` (10 - 2 = 08 UTC).
 ### Step 3: Verify
 
 The `--calibrate` command prints verification output automatically. Check that:
+
 - Weekly percentage matches the screenshot (±0.5%)
 - Session percentage is close (may differ by 1-3% due to tokens consumed during calibration)
 
 ### What each screenshot field maps to
 
-| Screenshot field | CLI flag | Notes |
-|-----------------|----------|-------|
-| "Current session: X% used" | `--session-pct X` | |
-| "Resets in Xh Ym" | `--session-reset "Xh Ym"` | Session rolling window |
-| "All models: X% used" | `--weekly-all-pct X` | |
-| "Resets Day HH:MM AM/PM" | `--weekly-all-reset "day:HH"` | Convert to UTC! |
-| "Sonnet only: X% used" | `--weekly-sonnet-pct X` | Only if > 0% |
-| Sonnet reset time | `--weekly-sonnet-reset "day:HH"` | Often different from All Models |
+| Screenshot field           | CLI flag                         | Notes                           |
+| -------------------------- | -------------------------------- | ------------------------------- |
+| "Current session: X% used" | `--session-pct X`                |                                 |
+| "Resets in Xh Ym"          | `--session-reset "Xh Ym"`        | Session rolling window          |
+| "All models: X% used"      | `--weekly-all-pct X`             |                                 |
+| "Resets Day HH:MM AM/PM"   | `--weekly-all-reset "day:HH"`    | Convert to UTC!                 |
+| "Sonnet only: X% used"     | `--weekly-sonnet-pct X`          | Only if > 0%                    |
+| Sonnet reset time          | `--weekly-sonnet-reset "day:HH"` | Often different from All Models |
 
 ### When percentages are 0%
 
@@ -61,6 +62,7 @@ If weekly shows 0%, you **cannot** calibrate that limit (division by zero). Skip
 ### Cache token note
 
 JSONL files count ALL input tokens including `cache_read` tokens. Anthropic discounts cached tokens for quota tracking. This means:
+
 - Calibrated limits will be **higher** than the real Anthropic quota (in raw token terms)
 - This is correct behavior — both numerator and denominator use the same inflated unit
 - Limits may drift as cache hit rates change — **re-calibrate weekly**
@@ -96,12 +98,14 @@ This is shared across all project instances of the tracker.
 The tracker can attempt to fetch real-time usage percentages from an undocumented Anthropic API endpoint. This is experimental and may break at any time.
 
 To enable, add `"fetch_usage": true` to `~/.claude/usage-tracker/limits.json`:
+
 ```json
 {
   "all_models": { ... },
   "fetch_usage": true
 }
 ```
+
 Then run: `python3 usage-tracker/claude-usage-tracker.py --fetch-usage`
 
 Requires `~/.claude/.credentials.json` (auto-created when you log in to Claude Code).

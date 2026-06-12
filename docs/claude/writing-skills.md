@@ -1,4 +1,3 @@
-
 # Writing Skills
 
 How to create, structure, and improve Claude Code skills in this repository.
@@ -6,6 +5,7 @@ How to create, structure, and improve Claude Code skills in this repository.
 Skills live in `.claude/skills/<skill-name>/` and are invoked with `/<skill-name>`. Each skill is a folder containing a `SKILL.md` entry point and optional subfolders for supporting files.
 
 **Related docs:**
+
 - [Skill Patterns & Subfolder Guide](skill-patterns.md) — common patterns, subfolder conventions, description writing
 - [Skill Evaluation Guide](skill-evals.md) — evals.json schema, Skill Creator setup, baseline_score
 - [Skill Checklist](skill-checklist.md) — quick validation checklist per maturity level
@@ -33,12 +33,14 @@ Not every skill needs to reach Level 7. A simple utility skill (`clean-env`) may
 The skill exists as a properly structured folder with a valid SKILL.md.
 
 **Criteria:**
+
 - Has `SKILL.md` with valid frontmatter (`name`, `description`, `metadata`)
 - Has numbered, self-contained steps
 - Has guardrails (what the skill must NOT do)
 - Folder name matches `name` field and slash command
 
 **Anti-patterns:**
+
 - No frontmatter or missing `description`
 - Steps are vague paragraphs instead of numbered instructions
 - No guardrails — skill can do anything without constraints
@@ -56,6 +58,7 @@ The skill uses progressive disclosure and has a description optimized for reliab
 > **Source:** Confirmed by Barry Zhang & Mahesh Murag (Anthropic) in "Don't Build Agents, Build Skills Instead" — only metadata is loaded initially, the LLM decides whether to load the full skill. Also confirmed by Anthropic's official docs: descriptions are capped at 250 characters in skill listings.
 
 **Criteria (in addition to L1):**
+
 - Description is written in **third person** (it gets injected into the system prompt)
 - Description **front-loads the key use case** in the first 250 characters (longer gets truncated in listings)
 - Description includes **specific trigger terms**, not vague phrases like "helps with code"
@@ -63,12 +66,13 @@ The skill uses progressive disclosure and has a description optimized for reliab
 - **Progressive disclosure** is actively used (see [Size Limits & Progressive Disclosure](#size-limits--progressive-disclosure) below)
 
 **Example — bad vs good description:**
+
 ```
 # Bad: vague, passive, no trigger terms
 description: A skill that helps with various document-related tasks
 
 # Good: specific, third-person, front-loaded action + trigger terms
-description: Create a Pull Request from the current branch — runs local checks, picks target branch, and opens the PR on GitHub
+description: Create a Pull Request from the current branch — runs local checks, picks target branch, and opens the PR. Supports Codeberg (primary), GitHub (fallback) and GitLab (alternative).
 ```
 
 **Known limitation:** Multiple independent sources report ~50% auto-activation rates for skills. The `SLASH_COMMAND_TOOL_CHAR_BUDGET` defaults to 1% of context window, limiting how many descriptions fit. With large skill libraries, explicit `/skill-name` invocation is more reliable than auto-triggering.
@@ -84,6 +88,7 @@ The skill is built on recognized patterns, community best practices, or existing
 **Why this matters:** Research shows ~80% of community-created skills make output worse. The 20% that work are built by domain experts using iterative evaluation (Corporate Waters, 2026). Starting from proven foundations avoids reinventing broken wheels.
 
 **Criteria (in addition to L2):**
+
 - Built on a **recognized pattern**: Anthropic official patterns, validated community skill, or your own proven pattern library
 - Has **at least one supporting subfolder**: `examples/` (output format demos), `references/` (standards docs), or `templates/` (fillable scaffolds)
 - Uses **at least one common pattern** consistently (model guard, AskUserQuestion, destructive action confirmation, quality gates — see [skill-patterns.md](skill-patterns.md#common-patterns))
@@ -92,6 +97,7 @@ The skill is built on recognized patterns, community best practices, or existing
 > **What the script auto-detects for L3:** at least one common pattern keyword present in SKILL.md from any of these categories: (1) model guard (`model:`, `On Haiku`, `active model`, ...), (2) `AskUserQuestion`, (3) quality gates (`composer check`, `phpcs`, `phpstan`, `make check`, `ruff`, `psalm`), (4) subfolder references (`examples/`, `refs/`, `references/`, or `templates/` as text in SKILL.md), or (5) destructive/browser patterns (`confirm.*before`, `browser_snapshot`, `browser_navigate`, `## Hard Rule`, `## Verification`, `acceptance_criteria`) — AND existence of at least one of `examples/`, `references/`, or `templates/` on disk. These are structural proxies for the full criteria above.
 
 **Sources for proven patterns:**
+
 - Anthropic's official `/skill-creator` bundled plugin ([GitHub](https://github.com/anthropics/skills/blob/main/skills/skill-creator/SKILL.md))
 - Agent Skills Open Standard: [agentskills.io/specification](https://agentskills.io/specification)
 - Community repos: [awesome-claude-code](https://github.com/hesreallyhim/awesome-claude-code), [awesome-claude-skills](https://github.com/travisvn/awesome-claude-skills)
@@ -104,12 +110,14 @@ The skill is built on recognized patterns, community best practices, or existing
 The skill contains domain-specific knowledge that makes it uniquely effective for your project. It couldn't be dropped into another company and work as-is.
 
 **Criteria (in addition to L3):**
+
 - Has **business-specific reference files** (e.g., `references/dutch-gov-backend-standards.md`, persona cards, ADR documents)
 - Uses **project-specific templates** (PR format, spec format matching your workflow)
 - References **your architecture, ADRs, coding standards** — not just generic best practices
 - Skill output is **recognizably tailored** to your domain
 
 **Example — generic vs personalized:**
+
 ```
 # Generic (L3): "Run linting checks after code changes"
 # Personalized (L4): "Run `composer check:strict` from the app directory.
@@ -119,6 +127,7 @@ The skill contains domain-specific knowledge that makes it uniquely effective fo
 ```
 
 **In this repository**, L4 personalization includes:
+
 - Dutch government standards (GEMMA, ZGW, BIO2, Common Ground)
 - NL Design System CSS variables and WCAG AA compliance
 - Conduction app patterns (openregister, opencatalogi, etc.)
@@ -134,6 +143,7 @@ The skill has been systematically tested with evaluation scenarios. Its performa
 **Why most skills plateau at L4:** A skill that "feels right" but has never been measured may have blind spots, false confidence, or suboptimal triggering. Measurement turns intuition into evidence.
 
 **Criteria (in addition to L4):**
+
 - Has **3+ evals** with input prompts, expected output characteristics, and assertion criteria
 - **Description trigger testing**: 10+ `should_trigger` + 10+ `should_not_trigger` prompts
 - **Evals have been run**: `last_validated` is set in `evals.json`
@@ -152,6 +162,7 @@ For the full evals.json schema, Skill Creator setup guide, and baseline_score us
 The skill captures learnings during execution and periodically consolidates them into improved standing rules.
 
 **The Learnings-to-Rules Pipeline:**
+
 ```
 Execution -> Capture observations -> learnings.md -> Consolidation -> Updated SKILL.md rules
                                        ^                              |
@@ -159,6 +170,7 @@ Execution -> Capture observations -> learnings.md -> Consolidation -> Updated SK
 ```
 
 **Criteria (in addition to L5):**
+
 - Has a **`learnings.md`** file in the skill folder
 - SKILL.md includes a **"capture learnings" step** near the end of execution
 - Each learning entry is **dated and atomic** (one insight per bullet)
@@ -180,24 +192,30 @@ Promotion criteria: observation confirmed across 3+ executions, or resolves a me
 > **Source:** The learnings-to-rules pattern is documented by MindStudio ([mindstudio.ai/blog](https://www.mindstudio.ai/blog/how-to-build-learnings-loop-claude-code-skills)) and implemented in community tools: [claude-reflect-system](https://github.com/haddock-development/claude-reflect-system), [claude-meta](https://github.com/aviadr1/claude-meta), [turbo](https://github.com/tobihagemann/turbo). The two-stage buffer improvement was suggested by @jacksonporter1949 in community discussion.
 
 **Example `learnings.md`:**
+
 ```markdown
 # Learnings — create-pr
 
 ## Patterns That Work
+
 - 2026-03-15: Branch protection on `main` requires status checks — always verify checks exist first
 - 2026-03-20: Including GitHub issue number in PR title improves traceability
 
 ## Mistakes to Avoid
+
 - 2026-03-18: Do NOT create PR with uncommitted changes — causes confusion about what's included
 - 2026-03-22: Lock file conflicts (composer.lock) -> run `composer update` locally, don't accept either side
 
 ## Domain Knowledge
+
 - 2026-03-19: Conduction repos use `development` as primary integration branch, not `main`
 
 ## Open Questions
+
 - Should PRs auto-assign reviewers based on CODEOWNERS?
 
 ## Consolidated Principles
+
 - (promoted after 3+ confirmations)
 - Always run `composer check:strict` before creating PR — catches 90% of review feedback
 ```
@@ -209,6 +227,7 @@ Promotion criteria: observation confirmed across 3+ executions, or resolves a me
 The skill orchestrates multiple agents or is part of a coordinated workflow where specialized skills work together autonomously.
 
 **Criteria (in addition to L6):**
+
 - **Orchestrates sub-agents** (spawns parallel workers) or is **orchestrated by a parent skill**
 - Part of a **defined workflow chain** with explicit handoff points:
   ```
@@ -221,13 +240,13 @@ The skill orchestrates multiple agents or is part of a coordinated workflow wher
 
 **Orchestration patterns in this repository:**
 
-| Pattern | Example | Description |
-|---------|---------|-------------|
-| **Pipeline** | `opsx-pipeline` | Full lifecycle for 1+ changes in parallel via subagents |
-| **Fan-out/Fan-in** | `test-counsel`, `feature-counsel` | Spawn N agents in parallel, synthesize results |
-| **Sequential Chain** | `opsx-new` -> ... -> `opsx-archive` | Each skill hands off to the next |
-| **Autonomous Loop** | `opsx-apply-loop` | Runs apply->verify cycle with retry logic, auto-archives |
-| **Multi-perspective** | `test-app` | Spawns 6 specialized test agents simultaneously |
+| Pattern               | Example                             | Description                                              |
+| --------------------- | ----------------------------------- | -------------------------------------------------------- |
+| **Pipeline**          | `opsx-pipeline`                     | Full lifecycle for 1+ changes in parallel via subagents  |
+| **Fan-out/Fan-in**    | `test-counsel`, `feature-counsel`   | Spawn N agents in parallel, synthesize results           |
+| **Sequential Chain**  | `opsx-new` -> ... -> `opsx-archive` | Each skill hands off to the next                         |
+| **Autonomous Loop**   | `opsx-apply-loop`                   | Runs apply->verify cycle with retry logic, auto-archives |
+| **Multi-perspective** | `test-app`                          | Spawns 6 specialized test agents simultaneously          |
 
 > **Reference:** Claude Code Agent Teams (experimental) and the Agent SDK support these patterns natively. See [Claude Code Agent Teams docs](https://code.claude.com/docs/en/agent-teams).
 
@@ -237,15 +256,15 @@ The skill orchestrates multiple agents or is part of a coordinated workflow wher
 
 ### Maturity Assessment Quick Reference
 
-| Check | Yes -> at least | No -> stuck at |
-|-------|:---:|:---:|
-| Has SKILL.md with frontmatter, steps, guardrails? | L1 | Below L1 |
-| Description optimized for triggering, progressive disclosure used, <500 lines? | L2 | L1 |
-| Built on proven patterns, has examples/references? | L3 | L2 |
-| Contains business-specific domain context? | L4 | L3 |
-| Has eval scenarios, measured and optimized with data? | L5 | L4 |
-| Has learnings.md with consolidation process? | L6 | L5 |
-| Orchestrates agents or part of workflow chain? | L7 | L6 |
+| Check                                                                          | Yes -> at least | No -> stuck at |
+| ------------------------------------------------------------------------------ | :-------------: | :------------: |
+| Has SKILL.md with frontmatter, steps, guardrails?                              |       L1        |    Below L1    |
+| Description optimized for triggering, progressive disclosure used, <500 lines? |       L2        |       L1       |
+| Built on proven patterns, has examples/references?                             |       L3        |       L2       |
+| Contains business-specific domain context?                                     |       L4        |       L3       |
+| Has eval scenarios, measured and optimized with data?                          |       L5        |       L4       |
+| Has learnings.md with consolidation process?                                   |       L6        |       L5       |
+| Orchestrates agents or part of workflow chain?                                 |       L7        |       L6       |
 
 ---
 
@@ -254,16 +273,19 @@ The skill orchestrates multiple agents or is part of a coordinated workflow wher
 Skills degrade over time. Schedule periodic reviews:
 
 **Monthly:**
+
 - Run eval scenarios for L5+ skills — have pass rates changed?
 - Review `learnings.md` for L6+ skills — consolidate if >80 entries
 - Check description trigger rates for frequently-used skills
 
 **Quarterly:**
+
 - Re-evaluate L4 skills: has the business context changed? (new ADRs, standards, deprecated patterns)
 - Check if L7 workflow chains still work end-to-end
 - Prune skills that are never invoked
 
 **When something breaks:**
+
 - Add the failure to `learnings.md` (L6 skills) or create an eval scenario (L5 skills)
 - Don't just fix the symptom — update the skill's standing rules to prevent recurrence
 - If a skill consistently fails, consider splitting it (simpler skills trigger more reliably)
@@ -303,6 +325,7 @@ Not every skill needs all subfolders. Create them only when content qualifies. A
 **Script convention**: Any executable that the skill invokes (`.py`, `.sh`, etc.) lives in `scripts/`. SKILL.md and reference files invoke them via `python -m scripts.<name>` or `bash scripts/<name>.sh`. Don't put scripts in `assets/` (which is for non-executable static files like SVG/JSON) or `references/` (which is for content Claude reads, not runs). The one exception is vendored upstream skills (e.g., `skill-creator`) where the layout is dictated by upstream and may differ.
 
 **Extraction threshold**: Extract content from `SKILL.md` into a subfolder when the block is:
+
 - 10%+ of the total file size, AND
 - A standalone unit (not tightly coupled to surrounding procedural steps)
 
@@ -314,15 +337,16 @@ Do not extract short inline code snippets, conditional logic, or step-by-step in
 
 Claude loads skill content in three layers. Respecting these limits keeps skills fast and context-efficient.
 
-| Layer | What | Budget | When loaded |
-|-------|------|--------|-------------|
-| **Metadata** | `name` + `description` in frontmatter | ~100 words / **250 characters** visible in listings | **Always** — part of system prompt |
-| **SKILL.md body** | Steps, guardrails, inline instructions | **< 500 lines** | When skill triggers (auto or `/slash`) |
-| **Reference files** | `references/`, `templates/`, `examples/`, `assets/` | Unlimited (but each file adds to context on read) | On demand during execution |
+| Layer               | What                                                | Budget                                              | When loaded                            |
+| ------------------- | --------------------------------------------------- | --------------------------------------------------- | -------------------------------------- |
+| **Metadata**        | `name` + `description` in frontmatter               | ~100 words / **250 characters** visible in listings | **Always** — part of system prompt     |
+| **SKILL.md body**   | Steps, guardrails, inline instructions              | **< 500 lines**                                     | When skill triggers (auto or `/slash`) |
+| **Reference files** | `references/`, `templates/`, `examples/`, `assets/` | Unlimited (but each file adds to context on read)   | On demand during execution             |
 
 > **Source:** Anthropic's [Skill Authoring Best Practices](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices) — "Concise is key: the context window is a shared resource. Only add what Claude does not already know."
 
 **When SKILL.md exceeds 500 lines:**
+
 1. Move large reference blocks to `references/` and link them
 2. Move output format examples to `examples/`
 3. Move templates with placeholders to `templates/`
@@ -360,6 +384,7 @@ Brief explanation of what the skill does.
    Instructions...
 
 **Guardrails**
+
 - What the skill must never do
 - What to check before destructive actions
 ```
@@ -380,19 +405,19 @@ Beyond `name`, `description`, and `metadata`, several optional frontmatter field
 ---
 name: my-skill
 description: "..."
-allowed-tools: [Read, Glob, Grep, Bash]  # restrict which tools the skill can use
-context: fork                              # run in isolated subagent context
-paths: ["openspec/**", "docs/**"]          # only auto-trigger when working in these paths
-disable-model-invocation: true             # prevent auto-triggering; slash-only invocation
+allowed-tools: [Read, Glob, Grep, Bash] # restrict which tools the skill can use
+context: fork # run in isolated subagent context
+paths: ["openspec/**", "docs/**"] # only auto-trigger when working in these paths
+disable-model-invocation: true # prevent auto-triggering; slash-only invocation
 ---
 ```
 
-| Field | Purpose | When to use |
-|-------|---------|-------------|
-| `allowed-tools` | Restricts which tools the skill can call | Safety-critical skills — e.g., a read-only audit skill should not have Write access |
-| `context: fork` | Runs the skill in an isolated subagent context | Skills that should not pollute the parent conversation's context window |
-| `paths` | Limits auto-activation to specific file patterns | Skills that only apply to certain parts of the repo (e.g., `openspec/**`) |
-| `disable-model-invocation` | Blocks auto-triggering entirely | Skills that should only run when explicitly invoked via `/skill-name` |
+| Field                      | Purpose                                          | When to use                                                                         |
+| -------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| `allowed-tools`            | Restricts which tools the skill can call         | Safety-critical skills — e.g., a read-only audit skill should not have Write access |
+| `context: fork`            | Runs the skill in an isolated subagent context   | Skills that should not pollute the parent conversation's context window             |
+| `paths`                    | Limits auto-activation to specific file patterns | Skills that only apply to certain parts of the repo (e.g., `openspec/**`)           |
+| `disable-model-invocation` | Blocks auto-triggering entirely                  | Skills that should only run when explicitly invoked via `/skill-name`               |
 
 > **Source:** Anthropic's [Skill Authoring Best Practices](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices) and the [Agent Skills Open Standard](https://agentskills.io/specification).
 
@@ -400,12 +425,12 @@ disable-model-invocation: true             # prevent auto-triggering; slash-only
 
 Skills can inject dynamic content at invocation time:
 
-| Syntax | Purpose | Example |
-|--------|---------|---------|
-| `$ARGUMENTS` | Full argument string passed after `/skill-name` | `/app-create my-app` -> `$ARGUMENTS` = `"my-app"` |
-| `$ARGUMENTS[0]` | Individual positional argument | First argument after the skill name |
-| `${CLAUDE_SKILL_DIR}` | Absolute path to the skill's own folder | Useful for referencing bundled scripts or assets |
-| `` !`command` `` | Shell command output injected before skill loads | `` !`git branch --show-current` `` injects the current branch name |
+| Syntax                | Purpose                                          | Example                                                            |
+| --------------------- | ------------------------------------------------ | ------------------------------------------------------------------ |
+| `$ARGUMENTS`          | Full argument string passed after `/skill-name`  | `/app-create my-app` -> `$ARGUMENTS` = `"my-app"`                  |
+| `$ARGUMENTS[0]`       | Individual positional argument                   | First argument after the skill name                                |
+| `${CLAUDE_SKILL_DIR}` | Absolute path to the skill's own folder          | Useful for referencing bundled scripts or assets                   |
+| `` !`command` ``      | Shell command output injected before skill loads | `` !`git branch --show-current` `` injects the current branch name |
 
 The `` !`command` `` syntax is particularly powerful for injecting runtime context into skills — the command runs before the skill content is loaded into context.
 
@@ -413,11 +438,11 @@ The `` !`command` `` syntax is particularly powerful for injecting runtime conte
 
 Match the skill's specificity to its task fragility:
 
-| Task type | Freedom level | Skill style |
-|-----------|:---:|-------------|
-| Exploration, code review, brainstorming | **High** | Provide goals and constraints, let Claude decide approach |
-| Feature implementation, refactoring | **Medium** | Provide steps with decision points, let Claude adapt |
-| Database migrations, production deploys, CI config | **Low** | Prescribe exact commands, explicit confirmation gates |
+| Task type                                          | Freedom level | Skill style                                               |
+| -------------------------------------------------- | :-----------: | --------------------------------------------------------- |
+| Exploration, code review, brainstorming            |   **High**    | Provide goals and constraints, let Claude decide approach |
+| Feature implementation, refactoring                |  **Medium**   | Provide steps with decision points, let Claude adapt      |
+| Database migrations, production deploys, CI config |    **Low**    | Prescribe exact commands, explicit confirmation gates     |
 
 A skill for `/app-explore` (thinking mode) should have high degrees of freedom — it's about creativity and investigation. A skill for `/app-apply` (config -> code sync) should have low freedom — it must apply changes predictably and safely.
 
@@ -431,15 +456,15 @@ When a SKILL.md instructs Claude to read a file (persona card, shared doc, spec)
 
 ### Rules by target location
 
-| Target | Canonical path form | Example |
-|---|---|---|
-| **Personas in `hydra/personas/`** (Nextcloud workspace) | `hydra/personas/<slug>.md` | `hydra/personas/henk-bakker.md` |
-| **Personas inside a `.claude`-centered workspace** (where `.claude/` lives at the project root) | `.claude/personas/<slug>.md` | `.claude/personas/<role>.md` |
-| **Company-wide specs** (hydra `openspec/specs/`) | `hydra/openspec/specs/<capability>/spec.md` | `hydra/openspec/specs/nextcloud-app/spec.md` |
-| **Company-wide ADRs** (hydra `openspec/architecture/`) | `hydra/openspec/architecture/adr-<NNN>-*.md` | `hydra/openspec/architecture/adr-001-data-layer.md` |
-| **Developer/Claude docs** (lives in `ConductionNL/.github` repo, cloned separately — **not** a subdir of any project workspace) | Full GitHub URL | `https://github.com/ConductionNL/.github/blob/main/docs/claude/writing-specs.md` |
-| **App-specific docs** (inside the current app) | Workspace-relative | `{APP_DIR}/docs/features/README.md` |
-| **App-specific specs** | Workspace-relative | `openspec/specs/<capability>/spec.md` |
+| Target                                                                                                                          | Canonical path form                          | Example                                                                          |
+| ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- | -------------------------------------------------------------------------------- |
+| **Personas in `hydra/personas/`** (Nextcloud workspace)                                                                         | `hydra/personas/<slug>.md`                   | `hydra/personas/henk-bakker.md`                                                  |
+| **Personas inside a `.claude`-centered workspace** (where `.claude/` lives at the project root)                                 | `.claude/personas/<slug>.md`                 | `.claude/personas/<role>.md`                                                     |
+| **Company-wide specs** (hydra `openspec/specs/`)                                                                                | `hydra/openspec/specs/<capability>/spec.md`  | `hydra/openspec/specs/nextcloud-app/spec.md`                                     |
+| **Company-wide ADRs** (hydra `openspec/architecture/`)                                                                          | `hydra/openspec/architecture/adr-<NNN>-*.md` | `hydra/openspec/architecture/adr-001-data-layer.md`                              |
+| **Developer/Claude docs** (lives in `Conduction/.github` repo, cloned separately — **not** a subdir of any project workspace) | Full GitHub URL                              | `https://codeberg.org/Conduction/.github/blob/main/docs/claude/writing-specs.md` |
+| **App-specific docs** (inside the current app)                                                                                  | Workspace-relative                           | `{APP_DIR}/docs/features/README.md`                                              |
+| **App-specific specs**                                                                                                          | Workspace-relative                           | `openspec/specs/<capability>/spec.md`                                            |
 
 ### Why not `.claude/personas/` or `.claude/docs/` in hydra skills?
 
@@ -464,15 +489,15 @@ Skills authored inside a `.claude`-centered workspace may legitimately use `.cla
 
 Skills use the `namespace-action` format with lowercase letters, numbers, and hyphens only.
 
-| Namespace | Covers |
-|-----------|--------|
-| `opsx-` | OpenSpec workflow steps (`opsx-new`, `opsx-apply`, `opsx-archive`) |
-| `app-` | Nextcloud app lifecycle (`app-design`, `app-create`, `app-explore`, `app-apply`) |
-| `test-` | Testing — counsel, persona agents, regression (`test-counsel`, `test-persona-henk`) |
-| `team-` | Scrum team agents (`team-backend`, `team-qa`, `team-reviewer`) |
-| `swc-` | Softwarecatalogus-specific (`swc-test`, `swc-update`) |
-| `ecosystem-` | Ecosystem research (`ecosystem-investigate`, `ecosystem-propose-app`) |
-| `tender-` | Tender intelligence (`tender-scan`, `tender-status`) |
+| Namespace    | Covers                                                                              |
+| ------------ | ----------------------------------------------------------------------------------- |
+| `opsx-`      | OpenSpec workflow steps (`opsx-new`, `opsx-apply`, `opsx-archive`)                  |
+| `app-`       | Nextcloud app lifecycle (`app-design`, `app-create`, `app-explore`, `app-apply`)    |
+| `test-`      | Testing — counsel, persona agents, regression (`test-counsel`, `test-persona-henk`) |
+| `team-`      | Scrum team agents (`team-backend`, `team-qa`, `team-reviewer`)                      |
+| `swc-`       | Softwarecatalogus-specific (`swc-test`, `swc-update`)                               |
+| `ecosystem-` | Ecosystem research (`ecosystem-investigate`, `ecosystem-propose-app`)               |
+| `tender-`    | Tender intelligence (`tender-scan`, `tender-status`)                                |
 
 The folder name, `name` frontmatter field, and the slash command all must match exactly.
 

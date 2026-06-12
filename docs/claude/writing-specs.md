@@ -12,18 +12,22 @@ Every spec file at `openspec/specs/{domain}/spec.md` follows this structure:
 **Status**: idea | planned | in-progress | done
 **Scope**: company-wide | {app-name}
 **OpenSpec changes**:
+
 - [change-name](../../changes/change-name/)
 - [archived-change](../../changes/archive/YYYY-MM-DD-archived-change/) _(archived YYYY-MM-DD)_
 
 ## Purpose
+
 <What this capability does and why it exists (2–5 sentences). Include relevant ADR references.>
 
 ## Requirements
 
 ### REQ-{NNN}: <Name>
+
 <Description using RFC 2119 keywords>
 
 #### Scenario: <Name>
+
 - GIVEN <precondition>
 - WHEN <action>
 - THEN <expected result>
@@ -33,7 +37,7 @@ Every spec file at `openspec/specs/{domain}/spec.md` follows this structure:
 
 - **Performance:** <measurable performance requirement>
 - **Accessibility:** <WCAG or usability requirement>
-- **Internationalization:** Dutch and English MUST be supported (ADR-005)
+- **Internationalization:** Dutch and English MUST be supported (ADR-007)
 
 ## Acceptance Criteria
 
@@ -46,14 +50,14 @@ Every spec file at `openspec/specs/{domain}/spec.md` follows this structure:
 
 ### Field reference
 
-| Field | Required | Notes |
-|-------|----------|-------|
-| `**Status**` | Yes | `idea` → `planned` → `in-progress` → `done` |
-| `**Scope**` | Yes | `company-wide` (in `hydra/openspec/specs/`) or app name (in `{app}/openspec/specs/`) |
-| `**OpenSpec changes**` | Yes | Vertical list, one entry per line, oldest first. `_(none yet)_` until first change created. Archived entries include `_(archived YYYY-MM-DD)_`. See [Grouping rule](#openspec-changes-list-format) below. |
-| `## Non-Functional Requirements` | Yes | Always present, even if minimal |
-| `## Acceptance Criteria` | Yes | Placeholder OK for `idea` status; fill in before moving to `planned` |
-| `## Notes` | Yes | Always present |
+| Field                            | Required | Notes                                                                                                                                                                                                     |
+| -------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `**Status**`                     | Yes      | `idea` → `planned` → `in-progress` → `done`                                                                                                                                                               |
+| `**Scope**`                      | Yes      | `company-wide` (in `hydra/openspec/specs/`) or app name (in `{app}/openspec/specs/`)                                                                                                                      |
+| `**OpenSpec changes**`           | Yes      | Vertical list, one entry per line, oldest first. `_(none yet)_` until first change created. Archived entries include `_(archived YYYY-MM-DD)_`. See [Grouping rule](#openspec-changes-list-format) below. |
+| `## Non-Functional Requirements` | Yes      | Always present, even if minimal                                                                                                                                                                           |
+| `## Acceptance Criteria`         | Yes      | Placeholder OK for `idea` status; fill in before moving to `planned`                                                                                                                                      |
+| `## Notes`                       | Yes      | Always present                                                                                                                                                                                            |
 
 ### Status lifecycle
 
@@ -66,12 +70,12 @@ still fuzzy, fill in             in-progress (again)
 Acceptance Criteria first
 ```
 
-| Status | Meaning |
-|--------|---------|
-| `idea` | Concept noted — Purpose defined, Requirements fuzzy |
-| `planned` | Acceptance criteria fully defined — **ready for `/opsx-ff`** |
+| Status        | Meaning                                                       |
+| ------------- | ------------------------------------------------------------- |
+| `idea`        | Concept noted — Purpose defined, Requirements fuzzy           |
+| `planned`     | Acceptance criteria fully defined — **ready for `/opsx-ff`**  |
 | `in-progress` | One or more OpenSpec changes have been created from this spec |
-| `done` | All associated OpenSpec changes have been archived |
+| `done`        | All associated OpenSpec changes have been archived            |
 
 **Re-opening a done spec:** If a new change is created that modifies a `done` spec, set the status back to `in-progress`. The `**OpenSpec changes**` list preserves the full history (archived entries stay visible).
 
@@ -100,23 +104,25 @@ Group at the coarsest level that keeps the list under 15 bullets while preservin
 
 Use these keywords deliberately to communicate the importance of each requirement:
 
-| Keyword | Meaning | Use when |
-|---------|---------|----------|
-| **MUST** / **SHALL** | Absolute requirement. Non-negotiable. | The feature won't work correctly without this |
-| **MUST NOT** / **SHALL NOT** | Absolute prohibition | Doing this would break something or violate a constraint |
-| **SHOULD** | Recommended, but exceptions may exist | Best practice that can be skipped with justification |
-| **SHOULD NOT** | Discouraged, but exceptions may exist | Not ideal but acceptable in some cases |
-| **MAY** | Optional | Nice to have, up to implementer |
+| Keyword                      | Meaning                               | Use when                                                 |
+| ---------------------------- | ------------------------------------- | -------------------------------------------------------- |
+| **MUST** / **SHALL**         | Absolute requirement. Non-negotiable. | The feature won't work correctly without this            |
+| **MUST NOT** / **SHALL NOT** | Absolute prohibition                  | Doing this would break something or violate a constraint |
+| **SHOULD**                   | Recommended, but exceptions may exist | Best practice that can be skipped with justification     |
+| **SHOULD NOT**               | Discouraged, but exceptions may exist | Not ideal but acceptable in some cases                   |
+| **MAY**                      | Optional                              | Nice to have, up to implementer                          |
 
 ### Examples
 
 ```markdown
 # Good — clear intention
+
 The API endpoint MUST return HTTP 404 when the resource does not exist.
 The response SHOULD include a human-readable error message.
 The response MAY include a machine-readable error code.
 
 # Bad — vague, no keywords
+
 The API should handle errors properly.
 ```
 
@@ -132,6 +138,7 @@ Scenarios use the Gherkin format (GIVEN/WHEN/THEN) to describe specific behavior
 
 ```markdown
 #### Scenario: Successful login with valid credentials
+
 - GIVEN a user with email "test@example.com" and a valid password
 - WHEN they submit the login form
 - THEN the system MUST return a JWT token
@@ -139,6 +146,7 @@ Scenarios use the Gherkin format (GIVEN/WHEN/THEN) to describe specific behavior
 - AND the session MUST be stored in the database
 
 #### Scenario: Login fails with invalid password
+
 - GIVEN a user with email "test@example.com"
 - WHEN they submit the login form with an incorrect password
 - THEN the system MUST return HTTP 401
@@ -150,13 +158,17 @@ Scenarios use the Gherkin format (GIVEN/WHEN/THEN) to describe specific behavior
 
 ```markdown
 # Too vague
+
 #### Scenario: Login works
+
 - GIVEN a user
 - WHEN they log in
 - THEN it works
 
 # Too implementation-specific
+
 #### Scenario: Login
+
 - GIVEN a POST to /api/v1/auth/login with body {"email":"x","pass":"y"}
 - WHEN AuthController::login() calls UserService::authenticate()
 - THEN it calls $mapper->findByEmail() and JWTService::generate()
@@ -182,9 +194,11 @@ New requirements that didn't exist before:
 ## ADDED Requirements
 
 ### REQ-001: Full-Text Search
+
 The system MUST support full-text search across publication titles and content bodies using PostgreSQL's tsvector.
 
 #### Scenario: Search returns matching publications
+
 - GIVEN publications with titles "Climate Report 2024" and "Budget Overview"
 - WHEN a user searches for "climate"
 - THEN the results MUST include "Climate Report 2024"
@@ -200,11 +214,13 @@ Changes to existing requirements. Always note what the previous behavior was:
 ## MODIFIED Requirements
 
 ### REQ-003: Session Duration
+
 The system MUST expire user sessions after 15 minutes of inactivity.
 
 (Previously: sessions expired after 30 minutes of inactivity)
 
 #### Scenario: Session expires
+
 - GIVEN a user who has been inactive for 16 minutes
 - WHEN they make a request
 - THEN the system MUST return HTTP 401
@@ -219,6 +235,7 @@ Requirements being deprecated. Always explain why:
 ## REMOVED Requirements
 
 ### REQ-002: Remember Me Checkbox
+
 (Deprecated: replaced by automatic session refresh on activity. Removing the checkbox simplifies the login form and improves security by eliminating long-lived sessions.)
 ```
 
@@ -230,8 +247,10 @@ Requirements whose name is changing but whose behavior is unchanged. Always use 
 ## RENAMED Requirements
 
 ### REQ-004: Old Requirement Name
+
 FROM: Old Requirement Name
 TO: New Requirement Name
+
 <!-- No behavior change — rename only -->
 ```
 
@@ -241,6 +260,7 @@ When your requirement relates to a cross-project convention, reference the share
 
 ```markdown
 ### REQ-005: Publication API Endpoint
+
 The system MUST provide a REST endpoint at `/index.php/apps/opencatalogi/api/publications`.
 
 See shared spec: `api-patterns/spec.md#requirement-url-structure` for URL conventions.
@@ -259,12 +279,12 @@ Shared specs live in `hydra/openspec/specs/` (company-wide, maintained by Conduc
 
 Examples:
 
-| Context | Format | Example |
-|---------|--------|---------|
-| tasks.md task entry | `{capability}#REQ-NNN — {title}` | `archival-destruction-workflow#REQ-009 — Advance Archivist Notifications` |
+| Context              | Format                                                        | Example                                                                                                           |
+| -------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| tasks.md task entry  | `{capability}#REQ-NNN — {title}`                              | `archival-destruction-workflow#REQ-009 — Advance Archivist Notifications`                                         |
 | Cross-spec reference | `[capability/spec.md#req-nnn](../capability/spec.md#req-nnn)` | `[archival-destruction-workflow#REQ-006](../archival-destruction-workflow/spec.md#req-006-legal-hold-management)` |
-| PR title / issue | `{capability}#REQ-NNN` | `archival-destruction-workflow#REQ-003` |
-| `@spec` PHPDoc tag | `openspec/changes/{change}/tasks.md#task-N` | (points to tasks.md, not directly to REQ) |
+| PR title / issue     | `{capability}#REQ-NNN`                                        | `archival-destruction-workflow#REQ-003`                                                                           |
+| `@spec` PHPDoc tag   | `openspec/changes/{change}/tasks.md#task-N`                   | (points to tasks.md, not directly to REQ)                                                                         |
 
 Inside the spec file itself, bare `REQ-NNN` is sufficient — the file location already provides the namespace.
 
@@ -298,9 +318,11 @@ Specs written after implementation just document what exists. They don't help yo
 
 ```markdown
 # Bad
+
 The system should handle errors.
 
 # Good
+
 The system MUST return HTTP 400 with a JSON body containing an `error` field
 when the request body fails validation.
 ```
@@ -309,9 +331,11 @@ when the request body fails validation.
 
 ```markdown
 # Bad — tied to specific classes
+
 The AuthController MUST call UserMapper::findByEmail().
 
 # Good — describes behavior
+
 The system MUST look up users by email address during authentication.
 ```
 
@@ -327,9 +351,11 @@ If everything is MUST, nothing is distinguishable. Reserve MUST for true require
 
 ```markdown
 # Bad — how do you verify this?
+
 The system MUST be fast.
 
 # Good — measurable
+
 The search endpoint MUST respond within 500ms for queries returning fewer than 100 results.
 ```
 
@@ -355,6 +381,7 @@ Every feature implemented from a spec MUST include all three layers:
    - **Browser tests** (Playwright MCP) for the UI — verify the feature works end-to-end through the browser
 
 After implementing each task, the agent MUST run the relevant tests to confirm everything works:
+
 - `composer test` or `vendor/bin/phpunit` for unit tests
 - `newman run` for API tests
 - Browser MCP snapshot/interaction for UI verification
@@ -365,6 +392,7 @@ A task is NOT complete until its tests pass.
 
 ```markdown
 ### Task 1: Create SearchService with basic query method
+
 - **spec_ref**: `openspec/specs/search/spec.md#requirement-full-text-search`
 - **files**: `lib/Service/SearchService.php`
 - **acceptance_criteria**:
@@ -374,6 +402,7 @@ A task is NOT complete until its tests pass.
 - [ ] Run unit tests — confirm passing
 
 ### Task 2: Create SearchController with GET endpoint
+
 - **spec_ref**: `openspec/specs/search/spec.md#requirement-search-api-endpoint`
 - **files**: `lib/Controller/SearchController.php`, `appinfo/routes.php`
 - **acceptance_criteria**:
@@ -383,6 +412,7 @@ A task is NOT complete until its tests pass.
 - [ ] Run Newman tests — confirm passing
 
 ### Task 3: Add search UI page
+
 - **spec_ref**: `openspec/specs/search/spec.md#requirement-search-ui`
 - **files**: `src/views/SearchView.vue`, `src/router/index.js`
 - **acceptance_criteria**:
@@ -392,6 +422,7 @@ A task is NOT complete until its tests pass.
 - [ ] Browser test — navigate to page, enter query, verify results appear
 
 ### Task 4: Add pagination to search results
+
 - **spec_ref**: `openspec/specs/search/spec.md#requirement-search-pagination`
 - **files**: `lib/Service/SearchService.php`, `lib/Controller/SearchController.php`, `src/views/SearchView.vue`
 - **acceptance_criteria**:
@@ -406,10 +437,13 @@ A task is NOT complete until its tests pass.
 
 ```markdown
 ### Task 1: Implement search
+
 - [ ] Do everything
 
 ### Task 2: (also bad) Backend only, no UI or tests
+
 - [ ] Add SearchService
 - [ ] Add SearchController
+
 # Missing: no UI (users can't use it), no tests (nothing verified)
 ```

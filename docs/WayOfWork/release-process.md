@@ -17,7 +17,7 @@ keywords:
 
 # Release Process
 
-This document describes how we version, build, and release our Nextcloud apps. All release workflows are centralized in the [ConductionNL/.github](https://github.com/ConductionNL/.github) repository and shared across all app repositories.
+This document describes how we version, build, and release our Nextcloud apps. All release workflows are centralized in the [Conduction/.github](https://codeberg.org/Conduction/.github) repository and shared across all app repositories.
 
 ## Branch Model
 
@@ -33,11 +33,11 @@ hotfix/*  ─┘        │              │        │
 
 ### Branch Rules
 
-| Target branch | Allowed source branches | What happens on merge |
-|---------------|------------------------|----------------------|
-| `development` | `feature/*`, `bugfix/*`, `hotfix/*` | Nothing — no builds triggered |
-| `beta` | `development`, `hotfix/*`, `main` | Beta release built and pushed as nightly to App Store |
-| `main` | `beta`, `hotfix/*` | Stable release built and pushed to App Store |
+| Target branch | Allowed source branches             | What happens on merge                                 |
+| ------------- | ----------------------------------- | ----------------------------------------------------- |
+| `development` | `feature/*`, `bugfix/*`, `hotfix/*` | Nothing — no builds triggered                         |
+| `beta`        | `development`, `hotfix/*`, `main`   | Beta release built and pushed as nightly to App Store |
+| `main`        | `beta`, `hotfix/*`                  | Stable release built and pushed to App Store          |
 
 These rules are enforced by the centralized **branch-protection** workflow. PRs from disallowed branches are blocked automatically.
 
@@ -57,17 +57,18 @@ We use [Semantic Versioning](https://semver.org/) (semver). Versions are **calcu
 
 Every PR should have one of these labels:
 
-| Label | When to use | Example |
-|-------|-------------|---------|
+| Label   | When to use                                       | Example             |
+| ------- | ------------------------------------------------- | ------------------- |
 | `patch` | Bug fixes, small improvements, dependency updates | `0.2.13` → `0.2.14` |
-| `minor` | New features, significant enhancements | `0.2.13` → `0.3.0` |
-| `major` | Breaking changes, major rewrites | `0.2.13` → `1.0.0` |
+| `minor` | New features, significant enhancements            | `0.2.13` → `0.3.0`  |
+| `major` | Breaking changes, major rewrites                  | `0.2.13` → `1.0.0`  |
 
 If no label is set, the version defaults to a **patch** bump.
 
 ### How Versions Are Calculated
 
 **Stable releases** (on merge to `main`):
+
 1. The workflow reads the latest stable git tag (e.g., `v0.2.13`)
 2. It checks the PR labels for `major`, `minor`, or `patch`
 3. It bumps the version accordingly (e.g., `0.2.14` for patch)
@@ -75,6 +76,7 @@ If no label is set, the version defaults to a **patch** bump.
 5. A git tag `v0.2.14` is created
 
 **Beta releases** (on merge to `beta`):
+
 1. The workflow reads the latest stable git tag (e.g., `v0.2.13`)
 2. It always bumps the patch version by one (e.g., `0.2.14`)
 3. It appends a beta suffix with a UTC timestamp: `0.2.14-beta.20260313143022`
@@ -91,10 +93,10 @@ The `appinfo/info.xml` in your repository is **never modified** by the release w
 
 ## Release Channels
 
-| Channel | Branch | App Store flag | Who uses it |
-|---------|--------|---------------|-------------|
-| **Stable** | `main` | `nightly: false` | Production users, default install |
-| **Beta** | `beta` | `nightly: true` | Testers, early adopters (opt-in via App Store settings) |
+| Channel    | Branch | App Store flag   | Who uses it                                             |
+| ---------- | ------ | ---------------- | ------------------------------------------------------- |
+| **Stable** | `main` | `nightly: false` | Production users, default install                       |
+| **Beta**   | `beta` | `nightly: true`  | Testers, early adopters (opt-in via App Store settings) |
 
 There are no development builds. The `development` branch is for integration only — developers test locally or install from the beta channel.
 
@@ -121,7 +123,7 @@ on:
 
 jobs:
   release:
-    uses: ConductionNL/.github/.github/workflows/release-stable.yml@main
+    uses: Conduction/.github/.github/workflows/release-stable.yml@main
     with:
       app-name: your-app-name
     secrets: inherit
@@ -138,7 +140,7 @@ on:
 
 jobs:
   release:
-    uses: ConductionNL/.github/.github/workflows/release-beta.yml@main
+    uses: Conduction/.github/.github/workflows/release-beta.yml@main
     with:
       app-name: your-app-name
     secrets: inherit
@@ -155,7 +157,7 @@ on:
 
 jobs:
   check:
-    uses: ConductionNL/.github/.github/workflows/branch-protection.yml@main
+    uses: Conduction/.github/.github/workflows/branch-protection.yml@main
 ```
 
 ### Sync Development to Beta (`sync-to-beta.yml`)
@@ -169,7 +171,7 @@ on:
 
 jobs:
   sync:
-    uses: ConductionNL/.github/.github/workflows/sync-to-beta.yml@main
+    uses: Conduction/.github/.github/workflows/sync-to-beta.yml@main
 ```
 
 ### Apps With Special Vendor Dependencies
@@ -179,7 +181,7 @@ If your app has critical vendor dependencies that must be verified (like OpenReg
 ```yaml
 jobs:
   release:
-    uses: ConductionNL/.github/.github/workflows/release-stable.yml@main
+    uses: Conduction/.github/.github/workflows/release-stable.yml@main
     with:
       app-name: openregister
       verify-vendor-deps: true
@@ -191,9 +193,9 @@ jobs:
 
 Each app repository needs these secrets configured:
 
-| Secret | Purpose |
-|--------|---------|
-| `NEXTCLOUD_SIGNING_KEY` | Private key for signing the release tarball |
+| Secret                     | Purpose                                            |
+| -------------------------- | -------------------------------------------------- |
+| `NEXTCLOUD_SIGNING_KEY`    | Private key for signing the release tarball        |
 | `NEXTCLOUD_APPSTORE_TOKEN` | API token for uploading to the Nextcloud App Store |
 
 ## Migration from Old Workflows
@@ -201,6 +203,7 @@ Each app repository needs these secrets configured:
 If your app currently has its own release workflows (e.g., `release-workflow.yaml`, `beta-release.yaml`, `unstable-release.yaml`):
 
 1. **Tag your current version**: Before switching, create a git tag on `main` for the current version:
+
    ```bash
    git tag v$(grep -oP '(?<=<version>)[^<]+' appinfo/info.xml | sed 's/-.*//') main
    git push origin --tags
@@ -231,7 +234,7 @@ A: This is still managed in your repo's `appinfo/info.xml`. Only the `<version>`
 
 ## Further Reading
 
-- **Centralized workflows**: [github.com/ConductionNL/.github](https://github.com/ConductionNL/.github/tree/main/.github/workflows) — all shared workflow definitions
-- **Branch protection**: [`.github/workflows/branch-protection.yml`](https://github.com/ConductionNL/.github/blob/main/.github/workflows/branch-protection.yml)
-- **Release workflows**: [`release.yml`](https://github.com/ConductionNL/.github/blob/main/.github/workflows/release.yml), [`release-beta.yml`](https://github.com/ConductionNL/.github/blob/main/.github/workflows/release-beta.yml), [`release-stable.yml`](https://github.com/ConductionNL/.github/blob/main/.github/workflows/release-stable.yml)
+- **Centralized workflows**: [codeberg.org/Conduction/.github](https://codeberg.org/Conduction/.github/tree/main/.github/workflows) — all shared workflow definitions
+- **Branch protection**: [`.github/workflows/branch-protection.yml`](https://codeberg.org/Conduction/.github/blob/main/.github/workflows/branch-protection.yml)
+- **Release workflows**: [`release.yml`](https://codeberg.org/Conduction/.github/blob/main/.github/workflows/release.yml), [`release-beta.yml`](https://codeberg.org/Conduction/.github/blob/main/.github/workflows/release-beta.yml), [`release-stable.yml`](https://codeberg.org/Conduction/.github/blob/main/.github/workflows/release-stable.yml)
 - **Semantic Versioning**: [semver.org](https://semver.org)

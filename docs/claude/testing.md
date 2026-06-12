@@ -8,24 +8,24 @@ This document describes all testing commands and skills available in this worksp
 
 All entries below are skills (the only mechanism we use — Anthropic merged custom commands into skills, and this workspace was never built on `.claude/commands/`). The **Agents** column shows how many parallel agents the skill orchestrates.
 
-| Command | Focus | Agents | Output |
-|---------|-------|--------|--------|
-| `/test-counsel` | **Persona-based** — Would Henk/Fatima/Sem/… succeed? | 8 | `{APP}/test-results/` |
-| `/test-app` | **Perspective-based** — Functional, UX, accessibility, performance, security, API | 1 / 6 | `{APP}/test-results/README.md` |
-| `/test-functional` | Feature correctness (GIVEN/WHEN/THEN) | 1 | Chat + optional evidence |
-| `/test-api` | REST API endpoints | 1 | Chat + API report |
-| `/test-accessibility` | WCAG 2.1 AA (axe-core) | 1 | Chat + a11y report |
-| `/test-performance` | Load times, API response | 1 | Chat |
-| `/test-security` | OWASP Top 10, Nextcloud roles | 1 | Chat |
-| `/test-regression` | Cross-feature regression | 1 | Chat |
-| `/test-persona-henk` | Henk's perspective only | 1 | Chat |
-| `/test-persona-fatima` | Fatima's perspective only | 1 | Chat |
-| `/test-persona-sem` | Sem's perspective only | 1 | Chat |
-| `/test-persona-noor` | Noor's perspective only | 1 | Chat |
-| `/test-persona-annemarie` | Annemarie's perspective only | 1 | Chat |
-| `/test-persona-mark` | Mark's perspective only | 1 | Chat |
-| `/test-persona-priya` | Priya's perspective only | 1 | Chat |
-| `/test-persona-janwillem` | Jan-Willem's perspective only | 1 | Chat |
+| Command                   | Focus                                                                             | Agents | Output                         |
+| ------------------------- | --------------------------------------------------------------------------------- | ------ | ------------------------------ |
+| `/test-counsel`           | **Persona-based** — Would Henk/Fatima/Sem/… succeed?                              | 8      | `{APP}/test-results/`          |
+| `/test-app`               | **Perspective-based** — Functional, UX, accessibility, performance, security, API | 1 / 6  | `{APP}/test-results/README.md` |
+| `/test-functional`        | Feature correctness (GIVEN/WHEN/THEN)                                             | 1      | Chat + optional evidence       |
+| `/test-api`               | REST API endpoints                                                                | 1      | Chat + API report              |
+| `/test-accessibility`     | WCAG 2.1 AA (axe-core)                                                            | 1      | Chat + a11y report             |
+| `/test-performance`       | Load times, API response                                                          | 1      | Chat                           |
+| `/test-security`          | OWASP Top 10, Nextcloud roles                                                     | 1      | Chat                           |
+| `/test-regression`        | Cross-feature regression                                                          | 1      | Chat                           |
+| `/test-persona-henk`      | Henk's perspective only                                                           | 1      | Chat                           |
+| `/test-persona-fatima`    | Fatima's perspective only                                                         | 1      | Chat                           |
+| `/test-persona-sem`       | Sem's perspective only                                                            | 1      | Chat                           |
+| `/test-persona-noor`      | Noor's perspective only                                                           | 1      | Chat                           |
+| `/test-persona-annemarie` | Annemarie's perspective only                                                      | 1      | Chat                           |
+| `/test-persona-mark`      | Mark's perspective only                                                           | 1      | Chat                           |
+| `/test-persona-priya`     | Priya's perspective only                                                          | 1      | Chat                           |
+| `/test-persona-janwillem` | Jan-Willem's perspective only                                                     | 1      | Chat                           |
 
 ---
 
@@ -104,21 +104,21 @@ Or a single persona for a faster targeted check:
 
 Use single-agent commands when you need to target a specific quality dimension:
 
-| Goal | Command |
-|------|---------|
-| Verify a specific feature works end-to-end | `/test-functional` |
-| Validate REST API endpoints | `/test-api` |
-| Audit accessibility compliance | `/test-accessibility` |
-| Measure page and API speed | `/test-performance` |
-| Security and role checks | `/test-security` |
-| Check nothing unrelated broke | `/test-regression` |
-| One persona's full journey | `/test-persona-*` |
+| Goal                                       | Command               |
+| ------------------------------------------ | --------------------- |
+| Verify a specific feature works end-to-end | `/test-functional`    |
+| Validate REST API endpoints                | `/test-api`           |
+| Audit accessibility compliance             | `/test-accessibility` |
+| Measure page and API speed                 | `/test-performance`   |
+| Security and role checks                   | `/test-security`      |
+| Check nothing unrelated broke              | `/test-regression`    |
+| One persona's full journey                 | `/test-persona-*`     |
 
 ---
 
 ### Feature design review (before implementation)
 
-Use `/feature-counsel` to get persona feedback on specs *before* building:
+Use `/feature-counsel` to get persona feedback on specs _before_ building:
 
 ```
 /opsx-ff                        # Generate all spec artifacts
@@ -127,7 +127,7 @@ Use `/feature-counsel` to get persona feedback on specs *before* building:
 /opsx-apply                     # Only then implement
 ```
 
-This is the only testing-adjacent command that runs *before* implementation. It reads specs, not the live app.
+This is the only testing-adjacent command that runs _before_ implementation. It reads specs, not the live app.
 
 ---
 
@@ -139,11 +139,11 @@ This is the only testing-adjacent command that runs *before* implementation. It 
 
 **Agents:** 8 (one per persona) — run in parallel.
 
-**Use when:** You want feedback from realistic user perspectives. Each persona represents a different role, technical level, and set of priorities (citizen, developer, municipal officer, etc.). Output includes in-character findings and verdicts per persona. Best used after `/test-functional` confirms the feature works — this answers whether *users* would succeed, not just whether the spec was met.
+**Use when:** You want feedback from realistic user perspectives. Each persona represents a different role, technical level, and set of priorities (citizen, developer, municipal officer, etc.). Output includes in-character findings and verdicts per persona. Best used after `/test-functional` confirms the feature works — this answers whether _users_ would succeed, not just whether the spec was met.
 
 **Cap impact:** Very high — 8 parallel agents. Open a fresh Claude window before running. See [parallel-agents.md](parallel-agents.md).
 
-**See:** [.claude/skills/test-counsel/SKILL.md](https://github.com/ConductionNL/hydra/blob/main/.claude/skills/test-counsel/SKILL.md)
+**See:** [.claude/skills/test-counsel/SKILL.md](https://codeberg.org/Conduction/hydra/blob/main/.claude/skills/test-counsel/SKILL.md)
 
 ---
 
@@ -159,19 +159,19 @@ This is the only testing-adjacent command that runs *before* implementation. It 
 
 **Cap impact:** Low (Quick) to Very high (Full). See [parallel-agents.md](parallel-agents.md).
 
-**See:** [.claude/skills/test-app/SKILL.md](https://github.com/ConductionNL/hydra/blob/main/.claude/skills/test-app/SKILL.md)
+**See:** [.claude/skills/test-app/SKILL.md](https://codeberg.org/Conduction/hydra/blob/main/.claude/skills/test-app/SKILL.md)
 
 ---
 
 ## `/test-counsel` vs `/test-app`
 
-| Aspect | `/test-counsel` | `/test-app` |
-|--------|-----------------|--------------------|
-| **Lens** | Persona — user goals and experience | Perspective — technical correctness |
-| **Question** | "Would Henk/Fatima/Priya/… complete their tasks?" | "Do features work, perform, and meet standards?" |
-| **Agents** | 8 (one per persona) | 1 / 6 (Quick or Full mode) |
-| **Output style** | In-character findings, persona verdicts | PASS/PARTIAL/FAIL, technical notes |
-| **Best for** | User acceptance, UX feedback | Quality gates, regression, coverage |
+| Aspect           | `/test-counsel`                                   | `/test-app`                                      |
+| ---------------- | ------------------------------------------------- | ------------------------------------------------ |
+| **Lens**         | Persona — user goals and experience               | Perspective — technical correctness              |
+| **Question**     | "Would Henk/Fatima/Priya/… complete their tasks?" | "Do features work, perform, and meet standards?" |
+| **Agents**       | 8 (one per persona)                               | 1 / 6 (Quick or Full mode)                       |
+| **Output style** | In-character findings, persona verdicts           | PASS/PARTIAL/FAIL, technical notes               |
+| **Best for**     | User acceptance, UX feedback                      | Quality gates, regression, coverage              |
 
 Both cover the full app. Use both for thorough validation: `/test-counsel` for user perspective, `/test-app` for technical perspective.
 
@@ -223,7 +223,7 @@ OWASP Top 10, Nextcloud roles, authorization. Checks XSS, CSRF, sensitive data e
 
 Cross-feature regression. Tests unrelated flows to verify a change hasn't broken anything outside its scope. Broader than `/test-functional`.
 
-**Use when:** You've made structural changes — database schema, core service updates, shared utilities — where side-effects are plausible. Run this *before* the persona sweeps in a full regression cycle; if something is already broken it'll surface here first.
+**Use when:** You've made structural changes — database schema, core service updates, shared utilities — where side-effects are plausible. Run this _before_ the persona sweeps in a full regression cycle; if something is already broken it'll surface here first.
 
 ---
 
@@ -231,16 +231,16 @@ Cross-feature regression. Tests unrelated flows to verify a change hasn't broken
 
 Single-persona deep dive. Use when you want one persona's full assessment without launching all eight:
 
-| Command | Persona | Role |
-|---------|---------|------|
-| `/test-persona-henk` | **Henk Bakker** | Elderly citizen — low digital literacy |
-| `/test-persona-fatima` | **Fatima El-Amrani** | Low-literate migrant citizen |
-| `/test-persona-sem` | **Sem de Jong** | Young digital native |
-| `/test-persona-noor` | **Noor Yilmaz** | Municipal CISO / functional admin |
-| `/test-persona-annemarie` | **Annemarie de Vries** | VNG standards architect |
-| `/test-persona-mark` | **Mark Visser** | MKB software vendor |
-| `/test-persona-priya` | **Priya Ganpat** | ZZP developer / integrator |
-| `/test-persona-janwillem` | **Jan-Willem van der Berg** | Small business owner |
+| Command                   | Persona                     | Role                                   |
+| ------------------------- | --------------------------- | -------------------------------------- |
+| `/test-persona-henk`      | **Henk Bakker**             | Elderly citizen — low digital literacy |
+| `/test-persona-fatima`    | **Fatima El-Amrani**        | Low-literate migrant citizen           |
+| `/test-persona-sem`       | **Sem de Jong**             | Young digital native                   |
+| `/test-persona-noor`      | **Noor Yilmaz**             | Municipal CISO / functional admin      |
+| `/test-persona-annemarie` | **Annemarie de Vries**      | VNG standards architect                |
+| `/test-persona-mark`      | **Mark Visser**             | MKB software vendor                    |
+| `/test-persona-priya`     | **Priya Ganpat**            | ZZP developer / integrator             |
+| `/test-persona-janwillem` | **Jan-Willem van der Berg** | Small business owner                   |
 
 **Use when:** You know which persona is most affected by the change, or when you've already run `/test-counsel` and want a deeper single-perspective follow-up. One agent instead of eight — lower cap cost than `/test-counsel`.
 
@@ -250,24 +250,26 @@ Single-persona deep dive. Use when you want one persona's full assessment withou
 
 Test scenarios (`{APP}/test-scenarios/TS-NNN-slug.md`) are reusable, Gherkin-style flows that the test commands pick up automatically. When scenarios exist, the following commands ask whether to include them before launching agents:
 
-| Command | Behaviour |
-|---------|-----------|
-| `/test-app` | Offers to include all active scenarios before launching agents. Agents execute scenario steps before free exploration. |
-| `/test-counsel` | Offers to include scenarios, grouped by persona. Each persona agent receives only the scenarios tagged with their slug. |
-| `/test-persona-*` | Scans for scenarios matching that persona's slug. Asks to run them before free exploration. |
-| `/test-scenario-run` | Runs scenarios directly (by ID, tag, persona, or all) |
+| Command              | Behaviour                                                                                                               |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `/test-app`          | Offers to include all active scenarios before launching agents. Agents execute scenario steps before free exploration.  |
+| `/test-counsel`      | Offers to include scenarios, grouped by persona. Each persona agent receives only the scenarios tagged with their slug. |
+| `/test-persona-*`    | Scans for scenarios matching that persona's slug. Asks to run them before free exploration.                             |
+| `/test-scenario-run` | Runs scenarios directly (by ID, tag, persona, or all)                                                                   |
 
 ### `/test-scenario-create`
 
 Guided wizard for creating a well-structured test scenario for a Nextcloud app.
 
 **Usage:**
+
 ```
 /test-scenario-create
 /test-scenario-create openregister
 ```
 
 **What it does:**
+
 1. Determines the next ID (`TS-NNN`) by scanning existing scenarios
 2. Asks for title, goal, category (functional/api/security/accessibility/performance/ux/integration), and priority
 3. Shows relevant personas and asks which this scenario targets
@@ -279,15 +281,15 @@ Guided wizard for creating a well-structured test scenario for a Nextcloud app.
 
 **Scenario categories and suggested personas:**
 
-| Category | Suggested personas |
-|---|---|
-| functional | Mark Visser, Sem de Jong |
-| api | Priya Ganpat, Annemarie de Vries |
-| security | Noor Yilmaz |
-| accessibility | Henk Bakker, Fatima El-Amrani |
-| ux | Henk Bakker, Jan-Willem, Mark Visser |
-| performance | Sem de Jong, Priya Ganpat |
-| integration | Priya Ganpat, Annemarie de Vries |
+| Category      | Suggested personas                   |
+| ------------- | ------------------------------------ |
+| functional    | Mark Visser, Sem de Jong             |
+| api           | Priya Ganpat, Annemarie de Vries     |
+| security      | Noor Yilmaz                          |
+| accessibility | Henk Bakker, Fatima El-Amrani        |
+| ux            | Henk Bakker, Jan-Willem, Mark Visser |
+| performance   | Sem de Jong, Priya Ganpat            |
+| integration   | Priya Ganpat, Annemarie de Vries     |
 
 ---
 
@@ -296,6 +298,7 @@ Guided wizard for creating a well-structured test scenario for a Nextcloud app.
 Execute one or more test scenarios against the live Nextcloud environment using a browser agent.
 
 **Usage:**
+
 ```
 /test-scenario-run                        # list and choose
 /test-scenario-run TS-001                 # run specific scenario
@@ -306,6 +309,7 @@ Execute one or more test scenarios against the live Nextcloud environment using 
 ```
 
 **What it does:**
+
 1. Discovers scenario files in `{APP}/test-scenarios/`
 2. Filters by tag, persona, or ID as specified
 3. Asks which environment to test against (local or custom URL)
@@ -328,6 +332,7 @@ Execute one or more test scenarios against the live Nextcloud environment using 
 Edit an existing test scenario — update any field (metadata or content) interactively.
 
 **Usage:**
+
 ```
 /test-scenario-edit                      # list all scenarios, pick one
 /test-scenario-edit TS-001               # open specific scenario
@@ -335,6 +340,7 @@ Edit an existing test scenario — update any field (metadata or content) intera
 ```
 
 **What it does:**
+
 1. Locates the scenario file
 2. Shows a summary of current values (status, priority, category, personas, tags, spec refs)
 3. Asks what scope to edit: metadata only / content only / both / status only / tags only
@@ -348,17 +354,18 @@ Edit an existing test scenario — update any field (metadata or content) intera
 
 ### How existing test commands use scenarios
 
-| Command | Behaviour when scenarios exist |
-|---|---|
-| `/test-app` | Asks to include active scenarios before launching agents. Agents execute scenario steps before free exploration. |
-| `/test-counsel` | Asks to include scenarios, grouped by persona. Each persona agent receives only the scenarios tagged with their slug. |
-| `/test-persona-*` | Scans for scenarios matching that persona's slug. Asks to run them before free exploration in Step 2. |
+| Command           | Behaviour when scenarios exist                                                                                        |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `/test-app`       | Asks to include active scenarios before launching agents. Agents execute scenario steps before free exploration.      |
+| `/test-counsel`   | Asks to include scenarios, grouped by persona. Each persona agent receives only the scenarios tagged with their slug. |
+| `/test-persona-*` | Scans for scenarios matching that persona's slug. Asks to run them before free exploration in Step 2.                 |
 
 ---
 
 ## Environment
 
 All testing uses:
+
 - **Base URL:** `http://localhost:8080` (local env) or `http://localhost:3000` (dev)
 - **Credentials:** `admin` / `admin` (local env)
 - **Browser:** Playwright MCP — see browser usage below
@@ -369,14 +376,14 @@ Ensure Docker is running and Nextcloud is accessible before testing. See [docker
 
 ## Browser Usage
 
-| Context | Browser | When |
-|---------|---------|------|
-| **Single-agent commands** | `browser-1` | `/test-functional`, `/test-persona-*`, `/test-*` — one agent at a time |
-| **test-counsel (8 parallel)** | `browser-2`–`browser-5`, `browser-7` + overflow | One browser per persona |
-| **test-counsel (1 persona)** | `browser-1` | When testing a single persona only |
-| **test-app Quick** | `browser-1` | Single agent smoke test |
-| **test-app Full (6 parallel)** | `browser-2`–`browser-5`, `browser-7` + 1 | Each perspective gets a distinct browser |
-| **User observation** | `browser-6` | Headed browser for watching tests live |
+| Context                        | Browser                                         | When                                                                   |
+| ------------------------------ | ----------------------------------------------- | ---------------------------------------------------------------------- |
+| **Single-agent commands**      | `browser-1`                                     | `/test-functional`, `/test-persona-*`, `/test-*` — one agent at a time |
+| **test-counsel (8 parallel)**  | `browser-2`–`browser-5`, `browser-7` + overflow | One browser per persona                                                |
+| **test-counsel (1 persona)**   | `browser-1`                                     | When testing a single persona only                                     |
+| **test-app Quick**             | `browser-1`                                     | Single agent smoke test                                                |
+| **test-app Full (6 parallel)** | `browser-2`–`browser-5`, `browser-7` + 1        | Each perspective gets a distinct browser                               |
+| **User observation**           | `browser-6`                                     | Headed browser for watching tests live                                 |
 
 **Rule:** Single agent = `browser-1`. Parallel agents = each gets a distinct browser (`browser-2`, `browser-3`, `browser-4`, …) to avoid session conflicts.
 

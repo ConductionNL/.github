@@ -9,6 +9,7 @@ See [writing-specs.md](writing-specs.md) for the separate guide on writing OpenS
 ## Contents
 
 **Part 1 — Principles**
+
 - [The Core Rule: Reference, Don't Duplicate](#the-core-rule-reference-dont-duplicate)
 - [Sources of Truth](#sources-of-truth)
 - [Audience Determines Location](#audience-determines-location)
@@ -16,6 +17,7 @@ See [writing-specs.md](writing-specs.md) for the separate guide on writing OpenS
 - [Where Does This Content Go?](#where-does-this-content-go)
 
 **Part 2 — Writing Mechanics**
+
 - [Document Lifecycle Markers](#document-lifecycle-markers)
 - [Link Structure](#link-structure)
 - [Lists, Tables, and Structure](#lists-tables-and-structure)
@@ -24,6 +26,7 @@ See [writing-specs.md](writing-specs.md) for the separate guide on writing OpenS
 - [Formatting Alignment](#formatting-alignment)
 
 **Part 3 — Maintenance**
+
 - [Keeping Docs Current](#keeping-docs-current)
 - [Staleness Signals](#staleness-signals)
 - [Outdated and Legacy Documentation](#outdated-and-legacy-documentation)
@@ -55,40 +58,40 @@ When content is duplicated, it will eventually diverge. One copy gets updated; t
 
 ## Sources of Truth
 
-| Concern                                                     | Source of truth                                                          |
-|-------------------------------------------------------------|--------------------------------------------------------------------------|
-| **Vision & Direction**                                      |                                                                          |
-| Project vision and phases                                   | `openspec/ROADMAP.md` (if present)                                       |
-| Target audience and personas                                | `openspec/audience.md` (if present)                                      |
-| Architectural decisions (why)                               | `openspec/architecture/adr-{NNN}-*.md`                                   |
-| Technical decisions and constraints                         | `openspec/architecture/` ADRs                                            |
-| **Standards & Patterns**                                    |                                                                          |
-| NL Design System and UI standards                           | `openspec/specs/{domain}/spec.md` (app-specific) or company ADR-003      |
-| API conventions and URL structure                           | `openspec/specs/{domain}/spec.md` (app-specific) or company ADR-002      |
-| **Requirements**                                            |                                                                          |
-| Feature requirements and scenarios                          | `openspec/specs/{domain}/spec.md`                                        |
-| **Guides & Documentation**                                  |                                                                          |
-| User-facing how-to guides                                   | `docs/` feature docs                                                     |
-| App administrator procedures                                | `docs/admin-guide.md` (if present)                                       |
-| Developer setup and environment                             | `README.md`                                                              |
-| Available `make` commands and scripts                       | workspace root `Makefile`                                                |
-| Developer workflow and commands                             | `.github/docs/claude/commands.md`, `.github/docs/claude/workflow.md`     |
-| Testing conventions and persona usage                       | `.github/docs/claude/testing.md`                                         |
-| Docker environment and setup                                | `.github/docs/claude/docker.md`, `.github/docs/claude/getting-started.md`|
-| Frontend standards                                          | `.github/docs/claude/frontend-standards.md`                              |
-| Standards compliance references                             | `docs/features/README.md` (GEMMA, ZGW, Forum Standaardisatie)            |
-| **Testing**                                                 |                                                                          |
-| Persona testing behavior and scripts                        | `hydra/personas/`                                                        |
-| Reusable test scenarios (Gherkin)                           | `test-scenarios/TS-*.md`                                                 |
-| **Meta**                                                    |                                                                          |
+| Concern                                                     | Source of truth                                                               |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| **Vision & Direction**                                      |                                                                               |
+| Project vision and phases                                   | `openspec/ROADMAP.md` (if present)                                            |
+| Target audience and personas                                | `openspec/audience.md` (if present)                                           |
+| Architectural decisions (why)                               | `openspec/architecture/adr-{NNN}-*.md`                                        |
+| Technical decisions and constraints                         | `openspec/architecture/` ADRs                                                 |
+| **Standards & Patterns**                                    |                                                                               |
+| NL Design System and UI standards                           | `openspec/specs/{domain}/spec.md` (app-specific) or company ADR-003           |
+| API conventions and URL structure                           | `openspec/specs/{domain}/spec.md` (app-specific) or company ADR-002           |
+| **Requirements**                                            |                                                                               |
+| Feature requirements and scenarios                          | `openspec/specs/{domain}/spec.md`                                             |
+| **Guides & Documentation**                                  |                                                                               |
+| User-facing how-to guides                                   | `docs/` feature docs                                                          |
+| App administrator procedures                                | `docs/admin-guide.md` (if present)                                            |
+| Developer setup and environment                             | `README.md`                                                                   |
+| Available `make` commands and scripts                       | workspace root `Makefile`                                                     |
+| Developer workflow and commands                             | `.github/docs/claude/commands.md`, `.github/docs/claude/workflow.md`          |
+| Testing conventions and persona usage                       | `.github/docs/claude/testing.md`                                              |
+| Docker environment and setup                                | `.github/docs/claude/docker.md`, `.github/docs/claude/getting-started.md`     |
+| Frontend standards                                          | `.github/docs/claude/frontend-standards.md`                                   |
+| Standards compliance references                             | `docs/features/README.md` (GEMMA, ZGW, Forum Standaardisatie)                 |
+| **Testing**                                                 |                                                                               |
+| Persona testing behavior and scripts                        | `hydra/personas/`                                                             |
+| Reusable test scenarios (Gherkin)                           | `test-scenarios/TS-*.md`                                                      |
+| **Meta**                                                    |                                                                               |
 | Spec and doc writing conventions                            | `.github/docs/claude/writing-specs.md`, `.github/docs/claude/writing-docs.md` |
-| ADR writing conventions                                     | `.github/docs/claude/writing-adrs.md`                                    |
-| Skill writing conventions                                   | `.github/docs/claude/writing-skills.md`                                  |
-| OpenSpec schema and artifact templates                      | `openspec/schemas/conduction/schema.yaml`, `templates/`                  |
-| Parallel agent conventions                                  | `.github/docs/claude/parallel-agents.md`                                 |
-| Claude harness configuration (permissions, hooks, env vars) | `.github/global-settings/settings.json`                                  |
-| Global Claude settings guide                                | `.github/docs/claude/global-claude-settings.md`                          |
-| Claude usage tracking documentation                         | `.github/usage-tracker/README.md`                                        |
+| ADR writing conventions                                     | `.github/docs/claude/writing-adrs.md`                                         |
+| Skill writing conventions                                   | `.github/docs/claude/writing-skills.md`                                       |
+| OpenSpec schema and artifact templates                      | `openspec/schemas/conduction/schema.yaml`, `templates/`                       |
+| Parallel agent conventions                                  | `.github/docs/claude/parallel-agents.md`                                      |
+| Claude harness configuration (permissions, hooks, env vars) | `.github/global-settings/settings.json`                                       |
+| Global Claude settings guide                                | `.github/docs/claude/global-claude-settings.md`                               |
+| Claude usage tracking documentation                         | `.github/usage-tracker/README.md`                                             |
 
 ---
 
@@ -96,16 +99,16 @@ When content is duplicated, it will eventually diverge. One copy gets updated; t
 
 Each document has one target audience. Don't mix them.
 
-| Audience                              | Location                                                 | Style                                                                        |
-|---------------------------------------|----------------------------------------------------------|------------------------------------------------------------------------------|
-| End users / citizens                  | `docs/` feature docs                                     | Plain language, no jargon, task-oriented                                     |
-| App administrator                     | `docs/admin-guide.md` (if present)                       | Task-oriented, step-by-step                                                  |
-| Developer (setup, environment)        | `README.md`                                              | Technical, precise                                                           |
-| Claude / spec workflow                | `.github/docs/`, `hydra/.claude/skills/`                 | Instruction-style, precise — Claude reads this at runtime                    |
-| Spec / requirements                   | `openspec/specs/`                                        | RFC 2119, Gherkin — see [writing-specs.md](writing-specs.md)                 |
-| Architectural decisions (why)         | `openspec/architecture/`                                 | ADR format — context, decision, consequences; written for future developers  |
-| Claude test agents (persona testers)  | `hydra/personas/`                                        | Persona cards — behavior, goals, device preference; loaded by test commands at runtime |
-| Claude test agents (scenario execution) | `test-scenarios/`                                      | Gherkin-style test scenarios; loaded by `/test-scenario-run`                 |
+| Audience                                | Location                                 | Style                                                                                  |
+| --------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------- |
+| End users / citizens                    | `docs/` feature docs                     | Plain language, no jargon, task-oriented                                               |
+| App administrator                       | `docs/admin-guide.md` (if present)       | Task-oriented, step-by-step                                                            |
+| Developer (setup, environment)          | `README.md`                              | Technical, precise                                                                     |
+| Claude / spec workflow                  | `.github/docs/`, `hydra/.claude/skills/` | Instruction-style, precise — Claude reads this at runtime                              |
+| Spec / requirements                     | `openspec/specs/`                        | RFC 2119, Gherkin — see [writing-specs.md](writing-specs.md)                           |
+| Architectural decisions (why)           | `openspec/architecture/`                 | ADR format — context, decision, consequences; written for future developers            |
+| Claude test agents (persona testers)    | `hydra/personas/`                        | Persona cards — behavior, goals, device preference; loaded by test commands at runtime |
+| Claude test agents (scenario execution) | `test-scenarios/`                        | Gherkin-style test scenarios; loaded by `/test-scenario-run`                           |
 
 **Developer/technical content does not belong in `docs/`.** If you find implementation details, class names, or spec requirements in a user-facing guide, replace them with plain-language descriptions or links to the spec.
 
@@ -156,17 +159,20 @@ Users will be able to export publications to PDF format.
 ```
 
 **Adding the marker:**
+
 - Only use `[Future]` in `docs/` files — not in specs or `.github/docs/`
 - Only mark features on the active roadmap. Don't document speculative or far-future items — if you don't know when they'll ship, don't document them yet
 - Write the section body in future tense: "Users will be able to..."
 
 **Auditing for stale markers:**
+
 - Run `/sync-docs app` to check automatically
 - When archiving any change, check whether it implements something currently marked `[Future]` in any doc
 - When reading a doc and encountering a `[Future]` section, verify against current specs before assuming it's still future
 
 **Removing the marker — not just deletion:**
 When a feature ships, don't just strip the label — do a content review:
+
 1. Switch future tense to present tense: "will be available" → "is available"
 2. Verify the description still matches what was actually built — planned and implemented are not always identical
 3. Update any example steps, URLs, or screenshots
@@ -194,10 +200,12 @@ See [Outdated and Legacy Documentation](#outdated-and-legacy-documentation) for 
 ### When to use a list
 
 **Bulleted list** — unordered items with no inherent sequence:
+
 - Three or more items that would be awkward as a run-on sentence
 - Items where order doesn't matter
 
 **Numbered list** — always use when sequence matters:
+
 - Step-by-step instructions
 - Ordered procedures where skipping or reordering a step would cause problems
 
@@ -206,6 +214,7 @@ Avoid lists for fewer than three items — prose is usually cleaner: "Feature A 
 ### When to use a table
 
 Use a table when each item has **two or more parallel attributes**:
+
 - Comparing options across a consistent set of criteria
 - Mapping one thing to another (status → meaning, command → effect, field → description)
 - Reference material readers will scan rather than read linearly
@@ -230,11 +239,13 @@ Don't use a table for a simple list of items with a single attribute — that's 
 ## Table of Contents
 
 **Add a ToC when:**
+
 - The document has 5 or more sections and is longer than ~50 lines
 - The document serves as an overview or index (any `README.md`)
 - The document is a guide that readers navigate non-linearly (feature docs, admin-guide.md, commands.md)
 
 **Don't add a ToC when:**
+
 - The document is short (under ~50 lines)
 - The document has a single coherent top-to-bottom flow
 - The document is primarily a single table or reference list
@@ -275,13 +286,13 @@ stateDiagram-v2
 
 **Mermaid diagram types and when to use them:**
 
-| Type               | Use for                                                              |
-|--------------------|----------------------------------------------------------------------|
-| `flowchart`        | Process flows, decision trees, "what happens when"                   |
-| `sequenceDiagram`  | Multi-party interactions (user → Nextcloud app → external service)   |
-| `stateDiagram-v2`  | State machines — task lifecycle, status transitions                  |
-| `erDiagram`        | Data model relationships between entities                            |
-| `gitGraph`         | Branch topology (use sparingly — only if it genuinely aids understanding) |
+| Type              | Use for                                                                   |
+| ----------------- | ------------------------------------------------------------------------- |
+| `flowchart`       | Process flows, decision trees, "what happens when"                        |
+| `sequenceDiagram` | Multi-party interactions (user → Nextcloud app → external service)        |
+| `stateDiagram-v2` | State machines — task lifecycle, status transitions                       |
+| `erDiagram`       | Data model relationships between entities                                 |
+| `gitGraph`        | Branch topology (use sparingly — only if it genuinely aids understanding) |
 
 **Where diagrams live:**
 
@@ -302,11 +313,11 @@ Use screenshots to illustrate UI steps that are genuinely hard to describe in te
 
 **Where images live:**
 
-| Purpose                                                  | Location                                   | Committed? |
-|----------------------------------------------------------|--------------------------------------------|------------|
-| Documentation screenshots for `docs/` guides             | `docs/images/`                             | Yes — commit alongside the doc |
-| Documentation screenshots for `.github/docs/`            | `.github/docs/images/`                     | Yes — commit alongside the doc |
-| Automated test screenshots (browser tests)               | `{app}/test-results/`                      | **No** — gitignored |
+| Purpose                                       | Location               | Committed?                     |
+| --------------------------------------------- | ---------------------- | ------------------------------ |
+| Documentation screenshots for `docs/` guides  | `docs/images/`         | Yes — commit alongside the doc |
+| Documentation screenshots for `.github/docs/` | `.github/docs/images/` | Yes — commit alongside the doc |
+| Automated test screenshots (browser tests)    | `{app}/test-results/`  | **No** — gitignored            |
 
 The `docs/images/` and `.github/docs/images/` directories do not exist yet — create them when you add the first image.
 
@@ -367,18 +378,18 @@ GFM renders tables regardless of source padding, but readable source matters for
 ✓ Well-aligned:
 
 ```markdown
-| Concern         | Source of truth             |
-|-----------------|-----------------------------|
-| Requirements    | `openspec/specs/`           |
-| Developer setup | `README.md`                 |
+| Concern         | Source of truth   |
+| --------------- | ----------------- |
+| Requirements    | `openspec/specs/` |
+| Developer setup | `README.md`       |
 ```
 
 ✗ Misaligned separator — won't break rendering, but signals a partial edit:
 
 ```markdown
-| Concern         | Source of truth             |
-|--|--|
-| Requirements    | `openspec/specs/`           |
+| Concern      | Source of truth   |
+| ------------ | ----------------- |
+| Requirements | `openspec/specs/` |
 ```
 
 ### ASCII box diagrams
@@ -429,31 +440,31 @@ A stale doc is worse than no doc — it misleads. After any change that affects 
 
 When reading or reviewing documentation, certain patterns are signals to stop and verify before trusting. Some indicate the doc has drifted from reality; others indicate it was never finished.
 
-| Pattern found in a doc                                                        | What to check                                                                           |
-|-------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------|
-| `[Future]`                                                                    | Whether the feature has since been implemented                                          |
-| `[Legacy]`                                                                    | Whether the content can now be fully removed                                            |
-| `TODO` / `TBD` in a shipped doc                                               | Whether it needs resolving or a proper `[Future]` marker                                |
-| Hardcoded version numbers in prose                                            | The relevant version source for what's actually pinned                                  |
-| File path references (`openspec/specs/publications/spec.md`, etc.)            | Whether the file still exists at that path                                              |
-| Environment variable names                                                    | `.env.example` or app config to confirm still a valid variable                          |
-| Hardcoded port or URL (`localhost:8080`)                                      | App config to confirm current port and URL                                              |
-| Links to other docs                                                           | Whether the linked file and section still exist                                         |
-| Phase references ("In Phase 1", "POC phase")                                  | `openspec/ROADMAP.md` to see if the phase has advanced                                  |
-| App or tool names ("OpenCatalogi", "OpenConnector")                           | App install scripts or `apps-extra/` to confirm still active                            |
-| Persona names                                                                 | `hydra/personas/` to confirm the persona still exists                                   |
-| Command names (`/opsx-archive`, `make reset`)                                 | `hydra/.claude/skills/` or `Makefile` to confirm still valid                            |
-| Table of Contents entries                                                     | Whether each linked section still exists with the same heading                          |
-| "See [document title]" cross-references                                       | Whether the referenced doc still has the described content                              |
-| Screenshot references (`![alt](images/...)`)                                  | Whether the file exists AND whether the UI has changed since the screenshot was taken   |
-| `(not yet created)` or `(none created yet)` in a table                        | Whether the file now exists and the annotation should be removed                        |
-| Mermaid diagrams (states, flows, sequences)                                   | Whether the underlying process, states, or parties still match reality                  |
-| Specific UI navigation paths ("Go to Settings > Users")                       | Whether the menu structure still exists with those exact labels                         |
-| Step-by-step numbered instructions in guides                                  | Whether the step count and order still match the current UI                             |
-| Code block examples with commands or config snippets                          | Whether the syntax or API contract still holds                                          |
-| Standards references ("GEMMA", "ZGW", "Forum Standaardisatie")                | `docs/features/README.md` to confirm still the governing standards                      |
-| ADR references (`adr-003-...`)                                                | Whether the file exists at that path in `openspec/architecture/`                        |
-| References to `openspec/changes/` proposals                                   | Whether the change was archived and links need updating or removal                      |
+| Pattern found in a doc                                             | What to check                                                                         |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| `[Future]`                                                         | Whether the feature has since been implemented                                        |
+| `[Legacy]`                                                         | Whether the content can now be fully removed                                          |
+| `TODO` / `TBD` in a shipped doc                                    | Whether it needs resolving or a proper `[Future]` marker                              |
+| Hardcoded version numbers in prose                                 | The relevant version source for what's actually pinned                                |
+| File path references (`openspec/specs/publications/spec.md`, etc.) | Whether the file still exists at that path                                            |
+| Environment variable names                                         | `.env.example` or app config to confirm still a valid variable                        |
+| Hardcoded port or URL (`localhost:8080`)                           | App config to confirm current port and URL                                            |
+| Links to other docs                                                | Whether the linked file and section still exist                                       |
+| Phase references ("In Phase 1", "POC phase")                       | `openspec/ROADMAP.md` to see if the phase has advanced                                |
+| App or tool names ("OpenCatalogi", "OpenConnector")                | App install scripts or `apps-extra/` to confirm still active                          |
+| Persona names                                                      | `hydra/personas/` to confirm the persona still exists                                 |
+| Command names (`/opsx-archive`, `make reset`)                      | `hydra/.claude/skills/` or `Makefile` to confirm still valid                          |
+| Table of Contents entries                                          | Whether each linked section still exists with the same heading                        |
+| "See [document title]" cross-references                            | Whether the referenced doc still has the described content                            |
+| Screenshot references (`![alt](images/...)`)                       | Whether the file exists AND whether the UI has changed since the screenshot was taken |
+| `(not yet created)` or `(none created yet)` in a table             | Whether the file now exists and the annotation should be removed                      |
+| Mermaid diagrams (states, flows, sequences)                        | Whether the underlying process, states, or parties still match reality                |
+| Specific UI navigation paths ("Go to Settings > Users")            | Whether the menu structure still exists with those exact labels                       |
+| Step-by-step numbered instructions in guides                       | Whether the step count and order still match the current UI                           |
+| Code block examples with commands or config snippets               | Whether the syntax or API contract still holds                                        |
+| Standards references ("GEMMA", "ZGW", "Forum Standaardisatie")     | `docs/features/README.md` to confirm still the governing standards                    |
+| ADR references (`adr-003-...`)                                     | Whether the file exists at that path in `openspec/architecture/`                      |
+| References to `openspec/changes/` proposals                        | Whether the change was archived and links need updating or removal                    |
 
 ---
 
@@ -526,14 +537,14 @@ Run `/sync-docs` to surface large duplicates automatically.
 
 ## Common Mistakes
 
-| Mistake                                                        | Fix                                                               |
-|----------------------------------------------------------------|-------------------------------------------------------------------|
-| Copying a spec requirement into a user guide                   | Link to the spec instead                                          |
-| Writing technical setup steps in a user-facing guide           | Move to `README.md` or a developer doc                            |
-| Describing the same feature in both the spec and a design doc  | Keep requirements in the spec; keep design decisions in `design.md` |
-| Using absolute file paths in links                             | Use relative paths                                                |
-| Describing API internals in user docs                          | Keep API details in specs and API docs                            |
-| Marking a feature `[Future]` after it ships                    | Remove the marker when the feature is live                        |
+| Mistake                                                       | Fix                                                                 |
+| ------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Copying a spec requirement into a user guide                  | Link to the spec instead                                            |
+| Writing technical setup steps in a user-facing guide          | Move to `README.md` or a developer doc                              |
+| Describing the same feature in both the spec and a design doc | Keep requirements in the spec; keep design decisions in `design.md` |
+| Using absolute file paths in links                            | Use relative paths                                                  |
+| Describing API internals in user docs                         | Keep API details in specs and API docs                              |
+| Marking a feature `[Future]` after it ships                   | Remove the marker when the feature is live                          |
 
 ---
 
@@ -543,33 +554,31 @@ The mistakes above are structural — wrong place, wrong audience, wrong format.
 
 ### Before removing an anti-pattern, check the note's purpose
 
-Anti-pattern detection (especially time-sensitive language and forward-looking statements) is a heuristic, not a verdict. Some notes that *look* like an anti-pattern are actually load-bearing context that future readers need:
+Anti-pattern detection (especially time-sensitive language and forward-looking statements) is a heuristic, not a verdict. Some notes that _look_ like an anti-pattern are actually load-bearing context that future readers need:
 
-- **A note that explains *why* something is the way it is today** ("the gate name is `spdx-headers` but it enforces PHPDoc tags — the naming will migrate once all legacy tooling is updated") communicates a known mismatch and its rationale. Stripping it leaves the inconsistency unexplained.
-- **A note acknowledging a current model behaviour** ("Claude currently undertriggers skills, so write descriptions slightly pushy") flags that the *advice* depends on an *observation*. Removing the qualifier converts an observation into a permanent claim and the advice can age into nonsense if the observation no longer holds.
+- **A note that explains _why_ something is the way it is today** ("the gate name is `spdx-headers` but it enforces PHPDoc tags — the naming will migrate once all legacy tooling is updated") communicates a known mismatch and its rationale. Stripping it leaves the inconsistency unexplained.
+- **A note acknowledging a current model behaviour** ("Claude currently undertriggers skills, so write descriptions slightly pushy") flags that the _advice_ depends on an _observation_. Removing the qualifier converts an observation into a permanent claim and the advice can age into nonsense if the observation no longer holds.
 - **A note pointing at a known-broken state** ("this is a workaround until upstream PR #123 lands") is the only signal that the workaround is temporary. Without it, future readers may treat the workaround as the intended design.
 
 Before rephrasing or deleting any time-sensitive line, ask:
 
-1. **Does the line carry a *reason* (a "why")?** If yes, preserve the reason even if you reword the temporal qualifier.
-2. **Does the line flag a *known mismatch* between names, behaviour, or state?** If yes, keep the mismatch flagged (with a softer qualifier like "as of writing" or by attaching a tracking link).
+1. **Does the line carry a _reason_ (a "why")?** If yes, preserve the reason even if you reword the temporal qualifier.
+2. **Does the line flag a _known mismatch_ between names, behaviour, or state?** If yes, keep the mismatch flagged (with a softer qualifier like "as of writing" or by attaching a tracking link).
 3. **Would removing it make the surrounding text confusing or misleading?** If yes, restructure rather than delete.
 
 Only when a note adds zero load-bearing context (pure decoration like "Observed today (2026-04-19) on issue #71") is straight deletion safe — and even then, replace the date with a stable issue reference rather than dropping the provenance entirely.
 
 `/sync-docs dev` Phase 6 Part B applies this check before flagging an anti-pattern as fixable; agents running ad-hoc reviews should do the same.
 
-
-
-| Anti-pattern                                                        | Why it's a problem                                              | Fix                                                                          |
-|---------------------------------------------------------------------|-----------------------------------------------------------------|------------------------------------------------------------------------------|
-| Using "currently", "as of now", "recently", "at the time of writing" | Becomes misleading the moment circumstances change             | Write as timeless fact: "The app uses X" not "Currently, the app uses X"    |
-| Hardcoding version numbers in prose                                 | Versions change; prose doesn't update automatically            | Link to the relevant version source instead                                  |
-| "It should be noted that…" / "Please be aware that…"               | Adds noise without adding information                           | State the fact directly                                                      |
-| Describing what a thing *is* instead of what the reader should *do* | User guides become encyclopedias instead of task guides         | Lead with the action: "Click X to do Y", not "X is the button that does Y"  |
-| Naming the actor vaguely ("the user", "you should")                 | Unclear whether "you" means end user, admin, or developer       | Name the actor explicitly: "The administrator clicks…", "The citizen sees…" |
-| Writing "as we discussed" or "following the recent change"          | Assumes shared context the reader doesn't have                  | Docs must be self-contained; link to the change or ADR instead              |
-| Using Dutch strings without labelling them                          | Readers who don't speak Dutch can't tell if it's a slug, a label, or a typo | Annotate: `` `zaaktype` (Dutch term for case type) ``           |
-| Adding "TODO" or "TBD" in shipped documentation                     | Signals the doc is incomplete; confuses readers                 | Use `[Future]` with a specific description, or don't document it yet        |
-| Writing "see below" or "as mentioned above"                         | Breaks when the doc is restructured                             | Use a named section link: `[see API Conventions](#api-conventions)`         |
-| Doc file proliferation — creating a new file for every concern      | Increases maintenance surface; readers can't find the right doc | Before creating a new file, check if the content belongs as a section in an existing one. A standalone doc is justified when it has internal navigation needs, targets a distinct audience, or is frequently referenced from multiple places. Run `/sync-docs dev` → Part C to audit doc structure periodically. |
+| Anti-pattern                                                         | Why it's a problem                                                          | Fix                                                                                                                                                                                                                                                                                                              |
+| -------------------------------------------------------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Using "currently", "as of now", "recently", "at the time of writing" | Becomes misleading the moment circumstances change                          | Write as timeless fact: "The app uses X" not "Currently, the app uses X"                                                                                                                                                                                                                                         |
+| Hardcoding version numbers in prose                                  | Versions change; prose doesn't update automatically                         | Link to the relevant version source instead                                                                                                                                                                                                                                                                      |
+| "It should be noted that…" / "Please be aware that…"                 | Adds noise without adding information                                       | State the fact directly                                                                                                                                                                                                                                                                                          |
+| Describing what a thing _is_ instead of what the reader should _do_  | User guides become encyclopedias instead of task guides                     | Lead with the action: "Click X to do Y", not "X is the button that does Y"                                                                                                                                                                                                                                       |
+| Naming the actor vaguely ("the user", "you should")                  | Unclear whether "you" means end user, admin, or developer                   | Name the actor explicitly: "The administrator clicks…", "The citizen sees…"                                                                                                                                                                                                                                      |
+| Writing "as we discussed" or "following the recent change"           | Assumes shared context the reader doesn't have                              | Docs must be self-contained; link to the change or ADR instead                                                                                                                                                                                                                                                   |
+| Using Dutch strings without labelling them                           | Readers who don't speak Dutch can't tell if it's a slug, a label, or a typo | Annotate: `` `zaaktype` (Dutch term for case type) ``                                                                                                                                                                                                                                                            |
+| Adding "TODO" or "TBD" in shipped documentation                      | Signals the doc is incomplete; confuses readers                             | Use `[Future]` with a specific description, or don't document it yet                                                                                                                                                                                                                                             |
+| Writing "see below" or "as mentioned above"                          | Breaks when the doc is restructured                                         | Use a named section link: `[see API Conventions](#api-conventions)`                                                                                                                                                                                                                                              |
+| Doc file proliferation — creating a new file for every concern       | Increases maintenance surface; readers can't find the right doc             | Before creating a new file, check if the content belongs as a section in an existing one. A standalone doc is justified when it has internal navigation needs, targets a distinct audience, or is frequently referenced from multiple places. Run `/sync-docs dev` → Part C to audit doc structure periodically. |

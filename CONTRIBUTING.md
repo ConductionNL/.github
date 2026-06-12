@@ -12,42 +12,42 @@ This project and everyone participating in it is governed by our [Code of Conduc
 
 Before creating bug reports, please check the issue list as you might find out that you don't need to create one. When you are creating a bug report, please include as many details as possible:
 
-* Use a clear and descriptive title
-* Describe the exact steps which reproduce the problem
-* Provide specific examples to demonstrate the steps
-* Describe the behavior you observed after following the steps
-* Explain which behavior you expected to see instead and why
-* Include screenshots if possible
+- Use a clear and descriptive title
+- Describe the exact steps which reproduce the problem
+- Provide specific examples to demonstrate the steps
+- Describe the behavior you observed after following the steps
+- Explain which behavior you expected to see instead and why
+- Include screenshots if possible
 
 ### Suggesting Enhancements
 
-Enhancement suggestions are tracked as GitHub issues. When creating an enhancement suggestion, please include:
+Enhancement suggestions are tracked as issues on the repo's host — Codeberg (`codeberg.org/Conduction`, primary) or GitHub (`github.com/ConductionNL`, legacy/archived). When creating an enhancement suggestion, please include:
 
-* Use a clear and descriptive title
-* Provide a step-by-step description of the suggested enhancement
-* Describe the current behavior and explain which behavior you expected to see instead
-* Explain why this enhancement would be useful
+- Use a clear and descriptive title
+- Provide a step-by-step description of the suggested enhancement
+- Describe the current behavior and explain which behavior you expected to see instead
+- Explain why this enhancement would be useful
 
 ### Pull Requests
 
-* Fork the repo and create your branch from `development`
-* If you've added code that should be tested, add tests
-* If you've changed APIs, update the documentation
-* Ensure the test suite passes
-* Make sure your code lints (`composer cs:check`)
-* Create a pull request!
+- Fork the repo and create your branch from `development`
+- If you've added code that should be tested, add tests
+- If you've changed APIs, update the documentation
+- Ensure the test suite passes
+- Make sure your code lints (`composer cs:check`)
+- Create a pull request!
 
 ### PR Size
 
 Prefer **one PR per logically-coherent finding or feature**. Each PR's commit message, checkbox, and inline-comment chain should map to a single change unit — reviewers hold a clearer mental model on focused PRs than on large ones.
 
-* When a PR's scope grows past **~10 commits or ~30 files**, consider splitting it before requesting review. The per-finding commits stay; the PR boundary moves.
-* **Exception:** release-promotion PRs (`development → beta`, `beta → main`) aggregate every change since the last cut and are expected to be larger.
-* PRs touching many files across unrelated subsystems tend to get reviewed paragraph-by-paragraph rather than holistically — that's a signal to split, not to push through.
+- When a PR's scope grows past **~10 commits or ~30 files**, consider splitting it before requesting review. The per-finding commits stay; the PR boundary moves.
+- **Exception:** release-promotion PRs (`development → beta`, `beta → main`) aggregate every change since the last cut and are expected to be larger.
+- PRs touching many files across unrelated subsystems tend to get reviewed paragraph-by-paragraph rather than holistically — that's a signal to split, not to push through.
 
 ## Branch Protection & Git Flow
 
-We use a structured branching model to ensure stability across environments. All branches are protected via **organization-wide rulesets** on the ConductionNL GitHub organization — direct pushes are not allowed. Every change flows through a pull request with peer review and CI checks.
+We use a structured branching model to ensure stability across environments. All branches are protected via **organization-wide rulesets** on the `Conduction` Codeberg organization (primary) and the legacy `ConductionNL` GitHub organization — direct pushes are not allowed. Every change flows through a pull request with peer review and CI checks.
 
 ```mermaid
 graph LR
@@ -66,13 +66,13 @@ graph LR
 
 ### Branch Rules
 
-These rules are enforced organization-wide across all ConductionNL repositories. They cannot be overridden at the repository level.
+These rules are enforced organization-wide across all `Conduction` (Codeberg) and `ConductionNL` (GitHub, legacy) repositories. They cannot be overridden at the repository level.
 
-| Target | Allowed Sources | Reviews | Required CI Checks |
-|--------|----------------|---------|-------------------|
-| `development` | `feature/*`, `bugfix/*` | 1 approving review | Quality CI (`lint-check`) |
-| `beta` | `development`, `hotfix/*`, `main` (backport) | 1 approving review | Quality CI (`lint-check`) |
-| `main` | `beta`, `hotfix/*` | 2 approving reviews | Branch Protection CI (`check-branch`, `lint-check`) |
+| Target        | Allowed Sources                              | Reviews             | Required CI Checks                                  |
+| ------------- | -------------------------------------------- | ------------------- | --------------------------------------------------- |
+| `development` | `feature/*`, `bugfix/*`                      | 1 approving review  | Quality CI (`lint-check`)                           |
+| `beta`        | `development`, `hotfix/*`, `main` (backport) | 1 approving review  | Quality CI (`lint-check`)                           |
+| `main`        | `beta`, `hotfix/*`                           | 2 approving reviews | Branch Protection CI (`check-branch`, `lint-check`) |
 
 ### Organization-Wide Rulesets
 
@@ -83,6 +83,7 @@ Branch protection is managed at the **organization level**, not per-repository. 
 3. **Main Branch Protection** — Stricter: requires 2 reviewers and branch-source validation before stable release
 
 All rulesets also enforce:
+
 - No force pushes
 - No branch deletion
 - Stale reviews dismissed on new pushes
@@ -107,28 +108,28 @@ Every pull request triggers our automated quality pipeline. **All checks must pa
 
 ### PHP Quality Checks
 
-| Check | Tool | What It Does |
-|-------|------|-------------|
-| **Lint** | `php -l` | Syntax validation — catches parse errors |
-| **Code Style** | PHPCS | Enforces coding standards (PSR-12 + custom rules) |
-| **Static Analysis** | PHPStan (level 5) | Type checking, undefined methods, dead code |
-| **Static Analysis** | Psalm | Additional type inference and security analysis |
-| **Mess Detection** | PHPMD | Complexity, naming, unused code, design problems |
-| **Metrics** | phpmetrics | Maintainability index, coupling, cyclomatic complexity |
+| Check               | Tool              | What It Does                                           |
+| ------------------- | ----------------- | ------------------------------------------------------ |
+| **Lint**            | `php -l`          | Syntax validation — catches parse errors               |
+| **Code Style**      | PHPCS             | Enforces coding standards (PSR-12 + custom rules)      |
+| **Static Analysis** | PHPStan (level 5) | Type checking, undefined methods, dead code            |
+| **Static Analysis** | Psalm             | Additional type inference and security analysis        |
+| **Mess Detection**  | PHPMD             | Complexity, naming, unused code, design problems       |
+| **Metrics**         | phpmetrics        | Maintainability index, coupling, cyclomatic complexity |
 
 ### Frontend Quality Checks
 
-| Check | Tool | What It Does |
-|-------|------|-------------|
-| **JavaScript** | ESLint | Enforces JS/Vue coding standards |
-| **CSS** | Stylelint | Enforces CSS/SCSS coding standards |
+| Check          | Tool      | What It Does                       |
+| -------------- | --------- | ---------------------------------- |
+| **JavaScript** | ESLint    | Enforces JS/Vue coding standards   |
+| **CSS**        | Stylelint | Enforces CSS/SCSS coding standards |
 
 ### Dependency Checks
 
-| Check | What It Does |
-|-------|-------------|
-| **License (npm + composer)** | Ensures all dependencies use approved open-source licenses |
-| **Security (npm + composer)** | Checks for known vulnerabilities in dependencies |
+| Check                         | What It Does                                               |
+| ----------------------------- | ---------------------------------------------------------- |
+| **License (npm + composer)**  | Ensures all dependencies use approved open-source licenses |
+| **Security (npm + composer)** | Checks for known vulnerabilities in dependencies           |
 
 ### Running Quality Checks Locally
 
@@ -147,72 +148,95 @@ npx stylelint "src/**/*.{css,scss,vue}"  # Stylelint
 
 ## App Store Release Process
 
-Releases to the Nextcloud App Store are fully automated via GitHub Actions. They are triggered by merging PRs into `beta` or `main`. Version numbers are calculated automatically from PR labels.
+Releases are fully automated via **Forgejo Actions on Codeberg** and **[semantic-release](https://semantic-release.gitbook.io/)**. **Version numbers are derived from your commit messages and the latest Git tag** — there is no manual version and no version label.
 
 ```mermaid
 graph TD
-    subgraph "Beta Release"
-        D[development] -->|"Developer creates PR"| BP1{"Quality CI\npasses?"}
-        BP1 -->|"Yes"| BM["Merge PR to beta"]
-        BP1 -->|"No"| BF["Fix issues\nre-push"]
-        BF --> BP1
-        BM --> BT{Version Bump\nfrom PR label}
-        BT -->|"label: major"| BV1["v2.0.0-beta.20260319"]
-        BT -->|"label: minor"| BV2["v1.1.0-beta.20260319"]
-        BT -->|"label: patch\n(default)"| BV3["v1.0.1-beta.20260319"]
-        BV1 & BV2 & BV3 --> BB["Build & Package"]
+    subgraph "Beta channel (branch: beta)"
+        D[development] -->|"PR + Quality CI"| BM["Merge PR to beta"]
+        BM --> BA{"Releasable commits?\n(feat/fix/BREAKING)"}
+        BA -->|"No"| BX["No release"]
+        BA -->|"Yes"| BV["semantic-release computes\nX.Y.Z-beta.N from latest tag"]
+        BV --> BT["Create + push tag vX.Y.Z-beta.N"]
+        BT --> BB["Build · sign · Codeberg pre-release"]
         BB --> BU["Upload to App Store\n(nightly channel)"]
-        BB --> BG["Create GitHub\npre-release"]
     end
 
-    subgraph "Stable Release"
-        B2[beta] -->|"Developer creates PR"| SP1{"Branch Protection\nCI passes?"}
-        SP1 -->|"Yes"| SM["Merge PR to main"]
-        SP1 -->|"No"| SF["Fix issues"]
-        SF --> SP1
-        SM --> ST{Version Bump\nfrom PR label}
-        ST -->|"from PR labels"| SV["v1.1.0"]
-        SV --> SB["Build & Package"]
+    subgraph "Stable channel (branch: main)"
+        B2[beta] -->|"PR + Branch-Protection CI"| SM["Merge PR to main"]
+        SM --> SA{"Releasable commits?"}
+        SA -->|"No"| SX["No release"]
+        SA -->|"Yes"| SV["semantic-release computes\nX.Y.Z from latest tag"]
+        SV --> ST["Create + push tag vX.Y.Z"]
+        ST --> SB["Build · sign · Codeberg release"]
         SB --> SU["Upload to App Store\n(stable channel)"]
-        SB --> SG["Create GitHub release\nwith changelog"]
     end
 
-    style D fill:#fff9c4
     style BM fill:#ffe0b2
     style SM fill:#c8e6c9
     style BU fill:#e1bee7
     style SU fill:#e1bee7
-    style BF fill:#ffcdd2
-    style SF fill:#ffcdd2
+    style BX fill:#eeeeee
+    style SX fill:#eeeeee
 ```
 
-### Version Labeling
+### How version numbers are established (Git tags + Conventional Commits)
 
-Add a label to your PR to control the version bump:
+1. **Git tags are the source of truth.** An app's current version is the highest `vX.Y.Z` tag in its repository. semantic-release reads that tag as the baseline for the next release. `appinfo/info.xml` is **not** the source of truth — its `<version>` is *injected* from the computed version at package time.
+2. **Your commit messages decide the bump** ([Conventional Commits](https://www.conventionalcommits.org/)):
 
-| Label | Version Change | When to Use |
-|-------|---------------|-------------|
-| `major` | `1.0.0` → `2.0.0` | Breaking changes, major redesigns |
-| `minor` | `1.0.0` → `1.1.0` | New features, non-breaking additions |
-| `patch` (default) | `1.0.0` → `1.0.1` | Bug fixes, small improvements |
+   | Commit type | Version bump | Example |
+   | --- | --- | --- |
+   | `fix:` | patch | `1.2.3` → `1.2.4` |
+   | `feat:` | minor | `1.2.3` → `1.3.0` |
+   | `feat!:` or a `BREAKING CHANGE:` footer | major | `1.2.3` → `2.0.0` |
+   | `chore:` `docs:` `ci:` `refactor:` `test:` `style:` | none | no release |
 
-### Release Artifacts
+3. **No releasable commits = no release.** A merge containing only `chore`/`docs`/`ci`/etc. builds and publishes **nothing**. This is intentional — version numbers only change when behaviour does.
+4. On a release, semantic-release **creates and pushes the new tag** (`vX.Y.Z` for stable, `vX.Y.Z-beta.N` for beta), then the app is built, signed, a Codeberg release is created, and the tarball is uploaded to the [Nextcloud App Store](https://apps.nextcloud.com). The new tag becomes the baseline for the *next* release.
 
-Each release automatically:
-1. Bumps the version in `appinfo/info.xml`
-2. Builds the app (composer install, npm build)
-3. Creates a signed tarball
-4. Uploads to the [Nextcloud App Store](https://apps.nextcloud.com)
-5. Creates a GitHub release with auto-generated changelog
+### Two channels
+
+| Branch | Channel | Version format | App Store channel |
+| --- | --- | --- | --- |
+| `beta` | prerelease | `X.Y.Z-beta.N` | nightly |
+| `main` | stable | `X.Y.Z` | stable |
+
+So the flow is: merge **dev → beta** for a beta build, and **beta → main** for a stable build — each fires only when the merge carries releasable commits.
+
+### Versions only ever go up (no downgrades)
+
+Each app's Git tags are kept **at or above** the version currently published on the Nextcloud App Store (a one-time alignment set the baseline). Because every release bumps from the **highest** tag, published versions are monotonic.
+
+> ⚠️ **Do not hand-create a `vX.Y.Z` tag lower than the app's current store version** — semantic-release would bump from it and publish a downgrade. If you ever need to reset the baseline, create a tag **at or above** the store version.
+
+### Per-app requirements for a successful publish
+
+An app builds + tags + creates a Codeberg release on any host, but reaching the **App Store** additionally needs:
+
+- `NEXTCLOUD_SIGNING_KEY` + `NEXTCLOUD_SIGNING_CERT` repo secrets — the **exact keypair registered for that app id** on the store (a mismatch fails signature verification).
+- The app registered on [apps.nextcloud.com](https://apps.nextcloud.com) (new apps are registered on first upload).
+- The caller's `app-name` = the `<id>` in `appinfo/info.xml` (it is the tarball's top-level directory, which the store requires).
+
+`NEXTCLOUD_APPSTORE_TOKEN` is provided org-wide; you do not set it per app.
+
+### Reusable workflows
+
+The release logic lives in `Conduction/.github`:
+
+- Stable: `.forgejo/workflows/release-semrel.yml`
+- Beta: `.forgejo/workflows/release-semrel-beta.yml`
+
+Each app's `.forgejo/workflows/release-stable.yml` (on `main`) and `release-beta.yml` (on `beta`) is a thin caller that passes `app-name` and `secrets: inherit`.
 
 ## Documentation Release Process
 
-Documentation is built with [Docusaurus](https://docusaurus.io/) and deployed to GitHub Pages.
+Documentation is built with [Docusaurus](https://docusaurus.io/) and deployed to **Cloudflare Workers (Static Assets)** via Forgejo Actions.
 
-1. Documentation source lives in the `docs/` (or `docusaurus/`) folder on any branch
-2. Push or merge to the `documentation` branch triggers the build
-3. Docusaurus builds the static site
-4. The site is deployed to GitHub Pages with a custom domain (e.g., `openregister.app`)
+1. Documentation source lives in the `docs/` folder.
+2. A push/merge to `documentation`, `main`, or `development` (or the daily schedule) triggers the build.
+3. Docusaurus builds the static site; the build is validated on every event (including PRs).
+4. On non-PR events it deploys to Cloudflare (project `<app>-docs`), reachable at the app's custom domain.
 
 Each app has its own documentation site — see the app's README for its URL.
 
@@ -231,23 +255,23 @@ Each app has its own documentation site — see the app's README for its URL.
 
 We use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/):
 
-* `feat:` for new features
-* `fix:` for bug fixes
-* `chore:` for maintenance tasks
-* `docs:` for documentation changes
-* `refactor:` for code refactoring
-* Use the present tense and imperative mood
-* Limit the first line to 72 characters
+- `feat:` for new features
+- `fix:` for bug fixes
+- `chore:` for maintenance tasks
+- `docs:` for documentation changes
+- `refactor:` for code refactoring
+- Use the present tense and imperative mood
+- Limit the first line to 72 characters
 
 ### PR Labels for Changelogs
 
 Add labels to categorize your PR in the automated changelog:
 
-* **`feature`** / **`enhancement`** — New features (appears under "Added")
-* **`bug`** / **`fix`** — Bug fixes (appears under "Fixed")
-* **`docs`** — Documentation updates
-* **`refactor`** / **`chore`** — Code improvements (appears under "Changed")
-* **`skip-changelog`** — Exclude from changelog
+- **`feature`** / **`enhancement`** — New features (appears under "Added")
+- **`bug`** / **`fix`** — Bug fixes (appears under "Fixed")
+- **`docs`** — Documentation updates
+- **`refactor`** / **`chore`** — Code improvements (appears under "Changed")
+- **`skip-changelog`** — Exclude from changelog
 
 ## Development Setup
 
@@ -259,9 +283,9 @@ Add labels to categorize your PR in the automated changelog:
 
 ## Community
 
-* Join the [Common Ground Slack](https://commonground.nl)
-* Follow us on [X](https://x.com/conduction_nl)
-* Read our updates on [LinkedIn](https://www.linkedin.com/company/conduction/)
+- Join the [Common Ground Slack](https://commonground.nl)
+- Follow us on [X](https://x.com/conduction_nl)
+- Read our updates on [LinkedIn](https://www.linkedin.com/company/conduction/)
 
 ## License
 

@@ -25,11 +25,11 @@ If the app has full annotations already, skip this — `/opsx-verify` handles it
 
 ## The three skills, in order
 
-| Skill | What it does | Writes |
-|---|---|---|
-| [`/opsx-coverage-scan {app}`](../../../hydra/.claude/skills/opsx-coverage-scan/SKILL.md) | Audit only — produces a report bucketing every code unit | `{app}/openspec/coverage-report.md` + `.json` sidecar |
-| [`/opsx-annotate {app}`](../../../hydra/.claude/skills/opsx-annotate/SKILL.md) | Creates ghost change + applies `@spec` tags from Bucket 1 | Annotation-only PR |
-| [`/opsx-reverse-spec {app} --cluster X` or `--extend Y`](../../../hydra/.claude/skills/opsx-reverse-spec/SKILL.md) | Drafts REQs for one Bucket 2 entry via ghost change (spec delta + tasks + annotations), syncs to Specter | Spec PR |
+| Skill                                                                                                              | What it does                                                                                             | Writes                                                |
+| ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| [`/opsx-coverage-scan {app}`](../../../hydra/.claude/skills/opsx-coverage-scan/SKILL.md)                           | Audit only — produces a report bucketing every code unit                                                 | `{app}/openspec/coverage-report.md` + `.json` sidecar |
+| [`/opsx-annotate {app}`](../../../hydra/.claude/skills/opsx-annotate/SKILL.md)                                     | Creates ghost change + applies `@spec` tags from Bucket 1                                                | Annotation-only PR                                    |
+| [`/opsx-reverse-spec {app} --cluster X` or `--extend Y`](../../../hydra/.claude/skills/opsx-reverse-spec/SKILL.md) | Drafts REQs for one Bucket 2 entry via ghost change (spec delta + tasks + annotations), syncs to Specter | Spec PR                                               |
 
 Run them in this exact order. Don't skip the audit step.
 
@@ -113,11 +113,11 @@ ADR conformance issues are noise during retrofit but worth tracking. Open a foll
 
 Not every retrofit ghost change adds new REQs. Three sub-patterns produce a ghost change without any spec delta — they are deliberate, supported, and **do not require cohort frontmatter** on the affected capabilities (the cohort flag is for tracking REQ provenance, not annotation provenance):
 
-| Pattern | When | Example |
-|---|---|---|
-| **Cross-capability annotation patch** | Bucket 2 cluster's methods turn out to map to *existing* REQs in *other* capabilities. The ghost change is one task per cross-cap reference; annotations point at those existing tasks. | `retrofit-{date}-b2b-crossrefs` — 33 tasks pointing across 15 sibling capabilities. |
-| **Private-helper inheritance** | Scanner couldn't follow the call chain into private helpers. Ghost change documents which existing parent task each helper belongs to. No new REQs. | `retrofit-{date}-schema-hooks` — 7 private helpers inherit parent annotate tasks 65/67/68/69. |
-| **Scanner misclassification cleanup** | Scanner placed methods under the wrong capability. Ghost change re-routes them to their actual home capabilities (whose REQs already cover the behavior). | `retrofit-{date}-tenant-isolation-audit` — 3 methods actually belong to `tenant-lifecycle` and `tenant-quotas`. |
+| Pattern                               | When                                                                                                                                                                                    | Example                                                                                                         |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| **Cross-capability annotation patch** | Bucket 2 cluster's methods turn out to map to _existing_ REQs in _other_ capabilities. The ghost change is one task per cross-cap reference; annotations point at those existing tasks. | `retrofit-{date}-b2b-crossrefs` — 33 tasks pointing across 15 sibling capabilities.                             |
+| **Private-helper inheritance**        | Scanner couldn't follow the call chain into private helpers. Ghost change documents which existing parent task each helper belongs to. No new REQs.                                     | `retrofit-{date}-schema-hooks` — 7 private helpers inherit parent annotate tasks 65/67/68/69.                   |
+| **Scanner misclassification cleanup** | Scanner placed methods under the wrong capability. Ghost change re-routes them to their actual home capabilities (whose REQs already cover the behavior).                               | `retrofit-{date}-tenant-isolation-audit` — 3 methods actually belong to `tenant-lifecycle` and `tenant-quotas`. |
 
 The proposal must explicitly say "no new REQs" / "no new REQs needed" / "no new REQs drafted" / "behaviors are fully covered" so `/opsx-verify --app` can detect the pattern. These ghost changes have no `specs/` folder.
 
@@ -125,13 +125,13 @@ The proposal must explicitly say "no new REQs" / "no new REQs needed" / "no new 
 
 Bucket 2 is the whole reason retrofit is a three-step flow rather than one. `/opsx-annotate` deliberately does **not** touch methods without a REQ match — it would have nothing to point at. `/opsx-reverse-spec` handles those, one cluster at a time:
 
-| Situation | Which flag | What happens |
-|---|---|---|
-| Method belongs to an existing capability, no REQ covers it | `--extend <capability>` | Drafts new REQs appended to the capability spec, creates ghost change with delta + task per REQ, annotates the methods |
-| Method has no capability owner at all | `--cluster <name>` | Drafts whole new spec, creates ghost change with new spec + tasks, annotates the methods |
-| Method is plumbing (listener dispatch, framework `__call`) | — | Never annotated. Scanner flags as `plumbing`. |
-| Method is a private helper of an annotated method | — | Inherits caller's REQ(s). Annotated in the same pass as its caller. |
-| Method should deliberately never be specified (debug tooling, internal optimization) | — | Add to `{app}/.opsx-ignore` — scanner suppresses in future runs. |
+| Situation                                                                            | Which flag              | What happens                                                                                                           |
+| ------------------------------------------------------------------------------------ | ----------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Method belongs to an existing capability, no REQ covers it                           | `--extend <capability>` | Drafts new REQs appended to the capability spec, creates ghost change with delta + task per REQ, annotates the methods |
+| Method has no capability owner at all                                                | `--cluster <name>`      | Drafts whole new spec, creates ghost change with new spec + tasks, annotates the methods                               |
+| Method is plumbing (listener dispatch, framework `__call`)                           | —                       | Never annotated. Scanner flags as `plumbing`.                                                                          |
+| Method is a private helper of an annotated method                                    | —                       | Inherits caller's REQ(s). Annotated in the same pass as its caller.                                                    |
+| Method should deliberately never be specified (debug tooling, internal optimization) | —                       | Add to `{app}/.opsx-ignore` — scanner suppresses in future runs.                                                       |
 
 After Bucket 2 is drained, Bucket 1 is empty on the next scan, and all code units are either annotated, plumbing, or explicitly ignored. That's the success state.
 

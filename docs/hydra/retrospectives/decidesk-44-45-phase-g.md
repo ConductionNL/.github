@@ -80,14 +80,16 @@ This was bug #1: **supervisor spam** ([ADR in CLAUDE.md "Terminal-state guards"]
 The idea: the 8 mechanical hydra-gates (`scripts/run-hydra-gates.sh`) iterate `lib/**/*.php` repo-wide. When a PR edits some files and leaves others untouched, pre-existing debt in the untouched files still shows up as FAIL. decidesk#44 and #45 were both being blocked by 2 findings in `lib/Controller/SettingsController.php` — a file neither PR touched. The reviewer could see the failures but couldn't bound-fix them (out of diff scope). Result: every cycle re-bounced on the same debt.
 
 Phase G added `--scope-to-diff [--base BRANCH]` to `run-hydra-gates.sh`:
+
 - Derive `CHANGED_FILES = git diff --name-only --diff-filter=ACMR BASE...HEAD` once
 - Every gate's file loop filters through `_in_scope "$f" || continue`
 - Gate 4 (composer-audit) skips entirely unless `composer.json`/`composer.lock` is in diff
-- Gate 6 (orphan-auth) scopes the *defining* file but keeps caller grep repo-wide
+- Gate 6 (orphan-auth) scopes the _defining_ file but keeps caller grep repo-wide
 
 All four pipeline positions that invoke gates use the new flag (builder Rule 0b + reviewer pre/post-flight + security pre/post-flight). The applier doesn't invoke gates — it consumes verdicts.
 
 Smoke test on PR#131 (feature/47 branch):
+
 - Full-repo scan: 2 FAIL (`SettingsController.php`, unchanged)
 - `--scope-to-diff --base origin/development`: **ALL 8 GATES GREEN** on the 19 changed files
 
@@ -115,6 +117,7 @@ After restart on local images:
 Both issues cleared code review. The `SettingsController` debt that had been blocking them for days was now correctly out of scope. Phase G was working.
 
 Then:
+
 - #44 → `code-review:pass` → `security-review:pass` → `applier:running` → **`applier:fail`**
 - #45 → `code-review:pass` → **`security-review:fail`**
 
@@ -125,7 +128,7 @@ Two different failure modes. The applier was supposed to be the backstop; what h
 Applier verdict JSON for #44:
 
 ```json
-{"ran": true, "pass": null, "blocking": [], "turns": 0, "cost_usd": 0.0}
+{ "ran": true, "pass": null, "blocking": [], "turns": 0, "cost_usd": 0.0 }
 ```
 
 Zero turns. Claude never completed a message. Checking the transcript:
@@ -144,6 +147,7 @@ Reason: `/workspace` was `root:root 0755` in the applier image. Applier runs as 
 **Bug #3: applier `/workspace` not pre-chowned at image build time.**
 
 Smoke test confirmed:
+
 ```
 $ docker run --rm --user claude:claude --entrypoint sh localhost/hydra-applier:test \
     -c 'touch /workspace/.test && mkdir -p /workspace/pr-context'
@@ -225,7 +229,7 @@ Four PRs, all admin-merged to `development`. Three new rules formalised ([ADR-02
 
 4. **The no-loop policy has zero tolerance for infrastructure gaps.** In a loop-based pipeline you can retry through a transient mkdir failure. In a no-loop pipeline, one `root:root` directory turns into `applier:fail` and a human escalation. This is the right trade-off — it forces us to build rock-solid infrastructure — but it means every infrastructure edge case that would be papered over in other systems shows up as a hard verdict here.
 
-5. **"Architectural" is a category, not an escape hatch.** When a reviewer says a fix is "architectural", the real question is: *does this require a NEW decision, or does it apply an existing one?* If the pattern exists in the same file, there's no new decision. The old bounded-fix rule treated "5 lines" as architectural; the new rule treats "new concept" as architectural. Much better.
+5. **"Architectural" is a category, not an escape hatch.** When a reviewer says a fix is "architectural", the real question is: _does this require a NEW decision, or does it apply an existing one?_ If the pattern exists in the same file, there's no new decision. The old bounded-fix rule treated "5 lines" as architectural; the new rule treats "new concept" as architectural. Much better.
 
 6. **Retrospectives are cheap. Write them.** This session found and fixed five distinct pipeline bugs, each worth a paragraph of future-me context. Without writing it down, the next pipeline contributor relearns the whole stack the hard way.
 

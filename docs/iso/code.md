@@ -1,8 +1,8 @@
 # ISO 9001:2015 ↔ Code-Quality Pipeline
 
-This document maps every clause of ISO 9001:2015 (*Quality management systems — Requirements*) to concrete artefacts in the Conduction engineering pipeline. The pipeline itself has four cooperating layers — **Specter** (what & why), **Hydra** (how), the **Quality CI workflow** (gatekeeper), and the **human reviewer** (release authority). The goal here is honest coverage: for each clause we say what we actually do, rate it *Full / Partial / None / N/A*, and — when we fall short — describe the shortest path to closing the gap.
+This document maps every clause of ISO 9001:2015 (_Quality management systems — Requirements_) to concrete artefacts in the Conduction engineering pipeline. The pipeline itself has four cooperating layers — **Specter** (what & why), **Hydra** (how), the **Quality CI workflow** (gatekeeper), and the **human reviewer** (release authority). The goal here is honest coverage: for each clause we say what we actually do, rate it _Full / Partial / None / N/A_, and — when we fall short — describe the shortest path to closing the gap.
 
-ISO 9001 is a generic quality-management standard. The software-specific interpretation lives in **ISO/IEC 90003:2018** (*Software engineering — Guidelines for the application of ISO 9001:2015 to computer software*). Where ISO/IEC 90003 adds software-specific guidance we note it inline.
+ISO 9001 is a generic quality-management standard. The software-specific interpretation lives in **ISO/IEC 90003:2018** (_Software engineering — Guidelines for the application of ISO 9001:2015 to computer software_). Where ISO/IEC 90003 adds software-specific guidance we note it inline.
 
 ---
 
@@ -38,7 +38,7 @@ Pipeline artefact reference (cited throughout below):
 
 ---
 
-Specter and Hydra are peers. Neither is a subsystem of the other. Specter owns *what & why*; Hydra owns *how*; between them runs a learning bridge that feeds each half's outputs back into the other's inputs. The three sections below — § 0a, § 0b, § 0c — describe the two halves and the bridge.
+Specter and Hydra are peers. Neither is a subsystem of the other. Specter owns _what & why_; Hydra owns _how_; between them runs a learning bridge that feeds each half's outputs back into the other's inputs. The three sections below — § 0a, § 0b, § 0c — describe the two halves and the bridge.
 
 ---
 
@@ -46,9 +46,9 @@ Specter and Hydra are peers. Neither is a subsystem of the other. Specter owns *
 
 Where Hydra is the "how," Specter is the "what and why." It is the evidence-gathering, requirement-tracking, competitor-scanning, spec-proposing half of the pipeline. Code lives at [concurrentie-analyse/](../../../concurrentie-analyse/) (remote: private repo `ConductionNL/market-intelligence`). The design principle, quoted from `concurrentie-analyse/README.md`:
 
-> *"Every spec traces back to real tender requirements, real competitor gaps, and real government demand. No fiction."*
+> _"Every spec traces back to real tender requirements, real competitor gaps, and real government demand. No fiction."_
 
-In ISO-9001 terms Specter operationalises the design-and-development *inputs* side of clause 8.3 (specifically 8.3.3), the customer/stakeholder-requirement side of 8.2, and — crucially for 8.5.2 — the *upstream* half of the traceability chain that ends at `@spec` tags in code.
+In ISO-9001 terms Specter operationalises the design-and-development _inputs_ side of clause 8.3 (specifically 8.3.3), the customer/stakeholder-requirement side of 8.2, and — crucially for 8.5.2 — the _upstream_ half of the traceability chain that ends at `@spec` tags in code.
 
 ### The raw material — the intelligence database
 
@@ -56,34 +56,34 @@ In ISO-9001 terms Specter operationalises the design-and-development *inputs* si
 
 **Schema.** Django ORM migrations at `concurrentie-analyse/intelligence/migrations/0001_initial.py`. 58+ tables across 8 domains. Notable tables and their current row counts (from `README.md` sync-status block):
 
-| Domain | Key tables | Rows |
-|---|---|---|
+| Domain              | Key tables                                                                             | Rows                                                                               |
+| ------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | Tender intelligence | `tenders`, `requirements`, `tender_documents`, `tender_awards`, `tender_app_relevance` | 75.6K tenders / 151.4K requirements / 30K docs / 13K awards / 15.8K relevance rows |
-| Canonical features | `canonical_features`, `canonical_feature_sources`, `tec_features`, `category_features` | 6.8K canonical / 7 062 TEC features / 422 category features |
-| Competitors | `competitors`, `competitor_features`, `competitor_apps`, `github_repo_metrics` | 98 competitors / 938 features / 218 apps |
-| App research | `domains`, `stakeholders`, `customer_journeys`, `user_stories`, `external_sources` | 92 stakeholders / 285 journeys / 1.9K user stories / 459 external sources |
-| Legal / standards | `nl_standards`, `laws`, `law_articles`, `gemma_components`, `gemma_services` | 127 standards / 4.277K law articles / 254 components |
-| Ecosystem | `ecosystem_gaps`, `apps`, `nextcloud_marketplace` | 53 gaps / ~22 apps / 620 NC marketplace apps |
-| Procurement | `procurement_windows`, `source_syncs` | 833 windows / 36 source-sync records |
-| Outputs | `app_specs` | per-change spec metadata incl. `status`, `depends_on_specs` |
+| Canonical features  | `canonical_features`, `canonical_feature_sources`, `tec_features`, `category_features` | 6.8K canonical / 7 062 TEC features / 422 category features                        |
+| Competitors         | `competitors`, `competitor_features`, `competitor_apps`, `github_repo_metrics`         | 98 competitors / 938 features / 218 apps                                           |
+| App research        | `domains`, `stakeholders`, `customer_journeys`, `user_stories`, `external_sources`     | 92 stakeholders / 285 journeys / 1.9K user stories / 459 external sources          |
+| Legal / standards   | `nl_standards`, `laws`, `law_articles`, `gemma_components`, `gemma_services`           | 127 standards / 4.277K law articles / 254 components                               |
+| Ecosystem           | `ecosystem_gaps`, `apps`, `nextcloud_marketplace`                                      | 53 gaps / ~22 apps / 620 NC marketplace apps                                       |
+| Procurement         | `procurement_windows`, `source_syncs`                                                  | 833 windows / 36 source-sync records                                               |
+| Outputs             | `app_specs`                                                                            | per-change spec metadata incl. `status`, `depends_on_specs`                        |
 
 (The numbers in the memory index — "39 591 tenders, 17 338 requirements, 303 features" — are stale; the figures here come from inspecting the current DB and README directly.)
 
-**Traceability key.** `canonical_feature_sources` is the junction table that makes 8.5.2 work upstream: every canonical feature points back to a specific evidence row via `(source_table, source_id, confidence)`. One feature can have hundreds of sources. Example (from the audit): the *System Integration* feature has 221 tender sources, 89 competitor implementations, plus external-blog citations, aggregating to a `demand_score` of 8.7/10.
+**Traceability key.** `canonical_feature_sources` is the junction table that makes 8.5.2 work upstream: every canonical feature points back to a specific evidence row via `(source_table, source_id, confidence)`. One feature can have hundreds of sources. Example (from the audit): the _System Integration_ feature has 221 tender sources, 89 competitor implementations, plus external-blog citations, aggregating to a `demand_score` of 8.7/10.
 
 ### The 7 `specter-*` skills
 
 Under `concurrentie-analyse/.claude/skills/`:
 
-| Skill | Job | Cadence |
-|---|---|---|
-| `specter-sync` | Fetch new tenders from specific sources (27 procurement portals, 19 ecosystem catalogues); classify; update README status. | Ad-hoc, also invoked by `specter-pipeline` |
-| `specter-pipeline` | Main orchestrator — 13 global phases + 10 per-app phases: setup → sync → download → parse → analyse → cleanup → link → score → snapshot → context → report → dump → commit. | Weekly (Sun 02:00 UTC via GitHub Actions) |
-| `specter-research-app` | Deep per-app research (9 phases: domains → stakeholder/journey → competitor → tender mining → external sources → sentiment → standards mapping → feature linking → briefs). Promotes an app from `concept` to `idea`. | Post-pipeline, per-app |
-| `specter-prepare-context` | Query DB for an app (market, top-20 features, competitors, insights, standards, user stories) and produce a structured context markdown for `/opsx-explore` or `/app-design`. | Before spec writing |
-| `specter-concept` | Exploratory — three parallel agents investigate market (competitors, demand, feasibility) for a rough product idea; recommends GO / EXPLORE / PARK. | Ad-hoc (ideation) |
-| `specter-analyze-docs` | Download & parse tender documents for a specific app, extract requirements, link to user stories. Used within phase 4 of `specter-research-app`. | Within research-app |
-| `specter-harvest` | Batch-fetch full text from external source URLs and re-extract features — full text yields ~3–4× more features than summaries. | Post-source discovery |
+| Skill                     | Job                                                                                                                                                                                                                   | Cadence                                    |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `specter-sync`            | Fetch new tenders from specific sources (27 procurement portals, 19 ecosystem catalogues); classify; update README status.                                                                                            | Ad-hoc, also invoked by `specter-pipeline` |
+| `specter-pipeline`        | Main orchestrator — 13 global phases + 10 per-app phases: setup → sync → download → parse → analyse → cleanup → link → score → snapshot → context → report → dump → commit.                                           | Weekly (Sun 02:00 UTC via GitHub Actions)  |
+| `specter-research-app`    | Deep per-app research (9 phases: domains → stakeholder/journey → competitor → tender mining → external sources → sentiment → standards mapping → feature linking → briefs). Promotes an app from `concept` to `idea`. | Post-pipeline, per-app                     |
+| `specter-prepare-context` | Query DB for an app (market, top-20 features, competitors, insights, standards, user stories) and produce a structured context markdown for `/opsx-explore` or `/app-design`.                                         | Before spec writing                        |
+| `specter-concept`         | Exploratory — three parallel agents investigate market (competitors, demand, feasibility) for a rough product idea; recommends GO / EXPLORE / PARK.                                                                   | Ad-hoc (ideation)                          |
+| `specter-analyze-docs`    | Download & parse tender documents for a specific app, extract requirements, link to user stories. Used within phase 4 of `specter-research-app`.                                                                      | Within research-app                        |
+| `specter-harvest`         | Batch-fetch full text from external source URLs and re-extract features — full text yields ~3–4× more features than summaries.                                                                                        | Post-source discovery                      |
 
 ### Pipeline phases (the real ones)
 
@@ -128,14 +128,14 @@ The README at `concurrentie-analyse/README.md` already renders a "Sync Status" s
 
 ### Specter in ISO-9001 terms
 
-| Clause | How Specter serves it |
-|---|---|
-| 4.1 Context of the organization | Weekly ingestion of 27 procurement sources + 19 ecosystem sources makes "external issues" a *measured* quantity, not an opinion. |
-| 4.2 Interested parties | `stakeholders`, `customer_journeys`, `user_stories` tables name parties and what they require. |
-| 6.1 Risks and opportunities | `ecosystem_gaps` + `competitor_features` together are the opportunity register. `tender_awards` is the addressable-market quantifier. |
-| 8.2.2 Determining requirements | `requirements` table (151.4K rows) is the authoritative requirement source for tender-driven work. |
-| 8.3.3 D&D inputs | `canonical_features` + `canonical_feature_sources` furnish inputs with traceability to evidence. |
-| 8.5.2 Identification and traceability | Upstream half of the chain — see above. Gap at the issue-tagging step. |
+| Clause                                | How Specter serves it                                                                                                                 |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 4.1 Context of the organization       | Weekly ingestion of 27 procurement sources + 19 ecosystem sources makes "external issues" a _measured_ quantity, not an opinion.      |
+| 4.2 Interested parties                | `stakeholders`, `customer_journeys`, `user_stories` tables name parties and what they require.                                        |
+| 6.1 Risks and opportunities           | `ecosystem_gaps` + `competitor_features` together are the opportunity register. `tender_awards` is the addressable-market quantifier. |
+| 8.2.2 Determining requirements        | `requirements` table (151.4K rows) is the authoritative requirement source for tender-driven work.                                    |
+| 8.3.3 D&D inputs                      | `canonical_features` + `canonical_feature_sources` furnish inputs with traceability to evidence.                                      |
+| 8.5.2 Identification and traceability | Upstream half of the chain — see above. Gap at the issue-tagging step.                                                                |
 
 ### Gaps and closure proposals (Specter-side)
 
@@ -154,18 +154,18 @@ Not raised as changes:
 
 ## 0b. Hydra — the spec → code pipeline
 
-Where Specter is the *what & why*, Hydra is the *how*. It takes an OpenSpec change (proposal.md + design.md + tasks.md + context-brief.md) and turns it into merged, reviewed, gate-passed code on the target app repo. Code lives at [hydra/](../../../hydra/).
+Where Specter is the _what & why_, Hydra is the _how_. It takes an OpenSpec change (proposal.md + design.md + tasks.md + context-brief.md) and turns it into merged, reviewed, gate-passed code on the target app repo. Code lives at [hydra/](../../../hydra/).
 
 ### Pipeline stages
 
 Four agent personas, each with its own container-pool budget (ADR-013):
 
-| Stage | Persona | Input | Output | Key ADR |
-|---|---|---|---|---|
-| Build | `builder` | change folder + target repo | draft PR with code + tests | ADR-003, ADR-015 |
-| Review | `reviewer` | builder's PR | findings with `[fixed:…]` / `[unfixed:…]` markers | ADR-020, ADR-021 |
-| Security review | `security-reviewer` | builder's PR | OWASP / auth findings | ADR-005, ADR-023 |
-| Fix | `fixer` | `[unfixed:…]` markers | bounded-scope corrections | ADR-021 |
+| Stage           | Persona             | Input                       | Output                                            | Key ADR          |
+| --------------- | ------------------- | --------------------------- | ------------------------------------------------- | ---------------- |
+| Build           | `builder`           | change folder + target repo | draft PR with code + tests                        | ADR-003, ADR-015 |
+| Review          | `reviewer`          | builder's PR                | findings with `[fixed:…]` / `[unfixed:…]` markers | ADR-020, ADR-021 |
+| Security review | `security-reviewer` | builder's PR                | OWASP / auth findings                             | ADR-005, ADR-023 |
+| Fix             | `fixer`             | `[unfixed:…]` markers       | bounded-scope corrections                         | ADR-021          |
 
 ### The 9 mechanical gates
 
@@ -208,14 +208,14 @@ Terminal label set on specific triggers (detailed in 8.7); once applied, every h
 
 ### Hydra in ISO-9001 terms
 
-| Clause | How Hydra serves it |
-|---|---|
-| 8.3.4 D&D controls | 9 mechanical gates + reviewer + security-reviewer + fixer; bounded fix scope (ADR-021). |
-| 8.5.1 Control of production | Quality.yml bank + gates + PHPUnit matrix. |
+| Clause                                                  | How Hydra serves it                                                                                       |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| 8.3.4 D&D controls                                      | 9 mechanical gates + reviewer + security-reviewer + fixer; bounded fix scope (ADR-021).                   |
+| 8.5.1 Control of production                             | Quality.yml bank + gates + PHPUnit matrix.                                                                |
 | 8.5.2 Identification and traceability (downstream half) | `@spec` tags (ADR-003) anchor every source line to `tasks.md#task-N`; `Closes #N` closes the issue chain. |
-| 8.7 Control of non-conforming outputs | Fixer for in-scope findings; `needs-input` terminal state with handler short-circuit for out-of-scope. |
-| 9.1.1 Monitoring (per-PR) | quality-report.md + `hydra.json` at every stage. |
-| 10.2 Corrective action | New mechanical gate per recurring class; ADR iteration. |
+| 8.7 Control of non-conforming outputs                   | Fixer for in-scope findings; `needs-input` terminal state with handler short-circuit for out-of-scope.    |
+| 9.1.1 Monitoring (per-PR)                               | quality-report.md + `hydra.json` at every stage.                                                          |
+| 10.2 Corrective action                                  | New mechanical gate per recurring class; ADR iteration.                                                   |
 
 ### Gaps and closure proposals (Hydra-side)
 
@@ -234,7 +234,7 @@ This section describes it in some detail because it is where the most important 
 
 ### Why it lives in Specter
 
-`hydra_learning` is analytics *about* Hydra's pipeline output, not part of Hydra's runtime. It belongs where Specter's infrastructure already exists: PostgreSQL at port 5433, Django 5 admin, Jazzmin sidebar, AdminLTE + Chart.js templates, management-command cron pattern, `StaffRequiredMixin` auth.
+`hydra_learning` is analytics _about_ Hydra's pipeline output, not part of Hydra's runtime. It belongs where Specter's infrastructure already exists: PostgreSQL at port 5433, Django 5 admin, Jazzmin sidebar, AdminLTE + Chart.js templates, management-command cron pattern, `StaffRequiredMixin` auth.
 
 Code:
 
@@ -247,25 +247,25 @@ Code:
 
 All prefixed `hydra_` to stay in their namespace. Django-managed.
 
-| Table | Grain | Role in ISO |
-|---|---|---|
-| `hydra_pipelines` | one row per pipeline run (build + fixes + reviews for one issue) | 9.1.1 monitoring anchor; 8.7 `final_status` captures needs-input |
-| `hydra_phases` | one row per phase of a pipeline (turns, cost, tokens, model, terminal reason) | 9.1.1 cost + duration metrics |
-| `hydra_findings` | one row per reviewer finding (severity, file, line, title, description, status, fixed_in_round) | 10.2 corrective-action evidence |
-| `hydra_finding_clusters` | normalised group of similar findings across pipelines (fingerprint, pipeline_count, first/last_seen, coverage flags) | 9.1.3 analysis; 10.3 continual improvement signal |
-| `hydra_suggestions` | LLM-generated improvement proposal per cluster (proposed patch, rationale, evidence, review status) | 10.2 / 10.3 automated corrective-action proposals |
+| Table                    | Grain                                                                                                                | Role in ISO                                                      |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `hydra_pipelines`        | one row per pipeline run (build + fixes + reviews for one issue)                                                     | 9.1.1 monitoring anchor; 8.7 `final_status` captures needs-input |
+| `hydra_phases`           | one row per phase of a pipeline (turns, cost, tokens, model, terminal reason)                                        | 9.1.1 cost + duration metrics                                    |
+| `hydra_findings`         | one row per reviewer finding (severity, file, line, title, description, status, fixed_in_round)                      | 10.2 corrective-action evidence                                  |
+| `hydra_finding_clusters` | normalised group of similar findings across pipelines (fingerprint, pipeline_count, first/last_seen, coverage flags) | 9.1.3 analysis; 10.3 continual improvement signal                |
+| `hydra_suggestions`      | LLM-generated improvement proposal per cluster (proposed patch, rationale, evidence, review status)                  | 10.2 / 10.3 automated corrective-action proposals                |
 
-The cluster table carries `covered_by_claude_md` + `covered_by_adr` flags — important: if a pattern is *already* documented in an ADR or CLAUDE.md, it won't be re-proposed.
+The cluster table carries `covered_by_claude_md` + `covered_by_adr` flags — important: if a pattern is _already_ documented in an ADR or CLAUDE.md, it won't be re-proposed.
 
 ### The 5 management commands
 
-| Command | Role |
-|---|---|
-| `ingest_hydra_logs` | Reads `../hydra/logs/pipeline-*/`, target repos' `openspec/changes/*/hydra.json`, `reviews/*.json`, `pipeline-logs/*.jsonl.gz`, and GitHub issue events. Upserts into the `hydra_*` tables. Idempotent (unique_together on `repo, issue_num, log_dir`). |
-| `analyze_pipelines` | Fingerprints finding titles, updates `HydraFindingCluster` with pipeline_count / severity_mix / first_seen / last_seen. Grep-based coverage detection against Hydra's current CLAUDE.md + ADRs. |
-| `suggest_improvements` | For uncovered high-frequency clusters (default threshold: 15% frequency, max 5 per run), invokes local `claude -p` with a scoped prompt carrying Hydra's CLAUDE.md + the cluster's example findings. Writes `HydraSuggestion` rows with `status='proposed'`. |
-| `apply_hydra_suggestion` | When a human clicks "Apply" on an accepted suggestion, clones Hydra, branches `learning/suggestion-<id>-<slug>`, applies the patch, opens a PR to development. |
-| `hydra_nightly` | Orchestrates the three analytical commands. Registered as host cron at 03:00 UTC daily. Exits non-zero on any failure. |
+| Command                  | Role                                                                                                                                                                                                                                                         |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ingest_hydra_logs`      | Reads `../hydra/logs/pipeline-*/`, target repos' `openspec/changes/*/hydra.json`, `reviews/*.json`, `pipeline-logs/*.jsonl.gz`, and GitHub issue events. Upserts into the `hydra_*` tables. Idempotent (unique_together on `repo, issue_num, log_dir`).      |
+| `analyze_pipelines`      | Fingerprints finding titles, updates `HydraFindingCluster` with pipeline_count / severity_mix / first_seen / last_seen. Grep-based coverage detection against Hydra's current CLAUDE.md + ADRs.                                                              |
+| `suggest_improvements`   | For uncovered high-frequency clusters (default threshold: 15% frequency, max 5 per run), invokes local `claude -p` with a scoped prompt carrying Hydra's CLAUDE.md + the cluster's example findings. Writes `HydraSuggestion` rows with `status='proposed'`. |
+| `apply_hydra_suggestion` | When a human clicks "Apply" on an accepted suggestion, clones Hydra, branches `learning/suggestion-<id>-<slug>`, applies the patch, opens a PR to development.                                                                                               |
+| `hydra_nightly`          | Orchestrates the three analytical commands. Registered as host cron at 03:00 UTC daily. Exits non-zero on any failure.                                                                                                                                       |
 
 ### Dashboard — the user-facing half
 
@@ -310,12 +310,12 @@ Specter DB:      hydra_pipelines, hydra_phases, hydra_findings
 
 ### What the learning bridge does for ISO clauses
 
-| Clause | What's satisfied |
-|---|---|
-| 9.1.1 Monitoring and measurement | `hydra_pipelines` + `hydra_phases` = cross-change cost, duration, turn count, findings density. Rendered on `/hydra/` dashboard. |
-| 9.1.3 Analysis and evaluation | `analyze_pipelines` + `hydra_finding_clusters` = automated cross-pipeline pattern analysis. Weekly trend charts. |
-| 10.2 Corrective action | `suggest_improvements` + `apply_hydra_suggestion` = automated proposal loop with HITL approval. |
-| 10.3 Continual improvement | Success metric: 30%+ drop in average reviewer findings per pipeline; 25%+ drop in median time-to-done; first-pass success from ~40% to >60%. Measured from `HydraPipeline.findings.count()` and `HydraPipeline.ended_at - started_at`. |
+| Clause                           | What's satisfied                                                                                                                                                                                                                       |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 9.1.1 Monitoring and measurement | `hydra_pipelines` + `hydra_phases` = cross-change cost, duration, turn count, findings density. Rendered on `/hydra/` dashboard.                                                                                                       |
+| 9.1.3 Analysis and evaluation    | `analyze_pipelines` + `hydra_finding_clusters` = automated cross-pipeline pattern analysis. Weekly trend charts.                                                                                                                       |
+| 10.2 Corrective action           | `suggest_improvements` + `apply_hydra_suggestion` = automated proposal loop with HITL approval.                                                                                                                                        |
+| 10.3 Continual improvement       | Success metric: 30%+ drop in average reviewer findings per pipeline; 25%+ drop in median time-to-done; first-pass success from ~40% to >60%. Measured from `HydraPipeline.findings.count()` and `HydraPipeline.ended_at - started_at`. |
 
 ### What's still missing
 
@@ -325,7 +325,7 @@ Three honest gaps remain. All are narrow. Each has an OpenSpec change raised und
 2. **`embed-feature-id-in-issues`** — complementary: have `push_roadmap_issues.py` emit `feature_id` on issues so the enrichment phase in change 1 has a machine-readable anchor.
 3. **`add-spec-pipeline-throughput-view`** — a view on `/specs/throughput/` showing `app_specs.status` transitions (proposed → created → pushed → merged) per week, joined to `hydra_pipelines` for mean change age. Closes Board-1 / Board-2 of the § 9.1.1 management metrics panel.
 
-A smaller residual gap: the operator cron entry ("0 3 * * * cd … python3 manage.py hydra_nightly …") sits in the host crontab, not in a reproducible Ansible / Docker Compose manifest. Spelled out in `docs/hydra-learning/README.md` but not automated. This is 7.5.3 (control of documented information) adjacent — worth adding to the 27001 track.
+A smaller residual gap: the operator cron entry ("0 3 \* \* \* cd … python3 manage.py hydra_nightly …") sits in the host crontab, not in a reproducible Ansible / Docker Compose manifest. Spelled out in `docs/hydra-learning/README.md` but not automated. This is 7.5.3 (control of documented information) adjacent — worth adding to the 27001 track.
 
 ---
 
@@ -333,17 +333,17 @@ A smaller residual gap: the operator cron entry ("0 3 * * * cd … python3 manag
 
 ## 4.1 Understanding the organization and its context
 
-*What the standard asks.* Determine external and internal issues relevant to the organization's purpose and its ability to achieve intended QMS results.
+_What the standard asks._ Determine external and internal issues relevant to the organization's purpose and its ability to achieve intended QMS results.
 
-**Our implementation.** Conduction's context — open-source ecosystem serving Dutch public administration — is recorded in the company-wide CLAUDE.md, in [.github/docs/claude/](../claude/), and in the roadmap at [.github/docs/ROADMAP.md](../ROADMAP.md). External context is *measured* — the Specter intelligence DB (see § 0a) currently holds 75.6K tenders, 151.4K requirements, 6.8K canonical features and 98 tracked competitors, refreshed weekly by the Sunday 02:00 UTC GitHub Actions sync.
+**Our implementation.** Conduction's context — open-source ecosystem serving Dutch public administration — is recorded in the company-wide CLAUDE.md, in [.github/docs/claude/](../claude/), and in the roadmap at [.github/docs/ROADMAP.md](../ROADMAP.md). External context is _measured_ — the Specter intelligence DB (see § 0a) currently holds 75.6K tenders, 151.4K requirements, 6.8K canonical features and 98 tracked competitors, refreshed weekly by the Sunday 02:00 UTC GitHub Actions sync.
 
-**Coverage.** *Partial.*
+**Coverage.** _Partial._
 
 **Gap & how to close.** There is no single "context of the organization" document. The information is spread across CLAUDE.md, the roadmap, and the intelligence DB. Closing the gap: produce one short summary (1–2 pages) at `.github/docs/iso/context.md` that names internal issues (team size, multi-repo sprawl, shared stack), external issues (VNG standards, EU tender directives, Nextcloud upstream), and links out to the authoritative sources.
 
 ## 4.2 Needs and expectations of interested parties
 
-*What the standard asks.* Identify interested parties relevant to the QMS and their requirements.
+_What the standard asks._ Identify interested parties relevant to the QMS and their requirements.
 
 **Our implementation.** Interested parties are captured across three channels:
 
@@ -351,27 +351,27 @@ A smaller residual gap: the operator cron entry ("0 3 * * * cd … python3 manag
 - **Persona skills** — eight `test-persona-*` agents (Henk, Fatima, Sem, Annemarie, Jan-Willem, Mark, Priya, Noor) that name end-user archetypes used for testing.
 - **Standards** — VNG, Logius, Forum Standaardisatie surface in the 127 imported `nl_standards` rows plus the `gemma_components` / `gemma_services` / `laws` / `law_articles` tables.
 
-**Coverage.** *Partial.*
+**Coverage.** _Partial._
 
 **Gap & how to close.** The data exists but is not presented as a single party register that names (a) the party, (b) the requirement they impose, (c) where we evidence satisfying it. A view / script against the existing DB — `scripts/specter-interested-parties.py` — could render the table directly. Low effort, no new data.
 
 ## 4.3 Determining the scope of the quality management system
 
-*What the standard asks.* Define boundaries and applicability of the QMS.
+_What the standard asks._ Define boundaries and applicability of the QMS.
 
-**Our implementation.** Implicit scope: the apps under `apps-extra/` plus the shared platforms (OpenRegister, Hydra, nextcloud-vue). External components such as `Softwarecatalogus/` (VNG client repo) are explicitly out of scope per the CLAUDE.md instruction *"NEVER commit"*.
+**Our implementation.** Implicit scope: the apps under `apps-extra/` plus the shared platforms (OpenRegister, Hydra, nextcloud-vue). External components such as `Softwarecatalogus/` (VNG client repo) are explicitly out of scope per the CLAUDE.md instruction _"NEVER commit"_.
 
-**Coverage.** *Partial.*
+**Coverage.** _Partial._
 
 **Gap & how to close.** The scope is known in practice but not written down as a QMS scope statement. One paragraph naming the apps in scope, the shared infrastructure, and the explicit exclusions (e.g. client repos, third-party submodules) would close this.
 
 ## 4.4 Quality management system and its processes
 
-*What the standard asks.* Establish, implement, maintain and continually improve a QMS, including the processes needed and their interactions.
+_What the standard asks._ Establish, implement, maintain and continually improve a QMS, including the processes needed and their interactions.
 
-**Our implementation.** The QMS *is* the pipeline in § 0. The processes and their interactions are specified by the 23 Hydra ADRs and the `/opsx-*` skill chain. Process ownership: Hydra owns code-review and security-review; Specter owns intelligence→spec; CI workflow owns quality gates; human reviewers own release.
+**Our implementation.** The QMS _is_ the pipeline in § 0. The processes and their interactions are specified by the 23 Hydra ADRs and the `/opsx-*` skill chain. Process ownership: Hydra owns code-review and security-review; Specter owns intelligence→spec; CI workflow owns quality gates; human reviewers own release.
 
-**Coverage.** *Full.*
+**Coverage.** _Full._
 
 ---
 
@@ -379,31 +379,31 @@ A smaller residual gap: the operator cron entry ("0 3 * * * cd … python3 manag
 
 ## 5.1 Leadership and commitment (5.1.1 General / 5.1.2 Customer focus)
 
-*What the standard asks.* Top management must demonstrate leadership and commitment to the QMS and to customer focus.
+_What the standard asks._ Top management must demonstrate leadership and commitment to the QMS and to customer focus.
 
 **Our implementation.** Leadership commitment shows up in the ADRs themselves — ADR-014 mandates EUPL-1.2 licensing + SPDX headers on every file; ADR-015 codifies a 15-point pre-commit checklist evolved from 77 real review findings ([project_hydra-adr-iteration.md](../../../.claude/memory/project_hydra-adr-iteration.md)). Customer focus is embodied in the 8 persona testers and the tender-driven roadmap.
 
-**Coverage.** *Partial.*
+**Coverage.** _Partial._
 
 **Gap & how to close.** We have actions but no explicit quality-commitment artefact. A signed-off one-pager from leadership — "we commit to these ADRs, this pipeline, this review cadence" — would take this to Full.
 
 ## 5.2 Policy (5.2.1 Establish / 5.2.2 Communicate)
 
-*What the standard asks.* A quality policy appropriate to the organization's purpose, providing a framework for objectives, documented, communicated, understood, applied, available to interested parties.
+_What the standard asks._ A quality policy appropriate to the organization's purpose, providing a framework for objectives, documented, communicated, understood, applied, available to interested parties.
 
 **Our implementation.** None explicit.
 
-**Coverage.** *None.*
+**Coverage.** _None._
 
 **Gap & how to close.** Write and publish `.github/docs/iso/quality-policy.md`. It should be short (half a page), link into this folder, and be referenced from the top-level README. ISO/IEC 90003 §5.2 does not add software-specific requirements beyond 9001's.
 
 ## 5.3 Organizational roles, responsibilities and authorities
 
-*What the standard asks.* Assign, communicate and understand responsibilities and authorities for QMS roles.
+_What the standard asks._ Assign, communicate and understand responsibilities and authorities for QMS roles.
 
 **Our implementation.** Roles are expressed through Hydra agent roles (builder, reviewer, security-reviewer, fixer) and the Scrum-team skills (`team-po`, `team-architect`, `team-backend`, `team-frontend`, `team-reviewer`, `team-qa`, `team-sm`). Branch-protection rulesets encode authority: who can approve for development / beta / main.
 
-**Coverage.** *Partial.*
+**Coverage.** _Partial._
 
 **Gap & how to close.** Write a short RACI-style table of human roles — who approves ADRs, who owns Hydra config, who signs off on a release — alongside the agent-role map.
 
@@ -413,31 +413,31 @@ A smaller residual gap: the operator cron entry ("0 3 * * * cd … python3 manag
 
 ## 6.1 Actions to address risks and opportunities
 
-*What the standard asks.* Consider issues (4.1) and requirements (4.2), determine risks and opportunities, plan actions, evaluate effectiveness.
+_What the standard asks._ Consider issues (4.1) and requirements (4.2), determine risks and opportunities, plan actions, evaluate effectiveness.
 
 **Our implementation.** Risk-based thinking is baked into the pipeline: 9 mechanical Hydra gates address specific OWASP/CWE risks (e.g. `no-admin-idor` for A01:2021 IDOR, `unsafe-auth-resolver` for silent-fail-open auth, `semantic-auth` for annotation/body mismatch). Each new gate typically springs from a concrete incident — e.g. `semantic-auth` from decidesk#44 (2026-04-23). This is exactly the "plan actions to address risks" cycle, just executed at skill-definition level.
 
-**Coverage.** *Full* for technical code-level risks; *Partial* for business/organizational risks (no risk register).
+**Coverage.** _Full_ for technical code-level risks; _Partial_ for business/organizational risks (no risk register).
 
 **Gap & how to close.** A lightweight risk register at `.github/docs/iso/risks.md` capturing non-code risks: dependency on Nextcloud upstream, Cyso hosting, single-maintainer bus factor per app, EU tender deadlines. Re-evaluate quarterly.
 
 ## 6.2 Quality objectives and planning to achieve them
 
-*What the standard asks.* Establish measurable quality objectives at relevant functions; document them; plan what, who, when, resources, how evaluated.
+_What the standard asks._ Establish measurable quality objectives at relevant functions; document them; plan what, who, when, resources, how evaluated.
 
 **Our implementation.** Implicit objectives: `composer check:strict` passes, 75 % spec-to-test coverage threshold (per [project_testing-architecture.md](../../../.claude/memory/project_testing-architecture.md)), Newman + Playwright both green, license allowlist clean, zero Psalm errors. These live in the quality.yml job definitions, not in a separate objectives document.
 
-**Coverage.** *Partial.*
+**Coverage.** _Partial._
 
 **Gap & how to close.** Extract the implicit objectives into `.github/docs/iso/objectives.md` with the 9001 format: objective, target, measurement method, review cadence. The numbers already exist; they just need collecting.
 
 ## 6.3 Planning of changes
 
-*What the standard asks.* When the QMS needs change, plan it — purpose, consequences, integrity, resources, responsibilities.
+_What the standard asks._ When the QMS needs change, plan it — purpose, consequences, integrity, resources, responsibilities.
 
-**Our implementation.** The OpenSpec *change* format. `hydra/openspec/changes/{slug}/` contains proposal.md (purpose), design.md (consequences), tasks.md (work breakdown). The `/opsx-*` skill chain enforces that every change goes through propose → plan → apply → verify → archive. ADR changes follow the same flow.
+**Our implementation.** The OpenSpec _change_ format. `hydra/openspec/changes/{slug}/` contains proposal.md (purpose), design.md (consequences), tasks.md (work breakdown). The `/opsx-*` skill chain enforces that every change goes through propose → plan → apply → verify → archive. ADR changes follow the same flow.
 
-**Coverage.** *Full.*
+**Coverage.** _Full._
 
 ---
 
@@ -447,49 +447,49 @@ A smaller residual gap: the operator cron entry ("0 3 * * * cd … python3 manag
 
 ### 7.1.1 General
 
-*What.* Determine and provide resources needed for the QMS.
+_What._ Determine and provide resources needed for the QMS.
 
 **Our implementation.** Resources = compute (Docker Compose dev env, CI runners), tooling (Composer, npm, Playwright, Psalm, PHPStan), data (intelligence DB, seed data), agents (Hydra, Specter). All tracked in `.github/docker-compose.yml`, `composer.json`, `package.json`, and the skills inventory.
 
-**Coverage.** *Full.*
+**Coverage.** _Full._
 
 ### 7.1.2 People
 
-*What.* Determine and provide persons necessary.
+_What._ Determine and provide persons necessary.
 
 **Our implementation.** Combination of human engineers and AI agents (the 9 Scrum-team skills, 8 persona testers, 7 testing-team agents). The agent inventory is the clearest record.
 
-**Coverage.** *Full.*
+**Coverage.** _Full._
 
 ### 7.1.3 Infrastructure
 
-*What.* Determine, provide and maintain infrastructure (buildings, equipment, ICT, transport).
+_What._ Determine, provide and maintain infrastructure (buildings, equipment, ICT, transport).
 
 **Our implementation.** ICT infrastructure: GitHub (code + CI + issues + PRs), Cyso hosting (production, ISAE 3402), Docker Compose (dev/test), 7 Playwright MCP browser sessions (browser-1 … browser-7), Ollama + Qwen 3.5 for local LLM inference. Documented in CLAUDE.md and [.github/docs/claude/](../claude/).
 
-**Coverage.** *Full.*
+**Coverage.** _Full._
 
 ### 7.1.4 Environment for the operation of processes
 
-*What.* Provide and maintain the environment needed for operation.
+_What._ Provide and maintain the environment needed for operation.
 
 **Our implementation.** Dev environment reproducible via `bash clean-env.sh` / `/clean-env` skill. CI environment defined in quality.yml job containers (matrix of PHP × Nextcloud versions).
 
-**Coverage.** *Full.*
+**Coverage.** _Full._
 
 ### 7.1.5 Monitoring and measuring resources
 
-*What.* Ensure resources are suitable for the monitoring/measurement activity and are maintained (in classic ISO 9001 this is about calibrating rulers and scales).
+_What._ Ensure resources are suitable for the monitoring/measurement activity and are maintained (in classic ISO 9001 this is about calibrating rulers and scales).
 
 **Our implementation.** Software analogue: the test suites, linters, and static analysers are themselves "measuring instruments". We pin their versions (composer.lock, package-lock.json), update them deliberately, and the PHPUnit baseline guard in quality.yml detects regressions in the measurement itself.
 
-**Coverage.** *Partial — with interpretation.* ISO/IEC 90003 §7.1.5 explicitly allows this software reinterpretation; we do pin versions but do not formally document a tool-suitability check.
+**Coverage.** _Partial — with interpretation._ ISO/IEC 90003 §7.1.5 explicitly allows this software reinterpretation; we do pin versions but do not formally document a tool-suitability check.
 
 **Gap & how to close.** A short "tool-suitability" note in `objectives.md` or a dedicated file: which tools we rely on, how we know the version is fit for purpose, how we handle updates.
 
 ### 7.1.6 Organizational knowledge
 
-*What.* Determine the knowledge necessary for operating processes, maintain it, make it available, and consider how to acquire additional knowledge.
+_What._ Determine the knowledge necessary for operating processes, maintain it, make it available, and consider how to acquire additional knowledge.
 
 **Our implementation.** This is one of our strongest clauses. Knowledge lives in:
 
@@ -500,35 +500,35 @@ A smaller residual gap: the operator cron entry ("0 3 * * * cd … python3 manag
 - **Memory index** — per-user memory under `~/.claude/projects/…/memory/MEMORY.md` preserves project-specific facts across sessions.
 - **Retrospectives** — `hydra/docs/retrospectives/`.
 
-**Coverage.** *Full.*
+**Coverage.** _Full._
 
 ## 7.2 Competence
 
-*What.* Determine required competence; ensure persons are competent; take actions to acquire it; evaluate effectiveness.
+_What._ Determine required competence; ensure persons are competent; take actions to acquire it; evaluate effectiveness.
 
 **Our implementation.** For humans: no formal competence matrix. For agents: each skill has an explicit description and — where applicable — a worked example. The Hydra pipeline is itself a forcing function: if an agent-produced PR fails the gates, the agent's "competence" is measured objectively.
 
-**Coverage.** *Partial* (humans) / *Full* (agents).
+**Coverage.** _Partial_ (humans) / _Full_ (agents).
 
 **Gap & how to close.** A skills matrix for humans listing required competences per role (backend PHP, Vue, pipeline ops, security review) and recorded training. Not heavy — one table.
 
 ## 7.3 Awareness
 
-*What.* Persons doing work under the QMS are aware of the quality policy, relevant objectives, their contribution, implications of non-conformity.
+_What._ Persons doing work under the QMS are aware of the quality policy, relevant objectives, their contribution, implications of non-conformity.
 
 **Our implementation.** CLAUDE.md loads on every session; MEMORY.md reinforces preferences; ADRs are referenced in issue templates and PR reviews. Non-conformity implications are very visible (the PR doesn't merge).
 
-**Coverage.** *Partial* — awareness of the implicit objectives is high; awareness of a formal *policy* is impossible because one doesn't yet exist (see 5.2).
+**Coverage.** _Partial_ — awareness of the implicit objectives is high; awareness of a formal _policy_ is impossible because one doesn't yet exist (see 5.2).
 
 **Gap & how to close.** Closes automatically once 5.2 (policy) and 6.2 (objectives) are written.
 
 ## 7.4 Communication
 
-*What.* Determine internal and external communications (what, when, with whom, how, who).
+_What._ Determine internal and external communications (what, when, with whom, how, who).
 
 **Our implementation.** GitHub issues, PR comments, and review threads form the primary communication channel. Hydra comments are labelled with stage markers (`[fixed:…]`, `[unfixed:…]`). Specter-produced issues carry `ready-to-build` labels. Labels are the protocol.
 
-**Coverage.** *Full* internally; *Partial* externally (no external-communication plan).
+**Coverage.** _Full_ internally; _Partial_ externally (no external-communication plan).
 
 **Gap & how to close.** If we begin communicating QMS status to external parties (customers, auditors), add an external-communication matrix. Until then this is fine.
 
@@ -536,7 +536,7 @@ A smaller residual gap: the operator cron entry ("0 3 * * * cd … python3 manag
 
 ### 7.5.1 General
 
-*What.* The QMS shall include documented information required by the standard and information determined necessary for QMS effectiveness.
+_What._ The QMS shall include documented information required by the standard and information determined necessary for QMS effectiveness.
 
 **Our implementation.** Documented information sits in predictable locations:
 
@@ -544,23 +544,23 @@ A smaller residual gap: the operator cron entry ("0 3 * * * cd … python3 manag
 - Process-mandated: ADRs, OpenSpec changes, specs.
 - Evidence: `hydra.json` per change, quality.yml artefacts, PR reviews.
 
-**Coverage.** *Partial* pending the 5.2/6.2 artefacts.
+**Coverage.** _Partial_ pending the 5.2/6.2 artefacts.
 
 ### 7.5.2 Creating and updating
 
-*What.* Ensure appropriate identification, description, format, review, approval.
+_What._ Ensure appropriate identification, description, format, review, approval.
 
 **Our implementation.** All documented information is versioned via Git. The standard file layout (ADR naming `adr-NNN-name.md`, changes `changes/{slug}/`, specs `specs/{area}/spec.md`) provides identification. Review/approval = PR approval.
 
-**Coverage.** *Full.*
+**Coverage.** _Full._
 
 ### 7.5.3 Control of documented information (availability, protection, distribution, retention, obsolete handling)
 
-*What.* Control it — availability where needed, protection from loss, distribution, retention, handling of obsolete information.
+_What._ Control it — availability where needed, protection from loss, distribution, retention, handling of obsolete information.
 
 **Our implementation.** Availability: Git + GitHub. Protection: org rulesets, 2-review gate on main. Retention: Git history is permanent; archived changes go to `changes/archive/`. Obsolete handling: `opsx-archive` skill; superseded ADRs are marked rather than deleted (convention).
 
-**Coverage.** *Full.*
+**Coverage.** _Full._
 
 ---
 
@@ -570,45 +570,45 @@ This is where the weight of the mapping sits. Clause 8 covers planning, requirem
 
 ## 8.1 Operational planning and control
 
-*What.* Plan, implement and control the processes needed to meet requirements for products and services.
+_What._ Plan, implement and control the processes needed to meet requirements for products and services.
 
 **Our implementation.** The pipeline in § 0 is the operational plan, made executable by skill chains (`/opsx-new`, `/opsx-ff`, `/opsx-apply`, `/opsx-verify`, `/opsx-archive`). Quality.yml is the per-PR runtime control.
 
-**Coverage.** *Full.*
+**Coverage.** _Full._
 
 ## 8.2 Requirements for products and services
 
 ### 8.2.1 Customer communication
 
-*What.* Provide product information, handle enquiries/contracts/orders/amendments, obtain feedback/complaints, handle customer property, establish contingency actions.
+_What._ Provide product information, handle enquiries/contracts/orders/amendments, obtain feedback/complaints, handle customer property, establish contingency actions.
 
 **Our implementation.** GitHub Issues + PR comments + labels serve as the primary customer-communication surface. Each OpenSpec change is linked to one or more issues (`opsx-plan-to-issues` skill). Tender intake is automated — Specter ingests tender data into the intelligence DB weekly (GitHub Actions Sunday 02:00 UTC sync).
 
-**Coverage.** *Full* for software-project communication.
+**Coverage.** _Full_ for software-project communication.
 
 ### 8.2.2 Determining requirements for products and services
 
-*What.* Ensure requirements, including applicable statutory/regulatory, are defined.
+_What._ Ensure requirements, including applicable statutory/regulatory, are defined.
 
 **Our implementation.** Specter's `requirements` table (151.4K rows) is the authoritative source for tender-driven requirements. `canonical_features` (6.8K rows) de-duplicates and scores them; `canonical_feature_sources` links every canonical feature back to the specific tender / competitor / external evidence rows with a confidence score. Statutory / regulatory inputs come from the Forum Standaardisatie imports (127 `nl_standards` rows), the `laws` / `law_articles` tables (4.277K law articles), and the `gemma_components` / `gemma_services` tables (254 + 422 rows).
 
-**Coverage.** *Full.*
+**Coverage.** _Full._
 
 ### 8.2.3 Review of requirements for products and services
 
-*What.* Review requirements before committing to provide; ensure requirements are resolved, organization has the capability, differences understood.
+_What._ Review requirements before committing to provide; ensure requirements are resolved, organization has the capability, differences understood.
 
 **Our implementation.** Two review gates: the `openspec-propose` / `opsx-ff` step forces a proposal document before any code is written; the human PO (via `team-po` skill or real person) approves the change before it leaves the `proposed` state.
 
-**Coverage.** *Full.*
+**Coverage.** _Full._
 
 ### 8.2.4 Changes to requirements for products and services
 
-*What.* When requirements change, ensure documented information is amended and relevant persons are aware.
+_What._ When requirements change, ensure documented information is amended and relevant persons are aware.
 
 **Our implementation.** OpenSpec changes are first-class objects; amendments flow through the same lifecycle. `opsx-sync` syncs delta specs to main specs on archive. Awareness propagates via issue comments and label changes.
 
-**Coverage.** *Full.*
+**Coverage.** _Full._
 
 ## 8.3 Design and development of products and services
 
@@ -616,15 +616,15 @@ This is the central clause for software engineering and the one ISO/IEC 90003 ex
 
 ### 8.3.1 General
 
-*What.* Establish, implement and maintain a design and development process appropriate to ensure subsequent provision of products and services.
+_What._ Establish, implement and maintain a design and development process appropriate to ensure subsequent provision of products and services.
 
-**Our implementation.** The Specter → Hydra → CI → reviewer chain *is* the D&D process. It is maintained by the ADR set and evolved via the ADR iteration loop (see 10.3).
+**Our implementation.** The Specter → Hydra → CI → reviewer chain _is_ the D&D process. It is maintained by the ADR set and evolved via the ADR iteration loop (see 10.3).
 
-**Coverage.** *Full.*
+**Coverage.** _Full._
 
 ### 8.3.2 Design and development planning
 
-*What.* Plan stages, reviews, verification, validation, responsibilities, resources, interfaces, customer involvement, documented information needs.
+_What._ Plan stages, reviews, verification, validation, responsibilities, resources, interfaces, customer involvement, documented information needs.
 
 **Our implementation.**
 
@@ -637,19 +637,19 @@ This is the central clause for software engineering and the one ISO/IEC 90003 ex
 - **Interfaces** — ADR-002 (API), ADR-022 (apps consume OR abstractions).
 - **Documented information** — proposal.md, design.md, tasks.md per change.
 
-**Coverage.** *Full.*
+**Coverage.** _Full._
 
 ### 8.3.3 Design and development inputs
 
-*What.* Determine requirements essential to the types being designed; consider functional/performance, applicable statutory/regulatory, standards, potential consequences of failure.
+_What._ Determine requirements essential to the types being designed; consider functional/performance, applicable statutory/regulatory, standards, potential consequences of failure.
 
 **Our implementation.** Inputs are assembled by `concurrentie-analyse/scripts/generate_spec_content.py` (pure DB → markdown, no LLM) into a `context-brief.md` per app, then carried into `hydra/openspec/changes/{slug}/proposal.md` + `design.md`. The brief draws from: `canonical_features` + `canonical_feature_sources` (functional requirements with evidence trail), `nl_standards` / `gemma_*` / `laws` (statutory & regulatory), `competitor_features` (what peers ship), `ecosystem_gaps` (what is missing), ADR-005 (consequences-of-failure thinking for security-sensitive paths).
 
-**Coverage.** *Full.*
+**Coverage.** _Full._
 
 ### 8.3.4 Design and development controls
 
-*What.* Apply controls to ensure D&D results meet input requirements; reviews, verifications, validations, actions on problems.
+_What._ Apply controls to ensure D&D results meet input requirements; reviews, verifications, validations, actions on problems.
 
 **Our implementation.** This is where the bulk of the pipeline lives.
 
@@ -658,49 +658,49 @@ This is the central clause for software engineering and the one ISO/IEC 90003 ex
 - **Validations**: PHPUnit (unit), Newman (integration), Playwright (E2E), persona testing (`test-persona-*` agents).
 - **Actions on problems**: `needs-input` escalation pattern — on container crash or unresolvable finding, issue leaves the queue and is surfaced to humans. Fixer agent applies `[unfixed:…]` item resolutions within bounded scope (ADR-021).
 
-**Coverage.** *Full* — this is the clause our pipeline was architected around.
+**Coverage.** _Full_ — this is the clause our pipeline was architected around.
 
 ### 8.3.5 Design and development outputs
 
-*What.* Ensure outputs meet input requirements; adequate for subsequent processes; include/reference monitoring & measurement requirements and acceptance criteria; specify characteristics essential for intended purpose and safe/proper provision.
+_What._ Ensure outputs meet input requirements; adequate for subsequent processes; include/reference monitoring & measurement requirements and acceptance criteria; specify characteristics essential for intended purpose and safe/proper provision.
 
 **Our implementation.** Outputs of each stage are named files: `proposal.md`, `design.md`, `tasks.md`, source files with `@spec` tags, tests, `hydra.json`. Acceptance criteria are the gate set + tasks.md checkboxes + reviewer approval. ADR-003 mandates `@spec` PHPDoc tags at file/class/method level — the traceability anchor.
 
-**Coverage.** *Full.*
+**Coverage.** _Full._
 
 ### 8.3.6 Design and development changes
 
-*What.* Identify, review and control changes made during or after D&D to avoid adverse impact; retain documented information on the changes, the results of reviews, authorisation, actions to prevent adverse impact.
+_What._ Identify, review and control changes made during or after D&D to avoid adverse impact; retain documented information on the changes, the results of reviews, authorisation, actions to prevent adverse impact.
 
 **Our implementation.** OpenSpec changes are the unit of change. `hydra.json` stages record every action (locked writer, atomic via `scripts/lib/hydra_record.py`). Superseded ADRs are marked rather than deleted. `opsx-archive` + `opsx-sync` handle post-archive integrity.
 
-**Coverage.** *Full.*
+**Coverage.** _Full._
 
 ## 8.4 Control of externally provided processes, products and services
 
 ### 8.4.1 General
 
-*What.* Ensure externally provided processes/products/services conform to requirements.
+_What._ Ensure externally provided processes/products/services conform to requirements.
 
 **Our implementation.** External dependencies flow through Composer (PHP) and npm (JS). Two controls: `composer audit` / `npm audit` at critical-level in quality.yml (a gate), and license checks against `.license-allowlist.json` with explicit overrides in `.license-overrides.json`. SBOM generation (CycloneDX) provides the external-inventory trail. External hosting: Cyso (ISAE 3402 Type II) provides the inherited control.
 
-**Coverage.** *Full.*
+**Coverage.** _Full._
 
 ### 8.4.2 Type and extent of control
 
-*What.* Ensure externally provided processes remain within control of the QMS; define controls; consider impact on ability to meet requirements; take account of effectiveness of external provider's own controls; determine verification.
+_What._ Ensure externally provided processes remain within control of the QMS; define controls; consider impact on ability to meet requirements; take account of effectiveness of external provider's own controls; determine verification.
 
 **Our implementation.** Type-of-control is tiered: runtime libraries (Composer/npm) → automated audit + license gate; hosting (Cyso) → contractual ISAE 3402; shared upstream (Nextcloud) → version-pinning + PHPUnit matrix testing across supported NC versions.
 
-**Coverage.** *Full.*
+**Coverage.** _Full._
 
 ### 8.4.3 Information for external providers
 
-*What.* Communicate requirements to the external provider for processes/products/services, approval, competence, interactions, control and monitoring, verification activities, activities at provider premises.
+_What._ Communicate requirements to the external provider for processes/products/services, approval, competence, interactions, control and monitoring, verification activities, activities at provider premises.
 
-**Our implementation.** Not a strong suit — we mostly *consume* external providers rather than commissioning bespoke work from them. The information flow to Nextcloud upstream (bug reports, patches) is ad-hoc.
+**Our implementation.** Not a strong suit — we mostly _consume_ external providers rather than commissioning bespoke work from them. The information flow to Nextcloud upstream (bug reports, patches) is ad-hoc.
 
-**Coverage.** *Partial.*
+**Coverage.** _Partial._
 
 **Gap & how to close.** Short process note for the cases where it matters: how we interact with Nextcloud upstream, how we raise CVE issues with Composer package maintainers. Low priority — our external-provider surface is narrow.
 
@@ -708,15 +708,15 @@ This is the central clause for software engineering and the one ISO/IEC 90003 ex
 
 ### 8.5.1 Control of production and service provision
 
-*What.* Implement production and service provision under controlled conditions: availability of documented information, monitoring & measuring resources, monitoring & measurement activities, suitable infrastructure & environment, competence of persons, validation of processes where output cannot be verified, actions to prevent human error, release/delivery/post-delivery activities.
+_What._ Implement production and service provision under controlled conditions: availability of documented information, monitoring & measuring resources, monitoring & measurement activities, suitable infrastructure & environment, competence of persons, validation of processes where output cannot be verified, actions to prevent human error, release/delivery/post-delivery activities.
 
-**Our implementation.** Controlled conditions for each PR: the 4-layer pipeline, the 9 mechanical gates, the full quality.yml bank, the PHPUnit matrix (PHP × Nextcloud backends). Actions to prevent human error: *everything* the pipeline catches before a human looks — the 15-point pre-commit checklist (ADR-015), the gate set, the forbidden-patterns scanner.
+**Our implementation.** Controlled conditions for each PR: the 4-layer pipeline, the 9 mechanical gates, the full quality.yml bank, the PHPUnit matrix (PHP × Nextcloud backends). Actions to prevent human error: _everything_ the pipeline catches before a human looks — the 15-point pre-commit checklist (ADR-015), the gate set, the forbidden-patterns scanner.
 
-**Coverage.** *Full.*
+**Coverage.** _Full._
 
 ### 8.5.2 Identification and traceability
 
-*What.* Identify outputs by suitable means; identify the status of outputs with respect to monitoring & measurement requirements; control unique identification of outputs when traceability is a requirement; retain documented information necessary for traceability.
+_What._ Identify outputs by suitable means; identify the status of outputs with respect to monitoring & measurement requirements; control unique identification of outputs when traceability is a requirement; retain documented information necessary for traceability.
 
 **Our implementation.** The full evidence chain end-to-end — from tender in Brussels to a line of PHP in a Nextcloud app:
 
@@ -749,47 +749,47 @@ merged code on main
 - **Status tracking** — at the evidence level: `app_specs.status` (`draft` / `created` / `pushed` / `merged`). At the workflow level: issue labels (`proposed`, `in-progress`, `code-review:queued`, `needs-input`, `ready-to-merge`, etc.). At the code level: `findings[].status` in `hydra.json`.
 - **Reverse chain works**: `git blame` → commit `(#N)` → PR `Closes #N` → issue → change folder → `@spec` tag matches tasks.md line.
 
-**Where the chain breaks (honest).** Walking *backward* from a merged PR through the GitHub issue lands at a change folder — but the link to `canonical_features.id` is in prose in the issue body, not as a machine-readable label or front-matter key. So today the last hop from "change folder" back to "the specific canonical feature and its source evidence" is a human step, not an automated one.
+**Where the chain breaks (honest).** Walking _backward_ from a merged PR through the GitHub issue lands at a change folder — but the link to `canonical_features.id` is in prose in the issue body, not as a machine-readable label or front-matter key. So today the last hop from "change folder" back to "the specific canonical feature and its source evidence" is a human step, not an automated one.
 
-**Coverage.** *Full* for forward traceability from any point in the chain onward. *Partial* for automated reverse traceability from code to the originating canonical-feature row (breaks at the issue ↔ feature_id hop).
+**Coverage.** _Full_ for forward traceability from any point in the chain onward. _Partial_ for automated reverse traceability from code to the originating canonical-feature row (breaks at the issue ↔ feature_id hop).
 
 **Gap & how to close.** Two OpenSpec changes raised: `embed-feature-id-in-issues` (Specter-side: `push_roadmap_issues.py` emits `feature_id` in issue body front-matter / as a label) + `link-findings-to-features` (DB-side: `HydraPipeline.canonical_feature_id` FK + enrichment). Either alone closes the forward walk; together they close both directions and make feature-level metrics queryable.
 
 ### 8.5.3 Property belonging to customers or external providers
 
-*What.* Exercise care with property belonging to the customer or external providers while under the organization's control.
+_What._ Exercise care with property belonging to the customer or external providers while under the organization's control.
 
-**Our implementation.** Customer property in the software sense is the data users store in Nextcloud instances. Data-handling is out of scope for *code quality* and belongs in a future `security.md` (ISO 27001). Where customer repositories are involved (e.g. `Softwarecatalogus/`), the CLAUDE.md rule is explicit: *NEVER commit*.
+**Our implementation.** Customer property in the software sense is the data users store in Nextcloud instances. Data-handling is out of scope for _code quality_ and belongs in a future `security.md` (ISO 27001). Where customer repositories are involved (e.g. `Softwarecatalogus/`), the CLAUDE.md rule is explicit: _NEVER commit_.
 
-**Coverage.** *N/A* for this document — covered under 27001 scope.
+**Coverage.** _N/A_ for this document — covered under 27001 scope.
 
 ### 8.5.4 Preservation
 
-*What.* Preserve outputs during production and service provision to the extent necessary to maintain conformity.
+_What._ Preserve outputs during production and service provision to the extent necessary to maintain conformity.
 
 **Our implementation.** Git preserves source. Build artefacts preserved via CI artefact upload. `hydra.json` preserves pipeline state atomically. Container images pinned by tag/digest.
 
-**Coverage.** *Full.*
+**Coverage.** _Full._
 
 ### 8.5.5 Post-delivery activities
 
-*What.* Meet post-delivery requirements associated with the products/services; consider statutory/regulatory, potential consequences, nature/use/lifetime, customer requirements, customer feedback.
+_What._ Meet post-delivery requirements associated with the products/services; consider statutory/regulatory, potential consequences, nature/use/lifetime, customer requirements, customer feedback.
 
 **Our implementation.** Bug fixes flow through the same pipeline as new work. Security CVEs in dependencies are surfaced by `composer audit` / `npm audit` at each CI run (not only on new work). Hotfix branch pattern is encoded in `branch-protection.yml` (`hotfix/*` allowed into main and beta).
 
-**Coverage.** *Full.*
+**Coverage.** _Full._
 
 ### 8.5.6 Control of changes
 
-*What.* Review and control changes for production or service provision to ensure continuing conformity.
+_What._ Review and control changes for production or service provision to ensure continuing conformity.
 
 **Our implementation.** Same as 8.3.6 — change is the unit of production. Every production change is an OpenSpec change.
 
-**Coverage.** *Full.*
+**Coverage.** _Full._
 
 ## 8.6 Release of products and services
 
-*What.* Implement planned arrangements at appropriate stages to verify product/service requirements are met; retain documented information on release — evidence of conformity, traceability to authorising person.
+_What._ Implement planned arrangements at appropriate stages to verify product/service requirements are met; retain documented information on release — evidence of conformity, traceability to authorising person.
 
 **Our implementation.**
 
@@ -797,13 +797,13 @@ merged code on main
 - **Conformity evidence**: quality-report.md + SBOM (CycloneDX) + Newman reports + Playwright reports + `hydra.json`.
 - **Authoriser traceability**: PR approvals are GitHub-signed and retained.
 
-**Coverage.** *Full.*
+**Coverage.** _Full._
 
 ## 8.7 Control of nonconforming outputs
 
-*What.* Ensure outputs not conforming to requirements are identified and controlled to prevent unintended use/delivery; take action based on nature; verify conformity after correction; retain documented information describing the nonconformity and actions taken.
+_What._ Ensure outputs not conforming to requirements are identified and controlled to prevent unintended use/delivery; take action based on nature; verify conformity after correction; retain documented information describing the nonconformity and actions taken.
 
-**Our implementation.** Non-conformity handling is one of the pipeline's defining features. It operates at two levels: *automated correction* of in-scope findings, and *terminal-state escalation* for anything the automation cannot handle safely.
+**Our implementation.** Non-conformity handling is one of the pipeline's defining features. It operates at two levels: _automated correction_ of in-scope findings, and _terminal-state escalation_ for anything the automation cannot handle safely.
 
 **Identification.** Multiple detectors:
 
@@ -814,17 +814,17 @@ merged code on main
 
 **Control — the `needs-input` terminal state.** When automation cannot safely proceed, the issue is labelled `needs-input` and all automated handlers short-circuit before emitting further side-effects. The triggers, confirmed from `hydra/scripts/orchestrate.sh` and `hydra/CLAUDE.md`:
 
-| Trigger | Meaning |
-|---|---|
-| Reviewer verdict = `fail` | Reviewer could not approve after the fixer's best attempt. |
-| Applier verdict = `fail` | The code applier failed to apply the proposed change. |
-| Quality recheck post-review fails | `recheck-caught-new-findings` — the post-fix gate pass surfaced new issues. |
-| Container crashes mid-stage | `container-crashed-mid-stage` — infrastructure fault, not a code fault. |
-| Label-state contradiction | Both `:pass` and `:fail` present on the issue — internally inconsistent state. |
+| Trigger                           | Meaning                                                                        |
+| --------------------------------- | ------------------------------------------------------------------------------ |
+| Reviewer verdict = `fail`         | Reviewer could not approve after the fixer's best attempt.                     |
+| Applier verdict = `fail`          | The code applier failed to apply the proposed change.                          |
+| Quality recheck post-review fails | `recheck-caught-new-findings` — the post-fix gate pass surfaced new issues.    |
+| Container crashes mid-stage       | `container-crashed-mid-stage` — infrastructure fault, not a code fault.        |
+| Label-state contradiction         | Both `:pass` and `:fail` present on the issue — internally inconsistent state. |
 
 The terminal-state invariant is encoded repeat-offender-proof in `hydra/CLAUDE.md` (lines 580–598):
 
-> *"Labels like `needs-input`, `*:fail`, `*:pass`, `applier:*` are terminal — once set, the pipeline has made a decision and further state-machine side effects must not fire on that issue. Every handler that might emit a side effect (comment post, label swap, container dispatch) MUST short-circuit before the side effect if the issue is already in a terminal state."*
+> _"Labels like `needs-input`, `_:fail`, `_:pass`, `applier:_` are terminal — once set, the pipeline has made a decision and further state-machine side effects must not fire on that issue. Every handler that might emit a side effect (comment post, label swap, container dispatch) MUST short-circuit before the side effect if the issue is already in a terminal state."\*
 
 This rule exists because of the decidesk#44/#45 incident (2026-04-23) where 134+ duplicate escalation comments were posted by handlers re-entering on an already-terminal issue (fixed in hydra PR #133).
 
@@ -834,9 +834,9 @@ This rule exists because of the decidesk#44/#45 incident (2026-04-23) where 134+
 
 **Documented information.** `hydra.json` records every finding (with `status` transitions: `open` → `fixed_in_stage` / `fixed_later` / `wontfix`) and every fixer decision. Per-change records are atomic (locked writer).
 
-**Coverage.** *Full* for the per-issue handling of a single non-conformity.
+**Coverage.** _Full_ for the per-issue handling of a single non-conformity.
 
-*Partial* for the **aggregate** handling. The standard in 8.7 asks us to take action "based on the nature" of the non-conformity — at single-issue granularity we do; across issues we don't yet see the pattern. There is no register of `needs-input` incidents, no recurrence analysis, no "this trigger fired N times last month in N apps."
+_Partial_ for the **aggregate** handling. The standard in 8.7 asks us to take action "based on the nature" of the non-conformity — at single-issue granularity we do; across issues we don't yet see the pattern. There is no register of `needs-input` incidents, no recurrence analysis, no "this trigger fired N times last month in N apps."
 
 **Gap & how to close.** A `/hydra/needs-input/` view on the Specter `hydra_learning` dashboard: query `hydra_pipelines.final_status='needs-input'` grouped by `outcome_reason`. The data already exists (ingested nightly); only the view is missing. Small residual noted in the gap shortlist; could be folded into any of the three raised OpenSpec changes.
 
@@ -848,7 +848,7 @@ This rule exists because of the decidesk#44/#45 incident (2026-04-23) where 134+
 
 ### 9.1.1 General
 
-*What.* Determine what needs monitoring & measurement, methods, when, when results analysed.
+_What._ Determine what needs monitoring & measurement, methods, when, when results analysed.
 
 **Our implementation — per-PR (works today).** Monitored and published per PR: gate pass/fail, PHPUnit coverage, spec-to-test coverage (75 % threshold), Newman pass rate, Playwright pass rate, `composer audit` findings, `npm audit` findings, license-compliance result, SBOM. Measurements land in `quality-report.md` per PR and in `hydra.json` per change.
 
@@ -858,52 +858,52 @@ This rule exists because of the decidesk#44/#45 incident (2026-04-23) where 134+
 
 **Board 1 — Throughput**
 
-| Metric | Definition | Source | Status |
-|---|---|---|---|
-| Specs closed per week | Count of changes moving `proposed` → `archived` per week | `app_specs.status` transitions + `HydraPipeline.ended_at` | **gap — raised as `add-spec-pipeline-throughput-view`** |
-| Mean change age | Median days from first `HydraPipeline.started_at` to archive | `HydraPipeline.started_at` → archive event | **gap — same change** |
-| Clean-archive rate | % of changes archived without ever entering `needs-input` | `HydraPipeline.final_status` history | **gap — same change** |
-| Cycles per change | Median count of `HydraPipeline` rows per `repo,issue_num` | `HydraPipeline` group-by | today via dashboard |
+| Metric                | Definition                                                   | Source                                                    | Status                                                  |
+| --------------------- | ------------------------------------------------------------ | --------------------------------------------------------- | ------------------------------------------------------- |
+| Specs closed per week | Count of changes moving `proposed` → `archived` per week     | `app_specs.status` transitions + `HydraPipeline.ended_at` | **gap — raised as `add-spec-pipeline-throughput-view`** |
+| Mean change age       | Median days from first `HydraPipeline.started_at` to archive | `HydraPipeline.started_at` → archive event                | **gap — same change**                                   |
+| Clean-archive rate    | % of changes archived without ever entering `needs-input`    | `HydraPipeline.final_status` history                      | **gap — same change**                                   |
+| Cycles per change     | Median count of `HydraPipeline` rows per `repo,issue_num`    | `HydraPipeline` group-by                                  | today via dashboard                                     |
 
 **Board 2 — Cost**
 
-| Metric | Definition | Source | Status |
-|---|---|---|---|
-| Tokens per pipeline | Sum of `HydraPhase.turns` across a pipeline | `hydra_phases.turns` | today via dashboard |
-| USD per pipeline | Sum of `HydraPhase.cost_usd` | `hydra_phases.cost_usd` | today via dashboard |
-| USD per feature category | USD aggregated by the feature category the pipeline built | `hydra_phases.cost_usd` + *(new)* `HydraPipeline.canonical_feature_id` | **gap — raised as `link-findings-to-features`** |
-| Budget-exhaustion rate | % of phases with `terminal_reason='max_turns'` | `hydra_phases.terminal_reason` | today via dashboard |
+| Metric                   | Definition                                                | Source                                                                 | Status                                          |
+| ------------------------ | --------------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------- |
+| Tokens per pipeline      | Sum of `HydraPhase.turns` across a pipeline               | `hydra_phases.turns`                                                   | today via dashboard                             |
+| USD per pipeline         | Sum of `HydraPhase.cost_usd`                              | `hydra_phases.cost_usd`                                                | today via dashboard                             |
+| USD per feature category | USD aggregated by the feature category the pipeline built | `hydra_phases.cost_usd` + _(new)_ `HydraPipeline.canonical_feature_id` | **gap — raised as `link-findings-to-features`** |
+| Budget-exhaustion rate   | % of phases with `terminal_reason='max_turns'`            | `hydra_phases.terminal_reason`                                         | today via dashboard                             |
 
 **Board 3 — Quality**
 
-| Metric | Definition | Source | Status |
-|---|---|---|---|
-| Findings per pipeline | Weekly trend of `hydra_findings` count per pipeline | `hydra_findings` | today — rendered on `/hydra/` |
-| First-pass success rate | % of pipelines reaching `final_status='done'` on first iteration | `hydra_pipelines` + `hydra_phases` | today — rendered on `/hydra/` |
-| Autofix success rate | % of `hydra_findings` with `status='fixed'` and `fixed_in_round=1` | `hydra_findings.status`, `fixed_in_round` | today via dashboard |
-| Cluster recurrence top-10 | Top 10 `HydraFindingCluster` rows by `pipeline_count` | `hydra_finding_clusters` | today — rendered on `/hydra/findings/` |
-| `needs-input` incidence | Count of `HydraPipeline` rows with `final_status='needs-input'` grouped by trigger | `hydra_pipelines.final_status` + `outcome_reason` | **gap — dashboard view not yet built** |
-| Suggestion accept/reject ratio | `HydraSuggestion.status` histogram over trailing 30 days | `hydra_suggestions.status` | today via dashboard |
+| Metric                         | Definition                                                                         | Source                                            | Status                                 |
+| ------------------------------ | ---------------------------------------------------------------------------------- | ------------------------------------------------- | -------------------------------------- |
+| Findings per pipeline          | Weekly trend of `hydra_findings` count per pipeline                                | `hydra_findings`                                  | today — rendered on `/hydra/`          |
+| First-pass success rate        | % of pipelines reaching `final_status='done'` on first iteration                   | `hydra_pipelines` + `hydra_phases`                | today — rendered on `/hydra/`          |
+| Autofix success rate           | % of `hydra_findings` with `status='fixed'` and `fixed_in_round=1`                 | `hydra_findings.status`, `fixed_in_round`         | today via dashboard                    |
+| Cluster recurrence top-10      | Top 10 `HydraFindingCluster` rows by `pipeline_count`                              | `hydra_finding_clusters`                          | today — rendered on `/hydra/findings/` |
+| `needs-input` incidence        | Count of `HydraPipeline` rows with `final_status='needs-input'` grouped by trigger | `hydra_pipelines.final_status` + `outcome_reason` | **gap — dashboard view not yet built** |
+| Suggestion accept/reject ratio | `HydraSuggestion.status` histogram over trailing 30 days                           | `hydra_suggestions.status`                        | today via dashboard                    |
 
 **Board 4 — Adoption**
 
-| Metric | Definition | Source | Status |
-|---|---|---|---|
-| Active instances per app | Count of NC instances with app installed and used in last 30 days | **New telemetry required** | not today |
-| Feature-usage within app | Controller-level hit counts per feature | **New telemetry required** | not today |
-| Time to first use after release | Days from app update to first production invocation | **New telemetry required** | not today |
+| Metric                          | Definition                                                        | Source                     | Status    |
+| ------------------------------- | ----------------------------------------------------------------- | -------------------------- | --------- |
+| Active instances per app        | Count of NC instances with app installed and used in last 30 days | **New telemetry required** | not today |
+| Feature-usage within app        | Controller-level hit counts per feature                           | **New telemetry required** | not today |
+| Time to first use after release | Days from app update to first production invocation               | **New telemetry required** | not today |
 
 **Board 5 — Intelligence (Specter-side)**
 
-| Metric | Definition | Source | Status |
-|---|---|---|---|
-| Sources synced per week | Successful `source_syncs` rows in the last 7 days | `source_syncs.last_sync`, `records_synced` | today |
-| Requirements ingested per week | New rows in `requirements` per week | `requirements` timestamp | today |
-| Features discovered per source | `canonical_feature_sources` grouped by `source_table` over last 30 days | `canonical_feature_sources` | today |
-| Competitor signals processed | Rows in `competitor_features` with `category` like `release-*` or `enhancement-issue`, weekly | `competitor_features` | today |
-| Addressable market per app | Sum `tender_awards.contract_value` joined to `tender_app_relevance` | `tender_awards`, `tender_app_relevance` | today |
-| Spec-pipeline throughput | Count by `app_specs.status` (`draft` / `created` / `pushed` / `merged`) | `app_specs` | today |
-| Open ecosystem gaps | Count of `ecosystem_gaps` without a matching app | `ecosystem_gaps` | today |
+| Metric                         | Definition                                                                                    | Source                                     | Status |
+| ------------------------------ | --------------------------------------------------------------------------------------------- | ------------------------------------------ | ------ |
+| Sources synced per week        | Successful `source_syncs` rows in the last 7 days                                             | `source_syncs.last_sync`, `records_synced` | today  |
+| Requirements ingested per week | New rows in `requirements` per week                                                           | `requirements` timestamp                   | today  |
+| Features discovered per source | `canonical_feature_sources` grouped by `source_table` over last 30 days                       | `canonical_feature_sources`                | today  |
+| Competitor signals processed   | Rows in `competitor_features` with `category` like `release-*` or `enhancement-issue`, weekly | `competitor_features`                      | today  |
+| Addressable market per app     | Sum `tender_awards.contract_value` joined to `tender_app_relevance`                           | `tender_awards`, `tender_app_relevance`    | today  |
+| Spec-pipeline throughput       | Count by `app_specs.status` (`draft` / `created` / `pushed` / `merged`)                       | `app_specs`                                | today  |
+| Open ecosystem gaps            | Count of `ecosystem_gaps` without a matching app                                              | `ecosystem_gaps`                           | today  |
 
 **Where each board lives today.**
 
@@ -914,23 +914,23 @@ This rule exists because of the decidesk#44/#45 incident (2026-04-23) where 134+
 - Board 3 `needs-input` incidence — **not yet rendered**. Data is in `hydra_pipelines.final_status`; a `/hydra/needs-input/` view would close it.
 - Board 4 (adoption) — requires opt-in NC-instance telemetry. Separate roadmap decision; GDPR + user-trust tradeoffs.
 
-**Coverage.** *Full* for per-PR monitoring. *Full* for cross-change monitoring on Boards 2, 3, and most of 5 (via `hydra_learning` + intelligence dashboards). *Partial* on Boards 1 and Board-2 feature-level (pending the three OpenSpec changes listed above). *None* on Board 4 (adoption).
+**Coverage.** _Full_ for per-PR monitoring. _Full_ for cross-change monitoring on Boards 2, 3, and most of 5 (via `hydra_learning` + intelligence dashboards). _Partial_ on Boards 1 and Board-2 feature-level (pending the three OpenSpec changes listed above). _None_ on Board 4 (adoption).
 
 **Gap & how to close.** The three OpenSpec changes listed above close Boards 1 and the feature-level slice of Board 2. The `needs-input` dashboard view is a small residual. Board 4 stays a separate decision.
 
 ### 9.1.2 Customer satisfaction
 
-*What.* Monitor customers' perceptions of the degree to which their needs and expectations have been met.
+_What._ Monitor customers' perceptions of the degree to which their needs and expectations have been met.
 
 **Our implementation.** Partial — persona testers serve as a proxy; real user feedback is not systematically gathered per release.
 
-**Coverage.** *Partial.*
+**Coverage.** _Partial._
 
 **Gap & how to close.** This is a genuinely harder clause for open-source projects. A minimal closure: track GitHub issues tagged `user-report` and `feature-request`; review trend quarterly. A stronger closure: embed feedback in the apps themselves and aggregate.
 
 ### 9.1.3 Analysis and evaluation
 
-*What.* Analyse and evaluate data from monitoring; use results to evaluate conformity, customer satisfaction, QMS performance/effectiveness, effectiveness of actions, external providers, need for improvement.
+_What._ Analyse and evaluate data from monitoring; use results to evaluate conformity, customer satisfaction, QMS performance/effectiveness, effectiveness of actions, external providers, need for improvement.
 
 **Our implementation.** Analysis runs automatically via the `hydra_learning` learning bridge (§ 0c):
 
@@ -940,13 +940,13 @@ This rule exists because of the decidesk#44/#45 incident (2026-04-23) where 134+
 
 Human-authored retrospectives live at `hydra/docs/retrospectives/` and complement the automated pass — 77 review findings (project_hydra-adr-iteration.md) drove the original ADR evolution.
 
-**Coverage.** *Full* — automated cross-pipeline pattern analysis ships with `hydra_learning` (2026-04-17 backfill produced 752 clusters from 481 pipelines; 627 uncovered clusters flagged for potential gate / ADR updates).
+**Coverage.** _Full_ — automated cross-pipeline pattern analysis ships with `hydra_learning` (2026-04-17 backfill produced 752 clusters from 481 pipelines; 627 uncovered clusters flagged for potential gate / ADR updates).
 
 One residual gap — analysis by feature category is currently blocked because `hydra_pipelines` has no FK to `canonical_features`. Raised as `link-findings-to-features`.
 
 ## 9.2 Internal audit
 
-*What.* Conduct internal audits at planned intervals to provide information on whether the QMS conforms to its own requirements and to this standard, and is effectively implemented and maintained.
+_What._ Conduct internal audits at planned intervals to provide information on whether the QMS conforms to its own requirements and to this standard, and is effectively implemented and maintained.
 
 **Our implementation.**
 
@@ -954,17 +954,17 @@ One residual gap — analysis by feature category is currently blocked because `
 - **Workflow-internal**: quality.yml itself is a continuous audit running on every PR.
 - **Process-level**: no planned-interval internal audit of the QMS as a whole.
 
-**Coverage.** *Partial.*
+**Coverage.** _Partial._
 
 **Gap & how to close.** Schedule a quarterly QMS-audit pass: pick 5 merged PRs at random, walk them back from merged code → `@spec` → tasks.md → change → issue → Specter intelligence row, and confirm every link holds. Output: a short audit note per quarter in `.github/docs/iso/audits/`.
 
 ## 9.3 Management review
 
-*What.* Top management shall review the QMS at planned intervals; inputs and outputs as specified; retain documented information.
+_What._ Top management shall review the QMS at planned intervals; inputs and outputs as specified; retain documented information.
 
 **Our implementation.** None as a formal activity.
 
-**Coverage.** *None.*
+**Coverage.** _None._
 
 **Gap & how to close.** Institute a quarterly (or whatever cadence fits) management review with a fixed agenda. Cadence and discipline matter more than length — ~2 hours per quarter is enough. Proposed agenda template, with each input tied back to its generating clause and, where relevant, the automation that feeds it:
 
@@ -991,7 +991,7 @@ One residual gap — analysis by feature category is currently blocked because `
 
 All ten inputs are already backed by shipped dashboards or queryable tables. Running the first review is purely a scheduling decision — no engineering prerequisite.
 
-Coverage upgrade path: *None → Full* after the first review is held and the note is filed. No intermediate *Partial* step needed given the inputs are available.
+Coverage upgrade path: _None → Full_ after the first review is held and the note is filed. No intermediate _Partial_ step needed given the inputs are available.
 
 ---
 
@@ -999,15 +999,15 @@ Coverage upgrade path: *None → Full* after the first review is held and the no
 
 ## 10.1 General
 
-*What.* Determine and select opportunities for improvement; implement necessary actions to meet customer requirements and enhance customer satisfaction; improving products/services, correcting/preventing/reducing undesired effects, improving QMS performance/effectiveness.
+_What._ Determine and select opportunities for improvement; implement necessary actions to meet customer requirements and enhance customer satisfaction; improving products/services, correcting/preventing/reducing undesired effects, improving QMS performance/effectiveness.
 
 **Our implementation.** Opportunities surface through: Specter-driven feature extraction, retrospectives, gate-failure patterns, user issues. Actions are implemented via new ADRs (e.g. ADR-020, ADR-021, ADR-022, ADR-023 all post-date the first 19), new gates (`semantic-auth` 2026-04-23), or new specs.
 
-**Coverage.** *Full.*
+**Coverage.** _Full._
 
 ## 10.2 Nonconformity and corrective action
 
-*What.* React to the nonconformity; evaluate the need for action to eliminate the causes so it does not recur; implement actions; review effectiveness; update risks/opportunities; change the QMS if necessary; retain documented information on the nature of nonconformities, actions taken, results.
+_What._ React to the nonconformity; evaluate the need for action to eliminate the causes so it does not recur; implement actions; review effectiveness; update risks/opportunities; change the QMS if necessary; retain documented information on the nature of nonconformities, actions taken, results.
 
 **Our implementation.** This is the clearest pattern we have.
 
@@ -1020,21 +1020,21 @@ Coverage upgrade path: *None → Full* after the first review is held and the no
 
 As-shipped: 752 clusters from 481 pipelines (2026-04-17 backfill); 627 uncovered. First LLM-generated suggestion produced at the same backfill.
 
-**Coverage.** *Full.*
+**Coverage.** _Full._
 
-One residual slice: analysis *by feature category* is currently not possible because `hydra_pipelines` has no FK to `canonical_features`. Raised as `link-findings-to-features`.
+One residual slice: analysis _by feature category_ is currently not possible because `hydra_pipelines` has no FK to `canonical_features`. Raised as `link-findings-to-features`.
 
 ## 10.3 Continual improvement
 
-*What.* Continually improve the suitability, adequacy and effectiveness of the QMS.
+_What._ Continually improve the suitability, adequacy and effectiveness of the QMS.
 
-**Our implementation.** The ADR iteration loop. 77 review findings → ADR set grew from an initial sketch to 23 ADRs. Gate set grew to 9. Skills inventory continues to grow. The *continual* part is evidenced in dated memory entries (`feedback_*.md`) tracking where the QMS bent to absorb an incident.
+**Our implementation.** The ADR iteration loop. 77 review findings → ADR set grew from an initial sketch to 23 ADRs. Gate set grew to 9. Skills inventory continues to grow. The _continual_ part is evidenced in dated memory entries (`feedback_*.md`) tracking where the QMS bent to absorb an incident.
 
 **The loop in one sentence:** incident → `hydra.json` evidence → `hydra_findings` row → fingerprint → cluster → nightly `analyze_pipelines` → coverage check against CLAUDE.md/ADRs → `suggest_improvements` drafts patch → human accept/reject in `/hydra/suggestions/` → `apply_hydra_suggestion` opens PR on Hydra → human merges → Hydra's behaviour improves on next run.
 
 **Discovery is automated; design stays human.** `hydra_learning` automates the discovery half (recurrence counting, cluster fingerprinting, coverage detection) while leaving the design half (patch wording, false-positive tolerance, scope) firmly with humans through the accept/reject/apply queue. That split is deliberate — gate design is judgment; recurrence counting is not.
 
-**Coverage.** *Full.*
+**Coverage.** _Full._
 
 Residual: the loop measures itself via the target success metrics (30 %+ drop in average reviewer findings per pipeline; 25 %+ drop in median time-to-done; first-pass success from ~40 % to >60 %; ≥5 merged suggestion PRs after 4 weeks of operation). These are the effectiveness metrics 10.3 asks for. Tracking them formally becomes easier once the quarterly management review (9.3) is running.
 
@@ -1042,60 +1042,60 @@ Residual: the loop measures itself via the target success metrics (30 %+ drop in
 
 # Coverage summary
 
-| Clause | Title | Coverage |
-|--------|-------|----------|
-| 4.1 | Understanding the organization and its context | Partial |
-| 4.2 | Needs and expectations of interested parties | Partial |
-| 4.3 | Scope of the QMS | Partial |
-| 4.4 | QMS and its processes | Full |
-| 5.1 | Leadership and commitment | Partial |
-| 5.2 | Policy | **None** |
-| 5.3 | Roles, responsibilities, authorities | Partial |
-| 6.1 | Risks and opportunities | Full (tech) / Partial (business) |
-| 6.2 | Quality objectives | Partial |
-| 6.3 | Planning of changes | Full |
-| 7.1.1 | Resources — general | Full |
-| 7.1.2 | People | Full |
-| 7.1.3 | Infrastructure | Full |
-| 7.1.4 | Environment | Full |
-| 7.1.5 | Monitoring/measuring resources | Partial |
-| 7.1.6 | Organizational knowledge | Full |
-| 7.2 | Competence | Partial (humans) / Full (agents) |
-| 7.3 | Awareness | Partial |
-| 7.4 | Communication | Full internal / Partial external |
-| 7.5.1 | Documented information — general | Partial |
-| 7.5.2 | Creating and updating | Full |
-| 7.5.3 | Control of documented information | Full |
-| 8.1 | Operational planning and control | Full |
-| 8.2.1 | Customer communication | Full |
-| 8.2.2 | Determining requirements | Full |
-| 8.2.3 | Review of requirements | Full |
-| 8.2.4 | Changes to requirements | Full |
-| 8.3.1 | D&D — general | Full |
-| 8.3.2 | D&D planning | Full |
-| 8.3.3 | D&D inputs | Full |
-| 8.3.4 | D&D controls | Full |
-| 8.3.5 | D&D outputs | Full |
-| 8.3.6 | D&D changes | Full |
-| 8.4.1 | Externally provided — general | Full |
-| 8.4.2 | Type and extent of control | Full |
-| 8.4.3 | Information for external providers | Partial |
-| 8.5.1 | Control of production | Full |
-| 8.5.2 | Identification and traceability | Full (forward) / Partial (reverse, breaks at issue ↔ feature_id) |
-| 8.5.3 | Property of customers / providers | N/A here (27001) |
-| 8.5.4 | Preservation | Full |
-| 8.5.5 | Post-delivery activities | Full |
-| 8.5.6 | Control of changes | Full |
-| 8.6 | Release | Full |
-| 8.7 | Non-conforming outputs | Full (per-issue) / Partial (aggregate — `needs-input` dashboard view pending) |
-| 9.1.1 | Monitoring — general | Full (per-PR + cross-change via hydra_learning) / Partial (throughput view pending) / None (adoption telemetry) |
-| 9.1.2 | Customer satisfaction | Partial |
-| 9.1.3 | Analysis and evaluation | Full (automated via `analyze_pipelines`; feature-level pending `link-findings-to-features`) |
-| 9.2 | Internal audit | Partial |
-| 9.3 | Management review | **None** (inputs now exist; just needs the first meeting) |
-| 10.1 | Improvement — general | Full |
-| 10.2 | Nonconformity and corrective action | Full (automated via `suggest_improvements` + HITL) |
-| 10.3 | Continual improvement | Full (measured via hydra_learning success metrics) |
+| Clause | Title                                          | Coverage                                                                                                        |
+| ------ | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| 4.1    | Understanding the organization and its context | Partial                                                                                                         |
+| 4.2    | Needs and expectations of interested parties   | Partial                                                                                                         |
+| 4.3    | Scope of the QMS                               | Partial                                                                                                         |
+| 4.4    | QMS and its processes                          | Full                                                                                                            |
+| 5.1    | Leadership and commitment                      | Partial                                                                                                         |
+| 5.2    | Policy                                         | **None**                                                                                                        |
+| 5.3    | Roles, responsibilities, authorities           | Partial                                                                                                         |
+| 6.1    | Risks and opportunities                        | Full (tech) / Partial (business)                                                                                |
+| 6.2    | Quality objectives                             | Partial                                                                                                         |
+| 6.3    | Planning of changes                            | Full                                                                                                            |
+| 7.1.1  | Resources — general                            | Full                                                                                                            |
+| 7.1.2  | People                                         | Full                                                                                                            |
+| 7.1.3  | Infrastructure                                 | Full                                                                                                            |
+| 7.1.4  | Environment                                    | Full                                                                                                            |
+| 7.1.5  | Monitoring/measuring resources                 | Partial                                                                                                         |
+| 7.1.6  | Organizational knowledge                       | Full                                                                                                            |
+| 7.2    | Competence                                     | Partial (humans) / Full (agents)                                                                                |
+| 7.3    | Awareness                                      | Partial                                                                                                         |
+| 7.4    | Communication                                  | Full internal / Partial external                                                                                |
+| 7.5.1  | Documented information — general               | Partial                                                                                                         |
+| 7.5.2  | Creating and updating                          | Full                                                                                                            |
+| 7.5.3  | Control of documented information              | Full                                                                                                            |
+| 8.1    | Operational planning and control               | Full                                                                                                            |
+| 8.2.1  | Customer communication                         | Full                                                                                                            |
+| 8.2.2  | Determining requirements                       | Full                                                                                                            |
+| 8.2.3  | Review of requirements                         | Full                                                                                                            |
+| 8.2.4  | Changes to requirements                        | Full                                                                                                            |
+| 8.3.1  | D&D — general                                  | Full                                                                                                            |
+| 8.3.2  | D&D planning                                   | Full                                                                                                            |
+| 8.3.3  | D&D inputs                                     | Full                                                                                                            |
+| 8.3.4  | D&D controls                                   | Full                                                                                                            |
+| 8.3.5  | D&D outputs                                    | Full                                                                                                            |
+| 8.3.6  | D&D changes                                    | Full                                                                                                            |
+| 8.4.1  | Externally provided — general                  | Full                                                                                                            |
+| 8.4.2  | Type and extent of control                     | Full                                                                                                            |
+| 8.4.3  | Information for external providers             | Partial                                                                                                         |
+| 8.5.1  | Control of production                          | Full                                                                                                            |
+| 8.5.2  | Identification and traceability                | Full (forward) / Partial (reverse, breaks at issue ↔ feature_id)                                                |
+| 8.5.3  | Property of customers / providers              | N/A here (27001)                                                                                                |
+| 8.5.4  | Preservation                                   | Full                                                                                                            |
+| 8.5.5  | Post-delivery activities                       | Full                                                                                                            |
+| 8.5.6  | Control of changes                             | Full                                                                                                            |
+| 8.6    | Release                                        | Full                                                                                                            |
+| 8.7    | Non-conforming outputs                         | Full (per-issue) / Partial (aggregate — `needs-input` dashboard view pending)                                   |
+| 9.1.1  | Monitoring — general                           | Full (per-PR + cross-change via hydra_learning) / Partial (throughput view pending) / None (adoption telemetry) |
+| 9.1.2  | Customer satisfaction                          | Partial                                                                                                         |
+| 9.1.3  | Analysis and evaluation                        | Full (automated via `analyze_pipelines`; feature-level pending `link-findings-to-features`)                     |
+| 9.2    | Internal audit                                 | Partial                                                                                                         |
+| 9.3    | Management review                              | **None** (inputs now exist; just needs the first meeting)                                                       |
+| 10.1   | Improvement — general                          | Full                                                                                                            |
+| 10.2   | Nonconformity and corrective action            | Full (automated via `suggest_improvements` + HITL)                                                              |
+| 10.3   | Continual improvement                          | Full (measured via hydra_learning success metrics)                                                              |
 
 **Totals.** 51 clauses/subclauses. Clauses fully None: 2 (5.2 Policy, 9.3 Management review — both close with documentation/scheduling, no engineering). N/A-here: 1 (8.5.3 customer property, covered under 27001 scope). The shipping of `hydra_learning` (§ 0c) on 2026-04-17 upgraded 9.1.3, 10.2, and 10.3 from Partial to Full. The remaining Partial ratings are nearly all documentation gaps (5.x policy/roles, 6.x objectives, 4.x context) or narrow items covered by the three raised OpenSpec changes.
 
@@ -1129,7 +1129,7 @@ Residual: the loop measures itself via the target success metrics (30 %+ drop in
 
 Items 1–5 are pure documentation / scheduling. Items 6–8 are tracked OpenSpec changes on `spec/*` branches in `concurrentie-analyse`, each PR'd to `development`. Items 9–12 are small cleanups. Together, closing 1–8 moves the document from two hard Nones and several Partials to a handful of deliberate Partials (7.1.5, 8.4.3, 9.1.2 — see below).
 
-## Gaps that will stay *Partial* for good reason
+## Gaps that will stay _Partial_ for good reason
 
 - **7.1.5 Monitoring/measuring resources** — we pin tool versions and run a PHPUnit baseline; formal "tool suitability" audits add more ceremony than value.
 - **8.4.3 Information for external providers** — our external-provider surface is narrow (Composer, npm, Nextcloud upstream). Formal protocols here would be overkill.
@@ -1176,4 +1176,4 @@ The clause titles used in this document were cross-referenced from open summarie
 
 ---
 
-*Last reviewed: 2026-04-23. Review trigger: any new ADR, new Hydra gate, change in branch-protection rulesets, or material change to quality.yml.*
+_Last reviewed: 2026-04-23. Review trigger: any new ADR, new Hydra gate, change in branch-protection rulesets, or material change to quality.yml._

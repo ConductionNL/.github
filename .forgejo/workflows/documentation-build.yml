@@ -1,0 +1,60 @@
+# Reusable: build + validate a Docusaurus site and upload it as an artifact for the
+# deploy reusable. Split out from documentation.yml: Forgejo workflow_call reusables
+# cannot see the trigger event, so the deploy gate must live in the CALLER. Build runs
+# on every event (incl. pull_request) so the docusaurus-preset validator gates PRs.
+name: Documentation Build
+
+on:
+  workflow_call:
+    inputs:
+      source-folder:
+        description: "Folder containing the Docusaurus project"
+        required: false
+        type: string
+        default: "docs"
+      node-version:
+        description: "Node.js version for building"
+        required: false
+        type: string
+        default: "20"
+
+jobs:
+  build:
+    name: Build and validate
+    runs-on: codeberg-medium
+    container:
+      image: node:24-bookworm
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: https://github.com/actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Node.js
+        uses: https://github.com/actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+      - name: Install dependencies and build
+        timeout-minutes: 9
+        env:
+          CODEBERG_TOKEN: ${{ secrets.CODEBERG_TOKEN }}
+        run: |
+          # Container checkout is often owned by a different uid than the build user; trust it so
+          # Docusaurus' sitemap lastmod 'git log' lookups don't abort with "detected dubious ownership".
+          git config --global --add safe.directory '*' || true
+          cd "${{ inputs.source-folder }}"
+          rm -rf node_modules/.cache .docusaurus build
+          npm run ci
+      - name: Verify build output
+        run: |
+          if [ ! -f "${{ inputs.source-folder }}/build/index.html" ]; then
+            echo "ERROR: index.html not found in build directory!"
+            exit 1
+          fi
+      - name: Upload build artifact for deploy job
+        uses: https://github.com/actions/upload-artifact@v3
+        with:
+          name: docusaurus-build
+          path: ${{ inputs.source-folder }}/build
+          retention-days: 1
+

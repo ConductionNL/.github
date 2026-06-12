@@ -16,11 +16,13 @@ outperforms one with 200 verbose rules.
 **ONLY rules that require JUDGMENT to apply.**
 
 A rule belongs in an ADR if:
+
 - A tool cannot enforce it automatically
 - The agent needs to understand WHEN and WHY, not just WHAT
 - Applying the rule requires understanding the codebase context
 
 Examples of JUDGMENT rules:
+
 - "Controllers MUST be thin — routing + validation + response only" (judgment: what is "business logic"?)
 - "Use schema.org vocabulary where equivalent exists" (judgment: does an equivalent exist?)
 - "Multi-tenant isolation at API/service level" (judgment: how to scope data access)
@@ -29,15 +31,15 @@ Examples of JUDGMENT rules:
 
 **Rules that can be enforced by tools.**
 
-| Rule | Enforced By | NOT an ADR |
-|------|-------------|------------|
-| "Lines must not exceed 150 chars" | PHPCS | Script handles it |
-| "No var_dump() calls" | PHPCS | Script handles it |
-| "Scoped styles required" | ESLint/Stylelint | Script handles it |
-| "Named arguments in PHP" | PHPCS custom sniff | Script handles it |
-| "SPDX license headers" | `reuse lint` | Script handles it |
-| "No hardcoded colors" | Stylelint | Script handles it |
-| "publiccode.yml required" | CI check | Script handles it |
+| Rule                              | Enforced By        | NOT an ADR        |
+| --------------------------------- | ------------------ | ----------------- |
+| "Lines must not exceed 150 chars" | PHPCS              | Script handles it |
+| "No var_dump() calls"             | PHPCS              | Script handles it |
+| "Scoped styles required"          | ESLint/Stylelint   | Script handles it |
+| "Named arguments in PHP"          | PHPCS custom sniff | Script handles it |
+| "SPDX license headers"            | `reuse lint`       | Script handles it |
+| "No hardcoded colors"             | Stylelint          | Script handles it |
+| "publiccode.yml required"         | CI check           | Script handles it |
 
 **Also not ADRs:** Workflow/process rules about HOW to use the pipeline (these belong
 in skill definitions or pipeline docs, not in architecture context).
@@ -91,11 +93,11 @@ to know WHY the rule exists — it needs to know WHAT to do.
 
 ## Size Budget
 
-| Scope | Target | Max |
-|-------|--------|-----|
-| Single ADR topic | 5-15 lines | 20 lines |
+| Scope             | Target       | Max       |
+| ----------------- | ------------ | --------- |
+| Single ADR topic  | 5-15 lines   | 20 lines  |
 | All ADRs combined | 80-120 lines | 200 lines |
-| Estimated tokens | 1,000-2,000 | 3,000 |
+| Estimated tokens  | 1,000-2,000  | 3,000     |
 
 At 200 lines / 3,000 tokens, the ADRs consume ~1.5% of a 200K context window.
 Above that, you're paying diminishing returns.
@@ -120,24 +122,30 @@ most specific topic and reference it:
 
 ```markdown
 ## Security
+
 - Entity setters: positional args only (see Backend Layering).
 ```
 
 NOT:
+
 ```markdown
 ## Backend Layering
+
 - Entity setters: POSITIONAL args only.
 
-## Security  
+## Security
+
 - Entity setters: POSITIONAL args only. This is important for security.
 
 ## Code Quality
+
 - Entity setters: POSITIONAL args only. This prevents bugs.
 ```
 
 ## Compounding Improvements
 
 When an agent makes a mistake that an ADR should have prevented:
+
 1. Check if the rule already exists — maybe it's too wordy and got ignored
 2. If missing, add a 1-line rule to the relevant topic
 3. If existing but ignored, make it shorter and more prominent
@@ -147,6 +155,7 @@ Never add a new ADR file for a single rule. Add it to the existing topic.
 ## Review Checklist
 
 Before merging an ADR change:
+
 - [ ] Every rule requires judgment (can't be a script)
 - [ ] No rule is duplicated across topics
 - [ ] No paragraphs — bullets only
@@ -159,20 +168,22 @@ Before merging an ADR change:
 
 Every Conduction app repo follows a clean split:
 
-| Location | Scope | Who writes |
-|---|---|---|
-| [`hydra/openspec/architecture/`](https://github.com/ConductionNL/hydra/tree/main/openspec/architecture) | **Org-wide ADRs** — apply to every Conduction app | Humans (architecture-level decisions) |
-| `<app>/openspec/architecture/` | **Repo-specific ADRs** — apply only to that app (data model choices, domain standards, storage decisions) | Authored by Specter during research; evolved by humans |
+| Location                                                                                                | Scope                                                                                                     | Who writes                                             |
+| ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| [`hydra/openspec/architecture/`](https://codeberg.org/Conduction/hydra/tree/main/openspec/architecture) | **Org-wide ADRs** — apply to every Conduction app                                                         | Humans (architecture-level decisions)                  |
+| `<app>/openspec/architecture/`                                                                          | **Repo-specific ADRs** — apply only to that app (data model choices, domain standards, storage decisions) | Authored by Specter during research; evolved by humans |
 
-The authoritative org-wide list is the directory itself — [`hydra/openspec/architecture/`](https://github.com/ConductionNL/hydra/tree/main/openspec/architecture) on `main`. GitHub renders it as a browsable index, so we don't mirror it here (the mirror would drift the moment a new ADR lands).
+The authoritative org-wide list is the directory itself — [`hydra/openspec/architecture/`](https://codeberg.org/Conduction/hydra/tree/main/openspec/architecture) on `main`. GitHub renders it as a browsable index, so we don't mirror it here (the mirror would drift the moment a new ADR lands).
 
 App repos do **NOT** carry copies of the org-wide ADRs. Earlier they had stale duplicates that drifted (e.g. a copy saying `fetch()` while hydra's master said `axios`) — those copies were removed across every app repo that had them.
 
 **How agents see org-wide ADRs:**
+
 - Reviewer + builder containers copy the relevant ADRs from the hydra repo at image-build time.
 - Agents operating in an app repo outside a container (IDE humans, manual `/opsx-ff` runs) read them from hydra's `main` branch directly.
 - `specter-prepare-context` surfaces the applicable org-wide ADRs in `context-brief.md` for each spec so the builder sees them pre-loaded.
 
 **Rule of thumb for where a new ADR belongs:**
+
 - Applies to ≥2 Conduction apps → org-wide, in `hydra/openspec/architecture/`.
 - Applies only to one app's domain/storage/auth choice → app-specific, in `<app>/openspec/architecture/`.

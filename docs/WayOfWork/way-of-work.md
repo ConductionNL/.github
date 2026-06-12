@@ -12,12 +12,12 @@ Conduction's mission, vision, and core values live on **[identity.conduction.nl]
 
 ## Being Open
 
-Conduction is an open company. Being open is about more than open-source code. It also means being open about *how we work* and *how we manage what we do*. That's why this handbook exists, and it's why it lives on a public site instead of an internal wiki.
+Conduction is an open company. Being open is about more than open-source code. It also means being open about _how we work_ and _how we manage what we do_. That's why this handbook exists, and it's why it lives on a public site instead of an internal wiki.
 
 In practice:
 
-- **Our handbook is public.** You're reading it. The source lives in [ConductionNL/.github](https://github.com/ConductionNL/.github/tree/main/docs).
-- **Our roadmap is public.** [GitHub Projects](https://github.com/orgs/ConductionNL/projects/4) shows what's next, what's in flight, and what's shipped.
+- **Our handbook is public.** You're reading it. The source lives in [Conduction/.github](https://codeberg.org/Conduction/.github/tree/main/docs).
+- **Our roadmap is public.** Our project boards on Codeberg (primary) and [GitHub Projects](https://github.com/orgs/ConductionNL/projects/4) (legacy) show what's next, what's in flight, and what's shipped.
 - **Our specs and decisions are public.** Every change starts as an OpenSpec proposal and lands as a reviewed pull request. The reasoning lives in the issue and the PR, not in private channels.
 - **Our pipeline is public.** [Hydra](/hydra/), the agentic CI/CD that builds our apps, is itself open source.
 - **Our identity is public.** Brand, voice, and visual identity live on [identity.conduction.nl](https://identity.conduction.nl/).
@@ -26,9 +26,9 @@ If you can't find something, that's a documentation gap, not a privacy boundary.
 
 ## How We Operate
 
-We work in small, self-directed teams using agile methods. We prefer GitHub Issues over lengthy emails, working software over documentation, and concrete results over process theatre.
+We work in small, self-directed teams using agile methods. We prefer issues (tracked on Codeberg, our primary platform) over lengthy emails, working software over documentation, and concrete results over process theatre.
 
-- **Our work lives on GitHub** — [github.com/ConductionNL](https://github.com/ConductionNL)
+- **Our work lives on Codeberg** — [codeberg.org/Conduction](https://codeberg.org/Conduction), with legacy/archived projects on [github.com/ConductionNL](https://github.com/ConductionNL)
 - **We build on Common Ground** — open standards for Dutch government software
 - **We eat our own dog food** — we use the products we build
 

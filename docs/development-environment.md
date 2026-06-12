@@ -51,38 +51,38 @@ docker compose -f .github/docker-compose.yml --profile mail --profile ai --profi
 
 ### Available profiles
 
-| Profile | Services | Purpose | Resources |
-|---------|----------|---------|-----------|
-| *(default)* | db, nextcloud, exapp-n8n | Core dev environment | ~1 GB |
-| `demo` | nextcloud-demo | Self-contained demo (installs from app store) | ~1 GB |
-| `mail` | greenmail | Test mail server (SMTP/IMAP) | ~512 MB |
-| `ai` | presidio, tgi-llm, dolphin-vlm, openanonymiser, exapp-openwebui | AI/LLM services | ~40 GB + GPU |
-| `ollama` | ollama | Standalone LLM inference | ~16 GB + GPU |
-| `ui` | tilburg-woo-ui | Public WOO document frontend | ~256 MB |
-| `exapps` | harp, redis, livekit, minio | AppAPI infrastructure | ~1 GB |
-| `commonground` | keycloak, redis, livekit, minio, exapp-openklant, exapp-openzaak, exapp-valtimo, exapp-opentalk | Common Ground ExApps | ~10 GB |
-| `solr` / `search` | solr, zookeeper | Solr search engine | ~1 GB |
-| `elasticsearch` | elasticsearch | Elasticsearch backend | ~1 GB |
-| `standalone` | n8n, open-webui | Standalone versions (not ExApps) | ~1 GB |
-| `llm-management` | openllm | LLM model management | ~16 GB + GPU |
-| `mariadb` | db-mariadb, nextcloud-mariadb | MariaDB compatibility testing | ~1 GB |
-| `openproject` / `integrations` | openproject | Project management | ~4 GB |
-| `xwiki` / `integrations` | xwiki | Wiki platform | ~4 GB |
-| `ox` / `integrations` | open-xchange | Email and groupware (requires registry access) | ~4 GB |
-| `valtimo` / `commonground` | valtimo | BPM and case management | ~2 GB |
-| `openzaak` / `commonground` | openzaak | ZGW API case management | ~2 GB |
-| `openklant` / `commonground` | openklant | Customer interaction registry | ~1 GB |
-| `exapps-legacy` | docker-socket-proxy | Legacy AppAPI deploy daemon | ~128 MB |
+| Profile                        | Services                                                                                        | Purpose                                        | Resources    |
+| ------------------------------ | ----------------------------------------------------------------------------------------------- | ---------------------------------------------- | ------------ |
+| _(default)_                    | db, nextcloud, exapp-n8n                                                                        | Core dev environment                           | ~1 GB        |
+| `demo`                         | nextcloud-demo                                                                                  | Self-contained demo (installs from app store)  | ~1 GB        |
+| `mail`                         | greenmail                                                                                       | Test mail server (SMTP/IMAP)                   | ~512 MB      |
+| `ai`                           | presidio, tgi-llm, dolphin-vlm, openanonymiser, exapp-openwebui                                 | AI/LLM services                                | ~40 GB + GPU |
+| `ollama`                       | ollama                                                                                          | Standalone LLM inference                       | ~16 GB + GPU |
+| `ui`                           | tilburg-woo-ui                                                                                  | Public WOO document frontend                   | ~256 MB      |
+| `exapps`                       | harp, redis, livekit, minio                                                                     | AppAPI infrastructure                          | ~1 GB        |
+| `commonground`                 | keycloak, redis, livekit, minio, exapp-openklant, exapp-openzaak, exapp-valtimo, exapp-opentalk | Common Ground ExApps                           | ~10 GB       |
+| `solr` / `search`              | solr, zookeeper                                                                                 | Solr search engine                             | ~1 GB        |
+| `elasticsearch`                | elasticsearch                                                                                   | Elasticsearch backend                          | ~1 GB        |
+| `standalone`                   | n8n, open-webui                                                                                 | Standalone versions (not ExApps)               | ~1 GB        |
+| `llm-management`               | openllm                                                                                         | LLM model management                           | ~16 GB + GPU |
+| `mariadb`                      | db-mariadb, nextcloud-mariadb                                                                   | MariaDB compatibility testing                  | ~1 GB        |
+| `openproject` / `integrations` | openproject                                                                                     | Project management                             | ~4 GB        |
+| `xwiki` / `integrations`       | xwiki                                                                                           | Wiki platform                                  | ~4 GB        |
+| `ox` / `integrations`          | open-xchange                                                                                    | Email and groupware (requires registry access) | ~4 GB        |
+| `valtimo` / `commonground`     | valtimo                                                                                         | BPM and case management                        | ~2 GB        |
+| `openzaak` / `commonground`    | openzaak                                                                                        | ZGW API case management                        | ~2 GB        |
+| `openklant` / `commonground`   | openklant                                                                                       | Customer interaction registry                  | ~1 GB        |
+| `exapps-legacy`                | docker-socket-proxy                                                                             | Legacy AppAPI deploy daemon                    | ~128 MB      |
 
 ## Service Details
 
 ### Core: Nextcloud + PostgreSQL
 
-| Service | Container | Port | Notes |
-|---------|-----------|------|-------|
-| PostgreSQL | `conduction-postgres` | 5432 | pgvector enabled, shared by all services |
-| Nextcloud | `nextcloud` | 8080 | Admin: `admin` / `admin` |
-| n8n ExApp | `conduction-exapp-n8n` | — | Via Nextcloud AppAPI proxy |
+| Service    | Container              | Port | Notes                                    |
+| ---------- | ---------------------- | ---- | ---------------------------------------- |
+| PostgreSQL | `conduction-postgres`  | 5432 | pgvector enabled, shared by all services |
+| Nextcloud  | `nextcloud`            | 8080 | Admin: `admin` / `admin`                 |
+| n8n ExApp  | `conduction-exapp-n8n` | —    | Via Nextcloud AppAPI proxy               |
 
 All Conduction apps are mounted as volumes into Nextcloud's `custom_apps` directory. Changes to app source code are immediately reflected.
 
@@ -90,26 +90,26 @@ All Conduction apps are mounted as volumes into Nextcloud's `custom_apps` direct
 
 Two options are available depending on your needs:
 
-| | GreenMail (`--profile mail`) | Open-Xchange (`--profile ox`) |
-|---|---|---|
-| **Use for** | Day-to-day development, quick testing | Production-like integration, client demos |
-| **Complexity** | Zero config, works immediately | Multi-service, requires registry access |
-| **Mail** | SMTP + IMAP (auto-create accounts) | Full IMAP/SMTP via Dovecot/Postfix |
-| **Calendar** | Use Nextcloud Calendar (CalDAV) | Built-in calendar + CalDAV |
-| **Contacts** | Use Nextcloud Contacts (CardDAV) | Built-in contacts + CardDAV |
-| **Web UI** | REST API at :8085 | Full webmail at :8087 |
-| **Seed data** | Scripts included | CLI user/context creation |
+|                | GreenMail (`--profile mail`)          | Open-Xchange (`--profile ox`)             |
+| -------------- | ------------------------------------- | ----------------------------------------- |
+| **Use for**    | Day-to-day development, quick testing | Production-like integration, client demos |
+| **Complexity** | Zero config, works immediately        | Multi-service, requires registry access   |
+| **Mail**       | SMTP + IMAP (auto-create accounts)    | Full IMAP/SMTP via Dovecot/Postfix        |
+| **Calendar**   | Use Nextcloud Calendar (CalDAV)       | Built-in calendar + CalDAV                |
+| **Contacts**   | Use Nextcloud Contacts (CardDAV)      | Built-in contacts + CardDAV               |
+| **Web UI**     | REST API at :8085                     | Full webmail at :8087                     |
+| **Seed data**  | Scripts included                      | CLI user/context creation                 |
 
 #### Option A: GreenMail (recommended for development)
 
 Lightweight test mail server. Accounts auto-created on first email. No configuration needed.
 
-| Service | Container | Port | Protocol |
-|---------|-----------|------|----------|
-| GreenMail | `conduction-greenmail` | 3025 | SMTP |
-| | | 3143 | IMAP |
-| | | 3110 | POP3 |
-| | | 8085 | Web UI / REST API |
+| Service   | Container              | Port | Protocol          |
+| --------- | ---------------------- | ---- | ----------------- |
+| GreenMail | `conduction-greenmail` | 3025 | SMTP              |
+|           |                        | 3143 | IMAP              |
+|           |                        | 3110 | POP3              |
+|           |                        | 8085 | Web UI / REST API |
 
 **Setup:**
 
@@ -125,6 +125,7 @@ bash .github/docker/mail/seed-pim.sh
 ```
 
 **Configure Nextcloud Mail app:**
+
 - Go to Nextcloud (http://localhost:8080) → Mail app → Settings
 - Add account:
   - **IMAP**: Host `greenmail`, Port `3143`, Security `None`
@@ -134,15 +135,16 @@ bash .github/docker/mail/seed-pim.sh
 
 **Test accounts** (auto-created by seed script):
 
-| Email | Role | Description |
-|-------|------|-------------|
-| `admin@test.local` | System admin | Administrative notifications |
-| `behandelaar@test.local` | Case handler | Processes applications and cases |
-| `coordinator@test.local` | Team coordinator | Planning, oversight, IT liaison |
-| `burger@test.local` | Citizen | Submits applications and complaints |
-| `leverancier@test.local` | Supplier/vendor | External IT partner |
+| Email                    | Role             | Description                         |
+| ------------------------ | ---------------- | ----------------------------------- |
+| `admin@test.local`       | System admin     | Administrative notifications        |
+| `behandelaar@test.local` | Case handler     | Processes applications and cases    |
+| `coordinator@test.local` | Team coordinator | Planning, oversight, IT liaison     |
+| `burger@test.local`      | Citizen          | Submits applications and complaints |
+| `leverancier@test.local` | Supplier/vendor  | External IT partner                 |
 
 **Seed data includes:**
+
 - 12 emails: case applications, status updates, internal coordination, complaints, deadlines
 - 6 contacts: citizens, civil servants, VNG architect, supplier (CardDAV)
 - 5 calendar events: sprint review, welstandscommissie, IT overleg, deadlines, retrospective (CalDAV)
@@ -153,13 +155,14 @@ All seed data is interconnected around realistic Dutch municipal case management
 
 Full groupware suite with integrated webmail, calendar, contacts, and document editing (OX Text + Spreadsheet). Uses GreenMail as its IMAP/SMTP backend — the same mail server, so both OX and Nextcloud Mail see the same emails.
 
-| Service | Container | Port | Purpose |
-|---------|-----------|------|---------|
-| Open-Xchange | `conduction-open-xchange` | 8087 | Web UI (AppSuite) |
-| OX MariaDB | `conduction-ox-mariadb` | — | Dedicated database for OX |
-| GreenMail | `conduction-greenmail` | 3025/3143/8085 | Shared IMAP/SMTP (auto-starts) |
+| Service      | Container                 | Port           | Purpose                        |
+| ------------ | ------------------------- | -------------- | ------------------------------ |
+| Open-Xchange | `conduction-open-xchange` | 8087           | Web UI (AppSuite)              |
+| OX MariaDB   | `conduction-ox-mariadb`   | —              | Dedicated database for OX      |
+| GreenMail    | `conduction-greenmail`    | 3025/3143/8085 | Shared IMAP/SMTP (auto-starts) |
 
 **Architecture:**
+
 ```
 GreenMail (IMAP/SMTP)
 ├── OX AppSuite → authenticates + reads/sends mail via IMAP/SMTP
@@ -188,17 +191,18 @@ bash .github/docker/mail/seed-ox.sh
 
 **Login credentials:**
 
-| Username | Password | Role |
-|----------|----------|------|
-| `oxadmin` | `oxadmin` | Context admin |
-| `behandelaar` | `behandelaar@test.local` | Case handler |
+| Username      | Password                 | Role             |
+| ------------- | ------------------------ | ---------------- |
+| `oxadmin`     | `oxadmin`                | Context admin    |
+| `behandelaar` | `behandelaar@test.local` | Case handler     |
 | `coordinator` | `coordinator@test.local` | Team coordinator |
-| `burger` | `burger@test.local` | Citizen |
-| `leverancier` | `leverancier@test.local` | Supplier |
+| `burger`      | `burger@test.local`      | Citizen          |
+| `leverancier` | `leverancier@test.local` | Supplier         |
 
 Note: User passwords match their GreenMail email addresses because OX authenticates via IMAP against GreenMail.
 
 **What's included after seeding:**
+
 - 5 user accounts with Dutch names and roles
 - 4 contacts (citizens, supplier, VNG architect)
 - 2 calendar appointments (welstandscommissie, IT-overleg)
@@ -206,24 +210,26 @@ Note: User passwords match their GreenMail email addresses because OX authentica
 - OX Text and Spreadsheet editors enabled
 
 **Connecting Nextcloud to OX:**
+
 - Both OX and Nextcloud Mail share the same GreenMail IMAP server
 - Configure Nextcloud Mail with: IMAP host `greenmail`, port `3143` (same as standalone mail profile)
 - OX can mount Nextcloud files via WebDAV for document collaboration
 
 **Resource requirements:**
+
 - OX needs ~2-4 GB RAM
 - First boot initializes databases and takes 2-3 minutes
 - Subsequent boots are faster (config is persisted in `ox-etc` volume)
 
 ### AI Services (--profile ai)
 
-| Service | Container | Port | Purpose |
-|---------|-----------|------|---------|
-| Presidio | `conduction-presidio-analyzer` | 5001 | PII detection (Microsoft) |
-| TGI LLM | `conduction-tgi-llm` | 8081 | Text generation (HuggingFace) |
-| Dolphin VLM | `conduction-dolphin-vlm` | 8083 | Document parsing (Vision LM) |
-| OpenAnonymiser | `conduction-openanonymiser` | 5002 | PII anonymisation |
-| OpenWebUI ExApp | `conduction-exapp-openwebui` | — | AI chat via Nextcloud |
+| Service         | Container                      | Port | Purpose                       |
+| --------------- | ------------------------------ | ---- | ----------------------------- |
+| Presidio        | `conduction-presidio-analyzer` | 5001 | PII detection (Microsoft)     |
+| TGI LLM         | `conduction-tgi-llm`           | 8081 | Text generation (HuggingFace) |
+| Dolphin VLM     | `conduction-dolphin-vlm`       | 8083 | Document parsing (Vision LM)  |
+| OpenAnonymiser  | `conduction-openanonymiser`    | 5002 | PII anonymisation             |
+| OpenWebUI ExApp | `conduction-exapp-openwebui`   | —    | AI chat via Nextcloud         |
 
 Requires NVIDIA GPU with Docker GPU support configured.
 
@@ -231,16 +237,16 @@ Requires NVIDIA GPU with Docker GPU support configured.
 
 Dutch government Common Ground services, running as Nextcloud ExApps:
 
-| Service | Container | Port | Purpose |
-|---------|-----------|------|---------|
-| Keycloak | `conduction-exapp-keycloak` | 8180 | Identity management (OIDC) |
-| OpenKlant ExApp | `conduction-exapp-openklant` | — | Customer interaction registry |
-| OpenZaak ExApp | `conduction-exapp-openzaak` | — | ZGW case management |
-| Valtimo ExApp | `conduction-exapp-valtimo` | — | BPM and case management |
-| OpenTalk ExApp | `conduction-exapp-opentalk` | — | Video conferencing |
-| Redis | `conduction-exapp-redis` | — | Shared cache |
-| LiveKit | `conduction-exapp-livekit` | 7880 | WebRTC media server |
-| MinIO | `conduction-exapp-minio` | — | Object storage |
+| Service         | Container                    | Port | Purpose                       |
+| --------------- | ---------------------------- | ---- | ----------------------------- |
+| Keycloak        | `conduction-exapp-keycloak`  | 8180 | Identity management (OIDC)    |
+| OpenKlant ExApp | `conduction-exapp-openklant` | —    | Customer interaction registry |
+| OpenZaak ExApp  | `conduction-exapp-openzaak`  | —    | ZGW case management           |
+| Valtimo ExApp   | `conduction-exapp-valtimo`   | —    | BPM and case management       |
+| OpenTalk ExApp  | `conduction-exapp-opentalk`  | —    | Video conferencing            |
+| Redis           | `conduction-exapp-redis`     | —    | Shared cache                  |
+| LiveKit         | `conduction-exapp-livekit`   | 7880 | WebRTC media server           |
+| MinIO           | `conduction-exapp-minio`     | —    | Object storage                |
 
 ## Common Operations
 
@@ -297,34 +303,34 @@ docker logs -f conduction-postgres
 
 Quick reference for all service ports:
 
-| Port | Service | Profile |
-|------|---------|---------|
-| 2181 | ZooKeeper | solr |
-| 2375 | Docker Socket Proxy | exapps-legacy |
-| 3025 | GreenMail SMTP | mail |
-| 3110 | GreenMail POP3 | mail |
-| 3143 | GreenMail IMAP | mail |
-| 3306 | MariaDB | mariadb |
-| 5001 | Presidio Analyzer | ai |
-| 5002 | OpenAnonymiser | ai |
-| 5432 | PostgreSQL | *(default)* |
-| 5678 | n8n (standalone) | standalone |
-| 7880 | LiveKit | commonground |
-| 8080 | **Nextcloud** | *(default)* |
-| 8081 | TGI LLM | ai |
-| 8083 | Dolphin VLM | ai |
-| 8085 | GreenMail Web UI | mail |
-| 8086 | OpenProject | openproject |
-| 8087 | Open-Xchange | ox |
-| 8088 | XWiki | xwiki |
-| 8089 | Valtimo | valtimo |
-| 8090 | OpenZaak | openzaak |
-| 8091 | OpenKlant | openklant |
-| 8180 | Keycloak | commonground |
-| 8780 | HaRP | exapps |
-| 8983 | Solr | solr |
-| 9200 | Elasticsearch | elasticsearch |
-| 11434 | Ollama | ollama |
+| Port  | Service             | Profile       |
+| ----- | ------------------- | ------------- |
+| 2181  | ZooKeeper           | solr          |
+| 2375  | Docker Socket Proxy | exapps-legacy |
+| 3025  | GreenMail SMTP      | mail          |
+| 3110  | GreenMail POP3      | mail          |
+| 3143  | GreenMail IMAP      | mail          |
+| 3306  | MariaDB             | mariadb       |
+| 5001  | Presidio Analyzer   | ai            |
+| 5002  | OpenAnonymiser      | ai            |
+| 5432  | PostgreSQL          | _(default)_   |
+| 5678  | n8n (standalone)    | standalone    |
+| 7880  | LiveKit             | commonground  |
+| 8080  | **Nextcloud**       | _(default)_   |
+| 8081  | TGI LLM             | ai            |
+| 8083  | Dolphin VLM         | ai            |
+| 8085  | GreenMail Web UI    | mail          |
+| 8086  | OpenProject         | openproject   |
+| 8087  | Open-Xchange        | ox            |
+| 8088  | XWiki               | xwiki         |
+| 8089  | Valtimo             | valtimo       |
+| 8090  | OpenZaak            | openzaak      |
+| 8091  | OpenKlant           | openklant     |
+| 8180  | Keycloak            | commonground  |
+| 8780  | HaRP                | exapps        |
+| 8983  | Solr                | solr          |
+| 9200  | Elasticsearch       | elasticsearch |
+| 11434 | Ollama              | ollama        |
 
 ## Demo Mode (--profile demo)
 
@@ -348,11 +354,13 @@ docker compose -f .github/docker-compose.yml --profile mariadb up -d
 ```
 
 An automated test script is available for running integration tests against both databases:
+
 ```bash
 bash .github/docker/test-database-compatibility.sh
 ```
 
 Key differences between PostgreSQL and MariaDB:
+
 - **Vector search**: Only available with PostgreSQL (pgvector)
 - **Full-text search**: Both supported, different syntax
 - **JSON operations**: PostgreSQL has richer JSON support
@@ -375,6 +383,7 @@ docker compose -f .github/docker-compose.yml up -d
 Container names have changed from `openregister-*` to `conduction-*` (except `nextcloud` which stays the same). The network is now `conduction-network` instead of `openregister-network`.
 
 **Note**: You may need to remove old volumes if switching:
+
 ```bash
 docker compose -f openregister/docker-compose.yml down -v
 docker compose -f .github/docker-compose.yml up -d

@@ -10,18 +10,21 @@ This guide walks you through setting up the spec-driven development workflow and
 
 - **Node.js 20+** (required by OpenSpec CLI)
 - **Global Claude settings installed** — mandatory for all Conduction work; see [global-claude-settings.md](global-claude-settings.md) for the install commands (sets up read-only Bash policy, write-approval hooks, and session-level version checking)
-- **GitHub CLI** (`gh`) authenticated, or the GitHub MCP server active
-- Access to the `ConductionNL` GitHub organization
+- **Git-host CLI(s) authenticated** — at least one of the following (preference order, see workstation-setup.md for setup):
+  - **`tea` for Codeberg / Gitea / Forgejo** *(primary)* — `tea login add --name codeberg --url https://codeberg.org --token <PAT>`. Conduction is migrating to `codeberg.org/Conduction/*` as of 2026-05-29.
+  - **`gh` for GitHub** *(secondary/fallback)* — `gh auth login`. Still required while migration is in progress; supports `ConductionNL/*` legacy repos.
+  - **`glab` for GitLab** *(alternative)* — only needed for non-Conduction work.
+- Access to the `Conduction` org on Codeberg AND the `ConductionNL` org on GitHub (both, while migration is in flight)
 - The `apps-extra` workspace cloned with at least one project
 
 **Optional — Container authentication (needed for `/opsx-apply-loop` and `/opsx-pipeline`):**
 
 These commands run Claude CLI inside an isolated Docker container, which cannot use the interactive OAuth login your host session uses. You need one of these environment variables set in your shell:
 
-| Variable | Source | Cost |
-|----------|--------|------|
-| `CLAUDE_CODE_AUTH_TOKEN` (preferred) | Your existing Claude Max/Pro subscription | Free (included in subscription) |
-| `ANTHROPIC_API_KEY` (fallback) | Anthropic API console | Prepaid credits (billed per token) |
+| Variable                             | Source                                    | Cost                               |
+| ------------------------------------ | ----------------------------------------- | ---------------------------------- |
+| `CLAUDE_CODE_AUTH_TOKEN` (preferred) | Your existing Claude Max/Pro subscription | Free (included in subscription)    |
+| `ANTHROPIC_API_KEY` (fallback)       | Anthropic API console                     | Prepaid credits (billed per token) |
 
 **To set up `CLAUDE_CODE_AUTH_TOKEN` (recommended):**
 
@@ -139,6 +142,7 @@ Generate all planning artifacts at once:
 ```
 
 Claude will create:
+
 1. **`proposal.md`** — Why this change exists and what it covers
 2. **`specs/*.md`** — Detailed requirements with scenarios
 3. **`design.md`** — Technical approach and architecture
@@ -149,6 +153,7 @@ Claude will create:
 Read through each artifact. This is the most valuable step — catching issues in specs is much cheaper than catching them in code.
 
 Things to check:
+
 - Does the proposal cover the right scope?
 - Are the spec requirements using the right RFC 2119 keywords (MUST vs SHOULD)?
 - Do the scenarios cover edge cases?
@@ -156,18 +161,19 @@ Things to check:
 
 Edit the artifacts directly if needed — they're just markdown files.
 
-### 4d. Create GitHub Issues
+### 4d. Create tracking issues
 
 ```
 /opsx-plan-to-issues
 ```
 
-This converts your tasks into GitHub Issues:
+This converts your tasks into tracking issues on the per-repo platform (Codeberg primary, GitHub fallback, GitLab alternative — auto-detected from `git remote get-url origin`):
+
 - A **tracking issue** with a full checklist (your "epic")
 - **Individual issues** per task with acceptance criteria and spec references
 - A **`plan.json`** file linking everything together
 
-Open the tracking issue URL to see your kanban view.
+Open the tracking issue URL to see your project-board view (per-repo on Codeberg; cross-repo Kanban exists on GitHub Projects v2 only — no Codeberg equivalent yet).
 
 ### 4e. Start implementing
 
@@ -176,10 +182,11 @@ Open the tracking issue URL to see your kanban view.
 ```
 
 This starts the implementation loop. Each iteration:
+
 1. Picks the next pending task from `plan.json`
 2. Reads ONLY the spec section that task references
 3. Implements the task
-4. Closes the GitHub issue
+4. Closes the tracking issue (on the per-repo platform)
 5. Moves to the next task
 
 The key benefit: each iteration works with minimal context, preventing AI "amnesia" on large changes.
@@ -193,6 +200,7 @@ After all tasks are done:
 ```
 
 This checks every spec requirement against your implementation and reports:
+
 - **CRITICAL** findings that must be fixed
 - **WARNING** findings that should be addressed
 - **SUGGESTION** findings that are nice-to-have
@@ -209,15 +217,15 @@ This merges your delta specs into the main specs and preserves the change for hi
 
 ## Quick Reference
 
-| What you want to do | Command |
-|---------------------|---------|
-| Start a new feature | `/opsx-new <name>` |
-| Generate all specs at once | `/opsx-ff` |
-| Generate specs one at a time | `/opsx-continue` |
-| Convert tasks to GitHub Issues | `/opsx-plan-to-issues` |
-| Start implementing | `/opsx-apply` |
-| Review implementation | `/opsx-verify` |
-| Complete and archive | `/opsx-archive` |
+| What you want to do            | Command                |
+| ------------------------------ | ---------------------- |
+| Start a new feature            | `/opsx-new <name>`     |
+| Generate all specs at once     | `/opsx-ff`             |
+| Generate specs one at a time   | `/opsx-continue`       |
+| Convert tasks to tracking issues (Codeberg/GitHub) | `/opsx-plan-to-issues` |
+| Start implementing             | `/opsx-apply`          |
+| Review implementation          | `/opsx-verify`         |
+| Complete and archive           | `/opsx-archive`        |
 
 ## Next Steps
 
