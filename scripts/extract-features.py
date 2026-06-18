@@ -10,8 +10,10 @@ Writes: docs/features.json             (committed to repo by the workflow)
 
 Each emitted entry: { slug, title, summary, docsUrl }.
 
-Only specs whose YAML frontmatter declares status: implemented OR reviewed
-are emitted. Other statuses (draft, in-progress, deprecated) are skipped.
+Only specs whose YAML frontmatter declares status: done are emitted (the
+canonical "shipped" status — a capability is done once it has a delivered/
+archived change). Other statuses (draft, in-progress, partial, retired,
+deprecated, redirect) are skipped.
 
 Stable output: entries sorted by slug; deterministic JSON formatting
 (indent=2, sort_keys=False per-entry, trailing newline) so the workflow
@@ -35,7 +37,7 @@ except ImportError:
     sys.exit(1)
 
 
-ACCEPTED_STATUSES = frozenset({"implemented", "reviewed"})
+ACCEPTED_STATUSES = frozenset({"done"})
 FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?\n)---\s*\n(.*)\Z", re.DOTALL)
 H1_RE = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
 PURPOSE_RE = re.compile(r"^##\s+Purpose\s*\n(.+?)(?=\n##\s|\Z)", re.DOTALL | re.MULTILINE)
