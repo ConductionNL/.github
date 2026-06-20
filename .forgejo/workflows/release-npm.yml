@@ -32,10 +32,10 @@ on:
         type: string
         default: "ci"
       install-flags:
-        description: "Extra flags for the install (e.g. --legacy-peer-deps)"
+        description: "Extra flags for the install. Default empty. Do NOT pass --legacy-peer-deps: it masks peer-dependency conflicts and broke CI fleet-wide; fix peer deps by aligning versions in package.json instead."
         required: false
         type: string
-        default: "--legacy-peer-deps"
+        default: ""
       working-directory:
         description: "Subdir to run lint/build/semantic-release in (monorepo package dir). Install always runs at repo root so npm workspaces resolve."
         required: false

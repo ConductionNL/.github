@@ -62,7 +62,7 @@ jobs:
           set -euo pipefail
           VERSION="$1"
           echo "prepare: building ${APP_NAME} ${VERSION}"
-          if [ -f package.json ]; then npm ci || npm install --legacy-peer-deps; npm run build; fi
+          if [ -f package.json ]; then npm ci || npm install; npm run build; fi
           if [ -f composer.json ]; then composer install --no-dev --optimize-autoloader --classmap-authoritative --ignore-platform-reqs; fi
           mkdir -p "package/${APP_NAME}"
           rsync -a \
