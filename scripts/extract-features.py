@@ -30,15 +30,10 @@ import re
 import sys
 from pathlib import Path
 
-try:
-    import yaml
-except ImportError:
-    print("error: PyYAML is required (pip install pyyaml)", file=sys.stderr)
-    sys.exit(1)
-
 
 ACCEPTED_STATUSES = frozenset({"done"})
 FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?\n)---\s*\n(.*)\Z", re.DOTALL)
+STATUS_RE = re.compile(r"^status:\s*(.+?)\s*$", re.MULTILINE)
 H1_RE = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
 PURPOSE_RE = re.compile(r"^##\s+Purpose\s*\n(.+?)(?=\n##\s|\Z)", re.DOTALL | re.MULTILINE)
 
@@ -51,15 +46,17 @@ def parse_spec(spec_path: Path) -> dict | None:
         return None
 
     raw_front, body = match.group(1), match.group(2)
-    try:
-        front = yaml.safe_load(raw_front) or {}
-    except yaml.YAMLError:
-        return None
-
-    if not isinstance(front, dict):
-        return None
-
-    status = str(front.get("status", "")).strip().lower()
+    # Read `status` straight off the frontmatter line instead of parsing the
+    # whole block as YAML. A typo in an unrelated field (e.g. an unquoted
+    # colon in `note:`) makes the block invalid YAML, and a fail-closed YAML
+    # parse would then silently drop an otherwise-done spec from the feature
+    # list. This mirrors the docusaurus-preset extractFeatures.js so the
+    # docs build and CI agree byte-for-byte.
+    status_match = STATUS_RE.search(raw_front)
+    status = (
+        status_match.group(1).strip().strip("\"'").lower()
+        if status_match is not None else ""
+    )
     if status not in ACCEPTED_STATUSES:
         return None
 
