@@ -26,6 +26,7 @@ All entries below are skills (the only mechanism we use — Anthropic merged cus
 | `/test-persona-mark`      | Mark's perspective only                                                           | 1      | Chat                           |
 | `/test-persona-priya`     | Priya's perspective only                                                          | 1      | Chat                           |
 | `/test-persona-janwillem` | Jan-Willem's perspective only                                                     | 1      | Chat                           |
+| `/test-persona-jasper`    | Jasper's perspective only — blind senior dev (NVDA/JAWS/VoiceOver + braille)      | 1      | Chat                           |
 
 ---
 
@@ -197,7 +198,11 @@ REST API testing. Checks endpoints, authentication, pagination, and error respon
 
 ### `/test-accessibility`
 
-**WCAG 2.2 AA** compliance using axe-core (current legal floor is WCAG 2.1 AA via EN 301 549 v3.2.1; v4.1.1 publishes ~Oct 2026 with 2.2 AA — target 2.2 in new work). Injects axe-core 4.10+, runs automated checks against the `wcag2a`/`wcag2aa`/`wcag21aa`/`wcag22aa` rulesets, reports violations. Adds manual verification for keyboard navigation and focus management. When invoked from the Hydra pipeline, the report lands at `tests/axe/report.json` and is consumed by the `hydra-gate-axe` mechanical gate; see [`openspec/architecture/wcag-coverage.md`](https://codeberg.org/Conduction/hydra/src/branch/main/openspec/architecture/wcag-coverage.md) in hydra for the per-SC enforcement matrix.
+**WCAG 2.2 AA** compliance using axe-core (current legal floor is WCAG 2.1 AA via EN 301 549 v3.2.1; v4.1.1 publishes ~Oct 2026 with 2.2 AA — target 2.2 in new work). Injects axe-core 4.12+, runs automated checks against the `wcag2a`/`wcag2aa`/`wcag21aa`/`wcag22aa` rulesets, reports violations. Adds manual verification for keyboard navigation and focus management. When invoked from the Hydra pipeline, the report lands at `tests/axe/report.json` and is consumed by the `hydra-gate-axe` mechanical gate; see [`openspec/architecture/wcag-coverage.md`](https://codeberg.org/Conduction/hydra/src/branch/main/openspec/architecture/wcag-coverage.md) in hydra for the per-SC enforcement matrix.
+
+**Toegankelijkheidsverklaring**: after running, generate the Dutch government accessibility declaration with [`scripts/generate-toegankelijkheidsverklaring.sh`](https://codeberg.org/Conduction/hydra/src/branch/main/scripts/generate-toegankelijkheidsverklaring.sh) `--app <appname>`. Computes Status A/B/C from gate results; output goes to `<app>/docs/toegankelijkheidsverklaring.md`. Add `--en` for the English variant.
+
+**Deeper screen-reader audit**: pair with [`/test-persona-jasper`](#test-persona-) for an NVDA-primary user perspective (keyboard-only nav, screen-reader announcement, focus management, live regions, semantic-HTML).
 
 **Use when:** You've added or changed UI components, forms, or navigation. Should be run before archiving any change that touches the frontend. `/test-app` Full mode includes an accessibility perspective, but this command goes deeper.
 
@@ -229,7 +234,7 @@ Cross-feature regression. Tests unrelated flows to verify a change hasn't broken
 
 ### `/test-persona-*`
 
-Single-persona deep dive. Use when you want one persona's full assessment without launching all eight:
+Single-persona deep dive. Use when you want one persona's full assessment without launching all nine:
 
 | Command                   | Persona                     | Role                                   |
 | ------------------------- | --------------------------- | -------------------------------------- |
@@ -241,8 +246,9 @@ Single-persona deep dive. Use when you want one persona's full assessment withou
 | `/test-persona-mark`      | **Mark Visser**             | MKB software vendor                    |
 | `/test-persona-priya`     | **Priya Ganpat**            | ZZP developer / integrator             |
 | `/test-persona-janwillem` | **Jan-Willem van der Berg** | Small business owner                   |
+| `/test-persona-jasper`    | **Jasper Hofstede**         | Blind senior developer — NVDA / JAWS / VoiceOver primary user (a11y / screen-reader / keyboard-nav coverage; the first AT-primary persona) |
 
-**Use when:** You know which persona is most affected by the change, or when you've already run `/test-counsel` and want a deeper single-perspective follow-up. One agent instead of eight — lower cap cost than `/test-counsel`.
+**Use when:** You know which persona is most affected by the change, or when you've already run `/test-counsel` and want a deeper single-perspective follow-up. One agent instead of nine — lower cap cost than `/test-counsel`.
 
 ---
 
