@@ -102,7 +102,10 @@ services:
   nextcloud:
     user: root
     container_name: nextcloud
-    image: nextcloud
+    # PINNED — never use the floating `nextcloud`/`:latest` tag: on env reset the
+    # container would boot a drifted NC over the existing data volume →
+    # needsDbUpgrade → maintenance/503 + disabled apps. Bump deliberately.
+    image: nextcloud:34.0.0-apache
     restart: always
     ports:
       - 8080:80
@@ -125,6 +128,7 @@ services:
       - ../pipelinq:/var/www/html/custom_apps/pipelinq
       - ../zaakafhandelapp:/var/www/html/custom_apps/zaakafhandelapp
       - ../larpingapp:/var/www/html/custom_apps/larpingapp
+      - ../scholiq:/var/www/html/custom_apps/scholiq
       # Custom apps directory from openregister (contains pre-installed apps)
       - ../openregister/custom_apps:/var/www/html/custom_apps
     environment:
@@ -194,7 +198,10 @@ services:
       - demo
     user: root
     container_name: nextcloud
-    image: nextcloud
+    # PINNED — never use the floating `nextcloud`/`:latest` tag: on env reset the
+    # container would boot a drifted NC over the existing data volume →
+    # needsDbUpgrade → maintenance/503 + disabled apps. Bump deliberately.
+    image: nextcloud:34.0.0-apache
     restart: always
     ports:
       - 8080:80
@@ -271,7 +278,10 @@ services:
       - mariadb
     user: root
     container_name: nextcloud-mariadb
-    image: nextcloud
+    # PINNED — never use the floating `nextcloud`/`:latest` tag: on env reset the
+    # container would boot a drifted NC over the existing data volume →
+    # needsDbUpgrade → maintenance/503 + disabled apps. Bump deliberately.
+    image: nextcloud:34.0.0-apache
     restart: always
     ports:
       - 8080:80
