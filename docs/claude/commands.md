@@ -63,7 +63,7 @@ All entries below are skills (the only mechanism we use — Anthropic merged cus
 | `/feature-counsel`      | 8      | Pre-build spec analysis from 8 persona perspectives                 |
 | `/test-functional`      | 1      | Feature correctness via GIVEN/WHEN/THEN                             |
 | `/test-api`             | 1      | REST API endpoint testing                                           |
-| `/test-accessibility`   | 1      | WCAG 2.1 AA compliance                                              |
+| `/test-accessibility`   | 1      | WCAG 2.2 AA compliance (axe-core 4.10+ ruleset)                     |
 | `/test-performance`     | 1      | Load times and API response                                         |
 | `/test-security`        | 1      | OWASP Top 10, roles, authorization                                  |
 | `/test-regression`      | 1      | Cross-feature regression                                            |

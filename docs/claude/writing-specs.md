@@ -36,7 +36,7 @@ Every spec file at `openspec/specs/{domain}/spec.md` follows this structure:
 ## Non-Functional Requirements
 
 - **Performance:** <measurable performance requirement>
-- **Accessibility:** <WCAG or usability requirement>
+- **Accessibility:** Target **WCAG 2.2 AA** (legal floor today is 2.1 AA via EN 301 549 v3.2.1; v4.1.1 → 2.2 expected Oct 2026). For UI-bearing specs, enumerate the touched SCs per the format used in [`openspec/changes/clickable-kpi-widgets/proposal.md`](https://codeberg.org/Conduction/hydra/src/branch/main/openspec/changes/clickable-kpi-widgets/proposal.md) — each SC reference names the Hydra gate that catches it. Cross-reference [`openspec/architecture/wcag-coverage.md`](https://codeberg.org/Conduction/hydra/src/branch/main/openspec/architecture/wcag-coverage.md) for the per-SC enforcement matrix. The 6 NEW-in-2.2 SCs (2.4.11 Focus Not Obscured, 2.5.7 Dragging Movements, 2.5.8 Target Size, 3.2.6 Consistent Help, 3.3.7 Redundant Entry, 3.3.8 Accessible Authentication) MUST be addressed explicitly in any UI spec, even if only to mark them n/a with a reason.
 - **Internationalization:** Dutch and English MUST be supported (ADR-007)
 
 ## Acceptance Criteria

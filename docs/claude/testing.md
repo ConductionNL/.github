@@ -14,7 +14,7 @@ All entries below are skills (the only mechanism we use — Anthropic merged cus
 | `/test-app`               | **Perspective-based** — Functional, UX, accessibility, performance, security, API | 1 / 6  | `{APP}/test-results/README.md` |
 | `/test-functional`        | Feature correctness (GIVEN/WHEN/THEN)                                             | 1      | Chat + optional evidence       |
 | `/test-api`               | REST API endpoints                                                                | 1      | Chat + API report              |
-| `/test-accessibility`     | WCAG 2.1 AA (axe-core)                                                            | 1      | Chat + a11y report             |
+| `/test-accessibility`     | WCAG 2.2 AA (axe-core)                                                            | 1      | Chat + a11y report             |
 | `/test-performance`       | Load times, API response                                                          | 1      | Chat                           |
 | `/test-security`          | OWASP Top 10, Nextcloud roles                                                     | 1      | Chat                           |
 | `/test-regression`        | Cross-feature regression                                                          | 1      | Chat                           |
@@ -197,7 +197,7 @@ REST API testing. Checks endpoints, authentication, pagination, and error respon
 
 ### `/test-accessibility`
 
-WCAG 2.1 AA compliance using axe-core. Injects axe, runs automated checks, reports violations. Adds manual verification for keyboard navigation and focus management.
+**WCAG 2.2 AA** compliance using axe-core (current legal floor is WCAG 2.1 AA via EN 301 549 v3.2.1; v4.1.1 publishes ~Oct 2026 with 2.2 AA — target 2.2 in new work). Injects axe-core 4.10+, runs automated checks against the `wcag2a`/`wcag2aa`/`wcag21aa`/`wcag22aa` rulesets, reports violations. Adds manual verification for keyboard navigation and focus management. When invoked from the Hydra pipeline, the report lands at `tests/axe/report.json` and is consumed by the `hydra-gate-axe` mechanical gate; see [`openspec/architecture/wcag-coverage.md`](https://codeberg.org/Conduction/hydra/src/branch/main/openspec/architecture/wcag-coverage.md) in hydra for the per-SC enforcement matrix.
 
 **Use when:** You've added or changed UI components, forms, or navigation. Should be run before archiving any change that touches the frontend. `/test-app` Full mode includes an accessibility perspective, but this command goes deeper.
 

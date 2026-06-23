@@ -70,7 +70,7 @@ Per-discipline reviewers / counsels you can invoke directly when you want a sing
 
 | Skill                                                      | Purpose                                                       |
 | ---------------------------------------------------------- | ------------------------------------------------------------- |
-| `test-accessibility`                                       | Axe-Core + WCAG AA sweep                                      |
+| `test-accessibility`                                       | Axe-Core + WCAG 2.2 AA sweep                                  |
 | `test-api`                                                 | Newman-based API contract tests                               |
 | `test-app`                                                 | App-scoped Playwright run                                     |
 | `test-counsel`                                             | Orchestrates parallel test runs across multiple personas      |
