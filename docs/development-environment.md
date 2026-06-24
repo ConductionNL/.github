@@ -13,7 +13,7 @@ Shared Docker Compose setup for all ConductionNL Nextcloud app development. The 
   ├── opencatalogi/
   ├── softwarecatalog/
   ├── nldesign/
-  ├── mydash/
+  ├── launchpad/
   ├── docudesk/
   ├── procest/
   ├── pipelinq/
@@ -267,7 +267,7 @@ docker exec nextcloud php occ app:enable openregister
 docker exec nextcloud php occ app:enable opencatalogi
 docker exec nextcloud php occ app:enable softwarecatalog
 docker exec nextcloud php occ app:enable nldesign
-docker exec nextcloud php occ app:enable mydash
+docker exec nextcloud php occ app:enable launchpad
 ```
 
 ### Clear caches
