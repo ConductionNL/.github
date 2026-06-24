@@ -105,7 +105,7 @@ All Conduction apps, with priority on apps that handle personal data:
 **Lower priority (minimal personal data):**
 
 - NL Design (theming, no personal data)
-- MyDash (dashboard, displays data from other apps)
+- LaunchPad (dashboard, displays data from other apps)
 - SoftwareCatalog (software metadata)
 - LarpingApp (hobby app, limited personal data)
 
@@ -119,7 +119,7 @@ All Conduction apps, with priority on apps that handle personal data:
 
 ## Open Questions
 
-1. Should the privacy dashboard be a standalone app or integrated into an existing app (MyDash)?
+1. Should the privacy dashboard be a standalone app or integrated into an existing app (LaunchPad)?
 2. How to handle BSN (Burger Service Nummer) -- special legal requirements for storage and access?
 3. What level of automation is appropriate for retention enforcement (flag only vs auto-delete)?
 4. How to detect personal data in unstructured documents (Docudesk)?

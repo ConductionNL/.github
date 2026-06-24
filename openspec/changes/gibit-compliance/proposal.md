@@ -88,7 +88,7 @@ All 11 Conduction Nextcloud apps:
 - OpenConnector
 - Docudesk
 - NL Design
-- MyDash
+- LaunchPad
 - SoftwareCatalog
 - LarpingApp
 - ZaakAfhandelApp
