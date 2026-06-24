@@ -57,7 +57,7 @@ jobs:
   # never reached) without relying on cross-job scheduling.
   release:
     name: Release
-    runs-on: codeberg-small
+    runs-on: codeberg-medium
     container:
       image: node:24-bookworm
     timeout-minutes: 15
