@@ -31,11 +31,49 @@ import sys
 from pathlib import Path
 
 
-ACCEPTED_STATUSES = frozenset({"done"})
+# Map a spec's frontmatter status to a roadmap kind rendered on the features
+# page: stable (mint), beta (cobalt blue), soon (orange "coming soon"). Specs
+# whose status maps to None are skipped entirely (retired/deprecated/etc.).
+STATUS_KIND = {
+    "done": "stable", "implemented": "stable", "reviewed": "stable",
+    "active": "stable", "stable": "stable",
+    "in-progress": "beta", "implementing": "beta", "partial": "beta", "beta": "beta",
+    "draft": "soon", "specified": "soon", "proposed": "soon", "planned": "soon",
+    "coming-soon": "soon", "soon": "soon",
+}
+
+# Tokens to upper-case when title-casing a raw slug (e.g. launchpad-ai → AI).
+ACRONYMS = frozenset({
+    "ai", "api", "ui", "ux", "or", "bi", "mcp", "tmlo", "mdto", "dcat", "woo",
+    "vth", "kcc", "crm", "pdf", "csv", "sepa", "zgw", "ztc", "dso", "rbac",
+    "gdpr", "avg", "kvk", "brp", "sso", "jwt", "cli", "ocr", "ner", "kpi",
+    "saas", "oas", "json", "xml", "html", "css", "url", "http", "https", "id",
+    "pwa", "sip", "eml", "sla", "llm", "rag", "e2e", "qr", "vng",
+})
+
 FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?\n)---\s*\n(.*)\Z", re.DOTALL)
 STATUS_RE = re.compile(r"^status:\s*(.+?)\s*$", re.MULTILINE)
 H1_RE = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
 PURPOSE_RE = re.compile(r"^##\s+Purpose\s*\n(.+?)(?=\n##\s|\Z)", re.DOTALL | re.MULTILINE)
+SLUGGY_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)+$")
+
+
+def titlecase_slug(slug: str) -> str:
+    """Turn a kebab slug into a human title, upper-casing known acronyms."""
+    return " ".join(
+        word.upper() if word in ACRONYMS else word.capitalize()
+        for word in slug.split("-")
+    )
+
+
+def clean_title(raw_title: str, slug: str) -> str:
+    """Strip 'Spec:' prefixes / 'Specification' suffixes; fall back to a
+    title-cased slug when the H1 is missing or is itself a raw slug."""
+    title = re.sub(r"^\s*spec:\s*", "", raw_title, flags=re.IGNORECASE)
+    title = re.sub(r"\s+specification\s*$", "", title, flags=re.IGNORECASE).strip()
+    if not title or title == slug or SLUGGY_RE.match(title):
+        title = titlecase_slug(slug)
+    return title
 
 
 def parse_spec(spec_path: Path) -> dict | None:
@@ -57,14 +95,15 @@ def parse_spec(spec_path: Path) -> dict | None:
         status_match.group(1).strip().strip("\"'").lower()
         if status_match is not None else ""
     )
-    if status not in ACCEPTED_STATUSES:
+    kind = STATUS_KIND.get(status)
+    if kind is None:
         return None
 
     slug = spec_path.parent.name
 
     title_match = H1_RE.search(body)
     raw_title = title_match.group(1).strip() if title_match else slug
-    title = re.sub(r"\s+specification\s*$", "", raw_title, flags=re.IGNORECASE).strip()
+    title = clean_title(raw_title, slug)
 
     summary = ""
     purpose_match = PURPOSE_RE.search(body)
@@ -76,6 +115,7 @@ def parse_spec(spec_path: Path) -> dict | None:
         "slug": slug,
         "title": title,
         "summary": summary,
+        "status": kind,
         "docsUrl": f"openspec/specs/{slug}/spec.md",
     }
 
