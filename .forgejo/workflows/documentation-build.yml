@@ -21,7 +21,7 @@ on:
 jobs:
   build:
     name: Build and validate
-    runs-on: codeberg-medium
+    runs-on: codeberg-small
     container:
       image: node:24-bookworm
     timeout-minutes: 10

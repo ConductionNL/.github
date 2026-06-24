@@ -58,7 +58,7 @@ on:
 
 jobs:
   release:
-    runs-on: codeberg-medium
+    runs-on: codeberg-small
     container:
       image: php:8.3-cli
     timeout-minutes: 10
