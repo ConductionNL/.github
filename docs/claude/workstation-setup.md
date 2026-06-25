@@ -290,7 +290,7 @@ For running Claude Code with a local Qwen model (privacy, cost reduction, offlin
 
 ### Hydra repo (optional, follow along)
 
-Most workstation flows don't need the Hydra repo cloned locally — Hydra normally runs in containers, triggered by an issue label. Clone it when you want to **follow along with the [Hydra tutorial series](https://conduction.nl/academy/hydra-tutorial-1-what-is-hydra)**, read the canonical `CLAUDE.md`, or use the `clean-env` / `hydra-gate-*` skills shipped in `hydra/.claude/skills/`.
+Most workstation flows don't need the Hydra repo cloned locally — Hydra normally runs in containers, triggered by an issue label. Clone it when you want to **follow along with the [Hydra tutorial series](https://conduction.nl/academy/?series=hydra-tutorial)**, read the canonical `CLAUDE.md`, or use the `clean-env` / `hydra-gate-*` skills shipped in `hydra/.claude/skills/`.
 
 Access is restricted to the [`Conduction/hydra`](https://codeberg.org/Conduction/hydra) repo on Codeberg — ask your team lead first. Once granted:
 
