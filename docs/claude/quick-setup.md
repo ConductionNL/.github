@@ -14,20 +14,20 @@ If any step surprises you, stop and read the corresponding section of [`workstat
 
 ## 1. Prerequisites (before anything Conduction-specific)
 
-OS-level pieces that must exist before any command below works. For each row, **pick one** column — the two paths are equally supported, just different starting points:
+OS-level pieces that must exist before any command below works. For each row, **pick one** column — the three paths are equally supported, just different starting points:
 
-| Component | Path A: Windows + WSL | Path B: Native Linux |
-|---|---|---|
-| **OS** | Windows 11 + WSL2 + Ubuntu 24.04 — `wsl --install -d Ubuntu-24.04` from elevated PowerShell, reboot, create Linux user | Ubuntu 24.04 (or comparable Debian-based distro) installed directly on the machine |
-| **Docker** | Docker Desktop for Windows with WSL integration enabled for your Ubuntu distro | Docker Engine + Compose plugin natively: `sudo apt install -y docker.io docker-compose-plugin && sudo usermod -aG docker $USER` (logout/login) |
-| **Editor** | VS Code on Windows + the Remote-WSL extension (so the editor runs on Windows but the terminal + code live in Linux) | VS Code natively, **or** JetBrains PhpStorm / IntelliJ IDEA with the Claude Code plugin — pick whichever you already use |
+| Component | Path A: Windows + WSL | Path B: Native Linux | Path C: macOS |
+|---|---|---|---|
+| **OS** | Windows 11 + WSL2 + Ubuntu 24.04 — `wsl --install -d Ubuntu-24.04` from elevated PowerShell, reboot, create Linux user | Ubuntu 24.04 (or comparable Debian-based distro) installed directly on the machine | macOS 13 Ventura or newer (Apple Silicon or Intel) with [Homebrew](https://brew.sh/) installed |
+| **Docker** | Docker Desktop for Windows with WSL integration enabled for your Ubuntu distro | Docker Engine + Compose plugin natively: `sudo apt install -y docker.io docker-compose-plugin && sudo usermod -aG docker $USER` (logout/login) | Docker Desktop for Mac, **or** a lighter alternative like [OrbStack](https://orbstack.dev/) / [Colima](https://github.com/abiosoft/colima) |
+| **Editor** | VS Code on Windows + the Remote-WSL extension (so the editor runs on Windows but the terminal + code live in Linux) | VS Code natively, **or** JetBrains PhpStorm / IntelliJ IDEA with the Claude Code plugin — pick whichever you already use | VS Code, **or** JetBrains PhpStorm / IntelliJ IDEA with the Claude Code plugin — pick whichever you already use |
 
 Regardless of which path you take, you also need:
 
 - A **Codeberg account** (`codeberg.org`) with repo access — ask your team lead for `Conduction/hydra` and any app repos you'll touch.
 - A **Claude Max** account (OAuth, no API key needed for normal work).
 
-macOS works too via Homebrew — concepts translate but you'll adapt install commands yourself. The canonical [`workstation-setup.md`](./workstation-setup.md) only documents the Windows + WSL2 path in detail.
+The canonical [`workstation-setup.md`](./workstation-setup.md) documents the Windows + WSL2 path in most detail; the Linux and macOS paths reuse the same tools, just installed via `apt` or `brew` instead.
 
 ## 2. Which repos to clone
 
@@ -61,7 +61,10 @@ git clone git@codeberg.org:Conduction/hydra.git
 
 ## 3. Commands in order
 
-Run inside WSL Ubuntu. Lines that need `sudo` say so explicitly.
+Run inside WSL Ubuntu (Path A) or your native Linux shell (Path B). Lines that need `sudo` say so explicitly.
+
+> **macOS users (Path C):** the steps below are Linux/WSL-shaped. Map them to `brew` equivalents — most tools have a one-liner:
+> `brew install nvm php composer gh && brew install --cask docker` (or use OrbStack instead of the Docker cask), `brew install gitea/tap/tea`. `npm install -g …` and `npx playwright install chromium` work unchanged once Node is installed. The `sudo chattr +i` lock in §3.7 is Linux-only; macOS users can use `sudo chflags uchg <file>` as the equivalent immutable bit. The rest of the command structure carries over one-to-one.
 
 ```bash
 # --- 3.1 Node 20 via nvm ---
