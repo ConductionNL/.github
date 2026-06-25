@@ -54,6 +54,8 @@ You don't run Hydra yourself — you trigger it with labels.
 
 ## Where to learn more
 
+For a narrative introduction, the Academy's **[Hydra tutorial series](https://conduction.nl/academy/?series=hydra-tutorial)** walks through what Hydra is, the three pipelines, the quality gates, the skill catalogue, and how to start a real run — six short modules. Read it first if you're new to Hydra; come back here for the reference detail.
+
 The deep technical detail stays in the [hydra repo](https://codeberg.org/Conduction/hydra):
 
 - [hydra/README.md](https://codeberg.org/Conduction/hydra/blob/main/README.md) — quickstart and full pipeline overview.

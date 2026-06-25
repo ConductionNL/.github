@@ -2,6 +2,8 @@
 
 How to set up a new machine for Conduction development. The stack is **Windows + WSL2 + Docker Desktop + VS Code** — this guide covers everything needed to go from a fresh Windows install to a working development environment.
 
+> **Prefer a narrative walkthrough?** The Conduction Academy's [Workstation Tutorial series](https://conduction.nl/academy/?series=workstation-tutorial) covers the same ground in six short modules with screenshots and follow-along steps. This page is the reference; the Academy series is the guided tour.
+
 ## Workstation Setup (Windows)
 
 Our development environment runs on **Windows + WSL2 + Docker Desktop + VS Code**. Follow these steps on a fresh Windows machine.
