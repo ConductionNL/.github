@@ -288,6 +288,23 @@ npm install -g @anthropic-ai/claude-code
 
 For running Claude Code with a local Qwen model (privacy, cost reduction, offline use), see **[local-llm.md](./local-llm.md)**. That guide covers Ollama installation, model selection, performance benchmarks, the Qwen Code CLI, and the Double Dutch RAD workflow for pairing Claude (day shift) with Qwen (overnight batch jobs).
 
+### Hydra repo (optional, follow along)
+
+Most workstation flows don't need the Hydra repo cloned locally — Hydra normally runs in containers, triggered by an issue label. Clone it when you want to **follow along with the [Hydra tutorial series](https://conduction.nl/academy/hydra-tutorial-1-what-is-hydra)**, read the canonical `CLAUDE.md`, or use the `clean-env` / `hydra-gate-*` skills shipped in `hydra/.claude/skills/`.
+
+Access is restricted to the [`Conduction/hydra`](https://codeberg.org/Conduction/hydra) repo on Codeberg — ask your team lead first. Once granted:
+
+```bash
+# Clone inside your apps-extra workspace, alongside the project repos
+# (matches the workspace layout in getting-started.md)
+cd path/to/apps-extra
+git clone git@codeberg.org:Conduction/hydra.git
+cd hydra
+cat CLAUDE.md
+```
+
+The clone only becomes a hard requirement at **Hydra tutorial Part 5** (triggering a real run); Parts 1–4 are read-along material.
+
 ### Summary Checklist
 
 ```bash
