@@ -4,6 +4,8 @@ How to create, structure, and improve Claude Code skills in this repository.
 
 Skills live in `.claude/skills/<skill-name>/` and are invoked with `/<skill-name>`. Each skill is a folder containing a `SKILL.md` entry point and optional subfolders for supporting files.
 
+> **Writing your first skill?** The Academy's **[Claude Skills tutorial series](https://conduction.nl/academy/?series=claude-skills-tutorial)** walks through skills end-to-end — what a skill is, how to write one, the maturity framework, and how to measure performance. This page is the reference; the series is the guided introduction.
+
 **Related docs:**
 
 - [Skill Patterns & Subfolder Guide](skill-patterns.md) — common patterns, subfolder conventions, description writing
