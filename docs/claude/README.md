@@ -68,6 +68,10 @@ Available docker-compose profiles, reset instructions, and environment setup.
 
 How to set up a new machine — Windows + WSL2 + Docker Desktop + VS Code installation, required/recommended extensions, Claude Code authentication, and WSL prerequisites (Node.js, PHP, Composer, git-host CLIs — `tea` for Codeberg/Gitea/Forgejo (primary), `gh` for GitHub (fallback), `glab` for GitLab — Playwright, OpenSpec CLI).
 
+### [Quick Setup — for people who already know the system](./quick-setup.md)
+
+Condensed cheat-sheet for re-imaging a known-good workstation: prerequisites, repos to clone, commands in order, validation step. Not for first-timers — for them, the [Workstation Tutorial series](https://conduction.nl/academy/?series=workstation-tutorial) (with screenshots) plus [Workstation Setup](./workstation-setup.md) (full reference) is the path.
+
 ### [Codeberg Authentication Setup](./codeberg-auth-setup.md)
 
 End-to-end auth for Codeberg (the Conduction primary git host) from WSL: SSH key generation + Codeberg upload, `~/.ssh/config`, `keychain` for passphrase persistence, `tea` CLI install + token scopes, VS Code Gitea extension, switching existing repo remotes, and how Claude Code inherits the auth without re-prompting. Read this when setting up a new workstation or onboarding a new dev — the [Workstation Setup](./workstation-setup.md) doc points at this for the Codeberg-specific steps.
