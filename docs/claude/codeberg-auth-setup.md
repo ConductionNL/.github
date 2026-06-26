@@ -285,6 +285,22 @@ The `/issues/resolve_conversation` route does **not** require a CSRF token despi
 
 The practical horizon is the Anubis JWT (~7 days). After it expires, calls start failing with `HTTP 302/303 → /user/login` and you re-extract from a fresh browser tab.
 
+**Three-cookie shortcut (verified 2026-06-05 and 2026-06-08, 18+ POSTs across multiple PRs):** `/issues/resolve_conversation` often accepts POSTs without the `techaro.lol-anubis-auth` JWT — just `cb_sessionid` + `persistent` + `x-robot-challenge-2=passed` is enough in many sessions. Try the POST with whatever cookies are available; only re-extract the Anubis JWT if you get a 303. The cookie that rotates fastest is `cb_sessionid` — when you hit a 303 after working calls earlier in the day, refresh `cb_sessionid` first before reaching for the others. The required `Cookie:` header form is:
+
+```
+Cookie: cb_sessionid=<v>; persistent=<v>; x-robot-challenge-2=passed
+```
+
+Plus the `POST` body shape (URL-encoded form, no CSRF token):
+
+```
+action=Resolve&comment_id=<review_comment_id>&origin=PullDetails
+```
+
+Returns `HTTP 200` with empty body on success. Success is confirmed by re-reading `GET /api/v1/repos/{o}/{r}/pulls/{n}/reviews/{review_id}/comments` and checking `.resolver.login` is set — the `.resolved_at` field stays `null` even on a successful resolve.
+
+**`cb-cookies-load` cannot run from Claude Code's Bash.** `age -d` reads the SSH key file directly and prompts for the passphrase via `/dev/tty`. Claude's Bash is non-interactive — decryption fails with `failed to obtain passphrase`. The exported `$CB_COOKIES` *is* inherited by child shells launched from a terminal that already ran `cb-cookies-load`, so the smoothest workflow is: you run `cb-cookies-load` in the terminal first, then launch `claude` from that same terminal. Alternative fallback (when launching from a fresh terminal): paste the cookie string once into the chat, write it to a `chmod 600` tmpfile, `export CB_COOKIES="$(cat /tmp/<file>)"` for the duration of the session, then `rm` + `unset` afterwards.
+
 ### Setup
 
 1. **Install `age`** (modern file encryption, single binary):
@@ -473,6 +489,36 @@ The Codeberg REST API has no such prompt. Claude can create PRs, post comments, 
 ### Edge case 3: the explicit push-authorization phrase
 
 Claude Code's safety hook may also block `git push` until you say one of the explicit phrases (`push my changes`, `push for me`, `commit and push`, `please git push`) in your message to it. That's a separate guardrail layered on top of authentication — auth determines *can*, the phrase determines *should*. Both must pass.
+
+### Edge case 4: Codeberg blocks self-review verdicts (the failure modes differ)
+
+Codeberg / Forgejo refuses formal review verdicts (APPROVE / REQUEST_CHANGES) on your own PRs. The two failure modes look different and the recovery is different:
+
+- **`POST /repos/{o}/{r}/pulls/{n}/reviews` with `event=REQUEST_CHANGES`** on your own PR — returns `HTTP 422 {"message":"reject your own pull is not allowed"}` immediately. Nothing persisted.
+- **`POST /repos/{o}/{r}/pulls/{n}/reviews` with `event=APPROVE`** on your own PR — returns `HTTP 200` and creates a review in `state=PENDING` (a silent draft, visible in the API but not on the PR page). The follow-up `POST .../reviews/{id}` to submit it then returns `422 "approve your own pull is not allowed"`. `POST .../reviews/{id}/submit` returns `405` (no such endpoint on Forgejo).
+
+**Workflow when reviewing your own Codeberg PR:**
+
+1. **Detect upfront.** Compare `gh api user --jq .login` (or `tea` login) against the PR's `.user.login`. If they match, skip the REST verdict call entirely.
+2. **Post `event=COMMENT` instead.** `event=COMMENT` is *not* blocked on self-review — it accepts the same `comments[]` array (inline findings) AND carries the verdict text in the review body. Frame the verdict in the body explicitly, e.g.:
+
+   ```
+   **APPROVE** (re-review, Standard mode) — all prior findings resolved. Codeberg blocks
+   self-APPROVE so posting this as a COMMENT review; the verdict is the body, not the state.
+   ```
+
+3. **Clean up any PENDING-draft from a prior failed APPROVE attempt** before posting the COMMENT:
+
+   ```bash
+   gh api repos/{o}/{r}/pulls/{n}/reviews \
+       --jq '.[] | select(.user.login=="<me>" and .state=="PENDING") | .id' \
+       | while read id; do
+           curl -X DELETE -H "Authorization: token $TOKEN" \
+               "https://codeberg.org/api/v1/repos/{o}/{r}/pulls/{n}/reviews/$id"
+       done   # returns 204 per delete
+   ```
+
+Inline-comment posting still works via the normal `POST .../reviews` with `event=COMMENT` + `comments[]` array. The thread resolution flow from Step 11 is unaffected — cookies-form POST resolves the threads regardless of who authored the PR.
 
 ## Save your Codeberg setup facts to Claude memory
 
