@@ -76,7 +76,7 @@ Per-discipline reviewers / counsels you can invoke directly when you want a sing
 | `test-counsel`                                             | Orchestrates parallel test runs across multiple personas      |
 | `test-functional`                                          | Functional regression sweep                                   |
 | `test-performance`                                         | Lighthouse / load-time checks                                 |
-| `test-persona-annemarie`, `-fatima`, `-henk`, `-janwillem` | Persona-driven flows (each persona file in `hydra/personas/`) |
+| `test-persona-annemarie`, `-fatima`, `-henk`, `-janwillem`, `-jasper`, `-mark`, `-noor`, `-priya`, `-sem` | Persona-driven flows (each persona file in `hydra/personas/`) — `-jasper` is the screen-reader-primary, AT-instrumented flow |
 | `journeydoc-init`                                          | Scaffold the journeydoc Playwright + Docusaurus capture setup |
 | `journeydoc-add-story`                                     | Add a new tutorial-page capture spec                          |
 | `journeydoc-instrument`                                    | Add `data-testid` instrumentation to existing components      |
@@ -108,6 +108,7 @@ Personas are non-agent — they're test subjects representing real user archetyp
 | `fatima-el-amrani.md`       | Front-line municipal officer, multilingual          |
 | `henk-bakker.md`            | Senior caseworker, sceptical of new tools           |
 | `janwillem-van-der-berg.md` | IT architect, evaluates platform fit                |
+| `jasper-blind-developer.md` | Blind senior developer (NVDA / JAWS / VoiceOver / refreshable braille) — screen-reader-primary, the first AT-primary persona |
 | `mark-visser.md`            | Developer onboarding the platform                   |
 | `noor-yilmaz.md`            | Citizen-side user submitting forms                  |
 | `priya-ganpat.md`           | Compliance officer, ISO / privacy lens              |
