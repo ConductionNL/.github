@@ -81,6 +81,11 @@ jobs:
             --exclude='/openapi.json' --exclude='/CHANGELOG.md' --exclude='/CONTRIBUTING.md' \
             ${EXTRA_EXCLUDES:-} \
             ./ "package/${APP_NAME}/"
+          # The App Store blacklists ANY .git directory in the archive. composer installs
+          # source/dev-branch deps (e.g. ddn/sapp pinned to a dev- branch) via git clone,
+          # leaving a nested vendor/**/.git that the root-anchored rsync excludes miss.
+          # Strip every nested .git (dir or gitlink file) before packaging.
+          find "package/${APP_NAME}" -name '.git' -exec rm -rf {} + 2>/dev/null || true
           sed -i "s|<version>.*</version>|<version>${VERSION}</version>|" "package/${APP_NAME}/appinfo/info.xml"
           printf '%s' "${NEXTCLOUD_SIGNING_KEY}" > signing-key.key
           printf '%s' "${NEXTCLOUD_SIGNING_CERT}" > signing-cert.crt
