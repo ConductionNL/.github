@@ -89,7 +89,7 @@ These are the core apps that run on the Nextcloud platform. Actively developed a
 | [openconnector](https://codeberg.org/Conduction/openconnector)     | Gateway/service bus for mapping, translation, and data synchronisation                     |
 | [docudesk](https://codeberg.org/Conduction/docudesk)               | Document generation and anonymisation — GDPR/WCAG compliant                                |
 | [nldesign](https://codeberg.org/Conduction/nldesign)               | NL Design System theme for Nextcloud — government theming                                  |
-| [mydash](https://codeberg.org/Conduction/mydash)                   | Custom dashboard app for Nextcloud                                                         |
+| [launchpad](https://codeberg.org/Conduction/launchpad)                   | Custom dashboard app for Nextcloud                                                         |
 | [softwarecatalog](https://codeberg.org/Conduction/softwarecatalog) | GEMMA Softwarecatalogus Nextcloud app                                                      |
 | [larpingapp](https://codeberg.org/Conduction/larpingapp)           | Larping app — demo/reference app and active product                                        |
 | [zaakafhandelapp](https://codeberg.org/Conduction/zaakafhandelapp) | Zaak handling for Dutch governmental institutions                                          |
@@ -311,7 +311,7 @@ Process/case management from before Procest existed.
 | -------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------- |
 | [procces-engine](https://github.com/ConductionNL/procces-engine)                 | 42          | Headless process/business engine — **direct predecessor to Procest**, high issue count has historical value |
 | [processenDashboard](https://github.com/ConductionNL/processenDashboard)         | 6           | Process dashboard — replaced by Procest UI                                                                  |
-| [commonground-dashboard](https://github.com/ConductionNL/commonground-dashboard) | 4           | CG dashboard — replaced by MyDash                                                                           |
+| [commonground-dashboard](https://github.com/ConductionNL/commonground-dashboard) | 4           | CG dashboard — replaced by LaunchPad                                                                           |
 | [checking](https://github.com/ConductionNL/checking)                             | 3           | Checking app — obsolete                                                                                     |
 
 ## Category 12: ARCHIVE — Publiccode Metadata Repos (19 repos)

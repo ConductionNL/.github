@@ -2,6 +2,8 @@
 
 How to set up a new machine for Conduction development. The stack is **Windows + WSL2 + Docker Desktop + VS Code** — this guide covers everything needed to go from a fresh Windows install to a working development environment.
 
+> **Prefer a narrative walkthrough?** The Conduction Academy's [Workstation Tutorial series](https://conduction.nl/academy/?series=workstation-tutorial) covers the same ground in six short modules with screenshots and follow-along steps. This page is the reference; the Academy series is the guided tour.
+
 ## Workstation Setup (Windows)
 
 Our development environment runs on **Windows + WSL2 + Docker Desktop + VS Code**. Follow these steps on a fresh Windows machine.
@@ -287,6 +289,23 @@ npm install -g @anthropic-ai/claude-code
 ### Ollama + Qwen (optional, local LLM)
 
 For running Claude Code with a local Qwen model (privacy, cost reduction, offline use), see **[local-llm.md](./local-llm.md)**. That guide covers Ollama installation, model selection, performance benchmarks, the Qwen Code CLI, and the Double Dutch RAD workflow for pairing Claude (day shift) with Qwen (overnight batch jobs).
+
+### Hydra repo (optional, follow along)
+
+Most workstation flows don't need the Hydra repo cloned locally — Hydra normally runs in containers, triggered by an issue label. Clone it when you want to **follow along with the [Hydra tutorial series](https://conduction.nl/academy/?series=hydra-tutorial)**, read the canonical `CLAUDE.md`, or use the `clean-env` / `hydra-gate-*` skills shipped in `hydra/.claude/skills/`.
+
+Access is restricted to the [`Conduction/hydra`](https://codeberg.org/Conduction/hydra) repo on Codeberg — ask your team lead first. Once granted:
+
+```bash
+# Clone inside your apps-extra workspace, alongside the project repos
+# (matches the workspace layout in getting-started.md)
+cd path/to/apps-extra
+git clone git@codeberg.org:Conduction/hydra.git
+cd hydra
+cat CLAUDE.md
+```
+
+The clone only becomes a hard requirement at **Hydra tutorial Part 5** (triggering a real run); Parts 1–4 are read-along material.
 
 ### Summary Checklist
 

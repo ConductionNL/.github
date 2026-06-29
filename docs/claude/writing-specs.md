@@ -2,6 +2,8 @@
 
 How to write effective specifications that produce good code. Specs are the foundation of the entire workflow — bad specs lead to bad code, no matter how good the AI is.
 
+> **New to spec-driven development?** The Academy's **[OpenSpec tutorial series](https://conduction.nl/academy/?series=openspec-tutorial)** introduces the workflow from the ground up — what a spec is, what a change is, and how to ship your first one. This page is the reference for *what good looks like*; the series shows you *how to get there*.
+
 ## Spec Structure
 
 Every spec file at `openspec/specs/{domain}/spec.md` follows this structure:

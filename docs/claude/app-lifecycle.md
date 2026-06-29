@@ -2,6 +2,8 @@
 
 App lifecycle commands live in the `app-` namespace. OpenSpec workflow commands (`opsx-`) handle feature implementation; `app-` commands handle the app itself — bootstrapping, configuration, and health checks.
 
+> **Want a worked example?** The Academy's **[Build a Nextcloud App tutorial series](https://conduction.nl/academy/?series=build-an-app-tutorial)** walks the full `app-design` → `app-create` → `app-apply` → `app-verify` path end-to-end using the PetStore domain. Use this page as the command reference; use the series for a guided first-time build.
+
 ---
 
 ## Flow Diagram

@@ -4,6 +4,18 @@ Developer-facing guide to Conduction's spec-driven workflow. This is the _driver
 
 Underneath, the tool is **Claude Code** with the Conduction skills catalogue; this section was previously titled _Claude Code Developer Guide_ before being folded into the Hydra umbrella.
 
+## Academy tutorials
+
+The reference docs in this section are deliberately terse — for narrative walkthroughs with worked examples, the Conduction Academy publishes interactive tutorial series that pair with the topics below:
+
+- **[Workstation Tutorial](https://conduction.nl/academy/?series=workstation-tutorial)** — fresh-machine walkthrough of Windows + WSL2 + Docker + VS Code, paired with [Workstation Setup](./workstation-setup.md).
+- **[OpenSpec Tutorial](https://conduction.nl/academy/?series=openspec-tutorial)** — spec-driven development workflow, paired with [Writing Specs](./writing-specs.md) and [Workflow Overview](./workflow.md).
+- **[Claude Skills Tutorial](https://conduction.nl/academy/?series=claude-skills-tutorial)** — writing your first skill end-to-end, paired with [Writing Skills](./writing-skills.md), [Skill Checklist](./skill-checklist.md) and [Skill Evaluation](./skill-evals.md).
+- **[Build a Nextcloud App Tutorial](https://conduction.nl/academy/?series=build-an-app-tutorial)** — nine-part PetStore series, paired with [App Lifecycle](./app-lifecycle.md).
+- **[Hydra Tutorial](https://conduction.nl/academy/?series=hydra-tutorial)** — the agentic CI/CD pipeline end-to-end; pipeline internals live in the sibling [Hydra](../hydra/) section.
+
+Use the reference docs as lookup material; use the Academy tutorials when you want to learn a workflow narratively for the first time.
+
 ## Guides
 
 ### [Getting Started](./getting-started.md)
@@ -67,6 +79,10 @@ Available docker-compose profiles, reset instructions, and environment setup.
 ### [Workstation Setup](./workstation-setup.md)
 
 How to set up a new machine — Windows + WSL2 + Docker Desktop + VS Code installation, required/recommended extensions, Claude Code authentication, and WSL prerequisites (Node.js, PHP, Composer, git-host CLIs — `tea` for Codeberg/Gitea/Forgejo (primary), `gh` for GitHub (fallback), `glab` for GitLab — Playwright, OpenSpec CLI).
+
+### [Quick Setup — for people who already know the system](./quick-setup.md)
+
+Condensed cheat-sheet for re-imaging a known-good workstation: prerequisites, repos to clone, commands in order, validation step. Not for first-timers — for them, the [Workstation Tutorial series](https://conduction.nl/academy/?series=workstation-tutorial) (with screenshots) plus [Workstation Setup](./workstation-setup.md) (full reference) is the path.
 
 ### [Codeberg Authentication Setup](./codeberg-auth-setup.md)
 

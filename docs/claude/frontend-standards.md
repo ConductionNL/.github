@@ -4,7 +4,7 @@ Standards that apply to all Conduction Nextcloud apps. These are enforced via ES
 
 ## OpenRegister Dependency Check
 
-All apps that depend on OpenRegister (everything except `nldesign` and `mydash`) must show an empty state when OpenRegister is not installed, instead of a broken UI.
+All apps that depend on OpenRegister (everything except `nldesign` and `launchpad`) must show an empty state when OpenRegister is not installed, instead of a broken UI.
 
 ### Backend (SettingsController)
 

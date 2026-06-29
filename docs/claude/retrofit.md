@@ -176,7 +176,7 @@ Recommended sequence:
 5. docudesk
 6. openconnector
 7. nldesign
-8. mydash
+8. launchpad
 9. softwarecatalog
 10. larpingapp
 11. zaakafhandelapp

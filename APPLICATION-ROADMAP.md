@@ -16,7 +16,7 @@
 | **Docudesk**        | Document generation and data anonymization | Documents       |
 | **Procest**         | Case management, VTH, and process handling | Cases & permits |
 | **Pipelinq**        | CRM and customer interaction               | Relations       |
-| **MyDash**          | Dashboard system                           | Visualization   |
+| **LaunchPad**          | Dashboard system                           | Visualization   |
 | **NL Design**       | Government design system (Rijkshuisstijl)  | Theming         |
 | **SoftwareCatalog** | IT asset management                        | IT governance   |
 | **ZaakAfhandelApp** | Case handling                              | Cases           |
