@@ -160,6 +160,7 @@ jobs:
           NEXTCLOUD_SIGNING_KEY: ${{ secrets.NEXTCLOUD_SIGNING_KEY }}
           NEXTCLOUD_SIGNING_CERT: ${{ secrets.NEXTCLOUD_SIGNING_CERT }}
           NEXTCLOUD_APPSTORE_TOKEN: ${{ secrets.NEXTCLOUD_APPSTORE_TOKEN }}
+          COMPOSER_AUTH: '{"github-oauth":{"github.com":"${{ secrets.GH_COMPOSER_TOKEN }}"}}'
           GIT_CREDENTIALS: "https://x-access-token:${{ secrets.CODEBERG_TOKEN }}@codeberg.org"
         run: |
           git config --global --add safe.directory "$(pwd)"
