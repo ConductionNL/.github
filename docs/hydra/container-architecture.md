@@ -290,7 +290,7 @@ baseline conventions for all Conduction projects:
 | adr-007 | i18n requirement (nl/en minimum, register i18n)                |
 | adr-008 | Mandatory test coverage                                        |
 | adr-009 | Documentation with screenshots                                 |
-| adr-010 | NL Design System (CSS vars, WCAG AA)                           |
+| adr-010 | NL Design System (CSS vars, WCAG 2.2 AA — see openspec/architecture/wcag-coverage.md) |
 | adr-011 | Schema standards (schema.org, vCard)                           |
 | adr-012 | Deduplication check against OpenRegister core                  |
 

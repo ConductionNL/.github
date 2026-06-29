@@ -10,11 +10,11 @@ All entries below are skills (the only mechanism we use — Anthropic merged cus
 
 | Command                   | Focus                                                                             | Agents | Output                         |
 | ------------------------- | --------------------------------------------------------------------------------- | ------ | ------------------------------ |
-| `/test-counsel`           | **Persona-based** — Would Henk/Fatima/Sem/… succeed?                              | 8      | `{APP}/test-results/`          |
+| `/test-counsel`           | **Persona-based** — Would Henk/Fatima/Sem/…/Jasper succeed?                       | 9      | `{APP}/test-results/`          |
 | `/test-app`               | **Perspective-based** — Functional, UX, accessibility, performance, security, API | 1 / 6  | `{APP}/test-results/README.md` |
 | `/test-functional`        | Feature correctness (GIVEN/WHEN/THEN)                                             | 1      | Chat + optional evidence       |
 | `/test-api`               | REST API endpoints                                                                | 1      | Chat + API report              |
-| `/test-accessibility`     | WCAG 2.1 AA (axe-core)                                                            | 1      | Chat + a11y report             |
+| `/test-accessibility`     | WCAG 2.2 AA (axe-core)                                                            | 1      | Chat + a11y report             |
 | `/test-performance`       | Load times, API response                                                          | 1      | Chat                           |
 | `/test-security`          | OWASP Top 10, Nextcloud roles                                                     | 1      | Chat                           |
 | `/test-regression`        | Cross-feature regression                                                          | 1      | Chat                           |
@@ -26,6 +26,7 @@ All entries below are skills (the only mechanism we use — Anthropic merged cus
 | `/test-persona-mark`      | Mark's perspective only                                                           | 1      | Chat                           |
 | `/test-persona-priya`     | Priya's perspective only                                                          | 1      | Chat                           |
 | `/test-persona-janwillem` | Jan-Willem's perspective only                                                     | 1      | Chat                           |
+| `/test-persona-jasper`    | Jasper's perspective only — blind senior dev (NVDA/JAWS/VoiceOver + braille)      | 1      | Chat                           |
 
 ---
 
@@ -38,7 +39,7 @@ The standard validation flow before raising a pull request:
 ```
 /opsx-verify                    # Confirms implementation matches specs (reads code + artifacts, no browser)
 /test-functional           # Verifies the feature behaves as specced step by step
-/test-counsel                   # User acceptance from all 8 personas
+/test-counsel                   # User acceptance from all 9 personas
 /create-pr
 ```
 
@@ -76,7 +77,7 @@ When you want comprehensive coverage — correctness, user experience, and techn
 
 ```
 /test-regression           # Verify no cross-feature breakage first
-/test-counsel                   # All 8 persona perspectives
+/test-counsel                   # All 9 persona perspectives
 /test-app                       # Full mode: 6 agents (functional, UX, accessibility, performance, security, API)
 ```
 
@@ -122,7 +123,7 @@ Use `/feature-counsel` to get persona feedback on specs _before_ building:
 
 ```
 /opsx-ff                        # Generate all spec artifacts
-/feature-counsel                # 8 personas analyze specs, suggest missing features
+/feature-counsel                # 9 personas analyze specs, suggest missing features
 # [review and refine specs]
 /opsx-apply                     # Only then implement
 ```
@@ -135,13 +136,13 @@ This is the only testing-adjacent command that runs _before_ implementation. It 
 
 ### `/test-counsel` — Persona-Based Testing
 
-**Lens:** User experience. "Would Henk, Fatima, Sem, Noor, Annemarie, Mark, Priya, or Jan-Willem succeed and be satisfied?"
+**Lens:** User experience. "Would Henk, Fatima, Sem, Noor, Annemarie, Mark, Priya, Jan-Willem, or Jasper succeed and be satisfied?"
 
-**Agents:** 8 (one per persona) — run in parallel.
+**Agents:** 9 (one per persona) — run in parallel. Jasper (blind senior dev, NVDA/JAWS/VoiceOver) is the first AT-primary tester in the set; he owns the screen-reader / keyboard / focus-management coverage.
 
 **Use when:** You want feedback from realistic user perspectives. Each persona represents a different role, technical level, and set of priorities (citizen, developer, municipal officer, etc.). Output includes in-character findings and verdicts per persona. Best used after `/test-functional` confirms the feature works — this answers whether _users_ would succeed, not just whether the spec was met.
 
-**Cap impact:** Very high — 8 parallel agents. Open a fresh Claude window before running. See [parallel-agents.md](parallel-agents.md).
+**Cap impact:** Very high — 9 parallel agents. Open a fresh Claude window before running. See [parallel-agents.md](parallel-agents.md).
 
 **See:** [.claude/skills/test-counsel/SKILL.md](https://codeberg.org/Conduction/hydra/blob/main/.claude/skills/test-counsel/SKILL.md)
 
@@ -168,8 +169,8 @@ This is the only testing-adjacent command that runs _before_ implementation. It 
 | Aspect           | `/test-counsel`                                   | `/test-app`                                      |
 | ---------------- | ------------------------------------------------- | ------------------------------------------------ |
 | **Lens**         | Persona — user goals and experience               | Perspective — technical correctness              |
-| **Question**     | "Would Henk/Fatima/Priya/… complete their tasks?" | "Do features work, perform, and meet standards?" |
-| **Agents**       | 8 (one per persona)                               | 1 / 6 (Quick or Full mode)                       |
+| **Question**     | "Would Henk/Fatima/Priya/…/Jasper complete their tasks?" | "Do features work, perform, and meet standards?" |
+| **Agents**       | 9 (one per persona)                               | 1 / 6 (Quick or Full mode)                       |
 | **Output style** | In-character findings, persona verdicts           | PASS/PARTIAL/FAIL, technical notes               |
 | **Best for**     | User acceptance, UX feedback                      | Quality gates, regression, coverage              |
 
@@ -197,7 +198,11 @@ REST API testing. Checks endpoints, authentication, pagination, and error respon
 
 ### `/test-accessibility`
 
-WCAG 2.1 AA compliance using axe-core. Injects axe, runs automated checks, reports violations. Adds manual verification for keyboard navigation and focus management.
+**WCAG 2.2 AA** compliance using axe-core (current legal floor is WCAG 2.1 AA via EN 301 549 v3.2.1; v4.1.1 publishes ~Oct 2026 with 2.2 AA — target 2.2 in new work). Injects axe-core 4.10+, runs automated checks against the `wcag2a`/`wcag2aa`/`wcag21aa`/`wcag22aa` rulesets, reports violations. Adds manual verification for keyboard navigation and focus management. When invoked from the Hydra pipeline, the report lands at `tests/axe/report.json` and is consumed by the `hydra-gate-axe` mechanical gate; see [`openspec/architecture/wcag-coverage.md`](https://codeberg.org/Conduction/hydra/src/branch/main/openspec/architecture/wcag-coverage.md) in hydra for the per-SC enforcement matrix.
+
+**Toegankelijkheidsverklaring**: after running, generate the Dutch government accessibility declaration with [`scripts/generate-toegankelijkheidsverklaring.sh`](https://codeberg.org/Conduction/hydra/src/branch/main/scripts/generate-toegankelijkheidsverklaring.sh) `--app <appname>`. Computes Status A/B/C from gate results; output goes to `<app>/docs/toegankelijkheidsverklaring.md`. Add `--en` for the English variant.
+
+**Deeper screen-reader audit**: pair with [`/test-persona-jasper`](#test-persona-) for an NVDA-primary user perspective (keyboard-only nav, screen-reader announcement, focus management, live regions, semantic-HTML).
 
 **Use when:** You've added or changed UI components, forms, or navigation. Should be run before archiving any change that touches the frontend. `/test-app` Full mode includes an accessibility perspective, but this command goes deeper.
 
@@ -229,7 +234,7 @@ Cross-feature regression. Tests unrelated flows to verify a change hasn't broken
 
 ### `/test-persona-*`
 
-Single-persona deep dive. Use when you want one persona's full assessment without launching all eight:
+Single-persona deep dive. Use when you want one persona's full assessment without launching all nine:
 
 | Command                   | Persona                     | Role                                   |
 | ------------------------- | --------------------------- | -------------------------------------- |
@@ -241,8 +246,9 @@ Single-persona deep dive. Use when you want one persona's full assessment withou
 | `/test-persona-mark`      | **Mark Visser**             | MKB software vendor                    |
 | `/test-persona-priya`     | **Priya Ganpat**            | ZZP developer / integrator             |
 | `/test-persona-janwillem` | **Jan-Willem van der Berg** | Small business owner                   |
+| `/test-persona-jasper`    | **Jasper Hofstede**         | Blind senior developer — NVDA / JAWS / VoiceOver primary user (a11y / screen-reader / keyboard-nav coverage; the first AT-primary persona) |
 
-**Use when:** You know which persona is most affected by the change, or when you've already run `/test-counsel` and want a deeper single-perspective follow-up. One agent instead of eight — lower cap cost than `/test-counsel`.
+**Use when:** You know which persona is most affected by the change, or when you've already run `/test-counsel` and want a deeper single-perspective follow-up. One agent instead of nine — lower cap cost than `/test-counsel`.
 
 ---
 
@@ -379,7 +385,7 @@ Ensure Docker is running and Nextcloud is accessible before testing. See [docker
 | Context                        | Browser                                         | When                                                                   |
 | ------------------------------ | ----------------------------------------------- | ---------------------------------------------------------------------- |
 | **Single-agent commands**      | `browser-1`                                     | `/test-functional`, `/test-persona-*`, `/test-*` — one agent at a time |
-| **test-counsel (8 parallel)**  | `browser-2`–`browser-5`, `browser-7` + overflow | One browser per persona                                                |
+| **test-counsel (9 parallel)**  | `browser-2`–`browser-5`, `browser-7` + overflow | One browser per persona; 9th (Jasper) shares sequentially after the first batch |
 | **test-counsel (1 persona)**   | `browser-1`                                     | When testing a single persona only                                     |
 | **test-app Quick**             | `browser-1`                                     | Single agent smoke test                                                |
 | **test-app Full (6 parallel)** | `browser-2`–`browser-5`, `browser-7` + 1        | Each perspective gets a distinct browser                               |
