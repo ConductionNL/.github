@@ -97,3 +97,52 @@ Pipelinq is the reference implementation for all these patterns:
 - App.vue: `pipelinq/src/App.vue`
 - CSS: `pipelinq/src/assets/app.css`
 - ESLint: `pipelinq/eslint.config.js`
+
+## Gotchas that trip mechanical gates
+
+A few surface patterns have empirically caused review round-trips because they interact badly with either the Hydra gate regexes or the NC framework. Avoid them.
+
+### Avoid arrow functions inside Vue attribute values
+
+Vue templates like `<NcSelect :reduce="(o) => o">` contain a `>` character *inside* an attribute value. Some downstream tooling — including `hydra-gate-nc-input-labels` on Hydra `main` — assumes attribute values do not contain `>` and truncates the tag prematurely. A tag whose `:input-label` prop lives on a line AFTER `:reduce` will falsely trip the gate.
+
+Two workable patterns:
+
+```vue
+<!-- Preferred: order matters — labels first, complex bindings last -->
+<NcSelect
+    :options="opts"
+    :input-label="t('app', 'Level')"
+    :reduce="(o) => o"
+    :clearable="false" />
+
+<!-- Alternative: named function, no arrow -->
+<NcSelect
+    :options="opts"
+    :reduce="function (o) { return o }"
+    :input-label="t('app', 'Level')" />
+```
+
+Reference case: opencatalogi PR #79 round-3.
+
+### Cascade error handling — one keys, not four
+
+```js
+// ❌ Cascading through 4 possible error-body shapes is a smell — the backend is drifting.
+const msg = body?.data?.error || body?.error || body?.message || `HTTP ${res.status}`
+
+// ✅ Per ADR-050, the backend returns `{message, error?}`. One fallback.
+const msg = body?.message || `HTTP ${res.status}`
+```
+
+If the backend is drifting, fix the backend to align with ADR-050 rather than layering more fallbacks in the frontend.
+
+### CSRF on raw `fetch()` calls
+
+Raw `fetch()` to a Nextcloud AppFramework route (`/apps/{appid}/api/...`) does NOT auto-send `requesttoken`. Options, in order of preference:
+
+1. Use `@nextcloud/axios` (auto-injects `requesttoken` via its interceptor).
+2. Add `OCS-APIRequest: true` to headers — satisfies NC's CSRF bypass (`Request::passesCSRFCheck()`).
+3. Manually set `requesttoken` via `getRequestToken()` from `@nextcloud/auth`.
+
+Reference case: opencatalogi PR #79 F8 — delete-modal fetch had none of these, and the moment the backend dropped `@NoCSRFRequired` the call would have started 412ing.

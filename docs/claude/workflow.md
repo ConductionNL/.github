@@ -301,3 +301,26 @@ Specialist agents representing different roles on the development team. Useful f
 - **Use shared specs**: Reference cross-project specs in your delta specs to avoid reinventing patterns
 - **Trust the JSON**: The plan.json is your source of truth during implementation — it survives context window resets
 - **The tracking issue is your dashboard**: Use the per-repo project board (Codeberg primary, GitHub Projects on legacy repos) to visualize progress across multiple changes and projects. Codeberg has no cross-repo board yet — per-repo only.
+
+## Post-fix-commit gate verification (fix mode)
+
+Every commit that addresses a review finding must be checked against the mechanical gates BEFORE `git push`. The pattern to avoid: a fix commit that resolves the review concerns but silently introduces NEW gate failures. This turns a "one more round" into "one more round, plus surface new issues" and burns review cycles.
+
+Recipe:
+
+```bash
+# Before starting the fix — snapshot the current gate report
+git stash
+bash scripts/run-hydra-gates.sh --scope-to-diff --base origin/<base> . > /tmp/gates-before.log
+git stash pop
+
+# Apply the fix, then verify no NEW failures
+bash scripts/run-hydra-gates.sh --scope-to-diff --base origin/<base> . > /tmp/gates-after.log
+
+diff /tmp/gates-before.log /tmp/gates-after.log
+# Any NEW `FAIL` line in `after` that isn't in `before` = a regression the fix introduced.
+```
+
+If diff shows new `FAIL` lines, fix them (or add `@spec exclude <reason>` with a compliant reason per ADR-020 amendment) BEFORE pushing. This is enforced by the Al Gorithm builder agent's Rule 0c (`hydra/agents/al-gorithm/behavior.md`) for pipeline-driven fix mode, and applies just as much to manual fixes.
+
+Reference case: opencatalogi PR #79 round-3 shipped a fix commit that resolved 6 review threads but introduced 2 new gate failures (gate-12 `nc-input-labels` regex, gate-16 `spec-coverage` on 19 methods). Both surfaced only in the next review round.

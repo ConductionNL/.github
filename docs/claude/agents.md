@@ -121,3 +121,21 @@ Full persona files live in [`hydra/personas/`](https://codeberg.org/Conduction/h
 - **Each skill is its own folder** under `.claude/skills/<name>/` with a `SKILL.md` (the instruction prompt the agent runs) plus optional `examples/`, `references/`, `templates/`, `assets/`. See [Writing skills](./writing-skills.md) and the [Skill checklist](./skill-checklist.md).
 - **Skill maturity levels (L1–L7)** describe how much evaluation backs each skill. The [Skill evaluation](./skill-evals.md) page documents the L5+ workflow with `evals.json` baselines.
 - **Skills are invokable** via `Skill: <name>` inside Claude Code or as `/<name>` slash-commands. The harness also publishes them to sub-agents through the `Agent` tool.
+
+## Recent behaviour additions (2026-07-03)
+
+Behaviour changes distilled from three rounds of review on opencatalogi #79 / #85 / #86:
+
+### Al Gorithm — Rule 0c: fix-commit gate delta
+
+In fix mode, every iteration must verify the fix commit does not INTRODUCE new gate failures. Snapshot the pre-fix gate report, apply the fix, re-run the gates, diff. If the after-log has any FAIL line not present in the before-log, the fix commit isn't ready to push. Prevents the "resolved 6 review threads but silently added 2 new gate failures" pattern that opencatalogi PR #79 round-3 shipped.
+
+Full recipe in `hydra/agents/al-gorithm/behavior.md § Fix mode § Rule 0c`.
+
+### Juan Claude — mandatory spec-anchor resolver
+
+Every non-exclude `@spec openspec/…` tag in the diff must be resolved (file exists, and — if the tag has a fragment — the anchor exists inside the file) before the verdict fires. Gate-16 checks the tag is PRESENT; this step verifies the TARGET resolves. Companion mechanical enforcement is gate-46 (`hydra-gate-spec-anchor-existence`); this step is Juan's fallback for cases the gate can't statically resolve.
+
+Full recipe in `hydra/agents/juan-claude-van-damme/behavior.md § Spec-anchor resolver`.
+
+Reference case: opencatalogi PR #85 shipped `@spec openspec/specs/federation/spec.md#requirement-directory-self-detection` where the requirement had never been written down.

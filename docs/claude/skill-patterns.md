@@ -208,3 +208,26 @@ Suggest the logical next action:
 - If implementation done → "Run `/opsx-verify` to validate"
 - If verified → "Run `/opsx-archive` to complete"
 ```
+
+### Verify subagent load-bearing claims (L5+)
+
+Skills that delegate deep analysis to subagents (`Agent` tool) must verify high-impact claims at the orchestrator level BEFORE acting on them. Subagents are good at semantic analysis but their findings can occasionally be confidently wrong — the classic failure mode is a claim like "file X is not imported anywhere" that turns out to be false because the file loads via a PHP `Util::addStyle` call the subagent's grep didn't cover.
+
+Rule: for any subagent finding of severity `blocker` (🔴 in review skills, or "must-do" in other verticals), the orchestrator MUST re-verify the underlying claim with a targeted grep or read before posting / committing / merging. The verify step is cheap (one bash call) and catches false alarms that would otherwise ship as public review comments.
+
+Recipe:
+
+```markdown
+## Step N.5 — Verify subagent load-bearing claims
+
+For each `findings[].severity === "blocker"` returned by the subagent:
+
+1. Extract the load-bearing factual claim (e.g. "css/main.css is orphan — not imported anywhere").
+2. Run the orthogonal verifier (grep across the repo, read the file's PHP loader, check `Util::addStyle` calls, check templates/).
+3. If verification refutes the claim → downgrade the finding to a concern or drop it entirely.
+4. Log the verification result in the skill's activity trace so future reviewers see the check happened.
+```
+
+Reference case: opencatalogi PR #80 round-2 review — subagent claimed `css/main.css` was orphan and posted it as a 🔴 blocker. Orchestrator caught the false alarm before posting by grepping `templates/*.php` for `Util::addStyle('opencatalogi', 'main')` — found the loader on line 14 of `templates/index.php`. Blocker downgraded to no-op; the ~15 minutes saved on the correction email were the value of the verify step.
+
+The pattern applies to *any* skill that delegates factual analysis to a subagent — not just review-pr. If your skill lets a subagent make claims that will drive user-visible actions, add a mandatory verify step.
