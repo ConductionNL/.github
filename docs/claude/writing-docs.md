@@ -87,6 +87,7 @@ When content is duplicated, it will eventually diverge. One copy gets updated; t
 | Spec and doc writing conventions                            | `.github/docs/claude/writing-specs.md`, `.github/docs/claude/writing-docs.md` |
 | ADR writing conventions                                     | `.github/docs/claude/writing-adrs.md`                                         |
 | Skill writing conventions                                   | `.github/docs/claude/writing-skills.md`                                       |
+| Controller authoring conventions                            | `.github/docs/claude/writing-controllers.md`                                  |
 | OpenSpec schema and artifact templates                      | `openspec/schemas/conduction/schema.yaml`, `templates/`                       |
 | Parallel agent conventions                                  | `.github/docs/claude/parallel-agents.md`                                      |
 | Claude harness configuration (permissions, hooks, env vars) | `.github/global-settings/settings.json`                                       |

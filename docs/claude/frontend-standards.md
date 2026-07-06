@@ -125,7 +125,7 @@ Two workable patterns:
 
 Reference case: opencatalogi PR #79 round-3.
 
-### Cascade error handling — one keys, not four
+### Cascade error handling — one key, not four
 
 ```js
 // ❌ Cascading through 4 possible error-body shapes is a smell — the backend is drifting.
