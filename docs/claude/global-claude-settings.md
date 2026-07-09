@@ -292,7 +292,7 @@ Three hook entries in `settings.json` invoke the same wrapper with different arg
 - Sources the config file into whitelisted variables only — `SOUND_ENABLED`, `SOUND_QUESTION_FILE`, `SOUND_PERMISSION_FILE`, `SOUND_STOP_FILE`. It does **not** eval command strings.
 - If `SOUND_ENABLED != 1`, exits `0`.
 - Detects an available player in order: `paplay` → `afplay` → `aplay` → `powershell.exe` (WSL).
-- Plays the sound in the background so the hook never blocks Claude's turn.
+- Plays the sound in the background so the hook never blocks Claude's turn. Detaches the audio player from the hook's process group (`setsid` when available, otherwise `nohup`) so short sounds (<~500ms) survive Claude Code tearing down the hook — a bare `&` + `disown` is not enough. (Fixed in v2.2.1; observed in v2.2.0 as: `complete.oga` played, `dialog-information.oga` was silent.)
 - Always exits `0` — a broken sound never delays Claude.
 
 ### Enabling sounds

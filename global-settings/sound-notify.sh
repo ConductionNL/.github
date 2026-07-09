@@ -42,25 +42,34 @@ esac
 
 [ -n "$file" ] && [ -r "$file" ] || exit 0
 
-# Background the player so the hook never blocks Claude's turn.
-play() {
-    if command -v paplay >/dev/null 2>&1; then
-        paplay -- "$1" >/dev/null 2>&1
-    elif command -v afplay >/dev/null 2>&1; then
-        afplay "$1" >/dev/null 2>&1
-    elif command -v aplay >/dev/null 2>&1; then
-        aplay -q -- "$1" >/dev/null 2>&1
-    elif command -v powershell.exe >/dev/null 2>&1; then
-        # WSL path — convert if wslpath is available, otherwise use as-is.
-        local win_path="$1"
-        if command -v wslpath >/dev/null 2>&1 && [ "${1#/}" != "$1" ]; then
-            win_path=$(wslpath -w "$1" 2>/dev/null || printf '%s' "$1")
-        fi
-        powershell.exe -NoProfile -Command "(New-Object Media.SoundPlayer '${win_path//\'/\'\'}').PlaySync()" >/dev/null 2>&1
+# Detach the player from the hook's process group so short sounds (<~500ms)
+# survive Claude Code tearing down the hook after we exit. Without setsid /
+# nohup, a bare `&` + `disown` still leaves the child in the same process
+# group; a group-wide SIGTERM/SIGHUP on hook cleanup then kills PulseAudio
+# playback mid-stream. Symptoms (v2.2.0): long sounds like complete.oga (~1s)
+# played fine, short sounds like dialog-information.oga (~200ms) were silent.
+detach_run() {
+    if command -v setsid >/dev/null 2>&1; then
+        setsid "$@" </dev/null >/dev/null 2>&1 &
+    else
+        nohup "$@" </dev/null >/dev/null 2>&1 &
     fi
+    disown 2>/dev/null || true
 }
 
-(play "$file") >/dev/null 2>&1 &
-disown 2>/dev/null || true
+if command -v paplay >/dev/null 2>&1; then
+    detach_run paplay -- "$file"
+elif command -v afplay >/dev/null 2>&1; then
+    detach_run afplay "$file"
+elif command -v aplay >/dev/null 2>&1; then
+    detach_run aplay -q -- "$file"
+elif command -v powershell.exe >/dev/null 2>&1; then
+    # WSL path — convert if wslpath is available, otherwise use as-is.
+    win_path="$file"
+    if command -v wslpath >/dev/null 2>&1 && [ "${file#/}" != "$file" ]; then
+        win_path=$(wslpath -w "$file" 2>/dev/null || printf '%s' "$file")
+    fi
+    detach_run powershell.exe -NoProfile -Command "(New-Object Media.SoundPlayer '${win_path//\'/\'\'}').PlaySync()"
+fi
 
 exit 0
