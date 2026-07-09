@@ -129,6 +129,7 @@ services:
       - ../zaakafhandelapp:/var/www/html/custom_apps/zaakafhandelapp
       - ../larpingapp:/var/www/html/custom_apps/larpingapp
       - ../scholiq:/var/www/html/custom_apps/scholiq
+      - ../hermiq:/var/www/html/custom_apps/hermiq
       # Custom apps directory from openregister (contains pre-installed apps)
       - ../openregister/custom_apps:/var/www/html/custom_apps
     environment:
