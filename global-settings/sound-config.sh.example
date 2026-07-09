@@ -21,8 +21,12 @@ SOUND_ENABLED=0
 # installed by default and these files won't exist. Install it once with:
 #   sudo apt install sound-theme-freedesktop
 # Then verify with: ls /usr/share/sounds/freedesktop/stereo/
-SOUND_QUESTION_FILE="/usr/share/sounds/freedesktop/stereo/dialog-information.oga"
-SOUND_PERMISSION_FILE="/usr/share/sounds/freedesktop/stereo/dialog-warning.oga"
+#
+# All three defaults are ≥20KB / ~1s of audio. The wrapper detaches the audio
+# player from the hook's process group, but leaving margin is cheap — any file
+# shorter than ~500ms may still be inaudible on some systems.
+SOUND_QUESTION_FILE="/usr/share/sounds/freedesktop/stereo/message-new-instant.oga"
+SOUND_PERMISSION_FILE="/usr/share/sounds/freedesktop/stereo/camera-shutter.oga"
 SOUND_STOP_FILE="/usr/share/sounds/freedesktop/stereo/complete.oga"
 
 # ── macOS ─────────────────────────────────────────────────────────────────────
