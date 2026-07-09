@@ -66,6 +66,13 @@ jobs:
         uses: https://github.com/actions/checkout@v4
         with:
           fetch-depth: 0
+          # Check out the BRANCH at its current tip (on-branch, not the detached
+          # triggering SHA). On an actively-pushed branch the run often starts
+          # after new commits have landed; a detached checkout at the old SHA
+          # makes semantic-release abort with "branch <x> is behind the remote"
+          # and silently skip the publish. Tracking the branch head keeps
+          # local == remote so the release proceeds.
+          ref: ${{ github.ref_name }}
 
       - name: Configure npm registry
         env:
