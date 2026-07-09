@@ -84,16 +84,21 @@ Since v2.2.0 the shared settings wire three Claude Code events to a `sound-notif
 ### Enabling sounds
 
 ```bash
+# On minimal Linux / WSL2 Ubuntu installs the freedesktop sound theme isn't
+# installed by default. Install it so the shipped defaults exist:
+sudo apt install sound-theme-freedesktop
+
 # Copy the example config into place — this is the opt-in step.
 cp "$REPO_ROOT/global-settings/sound-config.sh.example" ~/.claude/sound-config.sh
 
-# Then edit it and flip SOUND_ENABLED=1. Point the *_FILE variables at sound
-# files that exist on your system (the example ships Linux, macOS, and WSL
-# defaults commented in place).
+# Then edit it and flip SOUND_ENABLED=1. The Linux block is active by default;
+# macOS and WSL alternatives are commented in place if you need to switch.
 ${EDITOR:-nano} ~/.claude/sound-config.sh
 ```
 
 Restart Claude Code (or run `/hooks` to reload). Trigger any of the three events to verify.
+
+> **Note:** the `sound-theme-freedesktop` apt package is only needed if you keep the shipped Linux defaults (`/usr/share/sounds/freedesktop/stereo/*.oga`). If you point the `SOUND_*_FILE` variables at your own files (e.g. under `/mnt/c/Windows/Media/*.wav` on WSL, or `/System/Library/Sounds/*.aiff` on macOS) you can skip the apt install.
 
 ### Why is the config file not `chattr +i`-locked?
 

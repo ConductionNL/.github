@@ -298,11 +298,15 @@ Three hook entries in `settings.json` invoke the same wrapper with different arg
 ### Enabling sounds
 
 ```bash
+# On minimal Linux / WSL2 Ubuntu installs the freedesktop sound theme isn't
+# installed by default. Install it so the shipped defaults exist:
+sudo apt install sound-theme-freedesktop
+
 cp global-settings/sound-config.sh.example ~/.claude/sound-config.sh
 ${EDITOR:-nano} ~/.claude/sound-config.sh   # flip SOUND_ENABLED=1
 ```
 
-The example ships Linux, macOS, and WSL defaults with the non-active options commented out.
+The example ships **Linux paths as the default** (freedesktop sound theme) — most likely to work for the standard Conduction WSL2 Ubuntu setup once the theme package is installed. macOS and WSL-Windows alternatives are commented in place if you need to switch. The `sound-theme-freedesktop` apt install is only needed if you keep the shipped Linux paths; point the `SOUND_*_FILE` variables at your own files and you can skip it.
 
 ### Disabling sounds
 
