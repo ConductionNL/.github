@@ -12,7 +12,9 @@ The canonical files live under **[`global-settings/`](../../global-settings/)**.
 | ---------------------------------------------------------------------------------------------- | ------------------------------------------- |
 | [`global-settings/settings.json`](../../global-settings/settings.json)                         | `~/.claude/settings.json`                   |
 | [`global-settings/block-write-commands.sh`](../../global-settings/block-write-commands.sh)     | `~/.claude/hooks/block-write-commands.sh`   |
+| [`global-settings/block-config-tool-writes.sh`](../../global-settings/block-config-tool-writes.sh) | `~/.claude/hooks/block-config-tool-writes.sh` |
 | [`global-settings/check-settings-version.sh`](../../global-settings/check-settings-version.sh) | `~/.claude/hooks/check-settings-version.sh` |
+| [`global-settings/sound-notify.sh`](../../global-settings/sound-notify.sh)                     | `~/.claude/hooks/sound-notify.sh` (optional sound wrapper — silent by default; see [Optional: notification sounds](#optional-notification-sounds-opt-in)) |
 
 ## Install / update
 
@@ -113,15 +115,18 @@ You can configure:
 
 ## File locations
 
-| Path                                        | Role                                                                                       |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `~/.claude/settings.json`                   | User permissions allowlist, `PreToolUse` + `UserPromptSubmit` hooks, optional `mcpServers` |
-| `~/.claude/hooks/block-write-commands.sh`   | Hook script invoked for every **Bash** tool use before it runs                             |
-| `~/.claude/hooks/check-settings-version.sh` | Hook script that shows the status panel and warns on version mismatch                      |
-| `~/.claude/settings-version`                | Installed version (semver, matches repo `VERSION`)                                         |
-| `~/.claude/settings-repo-url`               | Codeberg repo slug for online version checking (e.g. `Conduction/.github`)                 |
-| `~/.claude/settings-repo-path`              | Absolute path to the root of the canonical repo (fallback for git-based check)             |
-| `~/.claude/settings-repo-ref`               | Branch/tag/SHA to track for version checks (defaults to `main`)                            |
+| Path                                            | Role                                                                                                            |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `~/.claude/settings.json`                       | User permissions allowlist, hooks (`PreToolUse`, `UserPromptSubmit`, `Notification`, `Stop`), optional `mcpServers` |
+| `~/.claude/hooks/block-write-commands.sh`       | Hook script invoked for every **Bash** tool use before it runs                                                  |
+| `~/.claude/hooks/block-config-tool-writes.sh`   | Hook script invoked for every **Write/Edit/MultiEdit** tool use before it runs                                  |
+| `~/.claude/hooks/check-settings-version.sh`     | Hook script that shows the status panel and warns on version mismatch                                           |
+| `~/.claude/hooks/sound-notify.sh`               | Optional sound-notification wrapper. Reads `~/.claude/sound-config.sh` and plays a sound on question / permission / stop events (v2.2.0+) |
+| `~/.claude/sound-config.sh`                     | **User-editable, not `chattr`-locked.** Absent by default (opt-in). Toggles sounds and points at sound files    |
+| `~/.claude/settings-version`                    | Installed version (semver, matches repo `VERSION`)                                                              |
+| `~/.claude/settings-repo-url`                   | Codeberg repo slug for online version checking (e.g. `Conduction/.github`)                                      |
+| `~/.claude/settings-repo-path`                  | Absolute path to the root of the canonical repo (fallback for git-based check)                                  |
+| `~/.claude/settings-repo-ref`                   | Branch/tag/SHA to track for version checks (defaults to `main`)                                                 |
 
 ## Shape of `~/.claude/settings.json`
 
@@ -179,7 +184,42 @@ Do **not** put broad `Bash(*)` allow rules here.
 ]
 ```
 
-### 5. `mcpServers` (optional)
+### 5. `hooks.PreToolUse` — `AskUserQuestion` matcher (sound wrapper)
+
+```json
+{
+  "matcher": "AskUserQuestion",
+  "hooks": [{ "type": "command", "command": "bash ~/.claude/hooks/sound-notify.sh question" }]
+}
+```
+
+Fires when Claude uses the `AskUserQuestion` tool. Wrapper is silent unless the user has opted in — see [Optional: notification sounds](#optional-notification-sounds-opt-in).
+
+### 6. `hooks.Notification`
+
+```json
+"Notification": [
+  {
+    "hooks": [{ "type": "command", "command": "bash ~/.claude/hooks/sound-notify.sh permission" }]
+  }
+]
+```
+
+Fires when Claude shows an allow/deny permission prompt.
+
+### 7. `hooks.Stop`
+
+```json
+"Stop": [
+  {
+    "hooks": [{ "type": "command", "command": "bash ~/.claude/hooks/sound-notify.sh stop" }]
+  }
+]
+```
+
+Fires when Claude finishes its turn.
+
+### 8. `mcpServers` (optional)
 
 7 Playwright browser instances (`browser-1` through `browser-7`). `browser-6` runs headed (no `--headless`). Adjust the count to match your actual usage.
 
@@ -230,6 +270,52 @@ Authorized git push phrases (case-insensitive): `push for me`, `commit and push`
 - Compares all versions using semver and prints a colored status panel to stderr (visible in the terminal/CLI).
 - Always injects a session-start message into Claude's context via stdout — "up to date", "update required", or "configuration error" — which Claude relays at the top of its first response.
 - Never silently skips: configuration issues (missing config files, unreachable remote, `curl` not installed) are shown in the panel and forwarded to Claude.
+
+## Optional: notification sounds (opt-in)
+
+Since v2.2.0 the shared settings ship a lightweight wrapper (`sound-notify.sh`) that can play a sound on three events. **It is silent by default** — no sound plays until the user opts in by creating `~/.claude/sound-config.sh`.
+
+### How it is wired
+
+Three hook entries in `settings.json` invoke the same wrapper with different arguments:
+
+| Event                                | Wrapper argument | Fires when                                          |
+| ------------------------------------ | ---------------- | --------------------------------------------------- |
+| `PreToolUse` matcher `AskUserQuestion` | `question`     | Claude asks you a multiple-choice question          |
+| `Notification`                       | `permission`     | Claude shows an allow/deny permission prompt        |
+| `Stop`                               | `stop`           | Claude finishes its turn                            |
+
+### What the wrapper does
+
+- Exits `0` immediately if the event arg is not one of `question` / `permission` / `stop`.
+- Exits `0` immediately if `~/.claude/sound-config.sh` does not exist.
+- Sources the config file into whitelisted variables only — `SOUND_ENABLED`, `SOUND_QUESTION_FILE`, `SOUND_PERMISSION_FILE`, `SOUND_STOP_FILE`. It does **not** eval command strings.
+- If `SOUND_ENABLED != 1`, exits `0`.
+- Detects an available player in order: `paplay` → `afplay` → `aplay` → `powershell.exe` (WSL).
+- Plays the sound in the background so the hook never blocks Claude's turn.
+- Always exits `0` — a broken sound never delays Claude.
+
+### Enabling sounds
+
+```bash
+cp global-settings/sound-config.sh.example ~/.claude/sound-config.sh
+${EDITOR:-nano} ~/.claude/sound-config.sh   # flip SOUND_ENABLED=1
+```
+
+The example ships Linux, macOS, and WSL defaults with the non-active options commented out.
+
+### Disabling sounds
+
+```bash
+# Flip the toggle:
+sed -i 's/^SOUND_ENABLED=1/SOUND_ENABLED=0/' ~/.claude/sound-config.sh
+# Or fully remove:
+rm ~/.claude/sound-config.sh
+```
+
+### Why is `sound-config.sh` not `chattr +i`-locked?
+
+Unlike `settings.json` and the hook scripts, `sound-config.sh` is a **user preference file** — it never affects what commands Claude can run. The wrapper only reads file paths and invokes a player it detects at runtime, so tampering with the file cannot produce shell injection. Locking it would force a `sudo chattr -i / +i` dance for every sound change, defeating the purpose. The wrapper `sound-notify.sh` itself *is* locked with the other hooks.
 
 ## Relationship to this repo's `.claude/settings.json`
 

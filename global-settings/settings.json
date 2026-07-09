@@ -195,6 +195,15 @@
             "command": "bash ~/.claude/hooks/block-config-tool-writes.sh"
           }
         ]
+      },
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/sound-notify.sh question"
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
@@ -203,6 +212,26 @@
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/check-settings-version.sh"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/sound-notify.sh permission"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/sound-notify.sh stop"
           }
         ]
       }
