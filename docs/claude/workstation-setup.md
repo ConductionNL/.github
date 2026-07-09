@@ -147,16 +147,9 @@ After installing the Claude Code extension, authenticate:
 
 Before using Claude in this workspace, set up user-level permissions and a safety hook that restricts which shell commands Claude can run automatically.
 
-See **[global-claude-settings.md](./global-claude-settings.md)** for the full guide, including copy-ready example files and a new-machine checklist.
+The canonical install block lives in **[`global-settings/README.md`](../../global-settings/README.md#install)** — copy it from there in one go. It installs `settings.json`, all four hook scripts (`block-write-commands.sh`, `block-config-tool-writes.sh`, `check-settings-version.sh`, `sound-notify.sh`), the `VERSION` tracker, and applies the `chattr +i` kernel-level lock.
 
-Quick install:
-
-```bash
-mkdir -p ~/.claude/hooks
-cp global-settings/settings.json ~/.claude/settings.json
-cp global-settings/block-write-commands.sh ~/.claude/hooks/block-write-commands.sh
-chmod +x ~/.claude/hooks/block-write-commands.sh
-```
+For the full reference (permissions table, hook behavior, troubleshooting, opt-in notification sounds), see **[global-claude-settings.md](./global-claude-settings.md)**.
 
 ---
 
