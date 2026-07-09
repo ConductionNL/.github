@@ -52,6 +52,23 @@ You don't run Hydra yourself — you trigger it with labels.
 3. **Crashes escalate to `needs-input`** rather than auto-retrying. If a Hydra container fails, or either reviewer emits a fail verdict, you'll see a `needs-input` label so a human can investigate. There is no retry loop ([ADR-013](https://codeberg.org/Conduction/hydra/blob/main/openspec/architecture/adr-013-container-pool.md)) — recovery is explicit via the `retry:queued` (fix the flagged findings) or `rebuild:queued` (start over) labels.
 4. **The `yolo` label means auto-merge after the pipeline passes.** All phases still run; `yolo` only removes the human approval gate at the end.
 
+## Hydra repo vs .github repo
+
+> **Hydra is the factory. `.github` is the manual.**
+
+Two separate repos, two distinct purposes, no overlap:
+
+| | **[`Conduction/hydra`](https://codeberg.org/Conduction/hydra)** *(private)* | **[`Conduction/.github`](https://codeberg.org/Conduction/.github)** *(public)* |
+|---|---|---|
+| **What it contains** | Container images, agent personas, orchestration scripts, the `.claude/skills/` catalogue (`hydra-gate-*`, `opsx-*`, `test-*`), OpenSpec changes, K8s manifests | Developer guides (`docs/claude/`), Way-of-Work and onboarding (`docs/WayOfWork/`), the public Hydra one-pager (`docs/hydra/`), ISO compliance (`docs/iso/`), global Claude settings (`global-settings/`), the usage-tracker tool |
+| **What it's for** | *Running* the pipeline — everything that executes | *Reading and configuring* — everything you study, install once per machine, or hand to a new colleague |
+| **Clone it when** | You want to run Hydra locally, modify a skill, inspect agent configs, or browse the OpenSpec change backlog | You want to read the docs offline, install the mandatory global Claude settings, or contribute to the developer handbook |
+| **Self-description** | "Factory, not the product" — from [`hydra/README.md`](https://codeberg.org/Conduction/hydra/src/branch/main/README.md) and [`hydra/CLAUDE.md`](https://codeberg.org/Conduction/hydra/src/branch/main/CLAUDE.md) | "Central hub for org-level defaults, developer guides, global tooling configuration, and shared documentation" — from [`.github/README.md`](https://codeberg.org/Conduction/.github/src/branch/main/README.md) |
+
+Each repo has its own `docs/` directory, and that's not a duplication: **Hydra's `docs/`** covers pipeline internals (container architecture, secrets, cron, retrospectives) — only relevant if you operate the pipeline. **`.github/docs/`** is for everyone using the pipeline as a consumer.
+
+Most developers only need `.github`. You only need the Hydra clone when you're working *on* the pipeline (skills, agents, container images) rather than *with* it (triggering it on your PR via labels).
+
 ## Where to learn more
 
 For a narrative introduction, the Academy's **[Hydra tutorial series](https://conduction.nl/academy/?series=hydra-tutorial)** walks through what Hydra is, the three pipelines, the quality gates, the skill catalogue, and how to start a real run — six short modules. Read it first if you're new to Hydra; come back here for the reference detail.

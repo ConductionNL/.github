@@ -63,7 +63,10 @@ jobs:
           VERSION="$1"
           echo "prepare: building ${APP_NAME} ${VERSION}"
           if [ -f package.json ]; then npm ci || npm install; npm run build; fi
-          if [ -f composer.json ]; then composer install --no-dev --optimize-autoloader --classmap-authoritative --ignore-platform-reqs; fi
+          # composer dist downloads intermittently 400 from codeload.github.com (per-package
+          # GitHub throttling of the shared runner IP). COMPOSER_AUTH (step env) + serial
+          # downloads + retry make the install reliable instead of failing a good build.
+          if [ -f composer.json ]; then n=0; until COMPOSER_MAX_PARALLEL_HTTP=1 composer install --no-dev --optimize-autoloader --classmap-authoritative --ignore-platform-reqs; do n=$((n+1)); [ $n -ge 5 ] && { echo "composer install failed after 5 attempts"; exit 1; }; echo "transient composer download failure, retry $n/5"; sleep 15; done; fi
           mkdir -p "package/${APP_NAME}"
           rsync -a \
             --exclude='/package' --exclude='/.git' --exclude='/.github' --exclude='/.forgejo' \
@@ -83,6 +86,11 @@ jobs:
             --exclude='/openapi.json' --exclude='/CHANGELOG.md' --exclude='/CONTRIBUTING.md' \
             ${EXTRA_EXCLUDES:-} \
             ./ "package/${APP_NAME}/"
+          # The App Store blacklists ANY .git directory in the archive. composer installs
+          # source/dev-branch deps (e.g. ddn/sapp pinned to a dev- branch) via git clone,
+          # leaving a nested vendor/**/.git that the root-anchored rsync excludes miss.
+          # Strip every nested .git (dir or gitlink file) before packaging.
+          find "package/${APP_NAME}" -name '.git' -exec rm -rf {} + 2>/dev/null || true
           sed -i "s|<version>.*</version>|<version>${VERSION}</version>|" "package/${APP_NAME}/appinfo/info.xml"
           printf '%s' "${NEXTCLOUD_SIGNING_KEY}" > signing-key.key
           printf '%s' "${NEXTCLOUD_SIGNING_CERT}" > signing-cert.crt
@@ -178,6 +186,7 @@ jobs:
           NEXTCLOUD_SIGNING_KEY: ${{ secrets.NEXTCLOUD_SIGNING_KEY }}
           NEXTCLOUD_SIGNING_CERT: ${{ secrets.NEXTCLOUD_SIGNING_CERT }}
           NEXTCLOUD_APPSTORE_TOKEN: ${{ secrets.NEXTCLOUD_APPSTORE_TOKEN }}
+          COMPOSER_AUTH: '{"github-oauth":{"github.com":"${{ secrets.GH_COMPOSER_TOKEN }}"}}'
           GIT_CREDENTIALS: "https://x-access-token:${{ secrets.CODEBERG_TOKEN }}@codeberg.org"
         run: |
           git config --global --add safe.directory "$(pwd)"

@@ -2,6 +2,8 @@
 
 Welcome to Conduction's organization repository. This is the central hub for our org-level defaults, developer and Claude Code guides, global tooling configuration, and shared documentation.
 
+> **Companion repo:** This `.github` repo holds the *documentation and shared tooling* — what you read and configure. The sister repo [`Conduction/hydra`](https://codeberg.org/Conduction/hydra) (private) holds the *agentic CI/CD pipeline* — what runs the builds, reviews, and skills. **Hydra is the factory, `.github` is the manual.** See [`docs/hydra/README.md`](./docs/hydra/README.md#hydra-repo-vs-github-repo) for the full split.
+
 ## What's in this repository
 
 | Path                                                               | Purpose                                                                                                                                                        |

@@ -58,12 +58,12 @@ All entries below are skills (the only mechanism we use — Anthropic merged cus
 
 | Command                 | Agents | Description                                                         |
 | ----------------------- | ------ | ------------------------------------------------------------------- |
-| `/test-counsel`         | 8      | Persona-based testing — all 8 personas in parallel                  |
+| `/test-counsel`         | 9      | Persona-based testing — all 9 personas in parallel (incl. Jasper — screen-reader-primary) |
 | `/test-app`             | 1 / 6  | Perspective-based sweep (functional, UX, a11y, perf, security, API) |
-| `/feature-counsel`      | 8      | Pre-build spec analysis from 8 persona perspectives                 |
+| `/feature-counsel`      | 9      | Pre-build spec analysis from 9 persona perspectives                 |
 | `/test-functional`      | 1      | Feature correctness via GIVEN/WHEN/THEN                             |
 | `/test-api`             | 1      | REST API endpoint testing                                           |
-| `/test-accessibility`   | 1      | WCAG 2.1 AA compliance                                              |
+| `/test-accessibility`   | 1      | WCAG 2.2 AA compliance (axe-core 4.10+ ruleset)                     |
 | `/test-performance`     | 1      | Load times and API response                                         |
 | `/test-security`        | 1      | OWASP Top 10, roles, authorization                                  |
 | `/test-regression`      | 1      | Cross-feature regression                                            |
@@ -467,7 +467,7 @@ Competitive analysis and ecosystem gap-finding workflow. For the complete refere
   [Human review & edit specs]
        │
        ▼
-/feature-counsel        (optional: 8-persona feedback on specs)
+/feature-counsel        (optional: 9-persona feedback on specs)
        │
        ▼
 /opsx-plan-to-issues    (optional: tasks → JSON + tracking issues — Codeberg/GitHub/GitLab)
@@ -480,7 +480,7 @@ Competitive analysis and ecosystem gap-finding workflow. For the complete refere
        │
        ▼
 /test-functional   (confirm feature behaves as specced)
-/test-counsel           (user acceptance — all 8 personas)
+/test-counsel           (user acceptance — all 9 personas)
 /test-app               (optional: full technical sweep)
        │
        ▼

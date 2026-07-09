@@ -80,6 +80,10 @@ Available docker-compose profiles, reset instructions, and environment setup.
 
 How to set up a new machine — Windows + WSL2 + Docker Desktop + VS Code installation, required/recommended extensions, Claude Code authentication, and WSL prerequisites (Node.js, PHP, Composer, git-host CLIs — `tea` for Codeberg/Gitea/Forgejo (primary), `gh` for GitHub (fallback), `glab` for GitLab — Playwright, OpenSpec CLI).
 
+### [Quick Setup — for people who already know the system](./quick-setup.md)
+
+Condensed cheat-sheet for re-imaging a known-good workstation: prerequisites, repos to clone, commands in order, validation step. Not for first-timers — for them, the [Workstation Tutorial series](https://conduction.nl/academy/?series=workstation-tutorial) (with screenshots) plus [Workstation Setup](./workstation-setup.md) (full reference) is the path.
+
 ### [Codeberg Authentication Setup](./codeberg-auth-setup.md)
 
 End-to-end auth for Codeberg (the Conduction primary git host) from WSL: SSH key generation + Codeberg upload, `~/.ssh/config`, `keychain` for passphrase persistence, `tea` CLI install + token scopes, VS Code Gitea extension, switching existing repo remotes, and how Claude Code inherits the auth without re-prompting. Read this when setting up a new workstation or onboarding a new dev — the [Workstation Setup](./workstation-setup.md) doc points at this for the Codeberg-specific steps.
@@ -277,7 +281,7 @@ proposal.md ──► specs/*.md ──► design.md ──► tasks.md ──�
 ```
 /opsx-new add-document-preview            # Start the change
 /opsx-ff                                   # Generate all artifacts
-/feature-counsel                           # Get 8-persona feedback
+/feature-counsel                           # Get 9-persona feedback
 # Human reviews and refines specs
 /opsx-plan-to-issues                       # Create trackable issues
 ```
@@ -333,7 +337,7 @@ Verify that the implementation matches the specs, passes quality standards, and 
 
 For the full list of testing commands, browser pool rules, and recommended workflows, see [testing.md](./testing.md) and [commands.md](./commands.md).
 
-Key commands: `/opsx-verify` (spec verification), `/test-counsel` (8-persona test sweep), `/test-app` (automated browser testing), `/test-functional`, `/test-api`, `/test-accessibility`, `/test-performance`, `/test-security`, `/test-regression`, and `/test-persona-*` (per-persona testing).
+Key commands: `/opsx-verify` (spec verification), `/test-counsel` (9-persona test sweep), `/test-app` (automated browser testing), `/test-functional`, `/test-api`, `/test-accessibility`, `/test-performance`, `/test-security`, `/test-regression`, and `/test-persona-*` (per-persona testing — incl. `/test-persona-jasper`, screen-reader-primary).
 
 #### CI/CD
 
@@ -356,7 +360,7 @@ All apps have `code-quality.yml` workflows that block PRs on (GitHub Actions tod
 ```
 composer phpcs && composer phpmd           # Code quality gates
 /opsx-verify                               # Verify against specs
-/test-counsel                              # 8-persona test sweep
+/test-counsel                              # 9-persona test sweep
 /test-api                                  # API compliance check
 /opsx-archive                              # Archive when everything passes
 ```
@@ -520,7 +524,7 @@ Each Conduction project (Nextcloud apps, WordPress sites, etc.) has its own `.cl
 
 Each project defines its own user personas in `personas/`. Personas drive multi-perspective analysis via `/feature-counsel` and testing via `/test-counsel`.
 
-The Nextcloud workspace uses 8 Dutch government personas (retired citizens, low-literate migrants, digital natives, CISOs, standards architects, MKB vendors, ZZP developers, small business owners). Other workspaces define personas relevant to their domain — e.g., a webshop workspace would carry shopper, returning-customer, and shop-owner personas instead.
+The Nextcloud workspace uses 9 Dutch government personas (retired citizens, low-literate migrants, digital natives, CISOs, standards architects, MKB vendors, ZZP developers, small business owners, blind senior developers — Jasper, the first AT-primary persona). Other workspaces define personas relevant to their domain — e.g., a webshop workspace would carry shopper, returning-customer, and shop-owner personas instead.
 
 For the full persona table with testing command mapping, see **[testing.md](./testing.md#commands-single-agent)**.
 

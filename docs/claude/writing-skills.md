@@ -131,9 +131,9 @@ The skill contains domain-specific knowledge that makes it uniquely effective fo
 **In this repository**, L4 personalization includes:
 
 - Dutch government standards (GEMMA, ZGW, BIO2, Common Ground)
-- NL Design System CSS variables and WCAG AA compliance
+- NL Design System CSS variables and **WCAG 2.2 AA** compliance (legal floor is WCAG 2.1 AA via EN 301 549 v3.2.1 today; v4.1.1 → 2.2 AA expected Oct 2026). Mechanical enforcement lives in Hydra's `hydra-gate-*` skills; see [`openspec/architecture/wcag-coverage.md`](https://codeberg.org/Conduction/hydra/src/branch/main/openspec/architecture/wcag-coverage.md) in hydra for the per-SC coverage matrix. The `hydra-gate-*` skill pattern (frontmatter, `## Hard rule` section, `## Check` bash block, `## Fix action` numbered list, `examples/pass.log` + `examples/fail.log` artefacts) is the template for new mechanical gates.
 - Conduction app patterns (openregister, opencatalogi, etc.)
-- 8 Dutch citizen/professional personas for testing
+- 9 Dutch citizen/professional personas for testing (incl. Jasper — screen-reader-primary, the first AT-primary persona)
 - OpenSpec workflow integration (specs, ADRs, changes)
 
 ---
