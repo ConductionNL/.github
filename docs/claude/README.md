@@ -491,7 +491,10 @@ This repo contains **documentation**, **global settings**, and **project templat
 ├── global-settings/                  # Mandatory user-level settings for ~/.claude/
 │   ├── settings.json                     # → ~/.claude/settings.json (global read-only policy)
 │   ├── block-write-commands.sh           # → ~/.claude/hooks/block-write-commands.sh
+│   ├── block-config-tool-writes.sh       # → ~/.claude/hooks/block-config-tool-writes.sh
 │   ├── check-settings-version.sh         # → ~/.claude/hooks/check-settings-version.sh
+│   ├── sound-notify.sh                   # → ~/.claude/hooks/sound-notify.sh (optional sound wrapper; silent by default)
+│   ├── sound-config.sh.example           # → ~/.claude/sound-config.sh (opt-in, user-editable)
 │   └── VERSION                           # Version tracking for update checks
 │
 └── usage-tracker/                    # Claude token usage monitoring tool

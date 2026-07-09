@@ -1,0 +1,44 @@
+# ~/.claude/sound-config.sh — optional notification sounds for Claude Code
+#
+# Copy this file to enable sounds:
+#   cp global-settings/sound-config.sh.example ~/.claude/sound-config.sh
+#
+# Then set SOUND_ENABLED=1 and point the *_FILE variables at sound files that
+# exist on your system. This file is user-editable — it is NOT chattr-locked
+# with the rest of the global settings, so you can iterate freely.
+#
+# The sound-notify.sh wrapper reads only the four variables below. It does NOT
+# execute arbitrary commands from this file — the wrapper detects an available
+# player (paplay / afplay / aplay / powershell.exe) at runtime and plays the
+# file itself. That keeps this file safe even if something tampers with it.
+
+# Master toggle. Set to 1 to enable sounds; 0 (default) keeps them silent.
+SOUND_ENABLED=0
+
+# ── Linux (PulseAudio / PipeWire — most desktops) ─────────────────────────────
+SOUND_QUESTION_FILE="/usr/share/sounds/freedesktop/stereo/dialog-information.oga"
+SOUND_PERMISSION_FILE="/usr/share/sounds/freedesktop/stereo/dialog-warning.oga"
+SOUND_STOP_FILE="/usr/share/sounds/freedesktop/stereo/complete.oga"
+
+# ── macOS ─────────────────────────────────────────────────────────────────────
+# SOUND_QUESTION_FILE="/System/Library/Sounds/Ping.aiff"
+# SOUND_PERMISSION_FILE="/System/Library/Sounds/Glass.aiff"
+# SOUND_STOP_FILE="/System/Library/Sounds/Hero.aiff"
+
+# ── WSL (Windows sound files, played via powershell.exe) ──────────────────────
+# Use Linux-style paths under /mnt/c/... — sound-notify.sh converts to Windows
+# paths via wslpath. Only .wav files work with Media.SoundPlayer.
+# SOUND_QUESTION_FILE="/mnt/c/Windows/Media/QuestionMarkLoud.wav"
+# SOUND_PERMISSION_FILE="/mnt/c/Windows/Media/Windows Notify.wav"
+# SOUND_STOP_FILE="/mnt/c/Windows/Media/CommandSuccesLoud.wav"
+
+# ── Custom files ──────────────────────────────────────────────────────────────
+# SOUND_QUESTION_FILE="$HOME/sounds/question.wav"
+# SOUND_PERMISSION_FILE="$HOME/sounds/permission.wav"
+# SOUND_STOP_FILE="$HOME/sounds/done.wav"
+
+# Leave a variable blank ("") to skip that event while leaving the others
+# active. e.g. only-on-stop:
+#   SOUND_QUESTION_FILE=""
+#   SOUND_PERMISSION_FILE=""
+#   SOUND_STOP_FILE="/usr/share/sounds/freedesktop/stereo/complete.oga"

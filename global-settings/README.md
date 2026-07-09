@@ -12,9 +12,11 @@ Current version: see [`VERSION`](VERSION)
 | `block-write-commands.sh`     | `~/.claude/hooks/block-write-commands.sh`     | Guards Bash write operations, prompts for approval                                                                          |
 | `block-config-tool-writes.sh` | `~/.claude/hooks/block-config-tool-writes.sh` | Guards Write/Edit/MultiEdit calls — denies tools that write to `~/.claude/` or produce scripts that would (added in v1.7.0) |
 | `check-settings-version.sh`   | `~/.claude/hooks/check-settings-version.sh`   | Warns at session start if settings are outdated                                                                             |
+| `sound-notify.sh`             | `~/.claude/hooks/sound-notify.sh`             | Optional notification-sound wrapper. Reads `~/.claude/sound-config.sh` and plays a sound on question / permission / stop events. Silent by default (added in v2.2.0)         |
 | `VERSION`                     | `~/.claude/settings-version`                  | Installed version tracker (semver)                                                                                          |
 | `settings-repo-url.example`   | `~/.claude/settings-repo-url`                 | Codeberg repo slug for online version checking                                                                              |
 | `settings-repo-ref.example`   | `~/.claude/settings-repo-ref`                 | Branch to track (defaults to `main` when absent; the Codeberg raw URL uses `/raw/branch/<ref>/`)                            |
+| `sound-config.sh.example`     | `~/.claude/sound-config.sh` (optional)        | Opt-in sound configuration. Only install if you want notification sounds. User-editable — **not** `chattr +i`-locked        |
 
 ## Install
 
@@ -29,6 +31,7 @@ cp "$REPO_ROOT/global-settings/settings.json" ~/.claude/settings.json
 cp "$REPO_ROOT/global-settings/block-write-commands.sh" ~/.claude/hooks/block-write-commands.sh
 cp "$REPO_ROOT/global-settings/block-config-tool-writes.sh" ~/.claude/hooks/block-config-tool-writes.sh
 cp "$REPO_ROOT/global-settings/check-settings-version.sh" ~/.claude/hooks/check-settings-version.sh
+cp "$REPO_ROOT/global-settings/sound-notify.sh" ~/.claude/hooks/sound-notify.sh
 chmod +x ~/.claude/hooks/*.sh
 
 cp "$REPO_ROOT/global-settings/VERSION" ~/.claude/settings-version
@@ -65,6 +68,53 @@ The status panel at session start shows which method was used:
   Local repo : (not configured)
   Online     : v2.0.0  (via Codeberg)
 ```
+
+## Optional: notification sounds (opt-in)
+
+Since v2.2.0 the shared settings wire three Claude Code events to a `sound-notify.sh` wrapper:
+
+| Event                          | Wrapper argument | Fires when                                          |
+| ------------------------------ | ---------------- | --------------------------------------------------- |
+| `PreToolUse` / `AskUserQuestion` | `question`     | Claude asks you a multiple-choice question          |
+| `Notification`                 | `permission`     | Claude shows an allow/deny permission prompt        |
+| `Stop`                         | `stop`           | Claude finishes its turn                            |
+
+**Sounds are silent by default.** The wrapper only plays anything when a `~/.claude/sound-config.sh` file exists AND sets `SOUND_ENABLED=1` AND points at a readable sound file. Fresh installs make no noise unless the user explicitly turns them on.
+
+### Enabling sounds
+
+```bash
+# Copy the example config into place — this is the opt-in step.
+cp "$REPO_ROOT/global-settings/sound-config.sh.example" ~/.claude/sound-config.sh
+
+# Then edit it and flip SOUND_ENABLED=1. Point the *_FILE variables at sound
+# files that exist on your system (the example ships Linux, macOS, and WSL
+# defaults commented in place).
+${EDITOR:-nano} ~/.claude/sound-config.sh
+```
+
+Restart Claude Code (or run `/hooks` to reload). Trigger any of the three events to verify.
+
+### Why is the config file not `chattr +i`-locked?
+
+- `~/.claude/sound-config.sh` is a **user preference file**, not a security-critical config. It never affects what commands Claude can run; the wrapper only reads file paths from it and invokes an audio player it detects at runtime (`paplay` / `afplay` / `aplay` / `powershell.exe`). Tampering with the file cannot produce shell injection.
+- Locking it would defeat the point — every sound change would need the `sudo chattr -i / -i` dance.
+- The `sound-notify.sh` wrapper itself **is** installed to `~/.claude/hooks/` and `chattr +i`-locked with the other hooks. Users configure via `sound-config.sh`; they do not modify the wrapper.
+
+### Disabling sounds
+
+Two ways:
+
+```bash
+# Method 1 — flip the toggle in the config file:
+sed -i 's/^SOUND_ENABLED=1/SOUND_ENABLED=0/' ~/.claude/sound-config.sh
+
+# Method 2 — delete the config file entirely. The wrapper exits 0 silently
+# when the file is absent, so this fully disables the feature:
+rm ~/.claude/sound-config.sh
+```
+
+The wrapper never blocks Claude regardless of state — a broken sound never delays a turn.
 
 ## Updating
 
