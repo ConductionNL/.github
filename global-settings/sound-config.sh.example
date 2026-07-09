@@ -15,7 +15,12 @@
 # Master toggle. Set to 1 to enable sounds; 0 (default) keeps them silent.
 SOUND_ENABLED=0
 
-# ── Linux (PulseAudio / PipeWire — most desktops) ─────────────────────────────
+# ── Linux / WSL (PulseAudio / PipeWire — most desktops) ──────────────────────
+# The paths below come from the freedesktop sound theme. On minimal installs
+# (Ubuntu Server, WSL2 Ubuntu, some container images) the theme package isn't
+# installed by default and these files won't exist. Install it once with:
+#   sudo apt install sound-theme-freedesktop
+# Then verify with: ls /usr/share/sounds/freedesktop/stereo/
 SOUND_QUESTION_FILE="/usr/share/sounds/freedesktop/stereo/dialog-information.oga"
 SOUND_PERMISSION_FILE="/usr/share/sounds/freedesktop/stereo/dialog-warning.oga"
 SOUND_STOP_FILE="/usr/share/sounds/freedesktop/stereo/complete.oga"

@@ -298,11 +298,15 @@ Three hook entries in `settings.json` invoke the same wrapper with different arg
 ### Enabling sounds
 
 ```bash
+# On minimal Linux / WSL2 Ubuntu installs the freedesktop sound theme isn't
+# installed by default. Install it so the shipped defaults exist:
+sudo apt install sound-theme-freedesktop
+
 cp global-settings/sound-config.sh.example ~/.claude/sound-config.sh
 ${EDITOR:-nano} ~/.claude/sound-config.sh   # flip SOUND_ENABLED=1
 ```
 
-The example ships Linux, macOS, and WSL defaults with the non-active options commented out.
+The example ships **Linux paths as the default** (freedesktop sound theme) — most likely to work for the standard Conduction WSL2 Ubuntu setup once the theme package is installed. macOS and WSL-Windows alternatives are commented in place if you need to switch. The `sound-theme-freedesktop` apt install is only needed if you keep the shipped Linux paths; point the `SOUND_*_FILE` variables at your own files and you can skip it.
 
 ### Disabling sounds
 
@@ -313,9 +317,23 @@ sed -i 's/^SOUND_ENABLED=1/SOUND_ENABLED=0/' ~/.claude/sound-config.sh
 rm ~/.claude/sound-config.sh
 ```
 
-### Why is `sound-config.sh` not `chattr +i`-locked?
+### What's blocked from Claude, what isn't
 
-Unlike `settings.json` and the hook scripts, `sound-config.sh` is a **user preference file** — it never affects what commands Claude can run. The wrapper only reads file paths and invokes a player it detects at runtime, so tampering with the file cannot produce shell injection. Locking it would force a `sudo chattr -i / +i` dance for every sound change, defeating the purpose. The wrapper `sound-notify.sh` itself *is* locked with the other hooks.
+| File                              | Deny-list rule                  | Content hook            | `chattr +i`             |
+| --------------------------------- | ------------------------------- | ----------------------- | ----------------------- |
+| `~/.claude/hooks/sound-notify.sh` | ✅ `Edit/Write(~/.claude/hooks/*)` | ✅ matches `hooks/?` regex | ✅ applied on install     |
+| `~/.claude/sound-config.sh`       | ❌ (intentional — user preference) | ❌ (not in protected list) | ❌ (not applied)         |
+
+The wrapper is protected the same way every other hook script is — Claude cannot Edit or Write it, cannot use a Bash `cat > ...` trick to overwrite it, and the kernel refuses even root writes while the immutable bit is set.
+
+The config file is intentionally **not** protected because:
+
+- It's a **user preference file**, not security policy. It never affects what commands Claude can run.
+- The wrapper reads only whitelisted file-path variables from it — it never `eval`s command strings, so tampering with the file cannot produce shell injection.
+- Locking it would force a `sudo chattr -i / +i` dance for every sound tweak, defeating the point of a user-configurable feature.
+- The [`update-config` skill](commands.md) uses `Edit`/`Write` to modify `~/.claude/` config on user request; keeping `sound-config.sh` unprotected lets that skill help users enable/tune sounds naturally.
+
+If you personally want to prevent Claude from touching `sound-config.sh` in your local setup, add `"Edit(~/.claude/sound-config.sh)"` and `"Write(~/.claude/sound-config.sh)"` to a **project** `.claude/settings.json` deny list — that overlays on top of the global settings without needing a global settings change.
 
 ## Relationship to this repo's `.claude/settings.json`
 

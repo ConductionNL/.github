@@ -145,18 +145,39 @@ After installing the Claude Code extension, authenticate:
 
 ### 7. Configure Global Claude Settings
 
-Before using Claude in this workspace, set up user-level permissions and a safety hook that restricts which shell commands Claude can run automatically.
+Before using Claude in this workspace, set up user-level permissions and safety hooks that restrict which shell commands Claude can run automatically.
 
-See **[global-claude-settings.md](./global-claude-settings.md)** for the full guide, including copy-ready example files and a new-machine checklist.
-
-Quick install:
+Quick install (assumes you've cloned this repo at `$REPO_ROOT`):
 
 ```bash
+REPO_ROOT="$(pwd)"   # or path to your .github clone
+
 mkdir -p ~/.claude/hooks
-cp global-settings/settings.json ~/.claude/settings.json
-cp global-settings/block-write-commands.sh ~/.claude/hooks/block-write-commands.sh
-chmod +x ~/.claude/hooks/block-write-commands.sh
+
+cp "$REPO_ROOT/global-settings/settings.json"                 ~/.claude/settings.json
+cp "$REPO_ROOT/global-settings/block-write-commands.sh"       ~/.claude/hooks/block-write-commands.sh
+cp "$REPO_ROOT/global-settings/block-config-tool-writes.sh"   ~/.claude/hooks/block-config-tool-writes.sh
+cp "$REPO_ROOT/global-settings/check-settings-version.sh"     ~/.claude/hooks/check-settings-version.sh
+cp "$REPO_ROOT/global-settings/sound-notify.sh"               ~/.claude/hooks/sound-notify.sh
+chmod +x ~/.claude/hooks/*.sh
+
+cp "$REPO_ROOT/global-settings/VERSION"                       ~/.claude/settings-version
+cp "$REPO_ROOT/global-settings/settings-repo-url.example"     ~/.claude/settings-repo-url
+
+# Kernel-level immutability (v1.7.0+). Without this the strongest defense layer stays off.
+sudo chattr +i ~/.claude/settings.json ~/.claude/hooks/*.sh ~/.claude/settings-version
 ```
+
+**Optional — opt in to notification sounds** (v2.2.0+, silent by default):
+
+```bash
+cp "$REPO_ROOT/global-settings/sound-config.sh.example" ~/.claude/sound-config.sh
+${EDITOR:-nano} ~/.claude/sound-config.sh   # flip SOUND_ENABLED=1
+```
+
+Restart Claude Code after installing. For the full reference (permissions table, hook behavior, update flow, sound config details, troubleshooting) see **[global-claude-settings.md](./global-claude-settings.md)** and the canonical **[`global-settings/README.md`](../../global-settings/README.md)**.
+
+> **Keep in sync:** if you add or rename a hook in `global-settings/`, update **both** this block and the one in `global-settings/README.md` (or add your hook to both).
 
 ---
 
