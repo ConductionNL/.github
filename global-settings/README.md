@@ -76,7 +76,7 @@ Since v2.2.0 the shared settings wire three Claude Code events to a `sound-notif
 | Event                          | Wrapper argument | Fires when                                          |
 | ------------------------------ | ---------------- | --------------------------------------------------- |
 | `PreToolUse` / `AskUserQuestion` | `question`     | Claude asks you a multiple-choice question          |
-| `Notification`                 | `permission`     | Claude shows an allow/deny permission prompt        |
+| `PermissionRequest`            | `permission`     | Claude shows an allow/deny permission prompt        |
 | `Stop`                         | `stop`           | Claude finishes its turn                            |
 
 **Sounds are silent by default.** The wrapper only plays anything when a `~/.claude/sound-config.sh` file exists AND sets `SOUND_ENABLED=1` AND points at a readable sound file. Fresh installs make no noise unless the user explicitly turns them on.
