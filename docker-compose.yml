@@ -130,8 +130,37 @@ services:
       - ../larpingapp:/var/www/html/custom_apps/larpingapp
       - ../scholiq:/var/www/html/custom_apps/scholiq
       - ../hermiq:/var/www/html/custom_apps/hermiq
-      # Custom apps directory from openregister (contains pre-installed apps)
-      - ../openregister/custom_apps:/var/www/html/custom_apps
+      # Pre-installed apps — mounted INDIVIDUALLY, not via a single recursive base
+      # mount. The old `../openregister/custom_apps:/var/www/html/custom_apps`
+      # mount overlapped the 16 child mounts above and, on Docker Desktop/WSL2,
+      # came up partial after every `docker stop/start` — silently dropping these
+      # ~23 base-only apps (openbuild, openconnector, decidesk, …) so the
+      # container saw 16/40 apps → "Could not find path for X" 404s + apps that
+      # looked disabled + needsDbUpgrade/503. Flat sibling mounts (like the 16
+      # above) are re-established reliably on restart.
+      - ../openregister/custom_apps/analytics:/var/www/html/custom_apps/analytics
+      - ../openregister/custom_apps/app_versions:/var/www/html/custom_apps/app_versions
+      - ../openregister/custom_apps/bookmarks:/var/www/html/custom_apps/bookmarks
+      - ../openregister/custom_apps/calendar:/var/www/html/custom_apps/calendar
+      - ../openregister/custom_apps/collectives:/var/www/html/custom_apps/collectives
+      - ../openregister/custom_apps/contacts:/var/www/html/custom_apps/contacts
+      - ../openregister/custom_apps/cospend:/var/www/html/custom_apps/cospend
+      - ../openregister/custom_apps/decidesk:/var/www/html/custom_apps/decidesk
+      - ../openregister/custom_apps/deck:/var/www/html/custom_apps/deck
+      - ../openregister/custom_apps/doriath:/var/www/html/custom_apps/doriath
+      - ../openregister/custom_apps/forms:/var/www/html/custom_apps/forms
+      - ../openregister/custom_apps/hrmq:/var/www/html/custom_apps/hrmq
+      - ../openregister/custom_apps/mail:/var/www/html/custom_apps/mail
+      - ../openregister/custom_apps/maps:/var/www/html/custom_apps/maps
+      - ../openregister/custom_apps/openbuild:/var/www/html/custom_apps/openbuild
+      - ../openregister/custom_apps/openconnector:/var/www/html/custom_apps/openconnector
+      - ../openregister/custom_apps/petstore:/var/www/html/custom_apps/petstore
+      - ../openregister/custom_apps/polls:/var/www/html/custom_apps/polls
+      - ../openregister/custom_apps/portaliq:/var/www/html/custom_apps/portaliq
+      - ../openregister/custom_apps/shillinq:/var/www/html/custom_apps/shillinq
+      - ../openregister/custom_apps/spreed:/var/www/html/custom_apps/spreed
+      - ../openregister/custom_apps/tasks:/var/www/html/custom_apps/tasks
+      - ../openregister/custom_apps/timemanager:/var/www/html/custom_apps/timemanager
     environment:
       # Database configuration (PostgreSQL)
       - POSTGRES_DB=nextcloud
