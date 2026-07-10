@@ -117,7 +117,7 @@ You can configure:
 
 | Path                                            | Role                                                                                                            |
 | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `~/.claude/settings.json`                       | User permissions allowlist, hooks (`PreToolUse`, `UserPromptSubmit`, `Notification`, `Stop`), optional `mcpServers` |
+| `~/.claude/settings.json`                       | User permissions allowlist, hooks (`PreToolUse`, `UserPromptSubmit`, `PermissionRequest`, `Stop`), optional `mcpServers` |
 | `~/.claude/hooks/block-write-commands.sh`       | Hook script invoked for every **Bash** tool use before it runs                                                  |
 | `~/.claude/hooks/block-config-tool-writes.sh`   | Hook script invoked for every **Write/Edit/MultiEdit** tool use before it runs                                  |
 | `~/.claude/hooks/check-settings-version.sh`     | Hook script that shows the status panel and warns on version mismatch                                           |
@@ -195,17 +195,17 @@ Do **not** put broad `Bash(*)` allow rules here.
 
 Fires when Claude uses the `AskUserQuestion` tool. Wrapper is silent unless the user has opted in — see [Optional: notification sounds](#optional-notification-sounds-opt-in).
 
-### 6. `hooks.Notification`
+### 6. `hooks.PermissionRequest`
 
 ```json
-"Notification": [
+"PermissionRequest": [
   {
     "hooks": [{ "type": "command", "command": "bash ~/.claude/hooks/sound-notify.sh permission" }]
   }
 ]
 ```
 
-Fires when Claude shows an allow/deny permission prompt.
+Fires when Claude shows an allow/deny permission prompt. (v2.2.0 used `Notification` for this — empirical testing on Claude Code showed `PermissionRequest` is the actual event name; fixed in v2.2.2.)
 
 ### 7. `hooks.Stop`
 
@@ -282,7 +282,7 @@ Three hook entries in `settings.json` invoke the same wrapper with different arg
 | Event                                | Wrapper argument | Fires when                                          |
 | ------------------------------------ | ---------------- | --------------------------------------------------- |
 | `PreToolUse` matcher `AskUserQuestion` | `question`     | Claude asks you a multiple-choice question          |
-| `Notification`                       | `permission`     | Claude shows an allow/deny permission prompt        |
+| `PermissionRequest`                  | `permission`     | Claude shows an allow/deny permission prompt        |
 | `Stop`                               | `stop`           | Claude finishes its turn                            |
 
 ### What the wrapper does

@@ -2,7 +2,7 @@
 # sound-notify.sh
 # Optional notification-sound wrapper. Wired to three Claude Code events:
 #   PreToolUse:AskUserQuestion → sound-notify.sh question
-#   Notification              → sound-notify.sh permission
+#   PermissionRequest         → sound-notify.sh permission
 #   Stop                      → sound-notify.sh stop
 #
 # Opt-in: sounds are silent by default. To enable, copy
