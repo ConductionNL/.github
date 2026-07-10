@@ -71,6 +71,14 @@ if ! wait_for_apps "$WANT" 15; then
   wait_for_apps "$WANT" 20 || echo "  WARNING: still partial after a restart — check Docker Desktop file sharing / disk space"
 fi
 
+echo "==> Ensuring custom_apps is writable by www-data"
+# Docker (re)creates the mount-parent dir as root:root, which leaves Nextcloud
+# with no writable apps path → /settings/apps 500s ("Cannot write into apps
+# directory"). Non-recursive on purpose: the per-app bind mounts inside keep
+# their host ownership.
+docker exec "$CONTAINER" chown www-data:www-data /var/www/html/custom_apps \
+  && echo "  ok" || echo "  WARNING: chown failed — /settings/apps may 500"
+
 echo "==> Clearing maintenance mode"
 occ maintenance:mode --off >/dev/null 2>&1 || true
 
