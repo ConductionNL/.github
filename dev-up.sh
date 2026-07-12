@@ -40,8 +40,15 @@ expected_apps() {
     | grep -cE '/var/www/html/custom_apps/[A-Za-z0-9_-]+$'
 }
 
+# Count apps whose appinfo/info.xml is actually READABLE inside the container.
+# Counting `ls custom_apps/` instead is not enough: when a bind mount fails to
+# attach, Docker still creates the mount-point directory, so the app dir exists
+# but is EMPTY. That reported a healthy 39/39 while every app was in fact missing
+# and the whole instance was 503'ing. Requiring info.xml proves content arrived.
 visible_apps() {
-  docker exec "$CONTAINER" sh -c 'ls /var/www/html/custom_apps/ 2>/dev/null | wc -l' 2>/dev/null | tr -d '[:space:]'
+  docker exec "$CONTAINER" sh -c \
+    'n=0; for d in /var/www/html/custom_apps/*/; do [ -f "$d/appinfo/info.xml" ] && n=$((n+1)); done; echo "$n"' \
+    2>/dev/null | tr -d '[:space:]'
 }
 
 wait_for_apps() {
@@ -69,6 +76,29 @@ if ! wait_for_apps "$WANT" 15; then
   docker restart "$CONTAINER" >/dev/null
   until docker exec "$CONTAINER" sh -c 'test -d /var/www/html/custom_apps' 2>/dev/null; do sleep 2; done
   wait_for_apps "$WANT" 20 || echo "  WARNING: still partial after a restart — check Docker Desktop file sharing / disk space"
+fi
+
+echo "==> Ensuring un-busted assets are not cached for 6 months"
+# Nextcloud's shipped .htaccess caches static assets for max-age=15778463 (6 months)
+# EVEN WHEN the URL carries no ?v= cache buster. With 'debug' => true — which this
+# dev instance runs — NC strips ?v= from every app script
+# (TemplateLayout::getVersionHashSuffix() returns '' in debug mode), so every entry
+# bundle lands in that branch: you deploy new JS and the browser keeps executing the
+# old one, immutably, with no way to bust it. Assets that DO carry ?v= keep the long
+# immutable cache, which is correct. ETag revalidation makes this cheap (304s).
+# Lives in the /var/www/html volume, so re-apply on every start (idempotent).
+if docker exec "$CONTAINER" sh -c '
+  H=/var/www/html/.htaccess
+  grep -q "no-cache, must-revalidate" "$H" && exit 0
+  # Only the bare 6-month directive — the `, immutable` one (URLs that DO carry ?v=)
+  # is correct and must be left alone. The `"$` anchor is what distinguishes them.
+  sed -i "0,/Header set Cache-Control \"max-age=15778463\"$/s//Header set Cache-Control \"no-cache, must-revalidate\"/" "$H"
+  # Verify, so an upstream reformat surfaces as a warning instead of silently no-opping.
+  grep -q "no-cache, must-revalidate" "$H"
+' >/dev/null 2>&1; then
+  echo "  ok"
+else
+  echo "  WARNING: could not patch .htaccess cache headers — un-busted assets may cache for 6 months"
 fi
 
 echo "==> Ensuring custom_apps is writable by www-data"
