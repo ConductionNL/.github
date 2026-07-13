@@ -10,11 +10,16 @@ on:
         description: "Cloudflare Worker name (e.g. 'openregister-docs')"
         required: true
         type: string
+      runner-label:
+        description: "Runner label to schedule the deploy on (e.g. 'codeberg-small', 'con-ci-oci')"
+        required: false
+        type: string
+        default: "codeberg-small"
 
 jobs:
   deploy:
     name: Deploy to Cloudflare Workers (Static Assets)
-    runs-on: codeberg-small
+    runs-on: ${{ inputs.runner-label }}
     container:
       image: node:24-bookworm
     timeout-minutes: 10

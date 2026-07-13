@@ -17,11 +17,16 @@ on:
         required: false
         type: string
         default: "20"
+      runner-label:
+        description: "Runner label to schedule the build on (e.g. 'codeberg-medium', 'con-ci-oci')"
+        required: false
+        type: string
+        default: "codeberg-medium"
 
 jobs:
   build:
     name: Build and validate
-    runs-on: codeberg-medium
+    runs-on: ${{ inputs.runner-label }}
     container:
       image: node:24-bookworm
     timeout-minutes: 10
