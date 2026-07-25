@@ -1898,7 +1898,12 @@ jobs:
         # peer/version mismatches in transitive deps, a hard dependency declared
         # by a lib but deduped away, etc. — which has nothing to do with the SBOM.
         # The lockfile is the deterministic source of truth for what gets installed.
-        run: npx @cyclonedx/cyclonedx-npm --package-lock-only --output-file bom-npm.cdx.json --spec-version 1.5 --omit dev
+        # --ignore-npm-errors: cyclonedx-npm still shells out to `npm ls` internally
+        # even with --package-lock-only, and aborts on those same benign
+        # ELSPROBLEMS (e.g. a transitive @vueuse/core pulled by @nextcloud/dialogs
+        # that mismatches a peer range). The tree quirk does not affect the SBOM,
+        # so tolerate it rather than red the whole quality run.
+        run: npx @cyclonedx/cyclonedx-npm --package-lock-only --ignore-npm-errors --output-file bom-npm.cdx.json --spec-version 1.5 --omit dev
 
       - name: Merge PHP + npm SBOMs
         if: ${{ inputs.enable-frontend }}
