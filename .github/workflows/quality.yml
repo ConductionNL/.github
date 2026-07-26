@@ -362,7 +362,19 @@ jobs:
               ;;
             npm)
               npm ci --legacy-peer-deps
-              npm audit --audit-level=critical --omit=dev
+              # Tolerate an unavailable npm advisory endpoint: npm is retiring
+              # the audits/quick endpoint and it intermittently 400s ("audit
+              # endpoint returned an error" / "Invalid package tree"). That is an
+              # infra outage, not a security finding, and must not hard-fail CI.
+              # Real advisories (which print a vuln table, not an endpoint error)
+              # still fail the gate.
+              out="$(npm audit --audit-level=critical --omit=dev 2>&1)" && rc=0 || rc=$?
+              echo "$out"
+              if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -qiE "audit endpoint returned an error|Invalid package tree|ECONNRESET|ETIMEDOUT|ENOTFOUND|being retired|Service Unavailable"; then
+                echo "::warning::npm audit skipped — npm advisory endpoint unavailable (external); not a vulnerability."
+              elif [ "$rc" -ne 0 ]; then
+                exit "$rc"
+              fi
               ;;
           esac
 
@@ -1954,7 +1966,17 @@ jobs:
         # shipped in the app bundle, and its frequent advisories would otherwise
         # red every run. Matches the dedicated `Security (npm)` job, which
         # already runs `--audit-level=critical --omit=dev`.
-        run: npm audit --audit-level=critical --omit=dev
+        # Also tolerate an unavailable npm advisory endpoint (npm is retiring
+        # audits/quick; it intermittently 400s) — an infra outage, not a finding.
+        # Real advisories (a vuln table, not an endpoint error) still fail.
+        run: |
+          out="$(npm audit --audit-level=critical --omit=dev 2>&1)" && rc=0 || rc=$?
+          echo "$out"
+          if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -qiE "audit endpoint returned an error|Invalid package tree|ECONNRESET|ETIMEDOUT|ENOTFOUND|being retired|Service Unavailable"; then
+            echo "::warning::npm audit skipped — npm advisory endpoint unavailable (external); not a vulnerability."
+          elif [ "$rc" -ne 0 ]; then
+            exit "$rc"
+          fi
 
       # ── Publish validated SBOM ──
       # The SBOM is intentionally NOT committed back to the repo.
