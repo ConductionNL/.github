@@ -758,13 +758,20 @@ jobs:
               php occ app:enable "$name" || echo "::warning::Failed to enable $name, continuing..."
             done
           fi
-          php occ app:enable ${{ inputs.app-name }}
           chmod -R a+w config
 
-      - name: Install app dependencies
+      # Install the app's own dependencies BEFORE enabling it. Enabling triggers
+      # install-scope repair steps that autowire services with eager constructors
+      # (e.g. SaveObject does `new Twig\Environment(...)`); without vendor present
+      # that fatals with an uncaught \Error (NC core only catches \Exception),
+      # killing the step. Matches the newman/playwright/journeydoc jobs, which
+      # already composer-install before enabling the app.
+      - name: Install app dependencies and enable app
         run: |
           cd server/apps/${{ inputs.app-name }}
           composer install --no-progress --prefer-dist --optimize-autoloader
+          cd ../../
+          php occ app:enable ${{ inputs.app-name }}
 
       - name: Validate test infrastructure
         run: |
