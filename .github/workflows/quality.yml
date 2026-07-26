@@ -1949,7 +1949,12 @@ jobs:
 
       - name: npm audit
         if: ${{ inputs.enable-frontend }}
-        run: npm audit --audit-level=critical
+        # --omit=dev: gate only on production-dependency criticals. Dev-only
+        # build tooling (node-gyp/cacache → tar, cyclonedx, babel, …) is never
+        # shipped in the app bundle, and its frequent advisories would otherwise
+        # red every run. Matches the dedicated `Security (npm)` job, which
+        # already runs `--audit-level=critical --omit=dev`.
+        run: npm audit --audit-level=critical --omit=dev
 
       # ── Publish validated SBOM ──
       # The SBOM is intentionally NOT committed back to the repo.
