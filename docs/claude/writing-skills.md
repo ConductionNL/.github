@@ -18,7 +18,7 @@ Skills live in `.claude/skills/<skill-name>/` and are invoked with `/<skill-name
 
 Skills evolve through 7 maturity levels. Each level builds on the previous — a skill is at the highest level where **all** criteria are met. Use these levels to assess existing skills, plan improvements, and set quality targets.
 
-> **Source:** This framework is based on Simon Scrapes' "Every Level of Claude Code Skills" (March 2026), validated against Anthropic's official skill authoring best practices ([platform.claude.com](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices)), the Barry Zhang & Mahesh Murag talk "Don't Build Agents, Build Skills Instead" (AI Engineer Summit, November 2025), and the Agent Skills Open Standard ([agentskills.io](https://agentskills.io/specification)).
+> **Source:** This framework is based on Simon Scrapes' "Every Level of Claude Code Skills" (March 2026), validated against Anthropic's official skill authoring best practices ([platform.claude.com](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices)), the Barry Zhang & Mahesh Murag talk "Don't Build Agents, Build Skills Instead" (AI Engineer Summit, November 2025), and the Agent Skills Open Standard ([agentskills.io](https://agentskills.io/specification)). The full annotated source list — including the human-competence ancestry (SFIA 9, Dreyfus, e-CF/KWIV), maturity-model ancestry (CMMI), L5 measurement methodology, and sources we assessed and deliberately excluded — lives in [skill-level-sources.md](./skill-level-sources.md).
 
 ### Levels Are Cumulative but Not Always Sequential
 
