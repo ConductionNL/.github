@@ -147,6 +147,16 @@ jobs:
     permissions:
       contents: read
       packages: write
+    # Best-effort by design: the fallback image is a nice-to-have on top of
+    # an already-completed gh-pages deploy. The known failure mode is
+    # org-side, not repo-side — GHCR's per-package "Manage Actions access"
+    # not granting the repository write access yields
+    # `denied: permission_denied: write_package`, and only an org/package
+    # admin can fix that (observed on conduction-website since 2026-07-26).
+    # A red job for an unfixable-from-here cause hides real failures, so the
+    # push is continue-on-error and the warn step below keeps the
+    # degradation loud instead of silent.
+    continue-on-error: true
     steps:
       - name: Download build artifact from build job
         uses: actions/download-artifact@v4
@@ -190,6 +200,8 @@ jobs:
         run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push fallback image
+        id: push_image
+        continue-on-error: true
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -198,3 +210,9 @@ jobs:
           tags: |
             ${{ steps.img.outputs.name }}:latest
             ${{ steps.img.outputs.name }}:${{ github.sha }}
+
+      - name: Warn loudly when the fallback image could not be pushed
+        if: steps.push_image.outcome == 'failure'
+        run: |
+          echo "::warning title=Fallback site image DEGRADED::GHCR push of ${{ steps.img.outputs.name }} failed. Known cause: the package's 'Manage Actions access' does not grant this repository write access (denied: permission_denied: write_package) — an org/package admin must add the repo with write role under the package's settings; repo-side tokens cannot do this. The gh-pages deploy itself is unaffected. This job is best-effort until the grant lands."
+          echo "Fallback image push FAILED — degraded pending the org-side GHCR package grant (see warning annotation)."
