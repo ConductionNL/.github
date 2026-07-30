@@ -113,6 +113,10 @@ services:
       - db
     volumes:
       - nextcloud:/var/www/html:rw
+      # PHP tuning overlay — sorts last in conf.d so it wins over the image's
+      # opcache-recommended.ini. Disables JIT, which costs ~140ms per request
+      # on this workload; see the file for the measurement.
+      - ./docker/php/zz-conduction-opcache.ini:/usr/local/etc/php/conf.d/zz-conduction-opcache.ini:ro
       # App mounts — each app directory is a sibling of .github in the workspace
       - ../openregister:/var/www/html/custom_apps/openregister
       - ../opencatalogi:/var/www/html/custom_apps/opencatalogi
