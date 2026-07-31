@@ -23,7 +23,7 @@ on:
         type: string
         default: '["stable31", "stable32"]'
       enable-php:
-        description: "Master switch for the PHP toolchain (php-quality, PHPUnit, composer security/license legs). Set false for JS-only repos without composer.json."
+        description: "Master switch for the PHP toolchain (php-quality, PHPUnit, composer security/license legs, SBOM). Set false for JS-only repos without composer.json."
         required: false
         type: boolean
         default: true
@@ -68,12 +68,12 @@ on:
         type: string
         default: "20"
       frontend-setup-command:
-        description: "Optional ADDITIONAL setup command for the frontend-checks job. The standard root `npm ci` always runs first; this command runs after it and does NOT replace it. Use it to prepare things the root install doesn't cover, e.g. installing a nested package's dependencies: 'cd docusaurus && npm ci'."
+        description: "Optional ADDITIONAL setup command for the frontend-checks job. The standard root `npm ci` always runs first; this command runs after it and does NOT replace it. Use it to prepare things the root install doesn't cover, e.g. installing a nested package's dependencies: 'cd docusaurus && npm ci' (the nested directory then needs its own package.json + package-lock.json)."
         required: false
         type: string
         default: ""
       frontend-checks:
-        description: "JSON array of npm scripts to run as individual 'Frontend Check (<script>)' jobs (e.g. '[\"test\", \"check:docs\"]'). Requires enable-frontend. Every listed script MUST exist in the repo's package.json and MUST be self-contained — each leg is a fresh job (own checkout + npm ci), so bundle order-dependent steps into one script (e.g. \"check:build\": \"npm run build && npm run check:css-entry\"). See CONVENTIONS.md § Custom frontend checks."
+        description: "JSON array of npm scripts to run as individual 'Frontend Check (<script>)' jobs (e.g. '[\"test\", \"check:docs\"]'). Requires enable-frontend and a repo with package.json + package-lock.json (each leg runs `npm ci`). Every listed script MUST exist in the repo's package.json and MUST be self-contained — each leg is a fresh job (own checkout + npm ci), so bundle order-dependent steps into one script (e.g. \"check:build\": \"npm run build && npm run check:css-entry\"). See CONVENTIONS.md § Custom frontend checks."
         required: false
         type: string
         default: "[]"
@@ -373,10 +373,15 @@ jobs:
           node-version: "${{ inputs.node-version }}"
           cache: "npm"
 
+      # Caller-supplied values are passed via env and referenced as "$VAR"
+      # (never inlined into the script) so special characters cannot break
+      # out of the intended shell context.
       - name: Verify script exists in package.json
+        env:
+          SCRIPT: ${{ matrix.script }}
         run: |
-          if ! node -e "const s = require('./package.json').scripts || {}; process.exit(s['${{ matrix.script }}'] ? 0 : 1)"; then
-            echo "::error::npm script '${{ matrix.script }}' is listed in this repo's frontend-checks input but does not exist in package.json. Add the script (see CONVENTIONS.md § Custom frontend checks in ConductionNL/.github) or remove it from the frontend-checks list in .github/workflows/code-quality.yml."
+          if ! node -e "const s = require('./package.json').scripts || {}; process.exit(s[process.env.SCRIPT] ? 0 : 1)"; then
+            echo "::error::npm script '$SCRIPT' is listed in this repo's frontend-checks input but does not exist in package.json. Add the script (see CONVENTIONS.md § Custom frontend checks in ConductionNL/.github) or remove it from the frontend-checks list in .github/workflows/code-quality.yml."
             exit 1
           fi
 
@@ -385,17 +390,23 @@ jobs:
 
       - name: Extra setup (runs after npm ci, does not replace it)
         if: ${{ inputs.frontend-setup-command != '' }}
-        run: ${{ inputs.frontend-setup-command }}
+        env:
+          SETUP_CMD: ${{ inputs.frontend-setup-command }}
+        run: bash -c "$SETUP_CMD"
 
       - name: Run ${{ matrix.script }}
-        run: npm run "${{ matrix.script }}"
+        env:
+          SCRIPT: ${{ matrix.script }}
+        run: npm run "$SCRIPT"
 
       - name: Record result
         if: always()
+        env:
+          SCRIPT: ${{ matrix.script }}
         run: |
           mkdir -p quality-results
           # ':' is invalid in artifact file paths — sanitize the script name
-          echo "${{ job.status }}" > "quality-results/$(echo '${{ matrix.script }}' | tr ':/' '--').txt"
+          echo "${{ job.status }}" > "quality-results/$(echo "$SCRIPT" | tr ':/' '--').txt"
       - name: Upload result
         if: always()
         uses: actions/upload-artifact@v4
@@ -1739,7 +1750,7 @@ jobs:
   report:
     runs-on: ubuntu-latest
     name: "Quality Report"
-    needs: [php-quality, vue-quality, frontend-checks, security, license, phpunit, newman, playwright, journeydoc-capture, baseline-protection]
+    needs: [php-quality, vue-quality, frontend-checks, security, license, phpunit, newman, playwright, journeydoc-capture, baseline-protection, sbom, features-check, features-extract]
     if: always()
 
     steps:
@@ -1975,7 +1986,7 @@ jobs:
   # ╚══════════════════════════════════════════════╝
 
   sbom:
-    if: ${{ inputs.enable-sbom && !cancelled() && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/beta' || github.ref == 'refs/heads/development') }}
+    if: ${{ inputs.enable-php && inputs.enable-sbom && !cancelled() && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/beta' || github.ref == 'refs/heads/development') }}
     runs-on: ubuntu-latest
     name: "SBOM"
     needs: [security]
