@@ -22,6 +22,11 @@ on:
         required: false
         type: string
         default: '["stable31", "stable32"]'
+      enable-php:
+        description: "Master switch for the PHP toolchain (php-quality, PHPUnit, composer security/license legs, SBOM). Set false for JS-only repos without composer.json."
+        required: false
+        type: boolean
+        default: true
       enable-psalm:
         description: "Run Psalm static analysis"
         required: false
@@ -57,6 +62,21 @@ on:
         required: false
         type: boolean
         default: true
+      node-version:
+        description: "Node.js version for all frontend/npm steps"
+        required: false
+        type: string
+        default: "20"
+      frontend-setup-command:
+        description: "Optional ADDITIONAL setup command for the frontend-checks job. The standard root `npm ci` always runs first; this command runs after it and does NOT replace it. Use it to prepare things the root install doesn't cover, e.g. installing a nested package's dependencies: 'cd docusaurus && npm ci' (the nested directory then needs its own package.json + package-lock.json)."
+        required: false
+        type: string
+        default: ""
+      frontend-checks:
+        description: "JSON array of npm scripts to run as individual 'Frontend Check (<script>)' jobs (e.g. '[\"test\", \"check:docs\"]'). Requires enable-frontend and a repo with package.json + package-lock.json (each leg runs `npm ci`). Every listed script MUST exist in the repo's package.json and MUST be self-contained — each leg is a fresh job (own checkout + npm ci), so bundle order-dependent steps into one script (e.g. \"check:build\": \"npm run build && npm run check:css-entry\"). See CONVENTIONS.md § Custom frontend checks."
+        required: false
+        type: string
+        default: "[]"
       enable-license-check:
         description: "Run dependency license compliance check (composer + npm)"
         required: false
@@ -183,6 +203,7 @@ jobs:
 
   # ── Group 1: PHP Quality ────────────────────────
   php-quality:
+    if: ${{ inputs.enable-php }}
     runs-on: ubuntu-latest
     name: "PHP Quality (${{ matrix.tool }})"
     strategy:
@@ -293,11 +314,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "${{ inputs.node-version }}"
           cache: "npm"
 
       - name: Install dependencies
-        run: npm ci --legacy-peer-deps
+        run: npm ci
 
       - name: Run ${{ matrix.tool }}
         run: |
@@ -326,6 +347,73 @@ jobs:
           name: result-vue-quality-${{ matrix.tool }}
           path: quality-results/
 
+  # ── Group 2b: Custom frontend checks ───────────
+  #
+  # Repo-defined npm scripts run as individual matrix legs, e.g.
+  #   frontend-checks: '["test", "check:build", "check:docs"]'
+  # Each leg gets a fresh checkout + npm ci, so scripts must be
+  # self-contained (bundle ordering deps into one script, e.g.
+  # "check:build": "npm run build && npm run check:css-entry").
+  frontend-checks:
+    if: ${{ inputs.enable-frontend && inputs.frontend-checks != '[]' }}
+    runs-on: ubuntu-latest
+    name: "Frontend Check (${{ matrix.script }})"
+    strategy:
+      matrix:
+        script: ${{ fromJSON(inputs.frontend-checks) }}
+      fail-fast: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "${{ inputs.node-version }}"
+          cache: "npm"
+
+      # Caller-supplied values are passed via env and referenced as "$VAR"
+      # (never inlined into the script) so special characters cannot break
+      # out of the intended shell context.
+      - name: Verify script exists in package.json
+        env:
+          SCRIPT: ${{ matrix.script }}
+        run: |
+          if ! node -e "const s = require('./package.json').scripts || {}; process.exit(s[process.env.SCRIPT] ? 0 : 1)"; then
+            echo "::error::npm script '$SCRIPT' is listed in this repo's frontend-checks input but does not exist in package.json. Add the script (see CONVENTIONS.md § Custom frontend checks in ConductionNL/.github) or remove it from the frontend-checks list in .github/workflows/code-quality.yml."
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Extra setup (runs after npm ci, does not replace it)
+        if: ${{ inputs.frontend-setup-command != '' }}
+        env:
+          SETUP_CMD: ${{ inputs.frontend-setup-command }}
+        run: bash -c "$SETUP_CMD"
+
+      - name: Run ${{ matrix.script }}
+        env:
+          SCRIPT: ${{ matrix.script }}
+        run: npm run "$SCRIPT"
+
+      - name: Record result
+        if: always()
+        env:
+          SCRIPT: ${{ matrix.script }}
+        run: |
+          mkdir -p quality-results
+          # ':' is invalid in artifact file paths — sanitize the script name
+          echo "${{ job.status }}" > "quality-results/$(echo "$SCRIPT" | tr ':/' '--').txt"
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-frontend-check-${{ strategy.job-index }}
+          path: quality-results/
+
   # ── Group 3: Security ──────────────────────────
   security:
     runs-on: ubuntu-latest
@@ -350,18 +438,22 @@ jobs:
         if: matrix.ecosystem == 'npm'
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "${{ inputs.node-version }}"
           cache: "npm"
 
       - name: Run ${{ matrix.ecosystem }} audit
         run: |
           case "${{ matrix.ecosystem }}" in
             composer)
+              if [ "${{ inputs.enable-php }}" != "true" ]; then
+                echo "PHP toolchain is disabled — skipping composer audit."
+                exit 0
+              fi
               composer install --no-progress --prefer-dist --optimize-autoloader
               composer audit --format=plain --abandoned=report
               ;;
             npm)
-              npm ci --legacy-peer-deps
+              npm ci
               # Tolerate an unavailable npm advisory endpoint: npm is retiring
               # the audits/quick endpoint and it intermittently 400s ("audit
               # endpoint returned an error" / "Invalid package tree"). That is an
@@ -459,21 +551,30 @@ jobs:
         if: matrix.ecosystem == 'npm'
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "${{ inputs.node-version }}"
           cache: "npm"
 
       - name: Install dependencies
         run: |
           if [ "${{ matrix.ecosystem }}" = "composer" ]; then
+            if [ "${{ inputs.enable-php }}" != "true" ]; then
+              echo "PHP toolchain is disabled — skipping composer install."
+              exit 0
+            fi
             composer install --no-progress --prefer-dist --optimize-autoloader
           else
-            npm ci --legacy-peer-deps
+            npm ci
             npm install -g license-checker
           fi
 
       - name: Check ${{ matrix.ecosystem }} licenses
         run: |
           set -euo pipefail
+
+          if [ "${{ matrix.ecosystem }}" = "composer" ] && [ "${{ inputs.enable-php }}" != "true" ]; then
+            echo "PHP toolchain is disabled — skipping composer license check."
+            exit 0
+          fi
 
           # ── Default allowlist (EUPL-1.2 / AGPL-3.0 compatible) ──
           DEFAULT_ALLOWLIST='[
@@ -677,7 +778,7 @@ jobs:
   # ╚══════════════════════════════════════════════╝
 
   phpunit:
-    if: ${{ inputs.enable-phpunit && !cancelled() && needs.php-quality.result != 'failure' && needs.security.result != 'failure' }}
+    if: ${{ inputs.enable-php && inputs.enable-phpunit && !cancelled() && needs.php-quality.result != 'failure' && needs.security.result != 'failure' }}
     runs-on: ubuntu-latest
     name: "PHPUnit (PHP ${{ matrix.php-version }}, NC ${{ matrix.nextcloud-ref }})"
     needs: [php-quality, security]
@@ -937,7 +1038,7 @@ jobs:
       - name: Setup Node.js and Newman
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "${{ inputs.node-version }}"
 
       - name: Install Newman
         run: npm install -g newman
@@ -1093,13 +1194,13 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "${{ inputs.node-version }}"
 
       - name: Install app npm dependencies
         run: |
           cd server/apps/${{ inputs.app-name }}
           if [ -f "package.json" ]; then
-            npm ci --legacy-peer-deps
+            npm ci
           fi
 
       - name: Install Playwright
@@ -1427,13 +1528,13 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "${{ inputs.node-version }}"
 
       - name: Install app npm dependencies
         run: |
           cd server/apps/${{ inputs.app-name }}
           if [ -f "package.json" ]; then
-            npm ci --legacy-peer-deps
+            npm ci
           fi
 
       - name: Install Playwright
@@ -1649,7 +1750,7 @@ jobs:
   report:
     runs-on: ubuntu-latest
     name: "Quality Report"
-    needs: [php-quality, vue-quality, security, license, phpunit, newman, playwright, journeydoc-capture, baseline-protection]
+    needs: [php-quality, vue-quality, frontend-checks, security, license, phpunit, newman, playwright, journeydoc-capture, baseline-protection, sbom, features-check, features-extract]
     if: always()
 
     steps:
@@ -1751,6 +1852,13 @@ jobs:
             for tool in eslint stylelint; do
               result=$(read_result "results/result-vue-quality-$tool/$tool.txt")
               echo "| $tool | | $(icon "$result") | | | |"
+            done
+
+            # Custom frontend checks (if any)
+            for f in results/result-frontend-check-*/*.txt; do
+              [ -f "$f" ] || continue
+              tool=$(basename "$f" .txt)
+              echo "| $tool | | $(icon "$(read_result "$f")") | | | |"
             done
 
             # Composer: security + license in one row
@@ -1859,6 +1967,15 @@ jobs:
               body
             });
 
+      # Makes "quality / Quality Report" a usable required check: without
+      # this the job always succeeded (if: always() + report-only steps),
+      # so requiring it in branch protection would gate nothing.
+      - name: Gate — fail when any upstream job failed
+        if: ${{ always() && contains(needs.*.result, 'failure') }}
+        run: |
+          echo "::error::One or more quality jobs failed — see the report above."
+          exit 1
+
   # ╔══════════════════════════════════════════════╗
   # ║  STAGE 4 — SBOM Generation & Validation      ║
   # ║                                               ║
@@ -1869,7 +1986,7 @@ jobs:
   # ╚══════════════════════════════════════════════╝
 
   sbom:
-    if: ${{ inputs.enable-sbom && !cancelled() && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/beta' || github.ref == 'refs/heads/development') }}
+    if: ${{ inputs.enable-php && inputs.enable-sbom && !cancelled() && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/beta' || github.ref == 'refs/heads/development') }}
     runs-on: ubuntu-latest
     name: "SBOM"
     needs: [security]
@@ -1891,7 +2008,7 @@ jobs:
         if: ${{ inputs.enable-frontend }}
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "${{ inputs.node-version }}"
 
       - name: Cache Composer dependencies
         uses: actions/cache@v4
@@ -1908,7 +2025,7 @@ jobs:
 
       - name: Install npm dependencies
         if: ${{ inputs.enable-frontend }}
-        run: npm ci --legacy-peer-deps
+        run: npm ci
 
       - name: Generate npm SBOM
         if: ${{ inputs.enable-frontend }}
