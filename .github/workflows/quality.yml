@@ -68,12 +68,12 @@ on:
         type: string
         default: "20"
       frontend-setup-command:
-        description: "Optional extra install command run after `npm ci` in the frontend-checks job (e.g. 'cd docusaurus && npm ci')"
+        description: "Optional ADDITIONAL setup command for the frontend-checks job. The standard root `npm ci` always runs first; this command runs after it and does NOT replace it. Use it to prepare things the root install doesn't cover, e.g. installing a nested package's dependencies: 'cd docusaurus && npm ci'."
         required: false
         type: string
         default: ""
       frontend-checks:
-        description: "JSON array of npm scripts to run as individual 'Frontend Check (<script>)' jobs (e.g. '[\"test\", \"check:docs\"]'). Requires enable-frontend."
+        description: "JSON array of npm scripts to run as individual 'Frontend Check (<script>)' jobs (e.g. '[\"test\", \"check:docs\"]'). Requires enable-frontend. Every listed script MUST exist in the repo's package.json and MUST be self-contained — each leg is a fresh job (own checkout + npm ci), so bundle order-dependent steps into one script (e.g. \"check:build\": \"npm run build && npm run check:css-entry\"). See CONVENTIONS.md § Custom frontend checks."
         required: false
         type: string
         default: "[]"
@@ -318,7 +318,7 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
-        run: npm ci --legacy-peer-deps
+        run: npm ci
 
       - name: Run ${{ matrix.tool }}
         run: |
@@ -373,10 +373,17 @@ jobs:
           node-version: "${{ inputs.node-version }}"
           cache: "npm"
 
-      - name: Install dependencies
-        run: npm ci --legacy-peer-deps
+      - name: Verify script exists in package.json
+        run: |
+          if ! node -e "const s = require('./package.json').scripts || {}; process.exit(s['${{ matrix.script }}'] ? 0 : 1)"; then
+            echo "::error::npm script '${{ matrix.script }}' is listed in this repo's frontend-checks input but does not exist in package.json. Add the script (see CONVENTIONS.md § Custom frontend checks in ConductionNL/.github) or remove it from the frontend-checks list in .github/workflows/code-quality.yml."
+            exit 1
+          fi
 
-      - name: Extra setup
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Extra setup (runs after npm ci, does not replace it)
         if: ${{ inputs.frontend-setup-command != '' }}
         run: ${{ inputs.frontend-setup-command }}
 
@@ -435,7 +442,7 @@ jobs:
               composer audit --format=plain --abandoned=report
               ;;
             npm)
-              npm ci --legacy-peer-deps
+              npm ci
               # Tolerate an unavailable npm advisory endpoint: npm is retiring
               # the audits/quick endpoint and it intermittently 400s ("audit
               # endpoint returned an error" / "Invalid package tree"). That is an
@@ -545,7 +552,7 @@ jobs:
             fi
             composer install --no-progress --prefer-dist --optimize-autoloader
           else
-            npm ci --legacy-peer-deps
+            npm ci
             npm install -g license-checker
           fi
 
@@ -1182,7 +1189,7 @@ jobs:
         run: |
           cd server/apps/${{ inputs.app-name }}
           if [ -f "package.json" ]; then
-            npm ci --legacy-peer-deps
+            npm ci
           fi
 
       - name: Install Playwright
@@ -1516,7 +1523,7 @@ jobs:
         run: |
           cd server/apps/${{ inputs.app-name }}
           if [ -f "package.json" ]; then
-            npm ci --legacy-peer-deps
+            npm ci
           fi
 
       - name: Install Playwright
@@ -2007,7 +2014,7 @@ jobs:
 
       - name: Install npm dependencies
         if: ${{ inputs.enable-frontend }}
-        run: npm ci --legacy-peer-deps
+        run: npm ci
 
       - name: Generate npm SBOM
         if: ${{ inputs.enable-frontend }}
