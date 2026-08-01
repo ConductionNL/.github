@@ -134,6 +134,25 @@ services:
       - ../larpingapp:/var/www/html/custom_apps/larpingapp
       - ../scholiq:/var/www/html/custom_apps/scholiq
       - ../hermiq:/var/www/html/custom_apps/hermiq
+      # These five used to be mounted from ../openregister/custom_apps/<app>,
+      # which is NOT their checkout. Those directories are a stale second copy:
+      # `decidesk` and `openbuild` are not git repositories at all, `petstore`
+      # points at nextcloud-app-template, and `shillinq` sat five patch versions
+      # behind. Every one of the ConductionNL/<app> checkouts that work happens
+      # in is a sibling of .github, so the container was running code nobody was
+      # editing — proven 2026-08-01 by a marker round-trip, and it silently
+      # invalidated any live verification done against these apps.
+      # ⚠️ shillinq's checkout is ahead of the copy (0.9.18 -> 0.9.23), so the
+      # first container recreate after this change registers an app upgrade.
+      - ../decidesk:/var/www/html/custom_apps/decidesk
+      - ../hrmq:/var/www/html/custom_apps/hrmq
+      - ../openbuild:/var/www/html/custom_apps/openbuild
+      - ../petstore:/var/www/html/custom_apps/petstore
+      - ../shillinq:/var/www/html/custom_apps/shillinq
+      # planix had no mount at all, so nothing about it could ever be verified
+      # against this instance. Mounting it does not enable it — run
+      # `occ app:enable planix` once after the next recreate.
+      - ../planix:/var/www/html/custom_apps/planix
       # Pre-installed apps — mounted INDIVIDUALLY, not via a single recursive base
       # mount. The old `../openregister/custom_apps:/var/www/html/custom_apps`
       # mount overlapped the 16 child mounts above and, on Docker Desktop/WSL2,
@@ -149,19 +168,14 @@ services:
       - ../openregister/custom_apps/collectives:/var/www/html/custom_apps/collectives
       - ../openregister/custom_apps/contacts:/var/www/html/custom_apps/contacts
       - ../openregister/custom_apps/cospend:/var/www/html/custom_apps/cospend
-      - ../openregister/custom_apps/decidesk:/var/www/html/custom_apps/decidesk
       - ../openregister/custom_apps/deck:/var/www/html/custom_apps/deck
       - ../openregister/custom_apps/doriath:/var/www/html/custom_apps/doriath
       - ../openregister/custom_apps/forms:/var/www/html/custom_apps/forms
-      - ../openregister/custom_apps/hrmq:/var/www/html/custom_apps/hrmq
       - ../openregister/custom_apps/mail:/var/www/html/custom_apps/mail
       - ../openregister/custom_apps/maps:/var/www/html/custom_apps/maps
-      - ../openregister/custom_apps/openbuild:/var/www/html/custom_apps/openbuild
       - ../openregister/custom_apps/openconnector:/var/www/html/custom_apps/openconnector
-      - ../openregister/custom_apps/petstore:/var/www/html/custom_apps/petstore
       - ../openregister/custom_apps/polls:/var/www/html/custom_apps/polls
       - ../openregister/custom_apps/portaliq:/var/www/html/custom_apps/portaliq
-      - ../openregister/custom_apps/shillinq:/var/www/html/custom_apps/shillinq
       - ../openregister/custom_apps/spreed:/var/www/html/custom_apps/spreed
       - ../openregister/custom_apps/tasks:/var/www/html/custom_apps/tasks
       - ../openregister/custom_apps/timemanager:/var/www/html/custom_apps/timemanager
@@ -342,6 +356,13 @@ services:
       - ../larpingapp:/var/www/html/custom_apps/larpingapp
       - ../scholiq:/var/www/html/custom_apps/scholiq
       - ../hermiq:/var/www/html/custom_apps/hermiq
+      # See the note on the postgres `nextcloud` service: these five are the real
+      # ConductionNL checkouts, not the stale ../openregister/custom_apps copies.
+      - ../decidesk:/var/www/html/custom_apps/decidesk
+      - ../hrmq:/var/www/html/custom_apps/hrmq
+      - ../openbuild:/var/www/html/custom_apps/openbuild
+      - ../petstore:/var/www/html/custom_apps/petstore
+      - ../shillinq:/var/www/html/custom_apps/shillinq
       - ../openregister/custom_apps/analytics:/var/www/html/custom_apps/analytics
       - ../openregister/custom_apps/app_versions:/var/www/html/custom_apps/app_versions
       - ../openregister/custom_apps/bookmarks:/var/www/html/custom_apps/bookmarks
@@ -349,19 +370,14 @@ services:
       - ../openregister/custom_apps/collectives:/var/www/html/custom_apps/collectives
       - ../openregister/custom_apps/contacts:/var/www/html/custom_apps/contacts
       - ../openregister/custom_apps/cospend:/var/www/html/custom_apps/cospend
-      - ../openregister/custom_apps/decidesk:/var/www/html/custom_apps/decidesk
       - ../openregister/custom_apps/deck:/var/www/html/custom_apps/deck
       - ../openregister/custom_apps/doriath:/var/www/html/custom_apps/doriath
       - ../openregister/custom_apps/forms:/var/www/html/custom_apps/forms
-      - ../openregister/custom_apps/hrmq:/var/www/html/custom_apps/hrmq
       - ../openregister/custom_apps/mail:/var/www/html/custom_apps/mail
       - ../openregister/custom_apps/maps:/var/www/html/custom_apps/maps
-      - ../openregister/custom_apps/openbuild:/var/www/html/custom_apps/openbuild
       - ../openregister/custom_apps/openconnector:/var/www/html/custom_apps/openconnector
-      - ../openregister/custom_apps/petstore:/var/www/html/custom_apps/petstore
       - ../openregister/custom_apps/polls:/var/www/html/custom_apps/polls
       - ../openregister/custom_apps/portaliq:/var/www/html/custom_apps/portaliq
-      - ../openregister/custom_apps/shillinq:/var/www/html/custom_apps/shillinq
       - ../openregister/custom_apps/spreed:/var/www/html/custom_apps/spreed
       - ../openregister/custom_apps/tasks:/var/www/html/custom_apps/tasks
       - ../openregister/custom_apps/timemanager:/var/www/html/custom_apps/timemanager
