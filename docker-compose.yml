@@ -7,6 +7,18 @@
 # Quick start:
 #   docker compose -f .github/docker-compose.yml up -d
 #
+# ⚠️ ALWAYS pass `-p openregister`. The running stack was created under the
+# compose project name `openregister`, but compose derives the project name from
+# the working directory — so running this file from inside `.github/` silently
+# targets a project called `github` instead. That project is NOT empty: other
+# worktrees run their own CI-local stacks from their own `.github/` directories,
+# so their containers carry `project=github` too. On 2026-08-01 a bare
+#   `docker compose up -d --force-recreate nextcloud`
+# run from this directory matched a *procest* CI container as its `nextcloud`
+# service and stopped it, then failed on a name clash with `conduction-postgres`
+# after creating two empty stray volumes. Correct form:
+#   docker compose -p openregister up -d --force-recreate --no-deps nextcloud
+#
 # With profiles:
 #   docker compose -f .github/docker-compose.yml --profile mail up -d
 #   docker compose -f .github/docker-compose.yml --profile ai --profile mail up -d
