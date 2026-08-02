@@ -60,6 +60,10 @@ Proven L3 building blocks for skills — description writing, subfolder layout (
 
 Detailed L5 reference for evaluating, measuring, and improving skills with data — `evals.json` format, baseline scoring, trigger tests, and the iteration workflow.
 
+### [Skill Level Sources](./skill-level-sources.md)
+
+Annotated external sources behind the L1–L7 maturity framework — direct ancestry, human-competence frameworks (SFIA 9, Dreyfus, e-CF/KWIV), maturity models (CMMI), L5 eval methodology, user AI-fluency frameworks (Anthropic 4Ds, EU AI Act Article 4), and sources assessed-and-excluded.
+
 ### [Writing ADRs](./writing-adrs.md)
 
 How to write Architectural Decision Records: structure, format, when to create one, and how ADRs feed into the OpenSpec workflow.
@@ -472,6 +476,7 @@ This repo contains **documentation**, **global settings**, and **project templat
 │       ├── skill-checklist.md           # Pre-add / review checklist by maturity level
 │       ├── skill-patterns.md            # Reusable L3 skill patterns and subfolder guide
 │       ├── skill-evals.md               # Skill evaluation & measurement (L5 reference)
+│       ├── skill-level-sources.md       # Annotated external sources for the L1–L7 framework
 │       ├── writing-adrs.md              # How to write ADRs
 │       ├── writing-docs.md              # Documentation standards
 │       ├── app-lifecycle.md             # Nextcloud app lifecycle
