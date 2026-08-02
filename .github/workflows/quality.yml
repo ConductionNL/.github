@@ -234,8 +234,31 @@ jobs:
 
       - name: Run ${{ matrix.tool }}
         run: |
+          # `composer <script>` exits 1 for BOTH "the script ran and returned 1"
+          # and "Command \"<script>\" is not defined." Any leg that interprets
+          # exit 1 (the phpcs warnings-are-non-blocking rule below) therefore
+          # reads a MISSING gate as a PASSING gate — a gate's absence and a
+          # gate's success become indistinguishable. See ConductionNL/.github#121.
+          #
+          # So: assert the script is declared BEFORE running it, and read the
+          # declaration from composer.json rather than from the exit code.
+          # Deliberately NOT an `[ -f vendor/bin/<tool> ]` guard — a file-presence
+          # guard that skips is the same silent-pass defect in a new costume.
+          require_script() {
+            tool="$1"
+            hint="$2"
+            if [ ! -f composer.json ]; then
+              echo "::error::The '$tool' gate is enabled but there is no composer.json in the repository root."
+              exit 1
+            fi
+            if ! jq -e --arg s "$tool" '(.scripts // {}) | has($s)' composer.json > /dev/null 2>&1; then
+              echo "::error::The '$tool' gate is enabled but composer.json declares no '$tool' script. Add it under \"scripts\", or turn the gate off with $hint."
+              exit 1
+            fi
+          }
           case "${{ matrix.tool }}" in
             lint)
+              require_script lint "the enable-php input"
               composer lint
               ;;
             phpcs)
@@ -243,8 +266,10 @@ jobs:
                 echo "PHPCS is disabled — skipping."
                 exit 0
               fi
+              require_script phpcs "the enable-phpcs input"
               # Exit code 0 = clean, 1 = warnings only, 2 = errors found.
-              # We treat warnings as non-blocking (exit 1 → success).
+              # We treat warnings as non-blocking (exit 1 → success). This is only
+              # safe because require_script has already proven the script exists.
               # NB: capture via `|| RC=$?` — a bare `composer phpcs; RC=$?`
               # is killed by `set -e` before RC is ever assigned.
               RC=0
@@ -260,6 +285,7 @@ jobs:
                 echo "PHPMD is disabled — skipping."
                 exit 0
               fi
+              require_script phpmd "the enable-phpmd input"
               composer phpmd
               ;;
             psalm)
@@ -267,6 +293,7 @@ jobs:
                 echo "Psalm is disabled — skipping."
                 exit 0
               fi
+              require_script psalm "the enable-psalm input"
               composer psalm
               ;;
             phpstan)
@@ -274,6 +301,7 @@ jobs:
                 echo "PHPStan is disabled — skipping."
                 exit 0
               fi
+              require_script phpstan "the enable-phpstan input"
               composer phpstan
               ;;
             phpmetrics)
@@ -281,6 +309,7 @@ jobs:
                 echo "phpmetrics is disabled — skipping."
                 exit 0
               fi
+              require_script phpmetrics "the enable-phpmetrics input"
               composer phpmetrics
               ;;
           esac
