@@ -2050,24 +2050,82 @@ jobs:
         if: ${{ !inputs.enable-frontend }}
         run: mv bom-php.cdx.json sbom.cdx.json
 
+      # Fold each component's npm scope back into its name.
+      #
+      # CycloneDX splits a scoped package into two fields:
+      #
+      #     name:  gen-mapping        group: @jridgewell
+      #     purl:  pkg:npm/%40jridgewell/gen-mapping@0.3.13
+      #
+      # Grype matches on `name` alone and ignores `group`, so the legitimate
+      # @jridgewell/gen-mapping collides with "Malware in gen-mapping" — an
+      # advisory about the UNSCOPED typosquat of the same base name. The npm
+      # typosquatting campaign hit enough popular scoped packages that this is a
+      # recurring class, not three one-offs: openbuild's SBOM went red on
+      # @rollup/rollup-linux-riscv64-gnu after the ignore list below already
+      # covered the first two.
+      #
+      # Writing "@scope/name" into `name` is what npm itself calls the package,
+      # matches the purl that is already correct, and makes Grype match the right
+      # advisory. It SUPPRESSES NOTHING: a genuinely unscoped malicious package
+      # has no `group` to fold, keeps its bare name, and is still flagged.
+      #
+      # Recursive because CycloneDX permits nested `components`; a top-level-only
+      # pass leaves nested entries unrenamed and still failing.
+      - name: Normalise scoped npm names in the SBOM
+        run: |
+          python3 - <<'PY'
+          import json
+
+          with open('sbom.cdx.json') as fh:
+              doc = json.load(fh)
+
+          renamed = 0
+
+          def fold(node):
+              global renamed
+              if isinstance(node, dict):
+                  group = node.get('group')
+                  name = node.get('name')
+                  if group and isinstance(name, str) and not name.startswith('@'):
+                      node['name'] = group + '/' + name
+                      renamed += 1
+                  for value in node.values():
+                      fold(value)
+              elif isinstance(node, list):
+                  for value in node:
+                      fold(value)
+
+          fold(doc)
+
+          with open('sbom.cdx.json', 'w') as fh:
+              json.dump(doc, fh)
+
+          print(f'Normalised {renamed} scoped component name(s) for Grype matching.')
+          PY
+
       # ── Validation gate ──
 
       - name: Install Grype
         uses: anchore/scan-action/download-grype@v5
         id: grype-install
 
-      - name: Create Grype ignore list for known false positives
-        run: |
-          if [ ! -f .grype.yaml ]; then
-            cat > .grype.yaml << 'GRYPE'
-          ignore:
-            # False positives: Grype matches unscoped CycloneDX component names
-            # against malware advisories for typosquatting packages. Actual deps
-            # are scoped (@jridgewell/gen-mapping, @babel/helper-validator-identifier).
-            - vulnerability: GHSA-8rmg-jf7p-4p22
-            - vulnerability: GHSA-pvjq-589m-3mc8
-          GRYPE
-          fi
+      # The ignore list that used to live here is deliberately gone.
+      #
+      # It suppressed GHSA-8rmg-jf7p-4p22 and GHSA-pvjq-589m-3mc8 outright to work
+      # around the scope-matching problem the normalisation step above now fixes
+      # properly. Those entries carried no package qualifier, so they suppressed
+      # the advisories for ANY component — including a genuinely malicious
+      # unscoped `gen-mapping`, which is exactly the package the advisory is about.
+      #
+      # Measured, by injecting a real unscoped `gen-mapping@0.3.13` (no group) into
+      # the SBOM:
+      #
+      #   with the old ignore list   -> grype exit 0, 0 criticals   (malware hidden)
+      #   with normalisation, no list -> grype exit 1, 1 critical    (malware caught)
+      #
+      # A workaround that hides the thing it is named after is worse than the
+      # false positive it was written for.
 
       - name: CVE scan SBOM
         run: ${{ steps.grype-install.outputs.cmd }} sbom:sbom.cdx.json --fail-on critical
