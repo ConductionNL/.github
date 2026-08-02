@@ -414,6 +414,99 @@ jobs:
           name: result-frontend-check-${{ strategy.job-index }}
           path: quality-results/
 
+  # Auto-detected JS unit tests.
+  #
+  # `frontend-checks` above is an opt-in LIST that defaults to "[]", so a repo
+  # only runs its JS suite if someone remembered to name the script. Nobody
+  # did: across the fleet this job's matrix resolved empty and reported
+  # "skipping" with the expression unexpanded, so vitest/jest suites had NEVER
+  # run in CI. Real failures sat invisible for months (openbuild carries one;
+  # procest's harness is broken outright — `tests/vitest/setup.js` does
+  # `import Vue from 'vue'`, which vue@3 does not publish).
+  #
+  # This job needs no opt-in: it runs the repo's own `test` script when one
+  # exists and is not a placeholder, and it BLOCKS on failure. A repo with no
+  # test script skips cleanly.
+  #
+  # Note it invokes `npm run test`, never `npx vitest` — a bare `npx vitest`
+  # exits 0 with no output when it finds no matching config, which is how
+  # doriath's "passing" unit gate was running nothing at all.
+  frontend-tests:
+    if: ${{ inputs.enable-frontend }}
+    runs-on: ubuntu-latest
+    name: "Frontend Tests (unit)"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "${{ inputs.node-version }}"
+          cache: "npm"
+
+      - name: Detect a runnable test script
+        id: detect
+        run: |
+          if [ ! -f package.json ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No package.json — nothing to test."
+            exit 0
+          fi
+          # Prefer `test`, fall back to `test:unit` — several repos declare
+          # their suite only under the latter (decidesk has 282 passing tests
+          # that a `test`-only probe would have skipped entirely).
+          #
+          # Skip the conventional npm placeholder, which "passes" while
+          # running nothing: "Error: no test specified" && exit 1.
+          node -e "
+            const s = (require('./package.json').scripts) || {};
+            const placeholder = v => !v || /no test specified/i.test(v);
+            const name = !placeholder(s.test) ? 'test'
+                       : !placeholder(s['test:unit']) ? 'test:unit'
+                       : '';
+            console.log('run=' + (name ? 'true' : 'false'));
+            console.log('script=' + name);
+          " >> "$GITHUB_OUTPUT"
+          node -e "
+            const s = (require('./package.json').scripts) || {};
+            const placeholder = v => !v || /no test specified/i.test(v);
+            const name = !placeholder(s.test) ? 'test'
+                       : !placeholder(s['test:unit']) ? 'test:unit'
+                       : '';
+            console.log(name
+              ? 'Detected \'' + name + '\' script: ' + s[name]
+              : 'No runnable test script (checked: test, test:unit).');
+          "
+
+      - name: Install dependencies
+        if: steps.detect.outputs.run == 'true'
+        run: npm ci
+
+      - name: Run unit tests
+        if: steps.detect.outputs.run == 'true'
+        env:
+          SCRIPT: ${{ steps.detect.outputs.script }}
+        run: npm run "$SCRIPT"
+
+      - name: Record result
+        if: always()
+        run: |
+          mkdir -p quality-results
+          if [ "${{ steps.detect.outputs.run }}" != "true" ]; then
+            echo "skipped" > quality-results/frontend-tests.txt
+          else
+            echo "${{ job.status }}" > quality-results/frontend-tests.txt
+          fi
+
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-frontend-tests
+          path: quality-results/
+
   # ── Group 3: Security ──────────────────────────
   security:
     runs-on: ubuntu-latest
