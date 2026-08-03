@@ -187,6 +187,21 @@ on:
         required: false
         type: string
         default: "pgsql"
+      enable-hydra-gates:
+        description: "Run the 61 Hydra mechanical quality gates (conduction/hydra-gates) against this PR's diff. OPT-IN, default false: the gates are diff-scoped per ADR-020, but a repo whose in-flight branches touch files with inherited debt will go red the moment this is switched on, so each repo enables it once its own diffs are clean. Enabling it makes gate failures block the Quality Report."
+        required: false
+        type: boolean
+        default: false
+      hydra-gates-ref:
+        description: "Ref of ConductionNL/.github to take the gate package from. Pin this to a tag to stop a gate change from altering a repo's verdict without a commit in that repo."
+        required: false
+        type: string
+        default: "main"
+      hydra-gates-require-full-coverage:
+        description: "Treat 'a declared gate did not run' as a failure (exit 98). Off by default: a control that blocks legitimate work gets switched off, and a switched-off control is worth less than a loud one. The coverage block is printed either way."
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: quality-${{ github.ref }}
@@ -2223,10 +2238,138 @@ jobs:
             git push || echo "::warning::Could not push the updated coverage baseline — branch protection rejected the bot push (see ConductionNL/.github#61). Commit .coverage-baseline manually."
           fi
 
+  # ── Hydra mechanical gates ──────────────────────
+  #
+  # The 61 gates, run from conduction/hydra-gates (this repository, hydra-gates/).
+  # OPT-IN via enable-hydra-gates; default false. See the input description.
+  #
+  # Two properties this job exists to preserve, both of which have been observed
+  # failing silently:
+  #
+  #   1. THE BASE REF IS EXPLICIT AND FAILS CLOSED. The gates are diff-scoped,
+  #      so a base that resolves to nothing makes every gate pass having read no
+  #      files — a green indistinguishable from a real one. On a pull_request we
+  #      name the PR's actual target branch. We never use @{upstream} (on a
+  #      pushed feature branch that is the branch ITSELF, which is exactly the
+  #      empty-diff case, and it happens precisely when CI runs) and we never
+  #      fall back to HEAD~1 (on a squash-merged mainline that is the previous
+  #      release). An unresolvable base exits 99 and prints no green.
+  #
+  #   2. THE EXIT CODE IS THE FAILURE COUNT. We capture it before deciding the
+  #      job verdict, and report 99 ("could not run at all") distinctly from
+  #      "N gates failed". A configuration error must never read as a clean tree.
+  #
+  # The package is checked out as a SIBLING of the app checkout, not inside it,
+  # so nothing in the gate package can ever be mistaken for app code under scan.
+  hydra-gates:
+    if: ${{ inputs.enable-hydra-gates }}
+    runs-on: ubuntu-latest
+    name: "Hydra Gates"
+    # The gates are shell + python over a PR-sized diff. Bounded generously:
+    # the slowest observed component is the manifest gate's node startup.
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout app
+        uses: actions/checkout@v4
+        with:
+          path: app
+          # fetch-depth: 0 is REQUIRED, not an optimisation. The gates are
+          # diff-scoped; a shallow clone has no base branch to diff against, so
+          # the base would not resolve and the run would (correctly) exit 99.
+          fetch-depth: 0
+
+      - name: Checkout conduction/hydra-gates
+        uses: actions/checkout@v4
+        with:
+          repository: ConductionNL/.github
+          ref: ${{ inputs.hydra-gates-ref }}
+          path: gates
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "${{ inputs.node-version }}"
+
+      - name: Install ajv for the manifest gates
+        # Installed INTO the package dir so `require('ajv')` from
+        # scripts/lib/check_manifest.js resolves by walking up to
+        # gates/hydra-gates/node_modules. A global install would need NODE_PATH
+        # and would silently not be found — which the manifest gates survive via
+        # a vendored fallback, meaning the miss would not be visible here. The
+        # coverage block at the end of the run is what makes any such gap loud.
+        run: npm --prefix gates/hydra-gates install --no-save --no-audit --no-fund ajv
+
+      - name: Resolve the diff base
+        id: base
+        run: |
+          set -u
+          if [ "${{ github.event_name }}" = "pull_request" ] || [ "${{ github.event_name }}" = "pull_request_target" ]; then
+            # The PR's real target branch. This is the only base that answers
+            # the question the gates are being asked: "what does this PR add?"
+            BASE="origin/${{ github.base_ref }}"
+          else
+            # Not a PR. We deliberately set NOTHING and let the package's own
+            # precedence chain resolve origin/HEAD -> origin/development ->
+            # origin/main -> origin/master, printing which one won and exiting
+            # 99 if none do. Inventing a base here would be the HEAD~1 mistake
+            # wearing a different name.
+            BASE=""
+          fi
+          echo "base=${BASE}" >> "$GITHUB_OUTPUT"
+          echo "Diff base for this run: ${BASE:-<auto-detect, see the run output>}"
+
+      - name: Run the Hydra gates
+        id: gates
+        env:
+          HYDRA_GATE_BASE_REF: ${{ steps.base.outputs.base }}
+        run: |
+          set -u
+          ARGS="--app-dir ${GITHUB_WORKSPACE}/app"
+          if [ "${{ inputs.hydra-gates-require-full-coverage }}" = "true" ]; then
+            ARGS="${ARGS} --require-full-coverage"
+          fi
+          # The default shell for a `run:` block is `bash -e {0}`. A bare
+          # invocation followed by `RC=$?` would therefore never reach the
+          # assignment — the step would abort on the first failing gate and the
+          # exit code, which carries the FAILURE COUNT, would be lost. Putting
+          # the call in an `&& / ||` list suspends errexit for it, so we get the
+          # real code. This is the 0/1 collapse the contract forbids, and it is
+          # one character away at all times.
+          bash "${GITHUB_WORKSPACE}/gates/hydra-gates/bin/hydra-gates" ${ARGS} && RC=0 || RC=$?
+          echo "rc=${RC}" >> "$GITHUB_OUTPUT"
+
+          if [ "${RC}" -eq 0 ]; then
+            echo "All gates that ran passed. Read the COVERAGE block above before treating this as complete."
+            exit 0
+          fi
+          if [ "${RC}" -eq 99 ]; then
+            echo "::error::hydra-gates COULD NOT RUN (exit 99). This is a configuration error, NOT a clean tree — nothing was gated. Most often: the diff base did not resolve, or the app checkout is shallow."
+            exit 1
+          fi
+          if [ "${RC}" -eq 98 ]; then
+            echo "::error::hydra-gates passed but coverage was incomplete, and hydra-gates-require-full-coverage is set. See the GATES THAT DID NOT RUN line above."
+            exit 1
+          fi
+          echo "::error::${RC} Hydra gate(s) failed. The exit code is the failure COUNT — see the named [gate-N] FAIL lines above."
+          exit 1
+
+      - name: Record result
+        if: always()
+        run: |
+          mkdir -p quality-results
+          echo "${{ job.status }}" > quality-results/hydra-gates.txt
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-hydra-gates
+          path: quality-results/
+
   report:
     runs-on: ubuntu-latest
     name: "Quality Report"
-    needs: [php-quality, vue-quality, frontend-checks, security, license, phpunit, newman, playwright, journeydoc-capture, baseline-protection, sbom, features-check, features-extract]
+    needs: [php-quality, vue-quality, frontend-checks, security, license, phpunit, newman, playwright, journeydoc-capture, baseline-protection, sbom, features-check, features-extract, hydra-gates]
     if: always()
     # Observed across 266 executions: median 0.6 min — but 2% of runs sit at
     # ~30 min because the `Install PDF tools` apt-get step stalls on the Ubuntu

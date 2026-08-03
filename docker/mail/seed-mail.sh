@@ -22,12 +22,13 @@ send_email() {
     local cc="${6:-}"
     local message_id="${7:-$(uuidgen)@test.local}"
 
-    local cc_header=""
-    if [ -n "$cc" ]; then
-        cc_header="Cc: $cc"$'\r\n'
-    fi
-
-    local email_data="From: $from\r\nTo: $to\r\n${cc_header}Subject: $subject\r\nDate: $date\r\nMessage-ID: <$message_id>\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n$body"
+    # NOTE: this function used to assemble the RFC-822 message here, into a
+    # local `email_data` (and a `cc_header` feeding it). Nothing ever read it —
+    # the python block below builds the message itself from the same arguments,
+    # including Cc. The dead assignment was the only reader of `cc_header`, so
+    # both are gone. Removed rather than suppressed: a hand-rolled second copy
+    # of the message format that no longer sends anything is exactly the kind of
+    # thing that gets "fixed" later by someone who assumes it is live.
 
     # Use Python for reliable SMTP sending (available in most environments)
     python3 -c "

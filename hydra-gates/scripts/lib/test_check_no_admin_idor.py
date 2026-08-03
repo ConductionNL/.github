@@ -1,0 +1,1111 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: EUPL-1.2
+"""Tests for check_no_admin_idor (gate-7). Run with:
+
+    python3 scripts/lib/test_check_no_admin_idor.py
+
+or via pytest:
+
+    python3 -m pytest scripts/lib/test_check_no_admin_idor.py
+"""
+from __future__ import annotations
+
+import io
+import os
+import sys
+import tempfile
+import unittest
+from contextlib import redirect_stdout
+from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import check_no_admin_idor as cni  # noqa: E402
+
+
+# ---------------------------------------------------------------------------
+# Helper
+# ---------------------------------------------------------------------------
+
+def _scan(src: str) -> list[str]:
+    """Write *src* to a temp file, scan it, capture printed lines."""
+    with tempfile.NamedTemporaryFile(
+        suffix=".php", mode="w", encoding="utf-8", delete=False
+    ) as fh:
+        fh.write(src)
+        fh_name = fh.name
+    buf = io.StringIO()
+    try:
+        with redirect_stdout(buf):
+            cni.scan_file(fh_name)
+    finally:
+        os.unlink(fh_name)
+    return [ln for ln in buf.getvalue().splitlines() if ln.strip()]
+
+
+# ---------------------------------------------------------------------------
+# Exemption 2 — preflightedCors* name prefix
+# ---------------------------------------------------------------------------
+
+class PreflightedCorsExemptionTest(unittest.TestCase):
+    """Methods whose name starts with preflightedCors must NOT be flagged.
+
+    Nextcloud convention: OPTIONS routes handled by ``preflightedCors`` /
+    ``preflightedCorsItem`` / ``preflightedCorsNested`` etc. are sent by
+    browsers *without credentials* before the real request; an auth guard
+    would break CORS.  These are never IDOR vectors.
+    """
+
+    def test_preflightedCors_not_flagged(self):
+        """The exact fleet name preflightedCors with @NoAdminRequired is exempted."""
+        src = """\
+<?php
+class DirectoryController {
+    /**
+     * @NoAdminRequired
+     * @NoCSRFRequired
+     * @PublicPage
+     */
+    public function preflightedCors(): Response
+    {
+        $response = new Response();
+        $response->addHeader('Access-Control-Allow-Origin', '*');
+        $response->addHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE');
+        return $response;
+    }
+}
+"""
+        self.assertEqual(_scan(src), [])
+
+    def test_preflightedCorsItem_not_flagged(self):
+        """Variant suffix preflightedCorsItem is also exempted."""
+        src = """\
+<?php
+class ItemController {
+    /**
+     * @NoAdminRequired
+     * @NoCSRFRequired
+     */
+    public function preflightedCorsItem(): Response
+    {
+        $r = new Response();
+        $r->addHeader('Access-Control-Allow-Origin', '*');
+        $r->addHeader('Access-Control-Allow-Methods', 'PUT, PATCH');
+        return $r;
+    }
+}
+"""
+        self.assertEqual(_scan(src), [])
+
+    def test_preflightedCors_mixed_case_not_flagged(self):
+        """Case-insensitive match: PreflightedCors prefix is also exempt."""
+        src = """\
+<?php
+class SomeController {
+    /**
+     * @NoAdminRequired
+     */
+    public function PreflightedCors(): Response
+    {
+        $r = new Response();
+        $r->addHeader('Access-Control-Allow-Origin', 'https://example.com');
+        return $r;
+    }
+}
+"""
+        self.assertEqual(_scan(src), [])
+
+    def test_non_preflight_method_without_guard_is_flagged(self):
+        """A method NOT named preflightedCors* without a guard must be flagged."""
+        src = """\
+<?php
+class ItemController {
+    /**
+     * @NoAdminRequired
+     * @NoCSRFRequired
+     */
+    public function previewItem(string $id): JSONResponse
+    {
+        $item = $this->service->find($id);
+        return new JSONResponse($item);
+    }
+}
+"""
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("previewItem", findings[0])
+        self.assertIn("no-auth-guard-in-body", findings[0])
+
+    def test_idor_exempt_tag_with_reason_passes(self):
+        """`@no-admin-idor-exempt <reason>` in the docblock exempts the method."""
+        src = """\
+<?php
+class XWikiController {
+    /**
+     * Search xWiki pages.
+     *
+     * @NoAdminRequired
+     * @NoCSRFRequired
+     * @no-admin-idor-exempt read-only knowledge-base proxy, no object ids
+     */
+    public function search(): JSONResponse
+    {
+        return new JSONResponse($this->xwiki->search($q));
+    }
+}
+"""
+        findings = _scan(src)
+        self.assertEqual(findings, [])
+
+    def test_idor_exempt_tag_without_reason_still_flagged(self):
+        """A bare `@no-admin-idor-exempt` tag (no reason) does NOT exempt."""
+        src = """\
+<?php
+class XWikiController {
+    /**
+     * @NoAdminRequired
+     * @no-admin-idor-exempt
+     */
+    public function search(): JSONResponse
+    {
+        return new JSONResponse($this->xwiki->search($q));
+    }
+}
+"""
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("search", findings[0])
+
+    def test_preview_prefix_not_confused_with_preflight(self):
+        """Methods starting with 'preview' are NOT CORS handlers — still flagged."""
+        src = """\
+<?php
+class ObjectController {
+    /**
+     * @NoAdminRequired
+     */
+    public function previewObject(): JSONResponse
+    {
+        return new JSONResponse($this->service->findAll());
+    }
+}
+"""
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("previewObject", findings[0])
+
+
+# ---------------------------------------------------------------------------
+# Exemption 3 — CORS-headers-only body (no data access)
+# ---------------------------------------------------------------------------
+
+class CorsOnlyBodyExemptionTest(unittest.TestCase):
+    """Oddly-named handlers that only set Access-Control-* headers are exempt."""
+
+    def test_cors_only_body_exempted(self):
+        """A method that only sets CORS headers is exempted even without the name convention."""
+        src = """\
+<?php
+class ApiController {
+    /**
+     * @NoAdminRequired
+     * @NoCSRFRequired
+     */
+    public function corsHandler(): Response
+    {
+        $r = new Response();
+        $r->addHeader('Access-Control-Allow-Origin', '*');
+        $r->addHeader('Access-Control-Allow-Methods', 'GET');
+        return $r;
+    }
+}
+"""
+        self.assertEqual(_scan(src), [])
+
+    def test_cors_plus_data_access_not_exempted(self):
+        """A method that sets CORS headers AND accesses data is still flagged."""
+        src = """\
+<?php
+class ApiController {
+    /**
+     * @NoAdminRequired
+     */
+    public function index(): JSONResponse
+    {
+        $data = $this->mapper->findAll();
+        $r = new JSONResponse($data);
+        $r->addHeader('Access-Control-Allow-Origin', '*');
+        return $r;
+    }
+}
+"""
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("index", findings[0])
+
+
+# ---------------------------------------------------------------------------
+# Exemption 1 — __construct
+# ---------------------------------------------------------------------------
+
+class ConstructorExemptionTest(unittest.TestCase):
+    def test_constructor_not_flagged(self):
+        """__construct is never a routed endpoint — always skipped."""
+        src = """\
+<?php
+class MyController {
+    /**
+     * @NoAdminRequired
+     */
+    public function __construct(
+        private MyService $service
+    ) {
+    }
+}
+"""
+        self.assertEqual(_scan(src), [])
+
+
+# ---------------------------------------------------------------------------
+# Guard patterns — must satisfy gate-7
+# ---------------------------------------------------------------------------
+
+class GuardPatternTest(unittest.TestCase):
+    def test_ocs_forbidden_exception_passes(self):
+        src = """\
+<?php
+class ItemController {
+    /**
+     * @NoAdminRequired
+     */
+    public function show(string $id): JSONResponse
+    {
+        if (!$this->canRead($id)) {
+            throw new OCSForbiddenException('Access denied');
+        }
+        return new JSONResponse($this->service->find($id));
+    }
+}
+"""
+        self.assertEqual(_scan(src), [])
+
+    def test_is_admin_check_passes(self):
+        src = """\
+<?php
+class ItemController {
+    /**
+     * @NoAdminRequired
+     */
+    public function show(string $id): JSONResponse
+    {
+        if (!$this->isAdmin()) {
+            return new JSONResponse([], Http::STATUS_FORBIDDEN);
+        }
+        return new JSONResponse($this->service->find($id));
+    }
+}
+"""
+        self.assertEqual(_scan(src), [])
+
+    def test_authorize_service_call_passes(self):
+        src = """\
+<?php
+class ItemController {
+    /**
+     * @NoAdminRequired
+     */
+    public function update(string $id): JSONResponse
+    {
+        $this->authorizationService->authorizeAction('update', $id);
+        return new JSONResponse($this->service->find($id));
+    }
+}
+"""
+        self.assertEqual(_scan(src), [])
+
+    def test_require_service_call_passes(self):
+        src = """\
+<?php
+class ItemController {
+    /**
+     * @NoAdminRequired
+     */
+    public function destroy(string $id): JSONResponse
+    {
+        $this->permissionService->requirePermission('delete', $id);
+        $this->service->delete($id);
+        return new JSONResponse([]);
+    }
+}
+"""
+        self.assertEqual(_scan(src), [])
+
+    def test_ensure_service_call_passes(self):
+        src = """\
+<?php
+class ItemController {
+    /**
+     * @NoAdminRequired
+     */
+    public function create(): JSONResponse
+    {
+        $this->accessService->ensureOwnership($this->userId);
+        return new JSONResponse($this->service->create([]));
+    }
+}
+"""
+        self.assertEqual(_scan(src), [])
+
+    def test_status_unauthorized_passes(self):
+        src = """\
+<?php
+class ItemController {
+    /**
+     * @NoAdminRequired
+     */
+    public function show(string $id): JSONResponse
+    {
+        if ($this->userSession->getUser() === null) {
+            return new JSONResponse([], Http::STATUS_UNAUTHORIZED);
+        }
+        return new JSONResponse($this->service->find($id));
+    }
+}
+"""
+        self.assertEqual(_scan(src), [])
+
+    def test_template_response_passes(self):
+        """SPA page renderers that return TemplateResponse are exempt."""
+        src = """\
+<?php
+class DashboardController {
+    /**
+     * @NoAdminRequired
+     */
+    public function page(): TemplateResponse
+    {
+        return new TemplateResponse('myapp', 'index');
+    }
+}
+"""
+        self.assertEqual(_scan(src), [])
+
+    def test_template_response_in_return_type_hint_passes(self):
+        """TemplateResponse in the return-type hint (not in the body) is also exempt.
+
+        The bash gate includes the function declaration line in its _body
+        variable, so a method like ``dashboard(): TemplateResponse`` that
+        delegates to ``$this->makeSpaResponse()`` passes because the return
+        type hint contains 'TemplateResponse'. The Python implementation must
+        match this behaviour.
+        """
+        src = """\
+<?php
+class UiController {
+    /**
+     * @NoAdminRequired
+     * @NoCSRFRequired
+     */
+    public function dashboard(): TemplateResponse
+    {
+        return $this->makeSpaResponse();
+    }
+}
+"""
+        self.assertEqual(_scan(src), [])
+
+    def test_public_page_annotation_on_method_passes(self):
+        """@PublicPage on the method head satisfies the gate."""
+        src = """\
+<?php
+class PublicController {
+    /**
+     * @NoAdminRequired
+     * @PublicPage
+     */
+    public function listing(): JSONResponse
+    {
+        return new JSONResponse($this->service->findAll());
+    }
+}
+"""
+        self.assertEqual(_scan(src), [])
+
+    def test_attribute_public_page_passes(self):
+        """#[PublicPage] PHP 8 attribute on the method also satisfies the gate."""
+        src = """\
+<?php
+class PublicController {
+    /**
+     * @NoAdminRequired
+     */
+    #[PublicPage]
+    public function listing(): JSONResponse
+    {
+        return new JSONResponse($this->service->findAll());
+    }
+}
+"""
+        self.assertEqual(_scan(src), [])
+
+
+# ---------------------------------------------------------------------------
+# Real IDOR violation — must be caught
+# ---------------------------------------------------------------------------
+
+class RealIdorViolationTest(unittest.TestCase):
+    def test_no_guard_at_all_is_flagged(self):
+        """A @NoAdminRequired method with no guard, no PublicPage, no exemption is flagged."""
+        src = """\
+<?php
+class ObjectsController {
+    /**
+     * @NoAdminRequired
+     * @NoCSRFRequired
+     */
+    public function show(string $id): JSONResponse
+    {
+        $object = $this->objectService->find($id);
+        return new JSONResponse($object);
+    }
+}
+"""
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("show", findings[0])
+        self.assertIn("no-auth-guard-in-body", findings[0])
+
+    def test_multiple_violations_all_reported(self):
+        """Multiple unguarded methods in the same file are all reported."""
+        src = """\
+<?php
+class ObjectsController {
+    /**
+     * @NoAdminRequired
+     */
+    public function index(): JSONResponse
+    {
+        return new JSONResponse($this->service->findAll());
+    }
+
+    /**
+     * @NoAdminRequired
+     */
+    public function show(string $id): JSONResponse
+    {
+        return new JSONResponse($this->service->find($id));
+    }
+
+    /**
+     * @NoAdminRequired
+     */
+    public function destroy(string $id): JSONResponse
+    {
+        $this->service->delete($id);
+        return new JSONResponse([]);
+    }
+}
+"""
+        findings = _scan(src)
+        self.assertEqual(len(findings), 3)
+        names = {f.split("method=")[1].split(" ")[0] for f in findings}
+        self.assertEqual(names, {"index", "show", "destroy"})
+
+    def test_method_without_no_admin_required_not_flagged(self):
+        """Methods that lack @NoAdminRequired are out of scope for gate-7."""
+        src = """\
+<?php
+class AdminController {
+    public function adminAction(): JSONResponse
+    {
+        return new JSONResponse($this->service->findAll());
+    }
+}
+"""
+        self.assertEqual(_scan(src), [])
+
+    def test_idor_with_cors_plus_data_access(self):
+        """A method with CORS headers AND data access is still flagged if no guard."""
+        src = """\
+<?php
+class ApiController {
+    /**
+     * @NoAdminRequired
+     */
+    public function records(): JSONResponse
+    {
+        $rows = $this->mapper->findAll();
+        $r = new JSONResponse($rows);
+        $r->addHeader('Access-Control-Allow-Origin', '*');
+        return $r;
+    }
+}
+"""
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("records", findings[0])
+
+
+# ---------------------------------------------------------------------------
+# Pattern 1 — private guard-helper delegation
+# ---------------------------------------------------------------------------
+
+class GuardHelperDelegationTest(unittest.TestCase):
+    """A routed method that delegates its guard to a same-class helper passes."""
+
+    def test_helper_that_throws_clears_caller(self):
+        """Caller invoking a helper whose body throws is guarded."""
+        src = """\
+<?php
+class ItemController {
+    /**
+     * @NoAdminRequired
+     */
+    public function show(string $id): JSONResponse
+    {
+        $this->guardCase($id);
+        return new JSONResponse($this->service->find($id));
+    }
+
+    private function guardCase(string $id): void
+    {
+        if (!$this->canRead($id)) {
+            throw new OCSForbiddenException('nope');
+        }
+    }
+}
+"""
+        self.assertEqual(_scan(src), [])
+
+    def test_helper_returning_403_response_clears_caller(self):
+        """Helper that returns a 403 Response (checked by caller) is a guard."""
+        src = """\
+<?php
+class ItemController {
+    /**
+     * @NoAdminRequired
+     */
+    public function index(): JSONResponse
+    {
+        $denial = $this->requireAdmin();
+        if ($denial !== null) {
+            return $denial;
+        }
+        return new JSONResponse($this->service->findAll());
+    }
+
+    private function requireAdmin(): ?JSONResponse
+    {
+        if ($this->isCurrentUserAdmin() === false) {
+            return new JSONResponse(['error' => 'forbidden'], 403);
+        }
+        return null;
+    }
+}
+"""
+        self.assertEqual(_scan(src), [])
+
+    def test_predicate_named_helper_clears_caller(self):
+        """A helper whose NAME reads as an auth predicate counts as a guard."""
+        src = """\
+<?php
+class ItemController {
+    /**
+     * @NoAdminRequired
+     */
+    public function destroy(string $id): JSONResponse
+    {
+        if ($this->isCurrentUserAdmin() === false) {
+            return new JSONResponse([], 403);
+        }
+        $this->service->delete($id);
+        return new JSONResponse([]);
+    }
+
+    private function isCurrentUserAdmin(): bool
+    {
+        return $this->groupManager->isInGroup($this->userId, 'admin');
+    }
+}
+"""
+        self.assertEqual(_scan(src), [])
+
+    def test_guard_helper_after_mutation_still_flags(self):
+        """A guard-helper called only AFTER the write does not protect it."""
+        src = """\
+<?php
+class ItemController {
+    /**
+     * @NoAdminRequired
+     */
+    public function update(string $id): JSONResponse
+    {
+        $this->service->updateThing($id);
+        $this->assertMayAct($id);
+        return new JSONResponse([]);
+    }
+
+    private function assertMayAct(string $id): void
+    {
+        throw new OCSForbiddenException('too late');
+    }
+}
+"""
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("update", findings[0])
+
+    def test_calling_non_guard_helper_still_flags(self):
+        """Invoking an ordinary (non-guard) helper does NOT clear the finding."""
+        src = """\
+<?php
+class ItemController {
+    /**
+     * @NoAdminRequired
+     */
+    public function show(string $id): JSONResponse
+    {
+        $data = $this->serialize($id);
+        return new JSONResponse($data);
+    }
+
+    private function serialize(string $id): array
+    {
+        return ['id' => $id];
+    }
+}
+"""
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("show", findings[0])
+
+
+# ---------------------------------------------------------------------------
+# Pattern 2 — OpenRegister data-layer RBAC delegation (ADR-022)
+# ---------------------------------------------------------------------------
+
+class OrDataLayerDelegationTest(unittest.TestCase):
+    """OR-namespace methods delegating to ObjectService / a *Mapper pass."""
+
+    def test_objectservice_access_in_or_namespace_cleared(self):
+        """@NoAdminRequired + ObjectService fetch inside OCA\\OpenRegister passes."""
+        src = """\
+<?php
+namespace OCA\\OpenRegister\\Controller;
+class ObjectsController {
+    /**
+     * @NoAdminRequired
+     */
+    public function show(string $id): JSONResponse
+    {
+        $object = $this->objectService->find($id);
+        return new JSONResponse($object);
+    }
+}
+"""
+        self.assertEqual(_scan(src), [])
+
+    def test_mapper_access_in_or_namespace_cleared(self):
+        """@NoAdminRequired + *Mapper fetch inside OCA\\OpenRegister passes."""
+        src = """\
+<?php
+namespace OCA\\OpenRegister\\Controller;
+class SourcesController {
+    /**
+     * @NoAdminRequired
+     */
+    public function index(): JSONResponse
+    {
+        $sources = $this->sourceMapper->findAll();
+        return new JSONResponse($sources);
+    }
+}
+"""
+        self.assertEqual(_scan(src), [])
+
+    def test_helper_objectservice_fetch_in_or_namespace_cleared(self):
+        """A validateObject-style helper doing the OR RBAC fetch clears the caller."""
+        src = """\
+<?php
+namespace OCA\\OpenRegister\\Controller;
+class DeckLinksController {
+    /**
+     * @NoAdminRequired
+     */
+    public function index(string $register, string $schema, string $id): JSONResponse
+    {
+        $object = $this->validateObject($register, $schema, $id);
+        if ($object === null) {
+            return new JSONResponse(['error' => 'not found'], 404);
+        }
+        return new JSONResponse($this->deckLinkService->getLinkedCards($object->getUuid()));
+    }
+
+    private function validateObject(string $register, string $schema, string $id): ?ObjectEntity
+    {
+        $this->objectService->setRegister($register);
+        $this->objectService->setSchema($schema);
+        $this->objectService->setObject($id);
+        return $this->objectService->getObject();
+    }
+}
+"""
+        self.assertEqual(_scan(src), [])
+
+    def test_same_objectservice_access_OUTSIDE_or_namespace_still_flags(self):
+        """The delegation is OR-scoped: an identical leaf-app method still flags.
+
+        This is the decidesk#44 safety proof — a consumer app that fetches via
+        ObjectService without an explicit controller guard is a real IDOR and
+        must NOT be masked by Pattern 2.
+        """
+        src = """\
+<?php
+namespace OCA\\Decidesk\\Controller;
+class MinutesController {
+    /**
+     * @NoAdminRequired
+     */
+    public function generateALVDraft(string $minutesId): JSONResponse
+    {
+        $minutes = $this->objectService->findObject(id: $minutesId);
+        return new JSONResponse($this->generate($minutes));
+    }
+}
+"""
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("generateALVDraft", findings[0])
+
+    def test_or_namespace_no_data_access_still_flags(self):
+        """An OR method with NO ObjectService/Mapper access and no guard still flags."""
+        src = """\
+<?php
+namespace OCA\\OpenRegister\\Controller;
+class WidgetController {
+    /**
+     * @NoAdminRequired
+     */
+    public function ping(string $id): JSONResponse
+    {
+        return new JSONResponse($this->externalGateway->call($id));
+    }
+}
+"""
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("ping", findings[0])
+
+
+# ---------------------------------------------------------------------------
+# Numeric status-code parity (401/403 literal == Http::STATUS_* constant)
+# ---------------------------------------------------------------------------
+
+class NumericStatusParityTest(unittest.TestCase):
+    def test_numeric_403_statuscode_named_arg_passes(self):
+        src = """\
+<?php
+class ItemController {
+    /**
+     * @NoAdminRequired
+     */
+    public function show(string $id): JSONResponse
+    {
+        if ($this->userSession->getUser() === null) {
+            return new JSONResponse([], statusCode: 401);
+        }
+        return new JSONResponse($this->service->find($id));
+    }
+}
+"""
+        self.assertEqual(_scan(src), [])
+
+    def test_numeric_403_positional_arg_passes(self):
+        src = """\
+<?php
+class ItemController {
+    /**
+     * @NoAdminRequired
+     */
+    public function show(string $id): JSONResponse
+    {
+        if (!$this->canRead($id)) {
+            return new JSONResponse(['error' => 'no'], 403);
+        }
+        return new JSONResponse($this->service->find($id));
+    }
+}
+"""
+        self.assertEqual(_scan(src), [])
+
+    def test_unrelated_number_403_not_a_false_guard(self):
+        """A bare 403 that is not a response status (e.g. an array value) does not clear."""
+        src = """\
+<?php
+class ItemController {
+    /**
+     * @NoAdminRequired
+     */
+    public function show(string $id): JSONResponse
+    {
+        $limit = 403000;
+        return new JSONResponse($this->service->find($id, $limit));
+    }
+}
+"""
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("show", findings[0])
+
+
+# ---------------------------------------------------------------------------
+# _is_preflight_cors_method unit tests
+# ---------------------------------------------------------------------------
+
+class IsPreflightCorsMethodTest(unittest.TestCase):
+    def test_exact_name_matches(self):
+        self.assertTrue(cni._is_preflight_cors_method("preflightedCors"))
+
+    def test_suffix_variant_matches(self):
+        self.assertTrue(cni._is_preflight_cors_method("preflightedCorsItem"))
+        self.assertTrue(cni._is_preflight_cors_method("preflightedCorsNested"))
+
+    def test_case_insensitive(self):
+        self.assertTrue(cni._is_preflight_cors_method("PreflightedCors"))
+        self.assertTrue(cni._is_preflight_cors_method("PREFLIGHTEDCORS"))
+
+    def test_preview_prefix_does_not_match(self):
+        self.assertFalse(cni._is_preflight_cors_method("previewItem"))
+
+    def test_preflight_alone_does_not_match(self):
+        """Only the specific 'preflightedCors' prefix is exempt by name."""
+        self.assertFalse(cni._is_preflight_cors_method("preflight"))
+        self.assertFalse(cni._is_preflight_cors_method("preflightItem"))
+
+    def test_construct_does_not_match(self):
+        self.assertFalse(cni._is_preflight_cors_method("__construct"))
+
+
+# ---------------------------------------------------------------------------
+# Response-helper deny spellings (::forbidden( / ->unauthorized( )
+# ---------------------------------------------------------------------------
+
+class ResponseHelperGuardSpellingTest(unittest.TestCase):
+    """A deny response routed through a helper is the same guard shape.
+
+    Controllers that centralise deny-responses in a helper class
+    (``ResponseHelper::forbidden(...)``) were flagged even though the guard
+    was present, purely because the gate only recognised the inline
+    ``Http::STATUS_FORBIDDEN`` / numeric spellings.
+    """
+
+    def test_static_response_helper_forbidden_passes(self):
+        src = """\
+<?php
+class C {
+    /**
+     * @NoAdminRequired
+     */
+    public function act(string $id) {
+        if ($this->request->getParam('userId') !== $this->userId) {
+            return ResponseHelper::forbidden(message: 'nope');
+        }
+        return $this->svc->get($id);
+    }
+}
+"""
+        self.assertEqual(_scan(src), [])
+
+    def test_instance_response_helper_unauthorized_passes(self):
+        src = """\
+<?php
+class C {
+    /**
+     * @NoAdminRequired
+     */
+    public function act(string $id) {
+        if ($this->userId === null) {
+            return $this->responses->unauthorized();
+        }
+        return $this->svc->get($id);
+    }
+}
+"""
+        self.assertEqual(_scan(src), [])
+
+    def test_forbidden_substring_is_not_a_false_guard(self):
+        """``forbiddenWords(`` must NOT be mistaken for a deny response.
+
+        Guards against the classic substring-match bug: the name must be
+        followed by the call parenthesis, not merely start with 'forbidden'.
+        """
+        src = """\
+<?php
+class C {
+    /**
+     * @NoAdminRequired
+     */
+    public function act(string $id) {
+        $bad = $this->filter->forbiddenWords($id);
+        return $this->svc->get($id);
+    }
+}
+"""
+        out = _scan(src)
+        self.assertEqual(len(out), 1)
+        self.assertIn("method=act", out[0])
+
+
+# ---------------------------------------------------------------------------
+# Pattern 3 — session-scoped endpoint with no caller-supplied reference
+# ---------------------------------------------------------------------------
+
+class SessionScopedNoReferenceTest(unittest.TestCase):
+    """Zero params + no request reads + session identity => not an IDOR vector.
+
+    The adversarial cases below are the important half: each one removes a
+    single condition and asserts the method is STILL flagged, so the pattern
+    cannot be used to smuggle a real IDOR past the gate.
+    """
+
+    def test_zero_param_session_scoped_method_passes(self):
+        """The canonical safe shape (cf. AcknowledgementController::pending)."""
+        src = """\
+<?php
+class C {
+    /**
+     * @NoAdminRequired
+     */
+    public function pending() {
+        return $this->svc->getPending(userId: $this->userId);
+    }
+}
+"""
+        self.assertEqual(_scan(src), [])
+
+    def test_method_with_id_parameter_still_flagged(self):
+        """A bound route parameter IS a direct object reference — must flag."""
+        src = """\
+<?php
+class C {
+    /**
+     * @NoAdminRequired
+     */
+    public function show(int $id) {
+        return $this->svc->find($id);
+    }
+}
+"""
+        out = _scan(src)
+        self.assertEqual(len(out), 1)
+        self.assertIn("method=show", out[0])
+
+    def test_zero_params_but_reads_request_param_still_flagged(self):
+        """Reading an id from the request is equally attacker-controlled."""
+        src = """\
+<?php
+class C {
+    /**
+     * @NoAdminRequired
+     */
+    public function show() {
+        $id = $this->request->getParam('id');
+        return $this->svc->find($id);
+    }
+}
+"""
+        out = _scan(src)
+        self.assertEqual(len(out), 1)
+        self.assertIn("method=show", out[0])
+
+    def test_zero_params_reading_superglobal_still_flagged(self):
+        """$_GET is caller-controlled input just as much as getParam()."""
+        src = """\
+<?php
+class C {
+    /**
+     * @NoAdminRequired
+     */
+    public function show() {
+        return $this->svc->find($_GET['id']);
+    }
+}
+"""
+        out = _scan(src)
+        self.assertEqual(len(out), 1)
+        self.assertIn("method=show", out[0])
+
+    def test_zero_params_without_session_identity_still_flagged(self):
+        """No session scoping => no positive evidence it is self-scoped."""
+        src = """\
+<?php
+class C {
+    /**
+     * @NoAdminRequired
+     */
+    public function listEverything() {
+        return $this->svc->findAll();
+    }
+}
+"""
+        out = _scan(src)
+        self.assertEqual(len(out), 1)
+        self.assertIn("method=listEverything", out[0])
+
+    def test_session_identity_does_not_launder_a_request_supplied_id(self):
+        """The dangerous combination: session identity present but an id is
+        still taken from the request and used unchecked. Must stay flagged."""
+        src = """\
+<?php
+class C {
+    /**
+     * @NoAdminRequired
+     */
+    public function show() {
+        $me = $this->userId;
+        $id = $this->request->getParam('dossierId');
+        return $this->svc->find($id);
+    }
+}
+"""
+        out = _scan(src)
+        self.assertEqual(len(out), 1)
+        self.assertIn("method=show", out[0])
+
+    def test_unparseable_signature_fails_closed(self):
+        """When the parameter list cannot be read, do not clear the method."""
+        self.assertFalse(cni._is_session_scoped_no_reference(None, "$this->userId"))
+
+    def test_helper_requires_all_three_conditions(self):
+        # zero params + session identity, no request read -> clear
+        self.assertTrue(cni._is_session_scoped_no_reference("", "$this->userId"))
+        # params present -> not clear
+        self.assertFalse(cni._is_session_scoped_no_reference("int $id", "$this->userId"))
+        # request read present -> not clear
+        self.assertFalse(
+            cni._is_session_scoped_no_reference("", "$this->request->getParam('id')")
+        )
+        # no session identity -> not clear
+        self.assertFalse(cni._is_session_scoped_no_reference("", "$this->svc->findAll()"))
+
+    def test_default_valued_params_with_parens_are_not_zero_params(self):
+        """Brace-aware parsing: a default value containing '(' must not make
+        the parameter list look empty."""
+        src = """\
+<?php
+class C {
+    /**
+     * @NoAdminRequired
+     */
+    public function show(int $id = 0, array $opts = ['a' => (1 + 2)]) {
+        $me = $this->userId;
+        return $this->svc->find($id);
+    }
+}
+"""
+        out = _scan(src)
+        self.assertEqual(len(out), 1)
+        self.assertIn("method=show", out[0])
+
+
+if __name__ == "__main__":
+    unittest.main()
