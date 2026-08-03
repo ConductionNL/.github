@@ -173,12 +173,12 @@ on:
         type: boolean
         default: false
       enable-sbom:
-        description: "Generate CycloneDX SBOM, validate (CVE + license), and commit to repo"
+        description: "Generate CycloneDX SBOM and validate it (Grype CVE scan + composer/npm audit — hard failures). Published as a run artifact and release asset; intentionally never committed to the repo."
         required: false
         type: boolean
         default: true
       enable-features-extract:
-        description: "Scan openspec/specs/ and (re)generate docs/features.json — auto-commits on feature branches, warns on protected branches"
+        description: "Verify docs/features.json is in sync with openspec/specs/ — READ-ONLY, hard-fails when stale (features-check on PRs, features-extract on pushes; both gate the Quality Report). Generation happens at commit time via the repo's .githooks/pre-commit — see CONVENTIONS.md."
         required: false
         type: boolean
         default: true
@@ -2503,7 +2503,7 @@ jobs:
           files: sbom.cdx.json
 
   # ╔══════════════════════════════════════════════╗
-  # ║  STAGE 5 — Features extract & commit          ║
+  # ║  STAGE 5 — Features verification (read-only)  ║
   # ║                                               ║
   # ║  Scans openspec/specs/*/spec.md for           ║
   # ║  capabilities whose YAML frontmatter declares  ║
@@ -2512,10 +2512,12 @@ jobs:
   # ║  Features & Roadmap surface consumes via       ║
   # ║  initial-state injection.                      ║
   # ║                                               ║
-  # ║  Branch policy mirrors update-baseline:        ║
-  # ║  feature branches → auto-commit + push;        ║
-  # ║  protected branches → warn only (see           ║
-  # ║  ConductionNL/.github#61).                     ║
+  # ║  CI never commits: generation happens at       ║
+  # ║  COMMIT TIME via each repo's committed          ║
+  # ║  .githooks/pre-commit (CONVENTIONS.md). Both    ║
+  # ║  jobs below only verify and HARD-FAIL when     ║
+  # ║  stale — via the Quality Report gate that      ║
+  # ║  blocks the merge.                             ║
   # ╚══════════════════════════════════════════════╝
 
   # On pull_request events, run the extractor in `--check` mode only — fail

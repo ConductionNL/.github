@@ -152,6 +152,54 @@ Repo setup (reference implementation: `openregister`):
 
 **Repos with no package.json or composer.json** (e.g. `hydra`): no auto-activation path exists — but such repos currently have `enable-features-extract: false`, so no hook is needed. If features are ever enabled there, document the manual `git config` line in the repo README.
 
+##### Enforcement: staleness is a merge blocker
+
+The commit hook is convenience, not the safety net — CI is. `features-check` (PR events) and `features-extract` (push events) both **hard-fail** when `docs/features.json` is out of sync with `openspec/specs/`, and both feed the `Quality Report` gate. Since `quality / Quality Report` is (to become) the org-wide required check, **a stale features.json blocks the merge** even if the hook was skipped, broken, or not activated. The failed run attaches the regenerated file as an artifact so recovery is one download + commit away.
+
+##### The hook, verbatim (`.githooks/pre-commit`)
+
+```sh
+#!/bin/sh
+# Regenerates docs/features.json whenever staged changes touch openspec/specs/
+# or the features overlay. Best-effort: warns but never blocks the commit —
+# the CI gate (features-check/features-extract → Quality Report) enforces.
+
+if git diff --cached --name-only | grep -qE "^openspec/(specs/|features\.overlay\.json)"; then
+  CACHE=".git/extract-features.py"
+  curl -sf --max-time 10 \
+    https://raw.githubusercontent.com/ConductionNL/.github/main/scripts/extract-features.py \
+    -o "$CACHE" 2>/dev/null || true
+
+  if [ -f "$CACHE" ]; then
+    if command -v python3 >/dev/null 2>&1; then PY="python3";
+    elif command -v py >/dev/null 2>&1; then PY="py -3";
+    else PY="python"; fi
+
+    if $PY "$CACHE" --app-root . >/dev/null 2>&1; then
+      git add docs/features.json
+      echo "pre-commit: docs/features.json regenerated from openspec/specs/."
+    else
+      echo "pre-commit: WARNING — could not regenerate docs/features.json (python or pyyaml missing?). CI features-check will verify." >&2
+    fi
+  else
+    echo "pre-commit: WARNING — could not fetch extract-features.py (offline?). CI features-check will verify." >&2
+  fi
+fi
+
+exit 0
+```
+
+##### Per-repo rollout checklist
+
+1. Copy `.githooks/pre-commit` (above) into the repo and mark it executable (`git add --chmod=+x .githooks/pre-commit` on Windows).
+2. Wire the activation one-liner into every manifest the repo has (`package.json` `prepare`, `composer.json` `post-install-cmd`); husky repos put the snippet in `.husky/pre-commit` instead.
+3. Run `git config core.hooksPath .githooks` once in your own clone (installs only cover future clones/installs).
+4. Regenerate once (`commit anything touching openspec/`, or run the script manually) so the repo enters the enforced state green.
+
+##### SBOM: nothing to set up per repo
+
+The SBOM never had this problem and needs no hook: the `sbom` job generates the CycloneDX SBOM in CI, hard-fails on validation (Grype CVE scan, composer/npm audit), and publishes it as a run artifact + release asset. It is **intentionally never committed to the repo** (SBOMs embed timestamps/serial numbers, so a committed copy would be perpetually "stale" and pollute every diff). Its failures block merges through the same Quality Report gate. PR-time dependency gating is covered separately by the `Security (composer)`/`Security (npm)` legs, which run on every PR.
+
 ## SBOM (Software Bill of Materials)
 
 Each app's SBOM is published exclusively as a **release asset** via the central Quality workflow's SBOM job. Per-app `sbom.yml` workflows are not allowed — they were removed in [`ConductionNL/.github#34`](https://github.com/ConductionNL/.github/pull/34).
