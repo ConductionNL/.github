@@ -1373,6 +1373,17 @@ jobs:
         # `sleep 3` therefore fails spuriously when the runner is noisy
         # and `php -S` hasn't bound :8080 yet. Poll every 0.5s with a
         # 15s hard cap so the fail-fast path is honest.
+        #
+        # PHP_CLI_SERVER_WORKERS: the built-in server is SINGLE-WORKER by
+        # default, so every request a Nextcloud SPA fires on boot is
+        # serialised behind the one before it. Measured on opencatalogi:
+        # whichever spec ran first blew its 60s test timeout waiting for the
+        # index page to render and then passed in 9.1s on retry, while every
+        # later spec ran in 4-7s. It was measuring server warm-up, and it
+        # cost a retry on every run. Callers cannot set this — the `php -S`
+        # invocation lives here — so it has to be fixed here.
+        env:
+          PHP_CLI_SERVER_WORKERS: 8
         run: |
           cd server
           php -S 0.0.0.0:8080 > /tmp/php-server.log 2>&1 &
@@ -1387,6 +1398,22 @@ jobs:
 
       - name: Seed test data
         if: inputs.playwright-seed-command != ''
+        # The seed command needs to know WHICH instance to seed and with what
+        # credentials, exactly like the test step below — a seed script is
+        # usually driving the app's own admin API. This step declared no `env:`
+        # at all, so a script here saw neither BASE_URL nor ADMIN_USER and had
+        # to hardcode `http://localhost:8080` to work. That literal is the
+        # SHARED dev container on a developer box, which makes the same script
+        # unsafe to run anywhere else. The journeydoc capture job already
+        # exports the full set to its own seed step; this matches it.
+        env:
+          BASE_URL: http://localhost:8080
+          NEXTCLOUD_URL: http://localhost:8080
+          NC_BASE_URL: http://localhost:8080
+          ADMIN_USER: admin
+          ADMIN_PASSWORD: admin
+          NC_ADMIN_USER: admin
+          NC_ADMIN_PASS: admin
         run: |
           cd server
           echo "Running seed command: ${{ inputs.playwright-seed-command }}"
@@ -1401,10 +1428,28 @@ jobs:
             CONFIG="playwright.config.ts"
           fi
           npx playwright test --config="$CONFIG"
+        # This step exported only BASE_URL / ADMIN_USER / ADMIN_PASSWORD, but a
+        # survey of the 21 fleet repos found 15 whose config resolves the target
+        # as `process.env.NEXTCLOUD_URL || 'http://localhost:8080'` and never
+        # reads BASE_URL. Those repos do not fail here — they fall through to
+        # the literal, which happens to be this runner's own `php -S`, so the
+        # suite runs against the right host FOR THE WRONG REASON and the same
+        # config points at the SHARED dev container the moment anyone runs it
+        # locally. Exporting every name the fleet actually uses means the
+        # variable, not the fallback, is what selects the target here.
+        #
+        # (Repos should still drop the `|| 'http://localhost:8080'` literal —
+        # see tests/e2e/base-url.ts in openregister/doriath/shillinq for the
+        # pattern that throws instead. This just stops CI from silently
+        # depending on it.)
         env:
           BASE_URL: http://localhost:8080
+          NEXTCLOUD_URL: http://localhost:8080
+          NC_BASE_URL: http://localhost:8080
           ADMIN_USER: admin
           ADMIN_PASSWORD: admin
+          NC_ADMIN_USER: admin
+          NC_ADMIN_PASS: admin
           COLLECT_COVERAGE: ${{ inputs.enable-playwright-coverage }}
 
       - name: Generate spec-to-test coverage report
@@ -1484,11 +1529,18 @@ jobs:
 
       - name: Upload Playwright report
         if: always()
+        # `tests/e2e/…` is included because that is where the scaffolded config
+        # in most fleet repos actually writes. With only the app-root paths
+        # listed, both upload steps matched nothing — and `if-no-files-found:
+        # ignore` meant they said so quietly and uploaded an empty artifact. A
+        # red run left no report and no traces to read, which is precisely when
+        # you need them. Extra paths are harmless: unmatched ones are ignored.
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
           path: |
             server/apps/${{ inputs.app-name }}/playwright-report/
+            server/apps/${{ inputs.app-name }}/tests/e2e/playwright-report/
             server/apps/${{ inputs.app-name }}/playwright-coverage.json
           retention-days: 14
           if-no-files-found: ignore
@@ -1498,7 +1550,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-traces
-          path: server/apps/${{ inputs.app-name }}/test-results/
+          path: |
+            server/apps/${{ inputs.app-name }}/test-results/
+            server/apps/${{ inputs.app-name }}/tests/e2e/test-results/
           retention-days: 14
           if-no-files-found: ignore
 
