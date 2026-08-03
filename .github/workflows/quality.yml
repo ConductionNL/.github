@@ -637,8 +637,22 @@ jobs:
           fi
           tar --null -czf /tmp/frontend-build-output.tar.gz -T /tmp/frontend-build-files.z
           echo "uploaded=true" >> "$GITHUB_OUTPUT"
-          tr '\0' '\n' < /tmp/frontend-build-files.z | head -40
-          echo "…"
+          # `sed -n '1,40p'`, NOT `head -40`. `head` closes the pipe as soon as
+          # it has its 40 lines, `tr` then dies of SIGPIPE, and `set -o pipefail`
+          # (three lines up) turns that into a FAILED JOB — for a log-preview
+          # line that has no bearing on whether the build worked.
+          #
+          # It only fires when the producer is still writing when head leaves,
+          # i.e. on repos with many build outputs. openregister's build writes
+          # fewer than 40 files and passed; nextcloud-vue's dist is thousands of
+          # files and failed every run. Reproduced: 200k NUL-separated entries
+          # through `tr | head -40` under pipefail exits 141 and the step never
+          # reaches the next line. `sed` reads its input to the end, so there is
+          # nothing to break.
+          tr '\0' '\n' < /tmp/frontend-build-files.z | sed -n '1,40p'
+          if [ "$COUNT" -gt 40 ]; then
+            echo "… and $((COUNT - 40)) more"
+          fi
 
       - name: Upload build output
         if: steps.package.outputs.uploaded == 'true'
@@ -2858,8 +2872,15 @@ jobs:
 
           # Coverage (if available)
           if [ -f "coverage/clover.xml" ]; then
-            COVERED=$(grep -oP 'coveredstatements="\K[0-9]+' coverage/clover.xml | head -1 || echo "0")
-            TOTAL_STMTS=$(grep -oP 'statements="\K[0-9]+' coverage/clover.xml | head -1 || echo "0")
+            # `grep -m1` rather than `grep | head -1`: this step also runs under
+            # `set -o pipefail`, so head closing the pipe on a clover.xml with
+            # many matches kills grep with SIGPIPE. The `|| echo "0"` then does
+            # not rescue the value — it APPENDS "0" to whatever head already
+            # printed, and the arithmetic below gets "1234\n0". Reporting a wrong
+            # coverage number is worse than failing, because nobody re-checks a
+            # number that rendered. -m1 stops grep itself, so there is no pipe.
+            COVERED=$(grep -oPm1 'coveredstatements="\K[0-9]+' coverage/clover.xml || echo "0")
+            TOTAL_STMTS=$(grep -oPm1 'statements="\K[0-9]+' coverage/clover.xml || echo "0")
             if [ "$TOTAL_STMTS" -gt 0 ]; then
               COVERAGE=$(echo "scale=1; $COVERED * 100 / $TOTAL_STMTS" | bc)
               echo "**Coverage:** ${COVERAGE}% ($COVERED/$TOTAL_STMTS statements)" >> "$REPORT"
