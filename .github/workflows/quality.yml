@@ -1141,9 +1141,27 @@ jobs:
           php occ app:enable ${{ inputs.app-name }}
 
       - name: Start PHP built-in server
+        # Same front-controller router as the Playwright job — see the long
+        # comment on that step. Without it, `php -S` returns 404 for any path
+        # that resolves to an existing directory with no index.php inside,
+        # which is every pretty Nextcloud URL once the app is checked out to
+        # `server/apps/<app>`. A Postman collection hitting `/apps/<app>/api/…`
+        # rather than `/index.php/apps/<app>/api/…` fails here for that reason
+        # alone.
         run: |
           cd server
-          php -S 0.0.0.0:8080 &
+          cat > ci-router.php <<'ROUTER'
+          <?php
+          $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+          if ($path !== '/' && is_file(__DIR__ . $path)) {
+              return false;
+          }
+          $_SERVER['SCRIPT_NAME'] = '/index.php';
+          $_SERVER['SCRIPT_FILENAME'] = __DIR__ . '/index.php';
+          $_SERVER['PHP_SELF'] = '/index.php';
+          require __DIR__ . '/index.php';
+          ROUTER
+          php -S 0.0.0.0:8080 ci-router.php &
           sleep 3
           curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/status.php || echo "Server not ready"
 
@@ -1382,11 +1400,63 @@ jobs:
         # later spec ran in 4-7s. It was measuring server warm-up, and it
         # cost a retry on every run. Callers cannot set this — the `php -S`
         # invocation lives here — so it has to be fixed here.
+        #
+        # ── ci-router.php: PRETTY URLs 404 WITHOUT IT ───────────────────────
+        # `php -S` was started with no router script, so it resolved each
+        # request path against the document root itself. For a path that
+        # resolves to a DIRECTORY WITH NO index.php INSIDE, it returns 404 —
+        # it does not fall back to the root index.php. Measured:
+        #
+        #     /index.php/apps/<app>/   -> 200   PATH_INFO=/apps/<app>/
+        #     /apps/<app>/             -> 404   <-- the directory exists
+        #     /nonexistent/            -> 200   <-- falls through to index.php
+        #
+        # Note the inversion: a path that does NOT exist works, and one that
+        # DOES exist fails. The app under test is checked out to
+        # `server/apps/<app>`, so every pretty Nextcloud URL in the fleet's
+        # specs 404s here. None of it shows up in the docker dev images, where
+        # apps live in `custom_apps/` and Apache + Nextcloud's own .htaccess
+        # rewrites pretty URLs — so a spec that passes locally 404s on CI and
+        # reports it as a selector timeout naming an ELEMENT, not a missing
+        # page. That is a wall of red pointing at the wrong thing.
+        #
+        # Evidence, from one run on one instance (ConductionNL/openconnector
+        # run 30771630267): the specs whose base URL was
+        # `/index.php/apps/openconnector` PASSED, while the specs whose base
+        # URL was `/apps/openconnector/#` failed with `main` not found. Across
+        # pipelinq, openconnector and scholiq alone that is ~55 spec files.
+        #
+        # The router does exactly what Nextcloud's shipped .htaccess does —
+        # `RewriteRule . index.php [PT,E=PATH_INFO:$1]`: serve real files
+        # as-is, route everything else through the root index.php with
+        # REQUEST_URI untouched. Nextcloud's Request::getRawPathInfo() derives
+        # the path by stripping SCRIPT_NAME from REQUEST_URI, so with
+        # SCRIPT_NAME="/index.php" both URL forms yield a byte-identical path
+        # info. Verified against that exact algorithm, including query-string
+        # preservation, static JS keeping `application/javascript`, and
+        # `status.php` still executing as itself.
         env:
           PHP_CLI_SERVER_WORKERS: 8
         run: |
           cd server
-          php -S 0.0.0.0:8080 > /tmp/php-server.log 2>&1 &
+          cat > ci-router.php <<'ROUTER'
+          <?php
+          // Front controller for `php -S`, mirroring Nextcloud's .htaccess.
+          // Real files are served by the built-in server as-is (so static
+          // assets keep their MIME types and Nextcloud's other PHP entry
+          // points — status.php, remote.php, ocs/v*.php, public.php,
+          // cron.php, core/ajax/update.php — still execute as themselves).
+          // Everything else routes through index.php with REQUEST_URI intact.
+          $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+          if ($path !== '/' && is_file(__DIR__ . $path)) {
+              return false;
+          }
+          $_SERVER['SCRIPT_NAME'] = '/index.php';
+          $_SERVER['SCRIPT_FILENAME'] = __DIR__ . '/index.php';
+          $_SERVER['PHP_SELF'] = '/index.php';
+          require __DIR__ . '/index.php';
+          ROUTER
+          php -S 0.0.0.0:8080 ci-router.php > /tmp/php-server.log 2>&1 &
           PHP_PID=$!
           echo "${PHP_PID}" > /tmp/php-server.pid
           timeout 15 bash -c 'until curl -sf -o /dev/null http://localhost:8080/status.php; do sleep 0.5; done' || {
@@ -1394,6 +1464,15 @@ jobs:
             cat /tmp/php-server.log
             exit 1
           }
+          # Prove the front controller is actually routing before any spec runs.
+          # `/apps/<app>/` is the URL the fleet's specs use; without the router
+          # it is a hard 404 and every one of them fails on a selector timeout.
+          PRETTY="$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:8080/apps/${{ inputs.app-name }}/")"
+          echo "Front-controller check: /apps/${{ inputs.app-name }}/ -> HTTP ${PRETTY}"
+          if [ "$PRETTY" = "404" ]; then
+            echo "::error::The php -S front-controller router is not routing pretty URLs — /apps/${{ inputs.app-name }}/ returned 404. Every spec using a pretty Nextcloud URL will fail on a selector timeout."
+            exit 1
+          fi
           echo "PHP built-in server alive (pid=${PHP_PID})."
 
       - name: Seed test data
@@ -1747,9 +1826,24 @@ jobs:
           fi
 
       - name: Start PHP built-in server
+        # Same front-controller router as the Playwright job — see the long
+        # comment on that step. The docs-capture project drives the same
+        # pretty Nextcloud URLs the regression specs do, so without the router
+        # every tutorial screenshot would be shot against a 404 page.
         run: |
           cd server
-          php -S 0.0.0.0:8080 > /tmp/php-server.log 2>&1 &
+          cat > ci-router.php <<'ROUTER'
+          <?php
+          $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+          if ($path !== '/' && is_file(__DIR__ . $path)) {
+              return false;
+          }
+          $_SERVER['SCRIPT_NAME'] = '/index.php';
+          $_SERVER['SCRIPT_FILENAME'] = __DIR__ . '/index.php';
+          $_SERVER['PHP_SELF'] = '/index.php';
+          require __DIR__ . '/index.php';
+          ROUTER
+          php -S 0.0.0.0:8080 ci-router.php > /tmp/php-server.log 2>&1 &
           PHP_PID=$!
           echo "${PHP_PID}" > /tmp/php-server.pid
           timeout 15 bash -c 'until curl -sf -o /dev/null http://localhost:8080/status.php; do sleep 0.5; done' || {
