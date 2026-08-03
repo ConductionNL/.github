@@ -376,6 +376,27 @@ fi
 
 # ---------------------------------------------------------------------------
 # Gate 4: Composer audit
+#
+# Audits the LOCK FILE, not the installed tree, whenever a composer.lock
+# exists. That is deliberate and it is a fix, not a convenience:
+#
+# `composer audit` with no vendor/ present does NOT audit the lock. What it
+# does depends on the composer version, and BOTH behaviours are wrong:
+#
+#   composer >= 2.8 : "No installed packages found. Please run composer install
+#                      ... or pass --locked", exit 1. The gate then reported
+#                      "CVEs or advisories" for a run that found no CVEs and
+#                      audited nothing — a configuration error wearing a
+#                      security finding's clothes.
+#   composer 2.7.x  : "No packages - skipping audit", exit 0 — a SILENT
+#                      FAIL-OPEN. The gate passed having audited nothing at all.
+#
+# Measured 2026-08-03 on openbuild in CI (composer 2.10.2, no vendor/): gate-4
+# FAILED, and `--locked` on the same lock reported no advisories whatsoever.
+#
+# The lock is also the right object to audit: it is what CI installs and what
+# pins the transitive tree. `--locked` needs no vendor/, so this gate no longer
+# depends on whether some earlier step happened to run `composer install`.
 # ---------------------------------------------------------------------------
 if [ -f composer.json ] && command -v composer >/dev/null 2>&1; then
     _run_audit=1
@@ -383,10 +404,29 @@ if [ -f composer.json ] && command -v composer >/dev/null 2>&1; then
         _in_scope "composer.json" || _in_scope "composer.lock" || _run_audit=0
     fi
     if [ "${_run_audit}" = "1" ]; then
-        if composer audit --format=plain >/tmp/hydra-gate-composer-audit.log 2>&1; then
-            _pass 4 "composer-audit"
+        _ca_log=/tmp/hydra-gate-composer-audit.log
+        if [ -f composer.lock ]; then
+            _ca_mode="--locked"
         else
-            _fail 4 "composer-audit" "CVEs or advisories — see /tmp/hydra-gate-composer-audit.log"
+            # No lock to audit. Auditing the installed tree is the only option,
+            # and it is only meaningful if there IS one.
+            _ca_mode=""
+        fi
+        composer audit ${_ca_mode} --format=plain >"${_ca_log}" 2>&1
+        _ca_rc=$?
+        if [ "${_ca_rc}" -eq 0 ]; then
+            # Distinguish "audited, clean" from "audited nothing, called it
+            # clean". The second is the 2.7.x fail-open above, and it must never
+            # be counted as a pass.
+            if grep -qiE "no packages|no installed packages" "${_ca_log}"; then
+                _fail 4 "composer-audit" "audited NOTHING (composer found no packages) — this is not a clean audit; see ${_ca_log}"
+            else
+                _pass 4 "composer-audit"
+            fi
+        elif grep -qiE "no installed packages found|please run \"?composer install" "${_ca_log}"; then
+            _fail 4 "composer-audit" "audit COULD NOT RUN (no installed packages and no lock to audit) — NOT a CVE finding; see ${_ca_log}"
+        else
+            _fail 4 "composer-audit" "CVEs or advisories — see ${_ca_log}"
         fi
     fi
 fi
