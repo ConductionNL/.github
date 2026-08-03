@@ -173,12 +173,12 @@ on:
         type: boolean
         default: false
       enable-sbom:
-        description: "Generate CycloneDX SBOM, validate (CVE + license), and commit to repo"
+        description: "Generate CycloneDX SBOM and validate it (Grype CVE scan + composer/npm audit — hard failures). Published as a run artifact and release asset; intentionally never committed to the repo."
         required: false
         type: boolean
         default: true
       enable-features-extract:
-        description: "Scan openspec/specs/ and (re)generate docs/features.json — auto-commits on feature branches, warns on protected branches"
+        description: "Verify docs/features.json is in sync with openspec/specs/ — READ-ONLY, hard-fails when stale (features-check on PRs, features-extract on pushes; both gate the Quality Report). Generation happens at commit time via the repo's .githooks/pre-commit — see CONVENTIONS.md."
         required: false
         type: boolean
         default: true
@@ -2672,7 +2672,7 @@ jobs:
           files: sbom.cdx.json
 
   # ╔══════════════════════════════════════════════╗
-  # ║  STAGE 5 — Features extract & commit          ║
+  # ║  STAGE 5 — Features verification (read-only)  ║
   # ║                                               ║
   # ║  Scans openspec/specs/*/spec.md for           ║
   # ║  capabilities whose YAML frontmatter declares  ║
@@ -2681,10 +2681,12 @@ jobs:
   # ║  Features & Roadmap surface consumes via       ║
   # ║  initial-state injection.                      ║
   # ║                                               ║
-  # ║  Branch policy mirrors update-baseline:        ║
-  # ║  feature branches → auto-commit + push;        ║
-  # ║  protected branches → warn only (see           ║
-  # ║  ConductionNL/.github#61).                     ║
+  # ║  CI never commits: generation happens at       ║
+  # ║  COMMIT TIME via each repo's committed          ║
+  # ║  .githooks/pre-commit (CONVENTIONS.md). Both    ║
+  # ║  jobs below only verify and HARD-FAIL when     ║
+  # ║  stale — via the Quality Report gate that      ║
+  # ║  blocks the merge.                             ║
   # ╚══════════════════════════════════════════════╝
 
   # On pull_request events, run the extractor in `--check` mode only — fail
@@ -2722,6 +2724,15 @@ jobs:
       - name: Verify docs/features.json is up to date
         run: python .conduction-shared/scripts/extract-features.py --app-root . --check
 
+  # READ-ONLY by design. This job used to auto-commit + push the regenerated
+  # docs/features.json back to the branch — a quality pipeline mutating the
+  # branch it is judging. That moved the PR head from under the checks
+  # (with [skip ci] it stripped ALL checks from the PR), dismissed reviewer
+  # approvals via the org ruleset's dismiss-stale-on-push, and on protected
+  # branches the bot push bounced anyway (#61). Generation now happens at
+  # COMMIT TIME in each repo via the committed .githooks/pre-commit hook
+  # (see CONVENTIONS.md § features.json is generated at commit time); CI
+  # only verifies and hands back the regenerated file as an artifact.
   features-extract:
     if: ${{ inputs.enable-features-extract && !cancelled() && github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
@@ -2730,13 +2741,10 @@ jobs:
     # (nextcloud-app-template).
     timeout-minutes: 20
     permissions:
-      contents: write
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref || github.ref_name }}
-          token: ${{ github.token }}
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -2756,16 +2764,27 @@ jobs:
       - name: Regenerate docs/features.json
         run: python .conduction-shared/scripts/extract-features.py --app-root .
 
-      - name: Commit if changed
+      - name: Fail if stale
+        id: fail-if-stale
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
           if git diff --quiet docs/features.json 2>/dev/null && ! git status --porcelain docs/features.json | grep -q '^??'; then
-            echo "docs/features.json unchanged, nothing to commit."
+            echo "docs/features.json is up to date."
           else
-            git add docs/features.json
-            git commit -m "ci: regenerate docs/features.json from openspec/specs/ [skip ci]"
-            # Non-blocking on protected branches: branch-protection rulesets reject
-            # the bot push on main/beta/development. Tracked in ConductionNL/.github#61.
-            git push || echo "::warning::Could not push the regenerated docs/features.json — branch protection rejected the bot push (see ConductionNL/.github#61). Run scripts/extract-features.py locally and commit manually."
+            echo "::error::docs/features.json is out of date with openspec/specs/. Regenerate it locally (the committed .githooks/pre-commit hook does this automatically — see CONVENTIONS.md) and commit it. The regenerated file is attached as the 'features-json' artifact of this run."
+            exit 1
           fi
+
+      - name: Upload regenerated file
+        # Gate on the staleness step SPECIFICALLY, not `failure()` alone: if the
+        # Regenerate step itself crashed, the file on disk is the stale committed
+        # copy (or absent), and uploading it under the 'features-json' label would
+        # invite committing exactly what CI just rejected. Only when fail-if-stale
+        # failed is the on-disk file guaranteed to be the fresh regeneration.
+        # (`failure() &&` is required — without a status-check function GitHub
+        # implies `success()`, and the step would never run after a failure.)
+        if: failure() && steps.fail-if-stale.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: features-json
+          path: docs/features.json
+          retention-days: 7
