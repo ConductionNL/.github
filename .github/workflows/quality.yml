@@ -1261,9 +1261,49 @@ jobs:
           php -S 0.0.0.0:8080 ci-router.php &
           sleep 3
           curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/status.php || echo "Server not ready"
+        env:
+          # PHP_CLI_SERVER_WORKERS: `php -S` is SINGLE-WORKER by default, so it
+          # can only ever have one request in flight. That is fatal — not slow,
+          # FATAL — for any API collection in which the app under test calls
+          # BACK into this same instance while serving a request: the one
+          # worker is blocked inside the outer request, so the nested request
+          # can never be accepted, and both hang until the job's timeout kills
+          # them.
+          #
+          # Measured on openconnector (run 30821823343, job 91713730053): the
+          # collection creates a "self-pointing source" whose `location` is
+          # this very server, then calls
+          # `POST /api/synchronizations/<uuid>/test`. That request never
+          # returned. The job sat in "Run Newman tests" for ~30 minutes and was
+          # cancelled by timeout-minutes, having completed J2.2 and printed
+          # nothing after J2.3. Self-referential fixtures like this are normal
+          # in an integration suite — pointing a Source at the instance's own
+          # OpenRegister API is the cheapest way to get a real, reachable
+          # upstream — so the runner has to be able to serve them.
+          #
+          # The Playwright job's identical `php -S` step already sets this (for
+          # a different symptom: SPA boot requests serialising behind each
+          # other). Callers cannot set it — the `php -S` invocation lives in
+          # this workflow — so, exactly as noted there, it has to be fixed here.
+          PHP_CLI_SERVER_WORKERS: 8
 
       - name: Seed test data
         if: inputs.newman-seed-command != ''
+        # Same rationale as the Playwright job's seed step: a seed script is
+        # usually driving the app's own admin API and has to be told WHICH
+        # instance and with what credentials. This step declared no `env:` at
+        # all, so a script here saw neither BASE_URL nor ADMIN_USER and had to
+        # hardcode `http://localhost:8080` — a literal that means the SHARED
+        # dev container on a developer box, which makes the same script unsafe
+        # to run anywhere else.
+        env:
+          BASE_URL: http://localhost:8080
+          NEXTCLOUD_URL: http://localhost:8080
+          NC_BASE_URL: http://localhost:8080
+          ADMIN_USER: admin
+          ADMIN_PASSWORD: admin
+          NC_ADMIN_USER: admin
+          NC_ADMIN_PASS: admin
         run: |
           cd server
           echo "Running seed command: ${{ inputs.newman-seed-command }}"
@@ -1302,7 +1342,20 @@ jobs:
           # Build environment args: use --environment file if provided, otherwise ad-hoc vars
           ENV_ARGS=""
           if [ -n "${{ inputs.newman-environment-path }}" ]; then
-            ENV_FILE="../../../apps/${{ inputs.app-name }}/${{ inputs.newman-environment-path }}"
+            # Absolute, so it does not depend on how deep
+            # `newman-collection-path` happens to be. The previous value,
+            # "../../../apps/<app>/<env-path>", was hand-rolled relative to the
+            # cwd set above and was off by one level: from
+            # `server/apps/<app>/tests/postman`, `../../..` is `server/apps`,
+            # so it resolved to `server/apps/apps/<app>/...` and never existed.
+            # Every run took the fallback branch and emitted a "not found"
+            # warning about a file that is committed and present (measured on
+            # openconnector, which ships tests/postman/*.postman_environment.json).
+            # The fallback happens to set the same three variables, so this was
+            # invisible — until a collection needs a variable the fallback does
+            # not define, at which point it fails for a reason the warning
+            # actively misdirects you away from.
+            ENV_FILE="$GITHUB_WORKSPACE/server/apps/${{ inputs.app-name }}/${{ inputs.newman-environment-path }}"
             if [ -f "$ENV_FILE" ]; then
               # Rewrite localhost:8080 for CI (PHP built-in server runs on 8080)
               echo "Using environment file: ${{ inputs.newman-environment-path }}"
