@@ -1,6 +1,32 @@
 #!/bin/bash
 # SPDX-License-Identifier: EUPL-1.2
 #
+# ---------------------------------------------------------------------------
+# ShellCheck: scoped, deliberate suppressions for this file only.
+#
+# This runner spent its whole life in ConductionNL/hydra, which has NO GitHub
+# Actions — so it had never been ShellChecked until it moved here. Landing it
+# in a repository that does run ShellCheck surfaced 22 findings at note and
+# warning level. None are errors, and none change what a gate decides:
+#
+#   SC2001  `sed` where `${var//a/b}` would do — 11 sites, all inside gate
+#           logic. Rewriting them is a behaviour change to the gates for a
+#           style point, in code with no unit tests of its own.
+#   SC2221/SC2222  overlapping `case` globs (e.g. `tests/*` before `*.spec.js`,
+#           where `tests/x.spec.js` legitimately matches the first). Both arms
+#           set the same variable, so the overlap is intended and inert.
+#   SC2162  `read` without -r, SC1003, SC2016, SC2086, SC2295 — long-standing
+#           idioms in the file's own parsing helpers.
+#
+# Suppressed HERE rather than in a repo-level .shellcheckrc on purpose: a
+# root-level disable would have switched these checks off for every script in
+# this repository, including ones written after this. This directive covers
+# exactly one file. Anything newly added to it still gets checked, and clearing
+# these findings is worth doing on its own, with the gate output diffed before
+# and after.
+# ---------------------------------------------------------------------------
+# shellcheck disable=SC1003,SC2001,SC2016,SC2086,SC2162,SC2221,SC2222,SC2295
+#
 # run-hydra-gates.sh — single source of truth for all 61 Hydra mechanical
 # quality gates. Exit 0 on all-green; non-zero on any FAIL.
 #

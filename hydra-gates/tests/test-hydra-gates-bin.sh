@@ -39,7 +39,10 @@ trap 'rm -rf "${WORK}"' EXIT
 # ---------------------------------------------------------------------------
 FIX="${WORK}/fixture"
 mkdir -p "${FIX}/lib" "${FIX}/appinfo"
-cd "${FIX}"
+# `|| exit 1` matters here: if this cd fails the fixture gets built in the
+# CURRENT directory instead, and every assertion below then measures the wrong
+# repository while still looking like a normal run.
+cd "${FIX}" || exit 1
 # `git init -b <branch>` needs git >= 2.28; Ubuntu 20.04 ships 2.25. Set the
 # initial branch through symbolic-ref instead so the fixture builds everywhere.
 # When this failed silently the whole suite returned 99 for every case, which

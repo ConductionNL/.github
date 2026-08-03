@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 #
+# ShellCheck: 7 x SC2001 (`sed` where `${var//a/b}` would do), all inside the
+# pattern-matching itself. Scoped to this file rather than a repo-level
+# .shellcheckrc, for the reason spelled out at the top of run-hydra-gates.sh.
+# shellcheck disable=SC2001
+#
 # lint-or-abstraction-anti-patterns.sh — single grep gate backing the seven
 # "consume-or-*-fleet-wide" umbrella specs.
 #

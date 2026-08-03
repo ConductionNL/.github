@@ -200,13 +200,26 @@ jobs:
           printf '%s\n' "${OUT}"
 
           echo "--- assertions ---"
-          # The offending FILES must appear in the output. A gate that fired on
-          # something else would otherwise read identically.
-          printf '%s' "${OUT}" | grep -q "lib/GateControl.php" \
-            || { echo "::error::the injected PHP file is not named in the output"; exit 1; }
-          printf '%s' "${OUT}" | grep -q "src/gateControl.js" \
-            || { echo "::error::the injected JS file is not named in the output"; exit 1; }
-          # The gates that catch them must be NAMED.
+          # The offending FILES must be named, so we know the gates fired on
+          # what we injected and not on something else that happened to be
+          # there. stdout carries only the COUNT per gate by design; the file
+          # list goes to the gate's own /tmp/hydra-gate-<name>.log, so that is
+          # where the attribution has to be checked. A gate that reported FAIL
+          # while writing no evidence at all would itself be a defect, so a
+          # missing log is a failure here too.
+          for probe in "forbidden-patterns:lib/GateControl.php" "window-confirm:src/gateControl.js"; do
+            gate="${probe%%:*}"; want="${probe##*:}"
+            # shellcheck disable=SC2012
+            log="$(ls -t "/tmp/hydra-gate-${gate}.log" /tmp/hydra-gate-"${gate}".*.log 2>/dev/null | head -1)"
+            if [ -z "${log}" ]; then
+              echo "::error::gate ${gate} reported a result but wrote no /tmp/hydra-gate-${gate}*.log — no evidence for its verdict"
+              exit 1
+            fi
+            echo "--- ${log}"; cat "${log}"
+            grep -q "${want}" "${log}" \
+              || { echo "::error::${gate} did not name the injected file ${want} — it fired on something else"; exit 1; }
+          done
+          # The gates that catch them must be NAMED on stdout.
           printf '%s' "${OUT}" | grep -qE '^\[gate-2\] .*: FAIL' \
             || { echo "::error::gate-2 forbidden-patterns did not fire"; exit 1; }
           printf '%s' "${OUT}" | grep -qE '^\[gate-34\] .*: FAIL' \

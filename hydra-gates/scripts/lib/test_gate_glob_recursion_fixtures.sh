@@ -38,6 +38,11 @@ _assert_found() { # <log-name> <expected-substring> <label>
     # name. Accept BOTH, newest first — asserting only the fixed path made this
     # test report "gate did not run" for a gate that had run and failed
     # correctly, which is a worse failure mode than the one it was guarding.
+    # `ls -t` is used deliberately: the point is to pick the MOST RECENT of the
+    # two possible log names, and ordering by mtime is exactly what ls -t does.
+    # The paths are gate-name-derived and contain no whitespace, so SC2012's
+    # concern (non-alphanumeric filenames) does not apply.
+    # shellcheck disable=SC2012
     log="$(ls -t "/tmp/hydra-gate-$1.log" /tmp/hydra-gate-"$1".*.log 2>/dev/null | head -1)"
     if [ -z "${log}" ] || [ ! -f "${log}" ]; then
         echo "FAIL: ${label} — no /tmp/hydra-gate-$1[.XXXXXX].log written (gate did not run)"

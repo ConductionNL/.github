@@ -12,8 +12,11 @@
 # OX authenticates against GreenMail's IMAP, so OX users must match GreenMail accounts.
 
 OX_CONTAINER="conduction-open-xchange"
-OX_ADMIN="oxadminmaster"
-OX_ADMIN_PASS="admin_master_password"
+# The OX *master* admin credentials used to be assigned here. Nothing in this
+# script ever read them — every command below authenticates with the CONTEXT
+# admin (CTX_ADMIN/CTX_ADMIN_PASS). They were a hardcoded master password
+# sitting in a public repository for no reason, so they are removed rather than
+# suppressed.
 CTX_ADMIN="oxadmin"
 CTX_ADMIN_PASS="oxadmin"
 CTX_ID="1"
@@ -60,7 +63,10 @@ create_user() {
     local email="$5"
     local password="$6"
 
-    docker exec "$OX_CONTAINER" /opt/open-xchange/sbin/createuser \
+    # Test the command directly rather than through $?. The two were already
+    # separated by a blank line, and any command inserted between them would
+    # have silently become the thing whose status was being read.
+    if docker exec "$OX_CONTAINER" /opt/open-xchange/sbin/createuser \
         -A "$CTX_ADMIN" -P "$CTX_ADMIN_PASS" -c "$CTX_ID" \
         --username "$username" \
         --displayname "$display" \
@@ -69,9 +75,7 @@ create_user() {
         --password "$password" \
         --email "$email" \
         --imaplogin "$email" \
-        --language nl_NL 2>&1
-
-    if [ $? -eq 0 ]; then
+        --language nl_NL 2>&1; then
         echo "  Created user: $username ($email)"
     else
         echo "  User $username may already exist (this is OK)"
