@@ -71,6 +71,8 @@ Repos without a `composer.json` (component libraries, themes — e.g. `nextcloud
 
 The skipped PHP checks still report (as "skipped"), which satisfies required status checks — so the same org-wide required contexts work for PHP apps and JS-only repos alike.
 
+The mirror image exists too: **PHP-only repos** without a `package.json` (e.g. `openklant`) set `enable-npm: false` (plus `enable-frontend: false`) so the npm legs of security/license skip instead of failing on `npm ci`. Skipped legs satisfy required checks the same way.
+
 #### Custom frontend checks (`frontend-checks`)
 
 Repo-specific quality gates (unit tests, build verification, docs coverage, …) run through the `frontend-checks` input — a JSON array of **npm script names**. Each entry becomes its own `quality / Frontend Check (<script>)` job.
@@ -95,6 +97,11 @@ Repo-specific quality gates (unit tests, build verification, docs coverage, …)
    ```
 
 All `frontend-checks` legs feed into the `Quality Report` gate, so a failing custom check fails the org-required `quality / Quality Report` context.
+
+Two related inputs:
+
+- **`frontend-path`** (default `"."`) — points every npm-side job (Vue Quality, Frontend Checks, npm security/license legs) at a subdirectory containing `package.json` + `package-lock.json`, for repos where the frontend is not at the repo root (e.g. `woo-website-template-apiv2` with its app in `pwa/`).
+- **`enable-stylelint`** (default `true`) — skip the Stylelint leg for repos without a `stylelint` npm script, mirroring `enable-eslint`.
 
 #### Peer-dependency policy (`.npmrc`, not CLI flags)
 

@@ -27,6 +27,11 @@ on:
         required: false
         type: boolean
         default: true
+      enable-npm:
+        description: "Master switch for the npm ecosystem checks (npm legs of security/license). Set false for PHP-only repos without package.json — `npm ci` fails hard without one. Counterpart of enable-php."
+        required: false
+        type: boolean
+        default: true
       enable-psalm:
         description: "Run Psalm static analysis"
         required: false
@@ -67,6 +72,16 @@ on:
         required: false
         type: string
         default: "20"
+      frontend-path:
+        description: "Directory containing package.json + package-lock.json for all npm-side jobs (Vue Quality, Frontend Checks, npm security/license legs). Default: repo root. Use for repos where the frontend lives in a subdirectory (e.g. 'pwa')."
+        required: false
+        type: string
+        default: "."
+      enable-stylelint:
+        description: "Run Stylelint (requires enable-frontend). Set false for repos without a stylelint npm script."
+        required: false
+        type: boolean
+        default: true
       frontend-setup-command:
         description: "Optional ADDITIONAL setup command for the frontend-checks job. The standard root `npm ci` always runs first; this command runs after it and does NOT replace it. Use it to prepare things the root install doesn't cover, e.g. installing a nested package's dependencies: 'cd docusaurus && npm ci' (the nested directory then needs its own package.json + package-lock.json)."
         required: false
@@ -302,6 +317,9 @@ jobs:
     if: ${{ inputs.enable-frontend }}
     runs-on: ubuntu-latest
     name: "Vue Quality (${{ matrix.tool }})"
+    defaults:
+      run:
+        working-directory: ${{ inputs.frontend-path }}
     strategy:
       matrix:
         tool: [eslint, stylelint]
@@ -316,6 +334,7 @@ jobs:
         with:
           node-version: "${{ inputs.node-version }}"
           cache: "npm"
+          cache-dependency-path: "${{ inputs.frontend-path }}/package-lock.json"
 
       - name: Install dependencies
         run: npm ci
@@ -331,6 +350,10 @@ jobs:
               npm run lint
               ;;
             stylelint)
+              if [ "${{ inputs.enable-stylelint }}" != "true" ]; then
+                echo "Stylelint is disabled — skipping."
+                exit 0
+              fi
               npm run stylelint
               ;;
           esac
@@ -345,7 +368,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: result-vue-quality-${{ matrix.tool }}
-          path: quality-results/
+          path: ${{ inputs.frontend-path }}/quality-results/
 
   # ── Group 2b: Custom frontend checks ───────────
   #
@@ -358,6 +381,9 @@ jobs:
     if: ${{ inputs.enable-frontend && inputs.frontend-checks != '[]' }}
     runs-on: ubuntu-latest
     name: "Frontend Check (${{ matrix.script }})"
+    defaults:
+      run:
+        working-directory: ${{ inputs.frontend-path }}
     strategy:
       matrix:
         script: ${{ fromJSON(inputs.frontend-checks) }}
@@ -372,6 +398,7 @@ jobs:
         with:
           node-version: "${{ inputs.node-version }}"
           cache: "npm"
+          cache-dependency-path: "${{ inputs.frontend-path }}/package-lock.json"
 
       # Caller-supplied values are passed via env and referenced as "$VAR"
       # (never inlined into the script) so special characters cannot break
@@ -412,7 +439,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: result-frontend-check-${{ strategy.job-index }}
-          path: quality-results/
+          path: ${{ inputs.frontend-path }}/quality-results/
 
   # ── Group 3: Security ──────────────────────────
   security:
@@ -440,8 +467,11 @@ jobs:
         with:
           node-version: "${{ inputs.node-version }}"
           cache: "npm"
+          cache-dependency-path: "${{ inputs.frontend-path }}/package-lock.json"
 
       - name: Run ${{ matrix.ecosystem }} audit
+        env:
+          FRONTEND_PATH: ${{ inputs.frontend-path }}
         run: |
           case "${{ matrix.ecosystem }}" in
             composer)
@@ -453,6 +483,11 @@ jobs:
               composer audit --format=plain --abandoned=report
               ;;
             npm)
+              if [ "${{ inputs.enable-npm }}" != "true" ]; then
+                echo "npm ecosystem is disabled — skipping npm audit."
+                exit 0
+              fi
+              cd "$FRONTEND_PATH"
               npm ci
               # Tolerate an unavailable npm advisory endpoint: npm is retiring
               # the audits/quick endpoint and it intermittently 400s ("audit
@@ -553,8 +588,11 @@ jobs:
         with:
           node-version: "${{ inputs.node-version }}"
           cache: "npm"
+          cache-dependency-path: "${{ inputs.frontend-path }}/package-lock.json"
 
       - name: Install dependencies
+        env:
+          FRONTEND_PATH: ${{ inputs.frontend-path }}
         run: |
           if [ "${{ matrix.ecosystem }}" = "composer" ]; then
             if [ "${{ inputs.enable-php }}" != "true" ]; then
@@ -563,16 +601,28 @@ jobs:
             fi
             composer install --no-progress --prefer-dist --optimize-autoloader
           else
+            if [ "${{ inputs.enable-npm }}" != "true" ]; then
+              echo "npm ecosystem is disabled — skipping npm install."
+              exit 0
+            fi
+            cd "$FRONTEND_PATH"
             npm ci
             npm install -g license-checker
           fi
 
       - name: Check ${{ matrix.ecosystem }} licenses
+        env:
+          FRONTEND_PATH: ${{ inputs.frontend-path }}
         run: |
           set -euo pipefail
 
           if [ "${{ matrix.ecosystem }}" = "composer" ] && [ "${{ inputs.enable-php }}" != "true" ]; then
             echo "PHP toolchain is disabled — skipping composer license check."
+            exit 0
+          fi
+
+          if [ "${{ matrix.ecosystem }}" = "npm" ] && [ "${{ inputs.enable-npm }}" != "true" ]; then
+            echo "npm ecosystem is disabled — skipping npm license check."
             exit 0
           fi
 
@@ -659,7 +709,7 @@ jobs:
           else
             echo ""
             echo "=== Checking npm dependencies ==="
-            NPM_JSON=$(license-checker --json --production 2>/dev/null || echo '{}')
+            NPM_JSON=$(license-checker --json --production --start "$FRONTEND_PATH" 2>/dev/null || echo '{}')
 
             for pkg in $(echo "$NPM_JSON" | jq -r 'keys[]' 2>/dev/null); do
               license=$(echo "$NPM_JSON" | jq -r --arg p "$pkg" '.[$p].licenses // .[$p].license // "UNKNOWN"')
