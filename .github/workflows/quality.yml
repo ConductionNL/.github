@@ -987,16 +987,57 @@ jobs:
 
           mkdir -p license-report
 
-          # Helper: check if a license string is allowed
-          # Handles SPDX OR expressions and trailing "*" from license-checker
+          # Helper: check if a license string is allowed.
+          #
+          # SPDX semantics:
+          #   OR  -> at least one branch must be allowed  (you may pick either)
+          #   AND -> every term must be allowed           (you must comply with both)
+          #
+          # The previous version split on " OR " only and returned success on the
+          # first allowed part. That made every conjunction a false failure:
+          # "MIT AND Zlib" never split, was treated as one unknown token, and was
+          # DENIED even though both halves are allowlisted. Repos worked around it
+          # with manual override entries (e.g. pako, sha.js) that are no longer
+          # needed once AND is evaluated correctly.
+          #
+          # Nested expressions FAIL CLOSED. Naive string splitting cannot evaluate
+          # "(MIT OR Apache-2.0) AND Zlib": splitting on OR first detaches the
+          # group, the bare "MIT" branch satisfies it, and the required "Zlib" is
+          # never checked — so a DISALLOWED licence would PASS. In a licence gate a
+          # false pass is worse than a false failure, so anything with an
+          # inner-grouped operator is refused and must be resolved with an
+          # explicit, reviewed override entry.
           check_license() {
             local license_str="$1"
-            IFS='|' read -ra PARTS <<< "$(echo "$license_str" | sed 's/ OR /|/g; s/ or /|/g')"
-            for part in "${PARTS[@]}"; do
-              part=$(echo "$part" | sed 's/^ *//;s/ *$//' | sed 's/[()]//g' | sed 's/\*$//')
-              if echo "$ALLOWLIST" | jq -e --arg l "$part" 'map(ascii_downcase) | index($l | ascii_downcase)' > /dev/null 2>&1; then
-                return 0
+            local s
+            s=$(echo "$license_str" | sed 's/\*$//')
+
+            # Refuse genuinely nested expressions (a parenthesised group that is
+            # not simply the entire string).
+            local trimmed
+            trimmed=$(echo "$s" | sed 's/^ *//;s/ *$//')
+            if echo "$trimmed" | grep -q '('; then
+              if ! echo "$trimmed" | grep -qE '^\([^()]*\)$'; then
+                echo "::warning::Un-evaluatable SPDX expression '$license_str' — add a reviewed override entry"
+                return 1
               fi
+            fi
+            s=$(echo "$s" | sed 's/[()]//g')
+
+            local IFS
+            IFS='|' read -ra OR_BRANCHES <<< "$(echo "$s" | sed 's/ OR /|/g; s/ or /|/g')"
+            for branch in "${OR_BRANCHES[@]}"; do
+              IFS=$'\x1f' read -ra AND_TERMS <<< "$(echo "$branch" | sed 's/ AND /\x1f/g; s/ and /\x1f/g')"
+              local all_allowed=1
+              for term in "${AND_TERMS[@]}"; do
+                term=$(echo "$term" | sed 's/^ *//;s/ *$//')
+                [ -z "$term" ] && continue
+                if ! echo "$ALLOWLIST" | jq -e --arg l "$term" 'map(ascii_downcase) | index($l | ascii_downcase)' > /dev/null 2>&1; then
+                  all_allowed=0
+                  break
+                fi
+              done
+              [ "$all_allowed" = "1" ] && return 0
             done
             return 1
           }
