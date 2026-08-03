@@ -2590,6 +2590,7 @@ jobs:
         run: python .conduction-shared/scripts/extract-features.py --app-root .
 
       - name: Fail if stale
+        id: fail-if-stale
         run: |
           if git diff --quiet docs/features.json 2>/dev/null && ! git status --porcelain docs/features.json | grep -q '^??'; then
             echo "docs/features.json is up to date."
@@ -2599,7 +2600,14 @@ jobs:
           fi
 
       - name: Upload regenerated file
-        if: failure()
+        # Gate on the staleness step SPECIFICALLY, not `failure()` alone: if the
+        # Regenerate step itself crashed, the file on disk is the stale committed
+        # copy (or absent), and uploading it under the 'features-json' label would
+        # invite committing exactly what CI just rejected. Only when fail-if-stale
+        # failed is the on-disk file guaranteed to be the fresh regeneration.
+        # (`failure() &&` is required — without a status-check function GitHub
+        # implies `success()`, and the step would never run after a failure.)
+        if: failure() && steps.fail-if-stale.outcome == 'failure'
         uses: actions/upload-artifact@v4
         with:
           name: features-json

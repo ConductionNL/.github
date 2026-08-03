@@ -140,7 +140,7 @@ A `.npmrc` containing `legacy-peer-deps=true` without a dated explanation and a 
 - `features-check` (PRs) and `features-extract` (pushes) are both **read-only gates** — they regenerate in memory, fail if the committed file is stale, and attach the regenerated file as a run artifact. Neither ever commits or pushes.
 - The pipeline previously auto-committed the regenerated file back to the branch. That is forbidden now and must not come back: a CI push moves the PR head out from under its checks (with `[skip ci]` it stripped **all** checks from the PR), dismisses reviewer approvals via the org ruleset's dismiss-stale-on-push, and bounced off branch protection on protected branches anyway (#61). A quality pipeline must never mutate the branch it is judging.
 
-Repo setup (reference implementation: `openregister`):
+Repo setup (the verbatim hook below is the canonical source — copy it, don't reinvent it):
 
 1. Commit `.githooks/pre-commit` — regenerates `docs/features.json` whenever staged changes touch `openspec/specs/` or `openspec/features.overlay.json`, fetching the canonical `scripts/extract-features.py` from this repo (cached fallback when offline). Best-effort: it warns and never blocks the commit; the CI gate is the enforcement backstop.
 2. Activate it automatically for every contributor — use **whichever manifests the repo has** (either one suffices; wire both when both exist):
@@ -175,11 +175,14 @@ if git diff --cached --name-only | grep -qE "^openspec/(specs/|features\.overlay
     elif command -v py >/dev/null 2>&1; then PY="py -3";
     else PY="python"; fi
 
-    if $PY "$CACHE" --app-root . >/dev/null 2>&1; then
+    # stdout is silenced for a quiet happy path, but stderr must reach the
+    # terminal: a spec file with broken YAML frontmatter should show the real
+    # parse error, not get mis-diagnosed as a missing-python problem.
+    if $PY "$CACHE" --app-root . >/dev/null; then
       git add docs/features.json
       echo "pre-commit: docs/features.json regenerated from openspec/specs/."
     else
-      echo "pre-commit: WARNING — could not regenerate docs/features.json (python or pyyaml missing?). CI features-check will verify." >&2
+      echo "pre-commit: WARNING — could not regenerate docs/features.json (see error above; missing python/pyyaml also lands here). CI features-check will verify." >&2
     fi
   else
     echo "pre-commit: WARNING — could not fetch extract-features.py (offline?). CI features-check will verify." >&2
@@ -188,6 +191,8 @@ fi
 
 exit 0
 ```
+
+**Trust boundary — know what you're inheriting.** The hook downloads and executes `scripts/extract-features.py` from this repo's `main` at commit time. That is the same trust model the reusable workflow already uses (its `Checkout shared scripts` step checks out `ConductionNL/.github@main`), but the blast radius differs: the workflow runs on an ephemeral CI runner, the hook runs on every contributor's machine — anyone with write access to `.github`'s `main` can execute code there on the next openspec-touching commit. This is accepted for now because it matches existing CI practice and keeps the script in one canonical place. If that ever stops being acceptable, harden by pinning the fetch to a tag (`.../refs/tags/quality-vN/...`) or verifying a committed SHA-256 checksum of the script before executing (fail closed on mismatch).
 
 ##### Per-repo rollout checklist
 
