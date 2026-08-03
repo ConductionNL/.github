@@ -3706,12 +3706,46 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Gate 62 — store-plane (ADR-080)
+# ---------------------------------------------------------------------------
+_sp_log=/tmp/hydra-gate-store-plane.log
+: > "${_sp_log}"
+set +e
+python3 "${SCRIPT_DIR}/lib/check_store_and_settings_surface.py" . --gate store --base "${BASE_REF}" > "${_sp_log}" 2>&1
+_sp_rc=$?
+set -e
+if [ "${_sp_rc}" -eq 0 ]; then
+    _pass 62 "store-plane"
+else
+    _sp_n=$(grep -cE '^FAIL' "${_sp_log}" 2>/dev/null || echo 1)
+    [ "${_sp_n}" -eq 0 ] && _sp_n=1
+    _fail 62 "store-plane" "${_sp_n} store/templates/catalogue naming or discovery violation(s) (ADR-080); see ${_sp_log}"
+fi
+
+# ---------------------------------------------------------------------------
+# Gate 63 — settings-surface (ADR-079)
+# ---------------------------------------------------------------------------
+_ss_log=/tmp/hydra-gate-settings-surface.log
+: > "${_ss_log}"
+set +e
+python3 "${SCRIPT_DIR}/lib/check_store_and_settings_surface.py" . --gate settings --base "${BASE_REF}" > "${_ss_log}" 2>&1
+_ss_rc=$?
+set -e
+if [ "${_ss_rc}" -eq 0 ]; then
+    _pass 63 "settings-surface"
+else
+    _ss_n=$(grep -cE '^FAIL' "${_ss_log}" 2>/dev/null || echo 1)
+    [ "${_ss_n}" -eq 0 ] && _ss_n=1
+    _fail 63 "settings-surface" "${_ss_n} settings-placement violation(s) (ADR-079); see ${_ss_log}"
+fi
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 _SUMMARY_REACHED=1
 echo ""
 if [ "${_FAILED}" -eq 0 ]; then
-    echo "[hydra-gates] ALL 61 GATES GREEN"
+    echo "[hydra-gates] ALL 63 GATES GREEN"
 else
     echo "[hydra-gates] ${_FAILED} gate(s) failed"
 fi
