@@ -1308,6 +1308,14 @@ jobs:
     runs-on: ubuntu-latest
     name: "E2E Tests (Playwright)"
     needs: [php-quality, security]
+    # No job in this file declared a timeout, so a hung suite ran to GitHub's
+    # 6-hour default. Observed durations once the suite is healthy: 4-10 min
+    # (planix 0.8, doriath 4.2, zaakafhandelapp 5.3, softwarecatalog 6.1,
+    # openconnector 7.7, opencatalogi 10.0). Unhealthy runs measured 1.1h and
+    # 1.6h before the `visual`/`docs-capture` projects were excluded. 45
+    # minutes leaves a wide margin over every healthy run while turning a hang
+    # into a failure in under an hour instead of burning a runner for six.
+    timeout-minutes: 45
 
     services:
       postgres:
