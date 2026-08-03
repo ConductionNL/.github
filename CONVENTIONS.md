@@ -133,6 +133,25 @@ A release or critical merge is blocked **right now**, the real fix (aligning the
 
 A `.npmrc` containing `legacy-peer-deps=true` without a dated explanation and a linked issue should be treated as a bug and flagged in review.
 
+#### features.json is generated at commit time, never by CI
+
+`docs/features.json` (the commercial capability list derived from `openspec/specs/`) is regenerated **on the developer's machine at commit time**, by a committed pre-commit hook. CI only verifies:
+
+- `features-check` (PRs) and `features-extract` (pushes) are both **read-only gates** — they regenerate in memory, fail if the committed file is stale, and attach the regenerated file as a run artifact. Neither ever commits or pushes.
+- The pipeline previously auto-committed the regenerated file back to the branch. That is forbidden now and must not come back: a CI push moves the PR head out from under its checks (with `[skip ci]` it stripped **all** checks from the PR), dismisses reviewer approvals via the org ruleset's dismiss-stale-on-push, and bounced off branch protection on protected branches anyway (#61). A quality pipeline must never mutate the branch it is judging.
+
+Repo setup (reference implementation: `openregister`):
+
+1. Commit `.githooks/pre-commit` — regenerates `docs/features.json` whenever staged changes touch `openspec/specs/` or `openspec/features.overlay.json`, fetching the canonical `scripts/extract-features.py` from this repo (cached fallback when offline). Best-effort: it warns and never blocks the commit; the CI gate is the enforcement backstop.
+2. Activate it automatically for every contributor — use **whichever manifests the repo has** (either one suffices; wire both when both exist):
+   - `package.json`: `"prepare": "git config core.hooksPath .githooks || true"`
+   - `composer.json`: add `"git config core.hooksPath .githooks || true"` to `post-install-cmd`
+   - Existing clones activate once manually: `git config core.hooksPath .githooks`
+
+**Husky repos (e.g. `nextcloud-vue`):** husky already owns `core.hooksPath` (`.husky`) — do NOT add `.githooks/` there, it would silently disable the existing husky hooks. Put the regeneration snippet inside the existing `.husky/pre-commit` instead.
+
+**Repos with no package.json or composer.json** (e.g. `hydra`): no auto-activation path exists — but such repos currently have `enable-features-extract: false`, so no hook is needed. If features are ever enabled there, document the manual `git config` line in the repo README.
+
 ## SBOM (Software Bill of Materials)
 
 Each app's SBOM is published exclusively as a **release asset** via the central Quality workflow's SBOM job. Per-app `sbom.yml` workflows are not allowed — they were removed in [`ConductionNL/.github#34`](https://github.com/ConductionNL/.github/pull/34).

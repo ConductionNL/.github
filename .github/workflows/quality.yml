@@ -2550,18 +2550,24 @@ jobs:
       - name: Verify docs/features.json is up to date
         run: python .conduction-shared/scripts/extract-features.py --app-root . --check
 
+  # READ-ONLY by design. This job used to auto-commit + push the regenerated
+  # docs/features.json back to the branch — a quality pipeline mutating the
+  # branch it is judging. That moved the PR head from under the checks
+  # (with [skip ci] it stripped ALL checks from the PR), dismissed reviewer
+  # approvals via the org ruleset's dismiss-stale-on-push, and on protected
+  # branches the bot push bounced anyway (#61). Generation now happens at
+  # COMMIT TIME in each repo via the committed .githooks/pre-commit hook
+  # (see CONVENTIONS.md § features.json is generated at commit time); CI
+  # only verifies and hands back the regenerated file as an artifact.
   features-extract:
     if: ${{ inputs.enable-features-extract && !cancelled() && github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     name: "Features Extract"
     permissions:
-      contents: write
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref || github.ref_name }}
-          token: ${{ github.token }}
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -2581,16 +2587,19 @@ jobs:
       - name: Regenerate docs/features.json
         run: python .conduction-shared/scripts/extract-features.py --app-root .
 
-      - name: Commit if changed
+      - name: Fail if stale
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
           if git diff --quiet docs/features.json 2>/dev/null && ! git status --porcelain docs/features.json | grep -q '^??'; then
-            echo "docs/features.json unchanged, nothing to commit."
+            echo "docs/features.json is up to date."
           else
-            git add docs/features.json
-            git commit -m "ci: regenerate docs/features.json from openspec/specs/ [skip ci]"
-            # Non-blocking on protected branches: branch-protection rulesets reject
-            # the bot push on main/beta/development. Tracked in ConductionNL/.github#61.
-            git push || echo "::warning::Could not push the regenerated docs/features.json — branch protection rejected the bot push (see ConductionNL/.github#61). Run scripts/extract-features.py locally and commit manually."
+            echo "::error::docs/features.json is out of date with openspec/specs/. Regenerate it locally (the committed .githooks/pre-commit hook does this automatically — see CONVENTIONS.md) and commit it. The regenerated file is attached as the 'features-json' artifact of this run."
+            exit 1
           fi
+
+      - name: Upload regenerated file
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: features-json
+          path: docs/features.json
+          retention-days: 7
