@@ -496,6 +496,175 @@ jobs:
           name: result-frontend-check-${{ strategy.job-index }}
           path: ${{ inputs.frontend-path }}/quality-results/
 
+  # Auto-detected frontend BUILD gate.
+  #
+  # `npm run build` existed in this file in exactly two places — inside the
+  # Playwright job and inside the journeydoc capture job — and both are opt-in
+  # and default OFF. Only 2 of the 21 repos that call this workflow enable
+  # Playwright (doriath, pipelinq) and none enable journeydoc capture, so for
+  # the other 19 the frontend was NEVER COMPILED IN CI AT ALL. A repo could
+  # ship a bundle that does not build and every gate stayed green, because
+  # nothing in the pipeline ever ran webpack.
+  #
+  # That is not hypothetical: hermiq's build broke when the floating
+  # `node-polyfill-webpack-plugin: ^4.0.0` resolved to 4.1.0 and webpack
+  # emitted 25 errors. Nine repos still carry an unpinned caret on that same
+  # plugin (openbuild, petstore, portaliq, shillinq, nextcloud-app-template at
+  # ^4.0.0; decidesk, zaakafhandelapp at ^3.0.0; pipelinq at ^4.1.0), so any
+  # lockfile regeneration can reproduce it silently.
+  #
+  # Like `frontend-tests` below, this job takes no opt-in input: it runs the
+  # repo's own `build` script when one exists and BLOCKS on failure. A repo
+  # with no package.json or no `build` script skips cleanly, and — unlike
+  # `frontend-tests` — it does not even set up Node in that case, so a repo
+  # without a lockfile cannot be newly broken by this job.
+  #
+  # The compiled output is uploaded as an artifact and reused by the Playwright
+  # job, which previously ran its own identical `npm run build`. See the
+  # "Restore prebuilt app frontend" step there: the reuse is a fast path with a
+  # full fallback, never a replacement, so a bad hand-off costs time, not a
+  # verdict.
+  frontend-build:
+    if: ${{ inputs.enable-frontend }}
+    runs-on: ubuntu-latest
+    name: "Frontend Build"
+    # UNMEASURED as a standalone job — it has never existed. The best proxy is
+    # the `npm run build` already embedded in other legs: measured at 211 s
+    # under heavy load, and the frontend-checks legs that wrap it peak at 2.1
+    # min end to end. `npm ci` adds ~1 min cold. 30 min is therefore ~8x the
+    # worst observed build and leaves the runner's own contention plenty of
+    # room, while still converting a hang into a failure inside half an hour
+    # rather than burning six hours on GitHub's default. Deliberately generous:
+    # a bound that fires under normal contention produces a CANCELLED job,
+    # which returns no verdict at all — strictly worse than no bound.
+    timeout-minutes: 30
+    outputs:
+      # 'true' only when the build actually ran AND produced files. The
+      # Playwright job keys its artifact download off this, so "no artifact"
+      # and "artifact I should not trust" both resolve to the fallback path.
+      built: ${{ steps.package.outputs.uploaded }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.frontend-path }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Runs BEFORE setup-node on purpose. `actions/setup-node` with
+      # `cache: npm` hard-fails when no lockfile is found, so detecting first
+      # means a repo with no package.json (or no build script) skips this job
+      # without ever touching a step that could fail on its behalf.
+      - name: Detect a build script
+        id: detect
+        run: |
+          if [ ! -f package.json ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No package.json in '${{ inputs.frontend-path }}' — nothing to build."
+            exit 0
+          fi
+          if [ ! -f package-lock.json ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::package.json present but no package-lock.json — skipping the frontend build (npm ci requires a lockfile)."
+            exit 0
+          fi
+          BUILD_CMD="$(jq -r '.scripts.build // ""' package.json)"
+          if [ -z "$BUILD_CMD" ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No 'build' script in package.json — nothing to build."
+            exit 0
+          fi
+          echo "run=true" >> "$GITHUB_OUTPUT"
+          echo "Detected 'build' script: $BUILD_CMD"
+
+      - name: Setup Node.js
+        if: steps.detect.outputs.run == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "${{ inputs.node-version }}"
+          cache: "npm"
+          cache-dependency-path: "${{ inputs.frontend-path }}/package-lock.json"
+
+      - name: Install dependencies
+        if: steps.detect.outputs.run == 'true'
+        run: npm ci
+
+      - name: Extra setup (runs after npm ci, does not replace it)
+        if: ${{ steps.detect.outputs.run == 'true' && inputs.frontend-setup-command != '' }}
+        env:
+          SETUP_CMD: ${{ inputs.frontend-setup-command }}
+        run: bash -c "$SETUP_CMD"
+
+      # The marker is dropped AFTER `npm ci` so that only what the build itself
+      # writes is captured — install-time churn under node_modules is already
+      # older than it.
+      - name: Build frontend
+        if: steps.detect.outputs.run == 'true'
+        run: |
+          touch /tmp/frontend-build-marker
+          npm run build
+
+      # Collect the build output WITHOUT knowing where it lands. Nextcloud apps
+      # emit to `js/`, vite apps to `dist/`, portaliq writes two bundles from a
+      # composite script — hardcoding any of those is how the hand-off to
+      # Playwright would silently ship an empty bundle. Instead: everything the
+      # build step touched, minus node_modules and .git.
+      #
+      # This matters because a MISSING bundle does not 404. Nextcloud's front
+      # controller answers an absent asset with HTTP 200 and an HTML error
+      # page, so a status-code probe reads it as success and the only symptom
+      # is a selector timeout that names an element. Several repos' ci-seed.sh
+      # guards against that by asserting the response is actually JavaScript;
+      # this job keeps that guard meaningful by making the reuse path prove it
+      # restored real .js files (see the Playwright job) and falling back to a
+      # real build when it cannot.
+      - name: Package build output
+        id: package
+        if: steps.detect.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          find . -type f -newer /tmp/frontend-build-marker \
+            -not -path './node_modules/*' \
+            -not -path './.git/*' \
+            -print0 > /tmp/frontend-build-files.z
+          COUNT="$(tr -cd '\0' < /tmp/frontend-build-files.z | wc -c)"
+          JS_COUNT="$(tr '\0' '\n' < /tmp/frontend-build-files.z | grep -c '\.js$' || true)"
+          echo "Build wrote $COUNT file(s), of which $JS_COUNT are .js"
+          if [ "$COUNT" -eq 0 ]; then
+            echo "uploaded=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::The build produced no files outside node_modules — nothing to hand off. Downstream jobs will build for themselves."
+            exit 0
+          fi
+          tar --null -czf /tmp/frontend-build-output.tar.gz -T /tmp/frontend-build-files.z
+          echo "uploaded=true" >> "$GITHUB_OUTPUT"
+          tr '\0' '\n' < /tmp/frontend-build-files.z | head -40
+          echo "…"
+
+      - name: Upload build output
+        if: steps.package.outputs.uploaded == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build-output
+          path: /tmp/frontend-build-output.tar.gz
+          retention-days: 1
+
+      - name: Record result
+        if: always()
+        run: |
+          mkdir -p quality-results
+          if [ "${{ steps.detect.outputs.run }}" != "true" ]; then
+            echo "skipped" > quality-results/frontend-build.txt
+          else
+            echo "${{ job.status }}" > quality-results/frontend-build.txt
+          fi
+
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-frontend-build
+          path: ${{ inputs.frontend-path }}/quality-results/
+
   # Auto-detected JS unit tests.
   #
   # `frontend-checks` above is an opt-in LIST that defaults to "[]", so a repo
@@ -1404,7 +1573,13 @@ jobs:
     if: ${{ inputs.enable-playwright && !cancelled() && needs.security.result != 'failure' }}
     runs-on: ubuntu-latest
     name: "E2E Tests (Playwright)"
-    needs: [php-quality, security]
+    # `frontend-build` is a dependency purely so its artifact is available to
+    # download — NOT a gate. The `if:` above contains `!cancelled()`, which
+    # suppresses the implicit `success()` on needs, so a failed or skipped
+    # frontend-build still lets this job run and reach its own verdict. When
+    # the artifact is absent for any reason the build step below runs exactly
+    # as it did before this dependency existed.
+    needs: [php-quality, security, frontend-build]
     # No job in this file declared a timeout, so a hung suite ran to GitHub's
     # 6-hour default. Observed durations once the suite is healthy: 4-10 min
     # (planix 0.8, doriath 4.2, zaakafhandelapp 5.3, softwarecatalog 6.1,
@@ -1522,12 +1697,69 @@ jobs:
           npm install --save-dev @playwright/test
           npx playwright install --with-deps chromium
 
+      # ── Reuse the bundle the `frontend-build` job already compiled ─────────
+      #
+      # Fast path only. Every condition below is written so that "I am not
+      # certain this is the right bundle" resolves to REBUILDING, never to
+      # running specs against something unverified — a wrong or empty bundle
+      # does not produce a 404, it produces HTTP 200 text/html and a wall of
+      # selector timeouts that read as a broken app rather than a broken
+      # pipeline. The cost of the fallback is ~3 minutes; the cost of a bad
+      # hand-off is a false verdict on every UI spec in the fleet.
+      #
+      # Guarded on frontend-path == '.' because the build job runs inside
+      # `inputs.frontend-path` while this job builds at the app root; for a
+      # repo with a nested frontend the two output trees are not the same
+      # paths, so that case keeps building here.
+      - name: Download prebuilt app frontend
+        id: prebuilt
+        if: ${{ needs.frontend-build.outputs.built == 'true' && inputs.frontend-path == '.' }}
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build-output
+          path: /tmp/frontend-build
+
+      - name: Restore prebuilt app frontend
+        id: restore
+        if: ${{ steps.prebuilt.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          TARBALL=/tmp/frontend-build/frontend-build-output.tar.gz
+          if [ ! -f "$TARBALL" ]; then
+            echo "restored=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Prebuilt frontend artifact downloaded but the tarball is missing — building here instead."
+            exit 0
+          fi
+          # Positive check on the thing that actually matters: JavaScript.
+          # An artifact that extracts cleanly but carries no .js is
+          # indistinguishable from a successful build at the HTTP layer
+          # (200 text/html either way), so assert it HERE, where the failure
+          # is still legible, and rebuild rather than proceed on doubt.
+          TOTAL="$(tar -tzf "$TARBALL" | grep -c . || true)"
+          JS_COUNT="$(tar -tzf "$TARBALL" | grep -c '\.js$' || true)"
+          echo "Artifact holds $TOTAL file(s), of which $JS_COUNT are .js"
+          if [ "$TOTAL" -eq 0 ] || [ "$JS_COUNT" -eq 0 ]; then
+            echo "restored=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Prebuilt frontend artifact carried no JavaScript — building here instead."
+            exit 0
+          fi
+          tar -xzf "$TARBALL" -C "server/apps/${{ inputs.app-name }}"
+          echo "Restored $TOTAL file(s) from the frontend-build artifact into server/apps/${{ inputs.app-name }}."
+          echo "restored=true" >> "$GITHUB_OUTPUT"
+
       - name: Build app frontend
         # Vue/React apps that mount via `Util::addScript()` need their
         # webpack bundle on disk before specs render the page; without
         # this step every selector waits times out because the script
         # tag 404s and the SPA never mounts. Skip silently when the app
         # has no `build` npm script (legacy apps without a frontend).
+        #
+        # Skipped when the `frontend-build` job already produced the bundle and
+        # the restore step verified it. Any other outcome falls through to here
+        # and builds, which is byte-for-byte the behaviour that predates the
+        # artifact hand-off.
+        if: ${{ steps.restore.outputs.restored != 'true' }}
         run: |
           cd server/apps/${{ inputs.app-name }}
           if [ -f "package.json" ] && node -e "process.exit(require('./package.json').scripts && require('./package.json').scripts.build ? 0 : 1)" 2>/dev/null; then
@@ -2422,7 +2654,7 @@ jobs:
   report:
     runs-on: ubuntu-latest
     name: "Quality Report"
-    needs: [php-quality, vue-quality, frontend-checks, security, license, phpunit, newman, playwright, journeydoc-capture, baseline-protection, sbom, features-check, features-extract, hydra-gates]
+    needs: [php-quality, vue-quality, frontend-build, frontend-checks, security, license, phpunit, newman, playwright, journeydoc-capture, baseline-protection, sbom, features-check, features-extract, hydra-gates]
     if: always()
     # Observed across 266 executions: median 0.6 min — but 2% of runs sit at
     # ~30 min because the `Install PDF tools` apt-get step stalls on the Ubuntu
@@ -2534,6 +2766,10 @@ jobs:
               result=$(read_result "results/result-vue-quality-$tool/$tool.txt")
               echo "| $tool | | $(icon "$result") | | | |"
             done
+
+            # Frontend build gate (auto-detected, blocking)
+            build_result=$(read_result "results/result-frontend-build/frontend-build.txt")
+            echo "| build | | $(icon "$build_result") | | | |"
 
             # Custom frontend checks (if any)
             for f in results/result-frontend-check-*/*.txt; do
