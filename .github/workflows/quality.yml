@@ -221,6 +221,10 @@ jobs:
     if: ${{ inputs.enable-php }}
     runs-on: ubuntu-latest
     name: "PHP Quality (${{ matrix.tool }})"
+    # Observed across 1497 executions fleet-wide: median 0.5 min, p95 1.5 min,
+    # max 4.0 min (launchpad). 20 min is a wide margin over the worst leg while
+    # still turning a hang into a failure instead of a 6-hour runner burn.
+    timeout-minutes: 20
     strategy:
       matrix:
         tool: [lint, phpcs, phpmd, psalm, phpstan, phpmetrics]
@@ -346,6 +350,9 @@ jobs:
     if: ${{ inputs.enable-frontend }}
     runs-on: ubuntu-latest
     name: "Vue Quality (${{ matrix.tool }})"
+    # Observed across 494 executions: median 0.6 min, p95 1.2 min, max 2.1 min
+    # (opencatalogi). 20 min absorbs npm-install contention with ~10x headroom.
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: ${{ inputs.frontend-path }}
@@ -410,6 +417,10 @@ jobs:
     if: ${{ inputs.enable-frontend && inputs.frontend-checks != '[]' }}
     runs-on: ubuntu-latest
     name: "Frontend Check (${{ matrix.script }})"
+    # Observed across 102 executions: median 0.6 min, p95 1.4 min, max 2.1 min
+    # (nextcloud-vue). These legs include `npm run build`, which has been
+    # measured at 211 s under heavy load, so the bound is deliberately loose.
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: ${{ inputs.frontend-path }}
@@ -491,6 +502,9 @@ jobs:
     if: ${{ inputs.enable-frontend }}
     runs-on: ubuntu-latest
     name: "Frontend Tests (unit)"
+    # Observed across 232 executions: median 0.6 min, p95 1.5 min, max 2.0 min
+    # (openbuild). Unit runs are load-sensitive, so 20 min, not 5.
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -567,6 +581,9 @@ jobs:
   security:
     runs-on: ubuntu-latest
     name: "Security (${{ matrix.ecosystem }})"
+    # Observed across 505 executions: median 0.4 min, p95 1.0 min, max 5.7 min
+    # (docudesk). Advisory-database fetches can stall, hence 20 min.
+    timeout-minutes: 20
     strategy:
       matrix:
         ecosystem: [composer, npm]
@@ -688,6 +705,9 @@ jobs:
     if: ${{ inputs.enable-license-check }}
     runs-on: ubuntu-latest
     name: "License (${{ matrix.ecosystem }})"
+    # Observed across 497 executions: median 0.7 min, p95 1.4 min, max 1.9 min
+    # (planix). 20 min covers a slow registry without ever firing on a good run.
+    timeout-minutes: 20
     strategy:
       matrix:
         ecosystem: [composer, npm]
@@ -954,6 +974,12 @@ jobs:
     runs-on: ubuntu-latest
     name: "PHPUnit (PHP ${{ matrix.php-version }}, NC ${{ matrix.nextcloud-ref }})"
     needs: [php-quality, security]
+    # Observed across 337 SUCCESSFUL executions: median 1.7 min, p95 13.6 min,
+    # max 18.9 min (shillinq, green). The spread is huge because each leg
+    # installs a full Nextcloud server before the suite runs, so a tight bound
+    # would newly fail shillinq's already-green runs. 45 min is ~2.4x the worst
+    # observed green run and still cuts a hang from 6 hours to 45 minutes.
+    timeout-minutes: 45
 
     services:
       postgres:
@@ -1099,6 +1125,9 @@ jobs:
     runs-on: ubuntu-latest
     name: "Integration Tests (Newman)"
     needs: [php-quality, security]
+    # Observed across 39 executions: median 1.9 min, max 7.5 min (launchpad).
+    # Also installs a full Nextcloud server first, so 30 min — 4x the worst run.
+    timeout-minutes: 30
 
     services:
       postgres:
@@ -1831,6 +1860,14 @@ jobs:
     runs-on: ubuntu-latest
     name: "Journeydoc Capture (screenshots)"
     needs: [security]
+    # UNMEASURED: no caller in the fleet currently sets
+    # `enable-journeydoc-capture: true`, so this job has never executed (312
+    # skipped records, 0 executions, across 15 repos). Its step list is a
+    # superset of the Playwright job's — full Nextcloud install, frontend build,
+    # a Playwright project, plus a commit and a workflow dispatch — so it is
+    # bounded above the Playwright job's 45 min rather than at it. Revisit with
+    # real numbers once a caller enables it.
+    timeout-minutes: 60
     permissions:
       contents: write
       actions: write
@@ -2129,6 +2166,8 @@ jobs:
     if: ${{ inputs.enable-coverage-guard && github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     name: "Coverage Baseline Protection"
+    # Observed across 8 executions: median 0.3 min, max 1.0 min (procest).
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -2147,6 +2186,9 @@ jobs:
     runs-on: ubuntu-latest
     name: "Update Coverage Baseline"
     needs: phpunit
+    # Observed across 3 executions: max 0.3 min (openregister). Downloads an
+    # artifact and commits; 15 min is generous for a push+commit round trip.
+    timeout-minutes: 15
     permissions:
       contents: write
     steps:
@@ -2186,6 +2228,15 @@ jobs:
     name: "Quality Report"
     needs: [php-quality, vue-quality, frontend-checks, security, license, phpunit, newman, playwright, journeydoc-capture, baseline-protection, sbom, features-check, features-extract]
     if: always()
+    # Observed across 266 executions: median 0.6 min — but 2% of runs sit at
+    # ~30 min because the `Install PDF tools` apt-get step stalls on the Ubuntu
+    # mirror. That stall is currently intermittent-but-live fleet-wide
+    # (nldesign, opencatalogi, pipelinq, planix, softwarecatalog) and it still
+    # SUCCEEDS: pipelinq run 30799846661 spent 09:34:30 -> 10:04:52 in that one
+    # step and went green. Anything under ~45 min would newly fail runs that
+    # pass today, so this is bounded at 60 min. The apt stall is a separate
+    # defect worth fixing on its own; this bound only stops the 6-hour case.
+    timeout-minutes: 60
 
     steps:
       - name: Download all result artifacts
@@ -2433,6 +2484,10 @@ jobs:
     runs-on: ubuntu-latest
     name: "SBOM"
     needs: [security]
+    # Observed across 54 executions: median 1.1 min, max 1.9 min
+    # (nextcloud-app-template). Does composer install + npm install + a Grype
+    # download + a CVE scan, all network-bound, so 30 min rather than 10.
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -2640,6 +2695,9 @@ jobs:
     if: ${{ inputs.enable-features-extract && !cancelled() && github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     name: "Features Check"
+    # Observed across 174 executions: median 0.2 min, max 3.1 min
+    # (zaakafhandelapp).
+    timeout-minutes: 20
     steps:
       - name: Checkout PR head
         uses: actions/checkout@v4
@@ -2668,6 +2726,9 @@ jobs:
     if: ${{ inputs.enable-features-extract && !cancelled() && github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     name: "Features Extract"
+    # Observed across 76 executions: median 0.2 min, max 2.5 min
+    # (nextcloud-app-template).
+    timeout-minutes: 20
     permissions:
       contents: write
     steps:
