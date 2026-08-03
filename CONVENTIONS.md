@@ -73,6 +73,16 @@ The skipped PHP checks still report (as "skipped"), which satisfies required sta
 
 The mirror image exists too: **PHP-only repos** without a `package.json` (e.g. `openklant`) set `enable-npm: false` (plus `enable-frontend: false`) so the npm legs of security/license skip instead of failing on `npm ci`. Skipped legs satisfy required checks the same way.
 
+#### Frontend build gate (`Frontend Build`) — automatic, no input
+
+`quality / Frontend Build` compiles the repo's frontend on every run. It is **auto-detected and has no opt-in input**, exactly like `Frontend Tests (unit)`: when `enable-frontend` is true and the repo has a `package.json` with a `build` script (plus a `package-lock.json`), it runs `npm ci && npm run build` and **blocks on failure** via the `Quality Report` gate. A repo missing any of those skips cleanly, without even setting up Node.
+
+It exists because `npm run build` previously ran *only* inside the opt-in Playwright and journeydoc jobs. Two of the twenty-one repos calling this workflow enable Playwright and none enable journeydoc capture, so nineteen repos had **never compiled their frontend in CI**. hermiq's build was broken for exactly that reason — a floating `node-polyfill-webpack-plugin: ^4.0.0` resolved to 4.1.0 and produced 25 webpack errors — with every gate green.
+
+The compiled output is uploaded as the `frontend-build-output` artifact (tarred, 1-day retention) and the **Playwright job reuses it instead of rebuilding**. That reuse is a fast path, never a replacement: if the artifact is absent, empty, contains no JavaScript, or the repo sets a non-default `frontend-path`, the Playwright job builds for itself exactly as before. A missing bundle answers HTTP 200 `text/html` rather than 404, so a bad hand-off would show up as selector timeouts across every UI spec — hence the fall-back-on-any-doubt rule.
+
+**Pin your build-critical devDependencies.** A caret on a build plugin means a lockfile regeneration can break the build in a way that used to be invisible and is now blocking.
+
 #### Custom frontend checks (`frontend-checks`)
 
 Repo-specific quality gates (unit tests, build verification, docs coverage, …) run through the `frontend-checks` input — a JSON array of **npm script names**. Each entry becomes its own `quality / Frontend Check (<script>)` job.
