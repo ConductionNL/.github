@@ -90,6 +90,9 @@ jobs:
     name: Deploy Documentation
     needs: build
     runs-on: ubuntu-latest
+    # Observed across 9 executions: median 0.2 min, max 1.8 min (.github,
+    # docs.conduction.nl). Downloads the built artifact and pushes gh-pages.
+    timeout-minutes: 20
     # Deploy only on direct pushes, scheduled rebuilds, and manual
     # workflow_dispatch. PR runs stop after the build job, so the
     # AI-baseline gate runs but no gh-pages push happens.
@@ -134,6 +137,11 @@ jobs:
   image:
     name: Build fallback site image
     needs: build
+    # UNMEASURED: no executed run of this job appears in the fleet history
+    # sampled (0 executions). It is a docker buildx build-and-push to GHCR of a
+    # static Apache site, so 30 min is a wide bound for an image build plus a
+    # registry push. Revisit once it has run a few times.
+    timeout-minutes: 30
     # Build the portable Apache image on the same events that deploy to
     # gh-pages, so the GHCR :latest tag always matches what is live. The
     # build job only uploads the artifact on these events, so the

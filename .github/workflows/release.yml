@@ -42,6 +42,12 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    # Observed across 73 executions of the shared release jobs: median 1.3 min,
+    # p95 3.0 min, max 4.0 min (nextcloud-vue). A release is expensive to fail
+    # spuriously — it builds the frontend (measured at 211 s under load),
+    # installs composer deps, packages and signs a tarball and uploads it — so
+    # this is bounded at 45 min, ~11x the worst run, purely as a hang stop.
+    timeout-minutes: 45
     steps:
 
       - name: Validate release type

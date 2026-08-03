@@ -16,6 +16,9 @@ jobs:
   shellcheck:
     name: ShellCheck
     runs-on: ubuntu-latest
+    # Observed: 0.5 min (hydra, the only executed run found). Checkout plus a
+    # containerised ShellCheck action.
+    timeout-minutes: 10
     permissions:
       contents: read
 

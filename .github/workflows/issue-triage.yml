@@ -36,6 +36,9 @@ jobs:
   triage-single:
     name: Triage New Issue
     runs-on: ubuntu-latest
+    # Observed across 8 executions: 0.1 min. A single actions/github-script
+    # step labelling one issue; 15 min covers a slow GitHub API.
+    timeout-minutes: 15
     permissions:
       issues: write
       contents: read
@@ -195,6 +198,9 @@ jobs:
   triage-decision:
     name: Handle Triage Decision
     runs-on: ubuntu-latest
+    # Same shape as triage-single: one actions/github-script step acting on a
+    # single issue. No executed run was sampled, so this mirrors that bound.
+    timeout-minutes: 15
     permissions:
       issues: write
       contents: read
@@ -331,6 +337,11 @@ jobs:
   backlog-triage:
     name: Backlog Triage Existing Issues
     runs-on: ubuntu-latest
+    # UNMEASURED: 6 skipped records, 0 executions in the fleet history sampled.
+    # Unlike the two single-issue jobs it walks EVERY untriaged open issue and
+    # writes labels, so its runtime scales with backlog size and with GitHub
+    # API rate limiting. Bounded well above the single-issue jobs at 30 min.
+    timeout-minutes: 30
     permissions:
       issues: write
       contents: read
