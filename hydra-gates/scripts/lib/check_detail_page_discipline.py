@@ -412,6 +412,31 @@ def check_page(path, page, page_ids, findings):
                     f"existing page id in the merged manifest"
                 )
 
+    # (f2) The OBJECT route form: `"route": {"name": "<pageId>", "query": {...}}`,
+    # used by stats-block entries[] to deep-link a KPI. The renderer calls
+    # `router.resolve({name, query})` inside a COMPUTED and reads `.href` off the
+    # result, so an unresolvable name throws and the page emits console errors on
+    # every mount — it does not degrade to a dead link.
+    #
+    # This form is invisible to (f), which only inspects string values. Observed
+    # 2026-08-03 on openconnector: deleting the EventDeliveries page during the
+    # ADR-080 dead-letter merge left two ConsumerDetail stats entries pointing at
+    # it. A string-only scan reported "no unresolvable route refs" while the E2E
+    # suite failed on ConsumerDetail — the check and the symptom disagreed, and
+    # the check was wrong.
+    objroutes = []
+    _collect(cfg, "route", objroutes)
+    for r in objroutes:
+        if isinstance(r, dict):
+            name = r.get("name")
+            if isinstance(name, str) and name and name not in page_ids:
+                findings.append(
+                    f"{path}: page '{pid}' — route object {{name: '{name}'}} does not "
+                    f"resolve to an existing page id in the merged manifest "
+                    f"(router.resolve() throws inside a computed, so the page emits "
+                    f"console errors on mount)"
+                )
+
 
 def check_file(path, page_ids, findings, base_ref):
     try:
