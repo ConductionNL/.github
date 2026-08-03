@@ -1202,9 +1202,27 @@ jobs:
           cd server
           cat > ci-router.php <<'ROUTER'
           <?php
-          $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+          $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?: '/';
           if ($path !== '/' && is_file(__DIR__ . $path)) {
               return false;
+          }
+          $segments = explode('/', ltrim($path, '/'));
+          $prefix = '';
+          foreach ($segments as $i => $segment) {
+              $prefix .= '/' . $segment;
+              if (substr($segment, -4) !== '.php'
+                  || $prefix === '/index.php'
+                  || !is_file(__DIR__ . $prefix)
+              ) {
+                  continue;
+              }
+              $rest = implode('/', array_slice($segments, $i + 1));
+              $_SERVER['SCRIPT_NAME'] = $prefix;
+              $_SERVER['SCRIPT_FILENAME'] = __DIR__ . $prefix;
+              $_SERVER['PHP_SELF'] = $path;
+              $_SERVER['PATH_INFO'] = $rest === '' ? '' : '/' . $rest;
+              require __DIR__ . $prefix;
+              return true;
           }
           $_SERVER['SCRIPT_NAME'] = '/index.php';
           $_SERVER['SCRIPT_FILENAME'] = __DIR__ . '/index.php';
@@ -1485,6 +1503,41 @@ jobs:
         # info. Verified against that exact algorithm, including query-string
         # preservation, static JS keeping `application/javascript`, and
         # `status.php` still executing as itself.
+        #
+        # ── AND THE OTHER PHP ENTRY POINTS NEED A PREFIX MATCH ──────────────
+        # The first cut of the router claimed those other entry points still
+        # "execute as themselves" on the strength of `is_file()`. That check
+        # only ever matches a URL that IS a file exactly — `/status.php`, the
+        # one case that got tested. Nextcloud never calls the OCS entry points
+        # that way: every real request carries path info,
+        #
+        #     /ocs/v2.php/cloud/user
+        #     /ocs/v1.php/cloud/groups?format=json
+        #     /remote.php/dav/files/admin
+        #
+        # and `is_file(__DIR__ . '/ocs/v2.php/cloud/user')` is false. So the
+        # router swallowed them into index.php with SCRIPT_NAME="/index.php",
+        # getRawPathInfo() returned "/ocs/v2.php/cloud/user", no route matched,
+        # and every OCS call in the fleet became a hard 404. Nextcloud's
+        # .htaccess exempts these by PREFIX (`RewriteCond %{REQUEST_FILENAME}
+        # !/ocs/v1.php` …), not by file existence — so do the same: walk the
+        # path for the longest `.php` prefix that exists on disk and hand the
+        # request to that script with a matching SCRIPT_NAME/PATH_INFO pair,
+        # which is exactly what a router-less `php -S` did before.
+        #
+        # `/index.php` is excluded from the walk on purpose, so `/index.php/…`
+        # keeps taking the fall-through branch byte-for-byte as before. The
+        # change is therefore additive: only URLs that were 404ing move.
+        #
+        # Measured on a fixture reproducing all three configurations
+        # (no router / first cut / this one):
+        #
+        #                                    no router      first cut     this
+        #     /ocs/v2.php/cloud/user         ocs/v2.php     index.php     ocs/v2.php
+        #     /remote.php/dav/files/admin    remote.php     index.php     remote.php
+        #     /status.php                    status.php     status.php    status.php
+        #     /apps/<app>/                   404            index.php     index.php
+        #     /index.php/apps/<app>/         index.php      index.php     index.php
         env:
           PHP_CLI_SERVER_WORKERS: 8
         run: |
@@ -1492,14 +1545,35 @@ jobs:
           cat > ci-router.php <<'ROUTER'
           <?php
           // Front controller for `php -S`, mirroring Nextcloud's .htaccess.
-          // Real files are served by the built-in server as-is (so static
-          // assets keep their MIME types and Nextcloud's other PHP entry
-          // points — status.php, remote.php, ocs/v*.php, public.php,
-          // cron.php, core/ajax/update.php — still execute as themselves).
-          // Everything else routes through index.php with REQUEST_URI intact.
-          $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+          //
+          // 1. A real file on disk is served by the built-in server as-is, so
+          //    static assets keep their MIME types.
+          // 2. Nextcloud's other PHP entry points — ocs/v1.php, ocs/v2.php,
+          //    remote.php, public.php, cron.php, core/ajax/update.php — are
+          //    reached WITH path info, which rule 1 never matches. Resolve the
+          //    longest existing `.php` prefix and execute that script itself.
+          // 3. Everything else routes through index.php, REQUEST_URI intact.
+          $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?: '/';
           if ($path !== '/' && is_file(__DIR__ . $path)) {
               return false;
+          }
+          $segments = explode('/', ltrim($path, '/'));
+          $prefix = '';
+          foreach ($segments as $i => $segment) {
+              $prefix .= '/' . $segment;
+              if (substr($segment, -4) !== '.php'
+                  || $prefix === '/index.php'
+                  || !is_file(__DIR__ . $prefix)
+              ) {
+                  continue;
+              }
+              $rest = implode('/', array_slice($segments, $i + 1));
+              $_SERVER['SCRIPT_NAME'] = $prefix;
+              $_SERVER['SCRIPT_FILENAME'] = __DIR__ . $prefix;
+              $_SERVER['PHP_SELF'] = $path;
+              $_SERVER['PATH_INFO'] = $rest === '' ? '' : '/' . $rest;
+              require __DIR__ . $prefix;
+              return true;
           }
           $_SERVER['SCRIPT_NAME'] = '/index.php';
           $_SERVER['SCRIPT_FILENAME'] = __DIR__ . '/index.php';
@@ -1521,6 +1595,20 @@ jobs:
           echo "Front-controller check: /apps/${{ inputs.app-name }}/ -> HTTP ${PRETTY}"
           if [ "$PRETTY" = "404" ]; then
             echo "::error::The php -S front-controller router is not routing pretty URLs — /apps/${{ inputs.app-name }}/ returned 404. Every spec using a pretty Nextcloud URL will fail on a selector timeout."
+            exit 1
+          fi
+          # And prove the OTHER Nextcloud PHP entry points still reach
+          # themselves. This gate did not exist when the router first shipped,
+          # and its absence is the whole reason a router that broke every OCS
+          # call read as a clean green server-start: the pretty-URL check above
+          # passed, so nothing spoke. `/ocs/v2.php/cloud/user` unauthenticated
+          # is a 401 when it reaches ocs/v2.php and a 404 when the router
+          # swallows it into index.php, so the two outcomes are distinguishable
+          # by status code alone.
+          OCS="$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:8080/ocs/v2.php/cloud/user?format=json")"
+          echo "OCS entry-point check: /ocs/v2.php/cloud/user -> HTTP ${OCS}"
+          if [ "$OCS" = "404" ]; then
+            echo "::error::The php -S front-controller router is swallowing Nextcloud's OCS entry point — /ocs/v2.php/cloud/user returned 404 instead of reaching ocs/v2.php. Every OCS call (current user, groups, user_status, dashboard layout) will 404, and specs will report it as a missing element."
             exit 1
           fi
           echo "PHP built-in server alive (pid=${PHP_PID})."
@@ -1884,9 +1972,27 @@ jobs:
           cd server
           cat > ci-router.php <<'ROUTER'
           <?php
-          $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+          $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?: '/';
           if ($path !== '/' && is_file(__DIR__ . $path)) {
               return false;
+          }
+          $segments = explode('/', ltrim($path, '/'));
+          $prefix = '';
+          foreach ($segments as $i => $segment) {
+              $prefix .= '/' . $segment;
+              if (substr($segment, -4) !== '.php'
+                  || $prefix === '/index.php'
+                  || !is_file(__DIR__ . $prefix)
+              ) {
+                  continue;
+              }
+              $rest = implode('/', array_slice($segments, $i + 1));
+              $_SERVER['SCRIPT_NAME'] = $prefix;
+              $_SERVER['SCRIPT_FILENAME'] = __DIR__ . $prefix;
+              $_SERVER['PHP_SELF'] = $path;
+              $_SERVER['PATH_INFO'] = $rest === '' ? '' : '/' . $rest;
+              require __DIR__ . $prefix;
+              return true;
           }
           $_SERVER['SCRIPT_NAME'] = '/index.php';
           $_SERVER['SCRIPT_FILENAME'] = __DIR__ . '/index.php';
