@@ -168,7 +168,7 @@ on:
         type: string
         default: "[]"
       enable-coverage-guard:
-        description: "Run coverage baseline guard and auto-update"
+        description: "Enforce the .coverage-baseline ratchet — READ-ONLY, never commits. On pushes, hard-fails when measured coverage has moved past the committed baseline and attaches the recomputed value as the 'coverage-baseline' artifact; on PRs, rejects a baseline that has been LOWERED. Raise the baseline by committing the recomputed value in a normal pull request."
         required: false
         type: boolean
         default: false
@@ -2456,14 +2456,16 @@ jobs:
           # "main") not github.ref (e.g. "refs/heads/main") — git push wants a
           # bare branch.
           REF_NAME="${{ github.ref_name }}"
-          # Non-blocking on protected branches per ConductionNL/.github#61.
-          if git push origin "HEAD:${REF_NAME}"; then
-            echo "Screenshots pushed to ${REF_NAME}."
-            echo "changed=1" >> "$GITHUB_OUTPUT"
-          else
-            echo "::warning::Could not push screenshot refresh — branch protection rejected the bot push (see ConductionNL/.github#61). Inspect the journeydoc-screenshots artifact and commit manually."
-            echo "changed=0" >> "$GITHUB_OUTPUT"
-          fi
+          # FAIL LOUDLY if the push is refused (#61). This used to swallow the
+          # rejection behind a `::warning::` and set changed=0, which made a
+          # refused push indistinguishable from "no screenshots changed" — the
+          # captures silently never landed and the job still reported success.
+          # The step runs under `set -euo pipefail`, so a non-zero `git push`
+          # fails the job. The screenshots are still uploaded as an artifact by
+          # the `if: always()` step below, so a refusal is recoverable by hand.
+          git push origin "HEAD:${REF_NAME}"
+          echo "Screenshots pushed to ${REF_NAME}."
+          echo "changed=1" >> "$GITHUB_OUTPUT"
 
       - name: Dispatch deploy workflow if screenshots changed
         if: ${{ inputs.journeydoc-deploy-workflow != '' && steps.commit.outputs.changed == '1' }}
@@ -2528,29 +2530,80 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Check for manual baseline changes
+      # .coverage-baseline is a monotonic ratchet: coverage-guard.php only ever
+      # writes it when measured coverage EXCEEDS the stored value. This job used
+      # to ban every manual change outright, which was coherent only while the
+      # push-side job auto-committed the new value. That push has always been
+      # rejected on ruleset-protected branches (#61), so the blanket ban left the
+      # baseline unchangeable by anyone — bot or human — an unclosable gate.
+      #
+      # The anti-gaming property that matters is "the baseline never goes DOWN",
+      # so enforce exactly that: a PR may RAISE the baseline (this is how the
+      # push-side Coverage Baseline Check is closed) but never lower it. Fails
+      # closed on any value it cannot parse.
+      - name: Reject a lowered baseline
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          if git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -q '^\.coverage-baseline$'; then
-            echo "::error::Manual changes to .coverage-baseline are not allowed."
+          set -euo pipefail
+          BASE="origin/${BASE_REF}"
+
+          if ! git diff --name-only "${BASE}...HEAD" | grep -q '^\.coverage-baseline$'; then
+            echo "No .coverage-baseline change in this PR."
+            exit 0
+          fi
+
+          NEW="$(tr -d '[:space:]' < .coverage-baseline)"
+          if ! OLD="$(git show "${BASE}:.coverage-baseline" 2>/dev/null | tr -d '[:space:]')"; then
+            OLD=""
+          fi
+
+          if [ -z "${OLD}" ]; then
+            echo "No baseline on ${BASE} — this PR introduces one (${NEW}). Accepted."
+            exit 0
+          fi
+
+          for v in "${OLD}" "${NEW}"; do
+            if ! awk -v v="${v}" 'BEGIN { exit !(v ~ /^[0-9]+(\.[0-9]+)?$/) }'; then
+              echo "::error::Unparseable coverage baseline value '${v}' — refusing to guess. Expected a bare number such as 55.54."
+              exit 1
+            fi
+          done
+
+          if awk -v o="${OLD}" -v n="${NEW}" 'BEGIN { exit !(n + 0 < o + 0) }'; then
+            echo "::error::.coverage-baseline was LOWERED from ${OLD} to ${NEW}. The baseline is a ratchet — it may be raised, never lowered."
             exit 1
           fi
-          echo "No manual baseline changes detected."
 
+          echo "Baseline change accepted: ${OLD} -> ${NEW} (not a decrease)."
+
+  # READ-ONLY by design, for the same reason as features-extract below. This job
+  # used to `git commit` + `git push` the recomputed .coverage-baseline back to
+  # the branch, with the push failure swallowed by `git push || echo "::warning::"`.
+  # On any repo whose development/main carries a ruleset ("Changes must be made
+  # through a pull request") that push is REJECTED — and because the failure was
+  # swallowed, the job still reported SUCCESS. The baseline therefore never moved
+  # while the gate read green (#61). A swallowed failure is worse than no job at
+  # all: it is indistinguishable from the work having been done.
+  #
+  # The job now recomputes the baseline, HARD-FAILS when it has drifted, and hands
+  # the regenerated file back as an artifact. The PR-side `baseline-protection`
+  # job above accepts a committed baseline as long as it does not LOWER the
+  # ratchet, so this gate is closable by a human via a normal pull request —
+  # it is deliberately not an unclosable gate.
   update-baseline:
     if: ${{ inputs.enable-coverage-guard && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/development') }}
     runs-on: ubuntu-latest
-    name: "Update Coverage Baseline"
+    name: "Coverage Baseline Check"
     needs: phpunit
     # Observed across 3 executions: max 0.3 min (openregister). Downloads an
-    # artifact and commits; 15 min is generous for a push+commit round trip.
+    # artifact and recomputes a number; 15 min is generous.
     timeout-minutes: 15
     permissions:
-      contents: write
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          token: ${{ github.token }}
       - name: Download coverage artifact
         uses: actions/download-artifact@v4
         with:
@@ -2560,23 +2613,33 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ inputs.php-version }}
-      - name: Update baseline if improved
+      - name: Recompute baseline
         run: php scripts/coverage-guard.php coverage/clover.xml --update-baseline
-      - name: Commit updated baseline
+      - name: Fail if baseline drifted
+        id: fail-if-drifted
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet .coverage-baseline; then
-            echo "Baseline unchanged, nothing to commit."
+          if git diff --quiet -- .coverage-baseline; then
+            echo "Coverage baseline is up to date."
           else
-            git add .coverage-baseline
-            git commit -m "ci: update coverage baseline [skip ci]"
-            # Non-blocking: branch-protection rulesets reject the bot push on
-            # repos with a protected development/main. Surface a warning instead
-            # of failing the whole workflow over an auto-committed convenience
-            # file. Tracked in ConductionNL/.github#61 (add bot as a bypass actor).
-            git push || echo "::warning::Could not push the updated coverage baseline — branch protection rejected the bot push (see ConductionNL/.github#61). Commit .coverage-baseline manually."
+            echo "Measured coverage has moved beyond the committed baseline:"
+            git --no-pager diff -- .coverage-baseline
+            echo "::error::.coverage-baseline is out of date — measured coverage has improved past it. Commit the recomputed value (attached as the 'coverage-baseline' artifact of this run) in a pull request. The Coverage Baseline Protection job accepts any value that does not LOWER the baseline."
+            exit 1
           fi
+      - name: Upload recomputed baseline
+        # Gate on the drift step SPECIFICALLY, not `failure()` alone: if the
+        # Recompute step itself failed (coverage DROPPED below the baseline), the
+        # file on disk is the unchanged committed copy and publishing it under
+        # this name would invite committing a no-op. Only when fail-if-drifted
+        # failed is the on-disk file guaranteed to be the fresh value.
+        # (`failure() &&` is required — without a status-check function GitHub
+        # implies `success()`, and the step would never run after a failure.)
+        if: failure() && steps.fail-if-drifted.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-baseline
+          path: .coverage-baseline
+          retention-days: 7
 
   # ── Hydra mechanical gates ──────────────────────
   #
