@@ -1,8 +1,18 @@
 # conduction/hydra-gates
 
-The 61 mechanical quality gates, packaged so **any** repo can run them against
+The mechanical quality gates, packaged so **any** repo can run them against
 its own diff — without hydra, without hydra's containers, and without
 credentials.
+
+> **How many gates are there?** Ask the runner, not a README. It declares its
+> own total and prints it on every run:
+> `[hydra-gates] COVERAGE: N of M declared gates reported a result.`
+> This line used to carry a hard-coded count. It read **61** while only **59**
+> gates actually reported — gate-33 (axe-core) and gate-24 were skipping
+> silently — so the number was wrong in both directions at once and nothing
+> existed to reconcile it against. A count in prose has no such reconciliation;
+> the runtime coverage block does. Consumers and other repos should say
+> "the Hydra mechanical quality gates" and link here.
 
 This directory is the **single source of truth** for the gate runner
 (`scripts/run-hydra-gates.sh`), its ~25 Python/JS helpers (`scripts/lib/`), its
