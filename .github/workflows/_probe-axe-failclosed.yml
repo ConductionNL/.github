@@ -29,9 +29,10 @@ permissions:
   pull-requests: write
 
 jobs:
-  # ARM = before
+  # ARM = after. ARM = before was run 30910234160 (Hydra Gates: SUCCESS with
+  # gate-33 SKIPPED and zero routes measured).
   arm:
-    uses: ConductionNL/.github/.github/workflows/quality.yml@main
+    uses: ./.github/workflows/quality.yml
     with:
       app-name: probe
       enable-hydra-gates: true
