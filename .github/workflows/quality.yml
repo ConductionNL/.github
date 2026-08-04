@@ -3338,7 +3338,17 @@ jobs:
       # reason and the producer's resolved state quoted in it. The way to not
       # enforce axe is `enable-axe: false` — one line in the caller, visible in
       # a diff and attributable to a person — not a silent green in a log.
+      #
+      # The failure is RECORDED here and RAISED at the end of the job, not
+      # thrown from this step. Measured first as a plain `exit 1` (run
+      # 30910345294): it aborted the job before `Run the Hydra gates`, so a
+      # missing axe artifact took the other sixty gates down with it and the PR
+      # lost all mechanical feedback until someone fixed an unrelated Playwright
+      # job. A gate that suppresses sixty other gates to report itself is its
+      # own kind of outage. So this step always exits 0, the gates run and print
+      # their full report, and the job is failed afterwards.
       - name: The axe report must exist and hold up
+        id: axe-check
         if: ${{ inputs.enable-axe }}
         env:
           PLAYWRIGHT_RESULT: ${{ needs.playwright.result }}
@@ -3346,8 +3356,9 @@ jobs:
           set -uo pipefail
           REPORT="${GITHUB_WORKSPACE}/app/tests/axe/report.json"
           if [ ! -f "${REPORT}" ]; then
-            echo "::error::enable-axe is set, but NO axe report reached this job — gate-33 measured nothing and this run carries no accessibility verdict at all. The Playwright job, which is the only producer of tests/axe/report.json, resolved '${PLAYWRIGHT_RESULT}'. Fix that job (enable-axe also requires enable-playwright), or set enable-axe: false to state deliberately that this repo does not enforce axe yet."
-            exit 1
+            echo "unmeasured=absent" >> "$GITHUB_OUTPUT"
+            echo "::error::enable-axe is set, but NO axe report reached this job — gate-33 will measure nothing and this run carries no accessibility verdict at all. The Playwright job, which is the only producer of tests/axe/report.json, resolved '${PLAYWRIGHT_RESULT}'. Fix that job (enable-axe also requires enable-playwright), or set enable-axe: false to state deliberately that this repo does not enforce axe yet. The remaining gates still run below; this job will fail at the end."
+            exit 0
           fi
           echo "Downloaded $(wc -c < "${REPORT}") byte(s) into ${REPORT}."
           python3 - "${REPORT}" <<'PYVALIDATE' && VALID=0 || VALID=$?
@@ -3388,9 +3399,9 @@ jobs:
           PYVALIDATE
           if [ "${VALID}" -ne 0 ]; then
             rm -f "${REPORT}"
+            echo "unmeasured=rejected" >> "$GITHUB_OUTPUT"
             echo "Removed ${REPORT} so gate-33 cannot read it as a clean accessibility run."
-            echo "::error::enable-axe is set and the axe report was REJECTED for the reason above, so this run has no accessibility verdict. A rejected report is the same amount of evidence as no report: none. Fix the producer, or set enable-axe: false."
-            exit 1
+            echo "::error::enable-axe is set and the axe report was REJECTED for the reason above, so this run has no accessibility verdict. A rejected report is the same amount of evidence as no report: none. Fix the producer, or set enable-axe: false. The remaining gates still run below; this job will fail at the end."
           fi
 
       - name: Resolve the diff base
@@ -3445,6 +3456,18 @@ jobs:
             exit 1
           fi
           echo "::error::${RC} Hydra gate(s) failed. The exit code is the failure COUNT — see the named [gate-N] FAIL lines above."
+          exit 1
+
+      # The verdict for `enable-axe`, raised here rather than at the check
+      # itself so the gates above still produce their full report first (see
+      # the reasoning on the axe-check step). `always()` so it is reached even
+      # when the gates step already failed — a run can be both "gates failed"
+      # and "accessibility never measured", and collapsing those loses one.
+      # It only ever turns a pass into a failure, never the reverse.
+      - name: Fail when axe was requested but never measured
+        if: ${{ always() && inputs.enable-axe && steps.axe-check.outputs.unmeasured != '' }}
+        run: |
+          echo "::error::enable-axe is set and this run produced NO accessibility measurement (reason: ${{ steps.axe-check.outputs.unmeasured }}). gate-33 reporting SKIPPED is the absence of the check, not the check passing — see the named error earlier in this job. Failing the gates job so the run cannot be read as accessible."
           exit 1
 
       - name: Record result
