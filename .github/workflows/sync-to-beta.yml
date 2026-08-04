@@ -6,6 +6,10 @@ on:
 jobs:
   create-pr:
     runs-on: ubuntu-latest
+    # Observed across 152 executions: median 0.1 min, p95 1.1 min, max 5.6 min
+    # (openregister — a full-depth checkout of a large repo). 20 min covers a
+    # slow `fetch-depth: 0` clone with a wide margin.
+    timeout-minutes: 20
     permissions:
       contents: write
       pull-requests: write

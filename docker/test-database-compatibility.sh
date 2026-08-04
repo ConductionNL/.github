@@ -78,7 +78,7 @@ wait_for_service() {
 
     log_info "Waiting for $service to be ready..."
     
-    while [ $attempt -lt $max_attempts ]; do
+    while [ "$attempt" -lt "$max_attempts" ]; do
         if docker-compose ps | grep -q "$service.*healthy"; then
             log_success "$service is ready!"
             return 0
@@ -129,8 +129,13 @@ run_newman_tests() {
         --reporters cli 2>&1 | tee "/tmp/newman-$db_type.log"; then
         
         # Extract test results
-        local assertions_executed=$(grep "assertions" "/tmp/newman-$db_type.log" | grep "executed" | awk '{print $4}')
-        local assertions_failed=$(grep "assertions" "/tmp/newman-$db_type.log" | grep "failed" | awk '{print $6}')
+        # Declared and assigned separately: `local x=$(...)` makes the exit
+        # status that of `local`, which always succeeds, so a failing pipeline
+        # here would have been invisible.
+        local assertions_executed
+        local assertions_failed
+        assertions_executed=$(grep "assertions" "/tmp/newman-$db_type.log" | grep "executed" | awk '{print $4}')
+        assertions_failed=$(grep "assertions" "/tmp/newman-$db_type.log" | grep "failed" | awk '{print $6}')
         
         if [ -n "$assertions_executed" ] && [ -n "$assertions_failed" ]; then
             local assertions_passed=$((assertions_executed - assertions_failed))

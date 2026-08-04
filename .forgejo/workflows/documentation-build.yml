@@ -12,30 +12,32 @@ on:
         required: false
         type: string
         default: "docs"
-      node-version:
-        description: "Node.js version for building"
+      runner-label:
+        description: "Runner label to schedule the build on (e.g. 'codeberg-medium', 'con-ci-oci')"
         required: false
         type: string
-        default: "20"
+        default: "codeberg-medium"
 
 jobs:
   build:
     name: Build and validate
-    runs-on: codeberg-medium
+    runs-on: ${{ inputs.runner-label }}
     container:
       image: node:24-bookworm
-    timeout-minutes: 10
+    timeout-minutes: 25
     steps:
       - name: Checkout code
         uses: https://github.com/actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Setup Node.js
-        uses: https://github.com/actions/setup-node@v4
-        with:
-          node-version: ${{ inputs.node-version }}
+      # Node is provided by the job container (node:24-bookworm). We used
+      # to run actions/setup-node@v4 here, but on egress-restricted self-
+      # hosted runners (Conduction/con-ci-oci) it 403s trying to reach
+      # api.github.com / nodejs.org, and on the Codeberg runners it was
+      # redundant (the container already ships a working Node toolchain).
+      # Removed 2026-07-11 after Mark's handoff on opencatalogi run 993.
       - name: Install dependencies and build
-        timeout-minutes: 9
+        timeout-minutes: 20
         env:
           CODEBERG_TOKEN: ${{ secrets.CODEBERG_TOKEN }}
         run: |

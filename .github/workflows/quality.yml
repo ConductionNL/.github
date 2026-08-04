@@ -22,6 +22,16 @@ on:
         required: false
         type: string
         default: '["stable31", "stable32"]'
+      enable-php:
+        description: "Master switch for the PHP toolchain (php-quality, PHPUnit, composer security/license legs, SBOM). Set false for JS-only repos without composer.json."
+        required: false
+        type: boolean
+        default: true
+      enable-npm:
+        description: "Master switch for the npm ecosystem checks (npm legs of security/license). Set false for PHP-only repos without package.json — `npm ci` fails hard without one. Counterpart of enable-php."
+        required: false
+        type: boolean
+        default: true
       enable-psalm:
         description: "Run Psalm static analysis"
         required: false
@@ -57,6 +67,31 @@ on:
         required: false
         type: boolean
         default: true
+      node-version:
+        description: "Node.js version for all frontend/npm steps"
+        required: false
+        type: string
+        default: "20"
+      frontend-path:
+        description: "Directory containing package.json + package-lock.json for all npm-side jobs (Vue Quality, Frontend Checks, npm security/license legs). Default: repo root. Use for repos where the frontend lives in a subdirectory (e.g. 'pwa')."
+        required: false
+        type: string
+        default: "."
+      enable-stylelint:
+        description: "Run Stylelint (requires enable-frontend). Set false for repos without a stylelint npm script."
+        required: false
+        type: boolean
+        default: true
+      frontend-setup-command:
+        description: "Optional ADDITIONAL setup command for the frontend-checks job. The standard root `npm ci` always runs first; this command runs after it and does NOT replace it. Use it to prepare things the root install doesn't cover, e.g. installing a nested package's dependencies: 'cd docusaurus && npm ci' (the nested directory then needs its own package.json + package-lock.json)."
+        required: false
+        type: string
+        default: ""
+      frontend-checks:
+        description: "JSON array of npm scripts to run as individual 'Frontend Check (<script>)' jobs (e.g. '[\"test\", \"check:docs\"]'). Requires enable-frontend and a repo with package.json + package-lock.json (each leg runs `npm ci`). Every listed script MUST exist in the repo's package.json and MUST be self-contained — each leg is a fresh job (own checkout + npm ci), so bundle order-dependent steps into one script (e.g. \"check:build\": \"npm run build && npm run check:css-entry\"). See CONVENTIONS.md § Custom frontend checks."
+        required: false
+        type: string
+        default: "[]"
       enable-license-check:
         description: "Run dependency license compliance check (composer + npm)"
         required: false
@@ -112,6 +147,36 @@ on:
         required: false
         type: number
         default: 75
+      enable-axe:
+        # Same shape and the same reasoning as enable-hydra-gates below: a
+        # control that goes red on inherited debt the moment it is switched on
+        # gets switched off again, so each repo opts in once its own routes are
+        # clean.
+        #
+        # It is worth being blunt about what "goes red" means here, because it
+        # was measured rather than assumed. Running this runner against a
+        # VANILLA Nextcloud 34 — no Conduction app installed at all — over
+        # /apps/dashboard/, /apps/files/ and /settings/user produced three
+        # serious/critical violations from Nextcloud's own UI (label,
+        # aria-input-field-name, aria-prohibited-attr). An app's own routes
+        # render inside that same shell, so the first run in any repo will
+        # almost certainly be red, and some of that red will not be the app's
+        # to fix. Default-on would therefore have blocked the fleet on core
+        # Nextcloud defects on day one.
+        description: "Run axe-core (@axe-core/playwright) against the app's routes inside the Playwright job and publish tests/axe/report.json, which is the file hydra-gates gate-33 consumes. OPT-IN, default false. Gate-33 fails on `serious`/`critical` violations only; without this the report does not exist and gate-33 reports SKIPPED, which is what it has done in every repo in the fleet since it was written. Requires enable-playwright (the report is produced by that job, against its Nextcloud instance) and is only consumed when enable-hydra-gates is also true. Measured against a vanilla Nextcloud 34 with no app installed, core's own pages already carry serious/critical violations — expect the first run in a repo to be red, which is exactly why this is off by default."
+        required: false
+        type: boolean
+        default: false
+      axe-routes:
+        description: "Newline- or comma-separated paths to run axe against, relative to the instance root (e.g. '/index.php/apps/openregister/,/index.php/apps/openregister/#/schemas'). Empty means the app's own root route. A path that answers HTTP >= 400 is a hard failure, not an empty result: axe would otherwise analyse Nextcloud's error page and report it as clean. Settings-only apps have no root route and MUST set this."
+        required: false
+        type: string
+        default: ""
+      axe-version:
+        description: "Version of @axe-core/playwright to install. Pinned rather than floating because the axe rule set decides the verdict: an unpinned install can turn a repo red on a day nobody committed anything, which is the one thing a mechanical gate must never do. Move it deliberately, in a commit."
+        required: false
+        type: string
+        default: "4.12.1"
       enable-journeydoc-capture:
         description: "Run the journeydoc Playwright capture spec (tests/e2e/docs-screenshots.spec.ts) against a freshly-installed Nextcloud and commit any new/changed screenshots back to the calling repo. Per ADR-030. Recommended to invoke from a dedicated docs-capture.yml workflow with schedule + workflow_dispatch triggers (not on every PR — too expensive)."
         required: false
@@ -133,17 +198,17 @@ on:
         type: string
         default: "[]"
       enable-coverage-guard:
-        description: "Run coverage baseline guard and auto-update"
+        description: "Enforce the .coverage-baseline ratchet — READ-ONLY, never commits. On pushes, hard-fails when measured coverage has moved past the committed baseline and attaches the recomputed value as the 'coverage-baseline' artifact; on PRs, rejects a baseline that has been LOWERED. Raise the baseline by committing the recomputed value in a normal pull request."
         required: false
         type: boolean
         default: false
       enable-sbom:
-        description: "Generate CycloneDX SBOM, validate (CVE + license), and commit to repo"
+        description: "Generate CycloneDX SBOM and validate it (Grype CVE scan + composer/npm audit — hard failures). Published as a run artifact and release asset; intentionally never committed to the repo."
         required: false
         type: boolean
         default: true
       enable-features-extract:
-        description: "Scan openspec/specs/ and (re)generate docs/features.json — auto-commits on feature branches, warns on protected branches"
+        description: "Verify docs/features.json is in sync with openspec/specs/ — READ-ONLY, hard-fails when stale (features-check on PRs, features-extract on pushes; both gate the Quality Report). Generation happens at commit time via the repo's .githooks/pre-commit — see CONVENTIONS.md."
         required: false
         type: boolean
         default: true
@@ -152,6 +217,36 @@ on:
         required: false
         type: string
         default: "pgsql"
+      enable-hydra-gates:
+        # No gate count here on purpose. There is no single true number to
+        # write: the total depends on which ref the CALLER pins via
+        # hydra-gates-ref, and the number that actually ran depends on the
+        # repo's own diff and toolchain. Measured on openbuild#113
+        # (2026-08-04, pinned v1.0.1):
+        #
+        #   [hydra-gates] ALL 61 GATES GREEN
+        #   [hydra-gates] COVERAGE: 58 of 61 declared gates reported a result.
+        #   [hydra-gates] GATES THAT DID NOT RUN: 4 24 33
+        #
+        # Three defensible figures for one line — 61 declared at that pin, 63
+        # declared on main, 58 actually executed — and the one a reader needs
+        # is per-run and unknowable statically. The package prints it
+        # (COVERAGE: N of M); a digit in prose has nothing to reconcile
+        # against and drifts silently in both directions.
+        description: "Run the Hydra mechanical quality gates (conduction/hydra-gates — https://github.com/ConductionNL/.github/tree/main/hydra-gates) against this PR's diff. OPT-IN, default false: the gates are diff-scoped per ADR-020, but a repo whose in-flight branches touch files with inherited debt will go red the moment this is switched on, so each repo enables it once its own diffs are clean. Enabling it makes gate failures block the Quality Report."
+        required: false
+        type: boolean
+        default: false
+      hydra-gates-ref:
+        description: "Ref of ConductionNL/.github to take the gate package from. Pin this to a tag to stop a gate change from altering a repo's verdict without a commit in that repo."
+        required: false
+        type: string
+        default: "main"
+      hydra-gates-require-full-coverage:
+        description: "Treat 'a declared gate did not run' as a failure (exit 98). Off by default: a control that blocks legitimate work gets switched off, and a switched-off control is worth less than a loud one. The coverage block is printed either way."
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: quality-${{ github.ref }}
@@ -183,8 +278,13 @@ jobs:
 
   # ── Group 1: PHP Quality ────────────────────────
   php-quality:
+    if: ${{ inputs.enable-php }}
     runs-on: ubuntu-latest
     name: "PHP Quality (${{ matrix.tool }})"
+    # Observed across 1497 executions fleet-wide: median 0.5 min, p95 1.5 min,
+    # max 4.0 min (launchpad). 20 min is a wide margin over the worst leg while
+    # still turning a hang into a failure instead of a 6-hour runner burn.
+    timeout-minutes: 20
     strategy:
       matrix:
         tool: [lint, phpcs, phpmd, psalm, phpstan, phpmetrics]
@@ -213,8 +313,31 @@ jobs:
 
       - name: Run ${{ matrix.tool }}
         run: |
+          # `composer <script>` exits 1 for BOTH "the script ran and returned 1"
+          # and "Command \"<script>\" is not defined." Any leg that interprets
+          # exit 1 (the phpcs warnings-are-non-blocking rule below) therefore
+          # reads a MISSING gate as a PASSING gate — a gate's absence and a
+          # gate's success become indistinguishable. See ConductionNL/.github#121.
+          #
+          # So: assert the script is declared BEFORE running it, and read the
+          # declaration from composer.json rather than from the exit code.
+          # Deliberately NOT an `[ -f vendor/bin/<tool> ]` guard — a file-presence
+          # guard that skips is the same silent-pass defect in a new costume.
+          require_script() {
+            tool="$1"
+            hint="$2"
+            if [ ! -f composer.json ]; then
+              echo "::error::The '$tool' gate is enabled but there is no composer.json in the repository root."
+              exit 1
+            fi
+            if ! jq -e --arg s "$tool" '(.scripts // {}) | has($s)' composer.json > /dev/null 2>&1; then
+              echo "::error::The '$tool' gate is enabled but composer.json declares no '$tool' script. Add it under \"scripts\", or turn the gate off with $hint."
+              exit 1
+            fi
+          }
           case "${{ matrix.tool }}" in
             lint)
+              require_script lint "the enable-php input"
               composer lint
               ;;
             phpcs)
@@ -222,8 +345,10 @@ jobs:
                 echo "PHPCS is disabled — skipping."
                 exit 0
               fi
+              require_script phpcs "the enable-phpcs input"
               # Exit code 0 = clean, 1 = warnings only, 2 = errors found.
-              # We treat warnings as non-blocking (exit 1 → success).
+              # We treat warnings as non-blocking (exit 1 → success). This is only
+              # safe because require_script has already proven the script exists.
               # NB: capture via `|| RC=$?` — a bare `composer phpcs; RC=$?`
               # is killed by `set -e` before RC is ever assigned.
               RC=0
@@ -239,6 +364,7 @@ jobs:
                 echo "PHPMD is disabled — skipping."
                 exit 0
               fi
+              require_script phpmd "the enable-phpmd input"
               composer phpmd
               ;;
             psalm)
@@ -246,6 +372,7 @@ jobs:
                 echo "Psalm is disabled — skipping."
                 exit 0
               fi
+              require_script psalm "the enable-psalm input"
               composer psalm
               ;;
             phpstan)
@@ -253,6 +380,7 @@ jobs:
                 echo "PHPStan is disabled — skipping."
                 exit 0
               fi
+              require_script phpstan "the enable-phpstan input"
               composer phpstan
               ;;
             phpmetrics)
@@ -260,6 +388,7 @@ jobs:
                 echo "phpmetrics is disabled — skipping."
                 exit 0
               fi
+              require_script phpmetrics "the enable-phpmetrics input"
               composer phpmetrics
               ;;
           esac
@@ -281,6 +410,12 @@ jobs:
     if: ${{ inputs.enable-frontend }}
     runs-on: ubuntu-latest
     name: "Vue Quality (${{ matrix.tool }})"
+    # Observed across 494 executions: median 0.6 min, p95 1.2 min, max 2.1 min
+    # (opencatalogi). 20 min absorbs npm-install contention with ~10x headroom.
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: ${{ inputs.frontend-path }}
     strategy:
       matrix:
         tool: [eslint, stylelint]
@@ -293,11 +428,12 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "${{ inputs.node-version }}"
           cache: "npm"
+          cache-dependency-path: "${{ inputs.frontend-path }}/package-lock.json"
 
       - name: Install dependencies
-        run: npm ci --legacy-peer-deps
+        run: npm ci
 
       - name: Run ${{ matrix.tool }}
         run: |
@@ -310,6 +446,10 @@ jobs:
               npm run lint
               ;;
             stylelint)
+              if [ "${{ inputs.enable-stylelint }}" != "true" ]; then
+                echo "Stylelint is disabled — skipping."
+                exit 0
+              fi
               npm run stylelint
               ;;
           esac
@@ -324,12 +464,429 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: result-vue-quality-${{ matrix.tool }}
+          path: ${{ inputs.frontend-path }}/quality-results/
+
+  # ── Group 2b: Custom frontend checks ───────────
+  #
+  # Repo-defined npm scripts run as individual matrix legs, e.g.
+  #   frontend-checks: '["test", "check:build", "check:docs"]'
+  # Each leg gets a fresh checkout + npm ci, so scripts must be
+  # self-contained (bundle ordering deps into one script, e.g.
+  # "check:build": "npm run build && npm run check:css-entry").
+  # The guard below tests the PARSED list, not the raw string, and that is the
+  # whole point. It used to read `inputs.frontend-checks != '[]'` — a literal
+  # two-character comparison against a value the matrix consumes through
+  # `fromJSON`. Guard and matrix therefore disagreed for every other spelling
+  # of "empty": `'[ ]'`, `'[\n]'`, `'[""]'` all pass a `!= '[]'` test and then
+  # resolve to an empty matrix vector.
+  #
+  # An empty matrix vector does not skip. MEASURED on run 30898927145 of this
+  # repo's self-test with `frontend-checks: '[ ]'`: the job is deleted from the
+  # run outright — 19 jobs instead of 21, no "skipping" row, no failure, no
+  # annotation anywhere. `report` has `if: always()`, so it still goes green.
+  # The gate disappears without leaving a trace, which is strictly worse than
+  # the visible "skipping" row a false `if:` produces.
+  #
+  # Routing both sides through `fromJSON` makes that state unreachable: any
+  # spelling of empty now yields a visible skip, and malformed JSON fails the
+  # run loudly in the `if:` instead of silently voiding the job.
+  frontend-checks:
+    if: ${{ inputs.enable-frontend && join(fromJSON(inputs.frontend-checks), ',') != '' }}
+    runs-on: ubuntu-latest
+    name: "Frontend Check (${{ matrix.script }})"
+    # Observed across 102 executions: median 0.6 min, p95 1.4 min, max 2.1 min
+    # (nextcloud-vue). These legs include `npm run build`, which has been
+    # measured at 211 s under heavy load, so the bound is deliberately loose.
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: ${{ inputs.frontend-path }}
+    strategy:
+      matrix:
+        script: ${{ fromJSON(inputs.frontend-checks) }}
+      fail-fast: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "${{ inputs.node-version }}"
+          cache: "npm"
+          cache-dependency-path: "${{ inputs.frontend-path }}/package-lock.json"
+
+      # Caller-supplied values are passed via env and referenced as "$VAR"
+      # (never inlined into the script) so special characters cannot break
+      # out of the intended shell context.
+      - name: Verify script exists in package.json
+        env:
+          SCRIPT: ${{ matrix.script }}
+        run: |
+          if ! node -e "const s = require('./package.json').scripts || {}; process.exit(s[process.env.SCRIPT] ? 0 : 1)"; then
+            echo "::error::npm script '$SCRIPT' is listed in this repo's frontend-checks input but does not exist in package.json. Add the script (see CONVENTIONS.md § Custom frontend checks in ConductionNL/.github) or remove it from the frontend-checks list in .github/workflows/code-quality.yml."
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Extra setup (runs after npm ci, does not replace it)
+        if: ${{ inputs.frontend-setup-command != '' }}
+        env:
+          SETUP_CMD: ${{ inputs.frontend-setup-command }}
+        run: bash -c "$SETUP_CMD"
+
+      - name: Run ${{ matrix.script }}
+        env:
+          SCRIPT: ${{ matrix.script }}
+        run: npm run "$SCRIPT"
+
+      - name: Record result
+        if: always()
+        env:
+          SCRIPT: ${{ matrix.script }}
+        run: |
+          mkdir -p quality-results
+          # ':' is invalid in artifact file paths — sanitize the script name
+          echo "${{ job.status }}" > "quality-results/$(echo "$SCRIPT" | tr ':/' '--').txt"
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-frontend-check-${{ strategy.job-index }}
+          path: ${{ inputs.frontend-path }}/quality-results/
+
+  # Auto-detected frontend BUILD gate.
+  #
+  # `npm run build` existed in this file in exactly two places — inside the
+  # Playwright job and inside the journeydoc capture job — and both are opt-in
+  # and default OFF. Only 2 of the 21 repos that call this workflow enable
+  # Playwright (doriath, pipelinq) and none enable journeydoc capture, so for
+  # the other 19 the frontend was NEVER COMPILED IN CI AT ALL. A repo could
+  # ship a bundle that does not build and every gate stayed green, because
+  # nothing in the pipeline ever ran webpack.
+  #
+  # That is not hypothetical: hermiq's build broke when the floating
+  # `node-polyfill-webpack-plugin: ^4.0.0` resolved to 4.1.0 and webpack
+  # emitted 25 errors. Nine repos still carry an unpinned caret on that same
+  # plugin (openbuild, petstore, portaliq, shillinq, nextcloud-app-template at
+  # ^4.0.0; decidesk, zaakafhandelapp at ^3.0.0; pipelinq at ^4.1.0), so any
+  # lockfile regeneration can reproduce it silently.
+  #
+  # Like `frontend-tests` below, this job takes no opt-in input: it runs the
+  # repo's own `build` script when one exists and BLOCKS on failure. A repo
+  # with no package.json or no `build` script skips cleanly, and — unlike
+  # `frontend-tests` — it does not even set up Node in that case, so a repo
+  # without a lockfile cannot be newly broken by this job.
+  #
+  # The compiled output is uploaded as an artifact and reused by the Playwright
+  # job, which previously ran its own identical `npm run build`. See the
+  # "Restore prebuilt app frontend" step there: the reuse is a fast path with a
+  # full fallback, never a replacement, so a bad hand-off costs time, not a
+  # verdict.
+  frontend-build:
+    if: ${{ inputs.enable-frontend }}
+    runs-on: ubuntu-latest
+    name: "Frontend Build"
+    # UNMEASURED as a standalone job — it has never existed. The best proxy is
+    # the `npm run build` already embedded in other legs: measured at 211 s
+    # under heavy load, and the frontend-checks legs that wrap it peak at 2.1
+    # min end to end. `npm ci` adds ~1 min cold. 30 min is therefore ~8x the
+    # worst observed build and leaves the runner's own contention plenty of
+    # room, while still converting a hang into a failure inside half an hour
+    # rather than burning six hours on GitHub's default. Deliberately generous:
+    # a bound that fires under normal contention produces a CANCELLED job,
+    # which returns no verdict at all — strictly worse than no bound.
+    timeout-minutes: 30
+    outputs:
+      # 'true' only when the build actually ran AND produced files. The
+      # Playwright job keys its artifact download off this, so "no artifact"
+      # and "artifact I should not trust" both resolve to the fallback path.
+      built: ${{ steps.package.outputs.uploaded }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.frontend-path }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Runs BEFORE setup-node on purpose. `actions/setup-node` with
+      # `cache: npm` hard-fails when no lockfile is found, so detecting first
+      # means a repo with no package.json (or no build script) skips this job
+      # without ever touching a step that could fail on its behalf.
+      - name: Detect a build script
+        id: detect
+        run: |
+          if [ ! -f package.json ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No package.json in '${{ inputs.frontend-path }}' — nothing to build."
+            exit 0
+          fi
+          if [ ! -f package-lock.json ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::package.json present but no package-lock.json — skipping the frontend build (npm ci requires a lockfile)."
+            exit 0
+          fi
+          BUILD_CMD="$(jq -r '.scripts.build // ""' package.json)"
+          if [ -z "$BUILD_CMD" ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No 'build' script in package.json — nothing to build."
+            exit 0
+          fi
+          echo "run=true" >> "$GITHUB_OUTPUT"
+          echo "Detected 'build' script: $BUILD_CMD"
+
+      - name: Setup Node.js
+        if: steps.detect.outputs.run == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "${{ inputs.node-version }}"
+          cache: "npm"
+          cache-dependency-path: "${{ inputs.frontend-path }}/package-lock.json"
+
+      - name: Install dependencies
+        if: steps.detect.outputs.run == 'true'
+        run: npm ci
+
+      - name: Extra setup (runs after npm ci, does not replace it)
+        if: ${{ steps.detect.outputs.run == 'true' && inputs.frontend-setup-command != '' }}
+        env:
+          SETUP_CMD: ${{ inputs.frontend-setup-command }}
+        run: bash -c "$SETUP_CMD"
+
+      # The marker is dropped AFTER `npm ci` so that only what the build itself
+      # writes is captured — install-time churn under node_modules is already
+      # older than it.
+      - name: Build frontend
+        if: steps.detect.outputs.run == 'true'
+        run: |
+          touch /tmp/frontend-build-marker
+          npm run build
+
+      # Collect the build output WITHOUT knowing where it lands. Nextcloud apps
+      # emit to `js/`, vite apps to `dist/`, portaliq writes two bundles from a
+      # composite script — hardcoding any of those is how the hand-off to
+      # Playwright would silently ship an empty bundle. Instead: everything the
+      # build step touched, minus node_modules and .git.
+      #
+      # This matters because a MISSING bundle does not 404. Nextcloud's front
+      # controller answers an absent asset with HTTP 200 and an HTML error
+      # page, so a status-code probe reads it as success and the only symptom
+      # is a selector timeout that names an element. Several repos' ci-seed.sh
+      # guards against that by asserting the response is actually JavaScript;
+      # this job keeps that guard meaningful by making the reuse path prove it
+      # restored real .js files (see the Playwright job) and falling back to a
+      # real build when it cannot.
+      - name: Package build output
+        id: package
+        if: steps.detect.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          find . -type f -newer /tmp/frontend-build-marker \
+            -not -path './node_modules/*' \
+            -not -path './.git/*' \
+            -print0 > /tmp/frontend-build-files.z
+          COUNT="$(tr -cd '\0' < /tmp/frontend-build-files.z | wc -c)"
+          JS_COUNT="$(tr '\0' '\n' < /tmp/frontend-build-files.z | grep -c '\.js$' || true)"
+          echo "Build wrote $COUNT file(s), of which $JS_COUNT are .js"
+          if [ "$COUNT" -eq 0 ]; then
+            echo "uploaded=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::The build produced no files outside node_modules — nothing to hand off. Downstream jobs will build for themselves."
+            exit 0
+          fi
+          tar --null -czf /tmp/frontend-build-output.tar.gz -T /tmp/frontend-build-files.z
+          echo "uploaded=true" >> "$GITHUB_OUTPUT"
+          # `sed -n '1,40p'`, NOT `head -40`. `head` closes the pipe as soon as
+          # it has its 40 lines, `tr` then dies of SIGPIPE, and `set -o pipefail`
+          # (three lines up) turns that into a FAILED JOB — for a log-preview
+          # line that has no bearing on whether the build worked.
+          #
+          # It only fires when the producer is still writing when head leaves,
+          # i.e. on repos with many build outputs. openregister's build writes
+          # fewer than 40 files and passed; nextcloud-vue's dist is thousands of
+          # files and failed every run. Reproduced: 200k NUL-separated entries
+          # through `tr | head -40` under pipefail exits 141 and the step never
+          # reaches the next line. `sed` reads its input to the end, so there is
+          # nothing to break.
+          tr '\0' '\n' < /tmp/frontend-build-files.z | sed -n '1,40p'
+          if [ "$COUNT" -gt 40 ]; then
+            echo "… and $((COUNT - 40)) more"
+          fi
+
+      - name: Upload build output
+        if: steps.package.outputs.uploaded == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build-output
+          path: /tmp/frontend-build-output.tar.gz
+          retention-days: 1
+
+      - name: Record result
+        if: always()
+        run: |
+          mkdir -p quality-results
+          if [ "${{ steps.detect.outputs.run }}" != "true" ]; then
+            echo "skipped" > quality-results/frontend-build.txt
+          else
+            echo "${{ job.status }}" > quality-results/frontend-build.txt
+          fi
+
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-frontend-build
+          path: ${{ inputs.frontend-path }}/quality-results/
+
+  # Auto-detected JS unit tests.
+  #
+  # `frontend-checks` above is an opt-in LIST that defaults to "[]", so a repo
+  # only runs its JS suite if someone remembered to name the script. Nobody
+  # did, so vitest/jest suites had NEVER run in CI.
+  #
+  # CORRECTION (measured, run 30898711087): the earlier note here said that
+  # matrix "resolved empty and reported skipping with the expression
+  # unexpanded". That mechanism is wrong, and believing it costs real time —
+  # it has since caused at least one repeat misdiagnosis of this job.
+  # A literal `${{ matrix.x }}` in a check-list name is the signature of a
+  # job whose `if:` was FALSE, and says nothing about whether the matrix
+  # would have expanded. Proof from that one run: `PHP Quality
+  # (${{ matrix.tool }})`, `License (${{ matrix.ecosystem }})` and `PHPUnit
+  # (PHP ${{ matrix.php-version }}, ...)` all rendered unexpanded in exactly
+  # the same way — and every one of those matrices is a hard-coded literal
+  # list that CANNOT be empty. They were gated off by their `if:`, nothing
+  # more. An empty matrix behaves the opposite way: the job vanishes from the
+  # run entirely (see the frontend-checks guard above).
+  #
+  # Real failures sat invisible for months (openbuild carries one;
+  # procest's harness is broken outright — `tests/vitest/setup.js` does
+  # `import Vue from 'vue'`, which vue@3 does not publish).
+  #
+  # This job needs no opt-in: it runs the repo's own `test` script when one
+  # exists and is not a placeholder, and it BLOCKS on failure. A repo with no
+  # test script skips cleanly.
+  #
+  # Note it invokes `npm run test`, never `npx vitest` — a bare `npx vitest`
+  # exits 0 with no output when it finds no matching config, which is how
+  # doriath's "passing" unit gate was running nothing at all.
+  frontend-tests:
+    if: ${{ inputs.enable-frontend }}
+    runs-on: ubuntu-latest
+    name: "Frontend Tests (unit)"
+    # Observed across 232 executions: median 0.6 min, p95 1.5 min, max 2.0 min
+    # (openbuild). Unit runs are load-sensitive, so 20 min, not 5.
+    timeout-minutes: 20
+    # This job was the only frontend job that ignored `frontend-path`: it had
+    # no `working-directory` and no `cache-dependency-path`, so on a repo whose
+    # frontend lives in a subdirectory it probed the REPO ROOT. Both outcomes
+    # are dead gates. MEASURED on run 30898711087 with `frontend-path:
+    # ci-selftest`: `setup-node` hard-failed with "Dependencies lock file is
+    # not found in /home/runner/work/.github/.github" — a falsely RED gate that
+    # blames the app for the workflow's own mislocation. The quieter outcome is
+    # worse: where the root does have a package.json, the probe finds no test
+    # script there, records "skipped" and goes GREEN while the frontend's real
+    # suite never runs — reopening, for subdirectory repos, precisely the hole
+    # this job was added to close.
+    #
+    # No caller sets a non-default `frontend-path` today (org-wide code search,
+    # 2026-08-04: the only hit is this file), so this is latent rather than
+    # live. It is fixed here because adopting `frontend-path` must not silently
+    # switch the unit gate off.
+    defaults:
+      run:
+        working-directory: ${{ inputs.frontend-path }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Detection runs BEFORE setup-node, mirroring frontend-build: setup-node
+      # with `cache: npm` hard-fails when it finds no lockfile, so a repo with
+      # nothing to test must never reach it.
+      - name: Detect a runnable test script
+        id: detect
+        run: |
+          if [ ! -f package.json ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No package.json in '${{ inputs.frontend-path }}' — nothing to test."
+            exit 0
+          fi
+          if [ ! -f package-lock.json ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::package.json present in '${{ inputs.frontend-path }}' but no package-lock.json — skipping unit tests (npm ci requires a lockfile)."
+            exit 0
+          fi
+          # Prefer `test`, fall back to `test:unit` — several repos declare
+          # their suite only under the latter (decidesk has 282 passing tests
+          # that a `test`-only probe would have skipped entirely).
+          #
+          # Skip the conventional npm placeholder, which "passes" while
+          # running nothing: "Error: no test specified" && exit 1.
+          node -e "
+            const s = (require('./package.json').scripts) || {};
+            const placeholder = v => !v || /no test specified/i.test(v);
+            const name = !placeholder(s.test) ? 'test'
+                       : !placeholder(s['test:unit']) ? 'test:unit'
+                       : '';
+            console.log('run=' + (name ? 'true' : 'false'));
+            console.log('script=' + name);
+          " >> "$GITHUB_OUTPUT"
+          node -e "
+            const s = (require('./package.json').scripts) || {};
+            const placeholder = v => !v || /no test specified/i.test(v);
+            const name = !placeholder(s.test) ? 'test'
+                       : !placeholder(s['test:unit']) ? 'test:unit'
+                       : '';
+            console.log(name
+              ? 'Detected \'' + name + '\' script: ' + s[name]
+              : 'No runnable test script (checked: test, test:unit).');
+          "
+
+      - name: Setup Node.js
+        if: steps.detect.outputs.run == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "${{ inputs.node-version }}"
+          cache: "npm"
+          cache-dependency-path: "${{ inputs.frontend-path }}/package-lock.json"
+
+      - name: Install dependencies
+        if: steps.detect.outputs.run == 'true'
+        run: npm ci
+
+      - name: Run unit tests
+        if: steps.detect.outputs.run == 'true'
+        env:
+          SCRIPT: ${{ steps.detect.outputs.script }}
+        run: npm run "$SCRIPT"
+
+      - name: Record result
+        if: always()
+        run: |
+          mkdir -p quality-results
+          if [ "${{ steps.detect.outputs.run }}" != "true" ]; then
+            echo "skipped" > quality-results/frontend-tests.txt
+          else
+            echo "${{ job.status }}" > quality-results/frontend-tests.txt
+          fi
+
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-frontend-tests
           path: quality-results/
 
   # ── Group 3: Security ──────────────────────────
   security:
     runs-on: ubuntu-latest
     name: "Security (${{ matrix.ecosystem }})"
+    # Observed across 505 executions: median 0.4 min, p95 1.0 min, max 5.7 min
+    # (docudesk). Advisory-database fetches can stall, hence 20 min.
+    timeout-minutes: 20
     strategy:
       matrix:
         ecosystem: [composer, npm]
@@ -346,23 +903,54 @@ jobs:
           php-version: ${{ inputs.php-version }}
           tools: composer:v2
 
+      # `enable-npm` must be in this condition, not only in the audit step below.
+      # actions/setup-node with `cache: npm` HARD-FAILS when there is no
+      # package-lock.json, so on a PHP-only repo (enable-npm: false) this step
+      # died before the audit step could report its polite "npm ecosystem is
+      # disabled — skipping". The npm leg then failed, and the Quality Report
+      # gate failed with it — a permanent red on every repo that legitimately
+      # has no package.json. Observed on ConductionNL/hydra 2026-08-04.
       - name: Setup Node.js
-        if: matrix.ecosystem == 'npm'
+        if: matrix.ecosystem == 'npm' && inputs.enable-npm
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "${{ inputs.node-version }}"
           cache: "npm"
+          cache-dependency-path: "${{ inputs.frontend-path }}/package-lock.json"
 
       - name: Run ${{ matrix.ecosystem }} audit
+        env:
+          FRONTEND_PATH: ${{ inputs.frontend-path }}
         run: |
           case "${{ matrix.ecosystem }}" in
             composer)
+              if [ "${{ inputs.enable-php }}" != "true" ]; then
+                echo "PHP toolchain is disabled — skipping composer audit."
+                exit 0
+              fi
               composer install --no-progress --prefer-dist --optimize-autoloader
               composer audit --format=plain --abandoned=report
               ;;
             npm)
-              npm ci --legacy-peer-deps
-              npm audit --audit-level=critical --omit=dev
+              if [ "${{ inputs.enable-npm }}" != "true" ]; then
+                echo "npm ecosystem is disabled — skipping npm audit."
+                exit 0
+              fi
+              cd "$FRONTEND_PATH"
+              npm ci
+              # Tolerate an unavailable npm advisory endpoint: npm is retiring
+              # the audits/quick endpoint and it intermittently 400s ("audit
+              # endpoint returned an error" / "Invalid package tree"). That is an
+              # infra outage, not a security finding, and must not hard-fail CI.
+              # Real advisories (which print a vuln table, not an endpoint error)
+              # still fail the gate.
+              out="$(npm audit --audit-level=critical --omit=dev 2>&1)" && rc=0 || rc=$?
+              echo "$out"
+              if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -qiE "audit endpoint returned an error|Invalid package tree|ECONNRESET|ETIMEDOUT|ENOTFOUND|being retired|Service Unavailable"; then
+                echo "::warning::npm audit skipped — npm advisory endpoint unavailable (external); not a vulnerability."
+              elif [ "$rc" -ne 0 ]; then
+                exit "$rc"
+              fi
               ;;
           esac
 
@@ -427,6 +1015,9 @@ jobs:
     if: ${{ inputs.enable-license-check }}
     runs-on: ubuntu-latest
     name: "License (${{ matrix.ecosystem }})"
+    # Observed across 497 executions: median 0.7 min, p95 1.4 min, max 1.9 min
+    # (planix). 20 min covers a slow registry without ever firing on a good run.
+    timeout-minutes: 20
     strategy:
       matrix:
         ecosystem: [composer, npm]
@@ -443,25 +1034,52 @@ jobs:
           php-version: ${{ inputs.php-version }}
           tools: composer:v2
 
+      # See the identical note on the security job's Setup Node.js step —
+      # `cache: npm` hard-fails without a package-lock.json, so this must also
+      # be gated on enable-npm, not only on the matrix leg.
       - name: Setup Node.js
-        if: matrix.ecosystem == 'npm'
+        if: matrix.ecosystem == 'npm' && inputs.enable-npm
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "${{ inputs.node-version }}"
           cache: "npm"
+          cache-dependency-path: "${{ inputs.frontend-path }}/package-lock.json"
 
       - name: Install dependencies
+        env:
+          FRONTEND_PATH: ${{ inputs.frontend-path }}
         run: |
           if [ "${{ matrix.ecosystem }}" = "composer" ]; then
+            if [ "${{ inputs.enable-php }}" != "true" ]; then
+              echo "PHP toolchain is disabled — skipping composer install."
+              exit 0
+            fi
             composer install --no-progress --prefer-dist --optimize-autoloader
           else
-            npm ci --legacy-peer-deps
+            if [ "${{ inputs.enable-npm }}" != "true" ]; then
+              echo "npm ecosystem is disabled — skipping npm install."
+              exit 0
+            fi
+            cd "$FRONTEND_PATH"
+            npm ci
             npm install -g license-checker
           fi
 
       - name: Check ${{ matrix.ecosystem }} licenses
+        env:
+          FRONTEND_PATH: ${{ inputs.frontend-path }}
         run: |
           set -euo pipefail
+
+          if [ "${{ matrix.ecosystem }}" = "composer" ] && [ "${{ inputs.enable-php }}" != "true" ]; then
+            echo "PHP toolchain is disabled — skipping composer license check."
+            exit 0
+          fi
+
+          if [ "${{ matrix.ecosystem }}" = "npm" ] && [ "${{ inputs.enable-npm }}" != "true" ]; then
+            echo "npm ecosystem is disabled — skipping npm license check."
+            exit 0
+          fi
 
           # ── Default allowlist (EUPL-1.2 / AGPL-3.0 compatible) ──
           DEFAULT_ALLOWLIST='[
@@ -498,16 +1116,57 @@ jobs:
 
           mkdir -p license-report
 
-          # Helper: check if a license string is allowed
-          # Handles SPDX OR expressions and trailing "*" from license-checker
+          # Helper: check if a license string is allowed.
+          #
+          # SPDX semantics:
+          #   OR  -> at least one branch must be allowed  (you may pick either)
+          #   AND -> every term must be allowed           (you must comply with both)
+          #
+          # The previous version split on " OR " only and returned success on the
+          # first allowed part. That made every conjunction a false failure:
+          # "MIT AND Zlib" never split, was treated as one unknown token, and was
+          # DENIED even though both halves are allowlisted. Repos worked around it
+          # with manual override entries (e.g. pako, sha.js) that are no longer
+          # needed once AND is evaluated correctly.
+          #
+          # Nested expressions FAIL CLOSED. Naive string splitting cannot evaluate
+          # "(MIT OR Apache-2.0) AND Zlib": splitting on OR first detaches the
+          # group, the bare "MIT" branch satisfies it, and the required "Zlib" is
+          # never checked — so a DISALLOWED licence would PASS. In a licence gate a
+          # false pass is worse than a false failure, so anything with an
+          # inner-grouped operator is refused and must be resolved with an
+          # explicit, reviewed override entry.
           check_license() {
             local license_str="$1"
-            IFS='|' read -ra PARTS <<< "$(echo "$license_str" | sed 's/ OR /|/g; s/ or /|/g')"
-            for part in "${PARTS[@]}"; do
-              part=$(echo "$part" | sed 's/^ *//;s/ *$//' | sed 's/[()]//g' | sed 's/\*$//')
-              if echo "$ALLOWLIST" | jq -e --arg l "$part" 'map(ascii_downcase) | index($l | ascii_downcase)' > /dev/null 2>&1; then
-                return 0
+            local s
+            s=$(echo "$license_str" | sed 's/\*$//')
+
+            # Refuse genuinely nested expressions (a parenthesised group that is
+            # not simply the entire string).
+            local trimmed
+            trimmed=$(echo "$s" | sed 's/^ *//;s/ *$//')
+            if echo "$trimmed" | grep -q '('; then
+              if ! echo "$trimmed" | grep -qE '^\([^()]*\)$'; then
+                echo "::warning::Un-evaluatable SPDX expression '$license_str' — add a reviewed override entry"
+                return 1
               fi
+            fi
+            s=$(echo "$s" | sed 's/[()]//g')
+
+            local IFS
+            IFS='|' read -ra OR_BRANCHES <<< "$(echo "$s" | sed 's/ OR /|/g; s/ or /|/g')"
+            for branch in "${OR_BRANCHES[@]}"; do
+              IFS=$'\x1f' read -ra AND_TERMS <<< "$(echo "$branch" | sed 's/ AND /\x1f/g; s/ and /\x1f/g')"
+              local all_allowed=1
+              for term in "${AND_TERMS[@]}"; do
+                term=$(echo "$term" | sed 's/^ *//;s/ *$//')
+                [ -z "$term" ] && continue
+                if ! echo "$ALLOWLIST" | jq -e --arg l "$term" 'map(ascii_downcase) | index($l | ascii_downcase)' > /dev/null 2>&1; then
+                  all_allowed=0
+                  break
+                fi
+              done
+              [ "$all_allowed" = "1" ] && return 0
             done
             return 1
           }
@@ -546,7 +1205,7 @@ jobs:
           else
             echo ""
             echo "=== Checking npm dependencies ==="
-            NPM_JSON=$(license-checker --json --production 2>/dev/null || echo '{}')
+            NPM_JSON=$(license-checker --json --production --start "$FRONTEND_PATH" 2>/dev/null || echo '{}')
 
             for pkg in $(echo "$NPM_JSON" | jq -r 'keys[]' 2>/dev/null); do
               license=$(echo "$NPM_JSON" | jq -r --arg p "$pkg" '.[$p].licenses // .[$p].license // "UNKNOWN"')
@@ -657,18 +1316,53 @@ jobs:
           path: quality-results/
 
   # ╔══════════════════════════════════════════════╗
-  # ║  STAGE 2 — Tests (gated behind Stage 1)      ║
+  # ║  STAGE 2 — Tests                              ║
   # ║                                               ║
   # ║  • PHPUnit matrix (PHP × Nextcloud versions)  ║
   # ║  • Integration tests (Newman)                 ║
   # ║  • E2E browser tests (Playwright)             ║
+  # ║                                               ║
+  # ║  Gated on `security` only. PHPUnit and        ║
+  # ║  Playwright deliberately do NOT gate on       ║
+  # ║  php-quality — a complexity or formatting     ║
+  # ║  finding must not silently delete the test    ║
+  # ║  signal. Newman still does; see its `if:`.    ║
   # ╚══════════════════════════════════════════════╝
 
   phpunit:
-    if: ${{ inputs.enable-phpunit && !cancelled() && needs.php-quality.result != 'failure' && needs.security.result != 'failure' }}
+    # NOT gated on php-quality — deliberately. `php-quality` is a matrix job, so
+    # its result is 'failure' if ANY leg fails, including phpmd (complexity/mess
+    # detection) and phpcs (formatting). Neither says anything about whether the
+    # test suite passes, but gating on them meant a repo carrying architectural
+    # debt got NO test signal at all — and the loss renders in the checks list as
+    # a single greyed-out "skipping" placeholder, which reads like a non-event
+    # rather than a gate that stopped running.
+    #
+    # Observed 2026-08-04 on ConductionNL/procest: phpmd was red on 25 complexity
+    # findings, so `development` runs had 26 jobs and ZERO PHPUnit legs. Its 1684
+    # tests had had no CI signal for as long as phpmd had been red. The contrast
+    # is the proof — ConductionNL/decidesk, identical workflow inputs, produced 29
+    # jobs with 4 green PHPUnit legs, and the ONLY difference was that decidesk's
+    # phpmd was green. Worse, it was green only because a phpmd.baseline.xml was
+    # suppressing 73 real findings: whether the test suite ran at all was
+    # contingent on a suppression file.
+    #
+    # The security gate is kept — a repo with a known-vulnerable dependency
+    # should not spin up servers. This also aligns PHPUnit with the playwright
+    # job below, which already deliberately declines to gate on php-quality.
+    #
+    # `needs:` is retained for ordering only; with `!cancelled()` and no result
+    # condition on php-quality, PHPUnit runs regardless of static-analysis colour.
+    if: ${{ inputs.enable-php && inputs.enable-phpunit && !cancelled() && needs.security.result != 'failure' }}
     runs-on: ubuntu-latest
     name: "PHPUnit (PHP ${{ matrix.php-version }}, NC ${{ matrix.nextcloud-ref }})"
     needs: [php-quality, security]
+    # Observed across 337 SUCCESSFUL executions: median 1.7 min, p95 13.6 min,
+    # max 18.9 min (shillinq, green). The spread is huge because each leg
+    # installs a full Nextcloud server before the suite runs, so a tight bound
+    # would newly fail shillinq's already-green runs. 45 min is ~2.4x the worst
+    # observed green run and still cuts a hang from 6 hours to 45 minutes.
+    timeout-minutes: 45
 
     services:
       postgres:
@@ -758,13 +1452,20 @@ jobs:
               php occ app:enable "$name" || echo "::warning::Failed to enable $name, continuing..."
             done
           fi
-          php occ app:enable ${{ inputs.app-name }}
           chmod -R a+w config
 
-      - name: Install app dependencies
+      # Install the app's own dependencies BEFORE enabling it. Enabling triggers
+      # install-scope repair steps that autowire services with eager constructors
+      # (e.g. SaveObject does `new Twig\Environment(...)`); without vendor present
+      # that fatals with an uncaught \Error (NC core only catches \Exception),
+      # killing the step. Matches the newman/playwright/journeydoc jobs, which
+      # already composer-install before enabling the app.
+      - name: Install app dependencies and enable app
         run: |
           cd server/apps/${{ inputs.app-name }}
           composer install --no-progress --prefer-dist --optimize-autoloader
+          cd ../../
+          php occ app:enable ${{ inputs.app-name }}
 
       - name: Validate test infrastructure
         run: |
@@ -807,6 +1508,9 @@ jobs:
     runs-on: ubuntu-latest
     name: "Integration Tests (Newman)"
     needs: [php-quality, security]
+    # Observed across 39 executions: median 1.9 min, max 7.5 min (launchpad).
+    # Also installs a full Nextcloud server first, so 30 min — 4x the worst run.
+    timeout-minutes: 30
 
     services:
       postgres:
@@ -899,14 +1603,90 @@ jobs:
           php occ app:enable ${{ inputs.app-name }}
 
       - name: Start PHP built-in server
+        # Same front-controller router as the Playwright job — see the long
+        # comment on that step. Without it, `php -S` returns 404 for any path
+        # that resolves to an existing directory with no index.php inside,
+        # which is every pretty Nextcloud URL once the app is checked out to
+        # `server/apps/<app>`. A Postman collection hitting `/apps/<app>/api/…`
+        # rather than `/index.php/apps/<app>/api/…` fails here for that reason
+        # alone.
         run: |
           cd server
-          php -S 0.0.0.0:8080 &
+          cat > ci-router.php <<'ROUTER'
+          <?php
+          $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?: '/';
+          if ($path !== '/' && is_file(__DIR__ . $path)) {
+              return false;
+          }
+          $segments = explode('/', ltrim($path, '/'));
+          $prefix = '';
+          foreach ($segments as $i => $segment) {
+              $prefix .= '/' . $segment;
+              if (substr($segment, -4) !== '.php'
+                  || $prefix === '/index.php'
+                  || !is_file(__DIR__ . $prefix)
+              ) {
+                  continue;
+              }
+              $rest = implode('/', array_slice($segments, $i + 1));
+              $_SERVER['SCRIPT_NAME'] = $prefix;
+              $_SERVER['SCRIPT_FILENAME'] = __DIR__ . $prefix;
+              $_SERVER['PHP_SELF'] = $path;
+              $_SERVER['PATH_INFO'] = $rest === '' ? '' : '/' . $rest;
+              require __DIR__ . $prefix;
+              return true;
+          }
+          $_SERVER['SCRIPT_NAME'] = '/index.php';
+          $_SERVER['SCRIPT_FILENAME'] = __DIR__ . '/index.php';
+          $_SERVER['PHP_SELF'] = '/index.php';
+          require __DIR__ . '/index.php';
+          ROUTER
+          php -S 0.0.0.0:8080 ci-router.php &
           sleep 3
           curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/status.php || echo "Server not ready"
+        env:
+          # PHP_CLI_SERVER_WORKERS: `php -S` is SINGLE-WORKER by default, so it
+          # can only ever have one request in flight. That is fatal — not slow,
+          # FATAL — for any API collection in which the app under test calls
+          # BACK into this same instance while serving a request: the one
+          # worker is blocked inside the outer request, so the nested request
+          # can never be accepted, and both hang until the job's timeout kills
+          # them.
+          #
+          # Measured on openconnector (run 30821823343, job 91713730053): the
+          # collection creates a "self-pointing source" whose `location` is
+          # this very server, then calls
+          # `POST /api/synchronizations/<uuid>/test`. That request never
+          # returned. The job sat in "Run Newman tests" for ~30 minutes and was
+          # cancelled by timeout-minutes, having completed J2.2 and printed
+          # nothing after J2.3. Self-referential fixtures like this are normal
+          # in an integration suite — pointing a Source at the instance's own
+          # OpenRegister API is the cheapest way to get a real, reachable
+          # upstream — so the runner has to be able to serve them.
+          #
+          # The Playwright job's identical `php -S` step already sets this (for
+          # a different symptom: SPA boot requests serialising behind each
+          # other). Callers cannot set it — the `php -S` invocation lives in
+          # this workflow — so, exactly as noted there, it has to be fixed here.
+          PHP_CLI_SERVER_WORKERS: 8
 
       - name: Seed test data
         if: inputs.newman-seed-command != ''
+        # Same rationale as the Playwright job's seed step: a seed script is
+        # usually driving the app's own admin API and has to be told WHICH
+        # instance and with what credentials. This step declared no `env:` at
+        # all, so a script here saw neither BASE_URL nor ADMIN_USER and had to
+        # hardcode `http://localhost:8080` — a literal that means the SHARED
+        # dev container on a developer box, which makes the same script unsafe
+        # to run anywhere else.
+        env:
+          BASE_URL: http://localhost:8080
+          NEXTCLOUD_URL: http://localhost:8080
+          NC_BASE_URL: http://localhost:8080
+          ADMIN_USER: admin
+          ADMIN_PASSWORD: admin
+          NC_ADMIN_USER: admin
+          NC_ADMIN_PASS: admin
         run: |
           cd server
           echo "Running seed command: ${{ inputs.newman-seed-command }}"
@@ -918,7 +1698,7 @@ jobs:
       - name: Setup Node.js and Newman
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "${{ inputs.node-version }}"
 
       - name: Install Newman
         run: npm install -g newman
@@ -945,7 +1725,20 @@ jobs:
           # Build environment args: use --environment file if provided, otherwise ad-hoc vars
           ENV_ARGS=""
           if [ -n "${{ inputs.newman-environment-path }}" ]; then
-            ENV_FILE="../../../apps/${{ inputs.app-name }}/${{ inputs.newman-environment-path }}"
+            # Absolute, so it does not depend on how deep
+            # `newman-collection-path` happens to be. The previous value,
+            # "../../../apps/<app>/<env-path>", was hand-rolled relative to the
+            # cwd set above and was off by one level: from
+            # `server/apps/<app>/tests/postman`, `../../..` is `server/apps`,
+            # so it resolved to `server/apps/apps/<app>/...` and never existed.
+            # Every run took the fallback branch and emitted a "not found"
+            # warning about a file that is committed and present (measured on
+            # openconnector, which ships tests/postman/*.postman_environment.json).
+            # The fallback happens to set the same three variables, so this was
+            # invisible — until a collection needs a variable the fallback does
+            # not define, at which point it fails for a reason the warning
+            # actively misdirects you away from.
+            ENV_FILE="$GITHUB_WORKSPACE/server/apps/${{ inputs.app-name }}/${{ inputs.newman-environment-path }}"
             if [ -f "$ENV_FILE" ]; then
               # Rewrite localhost:8080 for CI (PHP built-in server runs on 8080)
               echo "Using environment file: ${{ inputs.newman-environment-path }}"
@@ -979,7 +1772,21 @@ jobs:
     if: ${{ inputs.enable-playwright && !cancelled() && needs.security.result != 'failure' }}
     runs-on: ubuntu-latest
     name: "E2E Tests (Playwright)"
-    needs: [php-quality, security]
+    # `frontend-build` is a dependency purely so its artifact is available to
+    # download — NOT a gate. The `if:` above contains `!cancelled()`, which
+    # suppresses the implicit `success()` on needs, so a failed or skipped
+    # frontend-build still lets this job run and reach its own verdict. When
+    # the artifact is absent for any reason the build step below runs exactly
+    # as it did before this dependency existed.
+    needs: [php-quality, security, frontend-build]
+    # No job in this file declared a timeout, so a hung suite ran to GitHub's
+    # 6-hour default. Observed durations once the suite is healthy: 4-10 min
+    # (planix 0.8, doriath 4.2, zaakafhandelapp 5.3, softwarecatalog 6.1,
+    # openconnector 7.7, opencatalogi 10.0). Unhealthy runs measured 1.1h and
+    # 1.6h before the `visual`/`docs-capture` projects were excluded. 45
+    # minutes leaves a wide margin over every healthy run while turning a hang
+    # into a failure in under an hour instead of burning a runner for six.
+    timeout-minutes: 45
 
     services:
       postgres:
@@ -1074,13 +1881,13 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "${{ inputs.node-version }}"
 
       - name: Install app npm dependencies
         run: |
           cd server/apps/${{ inputs.app-name }}
           if [ -f "package.json" ]; then
-            npm ci --legacy-peer-deps
+            npm ci
           fi
 
       - name: Install Playwright
@@ -1089,12 +1896,69 @@ jobs:
           npm install --save-dev @playwright/test
           npx playwright install --with-deps chromium
 
+      # ── Reuse the bundle the `frontend-build` job already compiled ─────────
+      #
+      # Fast path only. Every condition below is written so that "I am not
+      # certain this is the right bundle" resolves to REBUILDING, never to
+      # running specs against something unverified — a wrong or empty bundle
+      # does not produce a 404, it produces HTTP 200 text/html and a wall of
+      # selector timeouts that read as a broken app rather than a broken
+      # pipeline. The cost of the fallback is ~3 minutes; the cost of a bad
+      # hand-off is a false verdict on every UI spec in the fleet.
+      #
+      # Guarded on frontend-path == '.' because the build job runs inside
+      # `inputs.frontend-path` while this job builds at the app root; for a
+      # repo with a nested frontend the two output trees are not the same
+      # paths, so that case keeps building here.
+      - name: Download prebuilt app frontend
+        id: prebuilt
+        if: ${{ needs.frontend-build.outputs.built == 'true' && inputs.frontend-path == '.' }}
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build-output
+          path: /tmp/frontend-build
+
+      - name: Restore prebuilt app frontend
+        id: restore
+        if: ${{ steps.prebuilt.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          TARBALL=/tmp/frontend-build/frontend-build-output.tar.gz
+          if [ ! -f "$TARBALL" ]; then
+            echo "restored=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Prebuilt frontend artifact downloaded but the tarball is missing — building here instead."
+            exit 0
+          fi
+          # Positive check on the thing that actually matters: JavaScript.
+          # An artifact that extracts cleanly but carries no .js is
+          # indistinguishable from a successful build at the HTTP layer
+          # (200 text/html either way), so assert it HERE, where the failure
+          # is still legible, and rebuild rather than proceed on doubt.
+          TOTAL="$(tar -tzf "$TARBALL" | grep -c . || true)"
+          JS_COUNT="$(tar -tzf "$TARBALL" | grep -c '\.js$' || true)"
+          echo "Artifact holds $TOTAL file(s), of which $JS_COUNT are .js"
+          if [ "$TOTAL" -eq 0 ] || [ "$JS_COUNT" -eq 0 ]; then
+            echo "restored=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Prebuilt frontend artifact carried no JavaScript — building here instead."
+            exit 0
+          fi
+          tar -xzf "$TARBALL" -C "server/apps/${{ inputs.app-name }}"
+          echo "Restored $TOTAL file(s) from the frontend-build artifact into server/apps/${{ inputs.app-name }}."
+          echo "restored=true" >> "$GITHUB_OUTPUT"
+
       - name: Build app frontend
         # Vue/React apps that mount via `Util::addScript()` need their
         # webpack bundle on disk before specs render the page; without
         # this step every selector waits times out because the script
         # tag 404s and the SPA never mounts. Skip silently when the app
         # has no `build` npm script (legacy apps without a frontend).
+        #
+        # Skipped when the `frontend-build` job already produced the bundle and
+        # the restore step verified it. Any other outcome falls through to here
+        # and builds, which is byte-for-byte the behaviour that predates the
+        # artifact hand-off.
+        if: ${{ steps.restore.outputs.restored != 'true' }}
         run: |
           cd server/apps/${{ inputs.app-name }}
           if [ -f "package.json" ] && node -e "process.exit(require('./package.json').scripts && require('./package.json').scripts.build ? 0 : 1)" 2>/dev/null; then
@@ -1131,9 +1995,128 @@ jobs:
         # `sleep 3` therefore fails spuriously when the runner is noisy
         # and `php -S` hasn't bound :8080 yet. Poll every 0.5s with a
         # 15s hard cap so the fail-fast path is honest.
+        #
+        # PHP_CLI_SERVER_WORKERS: the built-in server is SINGLE-WORKER by
+        # default, so every request a Nextcloud SPA fires on boot is
+        # serialised behind the one before it. Measured on opencatalogi:
+        # whichever spec ran first blew its 60s test timeout waiting for the
+        # index page to render and then passed in 9.1s on retry, while every
+        # later spec ran in 4-7s. It was measuring server warm-up, and it
+        # cost a retry on every run. Callers cannot set this — the `php -S`
+        # invocation lives here — so it has to be fixed here.
+        #
+        # ── ci-router.php: PRETTY URLs 404 WITHOUT IT ───────────────────────
+        # `php -S` was started with no router script, so it resolved each
+        # request path against the document root itself. For a path that
+        # resolves to a DIRECTORY WITH NO index.php INSIDE, it returns 404 —
+        # it does not fall back to the root index.php. Measured:
+        #
+        #     /index.php/apps/<app>/   -> 200   PATH_INFO=/apps/<app>/
+        #     /apps/<app>/             -> 404   <-- the directory exists
+        #     /nonexistent/            -> 200   <-- falls through to index.php
+        #
+        # Note the inversion: a path that does NOT exist works, and one that
+        # DOES exist fails. The app under test is checked out to
+        # `server/apps/<app>`, so every pretty Nextcloud URL in the fleet's
+        # specs 404s here. None of it shows up in the docker dev images, where
+        # apps live in `custom_apps/` and Apache + Nextcloud's own .htaccess
+        # rewrites pretty URLs — so a spec that passes locally 404s on CI and
+        # reports it as a selector timeout naming an ELEMENT, not a missing
+        # page. That is a wall of red pointing at the wrong thing.
+        #
+        # Evidence, from one run on one instance (ConductionNL/openconnector
+        # run 30771630267): the specs whose base URL was
+        # `/index.php/apps/openconnector` PASSED, while the specs whose base
+        # URL was `/apps/openconnector/#` failed with `main` not found. Across
+        # pipelinq, openconnector and scholiq alone that is ~55 spec files.
+        #
+        # The router does exactly what Nextcloud's shipped .htaccess does —
+        # `RewriteRule . index.php [PT,E=PATH_INFO:$1]`: serve real files
+        # as-is, route everything else through the root index.php with
+        # REQUEST_URI untouched. Nextcloud's Request::getRawPathInfo() derives
+        # the path by stripping SCRIPT_NAME from REQUEST_URI, so with
+        # SCRIPT_NAME="/index.php" both URL forms yield a byte-identical path
+        # info. Verified against that exact algorithm, including query-string
+        # preservation, static JS keeping `application/javascript`, and
+        # `status.php` still executing as itself.
+        #
+        # ── AND THE OTHER PHP ENTRY POINTS NEED A PREFIX MATCH ──────────────
+        # The first cut of the router claimed those other entry points still
+        # "execute as themselves" on the strength of `is_file()`. That check
+        # only ever matches a URL that IS a file exactly — `/status.php`, the
+        # one case that got tested. Nextcloud never calls the OCS entry points
+        # that way: every real request carries path info,
+        #
+        #     /ocs/v2.php/cloud/user
+        #     /ocs/v1.php/cloud/groups?format=json
+        #     /remote.php/dav/files/admin
+        #
+        # and `is_file(__DIR__ . '/ocs/v2.php/cloud/user')` is false. So the
+        # router swallowed them into index.php with SCRIPT_NAME="/index.php",
+        # getRawPathInfo() returned "/ocs/v2.php/cloud/user", no route matched,
+        # and every OCS call in the fleet became a hard 404. Nextcloud's
+        # .htaccess exempts these by PREFIX (`RewriteCond %{REQUEST_FILENAME}
+        # !/ocs/v1.php` …), not by file existence — so do the same: walk the
+        # path for the longest `.php` prefix that exists on disk and hand the
+        # request to that script with a matching SCRIPT_NAME/PATH_INFO pair,
+        # which is exactly what a router-less `php -S` did before.
+        #
+        # `/index.php` is excluded from the walk on purpose, so `/index.php/…`
+        # keeps taking the fall-through branch byte-for-byte as before. The
+        # change is therefore additive: only URLs that were 404ing move.
+        #
+        # Measured on a fixture reproducing all three configurations
+        # (no router / first cut / this one):
+        #
+        #                                    no router      first cut     this
+        #     /ocs/v2.php/cloud/user         ocs/v2.php     index.php     ocs/v2.php
+        #     /remote.php/dav/files/admin    remote.php     index.php     remote.php
+        #     /status.php                    status.php     status.php    status.php
+        #     /apps/<app>/                   404            index.php     index.php
+        #     /index.php/apps/<app>/         index.php      index.php     index.php
+        env:
+          PHP_CLI_SERVER_WORKERS: 8
         run: |
           cd server
-          php -S 0.0.0.0:8080 > /tmp/php-server.log 2>&1 &
+          cat > ci-router.php <<'ROUTER'
+          <?php
+          // Front controller for `php -S`, mirroring Nextcloud's .htaccess.
+          //
+          // 1. A real file on disk is served by the built-in server as-is, so
+          //    static assets keep their MIME types.
+          // 2. Nextcloud's other PHP entry points — ocs/v1.php, ocs/v2.php,
+          //    remote.php, public.php, cron.php, core/ajax/update.php — are
+          //    reached WITH path info, which rule 1 never matches. Resolve the
+          //    longest existing `.php` prefix and execute that script itself.
+          // 3. Everything else routes through index.php, REQUEST_URI intact.
+          $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?: '/';
+          if ($path !== '/' && is_file(__DIR__ . $path)) {
+              return false;
+          }
+          $segments = explode('/', ltrim($path, '/'));
+          $prefix = '';
+          foreach ($segments as $i => $segment) {
+              $prefix .= '/' . $segment;
+              if (substr($segment, -4) !== '.php'
+                  || $prefix === '/index.php'
+                  || !is_file(__DIR__ . $prefix)
+              ) {
+                  continue;
+              }
+              $rest = implode('/', array_slice($segments, $i + 1));
+              $_SERVER['SCRIPT_NAME'] = $prefix;
+              $_SERVER['SCRIPT_FILENAME'] = __DIR__ . $prefix;
+              $_SERVER['PHP_SELF'] = $path;
+              $_SERVER['PATH_INFO'] = $rest === '' ? '' : '/' . $rest;
+              require __DIR__ . $prefix;
+              return true;
+          }
+          $_SERVER['SCRIPT_NAME'] = '/index.php';
+          $_SERVER['SCRIPT_FILENAME'] = __DIR__ . '/index.php';
+          $_SERVER['PHP_SELF'] = '/index.php';
+          require __DIR__ . '/index.php';
+          ROUTER
+          php -S 0.0.0.0:8080 ci-router.php > /tmp/php-server.log 2>&1 &
           PHP_PID=$!
           echo "${PHP_PID}" > /tmp/php-server.pid
           timeout 15 bash -c 'until curl -sf -o /dev/null http://localhost:8080/status.php; do sleep 0.5; done' || {
@@ -1141,10 +2124,88 @@ jobs:
             cat /tmp/php-server.log
             exit 1
           }
+          # Prove the front controller is actually routing before any spec runs.
+          #
+          # The probe MUST be a URL whose path resolves to a real DIRECTORY under
+          # the document root with no index.php inside it — that is the precise
+          # shape `php -S` answers with a hard 404 when no router is installed,
+          # and the only shape that distinguishes "router working" from "router
+          # missing". `/login`, `/settings/admin` and friends are useless as
+          # probes: they resolve to nothing on disk, so a router-less `php -S`
+          # already falls through to the root index.php and returns 200.
+          #
+          # `/apps/files/` is that shape on every Nextcloud: `apps/files` is a
+          # shipped, always-enabled app whose directory exists under the docroot
+          # and contains no index.php, and whose `files.view.index` route always
+          # resolves. Unauthenticated it answers 302 to /login — never 404 —
+          # so a 404 can only mean the front controller is not routing.
+          #
+          # It deliberately does NOT probe `/apps/<app-name>/`, which is what
+          # this gate used to do. That conflated two different properties:
+          #   1. does the front controller route pretty URLs (a CI concern), and
+          #   2. does THIS app have an index route (an app design choice).
+          # Settings-only apps legitimately have neither a navigation entry nor
+          # a `/` route — nldesign is one: its whole surface is admin settings
+          # pages plus /api/* and /settings/* endpoints, so `/apps/nldesign/` is
+          # a correct Nextcloud 404. The old probe read that as a broken router
+          # and blocked the E2E job before a single spec ran, while its own
+          # error text pointed at the router. See ConductionNL/nldesign#206.
+          #
+          # Evidence that the two are separable, from that same PR: on run
+          # 30859016722 (job 91836768845) the identical URL returned **500**,
+          # not 404 — index.php had executed and thrown. Same router, same
+          # request, different status. A 404 from `/apps/<app>/` is therefore
+          # Nextcloud answering "no such route", not `php -S` answering
+          # "no such directory index".
+          PRETTY="$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:8080/apps/files/")"
+          echo "Front-controller check: /apps/files/ -> HTTP ${PRETTY}"
+          if [ "$PRETTY" = "404" ]; then
+            echo "::error::The php -S front-controller router is not routing pretty URLs — /apps/files/ returned 404, and apps/files is a real directory with no index.php, which is exactly what a router-less php -S 404s. Every spec using a pretty Nextcloud URL will fail on a selector timeout."
+            exit 1
+          fi
+          # The app's own root, reported but NOT gated — see above. Kept visible
+          # because when it IS a 404 that is worth knowing (a page app that lost
+          # its route looks identical to a settings-only app that never had one,
+          # and only the spec run can tell them apart).
+          APP_ROOT="$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:8080/apps/${{ inputs.app-name }}/")"
+          echo "App root: /apps/${{ inputs.app-name }}/ -> HTTP ${APP_ROOT}"
+          if [ "$APP_ROOT" = "404" ]; then
+            echo "::notice::/apps/${{ inputs.app-name }}/ returned 404 while /apps/files/ routed fine, so the front controller is working — this app declares no index route. Normal for a settings-only app; if this app is supposed to have a page, its route registration is broken."
+          fi
+          # And prove the OTHER Nextcloud PHP entry points still reach
+          # themselves. This gate did not exist when the router first shipped,
+          # and its absence is the whole reason a router that broke every OCS
+          # call read as a clean green server-start: the pretty-URL check above
+          # passed, so nothing spoke. `/ocs/v2.php/cloud/user` unauthenticated
+          # is a 401 when it reaches ocs/v2.php and a 404 when the router
+          # swallows it into index.php, so the two outcomes are distinguishable
+          # by status code alone.
+          OCS="$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:8080/ocs/v2.php/cloud/user?format=json")"
+          echo "OCS entry-point check: /ocs/v2.php/cloud/user -> HTTP ${OCS}"
+          if [ "$OCS" = "404" ]; then
+            echo "::error::The php -S front-controller router is swallowing Nextcloud's OCS entry point — /ocs/v2.php/cloud/user returned 404 instead of reaching ocs/v2.php. Every OCS call (current user, groups, user_status, dashboard layout) will 404, and specs will report it as a missing element."
+            exit 1
+          fi
           echo "PHP built-in server alive (pid=${PHP_PID})."
 
       - name: Seed test data
         if: inputs.playwright-seed-command != ''
+        # The seed command needs to know WHICH instance to seed and with what
+        # credentials, exactly like the test step below — a seed script is
+        # usually driving the app's own admin API. This step declared no `env:`
+        # at all, so a script here saw neither BASE_URL nor ADMIN_USER and had
+        # to hardcode `http://localhost:8080` to work. That literal is the
+        # SHARED dev container on a developer box, which makes the same script
+        # unsafe to run anywhere else. The journeydoc capture job already
+        # exports the full set to its own seed step; this matches it.
+        env:
+          BASE_URL: http://localhost:8080
+          NEXTCLOUD_URL: http://localhost:8080
+          NC_BASE_URL: http://localhost:8080
+          ADMIN_USER: admin
+          ADMIN_PASSWORD: admin
+          NC_ADMIN_USER: admin
+          NC_ADMIN_PASS: admin
         run: |
           cd server
           echo "Running seed command: ${{ inputs.playwright-seed-command }}"
@@ -1159,11 +2220,373 @@ jobs:
             CONFIG="playwright.config.ts"
           fi
           npx playwright test --config="$CONFIG"
+        # This step exported only BASE_URL / ADMIN_USER / ADMIN_PASSWORD, but a
+        # survey of the 21 fleet repos found 15 whose config resolves the target
+        # as `process.env.NEXTCLOUD_URL || 'http://localhost:8080'` and never
+        # reads BASE_URL. Those repos do not fail here — they fall through to
+        # the literal, which happens to be this runner's own `php -S`, so the
+        # suite runs against the right host FOR THE WRONG REASON and the same
+        # config points at the SHARED dev container the moment anyone runs it
+        # locally. Exporting every name the fleet actually uses means the
+        # variable, not the fallback, is what selects the target here.
+        #
+        # (Repos should still drop the `|| 'http://localhost:8080'` literal —
+        # see tests/e2e/base-url.ts in openregister/doriath/shillinq for the
+        # pattern that throws instead. This just stops CI from silently
+        # depending on it.)
         env:
           BASE_URL: http://localhost:8080
+          NEXTCLOUD_URL: http://localhost:8080
+          NC_BASE_URL: http://localhost:8080
           ADMIN_USER: admin
           ADMIN_PASSWORD: admin
+          NC_ADMIN_USER: admin
+          NC_ADMIN_PASS: admin
           COLLECT_COVERAGE: ${{ inputs.enable-playwright-coverage }}
+
+      # ── axe-core: produce the file gate-33 has never had ────────────────────
+      #
+      # hydra-gates gate-33 consumes `tests/axe/report.json` and fails on
+      # `serious`/`critical` violations. Measured 2026-08-03 across 13 repos:
+      # that file exists in NONE of them, and the `scripts/run-browser-tests.sh`
+      # documented as producing it exists in no app either. So gate-33 has never
+      # run anywhere, and every "all gates green" this fleet has produced
+      # excluded accessibility runtime checking — contrast, landmark structure,
+      # ARIA validity, live regions — outright.
+      #
+      # This is the only job in the file with both a booted Nextcloud and a
+      # browser, so this is where the report can be produced. It runs even when
+      # the Playwright suite itself failed (`!cancelled()`): an accessibility
+      # measurement is not contingent on the e2e verdict, and gate-33 runs
+      # either way.
+      #
+      # The runner is embedded here rather than kept as a file in this repo on
+      # purpose. This job never checks ConductionNL/.github out — only the
+      # hydra-gates job does, at its own `hydra-gates-ref` — so a separate file
+      # would mean a second ref to reason about and a second thing that can
+      # drift away from the workflow that calls it. Same rationale as
+      # ci-router.php above.
+      - name: Install axe-core
+        if: ${{ inputs.enable-axe && !cancelled() }}
+        run: |
+          set -euo pipefail
+          cd server/apps/${{ inputs.app-name }}
+          # --no-save: this checkout is the app's own tree, and the report is
+          # the artefact we want out of it — not a mutated package.json.
+          npm install --no-save --no-audit --no-fund "@axe-core/playwright@${{ inputs.axe-version }}"
+          node -e "const m=require('@axe-core/playwright'); if (typeof (m.AxeBuilder||m.default)!=='function') { console.error('::error::@axe-core/playwright installed but exports no AxeBuilder constructor.'); process.exit(1);} console.log('@axe-core/playwright resolved.');"
+
+      - name: Run axe-core against the app routes
+        id: axe
+        if: ${{ inputs.enable-axe && !cancelled() }}
+        env:
+          AXE_BASE_URL: http://localhost:8080
+          AXE_USER: admin
+          AXE_PASSWORD: admin
+          AXE_ROUTES: ${{ inputs.axe-routes }}
+          AXE_APP_NAME: ${{ inputs.app-name }}
+        run: |
+          set -euo pipefail
+          # The first-run wizard renders a modal over the first page an admin
+          # sees. Its markup is Nextcloud core's, not this app's, and axe cannot
+          # tell the difference — leaving it on attributes core's defects to the
+          # app under test. Reported, never silenced: if it is not enabled the
+          # notice below says so rather than a `|| true` swallowing it.
+          if php server/occ app:disable firstrunwizard; then
+            echo "firstrunwizard disabled for the axe run."
+          else
+            echo "::notice::firstrunwizard was not enabled (or could not be disabled) — continuing. If it renders, its violations will be attributed to this app."
+          fi
+
+          cd "server/apps/${{ inputs.app-name }}"
+
+          # Default to the app's own root route when the caller named none.
+          if [ -z "${AXE_ROUTES}" ]; then
+            AXE_ROUTES="/index.php/apps/${AXE_APP_NAME}/"
+            echo "::notice::axe-routes was empty; defaulting to ${AXE_ROUTES}. A settings-only app has no root route and will fail the HTTP-status guard below — set axe-routes for those."
+          fi
+          export AXE_ROUTES
+          export AXE_OUT="${PWD}/tests/axe/report.json"
+
+          cat > .axe-run.cjs <<'AXE_RUNNER'
+          // SPDX-License-Identifier: EUPL-1.2
+          //
+          // Produce tests/axe/report.json for hydra-gates gate-33 (axe-core).
+          //
+          // Gate-33 reads ONE key: `violations`, and fails on entries whose
+          // `impact` is `serious` or `critical`. Everything else written here is
+          // for humans and for the guards below.
+          //
+          // The design point of this file is that it must never write a report
+          // it has not earned. A `{}` — or a `{"violations": []}` produced by a
+          // browser that never loaded anything — parses fine and reads to
+          // gate-33 as a CLEAN accessibility run. (Verified: gate-33 reports
+          // PASS on a file containing exactly `{}`.) That is strictly worse than
+          // the loud skip gate-33 emits when the file is absent, because it
+          // converts "unverified" into "verified clean". So every exit path
+          // below either writes a report that provably came from a real axe run
+          // against a real rendered page, or writes NOTHING and exits non-zero.
+          //
+          // Three guards enforce that, in order:
+          //
+          //   1. SELF-TEST (positive control). Before touching the app, axe is
+          //      run against a scratch page carrying a KNOWN serious/critical
+          //      violation (`<button></button>` -> rule `button-name`, impact
+          //      critical). If axe does not report it, axe is not working —
+          //      misconfigured tags, a broken injection, a version whose rule
+          //      set moved — and every subsequent empty `violations` array would
+          //      be an artefact of the harness, not evidence about the app. A
+          //      gate whose green has never been shown capable of going red is
+          //      not a gate. This is the check that runs on every CI run, not
+          //      just once at authoring time.
+          //
+          //   2. HTTP STATUS. A route that answers >= 400 renders Nextcloud's
+          //      error page, and axe would happily report that page as clean.
+          //      Analysing the wrong document is indistinguishable from
+          //      analysing the right one at the JSON layer.
+          //
+          //   3. NON-EMPTY RESULT SET — a backstop, and stated as one. The
+          //      failure it describes (axe returns `violations: []` AND
+          //      `passes: []` because there was no document to analyse) is not
+          //      what @axe-core/playwright 4.12.1 actually does: measured
+          //      against `about:blank` it THROWS ("Please use
+          //      browser.newContext()") rather than returning empty, and that
+          //      throw is caught at the bottom of this file, which also writes
+          //      no report. The guard is kept because which of the two a given
+          //      version does is a library implementation detail, and the one
+          //      that returns empty is the one that would be indistinguishable
+          //      from a clean run.
+          //
+          // Env:
+          //   AXE_BASE_URL  base URL of the instance under test (required)
+          //   AXE_ROUTES    newline- or comma-separated paths (required)
+          //   AXE_OUT       where to write the report (required)
+          //   AXE_USER      login user (optional; no login when empty)
+          //   AXE_PASSWORD  login password
+          //   AXE_WAIT_MS   settle time per route after mount (default 1500)
+
+          const fs = require('fs');
+          const path = require('path');
+
+          // `@playwright/test` re-exports the browser types, so chromium is
+          // resolved from the package this job already installs rather than from
+          // `playwright`, which is only present as a hoisted transitive
+          // dependency and is not ours to rely on.
+          const { chromium } = require('@playwright/test');
+
+          // 4.x exposes both a named `AxeBuilder` and a `default`. Resolve
+          // either, and say so loudly if neither is a constructor: a silently
+          // undefined AxeBuilder throws deep in the run as `new undefined`.
+          const axeModule = require('@axe-core/playwright');
+          const AxeBuilder = axeModule.AxeBuilder || axeModule.default || axeModule;
+
+          // WCAG 2.2 AA and its predecessors. `best-practice` is deliberately
+          // excluded: it is not a conformance requirement, and gate-33 is a
+          // conformance gate.
+          const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
+
+          // The scratch page for guard 1. `<button></button>` has no accessible
+          // name: axe rule `button-name`, impact critical, tags wcag2a/wcag412.
+          const CONTROL_HTML =
+            '<!DOCTYPE html><html lang="en"><head><title>axe self-test</title></head>' +
+            '<body><main><button></button></main></body></html>';
+          const CONTROL_RULE = 'button-name';
+
+          const die = (msg) => {
+            console.error('::error::axe-runner: ' + msg);
+            process.exit(2);
+          };
+
+          const routes = (process.env.AXE_ROUTES || '')
+            .split(/[\n,]/)
+            .map((r) => r.trim())
+            .filter((r) => r.length > 0);
+
+          const baseUrl = (process.env.AXE_BASE_URL || '').replace(/\/+$/, '');
+          const outPath = process.env.AXE_OUT || '';
+          const waitMs = parseInt(process.env.AXE_WAIT_MS || '1500', 10);
+
+          if (typeof AxeBuilder !== 'function') {
+            die('@axe-core/playwright did not export a constructor (got ' + typeof AxeBuilder + '). The installed version changed its export shape.');
+          }
+          if (!baseUrl) die('AXE_BASE_URL is empty.');
+          if (!outPath) die('AXE_OUT is empty.');
+          if (routes.length === 0) die('AXE_ROUTES resolved to zero routes. Nothing would be analysed, and an empty report would read as a clean accessibility run.');
+
+          // Keep the report readable: violation nodes carry the full outerHTML,
+          // which for a Vue app is routinely tens of KB per node.
+          const trimNode = (n) => ({
+            target: n.target,
+            html: typeof n.html === 'string' ? n.html.slice(0, 400) : '',
+            failureSummary: n.failureSummary,
+          });
+
+          // Remove any pre-existing report FIRST. Every guard exits without
+          // writing, and "did not write" only means "no report" if there was
+          // nothing there to begin with — otherwise a stale file from an earlier
+          // attempt is what gate-33 reads, and it reads as a clean run of code
+          // that just refused to certify itself.
+          fs.rmSync(outPath, { force: true });
+
+          (async () => {
+            const browser = await chromium.launch();
+            const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+            const page = await context.newPage();
+
+            // ── Guard 1: positive control ──────────────────────────────────
+            await page.setContent(CONTROL_HTML);
+            const control = await new AxeBuilder({ page }).withTags(TAGS).analyze();
+            const controlHit = (control.violations || []).find(
+              (v) => v.id === CONTROL_RULE && ['serious', 'critical'].includes(v.impact)
+            );
+            if (!controlHit) {
+              const seen = (control.violations || []).map((v) => v.id + '/' + v.impact).join(', ') || '<none>';
+              await browser.close();
+              die(
+                'SELF-TEST FAILED. axe did not report the deliberate `' + CONTROL_RULE +
+                '` violation on the scratch page. It reported: ' + seen +
+                '. axe is therefore not capable of failing in this environment, so an empty ' +
+                'violations array here would be evidence about the harness, not about the app. ' +
+                'Refusing to write a report — gate-33 will skip loudly instead of passing falsely.'
+              );
+            }
+            console.log(
+              'axe self-test OK: rule=' + controlHit.id + ' impact=' + controlHit.impact +
+              ' nodes=' + controlHit.nodes.length + ' (axe-core ' + control.testEngine.version + ')'
+            );
+
+            // ── Login ──────────────────────────────────────────────────────
+            if (process.env.AXE_USER) {
+              const loginUrl = baseUrl + '/index.php/login';
+              const resp = await page.goto(loginUrl, { waitUntil: 'domcontentloaded' });
+              if (!resp || resp.status() >= 400) {
+                await browser.close();
+                die('login page ' + loginUrl + ' returned HTTP ' + (resp ? resp.status() : 'no-response') + '.');
+              }
+              await page.fill('input[name="user"]', process.env.AXE_USER);
+              await page.fill('input[name="password"]', process.env.AXE_PASSWORD || '');
+              await Promise.all([
+                page.waitForURL((u) => !u.toString().includes('/login'), { timeout: 30000 }).catch(() => {}),
+                page.click('button[type="submit"], input[type="submit"]'),
+              ]);
+              if (page.url().includes('/login')) {
+                await browser.close();
+                die('login did not leave /login — still at ' + page.url() + '. Every route would be analysed as the LOGIN page, not the app.');
+              }
+              console.log('Logged in as ' + process.env.AXE_USER + '; landed on ' + page.url());
+            }
+
+            // ── Analyse each route ─────────────────────────────────────────
+            const violations = [];
+            const analysed = [];
+            let engine = null;
+
+            for (const route of routes) {
+              const url = baseUrl + (route.startsWith('/') ? route : '/' + route);
+              const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+              const status = resp ? resp.status() : 0;
+
+              // Guard 2.
+              if (status === 0 || status >= 400) {
+                await browser.close();
+                die(
+                  'route ' + url + ' returned HTTP ' + status + '. axe would have analysed an ' +
+                  'error page and reported it as clean. Set the axe-routes input to routes ' +
+                  'this app actually serves.'
+                );
+              }
+
+              // Give the SPA a chance to mount. A Nextcloud page shell always
+              // has #content, including when the bundle never mounts — which is
+              // why guard 3 is a separate check and not folded into this wait.
+              await page.waitForSelector('#content, main, [role="main"]', { timeout: 60000 }).catch(() => {});
+              await page.waitForTimeout(waitMs);
+
+              const results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
+              engine = results.testEngine;
+
+              const nPass = (results.passes || []).length;
+              const nViol = (results.violations || []).length;
+              const nIncomplete = (results.incomplete || []).length;
+
+              // Guard 3.
+              if (nPass === 0 && nViol === 0) {
+                await browser.close();
+                die(
+                  'route ' + url + ' produced ZERO passes and ZERO violations. axe ran against ' +
+                  'a document with nothing in it — a blank page, or an SPA that never mounted. ' +
+                  'That is not a clean accessibility result, it is an absent one.'
+                );
+              }
+
+              console.log(
+                'axe ' + url + ' -> HTTP ' + status + ' | passes=' + nPass +
+                ' violations=' + nViol + ' incomplete=' + nIncomplete
+              );
+
+              analysed.push({ route, url, status, passes: nPass, violations: nViol, incomplete: nIncomplete });
+
+              for (const v of results.violations || []) {
+                violations.push({
+                  id: v.id,
+                  impact: v.impact,
+                  help: v.help,
+                  helpUrl: v.helpUrl,
+                  tags: v.tags,
+                  route,
+                  url,
+                  nodes: (v.nodes || []).map(trimNode),
+                });
+              }
+            }
+
+            await browser.close();
+
+            const report = {
+              // The key gate-33 reads.
+              violations,
+              // Everything below is provenance, so a reader — and the validator
+              // in the hydra-gates job — can tell a clean run from a run that
+              // never happened.
+              testEngine: engine,
+              generatedAt: new Date().toISOString(),
+              baseUrl,
+              tags: TAGS,
+              routesAnalysed: analysed,
+              selfTest: { rule: controlHit.id, impact: controlHit.impact, detected: true },
+              blocking: violations.filter((v) => ['serious', 'critical'].includes(v.impact)).length,
+            };
+
+            fs.mkdirSync(path.dirname(outPath), { recursive: true });
+            fs.writeFileSync(outPath, JSON.stringify(report, null, 2));
+
+            console.log(
+              'Wrote ' + outPath + ': ' + analysed.length + ' route(s), ' + violations.length +
+              ' violation(s), ' + report.blocking + ' of them serious/critical (gate-33 blocking).'
+            );
+          })().catch((err) => {
+            die('crashed before writing a report: ' + (err && err.stack ? err.stack : err));
+          });
+          AXE_RUNNER
+
+          # `bash -e` would abort on a failing node before `RC=$?` ever ran, so
+          # the cleanup would be skipped and the reason lost. Same `&& / ||`
+          # idiom the hydra-gates job uses for the same reason.
+          node .axe-run.cjs && RC=0 || RC=$?
+          rm -f .axe-run.cjs
+          exit "$RC"
+
+      - name: Upload the axe-core report
+        # Only when the runner succeeded. A failed runner has deliberately left
+        # no file, and `if-no-files-found: error` keeps that honest rather than
+        # publishing an empty artifact the gates job would then try to read.
+        if: ${{ inputs.enable-axe && !cancelled() && steps.axe.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: axe-report
+          path: server/apps/${{ inputs.app-name }}/tests/axe/report.json
+          retention-days: 14
+          if-no-files-found: error
 
       - name: Generate spec-to-test coverage report
         if: ${{ inputs.enable-playwright-coverage && !cancelled() }}
@@ -1242,11 +2665,18 @@ jobs:
 
       - name: Upload Playwright report
         if: always()
+        # `tests/e2e/…` is included because that is where the scaffolded config
+        # in most fleet repos actually writes. With only the app-root paths
+        # listed, both upload steps matched nothing — and `if-no-files-found:
+        # ignore` meant they said so quietly and uploaded an empty artifact. A
+        # red run left no report and no traces to read, which is precisely when
+        # you need them. Extra paths are harmless: unmatched ones are ignored.
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
           path: |
             server/apps/${{ inputs.app-name }}/playwright-report/
+            server/apps/${{ inputs.app-name }}/tests/e2e/playwright-report/
             server/apps/${{ inputs.app-name }}/playwright-coverage.json
           retention-days: 14
           if-no-files-found: ignore
@@ -1256,7 +2686,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-traces
-          path: server/apps/${{ inputs.app-name }}/test-results/
+          path: |
+            server/apps/${{ inputs.app-name }}/test-results/
+            server/apps/${{ inputs.app-name }}/tests/e2e/test-results/
           retention-days: 14
           if-no-files-found: ignore
 
@@ -1310,6 +2742,14 @@ jobs:
     runs-on: ubuntu-latest
     name: "Journeydoc Capture (screenshots)"
     needs: [security]
+    # UNMEASURED: no caller in the fleet currently sets
+    # `enable-journeydoc-capture: true`, so this job has never executed (312
+    # skipped records, 0 executions, across 15 repos). Its step list is a
+    # superset of the Playwright job's — full Nextcloud install, frontend build,
+    # a Playwright project, plus a commit and a workflow dispatch — so it is
+    # bounded above the Playwright job's 45 min rather than at it. Revisit with
+    # real numbers once a caller enables it.
+    timeout-minutes: 60
     permissions:
       contents: write
       actions: write
@@ -1408,13 +2848,13 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "${{ inputs.node-version }}"
 
       - name: Install app npm dependencies
         run: |
           cd server/apps/${{ inputs.app-name }}
           if [ -f "package.json" ]; then
-            npm ci --legacy-peer-deps
+            npm ci
           fi
 
       - name: Install Playwright
@@ -1451,9 +2891,42 @@ jobs:
           fi
 
       - name: Start PHP built-in server
+        # Same front-controller router as the Playwright job — see the long
+        # comment on that step. The docs-capture project drives the same
+        # pretty Nextcloud URLs the regression specs do, so without the router
+        # every tutorial screenshot would be shot against a 404 page.
         run: |
           cd server
-          php -S 0.0.0.0:8080 > /tmp/php-server.log 2>&1 &
+          cat > ci-router.php <<'ROUTER'
+          <?php
+          $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?: '/';
+          if ($path !== '/' && is_file(__DIR__ . $path)) {
+              return false;
+          }
+          $segments = explode('/', ltrim($path, '/'));
+          $prefix = '';
+          foreach ($segments as $i => $segment) {
+              $prefix .= '/' . $segment;
+              if (substr($segment, -4) !== '.php'
+                  || $prefix === '/index.php'
+                  || !is_file(__DIR__ . $prefix)
+              ) {
+                  continue;
+              }
+              $rest = implode('/', array_slice($segments, $i + 1));
+              $_SERVER['SCRIPT_NAME'] = $prefix;
+              $_SERVER['SCRIPT_FILENAME'] = __DIR__ . $prefix;
+              $_SERVER['PHP_SELF'] = $path;
+              $_SERVER['PATH_INFO'] = $rest === '' ? '' : '/' . $rest;
+              require __DIR__ . $prefix;
+              return true;
+          }
+          $_SERVER['SCRIPT_NAME'] = '/index.php';
+          $_SERVER['SCRIPT_FILENAME'] = __DIR__ . '/index.php';
+          $_SERVER['PHP_SELF'] = '/index.php';
+          require __DIR__ . '/index.php';
+          ROUTER
+          php -S 0.0.0.0:8080 ci-router.php > /tmp/php-server.log 2>&1 &
           PHP_PID=$!
           echo "${PHP_PID}" > /tmp/php-server.pid
           timeout 15 bash -c 'until curl -sf -o /dev/null http://localhost:8080/status.php; do sleep 0.5; done' || {
@@ -1510,14 +2983,16 @@ jobs:
           # "main") not github.ref (e.g. "refs/heads/main") — git push wants a
           # bare branch.
           REF_NAME="${{ github.ref_name }}"
-          # Non-blocking on protected branches per ConductionNL/.github#61.
-          if git push origin "HEAD:${REF_NAME}"; then
-            echo "Screenshots pushed to ${REF_NAME}."
-            echo "changed=1" >> "$GITHUB_OUTPUT"
-          else
-            echo "::warning::Could not push screenshot refresh — branch protection rejected the bot push (see ConductionNL/.github#61). Inspect the journeydoc-screenshots artifact and commit manually."
-            echo "changed=0" >> "$GITHUB_OUTPUT"
-          fi
+          # FAIL LOUDLY if the push is refused (#61). This used to swallow the
+          # rejection behind a `::warning::` and set changed=0, which made a
+          # refused push indistinguishable from "no screenshots changed" — the
+          # captures silently never landed and the job still reported success.
+          # The step runs under `set -euo pipefail`, so a non-zero `git push`
+          # fails the job. The screenshots are still uploaded as an artifact by
+          # the `if: always()` step below, so a refusal is recoverable by hand.
+          git push origin "HEAD:${REF_NAME}"
+          echo "Screenshots pushed to ${REF_NAME}."
+          echo "changed=1" >> "$GITHUB_OUTPUT"
 
       - name: Dispatch deploy workflow if screenshots changed
         if: ${{ inputs.journeydoc-deploy-workflow != '' && steps.commit.outputs.changed == '1' }}
@@ -1575,31 +3050,87 @@ jobs:
     if: ${{ inputs.enable-coverage-guard && github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     name: "Coverage Baseline Protection"
+    # Observed across 8 executions: median 0.3 min, max 1.0 min (procest).
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Check for manual baseline changes
+      # .coverage-baseline is a monotonic ratchet: coverage-guard.php only ever
+      # writes it when measured coverage EXCEEDS the stored value. This job used
+      # to ban every manual change outright, which was coherent only while the
+      # push-side job auto-committed the new value. That push has always been
+      # rejected on ruleset-protected branches (#61), so the blanket ban left the
+      # baseline unchangeable by anyone — bot or human — an unclosable gate.
+      #
+      # The anti-gaming property that matters is "the baseline never goes DOWN",
+      # so enforce exactly that: a PR may RAISE the baseline (this is how the
+      # push-side Coverage Baseline Check is closed) but never lower it. Fails
+      # closed on any value it cannot parse.
+      - name: Reject a lowered baseline
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          if git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -q '^\.coverage-baseline$'; then
-            echo "::error::Manual changes to .coverage-baseline are not allowed."
+          set -euo pipefail
+          BASE="origin/${BASE_REF}"
+
+          if ! git diff --name-only "${BASE}...HEAD" | grep -q '^\.coverage-baseline$'; then
+            echo "No .coverage-baseline change in this PR."
+            exit 0
+          fi
+
+          NEW="$(tr -d '[:space:]' < .coverage-baseline)"
+          if ! OLD="$(git show "${BASE}:.coverage-baseline" 2>/dev/null | tr -d '[:space:]')"; then
+            OLD=""
+          fi
+
+          if [ -z "${OLD}" ]; then
+            echo "No baseline on ${BASE} — this PR introduces one (${NEW}). Accepted."
+            exit 0
+          fi
+
+          for v in "${OLD}" "${NEW}"; do
+            if ! awk -v v="${v}" 'BEGIN { exit !(v ~ /^[0-9]+(\.[0-9]+)?$/) }'; then
+              echo "::error::Unparseable coverage baseline value '${v}' — refusing to guess. Expected a bare number such as 55.54."
+              exit 1
+            fi
+          done
+
+          if awk -v o="${OLD}" -v n="${NEW}" 'BEGIN { exit !(n + 0 < o + 0) }'; then
+            echo "::error::.coverage-baseline was LOWERED from ${OLD} to ${NEW}. The baseline is a ratchet — it may be raised, never lowered."
             exit 1
           fi
-          echo "No manual baseline changes detected."
 
+          echo "Baseline change accepted: ${OLD} -> ${NEW} (not a decrease)."
+
+  # READ-ONLY by design, for the same reason as features-extract below. This job
+  # used to `git commit` + `git push` the recomputed .coverage-baseline back to
+  # the branch, with the push failure swallowed by `git push || echo "::warning::"`.
+  # On any repo whose development/main carries a ruleset ("Changes must be made
+  # through a pull request") that push is REJECTED — and because the failure was
+  # swallowed, the job still reported SUCCESS. The baseline therefore never moved
+  # while the gate read green (#61). A swallowed failure is worse than no job at
+  # all: it is indistinguishable from the work having been done.
+  #
+  # The job now recomputes the baseline, HARD-FAILS when it has drifted, and hands
+  # the regenerated file back as an artifact. The PR-side `baseline-protection`
+  # job above accepts a committed baseline as long as it does not LOWER the
+  # ratchet, so this gate is closable by a human via a normal pull request —
+  # it is deliberately not an unclosable gate.
   update-baseline:
     if: ${{ inputs.enable-coverage-guard && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/development') }}
     runs-on: ubuntu-latest
-    name: "Update Coverage Baseline"
+    name: "Coverage Baseline Check"
     needs: phpunit
+    # Observed across 3 executions: max 0.3 min (openregister). Downloads an
+    # artifact and recomputes a number; 15 min is generous.
+    timeout-minutes: 15
     permissions:
-      contents: write
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          token: ${{ github.token }}
       - name: Download coverage artifact
         uses: actions/download-artifact@v4
         with:
@@ -1609,29 +3140,297 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ inputs.php-version }}
-      - name: Update baseline if improved
+      - name: Recompute baseline
         run: php scripts/coverage-guard.php coverage/clover.xml --update-baseline
-      - name: Commit updated baseline
+      - name: Fail if baseline drifted
+        id: fail-if-drifted
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet .coverage-baseline; then
-            echo "Baseline unchanged, nothing to commit."
+          if git diff --quiet -- .coverage-baseline; then
+            echo "Coverage baseline is up to date."
           else
-            git add .coverage-baseline
-            git commit -m "ci: update coverage baseline [skip ci]"
-            # Non-blocking: branch-protection rulesets reject the bot push on
-            # repos with a protected development/main. Surface a warning instead
-            # of failing the whole workflow over an auto-committed convenience
-            # file. Tracked in ConductionNL/.github#61 (add bot as a bypass actor).
-            git push || echo "::warning::Could not push the updated coverage baseline — branch protection rejected the bot push (see ConductionNL/.github#61). Commit .coverage-baseline manually."
+            echo "Measured coverage has moved beyond the committed baseline:"
+            git --no-pager diff -- .coverage-baseline
+            echo "::error::.coverage-baseline is out of date — measured coverage has improved past it. Commit the recomputed value (attached as the 'coverage-baseline' artifact of this run) in a pull request. The Coverage Baseline Protection job accepts any value that does not LOWER the baseline."
+            exit 1
           fi
+      - name: Upload recomputed baseline
+        # Gate on the drift step SPECIFICALLY, not `failure()` alone: if the
+        # Recompute step itself failed (coverage DROPPED below the baseline), the
+        # file on disk is the unchanged committed copy and publishing it under
+        # this name would invite committing a no-op. Only when fail-if-drifted
+        # failed is the on-disk file guaranteed to be the fresh value.
+        # (`failure() &&` is required — without a status-check function GitHub
+        # implies `success()`, and the step would never run after a failure.)
+        if: failure() && steps.fail-if-drifted.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-baseline
+          path: .coverage-baseline
+          retention-days: 7
+
+  # ── Hydra mechanical gates ──────────────────────
+  #
+  # The Hydra mechanical quality gates, run from conduction/hydra-gates (this
+  # repository, hydra-gates/ — https://github.com/ConductionNL/.github/tree/main/hydra-gates).
+  # OPT-IN via enable-hydra-gates; default false. See the input description.
+  #
+  # Deliberately no count. The package declares its own total and prints it
+  # (COVERAGE: N of M declared gates reported a result); that runtime number is
+  # the only trustworthy one, because the total moves with the caller's
+  # hydra-gates-ref pin and the executed count moves with the repo's diff and
+  # toolchain. A hard-coded digit in prose has nothing to reconcile against, so
+  # it drifts silently in both directions and outlives the thing it describes.
+  #
+  # Read the COVERAGE line, not the banner. Gates can skip silently and the job
+  # still reports a plain green tick; hydra-gates-require-full-coverage turns
+  # incomplete coverage into an error for repos that want that.
+  #
+  # Two properties this job exists to preserve, both of which have been observed
+  # failing silently:
+  #
+  #   1. THE BASE REF IS EXPLICIT AND FAILS CLOSED. The gates are diff-scoped,
+  #      so a base that resolves to nothing makes every gate pass having read no
+  #      files — a green indistinguishable from a real one. On a pull_request we
+  #      name the PR's actual target branch. We never use @{upstream} (on a
+  #      pushed feature branch that is the branch ITSELF, which is exactly the
+  #      empty-diff case, and it happens precisely when CI runs) and we never
+  #      fall back to HEAD~1 (on a squash-merged mainline that is the previous
+  #      release). An unresolvable base exits 99 and prints no green.
+  #
+  #   2. THE EXIT CODE IS THE FAILURE COUNT. We capture it before deciding the
+  #      job verdict, and report 99 ("could not run at all") distinctly from
+  #      "N gates failed". A configuration error must never read as a clean tree.
+  #
+  # The package is checked out as a SIBLING of the app checkout, not inside it,
+  # so nothing in the gate package can ever be mistaken for app code under scan.
+  hydra-gates:
+    # `!cancelled()` is load-bearing, not decoration. `needs:` below implies
+    # `success()` on the Playwright job, which would make this whole job vanish
+    # for every repo that has the gates on and Playwright off — the gates would
+    # stop running on a majority of the fleet, silently, as a side effect of
+    # wiring up ONE gate's input. `!cancelled()` suppresses that implicit
+    # `success()`, so a skipped or failed Playwright job still lets the gates
+    # run and reach their own verdict. The axe report is then simply absent and
+    # gate-33 reports SKIPPED, exactly as it does today.
+    if: ${{ inputs.enable-hydra-gates && !cancelled() }}
+    runs-on: ubuntu-latest
+    name: "Hydra Gates"
+    # ── Why this job now depends on Playwright ──────────────────────────────
+    #
+    # gate-33 (axe-core) consumes `tests/axe/report.json`, which can only be
+    # produced by a browser against a booted instance. This job has neither: it
+    # is a checkout, a shell script and python. The Playwright job is the only
+    # place in this file with both, so the report is produced there and handed
+    # over as an artifact — and an artifact cannot be downloaded before the job
+    # that uploads it has finished. Hence the edge.
+    #
+    # The alternative — booting a second Nextcloud here — duplicates ~150 lines
+    # of install/build/serve for one gate, and the second instance would be a
+    # second thing that can differ from the one the specs ran against.
+    #
+    # Cost, stated honestly: this job used to start at t=0 and now starts after
+    # Playwright resolves. That does NOT move the workflow's own verdict —
+    # `report` already needs both jobs, so the wall-clock to a complete result
+    # is unchanged — but the "Hydra Gates" check now appears later in the PR's
+    # check list than it used to.
+    needs: [playwright]
+    # The gates are shell + python over a PR-sized diff. Bounded generously:
+    # the slowest observed component is the manifest gate's node startup.
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout app
+        uses: actions/checkout@v4
+        with:
+          path: app
+          # fetch-depth: 0 is REQUIRED, not an optimisation. The gates are
+          # diff-scoped; a shallow clone has no base branch to diff against, so
+          # the base would not resolve and the run would (correctly) exit 99.
+          fetch-depth: 0
+
+      - name: Checkout conduction/hydra-gates
+        uses: actions/checkout@v4
+        with:
+          repository: ConductionNL/.github
+          ref: ${{ inputs.hydra-gates-ref }}
+          path: gates
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "${{ inputs.node-version }}"
+
+      - name: Install ajv for the manifest gates
+        # Installed INTO the package dir so `require('ajv')` from
+        # scripts/lib/check_manifest.js resolves by walking up to
+        # gates/hydra-gates/node_modules. A global install would need NODE_PATH
+        # and would silently not be found.
+        #
+        # Since 2026-08-03 a miss here is loud rather than survivable: gate-22
+        # used to fall back to a structural lint that checks only the AppHost
+        # blocks and report the result as a PASS — a manifest certified without
+        # ever being schema-validated. It now FAILS with a named reason (the
+        # validator exits 3 DEGRADED), exactly as gate-53 already refused to run
+        # fail-open. If this step is ever removed, both gates say so.
+        run: npm --prefix gates/hydra-gates install --no-save --no-audit --no-fund ajv
+
+      # ── gate-33's subject, handed over from the Playwright job ─────────────
+      #
+      # continue-on-error because the artifact legitimately does not exist when
+      # the Playwright job was skipped or its axe step refused to write a
+      # report. That case is not an error here: gate-33 then reports SKIPPED
+      # with its reason, which is the honest outcome and the one this repo has
+      # had all along.
+      - name: Download the axe-core report
+        id: axe-download
+        if: ${{ inputs.enable-axe }}
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: axe-report
+          path: app/tests/axe
+
+      # A downloaded file is not the same as a report. An artifact that
+      # extracted but is empty, truncated, or came from a run that analysed
+      # nothing would be read by gate-33 as a CLEAN accessibility result —
+      # verified: gate-33 reports PASS on a file containing exactly `{}`. That
+      # is the one outcome worse than today's loud skip, because it converts
+      # "never measured" into "measured clean".
+      #
+      # So the file is checked against the provenance the runner writes, and
+      # DELETED if it does not hold up. Deleting it restores the loud skip; it
+      # never invents a pass and it never invents a failure.
+      - name: Validate the axe report before gate-33 reads it
+        if: ${{ inputs.enable-axe }}
+        run: |
+          set -uo pipefail
+          REPORT="${GITHUB_WORKSPACE}/app/tests/axe/report.json"
+          if [ ! -f "${REPORT}" ]; then
+            echo "::notice::No axe report was downloaded. gate-33 will report SKIPPED with its reason — accessibility runtime checking is UNVERIFIED for this run."
+            exit 0
+          fi
+          echo "Downloaded $(wc -c < "${REPORT}") byte(s) into ${REPORT}."
+          python3 - "${REPORT}" <<'PYVALIDATE' && VALID=0 || VALID=$?
+          import json, sys
+          path = sys.argv[1]
+          def reject(why):
+              print("::warning::axe report rejected: " + why + " Deleting it so gate-33 skips loudly instead of reading it as a clean accessibility run.")
+              sys.exit(1)
+          try:
+              with open(path) as f:
+                  data = json.load(f)
+          except Exception as e:
+              reject("it does not parse as JSON (%s)." % e)
+          if not isinstance(data, dict):
+              reject("the top level is %s, not an object." % type(data).__name__)
+          if not isinstance(data.get('violations'), list):
+              reject("there is no `violations` array — that is the only key gate-33 reads.")
+          engine = data.get('testEngine') or {}
+          if engine.get('name') != 'axe-core':
+              reject("testEngine is %r, so this file did not come from axe-core." % (engine,))
+          if data.get('selfTest', {}).get('detected') is not True:
+              reject("the runner's positive control is not recorded as detected, so axe was never shown capable of reporting a violation on this run.")
+          routes = data.get('routesAnalysed')
+          if not isinstance(routes, list) or len(routes) == 0:
+              reject("it records ZERO routes analysed. An empty violations array from zero routes is an absent measurement, not a clean one.")
+          for r in routes:
+              if not (200 <= int(r.get('status', 0)) < 400):
+                  reject("route %s answered HTTP %s." % (r.get('url'), r.get('status')))
+              if int(r.get('passes', 0)) + int(r.get('violations', 0)) == 0:
+                  reject("route %s produced no axe results at all." % r.get('url'))
+          blocking = [v for v in data['violations'] if v.get('impact') in ('serious', 'critical')]
+          print("axe report OK: %d route(s), %d violation(s), %d serious/critical (axe-core %s, generated %s)."
+                % (len(routes), len(data['violations']), len(blocking),
+                   engine.get('version'), data.get('generatedAt')))
+          for r in routes:
+              print("  route %s -> HTTP %s | passes=%s violations=%s" % (r.get('url'), r.get('status'), r.get('passes'), r.get('violations')))
+          sys.exit(0)
+          PYVALIDATE
+          if [ "${VALID}" -ne 0 ]; then
+            rm -f "${REPORT}"
+            echo "Removed ${REPORT}. gate-33 will now report SKIPPED rather than PASS."
+          fi
+
+      - name: Resolve the diff base
+        id: base
+        run: |
+          set -u
+          if [ "${{ github.event_name }}" = "pull_request" ] || [ "${{ github.event_name }}" = "pull_request_target" ]; then
+            # The PR's real target branch. This is the only base that answers
+            # the question the gates are being asked: "what does this PR add?"
+            BASE="origin/${{ github.base_ref }}"
+          else
+            # Not a PR. We deliberately set NOTHING and let the package's own
+            # precedence chain resolve origin/HEAD -> origin/development ->
+            # origin/main -> origin/master, printing which one won and exiting
+            # 99 if none do. Inventing a base here would be the HEAD~1 mistake
+            # wearing a different name.
+            BASE=""
+          fi
+          echo "base=${BASE}" >> "$GITHUB_OUTPUT"
+          echo "Diff base for this run: ${BASE:-<auto-detect, see the run output>}"
+
+      - name: Run the Hydra gates
+        id: gates
+        env:
+          HYDRA_GATE_BASE_REF: ${{ steps.base.outputs.base }}
+        run: |
+          set -u
+          ARGS="--app-dir ${GITHUB_WORKSPACE}/app"
+          if [ "${{ inputs.hydra-gates-require-full-coverage }}" = "true" ]; then
+            ARGS="${ARGS} --require-full-coverage"
+          fi
+          # The default shell for a `run:` block is `bash -e {0}`. A bare
+          # invocation followed by `RC=$?` would therefore never reach the
+          # assignment — the step would abort on the first failing gate and the
+          # exit code, which carries the FAILURE COUNT, would be lost. Putting
+          # the call in an `&& / ||` list suspends errexit for it, so we get the
+          # real code. This is the 0/1 collapse the contract forbids, and it is
+          # one character away at all times.
+          bash "${GITHUB_WORKSPACE}/gates/hydra-gates/bin/hydra-gates" ${ARGS} && RC=0 || RC=$?
+          echo "rc=${RC}" >> "$GITHUB_OUTPUT"
+
+          if [ "${RC}" -eq 0 ]; then
+            echo "All gates that ran passed. Read the COVERAGE block above before treating this as complete."
+            exit 0
+          fi
+          if [ "${RC}" -eq 99 ]; then
+            echo "::error::hydra-gates COULD NOT RUN (exit 99). This is a configuration error, NOT a clean tree — nothing was gated. Most often: the diff base did not resolve, or the app checkout is shallow."
+            exit 1
+          fi
+          if [ "${RC}" -eq 98 ]; then
+            echo "::error::hydra-gates passed but coverage was incomplete, and hydra-gates-require-full-coverage is set. See the GATES THAT DID NOT RUN line above."
+            exit 1
+          fi
+          echo "::error::${RC} Hydra gate(s) failed. The exit code is the failure COUNT — see the named [gate-N] FAIL lines above."
+          exit 1
+
+      - name: Record result
+        if: always()
+        run: |
+          mkdir -p quality-results
+          echo "${{ job.status }}" > quality-results/hydra-gates.txt
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-hydra-gates
+          path: quality-results/
 
   report:
     runs-on: ubuntu-latest
     name: "Quality Report"
-    needs: [php-quality, vue-quality, security, license, phpunit, newman, playwright, journeydoc-capture, baseline-protection]
+    needs: [php-quality, vue-quality, frontend-build, frontend-checks, security, license, phpunit, newman, playwright, journeydoc-capture, baseline-protection, sbom, features-check, features-extract, hydra-gates]
     if: always()
+    # Observed across 266 executions: median 0.6 min — but 2% of runs sit at
+    # ~30 min because the `Install PDF tools` apt-get step stalls on the Ubuntu
+    # mirror. That stall is currently intermittent-but-live fleet-wide
+    # (nldesign, opencatalogi, pipelinq, planix, softwarecatalog) and it still
+    # SUCCEEDS: pipelinq run 30799846661 spent 09:34:30 -> 10:04:52 in that one
+    # step and went green. Anything under ~45 min would newly fail runs that
+    # pass today, so this is bounded at 60 min. The apt stall is a separate
+    # defect worth fixing on its own; this bound only stops the 6-hour case.
+    timeout-minutes: 60
 
     steps:
       - name: Download all result artifacts
@@ -1734,6 +3533,17 @@ jobs:
               echo "| $tool | | $(icon "$result") | | | |"
             done
 
+            # Frontend build gate (auto-detected, blocking)
+            build_result=$(read_result "results/result-frontend-build/frontend-build.txt")
+            echo "| build | | $(icon "$build_result") | | | |"
+
+            # Custom frontend checks (if any)
+            for f in results/result-frontend-check-*/*.txt; do
+              [ -f "$f" ] || continue
+              tool=$(basename "$f" .txt)
+              echo "| $tool | | $(icon "$(read_result "$f")") | | | |"
+            done
+
             # Composer: security + license in one row
             sec_comp=$(read_result "results/result-security-composer/composer.txt")
             echo "| composer | | | $(icon "$sec_comp") | $(license_info "composer") | |"
@@ -1773,8 +3583,15 @@ jobs:
 
           # Coverage (if available)
           if [ -f "coverage/clover.xml" ]; then
-            COVERED=$(grep -oP 'coveredstatements="\K[0-9]+' coverage/clover.xml | head -1 || echo "0")
-            TOTAL_STMTS=$(grep -oP 'statements="\K[0-9]+' coverage/clover.xml | head -1 || echo "0")
+            # `grep -m1` rather than `grep | head -1`: this step also runs under
+            # `set -o pipefail`, so head closing the pipe on a clover.xml with
+            # many matches kills grep with SIGPIPE. The `|| echo "0"` then does
+            # not rescue the value — it APPENDS "0" to whatever head already
+            # printed, and the arithmetic below gets "1234\n0". Reporting a wrong
+            # coverage number is worse than failing, because nobody re-checks a
+            # number that rendered. -m1 stops grep itself, so there is no pipe.
+            COVERED=$(grep -oPm1 'coveredstatements="\K[0-9]+' coverage/clover.xml || echo "0")
+            TOTAL_STMTS=$(grep -oPm1 'statements="\K[0-9]+' coverage/clover.xml || echo "0")
             if [ "$TOTAL_STMTS" -gt 0 ]; then
               COVERAGE=$(echo "scale=1; $COVERED * 100 / $TOTAL_STMTS" | bc)
               echo "**Coverage:** ${COVERAGE}% ($COVERED/$TOTAL_STMTS statements)" >> "$REPORT"
@@ -1826,6 +3643,15 @@ jobs:
 
       - name: Comment PR with results
         if: github.event_name == 'pull_request'
+        # Posting the summary comment needs `pull-requests: write`. A reusable
+        # workflow inherits the CALLER's permissions, and most callers declare
+        # only `contents: read` + `packages: read` — so this step 403s with
+        # "Resource not accessible by integration" and failed the whole Quality
+        # Report job. A cosmetic comment must never fail a quality gate: the
+        # gate's verdict comes from the jobs it aggregates, not from whether it
+        # could comment. Callers that want the comment should add
+        # `pull-requests: write` to their own `permissions:` block.
+        continue-on-error: true
         uses: actions/github-script@v7
         with:
           script: |
@@ -1840,6 +3666,101 @@ jobs:
               body
             });
 
+      # Makes "quality / Quality Report" a usable required check: without
+      # this the job always succeeded (if: always() + report-only steps),
+      # so requiring it in branch protection would gate nothing.
+      - name: Gate — fail when any upstream job failed
+        if: ${{ always() && contains(needs.*.result, 'failure') }}
+        run: |
+          echo "::error::One or more quality jobs failed — see the report above."
+          exit 1
+
+      # A CANCELLED job renders NO verdict, so treating it as merely
+      # "not a failure" lets this gate go green over a leg that never ran.
+      # Observed live on pipelinq run 30903070948: `E2E Tests (Playwright)`
+      # and `Hydra Gates` both CANCELLED, `Quality Report` still SUCCESS.
+      #
+      # But cancellation has two shapes and only one of them is a defect:
+      #
+      #   (a) a job cancelled while its run CARRIES ON — a real gap: that leg
+      #       produced no verdict while its siblings produced theirs. Reached
+      #       via a job-level `concurrency` group, a lost runner, or a
+      #       fail-fast matrix sibling. MUST fail the gate.
+      #
+      #   (b) the WHOLE run cancelled, almost always by this workflow's own
+      #       `concurrency: cancel-in-progress` when a newer commit supersedes
+      #       it. Entirely legitimate and routine — four merge commits in one
+      #       programme were superseded exactly this way. Must stay quiet, or
+      #       every rapid push turns into a wall of red.
+      #
+      # THE EXPRESSION CONTEXT CANNOT SEPARATE THEM. Measured, not assumed, on
+      # petstore's `probe/cancel-gate-semantics` branch:
+      #
+      #   run 30906581133 — shape (a), job-level concurrency cancelled ONE job
+      #     while the run carried on:  cancelled() = FALSE, run.conclusion = cancelled
+      #   run 30906801110 — shape (b), workflow-level `cancel-in-progress`
+      #     superseded the WHOLE run:  cancelled() = FALSE, run.conclusion = cancelled
+      #
+      # Both identical. So `cancelled()` is NOT the discriminator it looks like:
+      # it does not report true for a concurrency supersession, and a run's
+      # conclusion is `cancelled` merely because SOME job in it was cancelled.
+      # Gating on `!cancelled()` alone would have turned every superseded run
+      # red — the exact wall of red this must avoid.
+      #
+      # The property that actually differs is: **is this run still the
+      # authoritative one for its ref?** A supersession happens precisely
+      # because a newer commit arrived, so a superseded run's head SHA is no
+      # longer the branch tip. A run whose SHA is still the tip has not been
+      # superseded, so a cancelled leg in it is a real gap.
+      #
+      # That needs only `contents: read`, which every caller already grants.
+      #
+      # RESIDUE, stated rather than papered over:
+      #   * A run cancelled by a HUMAN, with no new commit pushed, still looks
+      #     like shape (a) and will now fail this gate. That is arguably right
+      #     (a cancelled leg rendered no verdict) but it is a behaviour change.
+      #   * A shape-(a) cancellation that coincides with a new push is read as
+      #     a supersession and stays quiet. Errs toward silence; the newer run
+      #     is the one whose verdict gates the PR.
+      #   * The tip lookup failing is treated as "not superseded" (fail loudly)
+      #     rather than silently waving a cancelled leg through.
+      - name: Gate — fail when an upstream job was cancelled mid-run
+        if: ${{ !cancelled() && contains(needs.*.result, 'cancelled') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          RUN_REF: ${{ github.head_ref || github.ref_name }}
+        run: |
+          set -uo pipefail
+
+          TIP="$(gh api "repos/${{ github.repository }}/commits/${RUN_REF}" --jq .sha 2>/dev/null || true)"
+
+          if [ -n "$TIP" ] && [ "$TIP" != "$RUN_SHA" ]; then
+            echo "::notice::Job(s) cancelled, but this run has been SUPERSEDED (${RUN_REF} is now at ${TIP:0:7}, this run is ${RUN_SHA:0:7}). Concurrency cancellation of an outdated run is not a defect — staying quiet."
+            {
+              echo ""
+              echo "### ⏭️ Cancelled jobs ignored — run superseded"
+              echo ""
+              echo "\`${RUN_REF}\` has moved to \`${TIP:0:7}\`; this run is \`${RUN_SHA:0:7}\`."
+              echo "The newer run is the one whose verdict counts."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "::error::One or more quality jobs were CANCELLED while this run was still the tip of ${RUN_REF}. A cancelled job renders no verdict, so this gate cannot pass."
+          {
+            echo ""
+            echo "## ❌ Gate failed — cancelled job(s)"
+            echo ""
+            echo "These jobs were cancelled while this run was still the authoritative"
+            echo "run for \`${RUN_REF}\` (\`${RUN_SHA:0:7}\`), so they produced no verdict:"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo '${{ toJSON(needs) }}' \
+            | jq -r 'to_entries[] | select(.value.result == "cancelled") | "- `\(.key)`"' \
+            >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+
   # ╔══════════════════════════════════════════════╗
   # ║  STAGE 4 — SBOM Generation & Validation      ║
   # ║                                               ║
@@ -1850,10 +3771,14 @@ jobs:
   # ╚══════════════════════════════════════════════╝
 
   sbom:
-    if: ${{ inputs.enable-sbom && !cancelled() && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/beta' || github.ref == 'refs/heads/development') }}
+    if: ${{ inputs.enable-php && inputs.enable-sbom && !cancelled() && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/beta' || github.ref == 'refs/heads/development') }}
     runs-on: ubuntu-latest
     name: "SBOM"
     needs: [security]
+    # Observed across 54 executions: median 1.1 min, max 1.9 min
+    # (nextcloud-app-template). Does composer install + npm install + a Grype
+    # download + a CVE scan, all network-bound, so 30 min rather than 10.
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -1872,7 +3797,7 @@ jobs:
         if: ${{ inputs.enable-frontend }}
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "${{ inputs.node-version }}"
 
       - name: Cache Composer dependencies
         uses: actions/cache@v4
@@ -1889,7 +3814,7 @@ jobs:
 
       - name: Install npm dependencies
         if: ${{ inputs.enable-frontend }}
-        run: npm ci --legacy-peer-deps
+        run: npm ci
 
       - name: Generate npm SBOM
         if: ${{ inputs.enable-frontend }}
@@ -1898,7 +3823,12 @@ jobs:
         # peer/version mismatches in transitive deps, a hard dependency declared
         # by a lib but deduped away, etc. — which has nothing to do with the SBOM.
         # The lockfile is the deterministic source of truth for what gets installed.
-        run: npx @cyclonedx/cyclonedx-npm --package-lock-only --output-file bom-npm.cdx.json --spec-version 1.5 --omit dev
+        # --ignore-npm-errors: cyclonedx-npm still shells out to `npm ls` internally
+        # even with --package-lock-only, and aborts on those same benign
+        # ELSPROBLEMS (e.g. a transitive @vueuse/core pulled by @nextcloud/dialogs
+        # that mismatches a peer range). The tree quirk does not affect the SBOM,
+        # so tolerate it rather than red the whole quality run.
+        run: npx @cyclonedx/cyclonedx-npm --package-lock-only --ignore-npm-errors --output-file bom-npm.cdx.json --spec-version 1.5 --omit dev
 
       - name: Merge PHP + npm SBOMs
         if: ${{ inputs.enable-frontend }}
@@ -1909,24 +3839,82 @@ jobs:
         if: ${{ !inputs.enable-frontend }}
         run: mv bom-php.cdx.json sbom.cdx.json
 
+      # Fold each component's npm scope back into its name.
+      #
+      # CycloneDX splits a scoped package into two fields:
+      #
+      #     name:  gen-mapping        group: @jridgewell
+      #     purl:  pkg:npm/%40jridgewell/gen-mapping@0.3.13
+      #
+      # Grype matches on `name` alone and ignores `group`, so the legitimate
+      # @jridgewell/gen-mapping collides with "Malware in gen-mapping" — an
+      # advisory about the UNSCOPED typosquat of the same base name. The npm
+      # typosquatting campaign hit enough popular scoped packages that this is a
+      # recurring class, not three one-offs: openbuild's SBOM went red on
+      # @rollup/rollup-linux-riscv64-gnu after the ignore list below already
+      # covered the first two.
+      #
+      # Writing "@scope/name" into `name` is what npm itself calls the package,
+      # matches the purl that is already correct, and makes Grype match the right
+      # advisory. It SUPPRESSES NOTHING: a genuinely unscoped malicious package
+      # has no `group` to fold, keeps its bare name, and is still flagged.
+      #
+      # Recursive because CycloneDX permits nested `components`; a top-level-only
+      # pass leaves nested entries unrenamed and still failing.
+      - name: Normalise scoped npm names in the SBOM
+        run: |
+          python3 - <<'PY'
+          import json
+
+          with open('sbom.cdx.json') as fh:
+              doc = json.load(fh)
+
+          renamed = 0
+
+          def fold(node):
+              global renamed
+              if isinstance(node, dict):
+                  group = node.get('group')
+                  name = node.get('name')
+                  if group and isinstance(name, str) and not name.startswith('@'):
+                      node['name'] = group + '/' + name
+                      renamed += 1
+                  for value in node.values():
+                      fold(value)
+              elif isinstance(node, list):
+                  for value in node:
+                      fold(value)
+
+          fold(doc)
+
+          with open('sbom.cdx.json', 'w') as fh:
+              json.dump(doc, fh)
+
+          print(f'Normalised {renamed} scoped component name(s) for Grype matching.')
+          PY
+
       # ── Validation gate ──
 
       - name: Install Grype
         uses: anchore/scan-action/download-grype@v5
         id: grype-install
 
-      - name: Create Grype ignore list for known false positives
-        run: |
-          if [ ! -f .grype.yaml ]; then
-            cat > .grype.yaml << 'GRYPE'
-          ignore:
-            # False positives: Grype matches unscoped CycloneDX component names
-            # against malware advisories for typosquatting packages. Actual deps
-            # are scoped (@jridgewell/gen-mapping, @babel/helper-validator-identifier).
-            - vulnerability: GHSA-8rmg-jf7p-4p22
-            - vulnerability: GHSA-pvjq-589m-3mc8
-          GRYPE
-          fi
+      # The ignore list that used to live here is deliberately gone.
+      #
+      # It suppressed GHSA-8rmg-jf7p-4p22 and GHSA-pvjq-589m-3mc8 outright to work
+      # around the scope-matching problem the normalisation step above now fixes
+      # properly. Those entries carried no package qualifier, so they suppressed
+      # the advisories for ANY component — including a genuinely malicious
+      # unscoped `gen-mapping`, which is exactly the package the advisory is about.
+      #
+      # Measured, by injecting a real unscoped `gen-mapping@0.3.13` (no group) into
+      # the SBOM:
+      #
+      #   with the old ignore list   -> grype exit 0, 0 criticals   (malware hidden)
+      #   with normalisation, no list -> grype exit 1, 1 critical    (malware caught)
+      #
+      # A workaround that hides the thing it is named after is worse than the
+      # false positive it was written for.
 
       - name: CVE scan SBOM
         run: ${{ steps.grype-install.outputs.cmd }} sbom:sbom.cdx.json --fail-on critical
@@ -1937,7 +3925,22 @@ jobs:
 
       - name: npm audit
         if: ${{ inputs.enable-frontend }}
-        run: npm audit --audit-level=critical
+        # --omit=dev: gate only on production-dependency criticals. Dev-only
+        # build tooling (node-gyp/cacache → tar, cyclonedx, babel, …) is never
+        # shipped in the app bundle, and its frequent advisories would otherwise
+        # red every run. Matches the dedicated `Security (npm)` job, which
+        # already runs `--audit-level=critical --omit=dev`.
+        # Also tolerate an unavailable npm advisory endpoint (npm is retiring
+        # audits/quick; it intermittently 400s) — an infra outage, not a finding.
+        # Real advisories (a vuln table, not an endpoint error) still fail.
+        run: |
+          out="$(npm audit --audit-level=critical --omit=dev 2>&1)" && rc=0 || rc=$?
+          echo "$out"
+          if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -qiE "audit endpoint returned an error|Invalid package tree|ECONNRESET|ETIMEDOUT|ENOTFOUND|being retired|Service Unavailable"; then
+            echo "::warning::npm audit skipped — npm advisory endpoint unavailable (external); not a vulnerability."
+          elif [ "$rc" -ne 0 ]; then
+            exit "$rc"
+          fi
 
       # ── Publish validated SBOM ──
       # The SBOM is intentionally NOT committed back to the repo.
@@ -1960,7 +3963,7 @@ jobs:
           files: sbom.cdx.json
 
   # ╔══════════════════════════════════════════════╗
-  # ║  STAGE 5 — Features extract & commit          ║
+  # ║  STAGE 5 — Features verification (read-only)  ║
   # ║                                               ║
   # ║  Scans openspec/specs/*/spec.md for           ║
   # ║  capabilities whose YAML frontmatter declares  ║
@@ -1969,10 +3972,12 @@ jobs:
   # ║  Features & Roadmap surface consumes via       ║
   # ║  initial-state injection.                      ║
   # ║                                               ║
-  # ║  Branch policy mirrors update-baseline:        ║
-  # ║  feature branches → auto-commit + push;        ║
-  # ║  protected branches → warn only (see           ║
-  # ║  ConductionNL/.github#61).                     ║
+  # ║  CI never commits: generation happens at       ║
+  # ║  COMMIT TIME via each repo's committed          ║
+  # ║  .githooks/pre-commit (CONVENTIONS.md). Both    ║
+  # ║  jobs below only verify and HARD-FAIL when     ║
+  # ║  stale — via the Quality Report gate that      ║
+  # ║  blocks the merge.                             ║
   # ╚══════════════════════════════════════════════╝
 
   # On pull_request events, run the extractor in `--check` mode only — fail
@@ -1983,6 +3988,9 @@ jobs:
     if: ${{ inputs.enable-features-extract && !cancelled() && github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     name: "Features Check"
+    # Observed across 174 executions: median 0.2 min, max 3.1 min
+    # (zaakafhandelapp).
+    timeout-minutes: 20
     steps:
       - name: Checkout PR head
         uses: actions/checkout@v4
@@ -2007,18 +4015,27 @@ jobs:
       - name: Verify docs/features.json is up to date
         run: python .conduction-shared/scripts/extract-features.py --app-root . --check
 
+  # READ-ONLY by design. This job used to auto-commit + push the regenerated
+  # docs/features.json back to the branch — a quality pipeline mutating the
+  # branch it is judging. That moved the PR head from under the checks
+  # (with [skip ci] it stripped ALL checks from the PR), dismissed reviewer
+  # approvals via the org ruleset's dismiss-stale-on-push, and on protected
+  # branches the bot push bounced anyway (#61). Generation now happens at
+  # COMMIT TIME in each repo via the committed .githooks/pre-commit hook
+  # (see CONVENTIONS.md § features.json is generated at commit time); CI
+  # only verifies and hands back the regenerated file as an artifact.
   features-extract:
     if: ${{ inputs.enable-features-extract && !cancelled() && github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     name: "Features Extract"
+    # Observed across 76 executions: median 0.2 min, max 2.5 min
+    # (nextcloud-app-template).
+    timeout-minutes: 20
     permissions:
-      contents: write
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref || github.ref_name }}
-          token: ${{ github.token }}
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -2038,16 +4055,27 @@ jobs:
       - name: Regenerate docs/features.json
         run: python .conduction-shared/scripts/extract-features.py --app-root .
 
-      - name: Commit if changed
+      - name: Fail if stale
+        id: fail-if-stale
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
           if git diff --quiet docs/features.json 2>/dev/null && ! git status --porcelain docs/features.json | grep -q '^??'; then
-            echo "docs/features.json unchanged, nothing to commit."
+            echo "docs/features.json is up to date."
           else
-            git add docs/features.json
-            git commit -m "ci: regenerate docs/features.json from openspec/specs/ [skip ci]"
-            # Non-blocking on protected branches: branch-protection rulesets reject
-            # the bot push on main/beta/development. Tracked in ConductionNL/.github#61.
-            git push || echo "::warning::Could not push the regenerated docs/features.json — branch protection rejected the bot push (see ConductionNL/.github#61). Run scripts/extract-features.py locally and commit manually."
+            echo "::error::docs/features.json is out of date with openspec/specs/. Regenerate it locally (the committed .githooks/pre-commit hook does this automatically — see CONVENTIONS.md) and commit it. The regenerated file is attached as the 'features-json' artifact of this run."
+            exit 1
           fi
+
+      - name: Upload regenerated file
+        # Gate on the staleness step SPECIFICALLY, not `failure()` alone: if the
+        # Regenerate step itself crashed, the file on disk is the stale committed
+        # copy (or absent), and uploading it under the 'features-json' label would
+        # invite committing exactly what CI just rejected. Only when fail-if-stale
+        # failed is the on-disk file guaranteed to be the fresh regeneration.
+        # (`failure() &&` is required — without a status-check function GitHub
+        # implies `success()`, and the step would never run after a failure.)
+        if: failure() && steps.fail-if-stale.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: features-json
+          path: docs/features.json
+          retention-days: 7
