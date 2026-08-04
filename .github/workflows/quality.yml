@@ -3693,28 +3693,67 @@ jobs:
       #       programme were superseded exactly this way. Must stay quiet, or
       #       every rapid push turns into a wall of red.
       #
-      # `cancelled()` is the discriminator: it reflects the RUN's cancellation
-      # state, not an individual job's. In shape (b) it is true, so this step
-      # is skipped and a superseded run stays silent. In shape (a) the run is
-      # alive, so it is false and the gate fires. (This job's own
-      # `if: always()` is what makes it reach here at all in shape (b);
-      # `always()` runs a job even when the run is cancelled.)
+      # THE EXPRESSION CONTEXT CANNOT SEPARATE THEM. Measured, not assumed, on
+      # petstore's `probe/cancel-gate-semantics` branch:
       #
-      # RESIDUE, stated rather than papered over: a run cancelled by a HUMAN
-      # pressing "Cancel workflow" is indistinguishable from (b) in the
-      # expression context — there is no cancellation-reason field — so it
-      # stays quiet too and this job still reports success. Guarding against
-      # that needs a different mechanism than an `if:` expression.
+      #   run 30906581133 — shape (a), job-level concurrency cancelled ONE job
+      #     while the run carried on:  cancelled() = FALSE, run.conclusion = cancelled
+      #   run 30906801110 — shape (b), workflow-level `cancel-in-progress`
+      #     superseded the WHOLE run:  cancelled() = FALSE, run.conclusion = cancelled
+      #
+      # Both identical. So `cancelled()` is NOT the discriminator it looks like:
+      # it does not report true for a concurrency supersession, and a run's
+      # conclusion is `cancelled` merely because SOME job in it was cancelled.
+      # Gating on `!cancelled()` alone would have turned every superseded run
+      # red — the exact wall of red this must avoid.
+      #
+      # The property that actually differs is: **is this run still the
+      # authoritative one for its ref?** A supersession happens precisely
+      # because a newer commit arrived, so a superseded run's head SHA is no
+      # longer the branch tip. A run whose SHA is still the tip has not been
+      # superseded, so a cancelled leg in it is a real gap.
+      #
+      # That needs only `contents: read`, which every caller already grants.
+      #
+      # RESIDUE, stated rather than papered over:
+      #   * A run cancelled by a HUMAN, with no new commit pushed, still looks
+      #     like shape (a) and will now fail this gate. That is arguably right
+      #     (a cancelled leg rendered no verdict) but it is a behaviour change.
+      #   * A shape-(a) cancellation that coincides with a new push is read as
+      #     a supersession and stays quiet. Errs toward silence; the newer run
+      #     is the one whose verdict gates the PR.
+      #   * The tip lookup failing is treated as "not superseded" (fail loudly)
+      #     rather than silently waving a cancelled leg through.
       - name: Gate — fail when an upstream job was cancelled mid-run
         if: ${{ !cancelled() && contains(needs.*.result, 'cancelled') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          RUN_REF: ${{ github.head_ref || github.ref_name }}
         run: |
-          echo "::error::One or more quality jobs were CANCELLED while the run continued. A cancelled job renders no verdict, so this gate cannot pass."
+          set -uo pipefail
+
+          TIP="$(gh api "repos/${{ github.repository }}/commits/${RUN_REF}" --jq .sha 2>/dev/null || true)"
+
+          if [ -n "$TIP" ] && [ "$TIP" != "$RUN_SHA" ]; then
+            echo "::notice::Job(s) cancelled, but this run has been SUPERSEDED (${RUN_REF} is now at ${TIP:0:7}, this run is ${RUN_SHA:0:7}). Concurrency cancellation of an outdated run is not a defect — staying quiet."
+            {
+              echo ""
+              echo "### ⏭️ Cancelled jobs ignored — run superseded"
+              echo ""
+              echo "\`${RUN_REF}\` has moved to \`${TIP:0:7}\`; this run is \`${RUN_SHA:0:7}\`."
+              echo "The newer run is the one whose verdict counts."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "::error::One or more quality jobs were CANCELLED while this run was still the tip of ${RUN_REF}. A cancelled job renders no verdict, so this gate cannot pass."
           {
             echo ""
             echo "## ❌ Gate failed — cancelled job(s)"
             echo ""
-            echo "The following jobs were cancelled while the run carried on, so they"
-            echo "produced no verdict:"
+            echo "These jobs were cancelled while this run was still the authoritative"
+            echo "run for \`${RUN_REF}\` (\`${RUN_SHA:0:7}\`), so they produced no verdict:"
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
           echo '${{ toJSON(needs) }}' \
