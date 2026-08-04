@@ -3166,6 +3166,30 @@ jobs:
         with:
           name: coverage-baseline
           path: .coverage-baseline
+          # ⚠️ REQUIRED, and its absence made this an unclosable gate.
+          #
+          # `.coverage-baseline` is a DOTFILE. actions/upload-artifact@v4
+          # excludes hidden files by default (`include-hidden-files: false`),
+          # and when the glob then matches nothing it does not fail — it prints
+          #
+          #     ##[warning]No files were found with the provided path:
+          #     .coverage-baseline. No artifacts will be uploaded.
+          #
+          # and the step still succeeds. So the artifact has NEVER existed,
+          # while the error message immediately above it says:
+          #
+          #     Commit the recomputed value (attached as the 'coverage-baseline'
+          #     artifact of this run) in a pull request.
+          #
+          # The gate therefore told you to close it using a file it had just
+          # silently declined to produce. Reproduced on docudesk
+          # (run 30925609908): the preceding `git --no-pager diff --
+          # .coverage-baseline` prints the changed file, proving it is on disk,
+          # and the upload immediately after reports it as not found.
+          #
+          # This is the same shape as the swallowed `git push` this job was
+          # rewritten to remove — a failure that reads as work having been done.
+          include-hidden-files: true
           retention-days: 7
 
   # ── Hydra mechanical gates ──────────────────────
