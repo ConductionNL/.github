@@ -473,8 +473,25 @@ jobs:
   # Each leg gets a fresh checkout + npm ci, so scripts must be
   # self-contained (bundle ordering deps into one script, e.g.
   # "check:build": "npm run build && npm run check:css-entry").
+  # The guard below tests the PARSED list, not the raw string, and that is the
+  # whole point. It used to read `inputs.frontend-checks != '[]'` — a literal
+  # two-character comparison against a value the matrix consumes through
+  # `fromJSON`. Guard and matrix therefore disagreed for every other spelling
+  # of "empty": `'[ ]'`, `'[\n]'`, `'[""]'` all pass a `!= '[]'` test and then
+  # resolve to an empty matrix vector.
+  #
+  # An empty matrix vector does not skip. MEASURED on run 30898927145 of this
+  # repo's self-test with `frontend-checks: '[ ]'`: the job is deleted from the
+  # run outright — 19 jobs instead of 21, no "skipping" row, no failure, no
+  # annotation anywhere. `report` has `if: always()`, so it still goes green.
+  # The gate disappears without leaving a trace, which is strictly worse than
+  # the visible "skipping" row a false `if:` produces.
+  #
+  # Routing both sides through `fromJSON` makes that state unreachable: any
+  # spelling of empty now yields a visible skip, and malformed JSON fails the
+  # run loudly in the `if:` instead of silently voiding the job.
   frontend-checks:
-    if: ${{ inputs.enable-frontend && inputs.frontend-checks != '[]' }}
+    if: ${{ inputs.enable-frontend && join(fromJSON(inputs.frontend-checks), ',') != '' }}
     runs-on: ubuntu-latest
     name: "Frontend Check (${{ matrix.script }})"
     # Observed across 102 executions: median 0.6 min, p95 1.4 min, max 2.1 min
@@ -728,9 +745,23 @@ jobs:
   #
   # `frontend-checks` above is an opt-in LIST that defaults to "[]", so a repo
   # only runs its JS suite if someone remembered to name the script. Nobody
-  # did: across the fleet this job's matrix resolved empty and reported
-  # "skipping" with the expression unexpanded, so vitest/jest suites had NEVER
-  # run in CI. Real failures sat invisible for months (openbuild carries one;
+  # did, so vitest/jest suites had NEVER run in CI.
+  #
+  # CORRECTION (measured, run 30898711087): the earlier note here said that
+  # matrix "resolved empty and reported skipping with the expression
+  # unexpanded". That mechanism is wrong, and believing it costs real time —
+  # it has since caused at least one repeat misdiagnosis of this job.
+  # A literal `${{ matrix.x }}` in a check-list name is the signature of a
+  # job whose `if:` was FALSE, and says nothing about whether the matrix
+  # would have expanded. Proof from that one run: `PHP Quality
+  # (${{ matrix.tool }})`, `License (${{ matrix.ecosystem }})` and `PHPUnit
+  # (PHP ${{ matrix.php-version }}, ...)` all rendered unexpanded in exactly
+  # the same way — and every one of those matrices is a hard-coded literal
+  # list that CANNOT be empty. They were gated off by their `if:`, nothing
+  # more. An empty matrix behaves the opposite way: the job vanishes from the
+  # run entirely (see the frontend-checks guard above).
+  #
+  # Real failures sat invisible for months (openbuild carries one;
   # procest's harness is broken outright — `tests/vitest/setup.js` does
   # `import Vue from 'vue'`, which vue@3 does not publish).
   #
@@ -748,23 +779,44 @@ jobs:
     # Observed across 232 executions: median 0.6 min, p95 1.5 min, max 2.0 min
     # (openbuild). Unit runs are load-sensitive, so 20 min, not 5.
     timeout-minutes: 20
+    # This job was the only frontend job that ignored `frontend-path`: it had
+    # no `working-directory` and no `cache-dependency-path`, so on a repo whose
+    # frontend lives in a subdirectory it probed the REPO ROOT. Both outcomes
+    # are dead gates. MEASURED on run 30898711087 with `frontend-path:
+    # ci-selftest`: `setup-node` hard-failed with "Dependencies lock file is
+    # not found in /home/runner/work/.github/.github" — a falsely RED gate that
+    # blames the app for the workflow's own mislocation. The quieter outcome is
+    # worse: where the root does have a package.json, the probe finds no test
+    # script there, records "skipped" and goes GREEN while the frontend's real
+    # suite never runs — reopening, for subdirectory repos, precisely the hole
+    # this job was added to close.
+    #
+    # No caller sets a non-default `frontend-path` today (org-wide code search,
+    # 2026-08-04: the only hit is this file), so this is latent rather than
+    # live. It is fixed here because adopting `frontend-path` must not silently
+    # switch the unit gate off.
+    defaults:
+      run:
+        working-directory: ${{ inputs.frontend-path }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "${{ inputs.node-version }}"
-          cache: "npm"
-
+      # Detection runs BEFORE setup-node, mirroring frontend-build: setup-node
+      # with `cache: npm` hard-fails when it finds no lockfile, so a repo with
+      # nothing to test must never reach it.
       - name: Detect a runnable test script
         id: detect
         run: |
           if [ ! -f package.json ]; then
             echo "run=false" >> "$GITHUB_OUTPUT"
-            echo "No package.json — nothing to test."
+            echo "No package.json in '${{ inputs.frontend-path }}' — nothing to test."
+            exit 0
+          fi
+          if [ ! -f package-lock.json ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::package.json present in '${{ inputs.frontend-path }}' but no package-lock.json — skipping unit tests (npm ci requires a lockfile)."
             exit 0
           fi
           # Prefer `test`, fall back to `test:unit` — several repos declare
@@ -792,6 +844,14 @@ jobs:
               ? 'Detected \'' + name + '\' script: ' + s[name]
               : 'No runnable test script (checked: test, test:unit).');
           "
+
+      - name: Setup Node.js
+        if: steps.detect.outputs.run == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "${{ inputs.node-version }}"
+          cache: "npm"
+          cache-dependency-path: "${{ inputs.frontend-path }}/package-lock.json"
 
       - name: Install dependencies
         if: steps.detect.outputs.run == 'true'
