@@ -1,0 +1,48 @@
+# TEMPORARY MEASUREMENT HARNESS — deleted once the measurement is recorded.
+#
+# A/B on the REAL quality.yml, not a copy of it. Both arms are the same caller
+# with the same inputs; the arms differ ONLY in which version of quality.yml
+# they call:
+#
+#   ARM = before -> ConductionNL/.github/.github/workflows/quality.yml@main
+#   ARM = after  -> ./.github/workflows/quality.yml   (this branch)
+#
+# Inputs put the pipeline in the exact hole under test: the gates are ON, axe
+# enforcement is ON, and the only producer of tests/axe/report.json — the
+# Playwright job — is OFF, so no report can possibly reach the gates job.
+#
+# Expected: `Hydra Gates` SUCCEEDS on main (gate-33 silently skipped, no
+# accessibility measured, plain green tick) and FAILS on this branch with a
+# named reason. Run one arm per push: both arms in one run would collide on the
+# `result-hydra-gates` artifact name and the collision, not the change, would
+# decide the verdict.
+name: probe-axe-failclosed
+
+on:
+  push:
+    branches: [fix/hydra-gates-needs-skip-deletion]
+
+permissions:
+  contents: write
+  actions: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  # ARM = before
+  arm:
+    uses: ConductionNL/.github/.github/workflows/quality.yml@main
+    with:
+      app-name: probe
+      enable-hydra-gates: true
+      enable-axe: true
+      enable-playwright: false
+      enable-phpunit: false
+      enable-newman: false
+      enable-frontend: false
+      enable-eslint: false
+      enable-psalm: false
+      enable-phpstan: false
+      enable-phpmetrics: false
+      enable-sbom: false
+      enable-coverage-guard: false

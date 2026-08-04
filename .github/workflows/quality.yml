@@ -163,7 +163,7 @@ on:
         # almost certainly be red, and some of that red will not be the app's
         # to fix. Default-on would therefore have blocked the fleet on core
         # Nextcloud defects on day one.
-        description: "Run axe-core (@axe-core/playwright) against the app's routes inside the Playwright job and publish tests/axe/report.json, which is the file hydra-gates gate-33 consumes. OPT-IN, default false. Gate-33 fails on `serious`/`critical` violations only; without this the report does not exist and gate-33 reports SKIPPED, which is what it has done in every repo in the fleet since it was written. Requires enable-playwright (the report is produced by that job, against its Nextcloud instance) and is only consumed when enable-hydra-gates is also true. Measured against a vanilla Nextcloud 34 with no app installed, core's own pages already carry serious/critical violations — expect the first run in a repo to be red, which is exactly why this is off by default."
+        description: "Run axe-core (@axe-core/playwright) against the app's routes inside the Playwright job and publish tests/axe/report.json, which is the file hydra-gates gate-33 consumes. OPT-IN, default false. Gate-33 fails on `serious`/`critical` violations only; without this the report does not exist and gate-33 reports SKIPPED, which is what it has done in every repo in the fleet since it was written. Requires enable-playwright (the report is produced by that job, against its Nextcloud instance) and is only consumed when enable-hydra-gates is also true. SETTING THIS TRUE IS AN OPT-IN TO ENFORCEMENT, NOT TO A BEST EFFORT: if no usable axe report reaches the hydra-gates job — because Playwright was skipped or failed, or because the report was rejected by the provenance check — that job now FAILS with a named reason instead of going green with gate-33 silently SKIPPED. Leave it false, deliberately and visibly, for any repo not ready to enforce it. Measured against a vanilla Nextcloud 34 with no app installed, core's own pages already carry serious/critical violations — expect the first run in a repo to be red, which is exactly why this is off by default."
         required: false
         type: boolean
         default: false
@@ -3210,8 +3210,30 @@ jobs:
     # stop running on a majority of the fleet, silently, as a side effect of
     # wiring up ONE gate's input. `!cancelled()` suppresses that implicit
     # `success()`, so a skipped or failed Playwright job still lets the gates
-    # run and reach their own verdict. The axe report is then simply absent and
-    # gate-33 reports SKIPPED, exactly as it does today.
+    # run and reach their own verdict.
+    #
+    # MEASURED, not assumed — ConductionNL/.github run 30909727531, a harness
+    # that reproduced this exact `needs:`/`if:` pair three times in one run and
+    # drove the producer into each of its three states. This guard, and the
+    # `always() && inputs.enable-hydra-gates` alternative, behaved identically
+    # and correctly in all three:
+    #
+    #   producer succeeded -> gates RAN   (needs.playwright.result=success)
+    #   producer FAILED    -> gates RAN   (needs.playwright.result=failure)
+    #   producer SKIPPED   -> gates RAN   (needs.playwright.result=skipped)
+    #
+    # The job never vanished. So `!cancelled()` is sufficient and there is no
+    # reason to reach for `always()`, which would additionally run the gates
+    # during a cancellation and produce a verdict nobody asked for. Do not
+    # "simplify" this back to a bare `inputs.enable-hydra-gates`: that restores
+    # the implicit `success()` and deletes the job with no red, no skip and no
+    # trace whenever Playwright does not succeed.
+    #
+    # What the measurement also settled: keeping the job alive is the RIGHT
+    # behaviour for the other 60 gates and precisely what makes gate-33
+    # dangerous, because a live job with an absent artifact used to go green
+    # having measured no accessibility at all. That hole is closed at the
+    # `enable-axe` step below, not here.
     if: ${{ inputs.enable-hydra-gates && !cancelled() }}
     runs-on: ubuntu-latest
     name: "Hydra Gates"
@@ -3276,11 +3298,11 @@ jobs:
 
       # ── gate-33's subject, handed over from the Playwright job ─────────────
       #
-      # continue-on-error because the artifact legitimately does not exist when
-      # the Playwright job was skipped or its axe step refused to write a
-      # report. That case is not an error here: gate-33 then reports SKIPPED
-      # with its reason, which is the honest outcome and the one this repo has
-      # had all along.
+      # continue-on-error so that a missing artifact does not abort the job
+      # here with download-artifact's own generic message. The absence is
+      # handled one step down, where it can be named — and, since `enable-axe`
+      # is an explicit opt-in to enforcement, where it FAILS. It is not
+      # tolerated: continue-on-error moves the verdict, it does not soften it.
       - name: Download the axe-core report
         id: axe-download
         if: ${{ inputs.enable-axe }}
@@ -3298,16 +3320,34 @@ jobs:
       # "never measured" into "measured clean".
       #
       # So the file is checked against the provenance the runner writes, and
-      # DELETED if it does not hold up. Deleting it restores the loud skip; it
-      # never invents a pass and it never invents a failure.
-      - name: Validate the axe report before gate-33 reads it
+      # DELETED if it does not hold up — gate-33 can then never read a rejected
+      # file as a clean run.
+      #
+      # Deletion alone is not enough, and this is the second half of the same
+      # defect. `enable-axe: true` is an explicit request for accessibility
+      # ENFORCEMENT, not for a best-effort attempt. Before this step failed
+      # closed, the two ways of having no measurement — the artifact never
+      # arrived (Playwright skipped, or crashed before its axe step), and the
+      # artifact arrived but was rejected here — both ended in gate-33
+      # reporting SKIPPED and the gates job reporting a plain green tick. A
+      # `::notice` buried in a three-thousand-line log is not a verdict: the
+      # absence of the check looked exactly like the check succeeding, which is
+      # the shape this whole file exists to eliminate.
+      #
+      # So with `enable-axe` set, no usable report is a FAILURE with a named
+      # reason and the producer's resolved state quoted in it. The way to not
+      # enforce axe is `enable-axe: false` — one line in the caller, visible in
+      # a diff and attributable to a person — not a silent green in a log.
+      - name: The axe report must exist and hold up
         if: ${{ inputs.enable-axe }}
+        env:
+          PLAYWRIGHT_RESULT: ${{ needs.playwright.result }}
         run: |
           set -uo pipefail
           REPORT="${GITHUB_WORKSPACE}/app/tests/axe/report.json"
           if [ ! -f "${REPORT}" ]; then
-            echo "::notice::No axe report was downloaded. gate-33 will report SKIPPED with its reason — accessibility runtime checking is UNVERIFIED for this run."
-            exit 0
+            echo "::error::enable-axe is set, but NO axe report reached this job — gate-33 measured nothing and this run carries no accessibility verdict at all. The Playwright job, which is the only producer of tests/axe/report.json, resolved '${PLAYWRIGHT_RESULT}'. Fix that job (enable-axe also requires enable-playwright), or set enable-axe: false to state deliberately that this repo does not enforce axe yet."
+            exit 1
           fi
           echo "Downloaded $(wc -c < "${REPORT}") byte(s) into ${REPORT}."
           python3 - "${REPORT}" <<'PYVALIDATE' && VALID=0 || VALID=$?
@@ -3348,7 +3388,9 @@ jobs:
           PYVALIDATE
           if [ "${VALID}" -ne 0 ]; then
             rm -f "${REPORT}"
-            echo "Removed ${REPORT}. gate-33 will now report SKIPPED rather than PASS."
+            echo "Removed ${REPORT} so gate-33 cannot read it as a clean accessibility run."
+            echo "::error::enable-axe is set and the axe report was REJECTED for the reason above, so this run has no accessibility verdict. A rejected report is the same amount of evidence as no report: none. Fix the producer, or set enable-axe: false."
+            exit 1
           fi
 
       - name: Resolve the diff base
@@ -3556,6 +3598,16 @@ jobs:
             echo "| PHPUnit | | | | | $(icon '${{ needs.phpunit.result }}') |"
             echo "| Newman | | | | | $(icon '${{ needs.newman.result }}') |"
             echo "| Playwright | | | | | $(icon '${{ needs.playwright.result }}') |"
+            # The Hydra gates were in this job's `needs:` and in its failure
+            # gate below, so a red gates job did red the Quality Report — but
+            # the report itself never mentioned them, in any state. The one
+            # artefact people actually read (the PR comment, the PDF) was
+            # silent about sixty gates: read on its own it was indistinguishable
+            # from a repo that has no gates, whether they passed, failed or
+            # never ran. `needs.<job>.result` rather than the result artifact,
+            # so a job that was skipped or deleted still renders as ⏭️ instead
+            # of vanishing from the table.
+            echo "| Hydra gates | | | | | $(icon '${{ needs.hydra-gates.result }}') |"
             echo ""
           } > "$REPORT"
 

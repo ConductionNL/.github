@@ -3,8 +3,8 @@
 name: probe-gate-guard-caller
 
 on:
-  push:
-    branches: [fix/hydra-gates-needs-skip-deletion]
+  # `push` was removed after run 30909727531 recorded the measurement, so later
+  # pushes to this branch do not re-run a harness that has already answered.
   workflow_dispatch:
 
 jobs:
