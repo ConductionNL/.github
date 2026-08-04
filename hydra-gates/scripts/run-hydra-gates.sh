@@ -2142,11 +2142,22 @@ fi
 # and by bin/hydra-gates' coverage assertion, and can be made a hard failure
 # with --require-full-coverage.
 #
-# To make it RUN: produce tests/axe/report.json from the app's Playwright
-# suite (`@axe-core/playwright` → `new AxeBuilder({ page }).analyze()` →
-# `fs.writeFileSync('tests/axe/report.json', JSON.stringify(results))`), or
-# add the documented scripts/run-browser-tests.sh. See the `hydra-gate-axe`
-# skill for the canonical snippet.
+# To make it RUN, as of 2026-08-04: set `enable-axe: true` on the shared
+# quality workflow (ConductionNL/.github/.github/workflows/quality.yml). It
+# runs `@axe-core/playwright` against the app's routes inside the Playwright
+# job — the only job with both a booted Nextcloud and a browser — and hands
+# tests/axe/report.json to the gates job as an artifact. Settings-only apps
+# have no root route and must also set `axe-routes`.
+#
+# Failing that, produce tests/axe/report.json any other way you like
+# (`new AxeBuilder({ page }).analyze()` → `fs.writeFileSync(...)`), or add the
+# documented scripts/run-browser-tests.sh. See the `hydra-gate-axe` skill for
+# the canonical snippet.
+#
+# Whatever produces it: do NOT write a report on a path where the browser did
+# not actually render the app. This gate reports PASS on a file containing
+# exactly `{}` — an empty or crashed-step report turns the loud skip above into
+# a silent false pass, which is strictly worse than never having run.
 #
 # References:
 #   - ADR-010 (NL Design — WCAG 2.2 AA)

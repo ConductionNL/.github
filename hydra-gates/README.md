@@ -268,6 +268,28 @@ Both layers now account for it. A gate that cannot run says so on its own line:
           ARIA-validity / live-region accessibility is UNVERIFIED. …
 ```
 
+Since 2026-08-04 gate 33's report can actually be produced. The shared quality
+workflow (`ConductionNL/.github/.github/workflows/quality.yml`) takes an opt-in
+`enable-axe` input that runs `@axe-core/playwright` against the app's routes
+inside the Playwright job — the only job with both a booted Nextcloud and a
+browser — and hands `tests/axe/report.json` to the gates job as an artifact.
+Set `enable-axe: true` (plus `axe-routes` for a settings-only app, which has no
+root route) and gate 33 stops reporting SKIPPED.
+
+It is off by default for the same reason `enable-hydra-gates` is: measured
+against a **vanilla** Nextcloud 34 with no Conduction app installed at all,
+core's own `/apps/files/` and `/settings/user` already carry three
+serious/critical violations, so the first run in a repo will be red and part of
+that red is not the app's to fix.
+
+The runner that produces the report refuses to write one it has not earned — it
+self-tests against a deliberate `button-name` violation on every run, rejects a
+route that answered HTTP ≥ 400, and the gates job re-validates the downloaded
+file before gate 33 reads it. All of that exists because gate 33 reports **PASS**
+on a `tests/axe/report.json` containing exactly `{}`: a report written by a
+crashed step would convert this gate's loud skip into a silent false pass, which
+is worse than where it started.
+
 and every run — `bin/hydra-gates` **and** a direct `run-hydra-gates.sh`
 invocation — ends with the accounting:
 
