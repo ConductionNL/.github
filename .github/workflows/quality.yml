@@ -3339,6 +3339,21 @@ jobs:
       # enforce axe is `enable-axe: false` — one line in the caller, visible in
       # a diff and attributable to a person — not a silent green in a log.
       #
+      # A/B on this file, same caller and same inputs (gates on, axe on,
+      # Playwright — the only producer — off), the arms differing only in which
+      # quality.yml they called:
+      #
+      #   before, quality.yml@main : run 30910234160, Hydra Gates SUCCESS
+      #                              "##[notice]No axe report was downloaded"
+      #                              "[gate-33] axe-core: SKIPPED"
+      #   after,  this branch      : run 30910908474, Hydra Gates FAILURE
+      #                              gates still ran and reported in full
+      #
+      # And the control that bounds the blast radius: the same inputs with
+      # `enable-axe: false` — the fleet default and openbuild's live config, the
+      # only repo with the gates enabled — run 30911069404, Hydra Gates SUCCESS
+      # with both axe steps SKIPPED. Nothing that is green today turns red.
+      #
       # The failure is RECORDED here and RAISED at the end of the job, not
       # thrown from this step. Measured first as a plain `exit 1` (run
       # 30910345294): it aborted the job before `Run the Hydra gates`, so a
