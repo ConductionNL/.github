@@ -581,6 +581,16 @@ while IFS= read -r f; do
     _oa_files+=("$f")
 done < <(_enum_tracked '\.php$' lib/Service lib/Controller)
 _oa_ran=1
+# An EMPTY scope is not a clean tree. With zero files the log stays empty, the
+# count is 0, and the gate used to report PASS having inspected nothing — the
+# same failure family as .github#147, where a missing helper made gate-7 report
+# PASS over 11 real unguarded endpoints. SKIPPED is the honest verdict: it is
+# excluded from _EMITTED_GATES, so the coverage summary lists this gate under
+# "GATES THAT DID NOT RUN" instead of folding it into ALL GATES GREEN.
+if [ "${#_oa_files[@]}" -eq 0 ]; then
+    _oa_ran=0
+    _skip 6 "orphan-auth" "scope was empty — 0 lib/Service or lib/Controller PHP file(s) in this diff, so NOTHING was inspected; orphaned (defined-but-never-called) authorization methods are UNVERIFIED by this run."
+fi
 if [ "${#_oa_files[@]}" -gt 0 ]; then
     _oa_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/lib" 2>/dev/null && pwd)"
     if [ ! -f "${_oa_lib_dir}/check_orphan_auth.py" ]; then
@@ -652,6 +662,13 @@ while IFS= read -r f; do
     _idor_files+=("$f")
 done < <(_enum_tracked '\.php$' lib/Controller)
 _idor_ran=1
+# See the gate-6 note above: an empty scope inspected nothing, so it cannot be
+# a PASS. SKIPPED keeps it out of _EMITTED_GATES and therefore visible in the
+# coverage summary rather than silently green.
+if [ "${#_idor_files[@]}" -eq 0 ]; then
+    _idor_ran=0
+    _skip 7 "no-admin-idor" "scope was empty — 0 lib/Controller PHP file(s) in this diff, so NOTHING was inspected; unguarded #[NoAdminRequired] endpoints (IDOR, OWASP A01:2021) are UNVERIFIED by this run."
+fi
 if [ "${#_idor_files[@]}" -gt 0 ]; then
     _gate_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/lib" 2>/dev/null && pwd)"
     if [ ! -f "${_gate_lib_dir}/check_no_admin_idor.py" ]; then

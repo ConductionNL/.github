@@ -1107,5 +1107,376 @@ class C {
         self.assertIn("method=show", out[0])
 
 
+# ---------------------------------------------------------------------------
+# Pattern 4 — delegation chains and collaborator-hosted guards
+# ---------------------------------------------------------------------------
+
+def _scan_app(controller_src: str, collaborators: dict) -> list[str]:
+    """Scan a controller inside a throwaway app tree with real collaborators.
+
+    Pattern 4 resolves a typed property to a *file* under the app's ``lib/``
+    tree and reads that file, so these tests must lay out a real directory:
+
+        <root>/lib/Controller/TestController.php
+        <root>/lib/Service/<Name>.php
+
+    *collaborators* maps ``ClassName -> php source``.
+    """
+    with tempfile.TemporaryDirectory() as root:
+        ctl_dir = Path(root) / "lib" / "Controller"
+        svc_dir = Path(root) / "lib" / "Service"
+        ctl_dir.mkdir(parents=True)
+        svc_dir.mkdir(parents=True)
+        for name, body in collaborators.items():
+            (svc_dir / f"{name}.php").write_text(body, encoding="utf-8")
+        ctl = ctl_dir / "TestController.php"
+        ctl.write_text(controller_src, encoding="utf-8")
+        # Pattern 4 caches per-root and per-file; a temp dir is unique per test
+        # but clear anyway so a reused inode can never leak a stale answer.
+        cni._CLASS_INDEX_CACHE.clear()
+        cni._COLLABORATOR_GUARD_CACHE.clear()
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            cni.scan_file(str(ctl))
+        cni._CLASS_INDEX_CACHE.clear()
+        cni._COLLABORATOR_GUARD_CACHE.clear()
+    return [ln for ln in buf.getvalue().splitlines() if ln.strip()]
+
+
+# The decidesk responder, reduced to the shape that matters: staffAction()
+# delegates to requireStaff() which denies with 401/403; citizenAction()
+# denies an anonymous caller with 401; respond() is NOT a guard — it only maps
+# a result or an exception onto a JSONResponse.
+_RESPONDER = """\
+<?php
+namespace OCA\\Decidesk\\Service;
+
+class ParticipationResponder {
+    public function staffAction(callable $operation, ?string $key = null, int $status = 200) {
+        return ($this->requireStaff() ?? $this->respond($operation, $key, $status));
+    }
+
+    public function citizenAction(callable $operation, ?string $key = null, int $status = 200) {
+        $uid = $this->staffGuard->currentUid();
+        if ($uid === null) {
+            return new JSONResponse(['message' => 'Unauthorized'], Http::STATUS_UNAUTHORIZED);
+        }
+        return $this->respond($operation, $key, $status);
+    }
+
+    private function requireStaff() {
+        if ($this->staffGuard->currentUid() === null) {
+            return new JSONResponse(['message' => 'Unauthorized'], Http::STATUS_UNAUTHORIZED);
+        }
+        if ($this->staffGuard->isStaff() === false) {
+            return new JSONResponse(['message' => 'Forbidden'], Http::STATUS_FORBIDDEN);
+        }
+        return null;
+    }
+
+    private function respond(callable $operation, ?string $key, int $status) {
+        return new JSONResponse([$key => $operation()], $status);
+    }
+}
+"""
+
+
+class CollaboratorGuardDelegationTest(unittest.TestCase):
+    """Pattern 4a — a guard reached through an injected collaborator.
+
+    Regression cover for the decidesk measurement of 2026-08-04: gate-7
+    reported 11 findings on ParticipationController /
+    ParticipationBudgetController and every one was guarded, because the
+    guard lives on ``$this->responder`` rather than in the method body.
+    """
+
+    def test_staffAction_delegation_is_recognised_as_guarded(self):
+        """$this->responder->staffAction() reaches requireStaff() -> not flagged."""
+        src = """\
+<?php
+namespace OCA\\Decidesk\\Controller;
+
+class TestController {
+    public function __construct(
+        private readonly ParticipationResponder $responder,
+    ) {
+    }
+
+    /**
+     * @NoAdminRequired
+     */
+    public function transitionBudgetRound(string $budgetId, string $status) {
+        return $this->responder->staffAction(
+            operation: fn (): array => $this->lifecycleService->transitionBudgetRound($budgetId, $status),
+            key: 'budgetRound'
+        );
+    }
+}
+"""
+        self.assertEqual(_scan_app(src, {"ParticipationResponder": _RESPONDER}), [])
+
+    def test_citizenAction_delegation_is_recognised_as_guarded(self):
+        """citizenAction() denies an anonymous caller with 401 -> not flagged."""
+        src = """\
+<?php
+namespace OCA\\Decidesk\\Controller;
+
+class TestController {
+    public function __construct(
+        private readonly ParticipationResponder $responder,
+    ) {
+    }
+
+    /**
+     * @NoAdminRequired
+     */
+    public function submitProposal(string $budgetId, string $title = '') {
+        return $this->responder->citizenAction(
+            operation: fn (string $uid): array => $this->budgetService->submitProposal($budgetId, $title, $uid),
+            key: 'proposal'
+        );
+    }
+}
+"""
+        self.assertEqual(_scan_app(src, {"ParticipationResponder": _RESPONDER}), [])
+
+    def test_three_hop_intra_class_chain_to_collaborator_guard(self):
+        """validateProposal -> approve/reject -> applyDecision -> staffAction().
+
+        The exact decidesk shape that needed three hops. Transitive closure
+        must follow it all the way to the collaborator guard.
+        """
+        src = """\
+<?php
+namespace OCA\\Decidesk\\Controller;
+
+class TestController {
+    public function __construct(
+        private readonly ParticipationResponder $responder,
+    ) {
+    }
+
+    /**
+     * @NoAdminRequired
+     */
+    public function validateProposal(string $proposalId, ?bool $approve = null) {
+        if ($approve === false) {
+            return $this->rejectProposal(proposalId: $proposalId);
+        }
+        return $this->approveProposal(proposalId: $proposalId);
+    }
+
+    private function approveProposal(string $proposalId) {
+        return $this->applyProposalDecision(proposalId: $proposalId, approve: true);
+    }
+
+    private function rejectProposal(string $proposalId) {
+        return $this->applyProposalDecision(proposalId: $proposalId, approve: false);
+    }
+
+    private function applyProposalDecision(string $proposalId, bool $approve) {
+        return $this->responder->staffAction(
+            operation: fn (): array => $this->budgetService->validateProposal($proposalId, $approve),
+            key: 'proposal'
+        );
+    }
+}
+"""
+        self.assertEqual(_scan_app(src, {"ParticipationResponder": _RESPONDER}), [])
+
+
+class CollaboratorGuardStillCatchesRealIdorTest(unittest.TestCase):
+    """Pattern 4 must not become a blanket clear — the negative direction.
+
+    Every test here is a shape the gate MUST still flag. Without these, the
+    Pattern 4 clear is only evidence about itself: a delegation-following
+    gate that follows delegation to *anything* has stopped gating.
+    """
+
+    def test_plain_unguarded_method_still_flagged(self):
+        """No responder, no helper, no guard, caller-supplied id -> flagged."""
+        src = """\
+<?php
+namespace OCA\\Decidesk\\Controller;
+
+class TestController {
+    public function __construct(
+        private readonly ParticipationResponder $responder,
+    ) {
+    }
+
+    /**
+     * @NoAdminRequired
+     */
+    public function deleteReaction(string $reactionId) {
+        $this->consultationService->deleteReaction($reactionId);
+        return new JSONResponse(['ok' => true]);
+    }
+}
+"""
+        out = _scan_app(src, {"ParticipationResponder": _RESPONDER})
+        self.assertEqual(len(out), 1)
+        self.assertIn("method=deleteReaction", out[0])
+
+    def test_collaborator_method_that_is_not_a_guard_still_flagged(self):
+        """respond() EXISTS on the responder but performs no authorisation.
+
+        The sharpest control: resolution must discriminate between methods of
+        the collaborator, not clear anything called on a property whose class
+        happens to contain a guard somewhere.
+        """
+        src = """\
+<?php
+namespace OCA\\Decidesk\\Controller;
+
+class TestController {
+    public function __construct(
+        private readonly ParticipationResponder $responder,
+    ) {
+    }
+
+    /**
+     * @NoAdminRequired
+     */
+    public function deleteReaction(string $reactionId) {
+        return $this->responder->respond(
+            fn (): array => $this->consultationService->deleteReaction($reactionId),
+            'reaction',
+            200
+        );
+    }
+}
+"""
+        out = _scan_app(src, {"ParticipationResponder": _RESPONDER})
+        self.assertEqual(len(out), 1)
+        self.assertIn("method=deleteReaction", out[0])
+
+    def test_unresolvable_collaborator_class_clears_nothing(self):
+        """A type with no file under lib/ must fail closed, not fail open."""
+        src = """\
+<?php
+namespace OCA\\Decidesk\\Controller;
+
+class TestController {
+    public function __construct(
+        private readonly MysteryResponder $responder,
+    ) {
+    }
+
+    /**
+     * @NoAdminRequired
+     */
+    public function deleteReaction(string $reactionId) {
+        return $this->responder->staffAction(
+            fn (): array => $this->consultationService->deleteReaction($reactionId)
+        );
+    }
+}
+"""
+        out = _scan_app(src, {})
+        self.assertEqual(len(out), 1)
+        self.assertIn("method=deleteReaction", out[0])
+
+    def test_intra_class_chain_ending_in_no_guard_still_flagged(self):
+        """A three-hop chain whose terminal method has no guard at all."""
+        src = """\
+<?php
+namespace OCA\\Decidesk\\Controller;
+
+class TestController {
+    public function __construct(
+        private readonly ParticipationResponder $responder,
+    ) {
+    }
+
+    /**
+     * @NoAdminRequired
+     */
+    public function deleteReaction(string $reactionId) {
+        return $this->hopOne(reactionId: $reactionId);
+    }
+
+    private function hopOne(string $reactionId) {
+        return $this->hopTwo(reactionId: $reactionId);
+    }
+
+    private function hopTwo(string $reactionId) {
+        $this->consultationService->deleteReaction($reactionId);
+        return new JSONResponse(['ok' => true]);
+    }
+}
+"""
+        out = _scan_app(src, {"ParticipationResponder": _RESPONDER})
+        self.assertEqual(len(out), 1)
+        self.assertIn("method=deleteReaction", out[0])
+
+    def test_collaborator_guard_after_the_write_still_flagged(self):
+        """The guard must run BEFORE the mutation or it protects nothing."""
+        src = """\
+<?php
+namespace OCA\\Decidesk\\Controller;
+
+class TestController {
+    public function __construct(
+        private readonly ParticipationResponder $responder,
+    ) {
+    }
+
+    /**
+     * @NoAdminRequired
+     */
+    public function deleteReaction(string $reactionId) {
+        $this->consultationService->deleteReaction($reactionId);
+        return $this->responder->staffAction(fn (): array => []);
+    }
+}
+"""
+        out = _scan_app(src, {"ParticipationResponder": _RESPONDER})
+        self.assertEqual(len(out), 1)
+        self.assertIn("method=deleteReaction", out[0])
+
+    def test_bare_throw_does_not_seed_a_delegation_chain(self):
+        """A collaborator method that only throws NotFoundException is not a guard.
+
+        `throw` is accepted by the one-hop Pattern-1 helper rule; propagation
+        deliberately requires a STRICTER signal, so "this can fail" never
+        becomes "this checks who you are" further up the chain.
+        """
+        thrower = """\
+<?php
+namespace OCA\\Decidesk\\Service;
+
+class ThingLoader {
+    public function load(string $id) {
+        if ($id === '') {
+            throw new NotFoundException('missing');
+        }
+        return $this->mapper->find($id);
+    }
+}
+"""
+        src = """\
+<?php
+namespace OCA\\Decidesk\\Controller;
+
+class TestController {
+    public function __construct(
+        private readonly ThingLoader $loader,
+    ) {
+    }
+
+    /**
+     * @NoAdminRequired
+     */
+    public function showThing(string $thingId) {
+        return new JSONResponse($this->loader->load($thingId));
+    }
+}
+"""
+        out = _scan_app(src, {"ThingLoader": thrower})
+        self.assertEqual(len(out), 1)
+        self.assertIn("method=showThing", out[0])
+
+
 if __name__ == "__main__":
     unittest.main()
