@@ -36,7 +36,7 @@ jobs:
     with:
       app-name: probe
       enable-hydra-gates: true
-      enable-axe: true
+      enable-axe: false
       enable-playwright: false
       enable-phpunit: false
       enable-newman: false
