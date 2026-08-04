@@ -3119,7 +3119,35 @@ jobs:
   # ratchet, so this gate is closable by a human via a normal pull request —
   # it is deliberately not an unclosable gate.
   update-baseline:
-    if: ${{ inputs.enable-coverage-guard && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/development') }}
+    # ⚠️ `!cancelled() && needs.phpunit.result == 'success'` is load-bearing, and
+    # its absence deleted this job on every run where PHP Quality was red.
+    #
+    # A job condition with no status function is implicitly wrapped in
+    # `success()`, and that success() is not satisfied by this job's DECLARED
+    # dependency alone — a failure anywhere in the `needs` closure removes the
+    # job. `phpunit` sits behind `needs: [php-quality, security]` and survives a
+    # red php-quality only because its own `if` carries `!cancelled()`. This job
+    # had no such escape, so a failing PHPMD — a GRANDPARENT it does not depend
+    # on — silently deleted the coverage ratchet while `phpunit` itself was
+    # green.
+    #
+    # Measured on procest's own history (push runs on development):
+    #
+    #   run 30896879219  php-quality FAIL  phpunit success  ->  CBC skipped
+    #   run 30895657851  php-quality FAIL  phpunit success  ->  CBC skipped
+    #   run 30887852492  php-quality FAIL  phpunit success  ->  CBC skipped
+    #   run 30882883115  php-quality FAIL  phpunit success  ->  CBC skipped
+    #   run 30876345083  php-quality FAIL  phpunit failure  ->  CBC skipped
+    #
+    # Five consecutive runs in which the ratchet reported nothing at all, and
+    # nothing said so: a skipped job is not a red. Reproduced on doriath twice
+    # today (run 30925445843 and its re-run) — `steps: []`, started_at ==
+    # completed_at, the shape of a job that never existed.
+    #
+    # Being explicit also makes the intent legible: this job needs a SUCCESSFUL
+    # phpunit, because it downloads that job's coverage artifact. It has no
+    # opinion about PHPMD.
+    if: ${{ inputs.enable-coverage-guard && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/development') && !cancelled() && needs.phpunit.result == 'success' }}
     runs-on: ubuntu-latest
     name: "Coverage Baseline Check"
     needs: phpunit
