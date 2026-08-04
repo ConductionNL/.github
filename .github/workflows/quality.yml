@@ -2698,9 +2698,14 @@ jobs:
         # Installed INTO the package dir so `require('ajv')` from
         # scripts/lib/check_manifest.js resolves by walking up to
         # gates/hydra-gates/node_modules. A global install would need NODE_PATH
-        # and would silently not be found — which the manifest gates survive via
-        # a vendored fallback, meaning the miss would not be visible here. The
-        # coverage block at the end of the run is what makes any such gap loud.
+        # and would silently not be found.
+        #
+        # Since 2026-08-03 a miss here is loud rather than survivable: gate-22
+        # used to fall back to a structural lint that checks only the AppHost
+        # blocks and report the result as a PASS — a manifest certified without
+        # ever being schema-validated. It now FAILS with a named reason (the
+        # validator exits 3 DEGRADED), exactly as gate-53 already refused to run
+        # fail-open. If this step is ever removed, both gates say so.
         run: npm --prefix gates/hydra-gates install --no-save --no-audit --no-fund ajv
 
       - name: Resolve the diff base
