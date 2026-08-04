@@ -1201,15 +1201,44 @@ jobs:
           path: quality-results/
 
   # ╔══════════════════════════════════════════════╗
-  # ║  STAGE 2 — Tests (gated behind Stage 1)      ║
+  # ║  STAGE 2 — Tests                              ║
   # ║                                               ║
   # ║  • PHPUnit matrix (PHP × Nextcloud versions)  ║
   # ║  • Integration tests (Newman)                 ║
   # ║  • E2E browser tests (Playwright)             ║
+  # ║                                               ║
+  # ║  Gated on `security` only. PHPUnit and        ║
+  # ║  Playwright deliberately do NOT gate on       ║
+  # ║  php-quality — a complexity or formatting     ║
+  # ║  finding must not silently delete the test    ║
+  # ║  signal. Newman still does; see its `if:`.    ║
   # ╚══════════════════════════════════════════════╝
 
   phpunit:
-    if: ${{ inputs.enable-php && inputs.enable-phpunit && !cancelled() && needs.php-quality.result != 'failure' && needs.security.result != 'failure' }}
+    # NOT gated on php-quality — deliberately. `php-quality` is a matrix job, so
+    # its result is 'failure' if ANY leg fails, including phpmd (complexity/mess
+    # detection) and phpcs (formatting). Neither says anything about whether the
+    # test suite passes, but gating on them meant a repo carrying architectural
+    # debt got NO test signal at all — and the loss renders in the checks list as
+    # a single greyed-out "skipping" placeholder, which reads like a non-event
+    # rather than a gate that stopped running.
+    #
+    # Observed 2026-08-04 on ConductionNL/procest: phpmd was red on 25 complexity
+    # findings, so `development` runs had 26 jobs and ZERO PHPUnit legs. Its 1684
+    # tests had had no CI signal for as long as phpmd had been red. The contrast
+    # is the proof — ConductionNL/decidesk, identical workflow inputs, produced 29
+    # jobs with 4 green PHPUnit legs, and the ONLY difference was that decidesk's
+    # phpmd was green. Worse, it was green only because a phpmd.baseline.xml was
+    # suppressing 73 real findings: whether the test suite ran at all was
+    # contingent on a suppression file.
+    #
+    # The security gate is kept — a repo with a known-vulnerable dependency
+    # should not spin up servers. This also aligns PHPUnit with the playwright
+    # job below, which already deliberately declines to gate on php-quality.
+    #
+    # `needs:` is retained for ordering only; with `!cancelled()` and no result
+    # condition on php-quality, PHPUnit runs regardless of static-analysis colour.
+    if: ${{ inputs.enable-php && inputs.enable-phpunit && !cancelled() && needs.security.result != 'failure' }}
     runs-on: ubuntu-latest
     name: "PHPUnit (PHP ${{ matrix.php-version }}, NC ${{ matrix.nextcloud-ref }})"
     needs: [php-quality, security]
