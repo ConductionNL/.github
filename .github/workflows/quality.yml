@@ -813,8 +813,15 @@ jobs:
           php-version: ${{ inputs.php-version }}
           tools: composer:v2
 
+      # `enable-npm` must be in this condition, not only in the audit step below.
+      # actions/setup-node with `cache: npm` HARD-FAILS when there is no
+      # package-lock.json, so on a PHP-only repo (enable-npm: false) this step
+      # died before the audit step could report its polite "npm ecosystem is
+      # disabled — skipping". The npm leg then failed, and the Quality Report
+      # gate failed with it — a permanent red on every repo that legitimately
+      # has no package.json. Observed on ConductionNL/hydra 2026-08-04.
       - name: Setup Node.js
-        if: matrix.ecosystem == 'npm'
+        if: matrix.ecosystem == 'npm' && inputs.enable-npm
         uses: actions/setup-node@v4
         with:
           node-version: "${{ inputs.node-version }}"
@@ -937,8 +944,11 @@ jobs:
           php-version: ${{ inputs.php-version }}
           tools: composer:v2
 
+      # See the identical note on the security job's Setup Node.js step —
+      # `cache: npm` hard-fails without a package-lock.json, so this must also
+      # be gated on enable-npm, not only on the matrix leg.
       - name: Setup Node.js
-        if: matrix.ecosystem == 'npm'
+        if: matrix.ecosystem == 'npm' && inputs.enable-npm
         uses: actions/setup-node@v4
         with:
           node-version: "${{ inputs.node-version }}"
