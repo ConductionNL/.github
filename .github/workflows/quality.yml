@@ -137,6 +137,11 @@ on:
         required: false
         type: string
         default: ""
+      playwright-preflight-path:
+        description: "Pretty URL the Playwright job probes to prove the php -S front controller is routing, before any spec runs. Defaults to /apps/<app-name>/, which is right for every app that serves a main page. Set it for apps that legitimately have NO main route — e.g. an admin-settings-only app like nldesign, whose routes.php declares only /api/* and /settings/* and whose /apps/nldesign/ therefore correctly 404s. Without an override the preflight reports that correct 404 as a broken front controller and fails the job before a single spec runs."
+        required: false
+        type: string
+        default: ""
       enable-playwright-coverage:
         description: "Collect V8 code coverage during Playwright tests and enforce threshold"
         required: false
@@ -2012,10 +2017,24 @@ jobs:
           # Prove the front controller is actually routing before any spec runs.
           # `/apps/<app>/` is the URL the fleet's specs use; without the router
           # it is a hard 404 and every one of them fails on a selector timeout.
-          PRETTY="$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:8080/apps/${{ inputs.app-name }}/")"
-          echo "Front-controller check: /apps/${{ inputs.app-name }}/ -> HTTP ${PRETTY}"
+          #
+          # A 404 here means "the router is broken" ONLY for an app that
+          # actually serves a main page. Not every app does: an
+          # admin-settings-only app such as nldesign declares just /api/* and
+          # /settings/* in routes.php and no <navigation> in info.xml, so
+          # /apps/nldesign/ is a CORRECT 404 — and this check read that as a
+          # broken front controller and killed the job before any spec ran.
+          # `playwright-preflight-path` lets such an app name a URL it really
+          # serves. Default is unchanged, so no existing caller is affected.
+          PREFLIGHT_PATH="${{ inputs.playwright-preflight-path }}"
+          if [ -z "$PREFLIGHT_PATH" ]; then
+            PREFLIGHT_PATH="/apps/${{ inputs.app-name }}/"
+          fi
+          PRETTY="$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:8080${PREFLIGHT_PATH}")"
+          echo "Front-controller check: ${PREFLIGHT_PATH} -> HTTP ${PRETTY}"
           if [ "$PRETTY" = "404" ]; then
-            echo "::error::The php -S front-controller router is not routing pretty URLs — /apps/${{ inputs.app-name }}/ returned 404. Every spec using a pretty Nextcloud URL will fail on a selector timeout."
+            echo "::error::The php -S front-controller router is not routing pretty URLs — ${PREFLIGHT_PATH} returned 404. Every spec using a pretty Nextcloud URL will fail on a selector timeout."
+            echo "::error::If this app legitimately serves no page at that path (an admin-settings-only app, for instance), set the 'playwright-preflight-path' input to a URL it does serve."
             exit 1
           fi
           # And prove the OTHER Nextcloud PHP entry points still reach
