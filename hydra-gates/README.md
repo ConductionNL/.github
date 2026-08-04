@@ -73,6 +73,29 @@ Then `composer update conduction/hydra-gates`.
 `vendor/conduction/hydra-gates` lands at about 1.2 MB. The org profile, the
 website and the docs tree are `export-ignore`d and do not follow.
 
+### Upgrading to `v1.1.0` from `v1.0.x`
+
+`^1.0` picks this up on the next `composer update`, and **verdicts move**. Three
+things to do before you upgrade:
+
+1. **Make `ajv` resolvable before the gates run** — `npm ci`, or
+   `npm --prefix <package-dir> install --no-save ajv` (Option A's shared
+   workflow already does this). Gate 22 previously fell back to a structural
+   lint that checks only the AppHost blocks and reported the result as a PASS;
+   it now **fails** with a named reason rather than certifying a manifest it
+   never schema-validated. Gate 53 has always refused to run without it.
+2. **Expect gate-22 verdicts to move in both directions.** Its verdict used to
+   come from the app's own `npm run check:manifest`; it now comes from the
+   vendored canonical validator, and the app script is surfaced as an advisory.
+   Apps whose local checker was weaker will surface real findings; apps failed
+   by a stale app-local page-type enum will go green.
+3. **Treat `: SKIPPED` as "did not run", not as a pass**, if you parse
+   `^\[gate-N\]` lines. New verdict; see *Reading a green* below.
+
+The upside: **gate 53 becomes usable under `--scope-to-diff`**. It was
+previously unenablable on any repo with manifest debt, because a one-line change
+reproduced the full-repo finding count exactly.
+
 ---
 
 ## What it needs at runtime
