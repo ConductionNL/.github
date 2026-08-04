@@ -1,0 +1,32 @@
+# TEMPORARY — deleted before this PR merges.
+# Calls quality.yml locally (`uses: ./`) so the frontend-checks matrix is
+# exercised by a real run. `.github` has no other caller of quality.yml, so
+# without this the job's expansion can only be argued from the YAML.
+name: SELFTEST frontend-checks
+
+on:
+  push:
+    branches: [fix/frontend-checks-matrix-guard]
+  workflow_dispatch:
+
+jobs:
+  quality:
+    uses: ./.github/workflows/quality.yml
+    with:
+      app-name: ci-selftest
+      enable-php: false
+      enable-psalm: false
+      enable-phpstan: false
+      enable-phpmd: false
+      enable-phpcs: false
+      enable-phpmetrics: false
+      enable-phpunit: false
+      enable-license-check: false
+      enable-coverage-guard: false
+      enable-sbom: false
+      enable-features-extract: false
+      enable-frontend: true
+      enable-eslint: false
+      enable-stylelint: false
+      frontend-path: ci-selftest
+      frontend-checks: '["selftest:pass", "selftest:fail"]'

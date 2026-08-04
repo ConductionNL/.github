@@ -1,0 +1,10 @@
+{
+  "name": "ci-selftest",
+  "version": "0.0.0",
+  "private": true,
+  "description": "TEMPORARY fixture proving the frontend-checks matrix expands and its legs can fail. Removed before merge.",
+  "scripts": {
+    "selftest:pass": "node -e \"console.log('selftest:pass ran'); process.exit(0)\"",
+    "selftest:fail": "node -e \"console.log('selftest:fail ran'); process.exit(1)\""
+  }
+}
