@@ -3675,6 +3675,53 @@ jobs:
           echo "::error::One or more quality jobs failed — see the report above."
           exit 1
 
+      # A CANCELLED job renders NO verdict, so treating it as merely
+      # "not a failure" lets this gate go green over a leg that never ran.
+      # Observed live on pipelinq run 30903070948: `E2E Tests (Playwright)`
+      # and `Hydra Gates` both CANCELLED, `Quality Report` still SUCCESS.
+      #
+      # But cancellation has two shapes and only one of them is a defect:
+      #
+      #   (a) a job cancelled while its run CARRIES ON — a real gap: that leg
+      #       produced no verdict while its siblings produced theirs. Reached
+      #       via a job-level `concurrency` group, a lost runner, or a
+      #       fail-fast matrix sibling. MUST fail the gate.
+      #
+      #   (b) the WHOLE run cancelled, almost always by this workflow's own
+      #       `concurrency: cancel-in-progress` when a newer commit supersedes
+      #       it. Entirely legitimate and routine — four merge commits in one
+      #       programme were superseded exactly this way. Must stay quiet, or
+      #       every rapid push turns into a wall of red.
+      #
+      # `cancelled()` is the discriminator: it reflects the RUN's cancellation
+      # state, not an individual job's. In shape (b) it is true, so this step
+      # is skipped and a superseded run stays silent. In shape (a) the run is
+      # alive, so it is false and the gate fires. (This job's own
+      # `if: always()` is what makes it reach here at all in shape (b);
+      # `always()` runs a job even when the run is cancelled.)
+      #
+      # RESIDUE, stated rather than papered over: a run cancelled by a HUMAN
+      # pressing "Cancel workflow" is indistinguishable from (b) in the
+      # expression context — there is no cancellation-reason field — so it
+      # stays quiet too and this job still reports success. Guarding against
+      # that needs a different mechanism than an `if:` expression.
+      - name: Gate — fail when an upstream job was cancelled mid-run
+        if: ${{ !cancelled() && contains(needs.*.result, 'cancelled') }}
+        run: |
+          echo "::error::One or more quality jobs were CANCELLED while the run continued. A cancelled job renders no verdict, so this gate cannot pass."
+          {
+            echo ""
+            echo "## ❌ Gate failed — cancelled job(s)"
+            echo ""
+            echo "The following jobs were cancelled while the run carried on, so they"
+            echo "produced no verdict:"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo '${{ toJSON(needs) }}' \
+            | jq -r 'to_entries[] | select(.value.result == "cancelled") | "- `\(.key)`"' \
+            >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+
   # ╔══════════════════════════════════════════════╗
   # ║  STAGE 4 — SBOM Generation & Validation      ║
   # ║                                               ║
