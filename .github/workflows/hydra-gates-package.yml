@@ -67,18 +67,30 @@ jobs:
       - name: Install ajv for the manifest-validation helpers
         run: npm install --no-save --no-audit --no-fund ajv ajv-formats
 
-      # These three cover the gate-22 verdict contract and the gate-53 ADR-020
-      # diff scoping. They lived in scripts/lib/ and were run by NOTHING —
-      # test_check_manifest.sh in particular had been green for its whole life
-      # while pointing at a fixture directory that did not exist (a missing
-      # manifest path makes the validator print "Tier 0, skipping" and exit 0,
-      # which is what two of its three assertions expected).
-      - name: Manifest gate helper suites
-        run: |
-          set -eu
-          bash hydra-gates/scripts/lib/test_check_manifest.sh
-          node hydra-gates/scripts/lib/test_manifest_scope_filter.js
-          python3 hydra-gates/scripts/lib/test_manifest_diff_scope.py
+      # EVERY scripts/lib/test_* suite, discovered rather than listed.
+      #
+      # This step used to name three files by hand. The package ships 19, so 15
+      # of them were executed by nothing at all — they existed, they looked like
+      # coverage, and no job ever ran them. Two were pointing at fixture
+      # directories that had never existed:
+      #
+      #   test_check_manifest.sh          green its whole life (a missing
+      #                                   manifest path makes the validator
+      #                                   print "Tier 0, skipping" and exit 0,
+      #                                   which is what 2 of its 3 assertions
+      #                                   expected) — fixed 2026-08-03
+      #   test_check_manifest_crossref.js red its whole life, unseen, because
+      #                                   nothing ran it — fixed 2026-08-04
+      #
+      # A hand-written list of test names decays exactly like a hand-written
+      # paths filter: adding a file does not add it to the list and the omission
+      # is invisible. The runner discovers instead, so a new scripts/lib/test_*
+      # is enforced the moment it lands, with no workflow edit to forget. Suites
+      # may be quarantined only with a stated reason, and the quarantine cannot
+      # rot — an entry that no longer exists, or that starts passing, fails the
+      # step.
+      - name: All helper suites (discovered, not listed)
+        run: bash hydra-gates/tests/run-helper-suites.sh
 
   install-from-published-location:
     name: "Install from published location (php:8.3-cli)"
