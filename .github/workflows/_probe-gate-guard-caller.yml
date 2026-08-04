@@ -1,0 +1,30 @@
+# TEMPORARY MEASUREMENT HARNESS — see _probe-gate-guard.yml. Deleted after the
+# measurement is recorded.
+name: probe-gate-guard-caller
+
+on:
+  push:
+    branches: [fix/hydra-gates-needs-skip-deletion]
+  workflow_dispatch:
+
+jobs:
+  producer-succeeded:
+    uses: ./.github/workflows/_probe-gate-guard.yml
+    with:
+      enable-playwright: true
+      playwright-fails: false
+      enable-hydra-gates: true
+
+  producer-failed:
+    uses: ./.github/workflows/_probe-gate-guard.yml
+    with:
+      enable-playwright: true
+      playwright-fails: true
+      enable-hydra-gates: true
+
+  producer-skipped:
+    uses: ./.github/workflows/_probe-gate-guard.yml
+    with:
+      enable-playwright: false
+      playwright-fails: false
+      enable-hydra-gates: true
