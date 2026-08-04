@@ -261,6 +261,15 @@ _count() {
 
 _FAILED=0
 _EMITTED_GATES=""
+# _SKIPPED_GATES is written by _skip but deliberately NOT read by the coverage
+# summary, and it must stay that way. The summary derives "gates that did not
+# run" as DECLARED minus _EMITTED_GATES, which is strictly broader: it catches
+# both a gate that skipped explicitly AND a gate that emitted nothing at all
+# because its enclosing `if [ -d src ]`-style prerequisite was false. Driving
+# the report off _SKIPPED_GATES instead would narrow it back to only the
+# explicit skips and silently reopen the hole this accounting exists to close.
+# Kept as a record of what skipped, for a caller that wants to distinguish the
+# two shapes.
 _SKIPPED_GATES=""
 # A reason may arrive with embedded newlines (a helper echoing a multi-line
 # message, a miscounted variable). Flatten it: the contract of this runner's
@@ -571,6 +580,7 @@ while IFS= read -r f; do
     _in_scope "$f" || continue
     _oa_files+=("$f")
 done < <(_enum_tracked '\.php$' lib/Service lib/Controller)
+_oa_ran=1
 if [ "${#_oa_files[@]}" -gt 0 ]; then
     _oa_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/lib" 2>/dev/null && pwd)"
     if [ ! -f "${_oa_lib_dir}/check_orphan_auth.py" ]; then
@@ -580,15 +590,18 @@ if [ "${#_oa_files[@]}" -gt 0 ]; then
         python3 "${_oa_lib_dir}/check_orphan_auth.py" "${_oa_files[@]}" \
             >> "${_oa_log}" 2>/dev/null || true
     else
-        echo "[gate-6] WARN: check_orphan_auth.py not found at ${_oa_lib_dir} — gate-6 skipped" >&2
+        _oa_ran=0
+        _skip 6 "orphan-auth" "check_orphan_auth.py not found at ${_oa_lib_dir} — ${#_oa_files[@]} PHP file(s) were in scope and NONE were inspected; orphaned (defined-but-never-called) authorization methods are UNVERIFIED by this run."
     fi
 fi
-_filter_preexisting "${_oa_log}"
-_oa_fail=$(wc -l < "${_oa_log}" 2>/dev/null || echo 0)
-if [ "${_oa_fail}" -eq 0 ]; then
-    _pass 6 "orphan-auth"
-else
-    _fail 6 "orphan-auth" "${_oa_fail} orphan method(s) — see ${_oa_log}"
+if [ "${_oa_ran}" -eq 1 ]; then
+    _filter_preexisting "${_oa_log}"
+    _oa_fail=$(wc -l < "${_oa_log}" 2>/dev/null || echo 0)
+    if [ "${_oa_fail}" -eq 0 ]; then
+        _pass 6 "orphan-auth"
+    else
+        _fail 6 "orphan-auth" "${_oa_fail} orphan method(s) — see ${_oa_log}"
+    fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -638,6 +651,7 @@ while IFS= read -r f; do
     _in_scope "$f" || continue
     _idor_files+=("$f")
 done < <(_enum_tracked '\.php$' lib/Controller)
+_idor_ran=1
 if [ "${#_idor_files[@]}" -gt 0 ]; then
     _gate_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/lib" 2>/dev/null && pwd)"
     if [ ! -f "${_gate_lib_dir}/check_no_admin_idor.py" ]; then
@@ -647,15 +661,18 @@ if [ "${#_idor_files[@]}" -gt 0 ]; then
         python3 "${_gate_lib_dir}/check_no_admin_idor.py" "${_idor_files[@]}" \
             >> "${_idor_log}" 2>/dev/null || true
     else
-        echo "[gate-7] WARN: check_no_admin_idor.py not found at ${_gate_lib_dir} — gate-7 skipped" >&2
+        _idor_ran=0
+        _skip 7 "no-admin-idor" "check_no_admin_idor.py not found at ${_gate_lib_dir} — ${#_idor_files[@]} controller file(s) were in scope and NONE were inspected; unguarded #[NoAdminRequired] endpoints (IDOR, OWASP A01:2021) are UNVERIFIED by this run."
     fi
 fi
-_filter_preexisting "${_idor_log}"
-_idor_fail=$(wc -l < "${_idor_log}" 2>/dev/null || echo 0)
-if [ "${_idor_fail}" -eq 0 ]; then
-    _pass 7 "no-admin-idor"
-else
-    _fail 7 "no-admin-idor" "${_idor_fail} method(s) with NoAdminRequired + no guard — see ${_idor_log}"
+if [ "${_idor_ran}" -eq 1 ]; then
+    _filter_preexisting "${_idor_log}"
+    _idor_fail=$(wc -l < "${_idor_log}" 2>/dev/null || echo 0)
+    if [ "${_idor_fail}" -eq 0 ]; then
+        _pass 7 "no-admin-idor"
+    else
+        _fail 7 "no-admin-idor" "${_idor_fail} method(s) with NoAdminRequired + no guard — see ${_idor_log}"
+    fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -738,6 +755,7 @@ while IFS= read -r f; do
     _in_scope "$f" || continue
     _sem_files+=("$f")
 done < <(_enum_tracked '\.php$' lib/Controller)
+_sem_ran=1
 if [ "${#_sem_files[@]}" -gt 0 ]; then
     # The helper script is co-located with the gate runner. Two layouts:
     #   local repo: scripts/run-hydra-gates.sh + scripts/lib/check_semantic_auth.py
@@ -757,14 +775,17 @@ if [ "${#_sem_files[@]}" -gt 0 ]; then
         python3 "${_sem_helper}" "${_sem_files[@]}" \
             >> "${_sem_log}" 2>/dev/null || true
     else
-        echo "[gate-9] WARN: check_semantic_auth.py not found near $(dirname "${BASH_SOURCE[0]:-$0}") — gate-9 skipped" >&2
+        _sem_ran=0
+        _skip 9 "semantic-auth" "check_semantic_auth.py not found near $(dirname "${BASH_SOURCE[0]:-$0}") — ${#_sem_files[@]} controller file(s) were in scope and NONE were inspected; auth-attribute-vs-body semantic mismatches are UNVERIFIED by this run."
     fi
 fi
-_sem_fail=$(wc -l < "${_sem_log}" 2>/dev/null || echo 0)
-if [ "${_sem_fail}" -eq 0 ]; then
-    _pass 9 "semantic-auth"
-else
-    _fail 9 "semantic-auth" "${_sem_fail} attribute-vs-body mismatch(es) — see ${_sem_log}"
+if [ "${_sem_ran}" -eq 1 ]; then
+    _sem_fail=$(wc -l < "${_sem_log}" 2>/dev/null || echo 0)
+    if [ "${_sem_fail}" -eq 0 ]; then
+        _pass 9 "semantic-auth"
+    else
+        _fail 9 "semantic-auth" "${_sem_fail} attribute-vs-body mismatch(es) — see ${_sem_log}"
+    fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -1042,6 +1063,7 @@ fi
 if [ -f src/manifest.json ]; then
     _da_log=/tmp/hydra-gate-dashboard-antipattern.log
     : > "${_da_log}"
+    _da_ran=1
     _da_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/lib" 2>/dev/null && pwd)"
     if [ ! -f "${_da_lib_dir}/check_dashboard_antipattern.py" ]; then
         _da_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)/lib"
@@ -1067,13 +1089,15 @@ if [ -f src/manifest.json ]; then
         fi
         _da_fail=$(wc -l < "${_da_log}" 2>/dev/null || echo 0)
     else
-        _da_fail=0
-        echo "[gate-15] WARN: check_dashboard_antipattern.py not found at ${_da_lib_dir} — gate-15 skipped" >&2
+        _da_ran=0
+        _skip 15 "dashboard-antipattern" "check_dashboard_antipattern.py not found at ${_da_lib_dir} — src/manifest.json is present but was NOT inspected; nested dashboard-in-dashboard patterns are UNVERIFIED by this run."
     fi
-    if [ "${_da_fail}" -eq 0 ]; then
-        _pass 15 "dashboard-antipattern"
-    else
-        _fail 15 "dashboard-antipattern" "${_da_fail} nested-dashboard pattern(s) — see ${_da_log}"
+    if [ "${_da_ran}" -eq 1 ]; then
+        if [ "${_da_fail}" -eq 0 ]; then
+            _pass 15 "dashboard-antipattern"
+        else
+            _fail 15 "dashboard-antipattern" "${_da_fail} nested-dashboard pattern(s) — see ${_da_log}"
+        fi
     fi
 fi
 
@@ -1091,6 +1115,7 @@ fi
 if [ -d lib ] || [ -d src ]; then
     _sc_log=/tmp/hydra-gate-spec-coverage.log
     : > "${_sc_log}"
+    _sc_ran=1
     _sc_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/lib" 2>/dev/null && pwd)"
     if [ ! -f "${_sc_lib_dir}/check_spec_coverage.py" ]; then
         _sc_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)/lib"
@@ -1105,13 +1130,15 @@ if [ -d lib ] || [ -d src ]; then
             >> "${_sc_log}" 2>/dev/null || true
         _sc_fail=$(wc -l < "${_sc_log}" 2>/dev/null || echo 0)
     else
-        _sc_fail=0
-        echo "[gate-16] WARN: check_spec_coverage.py not found at ${_sc_lib_dir} — gate-16 skipped" >&2
+        _sc_ran=0
+        _skip 16 "spec-coverage" "check_spec_coverage.py not found at ${_sc_lib_dir} — no changed method was inspected; @spec traceability (ADR-003/ADR-020) is UNVERIFIED by this run."
     fi
-    if [ "${_sc_fail}" -eq 0 ]; then
-        _pass 16 "spec-coverage"
-    else
-        _fail 16 "spec-coverage" "${_sc_fail} changed method(s) missing @spec — see ${_sc_log}"
+    if [ "${_sc_ran}" -eq 1 ]; then
+        if [ "${_sc_fail}" -eq 0 ]; then
+            _pass 16 "spec-coverage"
+        else
+            _fail 16 "spec-coverage" "${_sc_fail} changed method(s) missing @spec — see ${_sc_log}"
+        fi
     fi
 fi
 
@@ -1222,6 +1249,11 @@ _nd_is_engine=0
 # shillinq's 147 register files (0.7%) and 2 of procest's 20 (10%): the legacy
 # notification dialect was effectively unpoliced in every fragment-based app.
 _nd_register_files=$(_enum_tracked '(register[^/]*\.json|/register\.d/[^/]*\.json)$' lib/Settings | _filter_files_by_scope || true)
+# Tracks whether the BLOCKING half (a) actually ran. Half (b) below is a pure-
+# bash advisory that needs no helper: it still runs, and still prints its
+# non-blocking WARNING line, even when (a) could not run. Only (a) decides the
+# gate's PASS/FAIL verdict, so only (a)'s absence turns the gate into a SKIP.
+_nd_ran=1
 if [ -n "${_nd_register_files}" ]; then
     _nd_lib_dir="${SCRIPT_DIR}/lib"
     if [ -f "${_nd_lib_dir}/check_notification_dialect.py" ]; then
@@ -1231,7 +1263,8 @@ if [ -n "${_nd_register_files}" ]; then
             python3 "${_nd_lib_dir}/check_notification_dialect.py" "${_rf}" >> "${_nd_log}" 2>/dev/null || true
         done
     else
-        echo "[gate-18] WARN: check_notification_dialect.py not found at ${_nd_lib_dir} — legacy-dialect check skipped" >&2
+        _nd_ran=0
+        _skip 18 "notification-dialect" "check_notification_dialect.py not found at ${_nd_lib_dir} — register file(s) were in scope and NONE were inspected; the obsolete legacy notification dialect (ADR-031) is UNVERIFIED by this run. The imperative-dispatch advisory below is unaffected and still ran."
     fi
 fi
 _nd_fail=$(wc -l < "${_nd_log}" 2>/dev/null || echo 0)
@@ -1260,11 +1293,15 @@ if [ "${_nd_is_engine}" = "0" ] && [ -d lib ]; then
 fi
 _nd_warn=$(wc -l < "${_nd_warn_log}" 2>/dev/null || echo 0)
 
-if [ "${_nd_fail}" -eq 0 ]; then
-    _pass 18 "notification-dialect"
-else
-    _fail 18 "notification-dialect" "${_nd_fail} legacy-dialect token(s) in register file(s) — see ${_nd_log}"
+if [ "${_nd_ran}" -eq 1 ]; then
+    if [ "${_nd_fail}" -eq 0 ]; then
+        _pass 18 "notification-dialect"
+    else
+        _fail 18 "notification-dialect" "${_nd_fail} legacy-dialect token(s) in register file(s) — see ${_nd_log}"
+    fi
 fi
+# Advisory half (b) — deliberately OUTSIDE the _nd_ran guard and deliberately
+# never a failure. It is pure bash, so it ran regardless of the helper.
 if [ "${_nd_warn}" -gt 0 ]; then
     echo "[gate-18] notification-dialect: WARNING — ${_nd_warn} imperative-dispatch site(s) (advisory, non-blocking) — see ${_nd_warn_log}"
 fi
@@ -1290,6 +1327,7 @@ fi
 if [ -d openspec/specs ] || [ -d tests/e2e ]; then
     _e2e_log=/tmp/hydra-gate-e2e-coverage.log
     : > "${_e2e_log}"
+    _e2e_ran=1
     _e2e_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/lib" 2>/dev/null && pwd)"
     if [ ! -f "${_e2e_lib_dir}/check_e2e_coverage.py" ]; then
         _e2e_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)/lib"
@@ -1306,13 +1344,15 @@ if [ -d openspec/specs ] || [ -d tests/e2e ]; then
         _e2e_fail=$?
         set -e
     else
-        _e2e_fail=0
-        echo "[gate-19] WARN: check_e2e_coverage.py not found at ${_e2e_lib_dir} — gate-19 skipped" >&2
+        _e2e_ran=0
+        _skip 19 "e2e-coverage" "check_e2e_coverage.py not found at ${_e2e_lib_dir} — no spec scenario was inspected; @e2e traceability (ADR-020) is UNVERIFIED by this run."
     fi
-    if [ "${_e2e_fail}" -eq 0 ]; then
-        _pass 19 "e2e-coverage"
-    else
-        _fail 19 "e2e-coverage" "${_e2e_fail} scenario(s) missing @e2e — see ${_e2e_log}"
+    if [ "${_e2e_ran}" -eq 1 ]; then
+        if [ "${_e2e_fail}" -eq 0 ]; then
+            _pass 19 "e2e-coverage"
+        else
+            _fail 19 "e2e-coverage" "${_e2e_fail} scenario(s) missing @e2e — see ${_e2e_log}"
+        fi
     fi
 fi
 
@@ -1664,6 +1704,7 @@ fi
 if [ -f appinfo/routes.php ]; then
     _cc_log=/tmp/hydra-gate-contract-coverage.log
     : > "${_cc_log}"
+    _cc_ran=1
     _cc_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/lib" 2>/dev/null && pwd)"
     if [ ! -f "${_cc_lib_dir}/check_contract_coverage.py" ]; then
         _cc_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)/lib"
@@ -1678,13 +1719,15 @@ if [ -f appinfo/routes.php ]; then
         _cc_fail=$?
         set -e
     else
-        _cc_fail=0
-        echo "[gate-25] WARN: check_contract_coverage.py not found at ${_cc_lib_dir} — gate-25 skipped" >&2
+        _cc_ran=0
+        _skip 25 "contract-coverage" "check_contract_coverage.py not found at ${_cc_lib_dir} — appinfo/routes.php is present but NO endpoint was inspected; wire-contract coverage of newly-exposed endpoints is UNVERIFIED by this run."
     fi
-    if [ "${_cc_fail}" -eq 0 ]; then
-        _pass 25 "contract-coverage"
-    else
-        _fail 25 "contract-coverage" "${_cc_fail} new public endpoint(s) missing a contract test — see ${_cc_log}"
+    if [ "${_cc_ran}" -eq 1 ]; then
+        if [ "${_cc_fail}" -eq 0 ]; then
+            _pass 25 "contract-coverage"
+        else
+            _fail 25 "contract-coverage" "${_cc_fail} new public endpoint(s) missing a contract test — see ${_cc_log}"
+        fi
     fi
 fi
 
@@ -1708,6 +1751,7 @@ fi
 if [ -d src ]; then
     _vc_log=/tmp/hydra-gate-visual-coverage.log
     : > "${_vc_log}"
+    _vc_ran=1
     _vc_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/lib" 2>/dev/null && pwd)"
     if [ ! -f "${_vc_lib_dir}/check_visual_coverage.py" ]; then
         _vc_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)/lib"
@@ -1720,13 +1764,15 @@ if [ -d src ]; then
         _vc_fail=$?
         set -e
     else
-        _vc_fail=0
-        echo "[gate-26] WARN: check_visual_coverage.py not found at ${_vc_lib_dir} — gate-26 skipped" >&2
+        _vc_ran=0
+        _skip 26 "visual-coverage" "check_visual_coverage.py not found at ${_vc_lib_dir} — src/ is present but NO page component was inspected; visual-regression coverage of new screens is UNVERIFIED by this run."
     fi
-    if [ "${_vc_fail}" -eq 0 ]; then
-        _pass 26 "visual-coverage"
-    else
-        _fail 26 "visual-coverage" "${_vc_fail} new page component(s) missing a visual baseline — see ${_vc_log}"
+    if [ "${_vc_ran}" -eq 1 ]; then
+        if [ "${_vc_fail}" -eq 0 ]; then
+            _pass 26 "visual-coverage"
+        else
+            _fail 26 "visual-coverage" "${_vc_fail} new page component(s) missing a visual baseline — see ${_vc_log}"
+        fi
     fi
 fi
 
@@ -1775,6 +1821,7 @@ while IFS= read -r f; do
 done < <(find lib src \( -name '*.php' -o -name '*.vue' -o -name '*.js' -o -name '*.ts' \) \
     -not -path '*/vendor/*' -not -path '*/node_modules/*' \
     -not -path '*/dist/*' -not -path '*/build/*' 2>/dev/null)
+_pcar_ran=1
 if [ "${#_pcar_files[@]}" -gt 0 ]; then
     _pcar_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/lib" 2>/dev/null && pwd)"
     if [ ! -f "${_pcar_lib_dir}/check_phantom_cross_app_rpc.py" ]; then
@@ -1784,7 +1831,8 @@ if [ "${#_pcar_files[@]}" -gt 0 ]; then
         python3 "${_pcar_lib_dir}/check_phantom_cross_app_rpc.py" "${_pcar_files[@]}" \
             >> "${_pcar_log}" 2>/dev/null || true
     else
-        echo "[gate-27] WARN: check_phantom_cross_app_rpc.py not found at ${_pcar_lib_dir} — gate-27 skipped" >&2
+        _pcar_ran=0
+        _skip 27 "no-phantom-cross-app-rpc" "check_phantom_cross_app_rpc.py not found at ${_pcar_lib_dir} — ${#_pcar_files[@]} PHP/Vue/JS/TS file(s) were in scope and NONE were inspected; phantom cross-app RPC patterns (ADR-041) are UNVERIFIED by this run."
     fi
 fi
 # Count findings. NOTE: gates 25/26 above leave `set -e` ENABLED, so a
@@ -1795,10 +1843,12 @@ set +e
 _pcar_fail=$(wc -l < "${_pcar_log}" 2>/dev/null | tr -d ' ')
 set -e
 [ -z "${_pcar_fail}" ] && _pcar_fail=0
-if [ "${_pcar_fail}" -eq 0 ]; then
-    _pass 27 "no-phantom-cross-app-rpc"
-else
-    _fail 27 "no-phantom-cross-app-rpc" "${_pcar_fail} phantom cross-app RPC pattern(s) — use the ADR-041 event recipe; see ${_pcar_log}"
+if [ "${_pcar_ran}" -eq 1 ]; then
+    if [ "${_pcar_fail}" -eq 0 ]; then
+        _pass 27 "no-phantom-cross-app-rpc"
+    else
+        _fail 27 "no-phantom-cross-app-rpc" "${_pcar_fail} phantom cross-app RPC pattern(s) — use the ADR-041 event recipe; see ${_pcar_log}"
+    fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -3203,6 +3253,7 @@ while IFS= read -r f; do
     _in_scope "$f" || continue
     _spt_files+=("$f")
 done < <(_enum_tracked '(register[^/]*\.json|/register\.d/[^/]*\.json)$' lib/Settings)
+_spt_ran=1
 if [ "${#_spt_files[@]}" -gt 0 ]; then
     _spt_helper="${SCRIPT_DIR}/lib/check_schema_property_meta.py"
     if [ -f "${_spt_helper}" ]; then
@@ -3218,17 +3269,20 @@ if [ "${#_spt_files[@]}" -gt 0 ]; then
             python3 "${_spt_helper}" "${_spt_files[@]}" >> "${_spt_log}" 2>/dev/null || true
         fi
     else
-        echo "[gate-51] WARN: check_schema_property_meta.py not found at ${_spt_helper} — gate-51 skipped" >&2
+        _spt_ran=0
+        _skip 51 "schema-property-titles" "check_schema_property_meta.py not found at ${_spt_helper} — ${#_spt_files[@]} register file(s) were in scope and NONE were inspected; schema property title/description quality is UNVERIFIED by this run."
     fi
 fi
 set +e
 _spt_fail=$(wc -l < "${_spt_log}" 2>/dev/null | tr -d ' ')
 set -e
 [ -z "${_spt_fail}" ] && _spt_fail=0
-if [ "${_spt_fail}" -eq 0 ]; then
-    _pass 51 "schema-property-titles"
-else
-    _fail 51 "schema-property-titles" "${_spt_fail} schema property(ies) missing a human-friendly title/description — see ${_spt_log}"
+if [ "${_spt_ran}" -eq 1 ]; then
+    if [ "${_spt_fail}" -eq 0 ]; then
+        _pass 51 "schema-property-titles"
+    else
+        _fail 51 "schema-property-titles" "${_spt_fail} schema property(ies) missing a human-friendly title/description — see ${_spt_log}"
+    fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -3271,6 +3325,7 @@ done < <(find src \( -name '*.js' -o -name '*.ts' -o -name '*.vue' \) \
     -not -path '*/node_modules/*' -not -path '*/dist/*' \
     -not -path '*/build/*' 2>/dev/null)
 _cwr_fail=0
+_cwr_ran=1
 if [ "${#_cwr_files[@]}" -gt 0 ]; then
     _cwr_helper="${SCRIPT_DIR}/lib/check_custom_widget_ratchet.py"
     if [ -f "${_cwr_helper}" ]; then
@@ -3286,17 +3341,20 @@ if [ "${#_cwr_files[@]}" -gt 0 ]; then
         _cwr_fail=$?
         set -e
     else
-        echo "[gate-52] WARN: check_custom_widget_ratchet.py not found at ${_cwr_helper} — gate-52 skipped" >&2
+        _cwr_ran=0
+        _skip 52 "custom-widget-ratchet" "check_custom_widget_ratchet.py not found at ${_cwr_helper} — ${#_cwr_files[@]} frontend file(s) were in scope and NONE were inspected; custom kind:\"widget\" growth (ADR-049) is UNVERIFIED by this run — no base/head/delta counts were produced."
     fi
 fi
 # Surface the base/head/delta report on stdout (spec: the counts are always
 # reported so migrations can show the number shrinking).
 _cwr_counts=$(grep -m1 -o 'base=[0-9]* head=[0-9]* delta=[+-]*[0-9]*.*' "${_cwr_log}" 2>/dev/null || true)
 [ -n "${_cwr_counts}" ] && echo "[gate-52] custom-widget-ratchet: ${_cwr_counts}"
-if [ "${_cwr_fail}" -eq 0 ]; then
-    _pass 52 "custom-widget-ratchet"
-else
-    _fail 52 "custom-widget-ratchet" "${_cwr_fail} custom-widget finding(s)${_cwr_counts:+ (${_cwr_counts})} — see ${_cwr_log}"
+if [ "${_cwr_ran}" -eq 1 ]; then
+    if [ "${_cwr_fail}" -eq 0 ]; then
+        _pass 52 "custom-widget-ratchet"
+    else
+        _fail 52 "custom-widget-ratchet" "${_cwr_fail} custom-widget finding(s)${_cwr_counts:+ (${_cwr_counts})} — see ${_cwr_log}"
+    fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -3516,6 +3574,7 @@ while IFS= read -r f; do
     _in_scope "$f" || continue
     _rd_files+=("$f")
 done < <(_enum_tracked '(register[^/]*\.json|/register\.d/[^/]*\.json)$' lib/Settings)
+_rd_ran=1
 if [ "${#_rd_files[@]}" -gt 0 ]; then
     _rd_helper="${SCRIPT_DIR}/lib/check_relation_dialect.py"
     if [ -f "${_rd_helper}" ]; then
@@ -3529,7 +3588,8 @@ if [ "${#_rd_files[@]}" -gt 0 ]; then
             python3 "${_rd_helper}" "${_rd_log}" "${_rd_files[@]}" >/dev/null 2>&1 || true
         fi
     else
-        echo "[gate-54] WARN: check_relation_dialect.py not found at ${_rd_helper} — gate-54 skipped" >&2
+        _rd_ran=0
+        _skip 54 "relation-dialect" "check_relation_dialect.py not found at ${_rd_helper} — ${#_rd_files[@]} register file(s) were in scope and NONE were inspected; non-canonical relation dialects are UNVERIFIED by this run (its advisory WARN half reads the same empty log and is therefore also silent)."
     fi
 fi
 set +e
@@ -3539,10 +3599,12 @@ set -e
 [ -z "${_rd_fail}" ] && _rd_fail=0
 [ -z "${_rd_warn}" ] && _rd_warn=0
 [ "${_rd_warn}" -gt 0 ] && echo "[gate-54] relation-dialect: ${_rd_warn} WARN finding(s) (non-blocking) — see ${_rd_log}"
-if [ "${_rd_fail}" -eq 0 ]; then
-    _pass 54 "relation-dialect"
-else
-    _fail 54 "relation-dialect" "${_rd_fail} non-canonical relation dialect finding(s) — see ${_rd_log}"
+if [ "${_rd_ran}" -eq 1 ]; then
+    if [ "${_rd_fail}" -eq 0 ]; then
+        _pass 54 "relation-dialect"
+    else
+        _fail 54 "relation-dialect" "${_rd_fail} non-canonical relation dialect finding(s) — see ${_rd_log}"
+    fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -3572,6 +3634,7 @@ while IFS= read -r f; do
     _dpd_files+=("$f")
 done < <(find src -maxdepth 1 -name 'manifest.json' 2>/dev/null; \
     find src/manifest.d -name '*.json' 2>/dev/null)
+_dpd_ran=1
 if [ "${#_dpd_files[@]}" -gt 0 ]; then
     _dpd_helper="${SCRIPT_DIR}/lib/check_detail_page_discipline.py"
     if [ -f "${_dpd_helper}" ]; then
@@ -3585,17 +3648,20 @@ if [ "${#_dpd_files[@]}" -gt 0 ]; then
             python3 "${_dpd_helper}" "${_dpd_log}" "${_dpd_files[@]}" >/dev/null 2>&1 || true
         fi
     else
-        echo "[gate-55] WARN: check_detail_page_discipline.py not found at ${_dpd_helper} — gate-55 skipped" >&2
+        _dpd_ran=0
+        _skip 55 "detail-page-discipline" "check_detail_page_discipline.py not found at ${_dpd_helper} — ${#_dpd_files[@]} manifest file(s) were in scope and NONE were inspected; detail-page discipline is UNVERIFIED by this run."
     fi
 fi
 set +e
 _dpd_fail=$(wc -l < "${_dpd_log}" 2>/dev/null | tr -d ' ')
 set -e
 [ -z "${_dpd_fail}" ] && _dpd_fail=0
-if [ "${_dpd_fail}" -eq 0 ]; then
-    _pass 55 "detail-page-discipline"
-else
-    _fail 55 "detail-page-discipline" "${_dpd_fail} detail-page discipline finding(s) — see ${_dpd_log}"
+if [ "${_dpd_ran}" -eq 1 ]; then
+    if [ "${_dpd_fail}" -eq 0 ]; then
+        _pass 55 "detail-page-discipline"
+    else
+        _fail 55 "detail-page-discipline" "${_dpd_fail} detail-page discipline finding(s) — see ${_dpd_log}"
+    fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -3631,22 +3697,26 @@ while IFS= read -r f; do
 done < <(find lib/Settings -name '*register*.json' \
     -not -path '*/vendor/*' -not -path '*/node_modules/*' 2>/dev/null; \
     find lib/Settings/register.d -name '*.json' 2>/dev/null)
+_rhr_ran=1
 if [ "${#_rhr_files[@]}" -gt 0 ]; then
     _rhr_helper="${SCRIPT_DIR}/lib/check_register_handler_resolution.py"
     if [ -f "${_rhr_helper}" ]; then
         python3 "${_rhr_helper}" "${_rhr_files[@]}" >> "${_rhr_log}" 2>/dev/null || true
     else
-        echo "[gate-56] WARN: check_register_handler_resolution.py not found at ${_rhr_helper} — gate-56 skipped" >&2
+        _rhr_ran=0
+        _skip 56 "register-handler-resolution" "check_register_handler_resolution.py not found at ${_rhr_helper} — ${#_rhr_files[@]} register file(s) were in scope and NONE were inspected; whether every referenced handler class/method actually resolves is UNVERIFIED by this run."
     fi
 fi
 set +e
 _rhr_fail=$(wc -l < "${_rhr_log}" 2>/dev/null | tr -d ' ')
 set -e
 [ -z "${_rhr_fail}" ] && _rhr_fail=0
-if [ "${_rhr_fail}" -eq 0 ]; then
-    _pass 56 "register-handler-resolution"
-else
-    _fail 56 "register-handler-resolution" "${_rhr_fail} unresolved register-handler reference(s) — see ${_rhr_log}"
+if [ "${_rhr_ran}" -eq 1 ]; then
+    if [ "${_rhr_fail}" -eq 0 ]; then
+        _pass 56 "register-handler-resolution"
+    else
+        _fail 56 "register-handler-resolution" "${_rhr_fail} unresolved register-handler reference(s) — see ${_rhr_log}"
+    fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -3681,22 +3751,26 @@ while IFS= read -r f; do
     _in_scope "$f" || continue
     _owc_files+=("$f")
 done < <(_enum_tracked '\.php$' lib/Service | grep -v '/tests/')
+_owc_ran=1
 if [ "${#_owc_files[@]}" -gt 0 ]; then
     _owc_helper="${SCRIPT_DIR}/lib/check_orphaned_write_capability.py"
     if [ -f "${_owc_helper}" ]; then
         python3 "${_owc_helper}" "${_owc_files[@]}" >> "${_owc_log}" 2>/dev/null || true
     else
-        echo "[gate-57] WARN: check_orphaned_write_capability.py not found at ${_owc_helper} — gate-57 skipped" >&2
+        _owc_ran=0
+        _skip 57 "orphaned-write-capability" "check_orphaned_write_capability.py not found at ${_owc_helper} — ${#_owc_files[@]} service file(s) were in scope and NONE were inspected; orphaned (mintable-but-unreachable) write capabilities are UNVERIFIED by this run."
     fi
 fi
 set +e
 _owc_fail=$(wc -l < "${_owc_log}" 2>/dev/null | tr -d ' ')
 set -e
 [ -z "${_owc_fail}" ] && _owc_fail=0
-if [ "${_owc_fail}" -eq 0 ]; then
-    _pass 57 "orphaned-write-capability"
-else
-    _fail 57 "orphaned-write-capability" "${_owc_fail} orphaned write-capability method(s) — see ${_owc_log}"
+if [ "${_owc_ran}" -eq 1 ]; then
+    if [ "${_owc_fail}" -eq 0 ]; then
+        _pass 57 "orphaned-write-capability"
+    else
+        _fail 57 "orphaned-write-capability" "${_owc_fail} orphaned write-capability method(s) — see ${_owc_log}"
+    fi
 fi
 
 # ---------------------------------------------------------------------------

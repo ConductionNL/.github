@@ -356,9 +356,23 @@ class GateWiringTest(unittest.TestCase):
                       proc.stdout)
         self.assertIn("[gate-52] custom-widget-ratchet: PASS", proc.stdout)
 
-    def test_helper_absent_warn_skips(self):
+    def test_helper_absent_reports_skipped_not_pass(self):
         # Copy the gate script into a scripts/ dir with an EMPTY lib/ so the
-        # helper is missing: gate 29 must WARN-skip, not hard-fail.
+        # helper is missing.
+        #
+        # This test used to assert the OPPOSITE: a WARN on stderr plus
+        # "custom-widget-ratchet: PASS" on stdout. That codified a dead gate.
+        # The fixture below contains a NOTELESS widget — a real finding the
+        # gate reports as FAIL when the helper is present (see
+        # test_gate29_fails_on_growth_and_reports_counts, same fixture). With
+        # the helper absent the old wiring turned that FAIL into a PASS, and
+        # the WARN that said so went to stderr where no `^\[gate-` consumer
+        # reads it. An empty findings log because the helper never ran was
+        # byte-identical to an empty log because there was nothing to find.
+        #
+        # The gate must now SKIP: it inspected nothing, so it may not claim a
+        # verdict, and it must land in the summary's DID-NOT-RUN list rather
+        # than being counted toward the green.
         with tempfile.TemporaryDirectory() as d:
             scripts = Path(d) / "scripts"
             (scripts / "lib").mkdir(parents=True)
@@ -367,11 +381,15 @@ class GateWiringTest(unittest.TestCase):
             self._git("add", ".")
             self._git("commit", "-qm", "add noteless widget")
             proc = self._run_gates(script=scripts / "run-hydra-gates.sh")
-            self.assertIn(
-                "[gate-52] WARN: check_custom_widget_ratchet.py not found",
-                proc.stderr,
-            )
-            self.assertIn("[gate-52] custom-widget-ratchet: PASS",
+            self.assertIn("[gate-52] custom-widget-ratchet: SKIPPED",
+                          proc.stdout)
+            self.assertIn("check_custom_widget_ratchet.py not found",
+                          proc.stdout)
+            # The verdict it must NOT claim.
+            self.assertNotIn("[gate-52] custom-widget-ratchet: PASS",
+                             proc.stdout)
+            # And the coverage accounting must name it, not fold it away.
+            self.assertIn("gate-52 custom-widget-ratchet",
                           proc.stdout)
 
 
