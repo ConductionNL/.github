@@ -2035,13 +2035,52 @@ jobs:
             exit 1
           }
           # Prove the front controller is actually routing before any spec runs.
-          # `/apps/<app>/` is the URL the fleet's specs use; without the router
-          # it is a hard 404 and every one of them fails on a selector timeout.
-          PRETTY="$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:8080/apps/${{ inputs.app-name }}/")"
-          echo "Front-controller check: /apps/${{ inputs.app-name }}/ -> HTTP ${PRETTY}"
+          #
+          # The probe MUST be a URL whose path resolves to a real DIRECTORY under
+          # the document root with no index.php inside it — that is the precise
+          # shape `php -S` answers with a hard 404 when no router is installed,
+          # and the only shape that distinguishes "router working" from "router
+          # missing". `/login`, `/settings/admin` and friends are useless as
+          # probes: they resolve to nothing on disk, so a router-less `php -S`
+          # already falls through to the root index.php and returns 200.
+          #
+          # `/apps/files/` is that shape on every Nextcloud: `apps/files` is a
+          # shipped, always-enabled app whose directory exists under the docroot
+          # and contains no index.php, and whose `files.view.index` route always
+          # resolves. Unauthenticated it answers 302 to /login — never 404 —
+          # so a 404 can only mean the front controller is not routing.
+          #
+          # It deliberately does NOT probe `/apps/<app-name>/`, which is what
+          # this gate used to do. That conflated two different properties:
+          #   1. does the front controller route pretty URLs (a CI concern), and
+          #   2. does THIS app have an index route (an app design choice).
+          # Settings-only apps legitimately have neither a navigation entry nor
+          # a `/` route — nldesign is one: its whole surface is admin settings
+          # pages plus /api/* and /settings/* endpoints, so `/apps/nldesign/` is
+          # a correct Nextcloud 404. The old probe read that as a broken router
+          # and blocked the E2E job before a single spec ran, while its own
+          # error text pointed at the router. See ConductionNL/nldesign#206.
+          #
+          # Evidence that the two are separable, from that same PR: on run
+          # 30859016722 (job 91836768845) the identical URL returned **500**,
+          # not 404 — index.php had executed and thrown. Same router, same
+          # request, different status. A 404 from `/apps/<app>/` is therefore
+          # Nextcloud answering "no such route", not `php -S` answering
+          # "no such directory index".
+          PRETTY="$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:8080/apps/files/")"
+          echo "Front-controller check: /apps/files/ -> HTTP ${PRETTY}"
           if [ "$PRETTY" = "404" ]; then
-            echo "::error::The php -S front-controller router is not routing pretty URLs — /apps/${{ inputs.app-name }}/ returned 404. Every spec using a pretty Nextcloud URL will fail on a selector timeout."
+            echo "::error::The php -S front-controller router is not routing pretty URLs — /apps/files/ returned 404, and apps/files is a real directory with no index.php, which is exactly what a router-less php -S 404s. Every spec using a pretty Nextcloud URL will fail on a selector timeout."
             exit 1
+          fi
+          # The app's own root, reported but NOT gated — see above. Kept visible
+          # because when it IS a 404 that is worth knowing (a page app that lost
+          # its route looks identical to a settings-only app that never had one,
+          # and only the spec run can tell them apart).
+          APP_ROOT="$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:8080/apps/${{ inputs.app-name }}/")"
+          echo "App root: /apps/${{ inputs.app-name }}/ -> HTTP ${APP_ROOT}"
+          if [ "$APP_ROOT" = "404" ]; then
+            echo "::notice::/apps/${{ inputs.app-name }}/ returned 404 while /apps/files/ routed fine, so the front controller is working — this app declares no index route. Normal for a settings-only app; if this app is supposed to have a page, its route registration is broken."
           fi
           # And prove the OTHER Nextcloud PHP entry points still reach
           # themselves. This gate did not exist when the router first shipped,
