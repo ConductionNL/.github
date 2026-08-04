@@ -200,10 +200,32 @@ _ADMIN_GATE_BODY_RE = re.compile(
 _FORBIDDEN_TOKEN_RE = re.compile(
     r"STATUS_FORBIDDEN|OCSForbiddenException|\b403\b",
 )
+# What contradicts #[PublicPage] is a SESSION/ADMIN requirement in the body:
+# the annotation says "no Nextcloud login needed" while the body insists on a
+# logged-in (or admin) user, so one of the two is wrong.
+#
+# A bare `Http::STATUS_UNAUTHORIZED|FORBIDDEN` was previously a third
+# alternative here, and it was wrong: returning 401 is not evidence of a session
+# requirement, it is the CORRECT response for any failed authorization —
+# including the session-less kind. A #[PublicPage] endpoint authenticated by a
+# per-run bearer token (CLI runner, MCP transport, webhook callback) has no NC
+# session by construction and must reply 401 on a bad token, so every correctly
+# built one matched. Worse, the finding's remediation text reads "remove
+# #[PublicPage] or remove body auth check", and on these endpoints BOTH branches
+# are harmful: dropping #[PublicPage] makes NC middleware reject the session-less
+# caller (the feature breaks), and dropping the token check makes a genuinely
+# unauthenticated endpoint — on hermiq's EgressAuthorizeController that is a
+# public egress-permit oracle. A gate whose only green states are "broken" and
+# "insecure" is worse than no gate. Observed 2026-08-04 on hermiq
+# (EgressAuthorizeController::authorize, McpRunController::handle — both verify a
+# per-run token first and have specs asserting exactly that).
+#
+# Token-authenticated public endpoints are still covered elsewhere: gate-7
+# (no-admin-idor) requires a per-object guard, and the token check itself is the
+# subject of those endpoints' own spec scenarios.
 _PUBLIC_BODY_AUTH_RE = re.compile(
     r"\brequireAdmin\s*\(|"
-    r"userSession\s*->\s*getUser\s*\(\s*\)\s*===\s*null|"
-    r"Http::STATUS_(UNAUTHORIZED|FORBIDDEN)",
+    r"userSession\s*->\s*getUser\s*\(\s*\)\s*===\s*null",
 )
 
 
@@ -283,8 +305,11 @@ def scan_file(path: str) -> int:
             if _PUBLIC_BODY_AUTH_RE.search(body):
                 print(
                     f"{path}:{line_no} method={name} "
-                    f"rule=public-page-annotation-with-auth-body — "
-                    f"remove #[PublicPage] or remove body auth check"
+                    f"rule=public-page-annotation-with-session-auth-body — "
+                    f"#[PublicPage] says no login is required, but the body "
+                    f"requires a logged-in/admin user. Drop #[PublicPage] if the "
+                    f"endpoint really needs a session. Do NOT resolve this by "
+                    f"deleting the authorization check"
                 )
                 violations += 1
     return violations

@@ -92,6 +92,28 @@ done
 APP_DIR="${APP_DIR:-$(pwd)}"
 cd "${APP_DIR}" 2>/dev/null || { echo "[hydra-gates] ERROR: ${APP_DIR} not accessible" >&2; exit 99; }
 
+# Let the vendored Node helpers resolve `ajv` from the app under test.
+#
+# gate-22 (manifest-validation) and gate-53 (effective-manifest-crossref) run
+# scripts/lib/check_manifest.js out of THIS package's checkout, which ships no
+# node_modules of its own. Without a resolvable ajv both gates fail-closed with
+# "SCHEMA VALIDATION DID NOT HAPPEN" — correct behaviour (a weaker check must
+# never be reported as a pass), but it fires on every app whose gates are run
+# from a bare package checkout, so the real schema validation never happens
+# anywhere and two gates are permanently red for an environment reason rather
+# than a code one. The app being gated already depends on ajv (it is in every
+# app's package-lock for its own `npm run check:manifest`), so point NODE_PATH
+# at it. Appended, never overwritten: an explicit caller-supplied NODE_PATH
+# still wins, and if the app has no node_modules the gates fail closed exactly
+# as before.
+if [ -d "${APP_DIR}/node_modules" ]; then
+    if [ -n "${NODE_PATH:-}" ]; then
+        export NODE_PATH="${NODE_PATH}:${APP_DIR}/node_modules"
+    else
+        export NODE_PATH="${APP_DIR}/node_modules"
+    fi
+fi
+
 # When scope-to-diff is requested, derive the changed-files set once.
 # Non-diff branches that need the set: each gate below filters its
 # file-iteration based on this variable. Empty set = no scoped files =
@@ -864,8 +886,18 @@ if [ -d src ]; then
     while IFS= read -r vue; do
         _in_scope "${vue}" || continue
         _flat=$(tr '\n' ' ' < "${vue}")
+        # The tag matcher must skip `>` characters that sit INSIDE a quoted
+        # attribute value. The previous `<NcSelect[^>]*>` stopped at the first
+        # `>` anywhere, so a perfectly ordinary Vue guard —
+        # `v-if="options.length > 0"` — truncated the tag at `length >`, and
+        # every attribute after it (including the :input-label being looked for)
+        # was invisible to the check. That reported a missing label on three
+        # hermiq components that all HAD one, and the reverse is worse: the same
+        # truncation can hide a genuinely unlabelled attribute list behind an
+        # early `>`. Alternation order matters — a complete quoted string is
+        # consumed as one unit before the bare-character branch can see into it.
         echo "${_flat}" \
-            | grep -oE '<NcSelect[^>]*>' 2>/dev/null \
+            | grep -oE '<NcSelect([^>"'"'"']|"[^"]*"|'"'"'[^'"'"']*'"'"')*>' 2>/dev/null \
             | while IFS= read -r tag; do
                 [ -z "${tag}" ] && continue
                 if ! echo "${tag}" | grep -qE "(input-label|inputLabel|aria-label-combobox|ariaLabelCombobox)"; then
@@ -1972,16 +2004,29 @@ fi
 # (metrics, health, liveness, readiness, probe) MUST be annotated `#[PublicPage]`
 # / `@PublicPage`. Without it, NC middleware defaults to admin-login-required
 # and the route silently 401s/redirects to /login for the actual consumer
-# (Prometheus scraper, kubelet, external uptime monitor). Gate-5 (route-auth)
-# only verifies SOME annotation is present — this gate verifies the right one
-# is present for monitoring callers.
+# (kubelet, external uptime monitor). Gate-5 (route-auth) only verifies SOME
+# annotation is present — this gate verifies the right one is present for
+# monitoring callers.
+#
+# `metrics` is deliberately NOT in the word list. ADR-006 splits the two
+# surfaces explicitly: "GET /api/metrics (Prometheus text, ADMIN AUTH) +
+# GET /api/health (JSON, public)". Demanding #[PublicPage] on a metrics route
+# therefore contradicts the ADR, and a repo that "fixed" this gate would be
+# publishing its Prometheus exposition — app version, health, queue depths —
+# to anonymous callers. That is a security REGRESSION produced by a gate, which
+# is worse than the gate being silent: it is a red gate whose only green state
+# is the insecure one. Prometheus authenticates as an admin (or scrapes via an
+# internal route); the kubelet/uptime probes hit /api/health, which this gate
+# still covers. Observed 2026-08-04 on hermiq, whose MetricsController carries
+# "Admin auth per ADR-006" in its own docblock while this gate demanded the
+# opposite.
 # ---------------------------------------------------------------------------
 _pm_log=/tmp/hydra-gate-public-monitoring.log
 : > "${_pm_log}"
 if [ -f appinfo/routes.php ] && [ -d lib/Controller ]; then
     # Find route entries whose `name` looks like `<monitoring-word>#<method>`
-    grep -oE "['\"]\s*name['\"]\s*=>\s*['\"][a-zA-Z0-9_\\\\]*(metrics|health|liveness|readiness|probe)[a-zA-Z0-9_]*#[a-zA-Z0-9_]+['\"]" appinfo/routes.php 2>/dev/null \
-        | grep -oE "[a-zA-Z0-9_\\\\]*(metrics|health|liveness|readiness|probe)[a-zA-Z0-9_]*#[a-zA-Z0-9_]+" | sort -u \
+    grep -oE "['\"]\s*name['\"]\s*=>\s*['\"][a-zA-Z0-9_\\\\]*(health|liveness|readiness|probe)[a-zA-Z0-9_]*#[a-zA-Z0-9_]+['\"]" appinfo/routes.php 2>/dev/null \
+        | grep -oE "[a-zA-Z0-9_\\\\]*(health|liveness|readiness|probe)[a-zA-Z0-9_]*#[a-zA-Z0-9_]+" | sort -u \
         | while IFS='#' read _ctrl _method; do
             [ -z "${_ctrl}" ] && continue
             [ -z "${_method}" ] && continue

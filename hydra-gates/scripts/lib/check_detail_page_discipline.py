@@ -50,26 +50,65 @@ import sys
 
 
 # --------------------------------------------------------------------------
-# The shared icon registry. SOURCE OF TRUTH:
-#   nextcloud-vue  src/components/CnWidgetGrid/widgetIcons.js
-# An MDI icon name not in this set renders the "?" fallback (ADR-062 rule 8).
-# This list is a hardcoded mirror — when the registry changes, replace the
-# names below (kept as a single, alphabetically-ordered constant on purpose so
-# the swap is a trivial one-line edit).
+# The icon vocabulary a detail-page widget icon is validated against.
+#
+# SOURCE OF TRUTH: scripts/schemas/semantic-icons.json — the SAME canonical
+# ADR-077 table gate-60 (icon-vocabulary) uses.
+#
+# This previously mirrored nextcloud-vue's CnWidgetGrid/widgetIcons.js by hand,
+# which was the wrong registry AND stale, and the two gates therefore
+# contradicted each other on the same manifest. Concretely: ADR-077 Tier A
+# makes "CogOutline" a MUST for the `settings` concept (gate-60 fails anything
+# else), while widgetIcons.js ships `Cog` and not `CogOutline`, so gate-55
+# failed the very value gate-60 mandates — a manifest could not satisfy both,
+# and "fixing" one gate broke the other.
+#
+# widgetIcons.js is the wrong registry here because it is not what renders
+# these icons. A detail-page widget icon is rendered by CnDetailPage as
+# `<CnIcon :name="findWidget(item).icon">`, and CnIcon resolves against the
+# semantic vocabulary — NOT via CnWidgetIcon/widgetIcons.js, which governs
+# dashboard tiles and the menu. Verified in a browser: a `data` widget with
+# icon "CogOutline" renders the gear, not the "?" fallback the old comment
+# predicted.
+#
+# The hand-maintained mirror had drifted badly in both directions: 34 of its 55
+# names are not in the canonical table (so this gate PASSED icons gate-60
+# rejects), and 204 canonical names were missing from it (so it FAILED valid
+# ones). Reading the vendored JSON removes the drift class entirely.
 # --------------------------------------------------------------------------
-ICON_REGISTRY = {
-    "Account", "AccountBoxOutline", "AccountGroup", "AlertCircleOutline",
-    "Bell", "BookOpenVariant", "Briefcase", "Calendar", "Cash", "CashMultiple",
-    "ChartBar", "ChartLine", "CheckCircleOutline", "ClipboardCheckOutline",
-    "ClipboardList", "Cog", "CurrencyEur", "DatabaseOutline", "Earth", "Email",
-    "FileDocument", "FileSign", "FilterVariant", "FolderOutline", "Gauge",
-    "Gavel", "HandshakeOutline", "Heart", "History", "Home", "Lightbulb",
-    "LinkVariant", "MapMarker", "MessageTextOutline", "NoteTextOutline",
-    "OfficeBuilding", "Package", "Percent", "Phone", "RocketLaunch",
-    "ScaleBalance", "School", "ShieldCheckOutline", "Sitemap", "SourceBranch",
-    "Star", "TableColumn", "TagOutline", "Timeline", "TrendingDown",
-    "TrendingUp", "Trophy", "Truck", "ViewDashboard", "Web",
-}
+_VOCAB_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), '..', 'schemas', 'semantic-icons.json'
+)
+
+
+def _load_icon_registry() -> set:
+    """
+    Canonical MDI icon names from the vendored ADR-077 table.
+
+    Collects the icon NAMES out of every section: the tier maps are
+    concept -> icon-name, so the names are the values. `contentBlockIcons` is a
+    deliberately separate lowercase dialect (a published contract for the
+    Softwarecatalogus site) and carries prose under `_`-prefixed keys, so
+    `_`-prefixed entries are skipped rather than treated as icon names.
+    """
+    with open(_VOCAB_PATH, encoding='utf-8') as fh:
+        vocab = json.load(fh)
+
+    names = set()
+    for key, section in vocab.items():
+        if key.startswith('_'):
+            continue
+        if isinstance(section, dict):
+            names.update(
+                v for k, v in section.items()
+                if not k.startswith('_') and isinstance(v, str)
+            )
+        elif isinstance(section, list):
+            names.update(v for v in section if isinstance(v, str))
+    return names
+
+
+ICON_REGISTRY = _load_icon_registry()
 
 
 # --------------------------------------------------------------------------
@@ -397,8 +436,9 @@ def check_page(path, page, page_ids, findings):
     for ic in icons:
         if isinstance(ic, str) and ic and ic not in ICON_REGISTRY:
             findings.append(
-                f"{path}: page '{pid}' — widget icon '{ic}' is not in the shared "
-                f"icon registry (renders the '?' fallback, ADR-062 rule 8)"
+                f"{path}: page '{pid}' — widget icon '{ic}' is outside the canonical "
+                f"semantic icon vocabulary (ADR-077); use the canonical name for the "
+                f"concept so the same idea reads the same across every app"
             )
 
     # (f) viewAllRoute / rowRoute must resolve to a page id.

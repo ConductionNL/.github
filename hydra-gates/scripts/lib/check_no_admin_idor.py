@@ -393,9 +393,24 @@ _DATA_ACCESS_RE = re.compile(
 # A same-class helper counts as guard-bearing if its NAME reads like an
 # authorisation predicate.  Anchored so only the classic guard shapes match —
 # ``canRender`` / ``hasChanges`` (no auth suffix) deliberately do NOT.
+#
+# The auth keyword may appear ANYWHERE after the is/has/can/may prefix, not only
+# at the end. Anchoring it at the end ($) only matched predicates that happen to
+# finish on the keyword (`canUserAccess`), and missed the far more common shape
+# that names its object too — `canUserAccessAgent`, `canUserEditDocument`,
+# `hasAccessToCase`. Those are real per-object authorisation predicates, so
+# missing them made this gate report "no auth guard" on properly guarded
+# endpoints. Because guard-bearing status is then closed over same-class calls,
+# one unmatched predicate also un-guarded every helper that delegates to it:
+# on hermiq, `canUserAccessAgent` failing to match made the `loadAccessibleAgent`
+# accessor look unguarded, which in turn flagged AgentVersionController::index
+# and ::diff — both of which do enforce (private agents are owner/invitee-only).
+# `canRender` / `hasChanges` still do NOT match: they carry no auth keyword at
+# all, which is what actually distinguishes a guard from a plain predicate.
 _GUARD_HELPER_NAME_RE = re.compile(
     r"^(?:is|has|can|may)[A-Z][A-Za-z0-9_]*"
-    r"(?:Admin|Access|Permission|Permitted|Owner|Allowed|Authori[sz]ed)$"
+    r"(?:Admin|Access|Permission|Permitted|Owner|Allowed|Authori[sz]ed)"
+    r"[A-Za-z0-9_]*$"
     r"|^(?:assert|guard|deny|verify|authori[sz]e)[A-Za-z0-9_]*$"
     r"|^(?:require|ensure|check)[A-Z][A-Za-z0-9_]*$"
     r"|^isAdmin$"
