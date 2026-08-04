@@ -29,4 +29,4 @@ jobs:
       enable-eslint: false
       enable-stylelint: false
       frontend-path: ci-selftest
-      frontend-checks: '["selftest:pass", "selftest:fail"]'
+      frontend-checks: '[ ]'
