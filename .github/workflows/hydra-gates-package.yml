@@ -51,6 +51,14 @@ jobs:
       - name: Run the invariant suite
         run: bash hydra-gates/tests/test-hydra-gates-bin.sh
 
+      # FIRST, with no node_modules at all — this is the only state in which the
+      # DEGRADED contract can be exercised. Gate 22's whole point is that a
+      # validator which could not resolve Ajv must exit 3 and say so, never 0;
+      # once ajv is installed below, `NODE_PATH=/nonexistent` no longer hides it
+      # (node still resolves from ./node_modules) and that assertion self-skips.
+      - name: "Manifest validator: the no-Ajv degraded contract"
+        run: bash hydra-gates/scripts/lib/test_check_manifest.sh
+
       # Ajv is what gates 22 and 53 validate manifests WITH. Without it the
       # vendored validator can only run its structural lint, and the suite below
       # would skip exactly the paths worth testing. It is a devDependency of
