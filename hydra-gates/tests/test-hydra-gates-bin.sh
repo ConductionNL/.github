@@ -298,6 +298,133 @@ else
     _bad "did not say the incomplete install is not a green"
 fi
 
+# ---------------------------------------------------------------------------
+# Test 6 — a gate whose HELPER is absent must SKIP, never PASS.
+#
+# Distinct from Test 4b, which covers a gate whose INPUT is absent (gate-33 has
+# no tests/axe/report.json). This is the other half: the gate's own helper
+# script is missing, so the gate ran its file enumeration, found work to do, and
+# then could not do it.
+#
+# Sixteen gates used to handle that by echoing a WARN to STDERR and falling
+# through to `_pass`. `_pass` adds the gate to _EMITTED_GATES, so the gate was
+# counted as having reported — which means those sixteen branches actively
+# defeated the coverage machinery built to catch exactly this. Two of them,
+# gate-6 (orphan-auth) and gate-7 (no-admin-idor), are AUTHORIZATION gates.
+#
+# Measured on a real repo checkout while fixing this: with check_no_admin_idor.py
+# present, gate-7 reported `FAIL — 11 method(s) with NoAdminRequired + no guard`.
+# With the same helper renamed away, the same gate on the same tree reported
+# `PASS`. An empty findings log because the helper never ran was byte-identical
+# to an empty log because there were no findings.
+#
+# The control here is two-directional and attributable: the SAME fixture is run
+# against two copies of the package that differ ONLY in whether those two helper
+# files exist. Coverage must drop by exactly 2, and the two gates must be named.
+# ---------------------------------------------------------------------------
+echo "[test] a gate whose helper is absent skips instead of passing"
+
+# A fixture with a controller in the DIFF — gates 6/7 enumerate lib/Controller
+# and lib/Service, so an empty scope would give them no files and the
+# helper-missing branch would never be reached (which would make this test pass
+# for the wrong reason).
+SECFIX="${WORK}/sec-fixture"
+mkdir -p "${SECFIX}/lib/Controller" "${SECFIX}/appinfo"
+cd "${SECFIX}" || exit 1
+git init -q .
+git symbolic-ref HEAD refs/heads/development
+git config user.email "test@example.invalid"
+git config user.name "hydra-gates test"
+cat > appinfo/info.xml <<'XML'
+<?xml version="1.0"?>
+<info><id>fixture</id><name>Fixture</name><version>1.0.0</version></info>
+XML
+git add -A
+git commit -qm "base"
+SEC_BASE="$(git rev-parse HEAD)"
+git checkout -q -b feature/controller
+cat > lib/Controller/ThingController.php <<'PHP'
+<?php
+/**
+ * Thing controller fixture.
+ *
+ * @copyright Copyright (c) 2026 Conduction
+ * @license   EUPL-1.2
+ */
+
+namespace OCA\Fixture\Controller;
+
+class ThingController
+{
+    /**
+     * Return a constant.
+     *
+     * @spec exclude fixture-only controller, no product behaviour
+     */
+    public function show(): int
+    {
+        return 2;
+    }
+}
+PHP
+git add -A
+git commit -qm "add a controller to the diff"
+
+# Package copy that differs from the real one ONLY by the two missing helpers.
+NOHELP="${WORK}/pkg-no-security-helpers"
+cp -r "${PKG_ROOT}" "${NOHELP}"
+rm -f "${NOHELP}/scripts/lib/check_orphan_auth.py" \
+      "${NOHELP}/scripts/lib/check_no_admin_idor.py"
+
+SEC_WITH="$("${BIN}" --app-dir "${SECFIX}" --base "${SEC_BASE}" 2>&1)" || true
+SEC_WITHOUT="$("${NOHELP}/bin/hydra-gates" --app-dir "${SECFIX}" --base "${SEC_BASE}" 2>&1)" || true
+
+# Direction 1 — helpers PRESENT: the gates report a verdict, as before.
+if printf '%s\n' "${SEC_WITH}" | grep -qE '^\[gate-6\] orphan-auth: (PASS|FAIL)' \
+   && printf '%s\n' "${SEC_WITH}" | grep -qE '^\[gate-7\] no-admin-idor: (PASS|FAIL)'; then
+    _ok "helpers present — gates 6 and 7 still report a verdict"
+else
+    _bad "helpers present — gate 6/7 did not report a verdict; the fixture is not exercising them"
+fi
+
+# Direction 2 — helpers ABSENT: SKIPPED, and explicitly NOT a pass.
+if printf '%s\n' "${SEC_WITHOUT}" | grep -qE '^\[gate-6\] orphan-auth: SKIPPED' \
+   && printf '%s\n' "${SEC_WITHOUT}" | grep -qE '^\[gate-7\] no-admin-idor: SKIPPED'; then
+    _ok "helpers absent — the two authorization gates report SKIPPED"
+else
+    _bad "helpers absent — gate 6/7 did not report SKIPPED"
+fi
+if printf '%s\n' "${SEC_WITHOUT}" | grep -qE '^\[gate-(6|7)\] [a-z-]+: PASS'; then
+    _bad "an authorization gate printed PASS while its helper was missing — the original bug"
+else
+    _ok "no authorization gate claims PASS without its helper"
+fi
+
+# The summary must NAME them, and only in the direction where they skipped.
+if printf '%s\n' "${SEC_WITHOUT}" | grep -qE '^\[hydra-gates\]   gate-6 orphan-auth' \
+   && printf '%s\n' "${SEC_WITHOUT}" | grep -qE '^\[hydra-gates\]   gate-7 no-admin-idor'; then
+    _ok "the summary names gate-6 and gate-7 among the gates that did not run"
+else
+    _bad "gate 6/7 skipped but were not named in the DID NOT RUN list"
+fi
+if printf '%s\n' "${SEC_WITH}" | grep -qE '^\[hydra-gates\]   gate-(6|7) '; then
+    _bad "gate 6/7 were listed as not-run even though their helpers were present"
+else
+    _ok "reverse control — with helpers present they are absent from the DID NOT RUN list"
+fi
+
+# Attributable arithmetic: the two runs differ ONLY by those two helper files,
+# so the reported coverage must differ by exactly 2. This is what distinguishes
+# "the skip is being counted" from "the banner was merely reworded".
+_sec_with_n="$(printf '%s\n' "${SEC_WITH}" | grep -m1 -oE 'COVERAGE: [0-9]+' | awk '{print $2}')"
+_sec_without_n="$(printf '%s\n' "${SEC_WITHOUT}" | grep -m1 -oE 'COVERAGE: [0-9]+' | awk '{print $2}')"
+if [ -n "${_sec_with_n:-}" ] && [ -n "${_sec_without_n:-}" ] \
+   && [ "$((_sec_with_n - _sec_without_n))" -eq 2 ]; then
+    _ok "coverage drops by exactly 2 when exactly 2 helpers are removed (${_sec_with_n} → ${_sec_without_n})"
+else
+    _bad "coverage went ${_sec_with_n:-?} → ${_sec_without_n:-?}; removing 2 helpers must remove exactly 2 from the tally"
+fi
+
 echo ""
 echo "=================================================="
 echo "hydra-gates entry-point tests: ${PASS} passed, ${FAIL} failed"
