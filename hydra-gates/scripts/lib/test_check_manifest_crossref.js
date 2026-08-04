@@ -17,6 +17,20 @@
 //             check_manifest.js on the fragment-introduced `layout[]`
 //             violation (structural stage, Ajv path only).
 //
+// THE FIXTURES ARE PART OF THIS TEST. Until 2026-08-04 this file referenced
+// ../test-fixtures/effective-manifest/{good,broken}/ — a directory that had
+// never existed in this repository, and nothing in CI ran the file, so nobody
+// found out. Its sibling test_check_manifest.sh had the same defect and was
+// WORSE: a missing manifest path makes the validator print "Tier 0, skipping"
+// and exit 0, which is exactly what two of its three assertions expected, so
+// it reported GREEN for its whole life while inspecting nothing.
+//
+// This file failed loudly instead (13 of 21 assertions red) — but four of the
+// eight it "passed" it passed for the wrong reason: with no fixture, the
+// checker found zero findings, and "zero errors" is indistinguishable from
+// "nothing was ever loaded". The guard below refuses to run at all rather than
+// let that shape recur.
+//
 // Run: node scripts/lib/test_check_manifest_crossref.js   (exit 0 = pass)
 
 'use strict'
@@ -31,6 +45,42 @@ const FIX = path.resolve(LIB, '..', 'test-fixtures', 'effective-manifest')
 const BUILDER = path.join(LIB, 'build_effective_manifest.js')
 const CHECKER = path.join(LIB, 'check_manifest_crossref.js')
 const VALIDATOR = path.join(LIB, 'check_manifest.js')
+
+// --- guard the guard --------------------------------------------------------
+// If the fixtures go missing, say so and stop. A suite whose inputs are absent
+// cannot assert anything, and several of the assertions below would otherwise
+// be satisfied by the empty result an absent fixture produces.
+{
+	const required = [
+		'good/src/manifest.json',
+		'good/src/manifest.d/10-archive.json',
+		'good/src/manifest.d/20-settings.json',
+		'good/src/menu-layout.json',
+		'good/lib/Settings/items-register.json',
+		'broken/src/manifest.json',
+		'broken/src/manifest.d/10-besluiten.json',
+		'broken/src/menu-layout.json',
+		'broken/lib/Settings/zaken-register.json',
+	]
+	const missing = required.filter((rel) => !fs.existsSync(path.join(FIX, rel)))
+	if (missing.length > 0) {
+		console.log(`FAIL — ${missing.length} gate-30 fixture file(s) MISSING under ${FIX}; this suite cannot assert anything:`)
+		for (const rel of missing) console.log(`    ${rel}`)
+		console.log('')
+		console.log('Refusing to run. Without the fixtures the checker reports zero findings,')
+		console.log('and "zero errors" would satisfy several assertions below while inspecting')
+		console.log('nothing at all — the exact defect this gate exists to catch, one level down.')
+		process.exit(1)
+	}
+	// The helpers under test must also be present; requiring them via spawn
+	// would otherwise surface as a confusing non-zero exit rather than a cause.
+	for (const [label, p] of [['builder', BUILDER], ['checker', CHECKER], ['validator', VALIDATOR]]) {
+		if (!fs.existsSync(p)) {
+			console.log(`FAIL — the ${label} under test is missing at ${p}; this suite cannot assert anything`)
+			process.exit(1)
+		}
+	}
+}
 
 let fails = 0
 function assert(cond, label) {

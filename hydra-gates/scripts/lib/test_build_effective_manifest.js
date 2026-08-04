@@ -15,6 +15,7 @@
 
 'use strict'
 
+const fs = require('fs')
 const path = require('path')
 const {
 	buildManifest,
@@ -25,6 +26,33 @@ const {
 	applySettingsSection,
 	assembleFromDir,
 } = require('./build_effective_manifest.js')
+
+// --- guard the guard --------------------------------------------------------
+// The last block of this file assembles from
+// scripts/test-fixtures/effective-manifest/good/. Until 2026-08-04 that
+// directory did not exist and nothing in CI ran this file, so the in-memory
+// assertions above it reported PASS and the run then died on an uncaught
+// ENOBASE stack trace. Fail with a cause instead — and before, not after, the
+// misleading passes.
+{
+	const goodDir = path.resolve(__dirname, '..', 'test-fixtures', 'effective-manifest', 'good')
+	const required = [
+		'src/manifest.json',
+		'src/manifest.d/10-archive.json',
+		'src/manifest.d/20-settings.json',
+		'src/menu-layout.json',
+	]
+	const missing = required.filter((rel) => !fs.existsSync(path.join(goodDir, rel)))
+	if (missing.length > 0) {
+		console.log(`FAIL — ${missing.length} fixture file(s) MISSING under ${goodDir}; this suite cannot assert anything:`)
+		for (const rel of missing) console.log(`    ${rel}`)
+		console.log('')
+		console.log('Refusing to run. The assembly assertions at the end of this file need them,')
+		console.log('and reporting the in-memory passes above without them would announce a green')
+		console.log('for a suite that never reached its integration leg.')
+		process.exit(1)
+	}
+}
 
 let fails = 0
 function assert(cond, label) {
