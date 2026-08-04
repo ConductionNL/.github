@@ -147,6 +147,36 @@ on:
         required: false
         type: number
         default: 75
+      enable-axe:
+        # Same shape and the same reasoning as enable-hydra-gates below: a
+        # control that goes red on inherited debt the moment it is switched on
+        # gets switched off again, so each repo opts in once its own routes are
+        # clean.
+        #
+        # It is worth being blunt about what "goes red" means here, because it
+        # was measured rather than assumed. Running this runner against a
+        # VANILLA Nextcloud 34 — no Conduction app installed at all — over
+        # /apps/dashboard/, /apps/files/ and /settings/user produced three
+        # serious/critical violations from Nextcloud's own UI (label,
+        # aria-input-field-name, aria-prohibited-attr). An app's own routes
+        # render inside that same shell, so the first run in any repo will
+        # almost certainly be red, and some of that red will not be the app's
+        # to fix. Default-on would therefore have blocked the fleet on core
+        # Nextcloud defects on day one.
+        description: "Run axe-core (@axe-core/playwright) against the app's routes inside the Playwright job and publish tests/axe/report.json, which is the file hydra-gates gate-33 consumes. OPT-IN, default false. Gate-33 fails on `serious`/`critical` violations only; without this the report does not exist and gate-33 reports SKIPPED, which is what it has done in every repo in the fleet since it was written. Requires enable-playwright (the report is produced by that job, against its Nextcloud instance) and is only consumed when enable-hydra-gates is also true. Measured against a vanilla Nextcloud 34 with no app installed, core's own pages already carry serious/critical violations — expect the first run in a repo to be red, which is exactly why this is off by default."
+        required: false
+        type: boolean
+        default: false
+      axe-routes:
+        description: "Newline- or comma-separated paths to run axe against, relative to the instance root (e.g. '/index.php/apps/openregister/,/index.php/apps/openregister/#/schemas'). Empty means the app's own root route. A path that answers HTTP >= 400 is a hard failure, not an empty result: axe would otherwise analyse Nextcloud's error page and report it as clean. Settings-only apps have no root route and MUST set this."
+        required: false
+        type: string
+        default: ""
+      axe-version:
+        description: "Version of @axe-core/playwright to install. Pinned rather than floating because the axe rule set decides the verdict: an unpinned install can turn a repo red on a day nobody committed anything, which is the one thing a mechanical gate must never do. Move it deliberately, in a commit."
+        required: false
+        type: string
+        default: "4.12.1"
       enable-journeydoc-capture:
         description: "Run the journeydoc Playwright capture spec (tests/e2e/docs-screenshots.spec.ts) against a freshly-installed Nextcloud and commit any new/changed screenshots back to the calling repo. Per ADR-030. Recommended to invoke from a dedicated docs-capture.yml workflow with schedule + workflow_dispatch triggers (not on every PR — too expensive)."
         required: false
@@ -2154,6 +2184,350 @@ jobs:
           NC_ADMIN_PASS: admin
           COLLECT_COVERAGE: ${{ inputs.enable-playwright-coverage }}
 
+      # ── axe-core: produce the file gate-33 has never had ────────────────────
+      #
+      # hydra-gates gate-33 consumes `tests/axe/report.json` and fails on
+      # `serious`/`critical` violations. Measured 2026-08-03 across 13 repos:
+      # that file exists in NONE of them, and the `scripts/run-browser-tests.sh`
+      # documented as producing it exists in no app either. So gate-33 has never
+      # run anywhere, and every "all gates green" this fleet has produced
+      # excluded accessibility runtime checking — contrast, landmark structure,
+      # ARIA validity, live regions — outright.
+      #
+      # This is the only job in the file with both a booted Nextcloud and a
+      # browser, so this is where the report can be produced. It runs even when
+      # the Playwright suite itself failed (`!cancelled()`): an accessibility
+      # measurement is not contingent on the e2e verdict, and gate-33 runs
+      # either way.
+      #
+      # The runner is embedded here rather than kept as a file in this repo on
+      # purpose. This job never checks ConductionNL/.github out — only the
+      # hydra-gates job does, at its own `hydra-gates-ref` — so a separate file
+      # would mean a second ref to reason about and a second thing that can
+      # drift away from the workflow that calls it. Same rationale as
+      # ci-router.php above.
+      - name: Install axe-core
+        if: ${{ inputs.enable-axe && !cancelled() }}
+        run: |
+          set -euo pipefail
+          cd server/apps/${{ inputs.app-name }}
+          # --no-save: this checkout is the app's own tree, and the report is
+          # the artefact we want out of it — not a mutated package.json.
+          npm install --no-save --no-audit --no-fund "@axe-core/playwright@${{ inputs.axe-version }}"
+          node -e "const m=require('@axe-core/playwright'); if (typeof (m.AxeBuilder||m.default)!=='function') { console.error('::error::@axe-core/playwright installed but exports no AxeBuilder constructor.'); process.exit(1);} console.log('@axe-core/playwright resolved.');"
+
+      - name: Run axe-core against the app routes
+        id: axe
+        if: ${{ inputs.enable-axe && !cancelled() }}
+        env:
+          AXE_BASE_URL: http://localhost:8080
+          AXE_USER: admin
+          AXE_PASSWORD: admin
+          AXE_ROUTES: ${{ inputs.axe-routes }}
+          AXE_APP_NAME: ${{ inputs.app-name }}
+        run: |
+          set -euo pipefail
+          # The first-run wizard renders a modal over the first page an admin
+          # sees. Its markup is Nextcloud core's, not this app's, and axe cannot
+          # tell the difference — leaving it on attributes core's defects to the
+          # app under test. Reported, never silenced: if it is not enabled the
+          # notice below says so rather than a `|| true` swallowing it.
+          if php server/occ app:disable firstrunwizard; then
+            echo "firstrunwizard disabled for the axe run."
+          else
+            echo "::notice::firstrunwizard was not enabled (or could not be disabled) — continuing. If it renders, its violations will be attributed to this app."
+          fi
+
+          cd "server/apps/${{ inputs.app-name }}"
+
+          # Default to the app's own root route when the caller named none.
+          if [ -z "${AXE_ROUTES}" ]; then
+            AXE_ROUTES="/index.php/apps/${AXE_APP_NAME}/"
+            echo "::notice::axe-routes was empty; defaulting to ${AXE_ROUTES}. A settings-only app has no root route and will fail the HTTP-status guard below — set axe-routes for those."
+          fi
+          export AXE_ROUTES
+          export AXE_OUT="${PWD}/tests/axe/report.json"
+
+          cat > .axe-run.cjs <<'AXE_RUNNER'
+          // SPDX-License-Identifier: EUPL-1.2
+          //
+          // Produce tests/axe/report.json for hydra-gates gate-33 (axe-core).
+          //
+          // Gate-33 reads ONE key: `violations`, and fails on entries whose
+          // `impact` is `serious` or `critical`. Everything else written here is
+          // for humans and for the guards below.
+          //
+          // The design point of this file is that it must never write a report
+          // it has not earned. A `{}` — or a `{"violations": []}` produced by a
+          // browser that never loaded anything — parses fine and reads to
+          // gate-33 as a CLEAN accessibility run. (Verified: gate-33 reports
+          // PASS on a file containing exactly `{}`.) That is strictly worse than
+          // the loud skip gate-33 emits when the file is absent, because it
+          // converts "unverified" into "verified clean". So every exit path
+          // below either writes a report that provably came from a real axe run
+          // against a real rendered page, or writes NOTHING and exits non-zero.
+          //
+          // Three guards enforce that, in order:
+          //
+          //   1. SELF-TEST (positive control). Before touching the app, axe is
+          //      run against a scratch page carrying a KNOWN serious/critical
+          //      violation (`<button></button>` -> rule `button-name`, impact
+          //      critical). If axe does not report it, axe is not working —
+          //      misconfigured tags, a broken injection, a version whose rule
+          //      set moved — and every subsequent empty `violations` array would
+          //      be an artefact of the harness, not evidence about the app. A
+          //      gate whose green has never been shown capable of going red is
+          //      not a gate. This is the check that runs on every CI run, not
+          //      just once at authoring time.
+          //
+          //   2. HTTP STATUS. A route that answers >= 400 renders Nextcloud's
+          //      error page, and axe would happily report that page as clean.
+          //      Analysing the wrong document is indistinguishable from
+          //      analysing the right one at the JSON layer.
+          //
+          //   3. NON-EMPTY RESULT SET — a backstop, and stated as one. The
+          //      failure it describes (axe returns `violations: []` AND
+          //      `passes: []` because there was no document to analyse) is not
+          //      what @axe-core/playwright 4.12.1 actually does: measured
+          //      against `about:blank` it THROWS ("Please use
+          //      browser.newContext()") rather than returning empty, and that
+          //      throw is caught at the bottom of this file, which also writes
+          //      no report. The guard is kept because which of the two a given
+          //      version does is a library implementation detail, and the one
+          //      that returns empty is the one that would be indistinguishable
+          //      from a clean run.
+          //
+          // Env:
+          //   AXE_BASE_URL  base URL of the instance under test (required)
+          //   AXE_ROUTES    newline- or comma-separated paths (required)
+          //   AXE_OUT       where to write the report (required)
+          //   AXE_USER      login user (optional; no login when empty)
+          //   AXE_PASSWORD  login password
+          //   AXE_WAIT_MS   settle time per route after mount (default 1500)
+
+          const fs = require('fs');
+          const path = require('path');
+
+          // `@playwright/test` re-exports the browser types, so chromium is
+          // resolved from the package this job already installs rather than from
+          // `playwright`, which is only present as a hoisted transitive
+          // dependency and is not ours to rely on.
+          const { chromium } = require('@playwright/test');
+
+          // 4.x exposes both a named `AxeBuilder` and a `default`. Resolve
+          // either, and say so loudly if neither is a constructor: a silently
+          // undefined AxeBuilder throws deep in the run as `new undefined`.
+          const axeModule = require('@axe-core/playwright');
+          const AxeBuilder = axeModule.AxeBuilder || axeModule.default || axeModule;
+
+          // WCAG 2.2 AA and its predecessors. `best-practice` is deliberately
+          // excluded: it is not a conformance requirement, and gate-33 is a
+          // conformance gate.
+          const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
+
+          // The scratch page for guard 1. `<button></button>` has no accessible
+          // name: axe rule `button-name`, impact critical, tags wcag2a/wcag412.
+          const CONTROL_HTML =
+            '<!DOCTYPE html><html lang="en"><head><title>axe self-test</title></head>' +
+            '<body><main><button></button></main></body></html>';
+          const CONTROL_RULE = 'button-name';
+
+          const die = (msg) => {
+            console.error('::error::axe-runner: ' + msg);
+            process.exit(2);
+          };
+
+          const routes = (process.env.AXE_ROUTES || '')
+            .split(/[\n,]/)
+            .map((r) => r.trim())
+            .filter((r) => r.length > 0);
+
+          const baseUrl = (process.env.AXE_BASE_URL || '').replace(/\/+$/, '');
+          const outPath = process.env.AXE_OUT || '';
+          const waitMs = parseInt(process.env.AXE_WAIT_MS || '1500', 10);
+
+          if (typeof AxeBuilder !== 'function') {
+            die('@axe-core/playwright did not export a constructor (got ' + typeof AxeBuilder + '). The installed version changed its export shape.');
+          }
+          if (!baseUrl) die('AXE_BASE_URL is empty.');
+          if (!outPath) die('AXE_OUT is empty.');
+          if (routes.length === 0) die('AXE_ROUTES resolved to zero routes. Nothing would be analysed, and an empty report would read as a clean accessibility run.');
+
+          // Keep the report readable: violation nodes carry the full outerHTML,
+          // which for a Vue app is routinely tens of KB per node.
+          const trimNode = (n) => ({
+            target: n.target,
+            html: typeof n.html === 'string' ? n.html.slice(0, 400) : '',
+            failureSummary: n.failureSummary,
+          });
+
+          // Remove any pre-existing report FIRST. Every guard exits without
+          // writing, and "did not write" only means "no report" if there was
+          // nothing there to begin with — otherwise a stale file from an earlier
+          // attempt is what gate-33 reads, and it reads as a clean run of code
+          // that just refused to certify itself.
+          fs.rmSync(outPath, { force: true });
+
+          (async () => {
+            const browser = await chromium.launch();
+            const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+            const page = await context.newPage();
+
+            // ── Guard 1: positive control ──────────────────────────────────
+            await page.setContent(CONTROL_HTML);
+            const control = await new AxeBuilder({ page }).withTags(TAGS).analyze();
+            const controlHit = (control.violations || []).find(
+              (v) => v.id === CONTROL_RULE && ['serious', 'critical'].includes(v.impact)
+            );
+            if (!controlHit) {
+              const seen = (control.violations || []).map((v) => v.id + '/' + v.impact).join(', ') || '<none>';
+              await browser.close();
+              die(
+                'SELF-TEST FAILED. axe did not report the deliberate `' + CONTROL_RULE +
+                '` violation on the scratch page. It reported: ' + seen +
+                '. axe is therefore not capable of failing in this environment, so an empty ' +
+                'violations array here would be evidence about the harness, not about the app. ' +
+                'Refusing to write a report — gate-33 will skip loudly instead of passing falsely.'
+              );
+            }
+            console.log(
+              'axe self-test OK: rule=' + controlHit.id + ' impact=' + controlHit.impact +
+              ' nodes=' + controlHit.nodes.length + ' (axe-core ' + control.testEngine.version + ')'
+            );
+
+            // ── Login ──────────────────────────────────────────────────────
+            if (process.env.AXE_USER) {
+              const loginUrl = baseUrl + '/index.php/login';
+              const resp = await page.goto(loginUrl, { waitUntil: 'domcontentloaded' });
+              if (!resp || resp.status() >= 400) {
+                await browser.close();
+                die('login page ' + loginUrl + ' returned HTTP ' + (resp ? resp.status() : 'no-response') + '.');
+              }
+              await page.fill('input[name="user"]', process.env.AXE_USER);
+              await page.fill('input[name="password"]', process.env.AXE_PASSWORD || '');
+              await Promise.all([
+                page.waitForURL((u) => !u.toString().includes('/login'), { timeout: 30000 }).catch(() => {}),
+                page.click('button[type="submit"], input[type="submit"]'),
+              ]);
+              if (page.url().includes('/login')) {
+                await browser.close();
+                die('login did not leave /login — still at ' + page.url() + '. Every route would be analysed as the LOGIN page, not the app.');
+              }
+              console.log('Logged in as ' + process.env.AXE_USER + '; landed on ' + page.url());
+            }
+
+            // ── Analyse each route ─────────────────────────────────────────
+            const violations = [];
+            const analysed = [];
+            let engine = null;
+
+            for (const route of routes) {
+              const url = baseUrl + (route.startsWith('/') ? route : '/' + route);
+              const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+              const status = resp ? resp.status() : 0;
+
+              // Guard 2.
+              if (status === 0 || status >= 400) {
+                await browser.close();
+                die(
+                  'route ' + url + ' returned HTTP ' + status + '. axe would have analysed an ' +
+                  'error page and reported it as clean. Set the axe-routes input to routes ' +
+                  'this app actually serves.'
+                );
+              }
+
+              // Give the SPA a chance to mount. A Nextcloud page shell always
+              // has #content, including when the bundle never mounts — which is
+              // why guard 3 is a separate check and not folded into this wait.
+              await page.waitForSelector('#content, main, [role="main"]', { timeout: 60000 }).catch(() => {});
+              await page.waitForTimeout(waitMs);
+
+              const results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
+              engine = results.testEngine;
+
+              const nPass = (results.passes || []).length;
+              const nViol = (results.violations || []).length;
+              const nIncomplete = (results.incomplete || []).length;
+
+              // Guard 3.
+              if (nPass === 0 && nViol === 0) {
+                await browser.close();
+                die(
+                  'route ' + url + ' produced ZERO passes and ZERO violations. axe ran against ' +
+                  'a document with nothing in it — a blank page, or an SPA that never mounted. ' +
+                  'That is not a clean accessibility result, it is an absent one.'
+                );
+              }
+
+              console.log(
+                'axe ' + url + ' -> HTTP ' + status + ' | passes=' + nPass +
+                ' violations=' + nViol + ' incomplete=' + nIncomplete
+              );
+
+              analysed.push({ route, url, status, passes: nPass, violations: nViol, incomplete: nIncomplete });
+
+              for (const v of results.violations || []) {
+                violations.push({
+                  id: v.id,
+                  impact: v.impact,
+                  help: v.help,
+                  helpUrl: v.helpUrl,
+                  tags: v.tags,
+                  route,
+                  url,
+                  nodes: (v.nodes || []).map(trimNode),
+                });
+              }
+            }
+
+            await browser.close();
+
+            const report = {
+              // The key gate-33 reads.
+              violations,
+              // Everything below is provenance, so a reader — and the validator
+              // in the hydra-gates job — can tell a clean run from a run that
+              // never happened.
+              testEngine: engine,
+              generatedAt: new Date().toISOString(),
+              baseUrl,
+              tags: TAGS,
+              routesAnalysed: analysed,
+              selfTest: { rule: controlHit.id, impact: controlHit.impact, detected: true },
+              blocking: violations.filter((v) => ['serious', 'critical'].includes(v.impact)).length,
+            };
+
+            fs.mkdirSync(path.dirname(outPath), { recursive: true });
+            fs.writeFileSync(outPath, JSON.stringify(report, null, 2));
+
+            console.log(
+              'Wrote ' + outPath + ': ' + analysed.length + ' route(s), ' + violations.length +
+              ' violation(s), ' + report.blocking + ' of them serious/critical (gate-33 blocking).'
+            );
+          })().catch((err) => {
+            die('crashed before writing a report: ' + (err && err.stack ? err.stack : err));
+          });
+          AXE_RUNNER
+
+          # `bash -e` would abort on a failing node before `RC=$?` ever ran, so
+          # the cleanup would be skipped and the reason lost. Same `&& / ||`
+          # idiom the hydra-gates job uses for the same reason.
+          node .axe-run.cjs && RC=0 || RC=$?
+          rm -f .axe-run.cjs
+          exit "$RC"
+
+      - name: Upload the axe-core report
+        # Only when the runner succeeded. A failed runner has deliberately left
+        # no file, and `if-no-files-found: error` keeps that honest rather than
+        # publishing an empty artifact the gates job would then try to read.
+        if: ${{ inputs.enable-axe && !cancelled() && steps.axe.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: axe-report
+          path: server/apps/${{ inputs.app-name }}/tests/axe/report.json
+          retention-days: 14
+          if-no-files-found: error
+
       - name: Generate spec-to-test coverage report
         if: ${{ inputs.enable-playwright-coverage && !cancelled() }}
         run: |
@@ -2770,9 +3144,36 @@ jobs:
   # The package is checked out as a SIBLING of the app checkout, not inside it,
   # so nothing in the gate package can ever be mistaken for app code under scan.
   hydra-gates:
-    if: ${{ inputs.enable-hydra-gates }}
+    # `!cancelled()` is load-bearing, not decoration. `needs:` below implies
+    # `success()` on the Playwright job, which would make this whole job vanish
+    # for every repo that has the gates on and Playwright off — the gates would
+    # stop running on a majority of the fleet, silently, as a side effect of
+    # wiring up ONE gate's input. `!cancelled()` suppresses that implicit
+    # `success()`, so a skipped or failed Playwright job still lets the gates
+    # run and reach their own verdict. The axe report is then simply absent and
+    # gate-33 reports SKIPPED, exactly as it does today.
+    if: ${{ inputs.enable-hydra-gates && !cancelled() }}
     runs-on: ubuntu-latest
     name: "Hydra Gates"
+    # ── Why this job now depends on Playwright ──────────────────────────────
+    #
+    # gate-33 (axe-core) consumes `tests/axe/report.json`, which can only be
+    # produced by a browser against a booted instance. This job has neither: it
+    # is a checkout, a shell script and python. The Playwright job is the only
+    # place in this file with both, so the report is produced there and handed
+    # over as an artifact — and an artifact cannot be downloaded before the job
+    # that uploads it has finished. Hence the edge.
+    #
+    # The alternative — booting a second Nextcloud here — duplicates ~150 lines
+    # of install/build/serve for one gate, and the second instance would be a
+    # second thing that can differ from the one the specs ran against.
+    #
+    # Cost, stated honestly: this job used to start at t=0 and now starts after
+    # Playwright resolves. That does NOT move the workflow's own verdict —
+    # `report` already needs both jobs, so the wall-clock to a complete result
+    # is unchanged — but the "Hydra Gates" check now appears later in the PR's
+    # check list than it used to.
+    needs: [playwright]
     # The gates are shell + python over a PR-sized diff. Bounded generously:
     # the slowest observed component is the manifest gate's node startup.
     timeout-minutes: 20
@@ -2812,6 +3213,83 @@ jobs:
         # validator exits 3 DEGRADED), exactly as gate-53 already refused to run
         # fail-open. If this step is ever removed, both gates say so.
         run: npm --prefix gates/hydra-gates install --no-save --no-audit --no-fund ajv
+
+      # ── gate-33's subject, handed over from the Playwright job ─────────────
+      #
+      # continue-on-error because the artifact legitimately does not exist when
+      # the Playwright job was skipped or its axe step refused to write a
+      # report. That case is not an error here: gate-33 then reports SKIPPED
+      # with its reason, which is the honest outcome and the one this repo has
+      # had all along.
+      - name: Download the axe-core report
+        id: axe-download
+        if: ${{ inputs.enable-axe }}
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: axe-report
+          path: app/tests/axe
+
+      # A downloaded file is not the same as a report. An artifact that
+      # extracted but is empty, truncated, or came from a run that analysed
+      # nothing would be read by gate-33 as a CLEAN accessibility result —
+      # verified: gate-33 reports PASS on a file containing exactly `{}`. That
+      # is the one outcome worse than today's loud skip, because it converts
+      # "never measured" into "measured clean".
+      #
+      # So the file is checked against the provenance the runner writes, and
+      # DELETED if it does not hold up. Deleting it restores the loud skip; it
+      # never invents a pass and it never invents a failure.
+      - name: Validate the axe report before gate-33 reads it
+        if: ${{ inputs.enable-axe }}
+        run: |
+          set -uo pipefail
+          REPORT="${GITHUB_WORKSPACE}/app/tests/axe/report.json"
+          if [ ! -f "${REPORT}" ]; then
+            echo "::notice::No axe report was downloaded. gate-33 will report SKIPPED with its reason — accessibility runtime checking is UNVERIFIED for this run."
+            exit 0
+          fi
+          echo "Downloaded $(wc -c < "${REPORT}") byte(s) into ${REPORT}."
+          python3 - "${REPORT}" <<'PYVALIDATE' && VALID=0 || VALID=$?
+          import json, sys
+          path = sys.argv[1]
+          def reject(why):
+              print("::warning::axe report rejected: " + why + " Deleting it so gate-33 skips loudly instead of reading it as a clean accessibility run.")
+              sys.exit(1)
+          try:
+              with open(path) as f:
+                  data = json.load(f)
+          except Exception as e:
+              reject("it does not parse as JSON (%s)." % e)
+          if not isinstance(data, dict):
+              reject("the top level is %s, not an object." % type(data).__name__)
+          if not isinstance(data.get('violations'), list):
+              reject("there is no `violations` array — that is the only key gate-33 reads.")
+          engine = data.get('testEngine') or {}
+          if engine.get('name') != 'axe-core':
+              reject("testEngine is %r, so this file did not come from axe-core." % (engine,))
+          if data.get('selfTest', {}).get('detected') is not True:
+              reject("the runner's positive control is not recorded as detected, so axe was never shown capable of reporting a violation on this run.")
+          routes = data.get('routesAnalysed')
+          if not isinstance(routes, list) or len(routes) == 0:
+              reject("it records ZERO routes analysed. An empty violations array from zero routes is an absent measurement, not a clean one.")
+          for r in routes:
+              if not (200 <= int(r.get('status', 0)) < 400):
+                  reject("route %s answered HTTP %s." % (r.get('url'), r.get('status')))
+              if int(r.get('passes', 0)) + int(r.get('violations', 0)) == 0:
+                  reject("route %s produced no axe results at all." % r.get('url'))
+          blocking = [v for v in data['violations'] if v.get('impact') in ('serious', 'critical')]
+          print("axe report OK: %d route(s), %d violation(s), %d serious/critical (axe-core %s, generated %s)."
+                % (len(routes), len(data['violations']), len(blocking),
+                   engine.get('version'), data.get('generatedAt')))
+          for r in routes:
+              print("  route %s -> HTTP %s | passes=%s violations=%s" % (r.get('url'), r.get('status'), r.get('passes'), r.get('violations')))
+          sys.exit(0)
+          PYVALIDATE
+          if [ "${VALID}" -ne 0 ]; then
+            rm -f "${REPORT}"
+            echo "Removed ${REPORT}. gate-33 will now report SKIPPED rather than PASS."
+          fi
 
       - name: Resolve the diff base
         id: base
