@@ -78,9 +78,17 @@ website and the docs tree are `export-ignore`d and do not follow.
 ## What it needs at runtime
 
 `bash`, `git`, `python3` (about twenty gates are Python helpers) and `node`
-(gates 22 and 53 only, and they additionally want `ajv` resolvable). PHP is
-required only because composer is one of the two delivery mechanisms; **no gate
-executes PHP**.
+(gates 22 and 53 only). PHP is required only because composer is one of the two
+delivery mechanisms; **no gate executes PHP**.
+
+**Gates 22 and 53 need `ajv` resolvable, and both now say so instead of
+degrading quietly.** `ajv` is already a transitive devDependency in every fleet
+app's `package-lock.json`, so a `npm ci` resolves it; a bare checkout without
+`node_modules` does not. Gate 53 has always refused to run without it. Gate 22
+used to fall back to a structural lint that checks only the AppHost blocks and
+report the result as a PASS — a manifest certified without ever being
+schema-validated. It now fails with a named reason instead. Set `NODE_PATH` or
+run `npm ci` before the gates if you see it.
 
 **No gate needs a Nextcloud runtime.** Nothing under `scripts/` loads
 `../../lib/base.php` — that constraint belongs to `phpunit`, not to the gates,
@@ -147,25 +155,95 @@ clean one. So:
   construction.
 - A genuinely empty diff is **stated as empty** rather than reported as a pass.
 
+### Scope granularity, and where file granularity is not enough
+
+Most gates scope by **file**: a finding in a file the PR did not touch does not
+block. Gates 51 (schema-property-titles) and 55 (detail-page-discipline) go
+finer and scope by the **changed lines** inside a touched file, so legacy debt
+elsewhere in a file you edited does not block either.
+
+Gate 53 (effective-manifest-crossref) used to scope by file, and for that gate
+file granularity was indistinguishable from no scoping at all: an app's entire
+navigation surface lives in `src/manifest.json` + `src/manifest.d/*`, so
+touching any of it re-judged all of it. Measured 2026-08-03 on a one-line
+`title` change:
+
+| repo | full-repo | diff-scoped (before) | diff-scoped (after) |
+| --- | --- | --- | --- |
+| pipelinq | 24 | 24 | 0 blocking, 24 reported PRE-EXISTING |
+| shillinq | 246 | 246 | 0 blocking, 397 reported PRE-EXISTING |
+
+Gate 53 now separates two things that are not the same:
+
+- **Answering** a cross-reference needs the whole assembled manifest. You cannot
+  resolve `menu[].route` → page id, or check the ADR-044 no-orphan-removal
+  invariant, from a diff. That part of the gate is legitimately whole-repo and
+  stays so.
+- **Blocking** on the answer does not. Every finding carries a JSON pointer that
+  resolves to a page id, a menu id or a top-level block, and it blocks only when
+  the PR touched that entry.
+
+Findings on untouched entries are **printed as `PRE-EXISTING`, never dropped**,
+and their count is reported on stdout, so a scoped green cannot be read as "the
+manifest is clean". Findings that address the manifest as a whole (no entry to
+attribute them to), and any PR whose scope cannot be determined — a brand-new
+fragment untracked at base, a changed register JSON, a parse failure — block
+regardless. Unverifiable scope is never treated as narrow scope.
+
+The only part of the suite that is whole-repo **by nature** — as opposed to by
+oversight — is that residual set of gate-53 invariants. Everything else measured
+on 2026-08-03 (gates 34, 51, 55) narrows correctly, and the two other
+whole-manifest checks in the same family, gates 22 and 52, are triggered only
+by a change to the artefact they judge.
+
 ---
 
 ## Reading a green
 
 A green from this package says how much it covers, because a green that
 overstates its coverage is the same defect as `|| echo '...skipping'` one layer
-up. The runner's own closing line reads `ALL 61 GATES GREEN` regardless of how
-many gates ran; measured on openbuild, 59 of 61 report and gates 24 and 33 skip
-silently when their prerequisites are absent. So every run ends with:
+up.
+
+Every gate in the runner is wrapped in a prerequisite test (`if [ -d src ]`,
+`if [ -f tests/axe/report.json ]`, …). Until 2026-08-03 a gate whose
+prerequisite was absent emitted **nothing at all** — no line, no count, no
+trace — and the runner still closed with `ALL 63 GATES GREEN`. Measured across
+13 fleet repos, **gate 33 (axe-core) had never run in any of them**: the
+`tests/axe/report.json` it consumes is produced by a `scripts/run-browser-tests.sh`
+that exists in no app, while `axe-core` sits in every app's `devDependencies`
+so the prerequisite looks wired. Every green the fleet had ever produced
+excluded accessibility runtime checking, and nothing said so. Gate 24
+(integration-parity) was absent in most repos for the same structural reason.
+
+Both layers now account for it. A gate that cannot run says so on its own line:
 
 ```
-[hydra-gates] COVERAGE: 59 of 61 declared gates reported a result.
-[hydra-gates] GATES THAT DID NOT RUN: 24 33
-[hydra-gates] RESULT: ALL GATES PASSED — EXCEPT GATES 24 33, WHICH DID NOT RUN.
-[hydra-gates] This green covers 59 gates. It says NOTHING about gates 24 33.
+[gate-24] integration-parity: SKIPPED — no scripts/check-integration-parity.sh …
+[gate-33] axe-core: SKIPPED — no tests/axe/report.json in this repo — axe-core
+          never ran against a rendered DOM, so contrast / landmark /
+          ARIA-validity / live-region accessibility is UNVERIFIED. …
 ```
+
+and every run — `bin/hydra-gates` **and** a direct `run-hydra-gates.sh`
+invocation — ends with the accounting:
+
+```
+[hydra-gates] COVERAGE: 60 of 63 declared gates reported a result.
+[hydra-gates] GATES THAT DID NOT RUN — they inspected NOTHING, and their subject
+[hydra-gates] matter is UNVERIFIED by this run:
+[hydra-gates]   gate-4 composer-audit
+[hydra-gates]   gate-24 integration-parity
+[hydra-gates]   gate-33 axe-core
+[hydra-gates] 60 GATE(S) GREEN — but 3 of 63 DID NOT RUN (named above).
+[hydra-gates] This is NOT 'all 63 gates green'. …
+```
+
+A `SKIPPED` line is **not** counted as coverage — a gate reporting that it did
+nothing did nothing. `--require-full-coverage` turns an incomplete run into
+exit 98.
 
 The inventory is read out of the runner itself rather than hardcoded, so adding
-gate 62 does not silently leave the coverage check measuring against a stale 61.
+gate 64 does not silently leave the coverage check measuring against a stale 63.
 
 ### Waivers
 
@@ -188,14 +266,29 @@ A green earned by passing is then distinguishable from one earned by waiving.
 
 ```
 bash hydra-gates/tests/test-hydra-gates-bin.sh     # or: composer test:package
+
+# manifest gate helpers (gate 22's verdict contract, gate 53's diff scoping).
+# Install ajv first or the schema paths state a SKIP instead of passing:
+npm install --no-save ajv ajv-formats
+bash hydra-gates/scripts/lib/test_check_manifest.sh
+node hydra-gates/scripts/lib/test_manifest_scope_filter.js
+python3 hydra-gates/scripts/lib/test_manifest_diff_scope.py
 ```
 
-Asserts the four invariants — exit-code-is-count, loud unresolvable base, stated
-empty diff, self-describing coverage — against a synthesized fixture repo. The
-positive control runs in **both** directions: the injected violation must be
-*named* by the gate that catches it, and the same fixture must go green once it
-is removed. A one-directional control cannot distinguish "the check caught it"
-from "the check never ran".
+Asserts the invariants — exit-code-is-count, loud unresolvable base, stated
+empty diff, self-describing coverage, named unrun gates, one-line-per-verdict —
+against a synthesized fixture repo. The positive control runs in **both**
+directions: the injected violation must be *named* by the gate that catches it,
+and the same fixture must go green once it is removed. A one-directional control
+cannot distinguish "the check caught it" from "the check never ran".
+
+`test_check_manifest.sh` was itself an example of that failure until
+2026-08-03: it pointed at a `scripts/test-fixtures/manifest-validation/`
+directory that had never existed, and `check_manifest.js <missing-path>` prints
+"Tier 0, skipping" and exits 0 — which is exactly what two of its three
+assertions expected. It had been green its whole life while validating nothing.
+The fixtures now ship, and the suite refuses to run at all if they go missing
+again.
 
 CI for this package lives in
 [`.github/workflows/hydra-gates-package.yml`](../.github/workflows/hydra-gates-package.yml):

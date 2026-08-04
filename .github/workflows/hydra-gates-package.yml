@@ -51,6 +51,27 @@ jobs:
       - name: Run the invariant suite
         run: bash hydra-gates/tests/test-hydra-gates-bin.sh
 
+      # Ajv is what gates 22 and 53 validate manifests WITH. Without it the
+      # vendored validator can only run its structural lint, and the suite below
+      # would skip exactly the paths worth testing. It is a devDependency of
+      # every fleet app already; installing it here means CI exercises the same
+      # code path a real `npm ci` repo does.
+      - name: Install ajv for the manifest-validation helpers
+        run: npm install --no-save --no-audit --no-fund ajv ajv-formats
+
+      # These three cover the gate-22 verdict contract and the gate-53 ADR-020
+      # diff scoping. They lived in scripts/lib/ and were run by NOTHING —
+      # test_check_manifest.sh in particular had been green for its whole life
+      # while pointing at a fixture directory that did not exist (a missing
+      # manifest path makes the validator print "Tier 0, skipping" and exit 0,
+      # which is what two of its three assertions expected).
+      - name: Manifest gate helper suites
+        run: |
+          set -eu
+          bash hydra-gates/scripts/lib/test_check_manifest.sh
+          node hydra-gates/scripts/lib/test_manifest_scope_filter.js
+          python3 hydra-gates/scripts/lib/test_manifest_diff_scope.py
+
   install-from-published-location:
     name: "Install from published location (php:8.3-cli)"
     runs-on: ubuntu-latest

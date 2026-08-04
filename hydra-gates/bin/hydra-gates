@@ -28,13 +28,21 @@
 #      shallow clone it may not exist at all.
 #
 #   3. A COVERAGE ASSERTION ON THE GREEN.
-#      The runner ends with "ALL 61 GATES GREEN" whether or not 61 gates ran.
-#      Measured on openbuild, only 59 of the 61 emit a line — gates 24 and 33
-#      skip silently when their prerequisites are absent. A green that counts
-#      gates it never executed is the same defect as `|| echo 'skipping'`, one
-#      layer up. We diff the gate numbers that actually reported against the
-#      inventory declared by the runner itself, and say plainly which gates did
-#      not run and what the green therefore does not cover.
+#      The runner used to end with "ALL 63 GATES GREEN" whether or not 63 gates
+#      ran. Measured on openbuild, only 59 of 61 emitted a line — gates 24 and
+#      33 skipped silently when their prerequisites were absent; measured
+#      2026-08-03 across 13 repos, gate-33 (axe-core) has never run in ANY of
+#      them. A green that counts gates it never executed is the same defect as
+#      `|| echo 'skipping'`, one layer up. We diff the gate numbers that
+#      actually reported against the inventory declared by the runner itself,
+#      and say plainly which gates did not run and what the green therefore
+#      does not cover.
+#
+#      As of 2026-08-03 the runner performs the same accounting in its own
+#      summary, so a direct `run-hydra-gates.sh` invocation (which most of the
+#      fleet uses) is no longer blind to it. Gates that state their own absence
+#      now print `[gate-N] <name>: SKIPPED — <reason>`; that line is NOT counted
+#      as "reported" below — a gate that says it did nothing did nothing.
 #
 #   4. A LOUD, STATED SKIP FOR MISSING PREREQUISITES.
 #      Never `|| echo '...skipping'`. A prerequisite that is genuinely absent is
@@ -267,8 +275,13 @@ RC="${PIPESTATUS[0]}"
 # adds gate 62, and a coverage check that silently measures against a stale
 # inventory is the very defect this step exists to catch.
 # ---------------------------------------------------------------------------
-DECLARED="$(grep -oE '_(pass|fail) [0-9]+' "${RUNNER}" | awk '{print $2}' | sort -un)"
-EMITTED="$(grep -oE '^\[gate-[0-9]+\]' "${_out}" | grep -oE '[0-9]+' | sort -un)"
+DECLARED="$(grep -oE '_(pass|fail|skip) [0-9]+' "${RUNNER}" | awk '{print $2}' | sort -un)"
+# A `[gate-N] name: SKIPPED — reason` line is the gate REPORTING THAT IT DID NOT
+# RUN. Counting it as coverage would turn the fix into the bug: the whole point
+# of making the skip visible is that it stays outside the "reported a result"
+# tally. Excluded here by verdict, not by gate number.
+EMITTED="$(grep -E '^\[gate-[0-9]+\]' "${_out}" | grep -v ': SKIPPED' \
+    | grep -oE '^\[gate-[0-9]+\]' | grep -oE '[0-9]+' | sort -un)"
 DECLARED_N="$(printf '%s\n' "${DECLARED}" | grep -c . || true)"
 EMITTED_N="$(printf '%s\n' "${EMITTED}" | grep -c . || true)"
 
