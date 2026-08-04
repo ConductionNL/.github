@@ -42,6 +42,44 @@ authorisation one call-hop away from the routed method:
     an explicit controller-level guard (or a Pattern-1 helper), so a real
     IDOR in a leaf app is never masked.  See "Pattern 2 boundary" below.
 
+  Pattern 4 — delegated guard reached through a chain and/or a collaborator.
+    Patterns 1–3 all require the guard to be *one* call-hop away and on
+    ``$this``.  Real controllers routinely centralise authorisation in an
+    injected responder/guard collaborator, and route several thin public
+    actions through private helpers before reaching it.  Measured on decidesk
+    2026-08-04, that shape produced 11 findings and **every one was guarded**:
+    8 reached ``$this->responder->staffAction()`` → ``requireStaff()`` (which
+    checks ``currentUid() !== null`` AND ``isStaff()``), 3 reached
+    ``citizenAction()`` (401 for an anonymous caller), and ``validateProposal``
+    took three hops (``validateProposal`` → ``approveProposal`` /
+    ``rejectProposal`` → ``applyProposalDecision`` → ``staffAction``).
+
+    Pattern 4 therefore does two things, both evidence-based:
+
+      a. *Cross-class resolution.* The controller's typed constructor-promoted
+         properties and property declarations give ``$prop -> ClassName``.  The
+         class is resolved to a real file under the app's ``lib/`` tree (PSR-4
+         basename, confirmed by an actual ``class <Name>`` declaration) and
+         **that file is parsed**.  A call ``$this->prop->method(`` clears the
+         routed method only when ``method`` is demonstrably guard-bearing in
+         the collaborator's own source.  Nothing is assumed from the name of
+         the property or of the class — an unresolvable class clears nothing.
+
+      b. *Transitive closure.* A same-class method that reaches a guard (by
+         (a) or by a strict in-body signal) before its first data mutation is
+         itself guard-bearing, and the closure is iterated to a fixpoint, so an
+         arbitrarily long intra-class delegation chain is followed.
+
+    Propagation deliberately uses a **stricter** signal than the one-hop
+    Pattern 1 (``_STRICT_GUARD_BODY_RE``): a bare ``throw`` or a 404 does not
+    seed a chain, because a method that throws ``NotFoundException`` is not an
+    authorisation guard and chaining would let that leak arbitrarily far.  Only
+    an explicit deny (401/403, ``OCSForbiddenException``, ``isAdmin``, an
+    ``authorize*``/``require*``/``ensure*``/``assert*``/``guard*`` call, or an
+    anonymous-session rejection) starts or continues a chain.  Every hop must
+    also occur before the caller's first data mutation, so a guard that runs
+    only after the write still fails the gate.
+
 Exemptions (method skipped entirely):
   1. ``__construct`` — not a routed action, the 20-line look-back window can
      accidentally catch it when a constructor follows an annotated method.
@@ -76,6 +114,7 @@ Usage::
 """
 from __future__ import annotations
 
+import os
 import re
 import sys
 
@@ -385,6 +424,235 @@ _MUTATION_RE = re.compile(
 )
 
 # ---------------------------------------------------------------------------
+# Pattern 4 — delegation chains and collaborator-hosted guards
+# ---------------------------------------------------------------------------
+
+# The signal that may START or CONTINUE a delegation chain.
+#
+# Deliberately STRICTER than _HELPER_GUARD_BODY_RE, which is kept as-is for the
+# one-hop Pattern-1 clear.  Two alternatives are dropped here on purpose:
+#
+#   - a bare `throw`. A method that throws NotFoundException is not an
+#     authorisation guard; accepting it at one hop is already generous, and
+#     propagating it transitively would let "this function can fail" stand in
+#     for "this function checks who you are" arbitrarily far up the call chain.
+#   - `404` / STATUS_NOT_FOUND. Same reason: not-found is not access-denied.
+#
+# What remains is an explicit deny decision: a 401/403, a forbidden exception,
+# an admin-membership test, a call to an authorize*/require*/ensure*/assert*/
+# guard* predicate, or the rejection of an anonymous session.
+_STRICT_GUARD_BODY_RE = re.compile(
+    r"OCSForbiddenException"
+    r"|NotPermittedException"
+    r"|ForbiddenException"
+    r"|isAdmin\s*\("
+    r"|isCurrentUserAdmin\s*\("
+    r"|->\s*(?:authorize|authorise|require|ensure|assert|guard)[A-Z][A-Za-z0-9_]*\s*\("
+    r"|Http::STATUS_(?:UNAUTHORIZED|FORBIDDEN)"
+    r"|(?:statusCode:\s*|,\s*)(?:401|403)\b"
+    r"|(?:getUser|getUID|currentUid|getCurrentUserId)\s*\(\s*\)\s*===\s*null"
+)
+
+# Typed property declarations and constructor-promoted properties:
+#   private readonly ParticipationResponder $responder,
+#   protected ?FooGuard $guard;
+# Captures (ClassName, propertyName). Scalar/builtin types are filtered out by
+# _COLLABORATOR_SKIP_TYPES so `private string $key` never becomes a lookup.
+_PROPERTY_DECL_RE = re.compile(
+    r"\b(?:private|protected|public)\s+(?:readonly\s+)?\??"
+    r"([A-Za-z_][A-Za-z0-9_]*(?:\\[A-Za-z_][A-Za-z0-9_]*)*)\s+"
+    r"\$([A-Za-z_][A-Za-z0-9_]*)"
+)
+
+_COLLABORATOR_SKIP_TYPES = frozenset(
+    {
+        "array", "bool", "boolean", "callable", "float", "int", "integer",
+        "iterable", "mixed", "object", "string", "self", "static", "null",
+        "readonly", "false", "true", "void",
+    }
+)
+
+_CLASS_DECL_TEMPLATE = r"\b(?:abstract\s+|final\s+|readonly\s+)*class\s+%s\b"
+
+# Per-repo index of `ClassName -> [path, ...]` under the app's lib/ tree, built
+# lazily and cached. Bounded to lib/ so a scan never walks node_modules/vendor.
+_CLASS_INDEX_CACHE: dict = {}
+# Per-file cache of the strict guard-bearing method set of a collaborator class.
+_COLLABORATOR_GUARD_CACHE: dict = {}
+
+
+def _app_root_for(path: str):
+    """Return the app root for *path* — the parent of its ``lib/`` directory.
+
+    Gate-7 is only ever handed ``lib/Controller/*.php``, so the root is the
+    directory containing the ``lib`` segment.  Returns ``None`` when there is
+    no such segment (the caller then resolves no collaborators at all, which
+    fails closed: unresolved means unguarded means flagged).
+    """
+    parts = os.path.abspath(path).split(os.sep)
+    for i in range(len(parts) - 1, -1, -1):
+        if parts[i] == "lib":
+            return os.sep.join(parts[:i]) or os.sep
+    return None
+
+
+def _class_index(root: str) -> dict:
+    """Map ``ClassName -> [file, ...]`` for every PHP file under ``root/lib``.
+
+    PSR-4 basename indexing: the fleet's apps all name the file after the
+    class.  Candidates are *verified* by the caller against an actual ``class
+    <Name>`` declaration, so a basename collision cannot silently resolve to
+    the wrong file.
+    """
+    cached = _CLASS_INDEX_CACHE.get(root)
+    if cached is not None:
+        return cached
+    index: dict = {}
+    lib_dir = os.path.join(root, "lib")
+    for dirpath, dirnames, filenames in os.walk(lib_dir):
+        dirnames[:] = [
+            d for d in dirnames if d not in ("vendor", "node_modules", ".git")
+        ]
+        for fn in filenames:
+            if fn.endswith(".php"):
+                index.setdefault(fn[:-4], []).append(os.path.join(dirpath, fn))
+    _CLASS_INDEX_CACHE[root] = index
+    return index
+
+
+def _strict_guard_methods(cleaned: str, src: str) -> set:
+    """Names of methods in one class that reach a strict guard, transitively.
+
+    Seeded with methods whose name is an authorisation predicate
+    (``_GUARD_HELPER_NAME_RE``) or whose body carries a strict deny signal
+    (``_STRICT_GUARD_BODY_RE``), then closed over same-class calls: a method
+    that invokes a known guard-bearing method *before its first data mutation*
+    becomes guard-bearing itself.  Iterated to a fixpoint, so a chain of any
+    length is followed.
+    """
+    spans = list(_all_method_spans(cleaned))
+    known: set = set()
+    for name, body_start, body_end in spans:
+        if _GUARD_HELPER_NAME_RE.match(name):
+            known.add(name)
+        elif _STRICT_GUARD_BODY_RE.search(src[body_start:body_end]):
+            known.add(name)
+    changed = True
+    while changed:
+        changed = False
+        for name, body_start, body_end in spans:
+            if name in known:
+                continue
+            if _calls_guard_helper_before_mutation(src[body_start:body_end], known):
+                known.add(name)
+                changed = True
+    return known
+
+
+def _collaborator_guard_methods(class_file: str) -> set:
+    """Strict guard-bearing method names declared by the class in *class_file*."""
+    cached = _COLLABORATOR_GUARD_CACHE.get(class_file)
+    if cached is not None:
+        return cached
+    try:
+        with open(class_file, encoding="utf-8") as fh:
+            src = fh.read()
+    except OSError:
+        _COLLABORATOR_GUARD_CACHE[class_file] = set()
+        return set()
+    result = _strict_guard_methods(_strip_strings_and_comments(src), src)
+    _COLLABORATOR_GUARD_CACHE[class_file] = result
+    return result
+
+
+def _collaborator_guard_map(cleaned: str, path: str) -> dict:
+    """Map ``propertyName -> {guard method names}`` for this class's collaborators.
+
+    Reads the typed constructor-promoted properties and property declarations,
+    resolves each type to a real file under the app's ``lib/`` tree, confirms
+    the file actually declares that class, and parses it for guard-bearing
+    methods.  A type that cannot be resolved contributes nothing — the routed
+    method then stays flagged, which is the fail-closed direction.
+    """
+    root = _app_root_for(path)
+    if root is None:
+        return {}
+    index = _class_index(root)
+    out: dict = {}
+    for type_name, prop in _PROPERTY_DECL_RE.findall(cleaned):
+        short = type_name.rsplit("\\", 1)[-1]
+        if short.lower() in _COLLABORATOR_SKIP_TYPES:
+            continue
+        guards: set = set()
+        decl_re = re.compile(_CLASS_DECL_TEMPLATE % re.escape(short))
+        for candidate in index.get(short, []):
+            if os.path.abspath(candidate) == os.path.abspath(path):
+                continue
+            try:
+                with open(candidate, encoding="utf-8") as fh:
+                    csrc = fh.read()
+            except OSError:
+                continue
+            if not decl_re.search(_strip_strings_and_comments(csrc)):
+                continue
+            guards |= _collaborator_guard_methods(candidate)
+        if guards:
+            out.setdefault(prop, set()).update(guards)
+    return out
+
+
+def _calls_collaborator_guard_before_mutation(body: str, guard_map: dict) -> bool:
+    """True when *body* calls ``$this-><prop>-><guard>(`` before its first write.
+
+    *guard_map* comes from :func:`_collaborator_guard_map`, so every method
+    named here was read out of the collaborator's own source — this is a
+    resolved delegation, not a naming convention.
+    """
+    if not guard_map:
+        return False
+    mutation = _MUTATION_RE.search(body)
+    mutation_pos = mutation.start() if mutation is not None else None
+    for prop, methods in guard_map.items():
+        for method in methods:
+            call_re = re.compile(
+                r"\$this\s*->\s*" + re.escape(prop) + r"\s*->\s*"
+                + re.escape(method) + r"\s*\("
+            )
+            for m in call_re.finditer(body):
+                if mutation_pos is None or m.start() < mutation_pos:
+                    return True
+    return False
+
+
+def _delegated_guard_methods(cleaned: str, src: str, guard_map: dict) -> set:
+    """Same-class methods that reach a guard through *any* resolved route.
+
+    Seed = strict in-body guards (``_strict_guard_methods``) plus methods that
+    delegate straight to a resolved collaborator guard; then closed over
+    same-class calls to a fixpoint.  This is what clears decidesk's
+    ``validateProposal`` → ``approveProposal`` → ``applyProposalDecision`` →
+    ``$this->responder->staffAction()`` three-hop chain.
+    """
+    spans = list(_all_method_spans(cleaned))
+    known = _strict_guard_methods(cleaned, src)
+    for name, body_start, body_end in spans:
+        if name in known:
+            continue
+        if _calls_collaborator_guard_before_mutation(src[body_start:body_end], guard_map):
+            known.add(name)
+    changed = True
+    while changed:
+        changed = False
+        for name, body_start, body_end in spans:
+            if name in known:
+                continue
+            if _calls_guard_helper_before_mutation(src[body_start:body_end], known):
+                known.add(name)
+                changed = True
+    return known
+
+
+# ---------------------------------------------------------------------------
 # Pattern 2 — OpenRegister data-layer RBAC delegation (ADR-022)
 # ---------------------------------------------------------------------------
 
@@ -599,6 +867,12 @@ def scan_file(path: str) -> int:
     cleaned = _strip_strings_and_comments(src)
     is_or_repo = bool(_OR_NAMESPACE_RE.search(cleaned))
     guard_helpers = _collect_guard_helpers(cleaned, src, is_or_repo)
+    # Pattern 4 context: resolve this class's typed collaborators to real files
+    # and read their guard-bearing methods out of their own source, then close
+    # the same-class delegation graph over that. Both are lazy/cached; a file
+    # with no @NoAdminRequired method never pays for them.
+    collaborator_guards = _collaborator_guard_map(cleaned, path)
+    delegated_guards = _delegated_guard_methods(cleaned, src, collaborator_guards)
 
     violations = 0
     for name, head_start, sig_start, body_start, body_end, line_no in _find_method_bodies(src):
@@ -655,6 +929,17 @@ def scan_file(path: str) -> int:
         # (throws / returns 401/403/404 / is an is*Admin/assert*/guard*/
         # require*/ensure*/authorize* predicate) before its first mutation.
         if _calls_guard_helper_before_mutation(body, guard_helpers):
+            continue
+
+        # ---- Pattern 4: resolved delegation chain / collaborator guard ---
+        # Either the routed method hands straight to a collaborator method
+        # that was READ and found guard-bearing in its own file
+        # ($this->responder->staffAction()), or it reaches one through a chain
+        # of same-class helpers. Every hop is required to occur before the
+        # first data mutation, and an unresolvable collaborator clears nothing.
+        if _calls_collaborator_guard_before_mutation(body, collaborator_guards):
+            continue
+        if _calls_guard_helper_before_mutation(body, delegated_guards):
             continue
 
         # ---- Pattern 2: OpenRegister data-layer RBAC delegation ---------
