@@ -66,13 +66,24 @@ set -u
 # /some/app`), because the relative script path no longer resolves from inside
 # the app dir.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)"
+# Absolute path to THIS file. The summary reads its own gate inventory back out
+# of it (see the coverage block at the bottom) rather than hardcoding a count —
+# a hardcoded "63" goes stale the first time someone adds gate 64, and a
+# coverage assertion measured against a stale inventory is the very defect the
+# assertion exists to catch.
+RUNNER_SELF="${SCRIPT_DIR}/$(basename "${BASH_SOURCE[0]:-$0}")"
 
 SCOPE_TO_DIFF=0
 BASE_REF="origin/development"
 APP_DIR=""
+# Treat "a declared gate did not run" as a failure (exit 98). Off by default so
+# a Tier-0 app is not blocked by gates it has no surface for; on, the run
+# refuses to report green while any gate's subject matter is unverified.
+REQUIRE_FULL_COVERAGE="${HYDRA_GATE_REQUIRE_FULL_COVERAGE:-0}"
 while [ $# -gt 0 ]; do
     case "$1" in
         --scope-to-diff) SCOPE_TO_DIFF=1; shift ;;
+        --require-full-coverage) REQUIRE_FULL_COVERAGE=1; shift ;;
         --base) BASE_REF="$2"; shift 2 ;;
         --base=*) BASE_REF="${1#--base=}"; shift ;;
         *) APP_DIR="$1"; shift ;;
@@ -222,9 +233,60 @@ _enum_tracked() {
         | sort -u || true
 }
 
+# ---------------------------------------------------------------------------
+# _count <pattern> <file>  — how many lines of <file> match <pattern> (ERE).
+#
+# `grep -c` ALREADY prints the count on no-match ("0") and THEN exits 1, so the
+# idiom `$(grep -c … || echo 0)` captures BOTH: the variable becomes the
+# two-line string "0\n0". `[ "0\n0" -eq 0 ]` is not an integer comparison — it
+# errors to stderr and returns 2, so the "clamp to at least 1" guard that
+# follows never fires, and the failure message is emitted with an embedded
+# newline. That is how gate-22 came to print
+#
+#     [gate-22] manifest-validation: FAIL — 0
+#     1 schema violation(s) in src/manifest.json — see /tmp/…
+#
+# on opencatalogi: a real finding sat in the log, the count line read "0", and
+# the rest of the message was orphaned onto a second line that no `^\[gate-`
+# consumer parses. Diagnosed once before at gate-17 and fixed there only; eight
+# other call sites still carried it. One helper, used everywhere.
+# ---------------------------------------------------------------------------
+_count() {
+    local _n
+    _n=$(grep -cE "$1" "$2" 2>/dev/null) || true
+    _n="${_n%%$'\n'*}"
+    case "${_n}" in ''|*[!0-9]*) _n=0 ;; esac
+    printf '%s' "${_n}"
+}
+
 _FAILED=0
-_fail() { echo "[gate-$1] $2: FAIL${3:+ — $3}"; _FAILED=$((_FAILED + 1)); }
-_pass() { echo "[gate-$1] $2: PASS"; }
+_EMITTED_GATES=""
+_SKIPPED_GATES=""
+# A reason may arrive with embedded newlines (a helper echoing a multi-line
+# message, a miscounted variable). Flatten it: the contract of this runner's
+# stdout is ONE `[gate-N] name: VERDICT` line per gate, and every consumer —
+# bin/hydra-gates' coverage assertion, the reviewer skill, the builder's Rule 0b
+# wrapper — anchors on `^\[gate-`. A verdict that wraps onto a second line is
+# a verdict that silently loses its own reason.
+_fail() {
+    local _reason
+    _reason=$(printf '%s' "${3:-}" | tr '\n' ' ')
+    echo "[gate-$1] $2: FAIL${_reason:+ — ${_reason}}"
+    _FAILED=$((_FAILED + 1))
+    _EMITTED_GATES="${_EMITTED_GATES}$1 "
+}
+_pass() { echo "[gate-$1] $2: PASS"; _EMITTED_GATES="${_EMITTED_GATES}$1 "; }
+
+# _skip <n> <name> <reason> — the gate did NOT run. Distinct from PASS on
+# purpose: a prerequisite was absent, so the gate inspected NOTHING and its
+# subject matter is UNVERIFIED. Recorded separately so the summary can never
+# fold it into an "ALL GATES GREEN" banner.
+_skip() {
+    local _reason
+    _reason=$(printf '%s' "${3:-}" | tr '\n' ' ')
+    echo "[gate-$1] $2: SKIPPED — ${_reason}"
+    _SKIPPED_GATES="${_SKIPPED_GATES}$1 "
+}
 
 # An abort before the summary (set -e / set -u, a helper blowing up, ...) used
 # to be indistinguishable from a completed run: the per-gate PASS lines were
@@ -234,6 +296,11 @@ _pass() { echo "[gate-$1] $2: PASS"; }
 # reported as green because nobody noticed the summary was missing.
 # Make that failure mode impossible to misread.
 _SUMMARY_REACHED=0
+# `_rc` is assigned inside the trap body below, which ShellCheck analyses as its
+# own scope. Seed it here so the reference is unambiguous — it used to be
+# incidentally satisfied by an unrelated `_rc=$?` in gate-22, which is not
+# something the trap should depend on.
+_rc=0
 trap '_rc=$?; if [ "${_SUMMARY_REACHED}" -eq 0 ]; then
         echo "" >&2
         echo "[hydra-gates] ABORTED before the summary (exit ${_rc}) — GATE COVERAGE IS INCOMPLETE." >&2
@@ -1355,14 +1422,42 @@ fi
 #
 # Behavior:
 #   - No src/manifest.json   → skip (PASS quietly, no log line)
-#   - Has src/manifest.json:
-#       * Run `npm run check:manifest` if defined in package.json
-#       * Otherwise fall back to a thin Node one-liner that imports
-#         validateManifest from @conduction/nextcloud-vue and runs it
-#       * If the library is missing from node_modules → log warning + PASS
-#         (fail-open per spec — apps mid-migration may not have installed
-#         the renderer yet)
-#       * If validateManifest reports errors → FAIL with error count
+#   - Has src/manifest.json  → validate it with the HYDRA-VENDORED canonical
+#     validator, scripts/lib/check_manifest.js (the same one gate-53 runs over
+#     the assembled manifest): canonical ADR-040 schema, merged AppHost blocks,
+#     plus the post-schema semantic checks JSON Schema cannot express.
+#
+# WHY THE APP'S OWN `npm run check:manifest` IS NO LONGER THE AUTHORITY
+# (2026-08-03). The gate used to PREFER the app's package.json script and only
+# fall back to the vendored validator. Three things follow from that, all of
+# them measured:
+#
+#   1. The verdict was app-owned. pipelinq's `check:manifest` is a 50-line
+#      structural guard that asserts four top-level keys exist; it certifies any
+#      manifest as OK. An app could turn a fleet gate green by writing a weaker
+#      checker — the exact "I made the gate green by lying" shape gate-35 exists
+#      to catch elsewhere.
+#   2. The verdict was WRONG in the other direction too. opencatalogi's and
+#      shillinq's `check:manifest` runs tests/validate-manifest.js against a
+#      per-app vendored schema copy, which without Ajv falls back to a hardcoded
+#      "v1.x enum" that predates ADR-040. It rejects `type: "roadmap"` — a page
+#      type the CANONICAL schema has accepted since 2.x. gate-22 was failing
+#      apps for conforming to the standard.
+#   3. Those app scripts announce their own downgrade
+#      ("no schema candidate resolved; falling back to structural lint") on a
+#      line the gate neither surfaced nor acted on.
+#
+# The app script still RUNS when defined — its output is captured and surfaced
+# as an advisory line — but it can no longer decide this gate.
+#
+# FAIL-CLOSED ON A DEGRADED VALIDATION (exit 3). If Ajv cannot be resolved, the
+# vendored validator can only run its structural lint, which checks the AppHost
+# blocks and nothing else. Reporting that as PASS is a silent fallback to a
+# weaker check — the defect class this package exists to remove — so it FAILs
+# with a named reason instead, exactly as gate-53 already refuses to run without
+# Ajv. `ajv` is in every fleet app's package-lock.json, so a `npm ci` (which CI
+# does) resolves it; a bare checkout without node_modules will now say so out
+# loud rather than certifying a manifest it never schema-validated.
 #
 # Skill: .claude/skills/hydra-gate-manifest-validation/SKILL.md
 # Spec: openspec/changes/adopt-app-manifest/specs/adopt-app-manifest/spec.md
@@ -1370,66 +1465,43 @@ fi
 if [ -f src/manifest.json ]; then
     _mv_log=/tmp/hydra-gate-manifest-validation.log
     : > "${_mv_log}"
-    _mv_fail=0
+    _mv_validator="${SCRIPT_DIR}/lib/check_manifest.js"
     # Diff-scope: when --scope-to-diff is set and src/manifest.json was NOT
     # touched in this PR, the gate runs informationally (PASS without
     # spending time on a clean manifest the PR didn't touch).
     if [ "${SCOPE_TO_DIFF}" = "1" ] && ! _in_scope "src/manifest.json"; then
         _pass 22 "manifest-validation"
+    elif [ ! -f "${_mv_validator}" ]; then
+        _fail 22 "manifest-validation" "vendored validator missing at ${_mv_validator} — gate misconfiguration, fail-closed"
     else
-        # Prefer the package.json `check:manifest` script — apps adopting
-        # the convention add it per ADR-024.
+        set +e
+        node "${_mv_validator}" src/manifest.json >> "${_mv_log}" 2>&1
+        _mv_rc=$?
+        set -e
+        # Advisory: run the app's own check:manifest when it exists, purely so
+        # a divergence between it and the canonical validator is VISIBLE.
+        _mv_app_note=""
         if [ -f package.json ] && grep -q '"check:manifest"' package.json 2>/dev/null; then
-            if npm run --silent check:manifest >> "${_mv_log}" 2>&1; then
-                _pass 22 "manifest-validation"
-            else
-                _mv_fail=$(grep -cE 'at /|error:|ERROR' "${_mv_log}" 2>/dev/null || echo 1)
-                [ "${_mv_fail}" -eq 0 ] && _mv_fail=1
-                _fail 22 "manifest-validation" "${_mv_fail} schema violation(s) in src/manifest.json — see ${_mv_log}"
+            echo "--- advisory: the app's own \`npm run check:manifest\` (NOT the gate verdict) ---" >> "${_mv_log}"
+            set +e
+            npm run --silent check:manifest >> "${_mv_log}" 2>&1
+            _mv_app_rc=$?
+            set -e
+            if [ "${_mv_app_rc}" -ne 0 ]; then
+                _mv_app_note=" [advisory: the app's own check:manifest also exits ${_mv_app_rc} — see ${_mv_log}]"
             fi
-        elif [ -f node_modules/@conduction/nextcloud-vue/src/utils/validateManifest.js ] \
-          || [ -f node_modules/@conduction/nextcloud-vue/dist/utils/validateManifest.js ]; then
-            # Fallback: invoke validateManifest directly via node one-liner.
-            # Apps that haven't wired `check:manifest` into package.json yet
-            # still get gated, as long as the library is installed.
-            node -e "
-                const fs = require('fs');
-                const path = require('path');
-                let validateManifest;
-                try {
-                    validateManifest = require('@conduction/nextcloud-vue/utils/validateManifest').validateManifest
-                        || require('@conduction/nextcloud-vue').validateManifest;
-                } catch (e) {
-                    console.error('validateManifest library not installed; skipping');
-                    process.exit(0);
-                }
-                if (typeof validateManifest !== 'function') {
-                    console.error('validateManifest export missing — library version mismatch; skipping');
-                    process.exit(0);
-                }
-                const manifest = JSON.parse(fs.readFileSync('src/manifest.json', 'utf8'));
-                const result = validateManifest(manifest);
-                if (result && result.valid === false) {
-                    for (const err of (result.errors || [])) {
-                        console.error('at ' + (err.instancePath || err.dataPath || '/') + ': ' + (err.message || JSON.stringify(err)));
-                    }
-                    process.exit(1);
-                }
-                process.exit(0);
-            " >> "${_mv_log}" 2>&1
-            _rc=$?
-            if [ "${_rc}" -eq 0 ]; then
-                _pass 22 "manifest-validation"
-            else
-                _mv_fail=$(grep -cE '^at /' "${_mv_log}" 2>/dev/null || echo 1)
-                [ "${_mv_fail}" -eq 0 ] && _mv_fail=1
-                _fail 22 "manifest-validation" "${_mv_fail} schema violation(s) in src/manifest.json — see ${_mv_log}"
-            fi
-        else
-            # Fail-open per spec: missing library is treated as warning + PASS.
-            echo "validateManifest library not installed; skipping" >> "${_mv_log}"
-            _pass 22 "manifest-validation"
         fi
+        if grep -q 'no schema candidate resolved\|falling back to structural lint\|Falling back to a structural lint' "${_mv_log}" 2>/dev/null; then
+            echo "[gate-22] NOTE: an app-local manifest checker announced a fallback to a weaker structural lint. That line is advisory only — this gate's verdict comes from the vendored canonical validator."
+        fi
+        case "${_mv_rc}" in
+            0)  _pass 22 "manifest-validation" ;;
+            3)  _fail 22 "manifest-validation" "SCHEMA VALIDATION DID NOT HAPPEN — Ajv is not resolvable, so the vendored validator could only run its AppHost structural lint. A weaker check reported as a pass is not a pass. Run \`npm ci\` (ajv is already in package-lock.json) or set NODE_PATH; see ${_mv_log}" ;;
+            2)  _fail 22 "manifest-validation" "vendored canonical schema could not be loaded — gate misconfiguration; see ${_mv_log}" ;;
+            *)  _mv_fail=$(_count '^at ' "${_mv_log}")
+                [ "${_mv_fail}" -eq 0 ] && _mv_fail=1
+                _fail 22 "manifest-validation" "${_mv_fail} schema violation(s) in src/manifest.json — see ${_mv_log}${_mv_app_note}" ;;
+        esac
     fi
 fi
 
@@ -1474,7 +1546,7 @@ if [ -d lib ]; then
         else
             # In BLOCK mode (post bake-in epoch) the script exits 1 on any
             # match. Count the per-rule lines in the log.
-            _or_abs_hits=$(grep -cE '^\s+\[' "${_or_abs_log}" 2>/dev/null || echo 0)
+            _or_abs_hits=$(_count '^\s+\[' "${_or_abs_log}")
             [ "${_or_abs_hits}" -eq 0 ] && _or_abs_hits=1
             _fail 23 "or-abstraction-anti-patterns" "${_or_abs_hits} OR-abstraction match(es) — see ${_or_abs_log}"
         fi
@@ -1541,8 +1613,16 @@ fi
 #           (Decision 4 — parity correlation is a gate-24 concern; Decision 7 —
 #           renderMode-keyed render pair + server↔JS renderMode agreement).
 # ---------------------------------------------------------------------------
+#
+# Like gate-33, this gate used to vanish without a trace when its prerequisite
+# was absent: no scripts/check-integration-parity.sh → no output at all. It was
+# measured absent in MOST fleet repos on 2026-08-03, which is why fleet coverage
+# was never the declared gate count anywhere. It now says so.
 _parity_log=/tmp/hydra-gate-integration-parity.log
 : > "${_parity_log}"
+if [ ! -f scripts/check-integration-parity.sh ]; then
+    _skip 24 "integration-parity" "no scripts/check-integration-parity.sh in this repo — server↔JS leaf parity (ADR-066 Decisions 4/7: phantom render surfaces, orphan JS registrations, renderMode mismatch) was NOT checked."
+fi
 if [ -f scripts/check-integration-parity.sh ]; then
     if bash scripts/check-integration-parity.sh >> "${_parity_log}" 2>&1; then
         # The WARN-only ADR-066 cross-ref advisory lines start with `⚠`/its
@@ -1557,7 +1637,7 @@ if [ -f scripts/check-integration-parity.sh ]; then
         # WARN-only advisory lines carry "phantom"/"orphan"/"NO matching" and a
         # `⚠` header — never "missing"/"mismatch"/`^✗` — so this hard-failure
         # count excludes them by construction.
-        _parity_hits=$(grep -cE '^✗|missing|mismatch' "${_parity_log}" 2>/dev/null || echo 0)
+        _parity_hits=$(_count '^✗|missing|mismatch' "${_parity_log}")
         [ "${_parity_hits}" -eq 0 ] && _parity_hits=1
         _fail 24 "integration-parity" "${_parity_hits} parity violation(s) — see ${_parity_log}"
     fi
@@ -1993,15 +2073,30 @@ fi
 # can reliably detect. See WCAG 2.2 AA SC 1.4.3, 1.4.11, 1.3.1, 4.1.2, 4.1.3.
 #
 # Contract: if `tests/axe/report.json` exists, parse its `violations` array
-# and fail on any entry with `impact` of `serious` or `critical`. If the
-# report file does not exist, the gate SKIPS silently — the test runner
-# either didn't run axe yet, or this app doesn't have a browser-test stage.
-# This mirrors gate-4 (composer-audit) which skips when composer.json is
-# absent.
+# and fail on any entry with `impact` of `serious` or `critical`.
 #
-# To produce the report, add an axe-core invocation to the Playwright
-# session inside `scripts/run-browser-tests.sh`. See the `hydra-gate-axe`
-# skill for the canonical Playwright snippet.
+# THIS GATE HAS NEVER RUN — ANYWHERE (measured 2026-08-03, fleet-wide).
+#
+# The report it consumes is documented as the output of
+# `scripts/run-browser-tests.sh`. That script exists in NO app in the fleet,
+# and `tests/axe/report.json` exists in none either — while `axe-core` sits in
+# every app's package.json devDependencies, so the prerequisite LOOKS wired.
+# Until 2026-08-03 the missing report made the gate emit NOTHING: no line, no
+# count, no trace. Its silence was byte-identical to a pass, and it disappeared
+# under an "ALL 63 GATES GREEN" banner. Every green this fleet has produced
+# therefore excluded accessibility RUNTIME checking (contrast, landmark
+# structure, ARIA validity, live regions) — the exact class of defect the
+# static gates 31/32/35-45 cannot see.
+#
+# It now reports SKIPPED with the reason, is counted as NOT RUN by the summary
+# and by bin/hydra-gates' coverage assertion, and can be made a hard failure
+# with --require-full-coverage.
+#
+# To make it RUN: produce tests/axe/report.json from the app's Playwright
+# suite (`@axe-core/playwright` → `new AxeBuilder({ page }).analyze()` →
+# `fs.writeFileSync('tests/axe/report.json', JSON.stringify(results))`), or
+# add the documented scripts/run-browser-tests.sh. See the `hydra-gate-axe`
+# skill for the canonical snippet.
 #
 # References:
 #   - ADR-010 (NL Design — WCAG 2.2 AA)
@@ -2009,6 +2104,13 @@ fi
 #   - .claude/skills/hydra-gate-axe/SKILL.md (how the report is produced)
 # ---------------------------------------------------------------------------
 _axe_report="tests/axe/report.json"
+if [ ! -f "${_axe_report}" ]; then
+    if [ -d src ]; then
+        _skip 33 "axe-core" "no ${_axe_report} in this repo — axe-core never ran against a rendered DOM, so contrast / landmark / ARIA-validity / live-region accessibility is UNVERIFIED. Produce the report from the Playwright suite (@axe-core/playwright) or add scripts/run-browser-tests.sh."
+    else
+        _skip 33 "axe-core" "no src/ and no ${_axe_report} — no frontend to run axe-core against in this repo."
+    fi
+fi
 if [ -f "${_axe_report}" ]; then
     _axe_log=/tmp/hydra-gate-axe.log
     : > "${_axe_log}"
@@ -2849,9 +2951,18 @@ if [ "${SCOPE_TO_DIFF}" = "1" ] && [ -n "${BASE_REF}" ]; then
     _csrf_removed=$(git diff -U0 "${BASE_REF}...HEAD" -- 'lib/Controller/*.php' 2>/dev/null \
         | grep -E '^-.*(@NoCSRFRequired|#\[NoCSRFRequired\])' || true)
     if [ -n "${_csrf_removed}" ]; then
-        # Look for frontend co-change signals in the diff
+        # Look for frontend co-change signals in the diff.
+        #
+        # The `|| echo 0` here was worse than cosmetic: on ZERO signals grep
+        # printed "0" and exited 1, the fallback appended a second "0", and the
+        # `-eq 0` test below then ERRORED on "0\n0" and took the else branch —
+        # i.e. "no frontend co-change at all" was read as "co-change found" and
+        # the gate PASSED. A CSRF-protection removal with no frontend counterpart
+        # is precisely what this gate exists to stop, so the bug was fail-OPEN.
         _csrf_fe_signals=$(git diff "${BASE_REF}...HEAD" -- 'src/**/*.vue' 'src/**/*.js' 'src/**/*.ts' 2>/dev/null \
-            | grep -cE '^\+.*(OCS-APIRequest|requesttoken|@nextcloud/axios|getRequestToken)' 2>/dev/null || echo 0)
+            | grep -cE '^\+.*(OCS-APIRequest|requesttoken|@nextcloud/axios|getRequestToken)' 2>/dev/null || true)
+        _csrf_fe_signals="${_csrf_fe_signals%%$'\n'*}"
+        case "${_csrf_fe_signals}" in ''|*[!0-9]*) _csrf_fe_signals=0 ;; esac
         if [ "${_csrf_fe_signals}" -eq 0 ]; then
             # Check for opt-out
             _csrf_optout_re='\[hydra-gate-csrf-cochange exclude\][[:space:]]+.{20,}'
@@ -3261,6 +3372,66 @@ if [ -f src/manifest.json ]; then
         # manifest for real — refuse to run fail-open (fleet-sweep guard).
         _fail 53 "effective-manifest-crossref" "ajv not resolvable from ${SCRIPT_DIR}/lib — refusing to run fail-open (set NODE_PATH or install ajv)"
     else
+        # ---------------------------------------------------------------
+        # ADR-020 diff scope (fixed 2026-08-03). The trigger above is FILE
+        # granularity — and because an app's whole navigation surface lives in
+        # one input set, file granularity was indistinguishable from no scoping:
+        # a one-line `title` change reproduced the full-repo finding count
+        # exactly (pipelinq 24/24, shillinq 246/246, every finding on a page the
+        # PR had never touched).
+        #
+        # The joins are still ANSWERED over the whole assembled manifest — a
+        # menu route cannot be resolved to a page id from a diff, and that part
+        # of this gate is legitimately whole-repo. What changes is which answers
+        # BLOCK: a finding blocks when the PR touched the page / menu entry /
+        # top-level block it is about. Findings that address the manifest as a
+        # whole keep blocking under every scope and are reported as such.
+        # ---------------------------------------------------------------
+        _em_scope_file=""
+        _em_scoper="${SCRIPT_DIR}/lib/manifest_diff_scope.py"
+        if [ "${SCOPE_TO_DIFF}" = "1" ] && [ -f "${_em_scoper}" ]; then
+            _em_scope_file=$(mktemp /tmp/hydra-gate53-scope.XXXXXX 2>/dev/null || true)
+            if [ -n "${_em_scope_file}" ]; then
+                _em_inputs=()
+                while IFS= read -r _em_f; do
+                    [ -z "${_em_f}" ] && continue
+                    case "${_em_f}" in
+                        src/manifest.json|src/manifest.d/*|src/menu-layout.json|lib/Settings/*register*.json)
+                            _em_inputs+=("${_em_f}") ;;
+                    esac
+                done <<< "${CHANGED_FILES}"
+                set +e
+                if [ "${#_em_inputs[@]}" -gt 0 ]; then
+                    HYDRA_GATE_BASE_REF="${BASE_REF}" \
+                        python3 "${_em_scoper}" "${_em_inputs[@]}" > "${_em_scope_file}" 2>>"${_em_log}"
+                    _em_scope_rc=$?
+                else
+                    # The trigger said a manifest input changed; we found none.
+                    # A disagreement is not a narrow scope.
+                    echo "ALL" > "${_em_scope_file}"
+                    _em_scope_rc=0
+                fi
+                set -e
+                if [ "${_em_scope_rc}" -ne 0 ]; then
+                    # Could not compute a scope → do not narrow. Say so.
+                    echo "ALL" > "${_em_scope_file}"
+                    echo "[gate-53] scope computation failed (rc=${_em_scope_rc}) — running UNSCOPED (fail toward enforcement)."
+                fi
+                if grep -qx 'ALL' "${_em_scope_file}" 2>/dev/null; then
+                    echo "[gate-53] diff scope is INDETERMINATE for this PR (new/untracked manifest input, or a register JSON changed) — every finding blocks."
+                fi
+            fi
+        fi
+        # Built as two plain words rather than an array: `"${arr[@]}"` on an
+        # EMPTY array is an unbound-variable error under `set -u` on bash < 4.4,
+        # and this runner ships into containers we do not choose the bash of.
+        _em_scope_flag=""
+        _em_scope_val=""
+        if [ -n "${_em_scope_file}" ]; then
+            _em_scope_flag="--scope-ids"
+            _em_scope_val="${_em_scope_file}"
+        fi
+
         _em_tmp=$(mktemp /tmp/hydra-gate53-effective.XXXXXX.json 2>/dev/null || true)
         _em_reason=""
         if [ -z "${_em_tmp}" ]; then
@@ -3268,21 +3439,42 @@ if [ -f src/manifest.json ]; then
             _em_reason="mktemp failed — cannot write the assembled manifest (fail-closed)"
         elif ! node "${_em_builder}" --app-dir . --out "${_em_tmp}" >> "${_em_log}" 2>&1; then
             _em_reason="effective manifest could not be assembled (bad JSON input?) — see ${_em_log}"
-        elif ! node "${_em_validator}" "${_em_tmp}" >> "${_em_log}" 2>&1; then
-            _em_n=$(grep -cE '^at ' "${_em_log}" 2>/dev/null || true)
-            { [ -z "${_em_n}" ] || [ "${_em_n}" -eq 0 ]; } && _em_n=1
-            _em_reason="${_em_n} structural violation(s) in the ASSEMBLED manifest (base+fragments+menu-layout) — see ${_em_log}"
-        elif ! node "${_em_crossref}" --app-dir . --manifest "${_em_tmp}" >> "${_em_log}" 2>&1; then
-            # Count error-severity findings only — WARN lines never fail.
-            _em_n=$(grep -E '^at ' "${_em_log}" 2>/dev/null | grep -cv ': WARN ' || true)
-            { [ -z "${_em_n}" ] || [ "${_em_n}" -eq 0 ]; } && _em_n=1
-            _em_reason="${_em_n} cross-reference failure(s) in the effective manifest — see ${_em_log}"
+        else
+            set +e
+            node "${_em_validator}" "${_em_tmp}" ${_em_scope_flag} ${_em_scope_val} >> "${_em_log}" 2>&1
+            _em_val_rc=$?
+            set -e
+            if [ "${_em_val_rc}" -eq 3 ]; then
+                _em_reason="SCHEMA VALIDATION DID NOT HAPPEN — the vendored validator degraded to its structural lint (Ajv unresolvable mid-run); see ${_em_log}"
+            elif [ "${_em_val_rc}" -ne 0 ]; then
+                # Blocking findings only — PRE-EXISTING/WARN lines are excluded
+                # by the prefix, so the count is what this PR must actually fix.
+                _em_n=$(grep -E '^at ' "${_em_log}" 2>/dev/null | grep -cvE ': (WARN|PRE-EXISTING) ' || true)
+                { [ -z "${_em_n}" ] || [ "${_em_n}" -eq 0 ]; } && _em_n=1
+                _em_reason="${_em_n} structural violation(s) in the ASSEMBLED manifest (base+fragments+menu-layout) — see ${_em_log}"
+            else
+                set +e
+                node "${_em_crossref}" --app-dir . --manifest "${_em_tmp}" ${_em_scope_flag} ${_em_scope_val} >> "${_em_log}" 2>&1
+                _em_cr_rc=$?
+                set -e
+                if [ "${_em_cr_rc}" -ne 0 ]; then
+                    _em_n=$(grep -E '^at ' "${_em_log}" 2>/dev/null | grep -cvE ': (WARN|PRE-EXISTING) ' || true)
+                    { [ -z "${_em_n}" ] || [ "${_em_n}" -eq 0 ]; } && _em_n=1
+                    _em_reason="${_em_n} cross-reference failure(s) in the effective manifest — see ${_em_log}"
+                fi
+            fi
         fi
         [ -n "${_em_tmp}" ] && rm -f "${_em_tmp}"
+        [ -n "${_em_scope_file}" ] && rm -f "${_em_scope_file}"
         # Surface WARN-severity findings on stdout even on a pass (they never
         # set the exit code, but they must not vanish either).
-        _em_warns=$(grep -cE '^at .*: WARN ' "${_em_log}" 2>/dev/null || true)
-        [ -n "${_em_warns}" ] && [ "${_em_warns}" -gt 0 ] && echo "[gate-53] effective-manifest-crossref: ${_em_warns} WARN finding(s) (non-blocking) — see ${_em_log}"
+        _em_warns=$(_count '^at .*: WARN ' "${_em_log}")
+        [ "${_em_warns}" -gt 0 ] && echo "[gate-53] effective-manifest-crossref: ${_em_warns} WARN finding(s) (non-blocking) — see ${_em_log}"
+        # Same for pre-existing debt suppressed by the diff scope: it is real,
+        # it just is not this PR's to fix. Stating the count keeps a scoped
+        # green from reading as "the manifest is clean".
+        _em_pre=$(_count '^at .*: PRE-EXISTING ' "${_em_log}")
+        [ "${_em_pre}" -gt 0 ] && echo "[gate-53] effective-manifest-crossref: ${_em_pre} PRE-EXISTING finding(s) on manifest entries this PR did not touch (ADR-020, not blocking) — see ${_em_log}"
         if [ -z "${_em_reason}" ]; then
             _pass 53 "effective-manifest-crossref"
         else
@@ -3643,7 +3835,7 @@ if [ -f src/manifest.json ]; then
         if [ "${_iv_rc}" -eq 0 ]; then
             _pass 60 "icon-vocabulary"
         else
-            _iv_n=$(grep -cE '^FAIL' "${_iv_log}" 2>/dev/null || echo 1)
+            _iv_n=$(_count '^FAIL' "${_iv_log}")
             [ "${_iv_n}" -eq 0 ] && _iv_n=1
             _fail 60 "icon-vocabulary" "${_iv_n} icon(s) outside the canonical vocabulary (ADR-077); see ${_iv_log}"
         fi
@@ -3697,7 +3889,7 @@ if [ -d lib/AppInfo ]; then
     if [ "${_lwp_rc}" -eq 0 ]; then
         _pass 61 "listener-work-placement"
     else
-        _lwp_n=$(grep -cE '^FAIL' "${_lwp_log}" 2>/dev/null || echo 1)
+        _lwp_n=$(_count '^FAIL' "${_lwp_log}")
         [ "${_lwp_n}" -eq 0 ] && _lwp_n=1
         _fail 61 "listener-work-placement" "${_lwp_n} post-event listener(s) doing synchronous work with no deferral and no justification (ADR-078); see ${_lwp_log}"
     fi
@@ -3717,7 +3909,7 @@ set -e
 if [ "${_sp_rc}" -eq 0 ]; then
     _pass 62 "store-plane"
 else
-    _sp_n=$(grep -cE '^FAIL' "${_sp_log}" 2>/dev/null || echo 1)
+    _sp_n=$(_count '^FAIL' "${_sp_log}")
     [ "${_sp_n}" -eq 0 ] && _sp_n=1
     _fail 62 "store-plane" "${_sp_n} store/templates/catalogue naming or discovery violation(s) (ADR-080); see ${_sp_log}"
 fi
@@ -3734,18 +3926,81 @@ set -e
 if [ "${_ss_rc}" -eq 0 ]; then
     _pass 63 "settings-surface"
 else
-    _ss_n=$(grep -cE '^FAIL' "${_ss_log}" 2>/dev/null || echo 1)
+    _ss_n=$(_count '^FAIL' "${_ss_log}")
     [ "${_ss_n}" -eq 0 ] && _ss_n=1
     _fail 63 "settings-surface" "${_ss_n} settings-placement violation(s) (ADR-079); see ${_ss_log}"
 fi
 
 # ---------------------------------------------------------------------------
-# Summary
+# Summary + COVERAGE ACCOUNTING
+#
+# The banner used to read "ALL 63 GATES GREEN" whenever the failure count was
+# zero — whether or not 63 gates had actually run. Every gate in this file is
+# wrapped in a prerequisite test (`if [ -d src ]`, `if [ -f
+# tests/axe/report.json ]`, …) and a gate whose prerequisite is absent emitted
+# NOTHING AT ALL: no line, no count, no trace. Its absence was byte-identical
+# to its success.
+#
+# Measured 2026-08-03 across the fleet: gate-33 (axe-core) has never run in ANY
+# repository, because the `tests/axe/report.json` it consumes is produced by a
+# `scripts/run-browser-tests.sh` that exists in no app — so every "all gates
+# green" this fleet has ever produced excluded accessibility RUNTIME checking
+# entirely. gate-24 (integration-parity) is absent in most repos for the same
+# structural reason. Neither was visible anywhere in the output.
+#
+# The inventory is read back out of THIS FILE (number + name of every gate that
+# can report), so it cannot go stale against a hardcoded constant, and gates
+# that did not run are named — not merely counted.
 # ---------------------------------------------------------------------------
 _SUMMARY_REACHED=1
 echo ""
+
+# Declared inventory: "<n> <name>" per line, first declaration of each number
+# wins (a gate may call _pass/_fail/_skip from several branches).
+_declared=$(grep -oE '_(pass|fail|skip) [0-9]+ "[^"]+"' "${RUNNER_SELF}" 2>/dev/null \
+    | sed -E 's/^_(pass|fail|skip) ([0-9]+) "([^"]+)"$/\2 \3/' \
+    | sort -n -k1,1 -s | awk '!seen[$1]++' || true)
+_declared_n=$(printf '%s\n' "${_declared}" | grep -c . || true)
+_declared_n="${_declared_n:-0}"
+_emitted_n=$(printf '%s\n' ${_EMITTED_GATES} | grep -c . || true)
+_emitted_n="${_emitted_n:-0}"
+
+# Gates that never reported: declared minus emitted. Membership test rather
+# than comm(1) — comm compares in collating order, these lists are numeric,
+# and an under-reported coverage gap is exactly what this block exists to stop.
+_not_run=""
+while read -r _dn _dname; do
+    [ -z "${_dn:-}" ] && continue
+    case " ${_EMITTED_GATES}" in
+        *" ${_dn} "*) continue ;;
+    esac
+    _not_run="${_not_run}${_not_run:+
+}${_dn} ${_dname}"
+done <<< "${_declared}"
+_not_run_n=$(printf '%s\n' "${_not_run}" | grep -c . || true)
+_not_run_n="${_not_run_n:-0}"
+
+echo "[hydra-gates] COVERAGE: ${_emitted_n} of ${_declared_n} declared gates reported a result."
+if [ "${_not_run_n}" -gt 0 ]; then
+    echo "[hydra-gates] GATES THAT DID NOT RUN — they inspected NOTHING, and their subject"
+    echo "[hydra-gates] matter is UNVERIFIED by this run:"
+    while IFS= read -r _nr; do
+        [ -z "${_nr}" ] && continue
+        echo "[hydra-gates]   gate-${_nr%% *} ${_nr#* }"
+    done <<< "${_not_run}"
+fi
+
 if [ "${_FAILED}" -eq 0 ]; then
-    echo "[hydra-gates] ALL 63 GATES GREEN"
+    if [ "${_not_run_n}" -eq 0 ]; then
+        echo "[hydra-gates] ALL ${_declared_n} GATES GREEN — and all ${_declared_n} of them ran."
+    else
+        echo "[hydra-gates] ${_emitted_n} GATE(S) GREEN — but ${_not_run_n} of ${_declared_n} DID NOT RUN (named above)."
+        echo "[hydra-gates] This is NOT 'all ${_declared_n} gates green'. It says nothing about the gates that skipped."
+        if [ "${REQUIRE_FULL_COVERAGE}" = "1" ]; then
+            echo "[hydra-gates] --require-full-coverage was set: treating incomplete coverage as failure."
+            exit 98
+        fi
+    fi
 else
     echo "[hydra-gates] ${_FAILED} gate(s) failed"
 fi

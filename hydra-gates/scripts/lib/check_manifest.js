@@ -44,6 +44,13 @@
 //   0 — manifest validates with zero errors (or no manifest → caller skips)
 //   1 — manifest fails validation (errors printed one per line: "at <path>: …")
 //   2 — vendored canonical schema could not be loaded (gate misconfiguration)
+//   3 — DEGRADED: Ajv was not resolvable (or the merged schema would not
+//       compile), so only the AppHost structural lint ran and it found nothing.
+//       This is NOT a pass: the schema was never applied. Callers must surface
+//       it as a distinct verdict — a silent downgrade to a weaker check is the
+//       failure mode this whole package exists to remove. Exit 1 still wins
+//       when the structural lint DID find something, so a real finding is
+//       never masked by the degradation.
 
 'use strict'
 
@@ -54,9 +61,22 @@ const path = require('path')
 // It is the ADR-040 SUPERSET (published v2 base + observability + deepLinks).
 const CANONICAL_SCHEMA_PATH = path.resolve(__dirname, '..', 'schemas', 'app-manifest-v2.schema.json')
 
-const MANIFEST_PATH = process.argv[2]
-	? path.resolve(process.argv[2])
+// `--scope-ids FILE` (ADR-020): findings on manifest entries the PR did not
+// touch are reported as PRE-EXISTING instead of blocking. Absent → full-repo.
+const _argv = process.argv.slice(2)
+let SCOPE_IDS_FILE = null
+const _positional = []
+for (let i = 0; i < _argv.length; i++) {
+	if (_argv[i] === '--scope-ids') { SCOPE_IDS_FILE = _argv[++i]; continue }
+	if (_argv[i].startsWith('--scope-ids=')) { SCOPE_IDS_FILE = _argv[i].slice('--scope-ids='.length); continue }
+	_positional.push(_argv[i])
+}
+
+const MANIFEST_PATH = _positional[0]
+	? path.resolve(_positional[0])
 	: path.resolve(process.cwd(), 'src', 'manifest.json')
+
+const scopeFilter = require('./manifest_scope_filter.js')
 
 // Base-schema candidates, in priority order. The CANONICAL hydra-vendored
 // schema wins (2026-07-06 manifest audit, item 4): pinned-first meant "pass"
@@ -144,11 +164,26 @@ function semanticChecks(manifest) {
 // line — both on stdout (every stdout line is valid JSON). Human-readable
 // `at <path>: <first line>` diagnostics go to stderr, which also keeps
 // run-hydra-gates.sh's `grep -cE '^at /'` failure count working.
-function report(errors) {
+function report(allErrors, degradedReason, manifest) {
+	// ADR-020: answer over the whole manifest, block only on entries the PR
+	// touched. `scope` is null on a full-repo run and everything blocks.
+	const scope = scopeFilter.loadScope(SCOPE_IDS_FILE)
+	const parts = scopeFilter.partition(allErrors, manifest || {}, scope)
+	scopeFilter.reportScope('check_manifest', parts)
+	const errors = parts.blocking
 	const failed = errors.length > 0 ? 1 : 0
 	if (failed === 1) {
 		for (const e of errors) console.error(`at ${e.path || '/'}: ${String(e.message).split('\n')[0]}`)
 		console.log(JSON.stringify({ file: path.relative(process.cwd(), MANIFEST_PATH), schemaVersion: 'v2', errors }))
+	}
+	// A zero-finding run that never applied the schema is NOT a pass. Say so on
+	// both channels and exit 3 so the caller cannot mistake it for one.
+	if (failed === 0 && degradedReason) {
+		console.error(`[check_manifest] DEGRADED — SCHEMA VALIDATION DID NOT HAPPEN: ${degradedReason}`)
+		console.error('[check_manifest] The AppHost structural lint found nothing, but it checks only the observability/deepLinks blocks.')
+		console.error('[check_manifest] Reporting this as a pass would certify a manifest that was never validated against the canonical schema.')
+		console.log(JSON.stringify({ status: 'degraded', checked: 1, failed: 0, reason: degradedReason }))
+		process.exit(3)
 	}
 	console.log(JSON.stringify({ status: failed === 1 ? 'failed' : 'passed', checked: 1, failed }))
 	process.exit(failed)
@@ -340,7 +375,7 @@ function main() {
 			validate = ajv.compile(schema)
 		} catch (e) {
 			console.error(`[check_manifest] Ajv could not compile the merged schema (${e.message}); falling back to AppHost structural lint`)
-			return finishStructural(manifest)
+			return finishStructural(manifest, `Ajv could not compile the merged canonical schema (${e.message})`)
 		}
 		const errors = []
 		if (validate(manifest)) {
@@ -351,20 +386,20 @@ function main() {
 			}
 		}
 		errors.push(...semanticChecks(manifest))
-		return report(errors)
+		return report(errors, null, manifest)
 	}
 
 	console.error('[check_manifest] Ajv not installed; using AppHost structural lint (observability/deepLinks still validated for-real)')
-	return finishStructural(manifest)
+	return finishStructural(manifest, 'Ajv is not resolvable from this process (no node_modules, no NODE_PATH)')
 }
 
-function finishStructural(manifest) {
+function finishStructural(manifest, degradedReason) {
 	const errors = structuralLintAppHost(manifest)
 	if (errors.length === 0) {
 		console.error('[check_manifest] AppHost structural lint against canonical ADR-040 enums: PASS')
 	}
 	errors.push(...semanticChecks(manifest))
-	return report(errors)
+	return report(errors, degradedReason, manifest)
 }
 
 main()

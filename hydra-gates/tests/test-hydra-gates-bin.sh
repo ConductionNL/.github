@@ -211,6 +211,75 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Test 4b — a gate that DID NOT RUN is named, and cannot hide under a green.
+#
+# Measured 2026-08-03 across 13 fleet repos: gate-33 (axe-core) has never run in
+# any of them, because the tests/axe/report.json it consumes is produced by a
+# scripts/run-browser-tests.sh that exists nowhere. Until then it emitted NOTHING
+# when its prerequisite was absent — no line, no count — and the runner still
+# printed "ALL 63 GATES GREEN". Every green this fleet has produced therefore
+# excluded accessibility runtime checking, and nothing in the output said so.
+#
+# The fixture has no tests/axe/report.json, so this is the real condition.
+# ---------------------------------------------------------------------------
+echo "[test] a gate that did not run is named, not folded into the green"
+if printf '%s' "${OUT}" | grep -qE '^\[gate-33\] axe-core: SKIPPED'; then
+    _ok "gate-33 states its own absence instead of emitting nothing"
+else
+    _bad "gate-33 emitted no SKIPPED line — its absence is still indistinguishable from a pass"
+fi
+if printf '%s' "${OUT}" | grep -q "GATES THAT DID NOT RUN"; then
+    _ok "the summary names the gates that did not run"
+else
+    _bad "the summary did not name a single unrun gate, though gate-33 cannot have run here"
+fi
+if printf '%s' "${OUT}" | grep -qE 'ALL [0-9]+ GATES GREEN'; then
+    _bad "an 'ALL N GATES GREEN' banner was printed while gate-33 did not run"
+else
+    _ok "no 'ALL N GATES GREEN' banner while a gate did not run"
+fi
+# A SKIPPED gate must not be counted as coverage — that would turn the fix into
+# the bug. Coverage must be strictly less than the declared inventory here.
+_cov_line="$(printf '%s' "${OUT}" | grep -m1 -oE 'COVERAGE: [0-9]+ of [0-9]+' || true)"
+_cov_ran="$(printf '%s' "${_cov_line}" | awk '{print $2}')"
+_cov_all="$(printf '%s' "${_cov_line}" | awk '{print $4}')"
+if [ -n "${_cov_ran:-}" ] && [ -n "${_cov_all:-}" ] && [ "${_cov_ran}" -lt "${_cov_all}" ]; then
+    _ok "SKIPPED gates are excluded from the coverage tally (${_cov_ran} of ${_cov_all})"
+else
+    _bad "coverage read '${_cov_line}' — a skipped gate is being counted as having reported"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 4c — --require-full-coverage turns an incomplete run into a failure.
+# Reverse control for the above: the same fixture, exit 0 without the flag and
+# non-zero with it, proves the coverage gap is really being detected rather
+# than the banner merely being reworded.
+# ---------------------------------------------------------------------------
+echo "[test] --require-full-coverage refuses an incomplete green"
+"${BIN}" --app-dir "${FIX}" --base "${BASE_SHA}" --require-full-coverage > /dev/null 2>&1; RC_RFC=$?
+if [ "${RC_RFC}" -eq 98 ]; then
+    _ok "incomplete coverage exits 98 when the caller asked for full coverage"
+else
+    _bad "expected exit 98 with --require-full-coverage, got ${RC_RFC}"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 4d — no gate verdict line may wrap onto a second line.
+#
+# gate-22 printed "FAIL — 0" on opencatalogi with the rest of its message
+# orphaned onto an unparseable second line, because a `grep -c … || echo 1`
+# captured "0\n1". Every consumer of this runner anchors on `^\[gate-`, so a
+# wrapped verdict silently loses its own reason AND its count.
+# ---------------------------------------------------------------------------
+echo "[test] every gate verdict is exactly one line"
+_orphans="$(printf '%s\n' "${OUT}" | grep -cE '^[0-9]+ (schema violation|parity violation|structural violation|cross-reference)' || true)"
+if [ "${_orphans}" = "0" ]; then
+    _ok "no orphaned continuation line from a miscounted gate message"
+else
+    _bad "a gate message wrapped onto a second line — the count variable held a newline"
+fi
+
+# ---------------------------------------------------------------------------
 # Test 5 — a broken install is exit 99, never a green.
 # ---------------------------------------------------------------------------
 echo "[test] a package with no runner cannot report green"

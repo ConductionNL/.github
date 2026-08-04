@@ -72,15 +72,22 @@ try {
 
 let APP_DIR = process.cwd()
 let MANIFEST_FILE = null
+// `--scope-ids FILE` (ADR-020) — see manifest_scope_filter.js. The joins are
+// still answered against the WHOLE assembled manifest; the flag only decides
+// which of the answers block this PR.
+let SCOPE_IDS_FILE = null
 {
 	const argv = process.argv.slice(2)
 	for (let i = 0; i < argv.length; i++) {
 		if (argv[i] === '--app-dir' && argv[i + 1]) { APP_DIR = path.resolve(argv[++i]); continue }
 		if (argv[i] === '--manifest' && argv[i + 1]) { MANIFEST_FILE = path.resolve(argv[++i]); continue }
+		if (argv[i] === '--scope-ids' && argv[i + 1]) { SCOPE_IDS_FILE = argv[++i]; continue }
 		console.error(`[check_manifest_crossref] unknown argument: ${argv[i]}`)
 		process.exit(2)
 	}
 }
+
+const scopeFilter = require('./manifest_scope_filter.js')
 
 // --- findings accumulator ----------------------------------------------------
 
@@ -397,22 +404,37 @@ function main() {
 		}
 	}
 
-	report(manifestLabel)
+	report(manifestLabel, manifest)
 }
 
 // Emit the gate-22 report shape: per-file findings line (when any findings,
 // error OR warn), then always the summary line — both valid JSON on stdout.
 // Human diagnostics on stderr; WARNs never set the failure exit code.
-function report(manifestLabel) {
-	const errors = findings.filter((f) => f.severity === 'error')
+function report(manifestLabel, manifest) {
+	// ADR-020 diff scoping. WARNs are advisory already and are never scoped out
+	// — they cost nothing and vanishing them would hide debt twice over. Only
+	// error-severity findings are partitioned into blocking vs pre-existing.
+	const scope = scopeFilter.loadScope(SCOPE_IDS_FILE)
+	const errorFindings = findings.filter((f) => f.severity === 'error')
+	const parts = scopeFilter.partition(errorFindings, manifest || {}, scope)
+	const preexisting = new Set(parts.preexisting)
+	const errors = parts.blocking
 	const failed = errors.length > 0 ? 1 : 0
 	for (const f of findings) {
 		const first = String(f.message).split('\n')[0]
 		if (f.severity === 'warn') {
 			console.error(`at ${f.path || '/'}: WARN ${first}`)
+		} else if (preexisting.has(f)) {
+			console.error(`at ${f.path || '/'}: PRE-EXISTING ${first}`)
 		} else {
 			console.error(`at ${f.path || '/'}: ${first}`)
 		}
+	}
+	if (parts.preexisting.length > 0) {
+		console.error(`[check_manifest_crossref] diff-scope (ADR-020): ${parts.preexisting.length} cross-reference finding(s) sit on manifest entries this PR did not touch — reported above as PRE-EXISTING, not blocking.`)
+	}
+	if (parts.unscopable.length > 0) {
+		console.error(`[check_manifest_crossref] ${parts.unscopable.length} finding(s) address the manifest as a WHOLE and block regardless of scope.`)
 	}
 	if (findings.length > 0) {
 		console.log(JSON.stringify({
