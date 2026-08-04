@@ -188,7 +188,22 @@ on:
         type: string
         default: "pgsql"
       enable-hydra-gates:
-        description: "Run the 61 Hydra mechanical quality gates (conduction/hydra-gates) against this PR's diff. OPT-IN, default false: the gates are diff-scoped per ADR-020, but a repo whose in-flight branches touch files with inherited debt will go red the moment this is switched on, so each repo enables it once its own diffs are clean. Enabling it makes gate failures block the Quality Report."
+        # No gate count here on purpose. There is no single true number to
+        # write: the total depends on which ref the CALLER pins via
+        # hydra-gates-ref, and the number that actually ran depends on the
+        # repo's own diff and toolchain. Measured on openbuild#113
+        # (2026-08-04, pinned v1.0.1):
+        #
+        #   [hydra-gates] ALL 61 GATES GREEN
+        #   [hydra-gates] COVERAGE: 58 of 61 declared gates reported a result.
+        #   [hydra-gates] GATES THAT DID NOT RUN: 4 24 33
+        #
+        # Three defensible figures for one line — 61 declared at that pin, 63
+        # declared on main, 58 actually executed — and the one a reader needs
+        # is per-run and unknowable statically. The package prints it
+        # (COVERAGE: N of M); a digit in prose has nothing to reconcile
+        # against and drifts silently in both directions.
+        description: "Run the Hydra mechanical quality gates (conduction/hydra-gates — https://github.com/ConductionNL/.github/tree/main/hydra-gates) against this PR's diff. OPT-IN, default false: the gates are diff-scoped per ADR-020, but a repo whose in-flight branches touch files with inherited debt will go red the moment this is switched on, so each repo enables it once its own diffs are clean. Enabling it makes gate failures block the Quality Report."
         required: false
         type: boolean
         default: false
@@ -2672,8 +2687,20 @@ jobs:
 
   # ── Hydra mechanical gates ──────────────────────
   #
-  # The 61 gates, run from conduction/hydra-gates (this repository, hydra-gates/).
+  # The Hydra mechanical quality gates, run from conduction/hydra-gates (this
+  # repository, hydra-gates/ — https://github.com/ConductionNL/.github/tree/main/hydra-gates).
   # OPT-IN via enable-hydra-gates; default false. See the input description.
+  #
+  # Deliberately no count. The package declares its own total and prints it
+  # (COVERAGE: N of M declared gates reported a result); that runtime number is
+  # the only trustworthy one, because the total moves with the caller's
+  # hydra-gates-ref pin and the executed count moves with the repo's diff and
+  # toolchain. A hard-coded digit in prose has nothing to reconcile against, so
+  # it drifts silently in both directions and outlives the thing it describes.
+  #
+  # Read the COVERAGE line, not the banner. Gates can skip silently and the job
+  # still reports a plain green tick; hydra-gates-require-full-coverage turns
+  # incomplete coverage into an error for repos that want that.
   #
   # Two properties this job exists to preserve, both of which have been observed
   # failing silently:
