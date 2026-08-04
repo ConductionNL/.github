@@ -3354,6 +3354,17 @@ jobs:
       # only repo with the gates enabled — run 30911069404, Hydra Gates SUCCESS
       # with both axe steps SKIPPED. Nothing that is green today turns red.
       #
+      # Not measured end to end, and worth knowing why: the case where
+      # Playwright RUNS AND FAILS. Attempted in run 30911499894 by turning
+      # `enable-playwright` on, but this repo is not a Nextcloud app, so the
+      # security jobs failed first and the Playwright job's own
+      # `needs.security.result != 'failure'` guard turned it back into a skip.
+      # The gates job failed correctly there anyway, because what this step
+      # branches on is whether a usable report exists, not how the producer
+      # resolved — the producer's state appears only in the error text. That
+      # the gates job SURVIVES a genuinely failed producer is the thing that
+      # needed measuring, and run 30909727531 measured it directly.
+      #
       # The failure is RECORDED here and RAISED at the end of the job, not
       # thrown from this step. Measured first as a plain `exit 1` (run
       # 30910345294): it aborted the job before `Run the Hydra gates`, so a
