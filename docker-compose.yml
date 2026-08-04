@@ -181,13 +181,20 @@ services:
       - ../openregister/custom_apps/contacts:/var/www/html/custom_apps/contacts
       - ../openregister/custom_apps/cospend:/var/www/html/custom_apps/cospend
       - ../openregister/custom_apps/deck:/var/www/html/custom_apps/deck
-      - ../openregister/custom_apps/doriath:/var/www/html/custom_apps/doriath
+      # doriath / openconnector / portaliq are mounted from their OWN sibling
+      # checkouts, not from ../openregister/custom_apps/<app>. That directory is
+      # the stale second copy described above: doriath's and openconnector's
+      # copies are not git repositories at all. Proven again 2026-08-04 by a
+      # marker file written into ../openconnector that the container could not
+      # see — every OpenConnector edit made in the checkout was invisible to this
+      # instance, so any "verified live" claim about it was verifying old code.
+      - ../doriath:/var/www/html/custom_apps/doriath
       - ../openregister/custom_apps/forms:/var/www/html/custom_apps/forms
       - ../openregister/custom_apps/mail:/var/www/html/custom_apps/mail
       - ../openregister/custom_apps/maps:/var/www/html/custom_apps/maps
-      - ../openregister/custom_apps/openconnector:/var/www/html/custom_apps/openconnector
+      - ../openconnector:/var/www/html/custom_apps/openconnector
       - ../openregister/custom_apps/polls:/var/www/html/custom_apps/polls
-      - ../openregister/custom_apps/portaliq:/var/www/html/custom_apps/portaliq
+      - ../portaliq:/var/www/html/custom_apps/portaliq
       - ../openregister/custom_apps/spreed:/var/www/html/custom_apps/spreed
       - ../openregister/custom_apps/tasks:/var/www/html/custom_apps/tasks
       - ../openregister/custom_apps/timemanager:/var/www/html/custom_apps/timemanager
@@ -383,13 +390,20 @@ services:
       - ../openregister/custom_apps/contacts:/var/www/html/custom_apps/contacts
       - ../openregister/custom_apps/cospend:/var/www/html/custom_apps/cospend
       - ../openregister/custom_apps/deck:/var/www/html/custom_apps/deck
-      - ../openregister/custom_apps/doriath:/var/www/html/custom_apps/doriath
+      # doriath / openconnector / portaliq are mounted from their OWN sibling
+      # checkouts, not from ../openregister/custom_apps/<app>. That directory is
+      # the stale second copy described above: doriath's and openconnector's
+      # copies are not git repositories at all. Proven again 2026-08-04 by a
+      # marker file written into ../openconnector that the container could not
+      # see — every OpenConnector edit made in the checkout was invisible to this
+      # instance, so any "verified live" claim about it was verifying old code.
+      - ../doriath:/var/www/html/custom_apps/doriath
       - ../openregister/custom_apps/forms:/var/www/html/custom_apps/forms
       - ../openregister/custom_apps/mail:/var/www/html/custom_apps/mail
       - ../openregister/custom_apps/maps:/var/www/html/custom_apps/maps
-      - ../openregister/custom_apps/openconnector:/var/www/html/custom_apps/openconnector
+      - ../openconnector:/var/www/html/custom_apps/openconnector
       - ../openregister/custom_apps/polls:/var/www/html/custom_apps/polls
-      - ../openregister/custom_apps/portaliq:/var/www/html/custom_apps/portaliq
+      - ../portaliq:/var/www/html/custom_apps/portaliq
       - ../openregister/custom_apps/spreed:/var/www/html/custom_apps/spreed
       - ../openregister/custom_apps/tasks:/var/www/html/custom_apps/tasks
       - ../openregister/custom_apps/timemanager:/var/www/html/custom_apps/timemanager
