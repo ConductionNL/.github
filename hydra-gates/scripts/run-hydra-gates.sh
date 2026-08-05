@@ -2278,20 +2278,33 @@ if [ "${_pcar_ran}" -eq 1 ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Gate 28: License triangle — every per-file `@license` PHPDoc tag in lib/ + the
-# `license` field in composer.json MUST agree (Conduction convention: EUPL-1.2).
-# Gate-1 (SPDX) only checks PRESENCE of the @license tag; this gate checks the
-# VALUES line up across the three locations a Conduction app declares its
-# license: composer.json (.license), appinfo/info.xml (<licence>), per-file
-# @license PHPDoc tags.
+# Gate 28: License triangle — every per-file `@license` PHPDoc tag in lib/ and
+# the `license` field in composer.json MUST agree (Conduction convention:
+# EUPL-1.2). Gate-1 (SPDX) only checks PRESENCE of the @license tag; this gate
+# checks that the VALUES line up.
 #
-# Exception: appinfo/info.xml's <licence>agpl</licence> is the legacy Nextcloud
-# appstore signal that the app is published under EUPL-1.2 (the appstore taxonomy
-# pre-dates EUPL); per ADR-014 we accept that drift on info.xml ONLY. composer
-# .json and per-file headers must agree.
+# SCOPE, stated exactly, because the name oversells it: this compares TWO
+# locations — composer.json `.license` and per-file `@license` PHPDoc tags under
+# lib/. It does NOT read appinfo/info.xml. The `<licence>` element is outside
+# this gate's reach entirely, so nothing here can be read as a verdict on it.
+# (ADR-014 currently tells apps to declare `<licence>agpl</licence>` there while
+# the whole fleet declares EUPL-1.2 and the appstore's own info.xsd enumerates
+# EUPL-1.2 as valid. That contradiction is an ADR decision, not a gate change,
+# and is deliberately not resolved here.)
+#
+# WHY THE SKIP BRANCHES BELOW EXIST. Until 2026-08-05 this gate ran its
+# comparison inside `if [ -n "${_composer_lic}" ] && [ -d lib ]` but called
+# `_pass 28` unconditionally afterwards. A repo with no lib/ — every Python
+# ExApp sidecar in the fleet: valtimo, openklant, opentalk, openzaak — therefore
+# reported `[gate-28] license-triangle: PASS` having opened zero files, and the
+# coverage accounting counted it as a gate that reported a result. That is the
+# falsely-GREEN shape the coverage block exists to make impossible: a PASS and a
+# no-op were byte-identical in the output. A gate that inspected nothing now
+# says so.
 # ---------------------------------------------------------------------------
 _lt_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-license-triangle.log
 : > "${_lt_log}"
+_lt_checked=0
 _composer_lic=""
 if [ -f composer.json ]; then
     # composer.json's `license` may be a string ("EUPL-1.2") or an array of
@@ -2310,12 +2323,14 @@ except Exception:
     print('')
 " 2>/dev/null)
 fi
+# `_lt_ran=0` ONLY for the one case #172's taxonomy below cannot express: the
+# helper is absent. Everything else — no lib/, no composer.json, a composer
+# .json without a `license`, an empty scope — is left to that taxonomy, which
+# distinguishes them deliberately. Collapsing them into one `na` here would
+# undo #172.
 _lt_ran=1
 _lt_helper="${SCRIPT_DIR}/lib/check_license_triangle.py"
-if [ -z "${_composer_lic}" ] || [ ! -d lib ]; then
-    _lt_ran=0
-    _skip 28 "license-triangle" na "no composer.json \`license\` field, or no lib/ — there is no declared package licence to compare against."
-else
+if [ -n "${_composer_lic}" ] && [ -d lib ]; then
     _lt_files=()
     while IFS= read -r _php; do
         [ -z "${_php}" ] && continue
@@ -2323,23 +2338,47 @@ else
         _lt_files+=("${_php}")
     done < <(_enum_tracked '\.php$' lib)
     if [ "${#_lt_files[@]}" -eq 0 ]; then
-        _lt_ran=0
-        _skip 28 "license-triangle" na "scope was empty — 0 lib/**.php file(s) in this diff, so NO licence declaration was compared."
+        : # falls through to the `structural` branch below — nothing compared.
     elif [ ! -f "${_lt_helper}" ]; then
-        # A MISSING HELPER MUST NOT REPORT PASS (#147).
+        # A MISSING HELPER MUST NOT REPORT PASS (#147). This is the one state
+        # #172's chain would misread: with no helper, `_lt_checked` stays 0 and
+        # the chain would call it `structural` ("no file carried a tag"), which
+        # is a claim about the REPOSITORY. The repository is fine; the gate is
+        # broken, and those must not wear the same words.
         _lt_ran=0
         _skip 28 "license-triangle" wiring "check_license_triangle.py not found at ${_lt_helper} — ${#_lt_files[@]} PHP file(s) were in scope and NONE had their licence declarations read; licence drift is UNVERIFIED by this run."
     else
-        python3 "${_lt_helper}" "${_composer_lic}" "${_lt_files[@]}" >> "${_lt_log}" 2>/dev/null || true
+        # Findings to the log (stdout), the compared-file count back here
+        # (stderr). `2>&1 >>file |` duplicates the CURRENT stdout — the pipe —
+        # onto fd 2 BEFORE stdout is redirected to the log, so the two streams
+        # separate. The count keeps #172's PASS-only-if-something-was-compared
+        # rule intact now that the reading lives in a helper.
+        _lt_checked=$(python3 "${_lt_helper}" "${_composer_lic}" "${_lt_files[@]}" \
+            2>&1 >> "${_lt_log}" | sed -n 's/^declared_files=//p' | head -1)
+        [ -z "${_lt_checked}" ] && _lt_checked=0
     fi
 fi
 _lt_fail=$(wc -l < "${_lt_log}" 2>/dev/null || echo 0)
-if [ "${_lt_ran}" -eq 1 ]; then
-    if [ "${_lt_fail}" -eq 0 ]; then
-        _pass 28 "license-triangle"
-    else
-        _fail 28 "license-triangle" "${_lt_fail} licence declaration(s) disagreeing with composer.json or with each other — see ${_lt_log}"
-    fi
+if [ "${_lt_ran}" -eq 0 ]; then
+    : # the gate already declared itself via _skip above (no lib/, empty scope,
+      # or a missing helper). Falling through would print a second verdict.
+elif [ "${_lt_fail}" -ne 0 ]; then
+    _fail 28 "license-triangle" "${_lt_fail} file(s) with @license != composer.json — see ${_lt_log}"
+elif [ "${_lt_checked}" -gt 0 ]; then
+    _pass 28 "license-triangle"
+elif [ ! -d lib ]; then
+    _skip 28 "license-triangle" na "this repo has no lib/ directory, so there are no per-file @license PHPDoc tags for composer.json's license to be compared against. Nothing was inspected and nothing could be. Typical of the Python ExApp sidecars, whose application code lives in ex_app/ and whose only PHP is phpcs-custom-sniffs/. This gate becomes applicable the moment PHP app code lands under lib/."
+elif [ ! -f composer.json ]; then
+    # NOT APPLICABLE, not structural. This gate compares two declarations; with
+    # no composer.json there is no second declaration to compare against and no
+    # change inside this repo can create one to compare. Nothing is missing —
+    # the gate simply has no subject matter. (Contrast the branch below: a
+    # composer.json that exists but declares no license IS a fixable gap.)
+    _skip 28 "license-triangle" na "lib/ exists but this repo has no composer.json, so there is no \`license\` declaration for per-file @license tags to be compared against. This gate compares two declarations and only one exists here."
+elif [ -z "${_composer_lic}" ]; then
+    _skip 28 "license-triangle" structural "lib/ and composer.json both exist, but composer.json declares no \`license\` field, so there is nothing to compare per-file @license tags against. Per-file/composer license agreement is UNVERIFIED by this run. Fixable here: add \`\"license\": \"EUPL-1.2\"\` to composer.json."
+else
+    _skip 28 "license-triangle" structural "lib/ exists and composer.json declares license=${_composer_lic}, but 0 in-scope lib/**/*.php file carried an @license or SPDX-License-Identifier declaration, so NOTHING was compared. Per-file/composer license agreement is UNVERIFIED by this run. (Presence of the tag is gate-1's job, not this gate's.)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -2991,9 +3030,15 @@ if [ -d src ]; then
         _in_scope "${vue}" || continue
         _fl_files+=("${vue}")
     done < <(find src -name '*.vue' 2>/dev/null)
+    # NOTE: an empty in-scope set is NOT declared `na` here. Every other
+    # `[ -d src ]` gate reports PASS over an empty diff scope — that is what
+    # ADR-020 diff scoping MEANS — and tests/test-hydra-gates-bin.sh asserts
+    # that none of gates 10/12/13/26/31..45 goes NOT APPLICABLE while src/
+    # exists. Making gate-40 alone answer differently would drift the
+    # applicability table away from the guards it mirrors, which is the one
+    # way that change could hide a live gate.
     if [ "${#_fl_files[@]}" -eq 0 ]; then
-        _fl_ran=0
-        _skip 40 "form-label-association" na "scope was empty — 0 .vue file(s) in this diff, so NO form control was inspected."
+        : # nothing in scope; the PASS below describes the diff, as everywhere else.
     elif [ ! -f "${_fl_helper}" ]; then
         # A MISSING HELPER MUST NOT REPORT PASS (#147).
         _fl_ran=0
@@ -3260,8 +3305,8 @@ done < <(find lib src \( -name '*.php' -o -name '*.vue' -o -name '*.js' -o -name
 _sae_ran=1
 _sae_helper="${SCRIPT_DIR}/lib/check_spec_anchors.py"
 if [ "${#_sae_files[@]}" -eq 0 ]; then
-    _sae_ran=0
-    _skip 46 "spec-anchor-existence" na "scope was empty — 0 annotated source file(s) in this diff, so NO @spec target was resolved."
+    : # nothing in scope — ordinary diff scoping, same as before this gate
+      # moved into a helper. See the note on gate-40.
 elif [ ! -f "${_sae_helper}" ]; then
     # A MISSING HELPER MUST NOT REPORT PASS (#147). The gate previously
     # carried its resolver inline, so "the helper is absent" was not a
@@ -4365,6 +4410,61 @@ else
     _ss_n=$(_count '^FAIL' "${_ss_log}")
     [ "${_ss_n}" -eq 0 ] && _ss_n=1
     _fail 63 "settings-surface" "${_ss_n} settings-placement violation(s) (ADR-079); see ${_ss_log}"
+fi
+
+# ---------------------------------------------------------------------------
+# Gate 64: apphost-autoload-prelude — adopting OpenRegister's AppHost without
+# first putting OpenRegister's PSR-4 prefix on the autoloader.
+#
+# OC_App::getEnabledApps() does `sort($apps)`, and Coordinator::registerApps()
+# walks THAT sorted list calling OC_App::registerAutoloading($appId) and then
+# $application->register() for ONE APP AT A TIME. So every app's register() runs
+# BEFORE the PSR-4 prefix of every alphabetically-LATER app exists. Any leaf
+# sorting before `openregister` reaches register() while OCA\OpenRegister\ is not
+# autoloadable — on a healthy instance, with OpenRegister enabled.
+#
+# GUARDED, it degrades silently: class_exists() answers FALSE, the generic
+# plumbing is skipped, and classes that exist ONLY as Bootstrap DI aliases
+# (Controller\HealthController -> AppHost\Controller\GenericHealthController)
+# then fail to resolve — those endpoints return 500, not 404.
+#
+# UNGUARDED, the \Error aborts the ENTIRE register(). Every registerEventListener
+# below it never runs. Coordinator catches the Throwable, logs an `emergency` and
+# continues, so the app stays enabled and keeps serving: nothing in the UI says
+# half its wiring is missing. Measured on doriath — the audit listener recorded
+# ZERO dispatched events. Measured independently on openconnector, whose source
+# records `class_exists at register(): false` on a clean install.
+#
+# WHY THIS NEEDS A GATE RATHER THAN A TEST: the failure depends on WHICH APPS
+# HAPPEN TO BE INSTALLED. Any app that pulls OpenRegister's autoloader in
+# registers the prefix PROCESS-WIDE and masks the defect for every app that
+# registers after it. On a dev instance with such an app present everything
+# resolves; in CI with a minimal app set it does not. A masking app makes the
+# failure vanish exactly where you would test for it — which is why this was
+# invisible for as long as it was.
+#
+# Lazy service closures that merely MENTION an AppHost class are deliberately
+# NOT flagged: their bodies run at resolution time, long after every app has
+# registered. Only register()-time resolution is the defect.
+#
+# Spec: openspec/architecture/adr-040-apphost-adoption.md
+# ---------------------------------------------------------------------------
+_aap_log=/tmp/hydra-gate-apphost-autoload-prelude.log
+: > "${_aap_log}"
+if [ -d lib/AppInfo ]; then
+    set +e
+    python3 "${SCRIPT_DIR}/lib/check_apphost_autoload_prelude.py" . > "${_aap_log}" 2>&1
+    _aap_rc=$?
+    set -e
+    if [ "${_aap_rc}" -eq 0 ]; then
+        _pass 64 "apphost-autoload-prelude"
+    else
+        _aap_n=$(_count '^FAIL' "${_aap_log}")
+        [ "${_aap_n}" -eq 0 ] && _aap_n=1
+        _fail 64 "apphost-autoload-prelude" "${_aap_n} AppHost adoption(s) with no OpenRegister autoload prelude (ADR-040); see ${_aap_log}"
+    fi
+else
+    _skip 64 "apphost-autoload-prelude" na "no lib/AppInfo/ — this repo has no Nextcloud composition root, so there is no register() in which an AppHost reference could resolve too early."
 fi
 
 # ---------------------------------------------------------------------------

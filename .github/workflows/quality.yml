@@ -259,7 +259,7 @@ on:
         type: boolean
         default: false
       hydra-gates-ref:
-        description: "Ref of ConductionNL/.github to take the gate package from. Pin this to a tag to stop a gate change from altering a repo's verdict without a commit in that repo."
+        description: "Ref of ConductionNL/.github to take the gate package from. Pin this to a tag to stop a gate change from altering a repo's verdict without a commit in that repo. NOTE: this workflow is consumed at @main while the package is consumed at this pin, so the two move independently and a new default here can reach an old runner. v1.3.0 is the minimum for hydra-gates-require-full-coverage and enable-axe to be honoured (earlier packages count every not-applicable gate as a coverage gap); v1.4.0 is the minimum for enable-axe to run at all (it ships the axe runner). Below those, the affected flag is withheld with a named warning rather than failing the run for something the repo did not do."
         required: false
         type: string
         default: "main"
@@ -294,7 +294,7 @@ on:
         # opencatalogi and docudesk have ZERO gates that did not run; hermiq and
         # openconnector have exactly one each (gate-24), and it is a genuine gap
         # — both register integration leaves and neither ships a parity check.
-        description: "Fail the run (exit 98) when a gate whose subject matter EXISTS did not report. ON by default. A gate that is legitimately not applicable — a Tier-0 app with no src/, or gate-4 correctly diff-scoped out under ADR-020 because no composer file changed — reports NOT APPLICABLE, is named in the coverage block, and does NOT fail the run. Only two states fail: a STRUCTURAL gap (the subject matter exists and nothing produced the gate's input, e.g. a repo that registers integration leaves but ships no parity check) and a WIRING gap (the gate's own helper or tool is missing — the shape that once let gate-7 report PASS over 11 real unguarded IDOR endpoints). A gate that emits nothing at all still counts against coverage: not-applicable must be DECLARED, and its category is validated, so a gate cannot stop counting by staying quiet or by misspelling its reason. Set false only if you knowingly want a green that may be silent about what it did not check — the coverage block is printed either way."
+        description: "Fail the run (exit 98) when a gate whose subject matter EXISTS did not report. ON by default. A gate that is legitimately not applicable — a Tier-0 app with no src/, or gate-4 correctly diff-scoped out under ADR-020 because no composer file changed — reports NOT APPLICABLE, is named in the coverage block, and does NOT fail the run. Only two states fail: a STRUCTURAL gap (the subject matter exists and nothing produced the gate's input, e.g. a repo that registers integration leaves but ships no parity check) and a WIRING gap (the gate's own helper or tool is missing — the shape that once let gate-7 report PASS over 11 real unguarded IDOR endpoints). A gate that emits nothing at all still counts against coverage: not-applicable must be DECLARED, and its category is validated, so a gate cannot stop counting by staying quiet or by misspelling its reason. REQUIRES hydra-gates-ref v1.3.0 or later — an earlier package cannot tell the three states apart and counts every not-applicable gate as a gap, so at an older pin this flag is WITHHELD with a named warning instead of failing the run (measured: decidesk and doriath went red at v1.0.1 on nothing but gates 4, 24 and 33). Set false only if you knowingly want a green that may be silent about what it did not check — the coverage block is printed either way."
         required: false
         type: boolean
         default: true
@@ -2343,15 +2343,15 @@ jobs:
       # measurement is not contingent on the e2e verdict, and gate-33 runs
       # either way.
       #
-      # The runner is embedded here rather than kept as a file in this repo on
-      # purpose. This job never checks ConductionNL/.github out — only the
-      # hydra-gates job does, at its own `hydra-gates-ref` — so a separate file
-      # would mean a second ref to reason about and a second thing that can
-      # drift away from the workflow that calls it. Same rationale as
-      # ci-router.php above.
-      # The axe runner lives in this repo, not in a heredoc — see the step below
-      # for why that is load-bearing. Same checkout the hydra-gates job uses, so
+      # The axe runner lives in this repo as a FILE, not in a heredoc — see the
+      # "Run axe-core" step below for why that is load-bearing rather than
+      # tidiness. It comes from the same checkout the hydra-gates job uses, so
       # the runner and the gate that consumes its report come from one place.
+      #
+      # (An earlier revision of this comment claimed the opposite — that the
+      # runner was embedded here deliberately. That was true until #161/#166/#168
+      # and is exactly the instruction that must not survive: inlining it is what
+      # made the whole workflow unresolvable fleet-wide.)
       - name: Checkout the axe runner
         if: ${{ inputs.enable-axe && !cancelled() }}
         uses: actions/checkout@v4
@@ -2359,6 +2359,25 @@ jobs:
           repository: ConductionNL/.github
           ref: ${{ inputs.hydra-gates-ref }}
           path: gates
+
+      # This workflow is consumed at @main and the runner at the caller's pin,
+      # so the file can simply not be there: axe-run.cjs was added in v1.4.0 and
+      # every caller in the fleet is currently pinned to v1.3.0. Without this
+      # step the miss surfaces as node's `Cannot find module` three steps later,
+      # then as "the axe report never arrived", which points the reader at
+      # Playwright — the one place the fault is not.
+      - name: Assert the axe runner exists at the pinned ref
+        if: ${{ inputs.enable-axe && !cancelled() }}
+        env:
+          GATES_REF: ${{ inputs.hydra-gates-ref }}
+        run: |
+          set -u
+          RUNNER="${GITHUB_WORKSPACE}/gates/hydra-gates/scripts/axe-run.cjs"
+          if [ ! -f "${RUNNER}" ]; then
+            echo "::error::enable-axe is set, but hydra-gates-ref='${GATES_REF}' ships no hydra-gates/scripts/axe-run.cjs — that file arrived in v1.4.0. No axe report can be produced at this pin, so gate-33 has no input and this job would fail for a reason that has nothing to do with accessibility. Bump hydra-gates-ref to v1.4.0 or later, or set enable-axe: false."
+            exit 1
+          fi
+          echo "axe runner present at ref ${GATES_REF}."
 
       - name: Install axe-core
         if: ${{ inputs.enable-axe && !cancelled() }}
@@ -3178,6 +3197,71 @@ jobs:
           ref: ${{ inputs.hydra-gates-ref }}
           path: gates
 
+      # ── Does the PINNED gate package know what "not applicable" means? ─────
+      #
+      # This workflow is consumed at @main; the gate package is consumed at
+      # whatever tag the caller pinned. The two move independently, so a NEW
+      # default here reaches an OLD runner — the pinned-ref hazard running
+      # backwards.
+      #
+      # It is not hypothetical. `hydra-gates-require-full-coverage` was flipped
+      # to default TRUE once the runner learned to tell a not-applicable gate
+      # from a real gap (#164, released as v1.3.0). Every caller still pinned at
+      # v1.0.1 then got the new flag handed to a runner that counts EVERY gate
+      # it did not run as a gap. Measured, both red on nothing but gates
+      # 4/24/33 — none of which had any subject matter in those repos:
+      #
+      #   decidesk  job 92432089644  ref v1.0.1  ALL 61 GATES GREEN
+      #                              COVERAGE: 58 of 61 / DID NOT RUN: 4 24 33 -> exit 98, JOB FAILED
+      #   doriath   job 92363547732  ref v1.0.1  same three gates, same verdict
+      #
+      # That is precisely the outcome the flag was fixed to stop producing: a
+      # legitimately not-applicable gate failing the run. So the flag is only
+      # handed to a package that can honour it, and when it is withheld the run
+      # says so out loud — a quiet downgrade of a control is how the control
+      # stops existing.
+      #
+      # The probe reads the package's own accounting rather than parsing the
+      # ref as a version: a caller may pin a branch, a SHA or a fork, and none
+      # of those compare. `_NA_GATES` (runner) and the `NOT APPLICABLE` verdict
+      # (wrapper, which recomputes coverage independently) are both introduced
+      # by the same change and absent from every earlier tag — verified against
+      # the published tags: v1.0.0/v1.0.1/v1.1.0/v1.2.0 have neither, v1.3.0 and
+      # v1.4.0 have both.
+      #
+      # THOSE TWO LITERALS ARE A CONTRACT, NOT AN IMPLEMENTATION DETAIL.
+      # Renaming either one in the package would silently disable coverage
+      # enforcement in every repo in the fleet, with a warning that reads like
+      # an old pin. hydra-gates/tests/test-hydra-gates-bin.sh asserts both, so
+      # a rename fails the package's own CI instead.
+      - name: Can the pinned gate package tell "not applicable" from a gap?
+        id: gatecap
+        env:
+          GATES_REF: ${{ inputs.hydra-gates-ref }}
+        run: |
+          set -u
+          RUNNER="${GITHUB_WORKSPACE}/gates/hydra-gates/scripts/run-hydra-gates.sh"
+          WRAPPER="${GITHUB_WORKSPACE}/gates/hydra-gates/bin/hydra-gates"
+          # A missing file is a broken checkout, not an old package. Fail — a
+          # capability probe that answers "no" to a question it could not read
+          # is the same defect one layer up.
+          for f in "${RUNNER}" "${WRAPPER}"; do
+            if [ ! -f "${f}" ]; then
+              echo "::error::the hydra-gates checkout at ref '${GATES_REF}' has no ${f#"${GITHUB_WORKSPACE}/gates/"}. This is not a version difference — the package did not check out. Nothing was gated."
+              exit 1
+            fi
+          done
+          CAP=0
+          if grep -q '_NA_GATES' "${RUNNER}" && grep -q 'NOT APPLICABLE' "${WRAPPER}"; then
+            CAP=1
+          fi
+          echo "categories=${CAP}" >> "$GITHUB_OUTPUT"
+          if [ "${CAP}" -eq 1 ]; then
+            echo "hydra-gates @ ${GATES_REF} reports NOT APPLICABLE separately from SKIPPED — coverage enforcement can be honoured."
+          else
+            echo "hydra-gates @ ${GATES_REF} predates the coverage accounting fix (v1.3.0)."
+          fi
+
       # ── the floating-caller / pinned-callee contract ──────────────────────
       #
       # THIS WORKFLOW FLOATS ON @main; THE PACKAGE IT DRIVES IS PINNED.
@@ -3404,7 +3488,11 @@ jobs:
           set -u
           ARGS="--app-dir ${GITHUB_WORKSPACE}/app"
           if [ "${{ inputs.hydra-gates-require-full-coverage }}" = "true" ]; then
-            ARGS="${ARGS} --require-full-coverage"
+            if [ "${{ steps.gatecap.outputs.categories }}" = "1" ]; then
+              ARGS="${ARGS} --require-full-coverage"
+            else
+              echo "::warning::hydra-gates-require-full-coverage is on, but this run pins hydra-gates-ref='${{ inputs.hydra-gates-ref }}', whose gate package cannot tell a NOT-APPLICABLE gate from a real gap — it counts every gate it did not run against coverage. Enforcing it here would fail this run for gates that have no subject matter in this repo at all (measured: decidesk and doriath, both red on nothing but gates 4, 24 and 33). COVERAGE ENFORCEMENT IS THEREFORE NOT APPLIED TO THIS RUN — the coverage block below is printed but not enforced. Bump hydra-gates-ref to v1.3.0 or later to get it back."
+            fi
           fi
           # gate-33's input is the ONE input this runner cannot make for itself
           # — it comes from a browser in the Playwright job, and only when the
@@ -3415,8 +3503,20 @@ jobs:
           # never arrived" (a real gap, and it fails). Without this the runner
           # has to guess, and guessing "unverified" in both cases is what made
           # --require-full-coverage unusable in every repo in the fleet.
+          #
+          # Gated on the same probe, because `--axe-enabled` arrived in the same
+          # release as the categories and the OLD wrapper's argument parser ends
+          # in `*) APP_DIR="$1"` — an unrecognised flag is swallowed as a
+          # POSITIONAL and CLOBBERS the app dir set moments earlier. A v1.0.1
+          # pin handed this flag aborts with
+          # `FATAL: --app-dir '--axe-enabled' is not a directory. No gate ran.`
+          # and exits 99: every gate lost, for a flag the caller never typed.
           if [ "${{ inputs.enable-axe }}" = "true" ]; then
-            ARGS="${ARGS} --axe-enabled"
+            if [ "${{ steps.gatecap.outputs.categories }}" = "1" ]; then
+              ARGS="${ARGS} --axe-enabled"
+            else
+              echo "::warning::enable-axe is on, but hydra-gates-ref='${{ inputs.hydra-gates-ref }}' predates the flag (v1.3.0) and its argument parser would swallow it as the app directory, losing every gate. The flag is withheld; gate-33 will report its usual skip instead of a structural gap. Bump hydra-gates-ref to v1.3.0 or later."
+            fi
           fi
           # The default shell for a `run:` block is `bash -e {0}`. A bare
           # invocation followed by `RC=$?` would therefore never reach the

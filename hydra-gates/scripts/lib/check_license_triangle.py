@@ -157,13 +157,35 @@ def scan_files(files: list[str], composer_license: str) -> list[str]:
     return out
 
 
+def declared_file_count(files: list[str]) -> int:
+    """How many of *files* actually carried a licence declaration.
+
+    The runner needs this to keep #172's distinction intact: PASS only when
+    at least one file was really compared, `structural` when lib/ and a
+    composer licence both exist but nothing in scope declared anything. A
+    gate that reports PASS having opened zero files is the falsely-GREEN
+    shape the coverage block exists to make impossible, and moving the read
+    into a helper must not quietly re-create it.
+    """
+    n = 0
+    for path in files:
+        src = read_text(path)
+        if src is not None and declarations(src):
+            n += 1
+    return n
+
+
 def main(argv: list[str]) -> int:
     if len(argv) < 2:
         print("usage: check_license_triangle.py <composer-license-set> <file>...",
               file=sys.stderr)
         return 2
-    for line in scan_files(argv[2:], argv[1]):
+    files = argv[2:]
+    for line in scan_files(files, argv[1]):
         print(line)
+    # Findings on stdout, the compared-file count on stderr, so the caller can
+    # capture one without parsing it out of the other.
+    print(f"declared_files={declared_file_count(files)}", file=sys.stderr)
     return 0
 
 
