@@ -76,7 +76,13 @@ DECL = re.compile(
 # as `lib` and the path guard below never fired — the malfunction would have
 # been reported as an ordinary licence drift, sending someone to edit a
 # header that was already correct. The terminator is stripped instead.
-_TRAILING_COMMENT = re.compile(r'(?:\*/|-->)+$')
+#
+# `--!>` as well as `-->`: HTML5 treats both as a comment terminator, and a
+# pattern that knows only one of them is `py/bad-tag-filter`. Nothing here
+# sanitises markup — this only trims a terminator off a licence identifier —
+# but a half-known comment syntax is a half-known comment syntax, and the
+# narrower pattern would silently leave `EUPL-1.2--!` as the "licence".
+_TRAILING_COMMENT = re.compile(r'(?:\*/|--!?>)+$')
 
 
 def _looks_like_a_path(value: str) -> bool:
