@@ -2426,6 +2426,134 @@ jobs:
             '<!DOCTYPE html><html lang="en"><head><title>axe self-test</title></head>' +
             '<body><main><button></button></main></body></html>';
           const CONTROL_RULE = 'button-name';
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
+          // resolution-probe padding: inert JS comment, no semantic effect.
 
           const die = (msg) => {
             console.error('::error::axe-runner: ' + msg);
@@ -4279,205 +4407,3 @@ jobs:
           name: features-json
           path: docs/features.json
           retention-days: 7
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
-# resolution-probe padding: inert comment, no semantic effect whatsoever.
