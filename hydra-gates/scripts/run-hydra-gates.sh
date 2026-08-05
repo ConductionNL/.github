@@ -4396,6 +4396,61 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Gate 64: apphost-autoload-prelude — adopting OpenRegister's AppHost without
+# first putting OpenRegister's PSR-4 prefix on the autoloader.
+#
+# OC_App::getEnabledApps() does `sort($apps)`, and Coordinator::registerApps()
+# walks THAT sorted list calling OC_App::registerAutoloading($appId) and then
+# $application->register() for ONE APP AT A TIME. So every app's register() runs
+# BEFORE the PSR-4 prefix of every alphabetically-LATER app exists. Any leaf
+# sorting before `openregister` reaches register() while OCA\OpenRegister\ is not
+# autoloadable — on a healthy instance, with OpenRegister enabled.
+#
+# GUARDED, it degrades silently: class_exists() answers FALSE, the generic
+# plumbing is skipped, and classes that exist ONLY as Bootstrap DI aliases
+# (Controller\HealthController -> AppHost\Controller\GenericHealthController)
+# then fail to resolve — those endpoints return 500, not 404.
+#
+# UNGUARDED, the \Error aborts the ENTIRE register(). Every registerEventListener
+# below it never runs. Coordinator catches the Throwable, logs an `emergency` and
+# continues, so the app stays enabled and keeps serving: nothing in the UI says
+# half its wiring is missing. Measured on doriath — the audit listener recorded
+# ZERO dispatched events. Measured independently on openconnector, whose source
+# records `class_exists at register(): false` on a clean install.
+#
+# WHY THIS NEEDS A GATE RATHER THAN A TEST: the failure depends on WHICH APPS
+# HAPPEN TO BE INSTALLED. Any app that pulls OpenRegister's autoloader in
+# registers the prefix PROCESS-WIDE and masks the defect for every app that
+# registers after it. On a dev instance with such an app present everything
+# resolves; in CI with a minimal app set it does not. A masking app makes the
+# failure vanish exactly where you would test for it — which is why this was
+# invisible for as long as it was.
+#
+# Lazy service closures that merely MENTION an AppHost class are deliberately
+# NOT flagged: their bodies run at resolution time, long after every app has
+# registered. Only register()-time resolution is the defect.
+#
+# Spec: openspec/architecture/adr-040-apphost-adoption.md
+# ---------------------------------------------------------------------------
+_aap_log=/tmp/hydra-gate-apphost-autoload-prelude.log
+: > "${_aap_log}"
+if [ -d lib/AppInfo ]; then
+    set +e
+    python3 "${SCRIPT_DIR}/lib/check_apphost_autoload_prelude.py" . > "${_aap_log}" 2>&1
+    _aap_rc=$?
+    set -e
+    if [ "${_aap_rc}" -eq 0 ]; then
+        _pass 64 "apphost-autoload-prelude"
+    else
+        _aap_n=$(_count '^FAIL' "${_aap_log}")
+        [ "${_aap_n}" -eq 0 ] && _aap_n=1
+        _fail 64 "apphost-autoload-prelude" "${_aap_n} AppHost adoption(s) with no OpenRegister autoload prelude (ADR-040); see ${_aap_log}"
+    fi
+else
+    _skip 64 "apphost-autoload-prelude" na "no lib/AppInfo/ — this repo has no Nextcloud composition root, so there is no register() in which an AppHost reference could resolve too early."
+fi
+
+# ---------------------------------------------------------------------------
 # Summary + COVERAGE ACCOUNTING
 #
 # The banner used to read "ALL 63 GATES GREEN" whenever the failure count was
