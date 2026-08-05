@@ -155,6 +155,23 @@ class NulByteInSource(unittest.TestCase):
         # header that is already correct.
         self.assertNotIn("license-triangle-drift", rules)
 
+    def test_a_comment_terminator_is_trimmed_off_the_value(self):
+        # Both HTML5 terminators, and the C-style one. A pattern that knows
+        # only `-->` leaves `EUPL-1.2--!` as the licence and reports drift on
+        # a correct header.
+        for body, expected in (
+            ("<?php\n/** @license EUPL-1.2*/\n", ["EUPL-1.2"]),
+            ("<!--SPDX-License-Identifier: EUPL-1.2-->\n", ["EUPL-1.2"]),
+            ("<!--SPDX-License-Identifier: EUPL-1.2--!>\n", ["EUPL-1.2"]),
+        ):
+            with self.subTest(body=body):
+                self.assertEqual(clt.declarations(body), expected)
+                self.assertEqual(_scan(body), [])
+
+    def test_a_wrong_licence_is_still_wrong_after_trimming(self):
+        self.assertEqual(_rules(_scan("<!--SPDX-License-Identifier: MIT--!>\n")),
+                         ["license-triangle-drift"])
+
     def test_looks_like_a_path_directly(self):
         self.assertTrue(clt._looks_like_a_path("lib/Service/Thing.php"))
         self.assertTrue(clt._looks_like_a_path("./Thing.php"))
