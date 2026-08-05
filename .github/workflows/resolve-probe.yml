@@ -1,0 +1,30 @@
+# Resolution probe. NOT a quality gate.
+#
+# When #161 landed, every caller's run started up with ZERO jobs and a run
+# `name` equal to the raw file path — GitHub never RESOLVED quality.yml, so it
+# never learned its name. The file parsed cleanly as YAML, including under a
+# strict loader, so the cause is above YAML syntax and needs a controlled
+# experiment rather than a guess.
+#
+# This is that experiment, kept inside this repo so it can be run on a branch
+# without pointing any app repo at unmerged code. A same-repo `uses: ./…`
+# resolves the callee from this commit, so a dispatch here answers exactly one
+# question: does GitHub resolve this quality.yml at all.
+#
+# READ THE JOB COUNT, NOT THE CONCLUSION. A `failure` with jobs>0 means the
+# workflow resolved and something inside it failed — that is a PASS for this
+# probe. jobs==0 is the outage signature.
+name: Resolve probe
+on:
+  workflow_dispatch:
+jobs:
+  probe:
+    uses: ./.github/workflows/quality.yml
+    with:
+      app-name: probe
+      enable-phpcs: false
+      enable-psalm: false
+      enable-phpstan: false
+      enable-phpmetrics: false
+      enable-frontend: false
+      enable-phpunit: false
