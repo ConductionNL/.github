@@ -522,6 +522,50 @@ else
     _bad "coverage went ${_sec_with_n:-?} → ${_sec_without_n:-?}; removing 2 helpers must remove exactly 2 from the tally"
 fi
 
+# ---------------------------------------------------------------------------
+# The capability literals ConductionNL/.github's quality.yml probes for.
+#
+# quality.yml is consumed at @main; this package is consumed at whatever tag the
+# caller pinned, so the workflow cannot assume the package it checked out can
+# honour --require-full-coverage. It decides by reading two literals out of the
+# package's own files:
+#
+#   _NA_GATES        in scripts/run-hydra-gates.sh   (the not-applicable tally)
+#   "NOT APPLICABLE" in bin/hydra-gates              (the wrapper's own recount)
+#
+# Both were introduced by the accounting fix and are absent from every earlier
+# published tag, which is what makes them a usable discriminator against a pin
+# that may be a tag, a branch, a SHA or a fork.
+#
+# Rename either one and the probe answers "this package is too old" for the
+# CURRENT package — coverage enforcement would switch itself off in every repo
+# in the fleet, and the warning would blame the caller's pin. The rename is the
+# realistic accident; that it fails silently, in the direction that looks
+# greener, is what makes it worth an assertion here rather than a comment there.
+echo "[test] the capability literals quality.yml probes for still exist"
+if grep -q '_NA_GATES' "${PKG_ROOT}/scripts/run-hydra-gates.sh"; then
+    _ok "run-hydra-gates.sh still carries _NA_GATES (quality.yml's capability probe)"
+else
+    _bad "run-hydra-gates.sh no longer contains _NA_GATES — quality.yml would read this package as predating the coverage accounting and WITHHOLD --require-full-coverage fleet-wide. Restore the name, or change the probe in .github/workflows/quality.yml in the same commit."
+fi
+if grep -q 'NOT APPLICABLE' "${BIN}"; then
+    _ok "bin/hydra-gates still emits the NOT APPLICABLE verdict (quality.yml's capability probe)"
+else
+    _bad "bin/hydra-gates no longer contains 'NOT APPLICABLE' — quality.yml would read this package as predating the coverage accounting and WITHHOLD --require-full-coverage fleet-wide. Restore the wording, or change the probe in .github/workflows/quality.yml in the same commit."
+fi
+# Reverse control: the probe must NOT match a package that genuinely predates
+# the fix. Without this, an assertion that greps for a common word would pass on
+# every version and prove nothing about the discriminator.
+_probe_old="${WORK}/probe-old"
+mkdir -p "${_probe_old}"
+printf '%s\n' 'echo "[hydra-gates] GATES THAT DID NOT RUN: 4 24 33"' > "${_probe_old}/runner.sh"
+printf '%s\n' 'echo "[hydra-gates] COVERAGE: 58 of 61 declared gates reported a result."' > "${_probe_old}/wrapper"
+if grep -q '_NA_GATES' "${_probe_old}/runner.sh" || grep -q 'NOT APPLICABLE' "${_probe_old}/wrapper"; then
+    _bad "the capability probe matches pre-v1.3.0 output too — it is not a discriminator, and every old pin would be handed a flag it cannot honour"
+else
+    _ok "reverse control — the probe does NOT match the pre-v1.3.0 shape of either file"
+fi
+
 echo ""
 echo "=================================================="
 echo "hydra-gates entry-point tests: ${PASS} passed, ${FAIL} failed"
