@@ -2155,20 +2155,33 @@ if [ "${_pcar_ran}" -eq 1 ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Gate 28: License triangle — every per-file `@license` PHPDoc tag in lib/ + the
-# `license` field in composer.json MUST agree (Conduction convention: EUPL-1.2).
-# Gate-1 (SPDX) only checks PRESENCE of the @license tag; this gate checks the
-# VALUES line up across the three locations a Conduction app declares its
-# license: composer.json (.license), appinfo/info.xml (<licence>), per-file
-# @license PHPDoc tags.
+# Gate 28: License triangle — every per-file `@license` PHPDoc tag in lib/ and
+# the `license` field in composer.json MUST agree (Conduction convention:
+# EUPL-1.2). Gate-1 (SPDX) only checks PRESENCE of the @license tag; this gate
+# checks that the VALUES line up.
 #
-# Exception: appinfo/info.xml's <licence>agpl</licence> is the legacy Nextcloud
-# appstore signal that the app is published under EUPL-1.2 (the appstore taxonomy
-# pre-dates EUPL); per ADR-014 we accept that drift on info.xml ONLY. composer
-# .json and per-file headers must agree.
+# SCOPE, stated exactly, because the name oversells it: this compares TWO
+# locations — composer.json `.license` and per-file `@license` PHPDoc tags under
+# lib/. It does NOT read appinfo/info.xml. The `<licence>` element is outside
+# this gate's reach entirely, so nothing here can be read as a verdict on it.
+# (ADR-014 currently tells apps to declare `<licence>agpl</licence>` there while
+# the whole fleet declares EUPL-1.2 and the appstore's own info.xsd enumerates
+# EUPL-1.2 as valid. That contradiction is an ADR decision, not a gate change,
+# and is deliberately not resolved here.)
+#
+# WHY THE SKIP BRANCHES BELOW EXIST. Until 2026-08-05 this gate ran its
+# comparison inside `if [ -n "${_composer_lic}" ] && [ -d lib ]` but called
+# `_pass 28` unconditionally afterwards. A repo with no lib/ — every Python
+# ExApp sidecar in the fleet: valtimo, openklant, opentalk, openzaak — therefore
+# reported `[gate-28] license-triangle: PASS` having opened zero files, and the
+# coverage accounting counted it as a gate that reported a result. That is the
+# falsely-GREEN shape the coverage block exists to make impossible: a PASS and a
+# no-op were byte-identical in the output. A gate that inspected nothing now
+# says so.
 # ---------------------------------------------------------------------------
 _lt_log=/tmp/hydra-gate-license-triangle.log
 : > "${_lt_log}"
+_lt_checked=0
 _composer_lic=""
 if [ -f composer.json ]; then
     # composer.json's `license` may be a string ("EUPL-1.2") or an array of
@@ -2195,6 +2208,7 @@ if [ -n "${_composer_lic}" ] && [ -d lib ]; then
         _file_lic=$(grep -oE '^[[:space:]]*\*[[:space:]]*@license[[:space:]]+[^[:space:]*]+' "${_php}" 2>/dev/null \
             | head -1 | awk '{print $3}')
         if [ -z "${_file_lic}" ]; then continue; fi
+        _lt_checked=$((_lt_checked + 1))
         # Member-of check against the pipe-joined composer license set.
         case "|${_composer_lic}|" in
             *"|${_file_lic}|"*) ;;   # file license is in the allowed set
@@ -2205,10 +2219,23 @@ if [ -n "${_composer_lic}" ] && [ -d lib ]; then
     done < <(_enum_tracked '\.php$' lib)
 fi
 _lt_fail=$(wc -l < "${_lt_log}" 2>/dev/null || echo 0)
-if [ "${_lt_fail}" -eq 0 ]; then
-    _pass 28 "license-triangle"
-else
+if [ "${_lt_fail}" -ne 0 ]; then
     _fail 28 "license-triangle" "${_lt_fail} file(s) with @license != composer.json — see ${_lt_log}"
+elif [ "${_lt_checked}" -gt 0 ]; then
+    _pass 28 "license-triangle"
+elif [ ! -d lib ]; then
+    _skip 28 "license-triangle" na "this repo has no lib/ directory, so there are no per-file @license PHPDoc tags for composer.json's license to be compared against. Nothing was inspected and nothing could be. Typical of the Python ExApp sidecars, whose application code lives in ex_app/ and whose only PHP is phpcs-custom-sniffs/. This gate becomes applicable the moment PHP app code lands under lib/."
+elif [ ! -f composer.json ]; then
+    # NOT APPLICABLE, not structural. This gate compares two declarations; with
+    # no composer.json there is no second declaration to compare against and no
+    # change inside this repo can create one to compare. Nothing is missing —
+    # the gate simply has no subject matter. (Contrast the branch below: a
+    # composer.json that exists but declares no license IS a fixable gap.)
+    _skip 28 "license-triangle" na "lib/ exists but this repo has no composer.json, so there is no \`license\` declaration for per-file @license tags to be compared against. This gate compares two declarations and only one exists here."
+elif [ -z "${_composer_lic}" ]; then
+    _skip 28 "license-triangle" structural "lib/ and composer.json both exist, but composer.json declares no \`license\` field, so there is nothing to compare per-file @license tags against. Per-file/composer license agreement is UNVERIFIED by this run. Fixable here: add \`\"license\": \"EUPL-1.2\"\` to composer.json."
+else
+    _skip 28 "license-triangle" structural "lib/ exists and composer.json declares license=${_composer_lic}, but 0 in-scope lib/**/*.php file carried an @license PHPDoc tag, so NOTHING was compared. Per-file/composer license agreement is UNVERIFIED by this run. (Presence of the tag is gate-1's job, not this gate's.)"
 fi
 
 # ---------------------------------------------------------------------------
