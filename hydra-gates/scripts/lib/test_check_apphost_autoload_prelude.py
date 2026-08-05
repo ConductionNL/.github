@@ -72,6 +72,41 @@ class GateCase(unittest.TestCase):
         _write(self.dir / "lib" / "AppInfo" / name, content)
 
 
+class SeverityFramingTest(GateCase):
+    """The message must not overclaim. An app sorting AFTER openregister works
+    today; saying otherwise makes the gate look like it is crying wolf."""
+
+    def _with_id(self, app_id: str) -> None:
+        _write(
+            self.dir / "appinfo" / "info.xml",
+            f"<?xml version='1.0'?>\n<info>\n <id>{app_id}</id>\n</info>\n",
+        )
+        self.app("Application.php", UNGUARDED_BOOTSTRAP % "")
+
+    def test_app_sorting_before_openregister_is_LIVE_EXPOSED(self):
+        self._with_id("doriath")
+        rc, out = _run(self.dir)
+        self.assertEqual(rc, 1)
+        self.assertIn("LIVE-EXPOSED", out)
+        self.assertIn("sorts BEFORE", out)
+
+    def test_app_sorting_after_openregister_is_LATENT(self):
+        self._with_id("pipelinq")
+        rc, out = _run(self.dir)
+        self.assertEqual(rc, 1, "still a landmine, so still a failure")
+        self.assertIn("LATENT", out)
+        self.assertIn("by alphabet alone", out)
+        self.assertNotIn("LIVE-EXPOSED", out)
+
+    def test_app_id_comes_from_info_xml_not_the_directory_name(self):
+        """The checkout directory is not what Nextcloud sorts on."""
+        self._with_id("zzz-sorts-last")
+        rc, out = _run(self.dir)
+        self.assertEqual(rc, 1)
+        self.assertIn("zzz-sorts-last", out)
+        self.assertIn("LATENT", out)
+
+
 class RedThenGreenTest(GateCase):
     """The proof that the gate can fail, and that the documented fix clears it."""
 

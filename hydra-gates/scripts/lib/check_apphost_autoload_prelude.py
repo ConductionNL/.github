@@ -201,21 +201,59 @@ def scan_app(app_dir: str) -> list[tuple[str, str]]:
     return findings
 
 
+APP_ID = re.compile(r"<id>\s*([a-z0-9_\-]+)\s*</id>", re.I)
+
+
+def app_id(target: str) -> str:
+    """The app's real id, from appinfo/info.xml, falling back to the dir name.
+
+    The id — not the checkout directory — is what Nextcloud sorts on, so it is
+    what decides whether this app is live-exposed or merely latent.
+    """
+    info = os.path.join(target, "appinfo", "info.xml")
+    try:
+        with open(info, encoding="utf-8", errors="replace") as handle:
+            m = APP_ID.search(handle.read())
+        if m:
+            return m.group(1)
+    except OSError:
+        pass
+    return os.path.basename(os.path.abspath(target))
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv if argv is None else argv)
     targets = argv[1:] or ["."]
     failures = 0
 
     for target in targets:
-        app = os.path.basename(os.path.abspath(target))
+        app = app_id(target)
+        # Nextcloud sorts app ids with sort(), so a plain string comparison is
+        # the same question it asks. Sorting after `openregister` means the
+        # prefix is already on the autoloader by the time register() runs.
+        live = app < "openregister"
+        if live:
+            severity = (
+                f"LIVE-EXPOSED: '{app}' sorts BEFORE 'openregister', so this "
+                f"resolves on a healthy instance to FALSE (guarded — the plumbing "
+                f"is skipped and Bootstrap-aliased endpoints 500) or throws and "
+                f"aborts the whole register() (unguarded)"
+            )
+        else:
+            severity = (
+                f"LATENT: '{app}' sorts AFTER 'openregister', so this happens to "
+                f"work today — by alphabet alone, not by design. Renaming the app, "
+                f"or moving this code into one that sorts earlier, breaks it "
+                f"silently"
+            )
         for path, why in scan_app(target):
             rel = os.path.relpath(path, target)
             print(
                 f"FAIL {app}: {rel} {why}, but nothing under lib/AppInfo/ registers "
-                f"OpenRegister's autoloader first. Apps register in sorted order, so "
-                f"OCA\\OpenRegister\\ is not autoloadable here when this app id sorts "
-                f"before 'openregister' — the reference resolves to FALSE (guarded) or "
-                f"aborts the whole register() (unguarded). Add the ADR-040 prelude: "
+                f"OpenRegister's autoloader first. {severity}. Apps register in "
+                f"sorted order: getEnabledApps() sort()s the list and "
+                f"Coordinator::registerApps() calls registerAutoloading() then "
+                f"register() one app at a time. Add the ADR-040 prelude: "
                 f"$p = \\OCP\\Server::get(\\OCP\\App\\IAppManager::class)"
                 f"->getAppPath('openregister'); \\OC_App::registerAutoloading("
                 f"'openregister', $p); wrapped in try/catch(\\Throwable). Or add a "
