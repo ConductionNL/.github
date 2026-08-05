@@ -72,6 +72,15 @@ runner_for() { # <basename> -> interpreter
 	esac
 }
 
+# Per-invocation log directory, for the same reason the gate runner has one:
+# two CI jobs running this harness on one host used to write
+# /tmp/_helper_<name>.log over each other, so the failure output printed for a
+# red suite could belong to a different run entirely.
+LOGDIR="$(mktemp -d "${TMPDIR:-/tmp}/hydra-helper-suites.XXXXXXXX")" || {
+	echo "FAIL — could not create a private log directory; refusing to run."
+	exit 1
+}
+
 if [ ! -d "${LIB}" ]; then
 	echo "FAIL — ${LIB} does not exist; this runner cannot discover anything"
 	exit 1
@@ -107,12 +116,12 @@ for name in "${SUITES[@]}"; do
 		_failed+=("${name}")
 		continue
 	fi
-	if ( cd "${PKG_ROOT}" && "${cmd}" "scripts/lib/${name}" ) > "/tmp/_helper_${name}.log" 2>&1; then
+	if ( cd "${PKG_ROOT}" && "${cmd}" "scripts/lib/${name}" ) > "${LOGDIR}/helper_${name}.log" 2>&1; then
 		echo "PASS — ${name}"
 		_passed=$((_passed + 1))
 	else
 		echo "FAIL — ${name} (exit $?)"
-		sed 's/^/      /' "/tmp/_helper_${name}.log" | tail -40
+		sed 's/^/      /' "${LOGDIR}/helper_${name}.log" | tail -40
 		_failed+=("${name}")
 	fi
 done
@@ -129,7 +138,7 @@ for entry in "${QUARANTINE[@]}"; do
 		continue
 	fi
 	cmd="$(runner_for "${name}")"
-	if ( cd "${PKG_ROOT}" && "${cmd}" "scripts/lib/${name}" ) > "/tmp/_quar_${name}.log" 2>&1; then
+	if ( cd "${PKG_ROOT}" && "${cmd}" "scripts/lib/${name}" ) > "${LOGDIR}/quar_${name}.log" 2>&1; then
 		echo "FAIL — quarantined suite '${name}' now PASSES. Un-quarantine it: delete its"
 		echo "       QUARANTINE entry so CI enforces it from here on."
 		_rot=$((_rot + 1))

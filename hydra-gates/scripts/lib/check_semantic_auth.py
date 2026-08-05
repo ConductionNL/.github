@@ -200,10 +200,56 @@ _ADMIN_GATE_BODY_RE = re.compile(
 _FORBIDDEN_TOKEN_RE = re.compile(
     r"STATUS_FORBIDDEN|OCSForbiddenException|\b403\b",
 )
-_PUBLIC_BODY_AUTH_RE = re.compile(
+# A #[PublicPage] method that depends on the SESSION is the real mismatch:
+# NC middleware lets the request through without one, so the body's session
+# test can only ever fail. This is the decidesk defect the rule was built for
+# (`SettingsController::load()` annotated #[NoAdminRequired] while its body
+# called `requireAdmin()`).
+_PUBLIC_SESSION_AUTH_RE = re.compile(
     r"\brequireAdmin\s*\(|"
-    r"userSession\s*->\s*getUser\s*\(\s*\)\s*===\s*null|"
-    r"Http::STATUS_(UNAUTHORIZED|FORBIDDEN)",
+    r"userSession\s*->\s*getUser\s*\(\s*\)\s*===\s*null",
+)
+
+# Returning 401/403 is NOT, on its own, evidence of a session dependency.
+# It is what a correctly self-authenticating public endpoint does when the
+# credential in the REQUEST is missing, invalid or revoked.
+_PUBLIC_DENY_STATUS_RE = re.compile(r"Http::STATUS_(UNAUTHORIZED|FORBIDDEN)")
+
+# "The credential is in the request, not the session."
+#
+# This is Nextcloud's own idiom for public share links, and the fleet's for
+# webhooks and portal endpoints: #[PublicPage] BECAUSE the caller is a remote
+# server or an unauthenticated portal visitor with no local session, and the
+# body authenticates the caller itself from a route token, a bearer header or
+# an HMAC signature. 36 of gate-9's 39 fleet findings were this shape, every
+# one of them correct code:
+#
+#   openconnector PaymentsController::webhook  — HMAC verify, constant-time
+#                                                compare, timestamp tolerance
+#   portaliq ContributionController::inbox +9  — portal subject() resolution
+#   openregister FederationController ×6       — bearer share token in the URL
+#   doriath, hermiq, launchpad, procest, …     — same
+#
+# There was NO correct action a developer could take on those findings. The
+# advice said "remove #[PublicPage] or remove the body auth check": the first
+# breaks the endpoint (middleware rejects the caller before the controller
+# runs), the second removes its only authentication. A gate that can be
+# closed only by weakening the code is worse than no gate.
+_SELF_AUTH_RE = re.compile(
+    r"hash_hmac\s*\(|"
+    r"hash_equals\s*\(|"
+    r"\bBearer\b|"
+    r"->\s*getHeader\s*\(|"
+    r"\$_SERVER\s*\[\s*['\"]HTTP_|"
+    r"\bsignature\b|"
+    r"\bhmac\b|"
+    r"[Tt]oken\s*\)|"
+    r"\$\w*[Tt]oken\b|"
+    r"->\s*(resolve|validate|verify|find|get)\w*[Tt]oken\s*\(|"
+    r"->\s*subject\s*\(|"
+    r"->\s*findByToken\s*\(|"
+    r"[Cc]apability\s*[Tt]oken",
+    re.IGNORECASE,
 )
 
 
@@ -280,11 +326,32 @@ def scan_file(path: str) -> int:
                 )
                 violations += 1
         if _PUBLIC_PAGE_HEAD_RE.search(head):
-            if _PUBLIC_BODY_AUTH_RE.search(body):
+            # Session-derived check under #[PublicPage] — the real mismatch.
+            if _PUBLIC_SESSION_AUTH_RE.search(body):
                 print(
                     f"{path}:{line_no} method={name} "
-                    f"rule=public-page-annotation-with-auth-body — "
-                    f"remove #[PublicPage] or remove body auth check"
+                    f"rule=public-page-annotation-with-session-auth-body — "
+                    f"this method is #[PublicPage], so Nextcloud middleware admits the "
+                    f"request WITHOUT a session, yet the body tests the session "
+                    f"(requireAdmin()/IUserSession). That test can only ever fail for the "
+                    f"callers the annotation admits. Decide which is true: if the endpoint "
+                    f"needs a logged-in user, drop #[PublicPage] and keep the check; if it "
+                    f"is genuinely public, authenticate the caller from the REQUEST "
+                    f"(route token, bearer header, HMAC signature) instead of the session. "
+                    f"Do NOT simply delete the check."
+                )
+                violations += 1
+            elif _PUBLIC_DENY_STATUS_RE.search(body) and not _SELF_AUTH_RE.search(head + body):
+                print(
+                    f"{path}:{line_no} method={name} "
+                    f"rule=public-page-annotation-with-unsourced-denial — "
+                    f"this method is #[PublicPage] and returns 401/403, but nothing in it "
+                    f"resolves a credential from the request (no route token, bearer header, "
+                    f"HMAC signature or portal subject). Either it is denying on something "
+                    f"the annotation guarantees is absent, or the credential it checks is "
+                    f"not visible here. Name the credential the endpoint authenticates "
+                    f"with. Do NOT remove #[PublicPage] (middleware would reject the "
+                    f"caller before the controller runs) and do NOT remove the denial."
                 )
                 violations += 1
     return violations
