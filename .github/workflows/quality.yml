@@ -172,6 +172,27 @@ on:
         required: false
         type: string
         default: ""
+      axe-include-selector:
+        # MEASURED on a live Nextcloud 34.0.2, logged in, for every candidate
+        # selector ever proposed for this. `#app-content` and `main#content` do
+        # not exist on NC34 at all; `#content-vue` is absent on the dashboard and
+        # `#content` is absent on /apps/files/, so no SINGLE selector covers every
+        # page — hence a two-selector default. `#app-content-vue`/`main` also
+        # cover every page but sit INSIDE `#content-vue` and exclude the app
+        # navigation, which a Conduction app renders itself; scoping to them
+        # would hide real app defects, which is muting rather than scoping.
+        description: "CSS selector(s), comma-separated, wrapping this app's OWN rendered DOM. axe analyses only what is inside them (AxeBuilder.include), so Nextcloud's chrome is no longer attributed to the app. MEASURED: /apps/openregister/ went from 2 serious/critical violations to 0 and /apps/hermiq/ from 1 to 0, and every violation removed was core's. This is a SCOPE, not a mute: a deliberate violation injected inside the container is still reported, and the same violation injected outside it is not — both asserted on the live page every run. A selector list matching NOTHING is a hard failure. Set to 'body' to opt out."
+        required: false
+        type: string
+        default: "#content-vue, #content"
+      axe-exclude-selector:
+        # The one lever here that can hide a real defect of the app's own.
+        # Default empty. An exclude naming a missing selector is silently
+        # ignored by axe (fails open), unlike include which aborts.
+        description: "Optional CSS selector(s) to remove from inside the include scope (AxeBuilder.exclude). Default empty. Use ONLY for a region the app embeds but does not own; name it and say why in the caller."
+        required: false
+        type: string
+        default: ""
       axe-version:
         description: "Version of @axe-core/playwright to install. Pinned rather than floating because the axe rule set decides the verdict: an unpinned install can turn a repo red on a day nobody committed anything, which is the one thing a mechanical gate must never do. Move it deliberately, in a commit."
         required: false
@@ -2301,6 +2322,17 @@ jobs:
       # would mean a second ref to reason about and a second thing that can
       # drift away from the workflow that calls it. Same rationale as
       # ci-router.php above.
+      # The axe runner lives in this repo, not in a heredoc — see the step below
+      # for why that is load-bearing. Same checkout the hydra-gates job uses, so
+      # the runner and the gate that consumes its report come from one place.
+      - name: Checkout the axe runner
+        if: ${{ inputs.enable-axe && !cancelled() }}
+        uses: actions/checkout@v4
+        with:
+          repository: ConductionNL/.github
+          ref: ${{ inputs.hydra-gates-ref }}
+          path: gates
+
       - name: Install axe-core
         if: ${{ inputs.enable-axe && !cancelled() }}
         run: |
@@ -2320,6 +2352,8 @@ jobs:
           AXE_PASSWORD: admin
           AXE_ROUTES: ${{ inputs.axe-routes }}
           AXE_APP_NAME: ${{ inputs.app-name }}
+          AXE_INCLUDE: ${{ inputs.axe-include-selector }}
+          AXE_EXCLUDE: ${{ inputs.axe-exclude-selector }}
         run: |
           set -euo pipefail
           # The first-run wizard renders a modal over the first page an admin
@@ -2343,272 +2377,25 @@ jobs:
           export AXE_ROUTES
           export AXE_OUT="${PWD}/tests/axe/report.json"
 
-          cat > .axe-run.cjs <<'AXE_RUNNER'
-          // SPDX-License-Identifier: EUPL-1.2
-          //
-          // Produce tests/axe/report.json for hydra-gates gate-33 (axe-core).
-          //
-          // Gate-33 reads ONE key: `violations`, and fails on entries whose
-          // `impact` is `serious` or `critical`. Everything else written here is
-          // for humans and for the guards below.
-          //
-          // The design point of this file is that it must never write a report
-          // it has not earned. A `{}` — or a `{"violations": []}` produced by a
-          // browser that never loaded anything — parses fine and reads to
-          // gate-33 as a CLEAN accessibility run. (Verified: gate-33 reports
-          // PASS on a file containing exactly `{}`.) That is strictly worse than
-          // the loud skip gate-33 emits when the file is absent, because it
-          // converts "unverified" into "verified clean". So every exit path
-          // below either writes a report that provably came from a real axe run
-          // against a real rendered page, or writes NOTHING and exits non-zero.
-          //
-          // Three guards enforce that, in order:
-          //
-          //   1. SELF-TEST (positive control). Before touching the app, axe is
-          //      run against a scratch page carrying a KNOWN serious/critical
-          //      violation (`<button></button>` -> rule `button-name`, impact
-          //      critical). If axe does not report it, axe is not working —
-          //      misconfigured tags, a broken injection, a version whose rule
-          //      set moved — and every subsequent empty `violations` array would
-          //      be an artefact of the harness, not evidence about the app. A
-          //      gate whose green has never been shown capable of going red is
-          //      not a gate. This is the check that runs on every CI run, not
-          //      just once at authoring time.
-          //
-          //   2. HTTP STATUS. A route that answers >= 400 renders Nextcloud's
-          //      error page, and axe would happily report that page as clean.
-          //      Analysing the wrong document is indistinguishable from
-          //      analysing the right one at the JSON layer.
-          //
-          //   3. NON-EMPTY RESULT SET — a backstop, and stated as one. The
-          //      failure it describes (axe returns `violations: []` AND
-          //      `passes: []` because there was no document to analyse) is not
-          //      what @axe-core/playwright 4.12.1 actually does: measured
-          //      against `about:blank` it THROWS ("Please use
-          //      browser.newContext()") rather than returning empty, and that
-          //      throw is caught at the bottom of this file, which also writes
-          //      no report. The guard is kept because which of the two a given
-          //      version does is a library implementation detail, and the one
-          //      that returns empty is the one that would be indistinguishable
-          //      from a clean run.
-          //
-          // Env:
-          //   AXE_BASE_URL  base URL of the instance under test (required)
-          //   AXE_ROUTES    newline- or comma-separated paths (required)
-          //   AXE_OUT       where to write the report (required)
-          //   AXE_USER      login user (optional; no login when empty)
-          //   AXE_PASSWORD  login password
-          //   AXE_WAIT_MS   settle time per route after mount (default 1500)
-
-          const fs = require('fs');
-          const path = require('path');
-
-          // `@playwright/test` re-exports the browser types, so chromium is
-          // resolved from the package this job already installs rather than from
-          // `playwright`, which is only present as a hoisted transitive
-          // dependency and is not ours to rely on.
-          const { chromium } = require('@playwright/test');
-
-          // 4.x exposes both a named `AxeBuilder` and a `default`. Resolve
-          // either, and say so loudly if neither is a constructor: a silently
-          // undefined AxeBuilder throws deep in the run as `new undefined`.
-          const axeModule = require('@axe-core/playwright');
-          const AxeBuilder = axeModule.AxeBuilder || axeModule.default || axeModule;
-
-          // WCAG 2.2 AA and its predecessors. `best-practice` is deliberately
-          // excluded: it is not a conformance requirement, and gate-33 is a
-          // conformance gate.
-          const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
-
-          // The scratch page for guard 1. `<button></button>` has no accessible
-          // name: axe rule `button-name`, impact critical, tags wcag2a/wcag412.
-          const CONTROL_HTML =
-            '<!DOCTYPE html><html lang="en"><head><title>axe self-test</title></head>' +
-            '<body><main><button></button></main></body></html>';
-          const CONTROL_RULE = 'button-name';
-
-          const die = (msg) => {
-            console.error('::error::axe-runner: ' + msg);
-            process.exit(2);
-          };
-
-          const routes = (process.env.AXE_ROUTES || '')
-            .split(/[\n,]/)
-            .map((r) => r.trim())
-            .filter((r) => r.length > 0);
-
-          const baseUrl = (process.env.AXE_BASE_URL || '').replace(/\/+$/, '');
-          const outPath = process.env.AXE_OUT || '';
-          const waitMs = parseInt(process.env.AXE_WAIT_MS || '1500', 10);
-
-          if (typeof AxeBuilder !== 'function') {
-            die('@axe-core/playwright did not export a constructor (got ' + typeof AxeBuilder + '). The installed version changed its export shape.');
-          }
-          if (!baseUrl) die('AXE_BASE_URL is empty.');
-          if (!outPath) die('AXE_OUT is empty.');
-          if (routes.length === 0) die('AXE_ROUTES resolved to zero routes. Nothing would be analysed, and an empty report would read as a clean accessibility run.');
-
-          // Keep the report readable: violation nodes carry the full outerHTML,
-          // which for a Vue app is routinely tens of KB per node.
-          const trimNode = (n) => ({
-            target: n.target,
-            html: typeof n.html === 'string' ? n.html.slice(0, 400) : '',
-            failureSummary: n.failureSummary,
-          });
-
-          // Remove any pre-existing report FIRST. Every guard exits without
-          // writing, and "did not write" only means "no report" if there was
-          // nothing there to begin with — otherwise a stale file from an earlier
-          // attempt is what gate-33 reads, and it reads as a clean run of code
-          // that just refused to certify itself.
-          fs.rmSync(outPath, { force: true });
-
-          (async () => {
-            const browser = await chromium.launch();
-            const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-            const page = await context.newPage();
-
-            // ── Guard 1: positive control ──────────────────────────────────
-            await page.setContent(CONTROL_HTML);
-            const control = await new AxeBuilder({ page }).withTags(TAGS).analyze();
-            const controlHit = (control.violations || []).find(
-              (v) => v.id === CONTROL_RULE && ['serious', 'critical'].includes(v.impact)
-            );
-            if (!controlHit) {
-              const seen = (control.violations || []).map((v) => v.id + '/' + v.impact).join(', ') || '<none>';
-              await browser.close();
-              die(
-                'SELF-TEST FAILED. axe did not report the deliberate `' + CONTROL_RULE +
-                '` violation on the scratch page. It reported: ' + seen +
-                '. axe is therefore not capable of failing in this environment, so an empty ' +
-                'violations array here would be evidence about the harness, not about the app. ' +
-                'Refusing to write a report — gate-33 will skip loudly instead of passing falsely.'
-              );
-            }
-            console.log(
-              'axe self-test OK: rule=' + controlHit.id + ' impact=' + controlHit.impact +
-              ' nodes=' + controlHit.nodes.length + ' (axe-core ' + control.testEngine.version + ')'
-            );
-
-            // ── Login ──────────────────────────────────────────────────────
-            if (process.env.AXE_USER) {
-              const loginUrl = baseUrl + '/index.php/login';
-              const resp = await page.goto(loginUrl, { waitUntil: 'domcontentloaded' });
-              if (!resp || resp.status() >= 400) {
-                await browser.close();
-                die('login page ' + loginUrl + ' returned HTTP ' + (resp ? resp.status() : 'no-response') + '.');
-              }
-              await page.fill('input[name="user"]', process.env.AXE_USER);
-              await page.fill('input[name="password"]', process.env.AXE_PASSWORD || '');
-              await Promise.all([
-                page.waitForURL((u) => !u.toString().includes('/login'), { timeout: 30000 }).catch(() => {}),
-                page.click('button[type="submit"], input[type="submit"]'),
-              ]);
-              if (page.url().includes('/login')) {
-                await browser.close();
-                die('login did not leave /login — still at ' + page.url() + '. Every route would be analysed as the LOGIN page, not the app.');
-              }
-              console.log('Logged in as ' + process.env.AXE_USER + '; landed on ' + page.url());
-            }
-
-            // ── Analyse each route ─────────────────────────────────────────
-            const violations = [];
-            const analysed = [];
-            let engine = null;
-
-            for (const route of routes) {
-              const url = baseUrl + (route.startsWith('/') ? route : '/' + route);
-              const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-              const status = resp ? resp.status() : 0;
-
-              // Guard 2.
-              if (status === 0 || status >= 400) {
-                await browser.close();
-                die(
-                  'route ' + url + ' returned HTTP ' + status + '. axe would have analysed an ' +
-                  'error page and reported it as clean. Set the axe-routes input to routes ' +
-                  'this app actually serves.'
-                );
-              }
-
-              // Give the SPA a chance to mount. A Nextcloud page shell always
-              // has #content, including when the bundle never mounts — which is
-              // why guard 3 is a separate check and not folded into this wait.
-              await page.waitForSelector('#content, main, [role="main"]', { timeout: 60000 }).catch(() => {});
-              await page.waitForTimeout(waitMs);
-
-              const results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
-              engine = results.testEngine;
-
-              const nPass = (results.passes || []).length;
-              const nViol = (results.violations || []).length;
-              const nIncomplete = (results.incomplete || []).length;
-
-              // Guard 3.
-              if (nPass === 0 && nViol === 0) {
-                await browser.close();
-                die(
-                  'route ' + url + ' produced ZERO passes and ZERO violations. axe ran against ' +
-                  'a document with nothing in it — a blank page, or an SPA that never mounted. ' +
-                  'That is not a clean accessibility result, it is an absent one.'
-                );
-              }
-
-              console.log(
-                'axe ' + url + ' -> HTTP ' + status + ' | passes=' + nPass +
-                ' violations=' + nViol + ' incomplete=' + nIncomplete
-              );
-
-              analysed.push({ route, url, status, passes: nPass, violations: nViol, incomplete: nIncomplete });
-
-              for (const v of results.violations || []) {
-                violations.push({
-                  id: v.id,
-                  impact: v.impact,
-                  help: v.help,
-                  helpUrl: v.helpUrl,
-                  tags: v.tags,
-                  route,
-                  url,
-                  nodes: (v.nodes || []).map(trimNode),
-                });
-              }
-            }
-
-            await browser.close();
-
-            const report = {
-              // The key gate-33 reads.
-              violations,
-              // Everything below is provenance, so a reader — and the validator
-              // in the hydra-gates job — can tell a clean run from a run that
-              // never happened.
-              testEngine: engine,
-              generatedAt: new Date().toISOString(),
-              baseUrl,
-              tags: TAGS,
-              routesAnalysed: analysed,
-              selfTest: { rule: controlHit.id, impact: controlHit.impact, detected: true },
-              blocking: violations.filter((v) => ['serious', 'critical'].includes(v.impact)).length,
-            };
-
-            fs.mkdirSync(path.dirname(outPath), { recursive: true });
-            fs.writeFileSync(outPath, JSON.stringify(report, null, 2));
-
-            console.log(
-              'Wrote ' + outPath + ': ' + analysed.length + ' route(s), ' + violations.length +
-              ' violation(s), ' + report.blocking + ' of them serious/critical (gate-33 blocking).'
-            );
-          })().catch((err) => {
-            die('crashed before writing a report: ' + (err && err.stack ? err.stack : err));
-          });
-          AXE_RUNNER
+          # The runner is a FILE in this repo (hydra-gates/scripts/axe-run.cjs),
+          # not a heredoc, and that is load-bearing rather than tidiness.
+          #
+          # Embedding it inline grew this ONE `run:` step to 22,439 bytes, and a
+          # step that large makes GitHub fail to RESOLVE the whole workflow: every
+          # caller in the fleet started up with ZERO jobs and a run `name` equal to
+          # the raw file path. Bisected with a controlled probe:
+          #   file padded to 226 KB, step untouched  -> RESOLVES
+          #   step padded with INERT COMMENTS to 21 KB -> ZERO JOBS
+          #   45 workflow_call inputs, step untouched -> RESOLVES
+          # So it is neither file size nor input count: it is the size of a single
+          # step, and the threshold sits between ~19 KB and ~21 KB. Keeping the
+          # program in a file puts this step under 2 KB and takes the whole class
+          # of failure off the table.
 
           # `bash -e` would abort on a failing node before `RC=$?` ever ran, so
           # the cleanup would be skipped and the reason lost. Same `&& / ||`
           # idiom the hydra-gates job uses for the same reason.
-          node .axe-run.cjs && RC=0 || RC=$?
-          rm -f .axe-run.cjs
+          node "${GITHUB_WORKSPACE}/gates/hydra-gates/scripts/axe-run.cjs" && RC=0 || RC=$?
           exit "$RC"
 
       - name: Upload the axe-core report
