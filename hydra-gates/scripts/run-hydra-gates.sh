@@ -2835,6 +2835,24 @@ def slugify(text):
     t = text.strip().lower()
     t = re.sub(r'[^a-z0-9]+', '-', t).strip('-')
     return t
+def gh_slugify(text):
+    # GitHub's own heading-anchor rule: drop every character that is not
+    # alphanumeric, dash, underscore or space, then collapse spaces to dashes.
+    #
+    # It parts company with slugify() on punctuation *inside* a word. GitHub
+    # publishes "A subscription's retry/backoff policy" as
+    # #a-subscriptions-retrybackoff-policy; slugify() produces
+    # #a-subscription-s-retry-backoff-policy. Tags are written against the
+    # anchor GitHub actually serves — that is the link a reader clicks — so
+    # without this the gate reports a correct, working anchor as unresolved.
+    # Observed 2026-08-05 on openconnector: 137 findings, none of them real.
+    #
+    # Both shapes are accepted rather than one replacing the other: a tag
+    # written to satisfy the old kebab rule still resolves, and either way
+    # the heading has to exist, which is what this gate is for.
+    t = text.strip().lower()
+    t = re.sub(r'[^a-z0-9\-_ ]+', '', t)
+    return re.sub(r'\s+', '-', t).strip('-')
 def dedate(name):
     # `retrofit-2026-04-28-b2b-crossrefs` and `retrofit-b2b-crossrefs-2026-04-28`
     # both normalise to `retrofit-b2b-crossrefs`: archiving moves the date token.
@@ -2857,18 +2875,20 @@ def has_anchor(md_path, fragment):
                 m = re.match(r'^\s*#{1,6}\s+(.+?)\s*$', line)
                 if m:
                     head = m.group(1)
-                    hslug = slugify(head)
+                    hslugs = (slugify(head), gh_slugify(head))
                     frags = (frag_slug, frag_alt)
-                    if hslug in frags:
+                    if any(h in frags for h in hslugs):
                         return True
                     # `### Task 8 — long title` resolves `#task-8`; the `-`
                     # boundary keeps `#task-8` from matching `Task 89`.
-                    if any(hslug.startswith(f + '-') for f in frags if f):
+                    if any(h.startswith(f + '-') for h in hslugs for f in frags if f):
                         return True
                     # `### Requirement: Foo bar` resolves `#foo-bar` (tags
                     # often omit the `requirement-`/`scenario-` prefix).
-                    if ':' in head and slugify(head.split(':', 1)[1]) in frags:
-                        return True
+                    if ':' in head:
+                        tail = head.split(':', 1)[1]
+                        if slugify(tail) in frags or gh_slugify(tail) in frags:
+                            return True
                     lead = head.split()[0].rstrip('.:') if head.split() else ''
                     if lead and slugify(lead) in frags:
                         return True
