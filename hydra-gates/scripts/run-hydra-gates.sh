@@ -2225,8 +2225,15 @@ elif [ "${_lt_checked}" -gt 0 ]; then
     _pass 28 "license-triangle"
 elif [ ! -d lib ]; then
     _skip 28 "license-triangle" na "this repo has no lib/ directory, so there are no per-file @license PHPDoc tags for composer.json's license to be compared against. Nothing was inspected and nothing could be. Typical of the Python ExApp sidecars, whose application code lives in ex_app/ and whose only PHP is phpcs-custom-sniffs/. This gate becomes applicable the moment PHP app code lands under lib/."
+elif [ ! -f composer.json ]; then
+    # NOT APPLICABLE, not structural. This gate compares two declarations; with
+    # no composer.json there is no second declaration to compare against and no
+    # change inside this repo can create one to compare. Nothing is missing —
+    # the gate simply has no subject matter. (Contrast the branch below: a
+    # composer.json that exists but declares no license IS a fixable gap.)
+    _skip 28 "license-triangle" na "lib/ exists but this repo has no composer.json, so there is no \`license\` declaration for per-file @license tags to be compared against. This gate compares two declarations and only one exists here."
 elif [ -z "${_composer_lic}" ]; then
-    _skip 28 "license-triangle" structural "lib/ exists but composer.json declares no \`license\` field (or there is no composer.json), so there is nothing to compare per-file @license tags against. Per-file/composer license agreement is UNVERIFIED by this run."
+    _skip 28 "license-triangle" structural "lib/ and composer.json both exist, but composer.json declares no \`license\` field, so there is nothing to compare per-file @license tags against. Per-file/composer license agreement is UNVERIFIED by this run. Fixable here: add \`\"license\": \"EUPL-1.2\"\` to composer.json."
 else
     _skip 28 "license-triangle" structural "lib/ exists and composer.json declares license=${_composer_lic}, but 0 in-scope lib/**/*.php file carried an @license PHPDoc tag, so NOTHING was compared. Per-file/composer license agreement is UNVERIFIED by this run. (Presence of the tag is gate-1's job, not this gate's.)"
 fi
