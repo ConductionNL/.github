@@ -16,6 +16,8 @@
 # probe. jobs==0 is the outage signature.
 name: Resolve probe
 on:
+  push:
+    branches: [exp/axe-resolve-probe]
   workflow_dispatch:
 jobs:
   probe:
