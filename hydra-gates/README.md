@@ -22,8 +22,9 @@ credentials.
 > This line used to carry one anyway. A count in prose has nothing to
 > reconcile against; the runtime coverage block does. Consumers and other
 > repos should write "the Hydra mechanical quality gates" and link here.
-> Set `hydra-gates-require-full-coverage` if a green with silent skips should
-> be an error in your repo.
+> `hydra-gates-require-full-coverage` is ON by default: a gate whose subject
+> matter exists but did not report is an error. Gates that are legitimately not
+> applicable do not fail it.
 
 This directory is the **single source of truth** for the gate runner
 (`scripts/run-hydra-gates.sh`), its ~25 Python/JS helpers (`scripts/lib/`), its
@@ -110,8 +111,10 @@ things to do before you upgrade:
    vendored canonical validator, and the app script is surfaced as an advisory.
    Apps whose local checker was weaker will surface real findings; apps failed
    by a stale app-local page-type enum will go green.
-3. **Treat `: SKIPPED` as "did not run", not as a pass**, if you parse
-   `^\[gate-N\]` lines. New verdict; see *Reading a green* below.
+3. **Treat `: SKIPPED` and `: NOT APPLICABLE` as "did not run", not as a pass**,
+   if you parse `^\[gate-N\]` lines. Two verdicts, and they differ: `SKIPPED
+   (structural|wiring)` is a coverage GAP, `NOT APPLICABLE` means the gate had
+   no subject matter here. Neither is a result. See *Reading a green* below.
 
 The upside: **gate 53 becomes usable under `--scope-to-diff`**. It was
 previously unenablable on any repo with manifest debt, because a one-line change
@@ -294,19 +297,48 @@ and every run — `bin/hydra-gates` **and** a direct `run-hydra-gates.sh`
 invocation — ends with the accounting:
 
 ```
-[hydra-gates] COVERAGE: 60 of 63 declared gates reported a result.
+[hydra-gates] COVERAGE: 60 of 63 declared gates reported a result (2 not applicable
+[hydra-gates]           to this repo/diff; 60 of 61 applicable gates ran).
+[hydra-gates] NOT APPLICABLE — subject matter absent from this repo or this diff.
+[hydra-gates] These do NOT count against coverage. Each stated its own reason above:
+[hydra-gates]   gate-4 composer-audit
+[hydra-gates]   gate-33 axe-core
 [hydra-gates] GATES THAT DID NOT RUN — they inspected NOTHING, and their subject
 [hydra-gates] matter is UNVERIFIED by this run:
-[hydra-gates]   gate-4 composer-audit
 [hydra-gates]   gate-24 integration-parity
-[hydra-gates]   gate-33 axe-core
-[hydra-gates] 60 GATE(S) GREEN — but 3 of 63 DID NOT RUN (named above).
-[hydra-gates] This is NOT 'all 63 gates green'. …
+[hydra-gates] 60 GATE(S) GREEN — but 1 of 61 APPLICABLE gates DID NOT RUN (named above).
 ```
 
-A `SKIPPED` line is **not** counted as coverage — a gate reporting that it did
-nothing did nothing. `--require-full-coverage` turns an incomplete run into
-exit 98.
+### Three states, not two
+
+Neither a `SKIPPED` nor a `NOT APPLICABLE` line counts as coverage — a gate
+reporting that it did nothing did nothing. But only two of the three fail:
+
+| verdict | meaning | counts against coverage? |
+|---|---|---|
+| `NOT APPLICABLE` | the gate's subject matter does not exist in this repo or this diff — no `src/` at all, or a diff with no composer file under ADR-020 scoping | **no** |
+| `SKIPPED (structural)` | the subject matter EXISTS and nothing produced the gate's input — e.g. a repo that registers integration leaves but ships no parity check | yes |
+| `SKIPPED (wiring)` | the gate's own machinery is missing — a helper script, a tool not on PATH | yes |
+
+`--require-full-coverage` (ON by default in the shared workflow) turns the last
+two into exit 98. It ignores the first — that is what makes it switchable-on at
+all: before the split, a Tier-0 app with nothing wrong with it failed on 30 of
+63 gates, 25 of them merely because they are wrapped in `if [ -d src ]`.
+
+Two properties stop `NOT APPLICABLE` becoming a mute:
+
+- **Silence still counts against coverage.** A gate that emits nothing at all is
+  a gap by default. To stop counting it must *declare* itself not-applicable, by
+  name and with a reason.
+- **The category is validated.** `na`, `structural` and `wiring` are the only
+  accepted values; anything else is a hard gate failure, never a default. A gate
+  cannot stop counting by misspelling its reason.
+
+`--axe-enabled` (set by the shared workflow from `enable-axe`) tells the runner
+whether the caller undertook to produce gate-33's report. Without it a missing
+report means "this repo has not opted into runtime a11y enforcement" — a visible
+choice in the caller's workflow, not a hidden gap. With it, a missing report
+means the producer broke, and that fails.
 
 The inventory is read out of the runner itself rather than hardcoded, so adding
 gate 64 does not silently leave the coverage check measuring against a stale 63.

@@ -286,10 +286,40 @@ on:
         type: string
         default: "main"
       hydra-gates-require-full-coverage:
-        description: "Treat 'a declared gate did not run' as a failure (exit 98). Off by default: a control that blocks legitimate work gets switched off, and a switched-off control is worth less than a loud one. The coverage block is printed either way."
+        # ON by default as of this change, and only because the accounting was
+        # fixed first. It could not be switched on before: "did not run"
+        # collapsed three different facts into one, and the flag failed on all
+        # of them. Measured on a Tier-0 fixture with nothing wrong with it, 30
+        # of 63 gates emitted NOTHING — 25 of those simply because they are
+        # wrapped in `if [ -d src ]` and the repo has no frontend — and the flag
+        # exited 98. A control that red-flags a repo for gates it has no surface
+        # for is a control that gets switched off.
+        #
+        # The runner now distinguishes:
+        #   NOT APPLICABLE  subject matter absent from this repo or this diff.
+        #                   Named in the output, excluded from coverage, does
+        #                   NOT fail. (No src/ → no <img> to lack an alt. No
+        #                   composer file in the diff → no dependency change to
+        #                   audit, per ADR-020.)
+        #   SKIPPED (structural)  the subject matter EXISTS and nothing produced
+        #                   the gate's input. Fails.
+        #   SKIPPED (wiring)  the gate's own machinery is missing — a helper
+        #                   script, a tool. Fails, and this is the worst of the
+        #                   three: it is how gate-7 once reported PASS over 11
+        #                   real unguarded IDOR endpoints.
+        #
+        # Silence still counts AGAINST coverage. A gate stops counting only by
+        # declaring itself not-applicable out loud, with a category that is
+        # validated — an unrecognised one is a hard failure, never a default.
+        #
+        # Measured against five fleet repos with the flag on: openregister,
+        # opencatalogi and docudesk have ZERO gates that did not run; hermiq and
+        # openconnector have exactly one each (gate-24), and it is a genuine gap
+        # — both register integration leaves and neither ships a parity check.
+        description: "Fail the run (exit 98) when a gate whose subject matter EXISTS did not report. ON by default. A gate that is legitimately not applicable — a Tier-0 app with no src/, or gate-4 correctly diff-scoped out under ADR-020 because no composer file changed — reports NOT APPLICABLE, is named in the coverage block, and does NOT fail the run. Only two states fail: a STRUCTURAL gap (the subject matter exists and nothing produced the gate's input, e.g. a repo that registers integration leaves but ships no parity check) and a WIRING gap (the gate's own helper or tool is missing — the shape that once let gate-7 report PASS over 11 real unguarded IDOR endpoints). A gate that emits nothing at all still counts against coverage: not-applicable must be DECLARED, and its category is validated, so a gate cannot stop counting by staying quiet or by misspelling its reason. Set false only if you knowingly want a green that may be silent about what it did not check — the coverage block is printed either way."
         required: false
         type: boolean
-        default: false
+        default: true
 
 concurrency:
   group: quality-${{ github.ref }}
@@ -3773,6 +3803,18 @@ jobs:
           if [ "${{ inputs.hydra-gates-require-full-coverage }}" = "true" ]; then
             ARGS="${ARGS} --require-full-coverage"
           fi
+          # gate-33's input is the ONE input this runner cannot make for itself
+          # — it comes from a browser in the Playwright job, and only when the
+          # caller opted in. Telling the runner what the caller undertook is
+          # what lets it distinguish "this repo has not opted into runtime
+          # accessibility enforcement" (not applicable; the choice is a visible
+          # line in the caller's workflow) from "it DID opt in and the report
+          # never arrived" (a real gap, and it fails). Without this the runner
+          # has to guess, and guessing "unverified" in both cases is what made
+          # --require-full-coverage unusable in every repo in the fleet.
+          if [ "${{ inputs.enable-axe }}" = "true" ]; then
+            ARGS="${ARGS} --axe-enabled"
+          fi
           # The default shell for a `run:` block is `bash -e {0}`. A bare
           # invocation followed by `RC=$?` would therefore never reach the
           # assignment — the step would abort on the first failing gate and the
@@ -3792,7 +3834,7 @@ jobs:
             exit 1
           fi
           if [ "${RC}" -eq 98 ]; then
-            echo "::error::hydra-gates passed but coverage was incomplete, and hydra-gates-require-full-coverage is set. See the GATES THAT DID NOT RUN line above."
+            echo "::error::hydra-gates passed every gate that ran, but a gate whose SUBJECT MATTER EXISTS did not report, and hydra-gates-require-full-coverage is set. See the GATES THAT DID NOT RUN line above — each names itself as either 'structural' (nothing produced its input) or 'wiring' (its own helper or tool is missing). Gates listed under NOT APPLICABLE are NOT the cause: they were excluded from this verdict."
             exit 1
           fi
           echo "::error::${RC} Hydra gate(s) failed. The exit code is the failure COUNT — see the named [gate-N] FAIL lines above."

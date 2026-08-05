@@ -60,10 +60,19 @@
 #   --base REF                diff base (default: see resolution order below)
 #   --full                    scan the whole repo instead of the diff. Reports
 #                             inherited debt; use for audits, not for gating.
-#   --require-full-coverage   treat "a gate did not run" as a failure. Off by
-#                             default: a control that blocks legitimate work
-#                             gets switched off, and a switched-off control is
-#                             worth less than a loud one.
+#   --require-full-coverage   treat "an APPLICABLE gate did not run" as a
+#                             failure. Gates that reported NOT APPLICABLE — their
+#                             subject matter is absent from this repo or this
+#                             diff — are excluded, so a Tier-0 app is not blocked
+#                             by gates it has no surface for. A control that
+#                             blocks legitimate work gets switched off, and a
+#                             switched-off control is worth less than a loud one.
+#   --axe-enabled             tell the runner the caller undertook to produce
+#                             tests/axe/report.json (i.e. `enable-axe: true`).
+#                             Without it, a missing report means "this repo has
+#                             not opted into runtime a11y enforcement" (NOT
+#                             APPLICABLE); with it, a missing report means the
+#                             producer broke (a real gap, and it fails).
 #
 # Base ref resolution order (first that resolves wins, and it is printed):
 #   1. --base REF
@@ -109,6 +118,7 @@ APP_DIR=""
 BASE_REF_ARG=""
 SCOPE_DIFF=1
 REQUIRE_FULL_COVERAGE=0
+AXE_ENABLED="${HYDRA_GATE_AXE_ENABLED:-0}"
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -118,6 +128,7 @@ while [ $# -gt 0 ]; do
         --base=*) BASE_REF_ARG="${1#--base=}"; shift ;;
         --full) SCOPE_DIFF=0; shift ;;
         --require-full-coverage) REQUIRE_FULL_COVERAGE=1; shift ;;
+        --axe-enabled) AXE_ENABLED=1; shift ;;
         -h|--help) sed -n '3,70p' "${_self}" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) APP_DIR="$1"; shift ;;
     esac
@@ -259,6 +270,11 @@ set -- "${APP_DIR}"
 if [ "${SCOPE_DIFF}" = "1" ]; then
     set -- --scope-to-diff --base "${BASE_REF}" "$@"
 fi
+# Forwarded, not re-derived. The runner is the only thing that reads gate-33's
+# report; this wrapper just has to stop swallowing the caller's declaration.
+if [ "${AXE_ENABLED}" = "1" ]; then
+    set -- --axe-enabled "$@"
+fi
 
 _out="$(mktemp -t hydra-gates-out.XXXXXX)"
 trap 'rm -f "${_out}"' EXIT
@@ -276,14 +292,27 @@ RC="${PIPESTATUS[0]}"
 # inventory is the very defect this step exists to catch.
 # ---------------------------------------------------------------------------
 DECLARED="$(grep -oE '_(pass|fail|skip) [0-9]+' "${RUNNER}" | awk '{print $2}' | sort -un)"
-# A `[gate-N] name: SKIPPED — reason` line is the gate REPORTING THAT IT DID NOT
-# RUN. Counting it as coverage would turn the fix into the bug: the whole point
-# of making the skip visible is that it stays outside the "reported a result"
-# tally. Excluded here by verdict, not by gate number.
-EMITTED="$(grep -E '^\[gate-[0-9]+\]' "${_out}" | grep -v ': SKIPPED' \
+# A `[gate-N] name: SKIPPED (…) — reason` line is the gate REPORTING THAT IT DID
+# NOT RUN. Counting it as coverage would turn the fix into the bug: the whole
+# point of making the skip visible is that it stays outside the "reported a
+# result" tally. Excluded here by verdict, not by gate number.
+#
+# `NOT APPLICABLE` is a THIRD verdict and must be excluded from BOTH tallies —
+# it is neither a result nor a gap. Note it is excluded here explicitly rather
+# than left to fall through: a `NOT APPLICABLE` line contains no ': SKIPPED', so
+# the old filter would have counted every not-applicable gate as having REPORTED
+# A RESULT. This wrapper recomputes coverage independently of the runner, so a
+# verdict it does not know about is silently miscounted in the direction that
+# always reads better than the truth.
+EMITTED="$(grep -E '^\[gate-[0-9]+\]' "${_out}" | grep -v ': SKIPPED' | grep -v ': NOT APPLICABLE' \
+    | grep -oE '^\[gate-[0-9]+\]' | grep -oE '[0-9]+' | sort -un)"
+NOT_APPLICABLE="$(grep -E '^\[gate-[0-9]+\].*: NOT APPLICABLE' "${_out}" \
     | grep -oE '^\[gate-[0-9]+\]' | grep -oE '[0-9]+' | sort -un)"
 DECLARED_N="$(printf '%s\n' "${DECLARED}" | grep -c . || true)"
 EMITTED_N="$(printf '%s\n' "${EMITTED}" | grep -c . || true)"
+NA_N="$(printf '%s\n' "${NOT_APPLICABLE}" | grep -c . || true)"
+APPLICABLE_N=$((DECLARED_N - NA_N))
+NOT_APPLICABLE_INLINE="$(printf '%s' "${NOT_APPLICABLE}" | tr '\n' ' ' | sed 's/ *$//')"
 
 # Set difference by membership test, NOT by comm(1). comm requires its inputs
 # to be sorted in the COLLATING order it compares with; these lists are sorted
@@ -292,13 +321,20 @@ EMITTED_N="$(printf '%s\n' "${EMITTED}" | grep -c . || true)"
 # coverage gap is the exact failure this block exists to prevent.
 NOT_RUN=""
 for _d in ${DECLARED}; do
-    printf '%s\n' "${EMITTED}" | grep -qx "${_d}" || NOT_RUN="${NOT_RUN}${_d} "
+    printf '%s\n' "${EMITTED}" | grep -qx "${_d}" && continue
+    printf '%s\n' "${NOT_APPLICABLE}" | grep -qx "${_d}" && continue
+    NOT_RUN="${NOT_RUN}${_d} "
 done
 NOT_RUN="${NOT_RUN% }"
 
 echo ""
 echo "=============================================================="
-echo "[hydra-gates] COVERAGE: ${EMITTED_N} of ${DECLARED_N} declared gates reported a result."
+echo "[hydra-gates] COVERAGE: ${EMITTED_N} of ${DECLARED_N} declared gates reported a result (${NA_N} not applicable; ${EMITTED_N} of ${APPLICABLE_N} applicable gates ran)."
+if [ -n "${NOT_APPLICABLE}" ]; then
+    echo "[hydra-gates] NOT APPLICABLE: ${NOT_APPLICABLE_INLINE}"
+    echo "[hydra-gates] Their subject matter does not exist in this repo or this diff — each said"
+    echo "[hydra-gates] so by name above. They do NOT count against coverage."
+fi
 
 # The single most dangerous shape: a scoped run over an empty diff. Every gate
 # passes having read nothing, and the output is otherwise identical to a real
@@ -358,7 +394,18 @@ fi
 
 if [ "${RC}" -eq 0 ]; then
     if [ -z "${NOT_RUN}" ]; then
-        echo "[hydra-gates] RESULT: ALL ${DECLARED_N} GATES PASSED — and all ${DECLARED_N} of them ran."
+        if [ "${NA_N}" -eq 0 ]; then
+            echo "[hydra-gates] RESULT: ALL ${DECLARED_N} GATES PASSED — and all ${DECLARED_N} of them ran."
+        else
+            # NEVER "all ${DECLARED_N} ran" here. ${NA_N} of them did not run —
+            # they had nothing to run against. Saying otherwise would print the
+            # exact banner this whole accounting exists to make impossible, and
+            # it would print it precisely when the run is MOST incomplete.
+            echo "[hydra-gates] RESULT: ALL ${APPLICABLE_N} APPLICABLE GATES PASSED — and all ${APPLICABLE_N} of them ran."
+            echo "[hydra-gates] ${NA_N} gate(s) were NOT APPLICABLE to this repo/diff and did not run: ${NOT_APPLICABLE_INLINE}"
+            echo "[hydra-gates] This green covers ${EMITTED_N} of ${DECLARED_N} declared gates. It says nothing"
+            echo "[hydra-gates] about the ${NA_N} above — only that they had no subject matter here."
+        fi
     else
         echo "[hydra-gates] RESULT: ALL GATES PASSED — EXCEPT GATES ${NOT_RUN}, WHICH DID NOT RUN."
         echo "[hydra-gates] This green covers ${EMITTED_N} gates. It says NOTHING about gates ${NOT_RUN}."

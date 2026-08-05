@@ -80,10 +80,29 @@ APP_DIR=""
 # a Tier-0 app is not blocked by gates it has no surface for; on, the run
 # refuses to report green while any gate's subject matter is unverified.
 REQUIRE_FULL_COVERAGE="${HYDRA_GATE_REQUIRE_FULL_COVERAGE:-0}"
+# Whether the CALLER undertook to produce gate-33's input (tests/axe/report.json).
+# gate-33 is the one gate whose input this runner cannot make for itself: it is
+# produced by the Playwright job, and only when `enable-axe: true` is set on the
+# shared quality workflow. That makes the ABSENCE of the report ambiguous, and
+# the two readings are opposites:
+#
+#   enable-axe NOT set  — the repo has not opted into runtime accessibility
+#                         enforcement. The absence is a declared, visible choice
+#                         living in the caller's workflow file, not a gap hidden
+#                         in here. NOT APPLICABLE to this run.
+#   enable-axe set      — the repo DID opt in and the report still did not
+#                         arrive. Something between the browser and this script
+#                         broke. That is a real coverage gap and it must fail.
+#
+# Without this flag the runner cannot tell those apart and has to guess. It used
+# to guess "unverified" in both cases, which is why --require-full-coverage was
+# unusable in every repo in the fleet.
+AXE_ENABLED="${HYDRA_GATE_AXE_ENABLED:-0}"
 while [ $# -gt 0 ]; do
     case "$1" in
         --scope-to-diff) SCOPE_TO_DIFF=1; shift ;;
         --require-full-coverage) REQUIRE_FULL_COVERAGE=1; shift ;;
+        --axe-enabled) AXE_ENABLED=1; shift ;;
         --base) BASE_REF="$2"; shift 2 ;;
         --base=*) BASE_REF="${1#--base=}"; shift ;;
         *) APP_DIR="$1"; shift ;;
@@ -360,16 +379,23 @@ _ROUTE_PAIR_RX="[A-Za-z][A-Za-z0-9_\\]*#[a-zA-Z0-9_]+"
 
 _FAILED=0
 _EMITTED_GATES=""
-# _SKIPPED_GATES is written by _skip but deliberately NOT read by the coverage
-# summary, and it must stay that way. The summary derives "gates that did not
-# run" as DECLARED minus _EMITTED_GATES, which is strictly broader: it catches
-# both a gate that skipped explicitly AND a gate that emitted nothing at all
-# because its enclosing `if [ -d src ]`-style prerequisite was false. Driving
-# the report off _SKIPPED_GATES instead would narrow it back to only the
-# explicit skips and silently reopen the hole this accounting exists to close.
-# Kept as a record of what skipped, for a caller that wants to distinguish the
-# two shapes.
+# _SKIPPED_GATES holds the gates that skipped for a reason that COUNTS against
+# coverage (categories `structural` and `wiring` — see _skip below).
+#
+# It is still not what the summary subtracts. "Gates that did not run" is
+# derived as DECLARED minus _EMITTED_GATES minus _NA_GATES, which stays strictly
+# broader than _SKIPPED_GATES: it catches a gate that emitted NOTHING AT ALL
+# because its enclosing `if [ -d src ]`-style prerequisite was false and it
+# never reached a _skip call. Driving the report off _SKIPPED_GATES instead
+# would narrow it back to only the explicit skips and silently reopen the hole
+# this accounting exists to close. A silent non-reporter is therefore counted
+# against coverage by DEFAULT — to stop counting, a gate must say so, by name
+# and with a category.
 _SKIPPED_GATES=""
+# Gates whose SUBJECT MATTER does not exist in this repository or this diff.
+# Held separately from _SKIPPED_GATES because the two mean opposite things to a
+# reader deciding whether to trust the run — see _skip below.
+_NA_GATES=""
 # A reason may arrive with embedded newlines (a helper echoing a multi-line
 # message, a miscounted variable). Flatten it: the contract of this runner's
 # stdout is ONE `[gate-N] name: VERDICT` line per gate, and every consumer —
@@ -385,15 +411,55 @@ _fail() {
 }
 _pass() { echo "[gate-$1] $2: PASS"; _EMITTED_GATES="${_EMITTED_GATES}$1 "; }
 
-# _skip <n> <name> <reason> — the gate did NOT run. Distinct from PASS on
-# purpose: a prerequisite was absent, so the gate inspected NOTHING and its
-# subject matter is UNVERIFIED. Recorded separately so the summary can never
-# fold it into an "ALL GATES GREEN" banner.
+# _skip <n> <name> <category> <reason> — the gate did NOT run. Distinct from
+# PASS on purpose: the gate inspected NOTHING.
+#
+# The CATEGORY is the point of this helper, and it is mandatory. "Did not run"
+# collapses three situations that a reader — and --require-full-coverage — must
+# treat differently:
+#
+#   na          NOT APPLICABLE. The gate's subject matter does not exist here.
+#               A Tier-0 app with no src/ has no <img> to be missing an alt; a
+#               diff that touches no composer file has no dependency change to
+#               audit (ADR-020). Nothing is unverified, because there is nothing
+#               to verify. This does NOT count against coverage.
+#
+#   structural  The subject matter EXISTS and nothing produced the gate's input.
+#               An app with src/ that ships no axe report has runtime
+#               accessibility defects it has not looked for. A real gap.
+#
+#   wiring      The gate's own machinery is missing — a helper script absent, a
+#               tool not installed. This is the worst of the three because the
+#               repository looks fully covered while a check has quietly stopped
+#               existing. (Measured 2026-08: a missing helper made gate-7 report
+#               PASS over 11 real unguarded IDOR endpoints.)
+#
+# `structural` and `wiring` both count against coverage and both fail a run
+# started with --require-full-coverage. Only `na` does not.
+#
+# The category is validated, and an unrecognised one is a HARD FAILURE rather
+# than a default. A typo that silently resolved to `na` would be a lever for
+# making any gate's absence stop counting — which is precisely the accounting
+# hole this whole block exists to close, re-opened from the inside.
 _skip() {
-    local _reason
-    _reason=$(printf '%s' "${3:-}" | tr '\n' ' ')
-    echo "[gate-$1] $2: SKIPPED — ${_reason}"
-    _SKIPPED_GATES="${_SKIPPED_GATES}$1 "
+    local _cat _reason
+    _cat="${3:-}"
+    _reason=$(printf '%s' "${4:-}" | tr '\n' ' ')
+    case "${_cat}" in
+        na)
+            echo "[gate-$1] $2: NOT APPLICABLE — ${_reason}"
+            _NA_GATES="${_NA_GATES}$1 "
+            ;;
+        structural|wiring)
+            echo "[gate-$1] $2: SKIPPED (${_cat}) — ${_reason}"
+            _SKIPPED_GATES="${_SKIPPED_GATES}$1 "
+            ;;
+        *)
+            echo "[gate-$1] $2: FAIL — internal error: _skip called with reason category '${_cat}', which is not one of na|structural|wiring. Refusing to guess: an unclassified skip would silently stop counting against coverage."
+            _FAILED=$((_FAILED + 1))
+            _EMITTED_GATES="${_EMITTED_GATES}$1 "
+            ;;
+    esac
 }
 
 # An abort before the summary (set -e / set -u, a helper blowing up, ...) used
@@ -573,10 +639,36 @@ fi
 # pins the transitive tree. `--locked` needs no vendor/, so this gate no longer
 # depends on whether some earlier step happened to run `composer install`.
 # ---------------------------------------------------------------------------
+#
+# COVERAGE CLASSIFICATION (gate-4). This gate had THREE ways to emit nothing at
+# all, and all three were byte-identical to its success. Each now says which of
+# the three it is, because they are not the same fact:
+#
+#   no composer.json           NOT APPLICABLE. No PHP dependency tree exists to
+#                              audit. A JS-only / Tier-0 app is not less secure
+#                              for it.
+#   composer.json unchanged    NOT APPLICABLE, under ADR-020 diff scoping. The
+#     in a --scope-to-diff run  dependency tree this PR ships is the one the
+#                              base branch already audited; re-auditing it is
+#                              not this PR's gap. This is the case the product
+#                              owner named, and the case that made
+#                              --require-full-coverage unusable.
+#   composer NOT INSTALLED     WIRING. composer.json exists — there IS a
+#                              dependency tree, and the tool that audits it is
+#                              absent from the runner. This is a real dead gate
+#                              and it was the most silent of the three.
+if [ ! -f composer.json ]; then
+    _skip 4 "composer-audit" na "no composer.json — this repo declares no PHP dependency tree, so there is nothing for \`composer audit\` to audit."
+elif ! command -v composer >/dev/null 2>&1; then
+    _skip 4 "composer-audit" wiring "composer.json is present but the \`composer\` binary is not on PATH — the dependency tree EXISTS and was NOT audited. Known CVEs in it are UNVERIFIED by this run."
+fi
 if [ -f composer.json ] && command -v composer >/dev/null 2>&1; then
     _run_audit=1
     if [ "${SCOPE_TO_DIFF}" = "1" ]; then
         _in_scope "composer.json" || _in_scope "composer.lock" || _run_audit=0
+    fi
+    if [ "${_run_audit}" = "0" ]; then
+        _skip 4 "composer-audit" na "neither composer.json nor composer.lock is in this diff — under ADR-020 diff scoping the dependency tree is unchanged from the base branch, so this PR introduces no dependency change to audit."
     fi
     if [ "${_run_audit}" = "1" ]; then
         _ca_log=/tmp/hydra-gate-composer-audit.log
@@ -749,7 +841,7 @@ _oa_ran=1
 # "GATES THAT DID NOT RUN" instead of folding it into ALL GATES GREEN.
 if [ "${#_oa_files[@]}" -eq 0 ]; then
     _oa_ran=0
-    _skip 6 "orphan-auth" "scope was empty — 0 lib/Service or lib/Controller PHP file(s) in this diff, so NOTHING was inspected; orphaned (defined-but-never-called) authorization methods are UNVERIFIED by this run."
+    _skip 6 "orphan-auth" na "scope was empty — 0 lib/Service or lib/Controller PHP file(s) in this diff, so NOTHING was inspected; orphaned (defined-but-never-called) authorization methods are UNVERIFIED by this run."
 fi
 if [ "${#_oa_files[@]}" -gt 0 ]; then
     _oa_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/lib" 2>/dev/null && pwd)"
@@ -761,7 +853,7 @@ if [ "${#_oa_files[@]}" -gt 0 ]; then
             >> "${_oa_log}" 2>/dev/null || true
     else
         _oa_ran=0
-        _skip 6 "orphan-auth" "check_orphan_auth.py not found at ${_oa_lib_dir} — ${#_oa_files[@]} PHP file(s) were in scope and NONE were inspected; orphaned (defined-but-never-called) authorization methods are UNVERIFIED by this run."
+        _skip 6 "orphan-auth" wiring "check_orphan_auth.py not found at ${_oa_lib_dir} — ${#_oa_files[@]} PHP file(s) were in scope and NONE were inspected; orphaned (defined-but-never-called) authorization methods are UNVERIFIED by this run."
     fi
 fi
 if [ "${_oa_ran}" -eq 1 ]; then
@@ -827,7 +919,7 @@ _idor_ran=1
 # coverage summary rather than silently green.
 if [ "${#_idor_files[@]}" -eq 0 ]; then
     _idor_ran=0
-    _skip 7 "no-admin-idor" "scope was empty — 0 lib/Controller PHP file(s) in this diff, so NOTHING was inspected; unguarded #[NoAdminRequired] endpoints (IDOR, OWASP A01:2021) are UNVERIFIED by this run."
+    _skip 7 "no-admin-idor" na "scope was empty — 0 lib/Controller PHP file(s) in this diff, so NOTHING was inspected; unguarded #[NoAdminRequired] endpoints (IDOR, OWASP A01:2021) are UNVERIFIED by this run."
 fi
 if [ "${#_idor_files[@]}" -gt 0 ]; then
     _gate_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/lib" 2>/dev/null && pwd)"
@@ -839,7 +931,7 @@ if [ "${#_idor_files[@]}" -gt 0 ]; then
             >> "${_idor_log}" 2>/dev/null || true
     else
         _idor_ran=0
-        _skip 7 "no-admin-idor" "check_no_admin_idor.py not found at ${_gate_lib_dir} — ${#_idor_files[@]} controller file(s) were in scope and NONE were inspected; unguarded #[NoAdminRequired] endpoints (IDOR, OWASP A01:2021) are UNVERIFIED by this run."
+        _skip 7 "no-admin-idor" wiring "check_no_admin_idor.py not found at ${_gate_lib_dir} — ${#_idor_files[@]} controller file(s) were in scope and NONE were inspected; unguarded #[NoAdminRequired] endpoints (IDOR, OWASP A01:2021) are UNVERIFIED by this run."
     fi
 fi
 if [ "${_idor_ran}" -eq 1 ]; then
@@ -953,7 +1045,7 @@ if [ "${#_sem_files[@]}" -gt 0 ]; then
             >> "${_sem_log}" 2>/dev/null || true
     else
         _sem_ran=0
-        _skip 9 "semantic-auth" "check_semantic_auth.py not found near $(dirname "${BASH_SOURCE[0]:-$0}") — ${#_sem_files[@]} controller file(s) were in scope and NONE were inspected; auth-attribute-vs-body semantic mismatches are UNVERIFIED by this run."
+        _skip 9 "semantic-auth" wiring "check_semantic_auth.py not found near $(dirname "${BASH_SOURCE[0]:-$0}") — ${#_sem_files[@]} controller file(s) were in scope and NONE were inspected; auth-attribute-vs-body semantic mismatches are UNVERIFIED by this run."
     fi
 fi
 if [ "${_sem_ran}" -eq 1 ]; then
@@ -1264,7 +1356,7 @@ if [ -f src/manifest.json ]; then
         _da_fail=$(wc -l < "${_da_log}" 2>/dev/null || echo 0)
     else
         _da_ran=0
-        _skip 15 "dashboard-antipattern" "check_dashboard_antipattern.py not found at ${_da_lib_dir} — src/manifest.json is present but was NOT inspected; nested dashboard-in-dashboard patterns are UNVERIFIED by this run."
+        _skip 15 "dashboard-antipattern" wiring "check_dashboard_antipattern.py not found at ${_da_lib_dir} — src/manifest.json is present but was NOT inspected; nested dashboard-in-dashboard patterns are UNVERIFIED by this run."
     fi
     if [ "${_da_ran}" -eq 1 ]; then
         if [ "${_da_fail}" -eq 0 ]; then
@@ -1305,7 +1397,7 @@ if [ -d lib ] || [ -d src ]; then
         _sc_fail=$(wc -l < "${_sc_log}" 2>/dev/null || echo 0)
     else
         _sc_ran=0
-        _skip 16 "spec-coverage" "check_spec_coverage.py not found at ${_sc_lib_dir} — no changed method was inspected; @spec traceability (ADR-003/ADR-020) is UNVERIFIED by this run."
+        _skip 16 "spec-coverage" wiring "check_spec_coverage.py not found at ${_sc_lib_dir} — no changed method was inspected; @spec traceability (ADR-003/ADR-020) is UNVERIFIED by this run."
     fi
     if [ "${_sc_ran}" -eq 1 ]; then
         if [ "${_sc_fail}" -eq 0 ]; then
@@ -1438,7 +1530,7 @@ if [ -n "${_nd_register_files}" ]; then
         done
     else
         _nd_ran=0
-        _skip 18 "notification-dialect" "check_notification_dialect.py not found at ${_nd_lib_dir} — register file(s) were in scope and NONE were inspected; the obsolete legacy notification dialect (ADR-031) is UNVERIFIED by this run. The imperative-dispatch advisory below is unaffected and still ran."
+        _skip 18 "notification-dialect" wiring "check_notification_dialect.py not found at ${_nd_lib_dir} — register file(s) were in scope and NONE were inspected; the obsolete legacy notification dialect (ADR-031) is UNVERIFIED by this run. The imperative-dispatch advisory below is unaffected and still ran."
     fi
 fi
 _nd_fail=$(wc -l < "${_nd_log}" 2>/dev/null || echo 0)
@@ -1519,7 +1611,7 @@ if [ -d openspec/specs ] || [ -d tests/e2e ]; then
         set -e
     else
         _e2e_ran=0
-        _skip 19 "e2e-coverage" "check_e2e_coverage.py not found at ${_e2e_lib_dir} — no spec scenario was inspected; @e2e traceability (ADR-020) is UNVERIFIED by this run."
+        _skip 19 "e2e-coverage" wiring "check_e2e_coverage.py not found at ${_e2e_lib_dir} — no spec scenario was inspected; @e2e traceability (ADR-020) is UNVERIFIED by this run."
     fi
     if [ "${_e2e_ran}" -eq 1 ]; then
         if [ "${_e2e_fail}" -eq 0 ]; then
@@ -1834,8 +1926,37 @@ fi
 # was never the declared gate count anywhere. It now says so.
 _parity_log=/tmp/hydra-gate-integration-parity.log
 : > "${_parity_log}"
+#
+# COVERAGE CLASSIFICATION (gate-24). "No parity script" was one message for two
+# opposite situations, so it is split on the gate's OWN SUBJECT MATTER rather
+# than on the presence of its checker — which is the only test that cannot
+# drift away from what the gate actually correlates:
+#
+#   no LeafDescriptor and     NOT APPLICABLE. Parity is a correlation between
+#   no registerIntegration    two sets. Both are empty, so there is no pair that
+#                             could be phantom, orphaned, or renderMode-mismatched.
+#   either one present, but   STRUCTURAL. This repo DOES register leaves and
+#   no parity script          nothing correlates the two halves. A phantom
+#                             render surface here is invisible, which is the
+#                             exact defect ADR-066 Decision 4 exists to catch.
+#
+# Deciding this from `[ -f scripts/check-integration-parity.sh ]` alone is what
+# made every repo in the fleet report the same skip regardless of whether it had
+# any leaves at all.
 if [ ! -f scripts/check-integration-parity.sh ]; then
-    _skip 24 "integration-parity" "no scripts/check-integration-parity.sh in this repo — server↔JS leaf parity (ADR-066 Decisions 4/7: phantom render surfaces, orphan JS registrations, renderMode mismatch) was NOT checked."
+    _parity_has_php=0
+    _parity_has_js=0
+    if [ -d lib ] && grep -rqE 'new[[:space:]]+LeafDescriptor[[:space:]]*\(' lib/ --include='*.php' 2>/dev/null; then
+        _parity_has_php=1
+    fi
+    if [ -d src ] && grep -rqE '\bregisterIntegration[[:space:]]*\(' src/ 2>/dev/null; then
+        _parity_has_js=1
+    fi
+    if [ "${_parity_has_php}" = "0" ] && [ "${_parity_has_js}" = "0" ]; then
+        _skip 24 "integration-parity" na "no scripts/check-integration-parity.sh, and this repo registers no integration leaves at all — no \`new LeafDescriptor(\` in lib/ and no \`registerIntegration(\` in src/. There is no server↔JS pair for parity to correlate."
+    else
+        _skip 24 "integration-parity" structural "no scripts/check-integration-parity.sh, but this repo DOES register integration leaves (lib/ LeafDescriptor: ${_parity_has_php}, src/ registerIntegration: ${_parity_has_js}). server↔JS leaf parity (ADR-066 Decisions 4/7: phantom render surfaces, orphan JS registrations, renderMode mismatch) is UNVERIFIED — a leaf whose other half never registered is invisible to this run."
+    fi
 fi
 if [ -f scripts/check-integration-parity.sh ]; then
     if bash scripts/check-integration-parity.sh >> "${_parity_log}" 2>&1; then
@@ -1894,7 +2015,7 @@ if [ -f appinfo/routes.php ]; then
         set -e
     else
         _cc_ran=0
-        _skip 25 "contract-coverage" "check_contract_coverage.py not found at ${_cc_lib_dir} — appinfo/routes.php is present but NO endpoint was inspected; wire-contract coverage of newly-exposed endpoints is UNVERIFIED by this run."
+        _skip 25 "contract-coverage" wiring "check_contract_coverage.py not found at ${_cc_lib_dir} — appinfo/routes.php is present but NO endpoint was inspected; wire-contract coverage of newly-exposed endpoints is UNVERIFIED by this run."
     fi
     if [ "${_cc_ran}" -eq 1 ]; then
         if [ "${_cc_fail}" -eq 0 ]; then
@@ -1939,7 +2060,7 @@ if [ -d src ]; then
         set -e
     else
         _vc_ran=0
-        _skip 26 "visual-coverage" "check_visual_coverage.py not found at ${_vc_lib_dir} — src/ is present but NO page component was inspected; visual-regression coverage of new screens is UNVERIFIED by this run."
+        _skip 26 "visual-coverage" wiring "check_visual_coverage.py not found at ${_vc_lib_dir} — src/ is present but NO page component was inspected; visual-regression coverage of new screens is UNVERIFIED by this run."
     fi
     if [ "${_vc_ran}" -eq 1 ]; then
         if [ "${_vc_fail}" -eq 0 ]; then
@@ -2006,7 +2127,7 @@ if [ "${#_pcar_files[@]}" -gt 0 ]; then
             >> "${_pcar_log}" 2>/dev/null || true
     else
         _pcar_ran=0
-        _skip 27 "no-phantom-cross-app-rpc" "check_phantom_cross_app_rpc.py not found at ${_pcar_lib_dir} — ${#_pcar_files[@]} PHP/Vue/JS/TS file(s) were in scope and NONE were inspected; phantom cross-app RPC patterns (ADR-041) are UNVERIFIED by this run."
+        _skip 27 "no-phantom-cross-app-rpc" wiring "check_phantom_cross_app_rpc.py not found at ${_pcar_lib_dir} — ${#_pcar_files[@]} PHP/Vue/JS/TS file(s) were in scope and NONE were inspected; phantom cross-app RPC patterns (ADR-041) are UNVERIFIED by this run."
     fi
 fi
 # Count findings. NOTE: gates 25/26 above leave `set -e` ENABLED, so a
@@ -2339,11 +2460,34 @@ fi
 #   - .claude/skills/hydra-gate-axe/SKILL.md (how the report is produced)
 # ---------------------------------------------------------------------------
 _axe_report="tests/axe/report.json"
+#
+# COVERAGE CLASSIFICATION (gate-33). This gate's input is the one thing this
+# script cannot produce for itself — it comes from a browser, in the Playwright
+# job, and only when the caller sets `enable-axe: true`. So the absence of the
+# report is read against what the caller SAID it would do:
+#
+#   no src/                   NOT APPLICABLE. No frontend, no rendered DOM.
+#   src/, enable-axe NOT set  NOT APPLICABLE to this run. The repo has not opted
+#                             into runtime accessibility enforcement, and that
+#                             choice is a visible line in its own workflow file
+#                             — it is not a gap hidden inside this script. This
+#                             is what makes --require-full-coverage usable
+#                             fleet-wide instead of red everywhere on day one.
+#   src/, enable-axe SET,     STRUCTURAL. The repo DID opt in and the report
+#   report absent             still did not arrive — the Playwright job skipped,
+#                             crashed, or the artifact was rejected. A real gap,
+#                             and it fails. (quality.yml fails the job for this
+#                             independently; both, deliberately.)
+#
+# The middle case is the one that could be abused into a mute, so it is stated
+# in the output as a choice with a named way to change it, never as silence.
 if [ ! -f "${_axe_report}" ]; then
-    if [ -d src ]; then
-        _skip 33 "axe-core" "no ${_axe_report} in this repo — axe-core never ran against a rendered DOM, so contrast / landmark / ARIA-validity / live-region accessibility is UNVERIFIED. Produce the report from the Playwright suite (@axe-core/playwright) or add scripts/run-browser-tests.sh."
+    if [ ! -d src ]; then
+        _skip 33 "axe-core" na "no src/ and no ${_axe_report} — no frontend to run axe-core against in this repo."
+    elif [ "${AXE_ENABLED}" = "1" ]; then
+        _skip 33 "axe-core" structural "the caller set enable-axe/--axe-enabled, so a ${_axe_report} was EXPECTED, and none arrived. axe-core never ran against a rendered DOM: contrast / landmark / ARIA-validity / live-region accessibility is UNVERIFIED. The Playwright job that produces it was skipped, failed, or its artifact was rejected — that is the thing to fix, not this gate."
     else
-        _skip 33 "axe-core" "no src/ and no ${_axe_report} — no frontend to run axe-core against in this repo."
+        _skip 33 "axe-core" na "no ${_axe_report}, and the caller did not set enable-axe — this repo has not opted into runtime accessibility enforcement. Runtime a11y (contrast / landmark / ARIA-validity / live-region) is therefore NOT enforced here, by a choice recorded in the caller's workflow rather than in this run. To enforce it, set \`enable-axe: true\` on ConductionNL/.github's quality.yml; this gate then becomes blocking and its absence becomes a failure."
     fi
 fi
 if [ -f "${_axe_report}" ]; then
@@ -3455,7 +3599,7 @@ if [ "${#_spt_files[@]}" -gt 0 ]; then
         fi
     else
         _spt_ran=0
-        _skip 51 "schema-property-titles" "check_schema_property_meta.py not found at ${_spt_helper} — ${#_spt_files[@]} register file(s) were in scope and NONE were inspected; schema property title/description quality is UNVERIFIED by this run."
+        _skip 51 "schema-property-titles" wiring "check_schema_property_meta.py not found at ${_spt_helper} — ${#_spt_files[@]} register file(s) were in scope and NONE were inspected; schema property title/description quality is UNVERIFIED by this run."
     fi
 fi
 set +e
@@ -3527,7 +3671,7 @@ if [ "${#_cwr_files[@]}" -gt 0 ]; then
         set -e
     else
         _cwr_ran=0
-        _skip 52 "custom-widget-ratchet" "check_custom_widget_ratchet.py not found at ${_cwr_helper} — ${#_cwr_files[@]} frontend file(s) were in scope and NONE were inspected; custom kind:\"widget\" growth (ADR-049) is UNVERIFIED by this run — no base/head/delta counts were produced."
+        _skip 52 "custom-widget-ratchet" wiring "check_custom_widget_ratchet.py not found at ${_cwr_helper} — ${#_cwr_files[@]} frontend file(s) were in scope and NONE were inspected; custom kind:\"widget\" growth (ADR-049) is UNVERIFIED by this run — no base/head/delta counts were produced."
     fi
 fi
 # Surface the base/head/delta report on stdout (spec: the counts are always
@@ -3774,7 +3918,7 @@ if [ "${#_rd_files[@]}" -gt 0 ]; then
         fi
     else
         _rd_ran=0
-        _skip 54 "relation-dialect" "check_relation_dialect.py not found at ${_rd_helper} — ${#_rd_files[@]} register file(s) were in scope and NONE were inspected; non-canonical relation dialects are UNVERIFIED by this run (its advisory WARN half reads the same empty log and is therefore also silent)."
+        _skip 54 "relation-dialect" wiring "check_relation_dialect.py not found at ${_rd_helper} — ${#_rd_files[@]} register file(s) were in scope and NONE were inspected; non-canonical relation dialects are UNVERIFIED by this run (its advisory WARN half reads the same empty log and is therefore also silent)."
     fi
 fi
 set +e
@@ -3834,7 +3978,7 @@ if [ "${#_dpd_files[@]}" -gt 0 ]; then
         fi
     else
         _dpd_ran=0
-        _skip 55 "detail-page-discipline" "check_detail_page_discipline.py not found at ${_dpd_helper} — ${#_dpd_files[@]} manifest file(s) were in scope and NONE were inspected; detail-page discipline is UNVERIFIED by this run."
+        _skip 55 "detail-page-discipline" wiring "check_detail_page_discipline.py not found at ${_dpd_helper} — ${#_dpd_files[@]} manifest file(s) were in scope and NONE were inspected; detail-page discipline is UNVERIFIED by this run."
     fi
 fi
 set +e
@@ -3889,7 +4033,7 @@ if [ "${#_rhr_files[@]}" -gt 0 ]; then
         python3 "${_rhr_helper}" "${_rhr_files[@]}" >> "${_rhr_log}" 2>/dev/null || true
     else
         _rhr_ran=0
-        _skip 56 "register-handler-resolution" "check_register_handler_resolution.py not found at ${_rhr_helper} — ${#_rhr_files[@]} register file(s) were in scope and NONE were inspected; whether every referenced handler class/method actually resolves is UNVERIFIED by this run."
+        _skip 56 "register-handler-resolution" wiring "check_register_handler_resolution.py not found at ${_rhr_helper} — ${#_rhr_files[@]} register file(s) were in scope and NONE were inspected; whether every referenced handler class/method actually resolves is UNVERIFIED by this run."
     fi
 fi
 set +e
@@ -3943,7 +4087,7 @@ if [ "${#_owc_files[@]}" -gt 0 ]; then
         python3 "${_owc_helper}" "${_owc_files[@]}" >> "${_owc_log}" 2>/dev/null || true
     else
         _owc_ran=0
-        _skip 57 "orphaned-write-capability" "check_orphaned_write_capability.py not found at ${_owc_helper} — ${#_owc_files[@]} service file(s) were in scope and NONE were inspected; orphaned (mintable-but-unreachable) write capabilities are UNVERIFIED by this run."
+        _skip 57 "orphaned-write-capability" wiring "check_orphaned_write_capability.py not found at ${_owc_helper} — ${#_owc_files[@]} service file(s) were in scope and NONE were inspected; orphaned (mintable-but-unreachable) write capabilities are UNVERIFIED by this run."
     fi
 fi
 set +e
@@ -4221,25 +4365,125 @@ _declared=$(grep -oE '_(pass|fail|skip) [0-9]+ "[^"]+"' "${RUNNER_SELF}" 2>/dev/
     | sort -n -k1,1 -s | awk '!seen[$1]++' || true)
 _declared_n=$(printf '%s\n' "${_declared}" | grep -c . || true)
 _declared_n="${_declared_n:-0}"
+
+# ---------------------------------------------------------------------------
+# APPLICABILITY DECLARATIONS
+#
+# Most gates are wrapped in a bare prerequisite (`if [ -d src ]; then …`) with
+# no `else`. When the prerequisite is false the gate emits NOTHING AT ALL — no
+# line, no reason, no trace — and its silence is byte-identical to its success.
+# Measured on a Tier-0 fixture: 25 of 63 gates vanished this way, which is why
+# --require-full-coverage failed a repo that had nothing wrong with it.
+#
+# Each line below restates ONE gate group's own prerequisite, negated, and names
+# the gates it governs. The condition is written to MIRROR the `if` at the gate
+# — same test, same operator — so the two cannot mean different things.
+#
+# Two properties make this safe to state centrally rather than at each gate:
+#
+#   1. _declare_na REFUSES to touch a gate that already reported anything. A
+#      declaration can therefore never un-run a gate that ran, or overwrite a
+#      FAIL. It can only ever explain a silence.
+#   2. Each condition fires ONLY when the prerequisite is absent. If `src/`
+#      exists and a gate in that group still emitted nothing, that gate is a
+#      real dead gate and it stays in DID NOT RUN, exactly as before. The
+#      declaration cannot mask it, because the declaration did not fire.
+#
+# So the failure mode this could have introduced — a table drifting away from
+# the guards and quietly excusing a live gate — is closed by construction, not
+# by keeping the two in step by hand.
+# ---------------------------------------------------------------------------
+_declare_na() {
+    local _reason="$1"; shift
+    local _g _name
+    for _g in "$@"; do
+        # Already reported a verdict of any kind? Leave it entirely alone.
+        case " ${_EMITTED_GATES}" in *" ${_g} "*) continue ;; esac
+        case " ${_NA_GATES}" in *" ${_g} "*) continue ;; esac
+        case " ${_SKIPPED_GATES}" in *" ${_g} "*) continue ;; esac
+        _name=$(printf '%s\n' "${_declared}" | awk -v g="${_g}" '$1==g {print $2; exit}')
+        _skip "${_g}" "${_name:-gate-${_g}}" na "${_reason}"
+    done
+}
+
+# `if [ -d src ]` — gates 10 12 13 26 31 32 34 35 36 37 39 40 42 43 44 45
+[ -d src ] || _declare_na "no src/ directory — this repo ships no frontend, so there is no .vue/.js/.ts source for this gate to inspect." \
+    10 12 13 26 31 32 34 35 36 37 39 40 42 43 44 45
+# `if [ -f appinfo/routes.php ]` — gates 5 25
+[ -f appinfo/routes.php ] || _declare_na "no appinfo/routes.php — this repo registers no HTTP routes, so there is no endpoint for this gate to inspect." \
+    5 25
+# `if [ -d lib/Controller ] && [ -f appinfo/routes.php ]` — gate 14
+{ [ -d lib/Controller ] && [ -f appinfo/routes.php ]; } || _declare_na "no lib/Controller/ and appinfo/routes.php pair — there is no controller-to-route mapping for this gate to resolve." \
+    14
+# `if [ -f src/manifest.json ]` — gates 15 22 53
+[ -f src/manifest.json ] || _declare_na "no src/manifest.json — this repo declares no manifest, so there are no pages, widgets or handler references for this gate to inspect." \
+    15 22 53
+# `if [ -d openspec/specs ] || [ -d tests/e2e ]` — gate 19
+{ [ -d openspec/specs ] || [ -d tests/e2e ]; } || _declare_na "no openspec/specs/ and no tests/e2e/ — there is neither a spec scenario to trace nor an e2e suite to trace it to." \
+    19
+# `if [ -d src ] || [ -d templates ]` — gate 38
+{ [ -d src ] || [ -d templates ]; } || _declare_na "no src/ and no templates/ — this repo renders no markup, so there is no document for a skip link to be missing from." \
+    38
+# `if [ -d templates ] || [ -d appinfo/templates ]` — gate 41
+{ [ -d templates ] || [ -d appinfo/templates ]; } || _declare_na "no templates/ and no appinfo/templates/ — this repo ships no server-rendered HTML document to carry a lang attribute." \
+    41
+
 _emitted_n=$(printf '%s\n' ${_EMITTED_GATES} | grep -c . || true)
 _emitted_n="${_emitted_n:-0}"
 
 # Gates that never reported: declared minus emitted. Membership test rather
 # than comm(1) — comm compares in collating order, these lists are numeric,
 # and an under-reported coverage gap is exactly what this block exists to stop.
+#
+# Three-way split, not two. "Did not report" collapsed two facts that a caller
+# must act on differently, and collapsing them is why --require-full-coverage
+# could not be switched on anywhere:
+#
+#   NOT APPLICABLE  the gate said, by name and with a category, that its subject
+#                   matter does not exist in this repo or this diff. Nothing is
+#                   unverified. Listed for the reader; does NOT count against
+#                   coverage; does NOT fail the run.
+#   DID NOT RUN     everything else — an explicit `structural`/`wiring` skip, OR
+#                   total silence from a gate whose prerequisite was false and
+#                   which never reached a _skip call at all. Counts, and fails
+#                   under --require-full-coverage.
+#
+# Note the default: silence still counts AGAINST coverage. A gate stops counting
+# only by declaring itself not-applicable out loud. That direction matters — the
+# opposite default would let any gate disappear by doing nothing, which is the
+# failure this accounting was built to catch.
 _not_run=""
+_na_list=""
 while read -r _dn _dname; do
     [ -z "${_dn:-}" ] && continue
     case " ${_EMITTED_GATES}" in
         *" ${_dn} "*) continue ;;
+    esac
+    case " ${_NA_GATES}" in
+        *" ${_dn} "*)
+            _na_list="${_na_list}${_na_list:+
+}${_dn} ${_dname}"
+            continue
+            ;;
     esac
     _not_run="${_not_run}${_not_run:+
 }${_dn} ${_dname}"
 done <<< "${_declared}"
 _not_run_n=$(printf '%s\n' "${_not_run}" | grep -c . || true)
 _not_run_n="${_not_run_n:-0}"
+_na_n=$(printf '%s\n' "${_na_list}" | grep -c . || true)
+_na_n="${_na_n:-0}"
+_applicable_n=$((_declared_n - _na_n))
 
-echo "[hydra-gates] COVERAGE: ${_emitted_n} of ${_declared_n} declared gates reported a result."
+echo "[hydra-gates] COVERAGE: ${_emitted_n} of ${_declared_n} declared gates reported a result (${_na_n} not applicable to this repo/diff; ${_emitted_n} of ${_applicable_n} applicable gates ran)."
+if [ "${_na_n}" -gt 0 ]; then
+    echo "[hydra-gates] NOT APPLICABLE — subject matter absent from this repo or this diff."
+    echo "[hydra-gates] These do NOT count against coverage. Each stated its own reason above:"
+    while IFS= read -r _na; do
+        [ -z "${_na}" ] && continue
+        echo "[hydra-gates]   gate-${_na%% *} ${_na#* }"
+    done <<< "${_na_list}"
+fi
 if [ "${_not_run_n}" -gt 0 ]; then
     echo "[hydra-gates] GATES THAT DID NOT RUN — they inspected NOTHING, and their subject"
     echo "[hydra-gates] matter is UNVERIFIED by this run:"
@@ -4251,12 +4495,21 @@ fi
 
 if [ "${_FAILED}" -eq 0 ]; then
     if [ "${_not_run_n}" -eq 0 ]; then
-        echo "[hydra-gates] ALL ${_declared_n} GATES GREEN — and all ${_declared_n} of them ran."
+        if [ "${_na_n}" -eq 0 ]; then
+            echo "[hydra-gates] ALL ${_declared_n} GATES GREEN — and all ${_declared_n} of them ran."
+        else
+            echo "[hydra-gates] ALL ${_applicable_n} APPLICABLE GATES GREEN — and all ${_applicable_n} of them ran."
+            echo "[hydra-gates] The other ${_na_n} are not applicable to this repo/diff and are named above."
+            echo "[hydra-gates] This is NOT 'all ${_declared_n} gates green' — it is 'nothing applicable was left unchecked'."
+        fi
     else
-        echo "[hydra-gates] ${_emitted_n} GATE(S) GREEN — but ${_not_run_n} of ${_declared_n} DID NOT RUN (named above)."
+        echo "[hydra-gates] ${_emitted_n} GATE(S) GREEN — but ${_not_run_n} of ${_applicable_n} APPLICABLE gates DID NOT RUN (named above)."
         echo "[hydra-gates] This is NOT 'all ${_declared_n} gates green'. It says nothing about the gates that skipped."
         if [ "${REQUIRE_FULL_COVERAGE}" = "1" ]; then
             echo "[hydra-gates] --require-full-coverage was set: treating incomplete coverage as failure."
+            echo "[hydra-gates] Only gates whose subject matter EXISTS are counted — the ${_na_n} not-applicable"
+            echo "[hydra-gates] gate(s) above were excluded. Every gate named as DID NOT RUN either found its"
+            echo "[hydra-gates] input missing (structural) or its own machinery missing (wiring)."
             exit 98
         fi
     fi
