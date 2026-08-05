@@ -1539,7 +1539,34 @@ jobs:
           if-no-files-found: ignore
 
   newman:
-    if: ${{ inputs.enable-newman && !cancelled() && needs.php-quality.result != 'failure' && needs.security.result != 'failure' }}
+    # NOT gated on php-quality — deliberately, and for exactly the reason the
+    # `phpunit` job above already records. `php-quality` is a MATRIX job, so its
+    # result is 'failure' if ANY leg fails, including phpmd (complexity/mess
+    # detection) and phpcs (formatting). Neither says anything about whether the
+    # app's HTTP API answers correctly, but gating on them meant a repo carrying
+    # architectural debt got NO integration signal at all — and the loss renders
+    # in the checks list as a single greyed-out "skipping" placeholder, which
+    # reads like a non-event rather than a gate that stopped running.
+    #
+    # Observed 2026-08-05 on ConductionNL/doriath, run 31008292790 on
+    # `development`: `PHP Quality (phpmd)` was the ONLY red leg — phpcs, psalm,
+    # phpstan, phpmetrics and lint were all green, both Security legs were
+    # green, and E2E (Playwright) passed. doriath sets `enable-newman: true` and
+    # ships 2 Postman collections. Its Integration Tests job still reported
+    # `skipped`. A complexity finding had silently deleted the integration
+    # tests, and nothing in the run said so.
+    #
+    # This is the same defect the phpunit job was fixed for; newman was simply
+    # left behind. playwright already declines to gate on php-quality too, so
+    # this brings the last server-spinning job into line with the other two.
+    #
+    # The security gate is KEPT, matching phpunit and playwright: a repo with a
+    # known-vulnerable dependency should not spin up servers.
+    #
+    # `needs:` is retained for ordering only; with `!cancelled()` and no result
+    # condition on php-quality, Newman now runs regardless of static-analysis
+    # colour and reaches its own verdict.
+    if: ${{ inputs.enable-newman && !cancelled() && needs.security.result != 'failure' }}
     runs-on: ubuntu-latest
     name: "Integration Tests (Newman)"
     needs: [php-quality, security]
