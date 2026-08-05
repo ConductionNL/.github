@@ -1779,6 +1779,14 @@ if [ -f src/manifest.json ]; then
         _pass 22 "manifest-validation"
     elif [ ! -f "${_mv_validator}" ]; then
         _fail 22 "manifest-validation" "vendored validator missing at ${_mv_validator} — gate misconfiguration, fail-closed"
+    elif ! command -v node >/dev/null 2>&1; then
+        # WIRING, and named as such. Without this the `node …` below is a
+        # command-not-found (127), which falls through to the catch-all branch
+        # and is reported as "1 schema violation(s) in src/manifest.json" — a
+        # missing interpreter wearing a finding's clothes, and a reason nobody
+        # can act on. Same shape as gate-4 reporting "CVEs or advisories" for a
+        # composer that could not run.
+        _skip 22 "manifest-validation" wiring "src/manifest.json exists but \`node\` is not on PATH — the vendored canonical validator (${_mv_validator}) could not be executed, so the manifest was NOT schema-validated. This is a missing tool in the runner environment, not a finding about the manifest."
     else
         set +e
         node "${_mv_validator}" src/manifest.json >> "${_mv_log}" 2>&1
@@ -3753,6 +3761,12 @@ if [ -f src/manifest.json ]; then
     elif [ ! -f "${_em_builder}" ] || [ ! -f "${_em_crossref}" ] || [ ! -f "${_em_validator}" ]; then
         # Gate misconfiguration — a vendored helper is missing. Fail-closed.
         _fail 53 "effective-manifest-crossref" "vendored helper missing under ${SCRIPT_DIR}/lib (need build_effective_manifest.js + check_manifest_crossref.js + check_manifest.js) — fail-closed"
+    elif ! command -v node >/dev/null 2>&1; then
+        # WIRING. Named before the ajv probe below, which is itself a `node -e`
+        # — with node absent that probe fails for the wrong reason and reports
+        # "ajv not resolvable", sending a reader to install a library when the
+        # interpreter is what is missing.
+        _skip 53 "effective-manifest-crossref" wiring "a manifest input is in scope but \`node\` is not on PATH — the effective manifest could not be assembled or cross-referenced. This is a missing tool in the runner environment, not a finding about the manifest."
     elif ! node -e "require('ajv/dist/2020')" >/dev/null 2>&1 \
         && ! node -e "require.resolve('ajv/dist/2020', { paths: ['${SCRIPT_DIR}/lib'] })" >/dev/null 2>&1; then
         # Without Ajv the structural stage cannot validate the assembled
