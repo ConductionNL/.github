@@ -996,11 +996,15 @@ jobs:
   #   - The package is dual-licensed and the checker picks the wrong one
   #
   #   Keys are package names (composer: "vendor/package", npm: "package-name").
-  #   Values are a justification string (who approved it and when).
+  #   Values are a justification string: the reason, who approved it, and
+  #   when. Write the approver as a RESOLVABLE identity — GitHub handle with
+  #   profile link, or the PR number of the reviewing PR — not a bare name:
+  #   a name is ambiguous years later; a handle or PR resolves to an account
+  #   and a review trail.
   #   Example:
   #     {
-  #       "vendor/some-package": "Approved by legal (Jan de Vries) — 2026-03-14, dual-licensed MIT/proprietary, we use MIT terms",
-  #       "some-npm-package": "License is 'Artistic-2.0', compatible with EUPL — approved 2026-03-01"
+  #       "vendor/some-package": "Dual-licensed MIT/proprietary, we use the MIT terms. Approved 2026-03-14 by @nfoconductionnl (https://github.com/nfoconductionnl).",
+  #       "some-npm-package": "License is 'Artistic-2.0', compatible with EUPL. Approved in #157 by @nfoconductionnl."
   #     }
   #
   # How it works:
