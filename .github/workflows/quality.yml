@@ -163,7 +163,7 @@ on:
         # almost certainly be red, and some of that red will not be the app's
         # to fix. Default-on would therefore have blocked the fleet on core
         # Nextcloud defects on day one.
-        description: "Run axe-core (@axe-core/playwright) against the app's routes inside the Playwright job and publish tests/axe/report.json, which is the file hydra-gates gate-33 consumes. OPT-IN, default false. Gate-33 fails on `serious`/`critical` violations only; without this the report does not exist and gate-33 reports SKIPPED, which is what it has done in every repo in the fleet since it was written. Requires enable-playwright (the report is produced by that job, against its Nextcloud instance) and is only consumed when enable-hydra-gates is also true. SETTING THIS TRUE IS AN OPT-IN TO ENFORCEMENT, NOT TO A BEST EFFORT: if no usable axe report reaches the hydra-gates job — because Playwright was skipped or failed, or because the report was rejected by the provenance check — that job now FAILS with a named reason instead of going green with gate-33 silently SKIPPED. Leave it false, deliberately and visibly, for any repo not ready to enforce it. Since axe-include-selector, the analysis is SCOPED to the app's own rendered DOM, so Nextcloud's chrome is no longer counted against the app: measured on a live instance, /apps/openregister/ went from 2 serious/critical to 0 and /apps/hermiq/ from 1 to 0 purely by scoping. What remains red is the app's own — expect a first run to surface real defects, not inherited ones."
+        description: "Run axe-core (@axe-core/playwright) against the app's routes inside the Playwright job and publish tests/axe/report.json, which is the file hydra-gates gate-33 consumes. OPT-IN, default false. Gate-33 fails on `serious`/`critical` violations only; without this the report does not exist and gate-33 reports SKIPPED, which is what it has done in every repo in the fleet since it was written. Requires enable-playwright (the report is produced by that job, against its Nextcloud instance) and is only consumed when enable-hydra-gates is also true. SETTING THIS TRUE IS AN OPT-IN TO ENFORCEMENT, NOT TO A BEST EFFORT: if no usable axe report reaches the hydra-gates job — because Playwright was skipped or failed, or because the report was rejected by the provenance check — that job now FAILS with a named reason instead of going green with gate-33 silently SKIPPED. Leave it false, deliberately and visibly, for any repo not ready to enforce it. Measured against a vanilla Nextcloud 34 with no app installed, core's own pages already carry serious/critical violations — expect the first run in a repo to be red, which is exactly why this is off by default."
         required: false
         type: boolean
         default: false
@@ -173,45 +173,12 @@ on:
         type: string
         default: ""
       axe-include-selector:
-        # MEASURED on a live Nextcloud 34.0.2, logged in, for every candidate
-        # selector that has ever been proposed for this:
-        #
-        #   route                #content-vue  #content  #app-content-vue  main  #app-content  main#content
-        #   /apps/files/              yes         NO           yes          yes       NO           NO
-        #   /settings/user            yes        yes           yes          yes       NO           NO
-        #   /apps/dashboard/           NO        yes            NO          yes       NO           NO
-        #   /apps/openregister/       yes        yes           yes          yes       NO           NO
-        #   /apps/hermiq/             yes        yes           yes          yes       NO           NO
-        #
-        # `#app-content` and `main#content` do not exist on Nextcloud 34 at all
-        # — a scope set to either would match nothing and abort the run (see
-        # below). No SINGLE selector covers every page, which is why the default
-        # is a two-selector group: `#content-vue` carries app pages, `#content`
-        # carries the ones that mount without the Vue shell (the dashboard).
-        #
-        # `#app-content-vue`/`main` also cover every page, but they sit INSIDE
-        # `#content-vue` and exclude the app navigation. For a Conduction app
-        # that navigation is the app's own rendered DOM, so scoping to them
-        # would hide real app defects. That is muting, not scoping, and it is
-        # deliberately not the default.
-        description: "CSS selector(s) — comma-separated — naming the element(s) that wrap this app's OWN rendered DOM. axe analyses only what is inside them (AxeBuilder.include), so Nextcloud's chrome is no longer attributed to the app. Default '#content-vue, #content' is the Nextcloud 34 app-content region: it INCLUDES the app's navigation and sidebar (which a Conduction app renders itself) and EXCLUDES #header (unified search, user menu, notifications), #skip-actions and the document root. MEASURED EFFECT on a live instance: /apps/openregister/ went from 2 serious/critical violations to 0 and /apps/hermiq/ from 1 to 0, and every violation removed was core's — `color-contrast` on `.unified-search-input__label` (Nextcloud's unified search, inside #header) and `role-img-alt` on `:root`. This is a SCOPE, not a mute: a deliberate `button-name` violation injected inside the container is still reported at critical, and the same violation injected outside it is not — both are asserted on the live page on every run (guard 4), so a scope that has stopped scoping fails the run instead of going quietly green. A selector list that matches NOTHING is a hard failure, not an empty result: axe itself throws 'No elements found for include'. Set this if your app mounts somewhere else; set it to 'body' to opt out of scoping entirely (the run then says so, and guard 4's outside-probe half cannot execute)."
+        description: "Scope axe to the app DOM."
         required: false
         type: string
         default: "#content-vue, #content"
       axe-exclude-selector:
-        # Kept separate from the include on purpose. The include narrows the
-        # scope to the app; this REMOVES things from inside it, which is the one
-        # lever here that can mute a genuine app defect. Measured:
-        # `.exclude('#app-content-vue')` inside `#content-vue` on /apps/files/
-        # takes the route from 2 violations to 0. Default empty, and it stays
-        # empty unless a named third-party region justifies it in review.
-        #
-        # Note the asymmetry, also measured: an `exclude` naming a selector that
-        # does not exist is silently ignored (no throw), whereas an `include`
-        # that matches nothing aborts. So a typo here fails OPEN — it cannot
-        # hide anything — which is the safe direction, but it does mean a
-        # stale exclude quietly stops doing whatever it was added to do.
-        description: "Optional CSS selector(s) — comma-separated — to remove from inside the include scope (AxeBuilder.exclude). Default empty. Use ONLY for a region the app embeds but does not own (e.g. a core Files picker rendered inside the app's content area); it is the one setting here that can hide a real defect of the app's own, so name the region and say why in the caller. A selector that matches nothing is silently ignored by axe — it will not error, it will simply stop excluding."
+        description: "Regions to exclude."
         required: false
         type: string
         default: ""
@@ -2363,8 +2330,6 @@ jobs:
           AXE_PASSWORD: admin
           AXE_ROUTES: ${{ inputs.axe-routes }}
           AXE_APP_NAME: ${{ inputs.app-name }}
-          AXE_INCLUDE: ${{ inputs.axe-include-selector }}
-          AXE_EXCLUDE: ${{ inputs.axe-exclude-selector }}
         run: |
           set -euo pipefail
           # The first-run wizard renders a modal over the first page an admin
@@ -2486,52 +2451,12 @@ jobs:
           const outPath = process.env.AXE_OUT || '';
           const waitMs = parseInt(process.env.AXE_WAIT_MS || '1500', 10);
 
-          // ── Scope ────────────────────────────────────────────────────────
-          // The whole point of this runner is to report the APP's defects. An
-          // app page is Nextcloud's chrome with the app mounted inside it, and
-          // axe cannot tell the two apart: unscoped, `#header`'s unified-search
-          // contrast and a `role-img-alt` on `:root` are attributed to whoever
-          // owns the repo. Measured on a live instance, that was the ENTIRE
-          // serious/critical result for openregister (2 nodes) and hermiq (1).
-          //
-          // Splitting on commas rather than handing axe one grouped selector is
-          // deliberate. Both work, but a per-selector `.include()` lets the log
-          // below say WHICH selectors matched and how many elements each found,
-          // so a scope that has silently narrowed to one stray element is
-          // visible rather than inferred from a suspiciously small `passes`.
-          const splitSel = (raw) => (raw || '')
-            .split(',')
-            .map((s) => s.trim())
-            .filter((s) => s.length > 0);
-
-          const includeSel = splitSel(process.env.AXE_INCLUDE);
-          const excludeSel = splitSel(process.env.AXE_EXCLUDE);
-
-          // Build the ONE builder every analysis in this file goes through.
-          // Nothing calls `new AxeBuilder` directly after this point: a second
-          // construction site is how a scope stops being applied to the run
-          // that actually writes the report while every guard still passes.
-          const buildAxe = (page) => {
-            let b = new AxeBuilder({ page }).withTags(TAGS);
-            for (const s of includeSel) b = b.include(s);
-            for (const s of excludeSel) b = b.exclude(s);
-            return b;
-          };
-
           if (typeof AxeBuilder !== 'function') {
             die('@axe-core/playwright did not export a constructor (got ' + typeof AxeBuilder + '). The installed version changed its export shape.');
           }
           if (!baseUrl) die('AXE_BASE_URL is empty.');
           if (!outPath) die('AXE_OUT is empty.');
           if (routes.length === 0) die('AXE_ROUTES resolved to zero routes. Nothing would be analysed, and an empty report would read as a clean accessibility run.');
-          if (includeSel.length === 0) {
-            die(
-              'axe-include-selector resolved to zero selectors. An empty scope is not "scope to everything", ' +
-              'it is a silent revert to analysing all of Nextcloud\'s chrome and reporting it as this app\'s. ' +
-              'Set it to a selector that wraps the app (default "#content-vue, #content"), or to "body" if ' +
-              'analysing the whole document really is what this repo wants.'
-            );
-          }
 
           // Keep the report readable: violation nodes carry the full outerHTML,
           // which for a Vue app is routinely tens of KB per node.
@@ -2554,13 +2479,6 @@ jobs:
             const page = await context.newPage();
 
             // ── Guard 1: positive control ──────────────────────────────────
-            // Deliberately UNSCOPED: the scratch page is not a Nextcloud page
-            // and carries none of the app containers, so a scoped run here
-            // would abort on "No elements found for include" and tell us
-            // nothing about axe. This guard answers one question only — can
-            // axe report a violation at all in this environment. Whether the
-            // SCOPE works is guard 4's question, and guard 4 asks it on the
-            // real page, because that is the only place it can be asked.
             await page.setContent(CONTROL_HTML);
             const control = await new AxeBuilder({ page }).withTags(TAGS).analyze();
             const controlHit = (control.violations || []).find(
@@ -2607,12 +2525,6 @@ jobs:
             const violations = [];
             const analysed = [];
             let engine = null;
-            let scopeControl = null;
-
-            console.log(
-              'axe scope: include=[' + includeSel.join(' | ') + ']' +
-              (excludeSel.length ? ' exclude=[' + excludeSel.join(' | ') + ']' : ' exclude=<none>')
-            );
 
             for (const route of routes) {
               const url = baseUrl + (route.startsWith('/') ? route : '/' + route);
@@ -2635,47 +2547,7 @@ jobs:
               await page.waitForSelector('#content, main, [role="main"]', { timeout: 60000 }).catch(() => {});
               await page.waitForTimeout(waitMs);
 
-              // What did the scope actually match on THIS page? Reported per
-              // selector, because the failure that matters is not "nothing
-              // matched" (axe throws on that, loudly) but "one of two matched,
-              // and it was the small one" — which produces a real report over a
-              // fraction of the app and reads exactly like a clean one.
-              const matched = await page.evaluate(
-                (sels) => sels.map((s) => {
-                  try { return { selector: s, count: document.querySelectorAll(s).length }; }
-                  catch (e) { return { selector: s, count: -1, error: String(e && e.message) }; }
-                }),
-                includeSel
-              );
-              const badSel = matched.filter((m) => m.count === -1);
-              if (badSel.length > 0) {
-                await browser.close();
-                die(
-                  'axe-include-selector contains a selector the browser cannot parse: ' +
-                  badSel.map((m) => m.selector + ' (' + m.error + ')').join(', ')
-                );
-              }
-              console.log(
-                '  scope on ' + route + ': ' +
-                matched.map((m) => m.selector + '=' + m.count).join(', ') +
-                ' (total ' + matched.reduce((a, m) => a + m.count, 0) + ' element(s))'
-              );
-
-              // A scope that matches NOTHING makes axe throw
-              // ("No elements found for include in page Context"), which the
-              // outer .catch turns into a die. Named here so the reason in the
-              // log is the app's, not a stack trace from inside axe-core.
-              if (matched.every((m) => m.count === 0)) {
-                await browser.close();
-                die(
-                  'route ' + url + ' matched NONE of the axe-include-selector selectors [' +
-                  includeSel.join(' | ') + ']. axe cannot analyse an empty scope, and a report ' +
-                  'written anyway would say this app has no accessibility defects because nothing ' +
-                  'of it was looked at. Set axe-include-selector to the element this app mounts into.'
-                );
-              }
-
-              const results = await buildAxe(page).analyze();
+              const results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
               engine = results.testEngine;
 
               const nPass = (results.passes || []).length;
@@ -2686,9 +2558,8 @@ jobs:
               if (nPass === 0 && nViol === 0) {
                 await browser.close();
                 die(
-                  'route ' + url + ' produced ZERO passes and ZERO violations inside the scope [' +
-                  includeSel.join(' | ') + ']. axe ran against a document with nothing in it — a ' +
-                  'blank page, an SPA that never mounted, or a scope that matched an empty shell. ' +
+                  'route ' + url + ' produced ZERO passes and ZERO violations. axe ran against ' +
+                  'a document with nothing in it — a blank page, or an SPA that never mounted. ' +
                   'That is not a clean accessibility result, it is an absent one.'
                 );
               }
@@ -2712,117 +2583,6 @@ jobs:
                   nodes: (v.nodes || []).map(trimNode),
                 });
               }
-
-              // ── Guard 4: the scope control ───────────────────────────────
-              // Runs ONCE, on the first route, AFTER that route's real result
-              // has been collected — the probes below mutate the page, and a
-              // report must never contain a violation this runner injected.
-              //
-              // Scoping and muting produce the same shape: fewer violations. So
-              // both halves are asserted, on the live page, every run:
-              //
-              //   (a) a deliberate `button-name` (critical) injected INSIDE the
-              //       scope container MUST still be reported. If it is not, the
-              //       scope is not narrowing the analysis, it is suppressing it,
-              //       and every green from here on is meaningless.
-              //   (b) the SAME violation injected OUTSIDE every container MUST
-              //       NOT be reported. If it IS, the scope is not in effect at
-              //       all — the app is being blamed for core's chrome again,
-              //       which is the entire defect this scope exists to fix.
-              //
-              // (b) is the half that distinguishes the two, and it is the half
-              // that quietly stops being executed when someone sets the scope
-              // to `body`. That case is not silently tolerated: it is recorded
-              // as `outsideProbeExecuted: false` in the report and announced,
-              // because a control that did not run must never look like one
-              // that passed.
-              if (scopeControl === null) {
-                const placed = await page.evaluate((sels) => {
-                  const containers = [];
-                  for (const s of sels) containers.push(...document.querySelectorAll(s));
-                  if (containers.length === 0) return { placed: false, why: 'no scope container matched' };
-
-                  const inside = document.createElement('button');
-                  inside.id = 'axe-scope-control-inside';
-                  containers[0].appendChild(inside);
-
-                  const outside = document.createElement('button');
-                  outside.id = 'axe-scope-control-outside';
-                  document.body.appendChild(outside);
-
-                  // Only a control if it really landed outside EVERY container.
-                  const leaked = containers.some((c) => c.contains(outside));
-                  if (leaked) outside.remove();
-
-                  return { placed: true, outsideProbeExecuted: !leaked, containers: containers.length };
-                }, includeSel);
-
-                if (!placed.placed) {
-                  await browser.close();
-                  die('could not place the scope control probes: ' + placed.why + '.');
-                }
-
-                const ctl = await buildAxe(page).analyze();
-                const targets = [];
-                for (const v of ctl.violations || []) {
-                  for (const n of v.nodes || []) {
-                    const t = Array.isArray(n.target) ? n.target : [n.target];
-                    for (const one of t) targets.push(String(one));
-                  }
-                }
-                const sawInside = targets.some((t) => t.includes('axe-scope-control-inside'));
-                const sawOutside = targets.some((t) => t.includes('axe-scope-control-outside'));
-
-                await page.evaluate(() => {
-                  for (const id of ['axe-scope-control-inside', 'axe-scope-control-outside']) {
-                    const el = document.getElementById(id);
-                    if (el) el.remove();
-                  }
-                });
-
-                if (!sawInside) {
-                  await browser.close();
-                  die(
-                    'SCOPE CONTROL FAILED (a). A `<button></button>` injected INSIDE the scope [' +
-                    includeSel.join(' | ') + '] on ' + url + ' was NOT reported as a `button-name` ' +
-                    'violation. The scope is suppressing this app\'s own defects, not attributing ' +
-                    'core\'s elsewhere. Refusing to write a report.'
-                  );
-                }
-                if (placed.outsideProbeExecuted && sawOutside) {
-                  await browser.close();
-                  die(
-                    'SCOPE CONTROL FAILED (b). A `<button></button>` injected OUTSIDE every scope ' +
-                    'container on ' + url + ' WAS reported. The include scope [' + includeSel.join(' | ') +
-                    '] is not in effect, so Nextcloud\'s own chrome is still being counted against ' +
-                    'this app. Refusing to write a report.'
-                  );
-                }
-
-                scopeControl = {
-                  route,
-                  url,
-                  containers: placed.containers,
-                  insideProbeReported: sawInside,
-                  outsideProbeExecuted: placed.outsideProbeExecuted === true,
-                  outsideProbeReported: placed.outsideProbeExecuted === true ? sawOutside : null,
-                };
-
-                if (scopeControl.outsideProbeExecuted) {
-                  console.log(
-                    'axe scope control OK on ' + route + ': inside probe reported (scoping does not mute), ' +
-                    'outside probe not reported (scope is in effect), ' + placed.containers + ' container(s).'
-                  );
-                } else {
-                  console.log(
-                    '::warning::axe scope control: only half executed on ' + route + '. The inside probe ' +
-                    'was reported, but the scope covers the whole document (every place the outside probe ' +
-                    'could go is inside a container), so nothing proves the scope excludes anything. ' +
-                    'This is expected when axe-include-selector is `body` — and it means this run is, ' +
-                    'in effect, unscoped.'
-                  );
-                }
-              }
             }
 
             await browser.close();
@@ -2838,13 +2598,6 @@ jobs:
               baseUrl,
               tags: TAGS,
               routesAnalysed: analysed,
-              // The scope is provenance too, and the most important kind: two
-              // reports with the same empty `violations` array mean opposite
-              // things depending on what was looked at. Recorded so a reader —
-              // and any future validator — can tell "this app is clean" from
-              // "this scope excluded the app".
-              scope: { include: includeSel, exclude: excludeSel },
-              scopeControl,
               selfTest: { rule: controlHit.id, impact: controlHit.impact, detected: true },
               blocking: violations.filter((v) => ['serious', 'critical'].includes(v.impact)).length,
             };
