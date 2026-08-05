@@ -259,6 +259,105 @@ _count() {
     printf '%s' "${_n}"
 }
 
+# ---------------------------------------------------------------------------
+# ADR-040 AppHost adoption — shared between gate-5 (route-auth) and gate-14
+# (route-reachability).
+#
+# An app that calls `\OCA\OpenRegister\AppHost\Bootstrap::register()` from
+# lib/AppInfo/Application.php does NOT ship the dashboard / preferences /
+# settings / health / metrics controllers. Bootstrap registers the OpenRegister
+# *generic* controllers under the leaf app's conventional class names
+# (`OCA\<Leaf>\Controller\HealthController`, ...) via
+# `IRegistrationContext::registerService()`, so `appinfo/routes.php` names a
+# class that resolves at runtime but has NO FILE in this repository, by design.
+#
+# Before 2026-08-05 both gates read that absence as a finding:
+#   gate-5  reported it as "routed method missing auth attribute" — a SECURITY
+#           verdict on a file the gate simply could not open. On scholiq that
+#           was 4 findings on every PR (ConductionNL/.github#153). A security
+#           gate that cries wolf on correct code is worse than no gate: it
+#           trains readers to skip the whole tier.
+#   gate-14 deferred to gate-5 and skipped it entirely.
+#
+# The generic controllers DO carry their auth attributes — in the openregister
+# package, which this run has no access to. "I cannot see it" is not "it is
+# absent"; only the first of those is true, and only the first may be reported.
+#
+# NB: Bootstrap uses `aliasControllerUnlessLeafDefinesIt` — a leaf that ships
+# its own e.g. SettingsController.php keeps it, and the file therefore exists
+# and is judged normally. This helper only ever fires when the file is ABSENT.
+# ---------------------------------------------------------------------------
+_HYDRA_APPHOST=0
+if [ -f lib/AppInfo/Application.php ] \
+    && grep -qE 'AppHost\\+Bootstrap' lib/AppInfo/Application.php \
+    && grep -qE 'Bootstrap::register[[:space:]]*\(' lib/AppInfo/Application.php; then
+    _HYDRA_APPHOST=1
+fi
+# The five controller class names Bootstrap::register() aliases, as route
+# slugs. Source of truth: openregister lib/AppHost/Bootstrap.php
+# ::registerControllers(). Deliberately an explicit list, not a wildcard —
+# a wildcard would let ANY missing controller hide behind AppHost adoption.
+_HYDRA_APPHOST_SLUGS="dashboard preferences settings health metrics"
+
+# _apphost_serves <route-slug> — 0 when this app adopts AppHost AND the slug is
+# one of the generics AppHost provides, i.e. the missing file is expected.
+_apphost_serves() {
+    [ "${_HYDRA_APPHOST}" -eq 1 ] || return 1
+    case " ${_HYDRA_APPHOST_SLUGS} " in
+        *" $1 "*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# ---------------------------------------------------------------------------
+# _ctrl_path_from_name <route-slug> — the file a routed `controller#method`
+# name resolves to. Handles the three shapes Nextcloud accepts:
+#
+#   Settings\Foo  -> lib/Controller/Settings/FooController.php
+#   my_thing      -> lib/Controller/MyThingController.php   (snake_case)
+#   credentialVerify -> lib/Controller/CredentialVerifyController.php
+#
+# SHARED by gate-5 (route-auth) and gate-14 (route-reachability). It used to be
+# defined INSIDE gate-14 only, and gate-5 carried its own narrower copy —
+# including its own route-name regex, `'[a-z_]+#…'`. That regex matches only
+# all-lowercase and snake_case slugs, so EVERY camelCase route was invisible to
+# gate-5 and reported nothing, in either direction. Measured on scholiq
+# 2026-08-05: 14 of 37 routed names matched; the other 23 — among them
+# `paymentTransaction#callback`, `keyAdmin#generateKey` and
+# `credentialVerify#verify` — were never opened. A positive control (stripping
+# both the attributes AND the docblock tags from a real routed method) still
+# reported PASS, which is how this was caught. Two gates reading route names
+# through two different regexes is the defect; one helper is the fix.
+# ---------------------------------------------------------------------------
+_ctrl_path_from_name() {
+    local _name="$1"
+    case "${_name}" in
+        *\\*)
+            local _last="${_name##*\\}"
+            local _ns="${_name%\\*}"
+            # SC2155: declare and assign separately so awk's exit code isn't
+            # masked by `local`.
+            local _last_cap
+            _last_cap="$(printf '%s' "${_last}" | awk '{print toupper(substr($0,1,1)) substr($0,2)}')"
+            echo "lib/Controller/${_ns}/${_last_cap}Controller.php"
+            ;;
+        *_*)
+            local _camel
+            _camel=$(echo "${_name}" | awk -F'_' '{for(i=1;i<=NF;i++) printf toupper(substr($i,1,1)) substr($i,2); print ""}')
+            echo "lib/Controller/${_camel}Controller.php"
+            ;;
+        *)
+            local _cap
+            _cap=$(printf '%s' "${_name}" | awk '{print toupper(substr($0,1,1)) substr($0,2)}')
+            echo "lib/Controller/${_cap}Controller.php"
+            ;;
+    esac
+}
+
+# The one regex both route gates read `appinfo/routes.php` through.
+_ROUTE_NAME_RX="'name'\s*=>\s*'[A-Za-z][A-Za-z0-9_\\]*#[a-zA-Z0-9_]+'"
+_ROUTE_PAIR_RX="[A-Za-z][A-Za-z0-9_\\]*#[a-zA-Z0-9_]+"
+
 _FAILED=0
 _EMITTED_GATES=""
 # _SKIPPED_GATES is written by _skip but deliberately NOT read by the coverage
@@ -511,32 +610,93 @@ fi
 # Gate 5: Route-auth — every method registered in appinfo/routes.php has
 # an NC middleware attribute (#[PublicPage] / #[NoAdminRequired] /
 # #[NoCSRFRequired] / #[AuthorizedAdminSetting]) or legacy docblock tag.
+#
+# TWO DEFECTS FIXED 2026-08-05 (ConductionNL/.github#153):
+#
+# (a) A RESOLUTION FAILURE WAS REPORTED AS A SECURITY FINDING. When
+#     lib/Controller/<X>Controller.php did not exist, or existed without the
+#     routed method, the gate wrote a line into the failure log and the verdict
+#     read "N routed method(s) missing auth attribute". Those two states are
+#     not the same thing and only one of them is a security signal:
+#         "the attribute is absent"      -> a finding, and a real one
+#         "I could not open the class"   -> the gate learned NOTHING
+#     Reported live on scholiq, whose health/metrics/preferences controllers
+#     are ADR-040 AppHost generics (see _apphost_serves above). This gate now
+#     separates the two: unresolvable entries go to an UNRESOLVED log and are
+#     stated as such, never counted as auth findings.
+#
+#     ⚠️ The dangerous over-correction would be to swallow the unresolved
+#     entries. A route whose class this repo genuinely does not ship is a real
+#     defect (ReflectionException 500) — it is just not THIS gate's defect. It
+#     is now raised by gate-14 (route-reachability), which owns that invariant.
+#     Removing it here without adding it there would have created a dead gate.
+#
+# (b) IT WAS NOT DIFF-SCOPED. The `missing file` branch `continue`d BEFORE the
+#     `_in_scope` call, so a route whose controller was absent fired on every
+#     PR regardless of the diff — a package.json-only Dependabot bump included.
+#     Per ADR-020 a routed method is now judged when the PR touched EITHER the
+#     controller that serves it OR appinfo/routes.php itself (adding/altering a
+#     route is exactly when its auth posture must be re-checked).
 # ---------------------------------------------------------------------------
 if [ -f appinfo/routes.php ]; then
     _ra_fail=0 _ra_log=/tmp/hydra-gate-route-auth.log
+    _ra_unresolved_log=/tmp/hydra-gate-route-auth-unresolved.log
     : > "${_ra_log}"
-    grep -oE "'name'\s*=>\s*'[a-z_]+#[a-zA-Z0-9_]+'" appinfo/routes.php \
-        | grep -oE "[a-z_]+#[a-zA-Z0-9_]+" | sort -u \
-        | while IFS='#' read ctrl method; do
-            class=$(echo "$ctrl" | awk -F'_' '{for(i=1;i<=NF;i++) printf toupper(substr($i,1,1)) substr($i,2); print ""}')
-            path="lib/Controller/${class}Controller.php"
+    : > "${_ra_unresolved_log}"
+    # Touching appinfo/routes.php puts every routed method back in scope.
+    _ra_routes_touched=0
+    _in_scope "appinfo/routes.php" && _ra_routes_touched=1
+    # Process substitution, not a pipeline: the loop must run in THIS shell so
+    # the log appends and the scope flags are read from one consistent state.
+    while IFS='#' read ctrl method; do
+            [ -n "${ctrl:-}" ] || continue
+            path=$(_ctrl_path_from_name "${ctrl}")
             if [ ! -f "$path" ]; then
-                echo "${ctrl}#${method} — ${path} missing" >> "${_ra_log}"
+                if _apphost_serves "${ctrl}"; then
+                    echo "${ctrl}#${method} — served by the OpenRegister AppHost generic controller (ADR-040); its auth attribute lives in the openregister package and is NOT visible from this repository" >> "${_ra_unresolved_log}"
+                else
+                    echo "${ctrl}#${method} — ${path} is not present in this repository; controller class UNRESOLVED (see gate-14, which owns route reachability)" >> "${_ra_unresolved_log}"
+                fi
                 continue
             fi
-            _in_scope "$path" || continue
+            if [ "${_ra_routes_touched}" -eq 0 ]; then
+                _in_scope "$path" || continue
+            fi
             def_line=$(grep -nE "^\s*public\s+function\s+${method}\s*\(" "$path" | head -1 | cut -d: -f1)
             if [ -z "$def_line" ]; then
-                echo "${path}: no method ${method}" >> "${_ra_log}"
+                echo "${path}: routed method ${method} does not exist on this class; UNRESOLVED (see gate-14, which owns route reachability)" >> "${_ra_unresolved_log}"
                 continue
             fi
             start=$((def_line > 20 ? def_line - 20 : 1))
+            # ⚠️ THIRD DEFECT, found 2026-08-05 by this gate's own positive
+            # control (scripts/lib/test_gate_route_auth.sh). The 20-line
+            # lookback is not bounded by the START OF THE METHOD, so it reads
+            # back over the PREVIOUS member. A short guarded method sitting
+            # within 20 lines above an unguarded one donated its
+            # `#[NoAdminRequired]` to its neighbour and the unguarded method
+            # passed. That is a false NEGATIVE in a security gate — the
+            # expensive direction, and invisible because a pass leaves no log.
+            # Clamp the window to the line after the previous member's closing
+            # brace: an attribute or docblock for THIS method can only appear
+            # after it, so this can never hide a genuine attribute — it can
+            # only stop one being borrowed.
+            prev_close=$(awk -v L="${def_line}" 'NR < L && /^[[:space:]]*\}/ { n = NR } END { print n + 0 }' "$path")
+            if [ "${prev_close}" -ge "${start}" ]; then
+                start=$((prev_close + 1))
+            fi
             head_block=$(sed -n "${start},${def_line}p" "$path")
             if ! echo "$head_block" | grep -qE '#\[(PublicPage|NoAdminRequired|NoCSRFRequired|AuthorizedAdminSetting)\b|@(PublicPage|NoAdminRequired|NoCSRFRequired)\b'; then
                 echo "${path}:${def_line} method=${method} rule=missing-auth-attribute" >> "${_ra_log}"
             fi
-        done
-    _ra_fail=$(wc -l < "${_ra_log}" 2>/dev/null || echo 0)
+    done < <(grep -oE "${_ROUTE_NAME_RX}" appinfo/routes.php \
+        | grep -oE "${_ROUTE_PAIR_RX}" | sort -u)
+    _ra_fail=$(_count '.' "${_ra_log}")
+    _ra_unres=$(_count '.' "${_ra_unresolved_log}")
+    # Stated, never folded into the verdict. Does NOT start with `[gate-` so it
+    # cannot be mistaken for a verdict line by any `^\[gate-` consumer.
+    if [ "${_ra_unres}" -gt 0 ]; then
+        echo "[hydra-gates] gate-5 route-auth: ${_ra_unres} routed entr(ies) NOT JUDGED (controller class unresolvable here) — see ${_ra_unresolved_log}. This is not a pass for them; reachability is gate-14's."
+    fi
     if [ "${_ra_fail}" -eq 0 ]; then
         _pass 5 "route-auth"
     else
@@ -932,6 +1092,11 @@ if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
     _rr_log=/tmp/hydra-gate-route-reachability.log
     : > "${_rr_log}"
 
+    # Touching appinfo/routes.php puts every routed entry back in scope for
+    # invariant 2 — see the scope note at that loop.
+    _rr_routes_touched=0
+    _in_scope "appinfo/routes.php" && _rr_routes_touched=1
+
     # Resource auto-routes (entries inside the top-level `'resources' => [...]`
     # block) generate index/show/create/update/destroy on the named
     # controller; methods on those auto-routes are excluded from invariant 1.
@@ -1013,46 +1178,38 @@ if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
     done < <(_enum_tracked 'Controller\.php$' lib/Controller)
 
     # ---- Invariant 2: every routed entry resolves to a method that exists.
-    grep -oE "'name'\s*=>\s*'[A-Za-z][A-Za-z0-9_\\]*#[a-zA-Z0-9_]+'" appinfo/routes.php \
-        | grep -oE "[A-Za-z][A-Za-z0-9_\\]*#[a-zA-Z0-9_]+" | sort -u \
+    grep -oE "${_ROUTE_NAME_RX}" appinfo/routes.php \
+        | grep -oE "${_ROUTE_PAIR_RX}" | sort -u \
         | while IFS='#' read _ctrl _method; do
-            # Resolve controller name → file path. Settings\Foo → Settings/FooController.php.
-            # snake_case → camelCase + Controller.php.
-            _ctrl_path_from_name() {
-                local _name="$1"
-                case "${_name}" in
-                    *\\*)
-                        # Settings\Foo → Settings/FooController.php
-                        local _last="${_name##*\\}"
-                        local _ns="${_name%\\*}"
-                        # SC2155: declare and assign separately so awk's exit
-                        # code isn't masked by `local`.
-                        local _last_cap
-                        _last_cap="$(printf '%s' "${_last}" | awk '{print toupper(substr($0,1,1)) substr($0,2)}')"
-                        echo "lib/Controller/${_ns}/${_last_cap}Controller.php"
-                        ;;
-                    *_*)
-                        # snake_case → CamelCase
-                        local _camel
-                        _camel=$(echo "${_name}" | awk -F'_' '{for(i=1;i<=NF;i++) printf toupper(substr($i,1,1)) substr($i,2); print ""}')
-                        echo "lib/Controller/${_camel}Controller.php"
-                        ;;
-                    *)
-                        local _cap
-                        _cap=$(printf '%s' "${_name}" | awk '{print toupper(substr($0,1,1)) substr($0,2)}')
-                        echo "lib/Controller/${_cap}Controller.php"
-                        ;;
-                esac
-            }
+            # Resolver is shared with gate-5 — see _ctrl_path_from_name above.
+            # It lived here, inline, while gate-5 carried a narrower private
+            # copy; the divergence is what let 23 of scholiq's 37 routes go
+            # unjudged by gate-5.
             _path=$(_ctrl_path_from_name "${_ctrl}")
+            # Diff scope: enforce when the PR touched the controller OR
+            # appinfo/routes.php itself, so inherited debt doesn't bounce
+            # unrelated PRs (per ADR-020) while a newly added or edited route
+            # is still checked against the class it names.
+            _rr_scoped=0
+            [ "${_rr_routes_touched}" -eq 1 ] && _rr_scoped=1
+            _in_scope "${_path}" && _rr_scoped=1
+            [ "${_rr_scoped}" -eq 1 ] || continue
             if [ ! -f "${_path}" ]; then
-                # Treat missing controller file as out of this gate's scope —
-                # gate-5 (route-auth) already flags this. Skip to avoid duplicates.
+                # UNTIL 2026-08-05 this `continue`d with the comment "gate-5
+                # already flags this". Gate-5 flagged it as a MISSING AUTH
+                # ATTRIBUTE, which it is not, and gate-5 no longer does
+                # (ConductionNL/.github#153). The invariant is this gate's:
+                # a route naming a class that does not exist is a
+                # ReflectionException 500 at request time — precisely
+                # invariant 2, one step earlier than a missing method.
+                #
+                # ADR-040 AppHost generics are the ONE legitimate absence:
+                # Bootstrap::register() binds those class names in the DI
+                # container, so the route resolves with no file on disk.
+                _apphost_serves "${_ctrl}" && continue
+                echo "${_path} route='${_ctrl}#${_method}' rule=controller-class-not-found" >> "${_rr_log}"
                 continue
             fi
-            # Diff scope: only enforce on changed files so inherited debt
-            # doesn't bounce unrelated PRs (per ADR-020).
-            _in_scope "${_path}" || continue
             if ! grep -qE "^[[:space:]]*public function ${_method}[[:space:]]*\(" "${_path}"; then
                 echo "${_path} route='${_ctrl}#${_method}' rule=method-not-found-on-target-controller" >> "${_rr_log}"
             fi
