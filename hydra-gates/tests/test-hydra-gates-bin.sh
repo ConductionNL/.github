@@ -106,7 +106,21 @@ fi
 # ---------------------------------------------------------------------------
 # Test 2 — an EMPTY diff is reported as empty rather than as a clean pass.
 # ---------------------------------------------------------------------------
-echo "[test] empty diff is stated, not silently green"
+# An empty diff and a base that IS HEAD are different facts, and this test used
+# to conflate them: its fixture set BASE_SHA to HEAD, so "empty diff exits 0"
+# was really asserting "scoping a commit against itself exits 0".
+#
+# They are separated here because only one of them is legitimate.
+#
+#   base != HEAD, diff empty   a real PR that changes nothing in scope. Stated,
+#                              and green — unchanged, asserted below.
+#   base == HEAD               the run cannot inspect anything, by construction.
+#                              Measured on shillinq `development` c64e9fe: 22
+#                              seconds, 52 gates PASS. Unscoped, the same
+#                              commit FAILS 18. Every push-to-mainline scoped
+#                              run in the fleet has this shape.
+echo "[test] empty diff (base BEHIND head) is stated, not silently green"
+git -C "${FIX}" commit -q --allow-empty -m "an empty commit: base is behind HEAD, diff is empty"
 OUT="$("${BIN}" --app-dir "${FIX}" --base "${BASE_SHA}" 2>&1)"; RC=$?
 if printf '%s' "${OUT}" | grep -q "SCOPE WAS EMPTY"; then
     _ok "empty scope is called out explicitly"
@@ -117,6 +131,20 @@ if [ "${RC}" -eq 0 ]; then
     _ok "empty diff still exits 0 (it is a legitimate outcome, just a stated one)"
 else
     _bad "expected exit 0 on an empty diff, got ${RC}"
+fi
+
+echo "[test] a base that IS HEAD is refused, not reported green"
+_HEAD_SHA="$(git -C "${FIX}" rev-parse HEAD)"
+OUT_SELF="$("${BIN}" --app-dir "${FIX}" --base "${_HEAD_SHA}" 2>&1)"; RC_SELF=$?
+if [ "${RC_SELF}" -eq 99 ]; then
+    _ok "scoping a commit against itself exits 99 (configuration error, not a clean tree)"
+else
+    _bad "expected exit 99 when the base IS HEAD, got ${RC_SELF}"
+fi
+if printf '%s' "${OUT_SELF}" | grep -qE '^\[gate-[0-9]+\] [a-z-]+: PASS'; then
+    _bad "a run scoped against its own HEAD still printed gate PASS lines — that is the vacuous green"
+else
+    _ok "no gate reported PASS: nothing was inspected, and nothing claimed to be"
 fi
 
 # ---------------------------------------------------------------------------

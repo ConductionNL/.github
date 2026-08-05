@@ -3030,9 +3030,15 @@ if [ -d src ]; then
         _in_scope "${vue}" || continue
         _fl_files+=("${vue}")
     done < <(find src -name '*.vue' 2>/dev/null)
+    # NOTE: an empty in-scope set is NOT declared `na` here. Every other
+    # `[ -d src ]` gate reports PASS over an empty diff scope — that is what
+    # ADR-020 diff scoping MEANS — and tests/test-hydra-gates-bin.sh asserts
+    # that none of gates 10/12/13/26/31..45 goes NOT APPLICABLE while src/
+    # exists. Making gate-40 alone answer differently would drift the
+    # applicability table away from the guards it mirrors, which is the one
+    # way that change could hide a live gate.
     if [ "${#_fl_files[@]}" -eq 0 ]; then
-        _fl_ran=0
-        _skip 40 "form-label-association" na "scope was empty — 0 .vue file(s) in this diff, so NO form control was inspected."
+        : # nothing in scope; the PASS below describes the diff, as everywhere else.
     elif [ ! -f "${_fl_helper}" ]; then
         # A MISSING HELPER MUST NOT REPORT PASS (#147).
         _fl_ran=0
@@ -3299,8 +3305,8 @@ done < <(find lib src \( -name '*.php' -o -name '*.vue' -o -name '*.js' -o -name
 _sae_ran=1
 _sae_helper="${SCRIPT_DIR}/lib/check_spec_anchors.py"
 if [ "${#_sae_files[@]}" -eq 0 ]; then
-    _sae_ran=0
-    _skip 46 "spec-anchor-existence" na "scope was empty — 0 annotated source file(s) in this diff, so NO @spec target was resolved."
+    : # nothing in scope — ordinary diff scoping, same as before this gate
+      # moved into a helper. See the note on gate-40.
 elif [ ! -f "${_sae_helper}" ]; then
     # A MISSING HELPER MUST NOT REPORT PASS (#147). The gate previously
     # carried its resolver inline, so "the helper is absent" was not a
