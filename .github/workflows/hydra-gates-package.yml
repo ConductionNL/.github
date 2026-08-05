@@ -118,9 +118,17 @@ jobs:
 
       - name: Resolve the ref under test
         id: ref
+        # `github.head_ref` is attacker-controlled on a fork PR — a branch named
+        # with shell metacharacters is interpolated verbatim into this script by
+        # the expression expander, before bash ever sees it. Passed through the
+        # environment instead, where it is data rather than source text.
+        # Pre-existing; flagged by actionlint and fixed here rather than left.
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           set -eu
-          REF="${{ github.head_ref || github.ref_name }}"
+          REF="${HEAD_REF:-${REF_NAME}}"
           echo "ref=${REF}" >> "$GITHUB_OUTPUT"
           echo "Installing conduction/hydra-gates from branch: ${REF}"
 
@@ -303,11 +311,34 @@ jobs:
             || { echo "::error::the green did not state its own coverage"; exit 1; }
           printf '%s' "${OUT}" | grep -q "WAIVERS:" \
             || { echo "::error::no waiver accounting — a passed green cannot be told from a waived one"; exit 1; }
-          # node was deliberately not installed, so the run MUST say which gates
-          # that left unrun rather than counting them toward the green.
-          printf '%s' "${OUT}" | grep -q "GATES THAT DID NOT RUN:" \
-            || { echo "::error::node is absent, yet nothing reported an unrun gate — the coverage check is not measuring"; exit 1; }
-          echo "OK — exit 0, coverage stated, waivers stated, unrun gates named."
+          # This assertion used to be `grep -q "GATES THAT DID NOT RUN:"`, on the
+          # reasoning that node is deliberately absent here so something must be
+          # reported unrun. That reasoning was wrong, and it was a PROXY: the two
+          # gates that need node (22, 53) are guarded by `[ -f src/manifest.json ]`
+          # and this fixture has no manifest, so node's absence never reached
+          # them. What actually produced the line was the `git rm` above emptying
+          # src/ — the a11y gates went silent for a reason that had nothing to do
+          # with node, and the control passed on a coincidence.
+          #
+          # It stopped passing the moment those gates began declaring themselves
+          # NOT APPLICABLE by name, which is the correct verdict for a repo with
+          # no frontend. Rather than relax it, assert the thing it was reaching
+          # for — that the accounting ACCOUNTS FOR EVERY GATE. Nothing may fall
+          # out of the tally silently, whatever the reason it did not run.
+          _decl="$(printf '%s' "${OUT}" | grep -m1 -oE 'COVERAGE: [0-9]+ of [0-9]+' | awk '{print $4}')"
+          _ran="$(printf '%s' "${OUT}" | grep -m1 -oE 'COVERAGE: [0-9]+ of [0-9]+' | awk '{print $2}')"
+          _na="$(printf '%s' "${OUT}" | grep -m1 -oE '\(([0-9]+) not applicable' | grep -oE '[0-9]+' || echo 0)"
+          _unrun="$(printf '%s' "${OUT}" | grep -m1 -oE 'GATES THAT DID NOT RUN: .*' | sed 's/.*RUN: //' | wc -w || echo 0)"
+          [ -n "${_decl:-}" ] && [ -n "${_ran:-}" ] \
+            || { echo "::error::could not parse the COVERAGE line — the coverage check is not measuring"; exit 1; }
+          [ "$(( _ran + _na + _unrun ))" -eq "${_decl}" ] \
+            || { echo "::error::coverage does not account for every gate: ran=${_ran} + notApplicable=${_na} + didNotRun=${_unrun} != declared=${_decl}. A gate has fallen out of the tally silently, which is the exact defect this accounting exists to prevent."; exit 1; }
+          # And every gate that did not run must have SAID so on its own line —
+          # a number in a summary is not a trace.
+          _named="$(printf '%s\n' "${OUT}" | grep -cE '^\[gate-[0-9]+\] [a-z0-9-]+: (SKIPPED|NOT APPLICABLE)' || true)"
+          [ "${_named}" -ge "$(( _na + _unrun ))" ] \
+            || { echo "::error::${_na} not-applicable + ${_unrun} unrun gates are counted, but only ${_named} said so on their own line. A gate is disappearing from the per-gate output while still being tallied."; exit 1; }
+          echo "OK — exit 0, coverage stated, waivers stated, and ran=${_ran} + na=${_na} + unrun=${_unrun} = declared=${_decl}, each named."
 
       - name: "Unresolvable base ref must exit 99 with no green"
         run: |

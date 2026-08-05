@@ -223,44 +223,141 @@ fi
 # The fixture has no tests/axe/report.json, so this is the real condition.
 # ---------------------------------------------------------------------------
 echo "[test] a gate that did not run is named, not folded into the green"
-if printf '%s' "${OUT}" | grep -qE '^\[gate-33\] axe-core: SKIPPED'; then
+# The fixture has no src/ and no tests/axe/report.json, so gate-33's subject
+# matter genuinely does not exist here: NOT APPLICABLE, not a coverage gap. What
+# matters is that it SAYS SO — the original defect was that it said nothing at
+# all, and silence read as a pass.
+if printf '%s' "${OUT}" | grep -qE '^\[gate-33\] axe-core: (SKIPPED|NOT APPLICABLE)'; then
     _ok "gate-33 states its own absence instead of emitting nothing"
 else
-    _bad "gate-33 emitted no SKIPPED line — its absence is still indistinguishable from a pass"
+    _bad "gate-33 emitted neither a SKIPPED nor a NOT APPLICABLE line — its absence is still indistinguishable from a pass"
 fi
-if printf '%s' "${OUT}" | grep -q "GATES THAT DID NOT RUN"; then
-    _ok "the summary names the gates that did not run"
+if printf '%s' "${OUT}" | grep -qE '^\[gate-33\] axe-core: NOT APPLICABLE'; then
+    _ok "gate-33 is NOT APPLICABLE on a fixture with no src/ (no frontend to analyse)"
 else
-    _bad "the summary did not name a single unrun gate, though gate-33 cannot have run here"
+    _bad "gate-33 was counted as a coverage gap on a repo with no frontend at all"
 fi
-if printf '%s' "${OUT}" | grep -qE 'ALL [0-9]+ GATES GREEN'; then
-    _bad "an 'ALL N GATES GREEN' banner was printed while gate-33 did not run"
+if printf '%s' "${OUT}" | grep -qE '^\[hydra-gates\] NOT APPLICABLE'; then
+    _ok "the summary names the not-applicable gates"
 else
-    _ok "no 'ALL N GATES GREEN' banner while a gate did not run"
+    _bad "the summary did not name a single not-applicable gate, though this fixture has no src/"
 fi
-# A SKIPPED gate must not be counted as coverage — that would turn the fix into
-# the bug. Coverage must be strictly less than the declared inventory here.
+# The banner must never claim all N gates ran when some did not — whatever the
+# reason they did not. NOT APPLICABLE is a reason not to FAIL; it is not a
+# reason to claim the gate ran.
+if printf '%s' "${OUT}" | grep -qE 'ALL [0-9]+ GATES (GREEN|PASSED) — and all'; then
+    _bad "an 'ALL N GATES ... and all N of them ran' banner was printed while $(printf '%s' "${OUT}" | grep -cE ': NOT APPLICABLE') gate(s) did not run"
+else
+    _ok "no 'all N of them ran' banner while gates did not run"
+fi
+# Neither a SKIPPED nor a NOT APPLICABLE gate may be counted as coverage — that
+# would turn the fix into the bug. Coverage must be strictly less than declared.
 _cov_line="$(printf '%s' "${OUT}" | grep -m1 -oE 'COVERAGE: [0-9]+ of [0-9]+' || true)"
 _cov_ran="$(printf '%s' "${_cov_line}" | awk '{print $2}')"
 _cov_all="$(printf '%s' "${_cov_line}" | awk '{print $4}')"
 if [ -n "${_cov_ran:-}" ] && [ -n "${_cov_all:-}" ] && [ "${_cov_ran}" -lt "${_cov_all}" ]; then
-    _ok "SKIPPED gates are excluded from the coverage tally (${_cov_ran} of ${_cov_all})"
+    _ok "SKIPPED and NOT APPLICABLE gates are excluded from the coverage tally (${_cov_ran} of ${_cov_all})"
 else
-    _bad "coverage read '${_cov_line}' — a skipped gate is being counted as having reported"
+    _bad "coverage read '${_cov_line}' — a gate that did not run is being counted as having reported"
 fi
 
 # ---------------------------------------------------------------------------
-# Test 4c — --require-full-coverage turns an incomplete run into a failure.
-# Reverse control for the above: the same fixture, exit 0 without the flag and
-# non-zero with it, proves the coverage gap is really being detected rather
-# than the banner merely being reworded.
+# Test 4c — --require-full-coverage distinguishes THREE states, and only two of
+# them fail.
+#
+# The product owner's requirement, verbatim: "if a gate is legitimately not
+# applicable the flag shouldn't fail the run". Before this, it did — measured on
+# exactly this fixture: 30 of 63 gates emitted nothing, 25 of them because they
+# were guarded by an `if [ -d src ]` on a repo with no frontend, and the flag
+# exited 98 on a repository with nothing wrong with it.
+#
+# Both directions are asserted, because either one alone is satisfiable by a
+# broken implementation: a flag that never fails passes 4c-i, and a flag that
+# always fails passes 4c-ii.
 # ---------------------------------------------------------------------------
-echo "[test] --require-full-coverage refuses an incomplete green"
+echo "[test] --require-full-coverage passes when every non-reporting gate is NOT APPLICABLE"
 "${BIN}" --app-dir "${FIX}" --base "${BASE_SHA}" --require-full-coverage > /dev/null 2>&1; RC_RFC=$?
-if [ "${RC_RFC}" -eq 98 ]; then
-    _ok "incomplete coverage exits 98 when the caller asked for full coverage"
+if [ "${RC_RFC}" -eq 0 ]; then
+    _ok "a run whose only gaps are not-applicable gates PASSES with the flag set"
 else
-    _bad "expected exit 98 with --require-full-coverage, got ${RC_RFC}"
+    _bad "expected exit 0 with --require-full-coverage on an all-not-applicable fixture, got ${RC_RFC}"
+fi
+
+echo "[test] --require-full-coverage still FAILS on a structural gap"
+# Reverse control. Give the fixture a frontend that registers an integration
+# leaf: gate-24's subject matter now EXISTS, and nothing in this repo correlates
+# the two halves of it. That is category (b) — structurally impossible — and it
+# must fail. Same fixture, same flag, opposite verdict: this is what proves the
+# pass above is a verdict and not an inability to fail.
+mkdir -p "${FIX}/src"
+cat > "${FIX}/src/leaf.js" <<'JS'
+// SPDX-License-Identifier: EUPL-1.2
+import { registerIntegration } from '@conduction/nextcloud-vue'
+registerIntegration({ id: 'fixture-leaf', renderMode: 'component' })
+JS
+git -C "${FIX}" add -A >/dev/null 2>&1
+git -C "${FIX}" commit -qm "fixture: register an integration leaf" >/dev/null 2>&1
+OUT_STRUCT="$("${BIN}" --app-dir "${FIX}" --base "${BASE_SHA}" --require-full-coverage 2>&1)"; RC_STRUCT=$?
+if [ "${RC_STRUCT}" -eq 98 ]; then
+    _ok "a structural gap (leaves registered, no parity check) exits 98 with the flag set"
+else
+    _bad "expected exit 98 for a structural coverage gap, got ${RC_STRUCT}"
+fi
+if printf '%s' "${OUT_STRUCT}" | grep -qE '^\[gate-24\] integration-parity: SKIPPED \(structural\)'; then
+    _ok "gate-24 names its gap as structural, and says which half of the pair exists"
+else
+    _bad "gate-24 did not report a structural skip although this fixture registers a leaf"
+fi
+# Positive control for the applicability declarations: src/ now EXISTS, so the
+# gates guarded by `[ -d src ]` must genuinely RUN. If the declaration table
+# ever drifts away from the guards it mirrors, it would keep calling them
+# not-applicable here — which is the one way this change could hide a live gate.
+_still_na=""
+for _g in 10 12 13 26 31 32 34 35 36 37 39 40 42 43 44 45; do
+    printf '%s' "${OUT_STRUCT}" | grep -qE "^\[gate-${_g}\] [a-z-]+: NOT APPLICABLE" && _still_na="${_still_na}${_g} "
+done
+if [ -z "${_still_na}" ]; then
+    _ok "with src/ present, every src-guarded gate really runs (applicability table tracks its guards)"
+else
+    _bad "gates ${_still_na}were still called NOT APPLICABLE though src/ exists — the table has drifted from the guards it mirrors"
+fi
+
+echo "[test] an unrecognised skip category is a hard failure, never a silent 'na'"
+# A typo'd category that defaulted to `na` would be a lever for making any
+# gate's absence stop counting — the accounting hole this block closes, reopened
+# from the inside. It must fail loudly instead.
+TYPO_PKG="${WORK}/typo"
+mkdir -p "${TYPO_PKG}/bin" "${TYPO_PKG}/scripts"
+cp "${BIN}" "${TYPO_PKG}/bin/hydra-gates"
+cp -r "${PKG_ROOT}/scripts/lib" "${TYPO_PKG}/scripts/lib"
+# Corrupt the category on the gate-33 branch this fixture actually REACHES
+# (src/ exists, no axe report, caller did not declare enable-axe). Patching a
+# branch that does not execute would make this test pass by never running the
+# code it claims to test — the same defect the whole suite exists to catch. The
+# assertion below therefore also proves the patch LANDED.
+python3 - "${PKG_ROOT}/scripts/run-hydra-gates.sh" "${TYPO_PKG}/scripts/run-hydra-gates.sh" <<'PY'
+import sys
+src, dst = sys.argv[1], sys.argv[2]
+s = open(src).read()
+needle = '_skip 33 "axe-core" na "no ${_axe_report}, and the caller did not set enable-axe'
+assert needle in s, "typo-test needle not found — the gate-33 branch it corrupts has been reworded"
+s = s.replace(needle, '_skip 33 "axe-core" nq "no ${_axe_report}, and the caller did not set enable-axe', 1)
+open(dst, 'w').write(s)
+PY
+chmod +x "${TYPO_PKG}/scripts/run-hydra-gates.sh"
+OUT_TYPO="$("${TYPO_PKG}/bin/hydra-gates" --app-dir "${FIX}" --base "${BASE_SHA}" 2>&1)"; RC_TYPO=$?
+if [ "${RC_TYPO}" -ne 0 ] && printf '%s' "${OUT_TYPO}" | grep -q "is not one of na|structural|wiring"; then
+    _ok "an unrecognised reason category fails the gate instead of resolving to 'na'"
+else
+    _bad "a typo'd reason category did not fail (exit ${RC_TYPO}) — any gate could stop counting by misspelling its category"
+fi
+# Reverse control: the UNPATCHED runner on the same fixture must NOT emit that
+# internal error. Without this, "the error appeared" could equally mean the
+# error appears always.
+if "${BIN}" --app-dir "${FIX}" --base "${BASE_SHA}" 2>&1 | grep -q "is not one of na|structural|wiring"; then
+    _bad "the unpatched runner also reports an unrecognised category — the assertion above proves nothing"
+else
+    _ok "reverse control — the unpatched runner reports no category error"
 fi
 
 # ---------------------------------------------------------------------------
