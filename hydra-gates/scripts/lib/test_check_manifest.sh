@@ -25,6 +25,12 @@
 #
 # Run twice: once with Ajv available (full schema path) and once with Ajv
 # forced unavailable (structural-lint fallback), so both code paths are covered.
+
+# Private per-invocation log. A fixed /tmp path made this suite fail under
+# the helper-suite harness when two runs overlapped: the second run
+# truncated the first run's validator output between the write and the grep.
+_TCM_LOG="$(mktemp "${TMPDIR:-/tmp}/hydra-tcm.XXXXXXXX.log")"
+
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
@@ -47,22 +53,22 @@ done
 _assert() { # <expected-rc> <fixture> <label> [extra args...]
 	local want="$1" fixture="$2" label="$3" rc
 	shift 3
-	node "${VALIDATOR}" "${FIX}/${fixture}" "$@" >/tmp/_tcm.log 2>&1
+	node "${VALIDATOR}" "${FIX}/${fixture}" "$@" >${_TCM_LOG} 2>&1
 	rc=$?
 	if [ "${rc}" -eq "${want}" ]; then
 		_ok "${label} (rc=${rc})"
 	else
 		_no "${label}: expected rc=${want}, got ${rc}"
-		sed 's/^/    /' /tmp/_tcm.log
+		sed 's/^/    /' ${_TCM_LOG}
 	fi
 }
 
 _assert_log() { # <grep-ere> <label>
-	if grep -qE "$1" /tmp/_tcm.log; then
+	if grep -qE "$1" ${_TCM_LOG}; then
 		_ok "$2"
 	else
 		_no "$2 (pattern not found: $1)"
-		sed 's/^/    /' /tmp/_tcm.log
+		sed 's/^/    /' ${_TCM_LOG}
 	fi
 }
 

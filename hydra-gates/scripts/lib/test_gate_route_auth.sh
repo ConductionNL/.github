@@ -56,14 +56,24 @@ _bad()  { _fail_n=$((_fail_n + 1)); printf 'FAIL — %s\n' "$1"; }
 _OUT=""
 _UNRES=""
 _RRLOG=""
+_LOGDIR=""
 _run() {
     local _dir="$1"; shift
-    _OUT="$(bash "${RUNNER}" "$@" "${_dir}" 2>&1 || true)"
-    # The gates write their detail logs to fixed /tmp paths, which a
-    # concurrently running gate suite would truncate. Snapshot them straight
-    # away and assert against the snapshot.
-    _UNRES="$(cat /tmp/hydra-gate-route-auth-unresolved.log 2>/dev/null || true)"
-    _RRLOG="$(cat /tmp/hydra-gate-route-reachability.log 2>/dev/null || true)"
+    # Give THIS invocation its own findings directory.
+    #
+    # These assertions used to read fixed /tmp/hydra-gate-*.log paths and
+    # carried a comment saying a concurrent run "would truncate" them — with
+    # a snapshot taken after the run as the mitigation. A snapshot cannot
+    # help: the truncation happens DURING the run, between the gate's write
+    # and its own `wc -l`. Run under the helper-suite harness this suite
+    # reported 7 failures while reporting 0 standalone, which is the shape
+    # of a measurement contaminated by another process, not of a defect.
+    local _logdir
+    _logdir="$(mktemp -d "${TMPDIR:-/tmp}/hydra-gate-test.XXXXXXXX")"
+    _OUT="$(HYDRA_GATE_LOG_DIR="${_logdir}" bash "${RUNNER}" "$@" "${_dir}" 2>&1 || true)"
+    _UNRES="$(cat "${_logdir}/hydra-gate-route-auth-unresolved.log" 2>/dev/null || true)"
+    _RRLOG="$(cat "${_logdir}/hydra-gate-route-reachability.log" 2>/dev/null || true)"
+    _LOGDIR="${_logdir}"
     if ! printf '%s' "${_OUT}" | grep -q '^\[hydra-gates\] COVERAGE:'; then
         _bad "run in ${_dir} ABORTED before the summary — verdicts above it are not a result"
         printf '%s\n' "${_OUT}" | tail -20 | sed 's/^/       /'
@@ -121,7 +131,7 @@ if _run "${FIXTURES}/unguarded"; then
     _expect_gate 5 FAIL "unguarded fixture: a routed, attribute-less write still FAILS gate-5"
     _expect_out 'gate-5\] route-auth: FAIL — 2 routed method' \
         "unguarded fixture: exactly TWO findings (the guarded sibling method is not reported)"
-    _RALOG="$(cat /tmp/hydra-gate-route-auth.log 2>/dev/null || true)"
+    _RALOG="$(cat "${_LOGDIR}/hydra-gate-route-auth.log" 2>/dev/null || true)"
     _expect_log "${_RALOG}" 'WidgetController.php:[0-9]+ method=update' \
         "unguarded fixture: the snake/lowercase slug's unguarded method is named"
     # camelCase slug. Invisible to gate-5's old `'[a-z_]+#…'` regex.

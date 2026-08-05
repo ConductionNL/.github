@@ -50,7 +50,9 @@
 #
 # Output shape (stdout):
 #   [gate-N] <gate-name>: PASS | FAIL[<reasons>]
-# Gates that FAIL write details to /tmp/hydra-gate-<name>.log for debugging;
+# Gates that FAIL write details to <log-dir>/hydra-gate-<name>.log for debugging,
+# where <log-dir> is a PRIVATE per-invocation directory printed on the first
+# line of output (see HYDRA_GATE_LOG_DIR below);
 # a short summary is emitted on stdout so the wrapper can relay it to the
 # builder's focused fix pass.
 #
@@ -72,6 +74,47 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)"
 # coverage assertion measured against a stale inventory is the very defect the
 # assertion exists to catch.
 RUNNER_SELF="${SCRIPT_DIR}/$(basename "${BASH_SOURCE[0]:-$0}")"
+
+# ---------------------------------------------------------------------------
+# ONE PRIVATE LOG DIRECTORY PER INVOCATION.
+#
+# Every gate below writes its findings to a file and then derives its verdict
+# from `wc -l` on that file. Until now ~61 of those paths were hardcoded
+# `${HYDRA_GATE_LOG_DIR}/hydra-gate-<name>.log`, shared by every concurrent run on the host.
+# Exactly one gate — gate-6 — used `mktemp`, and its comment said why.
+#
+# The consequence is not noise, it is NON-DETERMINISM IN BOTH DIRECTIONS.
+# Two runs of the same commit on the same host, minutes apart, with other
+# runs active:
+#
+#     run A:  gate-7  FAIL 18   gate-28 FAIL  6   gate-39 PASS     gate-45 FAIL 30
+#     run B:  gate-7  FAIL 25   gate-28 FAIL 32   gate-39 FAIL 7   gate-45 FAIL 29
+#
+# gate-39 flipped PASS<->FAIL. A log another process truncated between the
+# write and the count reports a number describing neither run, and a
+# truncated-to-empty log reports PASS — a falsely-green gate, manufactured
+# by the runner's own plumbing. Measured five times across fleet sweeps: a
+# repo was credited with another repo's findings, and vice versa.
+#
+# TMPDIR is honoured so a caller can place the logs somewhere it can collect
+# them; the directory is PRINTED once so the paths in the summary stay
+# greppable, and is deliberately NOT deleted on exit — the whole point of a
+# findings log is that you read it after the run.
+# ---------------------------------------------------------------------------
+HYDRA_GATE_LOG_DIR="${HYDRA_GATE_LOG_DIR:-}"
+if [ -z "${HYDRA_GATE_LOG_DIR}" ]; then
+    HYDRA_GATE_LOG_DIR="$(mktemp -d "${TMPDIR:-/tmp}/hydra-gates.XXXXXXXX" 2>/dev/null || true)"
+fi
+if [ -z "${HYDRA_GATE_LOG_DIR}" ] || [ ! -d "${HYDRA_GATE_LOG_DIR}" ]; then
+    # Refuse rather than silently fall back to the shared path. A run whose
+    # logs land somewhere another run can truncate is a run whose verdicts
+    # cannot be trusted, and "cannot be trusted" must not look like "green".
+    echo "[hydra-gates] ERROR: could not create a private log directory under ${TMPDIR:-/tmp}." >&2
+    echo "[hydra-gates]        Refusing to run: shared log paths make gate verdicts non-deterministic." >&2
+    exit 97
+fi
+mkdir -p "${HYDRA_GATE_LOG_DIR}" 2>/dev/null || true
+echo "[hydra-gates] findings logs: ${HYDRA_GATE_LOG_DIR}"
 
 SCOPE_TO_DIFF=0
 BASE_REF="origin/development"
@@ -149,16 +192,86 @@ if [ "${SCOPE_TO_DIFF}" = "1" ]; then
         fi
     fi
 
+    # A RESOLVING BASE IS NOT A USABLE BASE (third vacuous-pass shape).
+    #
+    # The check above proves `${BASE_REF}` names a commit. It does NOT prove
+    # the two histories share one. On a SHALLOW checkout — `actions/checkout`
+    # with the default `fetch-depth: 1`, which is most of the fleet —
+    # `origin/development` exists as a ref while its history is truncated, so
+    # `git diff ${BASE_REF}...HEAD` fails outright. The old `|| … || true`
+    # chain swallowed that failure and left CHANGED_FILES empty, and an empty
+    # scope makes EVERY gate iterate nothing and report PASS.
+    #
+    # Measured on shillinq: a `development` run finished in 22 SECONDS with
+    # all 63 gates green. Unscoped, the same commit fails 18. Twenty-two
+    # seconds is itself the tell — but nothing in the output said so, and a
+    # green run is not read twice.
+    #
+    # So: require a merge base, and read the diff's exit status DIRECTLY
+    # rather than through a `||` chain that cannot tell "no changes" from
+    # "the command could not run".
+    # THE BASE IS THE SAME COMMIT AS HEAD.
+    #
+    # This is the shape that actually produced shillinq's 22-second all-green
+    # run, and it is not a shallow-history failure: on a push to
+    # `development`, `origin/development` and `HEAD` ARE the same commit. The
+    # diff is then legitimately empty, git succeeds, and every gate iterates
+    # nothing and reports PASS. Verified: shillinq `development`
+    # c64e9fe — `git rev-parse HEAD` and `origin/development` identical,
+    # `git diff origin/development...HEAD` = 0 files, 52 gates PASS. Run
+    # UNSCOPED the same commit fails 18.
+    #
+    # So EVERY diff-scoped run on a mainline branch is vacuous by
+    # construction. That is a configuration error in the caller (a scoped run
+    # only makes sense for a PR), not an empty PR, and it must not wear the
+    # same green as a run that inspected something.
+    _base_sha=$(git -c safe.directory='*' rev-parse --verify --quiet "${BASE_REF}^{commit}" 2>/dev/null || true)
+    _head_sha=$(git -c safe.directory='*' rev-parse --verify --quiet 'HEAD^{commit}' 2>/dev/null || true)
+    if [ -n "${_base_sha}" ] && [ "${_base_sha}" = "${_head_sha}" ]; then
+        echo "[hydra-gates] ERROR: diff base '${BASE_REF}' IS HEAD (${_head_sha})." >&2
+        echo "[hydra-gates] A scoped run against itself inspects nothing, and every gate" >&2
+        echo "[hydra-gates] would report PASS over an empty file set. Refusing." >&2
+        echo "[hydra-gates] Run WITHOUT --scope-to-diff on a mainline branch, or pass a" >&2
+        echo "[hydra-gates] --base that is actually behind HEAD." >&2
+        exit 99
+    fi
+
+    if ! git -c safe.directory='*' merge-base "${BASE_REF}" HEAD > /dev/null 2>&1; then
+        echo "[hydra-gates] ERROR: '${BASE_REF}' resolves, but shares NO history with HEAD." >&2
+        echo "[hydra-gates] This is what a SHALLOW checkout looks like (fetch-depth: 1)." >&2
+        echo "[hydra-gates] The diff would be empty and every gate would pass having read" >&2
+        echo "[hydra-gates] nothing. Refusing. Fix: fetch-depth: 0, or a deeper fetch of" >&2
+        echo "[hydra-gates] '${BASE_REF}', or run unscoped." >&2
+        exit 99
+    fi
+
+    # `&& _diff_rc=0 || _diff_rc=$?` and NOT `set -e` / `set +e`.
+    #
+    # This script runs under `set -u` only — errexit is deliberately OFF,
+    # because a gate returning non-zero is normal. An earlier draft of this
+    # block used `set +e … set -e`, which does not restore the previous
+    # state, it turns errexit ON for the remaining 3,700 lines. The run then
+    # ABORTED right after this block, and the abort banner said only
+    # "GATE COVERAGE IS INCOMPLETE" — caught by
+    # scripts/lib/test_gate_route_auth.sh, which is why that suite exists.
     CHANGED_FILES=$(git -c safe.directory='*' diff --name-only \
-        --diff-filter=ACMR "${BASE_REF}...HEAD" 2>/dev/null \
-        || git -c safe.directory='*' diff --name-only \
-            --diff-filter=ACMR "${BASE_REF}" 2>/dev/null \
-        || true)
+        --diff-filter=ACMR "${BASE_REF}...HEAD" 2>/dev/null) && _diff_rc=0 || _diff_rc=$?
+    if [ "${_diff_rc}" -ne 0 ]; then
+        # Fall back to the two-dot form, still reading the code directly.
+        CHANGED_FILES=$(git -c safe.directory='*' diff --name-only \
+            --diff-filter=ACMR "${BASE_REF}" 2>/dev/null) && _diff_rc=0 || _diff_rc=$?
+    fi
+    if [ "${_diff_rc}" -ne 0 ]; then
+        echo "[hydra-gates] ERROR: computing the diff against '${BASE_REF}' FAILED (git exit ${_diff_rc})." >&2
+        echo "[hydra-gates] An unobtainable scope is not an empty one. Refusing rather than" >&2
+        echo "[hydra-gates] reporting a green run over zero inspected files." >&2
+        exit 99
+    fi
     _cf_count=$(printf '%s' "${CHANGED_FILES}" | grep -c . 2>/dev/null || true)
     if [ "${_cf_count:-0}" = "0" ]; then
         # Genuinely zero changed files is a legitimate outcome, but it must be
         # stated as such rather than looking like a scoped run that found nothing.
-        echo "[hydra-gates] Scope: diff vs ${BASE_REF} — 0 changed file(s). Base resolves; this PR changes nothing."
+        echo "[hydra-gates] Scope: diff vs ${BASE_REF} — 0 changed file(s). Base resolves, histories join, git succeeded; this PR changes nothing."
     else
         echo "[hydra-gates] Scope: diff vs ${BASE_REF} — ${_cf_count} changed file(s)"
     fi
@@ -263,7 +376,7 @@ _enum_tracked() {
 # newline. That is how gate-22 came to print
 #
 #     [gate-22] manifest-validation: FAIL — 0
-#     1 schema violation(s) in src/manifest.json — see /tmp/…
+#     1 schema violation(s) in src/manifest.json — see ${HYDRA_GATE_LOG_DIR}/…
 #
 # on opencatalogi: a real finding sat in the log, the count line read "0", and
 # the rest of the message was orphaned onto a second line that no `^\[gate-`
@@ -485,9 +598,9 @@ trap '_rc=$?; if [ "${_SUMMARY_REACHED}" -eq 0 ]; then
 # Resolve the lib/ dir that ships the gate helpers. Local repo layout is
 # scripts/run-hydra-gates.sh + scripts/lib/*.py; container layout flattens
 # everything into /usr/local/lib/hydra/. Probe both.
-_gate_helper_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/lib" 2>/dev/null && pwd || true)"
+_gate_helper_dir="$(cd "${SCRIPT_DIR}/lib" 2>/dev/null && pwd || true)"
 if [ ! -f "${_gate_helper_dir}/filter_preexisting_methods.py" ]; then
-    _gate_helper_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"
+    _gate_helper_dir="${SCRIPT_DIR}"
 fi
 
 # Provenance filter — for method-based gates, distinguish PR-introduced
@@ -527,7 +640,7 @@ if [ -d lib ]; then
         {
             [ "${_ml}" -gt 0 ] && { echo "Missing @license:"; echo "${_missing_license}" | sed 's/^/  /'; }
             [ "${_mc}" -gt 0 ] && { echo "Missing @copyright:"; echo "${_missing_copyright}" | sed 's/^/  /'; }
-        } > /tmp/hydra-gate-spdx-headers.log
+        } > ${HYDRA_GATE_LOG_DIR}/hydra-gate-spdx-headers.log
         _fail 1 "spdx-headers" "${_ml} missing @license, ${_mc} missing @copyright"
     fi
 fi
@@ -536,14 +649,14 @@ fi
 # Gate 2: Forbidden debug helpers in lib/
 # ---------------------------------------------------------------------------
 if [ -d lib ]; then
-    : > /tmp/hydra-gate-forbidden-patterns.log
+    : > ${HYDRA_GATE_LOG_DIR}/hydra-gate-forbidden-patterns.log
     _forbidden=0
     for pattern in var_dump die error_log print_r dd dump; do
         _hits=$(grep -rnE "\\b${pattern}\\(" lib/ 2>/dev/null | grep -v 'vendor/' | _filter_grep_by_scope || true)
         if [ -n "${_hits}" ]; then
             _n=$(echo "${_hits}" | wc -l)
-            echo "${_n}x ${pattern}(" >> /tmp/hydra-gate-forbidden-patterns.log
-            echo "${_hits}" | head -3 | sed 's/^/  /' >> /tmp/hydra-gate-forbidden-patterns.log
+            echo "${_n}x ${pattern}(" >> ${HYDRA_GATE_LOG_DIR}/hydra-gate-forbidden-patterns.log
+            echo "${_hits}" | head -3 | sed 's/^/  /' >> ${HYDRA_GATE_LOG_DIR}/hydra-gate-forbidden-patterns.log
             _forbidden=$((_forbidden + _n))
         fi
     done
@@ -557,7 +670,7 @@ fi
 # ---------------------------------------------------------------------------
 # Gate 3: Stub scan
 # ---------------------------------------------------------------------------
-_stub_log=/tmp/hydra-gate-stub-scan.log
+_stub_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-stub-scan.log
 : > "${_stub_log}"
 grep -rn "In a complete implementation" lib/ src/ 2>/dev/null | _filter_grep_by_scope | head -5 >> "${_stub_log}" || true
 if [ -d lib/BackgroundJob ]; then
@@ -671,7 +784,7 @@ if [ -f composer.json ] && command -v composer >/dev/null 2>&1; then
         _skip 4 "composer-audit" na "neither composer.json nor composer.lock is in this diff — under ADR-020 diff scoping the dependency tree is unchanged from the base branch, so this PR introduces no dependency change to audit."
     fi
     if [ "${_run_audit}" = "1" ]; then
-        _ca_log=/tmp/hydra-gate-composer-audit.log
+        _ca_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-composer-audit.log
         if [ -f composer.lock ]; then
             _ca_mode="--locked"
         else
@@ -731,8 +844,8 @@ fi
 #     route is exactly when its auth posture must be re-checked).
 # ---------------------------------------------------------------------------
 if [ -f appinfo/routes.php ]; then
-    _ra_fail=0 _ra_log=/tmp/hydra-gate-route-auth.log
-    _ra_unresolved_log=/tmp/hydra-gate-route-auth-unresolved.log
+    _ra_fail=0 _ra_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-route-auth.log
+    _ra_unresolved_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-route-auth-unresolved.log
     : > "${_ra_log}"
     : > "${_ra_unresolved_log}"
     # Touching appinfo/routes.php puts every routed method back in scope.
@@ -821,10 +934,10 @@ fi
 # count (a public helper called from a sibling method is legit).
 #
 # The findings log uses a mktemp path (not the fixed
-# /tmp/hydra-gate-orphan-auth.log) so parallel gate runs across multiple
+# ${HYDRA_GATE_LOG_DIR}/hydra-gate-orphan-auth.log) so parallel gate runs across multiple
 # apps can't clobber each other's counts. See hydra#110.
 # ---------------------------------------------------------------------------
-_oa_log="$(mktemp "${TMPDIR:-/tmp}/hydra-gate-orphan-auth.XXXXXX.log")"
+_oa_log="$(mktemp "${HYDRA_GATE_LOG_DIR}/hydra-gate-orphan-auth.XXXXXX.log")"
 : > "${_oa_log}"
 _oa_files=()
 while IFS= read -r f; do
@@ -844,9 +957,9 @@ if [ "${#_oa_files[@]}" -eq 0 ]; then
     _skip 6 "orphan-auth" na "scope was empty — 0 lib/Service or lib/Controller PHP file(s) in this diff, so NOTHING was inspected; orphaned (defined-but-never-called) authorization methods are UNVERIFIED by this run."
 fi
 if [ "${#_oa_files[@]}" -gt 0 ]; then
-    _oa_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/lib" 2>/dev/null && pwd)"
+    _oa_lib_dir="$(cd "${SCRIPT_DIR}/lib" 2>/dev/null && pwd)"
     if [ ! -f "${_oa_lib_dir}/check_orphan_auth.py" ]; then
-        _oa_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)/lib"
+        _oa_lib_dir="${SCRIPT_DIR}/lib"
     fi
     if [ -f "${_oa_lib_dir}/check_orphan_auth.py" ]; then
         python3 "${_oa_lib_dir}/check_orphan_auth.py" "${_oa_files[@]}" \
@@ -905,7 +1018,7 @@ fi
 # properly scopes @NoAdminRequired look-back to the current method's
 # docblock — avoiding false positives from preceding method annotations.
 # ---------------------------------------------------------------------------
-_idor_log=/tmp/hydra-gate-no-admin-idor.log
+_idor_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-no-admin-idor.log
 : > "${_idor_log}"
 _idor_files=()
 while IFS= read -r f; do
@@ -922,9 +1035,9 @@ if [ "${#_idor_files[@]}" -eq 0 ]; then
     _skip 7 "no-admin-idor" na "scope was empty — 0 lib/Controller PHP file(s) in this diff, so NOTHING was inspected; unguarded #[NoAdminRequired] endpoints (IDOR, OWASP A01:2021) are UNVERIFIED by this run."
 fi
 if [ "${#_idor_files[@]}" -gt 0 ]; then
-    _gate_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/lib" 2>/dev/null && pwd)"
+    _gate_lib_dir="$(cd "${SCRIPT_DIR}/lib" 2>/dev/null && pwd)"
     if [ ! -f "${_gate_lib_dir}/check_no_admin_idor.py" ]; then
-        _gate_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)/lib"
+        _gate_lib_dir="${SCRIPT_DIR}/lib"
     fi
     if [ -f "${_gate_lib_dir}/check_no_admin_idor.py" ]; then
         python3 "${_gate_lib_dir}/check_no_admin_idor.py" "${_idor_files[@]}" \
@@ -948,7 +1061,7 @@ fi
 # Gate 8: Unsafe-auth-resolver — no `catch (\Throwable) { return null; }`
 # in methods whose name contains Auth/Authorization/Permission/Role/Guard.
 # ---------------------------------------------------------------------------
-_uar_log=/tmp/hydra-gate-unsafe-auth-resolver.log
+_uar_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-unsafe-auth-resolver.log
 : > "${_uar_log}"
 while IFS= read -r f; do
     [ -f "$f" ] || continue
@@ -1009,7 +1122,7 @@ fi
 # See ADR-005 (security — attribute must match actual requirement) and
 # ADR-016 (routes — gate-5 syntactic, gate-9 semantic).
 # ---------------------------------------------------------------------------
-_sem_log=/tmp/hydra-gate-semantic-auth.log
+_sem_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-semantic-auth.log
 : > "${_sem_log}"
 
 # W28 (2026-04-24 warnings list) — gate-9 was a flat-regex implementation
@@ -1033,8 +1146,8 @@ if [ "${#_sem_files[@]}" -gt 0 ]; then
     # because the path resolution only checked the lib/ subdir variant.
     _sem_helper=""
     for _candidate in \
-        "$(dirname "${BASH_SOURCE[0]:-$0}")/lib/check_semantic_auth.py" \
-        "$(dirname "${BASH_SOURCE[0]:-$0}")/check_semantic_auth.py"; do
+        "${SCRIPT_DIR}/lib/check_semantic_auth.py" \
+        "${SCRIPT_DIR}/check_semantic_auth.py"; do
         if [ -f "${_candidate}" ]; then
             _sem_helper="${_candidate}"
             break
@@ -1045,7 +1158,7 @@ if [ "${#_sem_files[@]}" -gt 0 ]; then
             >> "${_sem_log}" 2>/dev/null || true
     else
         _sem_ran=0
-        _skip 9 "semantic-auth" wiring "check_semantic_auth.py not found near $(dirname "${BASH_SOURCE[0]:-$0}") — ${#_sem_files[@]} controller file(s) were in scope and NONE were inspected; auth-attribute-vs-body semantic mismatches are UNVERIFIED by this run."
+        _skip 9 "semantic-auth" wiring "check_semantic_auth.py not found near ${SCRIPT_DIR} — ${#_sem_files[@]} controller file(s) were in scope and NONE were inspected; auth-attribute-vs-body semantic mismatches are UNVERIFIED by this run."
     fi
 fi
 if [ "${_sem_ran}" -eq 1 ]; then
@@ -1065,7 +1178,7 @@ fi
 # `loadState('doriath', 'version', 'Unknown')`. ADR-004 hard rule.
 # ---------------------------------------------------------------------------
 if [ -d src ]; then
-    _is_log=/tmp/hydra-gate-initial-state.log
+    _is_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-initial-state.log
     : > "${_is_log}"
     grep -rnE "getElementById\s*\([^)]+\)[^.]*\.dataset\b" src/ \
         --include='*.vue' --include='*.js' --include='*.ts' 2>/dev/null \
@@ -1085,7 +1198,7 @@ fi
 # framework enforces. ADR-004 hard rule. Observed 2026-04-30 on doriath
 # (commit c7c72e9 removed the dangerous /settings → AdminRoot route).
 # ---------------------------------------------------------------------------
-_ar_log=/tmp/hydra-gate-admin-router.log
+_ar_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-admin-router.log
 : > "${_ar_log}"
 for f in src/router/index.js src/router/index.ts src/router.js src/router.ts; do
     [ -f "$f" ] || continue
@@ -1111,7 +1224,7 @@ fi
 # rule. Observed 2026-04-30 on doriath.
 # ---------------------------------------------------------------------------
 if [ -d src ]; then
-    _il_log=/tmp/hydra-gate-nc-input-labels.log
+    _il_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-nc-input-labels.log
     : > "${_il_log}"
     while IFS= read -r vue; do
         _in_scope "${vue}" || continue
@@ -1139,7 +1252,7 @@ fi
 # components. ADR-004 hard rule. Observed 2026-04-30 on doriath.
 # ---------------------------------------------------------------------------
 if [ -d src ]; then
-    _mi_log=/tmp/hydra-gate-modal-isolation.log
+    _mi_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-modal-isolation.log
     : > "${_mi_log}"
     while IFS= read -r vue; do
         case "${vue}" in
@@ -1181,7 +1294,7 @@ fi
 # analysis; owned by code-review runtime semantics + ADR-005.
 # ---------------------------------------------------------------------------
 if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
-    _rr_log=/tmp/hydra-gate-route-reachability.log
+    _rr_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-route-reachability.log
     : > "${_rr_log}"
 
     # Touching appinfo/routes.php puts every routed entry back in scope for
@@ -1327,12 +1440,12 @@ fi
 # slicer + manifest walker.
 # ---------------------------------------------------------------------------
 if [ -f src/manifest.json ]; then
-    _da_log=/tmp/hydra-gate-dashboard-antipattern.log
+    _da_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-dashboard-antipattern.log
     : > "${_da_log}"
     _da_ran=1
-    _da_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/lib" 2>/dev/null && pwd)"
+    _da_lib_dir="$(cd "${SCRIPT_DIR}/lib" 2>/dev/null && pwd)"
     if [ ! -f "${_da_lib_dir}/check_dashboard_antipattern.py" ]; then
-        _da_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)/lib"
+        _da_lib_dir="${SCRIPT_DIR}/lib"
     fi
     if [ -f "${_da_lib_dir}/check_dashboard_antipattern.py" ]; then
         # The helper exits with the number of violations and prints one
@@ -1379,12 +1492,12 @@ fi
 # See scripts/lib/check_spec_coverage.py for the parse + scope logic.
 # ---------------------------------------------------------------------------
 if [ -d lib ] || [ -d src ]; then
-    _sc_log=/tmp/hydra-gate-spec-coverage.log
+    _sc_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-spec-coverage.log
     : > "${_sc_log}"
     _sc_ran=1
-    _sc_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/lib" 2>/dev/null && pwd)"
+    _sc_lib_dir="$(cd "${SCRIPT_DIR}/lib" 2>/dev/null && pwd)"
     if [ ! -f "${_sc_lib_dir}/check_spec_coverage.py" ]; then
-        _sc_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)/lib"
+        _sc_lib_dir="${SCRIPT_DIR}/lib"
     fi
     if [ -f "${_sc_lib_dir}/check_spec_coverage.py" ]; then
         # The helper self-scopes to the PR diff; feed it our --base so a
@@ -1430,8 +1543,18 @@ fi
 # 4 MeetingService CRUD methods, ~260 lines, never called from the
 # frontend. Deleted in 2026-04-28 retrofit. This gate prevents the same
 # pattern from recurring.
-_redundant_log=/tmp/hydra-gate-redundant-controller.log
-SCRIPT_DIR_REDUNDANT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_redundant_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-redundant-controller.log
+# ${SCRIPT_DIR}, resolved once at the top BEFORE the `cd "${APP_DIR}"`.
+#
+# This line used to re-resolve `dirname "${BASH_SOURCE[0]}"` HERE, which is
+# relative to the APP directory by the time it runs. Invoked by a relative
+# path — `bash dotgithub/hydra-gates/scripts/run-hydra-gates.sh /some/app`,
+# which is how a human runs it — the `cd` failed and, under the `&&`, the
+# whole runner ABORTED at gate 17. The remaining ~46 gates never executed.
+# The run does announce "ABORTED before the summary", so it is not silently
+# green, but it is a whole-suite outage triggered by nothing worse than the
+# caller's choice of path spelling.
+SCRIPT_DIR_REDUNDANT="${SCRIPT_DIR}"
 # Use a bash array so the multi-line `${CHANGED_FILES}` (newline-separated by
 # `git diff --name-only`) stays a single argument. Previously the unquoted
 # `${_changed_files_arg}` expansion word-split on newlines/spaces, causing
@@ -1499,7 +1622,7 @@ fi
 #
 # See ADR-031 "The x-openregister-notifications dialect (canonical)".
 # ---------------------------------------------------------------------------
-_nd_log=/tmp/hydra-gate-notification-dialect.log
+_nd_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-notification-dialect.log
 : > "${_nd_log}"
 # OpenRegister engine marker — only the engine app ships this dispatcher.
 # Its presence suppresses check (b) entirely (the engine legitimately calls
@@ -1536,7 +1659,7 @@ fi
 _nd_fail=$(wc -l < "${_nd_log}" 2>/dev/null || echo 0)
 
 # ---- (b) Imperative dispatch in a leaf app — WARNING only (not a failure).
-_nd_warn_log=/tmp/hydra-gate-notification-dialect-warn.log
+_nd_warn_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-notification-dialect-warn.log
 : > "${_nd_warn_log}"
 if [ "${_nd_is_engine}" = "0" ] && [ -d lib ]; then
     # NotificationService-named classes.
@@ -1591,12 +1714,12 @@ fi
 # See .claude/skills/hydra-gate-e2e-coverage/SKILL.md for the fix action.
 # ---------------------------------------------------------------------------
 if [ -d openspec/specs ] || [ -d tests/e2e ]; then
-    _e2e_log=/tmp/hydra-gate-e2e-coverage.log
+    _e2e_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-e2e-coverage.log
     : > "${_e2e_log}"
     _e2e_ran=1
-    _e2e_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/lib" 2>/dev/null && pwd)"
+    _e2e_lib_dir="$(cd "${SCRIPT_DIR}/lib" 2>/dev/null && pwd)"
     if [ ! -f "${_e2e_lib_dir}/check_e2e_coverage.py" ]; then
-        _e2e_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)/lib"
+        _e2e_lib_dir="${SCRIPT_DIR}/lib"
     fi
     if [ -f "${_e2e_lib_dir}/check_e2e_coverage.py" ]; then
         # check_e2e_coverage.py exits with the uncovered-scenario count (0 = PASS).
@@ -1641,7 +1764,7 @@ fi
 # Scoped to PHP files under lib/, diff-aware when --scope-to-diff is on.
 # ---------------------------------------------------------------------------
 if [ -d lib ]; then
-    _or_log=/tmp/hydra-gate-or-objectservice-api.log
+    _or_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-or-objectservice-api.log
     : > "${_or_log}"
     _or_hits=0
     # Method-call style only — `->findObjects(` etc — to avoid matching
@@ -1693,7 +1816,7 @@ fi
 # line + at least 7 chars + space, which is git's canonical conflict
 # marker shape and unlikely to collide with prose / code.
 # ---------------------------------------------------------------------------
-_cm_log=/tmp/hydra-gate-conflict-markers.log
+_cm_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-conflict-markers.log
 : > "${_cm_log}"
 _cm_hits=0
 # Match git's exact marker shapes: `<<<<<<< ` / `======= ` (end of line OK) / `>>>>>>> `
@@ -1769,7 +1892,7 @@ fi
 # Spec: openspec/changes/adopt-app-manifest/specs/adopt-app-manifest/spec.md
 # ---------------------------------------------------------------------------
 if [ -f src/manifest.json ]; then
-    _mv_log=/tmp/hydra-gate-manifest-validation.log
+    _mv_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-manifest-validation.log
     : > "${_mv_log}"
     _mv_validator="${SCRIPT_DIR}/lib/check_manifest.js"
     # Diff-scope: when --scope-to-diff is set and src/manifest.json was NOT
@@ -1840,7 +1963,7 @@ fi
 #   - openspec/changes/consume-or-workflow-engine-fleet-wide/tasks.md HYDRA-1.2
 #   - openspec/changes/shared-pdok-via-openconnector/tasks.md
 # ---------------------------------------------------------------------------
-_or_abs_log=/tmp/hydra-gate-or-abstraction-anti-patterns.log
+_or_abs_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-or-abstraction-anti-patterns.log
 : > "${_or_abs_log}"
 # Skip when lib/ is absent (frontend-only repo).
 if [ -d lib ]; then
@@ -1932,7 +2055,7 @@ fi
 # was absent: no scripts/check-integration-parity.sh → no output at all. It was
 # measured absent in MOST fleet repos on 2026-08-03, which is why fleet coverage
 # was never the declared gate count anywhere. It now says so.
-_parity_log=/tmp/hydra-gate-integration-parity.log
+_parity_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-integration-parity.log
 : > "${_parity_log}"
 #
 # COVERAGE CLASSIFICATION (gate-24). "No parity script" was one message for two
@@ -2005,12 +2128,12 @@ fi
 # See .claude/skills/hydra-gate-contract-coverage/SKILL.md for the fix action.
 # ---------------------------------------------------------------------------
 if [ -f appinfo/routes.php ]; then
-    _cc_log=/tmp/hydra-gate-contract-coverage.log
+    _cc_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-contract-coverage.log
     : > "${_cc_log}"
     _cc_ran=1
-    _cc_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/lib" 2>/dev/null && pwd)"
+    _cc_lib_dir="$(cd "${SCRIPT_DIR}/lib" 2>/dev/null && pwd)"
     if [ ! -f "${_cc_lib_dir}/check_contract_coverage.py" ]; then
-        _cc_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)/lib"
+        _cc_lib_dir="${SCRIPT_DIR}/lib"
     fi
     if [ -f "${_cc_lib_dir}/check_contract_coverage.py" ]; then
         # The helper exits with the uncovered-endpoint count (0 = PASS). Capture
@@ -2052,12 +2175,12 @@ fi
 # See .claude/skills/hydra-gate-visual-coverage/SKILL.md for the fix action.
 # ---------------------------------------------------------------------------
 if [ -d src ]; then
-    _vc_log=/tmp/hydra-gate-visual-coverage.log
+    _vc_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-visual-coverage.log
     : > "${_vc_log}"
     _vc_ran=1
-    _vc_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/lib" 2>/dev/null && pwd)"
+    _vc_lib_dir="$(cd "${SCRIPT_DIR}/lib" 2>/dev/null && pwd)"
     if [ ! -f "${_vc_lib_dir}/check_visual_coverage.py" ]; then
-        _vc_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)/lib"
+        _vc_lib_dir="${SCRIPT_DIR}/lib"
     fi
     if [ -f "${_vc_lib_dir}/check_visual_coverage.py" ]; then
         set +e
@@ -2112,7 +2235,7 @@ fi
 # See .claude/skills/hydra-gate-no-phantom-cross-app-rpc/SKILL.md for the
 # detection algorithm and the fix action (the event-contract recipe).
 # ---------------------------------------------------------------------------
-_pcar_log=/tmp/hydra-gate-no-phantom-cross-app-rpc.log
+_pcar_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-no-phantom-cross-app-rpc.log
 : > "${_pcar_log}"
 _pcar_files=()
 # Audit lib/ PHP (the command-dispatch site) and src/ JS/Vue/TS (a phantom
@@ -2126,9 +2249,9 @@ done < <(find lib src \( -name '*.php' -o -name '*.vue' -o -name '*.js' -o -name
     -not -path '*/dist/*' -not -path '*/build/*' 2>/dev/null)
 _pcar_ran=1
 if [ "${#_pcar_files[@]}" -gt 0 ]; then
-    _pcar_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/lib" 2>/dev/null && pwd)"
+    _pcar_lib_dir="$(cd "${SCRIPT_DIR}/lib" 2>/dev/null && pwd)"
     if [ ! -f "${_pcar_lib_dir}/check_phantom_cross_app_rpc.py" ]; then
-        _pcar_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)/lib"
+        _pcar_lib_dir="${SCRIPT_DIR}/lib"
     fi
     if [ -f "${_pcar_lib_dir}/check_phantom_cross_app_rpc.py" ]; then
         python3 "${_pcar_lib_dir}/check_phantom_cross_app_rpc.py" "${_pcar_files[@]}" \
@@ -2179,7 +2302,7 @@ fi
 # no-op were byte-identical in the output. A gate that inspected nothing now
 # says so.
 # ---------------------------------------------------------------------------
-_lt_log=/tmp/hydra-gate-license-triangle.log
+_lt_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-license-triangle.log
 : > "${_lt_log}"
 _lt_checked=0
 _composer_lic=""
@@ -2200,26 +2323,46 @@ except Exception:
     print('')
 " 2>/dev/null)
 fi
+# `_lt_ran=0` ONLY for the one case #172's taxonomy below cannot express: the
+# helper is absent. Everything else — no lib/, no composer.json, a composer
+# .json without a `license`, an empty scope — is left to that taxonomy, which
+# distinguishes them deliberately. Collapsing them into one `na` here would
+# undo #172.
+_lt_ran=1
+_lt_helper="${SCRIPT_DIR}/lib/check_license_triangle.py"
 if [ -n "${_composer_lic}" ] && [ -d lib ]; then
-    # Collect every distinct @license value in lib/**/*.php files in scope
+    _lt_files=()
     while IFS= read -r _php; do
         [ -z "${_php}" ] && continue
         _in_scope "${_php}" || continue
-        _file_lic=$(grep -oE '^[[:space:]]*\*[[:space:]]*@license[[:space:]]+[^[:space:]*]+' "${_php}" 2>/dev/null \
-            | head -1 | awk '{print $3}')
-        if [ -z "${_file_lic}" ]; then continue; fi
-        _lt_checked=$((_lt_checked + 1))
-        # Member-of check against the pipe-joined composer license set.
-        case "|${_composer_lic}|" in
-            *"|${_file_lic}|"*) ;;   # file license is in the allowed set
-            *)
-                echo "${_php} file_license=${_file_lic} composer_license=${_composer_lic} rule=license-triangle-drift" >> "${_lt_log}"
-                ;;
-        esac
+        _lt_files+=("${_php}")
     done < <(_enum_tracked '\.php$' lib)
+    if [ "${#_lt_files[@]}" -eq 0 ]; then
+        : # falls through to the `structural` branch below — nothing compared.
+    elif [ ! -f "${_lt_helper}" ]; then
+        # A MISSING HELPER MUST NOT REPORT PASS (#147). This is the one state
+        # #172's chain would misread: with no helper, `_lt_checked` stays 0 and
+        # the chain would call it `structural` ("no file carried a tag"), which
+        # is a claim about the REPOSITORY. The repository is fine; the gate is
+        # broken, and those must not wear the same words.
+        _lt_ran=0
+        _skip 28 "license-triangle" wiring "check_license_triangle.py not found at ${_lt_helper} — ${#_lt_files[@]} PHP file(s) were in scope and NONE had their licence declarations read; licence drift is UNVERIFIED by this run."
+    else
+        # Findings to the log (stdout), the compared-file count back here
+        # (stderr). `2>&1 >>file |` duplicates the CURRENT stdout — the pipe —
+        # onto fd 2 BEFORE stdout is redirected to the log, so the two streams
+        # separate. The count keeps #172's PASS-only-if-something-was-compared
+        # rule intact now that the reading lives in a helper.
+        _lt_checked=$(python3 "${_lt_helper}" "${_composer_lic}" "${_lt_files[@]}" \
+            2>&1 >> "${_lt_log}" | sed -n 's/^declared_files=//p' | head -1)
+        [ -z "${_lt_checked}" ] && _lt_checked=0
+    fi
 fi
 _lt_fail=$(wc -l < "${_lt_log}" 2>/dev/null || echo 0)
-if [ "${_lt_fail}" -ne 0 ]; then
+if [ "${_lt_ran}" -eq 0 ]; then
+    : # the gate already declared itself via _skip above (no lib/, empty scope,
+      # or a missing helper). Falling through would print a second verdict.
+elif [ "${_lt_fail}" -ne 0 ]; then
     _fail 28 "license-triangle" "${_lt_fail} file(s) with @license != composer.json — see ${_lt_log}"
 elif [ "${_lt_checked}" -gt 0 ]; then
     _pass 28 "license-triangle"
@@ -2235,7 +2378,7 @@ elif [ ! -f composer.json ]; then
 elif [ -z "${_composer_lic}" ]; then
     _skip 28 "license-triangle" structural "lib/ and composer.json both exist, but composer.json declares no \`license\` field, so there is nothing to compare per-file @license tags against. Per-file/composer license agreement is UNVERIFIED by this run. Fixable here: add \`\"license\": \"EUPL-1.2\"\` to composer.json."
 else
-    _skip 28 "license-triangle" structural "lib/ exists and composer.json declares license=${_composer_lic}, but 0 in-scope lib/**/*.php file carried an @license PHPDoc tag, so NOTHING was compared. Per-file/composer license agreement is UNVERIFIED by this run. (Presence of the tag is gate-1's job, not this gate's.)"
+    _skip 28 "license-triangle" structural "lib/ exists and composer.json declares license=${_composer_lic}, but 0 in-scope lib/**/*.php file carried an @license or SPDX-License-Identifier declaration, so NOTHING was compared. Per-file/composer license agreement is UNVERIFIED by this run. (Presence of the tag is gate-1's job, not this gate's.)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -2246,7 +2389,7 @@ fi
 # alongside a new .phpunit.cache/ ignore rule). Only fires under --scope-to-diff
 # because the check is intrinsically diff-relative.
 # ---------------------------------------------------------------------------
-_gi_log=/tmp/hydra-gate-gitignore-then-commit.log
+_gi_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-gitignore-then-commit.log
 : > "${_gi_log}"
 if [ "${SCOPE_TO_DIFF}" = "1" ] && [ -f .gitignore ]; then
     # Lines newly added to .gitignore in this PR (excluding blanks + comments)
@@ -2289,7 +2432,7 @@ fi
 # only verifies SOME annotation is present — this gate verifies the right one
 # is present for monitoring callers.
 # ---------------------------------------------------------------------------
-_pm_log=/tmp/hydra-gate-public-monitoring.log
+_pm_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-public-monitoring.log
 : > "${_pm_log}"
 if [ -f appinfo/routes.php ] && [ -d lib/Controller ]; then
     # Find route entries whose `name` looks like `<monitoring-word>#<method>`
@@ -2339,7 +2482,7 @@ fi
 #   - openspec/architecture/wcag-coverage.md SC 1.1.1
 # ---------------------------------------------------------------------------
 if [ -d src ]; then
-    _ia_log=/tmp/hydra-gate-img-alt.log
+    _ia_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-img-alt.log
     : > "${_ia_log}"
     while IFS= read -r vue; do
         _in_scope "${vue}" || continue
@@ -2387,7 +2530,7 @@ fi
 #   - openspec/architecture/wcag-coverage.md SC 2.1.1, 4.1.2
 # ---------------------------------------------------------------------------
 if [ -d src ]; then
-    _sc_log=/tmp/hydra-gate-semantic-controls.log
+    _sc_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-semantic-controls.log
     : > "${_sc_log}"
     while IFS= read -r vue; do
         _in_scope "${vue}" || continue
@@ -2526,7 +2669,7 @@ if [ ! -f "${_axe_report}" ]; then
     fi
 fi
 if [ -f "${_axe_report}" ]; then
-    _axe_log=/tmp/hydra-gate-axe.log
+    _axe_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-axe.log
     : > "${_axe_log}"
     # Parse with python so we don't add a jq dependency. Counts violations
     # by impact and emits one line per serious/critical violation for the
@@ -2572,7 +2715,7 @@ fi
 # role to assistive tech that matches the surrounding NC shell.
 # ---------------------------------------------------------------------------
 if [ -d src ]; then
-    _wc_log=/tmp/hydra-gate-window-confirm.log
+    _wc_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-window-confirm.log
     : > "${_wc_log}"
     grep -rnE '\bwindow\.(confirm|alert|prompt)\s*\(' src/ \
         --include='*.vue' --include='*.js' --include='*.ts' 2>/dev/null \
@@ -2602,7 +2745,7 @@ fi
 #   - openspec/architecture/wcag-coverage.md SC 1.1.1 (Non-text Content)
 # ---------------------------------------------------------------------------
 if [ -d src ]; then
-    _iae_log=/tmp/hydra-gate-img-alt-empty-only.log
+    _iae_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-img-alt-empty-only.log
     : > "${_iae_log}"
     while IFS= read -r vue; do
         _in_scope "${vue}" || continue
@@ -2647,7 +2790,7 @@ fi
 #     `tabindex='-1'`. Positive integer values are very rarely useful."
 # ---------------------------------------------------------------------------
 if [ -d src ]; then
-    _tp_log=/tmp/hydra-gate-tabindex-positive.log
+    _tp_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-tabindex-positive.log
     : > "${_tp_log}"
     # Match tabindex with quoted positive integer. Allow whitespace
     # inside the quotes. Excludes tabindex="0", tabindex="-1", and any
@@ -2680,7 +2823,7 @@ fi
 #   - axe-core rule `aria-hidden-focus` (impact: serious)
 # ---------------------------------------------------------------------------
 if [ -d src ]; then
-    _ahf_log=/tmp/hydra-gate-aria-hidden-focusable.log
+    _ahf_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-aria-hidden-focusable.log
     : > "${_ahf_log}"
     while IFS= read -r vue; do
         _in_scope "${vue}" || continue
@@ -2753,7 +2896,7 @@ fi
 #   - openspec/architecture/wcag-coverage.md SC 2.4.1
 # ---------------------------------------------------------------------------
 if [ -d src ] || [ -d templates ]; then
-    _sl_log=/tmp/hydra-gate-skip-link.log
+    _sl_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-skip-link.log
     : > "${_sl_log}"
     _sl_check() {
         local _f="$1"
@@ -2806,7 +2949,7 @@ fi
 #   - openspec/architecture/wcag-coverage.md SC 4.1.2
 # ---------------------------------------------------------------------------
 if [ -d src ]; then
-    _bn_log=/tmp/hydra-gate-button-name.log
+    _bn_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-button-name.log
     : > "${_bn_log}"
     while IFS= read -r vue; do
         _in_scope "${vue}" || continue
@@ -2852,66 +2995,61 @@ fi
 # Pass conditions for an input element:
 #   (a) has aria-label / :aria-label / aria-labelledby, OR
 #   (b) has an `id=` attribute paired with some `<label for=>` in the file
-#       referencing the same id (heuristic), OR
-#   (c) for the NC* components: has a `label` / `:label` / `inputLabel`
+#       referencing the same id — literal OR bound expression, so
+#       `:for="`f-${id}`"` + `:id="`f-${id}`"` associates, OR
+#   (c) it is a DESCENDANT of a `<label>` element (implicit association —
+#       `<label><input><span>Safe mode</span></label>` needs no id at all), OR
+#   (d) for the NC* components: has a `label` / `:label` / `inputLabel`
 #       prop (their published API), OR
-#   (d) input `type` is `hidden` / `submit` / `button` / `reset` / `image`.
+#   (e) for NcCheckboxRadioSwitch: has non-empty DEFAULT SLOT content, which
+#       nc-vue renders into its own <label>. This one is load-bearing: the
+#       only way to satisfy the previous implementation was to add
+#       `aria-label`, and `aria-label` OVERRIDES the visible text — an
+#       accessibility REGRESSION demanded by an accessibility gate. 463 of
+#       the fleet's 1,211 findings were this shape, and two burn-down PRs
+#       (opencatalogi#808, docudesk#385) were stuck un-mergeable on it, OR
+#   (f) input `type` is `hidden` / `submit` / `button` / `reset` / `image`.
+#
+# Comments and <script>/<style> blocks are excluded: markup that does not
+# ship is not a control.
+#
+# Implementation: scripts/lib/check_form_labels.py, with both-ways tests in
+# scripts/lib/test_check_form_labels.py — every relaxation above ships with
+# the true-positive case it must not swallow.
 #
 # References:
 #   - openspec/architecture/wcag-coverage.md SC 1.3.1, 3.3.2
 # ---------------------------------------------------------------------------
 if [ -d src ]; then
-    _fl_log=/tmp/hydra-gate-form-label-association.log
+    _fl_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-form-label-association.log
     : > "${_fl_log}"
+    _fl_ran=1
+    _fl_helper="${SCRIPT_DIR}/lib/check_form_labels.py"
+    _fl_files=()
     while IFS= read -r vue; do
         _in_scope "${vue}" || continue
-        python3 - "$vue" <<'PYFL' >> "${_fl_log}" 2>/dev/null
-import re, sys
-fname = sys.argv[1]
-try:
-    src = open(fname).read()
-except Exception:
-    sys.exit(0)
-txt = src.replace('\n', ' ')
-labelled_for = set(m.group(1) for m in re.finditer(r'<label\b[^>]*\bfor\s*=\s*"([^"]+)"', txt, re.IGNORECASE))
-
-def has_aria(attrs):
-    return bool(re.search(r'(^|\s)(:?aria-label|aria-labelledby|v-bind:aria-label)\s*=', attrs))
-
-def has_for_match(attrs):
-    m = re.search(r'(^|\s)id\s*=\s*"([^"]+)"', attrs)
-    return m and m.group(2) in labelled_for
-
-def has_nc_label_prop(attrs):
-    return bool(re.search(r'(^|\s)(:?label|input-label|:input-label|inputLabel)\s*=', attrs))
-
-for m in re.finditer(r'<input\b([^>]*)>', txt, re.IGNORECASE):
-    attrs = m.group(1) or ''
-    type_m = re.search(r'(^|\s)type\s*=\s*"(hidden|submit|button|reset|image)"', attrs, re.IGNORECASE)
-    if type_m: continue
-    if has_aria(attrs): continue
-    if has_for_match(attrs): continue
-    print(f'{fname}: {m.group(0)} rule=input-without-label')
-
-for m in re.finditer(r'<(NcTextField|NcCheckboxRadioSwitch|NcRichContenteditable|NcInputField)\b([^>]*)/?>', txt, re.IGNORECASE):
-    tag = m.group(1)
-    attrs = m.group(2) or ''
-    if has_aria(attrs): continue
-    if has_nc_label_prop(attrs): continue
-    print(f'{fname}: <{tag} ...> rule={tag.lower()}-without-label-prop')
-
-for m in re.finditer(r'<textarea\b([^>]*)>', txt, re.IGNORECASE):
-    attrs = m.group(1) or ''
-    if has_aria(attrs): continue
-    if has_for_match(attrs): continue
-    print(f'{fname}: <textarea ...> rule=textarea-without-label')
-PYFL
+        _fl_files+=("${vue}")
     done < <(find src -name '*.vue' 2>/dev/null)
-    _fl_fail=$(wc -l < "${_fl_log}" 2>/dev/null || echo 0)
-    if [ "${_fl_fail}" -eq 0 ]; then
-        _pass 40 "form-label-association"
+    if [ "${#_fl_files[@]}" -eq 0 ]; then
+        _fl_ran=0
+        _skip 40 "form-label-association" na "scope was empty — 0 .vue file(s) in this diff, so NO form control was inspected."
+    elif [ ! -f "${_fl_helper}" ]; then
+        # A MISSING HELPER MUST NOT REPORT PASS (#147).
+        _fl_ran=0
+        _skip 40 "form-label-association" wiring "check_form_labels.py not found at ${_fl_helper} — ${#_fl_files[@]} .vue file(s) were in scope and NONE were inspected; unlabelled form controls (WCAG 1.3.1 / 3.3.2) are UNVERIFIED by this run."
     else
-        _fail 40 "form-label-association" "${_fl_fail} form input(s) without an associated label — see ${_fl_log}"
+        # ONE python process for the whole file set, not one per file. The
+        # per-file heredoc this replaced took over two minutes on a 21-repo
+        # sweep, almost all of it interpreter startup.
+        python3 "${_fl_helper}" "${_fl_files[@]}" >> "${_fl_log}" 2>/dev/null || true
+    fi
+    _fl_fail=$(wc -l < "${_fl_log}" 2>/dev/null || echo 0)
+    if [ "${_fl_ran}" -eq 1 ]; then
+        if [ "${_fl_fail}" -eq 0 ]; then
+            _pass 40 "form-label-association"
+        else
+            _fail 40 "form-label-association" "${_fl_fail} form input(s) without an associated label — see ${_fl_log}"
+        fi
     fi
 fi
 
@@ -2930,7 +3068,7 @@ fi
 #   - openspec/architecture/wcag-coverage.md SC 3.1.1
 # ---------------------------------------------------------------------------
 if [ -d templates ] || [ -d appinfo/templates ]; then
-    _hl_log=/tmp/hydra-gate-html-lang.log
+    _hl_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-html-lang.log
     : > "${_hl_log}"
     while IFS= read -r _f; do
         [ -z "$_f" ] && continue
@@ -2970,7 +3108,7 @@ fi
 #   - openspec/architecture/wcag-coverage.md SC 2.4.4
 # ---------------------------------------------------------------------------
 if [ -d src ]; then
-    _lq_log=/tmp/hydra-gate-link-text-quality.log
+    _lq_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-link-text-quality.log
     : > "${_lq_log}"
     while IFS= read -r vue; do
         _in_scope "${vue}" || continue
@@ -3024,7 +3162,7 @@ fi
 #   - openspec/architecture/wcag-coverage.md SC 1.3.1
 # ---------------------------------------------------------------------------
 if [ -d src ]; then
-    _th_log=/tmp/hydra-gate-table-headers.log
+    _th_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-table-headers.log
     : > "${_th_log}"
     while IFS= read -r vue; do
         _in_scope "${vue}" || continue
@@ -3064,7 +3202,7 @@ fi
 #   - openspec/architecture/wcag-coverage.md SC 1.3.5
 # ---------------------------------------------------------------------------
 if [ -d src ]; then
-    _ac_log=/tmp/hydra-gate-autocomplete-attr.log
+    _ac_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-autocomplete-attr.log
     : > "${_ac_log}"
     while IFS= read -r vue; do
         _in_scope "${vue}" || continue
@@ -3108,7 +3246,7 @@ fi
 #   - openspec/architecture/wcag-coverage.md SC 2.3.3 (AAA, audit-common)
 # ---------------------------------------------------------------------------
 if [ -d src ]; then
-    _rm_log=/tmp/hydra-gate-prefers-reduced-motion.log
+    _rm_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-prefers-reduced-motion.log
     : > "${_rm_log}"
     while IFS= read -r vue; do
         _in_scope "${vue}" || continue
@@ -3148,7 +3286,7 @@ fi
 #
 # Skill: .claude/skills/hydra-gate-spec-anchor-existence/SKILL.md
 # ---------------------------------------------------------------------------
-_sae_log=/tmp/hydra-gate-spec-anchor-existence.log
+_sae_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-spec-anchor-existence.log
 : > "${_sae_log}"
 _sae_files=()
 while IFS= read -r f; do
@@ -3158,158 +3296,31 @@ while IFS= read -r f; do
 done < <(find lib src \( -name '*.php' -o -name '*.vue' -o -name '*.js' -o -name '*.ts' -o -name '*.md' \) \
     -not -path '*/vendor/*' -not -path '*/node_modules/*' \
     -not -path '*/dist/*' -not -path '*/build/*' 2>/dev/null)
-if [ "${#_sae_files[@]}" -gt 0 ]; then
-    python3 - "${_sae_log}" "${_sae_files[@]}" << 'PY'
-import glob, os, re, sys
-log_path = sys.argv[1]
-files = sys.argv[2:]
-# Match `@spec openspec/...` but NOT `@spec exclude ...`
-TAG = re.compile(r'@spec\s+(openspec/[^\s`\'"]+)')
-DATE = re.compile(r'\b\d{4}-\d{2}-\d{2}\b')
-def slugify(text):
-    # kebab-case the visible-heading text so #requirement-foo-bar matches "## Requirement: Foo Bar"
-    t = text.strip().lower()
-    t = re.sub(r'[^a-z0-9]+', '-', t).strip('-')
-    return t
-def gh_slugify(text):
-    # GitHub's own heading-anchor rule: drop every character that is not
-    # alphanumeric, dash, underscore or space, then collapse spaces to dashes.
-    #
-    # It parts company with slugify() on punctuation *inside* a word. GitHub
-    # publishes "A subscription's retry/backoff policy" as
-    # #a-subscriptions-retrybackoff-policy; slugify() produces
-    # #a-subscription-s-retry-backoff-policy. Tags are written against the
-    # anchor GitHub actually serves — that is the link a reader clicks — so
-    # without this the gate reports a correct, working anchor as unresolved.
-    # Observed 2026-08-05 on openconnector: 137 findings, none of them real.
-    #
-    # Both shapes are accepted rather than one replacing the other: a tag
-    # written to satisfy the old kebab rule still resolves, and either way
-    # the heading has to exist, which is what this gate is for.
-    t = text.strip().lower()
-    t = re.sub(r'[^a-z0-9\-_ ]+', '', t)
-    return re.sub(r'\s+', '-', t).strip('-')
-def dedate(name):
-    # `retrofit-2026-04-28-b2b-crossrefs` and `retrofit-b2b-crossrefs-2026-04-28`
-    # both normalise to `retrofit-b2b-crossrefs`: archiving moves the date token.
-    return re.sub(r'-+', '-', DATE.sub('', name)).strip('-')
-def has_anchor(md_path, fragment):
-    # A fragment resolves when it matches (kebab-cased) a heading, a heading's
-    # leading token (`#### 5.2 Foo` ← `#5.2`), a task-list item id
-    # (`- [x] task-18: ...` ← `#task-18`, `- [x] 5.2 Add ...` ← `#5.2`,
-    # optionally with a `task-` prefix in the tag), or — for `#task-N` /
-    # `#N` on files whose checkbox items carry no ids — the Nth top-level
-    # checkbox item (positional convention used by reverse-spec retrofits).
-    frag_slug = slugify(fragment)
-    frag_alt = slugify(re.sub(r'^task-', '', fragment))
-    pos_m = re.fullmatch(r'(?:task-)?(\d+)', fragment)
-    positional = int(pos_m.group(1)) if pos_m else None
-    item_count = 0
-    try:
-        with open(md_path, encoding='utf-8', errors='replace') as f:
-            for line in f:
-                m = re.match(r'^\s*#{1,6}\s+(.+?)\s*$', line)
-                if m:
-                    head = m.group(1)
-                    hslugs = (slugify(head), gh_slugify(head))
-                    frags = (frag_slug, frag_alt)
-                    if any(h in frags for h in hslugs):
-                        return True
-                    # `### Task 8 — long title` resolves `#task-8`; the `-`
-                    # boundary keeps `#task-8` from matching `Task 89`.
-                    if any(h.startswith(f + '-') for h in hslugs for f in frags if f):
-                        return True
-                    # `### Requirement: Foo bar` resolves `#foo-bar` (tags
-                    # often omit the `requirement-`/`scenario-` prefix).
-                    if ':' in head:
-                        tail = head.split(':', 1)[1]
-                        if slugify(tail) in frags or gh_slugify(tail) in frags:
-                            return True
-                    lead = head.split()[0].rstrip('.:') if head.split() else ''
-                    if lead and slugify(lead) in frags:
-                        return True
-                    continue
-                if re.match(r'^-\s*\[[ xX]\]', line):
-                    item_count += 1
-                    if positional is not None and item_count == positional:
-                        return True
-                t = re.match(r'^\s*-\s*\[[ xX]\]\s*(?:\*\*)?([A-Za-z0-9][A-Za-z0-9.\-]*)', line)
-                if t and slugify(t.group(1).rstrip('.:')) in (frag_slug, frag_alt):
-                    return True
-        return False
-    except OSError:
-        return False
-def find_repo_root():
-    p = os.getcwd()
-    while p and p != '/':
-        if os.path.isdir(os.path.join(p, 'openspec')):
-            return p
-        p = os.path.dirname(p)
-    return None
-root = find_repo_root() or os.getcwd()
-# Archived-change index: archiving moves `openspec/changes/<name>/` to
-# `openspec/changes/archive/<date>-<name>/` (or legacy `openspec/archive/<name>`,
-# sometimes with the date token reshuffled). Tags keep pointing at the original
-# path; resolve them through this index instead of forcing a repo-wide retag.
-archive_index = {}
-for pattern in ('openspec/changes/archive/*', 'openspec/archive/*'):
-    for d in glob.glob(os.path.join(root, pattern)):
-        if os.path.isdir(d):
-            archive_index.setdefault(dedate(os.path.basename(d)), []).append(d)
-def resolve(path):
-    # Returns the list of existing candidate files for the tag path: the
-    # literal path plus archived counterparts. Several archived dirs can
-    # share a de-dated key (e.g. two annotate-openregister retrofits from
-    # different dates), so candidates carrying the tag's own date token are
-    # tried first and ALL existing candidates are returned — the anchor
-    # check accepts a fragment found in any of them.
-    cands = []
-    abs_path = os.path.join(root, path)
-    if os.path.exists(abs_path):
-        cands.append(abs_path)
-    m = re.match(r'openspec/(?:changes|archive)/([^/]+)/(.*)$', path)
-    if m and m.group(1) != 'archive':
-        name = m.group(1)
-        dates = DATE.findall(name)
-        dirs = archive_index.get(dedate(name), [])
-        dirs = sorted(dirs, key=lambda d: 0 if any(t in os.path.basename(d) for t in dates) else 1)
-        for d in dirs:
-            cand = os.path.join(d, m.group(2))
-            if os.path.exists(cand) and cand not in cands:
-                cands.append(cand)
-    return cands
-for fp in files:
-    try:
-        with open(fp, encoding='utf-8', errors='replace') as f:
-            src = f.read()
-    except OSError:
-        continue
-    for m in TAG.finditer(src):
-        target = m.group(1)
-        # Split path#fragment
-        if '#' in target:
-            path, frag = target.split('#', 1)
-        else:
-            path, frag = target, None
-        candidates = resolve(path)
-        if not candidates:
-            with open(log_path, 'a', encoding='utf-8') as g:
-                g.write(f"{fp}: @spec target file not found → {target}\n")
-            continue
-        if frag and path.endswith('.md'):
-            if not any(has_anchor(c, frag) for c in candidates):
-                with open(log_path, 'a', encoding='utf-8') as g:
-                    g.write(f"{fp}: @spec anchor not found in {path} → #{frag}\n")
-PY
+_sae_ran=1
+_sae_helper="${SCRIPT_DIR}/lib/check_spec_anchors.py"
+if [ "${#_sae_files[@]}" -eq 0 ]; then
+    _sae_ran=0
+    _skip 46 "spec-anchor-existence" na "scope was empty — 0 annotated source file(s) in this diff, so NO @spec target was resolved."
+elif [ ! -f "${_sae_helper}" ]; then
+    # A MISSING HELPER MUST NOT REPORT PASS (#147). The gate previously
+    # carried its resolver inline, so "the helper is absent" was not a
+    # reachable state; now that it lives in scripts/lib it is, and an absent
+    # resolver looks exactly like a repository with no dangling anchors.
+    _sae_ran=0
+    _skip 46 "spec-anchor-existence" wiring "check_spec_anchors.py not found at ${_sae_helper} — ${#_sae_files[@]} file(s) were in scope and NONE had their @spec targets resolved; dangling spec references are UNVERIFIED by this run."
+else
+    python3 "${_sae_helper}" "${_sae_log}" "${_sae_files[@]}" || true
 fi
 set +e
 _sae_fail=$(wc -l < "${_sae_log}" 2>/dev/null | tr -d ' ')
 set -e
 [ -z "${_sae_fail}" ] && _sae_fail=0
-if [ "${_sae_fail}" -eq 0 ]; then
-    _pass 46 "spec-anchor-existence"
-else
-    _fail 46 "spec-anchor-existence" "${_sae_fail} unresolved @spec target(s) — see ${_sae_log}"
+if [ "${_sae_ran}" -eq 1 ]; then
+    if [ "${_sae_fail}" -eq 0 ]; then
+        _pass 46 "spec-anchor-existence"
+    else
+        _fail 46 "spec-anchor-existence" "${_sae_fail} unresolved @spec target(s) — see ${_sae_log}"
+    fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -3325,7 +3336,7 @@ fi
 #
 # Skill: .claude/skills/hydra-gate-security-change-has-tests/SKILL.md
 # ---------------------------------------------------------------------------
-_scht_log=/tmp/hydra-gate-security-change-has-tests.log
+_scht_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-security-change-has-tests.log
 : > "${_scht_log}"
 if [ "${SCOPE_TO_DIFF}" = "1" ] && [ -n "${BASE_REF}" ]; then
     _scht_changed=$(git diff --name-only "${BASE_REF}...HEAD" 2>/dev/null || true)
@@ -3378,7 +3389,7 @@ fi
 #
 # Skill: .claude/skills/hydra-gate-csrf-cochange/SKILL.md
 # ---------------------------------------------------------------------------
-_csrf_log=/tmp/hydra-gate-csrf-cochange.log
+_csrf_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-csrf-cochange.log
 : > "${_csrf_log}"
 if [ "${SCOPE_TO_DIFF}" = "1" ] && [ -n "${BASE_REF}" ]; then
     # Find removed @NoCSRFRequired lines in changed PHP files
@@ -3433,7 +3444,7 @@ fi
 #
 # Skill: .claude/skills/hydra-gate-controller-exception-translation/SKILL.md
 # ---------------------------------------------------------------------------
-_cxt_log=/tmp/hydra-gate-controller-exception-translation.log
+_cxt_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-controller-exception-translation.log
 : > "${_cxt_log}"
 _cxt_files=()
 while IFS= read -r f; do
@@ -3544,7 +3555,7 @@ fi
 #
 # Skill: .claude/skills/hydra-gate-security-config-fail-mode/SKILL.md
 # ---------------------------------------------------------------------------
-_scfm_log=/tmp/hydra-gate-security-config-fail-mode.log
+_scfm_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-security-config-fail-mode.log
 : > "${_scfm_log}"
 _scfm_files=()
 while IFS= read -r f; do
@@ -3629,7 +3640,7 @@ fi
 #
 # Skill: .claude/skills/hydra-gate-schema-property-titles/SKILL.md
 # ---------------------------------------------------------------------------
-_spt_log=/tmp/hydra-gate-schema-property-titles.log
+_spt_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-schema-property-titles.log
 : > "${_spt_log}"
 _spt_files=()
 while IFS= read -r f; do
@@ -3699,7 +3710,7 @@ fi
 #
 # Skill: .claude/skills/hydra-gate-custom-widget-ratchet/SKILL.md
 # ---------------------------------------------------------------------------
-_cwr_log=/tmp/hydra-gate-custom-widget-ratchet.log
+_cwr_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-custom-widget-ratchet.log
 : > "${_cwr_log}"
 _cwr_files=()
 while IFS= read -r f; do
@@ -3784,7 +3795,7 @@ fi
 # Spec:  openspec/changes/gate-53-effective-manifest-crossref/specs/gate-effective-manifest-crossref/spec.md
 # ---------------------------------------------------------------------------
 if [ -f src/manifest.json ]; then
-    _em_log=/tmp/hydra-gate-effective-manifest-crossref.log
+    _em_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-effective-manifest-crossref.log
     : > "${_em_log}"
     _em_builder="${SCRIPT_DIR}/lib/build_effective_manifest.js"
     _em_crossref="${SCRIPT_DIR}/lib/check_manifest_crossref.js"
@@ -3838,7 +3849,7 @@ if [ -f src/manifest.json ]; then
         _em_scope_file=""
         _em_scoper="${SCRIPT_DIR}/lib/manifest_diff_scope.py"
         if [ "${SCOPE_TO_DIFF}" = "1" ] && [ -f "${_em_scoper}" ]; then
-            _em_scope_file=$(mktemp /tmp/hydra-gate53-scope.XXXXXX 2>/dev/null || true)
+            _em_scope_file=$(mktemp ${HYDRA_GATE_LOG_DIR}/hydra-gate53-scope.XXXXXX 2>/dev/null || true)
             if [ -n "${_em_scope_file}" ]; then
                 _em_inputs=()
                 while IFS= read -r _em_f; do
@@ -3880,7 +3891,7 @@ if [ -f src/manifest.json ]; then
             _em_scope_val="${_em_scope_file}"
         fi
 
-        _em_tmp=$(mktemp /tmp/hydra-gate53-effective.XXXXXX.json 2>/dev/null || true)
+        _em_tmp=$(mktemp ${HYDRA_GATE_LOG_DIR}/hydra-gate53-effective.XXXXXX.json 2>/dev/null || true)
         _em_reason=""
         if [ -z "${_em_tmp}" ]; then
             # Temp-file handoff failed — fail-closed, never skipped.
@@ -3956,7 +3967,7 @@ fi
 #
 # Skill: .claude/skills/hydra-gate-relation-dialect/SKILL.md
 # ---------------------------------------------------------------------------
-_rd_log=/tmp/hydra-gate-relation-dialect.log
+_rd_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-relation-dialect.log
 : > "${_rd_log}"
 _rd_files=()
 while IFS= read -r f; do
@@ -4015,7 +4026,7 @@ fi
 #
 # Skill: .claude/skills/hydra-gate-detail-page-discipline/SKILL.md
 # ---------------------------------------------------------------------------
-_dpd_log=/tmp/hydra-gate-detail-page-discipline.log
+_dpd_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-detail-page-discipline.log
 : > "${_dpd_log}"
 _dpd_files=()
 while IFS= read -r f; do
@@ -4077,7 +4088,7 @@ fi
 #
 # Skill: .claude/skills/hydra-gate-register-handler-resolution/SKILL.md
 # ---------------------------------------------------------------------------
-_rhr_log=/tmp/hydra-gate-register-handler-resolution.log
+_rhr_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-register-handler-resolution.log
 : > "${_rhr_log}"
 _rhr_files=()
 while IFS= read -r f; do
@@ -4133,7 +4144,7 @@ fi
 #
 # Skill: .claude/skills/hydra-gate-orphaned-write-capability/SKILL.md
 # ---------------------------------------------------------------------------
-_owc_log=/tmp/hydra-gate-orphaned-write-capability.log
+_owc_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-orphaned-write-capability.log
 : > "${_owc_log}"
 _owc_files=()
 while IFS= read -r f; do
@@ -4191,7 +4202,7 @@ fi
 #
 # Skill: .claude/skills/hydra-gate-e2e-networkidle/SKILL.md
 # ---------------------------------------------------------------------------
-_nwi_log=/tmp/hydra-gate-e2e-networkidle.log
+_nwi_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-e2e-networkidle.log
 : > "${_nwi_log}"
 while IFS= read -r f; do
     [ -f "$f" ] || continue
@@ -4230,7 +4241,7 @@ fi
 # Suppress with a comment containing `unclosable-gate exclude <reason>`.
 # Skill: .claude/skills/hydra-gate-unclosable-gate/SKILL.md
 # ---------------------------------------------------------------------------
-_ucg_log=/tmp/hydra-gate-unclosable-gate.log
+_ucg_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-unclosable-gate.log
 : > "${_ucg_log}"
 if [ -d lib ] && printf '%s\n' "${CHANGED_FILES}" | grep -qE '^lib/.*\.php$'; then
     set +e
@@ -4270,7 +4281,7 @@ fi
 #
 # Spec: openspec/architecture/adr-077-semantic-icon-vocabulary.md
 # ---------------------------------------------------------------------------
-_iv_log=/tmp/hydra-gate-icon-vocabulary.log
+_iv_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-icon-vocabulary.log
 : > "${_iv_log}"
 if [ -f src/manifest.json ]; then
     _iv_args=""
@@ -4343,7 +4354,7 @@ fi
 # Spec: openspec/architecture/adr-078-object-event-work-placement.md
 # Skill: .claude/skills/hydra-gate-listener-work-placement/SKILL.md
 # ---------------------------------------------------------------------------
-_lwp_log=/tmp/hydra-gate-listener-work-placement.log
+_lwp_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-listener-work-placement.log
 : > "${_lwp_log}"
 if [ -d lib/AppInfo ]; then
     set +e
@@ -4364,7 +4375,7 @@ fi
 # ---------------------------------------------------------------------------
 # Gate 62 — store-plane (ADR-080)
 # ---------------------------------------------------------------------------
-_sp_log=/tmp/hydra-gate-store-plane.log
+_sp_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-store-plane.log
 : > "${_sp_log}"
 set +e
 python3 "${SCRIPT_DIR}/lib/check_store_and_settings_surface.py" . --gate store --base "${BASE_REF}" > "${_sp_log}" 2>&1
@@ -4381,7 +4392,7 @@ fi
 # ---------------------------------------------------------------------------
 # Gate 63 — settings-surface (ADR-079)
 # ---------------------------------------------------------------------------
-_ss_log=/tmp/hydra-gate-settings-surface.log
+_ss_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-settings-surface.log
 : > "${_ss_log}"
 set +e
 python3 "${SCRIPT_DIR}/lib/check_store_and_settings_surface.py" . --gate settings --base "${BASE_REF}" > "${_ss_log}" 2>&1
