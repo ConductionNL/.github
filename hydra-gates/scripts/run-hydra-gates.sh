@@ -2346,6 +2346,27 @@ fi
 # distinguishes them deliberately. Collapsing them into one `na` here would
 # undo #172.
 _lt_ran=1
+# Was the DIFF SCOPE empty, as distinct from "files were in scope and none of
+# them carried a tag"? #172 collapsed those two, and the collapse is a false
+# RED on the most ordinary PR there is.
+#
+# `_in_scope` filters to this PR's diff (ADR-020). So a PR that touches only
+# .github/workflows/, or only src/, has ZERO lib/**/*.php in scope — not
+# because the repository is missing licence tags, but because diff-scoping is
+# working exactly as designed. #172 reported that as `structural`, which is a
+# claim about the REPOSITORY, and with hydra-gates-require-full-coverage on by
+# default it fails the run with exit 98.
+#
+# MEASURED on the fleet's own unpinning PRs, each a single-file workflow diff:
+# hrmq#74 went from a CLEAN baseline to red on nothing but this, and
+# app-versions#129, opencatalogi#813, nextcloud-app-template#132 and
+# launchpad#60 all named gate 28 as their only gate that did not run.
+#
+# That is the "a gate that is legitimately not applicable must NOT fail the
+# run" rule, broken — the same shape as #173, one gate lower down. #172 was
+# right that an empty read must not report PASS; it just swung past
+# NOT APPLICABLE on the way to structural.
+_lt_scope_empty=0
 _lt_helper="${SCRIPT_DIR}/lib/check_license_triangle.py"
 if [ -n "${_composer_lic}" ] && [ -d lib ]; then
     _lt_files=()
@@ -2355,7 +2376,12 @@ if [ -n "${_composer_lic}" ] && [ -d lib ]; then
         _lt_files+=("${_php}")
     done < <(_enum_tracked '\.php$' lib)
     if [ "${#_lt_files[@]}" -eq 0 ]; then
-        : # falls through to the `structural` branch below — nothing compared.
+        # Distinguish the two ways to arrive here. If the repo HAS lib PHP but
+        # none of it is in this diff, the gate is diff-scoped out and that is
+        # NOT APPLICABLE. If the repo has no lib PHP at all, it is still not
+        # this gate's subject matter. Either way nothing was withheld: there
+        # was nothing to read.
+        _lt_scope_empty=1
     elif [ ! -f "${_lt_helper}" ]; then
         # A MISSING HELPER MUST NOT REPORT PASS (#147). This is the one state
         # #172's chain would misread: with no helper, `_lt_checked` stays 0 and
@@ -2394,8 +2420,14 @@ elif [ ! -f composer.json ]; then
     _skip 28 "license-triangle" na "lib/ exists but this repo has no composer.json, so there is no \`license\` declaration for per-file @license tags to be compared against. This gate compares two declarations and only one exists here."
 elif [ -z "${_composer_lic}" ]; then
     _skip 28 "license-triangle" structural "lib/ and composer.json both exist, but composer.json declares no \`license\` field, so there is nothing to compare per-file @license tags against. Per-file/composer license agreement is UNVERIFIED by this run. Fixable here: add \`\"license\": \"EUPL-1.2\"\` to composer.json."
+elif [ "${_lt_scope_empty}" -eq 1 ]; then
+    # DIFF-SCOPED OUT — not a gap. No lib/**/*.php file is in this PR's scope,
+    # so there was nothing for this gate to read. Reporting `structural` here
+    # makes every workflow-only and frontend-only PR red for a licence problem
+    # the repository does not have.
+    _skip 28 "license-triangle" na "no lib/**/*.php file is in this diff's scope, so there was nothing to compare composer.json's license=${_composer_lic} against. Diff-scoped out per ADR-020 — this says nothing about the repository's licence tags, only that this PR did not touch the code they live in. The gate becomes applicable again the moment a PR changes a file under lib/."
 else
-    _skip 28 "license-triangle" structural "lib/ exists and composer.json declares license=${_composer_lic}, but 0 in-scope lib/**/*.php file carried an @license or SPDX-License-Identifier declaration, so NOTHING was compared. Per-file/composer license agreement is UNVERIFIED by this run. (Presence of the tag is gate-1's job, not this gate's.)"
+    _skip 28 "license-triangle" structural "lib/ exists and composer.json declares license=${_composer_lic}, and ${#_lt_files[@]} lib/**/*.php file(s) WERE in scope, but none carried an @license or SPDX-License-Identifier declaration, so NOTHING was compared. Per-file/composer license agreement is UNVERIFIED by this run. (Presence of the tag is gate-1's job, not this gate's.)"
 fi
 
 # ---------------------------------------------------------------------------
