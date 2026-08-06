@@ -453,6 +453,68 @@ _STRICT_GUARD_BODY_RE = re.compile(
     r"|(?:getUser|getUID|currentUid|getCurrentUserId)\s*\(\s*\)\s*===\s*null"
 )
 
+# ---------------------------------------------------------------------------
+# Pattern 5 — the TENANCY guard (ConductionNL/.github#160)
+#
+# `_STRICT_GUARD_BODY_RE` above deliberately excludes a bare `throw` and a
+# 404, on the reasoning that "NotFoundException is not an authorisation
+# guard". For a MULTI-TENANT codebase that reasoning inverts, and gate-7
+# ended up ANTI-CORRELATED with the property it checks.
+#
+# OpenRegister's FlowService says why, in its own comment:
+#
+#     A flow the caller may not see raises the SAME exception as a flow that
+#     does not exist. Distinguishing them would turn every read into an
+#     oracle for enumerating other tenants' flow ids.
+#
+#     public function find(string $uuid): Flow {
+#         $flow = $this->mapper->findByUuid($uuid);
+#         if ($flow->belongsTo($this->activeOrganisation()) === false) {
+#             throw new DoesNotExistException('No such flow');
+#         }
+#         return $flow;
+#     }
+#
+# THAT IS THE GUARD. It is indistinguishable from a 404 on purpose, because
+# a 403 here leaks the existence of another tenant's object. So gate-7
+# flagged exactly the code that got tenancy right — and would have gone
+# GREEN if the 404 were replaced with a 403, i.e. if the code were made to
+# leak. `FlowController::state()` WAS a real IDOR, was fixed by routing
+# through `FlowService::find()`, and gate-7 reported it identically before
+# and after. A verdict that does not move when the defect does is not
+# measuring the defect.
+#
+# The signal below is evidence-based in the same way Pattern 4a is: the
+# collaborator's SOURCE is parsed, and what clears it is a comparison
+# against a SESSION-DERIVED scope followed by a refusal. Both halves are
+# required. A body that merely mentions `belongsTo` and never refuses is
+# not a guard; a body that throws with no tenancy comparison is not seeded
+# by THIS rule (it may still be seeded by the strict one, which is correct).
+_TENANCY_SCOPE_RE = re.compile(
+    r"->\s*belongsTo[A-Za-z0-9_]*\s*\("
+    r"|->\s*(?:getActiveOrganisation|activeOrganisation|getActiveTenant"
+    r"|activeTenant|currentOrganisation|currentTenant)\s*\("
+    r"|->\s*apply(?:Organisation|Organization|Tenant)Filter\s*\("
+    r"|\bMultiTenancyTrait\b"
+)
+
+# The refusal half. A tenancy comparison that leads to nothing is not a
+# guard — it is a computed value nobody acted on.
+_TENANCY_REFUSAL_RE = re.compile(
+    r"\bthrow\b"
+    r"|DoesNotExistException"
+    r"|NotFoundException"
+    r"|return\s*\[\s*\]"
+    r"|return\s+null\b"
+)
+
+
+def _has_tenancy_guard(body: str) -> bool:
+    """True when *body* compares against a session-derived tenant scope AND
+    refuses on mismatch. Both halves required — see Pattern 5 above."""
+    return bool(_TENANCY_SCOPE_RE.search(body) and _TENANCY_REFUSAL_RE.search(body))
+
+
 # Typed property declarations and constructor-promoted properties:
 #   private readonly ParticipationResponder $responder,
 #   protected ?FooGuard $guard;
@@ -536,6 +598,8 @@ def _strict_guard_methods(cleaned: str, src: str) -> set:
         if _GUARD_HELPER_NAME_RE.match(name):
             known.add(name)
         elif _STRICT_GUARD_BODY_RE.search(src[body_start:body_end]):
+            known.add(name)
+        elif _has_tenancy_guard(src[body_start:body_end]):
             known.add(name)
     changed = True
     while changed:

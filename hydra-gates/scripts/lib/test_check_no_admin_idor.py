@@ -1478,5 +1478,129 @@ class TestController {
         self.assertIn("method=showThing", out[0])
 
 
+# ---------------------------------------------------------------------------
+# Pattern 5 — the TENANCY guard (ConductionNL/.github#160)
+#
+# gate-7 was ANTI-CORRELATED with the property it checks on a multi-tenant
+# codebase: it stayed red on the correct fix and would have gone green if the
+# code were made to leak. The fixtures below are OpenRegister's real shapes.
+#
+# Both ways, in the same class: the tenancy-scoped service must clear its
+# caller, and a service that loads by client-supplied id with NO tenancy
+# comparison must still be flagged.
+# ---------------------------------------------------------------------------
+
+# The exact shape from OpenRegister's FlowService, comment and all. A flow the
+# caller may not see raises the SAME exception as one that does not exist.
+_FLOW_SERVICE = """<?php
+namespace OCA\\\\OpenRegister\\\\Service;
+
+class FlowService
+{
+    /**
+     * A flow the caller may not see raises the SAME exception as a flow that
+     * does not exist. Distinguishing them would turn every read into an
+     * oracle for enumerating other tenants' flow ids.
+     */
+    public function find(string $uuid): Flow
+    {
+        $flow = $this->mapper->findByUuid($uuid);
+        if ($flow->belongsTo($this->activeOrganisation()) === false) {
+            throw new DoesNotExistException('No such flow');
+        }
+        return $flow;
+    }
+
+    public function findAll(): array
+    {
+        $org = $this->activeOrganisation();
+        if ($org === null) {
+            return [];
+        }
+        return $this->mapper->findAllForOrganisation($org);
+    }
+}
+"""
+
+# Same surface, NO tenancy comparison: the client-supplied uuid goes straight
+# to an unscoped mapper. This is what FlowController::state() actually did
+# before it was fixed.
+_UNSCOPED_SERVICE = """<?php
+namespace OCA\\\\OpenRegister\\\\Service;
+
+class FlowService
+{
+    public function find(string $uuid): Flow
+    {
+        return $this->mapper->findByUuid($uuid);
+    }
+
+    public function findAll(): array
+    {
+        return $this->mapper->findAll();
+    }
+}
+"""
+
+_FLOW_CONTROLLER = """<?php
+namespace OCA\\\\OpenRegister\\\\Controller;
+
+class TestController extends Controller
+{
+    private FlowService $flows;
+
+    /**
+     * @NoAdminRequired
+     */
+    public function state(string $uuid) {
+        return new JSONResponse($this->flows->find($uuid)->getState());
+    }
+}
+"""
+
+
+class TenancyGuardTest(unittest.TestCase):
+    def test_fp_org_scoped_service_clears_its_caller(self):
+        # THE demonstration from #160: FlowController::state() was a real
+        # IDOR, was fixed by routing through FlowService::find(), and gate-7
+        # reported it identically before and after. It must now clear.
+        self.assertEqual(_scan_app(_FLOW_CONTROLLER, {"FlowService": _FLOW_SERVICE}), [])
+
+    def test_tp_the_same_controller_over_an_UNSCOPED_service_is_still_flagged(self):
+        # The pairing that proves this is not a mute. Identical controller,
+        # identical service NAME and signature — only the tenancy comparison
+        # differs, and that is the whole property gate-7 exists to measure.
+        out = _scan_app(_FLOW_CONTROLLER, {"FlowService": _UNSCOPED_SERVICE})
+        self.assertEqual(len(out), 1)
+        self.assertIn("method=state", out[0])
+
+    def test_a_tenancy_comparison_with_no_refusal_is_not_a_guard(self):
+        self.assertFalse(cni._has_tenancy_guard(
+            "$org = $this->activeOrganisation(); $out = $flow->belongsTo($org); return $flow;"))
+
+    def test_a_refusal_with_no_tenancy_comparison_is_not_a_tenancy_guard(self):
+        self.assertFalse(cni._has_tenancy_guard(
+            "$flow = $this->mapper->findByUuid($uuid); if ($flow === null) { throw new DoesNotExistException(); } return $flow;"))
+
+    def test_both_halves_together_are_a_guard(self):
+        self.assertTrue(cni._has_tenancy_guard(
+            "if ($flow->belongsTo($this->activeOrganisation()) === false) { throw new DoesNotExistException(); }"))
+
+    def test_silent_narrowing_to_an_empty_list_counts(self):
+        self.assertTrue(cni._has_tenancy_guard(
+            "$org = $this->activeOrganisation(); if ($org === null) { return []; }"))
+
+    def test_a_mapper_applying_the_organisation_filter_counts(self):
+        self.assertTrue(cni._has_tenancy_guard(
+            "$qb = $this->applyOrganisationFilter($qb); if ($rows === []) { return []; }"))
+
+    def test_a_plain_getter_named_getOrganisation_is_not_a_scope_signal(self):
+        # `->getOrganisation()` is an ordinary accessor all over the fleet.
+        # Only the ACTIVE/CURRENT forms are session-derived, and only a
+        # session-derived value makes the comparison an authorisation check.
+        self.assertFalse(cni._has_tenancy_guard(
+            "$org = $entity->getOrganisation(); if ($org === null) { throw new DoesNotExistException(); }"))
+
+
 if __name__ == "__main__":
     unittest.main()

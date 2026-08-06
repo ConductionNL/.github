@@ -3262,6 +3262,52 @@ jobs:
             echo "hydra-gates @ ${GATES_REF} predates the coverage accounting fix (v1.3.0)."
           fi
 
+      # ── the floating-caller / pinned-callee contract ──────────────────────
+      #
+      # THIS WORKFLOW FLOATS ON @main; THE PACKAGE IT DRIVES IS PINNED.
+      #
+      # A caller references this file as
+      # `ConductionNL/.github/.github/workflows/quality.yml@main` while
+      # pinning `hydra-gates-ref` to a tag. So the two halves of one system
+      # move independently, and every path this workflow executes inside
+      # `gates/hydra-gates/` is an UNVERSIONED INTERFACE between them.
+      #
+      # That interface has broken three times in one day. The decisive one
+      # was #168: a change on @main made this workflow execute
+      # `gates/hydra-gates/scripts/axe-run.cjs` BY PATH, and every repo whose
+      # pin predated that file got a failure whose message named neither the
+      # pin nor the file.
+      #
+      # Pinning both halves from one tag, or floating both, is the real fix
+      # and is a human decision — it changes how 22 repos receive gate fixes.
+      # Until then this step makes the desync SAY SO. A named refusal is not
+      # a fix, but it is the difference between "gate-33 is broken" and
+      # "your pin is four fixes behind and here is the file it is missing".
+      - name: Verify the pinned gates package satisfies this workflow
+        run: |
+          set -uo pipefail
+          REF='${{ inputs.hydra-gates-ref }}'
+          MISSING=""
+          for p in \
+            bin/hydra-gates \
+            scripts/run-hydra-gates.sh \
+            scripts/axe-run.cjs \
+            scripts/lib/check_spec_anchors.py \
+            scripts/lib/check_form_labels.py \
+            scripts/lib/check_license_triangle.py \
+            scripts/lib/check_no_admin_idor.py \
+            scripts/lib/check_semantic_auth.py \
+            scripts/lib/check_orphan_auth.py
+          do
+            [ -e "${GITHUB_WORKSPACE}/gates/hydra-gates/${p}" ] || MISSING="${MISSING} ${p}"
+          done
+          if [ -n "${MISSING}" ]; then
+            echo "::error::hydra-gates-ref '${REF}' does not contain:${MISSING}"
+            echo "::error::This workflow floats on @main and executes those paths by name inside the PINNED package, so a pin older than them cannot run the gates they implement. Bump hydra-gates-ref to a tag that includes them. This is NOT a code-quality finding about your repository."
+            exit 1
+          fi
+          echo "Pinned gates package at '${REF}' provides every path this workflow executes."
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:

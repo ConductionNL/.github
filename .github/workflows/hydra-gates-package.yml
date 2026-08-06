@@ -252,16 +252,31 @@ jobs:
           # The offending FILES must be named, so we know the gates fired on
           # what we injected and not on something else that happened to be
           # there. stdout carries only the COUNT per gate by design; the file
-          # list goes to the gate's own /tmp/hydra-gate-<name>.log, so that is
-          # where the attribution has to be checked. A gate that reported FAIL
-          # while writing no evidence at all would itself be a defect, so a
-          # missing log is a failure here too.
+          # list goes to the gate's own log, so that is where the attribution
+          # has to be checked. A gate that reported FAIL while writing no
+          # evidence at all would itself be a defect, so a missing log is a
+          # failure here too.
+          #
+          # The log DIRECTORY is read from the run's own first line rather than
+          # hardcoded. It used to be the shared /tmp/hydra-gate-<name>.log, and
+          # that was the same defect this assertion exists to catch, one level
+          # up: two runs on one host overwrote each other's evidence, so this
+          # check could read a DIFFERENT run's log and pass, or read a truncated
+          # one and fail, without either outcome saying anything about the
+          # fixture. Each invocation now mints its own directory and announces
+          # it; asking the run where it wrote is the only way to be sure the
+          # evidence belongs to it.
+          LOGDIR="$(printf '%s\n' "${OUT}" | sed -n 's/^\[hydra-gates\] findings logs: //p' | head -1)"
+          if [ -z "${LOGDIR}" ] || [ ! -d "${LOGDIR}" ]; then
+            echo "::error::the run did not announce a findings-log directory (expected a '[hydra-gates] findings logs: <dir>' line). Without it there is no way to attribute a verdict to its evidence."
+            exit 1
+          fi
           for probe in "forbidden-patterns:lib/GateControl.php" "window-confirm:src/gateControl.js"; do
             gate="${probe%%:*}"; want="${probe##*:}"
             # shellcheck disable=SC2012
-            log="$(ls -t "/tmp/hydra-gate-${gate}.log" /tmp/hydra-gate-"${gate}".*.log 2>/dev/null | head -1)"
+            log="$(ls -t "${LOGDIR}/hydra-gate-${gate}.log" "${LOGDIR}"/hydra-gate-"${gate}".*.log 2>/dev/null | head -1)"
             if [ -z "${log}" ]; then
-              echo "::error::gate ${gate} reported a result but wrote no /tmp/hydra-gate-${gate}*.log — no evidence for its verdict"
+              echo "::error::gate ${gate} reported a result but wrote no ${LOGDIR}/hydra-gate-${gate}*.log — no evidence for its verdict"
               exit 1
             fi
             echo "--- ${log}"; cat "${log}"
