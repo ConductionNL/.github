@@ -1,0 +1,280 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: EUPL-1.2
+"""Tests for check_security_cochange (gate-47). Run with:
+
+    python3 scripts/lib/test_check_security_cochange.py
+
+BOTH WAYS, EVERY TIME
+---------------------
+gate-47 classified a changed file by grepping the WHOLE file, so a PR whose
+hunks were CSS tokens and a chevron column was told to add a CSRF test, and a
+provably comment-only PR was told to co-change tests. Neither author used the
+opt-out — which is the tell. People do not reach for an opt-out when they
+believe the finding is wrong.
+
+Every relaxation below is paired, in the same class, with the real security
+change it must not swallow. The two false-positive fixtures are the reported
+shapes: a `.vue` file whose diff is CSS custom properties while the file
+elsewhere uses `IUserSession`, and a `lib/*.php` whose 30 changed lines are
+all docblock prose.
+"""
+from __future__ import annotations
+
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import check_security_cochange as csc  # noqa: E402
+
+
+class _Repo:
+    def __init__(self):
+        self.root = Path(tempfile.mkdtemp())
+        self._git("init", "-q")
+        self._git("config", "user.email", "t@example.invalid")
+        self._git("config", "user.name", "test")
+
+    def _git(self, *args: str) -> None:
+        subprocess.run(["git", "-C", str(self.root), *args],
+                       check=False, capture_output=True)
+
+    def write(self, rel: str, body: str) -> None:
+        p = self.root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(body, encoding="utf-8")
+
+    def commit(self, msg: str) -> str:
+        self._git("add", "-A")
+        self._git("commit", "-qm", msg)
+        return subprocess.run(["git", "-C", str(self.root), "rev-parse", "HEAD"],
+                              capture_output=True, text=True).stdout.strip()
+
+    def scan(self, base: str):
+        return csc.scan(base, str(self.root))
+
+    def close(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+
+# A component that DOES use IUserSession — somewhere else in the file.
+VUE_BEFORE = """<template>
+  <div class="panel">
+    <span>{{ user.displayName }}</span>
+  </div>
+</template>
+<script>
+import { getCurrentUser } from '@nextcloud/auth'
+// resolves through IUserSession on the server side
+export default { name: 'Panel' }
+</script>
+<style>
+.panel { --panel-gap: 8px; }
+</style>
+"""
+
+VUE_AFTER_CSS_ONLY = VUE_BEFORE.replace(
+    ".panel { --panel-gap: 8px; }",
+    ".panel { --panel-gap: 12px; --panel-pad: 4px; }\n.panel__chevron { width: 24px; }",
+)
+
+PHP_BEFORE = """<?php
+namespace OCA\\Thing\\Controller;
+
+class ThingController extends Controller
+{
+    /**
+     * List things.
+     */
+    #[NoAdminRequired]
+    public function index(): JSONResponse
+    {
+        $uid = $this->userSession->getUser()->getUID();
+        return new JSONResponse($this->service->listFor($uid));
+    }
+}
+"""
+
+# 30-ish changed lines, every one of them docblock prose.
+PHP_AFTER_DOCBLOCK_ONLY = PHP_BEFORE.replace(
+    """    /**
+     * List things.
+     */""",
+    """    /**
+     * List things.
+     *
+     * Returns every thing visible to the caller. Visibility is resolved by
+     * the service, which narrows on the caller's organisation; the controller
+     * itself performs no filtering and holds no policy.
+     *
+     * The IUserSession lookup below is the only place the caller identity
+     * enters this method. It is not re-read anywhere else, and callers must
+     * not pass a user id in the request.
+     *
+     * @return JSONResponse the visible things, newest first
+     */""",
+)
+
+
+class WholeFileClassificationFalsePositives(unittest.TestCase):
+    def setUp(self):
+        self.repo = _Repo()
+
+    def tearDown(self):
+        self.repo.close()
+
+    def test_fp_a_css_only_diff_in_a_session_using_component(self):
+        self.repo.write("src/Panel.vue", VUE_BEFORE)
+        base = self.repo.commit("base")
+        self.repo.write("src/Panel.vue", VUE_AFTER_CSS_ONLY)
+        self.repo.commit("css tokens and a chevron column")
+        security, has_test = self.repo.scan(base)
+        self.assertEqual(security, [])
+        self.assertFalse(has_test)
+
+    def test_fp_a_docblock_only_diff_in_an_annotated_controller(self):
+        self.repo.write("lib/Controller/ThingController.php", PHP_BEFORE)
+        base = self.repo.commit("base")
+        self.repo.write("lib/Controller/ThingController.php", PHP_AFTER_DOCBLOCK_ONLY)
+        self.repo.commit("document the visibility rule")
+        security, _ = self.repo.scan(base)
+        self.assertEqual(security, [])
+
+    def test_tp_editing_the_annotation_itself_still_fires(self):
+        # The pairing for the docblock case. Same file, same PR shape — the
+        # only difference is that the changed line IS the declaration.
+        self.repo.write("lib/Controller/ThingController.php", PHP_BEFORE)
+        base = self.repo.commit("base")
+        self.repo.write("lib/Controller/ThingController.php",
+                        PHP_BEFORE.replace("#[NoAdminRequired]", "#[PublicPage]"))
+        self.repo.commit("make it public")
+        security, _ = self.repo.scan(base)
+        self.assertEqual(security, ["lib/Controller/ThingController.php"])
+
+    def test_tp_a_docblock_annotation_counts_because_it_IS_the_declaration(self):
+        # `@NoAdminRequired` in a docblock is Nextcloud's legacy auth
+        # declaration, not prose. Excluding all comment lines would miss it —
+        # which is why the discriminator is the TOKEN, not the line shape.
+        self.repo.write("lib/Controller/Other.php",
+                        "<?php\nclass Other {\n    /**\n     * Do it.\n     */\n"
+                        "    public function go() {}\n}\n")
+        base = self.repo.commit("base")
+        self.repo.write("lib/Controller/Other.php",
+                        "<?php\nclass Other {\n    /**\n     * Do it.\n     * @NoAdminRequired\n     */\n"
+                        "    public function go() {}\n}\n")
+        self.repo.commit("relax auth via docblock")
+        security, _ = self.repo.scan(base)
+        self.assertEqual(security, ["lib/Controller/Other.php"])
+
+    def test_tp_adding_a_session_lookup_in_code_still_fires(self):
+        self.repo.write("src/Panel.vue", VUE_BEFORE)
+        base = self.repo.commit("base")
+        self.repo.write("src/Panel.vue", VUE_BEFORE.replace(
+            "export default { name: 'Panel' }",
+            "export default { name: 'Panel', computed: { uid() { return IUserSession.get() } } }"))
+        self.repo.commit("read the session in the component")
+        security, _ = self.repo.scan(base)
+        self.assertEqual(security, ["src/Panel.vue"])
+
+
+class PathBasedClassificationUnchanged(unittest.TestCase):
+    def setUp(self):
+        self.repo = _Repo()
+
+    def tearDown(self):
+        self.repo.close()
+
+    def test_any_change_under_an_auth_path_qualifies(self):
+        # There is no incidental edit to lib/Service/Auth/*. Even a comment.
+        self.repo.write("lib/Service/Auth/TokenVerifier.php", "<?php\nclass T {}\n")
+        base = self.repo.commit("base")
+        self.repo.write("lib/Service/Auth/TokenVerifier.php",
+                        "<?php\n// a note\nclass T {}\n")
+        self.repo.commit("comment")
+        security, _ = self.repo.scan(base)
+        self.assertEqual(security, ["lib/Service/Auth/TokenVerifier.php"])
+
+    def test_a_csrf_named_file_qualifies(self):
+        self.repo.write("lib/CsrfGuard.php", "<?php\nclass C {}\n")
+        base = self.repo.commit("base")
+        self.repo.write("lib/CsrfGuard.php", "<?php\nclass C { public $x = 1; }\n")
+        self.repo.commit("edit")
+        security, _ = self.repo.scan(base)
+        self.assertEqual(security, ["lib/CsrfGuard.php"])
+
+
+class TestCoChangeDetection(unittest.TestCase):
+    def setUp(self):
+        self.repo = _Repo()
+
+    def tearDown(self):
+        self.repo.close()
+
+    def test_a_test_in_the_same_diff_is_seen(self):
+        self.repo.write("lib/Service/Auth/T.php", "<?php\nclass T {}\n")
+        base = self.repo.commit("base")
+        self.repo.write("lib/Service/Auth/T.php", "<?php\nclass T { public $y = 2; }\n")
+        self.repo.write("tests/Unit/TTest.php", "<?php\nclass TTest {}\n")
+        self.repo.commit("change + test")
+        security, has_test = self.repo.scan(base)
+        self.assertEqual(security, ["lib/Service/Auth/T.php"])
+        self.assertTrue(has_test)
+
+
+class LineClassifierDirectly(unittest.TestCase):
+    """The unit the whole fix turns on."""
+
+    def test_annotations_count_in_any_line_shape(self):
+        for line in ("    #[NoAdminRequired]",
+                     "     * @NoCSRFRequired",
+                     "// @PublicPage",
+                     "    #[AuthorizedAdminSetting(Application::APP_ID)]"):
+            with self.subTest(line=line):
+                self.assertTrue(csc.line_is_security_relevant(line))
+
+    def test_code_tokens_count_in_code(self):
+        for line in ("        $u = $this->userSession;  // IUserSession",
+                     "        if (hash_equals($a, $b)) {",
+                     "        $p = parse_url($url);"):
+            with self.subTest(line=line):
+                self.assertTrue(csc.line_is_security_relevant(line))
+
+    def test_code_tokens_do_not_count_in_prose(self):
+        for line in ("     * The IUserSession lookup below is the only place",
+                     "     * we call parse_url on the redirect target.",
+                     "// requesttoken is set by the shell, not here",
+                     "  /* hash_equals is used for the comparison */"):
+            with self.subTest(line=line):
+                self.assertFalse(csc.line_is_security_relevant(line))
+
+    def test_a_php_attribute_is_not_a_hash_comment(self):
+        # `#[...]` starts with `#`. Reading it as a shell comment would drop
+        # every modern Nextcloud auth attribute on the floor.
+        self.assertTrue(csc.line_is_security_relevant("#[NoAdminRequired]"))
+
+
+class GateIsNotBlind(unittest.TestCase):
+    """A floor: every token in the vocabulary must still classify."""
+
+    def test_every_security_token_is_detected_as_code(self):
+        for tok in ("#[NoAdminRequired]", "#[PublicPage]", "#[NoCSRFRequired]",
+                    "@NoAdminRequired", "@NoCSRFRequired", "@PublicPage",
+                    "parse_url($u)", "hash_equals($a,$b)", "password_verify($p,$h)",
+                    "IUserSession", "getSecureRandom()", "requesttoken"):
+            with self.subTest(tok=tok):
+                self.assertTrue(csc.line_is_security_relevant(f"        {tok};"))
+
+    def test_ordinary_code_is_not_security_relevant(self):
+        for line in ("        $total = $a + $b;",
+                     "  .panel { --panel-gap: 12px; }",
+                     "        return new JSONResponse($rows);"):
+            with self.subTest(line=line):
+                self.assertFalse(csc.line_is_security_relevant(line))
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

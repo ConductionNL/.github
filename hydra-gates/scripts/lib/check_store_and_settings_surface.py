@@ -90,7 +90,7 @@ def _pages_by_id(manifests: list[tuple[Path, dict]]) -> dict[str, dict]:
     return pages
 
 
-def check_store(root: Path, manifests, findings) -> None:
+def check_store(root: Path, manifests, findings, changed: set[str] | None = None) -> None:
     """ADR-080: store / templates / catalogue are three distinct concepts."""
     pages = _pages_by_id(manifests)
 
@@ -156,10 +156,26 @@ def check_store(root: Path, manifests, findings) -> None:
                 )
 
     # Decision 3: no app-local re-implementation of store discovery.
+    #
+    # DIFF-SCOPED, like every other half of this gate.
+    #
+    # This scan used to walk the whole lib/ tree unconditionally while the
+    # manifest half above honoured ADR-020. The combination is the worst of
+    # both: the gate only RUNS when a manifest changed, and then judges code
+    # the PR never touched. One pre-existing violation in pipelinq therefore
+    # blocked EVERY manifest-touching PR in that repo, permanently, with a
+    # finding naming a file outside the diff — and there is no action the
+    # PR's author can take that is about their own change.
+    #
+    # Inherited debt in an untouched file is not this PR's to answer for
+    # (ADR-020). It is still real; it surfaces on a full-tree run and on the
+    # first PR that touches the file.
     lib = root / "lib"
     if lib.is_dir():
         for php in lib.rglob("*.php"):
             if php.name in {"GenericStoreService.php", "GenericStoreControllerBase.php"}:
+                continue
+            if changed is not None and str(php.relative_to(root)) not in changed:
                 continue
             try:
                 text = php.read_text(encoding="utf-8", errors="ignore")
@@ -272,7 +288,7 @@ def main() -> int:
 
     findings: list[str] = []
     if args.gate == "store":
-        check_store(root, manifests, findings)
+        check_store(root, manifests, findings, changed)
     else:
         check_settings(root, manifests, findings)
 

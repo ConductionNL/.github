@@ -404,13 +404,13 @@ class CoveredRefTest(unittest.TestCase):
 
     def test_long_form_annotation(self):
         _write(self.root, "tests/e2e/foo.spec.ts",
-               "// @e2e openspec/specs/my-spec/spec.md#foo-does-bar\ntest('x', () => {})\n")
+               "// @e2e openspec/specs/my-spec/spec.md#foo-does-bar\ntest('x', async ({ page }) => { await expect(page).toHaveTitle(/x/) })\n")
         refs = cec.collect_covered_refs(self.root)
         self.assertIn("my-spec::foo-does-bar", refs)
 
     def test_short_form_annotation(self):
         _write(self.root, "tests/e2e/foo.spec.ts",
-               "// @e2e my-spec::foo-does-bar\ntest('x', () => {})\n")
+               "// @e2e my-spec::foo-does-bar\ntest('x', async ({ page }) => { await expect(page).toHaveTitle(/x/) })\n")
         refs = cec.collect_covered_refs(self.root)
         self.assertIn("my-spec::foo-does-bar", refs)
 
@@ -454,7 +454,7 @@ class ReportModeTest(unittest.TestCase):
         _write(self.root, "openspec/specs/my-spec/spec.md", BASIC_SPEC)
         # Cover the first scenario
         _write(self.root, "tests/e2e/foo.spec.ts",
-               "// @e2e my-spec::foo-does-bar\ntest('x', () => {})\n")
+               "// @e2e my-spec::foo-does-bar\ntest('x', async ({ page }) => { await expect(page).toHaveTitle(/x/) })\n")
 
         buf = io.StringIO()
         with redirect_stdout(buf):
@@ -472,7 +472,7 @@ class ReportModeTest(unittest.TestCase):
     def test_report_with_exclusion(self):
         _write(self.root, "openspec/specs/my-spec/spec.md", SPEC_WITH_EXCLUSION)
         _write(self.root, "tests/e2e/foo.spec.ts",
-               "// @e2e my-spec::another-covered\ntest('x', () => {})\n")
+               "// @e2e my-spec::another-covered\ntest('x', async ({ page }) => { await expect(page).toHaveTitle(/x/) })\n")
 
         buf = io.StringIO()
         with redirect_stdout(buf):
@@ -563,7 +563,7 @@ class GateModeTest(unittest.TestCase):
         base = self._commit("base")
         _write(self.root, "openspec/specs/my-spec/spec.md", BASIC_SPEC)
         _write(self.root, "tests/e2e/my.spec.ts",
-               "// @e2e my-spec::foo-does-bar\n// @e2e my-spec::foo-handles-error\ntest('x', ()=>{})\n")
+               "// @e2e my-spec::foo-does-bar\n// @e2e my-spec::foo-handles-error\ntest('x', async ({ page }) => { await expect(page).toHaveTitle(/x/) })\n")
         self._commit("add spec + tests")
 
         os.environ["HYDRA_GATE_BASE_REF"] = base
@@ -601,7 +601,7 @@ class GateModeTest(unittest.TestCase):
         _write(self.root, "openspec/specs/my-spec/spec.md", SPEC_WITH_EXCLUSION)
         # Only the non-excluded scenario needs coverage
         _write(self.root, "tests/e2e/my.spec.ts",
-               "// @e2e my-spec::another-covered\ntest('x', ()=>{})\n")
+               "// @e2e my-spec::another-covered\ntest('x', async ({ page }) => { await expect(page).toHaveTitle(/x/) })\n")
         self._commit("add spec + test for visible scenario")
 
         os.environ["HYDRA_GATE_BASE_REF"] = base
@@ -654,6 +654,131 @@ class GateModeTest(unittest.TestCase):
         # old-spec is not in the diff → should not be flagged
         self.assertEqual(rc, 0)
         self.assertNotIn("old-spec", buf.getvalue())
+
+
+# ---------------------------------------------------------------------------
+# A PERMANENTLY-SKIPPED TEST IS NOT COVERAGE
+#
+# decidesk carried four tests with EMPTY BODIES and a hardcoded
+# `test.skip(true, ...)`, each tagged `@e2e`, each counted as traceability,
+# together asserting nothing. A gate that accepts a switched-off test as proof
+# is a dead gate by construction.
+#
+# The discriminator is the ARGUMENT, not the call: `test.skip(true)` is a test
+# someone turned off; `test.skip(browserName === 'firefox')` is a real test
+# with a runtime guard, and it runs everywhere else. Both ways, in one class.
+# ---------------------------------------------------------------------------
+class SkippedTestIsNotCoverageTest(unittest.TestCase):
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def _refs(self, body: str) -> set:
+        _write(self.root, "tests/e2e/foo.spec.ts", body)
+        return cec.collect_covered_refs(self.root)
+
+    # --- dead: must NOT count -------------------------------------------
+    def test_hardcoded_skip_true_with_empty_body_does_not_count(self):
+        # The decidesk shape, verbatim.
+        self.assertEqual(self._refs(
+            "// @e2e my-spec::foo-does-bar\n"
+            "test('minutes are published', async ({ page }) => {\n"
+            "  test.skip(true, 'pending backend work')\n"
+            "})\n"), set())
+
+    def test_skip_modifier_does_not_count(self):
+        self.assertEqual(self._refs(
+            "// @e2e my-spec::foo-does-bar\n"
+            "test.skip('minutes are published', async ({ page }) => {\n"
+            "  await expect(page).toHaveTitle(/x/)\n"
+            "})\n"), set())
+
+    def test_xit_does_not_count(self):
+        self.assertEqual(self._refs(
+            "// @e2e my-spec::foo-does-bar\n"
+            "xit('minutes are published', async () => { await go() })\n"), set())
+
+    def test_fixme_does_not_count(self):
+        self.assertEqual(self._refs(
+            "// @e2e my-spec::foo-does-bar\n"
+            "test.fixme('broken', async () => { await go() })\n"), set())
+
+    def test_empty_body_does_not_count(self):
+        self.assertEqual(self._refs(
+            "// @e2e my-spec::foo-does-bar\n"
+            "test('minutes are published', async ({ page }) => {})\n"), set())
+
+    def test_a_body_of_only_comments_does_not_count(self):
+        self.assertEqual(self._refs(
+            "// @e2e my-spec::foo-does-bar\n"
+            "test('later', async () => {\n"
+            "  // TODO: write this once the endpoint lands\n"
+            "  /* nothing here yet */\n"
+            "})\n"), set())
+
+    def test_argumentless_skip_does_not_count(self):
+        self.assertEqual(self._refs(
+            "// @e2e my-spec::foo-does-bar\n"
+            "test('off', async ({ page }) => {\n"
+            "  test.skip()\n"
+            "  await expect(page).toHaveTitle(/x/)\n"
+            "})\n"), set())
+
+    # --- live: must STILL count -----------------------------------------
+    def test_a_real_test_counts(self):
+        self.assertIn("my-spec::foo-does-bar", self._refs(
+            "// @e2e my-spec::foo-does-bar\n"
+            "test('minutes are published', async ({ page }) => {\n"
+            "  await expect(page.getByRole('heading')).toBeVisible()\n"
+            "})\n"))
+
+    def test_a_runtime_conditional_skip_still_counts(self):
+        # THE anti-blindness pair. This test RUNS on every browser but one.
+        # Refusing it would swap the gate's old blindness for a new one.
+        self.assertIn("my-spec::foo-does-bar", self._refs(
+            "// @e2e my-spec::foo-does-bar\n"
+            "test('minutes are published', async ({ page, browserName }) => {\n"
+            "  test.skip(browserName === 'firefox', 'flaky on gecko')\n"
+            "  await expect(page.getByRole('heading')).toBeVisible()\n"
+            "})\n"))
+
+    def test_an_env_conditional_skip_still_counts(self):
+        self.assertIn("my-spec::foo-does-bar", self._refs(
+            "// @e2e my-spec::foo-does-bar\n"
+            "test('needs a fixture', async ({ page }) => {\n"
+            "  test.skip(!process.env.CI, 'needs a CI fixture')\n"
+            "  await page.goto('/')\n"
+            "})\n"))
+
+    def test_one_live_reference_rescues_a_skipped_sibling(self):
+        # A scenario proven by a real test is covered even if some other
+        # skipped test also names it. The gate reports UNCOVERED, not
+        # "you have a skipped test".
+        self.assertIn("my-spec::foo-does-bar", self._refs(
+            "// @e2e my-spec::foo-does-bar\n"
+            "test.skip('old version', async () => { await go() })\n"
+            "// @e2e my-spec::foo-does-bar\n"
+            "test('new version', async ({ page }) => {\n"
+            "  await expect(page).toHaveTitle(/x/)\n"
+            "})\n"))
+
+    def test_a_file_level_tag_with_no_enclosing_test_still_counts(self):
+        # This gate is fixing tests that were switched OFF. It must not
+        # invent a structural requirement it never had.
+        self.assertIn("my-spec::foo-does-bar", self._refs(
+            "// @e2e my-spec::foo-does-bar\n"
+            "import { test, expect } from '@playwright/test'\n"))
+
+    def test_dead_refs_are_reported_with_a_reason(self):
+        _write(self.root, "tests/e2e/foo.spec.ts",
+               "// @e2e my-spec::foo-does-bar\n"
+               "test('x', async () => { test.skip(true, 'later') })\n")
+        live, dead = cec.collect_ref_status(self.root)
+        self.assertEqual(live, set())
+        self.assertIn("my-spec::foo-does-bar", dead)
+        self.assertIn("never runs", dead["my-spec::foo-does-bar"])
 
 
 if __name__ == "__main__":

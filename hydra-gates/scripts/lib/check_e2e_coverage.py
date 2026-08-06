@@ -432,12 +432,157 @@ _E2E_SHORT_RE = re.compile(
 )
 
 
+# ---------------------------------------------------------------------------
+# A PERMANENTLY-SKIPPED TEST IS NOT COVERAGE
+#
+# Observed on decidesk: four tests with EMPTY BODIES and a hardcoded
+# `test.skip(true, ...)`. Each carried an `@e2e` tag, each was counted as
+# traceability, and together they asserted NOTHING. That is a dead gate by
+# construction — the tag says a scenario is proven, the test proves nothing,
+# and the gate cannot tell the difference.
+#
+# What is dead:
+#   test.skip('name', ...)      the modifier form — declares a skipped test
+#   it.skip(...) / xit / xtest / test.fixme(...)
+#   describe.skip(...)          takes every test inside it with it
+#   test.skip(true)             an UNCONDITIONAL skip at the top of a body
+#   test.skip()                 argument-less, same thing
+#   an empty body               nothing but whitespace and comments
+#
+# What is NOT dead, and must keep counting:
+#   test.skip(browserName === 'firefox', 'flaky on gecko')
+#   test.skip(!process.env.CI, 'needs a CI fixture')
+#
+# ...because those run somewhere. A RUNTIME CONDITION is a real test with a
+# guard; a literal `true` is a test someone turned off. Conflating them would
+# swap this gate's blindness for a different one — refusing legitimate
+# conditional skips — so the discriminator is the argument, not the call.
+_TEST_DECL_RE = re.compile(
+    r"\b(?P<fn>test|it|describe)"
+    r"(?P<mod>\s*\.\s*(?:skip|fixme|failing))?"
+    r"\s*\(",
+)
+_XTEST_RE = re.compile(r"\b(?:xit|xtest|xdescribe)\s*\(")
+# `test.skip(true)` / `test.skip( 1 )` / `test.skip()` — no runtime condition.
+_UNCONDITIONAL_SKIP_RE = re.compile(
+    r"\b(?:test|it)\s*\.\s*skip\s*\(\s*(?:\)|true\s*[,)]|1\s*[,)])"
+)
+
+
+def _strip_comments(text: str) -> str:
+    """Remove // and /* */ comments so an empty body is not mistaken for a
+    documented one. Crude but sufficient: this only ever decides "is there any
+    executable statement here", never what the statement means."""
+    text = re.sub(r"/\*.*?\*/", " ", text, flags=re.DOTALL)
+    text = re.sub(r"(?m)//.*$", " ", text)
+    return text
+
+
+def _enclosing_block(text: str, pos: int) -> tuple[str, str] | None:
+    """The nearest `test(`/`it(`/`describe(` declaration at or after *pos*, as
+    (declaration_text, body_text).
+
+    An `@e2e` tag conventionally sits in a comment immediately ABOVE the test
+    it annotates, so the search runs forward from the tag.
+    """
+    m = _TEST_DECL_RE.search(text, pos)
+    xm = _XTEST_RE.search(text, pos)
+    if xm and (not m or xm.start() < m.start()):
+        decl_start, open_paren = xm.start(), xm.end() - 1
+    elif m:
+        decl_start, open_paren = m.start(), m.end() - 1
+    else:
+        return None
+    # Walk to the matching close paren of the declaration.
+    depth = 0
+    i = open_paren
+    while i < len(text):
+        if text[i] == "(":
+            depth += 1
+        elif text[i] == ")":
+            depth -= 1
+            if depth == 0:
+                break
+        i += 1
+    if i >= len(text):
+        return None
+    whole = text[decl_start:i + 1]
+    # THE BODY IS THE LAST BRACE-BALANCED GROUP, FOUND FROM THE END.
+    #
+    # Not the first `{`: in `test('name', async ({ page }) => { … })` the first
+    # brace opens the fixture DESTRUCTURING, so a forward search returns
+    # `{ page }) => {})` and an empty body then looks non-empty. Scanning back
+    # from the closing paren finds the callback body itself.
+    j = len(whole) - 2                      # skip the final ')'
+    while j >= 0 and whole[j].isspace():
+        j -= 1
+    body = ""
+    if j >= 0 and whole[j] == "}":
+        depth = 0
+        k = j
+        while k >= 0:
+            if whole[k] == "}":
+                depth += 1
+            elif whole[k] == "{":
+                depth -= 1
+                if depth == 0:
+                    break
+            k -= 1
+        if k >= 0:
+            body = whole[k:j + 1]
+    return whole, body
+
+
+def _ref_is_live(text: str, pos: int) -> bool:
+    """Does the test enclosing the `@e2e` tag at *pos* actually assert
+    anything?"""
+    block = _enclosing_block(text, pos)
+    if block is None:
+        # No enclosing test at all — a file-level tag. Treated as live: this
+        # function exists to catch tests that were switched OFF, not to
+        # invent a structural requirement the gate never had.
+        return True
+    decl, body = block
+    head = decl[:decl.find("{") if "{" in decl else len(decl)]
+    if _XTEST_RE.match(decl) or re.match(
+            r"\s*\b(?:test|it|describe)\s*\.\s*(?:skip|fixme|failing)\s*\(", decl):
+        return False
+    stripped = _strip_comments(body)
+    if _UNCONDITIONAL_SKIP_RE.search(stripped):
+        return False
+    inner = stripped.strip()
+    if inner.startswith("{"):
+        inner = inner[1:]
+    if inner.endswith("}"):
+        inner = inner[:-1]
+    if not inner.strip():
+        return False
+    del head
+    return True
+
+
 def collect_covered_refs(app_dir: Path) -> set[str]:
-    """Return the set of ``<spec>::<slug>`` refs found in any e2e test file."""
-    covered: set[str] = set()
+    """Return the set of ``<spec>::<slug>`` refs found in any e2e test file.
+
+    Only refs whose enclosing test actually runs are returned; see
+    ``collect_ref_status`` for the dead ones and why.
+    """
+    live, _dead = collect_ref_status(app_dir)
+    return live
+
+
+def collect_ref_status(app_dir: Path) -> tuple[set[str], dict[str, str]]:
+    """(live refs, {dead ref: reason}) across the app's e2e suite.
+
+    A ref is live if ANY test referencing it runs. One skipped copy alongside
+    a real one is not a regression, so the dead map only keeps refs with no
+    live reference at all.
+    """
+    live: set[str] = set()
+    dead: dict[str, str] = {}
     e2e_dir = app_dir / "tests" / "e2e"
     if not e2e_dir.is_dir():
-        return covered
+        return live, dead
     for p in e2e_dir.rglob("*"):
         if not p.is_file():
             continue
@@ -450,11 +595,18 @@ def collect_covered_refs(app_dir: Path) -> set[str]:
             text = p.read_text(encoding="utf-8")
         except OSError:
             continue
-        for m in _E2E_PATH_RE.finditer(text):
-            covered.add(f"{m.group('spec')}::{m.group('slug')}")
-        for m in _E2E_SHORT_RE.finditer(text):
-            covered.add(f"{m.group('spec')}::{m.group('slug')}")
-    return covered
+        for rex in (_E2E_PATH_RE, _E2E_SHORT_RE):
+            for m in rex.finditer(text):
+                ref = f"{m.group('spec')}::{m.group('slug')}"
+                if _ref_is_live(text, m.end()):
+                    live.add(ref)
+                    dead.pop(ref, None)
+                elif ref not in live:
+                    dead[ref] = (
+                        f"referenced only by a test that never runs "
+                        f"({p.relative_to(app_dir)})"
+                    )
+    return live, dead
 
 
 # ---------------------------------------------------------------------------
@@ -562,7 +714,7 @@ def run_gate(app_dir: Path) -> int:
         print(f"[gate-{GATE_NUM}] e2e-coverage: PASS — no spec files in diff")
         return 0
 
-    covered_refs = collect_covered_refs(app_dir)
+    covered_refs, dead_refs = collect_ref_status(app_dir)
 
     findings: list[str] = []
     for rel in sorted(touched):
@@ -579,6 +731,15 @@ def run_gate(app_dir: Path) -> int:
                 findings.append(
                     f"{s['ref']} — @e2e exclude without reason (reason required)"
                 )
+            elif s["ref"] in dead_refs:
+                # Named, but by a test that never runs. Saying "missing @e2e"
+                # here would send someone to add a tag that is already there.
+                findings.append(
+                    f"{s['ref']} — @e2e tag present but the test does not run: "
+                    f"{dead_refs[s['ref']]}. A permanently-skipped or empty test is "
+                    f"not coverage: unskip it, give it a body, or replace the tag "
+                    f"with a reason-bearing `@e2e exclude`."
+                )
             elif s["ref"] not in covered_refs:
                 findings.append(f"{s['ref']} — missing @e2e")
 
@@ -590,7 +751,7 @@ def run_gate(app_dir: Path) -> int:
         print(f"[gate-{GATE_NUM}] e2e-coverage: PASS — {len(covered_refs)} reference(s) in e2e suite")
     else:
         print(
-            f"[gate-{GATE_NUM}] e2e-coverage: FAIL — {count} scenario(s) missing @e2e"
+            f"[gate-{GATE_NUM}] e2e-coverage: FAIL — {count} scenario(s) without a running e2e test"
         )
     return count
 

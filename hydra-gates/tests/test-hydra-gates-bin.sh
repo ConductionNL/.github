@@ -133,6 +133,43 @@ else
     _bad "expected exit 0 on an empty diff, got ${RC}"
 fi
 
+# The epilogue must not contradict the header.
+#
+# `bin` decided "was the scope empty?" with `grep -q "0 changed file(s)"` — a
+# SUBSTRING match satisfied by `10 changed file(s)`. A run with ten changed
+# files, every gate running, also printed "SCOPE WAS EMPTY", and that string
+# was in fleet-wide use as the tell for a vacuous run. Ten is the smallest
+# count that reproduces it, so ten is what this fixture builds.
+echo "[test] a NON-empty scope must not claim to be empty"
+mkdir -p "${FIX}/src"
+for _i in 1 2 3 4 5 6 7 8 9 10; do
+    printf 'export const x%s = 1\n' "${_i}" > "${FIX}/src/scope_probe_${_i}.js"
+done
+git -C "${FIX}" add -A >/dev/null 2>&1
+git -C "${FIX}" commit -qm "ten changed files" >/dev/null 2>&1
+OUT_TEN="$("${BIN}" --app-dir "${FIX}" --base "${BASE_SHA}" 2>&1)"
+if printf '%s' "${OUT_TEN}" | grep -q '^\[hydra-gates\] SCOPE-FILE-COUNT: 10$'; then
+    _ok "the machine-readable scope size is emitted, once, as a bare integer"
+else
+    _bad "expected a 'SCOPE-FILE-COUNT: 10' line; the epilogue has nothing exact to derive from"
+fi
+if printf '%s' "${OUT_TEN}" | grep -q "SCOPE WAS EMPTY"; then
+    _bad "a 10-file scope claimed SCOPE WAS EMPTY — the epilogue contradicts the header"
+else
+    _ok "a 10-file scope does not claim to be empty"
+fi
+# ...and the pairing: the epilogue must still fire when the scope really is
+# empty, or this fix has just deleted the warning it was meant to repair.
+git -C "${FIX}" commit -q --allow-empty -m "empty again" >/dev/null 2>&1
+_TEN_SHA="$(git -C "${FIX}" rev-parse HEAD~1)"
+OUT_ZERO="$("${BIN}" --app-dir "${FIX}" --base "${_TEN_SHA}" 2>&1)"
+if printf '%s' "${OUT_ZERO}" | grep -q '^\[hydra-gates\] SCOPE-FILE-COUNT: 0$' \
+   && printf '%s' "${OUT_ZERO}" | grep -q "SCOPE WAS EMPTY"; then
+    _ok "a genuinely empty scope still says SCOPE WAS EMPTY"
+else
+    _bad "a genuinely empty scope no longer warns — the fix has muted the warning"
+fi
+
 echo "[test] a base that IS HEAD is refused, not reported green"
 _HEAD_SHA="$(git -C "${FIX}" rev-parse HEAD)"
 OUT_SELF="$("${BIN}" --app-dir "${FIX}" --base "${_HEAD_SHA}" 2>&1)"; RC_SELF=$?
