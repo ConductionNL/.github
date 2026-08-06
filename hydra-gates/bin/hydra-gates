@@ -82,6 +82,19 @@
 #   ... and if none of those resolve, we stop with exit 99 rather than scope to
 #   an empty set.
 #
+#   5. AND THEN, only if whatever won resolves to the SAME COMMIT as HEAD:
+#      github.event.before, the previous tip of the branch this push moved.
+#      That case is not an exotic misconfiguration — it is what EVERY push to
+#      `development` or `main` looks like, because origin/development IS HEAD
+#      there. Passing over the resulting empty diff (<= v1.4.0) made the gates
+#      permanently green on mainline; refusing (v1.5.0) made them permanently
+#      red. Neither says anything about the code. `before...HEAD` is what the
+#      push actually changed, and it is the only scope that answers the
+#      question being asked. If it cannot be resolved either — branch created
+#      by this push, force-pushed tip now unreachable, unrelated history — we
+#      still exit 99, with the reason named. See
+#      scripts/lib/resolve-push-base.sh.
+#
 # @{upstream} is NOT in that chain, and must never be added to it. The tracking
 # branch of a feature branch is that same branch on the remote, so the diff is
 # empty exactly when CI runs. See the long note at step 4.
@@ -249,14 +262,50 @@ if [ "${SCOPE_DIFF}" = "1" ]; then
     fi
     echo "[hydra-gates] Base ref: ${BASE_REF} (${BASE_SOURCE}) = $(_git rev-parse --short "${BASE_REF}" 2>/dev/null)"
 
-    # Self-comparison guard. A base that resolves to HEAD is a resolvable ref
-    # and a valid commit, so nothing upstream of here rejects it — but it makes
-    # the diff empty by construction and every gate green by construction. It
-    # is the empty-scope bug wearing a valid ref as a disguise.
+    # ── Self-comparison: the base IS HEAD ───────────────────────────────────
+    #
+    # A base that resolves to HEAD is a resolvable ref and a valid commit, so
+    # nothing upstream of here rejects it — but it makes the diff empty by
+    # construction and every gate green by construction. It is the empty-scope
+    # bug wearing a valid ref as a disguise.
+    #
+    # It is ALSO not an accident, and not rare: it is what EVERY push to a
+    # mainline looks like. On a push to `development`, `origin/development` is
+    # HEAD. That single shape accounts for every mainline run in the fleet.
+    #
+    # Warning about it (<= v1.4.0) let the vacuous green through. Refusing
+    # (v1.5.0) turns every mainline push permanently red, which is exactly as
+    # uninformative and gets the gate ignored just as fast. Neither reading is
+    # the answer, because the base is not missing on a push — it is simply not
+    # the branch's own name. GitHub hands the previous tip over as
+    # `github.event.before`, and "what this push changed" is `before...HEAD`.
+    #
+    # So: try that, and ONLY here, where the alternative is already a refusal.
+    # If it resolves we gate the push's real diff; if it cannot (branch just
+    # created, force-pushed away, no shared history) we fail closed, and the
+    # reason is named. See scripts/lib/resolve-push-base.sh for each case.
     if [ "$(_git rev-parse "${BASE_REF}" 2>/dev/null)" = "$(_git rev-parse HEAD 2>/dev/null)" ]; then
-        echo "[hydra-gates] WARNING: the base ref resolves to the SAME COMMIT as HEAD." >&2
-        echo "[hydra-gates] The diff is empty by construction and every gate will pass having" >&2
-        echo "[hydra-gates] read nothing. Point --base at the branch you intend to merge INTO." >&2
+        echo "[hydra-gates] Base ref '${BASE_REF}' resolves to the SAME COMMIT as HEAD."
+        echo "[hydra-gates] That is what a push to a mainline branch looks like. Re-scoping to the"
+        echo "[hydra-gates] push's own previous tip (github.event.before) instead of to HEAD."
+        # shellcheck source=scripts/lib/resolve-push-base.sh
+        # shellcheck disable=SC1091  # resolved at runtime from the package root
+        . "${PKG_ROOT}/scripts/lib/resolve-push-base.sh"
+        _head_sha="$(_git rev-parse HEAD 2>/dev/null)"
+        if _push_base="$(hydra_resolve_push_base "${APP_DIR}" "${_head_sha}")"; then
+            BASE_REF="${_push_base}"
+            BASE_SOURCE="github.event.before (push)"
+            echo "[hydra-gates] Base ref: ${BASE_REF} (${BASE_SOURCE}) = $(_git rev-parse --short "${BASE_REF}" 2>/dev/null)"
+        else
+            echo "" >&2
+            echo "[hydra-gates] FATAL: the diff base is HEAD and the push's previous tip could not be" >&2
+            echo "[hydra-gates] used either (reason above). There is no scope, so there is nothing to" >&2
+            echo "[hydra-gates] gate — and a run that inspected no files must never wear the same green" >&2
+            echo "[hydra-gates] as one that inspected the change. NOTHING WAS CHECKED." >&2
+            echo "[hydra-gates] Fix: run this on a pull_request (which has a real target branch), or" >&2
+            echo "[hydra-gates] pass --base <the commit this push started from>." >&2
+            exit 99
+        fi
     fi
 else
     echo "[hydra-gates] Base ref: n/a — --full requested, scanning the entire tree."
@@ -359,8 +408,12 @@ _scope_count="$(sed -n 's/^\[hydra-gates\] SCOPE-FILE-COUNT: //p' "${_out}" 2>/d
 if [ "${SCOPE_DIFF}" = "1" ] && [ "${_scope_count:-}" = "0" ]; then
     echo "[hydra-gates] SCOPE WAS EMPTY: 0 files differ from ${BASE_REF}."
     echo "[hydra-gates] Every gate below passed by inspecting NOTHING. This green describes"
-    echo "[hydra-gates] the empty diff, not the repository. If you expected changes here,"
-    echo "[hydra-gates] your base ref is wrong."
+    echo "[hydra-gates] the empty diff, not the repository. The base resolved, the histories"
+    echo "[hydra-gates] join and git succeeded, so this is a real answer to a real question —"
+    echo "[hydra-gates] it is just a question about nothing. Two ways to get here honestly:"
+    echo "[hydra-gates] a change that only DELETES files (the scope is --diff-filter=ACMR),"
+    echo "[hydra-gates] and a base pointed at the wrong branch. If you expected changes,"
+    echo "[hydra-gates] it is the second one."
 fi
 
 if [ -n "${NOT_RUN}" ]; then

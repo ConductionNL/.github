@@ -3117,6 +3117,20 @@ jobs:
   #      fall back to HEAD~1 (on a squash-merged mainline that is the previous
   #      release). An unresolvable base exits 99 and prints no green.
   #
+  #      On a PUSH we deliberately set nothing here and let the package resolve,
+  #      because only the package can see the repository. On a push to a
+  #      MAINLINE branch its chain lands on origin/development, which IS HEAD,
+  #      and the diff is then empty by construction — the single most common
+  #      shape in the fleet. hydra-gates v1.5.1 and later re-scope that case to
+  #      `github.event.before...HEAD`, the push's own diff, reading `before`
+  #      out of $GITHUB_EVENT_PATH (present in every step, so nothing needs to
+  #      be passed from here). At an OLDER PIN there is no such re-scoping:
+  #      <= v1.4.0 passes over the empty diff and v1.5.0 exits 99. Both are
+  #      pin-side behaviour, visible in that job's own output, and the fix is
+  #      to bump hydra-gates-ref — not to add a fallback here, which would put
+  #      a second base-resolution implementation in a file that floats on @main
+  #      while the one it must agree with is pinned per caller.
+  #
   #   2. THE EXIT CODE IS THE FAILURE COUNT. We capture it before deciding the
   #      job verdict, and report 99 ("could not run at all") distinctly from
   #      "N gates failed". A configuration error must never read as a clean tree.

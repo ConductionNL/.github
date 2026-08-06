@@ -631,6 +631,284 @@ else
     _ok "reverse control — the probe does NOT match the pre-v1.3.0 shape of either file"
 fi
 
+# ===========================================================================
+# PUSH-EVENT SCOPING.
+#
+# On a push to a mainline branch the diff base IS HEAD, because
+# `origin/development` and `HEAD` are the same commit. Two readings of that
+# have shipped, and both are useless:
+#
+#   <= v1.4.0  empty diff -> every gate iterates nothing -> PASS. A permanent
+#              GREEN. Measured on shillinq c64e9fe: 52 gates green in 22s; the
+#              same commit unscoped fails 18.
+#   v1.5.0     refuse (exit 99). Correct about the evidence, and it fires on
+#              EVERY mainline push in every repo. A permanent RED.
+#
+# The fix: scope the push against its own previous tip (`github.event.before`).
+# Everything below is paired — for each case the true-positive must still
+# FIRE, because a scoping change is exactly the kind of change that can make a
+# gate pass by making it blind.
+#
+# The suite is hermetic about these three variables: when it runs under GitHub
+# Actions they are already set, to THIS repository's push, and a fixture repo
+# would then be silently scoped against a commit from somewhere else.
+# ===========================================================================
+unset GITHUB_EVENT_NAME GITHUB_EVENT_PATH HYDRA_GATE_PUSH_BEFORE 2>/dev/null || true
+
+# A fixture that reproduces a mainline push exactly: a repo with an `origin`
+# remote whose `development` ref points at the SAME commit as HEAD. That is
+# the shape, and it is the only shape that exercises the code path.
+PUSHFIX="${WORK}/pushfix"
+PUSHUP="${WORK}/pushfix-origin.git"
+git init -q --bare "${PUSHUP}"
+mkdir -p "${PUSHFIX}/lib" "${PUSHFIX}/appinfo"
+cd "${PUSHFIX}" || exit 1
+git init -q .
+git symbolic-ref HEAD refs/heads/development
+git config user.email "test@example.invalid"
+git config user.name "hydra-gates test"
+git remote add origin "${PUSHUP}"
+cat > appinfo/info.xml <<'XML'
+<?xml version="1.0"?>
+<info><id>pushfix</id><name>Pushfix</name><version>1.0.0</version></info>
+XML
+cat > lib/Clean.php <<'PHP'
+<?php
+/**
+ * Clean fixture class.
+ *
+ * @copyright Copyright (c) 2026 Conduction
+ * @license   EUPL-1.2
+ */
+
+namespace OCA\Pushfix;
+
+class Clean
+{
+    public function value(): int
+    {
+        return 1;
+    }
+}
+PHP
+git add -A && git commit -qm "mainline: a clean tree"
+PUSH_BEFORE_SHA="$(git rev-parse HEAD)"
+
+# The push itself: one commit carrying two real violations.
+#   gate-1 spdx-headers        — no @license / @copyright
+#   gate-2 forbidden-patterns  — error_log() shipped in lib/
+cat > lib/Pushed.php <<'PHP'
+<?php
+
+namespace OCA\Pushfix;
+
+class Pushed
+{
+    public function run(): void
+    {
+        error_log('pushed straight to development');
+    }
+}
+PHP
+git add -A && git commit -qm "the push: two violations"
+git push -q origin development
+git update-ref refs/remotes/origin/development HEAD
+PUSH_HEAD_SHA="$(git rev-parse HEAD)"
+
+# Sanity: the fixture really does have base == HEAD. Without this the whole
+# block could pass while never entering the code path it exists to test.
+echo "[test] push fixture — origin/development IS HEAD (the mainline-push shape)"
+if [ "$(git rev-parse origin/development)" = "${PUSH_HEAD_SHA}" ]; then
+    _ok "fixture reproduces the mainline-push shape (origin/development == HEAD)"
+else
+    _bad "fixture does NOT reproduce the mainline-push shape — every assertion below is vacuous"
+fi
+
+# --- DIRECTION 1: a mainline push with real changes must be GATED. ---------
+echo "[test] mainline push with real violations — scoped to the push, and RED"
+OUT_PUSH="$(HYDRA_GATE_PUSH_BEFORE="${PUSH_BEFORE_SHA}" \
+    "${BIN}" --app-dir "${PUSHFIX}" 2>&1)"; RC_PUSH=$?
+# Reconcile the header's own count against git, rather than trusting prose.
+_expected_n="$(git -C "${PUSHFIX}" diff --name-only --diff-filter=ACMR \
+    "${PUSH_BEFORE_SHA}...${PUSH_HEAD_SHA}" | grep -c . || true)"
+_reported_n="$(printf '%s\n' "${OUT_PUSH}" | sed -n 's/^\[hydra-gates\] SCOPE-FILE-COUNT: //p' | head -1)"
+if [ "${_reported_n:-x}" = "${_expected_n}" ] && [ "${_expected_n}" != "0" ]; then
+    _ok "scope reconciles with git: ${_reported_n} file(s), matching \`git diff before...HEAD\`"
+else
+    _bad "scope was '${_reported_n:-<none>}' but git says '${_expected_n}' — the run did not scope to the push"
+fi
+if [ "${RC_PUSH}" -eq 2 ]; then
+    _ok "exit 2 — the failure COUNT, one per real violation the push introduced"
+else
+    _bad "expected exit 2 (two violations), got ${RC_PUSH}: the push was not gated"
+fi
+if printf '%s\n' "${OUT_PUSH}" | grep -q '^\[gate-1\] spdx-headers: FAIL' \
+   && printf '%s\n' "${OUT_PUSH}" | grep -q '^\[gate-2\] forbidden-patterns: FAIL'; then
+    _ok "both gates name themselves — they read the pushed file"
+else
+    _bad "the violating file was not caught; the scope did not reach it"
+fi
+if printf '%s\n' "${OUT_PUSH}" | grep -q "SCOPE WAS EMPTY"; then
+    _bad "a real push scope claimed to be empty"
+else
+    _ok "no empty-scope epilogue on a real push scope"
+fi
+
+# --- DIRECTION 2: a mainline push that changes nothing RELEVANT ------------
+# must not manufacture a pass over an unread tree. The tree still carries
+# lib/Pushed.php's two violations; this push touches only a doc file. A green
+# here is honest ONLY because the scope is non-empty and reconciles with git —
+# so assert exactly that, not merely the exit code.
+echo "[test] mainline push touching one irrelevant file — honest pass, not a blind one"
+_NOOP_BEFORE="$(git -C "${PUSHFIX}" rev-parse HEAD)"
+printf 'a release note\n' > "${PUSHFIX}/CHANGELOG.md"
+git -C "${PUSHFIX}" add -A && git -C "${PUSHFIX}" commit -qm "docs: a release note"
+git -C "${PUSHFIX}" update-ref refs/remotes/origin/development HEAD
+OUT_NOOP="$(HYDRA_GATE_PUSH_BEFORE="${_NOOP_BEFORE}" \
+    "${BIN}" --app-dir "${PUSHFIX}" 2>&1)"; RC_NOOP=$?
+_noop_expected="$(git -C "${PUSHFIX}" diff --name-only --diff-filter=ACMR \
+    "${_NOOP_BEFORE}...HEAD" | grep -c . || true)"
+_noop_reported="$(printf '%s\n' "${OUT_NOOP}" | sed -n 's/^\[hydra-gates\] SCOPE-FILE-COUNT: //p' | head -1)"
+if [ "${_noop_reported:-x}" = "${_noop_expected}" ] && [ "${_noop_expected}" = "1" ]; then
+    _ok "scope is the ONE file this push touched (${_noop_reported}), reconciled against git"
+else
+    _bad "scope was '${_noop_reported:-<none>}', git says '${_noop_expected}' — not scoped to this push"
+fi
+if [ "${RC_NOOP}" -eq 0 ]; then
+    _ok "exit 0 — the push introduced no gate violation, and said which file it read"
+else
+    _bad "expected exit 0 for a push that touches only a doc file, got ${RC_NOOP}"
+fi
+# The pairing that makes the pass meaningful: the SAME tree, scoped to the
+# violating push, is still red. A green that cannot go red is not a result.
+if printf '%s\n' "${OUT_PUSH}" | grep -q '^\[gate-2\] forbidden-patterns: FAIL' \
+   && printf '%s\n' "${OUT_NOOP}" | grep -qE '^\[gate-2\] forbidden-patterns: (PASS|NOT APPLICABLE)'; then
+    _ok "same tree, same gate: RED for the push that added the violation, green for the one that did not"
+else
+    _bad "gate-2 does not discriminate between the two pushes — the scope is not doing any work"
+fi
+
+# --- REFUSALS. Each edge case is exit 99, and each names itself. -----------
+# --- THE PRODUCTION PATH: the base comes from the EVENT PAYLOAD. ----------
+# Every assertion above drives $HYDRA_GATE_PUSH_BEFORE, which is the testing
+# hook. In CI nothing sets it — the base is read out of the JSON GitHub writes
+# to $GITHUB_EVENT_PATH. A hook that works while the real reader does not is
+# the same defect as a gate whose helper is missing: the suite is green and
+# production is not, and nothing says so. Driven here against a real payload
+# file, with a payload that must NOT be readable as a fallback (the reader is
+# keyed on GITHUB_EVENT_NAME=push, so a pull_request payload must be ignored).
+echo "[test] the base is read from the real push event payload, not just the test hook"
+git -C "${PUSHFIX}" update-ref refs/remotes/origin/development HEAD
+_EV_BEFORE="$(git -C "${PUSHFIX}" rev-parse HEAD~1)"
+_EV="${WORK}/push-event.json"
+python3 - "${_EV}" "${_EV_BEFORE}" <<'PY'
+import json, sys
+json.dump({"before": sys.argv[2], "ref": "refs/heads/development",
+           "commits": [{"id": sys.argv[2]}]}, open(sys.argv[1], "w"))
+PY
+OUT_EV="$(GITHUB_EVENT_NAME=push GITHUB_EVENT_PATH="${_EV}" \
+    "${BIN}" --app-dir "${PUSHFIX}" 2>&1)"; RC_EV=$?
+_ev_expected="$(git -C "${PUSHFIX}" diff --name-only --diff-filter=ACMR \
+    "${_EV_BEFORE}...HEAD" | grep -c . || true)"
+_ev_reported="$(printf '%s\n' "${OUT_EV}" | sed -n 's/^\[hydra-gates\] SCOPE-FILE-COUNT: //p' | head -1)"
+if [ "${_ev_reported:-x}" = "${_ev_expected}" ] && [ "${_ev_expected}" != "0" ]; then
+    _ok "scope came out of \$GITHUB_EVENT_PATH: ${_ev_reported} file(s), reconciled against git"
+else
+    _bad "event payload gave scope '${_ev_reported:-<none>}', git says '${_ev_expected}' — the production reader does not work"
+fi
+if [ "${RC_EV}" -ne 99 ]; then
+    _ok "the event payload resolved a usable base (rc=${RC_EV})"
+else
+    _bad "exit 99 with a perfectly good push payload — the JSON reader is broken"
+fi
+# Reverse control: the same payload on a NON-push event must be ignored, or
+# the reader is matching on file presence rather than on the event.
+OUT_EVPR="$(GITHUB_EVENT_NAME=pull_request GITHUB_EVENT_PATH="${_EV}" \
+    "${BIN}" --app-dir "${PUSHFIX}" 2>&1)"; RC_EVPR=$?
+if [ "${RC_EVPR}" -eq 99 ] \
+   && printf '%s\n' "${OUT_EVPR}" | grep -q "GITHUB_EVENT_NAME='pull_request'"; then
+    _ok "reverse control — the same payload is ignored when the event is not a push, and it says so"
+else
+    _bad "a pull_request payload was mined for a push base (rc=${RC_EVPR}) — the reader is not keyed on the event"
+fi
+
+echo "[test] push base = NULL sha (branch created by this push) — refused"
+OUT_NULL="$(HYDRA_GATE_PUSH_BEFORE="0000000000000000000000000000000000000000" \
+    "${BIN}" --app-dir "${PUSHFIX}" 2>&1)"; RC_NULL=$?
+if [ "${RC_NULL}" -eq 99 ]; then
+    _ok "exit 99 — cannot scope a branch against a state that never existed"
+else
+    _bad "expected exit 99 for the null sha, got ${RC_NULL}"
+fi
+if printf '%s\n' "${OUT_NULL}" | grep -q "CREATED the branch"; then
+    _ok "the refusal names the reason (branch creation)"
+else
+    _bad "the refusal did not name branch creation"
+fi
+if printf '%s\n' "${OUT_NULL}" | grep -qE '^\[gate-[0-9]+\] [a-z-]+: PASS'; then
+    _bad "gates printed PASS after a refusal — nothing was inspected"
+else
+    _ok "no gate reported PASS after the refusal"
+fi
+
+echo "[test] push base == HEAD (a push that moved nothing) — refused"
+OUT_SAME="$(HYDRA_GATE_PUSH_BEFORE="$(git -C "${PUSHFIX}" rev-parse HEAD)" \
+    "${BIN}" --app-dir "${PUSHFIX}" 2>&1)"; RC_SAME=$?
+if [ "${RC_SAME}" -eq 99 ] \
+   && printf '%s\n' "${OUT_SAME}" | grep -q "SAME COMMIT as HEAD"; then
+    _ok "exit 99 — a self-comparison is still a self-comparison when it comes from the event"
+else
+    _bad "expected exit 99 + a named reason when before == HEAD, got ${RC_SAME}"
+fi
+
+echo "[test] push base unreachable (force-push) — refused, not guessed"
+OUT_GONE="$(HYDRA_GATE_PUSH_BEFORE="1234567890123456789012345678901234567890" \
+    "${BIN}" --app-dir "${PUSHFIX}" 2>&1)"; RC_GONE=$?
+if [ "${RC_GONE}" -eq 99 ]; then
+    _ok "exit 99 — an unfetchable previous tip has no diff, and we do not invent one"
+else
+    _bad "expected exit 99 for an unreachable push base, got ${RC_GONE}"
+fi
+if printf '%s\n' "${OUT_GONE}" | grep -q "FORCE-PUSH"; then
+    _ok "the refusal names the force-push case"
+else
+    _bad "the refusal did not name the force-push case"
+fi
+
+echo "[test] no push event at all, base IS HEAD — still refused (v1.5.0 behaviour preserved)"
+OUT_NOEV="$("${BIN}" --app-dir "${PUSHFIX}" 2>&1)"; RC_NOEV=$?
+if [ "${RC_NOEV}" -eq 99 ] \
+   && printf '%s\n' "${OUT_NOEV}" | grep -q "No push event payload"; then
+    _ok "exit 99 — without a push to take a base from there is nothing to scope to, and it says so"
+else
+    _bad "expected exit 99 + a named reason with no push event and base == HEAD, got ${RC_NOEV}"
+fi
+
+# --- THE CONSERVATISM PROOF. ----------------------------------------------
+# The push base must engage ONLY when the resolved base is HEAD. A feature
+# branch whose base (origin/development) is genuinely behind HEAD must be
+# scoped against that base and must IGNORE the event entirely — otherwise this
+# change silently narrows every feature-branch run in the fleet to its last
+# commit. Driven with a DELIBERATELY WRONG push base: if it were consulted,
+# the run would exit 99 instead of gating the branch.
+echo "[test] feature branch (base genuinely behind HEAD) ignores the push event"
+git -C "${PUSHFIX}" update-ref refs/remotes/origin/development "${PUSH_BEFORE_SHA}"
+OUT_FEAT="$(HYDRA_GATE_PUSH_BEFORE="0000000000000000000000000000000000000000" \
+    "${BIN}" --app-dir "${PUSHFIX}" --base origin/development 2>&1)"; RC_FEAT=$?
+_feat_expected="$(git -C "${PUSHFIX}" diff --name-only --diff-filter=ACMR \
+    "${PUSH_BEFORE_SHA}...HEAD" | grep -c . || true)"
+_feat_reported="$(printf '%s\n' "${OUT_FEAT}" | sed -n 's/^\[hydra-gates\] SCOPE-FILE-COUNT: //p' | head -1)"
+if [ "${_feat_reported:-x}" = "${_feat_expected}" ]; then
+    _ok "scoped to origin/development (${_feat_reported} files), the push event ignored"
+else
+    _bad "scope was '${_feat_reported:-<none>}', expected '${_feat_expected}' — the push base leaked into a non-mainline run"
+fi
+if [ "${RC_FEAT}" -ne 99 ]; then
+    _ok "a usable base is never replaced by the event (rc=${RC_FEAT})"
+else
+    _bad "exit 99 — the null push base was consulted even though origin/development was usable"
+fi
+
 echo ""
 echo "=================================================="
 echo "hydra-gates entry-point tests: ${PASS} passed, ${FAIL} failed"

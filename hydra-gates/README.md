@@ -197,10 +197,51 @@ clean one. So:
   moment the branch is pushed — which is exactly when CI runs. This was not
   theoretical: the first end-to-end run of this package reported **58 gates
   green over 0 changed files**.
-- A base that resolves to the **same commit as HEAD** is warned about loudly. It
-  is a valid ref, so nothing else rejects it; it just makes the diff empty by
-  construction.
 - A genuinely empty diff is **stated as empty** rather than reported as a pass.
+
+### When the base IS HEAD: pushes to a mainline branch
+
+A base that resolves to the **same commit as HEAD** is a valid ref, so nothing
+in the chain above rejects it — and it makes the diff empty by construction.
+This is not a rare misconfiguration. It is what **every push to `development`
+or `main` looks like**: `origin/development` and `HEAD` are the same commit.
+
+Two readings of that have shipped, and both were useless:
+
+| version | behaviour on a mainline push | why it is worthless |
+|---|---|---|
+| ≤ v1.4.0 | empty diff → every gate iterates nothing → **PASS** | permanently green. Measured on shillinq `c64e9fe`: 52 gates green in 22 s; the same commit unscoped fails 18 |
+| v1.5.0 | **exit 99**, refuse to pass over nothing | correct about the evidence, and it fires on every mainline push in every repo — permanently red |
+
+A permanently-green gate and a permanently-red gate carry the same amount of
+information about the code, and both train readers to stop looking.
+
+From **v1.5.1** the base is not missing on a push — it is simply not the
+branch's own name. GitHub supplies the pusher's previous tip as
+`github.event.before`, so the honest scope for a push is `before...HEAD`:
+what this push actually changed. For a squash-merge that is exactly the
+squashed commit's diff; for a merge commit it is everything the merge brought
+in.
+
+This engages **only** when the resolved base is already HEAD — i.e. only where
+the alternative is a refusal. A push to a feature branch, where
+`origin/development` is genuinely behind HEAD, is scoped exactly as before and
+ignores the event entirely. Every pull-request run is untouched.
+
+Where the push's previous tip genuinely cannot be used, the run still exits 99,
+and the reason is named:
+
+| case | decision |
+|---|---|
+| `before` is the null SHA (this push **created** the branch) | **99.** There is no previous state; the only available scope is the whole tree, which is the audit mode and would report inherited debt as if this push wrote it |
+| `before` == HEAD (a push that moved the ref nowhere) | **99.** Still a self-comparison, whatever supplied it |
+| `before` is unreachable (**force-push** abandoned it) | one targeted `git fetch origin <sha>`, then `--unshallow` if the checkout is shallow; if it still cannot be fetched, **99** |
+| shallow checkout (`fetch-depth: 1`) | recovered by that same fetch — this is the common, fixable cause |
+| no shared history (force-push onto an unrelated tree) | **99** |
+
+`$HYDRA_GATE_PUSH_BEFORE` overrides the event payload. It exists so the
+invariant suite can drive each row above without a runner, and so a human can
+reproduce a CI run locally with the scope CI used.
 
 ### Scope granularity, and where file granularity is not enough
 
