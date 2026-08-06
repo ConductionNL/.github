@@ -134,17 +134,25 @@ _expect() {
         _bad "${_desc} — gate-28 emitted NO line at all (a silent gate is the #147 shape)"
         return
     fi
+    # `A && _ok || _bad` would be wrong here, and not merely untidy (SC2015):
+    # if _ok ever returned non-zero, _bad would ALSO run and the same
+    # assertion would be counted twice, once each way. In a harness whose
+    # entire job is to count assertions correctly, that is instrument
+    # corruption. Explicit if/else.
+    local _pattern
     case "${_want}" in
-        PASS)
-            printf '%s' "${_line}" | grep -qE ': PASS' \
-                && _ok "${_desc}" || _bad "${_desc} — got: ${_line}" ;;
-        NOTAPPLICABLE)
-            printf '%s' "${_line}" | grep -qE ': NOT APPLICABLE' \
-                && _ok "${_desc}" || _bad "${_desc} — got: ${_line}" ;;
-        structural)
-            printf '%s' "${_line}" | grep -qE ': SKIPPED \(structural\)' \
-                && _ok "${_desc}" || _bad "${_desc} — got: ${_line}" ;;
+        PASS)          _pattern=': PASS' ;;
+        NOTAPPLICABLE) _pattern=': NOT APPLICABLE' ;;
+        structural)    _pattern=': SKIPPED \(structural\)' ;;
+        *)
+            _bad "${_desc} — test bug: unknown expectation '${_want}'"
+            return ;;
     esac
+    if printf '%s' "${_line}" | grep -qE "${_pattern}"; then
+        _ok "${_desc}"
+    else
+        _bad "${_desc} — got: ${_line}"
+    fi
 }
 
 # --- 1. (b) THE FALSE RED. Repo HAS licensed lib PHP; the diff touches only a
