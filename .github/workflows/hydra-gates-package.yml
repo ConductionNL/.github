@@ -18,20 +18,31 @@ name: hydra-gates package
 # location, with no local checkout of the package on the box and no
 # credentials, tests the thing that was actually wrong.
 
+# NO `paths:` FILTER, DELIBERATELY.
+#
+# This used to run only when hydra-gates/**, composer.json or .gitattributes
+# changed. That was defensible while every caller PINNED the package: a repo on
+# v1.3.0 was unaffected by anything landing here, so gating unrelated PRs on a
+# 25-minute container job bought nothing.
+#
+# It stopped being defensible when the fleet unpinned. As of
+# `chore/track-latest-gates` all 23 callers take the package from @main, so the
+# blast radius of a merge here is the whole fleet and the question "did this PR
+# touch the gates?" is the wrong one — the runner resolves at RUN time, not at
+# merge time, so a PR that changes nothing under hydra-gates/ can still be the
+# commit a caller picks up.
+#
+# A required check with a `paths:` filter is also a trap in its own right: on
+# every PR the filter excludes, the check never reports, and the PR sits
+# pending forever unless the ruleset is taught the exception. The two ways out
+# are a hand-maintained filter that decays exactly like the hand-maintained
+# test list this same workflow already learned not to keep (see "discovered,
+# not listed" below), or no filter at all. No filter at all.
 on:
   pull_request:
-    paths:
-      - "hydra-gates/**"
-      - "composer.json"
-      - ".gitattributes"
-      - ".github/workflows/hydra-gates-package.yml"
+    branches: [main]
   push:
     branches: [main]
-    paths:
-      - "hydra-gates/**"
-      - "composer.json"
-      - ".gitattributes"
-      - ".github/workflows/hydra-gates-package.yml"
   workflow_dispatch:
 
 permissions:

@@ -1,0 +1,176 @@
+name: Quality resolve probe
+
+# THE GUARD ON THE SHARED WORKFLOW.
+#
+# Every caller in the fleet consumes .github/workflows/quality.yml at @main and,
+# as of `chore/track-latest-gates`, takes the gates package from @main too. That
+# is what the product owner asked for — nobody should have to bump a pin in 23
+# repositories to receive a fix. The cost of it is that a broken main now
+# reaches all 23 at once, so main has to be gated on the one failure mode that
+# does not announce itself.
+#
+# THE FAILURE MODE
+# ----------------
+# An unresolvable reusable workflow is not a red check. GitHub creates a run
+# with no jobs in it, or creates no run at all. There is nothing to fail, so
+# nothing fails: every caller quietly stops being checked and every dashboard
+# stays green. On 2026-08-04 a single ~22 KB `run:` step did exactly this
+# (#161); it was reverted (#166) and re-landed with the script in a file (#168).
+#
+# The signature is `jobs == 0`. So this probe COUNTS JOBS. It never looks at
+# whether they passed — a conclusion is a different measurement and reading it
+# here would reintroduce the same blind spot one level up.
+#
+# WHY TWO WORKFLOWS
+# -----------------
+# The thing being resolved is `quality-selftest.yml`. It lives in its own file
+# rather than as a job here, and that separation is load-bearing: if the call
+# sat in THIS workflow and quality.yml were unresolvable, this whole workflow
+# would fail to materialise, the required check would never report, and the PR
+# would sit PENDING FOREVER. A permanently-pending gate is one of the three
+# shapes a dead gate takes, and the hardest to notice. Split in two, the probe
+# always runs and always reports, so the outage surfaces as an explicit RED.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: quality-resolve-probe-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-limits:
+    name: "No `run:` step big enough to break resolution"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      # Deterministic, and it names the offending step — which a job count
+      # cannot do. This is the #161 class caught before merge rather than
+      # after.
+      - name: Assert every `run:` block is under the limit
+        run: python3 scripts/assert-run-steps-resolvable.py .github/workflows/*.yml
+
+      # POSITIVE CONTROL for the lint. A limit low enough that today's largest
+      # step must trip it proves the check has a reachable failure branch and
+      # is reading real sizes. Without this, a lint that silently stopped
+      # parsing `run:` blocks would report the same clean pass forever.
+      - name: "Positive control — the lint must fail on a limit it cannot meet"
+        run: |
+          set -eu
+          if python3 scripts/assert-run-steps-resolvable.py --limit 1 \
+               .github/workflows/quality.yml > /dev/null 2>&1; then
+            echo "::error::the run-step lint reported OK at a 1-byte limit. It is \
+          not measuring anything — every workflow in this repo has `run:` blocks \
+          larger than one byte."
+            exit 1
+          fi
+          echo "OK — the lint fails when it should. Its clean pass above is a verdict."
+
+  probe:
+    name: "quality.yml resolves (job count > 0)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      # POSITIVE CONTROL, FIRST. Run the counter against a workflow that
+      # cannot possibly have a run at this SHA and require the answer to be 0.
+      #
+      # This is the assertion the whole probe rests on: that a count of zero is
+      # something this instrument can actually produce and report. If the
+      # counter were broken — wrong repo, missing token scope, a jq path that
+      # silently yields nothing — it would return 0 here AND 0 for the real
+      # subject, and the probe would be a gate that only ever fails. Equally, a
+      # counter that had started returning a constant would pass the real check
+      # forever. Measuring the known-zero case first distinguishes the two.
+      - name: "Positive control — a workflow that does not exist must count 0"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -eu
+          # Short timeout: this one is EXPECTED to find nothing, so there is no
+          # race to wait out.
+          n="$(bash scripts/count-workflow-jobs.sh '__no-such-workflow.yml' "${HEAD_SHA}" 5)"
+          echo "control count = ${n}"
+          [ "${n}" = "0" ] || {
+            echo "::error::the counter returned ${n} jobs for a workflow that does not \
+          exist. It is not counting what it claims to count, so its verdict on \
+          quality.yml means nothing."
+            exit 1
+          }
+          echo "OK — the counter can return 0, and reports it."
+
+      # THE MEASUREMENT. quality-selftest.yml calls ./.github/workflows/quality.yml
+      # on this same commit. If quality.yml resolves, that run materialises its
+      # jobs (18 top-level jobs as of this change, some of which skip — a
+      # skipped job is still a job and still counts, which is the point: the
+      # probe measures RESOLUTION, not execution).
+      - name: "Count the jobs quality-selftest.yml materialised"
+        id: count
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -eu
+          n="$(bash scripts/count-workflow-jobs.sh 'quality-selftest.yml' "${HEAD_SHA}" 420)"
+          echo "count=${n}" >> "$GITHUB_OUTPUT"
+          echo "quality-selftest.yml materialised ${n} jobs at ${HEAD_SHA}"
+
+      - name: "Assert the shared workflow resolved"
+        env:
+          COUNT: ${{ steps.count.outputs.count }}
+        run: |
+          set -eu
+          if [ "${COUNT}" -eq 0 ]; then
+            echo "::error::quality.yml produced ZERO jobs. This is the #161 outage \
+          signature, not a slow run: an unresolvable reusable workflow yields a run \
+          with no jobs (or no run) and NEVER goes red on its own. Do not merge — \
+          every caller in the fleet consumes this file at @main and would silently \
+          stop being checked. Check for an oversized \`run:\` step, a malformed \
+          \`on: workflow_call\` block, or a YAML error."
+            exit 1
+          fi
+          echo "OK — ${COUNT} jobs. quality.yml is resolvable at this commit."
+
+  # A single check to require in the ruleset, so adding a job above does not
+  # need a branch-protection edit to be enforced. `needs:` implies success(),
+  # which is what we want here — but it also DELETES this job if a dependency
+  # is skipped, so `!cancelled()` is used and each result is asserted by name
+  # rather than inferred from this job having run at all.
+  guard:
+    name: "Shared-workflow guard"
+    runs-on: ubuntu-latest
+    needs: [static-limits, probe]
+    if: ${{ !cancelled() }}
+    steps:
+      - name: Assert both guards reached a verdict
+        env:
+          STATIC: ${{ needs.static-limits.result }}
+          PROBE: ${{ needs.probe.result }}
+        run: |
+          set -eu
+          echo "static-limits=${STATIC} probe=${PROBE}"
+          # `skipped` is failed here on purpose. A guard that did not run is
+          # not a guard that passed.
+          for pair in "static-limits:${STATIC}" "probe:${PROBE}"; do
+            name="${pair%%:*}"; result="${pair##*:}"
+            [ "${result}" = "success" ] || {
+              echo "::error::${name} did not succeed (result=${result}). A guard that \
+          was skipped or cancelled has returned no verdict at all."
+              exit 1
+            }
+          done
+          echo "OK — both guards ran and passed."

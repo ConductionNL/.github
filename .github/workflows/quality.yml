@@ -259,7 +259,59 @@ on:
         type: boolean
         default: false
       hydra-gates-ref:
-        description: "Ref of ConductionNL/.github to take the gate package from. Pin this to a tag to stop a gate change from altering a repo's verdict without a commit in that repo. NOTE: this workflow is consumed at @main while the package is consumed at this pin, so the two move independently and a new default here can reach an old runner. v1.3.0 is the minimum for hydra-gates-require-full-coverage and enable-axe to be honoured (earlier packages count every not-applicable gate as a coverage gap); v1.4.0 is the minimum for enable-axe to run at all (it ships the axe runner). Below those, the affected flag is withheld with a named warning rather than failing the run for something the repo did not do."
+        # DEFAULT `main`, AND CALLERS SHOULD NOT SET THIS AT ALL.
+        #
+        # A pin is a silent expiry date. It has now cost the fleet twice:
+        #
+        #   #159  22 repos sat on v1.0.1, which predated a batch of gate fixes.
+        #         16 gates were DEAD fleet-wide and every one of them reported
+        #         PASS, because a gate whose helper never ran emits a tick
+        #         identical to a real one.
+        #   #173  the coverage flag was flipped to default true HERE, at @main,
+        #         and reached v1.0.1 runners that predate the accounting that
+        #         makes it survivable. decidesk and doriath went red (exit 98)
+        #         on gates 4, 24 and 33 — precisely the not-applicable gates
+        #         that must never fail a run.
+        #
+        # Both are the same defect: this workflow is consumed at @main while the
+        # package was consumed at a pin, so the two moved independently and a
+        # change on one side reached a runner from the other side's past. The
+        # fix is not a better pin. It is no pin — the two sides move together
+        # again, and a fix landed here is a fix everyone has.
+        #
+        # ROLLBACK, because "always latest" is only safe with a way back:
+        #
+        #   fleet-wide, immediate — revert the offending commit on
+        #     ConductionNL/.github main. One commit, no per-repo PRs, and every
+        #     caller picks it up on its next run. This is the normal lever, and
+        #     it is strictly faster than the 23-PR bump that a pin makes
+        #     necessary.
+        #   one repo, immediate — set this input to a tag or SHA in that repo's
+        #     caller. Still supported, still honoured, and the right move when a
+        #     single repo needs to hold still while an upstream problem is
+        #     sorted out. Treat it as a temporary escape hatch and remove it
+        #     when the reason is gone: an explicit pin is exactly the state that
+        #     produced #159 and #173, and nothing here will remind you it is set.
+        #
+        # A moving major tag (`v1`, re-pointed each release) was considered and
+        # rejected. It would give a release boundary, but only while someone
+        # remembers to move it — and a tag nobody re-points is indistinguishable
+        # from the stale pin this change exists to remove. It would reproduce
+        # the failure silently, which is the one property being engineered out.
+        # `main` cannot rot, and main is now gated: see
+        # .github/workflows/quality-resolve-probe.yml, which counts the JOBS a
+        # real in-repo caller materialises, and hydra-gates-package.yml, which
+        # runs the package's own suites on every PR here.
+        #
+        # Version floors, still enforced by the capability probe below rather
+        # than by parsing this string (a pin may be a branch, a SHA or a fork,
+        # and none of those carry a version): v1.3.0 is the minimum for
+        # hydra-gates-require-full-coverage to be honoured — earlier packages
+        # count every not-applicable gate as a coverage gap — and v1.4.0 is the
+        # minimum for enable-axe to run at all, since it ships the axe runner.
+        # Below those the affected flag is WITHHELD with a named warning rather
+        # than failing the run for something the repo did not do.
+        description: "Ref of ConductionNL/.github to take the gate package from. LEAVE UNSET: the default tracks @main so a gate fix reaches every repo without a commit in that repo, and this workflow is itself consumed at @main so the two sides stay in step. Set it only as a temporary escape hatch when one repo must hold still — an explicit pin is a silent expiry date and has twice left gates dead or falsely red fleet-wide (#159, #173). To roll back for everyone, revert on ConductionNL/.github main instead. Older refs are still supported: a capability probe reads the package's own accounting and withholds a flag the pinned runner cannot honour, rather than failing the run."
         required: false
         type: string
         default: "main"
