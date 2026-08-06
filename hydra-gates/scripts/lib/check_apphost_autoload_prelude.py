@@ -93,6 +93,20 @@ import sys
 PRELUDE = re.compile(r"registerAutoloading\s*\(([^)]*)\)", re.S)
 OPENREGISTER_LITERAL = re.compile(r"""['"]openregister['"]""")
 
+# A composition root may pass the app id as a CLASS CONSTANT rather than a
+# quoted literal — `const OPENREGISTER_APP_ID = 'openregister';` then
+# `registerAutoloading(self::OPENREGISTER_APP_ID, $path)`. That is the same
+# prelude and must not be read as its absence.
+#
+# MEASURED, not hypothetical: doriath ships exactly this shape
+# (lib/AppInfo/OpenRegisterAutoloader.php) and called it correctly, BEFORE the
+# Bootstrap reference in Application::register(). Matching only the literal
+# reported a compliant composition root as an ADR-040 violation — a gate
+# failing an app for the way it spells a constant.
+APPID_CONST = re.compile(
+    r"""const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*['"]openregister['"]"""
+)
+
 # loadApp('openregister') is a WRONG fix, not a prelude — it boots OpenRegister
 # before its own register() has run. Named so the reader is told why.
 LOAD_APP = re.compile(r"""loadApp\s*\(\s*['"]openregister['"]\s*\)""")
@@ -135,11 +149,87 @@ def _sources(app_dir: str) -> dict[str, str]:
     return out
 
 
+def strip_comments(text: str) -> str:
+    """PHP source with comments removed, string literals preserved.
+
+    EVERY pattern below is evidence about CODE. Scanning raw source made
+    comments count as source, in both directions:
+
+      * `// Deliberately NOT IAppManager::loadApp('openregister')` — a comment
+        explaining why the WRONG fix was avoided — was reported as that wrong
+        fix. Measured on doriath, where both `loadApp` occurrences under
+        lib/AppInfo/ are prose saying the code does not do it.
+      * a commented-OUT `registerAutoloading('openregister', …)` would have
+        counted as a prelude that no longer runs — a false GREEN, the more
+        dangerous direction.
+
+    Newlines are preserved so any line-based reporting stays aligned.
+
+    `#[` opens a PHP 8 attribute, not a comment; treating it as one would
+    swallow the rest of the line, including `#[NoAdminRequired]`.
+    """
+    out: list[str] = []
+    i, n = 0, len(text)
+    state: str | None = None
+    while i < n:
+        c = text[i]
+        nxt = text[i + 1] if i + 1 < n else ""
+        if state is None:
+            if c == "'":
+                state, _ = "sq", out.append(c)
+                i += 1
+            elif c == '"':
+                state, _ = "dq", out.append(c)
+                i += 1
+            elif c == "/" and nxt == "/":
+                state, i = "line", i + 2
+            elif c == "#" and nxt != "[":
+                state, i = "line", i + 1
+            elif c == "/" and nxt == "*":
+                state, i = "block", i + 2
+            else:
+                out.append(c)
+                i += 1
+        elif state in ("sq", "dq"):
+            quote = "'" if state == "sq" else '"'
+            if c == "\\" and i + 1 < n:
+                out.append(c)
+                out.append(text[i + 1])
+                i += 2
+                continue
+            out.append(c)
+            if c == quote:
+                state = None
+            i += 1
+        elif state == "line":
+            if c == "\n":
+                out.append(c)
+                state = None
+            i += 1
+        else:  # block
+            if c == "*" and nxt == "/":
+                state, i = None, i + 2
+            else:
+                if c == "\n":
+                    out.append(c)
+                i += 1
+    return "".join(out)
+
+
 def has_prelude(text: str) -> bool:
-    """True when text contains registerAutoloading(... 'openregister' ...)."""
+    """True when text registers OpenRegister's autoloader.
+
+    Accepts the app id as a quoted literal OR as a constant defined in the
+    same composition root to that literal — both are the same prelude.
+    """
+    const_names = set(APPID_CONST.findall(text))
     for m in PRELUDE.finditer(text):
-        if OPENREGISTER_LITERAL.search(m.group(1)):
+        args = m.group(1)
+        if OPENREGISTER_LITERAL.search(args):
             return True
+        for name in const_names:
+            if re.search(r"\b" + re.escape(name) + r"\b", args):
+                return True
     return False
 
 
@@ -162,23 +252,29 @@ def scan_app(app_dir: str) -> list[tuple[str, str]]:
     if not sources:
         return []
 
+    # Every rule below is evidence about CODE, so it reads comment-stripped
+    # source. The SUPPRESSION is the one exception — it is authored AS a
+    # comment — so it keeps reading the raw text.
+    raw_blob = "\n".join(sources.values())
+    code = {path: strip_comments(text) for path, text in sources.items()}
+
     # OpenRegister owns AppHost — exempt by namespace, not by directory name,
     # so a checkout under any directory name is still recognised.
-    if any(OWN_NAMESPACE.search(text) for text in sources.values()):
+    if any(OWN_NAMESPACE.search(text) for text in code.values()):
         return []
 
-    blob = "\n".join(sources.values())
+    blob = "\n".join(code.values())
 
     # The prelude may legitimately live in a sibling composition-root file that
     # register() calls, so look for it across the whole of lib/AppInfo/.
     if has_prelude(blob):
         return []
 
-    if suppression_reason(blob):
+    if suppression_reason(raw_blob):
         return []
 
     findings: list[tuple[str, str]] = []
-    for path, text in sorted(sources.items()):
+    for path, text in sorted(code.items()):
         if BOOTSTRAP_REF.search(text):
             findings.append(
                 (path, "references OCA\\OpenRegister\\AppHost\\Bootstrap")
