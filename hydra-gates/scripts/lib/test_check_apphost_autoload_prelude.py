@@ -220,5 +220,157 @@ class WrongFixTest(GateCase):
         self.assertIn("bootApp()", out)
 
 
+class ConstantAppIdTest(GateCase):
+    """The app id may be a class constant, not only a quoted literal.
+
+    MEASURED on doriath, which shipped a correct prelude
+    (lib/AppInfo/OpenRegisterAutoloader.php) called BEFORE its Bootstrap
+    reference, and was still reported as an ADR-040 violation — the gate was
+    reading how the id is SPELLED, not what the code does.
+    """
+
+    def test_constant_resolving_to_openregister_is_a_prelude(self):
+        self.app("Application.php", """<?php
+namespace OCA\\Leaf\\AppInfo;
+use OCA\\OpenRegister\\AppHost\\Bootstrap;
+class Application {
+    private const OPENREGISTER_APP_ID = 'openregister';
+    public function register($context): void {
+        $p = \\OCP\\Server::get(\\OCP\\App\\IAppManager::class)
+            ->getAppPath(self::OPENREGISTER_APP_ID);
+        \\OC_App::registerAutoloading(self::OPENREGISTER_APP_ID, $p);
+        if (class_exists(Bootstrap::class) === true) {
+            Bootstrap::register($context, 'leaf', []);
+        }
+    }
+}
+""")
+        self.assertEqual(
+            _run(self.dir)[0], 0,
+            "a constant defined to 'openregister' is the same prelude",
+        )
+
+    def test_prelude_may_live_in_a_sibling_file(self):
+        """doriath's real shape: the prelude is its own class."""
+        self.app("OpenRegisterAutoloader.php", """<?php
+namespace OCA\\Leaf\\AppInfo;
+class OpenRegisterAutoloader {
+    private const OPENREGISTER_APP_ID = 'openregister';
+    public static function register(): bool {
+        try {
+            $m = \\OCP\\Server::get(\\OCP\\App\\IAppManager::class);
+            \\OC_App::registerAutoloading(
+                self::OPENREGISTER_APP_ID,
+                $m->getAppPath(self::OPENREGISTER_APP_ID)
+            );
+            return true;
+        } catch (\\Throwable) {
+            return false;
+        }
+    }
+}
+""")
+        self.app("Application.php", """<?php
+namespace OCA\\Leaf\\AppInfo;
+use OCA\\OpenRegister\\AppHost\\Bootstrap;
+class Application {
+    public function register($context): void {
+        OpenRegisterAutoloader::register();
+        if (class_exists(Bootstrap::class) === true) {
+            Bootstrap::register($context, 'leaf', []);
+        }
+    }
+}
+""")
+        self.assertEqual(_run(self.dir)[0], 0)
+
+    def test_constant_naming_a_DIFFERENT_app_is_not_a_prelude(self):
+        """The positive control: the constant path must still be able to fail."""
+        self.app("Application.php", """<?php
+namespace OCA\\Leaf\\AppInfo;
+use OCA\\OpenRegister\\AppHost\\Bootstrap;
+class Application {
+    private const OTHER_APP_ID = 'opencatalogi';
+    public function register($context): void {
+        \\OC_App::registerAutoloading(self::OTHER_APP_ID, $p);
+        if (class_exists(Bootstrap::class) === true) {
+            Bootstrap::register($context, 'leaf', []);
+        }
+    }
+}
+""")
+        self.assertEqual(
+            _run(self.dir)[0], 1,
+            "registering SOME OTHER app's autoloader is not the prelude",
+        )
+
+
+class CommentsAreNotCodeTest(GateCase):
+    """Every rule is evidence about code, so comments must not feed it."""
+
+    def test_comment_explaining_that_loadApp_is_avoided_is_not_a_finding(self):
+        """doriath's second false finding, exactly.
+
+        Both `loadApp` occurrences under its lib/AppInfo/ are prose saying the
+        code deliberately does NOT call it.
+        """
+        self.app("Application.php", """<?php
+namespace OCA\\Leaf\\AppInfo;
+use OCA\\OpenRegister\\AppHost\\Bootstrap;
+class Application {
+    private const OPENREGISTER_APP_ID = 'openregister';
+    public function register($context): void {
+        // Deliberately NOT IAppManager::loadApp('openregister'): that would
+        // boot OpenRegister before its own register() has run.
+        \\OC_App::registerAutoloading(self::OPENREGISTER_APP_ID, $p);
+        if (class_exists(Bootstrap::class) === true) {
+            Bootstrap::register($context, 'leaf', []);
+        }
+    }
+}
+""")
+        rc, out = _run(self.dir)
+        self.assertEqual(rc, 0, "a comment about loadApp is not a call to it")
+        self.assertNotIn("bootApp()", out)
+
+    def test_commented_OUT_prelude_is_NOT_a_prelude(self):
+        """The dangerous direction: stripping comments must not buy a green."""
+        self.app("Application.php", """<?php
+namespace OCA\\Leaf\\AppInfo;
+use OCA\\OpenRegister\\AppHost\\Bootstrap;
+class Application {
+    public function register($context): void {
+        // \\OC_App::registerAutoloading('openregister', $p);
+        /* \\OC_App::registerAutoloading('openregister', $p); */
+        if (class_exists(Bootstrap::class) === true) {
+            Bootstrap::register($context, 'leaf', []);
+        }
+    }
+}
+""")
+        self.assertEqual(
+            _run(self.dir)[0], 1,
+            "a prelude that does not RUN is not a prelude",
+        )
+
+    def test_php8_attribute_is_not_read_as_a_comment(self):
+        """`#[` opens an attribute; treating it as `#` would eat the line."""
+        self.app("Application.php", """<?php
+namespace OCA\\Leaf\\AppInfo;
+class Application {
+    #[SomeAttribute]
+    public function register($context): void {
+        if (class_exists('OCA\\\\OpenRegister\\\\AppHost\\\\Bootstrap') === true) {
+            return;
+        }
+    }
+}
+""")
+        self.assertEqual(
+            _run(self.dir)[0], 1,
+            "the class_exists probe after an attribute must still be seen",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
