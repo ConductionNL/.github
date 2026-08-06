@@ -28,8 +28,24 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# These must be at least as wide as the widest `permissions:` any job in
+# quality.yml declares — currently journeydoc-capture, which asks for
+# `contents: write` and `actions: write`.
+#
+# MEASURED, not copied: this file first shipped with `contents: read`, and run
+# 31073908079 came back `startup_failure` with ZERO jobs. Permissions are
+# validated when the run is CREATED, so `enable-journeydoc-capture: false` does
+# not help — the job's `if:` is never reached.
+#
+# That is worth stating plainly, because it is a second way into the same
+# outage and it applies to every caller in the fleet, not just this one: a
+# caller whose permission grant is narrower than the shared workflow requests
+# produces NO JOBS AND NO RED, exactly like an oversized `run:` step does. The
+# probe caught it on its first execution, which is the only reason it is
+# documented here rather than discovered in production.
 permissions:
-  contents: read
+  contents: write
+  actions: write
 
 concurrency:
   group: quality-selftest-${{ github.ref }}
