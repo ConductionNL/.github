@@ -2384,22 +2384,53 @@ except Exception:
     print('')
 " 2>/dev/null)
 fi
-# `_lt_ran=0` ONLY for the one case #172's taxonomy below cannot express: the
-# helper is absent. Everything else — no lib/, no composer.json, a composer
-# .json without a `license`, an empty scope — is left to that taxonomy, which
-# distinguishes them deliberately. Collapsing them into one `na` here would
-# undo #172.
+# `_lt_ran=0` for the two cases #172's taxonomy below cannot express: the
+# helper is absent, and the DIFF SCOPE is empty. The rest — no lib/, no
+# composer.json, a composer.json without a `license` — is left to that
+# taxonomy, which distinguishes them deliberately. Collapsing those into one
+# `na` here would undo #172.
+#
+# EMPTY SCOPE IS NOT A GAP (and the comment this replaces said it was).
+# `_lt_files` empty has two causes that the final `else` below stated as one:
+#
+#   a) the repo has lib/**/*.php, but THIS DIFF touches none of them. That is
+#      ADR-020 diff-scoping working — the same state gate-4 reports as NOT
+#      APPLICABLE for the same diff. Nothing is missing and no change in the
+#      repo could make the gate run on a diff that does not touch PHP.
+#   b) lib/ exists but holds no tracked .php at all. Also no subject matter.
+#
+# Neither is (c) "files WERE in scope and none carried a declaration", which
+# is the genuine structural gap the final `else` describes. Before this fix
+# all three printed (c) — a message that is FALSE for (a): with zero files in
+# scope, "0 in-scope file carried a declaration" is true only vacuously.
+#
+# The cost was not cosmetic. `hydra-gates-require-full-coverage` defaults to
+# TRUE (#164), and a structural gap FAILS the run — so gate-28 turned RED
+# every PR in the fleet whose diff does not touch lib/**/*.php, which is most
+# of them. Measured on nldesign with the real runner, both arms:
+#
+#   diff = .github/workflows/code-quality.yml   SKIPPED (structural) -> exit 98
+#   diff = 3 files under lib/                   PASS
+#
+# The gate was reporting the DIFF's shape as the REPOSITORY's defect.
 _lt_ran=1
 _lt_helper="${SCRIPT_DIR}/lib/check_license_triangle.py"
 if [ -n "${_composer_lic}" ] && [ -d lib ]; then
     _lt_files=()
+    _lt_tracked=0
     while IFS= read -r _php; do
         [ -z "${_php}" ] && continue
+        _lt_tracked=$((_lt_tracked + 1))
         _in_scope "${_php}" || continue
         _lt_files+=("${_php}")
     done < <(_enum_tracked '\.php$' lib)
     if [ "${#_lt_files[@]}" -eq 0 ]; then
-        : # falls through to the `structural` branch below — nothing compared.
+        _lt_ran=0
+        if [ "${_lt_tracked}" -gt 0 ]; then
+            _skip 28 "license-triangle" na "this diff touches none of the ${_lt_tracked} tracked lib/**/*.php file(s), so there is no per-file @license declaration in scope for composer.json's license=${_composer_lic} to be compared against. Diff-scoped out under ADR-020, exactly as gate-4 is for the same diff — not a gap: no change in this repository can make this gate inspect a file the diff does not contain. It runs on the next PR that touches PHP."
+        else
+            _skip 28 "license-triangle" na "lib/ exists but contains no tracked .php file, so there are no per-file @license declarations for composer.json's license=${_composer_lic} to be compared against. Nothing was inspected and nothing could be."
+        fi
     elif [ ! -f "${_lt_helper}" ]; then
         # A MISSING HELPER MUST NOT REPORT PASS (#147). This is the one state
         # #172's chain would misread: with no helper, `_lt_checked` stays 0 and
@@ -2439,7 +2470,11 @@ elif [ ! -f composer.json ]; then
 elif [ -z "${_composer_lic}" ]; then
     _skip 28 "license-triangle" structural "lib/ and composer.json both exist, but composer.json declares no \`license\` field, so there is nothing to compare per-file @license tags against. Per-file/composer license agreement is UNVERIFIED by this run. Fixable here: add \`\"license\": \"EUPL-1.2\"\` to composer.json."
 else
-    _skip 28 "license-triangle" structural "lib/ exists and composer.json declares license=${_composer_lic}, but 0 in-scope lib/**/*.php file carried an @license or SPDX-License-Identifier declaration, so NOTHING was compared. Per-file/composer license agreement is UNVERIFIED by this run. (Presence of the tag is gate-1's job, not this gate's.)"
+    # Reaching here now means something it did not mean before: files WERE in
+    # scope, the helper DID read them, and not one carried a declaration. The
+    # empty-scope case that used to land here — and made this message false —
+    # is caught above and reported as NOT APPLICABLE.
+    _skip 28 "license-triangle" structural "lib/ exists and composer.json declares license=${_composer_lic}, and ${#_lt_files[@]} lib/**/*.php file(s) WERE in scope, but not one carried an @license or SPDX-License-Identifier declaration, so NOTHING was compared. Per-file/composer license agreement is UNVERIFIED by this run. (Presence of the tag is gate-1's job, not this gate's.)"
 fi
 
 # ---------------------------------------------------------------------------
