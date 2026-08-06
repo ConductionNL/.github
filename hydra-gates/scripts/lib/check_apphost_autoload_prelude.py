@@ -93,6 +93,34 @@ import sys
 PRELUDE = re.compile(r"registerAutoloading\s*\(([^)]*)\)", re.S)
 OPENREGISTER_LITERAL = re.compile(r"""['"]openregister['"]""")
 
+# A name BOUND to the literal 'openregister' in the same blob. Three spellings:
+#   const OPENREGISTER_APP_ID = 'openregister';
+#   define('OPENREGISTER_APP_ID', 'openregister');
+#   $openRegisterAppId = 'openregister';
+# The binding must be to the EXACT literal — this resolves names, it does not
+# guess at them, and a name bound to anything else is not a match.
+CONST_BINDING = re.compile(
+    r"""(?:
+          const\s+(?P<name1>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*['"]openregister['"]
+        | define\s*\(\s*['"](?P<name2>[A-Za-z_][A-Za-z0-9_]*)['"]\s*,\s*['"]openregister['"]
+        | \$(?P<name3>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*['"]openregister['"]
+    )""",
+    re.X,
+)
+
+
+def _binding_name(match: "re.Match[str]") -> str:
+    return match.group("name1") or match.group("name2") or match.group("name3")
+
+
+# A name USED as a call argument: `self::NAME`, `static::NAME`, `Cls::NAME`,
+# a bare `NAME`, or `$var`. Matched against the bound names above, never
+# accepted on its own.
+ARG_NAME = re.compile(
+    r"""(?:(?:self|static|parent|[A-Za-z_][A-Za-z0-9_\\]*)\s*::\s*)?"""
+    r"""\$?(?P<name>[A-Za-z_][A-Za-z0-9_]*)""",
+)
+
 # loadApp('openregister') is a WRONG fix, not a prelude — it boots OpenRegister
 # before its own register() has run. Named so the reader is told why.
 LOAD_APP = re.compile(r"""loadApp\s*\(\s*['"]openregister['"]\s*\)""")
@@ -135,11 +163,45 @@ def _sources(app_dir: str) -> dict[str, str]:
     return out
 
 
+def openregister_aliases(text: str) -> set[str]:
+    """Names bound to the literal 'openregister' somewhere in this text.
+
+    WHY THIS EXISTS. The prelude used to be recognised only as a QUOTED literal
+    inside the call parentheses:
+
+        \\OC_App::registerAutoloading('openregister', $path);        accepted
+        \\OC_App::registerAutoloading(self::OPENREGISTER_APP_ID, $path);  REJECTED
+
+    The second form is the same call with the app id given a name, which is the
+    better of the two — and doriath, which does exactly that, was reported as
+    having NO prelude while its prelude sat four lines above the call. A gate
+    that fails the tidier spelling of the thing it is asking for teaches people
+    to write the untidy one, and its finding is not about the defect at all.
+
+    Resolution is deliberately SHALLOW and LITERAL: a name counts only when
+    this same source blob binds it to the exact string 'openregister'. We do
+    not follow imports, and we do not accept a name we cannot see bound. An
+    unresolvable name is still a finding — see test_unknown_constant_still_FAILS
+    and test_constant_bound_to_another_app_still_FAILS, which are what stop this
+    from becoming "any argument at all satisfies the gate".
+    """
+    return {_binding_name(m) for m in CONST_BINDING.finditer(text)} - {""}
+
+
 def has_prelude(text: str) -> bool:
-    """True when text contains registerAutoloading(... 'openregister' ...)."""
+    """True when text calls registerAutoloading() for the openregister app.
+
+    Accepts the app id as a quoted literal, or as any name this same blob binds
+    to that literal (a class constant, a define(), or a plain variable).
+    """
+    aliases = openregister_aliases(text)
     for m in PRELUDE.finditer(text):
-        if OPENREGISTER_LITERAL.search(m.group(1)):
+        args = m.group(1)
+        if OPENREGISTER_LITERAL.search(args):
             return True
+        for ref in ARG_NAME.finditer(args):
+            if ref.group("name") in aliases:
+                return True
     return False
 
 

@@ -124,6 +124,93 @@ class RedThenGreenTest(GateCase):
         self.assertIn("apphost-autoload-prelude: OK", out)
 
 
+class NamedConstantPreludeTest(GateCase):
+    """The app id may be given a NAME, and that must not be a finding.
+
+    doriath writes the prelude as
+
+        \\OC_App::registerAutoloading(self::OPENREGISTER_APP_ID, $path);
+
+    with `private const OPENREGISTER_APP_ID = 'openregister';` four lines
+    above. That is the same call as the documented one, spelled better — and
+    the gate reported it as having NO prelude, because the matcher required a
+    QUOTED literal inside the parentheses.
+
+    Measured on doriath#163: gate-64 FAIL, "2 AppHost adoption(s) with no
+    OpenRegister autoload prelude", with the prelude present and correct.
+
+    The three tests below are one unit. The first is the fix; the second and
+    third are what stop the fix from being "accept any argument", which would
+    make the gate blind to the defect it exists to catch.
+    """
+
+    CONST_FORM = """<?php
+namespace OCA\\Leaf\\AppInfo;
+use OCA\\OpenRegister\\AppHost\\Bootstrap;
+class Application {
+    private const %s = '%s';
+    public function register($context): void {
+        $path = \\OCP\\Server::get(\\OCP\\App\\IAppManager::class)->getAppPath('openregister');
+        \\OC_App::registerAutoloading(self::%s, $path);
+        Bootstrap::register($context, 'leaf', []);
+    }
+}
+"""
+
+    def test_named_constant_bound_to_openregister_is_GREEN(self):
+        self.app("Application.php", self.CONST_FORM % (
+            "OPENREGISTER_APP_ID", "openregister", "OPENREGISTER_APP_ID"))
+        rc, out = _run(self.dir)
+        self.assertEqual(
+            rc, 0,
+            "a const bound to 'openregister' IS the prelude — this is doriath's shape")
+        self.assertIn("apphost-autoload-prelude: OK", out)
+
+    def test_constant_bound_to_another_app_still_FAILS(self):
+        """The discriminator. Same syntax, different binding."""
+        self.app("Application.php", self.CONST_FORM % (
+            "SOME_OTHER_APP_ID", "opencatalogi", "SOME_OTHER_APP_ID"))
+        rc, out = _run(self.dir)
+        self.assertEqual(
+            rc, 1,
+            "registerAutoloading() for a DIFFERENT app is not an OpenRegister prelude")
+        self.assertIn("FAIL", out)
+
+    def test_unknown_constant_still_FAILS(self):
+        """A name the blob never binds must not be taken on trust."""
+        self.app("Application.php", """<?php
+namespace OCA\\Leaf\\AppInfo;
+use OCA\\OpenRegister\\AppHost\\Bootstrap;
+class Application {
+    public function register($context): void {
+        \\OC_App::registerAutoloading(self::NEVER_DEFINED_ANYWHERE, $path);
+        Bootstrap::register($context, 'leaf', []);
+    }
+}
+""")
+        rc, out = _run(self.dir)
+        self.assertEqual(
+            rc, 1,
+            "an unresolvable name must not satisfy the gate — that is how it goes blind")
+        self.assertIn("FAIL", out)
+
+    def test_variable_and_define_spellings_are_accepted(self):
+        self.app("Application.php", """<?php
+namespace OCA\\Leaf\\AppInfo;
+use OCA\\OpenRegister\\AppHost\\Bootstrap;
+class Application {
+    public function register($context): void {
+        $openRegisterAppId = 'openregister';
+        $path = \\OCP\\Server::get(\\OCP\\App\\IAppManager::class)->getAppPath($openRegisterAppId);
+        \\OC_App::registerAutoloading($openRegisterAppId, $path);
+        Bootstrap::register($context, 'leaf', []);
+    }
+}
+""")
+        rc, out = _run(self.dir)
+        self.assertEqual(rc, 0, "a variable bound to the literal is the same prelude")
+
+
 class DetectionShapesTest(GateCase):
     def test_class_exists_probe_without_prelude_is_RED(self):
         self.app("Application.php", """<?php
