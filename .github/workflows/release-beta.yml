@@ -100,28 +100,44 @@ jobs:
       - name: Calculate release version
         id: beta_version
         run: |
-          STABLE="${{ steps.stable_version.outputs.version }}"
-          IFS='.' read -ra PARTS <<< "$STABLE"
-
-          # One patch ahead of stable, with a timestamp so every run is a new
-          # version. The channel goes in the prerelease identifier, which
-          # keeps dev builds sorting below the beta of the same patch and
-          # makes it obvious in the app list where a build came from.
-          NEXT_PATCH=$(( ${PARTS[2]} + 1 ))
-          TIMESTAMP=$(date -u +"%Y%m%d%H%M%S")
-
           CHANNEL="${{ inputs.channel }}"
           if [ "$CHANNEL" != "beta" ] && [ "$CHANNEL" != "dev" ]; then
             echo "::error::channel must be 'beta' or 'dev', got '$CHANNEL'"
             exit 1
           fi
 
-          NEW_VERSION="${PARTS[0]}.${PARTS[1]}.${NEXT_PATCH}-${CHANNEL}.${TIMESTAMP}"
+          TIMESTAMP=$(date -u +"%Y%m%d%H%M%S")
+
+          if [ "$CHANNEL" = "dev" ]; then
+            # A dev build takes its number from the branch's own info.xml and
+            # does not bump the patch. 0.6.0-dev.<ts> is a build *of* 0.6.0
+            # and sorts just below it, which is what a semver prerelease
+            # identifier means.
+            #
+            # Deriving it from tags instead produces a number lower than the
+            # branch declares: Pipelinq's newest stable tag was v0.3.1 while
+            # development said 0.6.0, so the first dev build called itself
+            # 0.3.2-dev and looked like a downgrade from the branch it was
+            # built from.
+            BASE=$(grep -oP '(?<=<version>)[^<]+' appinfo/info.xml | head -1 | sed 's/-.*//')
+            if [ -z "$BASE" ]; then
+              echo "::error::could not read <version> from appinfo/info.xml"
+              exit 1
+            fi
+            NEW_VERSION="${BASE}-dev.${TIMESTAMP}"
+            echo "dev version: $NEW_VERSION (info.xml baseline: $BASE)"
+          else
+            # Beta stays one patch ahead of the last stable release.
+            STABLE="${{ steps.stable_version.outputs.version }}"
+            IFS='.' read -ra PARTS <<< "$STABLE"
+            NEXT_PATCH=$(( ${PARTS[2]} + 1 ))
+            NEW_VERSION="${PARTS[0]}.${PARTS[1]}.${NEXT_PATCH}-beta.${TIMESTAMP}"
+            echo "beta version: $NEW_VERSION (stable baseline: $STABLE)"
+          fi
 
           echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
           echo "APP_NAME=${{ inputs.app-name }}" >> $GITHUB_ENV
           echo "RELEASE_CHANNEL=$CHANNEL" >> $GITHUB_ENV
-          echo "$CHANNEL version: $NEW_VERSION (stable baseline: $STABLE)"
 
       # ── Build ──
 
