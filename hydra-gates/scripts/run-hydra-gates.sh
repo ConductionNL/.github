@@ -48,6 +48,12 @@
 #                              optional for builder (build mode runs full).
 #   --base BRANCH            — override the diff base (default origin/development)
 #
+# When the base resolves to the SAME COMMIT as HEAD — which is what every push
+# to a mainline branch looks like — the scope is taken from the push's own
+# previous tip (github.event.before) instead. $HYDRA_GATE_PUSH_BEFORE overrides
+# that, and is how the invariant suite drives it without a runner. See
+# scripts/lib/resolve-push-base.sh.
+#
 # Output shape (stdout):
 #   [gate-N] <gate-name>: PASS | FAIL[<reasons>]
 # Gates that FAIL write details to <log-dir>/hydra-gate-<name>.log for debugging,
@@ -222,18 +228,56 @@ if [ "${SCOPE_TO_DIFF}" = "1" ]; then
     # UNSCOPED the same commit fails 18.
     #
     # So EVERY diff-scoped run on a mainline branch is vacuous by
-    # construction. That is a configuration error in the caller (a scoped run
-    # only makes sense for a PR), not an empty PR, and it must not wear the
-    # same green as a run that inspected something.
+    # construction.
+    #
+    # THE FIX IS NOT TO REFUSE, AND IT IS NOT TO PASS.
+    #
+    # Refusing (what this block did when it was written) is correct about the
+    # evidence and useless in practice: it fires on every push to development
+    # and every push to main, in every repo, forever. A permanently-red gate
+    # and a permanently-green gate say the same thing about the code — nothing
+    # — and both get filtered out by the people reading them, which is the
+    # failure this whole programme exists to end.
+    #
+    # The base is not MISSING on a push. It is just not the branch's own name.
+    # GitHub supplies the pusher's previous tip as `github.event.before`, and
+    # the honest scope for a push is `before...HEAD` — what this push actually
+    # changed. For a squash-merge that is exactly the squashed commit's diff;
+    # for a merge commit it is everything the merge brought in.
+    #
+    # So try that first, and refuse only when it genuinely cannot be resolved
+    # (branch created by this push, force-pushed tip now unreachable, unrelated
+    # history). Each of those is named out loud by the helper. Exit 99 remains
+    # the answer for "I cannot scope" — it just stops being the answer for
+    # "this is a mainline push".
     _base_sha=$(git -c safe.directory='*' rev-parse --verify --quiet "${BASE_REF}^{commit}" 2>/dev/null || true)
     _head_sha=$(git -c safe.directory='*' rev-parse --verify --quiet 'HEAD^{commit}' 2>/dev/null || true)
     if [ -n "${_base_sha}" ] && [ "${_base_sha}" = "${_head_sha}" ]; then
-        echo "[hydra-gates] ERROR: diff base '${BASE_REF}' IS HEAD (${_head_sha})." >&2
-        echo "[hydra-gates] A scoped run against itself inspects nothing, and every gate" >&2
-        echo "[hydra-gates] would report PASS over an empty file set. Refusing." >&2
-        echo "[hydra-gates] Run WITHOUT --scope-to-diff on a mainline branch, or pass a" >&2
-        echo "[hydra-gates] --base that is actually behind HEAD." >&2
-        exit 99
+        echo "[hydra-gates] Diff base '${BASE_REF}' IS HEAD (${_head_sha}) — the shape of a push to a mainline branch."
+        echo "[hydra-gates] Re-scoping to the push's own previous tip rather than to HEAD."
+        if [ -r "${SCRIPT_DIR}/lib/resolve-push-base.sh" ]; then
+            # shellcheck source=lib/resolve-push-base.sh
+            # shellcheck disable=SC1091  # resolved at runtime from ${SCRIPT_DIR}
+            . "${SCRIPT_DIR}/lib/resolve-push-base.sh"
+            if _push_base=$(hydra_resolve_push_base "$(pwd)" "${_head_sha}"); then
+                BASE_REF="${_push_base}"
+                echo "[hydra-gates] Base ref: ${BASE_REF} (github.event.before, push)"
+            else
+                _push_base=""
+            fi
+        else
+            echo "[hydra-gates] ERROR: scripts/lib/resolve-push-base.sh is missing from this package." >&2
+            _push_base=""
+        fi
+        if [ -z "${_push_base:-}" ]; then
+            echo "[hydra-gates] ERROR: diff base '${BASE_REF}' IS HEAD (${_head_sha}) and the push's" >&2
+            echo "[hydra-gates] previous tip could not be used either (reason above)." >&2
+            echo "[hydra-gates] A scoped run against itself inspects nothing, and every gate" >&2
+            echo "[hydra-gates] would report PASS over an empty file set. Refusing." >&2
+            echo "[hydra-gates] Pass a --base that is actually behind HEAD, or set" >&2
+            echo "[hydra-gates] HYDRA_GATE_PUSH_BEFORE to the commit this push started from." >&2
+            exit 99
+        fi
     fi
 
     if ! git -c safe.directory='*' merge-base "${BASE_REF}" HEAD > /dev/null 2>&1; then
@@ -2340,48 +2384,53 @@ except Exception:
     print('')
 " 2>/dev/null)
 fi
-# `_lt_ran=0` ONLY for the one case #172's taxonomy below cannot express: the
-# helper is absent. Everything else — no lib/, no composer.json, a composer
-# .json without a `license`, an empty scope — is left to that taxonomy, which
-# distinguishes them deliberately. Collapsing them into one `na` here would
-# undo #172.
+# `_lt_ran=0` for the two cases #172's taxonomy below cannot express: the
+# helper is absent, and the DIFF SCOPE is empty. The rest — no lib/, no
+# composer.json, a composer.json without a `license` — is left to that
+# taxonomy, which distinguishes them deliberately. Collapsing those into one
+# `na` here would undo #172.
+#
+# EMPTY SCOPE IS NOT A GAP (and the comment this replaces said it was).
+# `_lt_files` empty has two causes that the final `else` below stated as one:
+#
+#   a) the repo has lib/**/*.php, but THIS DIFF touches none of them. That is
+#      ADR-020 diff-scoping working — the same state gate-4 reports as NOT
+#      APPLICABLE for the same diff. Nothing is missing and no change in the
+#      repo could make the gate run on a diff that does not touch PHP.
+#   b) lib/ exists but holds no tracked .php at all. Also no subject matter.
+#
+# Neither is (c) "files WERE in scope and none carried a declaration", which
+# is the genuine structural gap the final `else` describes. Before this fix
+# all three printed (c) — a message that is FALSE for (a): with zero files in
+# scope, "0 in-scope file carried a declaration" is true only vacuously.
+#
+# The cost was not cosmetic. `hydra-gates-require-full-coverage` defaults to
+# TRUE (#164), and a structural gap FAILS the run — so gate-28 turned RED
+# every PR in the fleet whose diff does not touch lib/**/*.php, which is most
+# of them. Measured on nldesign with the real runner, both arms:
+#
+#   diff = .github/workflows/code-quality.yml   SKIPPED (structural) -> exit 98
+#   diff = 3 files under lib/                   PASS
+#
+# The gate was reporting the DIFF's shape as the REPOSITORY's defect.
 _lt_ran=1
-# Was the DIFF SCOPE empty, as distinct from "files were in scope and none of
-# them carried a tag"? #172 collapsed those two, and the collapse is a false
-# RED on the most ordinary PR there is.
-#
-# `_in_scope` filters to this PR's diff (ADR-020). So a PR that touches only
-# .github/workflows/, or only src/, has ZERO lib/**/*.php in scope — not
-# because the repository is missing licence tags, but because diff-scoping is
-# working exactly as designed. #172 reported that as `structural`, which is a
-# claim about the REPOSITORY, and with hydra-gates-require-full-coverage on by
-# default it fails the run with exit 98.
-#
-# MEASURED on the fleet's own unpinning PRs, each a single-file workflow diff:
-# hrmq#74 went from a CLEAN baseline to red on nothing but this, and
-# app-versions#129, opencatalogi#813, nextcloud-app-template#132 and
-# launchpad#60 all named gate 28 as their only gate that did not run.
-#
-# That is the "a gate that is legitimately not applicable must NOT fail the
-# run" rule, broken — the same shape as #173, one gate lower down. #172 was
-# right that an empty read must not report PASS; it just swung past
-# NOT APPLICABLE on the way to structural.
-_lt_scope_empty=0
 _lt_helper="${SCRIPT_DIR}/lib/check_license_triangle.py"
 if [ -n "${_composer_lic}" ] && [ -d lib ]; then
     _lt_files=()
+    _lt_tracked=0
     while IFS= read -r _php; do
         [ -z "${_php}" ] && continue
+        _lt_tracked=$((_lt_tracked + 1))
         _in_scope "${_php}" || continue
         _lt_files+=("${_php}")
     done < <(_enum_tracked '\.php$' lib)
     if [ "${#_lt_files[@]}" -eq 0 ]; then
-        # Distinguish the two ways to arrive here. If the repo HAS lib PHP but
-        # none of it is in this diff, the gate is diff-scoped out and that is
-        # NOT APPLICABLE. If the repo has no lib PHP at all, it is still not
-        # this gate's subject matter. Either way nothing was withheld: there
-        # was nothing to read.
-        _lt_scope_empty=1
+        _lt_ran=0
+        if [ "${_lt_tracked}" -gt 0 ]; then
+            _skip 28 "license-triangle" na "this diff touches none of the ${_lt_tracked} tracked lib/**/*.php file(s), so there is no per-file @license declaration in scope for composer.json's license=${_composer_lic} to be compared against. Diff-scoped out under ADR-020, exactly as gate-4 is for the same diff — not a gap: no change in this repository can make this gate inspect a file the diff does not contain. It runs on the next PR that touches PHP."
+        else
+            _skip 28 "license-triangle" na "lib/ exists but contains no tracked .php file, so there are no per-file @license declarations for composer.json's license=${_composer_lic} to be compared against. Nothing was inspected and nothing could be."
+        fi
     elif [ ! -f "${_lt_helper}" ]; then
         # A MISSING HELPER MUST NOT REPORT PASS (#147). This is the one state
         # #172's chain would misread: with no helper, `_lt_checked` stays 0 and
@@ -2420,14 +2469,12 @@ elif [ ! -f composer.json ]; then
     _skip 28 "license-triangle" na "lib/ exists but this repo has no composer.json, so there is no \`license\` declaration for per-file @license tags to be compared against. This gate compares two declarations and only one exists here."
 elif [ -z "${_composer_lic}" ]; then
     _skip 28 "license-triangle" structural "lib/ and composer.json both exist, but composer.json declares no \`license\` field, so there is nothing to compare per-file @license tags against. Per-file/composer license agreement is UNVERIFIED by this run. Fixable here: add \`\"license\": \"EUPL-1.2\"\` to composer.json."
-elif [ "${_lt_scope_empty}" -eq 1 ]; then
-    # DIFF-SCOPED OUT — not a gap. No lib/**/*.php file is in this PR's scope,
-    # so there was nothing for this gate to read. Reporting `structural` here
-    # makes every workflow-only and frontend-only PR red for a licence problem
-    # the repository does not have.
-    _skip 28 "license-triangle" na "no lib/**/*.php file is in this diff's scope, so there was nothing to compare composer.json's license=${_composer_lic} against. Diff-scoped out per ADR-020 — this says nothing about the repository's licence tags, only that this PR did not touch the code they live in. The gate becomes applicable again the moment a PR changes a file under lib/."
 else
-    _skip 28 "license-triangle" structural "lib/ exists and composer.json declares license=${_composer_lic}, and ${#_lt_files[@]} lib/**/*.php file(s) WERE in scope, but none carried an @license or SPDX-License-Identifier declaration, so NOTHING was compared. Per-file/composer license agreement is UNVERIFIED by this run. (Presence of the tag is gate-1's job, not this gate's.)"
+    # Reaching here now means something it did not mean before: files WERE in
+    # scope, the helper DID read them, and not one carried a declaration. The
+    # empty-scope case that used to land here — and made this message false —
+    # is caught above and reported as NOT APPLICABLE.
+    _skip 28 "license-triangle" structural "lib/ exists and composer.json declares license=${_composer_lic}, and ${#_lt_files[@]} lib/**/*.php file(s) WERE in scope, but not one carried an @license or SPDX-License-Identifier declaration, so NOTHING was compared. Per-file/composer license agreement is UNVERIFIED by this run. (Presence of the tag is gate-1's job, not this gate's.)"
 fi
 
 # ---------------------------------------------------------------------------
