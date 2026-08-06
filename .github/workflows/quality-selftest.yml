@@ -1,0 +1,55 @@
+name: Quality selftest (resolve subject)
+
+# This workflow exists to BE RESOLVED, not to pass.
+#
+# It is the in-repo caller of ./.github/workflows/quality.yml. Its only purpose
+# is to make GitHub attempt the same resolution every fleet caller attempts, on
+# the PR's own version of quality.yml, so that an unresolvable shared workflow
+# is discovered HERE instead of by 23 repositories at once.
+#
+# ITS CONCLUSION IS NOT A VERDICT. Read `quality-resolve-probe.yml` instead:
+# that workflow counts the JOBS this run materialised. An unresolvable reusable
+# workflow does not fail — it produces a run with no jobs, or no run at all, and
+# a green dashboard. `jobs == 0` is the outage signature, so the count is the
+# measurement and this file is only the thing being measured. Do not make this
+# workflow a required check; make the probe one.
+#
+# Everything the shared workflow can switch off is switched off. The .github
+# repository is not a Nextcloud app: it has no composer.json app, no frontend
+# and no PHPUnit suite, so running those legs here would measure nothing and
+# cost ~30 minutes per PR. Resolution happens at run-creation time and is
+# entirely independent of what the jobs then decide to do, so a call with every
+# leg disabled resolves exactly as a full one does.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-selftest-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  resolve:
+    name: "Resolve quality.yml"
+    uses: ./.github/workflows/quality.yml
+    with:
+      app-name: github-selftest
+      enable-php: false
+      enable-npm: false
+      enable-frontend: false
+      enable-phpunit: false
+      enable-newman: false
+      enable-playwright: false
+      enable-hydra-gates: false
+      enable-license-check: false
+      enable-journeydoc-capture: false
+      enable-coverage-guard: false
+      enable-sbom: false
+      enable-features-extract: false
