@@ -36,7 +36,15 @@ on:
         description: "Node.js version for building"
         required: false
         type: string
-        default: "18"
+        # 22, not 18. Node 18 left support in April 2025 and now fails on
+        # packages the fleet already depends on. Two apps could not release
+        # because of it: nldesign's icon build loads an ES module from
+        # @conduction/nextcloud-vue and dies with "Unexpected token 'export'",
+        # since Node 18 treats it as CommonJS, and app_versions builds with
+        # Vite 7, which requires 20.19+. Both build fine locally on 22, which
+        # is the sort of gap that never gets diagnosed because the failure
+        # only exists on the runner.
+        default: "22"
       verify-vendor-deps:
         description: "Enable vendor dependency verification after composer install"
         required: false

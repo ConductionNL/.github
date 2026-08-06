@@ -16,7 +16,10 @@ on:
         description: "Node.js version for building"
         required: false
         type: string
-        default: "18"
+        # 22, matching release-beta.yml. Node 18 is out of support and fails
+        # on packages the fleet already uses; a stable release must not be
+        # built on a toolchain the beta of the same code could not use.
+        default: "22"
       verify-vendor-deps:
         description: "Enable vendor dependency verification after composer install"
         required: false
