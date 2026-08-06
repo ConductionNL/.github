@@ -48,6 +48,12 @@
 #                              optional for builder (build mode runs full).
 #   --base BRANCH            — override the diff base (default origin/development)
 #
+# When the base resolves to the SAME COMMIT as HEAD — which is what every push
+# to a mainline branch looks like — the scope is taken from the push's own
+# previous tip (github.event.before) instead. $HYDRA_GATE_PUSH_BEFORE overrides
+# that, and is how the invariant suite drives it without a runner. See
+# scripts/lib/resolve-push-base.sh.
+#
 # Output shape (stdout):
 #   [gate-N] <gate-name>: PASS | FAIL[<reasons>]
 # Gates that FAIL write details to <log-dir>/hydra-gate-<name>.log for debugging,
@@ -222,18 +228,56 @@ if [ "${SCOPE_TO_DIFF}" = "1" ]; then
     # UNSCOPED the same commit fails 18.
     #
     # So EVERY diff-scoped run on a mainline branch is vacuous by
-    # construction. That is a configuration error in the caller (a scoped run
-    # only makes sense for a PR), not an empty PR, and it must not wear the
-    # same green as a run that inspected something.
+    # construction.
+    #
+    # THE FIX IS NOT TO REFUSE, AND IT IS NOT TO PASS.
+    #
+    # Refusing (what this block did when it was written) is correct about the
+    # evidence and useless in practice: it fires on every push to development
+    # and every push to main, in every repo, forever. A permanently-red gate
+    # and a permanently-green gate say the same thing about the code — nothing
+    # — and both get filtered out by the people reading them, which is the
+    # failure this whole programme exists to end.
+    #
+    # The base is not MISSING on a push. It is just not the branch's own name.
+    # GitHub supplies the pusher's previous tip as `github.event.before`, and
+    # the honest scope for a push is `before...HEAD` — what this push actually
+    # changed. For a squash-merge that is exactly the squashed commit's diff;
+    # for a merge commit it is everything the merge brought in.
+    #
+    # So try that first, and refuse only when it genuinely cannot be resolved
+    # (branch created by this push, force-pushed tip now unreachable, unrelated
+    # history). Each of those is named out loud by the helper. Exit 99 remains
+    # the answer for "I cannot scope" — it just stops being the answer for
+    # "this is a mainline push".
     _base_sha=$(git -c safe.directory='*' rev-parse --verify --quiet "${BASE_REF}^{commit}" 2>/dev/null || true)
     _head_sha=$(git -c safe.directory='*' rev-parse --verify --quiet 'HEAD^{commit}' 2>/dev/null || true)
     if [ -n "${_base_sha}" ] && [ "${_base_sha}" = "${_head_sha}" ]; then
-        echo "[hydra-gates] ERROR: diff base '${BASE_REF}' IS HEAD (${_head_sha})." >&2
-        echo "[hydra-gates] A scoped run against itself inspects nothing, and every gate" >&2
-        echo "[hydra-gates] would report PASS over an empty file set. Refusing." >&2
-        echo "[hydra-gates] Run WITHOUT --scope-to-diff on a mainline branch, or pass a" >&2
-        echo "[hydra-gates] --base that is actually behind HEAD." >&2
-        exit 99
+        echo "[hydra-gates] Diff base '${BASE_REF}' IS HEAD (${_head_sha}) — the shape of a push to a mainline branch."
+        echo "[hydra-gates] Re-scoping to the push's own previous tip rather than to HEAD."
+        if [ -r "${SCRIPT_DIR}/lib/resolve-push-base.sh" ]; then
+            # shellcheck source=lib/resolve-push-base.sh
+            # shellcheck disable=SC1091  # resolved at runtime from ${SCRIPT_DIR}
+            . "${SCRIPT_DIR}/lib/resolve-push-base.sh"
+            if _push_base=$(hydra_resolve_push_base "$(pwd)" "${_head_sha}"); then
+                BASE_REF="${_push_base}"
+                echo "[hydra-gates] Base ref: ${BASE_REF} (github.event.before, push)"
+            else
+                _push_base=""
+            fi
+        else
+            echo "[hydra-gates] ERROR: scripts/lib/resolve-push-base.sh is missing from this package." >&2
+            _push_base=""
+        fi
+        if [ -z "${_push_base:-}" ]; then
+            echo "[hydra-gates] ERROR: diff base '${BASE_REF}' IS HEAD (${_head_sha}) and the push's" >&2
+            echo "[hydra-gates] previous tip could not be used either (reason above)." >&2
+            echo "[hydra-gates] A scoped run against itself inspects nothing, and every gate" >&2
+            echo "[hydra-gates] would report PASS over an empty file set. Refusing." >&2
+            echo "[hydra-gates] Pass a --base that is actually behind HEAD, or set" >&2
+            echo "[hydra-gates] HYDRA_GATE_PUSH_BEFORE to the commit this push started from." >&2
+            exit 99
+        fi
     fi
 
     if ! git -c safe.directory='*' merge-base "${BASE_REF}" HEAD > /dev/null 2>&1; then
