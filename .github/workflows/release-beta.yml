@@ -1,3 +1,18 @@
+# Packages a Nextcloud app and publishes it as a GitHub prerelease.
+#
+# Two channels share this one packaging path, because the packaging is the
+# part that must not drift:
+#
+#   beta (default) - cut from the beta branch, uploaded to the Nextcloud
+#                    app store, which is how most people install it.
+#   dev            - cut from development, published as a GitHub prerelease
+#                    only. Deliberately never reaches the app store.
+#
+# The dev channel exists so work on development can be installed before it
+# is promoted. The App Versions app reads a repository's releases straight
+# from the forge API and installs from the .tar.gz asset, so a prerelease
+# here is enough to make a development build installable without shipping
+# it to everyone.
 name: Beta Release
 
 on:
@@ -7,6 +22,11 @@ on:
         description: "Nextcloud app ID (must match appinfo/info.xml)"
         required: true
         type: string
+      channel:
+        description: "Release channel: 'beta' (app store) or 'dev' (GitHub prerelease only)"
+        required: false
+        type: string
+        default: "beta"
       php-version:
         description: "PHP version for building"
         required: false
@@ -77,21 +97,31 @@ jobs:
 
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Calculate beta version
+      - name: Calculate release version
         id: beta_version
         run: |
           STABLE="${{ steps.stable_version.outputs.version }}"
           IFS='.' read -ra PARTS <<< "$STABLE"
 
-          # Beta is always one patch ahead of stable
+          # One patch ahead of stable, with a timestamp so every run is a new
+          # version. The channel goes in the prerelease identifier, which
+          # keeps dev builds sorting below the beta of the same patch and
+          # makes it obvious in the app list where a build came from.
           NEXT_PATCH=$(( ${PARTS[2]} + 1 ))
           TIMESTAMP=$(date -u +"%Y%m%d%H%M%S")
 
-          BETA_VERSION="${PARTS[0]}.${PARTS[1]}.${NEXT_PATCH}-beta.${TIMESTAMP}"
+          CHANNEL="${{ inputs.channel }}"
+          if [ "$CHANNEL" != "beta" ] && [ "$CHANNEL" != "dev" ]; then
+            echo "::error::channel must be 'beta' or 'dev', got '$CHANNEL'"
+            exit 1
+          fi
 
-          echo "NEW_VERSION=$BETA_VERSION" >> $GITHUB_ENV
+          NEW_VERSION="${PARTS[0]}.${PARTS[1]}.${NEXT_PATCH}-${CHANNEL}.${TIMESTAMP}"
+
+          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
           echo "APP_NAME=${{ inputs.app-name }}" >> $GITHUB_ENV
-          echo "Beta version: $BETA_VERSION (stable baseline: $STABLE)"
+          echo "RELEASE_CHANNEL=$CHANNEL" >> $GITHUB_ENV
+          echo "$CHANNEL version: $NEW_VERSION (stable baseline: $STABLE)"
 
       # ── Build ──
 
@@ -252,12 +282,24 @@ jobs:
         run: |
           openssl dgst -sha512 -sign signing-key.key nextcloud-release.tar.gz | openssl base64 -out nextcloud-release.signature
 
+      # Sibling digest for installers that fetch the archive over plain HTTPS
+      # rather than through the app store. The App Versions app looks for a
+      # .sha256 next to the .tar.gz and verifies against it; without one it
+      # falls back to trusting whatever it downloaded the first time. The
+      # file holds the bare digest, since the archive is renamed on upload
+      # and a "digest  filename" line would name the wrong file.
+      - name: Compute SHA-256 of tarball
+        run: |
+          sha256sum nextcloud-release.tar.gz | cut -d' ' -f1 > nextcloud-release.tar.gz.sha256
+          echo "SHA-256: $(cat nextcloud-release.tar.gz.sha256)"
+
       - name: Upload tarball as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: beta-${{ inputs.app-name }}-${{ env.NEW_VERSION }}
+          name: ${{ env.RELEASE_CHANNEL }}-${{ inputs.app-name }}-${{ env.NEW_VERSION }}
           path: |
             nextcloud-release.tar.gz
+            nextcloud-release.tar.gz.sha256
             nextcloud-release.signature
           retention-days: 30
 
@@ -265,10 +307,11 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           tag: v${{ env.NEW_VERSION }}
-          name: Beta ${{ env.NEW_VERSION }}
+          name: ${{ env.RELEASE_CHANNEL == 'dev' && 'Development' || 'Beta' }} ${{ env.NEW_VERSION }}
+          body: ${{ env.RELEASE_CHANNEL == 'dev' && 'Unreleased build from the development branch. Not on the Nextcloud app store; install it with the App Versions app. Expect breakage.' || '' }}
           draft: false
           prerelease: true
-          generateReleaseNotes: true
+          generateReleaseNotes: ${{ env.RELEASE_CHANNEL != 'dev' }}
 
       - name: Attach tarball to release
         uses: svenstaro/upload-release-action@v2
@@ -279,7 +322,23 @@ jobs:
           tag: v${{ env.NEW_VERSION }}
           overwrite: true
 
+      # Named to sit beside the tarball: <app>-<version>.tar.gz.sha256. The
+      # installer derives this name from the archive's own URL, so the
+      # suffix has to follow the renamed asset rather than the build file.
+      - name: Attach SHA-256 to release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ github.token }}
+          file: nextcloud-release.tar.gz.sha256
+          asset_name: ${{ inputs.app-name }}-${{ env.NEW_VERSION }}.tar.gz.sha256
+          tag: v${{ env.NEW_VERSION }}
+          overwrite: true
+
+      # Beta only. A dev build must not reach the app store: that is the
+      # whole distinction between the two channels, and the app store is
+      # where everyone else installs from.
       - name: Register and upload to Nextcloud App Store
+        if: env.RELEASE_CHANNEL == 'beta'
         run: |
           DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/v${{ env.NEW_VERSION }}/${{ inputs.app-name }}-${{ env.NEW_VERSION }}.tar.gz"
 
