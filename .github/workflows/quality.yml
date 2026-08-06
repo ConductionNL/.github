@@ -219,7 +219,7 @@ on:
         type: string
         default: "[]"
       enable-coverage-guard:
-        description: "Enforce the .coverage-baseline ratchet — READ-ONLY, never commits. On pushes, hard-fails when measured coverage has moved past the committed baseline and attaches the recomputed value as the 'coverage-baseline' artifact; on PRs, rejects a baseline that has been LOWERED. Raise the baseline by committing the recomputed value in a normal pull request."
+        description: "Enforce the coverage ratchet — READ-ONLY, never commits. On a PULL REQUEST the merge base is measured in the phpunit job and the change must not reduce coverage against it; the floor is measured, not typed, so it cannot go stale and there is nothing for an author to keep up to date. On a PUSH the committed .coverage-baseline is enforced as a conservative fail-safe floor (below it fails; above it is fine). PRs may raise that floor but never lower it. Requires scripts/coverage-guard.php supporting --against; the workflow probes for it and fails loudly rather than silently downgrading the check."
         required: false
         type: boolean
         default: false
@@ -1510,6 +1510,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: server/apps/${{ inputs.app-name }}
+          # Full history: the coverage ratchet measures the MERGE BASE, and the
+          # default depth-1 checkout cannot reach it. Unconditional rather than
+          # keyed off enable-coverage-guard, because `inputs.x && 0 || 1` is a
+          # trap in GitHub expressions — 0 is falsy, so the `|| 1` branch wins
+          # and the depth silently stays 1.
+          fetch-depth: 0
 
       - name: Checkout additional apps
         if: ${{ inputs.additional-apps != '[]' }}
@@ -1596,11 +1602,83 @@ jobs:
             --colors=always \
             --coverage-clover=coverage/clover.xml
 
+      # ── The ratchet's floor is MEASURED, not typed ────────────────────────
+      #
+      # `.coverage-baseline` was read two ways at once: this job failed when
+      # coverage was BELOW it, and the push-side job failed when the file was
+      # STALE — i.e. when coverage was ABOVE it. Together those demand exact
+      # equality with a checked-in constant, and against a base branch that
+      # moves that is not satisfiable. To clear "stale" an author must commit
+      # the value the tree will measure AFTER landing, but their own diff moves
+      # that value and other pull requests land in between.
+      #
+      # Measured on openregister: an author committed 58.93, `development`
+      # advanced 16030 -> 16038 tests while the PR sat, the merge result
+      # measured 58.88, and the guard reported "dropped by 0.05%". While the
+      # follow-up pinned 58.88, development moved two further commits. There was
+      # no value that author could have committed that was correct on arrival.
+      #
+      # So the floor stops being a number a human types. On a pull request the
+      # MERGE BASE is measured here — same PHP, same xdebug driver, same suite,
+      # same job — and that measurement is the floor. The merge base is
+      # immutable for a given head, so it cannot go stale; a rebase re-measures
+      # both sides together; and because both numbers come from one driver, the
+      # xdebug/pcov statement-counting difference that can invalidate a locally
+      # measured constant cancels instead of being baked in.
+      #
+      # The measurement itself is deterministic, which is what makes an exact
+      # comparison honest rather than flaky. Verified on decidesk: two
+      # independent runs of the SAME commit (f4ed5611, runs 31050137982 and
+      # 31050142139) both reported 8687/15065 statements, and again at 3731e11f.
+      # Where the number does move between runs it is because the CODE moved —
+      # openbuild reads 8018/13971 across eight consecutive commits, then
+      # 8034/13988, then 8229/13987 once a 349-line test file was added.
+      #
+      # The test RESULT at the merge base is deliberately discarded (`|| true`):
+      # we are measuring the base, not judging it, and a base whose suite is red
+      # must not turn every open pull request red. The clover file is NOT
+      # optional — a missing or zero-statement report is a hard error in both
+      # this step and the guard, because a base measured as 0% would set the
+      # floor to zero and pass every possible drop.
+      - name: Measure merge-base coverage
+        if: ${{ inputs.enable-coverage-guard && github.event_name == 'pull_request' && matrix.php-version == inputs.php-version && matrix.nextcloud-ref == fromJSON(inputs.nextcloud-test-refs)[0] }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          cd "server/apps/${{ inputs.app-name }}"
+          HEAD_SHA="$(git rev-parse HEAD)"
+          MERGE_BASE="$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
+          echo "head=$HEAD_SHA base=$BASE_SHA merge-base=$MERGE_BASE"
+          cp coverage/clover.xml "$RUNNER_TEMP/head-clover.xml"
+          git checkout --force --detach "$MERGE_BASE"
+          composer install --no-progress --prefer-dist --optimize-autoloader
+          ./vendor/bin/phpunit -c phpunit.xml --coverage-clover="$RUNNER_TEMP/base-clover.xml" || true
+          git checkout --force --detach "$HEAD_SHA"
+          composer install --no-progress --prefer-dist --optimize-autoloader
+          cp "$RUNNER_TEMP/head-clover.xml" coverage/clover.xml
+          test -s "$RUNNER_TEMP/base-clover.xml" \
+            || { echo "::error::Could not measure coverage at merge base $MERGE_BASE — refusing to report a ratchet that did not run."; exit 1; }
+
+      # The capability probe is deliberately a HARD failure, not a fallback.
+      # An older copy of scripts/coverage-guard.php accepts `--against` and
+      # silently ignores it, which would quietly demote the ratchet back to the
+      # committed-constant check while still reporting success — a check that
+      # did not run looking exactly like one that passed. Every repository that
+      # sets enable-coverage-guard was updated before this workflow changed, so
+      # this should never fire; if it does, the repository is the thing to fix.
       - name: Guard coverage baseline
         if: inputs.enable-coverage-guard && matrix.php-version == inputs.php-version && matrix.nextcloud-ref == fromJSON(inputs.nextcloud-test-refs)[0]
         run: |
-          cd server/apps/${{ inputs.app-name }}
-          php scripts/coverage-guard.php coverage/clover.xml
+          set -euo pipefail
+          cd "server/apps/${{ inputs.app-name }}"
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            php scripts/coverage-guard.php coverage/clover.xml
+            exit 0
+          fi
+          php scripts/coverage-guard.php --capabilities 2>/dev/null | grep -qx against \
+            || { echo "::error::scripts/coverage-guard.php predates merge-base comparison. Update it from ConductionNL/.github before enabling the ratchet."; exit 1; }
+          php scripts/coverage-guard.php coverage/clover.xml --against="$RUNNER_TEMP/base-clover.xml"
 
       - name: Upload coverage artifact
         if: always() && matrix.php-version == inputs.php-version && matrix.nextcloud-ref == fromJSON(inputs.nextcloud-test-refs)[0]
@@ -2977,17 +3055,22 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      # .coverage-baseline is a monotonic ratchet: coverage-guard.php only ever
-      # writes it when measured coverage EXCEEDS the stored value. This job used
-      # to ban every manual change outright, which was coherent only while the
-      # push-side job auto-committed the new value. That push has always been
-      # rejected on ruleset-protected branches (#61), so the blanket ban left the
-      # baseline unchangeable by anyone — bot or human — an unclosable gate.
+      # .coverage-baseline is the conservative fail-safe floor — the ratchet
+      # proper is the measured merge-base comparison in the phpunit job. This
+      # job used to ban every manual change outright, which was coherent only
+      # while the push-side job auto-committed the new value. That push has
+      # always been rejected on ruleset-protected branches (#61), so the blanket
+      # ban left the baseline unchangeable by anyone — bot or human — an
+      # unclosable gate.
       #
-      # The anti-gaming property that matters is "the baseline never goes DOWN",
-      # so enforce exactly that: a PR may RAISE the baseline (this is how the
-      # push-side Coverage Baseline Check is closed) but never lower it. Fails
+      # The anti-gaming property that matters is "the floor never goes DOWN", so
+      # enforce exactly that: a PR may RAISE the floor but never lower it. Fails
       # closed on any value it cannot parse.
+      #
+      # Raising it is now optional rather than the way a red push job is closed
+      # — that job is gone (see the block further down). A floor left below
+      # actual coverage is simply conservative, and is never what blocks a pull
+      # request.
       - name: Reject a lowered baseline
         env:
           BASE_REF: ${{ github.base_ref }}
@@ -3024,121 +3107,48 @@ jobs:
 
           echo "Baseline change accepted: ${OLD} -> ${NEW} (not a decrease)."
 
-  # READ-ONLY by design, for the same reason as features-extract below. This job
-  # used to `git commit` + `git push` the recomputed .coverage-baseline back to
-  # the branch, with the push failure swallowed by `git push || echo "::warning::"`.
-  # On any repo whose development/main carries a ruleset ("Changes must be made
-  # through a pull request") that push is REJECTED — and because the failure was
-  # swallowed, the job still reported SUCCESS. The baseline therefore never moved
-  # while the gate read green (#61). A swallowed failure is worse than no job at
-  # all: it is indistinguishable from the work having been done.
+  # ── "Coverage Baseline Check" (update-baseline) — REMOVED ────────────────
   #
-  # The job now recomputes the baseline, HARD-FAILS when it has drifted, and hands
-  # the regenerated file back as an artifact. The PR-side `baseline-protection`
-  # job above accepts a committed baseline as long as it does not LOWER the
-  # ratchet, so this gate is closable by a human via a normal pull request —
-  # it is deliberately not an unclosable gate.
-  update-baseline:
-    # ⚠️ `!cancelled() && needs.phpunit.result == 'success'` is load-bearing, and
-    # its absence deleted this job on every run where PHP Quality was red.
-    #
-    # A job condition with no status function is implicitly wrapped in
-    # `success()`, and that success() is not satisfied by this job's DECLARED
-    # dependency alone — a failure anywhere in the `needs` closure removes the
-    # job. `phpunit` sits behind `needs: [php-quality, security]` and survives a
-    # red php-quality only because its own `if` carries `!cancelled()`. This job
-    # had no such escape, so a failing PHPMD — a GRANDPARENT it does not depend
-    # on — silently deleted the coverage ratchet while `phpunit` itself was
-    # green.
-    #
-    # Measured on procest's own history (push runs on development):
-    #
-    #   run 30896879219  php-quality FAIL  phpunit success  ->  CBC skipped
-    #   run 30895657851  php-quality FAIL  phpunit success  ->  CBC skipped
-    #   run 30887852492  php-quality FAIL  phpunit success  ->  CBC skipped
-    #   run 30882883115  php-quality FAIL  phpunit success  ->  CBC skipped
-    #   run 30876345083  php-quality FAIL  phpunit failure  ->  CBC skipped
-    #
-    # Five consecutive runs in which the ratchet reported nothing at all, and
-    # nothing said so: a skipped job is not a red. Reproduced on doriath twice
-    # today (run 30925445843 and its re-run) — `steps: []`, started_at ==
-    # completed_at, the shape of a job that never existed.
-    #
-    # Being explicit also makes the intent legible: this job needs a SUCCESSFUL
-    # phpunit, because it downloads that job's coverage artifact. It has no
-    # opinion about PHPMD.
-    if: ${{ inputs.enable-coverage-guard && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/development') && !cancelled() && needs.phpunit.result == 'success' }}
-    runs-on: ubuntu-latest
-    name: "Coverage Baseline Check"
-    needs: phpunit
-    # Observed across 3 executions: max 0.3 min (openregister). Downloads an
-    # artifact and recomputes a number; 15 min is generous.
-    timeout-minutes: 15
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Download coverage artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: coverage-report
-          path: coverage/
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: ${{ inputs.php-version }}
-      - name: Recompute baseline
-        run: php scripts/coverage-guard.php coverage/clover.xml --update-baseline
-      - name: Fail if baseline drifted
-        id: fail-if-drifted
-        run: |
-          if git diff --quiet -- .coverage-baseline; then
-            echo "Coverage baseline is up to date."
-          else
-            echo "Measured coverage has moved beyond the committed baseline:"
-            git --no-pager diff -- .coverage-baseline
-            echo "::error::.coverage-baseline is out of date — measured coverage has improved past it. Commit the recomputed value (attached as the 'coverage-baseline' artifact of this run) in a pull request. The Coverage Baseline Protection job accepts any value that does not LOWER the baseline."
-            exit 1
-          fi
-      - name: Upload recomputed baseline
-        # Gate on the drift step SPECIFICALLY, not `failure()` alone: if the
-        # Recompute step itself failed (coverage DROPPED below the baseline), the
-        # file on disk is the unchanged committed copy and publishing it under
-        # this name would invite committing a no-op. Only when fail-if-drifted
-        # failed is the on-disk file guaranteed to be the fresh value.
-        # (`failure() &&` is required — without a status-check function GitHub
-        # implies `success()`, and the step would never run after a failure.)
-        if: failure() && steps.fail-if-drifted.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-baseline
-          path: .coverage-baseline
-          # ⚠️ REQUIRED, and its absence made this an unclosable gate.
-          #
-          # `.coverage-baseline` is a DOTFILE. actions/upload-artifact@v4
-          # excludes hidden files by default (`include-hidden-files: false`),
-          # and when the glob then matches nothing it does not fail — it prints
-          #
-          #     ##[warning]No files were found with the provided path:
-          #     .coverage-baseline. No artifacts will be uploaded.
-          #
-          # and the step still succeeds. So the artifact has NEVER existed,
-          # while the error message immediately above it says:
-          #
-          #     Commit the recomputed value (attached as the 'coverage-baseline'
-          #     artifact of this run) in a pull request.
-          #
-          # The gate therefore told you to close it using a file it had just
-          # silently declined to produce. Reproduced on docudesk
-          # (run 30925609908): the preceding `git --no-pager diff --
-          # .coverage-baseline` prints the changed file, proving it is on disk,
-          # and the upload immediately after reports it as not found.
-          #
-          # This is the same shape as the swallowed `git push` this job was
-          # rewritten to remove — a failure that reads as work having been done.
-          include-hidden-files: true
-          retention-days: 7
+  # This job recomputed the baseline on pushes to main/development and HARD-
+  # FAILED when the committed file no longer matched. It is gone, and the
+  # asymmetry it created is the reason.
+  #
+  # It failed on coverage going UP. The phpunit-side guard fails on coverage
+  # going DOWN. Between them they demanded that a checked-in constant equal the
+  # measurement exactly — and the only way to restore that equality was to
+  # commit, in a pull request, the number the tree would measure after that pull
+  # request landed. That is a race no author can win, and the fleet ran into it
+  # simultaneously: on 2026-08-06 six of the sixteen apps were red here, every
+  # one of them for coverage being HIGHER than recorded —
+  #
+  #   openregister  58.87 -> 58.88      openbuild   57.39 -> 58.83
+  #   docudesk      61.39 -> 61.41      larpingapp  67.68 -> 71.73
+  #   procest       29.60 -> 29.69      doriath     55.78 -> 55.79
+  #
+  # Three of those are one or two hundredths of a percent. A gate whose red is
+  # produced by a single extra covered statement is not measuring anything worth
+  # blocking a mainline for.
+  #
+  # The staleness requirement was a leftover. While this job auto-committed the
+  # recomputed value, "the file equals the measurement" was an invariant a
+  # machine maintained. That push was removed when rulesets rejected it (#61),
+  # but the invariant it maintained was left behind — and became a standing
+  # human obligation against a moving target. The invariant outlived its
+  # enforcement mechanism.
+  #
+  # Nothing is lost by removing it. A push to development is the RESULT of an
+  # already-gated merge: there is nothing left to reject, and failing it only
+  # produces a mainline no pull request can turn green. The ratchet now lives
+  # entirely on the pull request, where a change can still be refused, and its
+  # floor is the MEASURED merge base rather than a typed constant — see "Measure
+  # merge-base coverage" in the phpunit job. That floor cannot go stale, so the
+  # failure mode this job existed to report no longer exists.
+  #
+  # `.coverage-baseline` survives as a conservative fail-safe floor, still
+  # enforced by the phpunit-side guard on pushes, and still protected from being
+  # LOWERED by the baseline-protection job above. It will drift below actual
+  # coverage over time. That is intended: a floor that is too low is merely
+  # conservative, and it is never the binding constraint on a pull request.
 
   # ── Hydra mechanical gates ──────────────────────
   #
@@ -3168,20 +3178,6 @@ jobs:
   #      empty-diff case, and it happens precisely when CI runs) and we never
   #      fall back to HEAD~1 (on a squash-merged mainline that is the previous
   #      release). An unresolvable base exits 99 and prints no green.
-  #
-  #      On a PUSH we deliberately set nothing here and let the package resolve,
-  #      because only the package can see the repository. On a push to a
-  #      MAINLINE branch its chain lands on origin/development, which IS HEAD,
-  #      and the diff is then empty by construction — the single most common
-  #      shape in the fleet. hydra-gates v1.5.1 and later re-scope that case to
-  #      `github.event.before...HEAD`, the push's own diff, reading `before`
-  #      out of $GITHUB_EVENT_PATH (present in every step, so nothing needs to
-  #      be passed from here). At an OLDER PIN there is no such re-scoping:
-  #      <= v1.4.0 passes over the empty diff and v1.5.0 exits 99. Both are
-  #      pin-side behaviour, visible in that job's own output, and the fix is
-  #      to bump hydra-gates-ref — not to add a fallback here, which would put
-  #      a second base-resolution implementation in a file that floats on @main
-  #      while the one it must agree with is pinned per caller.
   #
   #   2. THE EXIT CODE IS THE FAILURE COUNT. We capture it before deciding the
   #      job verdict, and report 99 ("could not run at all") distinctly from
