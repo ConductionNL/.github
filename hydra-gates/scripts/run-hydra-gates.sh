@@ -268,7 +268,24 @@ if [ "${SCOPE_TO_DIFF}" = "1" ]; then
         exit 99
     fi
     _cf_count=$(printf '%s' "${CHANGED_FILES}" | grep -c . 2>/dev/null || true)
-    if [ "${_cf_count:-0}" = "0" ]; then
+    _cf_count="${_cf_count:-0}"
+    # THE MACHINE-READABLE SCOPE SIZE. One line, one number, emitted exactly
+    # once, and it is the ONLY thing downstream may derive "was the scope
+    # empty?" from.
+    #
+    # `bin/hydra-gates` used to answer that question with
+    # `grep -q "0 changed file(s)"` over this output — a SUBSTRING match, so
+    # `10 changed file(s)` contains it, and so does 20, 30, 100. A run whose
+    # header said `10 changed file(s)` and whose every gate ran therefore also
+    # printed the "SCOPE WAS EMPTY" epilogue, and that epilogue was being used
+    # fleet-wide as the tell for a vacuous run. The report contradicted its own
+    # header and the contradiction pointed the wrong way: it manufactured
+    # doubt about runs that were fine.
+    #
+    # Deriving both statements from this one integer is what makes the
+    # contradiction impossible, rather than merely unlikely.
+    echo "[hydra-gates] SCOPE-FILE-COUNT: ${_cf_count}"
+    if [ "${_cf_count}" = "0" ]; then
         # Genuinely zero changed files is a legitimate outcome, but it must be
         # stated as such rather than looking like a scoped run that found nothing.
         echo "[hydra-gates] Scope: diff vs ${BASE_REF} — 0 changed file(s). Base resolves, histories join, git succeeded; this PR changes nothing."
@@ -3344,26 +3361,36 @@ fi
 # ---------------------------------------------------------------------------
 _scht_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-security-change-has-tests.log
 : > "${_scht_log}"
+_scht_ran=1
+_scht_helper="${SCRIPT_DIR}/lib/check_security_cochange.py"
 if [ "${SCOPE_TO_DIFF}" = "1" ] && [ -n "${BASE_REF}" ]; then
-    _scht_changed=$(git diff --name-only "${BASE_REF}...HEAD" 2>/dev/null || true)
-    _scht_sec=""
-    _scht_has_test=""
-    while IFS= read -r f; do
-        [ -z "$f" ] && continue
-        case "$f" in
-            tests/*|*/tests/*|*.spec.js|*.spec.ts|*.spec.vue) _scht_has_test="1" ;;
-        esac
-        case "$f" in
-            lib/*Auth*|lib/*Csrf*|lib/*Session*|lib/*/Auth/*|lib/*/Session/*|lib/*/Csrf/*|lib/*/Rbac/*|lib/*/Permission/*|lib/*/Authorization/*)
-                _scht_sec="${_scht_sec}${f}\n" ;;
-            lib/*.php|src/*.vue|src/*.js|src/*.ts)
-                # content-based classification
-                if [ -f "$f" ] && grep -qE "(#\[NoAdminRequired\]|#\[AuthorizedAdminSetting\(|@NoAdminRequired|@NoCSRFRequired|#\[PublicPage\]|parse_url|hash_equals|password_verify|IUserSession|getSecureRandom|requesttoken)" "$f" 2>/dev/null; then
-                    _scht_sec="${_scht_sec}${f}\n"
-                fi
-                ;;
-        esac
-    done <<< "${_scht_changed}"
+    if [ ! -f "${_scht_helper}" ]; then
+        # A MISSING HELPER MUST NOT REPORT PASS (#147).
+        _scht_ran=0
+        _skip 47 "security-change-has-tests" wiring "check_security_cochange.py not found at ${_scht_helper} — the diff was NOT classified; a security change shipping without a test co-change is UNVERIFIED by this run."
+        _scht_sec=""
+        _scht_has_test="1"
+    else
+        # CLASSIFY ON THE HUNKS, NOT THE FILE.
+        #
+        # This was `grep -qE "<tokens>" "$f"` over the WHOLE FILE, so a file
+        # counted as a security change if a token appeared anywhere in it —
+        # in a method the PR never went near, in an import, in prose. Two
+        # agents hit it the same day: a PR whose hunks were CSS custom
+        # properties and a chevron column was told to add a CSRF test, and a
+        # provably comment-only PR (all 30 changed lib/ lines inside
+        # docblocks) was told to co-change tests. Neither used the opt-out,
+        # which is the tell — people do not reach for an opt-out when they
+        # believe the finding is wrong.
+        _scht_sec=$(python3 "${_scht_helper}" "${BASE_REF}" "$(pwd)" 2>/dev/null || true)
+        _scht_has_test=""
+        while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            case "$f" in
+                tests/*|*/tests/*|*.spec.js|*.spec.ts|*.spec.vue|*Test.php) _scht_has_test="1" ;;
+            esac
+        done <<< "$(git diff --name-only "${BASE_REF}...HEAD" 2>/dev/null || true)"
+    fi
     if [ -n "${_scht_sec}" ] && [ -z "${_scht_has_test}" ]; then
         # Check for opt-out in PR body or head commit message
         _scht_optout_re='\[hydra-gate-security-change-has-tests exclude\][[:space:]]+.{20,}'
@@ -3371,18 +3398,18 @@ if [ "${SCOPE_TO_DIFF}" = "1" ] && [ -n "${BASE_REF}" ]; then
         [ -n "${HYDRA_GATE_PR_BODY:-}" ] && echo "${HYDRA_GATE_PR_BODY:-}" | grep -qE "${_scht_optout_re}" && _scht_optout="1"
         [ -z "${_scht_optout}" ] && git log -1 --pretty=%B 2>/dev/null | grep -qE "${_scht_optout_re}" && _scht_optout="1"
         if [ -z "${_scht_optout}" ]; then
-            printf "%b" "${_scht_sec}" >> "${_scht_log}"
+            printf "%s\n" "${_scht_sec}" >> "${_scht_log}"
         fi
     fi
 fi
-set +e
 _scht_fail=$(wc -l < "${_scht_log}" 2>/dev/null | tr -d ' ')
-set -e
 [ -z "${_scht_fail}" ] && _scht_fail=0
-if [ "${_scht_fail}" -eq 0 ]; then
-    _pass 47 "security-change-has-tests"
-else
-    _fail 47 "security-change-has-tests" "${_scht_fail} security-touching change(s) without a test co-change — see ${_scht_log}"
+if [ "${_scht_ran}" -eq 1 ]; then
+    if [ "${_scht_fail}" -eq 0 ]; then
+        _pass 47 "security-change-has-tests"
+    else
+        _fail 47 "security-change-has-tests" "${_scht_fail} security-touching change(s) without a test co-change — see ${_scht_log}"
+    fi
 fi
 
 # ---------------------------------------------------------------------------

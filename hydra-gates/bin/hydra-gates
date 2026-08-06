@@ -339,7 +339,24 @@ fi
 # The single most dangerous shape: a scoped run over an empty diff. Every gate
 # passes having read nothing, and the output is otherwise identical to a real
 # green. The runner states it; we restate it where the verdict is read.
-if [ "${SCOPE_DIFF}" = "1" ] && grep -q "0 changed file(s)" "${_out}"; then
+#
+# READ THE COUNT, DO NOT PATTERN-MATCH THE PROSE.
+#
+# This was `grep -q "0 changed file(s)"`, which is a SUBSTRING match: it is
+# satisfied by `10 changed file(s)`, and by 20, 30, 100. Runs whose header
+# said ten files changed and whose every gate ran still printed the
+# "SCOPE WAS EMPTY" epilogue below — and that epilogue had been adopted
+# fleet-wide as the tell for a vacuous run, so the bug manufactured doubt
+# about runs that were fine while saying nothing new about runs that were
+# not. A report that can contradict its own header is not a report.
+#
+# `SCOPE-FILE-COUNT:` is emitted by the runner exactly once, as a bare
+# integer, for this. Note the epilogue's own prose ("SCOPE WAS EMPTY") also
+# appears in COMMENTS in this file and in run-hydra-gates.sh, so grepping the
+# SOURCE for it finds explanations rather than emissions; grep the OUTPUT, or
+# better, grep `SCOPE-FILE-COUNT: 0`.
+_scope_count="$(sed -n 's/^\[hydra-gates\] SCOPE-FILE-COUNT: //p' "${_out}" 2>/dev/null | head -1)"
+if [ "${SCOPE_DIFF}" = "1" ] && [ "${_scope_count:-}" = "0" ]; then
     echo "[hydra-gates] SCOPE WAS EMPTY: 0 files differ from ${BASE_REF}."
     echo "[hydra-gates] Every gate below passed by inspecting NOTHING. This green describes"
     echo "[hydra-gates] the empty diff, not the repository. If you expected changes here,"
