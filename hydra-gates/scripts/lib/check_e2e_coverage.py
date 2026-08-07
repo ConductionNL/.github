@@ -457,8 +457,22 @@ _E2E_SHORT_RE = re.compile(
 # guard; a literal `true` is a test someone turned off. Conflating them would
 # swap this gate's blindness for a different one — refusing legitimate
 # conditional skips — so the discriminator is the argument, not the call.
+# `\b` is not enough of a boundary: it matches the `test` in `rx.test(text)`,
+# and JavaScript's RegExp.prototype.test is not Playwright's test(). On
+# openconnector, `dead-letter-replay.spec.ts` has
+#
+#     IGNORED_CONSOLE_PATTERNS.some((rx) => rx.test(text))
+#
+# in a helper ABOVE its tests, and the forward search from the file-level
+# `@e2e` tags landed on it. `_ref_is_live` then read that call's "body" —
+# there is none — and reported all 11 refs as "referenced only by a test that
+# never runs", about a file whose tests run fine.
+#
+# `(?<![.\w$])` rejects a member call (`rx.test`, `foo.it`) and an identifier
+# that merely ends in one (`latest(`, `submit(`), while leaving a bare
+# `test(` / `it(` / `describe(` at a statement boundary matching.
 _TEST_DECL_RE = re.compile(
-    r"\b(?P<fn>test|it|describe)"
+    r"(?<![.\w$])(?P<fn>test|it|describe)"
     r"(?P<mod>\s*\.\s*(?:skip|fixme|failing))?"
     r"\s*\(",
 )

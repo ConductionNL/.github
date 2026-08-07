@@ -780,6 +780,50 @@ class SkippedTestIsNotCoverageTest(unittest.TestCase):
         self.assertIn("my-spec::foo-does-bar", dead)
         self.assertIn("never runs", dead["my-spec::foo-does-bar"])
 
+    # --- a member call named `test` is not a test -----------------------
+    def test_a_regexp_test_call_is_not_mistaken_for_the_enclosing_test(self):
+        # openconnector dead-letter-replay.spec.ts, verbatim in shape: a
+        # console-filter helper sits between the file-level @e2e tags and the
+        # real tests, and it calls RegExp.prototype.test. The forward search
+        # landed on `rx.test(text)`, found no body, and reported all 11 refs
+        # as "referenced only by a test that never runs" — about a file whose
+        # tests run fine.
+        self.assertIn("my-spec::foo-does-bar", self._refs(
+            "// @e2e my-spec::foo-does-bar\n"
+            "const IGNORED = [/Deprecation/i]\n"
+            "function spy(page) {\n"
+            "  page.on('console', (msg) => {\n"
+            "    if (IGNORED.some((rx) => rx.test(msg.text()))) return\n"
+            "  })\n"
+            "}\n"
+            "test('the view mounts', async ({ page }) => {\n"
+            "  await expect(page).toHaveTitle(/x/)\n"
+            "})\n"))
+
+    def test_an_identifier_merely_ending_in_test_is_not_a_test(self):
+        # `latest(` / `submit(` end in `it`/`test` and must not open a block.
+        self.assertIn("my-spec::foo-does-bar", self._refs(
+            "// @e2e my-spec::foo-does-bar\n"
+            "const v = latest(versions)\n"
+            "test('the view mounts', async ({ page }) => {\n"
+            "  await expect(page).toHaveTitle(/x/)\n"
+            "})\n"))
+
+    def test_a_member_call_does_not_rescue_a_genuinely_skipped_test(self):
+        # THE CONTROL. Ignoring `rx.test(...)` must not make the gate skip
+        # forward past a real skipped test and find a live one instead — the
+        # skipped test still owns this tag, and it must still be dead.
+        _write(self.root, "tests/e2e/foo.spec.ts",
+               "// @e2e my-spec::foo-does-bar\n"
+               "const ok = /x/.test('x')\n"
+               "test('x', async () => { test.skip(true, 'later') })\n"
+               "test('unrelated', async ({ page }) => {\n"
+               "  await expect(page).toHaveTitle(/x/)\n"
+               "})\n")
+        live, dead = cec.collect_ref_status(self.root)
+        self.assertEqual(live, set())
+        self.assertIn("my-spec::foo-does-bar", dead)
+
 
 if __name__ == "__main__":
     unittest.main()
