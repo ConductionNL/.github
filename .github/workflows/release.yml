@@ -231,6 +231,7 @@ jobs:
             --exclude='/.git' \
             --exclude='/.github' \
             --exclude='/.claude' \
+            --exclude='/.hydra' \
             --exclude='/.cursor' \
             --exclude='/.vscode' \
             --exclude='/.nextcloud' \
@@ -331,12 +332,24 @@ jobs:
         run: |
           openssl dgst -sha512 -sign signing-key.key nextcloud-release.tar.gz | openssl base64 -out nextcloud-release.signature
 
+      # Sibling digest for installers that fetch the archive over plain HTTPS
+      # rather than through the app store. The App Versions app looks for a
+      # .sha256 next to the .tar.gz and verifies against it; without one it
+      # falls back to trusting whatever it downloaded the first time. The
+      # file holds the bare digest, because the archive is renamed on upload
+      # and a "digest  filename" line would name the wrong file.
+      - name: Compute SHA-256 of tarball
+        run: |
+          sha256sum nextcloud-release.tar.gz | cut -d' ' -f1 > nextcloud-release.tar.gz.sha256
+          echo "SHA-256: $(cat nextcloud-release.tar.gz.sha256)"
+
       - name: Upload tarball as artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.release-type }}-${{ inputs.app-name }}-${{ env.NEW_VERSION }}
           path: |
             nextcloud-release.tar.gz
+            nextcloud-release.tar.gz.sha256
             nextcloud-release.signature
           retention-days: ${{ inputs.release-type == 'stable' && 90 || (inputs.release-type == 'beta' && 30 || 7) }}
 
@@ -355,6 +368,18 @@ jobs:
           repo_token: ${{ github.token }}
           file: nextcloud-release.tar.gz
           asset_name: ${{ inputs.app-name }}-${{ env.NEW_VERSION }}.tar.gz
+          tag: v${{ env.NEW_VERSION }}
+          overwrite: true
+
+      # Named to sit beside the tarball: <app>-<version>.tar.gz.sha256. The
+      # installer derives this name from the archive's own URL, so the suffix
+      # follows the renamed asset rather than the build file.
+      - name: Attach SHA-256 to release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ github.token }}
+          file: nextcloud-release.tar.gz.sha256
+          asset_name: ${{ inputs.app-name }}-${{ env.NEW_VERSION }}.tar.gz.sha256
           tag: v${{ env.NEW_VERSION }}
           overwrite: true
 

@@ -503,6 +503,68 @@ _apphost_serves() {
 }
 
 # ---------------------------------------------------------------------------
+# _di_binds_controller <controller-file-path> — 0 when lib/AppInfo/Application.php
+# registers a service under EXACTLY the class name that path resolves to.
+#
+# `Bootstrap::register()` is not the only way an AppHost generic reaches a
+# route. A leaf that needs the generic constructed with its OWN collaborators
+# registers it itself, under the standard controller class name, because that
+# is the name NC's `App::main` synthesises from a plain route slug:
+#
+#   openconnector lib/AppInfo/Application.php
+#     $context->registerService(
+#         'OCA\\OpenConnector\\Controller\\GenericPreferencesController',
+#         static fn ($c) => new GenericPreferencesController(appName: 'openconnector', ...)
+#     );
+#
+# The class resolves at request time and has no file here — the same
+# legitimate absence `_apphost_serves` already covers, arrived at a different
+# way. The slug list could not see it: it is keyed on the five slugs
+# Bootstrap aliases (`preferences`), and this route is named
+# `genericPreferences`, so gate-14 called a working endpoint unreachable.
+#
+# Deliberately NOT a wildcard, and deliberately not "the app adopts AppHost,
+# so absences are fine". The evidence required is the exact fully-qualified
+# class name appearing as a literal within a few lines of a registerService
+# call — i.e. this repository can be shown to bind that specific name. A
+# controller that is simply missing still fails, which is the invariant.
+# ---------------------------------------------------------------------------
+_di_binds_controller() {
+    local _p="$1"
+    [ -f lib/AppInfo/Application.php ] || return 1
+
+    # lib/Controller/Sub/FooController.php -> Sub\FooController
+    local _rel="${_p#lib/Controller/}"
+    _rel="${_rel%.php}"
+    local _cls="${_rel//\//\\}"
+
+    # The app's own namespace, from its own file: `namespace OCA\<App>\AppInfo;`
+    local _app_ns
+    _app_ns=$(grep -m1 -oE '^namespace[[:space:]]+OCA\\[A-Za-z0-9_]+' lib/AppInfo/Application.php \
+        | awk '{print $2}')
+    [ -n "${_app_ns}" ] || return 1
+
+    # In PHP source the literal carries escaped backslashes.
+    local _fqcn="${_app_ns}\\Controller\\${_cls}"
+    local _needle="${_fqcn//\\/\\\\}"
+
+    # Through the environment, NOT `awk -v`: -v runs escape processing over the
+    # value, so the `\\` pairs this needle is made of arrive as single
+    # backslashes and never match the PHP literal. Silently — the helper just
+    # answers "no such binding" for every controller, which reads exactly like
+    # a correct verdict.
+    _HYDRA_DI_NEEDLE="${_needle}" awk '
+        BEGIN { needle = ENVIRON["_HYDRA_DI_NEEDLE"] }
+        /registerService(Alias)?[[:space:]]*\(/ { window = 6 }
+        window > 0 {
+            if (index($0, needle) > 0) { found = 1; exit }
+            window--
+        }
+        END { exit(found ? 0 : 1) }
+    ' lib/AppInfo/Application.php
+}
+
+# ---------------------------------------------------------------------------
 # _ctrl_path_from_name <route-slug> — the file a routed `controller#method`
 # name resolves to. Handles the three shapes Nextcloud accepts:
 #
@@ -918,7 +980,7 @@ if [ -f appinfo/routes.php ]; then
             [ -n "${ctrl:-}" ] || continue
             path=$(_ctrl_path_from_name "${ctrl}")
             if [ ! -f "$path" ]; then
-                if _apphost_serves "${ctrl}"; then
+                if _apphost_serves "${ctrl}" || _di_binds_controller "${path}"; then
                     echo "${ctrl}#${method} — served by the OpenRegister AppHost generic controller (ADR-040); its auth attribute lives in the openregister package and is NOT visible from this repository" >> "${_ra_unresolved_log}"
                 else
                     echo "${ctrl}#${method} — ${path} is not present in this repository; controller class UNRESOLVED (see gate-14, which owns route reachability)" >> "${_ra_unresolved_log}"
@@ -1469,10 +1531,13 @@ if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
                 # ReflectionException 500 at request time — precisely
                 # invariant 2, one step earlier than a missing method.
                 #
-                # ADR-040 AppHost generics are the ONE legitimate absence:
-                # Bootstrap::register() binds those class names in the DI
-                # container, so the route resolves with no file on disk.
+                # ADR-040 AppHost generics are the legitimate absence: the
+                # class name is bound in the DI container, so the route
+                # resolves with no file on disk. Two ways in — Bootstrap
+                # aliasing one of its five generics, or the leaf registering
+                # the generic itself under the standard controller name.
                 _apphost_serves "${_ctrl}" && continue
+                _di_binds_controller "${_path}" && continue
                 echo "${_path} route='${_ctrl}#${_method}' rule=controller-class-not-found" >> "${_rr_log}"
                 continue
             fi
@@ -2551,7 +2616,43 @@ if [ -f appinfo/routes.php ] && [ -d lib/Controller ]; then
             # Inspect annotations above the method declaration (up to 20 lines back)
             _ann_start=$((_method_line > 20 ? _method_line - 20 : 1))
             _annotations=$(sed -n "${_ann_start},${_method_line}p" "${_ctrl_path}")
-            if ! echo "${_annotations}" | grep -qE '#\[PublicPage\]|@PublicPage\b'; then
+            # An explicitly declared ADMIN posture is an answer too. What this
+            # gate is really preventing is an ACCIDENTAL posture: in Nextcloud
+            # the absence of `#[NoAdminRequired]` IS the admin gate, so a
+            # deliberate admin-only endpoint and a forgotten attribute look
+            # identical in the source. `#[AuthorizedAdminSetting(...)]` is the
+            # one positive, code-level way to say "admin required" and settles
+            # it either way.
+            # Anchored to ATTRIBUTE position (`#[` at the start of a line) or
+            # PHPDoc-TAG position (`* @`), never as a loose substring. The
+            # 20-line window is a blind slice, so it routinely contains a class
+            # docblock, and prose about an attribute is not an attribute: a
+            # sentence reading "no #[PublicPage] here on purpose" was closing
+            # this gate. Same anchoring gate-9 already applies for the same
+            # reason (openregister#1419, 8 of 10 findings were prose).
+            _pm_ok='^[[:space:]]*#\[PublicPage\]|^[[:space:]]*\*[[:space:]]*@PublicPage\b|^[[:space:]]*#\[AuthorizedAdminSetting\('
+            case "${_ctrl}" in
+                *metrics*)
+                    # ADR-006 makes /api/metrics admin-only ON PURPOSE, and the
+                    # engine that owns the decision says so in prose rather than
+                    # in an attribute: openregister's GenericMetricsController
+                    # carries only #[NoCSRFRequired] and documents "admin-only,
+                    # ADR-006" — while its GenericHealthController IS
+                    # #[PublicPage]. Demanding #[PublicPage] on metrics asks the
+                    # fleet to publish its metrics to anonymous callers to
+                    # satisfy a gate, which is the gate overriding the
+                    # architecture it exists to encode.
+                    #
+                    # A stated admin-only posture therefore counts here, and
+                    # ONLY here. It is weaker evidence than an attribute — prose
+                    # can lie — but the alternative is a finding whose only
+                    # remedy is a security regression. health / liveness /
+                    # readiness / probe keep the strict requirement; the engine
+                    # agrees with the gate on those.
+                    _pm_ok="${_pm_ok}"'|^[[:space:]]*\*.*[Aa]dmin-only'
+                    ;;
+            esac
+            if ! echo "${_annotations}" | grep -qE "${_pm_ok}"; then
                 echo "${_ctrl_path}:${_method_line} method=${_method} rule=monitoring-endpoint-missing-public-page" >> "${_pm_log}"
             fi
         done
@@ -2998,6 +3099,21 @@ if [ -d src ] || [ -d templates ]; then
         local _f="$1"
         _in_scope "$_f" || return 0
         if grep -qE '<NcContent\b|<NcAppContent\b|<NcAppContentList\b' "$_f" 2>/dev/null; then return 0; fi
+        # The shared app shell. `<CnAppRoot>` (@conduction/nextcloud-vue) IS an
+        # <NcContent> — it renders one as its own root element and puts the
+        # router-view inside an <NcAppContent> — so an app whose App.vue is a
+        # CnAppRoot has NC's skip-link, one component deeper than this grep can
+        # see.
+        #
+        # All 18 fleet apps root on CnAppRoot, so this gate reported every one
+        # of them as shipping no skip link. Same principle already written down
+        # for the AppHost generics in gate-5/gate-14: "I cannot see it" is not
+        # "it is absent", and only the first of those is true here.
+        #
+        # This does not weaken the gate for an app that writes its own shell —
+        # a root component that is neither an NcContent nor a CnAppRoot still
+        # has to carry a skip-link affordance of its own.
+        if grep -qE '<CnAppRoot\b' "$_f" 2>/dev/null; then return 0; fi
         # The skip-link affordance must be an actual anchor or marked
         # element — not just a stray mention of the words. Accept:
         #   - <a ... class="skip-link" ...> or class containing skip-link / skip-nav

@@ -79,6 +79,73 @@ class FullScanTest(unittest.TestCase):
             self.assertFalse(any("titledProp" in m for m in msgs))
 
 
+class OverlayFragmentTest(unittest.TestCase):
+    """An ADR-037 fragment deep-merges a flag onto a property the BASE register
+    already declares — and already titles and describes.
+
+    Real shape, from openconnector
+    `lib/Settings/register.d/99-source-secrets-writeonly.json`:
+
+        "apikey": { "writeOnly": true }
+
+    Demanding a title there forces every fragment to restate the base's prose,
+    and duplicated prose drifts: the fragment's copy goes stale the moment the
+    base is edited, and neither copy is then trustworthy.
+
+    The controls are what keep this from becoming "properties may skip their
+    metadata": anything that DECLARES (a type, a shape, members) or that has
+    already started DOCUMENTING (a title, a description) is still checked.
+    """
+
+    def _scan(self, props):
+        with tempfile.TemporaryDirectory() as d:
+            f = os.path.join(d, "fragment.json")
+            doc = {"components": {"schemas": {"source": {"properties": props}}}}
+            Path(f).write_text(json.dumps(doc, indent=2))
+            findings = []
+            g.check_file(f, findings)
+            return [m for _, m in findings]
+
+    def test_a_pure_overlay_property_is_not_flagged(self):
+        self.assertEqual(self._scan({"apikey": {"writeOnly": True}}), [])
+
+    def test_several_overlay_properties_are_not_flagged(self):
+        self.assertEqual(
+            self._scan({
+                "apikey": {"writeOnly": True},
+                "secret": {"writeOnly": True},
+                "password": {"writeOnly": True},
+            }),
+            [],
+        )
+
+    def test_a_property_that_declares_a_type_is_still_flagged(self):
+        # THE CONTROL. Add one declaring key and the exemption must not apply:
+        # this is a declaration site, so it owns its own metadata.
+        msgs = self._scan({"apikey": {"writeOnly": True, "type": "string"}})
+        self.assertEqual(len(msgs), 1, msgs)
+        self.assertIn("missing title + description", msgs[0])
+
+    def test_a_half_documented_overlay_is_still_flagged(self):
+        # THE OTHER CONTROL. A property that has started documenting is not an
+        # overlay — the missing half is genuinely missing.
+        msgs = self._scan({"apikey": {"writeOnly": True, "title": "API key"}})
+        self.assertEqual(len(msgs), 1, msgs)
+        self.assertIn("missing description", msgs[0])
+        self.assertNotIn("title", msgs[0].split("missing", 1)[1])
+
+    def test_an_overlay_with_nested_members_is_still_flagged(self):
+        # A fragment that introduces structure is declaring, not overlaying.
+        msgs = self._scan({
+            "authenticationConfig": {
+                "writeOnly": True,
+                "properties": {"scheme": {"type": "string"}},
+            },
+        })
+        self.assertTrue(any("authenticationConfig" in m for m in msgs), msgs)
+        self.assertTrue(any("scheme" in m for m in msgs), msgs)
+
+
 class DiffScopeTest(unittest.TestCase):
     """Property-level diff-scoping: only properties on changed lines flag."""
 
