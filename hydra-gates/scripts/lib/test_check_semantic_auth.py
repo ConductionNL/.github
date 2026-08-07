@@ -4,22 +4,24 @@
 
     python3 scripts/lib/test_check_semantic_auth.py
 
-WHY THIS SUITE EXISTS
----------------------
-gate-9 shipped with NO tests. Its `public-page-annotation-with-auth-body`
-rule produced 39 fleet findings of which 36 were false, and its remediation
-text — *"remove `#[PublicPage]` or remove body auth check"* — would have
-INTRODUCED a vulnerability in every one of those 36: the first half breaks
-the endpoint (Nextcloud middleware rejects the remote caller before the
-controller runs), the second half deletes its only authentication.
+or via pytest:
 
-The fixtures below are the real call shapes, verbatim in structure:
-openconnector's HMAC webhook, portaliq's portal `subject()` inbox,
-openregister's bearer-share-token federation reader — against decidesk's
-actual defect, a `#[PublicPage]` method that tests the SESSION.
+    python3 -m pytest scripts/lib/test_check_semantic_auth.py
 
-Both ways, in the same class: the self-authenticating shapes must go quiet,
-and the session-dependent shape must still fire.
+Gate-9 has two exemptions, and an exemption is a way for a real mismatch
+to slip through. So every "must not fire" test below is paired with a
+"must still fire" test built from the same PHP shape minus the one thing
+that earns the exemption. A suite in which nothing fails proves nothing.
+
+:class:`ProseDoesNotEarnTheExemption` is the one that matters most. The
+self-auth exemption used to be matched against the raw source, so a
+docblock reading "callers present a bearer token" exempted a method that
+checked no such thing — the 2026-08-06 gate-64 failure mode, where a
+commented-out call counted as a real one. Those tests fail if comment
+stripping is ever removed.
+
+Fixtures are written as realistic Nextcloud controllers rather than as
+minimal echoes of the gate's own regexes (the gate-56 lesson).
 """
 from __future__ import annotations
 
@@ -35,217 +37,429 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import check_semantic_auth as csa  # noqa: E402
 
 
-def _scan(php: str) -> list[str]:
-    with tempfile.TemporaryDirectory() as d:
-        p = Path(d) / "Controller.php"
-        p.write_text(php, encoding="utf-8")
+def _scan(src: str) -> list[str]:
+    """Write *src* to a throwaway .php file and return the finding lines."""
+    with tempfile.TemporaryDirectory() as root:
+        path = Path(root) / "SomeController.php"
+        path.write_text(src, encoding="utf-8")
         buf = io.StringIO()
         with redirect_stdout(buf):
-            csa.scan_file(str(p))
-    return [ln for ln in buf.getvalue().splitlines() if ln.strip()]
+            csa.scan_file(str(path))
+        return [ln for ln in buf.getvalue().splitlines() if ln.strip()]
 
 
-def _rules(findings: list[str]) -> list[str]:
-    return [f.split("rule=", 1)[1].split(" ", 1)[0] for f in findings]
+_PROLOGUE = """\
+<?php
+namespace OCA\\Demo\\Controller;
 
+use OCP\\AppFramework\\Controller;
+use OCP\\AppFramework\\Http;
+use OCP\\AppFramework\\Http\\Attribute\\NoAdminRequired;
+use OCP\\AppFramework\\Http\\Attribute\\PublicPage;
+use OCP\\AppFramework\\Http\\JSONResponse;
 
-CLASS = """<?php
-namespace OCA\\Thing\\Controller;
-
-class ThingController extends Controller
-{
-%s
-}
+class DemoController extends Controller {
 """
 
-HMAC_WEBHOOK = CLASS % """
-    #[PublicPage]
-    #[NoCSRFRequired]
-    public function webhook(): JSONResponse
-    {
-        $signature = $this->request->getHeader('X-Mollie-Signature');
-        $expected = hash_hmac('sha256', $this->request->getContent(), $this->secret);
-        if (hash_equals($expected, $signature) === false) {
-            return new JSONResponse(['error' => 'bad signature'], Http::STATUS_UNAUTHORIZED);
-        }
-        return new JSONResponse(['ok' => true]);
-    }
-"""
 
-PORTAL_INBOX = CLASS % """
-    #[PublicPage]
-    public function inbox(): JSONResponse
-    {
-        $subject = $this->portal->subject();
-        if ($subject === null) {
-            return new JSONResponse(['error' => 'no portal session'], Http::STATUS_UNAUTHORIZED);
-        }
-        return new JSONResponse($this->service->listFor($subject));
-    }
-"""
+def _controller(methods: str) -> str:
+    return _PROLOGUE + methods + "\n}\n"
 
-FEDERATION_BEARER = CLASS % """
-    #[PublicPage]
-    #[NoCSRFRequired]
-    public function objects(string $shareToken): JSONResponse
-    {
-        $share = $this->shares->findByToken($shareToken);
-        if ($share === null || $share->isRevoked()) {
-            return new JSONResponse(['error' => 'unknown share'], Http::STATUS_FORBIDDEN);
-        }
-        return new JSONResponse($this->service->objectsFor($share));
-    }
-"""
 
-# decidesk's real defect shape: annotated public, but the body tests the
-# SESSION — a test that can only ever fail for the callers the annotation
-# admits.
-SESSION_DEPENDENT = CLASS % """
-    #[PublicPage]
-    public function load(): JSONResponse
-    {
-        $this->requireAdmin();
-        return new JSONResponse($this->settings->all());
-    }
-"""
+# ---------------------------------------------------------------------------
+# The session-mismatch rule — a session gate hiding behind a public attribute.
+# ---------------------------------------------------------------------------
 
-SESSION_NULL_CHECK = CLASS % """
+class SessionGateBehindPublicPage(unittest.TestCase):
+    """#[PublicPage] whose denial reads the session can only ever deny."""
+
+    def test_user_session_null_check_is_flagged(self):
+        src = _controller("""
     #[PublicPage]
-    public function mine(): JSONResponse
-    {
+    public function summary(): JSONResponse {
         if ($this->userSession->getUser() === null) {
-            return new JSONResponse([], Http::STATUS_UNAUTHORIZED);
+            return new JSONResponse(['error' => 'sign in first'], Http::STATUS_UNAUTHORIZED);
         }
-        return new JSONResponse($this->service->forCurrentUser());
-    }
-"""
 
-# 401 with no credential source anywhere: the shape that remains worth
-# reporting, because nothing in the method says what it authenticates with.
-UNSOURCED_DENIAL = CLASS % """
+        return new JSONResponse($this->dashboardService->summarise());
+    }
+""")
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1, findings)
+        self.assertIn("rule=public-page-annotation-with-session-auth-body", findings[0])
+
+    def test_require_admin_is_flagged(self):
+        src = _controller("""
     #[PublicPage]
-    public function report(): JSONResponse
-    {
-        if ($this->flags->closed()) {
-            return new JSONResponse(['error' => 'closed'], Http::STATUS_FORBIDDEN);
+    public function purgeCaches(): JSONResponse {
+        $this->requireAdmin();
+
+        $this->cacheService->purgeAll();
+        return new JSONResponse(['purged' => true]);
+    }
+""")
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1, findings)
+        self.assertIn("rule=public-page-annotation-with-session-auth-body", findings[0])
+
+    def test_a_bearer_token_does_not_launder_a_session_gate(self):
+        """Self-auth must not buy an exemption from the session rule.
+
+        The session branch is checked first and has no exemption; a method
+        that authenticates a token AND then consults the session is still
+        contradicting its own attribute.
+        """
+        src = _controller("""
+    #[PublicPage]
+    public function dump(): JSONResponse {
+        $presentedToken = (string) $this->request->getHeader('Authorization');
+        if (hash_equals($this->expectedToken(), $presentedToken) === false) {
+            return new JSONResponse(['error' => 'unauthorized'], Http::STATUS_UNAUTHORIZED);
         }
-        return new JSONResponse($this->service->report());
-    }
-"""
 
-
-class SelfAuthenticatingPublicEndpoints(unittest.TestCase):
-    """The 36 false positives."""
-
-    def test_fp_hmac_signed_webhook_is_not_a_finding(self):
-        self.assertEqual(_scan(HMAC_WEBHOOK), [])
-
-    def test_fp_portal_subject_resolution_is_not_a_finding(self):
-        self.assertEqual(_scan(PORTAL_INBOX), [])
-
-    def test_fp_bearer_share_token_is_not_a_finding(self):
-        self.assertEqual(_scan(FEDERATION_BEARER), [])
-
-
-class SessionDependentPublicPage(unittest.TestCase):
-    """The 3 true positives — these MUST still fire."""
-
-    def test_tp_require_admin_under_public_page_still_fires(self):
-        self.assertEqual(_rules(_scan(SESSION_DEPENDENT)),
-                         ["public-page-annotation-with-session-auth-body"])
-
-    def test_tp_user_session_null_check_under_public_page_still_fires(self):
-        self.assertEqual(_rules(_scan(SESSION_NULL_CHECK)),
-                         ["public-page-annotation-with-session-auth-body"])
-
-    def test_tp_a_session_check_fires_even_alongside_a_token(self):
-        # Self-authentication excuses an UNSOURCED denial, never a session
-        # test. A method that reads a token AND requires a session is still
-        # contradicting its own annotation.
-        php = CLASS % """
-    #[PublicPage]
-    public function mixed(string $shareToken): JSONResponse
-    {
-        $share = $this->shares->findByToken($shareToken);
         $this->requireAdmin();
-        return new JSONResponse($share);
+
+        return new JSONResponse($this->exportService->dumpEverything());
     }
-"""
-        self.assertEqual(_rules(_scan(php)),
-                         ["public-page-annotation-with-session-auth-body"])
-
-    def test_tp_a_denial_with_no_credential_source_is_reported(self):
-        self.assertEqual(_rules(_scan(UNSOURCED_DENIAL)),
-                         ["public-page-annotation-with-unsourced-denial"])
+""")
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1, findings)
+        self.assertIn("rule=public-page-annotation-with-session-auth-body", findings[0])
 
 
-class RemediationTextIsSafe(unittest.TestCase):
-    """The advice itself is part of the gate. If it tells a developer to open
-    the endpoint, the gate is a vulnerability generator regardless of its
-    precision. These assertions are on the STRING, deliberately."""
+# ---------------------------------------------------------------------------
+# The unsourced-denial rule — 401/403 with no credential in the request.
+# ---------------------------------------------------------------------------
 
-    def _advice(self, php: str) -> str:
-        found = _scan(php)
-        self.assertTrue(found, "expected a finding to inspect the advice of")
-        return found[0]
+class DenialWithoutACredential(unittest.TestCase):
+    """A public endpoint that denies on app state, not on anything sent."""
 
-    def test_advice_never_says_to_remove_the_public_page_annotation(self):
-        for php in (SESSION_DEPENDENT, SESSION_NULL_CHECK, UNSOURCED_DENIAL):
-            with self.subTest(php=php[:60]):
-                advice = self._advice(php)
-                self.assertNotIn("remove #[PublicPage] or", advice)
+    def test_feature_flag_denial_is_flagged(self):
+        src = _controller("""
+    #[PublicPage]
+    public function index(): JSONResponse {
+        if ($this->config->getAppValue('demo', 'portal_enabled', 'no') !== 'yes') {
+            return new JSONResponse(['error' => 'portal disabled'], Http::STATUS_FORBIDDEN);
+        }
 
-    def test_advice_never_says_to_remove_the_auth_check(self):
-        for php in (SESSION_DEPENDENT, SESSION_NULL_CHECK, UNSOURCED_DENIAL):
-            with self.subTest(php=php[:60]):
-                advice = self._advice(php)
-                self.assertNotIn("remove body auth check", advice)
-                self.assertIn("Do NOT", advice)
+        return new JSONResponse($this->portalService->landingPage());
+    }
+""")
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1, findings)
+        self.assertIn("rule=public-page-annotation-with-unsourced-denial", findings[0])
 
-    def test_advice_names_the_request_borne_alternative(self):
-        advice = self._advice(SESSION_DEPENDENT)
-        self.assertIn("route token", advice)
+    def test_published_flag_denial_is_flagged(self):
+        src = _controller("""
+    #[PublicPage]
+    public function download(int $id): JSONResponse {
+        if ($this->exportService->isPublished($id) === false) {
+            return new JSONResponse(['error' => 'not available'], Http::STATUS_FORBIDDEN);
+        }
+
+        return new JSONResponse($this->exportService->payload($id));
+    }
+""")
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1, findings)
+        self.assertIn("rule=public-page-annotation-with-unsourced-denial", findings[0])
 
 
-class NoAdminRequiredRuleUnchanged(unittest.TestCase):
-    """The rule gate-9 was actually built for. It was RIGHT — 3 of 3 real —
-    and nothing above may weaken it."""
+class CredentialInTheRequestIsNotAMismatch(unittest.TestCase):
+    """Public by necessity, 401 by correctness — the 36-of-39 shape."""
 
-    def test_tp_no_admin_required_with_an_admin_body_still_fires(self):
-        php = CLASS % """
+    def test_hmac_signed_webhook_is_not_flagged(self):
+        src = _controller("""
+    #[PublicPage]
+    public function webhook(): JSONResponse {
+        $payload  = file_get_contents('php://input');
+        $expected = 'sha256=' . hash_hmac('sha256', $payload, $this->sharedSecret());
+
+        if (hash_equals($expected, (string) $this->request->getHeader('X-Hub-Signature-256')) === false) {
+            return new JSONResponse(['error' => 'bad signature'], Http::STATUS_FORBIDDEN);
+        }
+
+        return new JSONResponse([], 202);
+    }
+""")
+        self.assertEqual(_scan(src), [])
+
+    def test_route_share_token_is_not_flagged(self):
+        src = _controller("""
+    #[PublicPage]
+    public function share(string $shareToken): JSONResponse {
+        $share = $this->shareMapper->findByToken($shareToken);
+        if ($share === null || $share->getExpired() === true) {
+            return new JSONResponse(['error' => 'unknown share'], Http::STATUS_UNAUTHORIZED);
+        }
+
+        return new JSONResponse($this->shareService->contents($share));
+    }
+""")
+        self.assertEqual(_scan(src), [])
+
+    def test_login_endpoint_is_not_flagged(self):
+        """The credential is a password, not a token.
+
+        openconnector UserController::login (2026-08-07): correct code that
+        the token-only pattern list reported as an unsourced denial.
+        """
+        src = _controller("""
+    #[NoCSRFRequired]
+    #[PublicPage]
+    public function login(): JSONResponse {
+        $data        = $this->request->getParams();
+        $credentials = $this->securityService->validateLoginCredentials($data);
+        $username    = $credentials['username'];
+        $password    = $credentials['password'];
+
+        $user = $this->userManager->checkPassword($username, $password);
+        if ($user === false) {
+            $this->securityService->recordFailedLoginAttempt($username, $this->clientIp());
+            return new JSONResponse(['error' => 'invalid credentials'], Http::STATUS_UNAUTHORIZED);
+        }
+
+        return new JSONResponse(['uid' => $user->getUID()]);
+    }
+""")
+        self.assertEqual(_scan(src), [])
+
+    def test_named_argument_and_helper_resolved_token_is_not_flagged(self):
+        """hermiq McpRunController::handle / EgressAuthorizeController::authorize.
+
+        The credential is resolved by a helper (`bearerToken()`) and handed
+        over as a named argument (`token:`). Neither shape is one of the
+        six verbs the pattern list started with, and the only reason these
+        two used to pass was the word "bearer" in their own comments — so
+        they are the pair that would silently break if the comment-stripping
+        change were made without widening the idioms alongside it.
+        """
+        src = _controller("""
+    #[PublicPage]
+    #[NoCSRFRequired]
+    public function handle(): JSONResponse {
+        $binding = $this->runTokenService->verify(token: $this->bearerToken());
+        if ($binding === null) {
+            return new JSONResponse(['error' => 'invalid_token'], Http::STATUS_UNAUTHORIZED);
+        }
+
+        return new JSONResponse($this->mcpService->dispatch($binding, $this->readRawBody()));
+    }
+""")
+        self.assertEqual(_scan(src), [])
+
+    def test_password_protected_share_is_not_flagged(self):
+        src = _controller("""
+    #[PublicPage]
+    public function unlock(string $slug): JSONResponse {
+        $folder = $this->folderMapper->findBySlug($slug);
+
+        if (password_verify((string) $this->request->getParam('password'), $folder->getPasswordHash()) === false) {
+            return new JSONResponse(['error' => 'wrong password'], Http::STATUS_UNAUTHORIZED);
+        }
+
+        return new JSONResponse($this->folderService->listing($folder));
+    }
+""")
+        self.assertEqual(_scan(src), [])
+
+
+class ProseDoesNotEarnTheExemption(unittest.TestCase):
+    """Only executable code counts as authenticating a credential."""
+
+    def test_docblock_describing_a_token_check_is_still_flagged(self):
+        src = _controller("""
+    /**
+     * Download an export.
+     *
+     * Callers must present a signed capability token in the Authorization
+     * header. $presentedToken is compared against the stored secret with
+     * hash_equals() before any payload is returned.
+     */
+    #[PublicPage]
+    public function download(int $id): JSONResponse {
+        if ($this->exportService->isPublished($id) === false) {
+            return new JSONResponse(['error' => 'not available'], Http::STATUS_FORBIDDEN);
+        }
+
+        return new JSONResponse($this->exportService->payload($id));
+    }
+""")
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1, findings)
+        self.assertIn("rule=public-page-annotation-with-unsourced-denial", findings[0])
+
+    def test_commented_out_credential_check_is_still_flagged(self):
+        src = _controller("""
+    #[PublicPage]
+    public function receive(): JSONResponse {
+        // TODO re-enable once the partner rotates their key:
+        // $presentedToken = (string) $this->request->getHeader('X-Api-Key');
+        // if (hash_equals($this->expectedKey(), $presentedToken) === false) {
+        if ($this->importService->isAcceptingUploads() === false) {
+            return new JSONResponse(['error' => 'closed'], Http::STATUS_UNAUTHORIZED);
+        }
+
+        return new JSONResponse([], 202);
+    }
+""")
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1, findings)
+        self.assertIn("rule=public-page-annotation-with-unsourced-denial", findings[0])
+
+
+class StringLiteralsStillCount(unittest.TestCase):
+    """Comment stripping must not take the literals the idioms live in.
+
+    ``'Bearer '``, ``'HTTP_AUTHORIZATION'`` and the header name handed to
+    ``getHeader()`` are string literals in every real handler. Blanking them
+    alongside comments would turn correct code into findings — the exact
+    failure gate-9 was rewritten to stop.
+    """
+
+    def test_bearer_prefix_in_a_literal_is_not_flagged(self):
+        src = _controller("""
+    #[PublicPage]
+    public function ingest(): JSONResponse {
+        $header    = (string) $this->request->getHeader('Authorization');
+        $presented = str_replace('Bearer ', '', $header);
+
+        if ($this->apiKeyService->authorize($presented) === false) {
+            return new JSONResponse(['error' => 'unauthorized'], Http::STATUS_UNAUTHORIZED);
+        }
+
+        return new JSONResponse([], 202);
+    }
+""")
+        self.assertEqual(_scan(src), [])
+
+    def test_server_superglobal_header_is_not_flagged(self):
+        src = _controller("""
+    #[PublicPage]
+    public function ping(): JSONResponse {
+        $presented = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+
+        if (hash_equals($this->expectedKey(), (string) $presented) === false) {
+            return new JSONResponse(['error' => 'unauthorized'], Http::STATUS_UNAUTHORIZED);
+        }
+
+        return new JSONResponse(['pong' => true]);
+    }
+""")
+        self.assertEqual(_scan(src), [])
+
+    def test_a_url_with_a_double_slash_does_not_swallow_the_rest(self):
+        """`//` inside a literal must not be read as a comment start.
+
+        If it were, everything after it — including the credential check —
+        would be blanked and the method would be reported unsourced.
+        """
+        src = _controller("""
+    #[PublicPage]
+    public function callback(): JSONResponse {
+        $issuer    = 'https://idp.example.org/realms/demo';
+        $presented = (string) $this->request->getHeader('Authorization');
+
+        if ($this->oidcService->verifyIdToken($presented, $issuer) === false) {
+            return new JSONResponse(['error' => 'unauthorized'], Http::STATUS_UNAUTHORIZED);
+        }
+
+        return new JSONResponse(['issuer' => $issuer]);
+    }
+""")
+        self.assertEqual(_scan(src), [])
+
+
+# ---------------------------------------------------------------------------
+# The #[NoAdminRequired] rule, and silence on ordinary controllers.
+# ---------------------------------------------------------------------------
+
+class NoAdminRequiredWithAdminBody(unittest.TestCase):
+
+    def test_require_admin_under_no_admin_required_is_flagged(self):
+        src = _controller("""
     #[NoAdminRequired]
-    public function load(): JSONResponse
-    {
+    public function destroy(int $id): JSONResponse {
         $this->requireAdmin();
-        return new JSONResponse($this->settings->all());
-    }
-"""
-        self.assertEqual(_rules(_scan(php)),
-                         ["no-admin-required-annotation-with-admin-body"])
 
-    def test_fp_a_plain_no_admin_required_method_is_clean(self):
-        php = CLASS % """
+        $this->registerService->delete($id);
+        return new JSONResponse([], 204);
+    }
+""")
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1, findings)
+        self.assertIn("rule=no-admin-required-annotation-with-admin-body", findings[0])
+
+    def test_is_admin_guard_with_forbidden_return_is_flagged(self):
+        src = _controller("""
     #[NoAdminRequired]
-    public function index(): JSONResponse
-    {
-        return new JSONResponse($this->service->listForCurrentUser());
+    public function settings(): JSONResponse {
+        if ($this->groupManager->isAdmin($this->userId) === false) {
+            return new JSONResponse(['error' => 'admins only'], Http::STATUS_FORBIDDEN);
+        }
+
+        return new JSONResponse($this->settingsService->all());
     }
-"""
-        self.assertEqual(_scan(php), [])
+""")
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1, findings)
+        self.assertIn("rule=no-admin-required-annotation-with-admin-body", findings[0])
+
+    def test_yoda_comparison_is_flagged(self):
+        src = _controller("""
+    #[NoAdminRequired]
+    public function purge(): JSONResponse {
+        if (false === $this->groupManager->isAdmin($this->userId)) {
+            throw new OCSForbiddenException('admins only');
+        }
+
+        $this->cacheService->purgeAll();
+        return new JSONResponse(['purged' => true]);
+    }
+""")
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1, findings)
+        self.assertIn("rule=no-admin-required-annotation-with-admin-body", findings[0])
+
+    def test_a_non_admin_predicate_is_not_flagged(self):
+        """The guard has to be about being an admin, not merely an `if`."""
+        src = _controller("""
+    #[NoAdminRequired]
+    public function publish(int $id): JSONResponse {
+        if ($this->publicationService->isReviewed($id) === false) {
+            return new JSONResponse(['error' => 'not reviewed yet'], Http::STATUS_FORBIDDEN);
+        }
+
+        return new JSONResponse($this->publicationService->publish($id));
+    }
+""")
+        self.assertEqual(_scan(src), [])
 
 
-class GateIsNotBlind(unittest.TestCase):
-    def test_the_scanner_still_reads_methods_at_all(self):
-        # If `_find_method_bodies` ever returns nothing, every `assertEqual([])`
-        # above passes. This asserts the floor directly.
-        php = CLASS % """
-    #[PublicPage]
-    public function a(): JSONResponse { $this->requireAdmin(); return new JSONResponse([]); }
+class OrdinaryControllersProduceNoFindings(unittest.TestCase):
 
-    #[PublicPage]
-    public function b(): JSONResponse { $this->requireAdmin(); return new JSONResponse([]); }
-"""
-        self.assertEqual(len(_scan(php)), 2)
+    def test_plain_authenticated_endpoints_are_silent(self):
+        src = _controller("""
+    #[NoAdminRequired]
+    public function index(): JSONResponse {
+        return new JSONResponse($this->objectService->findAll());
+    }
+
+    #[NoAdminRequired]
+    public function show(int $id): JSONResponse {
+        return new JSONResponse($this->objectService->find($id));
+    }
+""")
+        self.assertEqual(_scan(src), [])
+
+    def test_an_admin_endpoint_with_no_attribute_is_silent(self):
+        src = _controller("""
+    public function reindex(): JSONResponse {
+        $this->searchService->reindexEverything();
+        return new JSONResponse(['queued' => true]);
+    }
+""")
+        self.assertEqual(_scan(src), [])
 
 
 if __name__ == "__main__":

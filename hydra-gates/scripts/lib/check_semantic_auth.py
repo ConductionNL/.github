@@ -24,7 +24,10 @@ This module:
     - ``$this->requireAdmin()`` or bare ``requireAdmin()``
     - ``if (... !isAdmin ...) { ... STATUS_FORBIDDEN | OCSForbidden | 403 ...}``
     - ``if (... isAdmin === false ...) { ... STATUS_FORBIDDEN | OCSForbidden | 403 ...}``
-    - PublicPage + ``Http::STATUS_UNAUTHORIZED|FORBIDDEN`` in body
+    - PublicPage + ``Http::STATUS_UNAUTHORIZED|FORBIDDEN`` in a body that
+      does not itself resolve a credential from the request. See
+      ``_SELF_AUTH_RE``; the exemption is matched against the
+      comment-stripped source, so only code can earn it.
 
 Prints one line per violation in the same format as the bash gate so
 ``run-hydra-gates.sh`` can consume it unchanged.
@@ -44,6 +47,71 @@ import sys
 _METHOD_RE = re.compile(
     r"\bpublic\s+function\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\(",
 )
+
+
+def _strip_comments(src: str) -> str:
+    """Replace comments with same-length whitespace, KEEPING string literals.
+
+    Used to decide whether a method authenticates its own credential. That
+    question is about executable code, and a docblock is not executable: a
+    comment reading "callers must present a bearer token" would otherwise
+    buy the self-auth exemption for a method containing no such check — the
+    2026-08-06 gate-64 failure mode, where a commented-out call counted as
+    a real one.
+
+    String literals are deliberately preserved, unlike in
+    :func:`_strip_strings_and_comments`. Several of the idioms in
+    ``_SELF_AUTH_RE`` live inside literals by nature — the ``'Bearer '``
+    prefix a handler strips, the ``'HTTP_AUTHORIZATION'`` key, the header
+    name passed to ``getHeader()``. Blanking those would turn correct code
+    into findings, which is the failure this gate already exists to avoid.
+
+    Offsets are preserved so the result can be searched interchangeably with
+    the raw slice.
+    """
+    out = []
+    i = 0
+    n = len(src)
+    while i < n:
+        c = src[i]
+        # Single-line comment // ... \n
+        if c == "/" and i + 1 < n and src[i + 1] == "/":
+            j = src.find("\n", i)
+            if j == -1:
+                j = n
+            out.append(" " * (j - i))
+            i = j
+            continue
+        # Block comment / docblock /* ... */
+        if c == "/" and i + 1 < n and src[i + 1] == "*":
+            j = src.find("*/", i + 2)
+            if j == -1:
+                j = n
+            else:
+                j += 2
+            out.append(" " * (j - i))
+            i = j
+            continue
+        # A quoted string is copied through verbatim, but must still be
+        # consumed here so that a `//` or `/*` inside it (a URL, a regex)
+        # is not mistaken for the start of a comment.
+        if c in ("'", '"'):
+            quote = c
+            j = i + 1
+            while j < n:
+                if src[j] == "\\" and j + 1 < n:
+                    j += 2
+                    continue
+                if src[j] == quote:
+                    j += 1
+                    break
+                j += 1
+            out.append(src[i:j])
+            i = j
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out)
 
 
 def _strip_strings_and_comments(src: str) -> str:
@@ -235,6 +303,16 @@ _PUBLIC_DENY_STATUS_RE = re.compile(r"Http::STATUS_(UNAUTHORIZED|FORBIDDEN)")
 # breaks the endpoint (middleware rejects the caller before the controller
 # runs), the second removes its only authentication. A gate that can be
 # closed only by weakening the code is worse than no gate.
+#
+# A username/password pair is the same idiom with a different credential
+# shape, and the token-only list above missed it: a login endpoint is
+# #[PublicPage] by necessity (the caller has no session yet — that is what
+# it is asking for) and answers 401 when the password is wrong. Observed on
+# openconnector UserController::login (2026-08-07), which resolves
+# `$username`/`$password` from the request and calls
+# `$this->userManager->checkPassword(...)` — the credential IS named, in the
+# body, and the gate still reported it unsourced. Same class of finding as
+# the 36 above, so it is listed here rather than argued with in the app.
 _SELF_AUTH_RE = re.compile(
     r"hash_hmac\s*\(|"
     r"hash_equals\s*\(|"
@@ -245,10 +323,23 @@ _SELF_AUTH_RE = re.compile(
     r"\bhmac\b|"
     r"[Tt]oken\s*\)|"
     r"\$\w*[Tt]oken\b|"
-    r"->\s*(resolve|validate|verify|find|get)\w*[Tt]oken\s*\(|"
+    # Any call whose NAME carries the credential, not just the six verbs
+    # that used to be listed. hermiq EgressAuthorizeController::authorize
+    # (2026-08-07) resolves its credential with `$this->bearerToken()` and
+    # was matching only on the word "bearer" in its own docblock — so it
+    # went from exempt to flagged the moment comments stopped counting,
+    # despite being textbook-correct code.
+    r"->\s*\w*[Tt]oken\w*\s*\(|"
+    # PHP named argument: `verify(token: ...)`, `assert(apiKey: ...)`.
+    r"\b(token|apiKey|credential|password|signature)\s*:\s*|"
     r"->\s*subject\s*\(|"
-    r"->\s*findByToken\s*\(|"
-    r"[Cc]apability\s*[Tt]oken",
+    r"[Cc]apability\s*[Tt]oken|"
+    # Username/password credentials presented in the request.
+    r"password_verify\s*\(|"
+    r"->\s*checkPassword\s*\(|"
+    r"\$\w*[Pp]assword\b|"
+    r"\$\w*[Cc]redentials?\b|"
+    r"->\s*(resolve|validate|verify|check)\w*[Cc]redentials?\s*\(",
     re.IGNORECASE,
 )
 
@@ -278,9 +369,16 @@ def _has_admin_if_with_throw(body: str) -> bool:
         # Negated isAdmin or isAdmin === false. Character class must
         # include `$` (`$this->`), `>` (`->`), and word chars to span
         # `$this->isAdmin` / `$user->getUID()->isAdmin` etc.
+        # `cond` is already bounded by the matching close paren of the `if`,
+        # so `.*?` cannot run past the condition. It must not be `[^)]*`:
+        # the call being tested usually HAS arguments, and
+        # `isAdmin($this->userId) === false` puts a `)` between the name and
+        # the comparison — the same shape of over-restrictive character class
+        # that made the old `[^}]*` body regex miss real throws (W28).
         if not (
             re.search(r"!\s*[\w\$\->]*isAdmin\b", cond) or
-            re.search(r"\bisAdmin\b[^)]*===\s*false", cond)
+            re.search(r"\bisAdmin\b.*?===\s*false", cond, re.DOTALL) or
+            re.search(r"false\s*===.*?\bisAdmin\b", cond, re.DOTALL)
         ):
             continue
         # Body of the if.
@@ -341,7 +439,13 @@ def scan_file(path: str) -> int:
                     f"Do NOT simply delete the check."
                 )
                 violations += 1
-            elif _PUBLIC_DENY_STATUS_RE.search(body) and not _SELF_AUTH_RE.search(head + body):
+            # Comments stripped before asking "does this authenticate its own
+            # credential?" — the exemption has to be earned by code, not by a
+            # docblock describing a check the body does not perform.
+            elif (
+                _PUBLIC_DENY_STATUS_RE.search(body)
+                and not _SELF_AUTH_RE.search(_strip_comments(head + body))
+            ):
                 print(
                     f"{path}:{line_no} method={name} "
                     f"rule=public-page-annotation-with-unsourced-denial — "
