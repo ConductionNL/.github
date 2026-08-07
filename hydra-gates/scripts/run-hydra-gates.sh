@@ -2616,7 +2616,43 @@ if [ -f appinfo/routes.php ] && [ -d lib/Controller ]; then
             # Inspect annotations above the method declaration (up to 20 lines back)
             _ann_start=$((_method_line > 20 ? _method_line - 20 : 1))
             _annotations=$(sed -n "${_ann_start},${_method_line}p" "${_ctrl_path}")
-            if ! echo "${_annotations}" | grep -qE '#\[PublicPage\]|@PublicPage\b'; then
+            # An explicitly declared ADMIN posture is an answer too. What this
+            # gate is really preventing is an ACCIDENTAL posture: in Nextcloud
+            # the absence of `#[NoAdminRequired]` IS the admin gate, so a
+            # deliberate admin-only endpoint and a forgotten attribute look
+            # identical in the source. `#[AuthorizedAdminSetting(...)]` is the
+            # one positive, code-level way to say "admin required" and settles
+            # it either way.
+            # Anchored to ATTRIBUTE position (`#[` at the start of a line) or
+            # PHPDoc-TAG position (`* @`), never as a loose substring. The
+            # 20-line window is a blind slice, so it routinely contains a class
+            # docblock, and prose about an attribute is not an attribute: a
+            # sentence reading "no #[PublicPage] here on purpose" was closing
+            # this gate. Same anchoring gate-9 already applies for the same
+            # reason (openregister#1419, 8 of 10 findings were prose).
+            _pm_ok='^[[:space:]]*#\[PublicPage\]|^[[:space:]]*\*[[:space:]]*@PublicPage\b|^[[:space:]]*#\[AuthorizedAdminSetting\('
+            case "${_ctrl}" in
+                *metrics*)
+                    # ADR-006 makes /api/metrics admin-only ON PURPOSE, and the
+                    # engine that owns the decision says so in prose rather than
+                    # in an attribute: openregister's GenericMetricsController
+                    # carries only #[NoCSRFRequired] and documents "admin-only,
+                    # ADR-006" — while its GenericHealthController IS
+                    # #[PublicPage]. Demanding #[PublicPage] on metrics asks the
+                    # fleet to publish its metrics to anonymous callers to
+                    # satisfy a gate, which is the gate overriding the
+                    # architecture it exists to encode.
+                    #
+                    # A stated admin-only posture therefore counts here, and
+                    # ONLY here. It is weaker evidence than an attribute — prose
+                    # can lie — but the alternative is a finding whose only
+                    # remedy is a security regression. health / liveness /
+                    # readiness / probe keep the strict requirement; the engine
+                    # agrees with the gate on those.
+                    _pm_ok="${_pm_ok}"'|^[[:space:]]*\*.*[Aa]dmin-only'
+                    ;;
+            esac
+            if ! echo "${_annotations}" | grep -qE "${_pm_ok}"; then
                 echo "${_ctrl_path}:${_method_line} method=${_method} rule=monitoring-endpoint-missing-public-page" >> "${_pm_log}"
             fi
         done
@@ -3063,6 +3099,21 @@ if [ -d src ] || [ -d templates ]; then
         local _f="$1"
         _in_scope "$_f" || return 0
         if grep -qE '<NcContent\b|<NcAppContent\b|<NcAppContentList\b' "$_f" 2>/dev/null; then return 0; fi
+        # The shared app shell. `<CnAppRoot>` (@conduction/nextcloud-vue) IS an
+        # <NcContent> — it renders one as its own root element and puts the
+        # router-view inside an <NcAppContent> — so an app whose App.vue is a
+        # CnAppRoot has NC's skip-link, one component deeper than this grep can
+        # see.
+        #
+        # All 18 fleet apps root on CnAppRoot, so this gate reported every one
+        # of them as shipping no skip link. Same principle already written down
+        # for the AppHost generics in gate-5/gate-14: "I cannot see it" is not
+        # "it is absent", and only the first of those is true here.
+        #
+        # This does not weaken the gate for an app that writes its own shell —
+        # a root component that is neither an NcContent nor a CnAppRoot still
+        # has to carry a skip-link affordance of its own.
+        if grep -qE '<CnAppRoot\b' "$_f" 2>/dev/null; then return 0; fi
         # The skip-link affordance must be an actual anchor or marked
         # element — not just a stray mention of the words. Accept:
         #   - <a ... class="skip-link" ...> or class containing skip-link / skip-nav
