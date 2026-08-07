@@ -178,7 +178,7 @@ def _menu_entries(path: str):
     except (OSError, ValueError):
         return
 
-    def walk(node, label_ctx):
+    def walk(node, label_ctx, in_widget=False):
         if isinstance(node, dict):
             if node.get('type') == 'caption':
                 return
@@ -186,13 +186,16 @@ def _menu_entries(path: str):
                      or node.get('id') or label_ctx)
             icon = node.get('icon')
             if isinstance(icon, str) and icon:
-                yield (str(label or ''), icon, str(node.get('id') or ''))
+                yield (str(label or ''), icon, str(node.get('id') or ''), in_widget)
             for key, value in node.items():
                 if key != 'icon':
-                    yield from walk(value, label)
+                    # Once inside a `widgets` array, everything below it is a
+                    # widget icon and stays flagged as one. See the Tier A
+                    # concept check for why that distinction matters.
+                    yield from walk(value, label, in_widget or key == 'widgets')
         elif isinstance(node, list):
             for item in node:
-                yield from walk(item, label_ctx)
+                yield from walk(item, label_ctx, in_widget)
 
     yield from walk(data, '')
 
@@ -255,7 +258,7 @@ def main() -> int:
 
     for path in paths:
         rel = os.path.relpath(path, repo)
-        for label, icon, entry_id in _menu_entries(path):
+        for label, icon, entry_id, in_widget in _menu_entries(path):
             where = f'{rel}: {label or entry_id or "?"}'
             if not icon:
                 continue
@@ -307,7 +310,37 @@ def main() -> int:
 
             used_mdi.add(icon)
 
+            # WIDGET icons are exempt from the concept MUST, and only from that.
+            #
+            # A widget icon renders through CnWidgetGrid's own `widgetIcons.js`
+            # registry, which is a strict SUBSET of the CnIcon vocabulary this
+            # gate governs. Where the two disagree the concept rule becomes
+            # unsatisfiable: ADR-077 Tier A requires "CogOutline" for the
+            # `settings` concept, `widgetIcons.js` ships "Cog" and NOT
+            # "CogOutline", and gate-55 fails any widget icon outside that
+            # registry. Verified against the installed library, not inferred:
+            #
+            #   grep -c CogOutline widgetIcons.js -> 0
+            #   grep -c '\bCog\b'   widgetIcons.js -> 2
+            #
+            # So obeying this rule on a widget renders the "?" fallback, and
+            # obeying gate-55 fails this one. Hit on hermiq#162, blocking a PR
+            # on a contradiction it could not resolve.
+            #
+            # Everything ABOVE still applies to widgets — a nonexistent icon or
+            # an unbridged `icon-*` is still a failure wherever it appears. Only
+            # the "this concept must use exactly that glyph" rule steps aside,
+            # because gate-55 already governs widget icons against the registry
+            # that actually draws them.
+            #
+            # The better end state is reconciling the two registries (add the
+            # Tier A glyphs to widgetIcons.js), after which this exemption can
+            # go. Until then it is the difference between a gate that is strict
+            # and one that is impossible.
             concept = CONCEPT_LABELS.get(label.strip().lower())
+            if concept and in_widget is True:
+                concept = None
+
             if concept:
                 expected = all_concepts.get(concept)
                 if expected and icon != expected:
