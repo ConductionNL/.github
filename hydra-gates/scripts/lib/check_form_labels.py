@@ -151,6 +151,23 @@ def scan_source(fname: str, src: str) -> list[str]:
             v = _attr(attrs, 'id')
             if v and _norm_expr(v) in label_for:
                 return True
+        if name in NC_PROP_COMPONENTS:
+            # `input-id` is what an Nc* wrapper puts on the <input> it renders,
+            # and it is the documented way to point an EXTERNAL <label for> at
+            # that input. The association is real HTML — the same one accepted
+            # for a native element two lines up — so it is an accessible name
+            # by the same evidence.
+            #
+            # Without this, a field written the way the shared components
+            # document it was reported as unlabelled, and the only way to
+            # close the finding was to add a redundant aria-label overriding
+            # the visible label, or a second visible one:
+            #
+            #   <label :for="filePathId">File path or glob</label>
+            #   <NcTextField :input-id="filePathId" ... />
+            v = _attr(attrs, 'input-id')
+            if v and _norm_expr(v) in label_for:
+                return True
         return False
 
     def _report(name: str, attrs: str, rule: str) -> None:

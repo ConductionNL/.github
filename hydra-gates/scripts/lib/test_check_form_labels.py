@@ -160,6 +160,47 @@ class DynamicIdForPairs(unittest.TestCase):
         """), [])
 
 
+class InputIdOnAWrapperComponent(unittest.TestCase):
+    """`input-id` is how an Nc* wrapper exposes the <input> it renders, and
+    the documented way to point an EXTERNAL <label for> at it. That is the
+    same real HTML association already accepted for a native element, so it
+    is an accessible name by the same evidence.
+
+    Before this, a field written the way the shared components document it
+    was reported unlabelled, and the only remedies were a redundant
+    aria-label overriding the visible label, or a second visible one.
+    """
+
+    def test_fp_an_external_label_for_a_bound_input_id_associates(self):
+        # openconnector SyncConfigWidget, verbatim in shape.
+        self.assertEqual(rules("""
+            <label :for="filePathId" class="sync-config__label">
+                {{ t('openconnector', 'File path or glob') }}
+            </label>
+            <NcTextField :input-id="filePathId" :model-value="sourceIdValue" />
+        """), [])
+
+    def test_fp_a_literal_input_id_associates_too(self):
+        self.assertEqual(rules("""
+            <label for="sync-file-path">File path or glob</label>
+            <NcTextField input-id="sync-file-path" :model-value="v" />
+        """), [])
+
+    def test_tp_an_input_id_no_label_points_at_is_still_reported(self):
+        # The control. If the exemption ever degrades into "has an input-id
+        # at all", this goes quiet — and with it every wrapper whose label
+        # was deleted, renamed, or never written.
+        self.assertEqual(rules("""
+            <label :for="someOtherId">File path or glob</label>
+            <NcTextField :input-id="filePathId" :model-value="v" />
+        """), ["nctextfield-without-label-prop"])
+
+    def test_tp_an_input_id_with_no_label_anywhere_is_still_reported(self):
+        self.assertEqual(rules("""
+            <NcTextField :input-id="filePathId" :model-value="v" />
+        """), ["nctextfield-without-label-prop"])
+
+
 # --------------------------------------------------------------------------
 # Mode 4 — markup that does not ship.
 # --------------------------------------------------------------------------
