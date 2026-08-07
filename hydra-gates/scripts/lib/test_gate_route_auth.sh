@@ -117,7 +117,7 @@ _expect_log() {   # <snapshot-var-contents> <regex> <description>
 echo "== gate-5 route-auth / gate-14 reachability control pairs =="
 echo
 
-for _f in unguarded guarded apphost apphost-unguarded orphan-route; do
+for _f in unguarded guarded apphost apphost-unguarded orphan-route di-registered-generic; do
     if [ ! -d "${FIXTURES}/${_f}" ]; then
         _bad "fixture ${FIXTURES}/${_f} does not exist — this suite would be green on nothing"
     fi
@@ -193,6 +193,34 @@ if _run "${FIXTURES}/orphan-route"; then
         "orphan-route fixture: gate-14 log names controller-class-not-found"
     _expect_log "${_RRLOG}" 'rule=method-not-found-on-target-controller' \
         "orphan-route fixture: gate-14 still names the missing-method shape too"
+fi
+
+# ---------------------------------------------------------------------------
+# 5b. THE OTHER WAY AN APPHOST GENERIC REACHES A ROUTE. openconnector
+#     (2026-08-07) registers OpenRegister's GenericPreferencesController
+#     itself, under the standard controller class name, so the generic gets
+#     this app's `appName` and its `pref_` user values stay scoped here. No
+#     Bootstrap::register() alias, and the route slug is `genericPreferences`
+#     rather than `preferences` — so the five-slug list could not see it and
+#     gate-14 reported a working endpoint unreachable.
+#
+#     The control lives in the SAME fixture: `gadget#run` names a class that
+#     is neither on disk nor registered. If _di_binds_controller() ever
+#     loosens into "this app registers services, so absences are fine", that
+#     assertion goes red here rather than going quiet in the fleet.
+# ---------------------------------------------------------------------------
+if _run "${FIXTURES}/di-registered-generic"; then
+    _expect_gate 14 FAIL "di-registered-generic fixture: an unregistered, absent controller is still raised"
+    _expect_log "${_RRLOG}" "GadgetController.php route='gadget#run' rule=controller-class-not-found" \
+        "di-registered-generic fixture: gate-14 names gadget#run"
+    if printf '%s' "${_RRLOG}" | grep -q 'GenericPreferencesController'; then
+        _bad "di-registered-generic fixture: gate-14 reported the DI-registered generic as unreachable"
+    else
+        _ok "di-registered-generic fixture: the DI-registered generic is NOT reported"
+    fi
+    _expect_gate 5 PASS "di-registered-generic fixture: the absent generic is not an auth finding either"
+    _expect_log "${_UNRES}" 'genericPreferences#getPreference' \
+        "di-registered-generic fixture: gate-5 states the generic was NOT JUDGED rather than dropping it"
 fi
 
 # ---------------------------------------------------------------------------

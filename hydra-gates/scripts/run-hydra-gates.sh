@@ -503,6 +503,68 @@ _apphost_serves() {
 }
 
 # ---------------------------------------------------------------------------
+# _di_binds_controller <controller-file-path> — 0 when lib/AppInfo/Application.php
+# registers a service under EXACTLY the class name that path resolves to.
+#
+# `Bootstrap::register()` is not the only way an AppHost generic reaches a
+# route. A leaf that needs the generic constructed with its OWN collaborators
+# registers it itself, under the standard controller class name, because that
+# is the name NC's `App::main` synthesises from a plain route slug:
+#
+#   openconnector lib/AppInfo/Application.php
+#     $context->registerService(
+#         'OCA\\OpenConnector\\Controller\\GenericPreferencesController',
+#         static fn ($c) => new GenericPreferencesController(appName: 'openconnector', ...)
+#     );
+#
+# The class resolves at request time and has no file here — the same
+# legitimate absence `_apphost_serves` already covers, arrived at a different
+# way. The slug list could not see it: it is keyed on the five slugs
+# Bootstrap aliases (`preferences`), and this route is named
+# `genericPreferences`, so gate-14 called a working endpoint unreachable.
+#
+# Deliberately NOT a wildcard, and deliberately not "the app adopts AppHost,
+# so absences are fine". The evidence required is the exact fully-qualified
+# class name appearing as a literal within a few lines of a registerService
+# call — i.e. this repository can be shown to bind that specific name. A
+# controller that is simply missing still fails, which is the invariant.
+# ---------------------------------------------------------------------------
+_di_binds_controller() {
+    local _p="$1"
+    [ -f lib/AppInfo/Application.php ] || return 1
+
+    # lib/Controller/Sub/FooController.php -> Sub\FooController
+    local _rel="${_p#lib/Controller/}"
+    _rel="${_rel%.php}"
+    local _cls="${_rel//\//\\}"
+
+    # The app's own namespace, from its own file: `namespace OCA\<App>\AppInfo;`
+    local _app_ns
+    _app_ns=$(grep -m1 -oE '^namespace[[:space:]]+OCA\\[A-Za-z0-9_]+' lib/AppInfo/Application.php \
+        | awk '{print $2}')
+    [ -n "${_app_ns}" ] || return 1
+
+    # In PHP source the literal carries escaped backslashes.
+    local _fqcn="${_app_ns}\\Controller\\${_cls}"
+    local _needle="${_fqcn//\\/\\\\}"
+
+    # Through the environment, NOT `awk -v`: -v runs escape processing over the
+    # value, so the `\\` pairs this needle is made of arrive as single
+    # backslashes and never match the PHP literal. Silently — the helper just
+    # answers "no such binding" for every controller, which reads exactly like
+    # a correct verdict.
+    _HYDRA_DI_NEEDLE="${_needle}" awk '
+        BEGIN { needle = ENVIRON["_HYDRA_DI_NEEDLE"] }
+        /registerService(Alias)?[[:space:]]*\(/ { window = 6 }
+        window > 0 {
+            if (index($0, needle) > 0) { found = 1; exit }
+            window--
+        }
+        END { exit(found ? 0 : 1) }
+    ' lib/AppInfo/Application.php
+}
+
+# ---------------------------------------------------------------------------
 # _ctrl_path_from_name <route-slug> — the file a routed `controller#method`
 # name resolves to. Handles the three shapes Nextcloud accepts:
 #
@@ -918,7 +980,7 @@ if [ -f appinfo/routes.php ]; then
             [ -n "${ctrl:-}" ] || continue
             path=$(_ctrl_path_from_name "${ctrl}")
             if [ ! -f "$path" ]; then
-                if _apphost_serves "${ctrl}"; then
+                if _apphost_serves "${ctrl}" || _di_binds_controller "${path}"; then
                     echo "${ctrl}#${method} — served by the OpenRegister AppHost generic controller (ADR-040); its auth attribute lives in the openregister package and is NOT visible from this repository" >> "${_ra_unresolved_log}"
                 else
                     echo "${ctrl}#${method} — ${path} is not present in this repository; controller class UNRESOLVED (see gate-14, which owns route reachability)" >> "${_ra_unresolved_log}"
@@ -1469,10 +1531,13 @@ if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
                 # ReflectionException 500 at request time — precisely
                 # invariant 2, one step earlier than a missing method.
                 #
-                # ADR-040 AppHost generics are the ONE legitimate absence:
-                # Bootstrap::register() binds those class names in the DI
-                # container, so the route resolves with no file on disk.
+                # ADR-040 AppHost generics are the legitimate absence: the
+                # class name is bound in the DI container, so the route
+                # resolves with no file on disk. Two ways in — Bootstrap
+                # aliasing one of its five generics, or the leaf registering
+                # the generic itself under the standard controller name.
                 _apphost_serves "${_ctrl}" && continue
+                _di_binds_controller "${_path}" && continue
                 echo "${_path} route='${_ctrl}#${_method}' rule=controller-class-not-found" >> "${_rr_log}"
                 continue
             fi
