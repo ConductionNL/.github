@@ -246,7 +246,24 @@ def has_anchor(md_path: str, fragment: str) -> bool:
     """True when *fragment* names a heading or task item in *md_path*."""
     frag_slug = slugify(fragment)
     frag_alt = slugify(re.sub(r'^task-', '', fragment))
-    frags = (frag_slug, frag_alt)
+    # The fragment VERBATIM, alongside its slugified forms.
+    #
+    # `heading_aliases` already produces both spellings of a heading — the
+    # kebab one and the one GitHub actually publishes — but the fragment was
+    # being pushed through `slugify()` first, and that rewrites `_` to `-`.
+    # A tag copied from a real GitHub link therefore stopped matching the
+    # gh alias it was copied FROM:
+    #
+    #   heading   ### Requirement: Trace-scoped call correlation via
+    #                 call_log.sessionId (REQ-011)
+    #   gh alias  …-via-call_logsessionid-req-011      ← what GitHub links to
+    #   fragment  …-via-call_logsessionid-req-011      ← what the author wrote
+    #   slugified …-via-call-logsessionid-req-011      ← what was compared
+    #
+    # which matches neither alias: not the gh one (underscore rewritten) and
+    # not the kebab one (`call-log-sessionid`, split at the underscore).
+    # Reported as "anchor not found" on a tag whose link works.
+    frags = (frag_slug, frag_alt, fragment.lower())
     pos_m = re.fullmatch(r'(?:task-)?(\d+)', fragment)
     positional = int(pos_m.group(1)) if pos_m else None
     item_count = 0

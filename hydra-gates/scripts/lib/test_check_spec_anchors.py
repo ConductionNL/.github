@@ -379,6 +379,52 @@ class PreservedBehaviour(unittest.TestCase):
         self.assertIn("anchor not found", findings[0])
 
 
+class FragmentCopiedFromAGitHubLink(unittest.TestCase):
+    """A tag copied from a real GitHub link must resolve.
+
+    ``heading_aliases`` already emits both spellings of a heading — the kebab
+    one and the one GitHub publishes — but the FRAGMENT was pushed through
+    ``slugify()`` before comparison, and that rewrites ``_`` to ``-``. So a
+    fragment matched neither alias: not the gh one (its underscore had been
+    rewritten) and not the kebab one (which splits at the underscore).
+    Observed on openconnector ``SynchronizationService`` (2026-08-07).
+    """
+
+    MD = (
+        "# HTTP call engine\n\n"
+        "### Requirement: Trace-scoped call correlation via call_log.sessionId (REQ-011)\n\n"
+        "Body.\n"
+    )
+
+    def test_the_github_spelling_resolves(self):
+        # What GitHub links to: underscore kept, dot dropped.
+        self.assertTrue(_anchor(
+            self.MD,
+            "requirement-trace-scoped-call-correlation-via-call_logsessionid-req-011",
+        ))
+
+    def test_the_kebab_spelling_still_resolves(self):
+        self.assertTrue(_anchor(
+            self.MD,
+            "requirement-trace-scoped-call-correlation-via-call-log-sessionid-req-011",
+        ))
+
+    def test_a_near_miss_does_not_resolve(self):
+        # The control. Accepting the raw fragment must not become "accept any
+        # fragment that shares a prefix" — this one names a heading the file
+        # does not have.
+        self.assertFalse(_anchor(
+            self.MD,
+            "requirement-trace-scoped-call-correlation-via-call_logrequestid-req-011",
+        ))
+
+    def test_an_underscore_fragment_against_a_file_without_it_does_not_resolve(self):
+        self.assertFalse(_anchor(
+            "# Other\n\n### Requirement: Something else entirely (REQ-012)\n",
+            "requirement-trace-scoped-call-correlation-via-call_logsessionid-req-011",
+        ))
+
+
 class GateIsNotBlind(unittest.TestCase):
     """One consolidated demonstration that the gate still has teeth.
 
