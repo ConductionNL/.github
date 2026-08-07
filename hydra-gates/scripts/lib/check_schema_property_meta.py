@@ -241,6 +241,33 @@ def _check_property(file_path, schema_name, prop_path, prop, line, findings):
     if set(prop.keys()) <= {"$ref"}:
         return
 
+    # An ADR-037 overlay fragment property — same reasoning as the $ref case
+    # above, one step further.
+    #
+    # `lib/Settings/register.d/99-source-secrets-writeonly.json` exists to
+    # deep-merge ONE flag onto a property the base register already declares:
+    #
+    #     "apikey": { "writeOnly": true }
+    #
+    # It declares no type, no shape, no members — the base register owns all
+    # of that, including the title and description. Demanding metadata here
+    # forces every fragment to restate the base's prose, and duplicated prose
+    # drifts: the fragment's copy goes stale the moment the base is edited,
+    # and neither copy is then trustworthy.
+    #
+    # The test is structural, not path-based: a property is an overlay when it
+    # DECLARES nothing (no type/shape/members) and DOCUMENTS nothing. A
+    # property carrying a title but no description still fails — it is trying
+    # to declare, and half its metadata is genuinely missing.
+    _DECLARING = {
+        "type", "properties", "items", "enum", "format",
+        "$ref", "oneOf", "anyOf", "allOf", "const",
+    }
+    if not (_DECLARING & set(prop.keys())) and not (
+        prop.get("title") or prop.get("description")
+    ):
+        return
+
     title = prop.get("title")
     desc = prop.get("description")
     missing = []
