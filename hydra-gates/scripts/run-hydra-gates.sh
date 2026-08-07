@@ -647,6 +647,43 @@ _fail() {
 }
 _pass() { echo "[gate-$1] $2: PASS"; _EMITTED_GATES="${_EMITTED_GATES}$1 "; }
 
+# _optout_text — every place a reason-bearing `[hydra-gate-<name> exclude]` tag
+# may legitimately be written, as one stream to grep.
+#
+# WHY THIS EXISTS
+# ---------------
+# Each opt-out used to inline two lookups, and on a pull_request BOTH read
+# nothing:
+#
+#   - `${HYDRA_GATE_PR_BODY}` was never exported by the caller workflow, so the
+#     first was always an empty string
+#   - `git log -1` reads the checked-out commit, and for a pull_request that is
+#     GitHub's synthetic MERGE commit (`Merge <sha> into <sha>`) — never a
+#     message any author wrote
+#
+# So every reason-bearing opt-out in this file was unreachable on a PR, which is
+# the only place they matter. Measured on hermiq#162: the tag was placed in the
+# PR body AND in an explicit head commit, and the finding count did not move
+# either time.
+#
+# Centralised so the three call sites cannot drift apart again, and so a fourth
+# gate adding an opt-out inherits the fixed behaviour rather than copying the
+# broken pair of lines.
+_optout_text() {
+    [ -n "${HYDRA_GATE_PR_BODY:-}" ] && printf '%s\n' "${HYDRA_GATE_PR_BODY}"
+
+    # The author's own head commit, when the caller told us which it is. Guarded
+    # on rev-parse because a shallow checkout may not contain it — falling back
+    # is better than emitting nothing.
+    if [ -n "${HYDRA_GATE_HEAD_SHA:-}" ] \
+        && git rev-parse --quiet --verify "${HYDRA_GATE_HEAD_SHA}^{commit}" >/dev/null 2>&1; then
+        git log -1 --pretty=%B "${HYDRA_GATE_HEAD_SHA}" 2>/dev/null
+        return 0
+    fi
+
+    git log -1 --pretty=%B 2>/dev/null
+}
+
 # _skip <n> <name> <category> <reason> — the gate did NOT run. Distinct from
 # PASS on purpose: the gate inspected NOTHING.
 #
@@ -3597,8 +3634,7 @@ if [ "${SCOPE_TO_DIFF}" = "1" ] && [ -n "${BASE_REF}" ]; then
         # Check for opt-out in PR body or head commit message
         _scht_optout_re='\[hydra-gate-security-change-has-tests exclude\][[:space:]]+.{20,}'
         _scht_optout=""
-        [ -n "${HYDRA_GATE_PR_BODY:-}" ] && echo "${HYDRA_GATE_PR_BODY:-}" | grep -qE "${_scht_optout_re}" && _scht_optout="1"
-        [ -z "${_scht_optout}" ] && git log -1 --pretty=%B 2>/dev/null | grep -qE "${_scht_optout_re}" && _scht_optout="1"
+        _optout_text | grep -qE "${_scht_optout_re}" && _scht_optout="1"
         if [ -z "${_scht_optout}" ]; then
             printf "%s\n" "${_scht_sec}" >> "${_scht_log}"
         fi
@@ -3647,8 +3683,7 @@ if [ "${SCOPE_TO_DIFF}" = "1" ] && [ -n "${BASE_REF}" ]; then
             # Check for opt-out
             _csrf_optout_re='\[hydra-gate-csrf-cochange exclude\][[:space:]]+.{20,}'
             _csrf_optout=""
-            [ -n "${HYDRA_GATE_PR_BODY:-}" ] && echo "${HYDRA_GATE_PR_BODY:-}" | grep -qE "${_csrf_optout_re}" && _csrf_optout="1"
-            [ -z "${_csrf_optout}" ] && git log -1 --pretty=%B 2>/dev/null | grep -qE "${_csrf_optout_re}" && _csrf_optout="1"
+            _optout_text | grep -qE "${_csrf_optout_re}" && _csrf_optout="1"
             if [ -z "${_csrf_optout}" ]; then
                 echo "@NoCSRFRequired removed but no frontend CSRF-signal added in diff:" >> "${_csrf_log}"
                 echo "${_csrf_removed}" >> "${_csrf_log}"
@@ -3747,8 +3782,28 @@ for fp in files:
             continue
         # Heuristic: if the method body ALREADY has try/catch of one of the tracked exceptions,
         # or its docblock declares @throws for one of them, accept it as intentionally handled.
-        try_ok = re.search(r'catch\s*\(\s*[\\\w]*(' + '|'.join(TRACKED) + r')\b', body)
-        throws_ok = any(x in (m['docblock'] or '') for x in TRACKED)
+        #
+        # `\Throwable` and `\Exception` count too. They are SUPERSETS of every
+        # name in TRACKED, so a method catching one of them handles all nine and
+        # more. Rejecting them reported the broadest possible translation as no
+        # translation at all — measured on hermiq#162, where three controller
+        # methods each caught \Throwable, returned a translated JSON error and
+        # logged the cause, and were still reported as unhandled.
+        #
+        # The cost of that false positive is not the red check. It is that the
+        # finding pushes the author toward the NARROWER handler: catch the one
+        # named exception, leave everything else to become a framework 500 with
+        # a stack trace — which for a #[NoAdminRequired] method reaches a
+        # non-admin. A gate that rejects the stronger guarantee teaches people
+        # to write the weaker one.
+        _CATCH_ALL = ['Throwable', 'Exception']
+        try_ok = re.search(
+            r'catch\s*\(\s*[\\\w]*(' + '|'.join(TRACKED + _CATCH_ALL) + r')\b',
+            body,
+        )
+        # Same reasoning on the docblock side: `@throws \Throwable` declares a
+        # superset of the tracked names, so it is at least as informative.
+        throws_ok = any(x in (m['docblock'] or '') for x in TRACKED + _CATCH_ALL)
         if try_ok or throws_ok:
             continue
         # Otherwise: if any SERVICE CALL invokes a known-throwy shape, log the
@@ -3787,8 +3842,7 @@ fi
 if [ -s "${_cxt_log}" ]; then
     _cxt_optout_re='\[hydra-gate-controller-exception-translation exclude\][[:space:]]+.{20,}'
     _cxt_optout=""
-    [ -n "${HYDRA_GATE_PR_BODY:-}" ] && echo "${HYDRA_GATE_PR_BODY:-}" | grep -qE "${_cxt_optout_re}" && _cxt_optout="1"
-    [ -z "${_cxt_optout}" ] && git log -1 --pretty=%B 2>/dev/null | grep -qE "${_cxt_optout_re}" && _cxt_optout="1"
+    _optout_text | grep -qE "${_cxt_optout_re}" && _cxt_optout="1"
     [ -n "${_cxt_optout}" ] && : > "${_cxt_log}"
 fi
 set +e

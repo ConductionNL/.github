@@ -3546,6 +3546,26 @@ jobs:
         id: gates
         env:
           HYDRA_GATE_BASE_REF: ${{ steps.base.outputs.base }}
+          # Several gates document a reason-bearing opt-out —
+          # `[hydra-gate-<name> exclude] <reason>` — and read it from THIS
+          # variable, falling back to `git log -1`. Neither reached anything:
+          #
+          #   - this variable was never set, so the first path was always empty
+          #   - on a pull_request, actions/checkout checks out the synthetic
+          #     MERGE commit, whose message is `Merge <sha> into <sha>`, so the
+          #     fallback inspected a message no author wrote
+          #
+          # So every reason-bearing opt-out in the suite was unreachable on a
+          # PR — the one place they are needed. Measured on hermiq#162: the tag
+          # was placed in the PR body AND in an explicit head commit, and the
+          # finding count did not move either time.
+          #
+          # `github.event.pull_request.body` is null on a push, which is
+          # correct: the fallback then reads the real pushed commit.
+          HYDRA_GATE_PR_BODY: ${{ github.event.pull_request.body }}
+          # The author's own head commit, so the fallback stops reading the
+          # merge commit. Empty on a push, where `git log -1` is already right.
+          HYDRA_GATE_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -u
           ARGS="--app-dir ${GITHUB_WORKSPACE}/app"
