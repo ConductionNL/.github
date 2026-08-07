@@ -1863,10 +1863,17 @@ if [ -d openspec/specs ] || [ -d tests/e2e ]; then
         _skip 19 "e2e-coverage" wiring "check_e2e_coverage.py not found at ${_e2e_lib_dir} — no spec scenario was inspected; @e2e traceability (ADR-020) is UNVERIFIED by this run."
     fi
     if [ "${_e2e_ran}" -eq 1 ]; then
+        # Prefer the count the helper PRINTED over its exit status. An exit
+        # code is one byte: 266 findings left as 10, and 256 findings would
+        # have left as 0 — reported as PASS. The helper clamps its status now,
+        # but the honest number is the one in its summary line.
+        _e2e_count=$(grep -oE 'FAIL — [0-9]+ scenario' "${_e2e_log}" 2>/dev/null \
+            | tail -1 | grep -oE '[0-9]+' || true)
+        [ -z "${_e2e_count}" ] && _e2e_count="${_e2e_fail}"
         if [ "${_e2e_fail}" -eq 0 ]; then
             _pass 19 "e2e-coverage"
         else
-            _fail 19 "e2e-coverage" "${_e2e_fail} scenario(s) missing @e2e — see ${_e2e_log}"
+            _fail 19 "e2e-coverage" "${_e2e_count} scenario(s) missing @e2e — see ${_e2e_log}"
         fi
     fi
 fi
@@ -3744,10 +3751,31 @@ for fp in files:
         throws_ok = any(x in (m['docblock'] or '') for x in TRACKED)
         if try_ok or throws_ok:
             continue
-        # Otherwise: if any service call inside the body invokes a known-throwy shape,
-        # log the method. Restricted to OR-specific suffixed names to keep false
-        # positives low; full symbol resolution is out of scope for this gate.
-        risky = re.search(r'\b(deleteObject|findObject|saveObject|updateObject|loadObject|get(One|Object|Register|Schema))\b', body)
+        # Otherwise: if any SERVICE CALL invokes a known-throwy shape, log the
+        # method. Matched against `service_calls` — the `$this->prop->name(`
+        # receivers collected above — and NOT against free text in the body.
+        #
+        # The free-text form asked two unrelated questions and ANDed them:
+        # "does this method call any service at all?" and "does one of these
+        # words appear anywhere?". `getObject` is on the list because
+        # OpenRegister's ObjectService HAS a getObject() — but ObjectEntity has
+        # one too, and that one is a plain array accessor that throws nothing.
+        # So `$entity->getObject()`, which is how every controller reads an
+        # object it already holds, counted as a risky service call. On
+        # openconnector that was 9 of 12 findings, each pointing at a line
+        # doing nothing riskier than reading a property off an entity in hand.
+        #
+        # `find` joins the list at the same time: ObjectService::find()
+        # documents `@throws Exception If the object is not found`, and reading
+        # one object by id is the commonest way a controller meets that throw.
+        # `findAll` deliberately does NOT join it — that one documents no
+        # throws, and adding it would flag every list endpoint in the fleet,
+        # trading one set of false positives for another.
+        RISKY = re.compile(
+            r'^(deleteObject|findObject|find|saveObject|updateObject'
+            r'|loadObject|get(One|Object|Register|Schema))$'
+        )
+        risky = any(RISKY.match(name) for name in service_calls)
         if risky:
             with open(log_path, 'a', encoding='utf-8') as g:
                 g.write(f"{fp}:{m['start_line']}: {m['name']}() calls a service method that may throw a tracked exception, "

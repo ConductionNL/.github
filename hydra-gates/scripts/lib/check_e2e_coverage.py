@@ -767,7 +767,14 @@ def run_gate(app_dir: Path) -> int:
         print(
             f"[gate-{GATE_NUM}] e2e-coverage: FAIL — {count} scenario(s) without a running e2e test"
         )
-    return count
+    # An exit code is one byte. Returning the raw count means 266 leaves as
+    # 10, and — the case that matters — a count of exactly 256 leaves as 0,
+    # which the caller reads as PASS on 256 uncovered scenarios.
+    #
+    # The printed summary above carries the true number and is what the bash
+    # gate now reports; this is only the pass/fail signal, so it is clamped
+    # into the byte and never allowed to wrap to zero while findings exist.
+    return min(count, 255)
 
 
 # ---------------------------------------------------------------------------
