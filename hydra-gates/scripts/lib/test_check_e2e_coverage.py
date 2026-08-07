@@ -536,6 +536,50 @@ class GateModeTest(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertIn("PASS", buf.getvalue())
 
+    def test_the_status_never_wraps_to_zero_while_findings_exist(self):
+        # An exit status is one byte. Returning the raw count meant 266
+        # findings left as 10 — and 256 findings left as 0, which the bash
+        # gate reads as PASS. Any multiple of 256 was a silent green.
+        _write(self.root, "README.md", "# app\n")
+        base = self._commit("base")
+        spec = ["# S\n\n## Requirements\n\n### Requirement: R\n"]
+        for i in range(256):
+            spec.append(f"\n#### Scenario: scenario number {i}\n\n- **WHEN** x happens\n")
+        _write(self.root, "openspec/specs/s/spec.md", "".join(spec))
+        self._commit("add spec")
+
+        os.environ["HYDRA_GATE_BASE_REF"] = base
+        try:
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                rc = cec.run_gate(self.root)
+        finally:
+            del os.environ["HYDRA_GATE_BASE_REF"]
+
+        self.assertNotEqual(rc, 0, "256 findings must not exit 0")
+        self.assertLessEqual(rc, 255, "an exit status is one byte")
+        # The TRUE number still has to reach the reader, which is why the
+        # bash gate reports the printed summary rather than the status.
+        self.assertIn("256 scenario(s) without a running e2e test", buf.getvalue())
+
+    def test_the_clamp_does_not_turn_a_clean_spec_into_a_failure(self):
+        # THE CONTROL for the clamp.
+        _write(self.root, "README.md", "# app\n")
+        base = self._commit("base")
+        _write(self.root, "openspec/specs/s/spec.md",
+               "# S\n\n## Requirements\n\n### Requirement: R\n\n"
+               "#### Scenario: only one\n\n- **WHEN** x happens\n"
+               "- @e2e exclude backend only — covered by PHPUnit\n")
+        self._commit("add spec")
+
+        os.environ["HYDRA_GATE_BASE_REF"] = base
+        try:
+            with redirect_stdout(io.StringIO()):
+                rc = cec.run_gate(self.root)
+        finally:
+            del os.environ["HYDRA_GATE_BASE_REF"]
+        self.assertEqual(rc, 0)
+
     def test_fail_uncovered_scenario_in_diff(self):
         # Baseline: nothing
         _write(self.root, "README.md", "# app\n")
