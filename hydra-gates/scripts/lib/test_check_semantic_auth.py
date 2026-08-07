@@ -20,6 +20,20 @@ actual defect, a `#[PublicPage]` method that tests the SESSION.
 
 Both ways, in the same class: the self-authenticating shapes must go quiet,
 and the session-dependent shape must still fire.
+
+2026-08-07 — three more defects, and the classes guarding them:
+
+* :class:`AdminGuardsWithArguments` — the `#[NoAdminRequired]` rule matched
+  `isAdmin` only through `[^)]*`, and `isAdmin($uid) === false` puts a `)`
+  between the two. It had therefore never matched a real guard: 25 findings
+  across 10 repos were invisible while the gate reported PASS.
+* :class:`ProseDoesNotEarnTheExemption` — the self-auth exemption was
+  matched against raw source, so a docblock describing a credential check
+  exempted a method performing none. The gate-64 failure mode.
+* :class:`StringLiteralsStillCount` — and the fix for the above must NOT
+  extend to string literals. `'Bearer '`, `'HTTP_AUTHORIZATION'` and the
+  header name passed to getHeader() are literals in every real handler.
+  These two classes are each other's control.
 """
 from __future__ import annotations
 
@@ -229,6 +243,232 @@ class NoAdminRequiredRuleUnchanged(unittest.TestCase):
     public function index(): JSONResponse
     {
         return new JSONResponse($this->service->listForCurrentUser());
+    }
+"""
+        self.assertEqual(_scan(php), [])
+
+
+class AdminGuardsWithArguments(unittest.TestCase):
+    """`isAdmin()` takes a UID, and the rule could not read past the `)`.
+
+    `\\bisAdmin\\b[^)]*===\\s*false` cannot span `isAdmin($this->userId)`,
+    which is how the guard is written everywhere. The rule above
+    (``NoAdminRequiredRuleUnchanged``) passed only because its fixture calls
+    `requireAdmin()`, matched by a different pattern — so the whole
+    `if (...isAdmin...) { deny }` branch had never fired on real code.
+    """
+
+    def test_tp_is_admin_with_a_uid_argument_fires(self):
+        php = CLASS % """
+    #[NoAdminRequired]
+    public function trust(): JSONResponse
+    {
+        if ($this->groupManager->isAdmin($this->userId) === false) {
+            return new JSONResponse(['error' => 'admins only'], Http::STATUS_FORBIDDEN);
+        }
+        return new JSONResponse($this->service->getTrustConfig());
+    }
+"""
+        self.assertEqual(_rules(_scan(php)),
+                         ["no-admin-required-annotation-with-admin-body"])
+
+    def test_tp_yoda_comparison_fires(self):
+        php = CLASS % """
+    #[NoAdminRequired]
+    public function purge(): JSONResponse
+    {
+        if (false === $this->groupManager->isAdmin($this->userId)) {
+            throw new OCSForbiddenException('admins only');
+        }
+        return new JSONResponse($this->cache->purgeAll());
+    }
+"""
+        self.assertEqual(_rules(_scan(php)),
+                         ["no-admin-required-annotation-with-admin-body"])
+
+    def test_fp_a_non_admin_predicate_is_not_a_finding(self):
+        # The guard has to be about being an admin, not merely an `if` that
+        # returns 403. Loosening the condition matcher must not turn every
+        # domain check into an attribute mismatch.
+        php = CLASS % """
+    #[NoAdminRequired]
+    public function publish(int $id): JSONResponse
+    {
+        if ($this->publications->isReviewed($id) === false) {
+            return new JSONResponse(['error' => 'not reviewed yet'], Http::STATUS_FORBIDDEN);
+        }
+        return new JSONResponse($this->publications->publish($id));
+    }
+"""
+        self.assertEqual(_scan(php), [])
+
+
+class PasswordsAreCredentialsToo(unittest.TestCase):
+    """A login endpoint is the self-authenticating shape with a password.
+
+    openconnector UserController::login: #[PublicPage] by necessity — the
+    caller has no session yet, that is what it is asking for — resolving
+    $username/$password from the request and calling checkPassword() in the
+    body, reported as an unsourced denial by a token-only pattern list.
+    """
+
+    def test_fp_login_is_not_a_finding(self):
+        php = CLASS % """
+    #[NoCSRFRequired]
+    #[PublicPage]
+    public function login(): JSONResponse
+    {
+        $data        = $this->request->getParams();
+        $credentials = $this->security->validateLoginCredentials($data);
+        $username    = $credentials['username'];
+        $password    = $credentials['password'];
+
+        $user = $this->userManager->checkPassword($username, $password);
+        if ($user === false) {
+            $this->security->recordFailedLoginAttempt($username, $this->clientIp());
+            return new JSONResponse(['error' => 'invalid credentials'], Http::STATUS_UNAUTHORIZED);
+        }
+        return new JSONResponse(['uid' => $user->getUID()]);
+    }
+"""
+        self.assertEqual(_scan(php), [])
+
+    def test_fp_password_protected_share_is_not_a_finding(self):
+        php = CLASS % """
+    #[PublicPage]
+    public function unlock(string $slug): JSONResponse
+    {
+        $folder = $this->folders->findBySlug($slug);
+        if (password_verify((string) $this->request->getParam('password'), $folder->getPasswordHash()) === false) {
+            return new JSONResponse(['error' => 'wrong password'], Http::STATUS_UNAUTHORIZED);
+        }
+        return new JSONResponse($this->folders->listing($folder));
+    }
+"""
+        self.assertEqual(_scan(php), [])
+
+    def test_fp_a_helper_resolved_token_passed_by_name_is_not_a_finding(self):
+        # hermiq McpRunController::handle / EgressAuthorizeController::authorize.
+        # The credential comes from a helper (`bearerToken()`) and is handed
+        # over as a named argument (`token:`). Neither is one of the verbs the
+        # pattern list started with — the ONLY thing that used to match was the
+        # word "bearer" in the method's own comments, so this pair is what
+        # would silently break if comment-stripping landed on its own.
+        php = CLASS % """
+    #[PublicPage]
+    #[NoCSRFRequired]
+    public function handle(): JSONResponse
+    {
+        $binding = $this->runTokenService->verify(token: $this->bearerToken());
+        if ($binding === null) {
+            return new JSONResponse(['error' => 'invalid_token'], Http::STATUS_UNAUTHORIZED);
+        }
+        return new JSONResponse($this->mcp->dispatch($binding, $this->readRawBody()));
+    }
+"""
+        self.assertEqual(_scan(php), [])
+
+
+class ProseDoesNotEarnTheExemption(unittest.TestCase):
+    """Only executable code counts as authenticating a credential.
+
+    The gate-64 shape: a checker that reads comments will accept a
+    commented-out call as a real one, and a docblock as a check.
+    """
+
+    def test_tp_a_docblock_describing_a_token_check_still_fires(self):
+        php = CLASS % """
+    /**
+     * Download an export.
+     *
+     * Callers must present a signed capability token in the Authorization
+     * header; it is compared against the stored secret with hash_equals()
+     * before any payload is returned.
+     */
+    #[PublicPage]
+    public function download(int $id): JSONResponse
+    {
+        if ($this->exports->isPublished($id) === false) {
+            return new JSONResponse(['error' => 'not available'], Http::STATUS_FORBIDDEN);
+        }
+        return new JSONResponse($this->exports->payload($id));
+    }
+"""
+        self.assertEqual(_rules(_scan(php)),
+                         ["public-page-annotation-with-unsourced-denial"])
+
+    def test_tp_a_commented_out_credential_check_still_fires(self):
+        php = CLASS % """
+    #[PublicPage]
+    public function receive(): JSONResponse
+    {
+        // TODO re-enable once the partner rotates their key:
+        // $presentedToken = (string) $this->request->getHeader('X-Api-Key');
+        // if (hash_equals($this->expectedKey(), $presentedToken) === false) {
+        if ($this->imports->isAcceptingUploads() === false) {
+            return new JSONResponse(['error' => 'closed'], Http::STATUS_UNAUTHORIZED);
+        }
+        return new JSONResponse([], 202);
+    }
+"""
+        self.assertEqual(_rules(_scan(php)),
+                         ["public-page-annotation-with-unsourced-denial"])
+
+
+class StringLiteralsStillCount(unittest.TestCase):
+    """The control on ProseDoesNotEarnTheExemption.
+
+    Comments go; literals stay. `'Bearer '`, `'HTTP_AUTHORIZATION'` and the
+    header name handed to getHeader() live in literals in every real
+    handler, so blanking them would manufacture exactly the false positives
+    this gate was rewritten to stop.
+    """
+
+    def test_fp_a_bearer_prefix_stripped_from_a_literal_is_not_a_finding(self):
+        php = CLASS % """
+    #[PublicPage]
+    public function ingest(): JSONResponse
+    {
+        $header    = (string) $this->request->getHeader('Authorization');
+        $presented = str_replace('Bearer ', '', $header);
+
+        if ($this->apiKeys->authorize($presented) === false) {
+            return new JSONResponse(['error' => 'unauthorized'], Http::STATUS_UNAUTHORIZED);
+        }
+        return new JSONResponse([], 202);
+    }
+"""
+        self.assertEqual(_scan(php), [])
+
+    def test_fp_the_server_superglobal_header_key_is_not_a_finding(self):
+        php = CLASS % """
+    #[PublicPage]
+    public function ping(): JSONResponse
+    {
+        $presented = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+        if (hash_equals($this->expectedKey(), (string) $presented) === false) {
+            return new JSONResponse(['error' => 'unauthorized'], Http::STATUS_UNAUTHORIZED);
+        }
+        return new JSONResponse(['pong' => true]);
+    }
+"""
+        self.assertEqual(_scan(php), [])
+
+    def test_fp_a_double_slash_inside_a_url_does_not_swallow_the_method(self):
+        # If `//` in a literal were read as a comment start, everything after
+        # it — including the credential check — would be blanked and the
+        # method would be reported as denying on nothing.
+        php = CLASS % """
+    #[PublicPage]
+    public function callback(): JSONResponse
+    {
+        $issuer    = 'https://idp.example.org/realms/demo';
+        $presented = (string) $this->request->getHeader('Authorization');
+
+        if ($this->oidc->verifyIdToken($presented, $issuer) === false) {
+            return new JSONResponse(['error' => 'unauthorized'], Http::STATUS_UNAUTHORIZED);
+        }
+        return new JSONResponse(['issuer' => $issuer]);
     }
 """
         self.assertEqual(_scan(php), [])
