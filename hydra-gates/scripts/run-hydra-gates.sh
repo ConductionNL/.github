@@ -3121,24 +3121,90 @@ fi
 
 
 # ---------------------------------------------------------------------------
-# Gate 38: Skip-link — every app entry-point Vue (App.vue / *Root.vue) or
-# admin/settings PHP template must include a skip-to-content affordance,
-# either via NC's shell (typically inherited by mounting under <NcContent>)
-# or via an explicit `<a href="#main">` / `<a href="#content">` link as
-# the first focusable element. Per WCAG 2.2 AA SC 2.4.1 (Bypass Blocks).
+# Gate 38: Skip-link — every app PAGE ROOT must include a skip-to-content
+# affordance, either via NC's shell (typically inherited by mounting under
+# <NcContent>) or via an explicit `<a href="#main">` / `<a href="#content">`
+# link as the first focusable element. Per WCAG 2.2 AA SC 2.4.1 (Bypass
+# Blocks).
 #
-# Heuristic: a file is in scope if it's a top-level Vue mount root (App.vue
-# / **/AdminRoot.vue / **/Root.vue) OR a settings admin template
-# (templates/settings/*.php). We pass if the file either renders
-# `<NcContent>` / `<NcAppContent>` (which inherits NC's skip-link) OR
-# contains a literal `skip-` link / `skip-to-content` reference.
+# A PAGE ROOT IS NOT A MOUNT POINT (#214 / #216 / #227)
+# ----------------------------------------------------
+# SC 2.4.1 is a property of a DOCUMENT: "a mechanism is available to bypass
+# blocks of content repeated on multiple WEB PAGES". Only the thing that owns
+# the document can satisfy it. Two shapes in this fleet own no document, and
+# this gate was reporting all of them:
+#
+#   templates/**/*.php   Nextcloud's `Template` renderer SUBSTITUTES an app
+#                        template into core's own page. Every one of the 30
+#                        PHP templates in this fleet is a fragment — measured:
+#                        NOT ONE emits <html>, <head> or <body>. The typical
+#                        body is literally `<div id="procest-settings"></div>`,
+#                        a Vue mount point. The skip link for that page is
+#                        emitted by NC core, above this file's first byte.
+#                        8 templates across 6 apps failed this way.
+#
+#   Admin / personal     `AdminRoot.vue` is rendered INTO core's Settings
+#   settings roots       page, inside the section core already built. It is a
+#                        <CnAdminSettingsShell> — a stack of
+#                        <NcSettingsSection>s — not an app shell. #227: these
+#                        surfaces cannot own a page shell, so they cannot own
+#                        a skip link either.
+#
+# In both cases the gate's implied remedy was to ADD a skip link to an element
+# that is not the page root: a second "skip to content" anchor pointing into
+# the middle of a page that already has one, announced to every screen-reader
+# user ahead of core's real one. A WCAG 2.4.1 REGRESSION demanded by a WCAG
+# 2.4.1 gate, which is why the finding could not be closed honestly.
+#
+# WHAT REMAINS IN SCOPE, AND STILL FAILS
+# --------------------------------------
+#   - src/App.vue, src/views/App.vue        — the app's own shell
+#   - **/*Root.vue that is NOT a settings surface
+#   - a PHP template that DOES own the document, i.e. emits <html>/<body>
+#     (a standalone / PublicPage template rendered outside core's shell). No
+#     fleet app has one today; the gate is ready for the first that does, and
+#     the fixture pair in scripts/test-fixtures/monitoring-skiplink proves it
+#     still fires. Note this WIDENS the PHP arm: it used to look only at
+#     templates/settings/, and now asks every app template the question.
 #
 # References:
 #   - openspec/architecture/wcag-coverage.md SC 2.4.1
+#   - ConductionNL/.github#214, #216, #227
 # ---------------------------------------------------------------------------
-if [ -d src ] || [ -d templates ]; then
+if [ -d src ] || [ -d templates ] || [ -d appinfo/templates ]; then
     _sl_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-skip-link.log
     : > "${_sl_log}"
+    # A Vue root that is a SETTINGS SURFACE, not a page root. Two independent
+    # signals, because neither alone covers the fleet:
+    #   name  — all 8 settings roots measured across the fleet are called
+    #           AdminRoot.vue / PersonalRoot.vue / AdminSettings.vue, and 3 of
+    #           them (petstore, portaliq, openregister) are NOT under a
+    #           settings/ path, so a path rule alone would miss them.
+    #   shell — a root rendering <CnAdminSettingsShell> / <NcSettingsSection> /
+    #           <CnSettingsSection> is a stack of settings sections mounted
+    #           into core's Settings page, whatever it happens to be called.
+    _sl_is_settings_surface() {
+        local _f="$1"
+        case "${_f##*/}" in
+            AdminRoot.vue|PersonalRoot.vue|AdminSettings.vue|PersonalSettings.vue) return 0 ;;
+        esac
+        case "${_f}" in
+            */views/settings/*|*/views/admin/*|*/components/userSettings/*) return 0 ;;
+        esac
+        grep -qE '<CnAdminSettingsShell\b|<NcSettingsSection\b|<CnSettingsSection\b' "$_f" 2>/dev/null
+    }
+    # A PHP template owns the document only if it EMITS one.
+    #
+    # This is deliberately NOT a grep. The first cut of it was, and the very
+    # first fixture defeated it: that fixture's own explanatory COMMENT
+    # contained the word `<html>`, so a bare `<div id="x"></div>` mount point
+    # classified as a page root. That is the gate-64 defect verbatim — a
+    # checker that greps a string literal misses every constant and matches
+    # every comment, failing both ways at once. scripts/lib/php_template_scope.py
+    # classifies EMITTED MARKUP, with PHP regions and HTML comments removed.
+    _sl_php_owns_document() {
+        python3 "${SCRIPT_DIR}/lib/php_template_scope.py" --owns-document "$1" 2>/dev/null
+    }
     _sl_check() {
         local _f="$1"
         _in_scope "$_f" || return 0
@@ -3172,19 +3238,45 @@ if [ -d src ] || [ -d templates ]; then
     done
     while IFS= read -r _f; do
         [ -z "$_f" ] && continue
+        # #227: a settings surface is not a page root and cannot own a skip
+        # link. Skipping it is the only honest verdict — the alternative
+        # remedy regresses the page that already has one.
+        _sl_is_settings_surface "$_f" && continue
         _sl_check "$_f"
     done < <(_enum_tracked 'Root\.vue$' src)
-    if [ -d templates/settings ]; then
+    # #214 / #216: a PHP template is checked only when it owns the document.
+    # `templates/settings/` is no longer the scope — the question asked of
+    # EVERY app template is whether it emits <html>/<body>.
+    _sl_ran=1
+    if [ -d templates ] || [ -d appinfo/templates ]; then
+        _sl_helper="${SCRIPT_DIR}/lib/php_template_scope.py"
+        _sl_php=()
         while IFS= read -r _f; do
             [ -z "$_f" ] && continue
-            _sl_check "$_f"
-        done < <(find templates/settings -name '*.php' 2>/dev/null)
+            _in_scope "$_f" && _sl_php+=("$_f")
+        done < <(find templates appinfo/templates -name '*.php' 2>/dev/null)
+        if [ "${#_sl_php[@]}" -eq 0 ]; then
+            :   # nothing in scope; the verdict below describes the diff, as everywhere else.
+        elif [ ! -f "${_sl_helper}" ]; then
+            # A MISSING HELPER MUST NOT REPORT PASS (#147). Without the
+            # classifier every template silently reads as a fragment, the
+            # whole PHP arm evaporates, and the gate goes green on nothing.
+            _sl_ran=0
+            _skip 38 "skip-link" wiring "php_template_scope.py not found at ${_sl_helper} — ${#_sl_php[@]} PHP template(s) were in scope and NONE were classified; a document-owning template with no bypass mechanism (WCAG 2.4.1) is UNVERIFIED by this run."
+        else
+            for _f in "${_sl_php[@]}"; do
+                _sl_php_owns_document "$_f" || continue
+                _sl_check "$_f"
+            done
+        fi
     fi
     _sl_fail=$(wc -l < "${_sl_log}" 2>/dev/null || echo 0)
-    if [ "${_sl_fail}" -eq 0 ]; then
-        _pass 38 "skip-link"
-    else
-        _fail 38 "skip-link" "${_sl_fail} root component(s) without skip-link / <NcContent> — see ${_sl_log}"
+    if [ "${_sl_ran}" -eq 1 ]; then
+        if [ "${_sl_fail}" -eq 0 ]; then
+            _pass 38 "skip-link"
+        else
+            _fail 38 "skip-link" "${_sl_fail} page root(s) without skip-link / <NcContent> — see ${_sl_log}"
+        fi
     fi
 fi
 

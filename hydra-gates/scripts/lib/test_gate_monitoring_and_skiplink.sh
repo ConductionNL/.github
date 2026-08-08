@@ -113,6 +113,11 @@ if _run "${FIXTURES}/accidental"; then
     _expect_gate 38 FAIL "accidental: a bespoke shell with no skip link is still reported"
     _expect_log "${_SLLOG}" 'App\.vue: no <NcContent> shell' \
         "accidental: gate-38 names the root component"
+    # #214/#216 — the PHP half must keep a true positive. `standalone.php`
+    # emits <html> and <body>: it owns the document, so SC 2.4.1 is its to
+    # satisfy, and it does not.
+    _expect_log "${_SLLOG}" 'templates/standalone\.php: no <NcContent> shell' \
+        "accidental: a PHP template that OWNS the document and has no bypass link is still reported"
 fi
 
 # ---------------------------------------------------------------------------
@@ -128,6 +133,34 @@ if _run "${FIXTURES}/stated"; then
     _expect_gate 38 PASS "stated: a CnAppRoot shell counts as having NC's skip link"
     _expect_not_log "${_SLLOG}" 'App\.vue' \
         "stated: gate-38 log is empty"
+    _expect_not_log "${_SLLOG}" 'standalone\.php' \
+        "stated: a document-owning template WITH a bypass anchor is not a finding"
+fi
+
+# ---------------------------------------------------------------------------
+# 3. MOUNT POINT vs PAGE ROOT (#214 / #216 / #227).
+#
+#    These three assertions run against `accidental/` — the fixture where
+#    EVERYTHING ELSE fails. That is deliberate: asserting "not reported" in a
+#    tree where the gate reports nothing proves nothing at all. Here the gate
+#    is demonstrably firing (section 1 named App.vue and standalone.php in
+#    this same run), so an absence is a decision rather than an empty scope.
+# ---------------------------------------------------------------------------
+if _run "${FIXTURES}/accidental"; then
+    _expect_log "${_SLLOG}" 'App\.vue|standalone\.php' \
+        "mount-point control: gate-38 IS firing in this tree (positive control for the three below)"
+    _expect_not_log "${_SLLOG}" 'settings/admin\.php' \
+        "#214/#216: a fragment template (<div id=...> mount point) is not a page root"
+    _expect_not_log "${_SLLOG}" 'AdminRoot\.vue' \
+        "#227: an admin-settings surface cannot own a page shell, so it is not asked for one"
+    # And the narrowing must not have swallowed the whole PHP arm: exactly one
+    # template is named, and it is the document-owning one.
+    if [ "$(printf '%s\n' "${_SLLOG}" | grep -c '\.php:')" = "1" ]; then
+        _ok "#214/#216: exactly ONE of the two PHP templates is in scope — the one that owns the document"
+    else
+        _bad "#214/#216: expected exactly 1 .php finding, got $(printf '%s\n' "${_SLLOG}" | grep -c '\.php:')"
+        printf '%s\n' "${_SLLOG}" | sed 's/^/       /'
+    fi
 fi
 
 echo
