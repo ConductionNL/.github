@@ -861,6 +861,45 @@ _optout_text() {
 # than a default. A typo that silently resolved to `na` would be a lever for
 # making any gate's absence stop counting — which is precisely the accounting
 # hole this whole block exists to close, re-opened from the inside.
+# _a11y_markup_files — every file in this repo that ships MARKUP A USER SEES.
+#
+# WHY THIS EXISTS (.github#225)
+# ----------------------------
+# The whole accessibility family — gates 31, 32, 34, 35, 36, 37, 39, 40, 42, 43,
+# 44, 45 — enumerated `find src -name '*.vue'` and nothing else. An app that
+# renders its UI from PHP templates therefore had every one of those gates
+# iterate an empty list and report PASS.
+#
+# Measured 2026-08-08 on nldesign, which ships one `templates/settings/admin.php`
+# and a `src/` containing only `manifest.json`: one textbook true positive was
+# planted per gate — an `<img>` with no alt, a positive `tabindex`, a focusable
+# element inside `aria-hidden="true"`, an icon-only `<button>`, an unlabelled
+# `<input>`, a `<table>` with no `<th>`, "click here" link text, and the rest —
+# and ALL TWELVE GATES REPORTED PASS. The `[ -d src ]` guard passed, because
+# `src/` exists; the glob then matched nothing.
+#
+# WCAG does not care which templating language produced the DOM. Neither should
+# these gates.
+#
+# SCOPE. Only directories an app renders FROM: src/, templates/, and
+# appinfo/templates/. Deliberately NOT the repo root — nldesign carries a
+# generated `phpmetrics/*.html` report tree, and auditing build output would
+# manufacture findings nobody can act on. node_modules / vendor / dist / build /
+# coverage are excluded for the same reason.
+_a11y_markup_files() {
+    find src templates appinfo/templates -type f \
+        \( -name '*.vue' -o -name '*.php' -o -name '*.html' -o -name '*.htm' \) \
+        2>/dev/null \
+        | grep -vE '(^|/)(node_modules|vendor|dist|build|coverage|phpmetrics|\.git)/' \
+        || true
+}
+
+# The directories those files can live in — the guard that replaces `[ -d src ]`
+# for the a11y family. An app with no src/ but a templates/ still ships markup.
+_a11y_has_markup_dir() {
+    [ -d src ] || [ -d templates ] || [ -d appinfo/templates ]
+}
+
 _skip() {
     set +e   # backstop — see the errexit invariant at the top of this file
     local _cat _reason
@@ -997,6 +1036,7 @@ if [ -d src ]; then
            && grep -qE "return\s*\[\s*\{\s*label:\s*'(Default|Personal|Test|Demo)" "${vue}"; then
             echo "${vue}: fetch*() returns hard-coded single-entry stub" >> "${_stub_log}"
         fi
+        # .vue only: a `fetch*()` stub is a Vue component-method pattern.
     done < <(find src -name '*.vue' 2>/dev/null)
 fi
 # Stub auth / ignored caller-identity parameter — decidesk#45 pattern
@@ -1556,6 +1596,8 @@ if [ -d src ]; then
                     echo "${vue}: ${tag}" >> "${_il_log}"
                 fi
             done
+        # .vue only: <NcSelect> is a Vue component. Gate 40 covers the
+        # language-agnostic <input>/<select> label rule for PHP templates.
     done < <(find src -name '*.vue' 2>/dev/null)
     _il_fail=$(wc -l < "${_il_log}" 2>/dev/null || echo 0)
     if [ "${_il_fail}" -eq 0 ]; then
@@ -1581,6 +1623,7 @@ if [ -d src ]; then
         if grep -qE '<NcModal[ \t>/]|<NcDialog[ \t>/]' "${vue}" 2>/dev/null; then
             echo "${vue}: inline NcModal/NcDialog — extract to src/modals/ or src/dialogs/" >> "${_mi_log}"
         fi
+        # .vue only: NcModal/NcDialog are Vue components with a .vue-file rule.
     done < <(find src -name '*.vue' 2>/dev/null)
     _mi_fail=$(wc -l < "${_mi_log}" 2>/dev/null || echo 0)
     if [ "${_mi_fail}" -eq 0 ]; then
@@ -2964,7 +3007,7 @@ if [ -d src ]; then
                     echo "${vue}: ${tag}" >> "${_ia_log}"
                 fi
             done
-    done < <(find src -name '*.vue' 2>/dev/null)
+    done < <(_a11y_markup_files)
     _ia_fail=$(wc -l < "${_ia_log}" 2>/dev/null || echo 0)
     if [ "${_ia_fail}" -eq 0 ]; then
         _pass 31 "img-alt"
@@ -3044,7 +3087,7 @@ if [ -d src ]; then
                     echo "${vue}: ${tag} rule=missing[${_missing}]" >> "${_sc_log}"
                 fi
             done
-    done < <(find src -name '*.vue' 2>/dev/null)
+    done < <(_a11y_markup_files)
     _sc_fail=$(wc -l < "${_sc_log}" 2>/dev/null || echo 0)
     if [ "${_sc_fail}" -eq 0 ]; then
         _pass 32 "semantic-controls"
@@ -3179,11 +3222,14 @@ fi
 # (Name, Role, Value) — native window dialogs don't expose a queryable
 # role to assistive tech that matches the surrounding NC shell.
 # ---------------------------------------------------------------------------
-if [ -d src ]; then
+if _a11y_has_markup_dir; then
     _wc_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-window-confirm.log
     : > "${_wc_log}"
-    grep -rnE '\bwindow\.(confirm|alert|prompt)\s*\(' src/ \
-        --include='*.vue' --include='*.js' --include='*.ts' 2>/dev/null \
+    # templates/ too (#225): a native dialog opened from an inline <script> in a
+    # PHP template breaks theming and WCAG exactly as one in a .vue does.
+    grep -rnE '\bwindow\.(confirm|alert|prompt)\s*\(' src/ templates/ appinfo/templates/ \
+        --include='*.vue' --include='*.js' --include='*.ts' \
+        --include='*.php' --include='*.html' --include='*.htm' 2>/dev/null \
         | _filter_grep_by_scope >> "${_wc_log}" || true
     _wc_fail=$(wc -l < "${_wc_log}" 2>/dev/null || echo 0)
     if [ "${_wc_fail}" -eq 0 ]; then
@@ -3223,16 +3269,19 @@ if [ -d src ]; then
                 # with computed-default-empty are out of scope; the developer there
                 # at least went through a prop pipeline).
                 echo "${tag}" | grep -qE 'alt\s*=\s*"\s*"' || continue
-                # Must have a bound :src or v-bind:src that names a semantic noun.
-                # We match the BINDING expression body — substring search inside
-                # the :src="..." quotes for the semantic noun list.
-                _src_expr=$(echo "${tag}" | grep -oE '(:src|v-bind:src)\s*=\s*"[^"]*"' | head -1 || true)
+                # Must have a src that names a semantic noun. A BOUND :src /
+                # v-bind:src carries the noun in its expression; a PHP template
+                # or plain HTML carries it in the literal attribute value
+                # (`src="<?php p($avatarUrl) ?>"`, `src="/img/avatar.png"`).
+                # Both mean the same thing — the author knew the image was a
+                # person or a picture and still gave it an empty alt (#225).
+                _src_expr=$(echo "${tag}" | grep -oE '(:src|v-bind:src|src)\s*=\s*"[^"]*"' | head -1 || true)
                 [ -z "${_src_expr}" ] && continue
                 if echo "${_src_expr}" | grep -qiE '\b(avatar|photo|thumbnail|picture|headshot|portrait|profilePicture)\b'; then
                     echo "${vue}: ${tag} rule=empty-alt-on-semantic-bound-src" >> "${_iae_log}"
                 fi
             done
-    done < <(find src -name '*.vue' 2>/dev/null)
+    done < <(_a11y_markup_files)
     _iae_fail=$(wc -l < "${_iae_log}" 2>/dev/null || echo 0)
     if [ "${_iae_fail}" -eq 0 ]; then
         _pass 35 "img-alt-empty-only"
@@ -3254,14 +3303,17 @@ fi
 #   - WHATWG / W3C: "Authors should generally use `tabindex='0'` or
 #     `tabindex='-1'`. Positive integer values are very rarely useful."
 # ---------------------------------------------------------------------------
-if [ -d src ]; then
+if _a11y_has_markup_dir; then
     _tp_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-tabindex-positive.log
     : > "${_tp_log}"
     # Match tabindex with quoted positive integer. Allow whitespace
     # inside the quotes. Excludes tabindex="0", tabindex="-1", and any
     # form where the value is bound (`:tabindex="..."` is reviewer-judgment).
-    grep -rnE 'tabindex[[:space:]]*=[[:space:]]*"[[:space:]]*[1-9][0-9]*[[:space:]]*"' src/ \
-        --include='*.vue' --include='*.js' --include='*.ts' 2>/dev/null \
+    # templates/ too (#225): focus order is a property of the rendered DOM, not
+    # of the language that emitted it.
+    grep -rnE 'tabindex[[:space:]]*=[[:space:]]*"[[:space:]]*[1-9][0-9]*[[:space:]]*"' src/ templates/ appinfo/templates/ \
+        --include='*.vue' --include='*.js' --include='*.ts' \
+        --include='*.php' --include='*.html' --include='*.htm' 2>/dev/null \
         | _filter_grep_by_scope >> "${_tp_log}" || true
     _tp_fail=$(wc -l < "${_tp_log}" 2>/dev/null || echo 0)
     if [ "${_tp_fail}" -eq 0 ]; then
@@ -3334,7 +3386,7 @@ if [ -d src ]; then
                     echo "${vue}: ${tag} rule=aria-hidden-on-focusable-element" >> "${_ahf_log}"
                 fi
             done
-    done < <(find src -name '*.vue' 2>/dev/null)
+    done < <(_a11y_markup_files)
     _ahf_fail=$(wc -l < "${_ahf_log}" 2>/dev/null || echo 0)
     if [ "${_ahf_fail}" -eq 0 ]; then
         _pass 37 "aria-hidden-focusable"
@@ -3456,7 +3508,7 @@ for tag_re in (r'<NcButton\b([^>]*)>(.*?)</NcButton>', r'<button\b([^>]*)>(.*?)<
         opening = m.group(0).split('>')[0] + '>'
         print(f'{fname}: {opening} rule=icon-only-button-without-accessible-name')
 PYBN
-    done < <(find src -name '*.vue' 2>/dev/null)
+    done < <(_a11y_markup_files)
     _bn_fail=$(wc -l < "${_bn_log}" 2>/dev/null || echo 0)
     if [ "${_bn_fail}" -eq 0 ]; then
         _pass 39 "button-name"
@@ -3509,7 +3561,7 @@ if [ -d src ]; then
     while IFS= read -r vue; do
         _in_scope "${vue}" || continue
         _fl_files+=("${vue}")
-    done < <(find src -name '*.vue' 2>/dev/null)
+    done < <(_a11y_markup_files)
     # NOTE: an empty in-scope set is NOT declared `na` here. Every other
     # `[ -d src ]` gate reports PASS over an empty diff scope — that is what
     # ADR-020 diff scoping MEANS — and tests/test-hydra-gates-bin.sh asserts
@@ -3623,7 +3675,7 @@ for pat, tagname in patterns:
         if not body_text or BAD.match(body_text):
             print(f'{fname}: <{tagname}> body="{body_text}" rule=link-text-not-descriptive')
 PYLQ
-    done < <(find src -name '*.vue' 2>/dev/null)
+    done < <(_a11y_markup_files)
     _lq_fail=$(wc -l < "${_lq_log}" 2>/dev/null || echo 0)
     if [ "${_lq_fail}" -eq 0 ]; then
         _pass 42 "link-text-quality"
@@ -3669,7 +3721,7 @@ for m in re.finditer(r'<table\b([^>]*)>(.*?)</table>', txt, re.IGNORECASE | re.D
     elif re.search(r'<td\b', body, re.IGNORECASE):
         print(f'{fname}: <table> rule=table-without-th')
 PYTH
-    done < <(find src -name '*.vue' 2>/dev/null)
+    done < <(_a11y_markup_files)
     _th_fail=$(wc -l < "${_th_log}" 2>/dev/null || echo 0)
     if [ "${_th_fail}" -eq 0 ]; then
         _pass 43 "table-headers"
@@ -3712,7 +3764,7 @@ for m in re.finditer(r'<input\b([^>]*)>', txt, re.IGNORECASE):
     if SEM_RE.search(val):
         print(f'{fname}: <input name/id="{val}" ...> rule=semantic-input-without-autocomplete')
 PYAC
-    done < <(find src -name '*.vue' 2>/dev/null)
+    done < <(_a11y_markup_files)
     _ac_fail=$(wc -l < "${_ac_log}" 2>/dev/null || echo 0)
     if [ "${_ac_fail}" -eq 0 ]; then
         _pass 44 "autocomplete-attr"
@@ -3751,7 +3803,7 @@ for m in re.finditer(r'<style\b[^>]*>(.*?)</style>', src, re.IGNORECASE | re.DOT
         continue
     print(f'{fname}: <style> rule=motion-without-reduced-motion-fallback')
 PYRM
-    done < <(find src -name '*.vue' 2>/dev/null)
+    done < <(_a11y_markup_files)
     _rm_fail=$(wc -l < "${_rm_log}" 2>/dev/null || echo 0)
     if [ "${_rm_fail}" -eq 0 ]; then
         _pass 45 "prefers-reduced-motion"
