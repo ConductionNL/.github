@@ -471,13 +471,98 @@ def _credential_surface(src: str, head: str, body: str, all_bodies: dict[str, st
     return "\n".join(surface)
 
 
+# Keywords whose `{ ... }` block does NOT necessarily execute when the
+# enclosing block is entered: branches, loops, catch handlers and closure
+# bodies. `try` is absent on purpose — a try body runs unconditionally.
+_CONDITIONAL_KWS = {
+    "if", "elseif", "else", "switch", "match",
+    "for", "foreach", "while", "do", "catch", "function", "fn",
+}
+
+
+def _unconditional_part(block: str) -> str:
+    """The part of *block* that runs whenever *block* is entered.
+
+    Nested blocks introduced by a branch / loop / catch / closure are blanked;
+    everything else (including a `try` body) is kept and descended into.
+
+    WHY THIS EXISTS — gate-9's dominant false positive (2026-08-08).
+    `_has_admin_if_with_throw` searched the `!isAdmin` block for a denial token
+    AT ANY DEPTH. That conflates two opposite postures:
+
+        if ($isAdmin === false) {          // ADMIN REQUIRED — the deny is the
+            return $this->forbidden();     // unconditional consequence of not
+        }                                  // being an admin. True positive.
+
+        if ($isAdmin === false) {          // ADMIN NOT REQUIRED — non-admins
+            $r = $this->svc->get($id);     // simply take the tighter per-owner
+            if ($r['initiatorUserId']      // path. A non-admin OWNER proceeds.
+                !== $uid) {                // `@NoAdminRequired` is CORRECT.
+                return $this->forbidden(); // False positive.
+            }
+        }
+
+    Live on docudesk `SigningController::cancelRequest` (docudesk#100's own WF1
+    fix). The remedy gate-9 printed for it — "remove @NoAdminRequired ... or use
+    #[AuthorizedAdminSetting]" — would have made a per-user cancel endpoint
+    admin-only and deleted the owner check's reason to exist. That is the
+    failure mode where a security gate's advice is itself the regression.
+    """
+    out: list[str] = []
+    i, n = 0, len(block)
+    while i < n:
+        if block[i] != "{":
+            out.append(block[i])
+            i += 1
+            continue
+        depth, j = 0, i
+        while j < n:
+            if block[j] == "{":
+                depth += 1
+            elif block[j] == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+            j += 1
+        if j >= n:
+            out.append(block[i:])
+            break
+        head = block[:i]
+        k = len(head) - 1
+        while k >= 0 and head[k].isspace():
+            k -= 1
+        if k >= 0 and head[k] == ")":  # step back over a balanced (...)
+            d = 0
+            while k >= 0:
+                if head[k] == ")":
+                    d += 1
+                elif head[k] == "(":
+                    d -= 1
+                    if d == 0:
+                        break
+                k -= 1
+            k -= 1
+        while k >= 0 and head[k].isspace():
+            k -= 1
+        kw_m = re.search(r"(\w+)\s*$", head[: k + 1]) if k >= 0 else None
+        keyword = kw_m.group(1) if kw_m else ""
+        if keyword in _CONDITIONAL_KWS:
+            out.append(" " * (j - i + 1))
+        else:
+            out.append("{")
+            out.append(_unconditional_part(block[i + 1 : j]))
+            out.append("}")
+        i = j + 1
+    return "".join(out)
+
+
 def _has_admin_if_with_throw(body: str) -> bool:
     """True if body contains `if (...!isAdmin...) { throw/return STATUS_FORBIDDEN ... }`.
 
     Brace-aware: walks every `if (` whose condition tests `isAdmin` (negated
-    or `=== false`), then checks the body of the if for a forbidden token at
-    any depth — closures, array literals, match-expressions don't terminate
-    the search prematurely.
+    or `=== false`), then checks the body of the if for a forbidden token — but
+    only where that denial is UNCONDITIONAL within the block (see
+    `_unconditional_part` for the escalation-branch false positive this closes).
     """
     for if_match in re.finditer(r"\bif\s*\(", body):
         if_start = if_match.start()
@@ -524,7 +609,9 @@ def _has_admin_if_with_throw(body: str) -> bool:
                     i += 1
                     break
             i += 1
-        if_body = body[body_start:i]
+        # Only the UNCONDITIONAL part counts: a denial nested under a further
+        # condition makes this an escalation branch, not an admin requirement.
+        if_body = _unconditional_part(body[body_start:i])
         if "throw" in if_body or "return" in if_body:
             if _FORBIDDEN_TOKEN_RE.search(if_body):
                 return True

@@ -334,12 +334,25 @@ def _find_method_bodies(src: str):
 
 # Look-back annotation patterns: anchored so prose inside a docblock
 # like "(no @NoAdminRequired)" does not fire.
+#
+# ⚠️ THE ATTRIBUTE MAY BE WRITTEN FULLY QUALIFIED (2026-08-08). `#[NoAdminRequired`
+# only matches the imported short form. PHP equally permits
+#
+#     #[\OCP\AppFramework\Http\Attribute\NoAdminRequired]
+#
+# and with that spelling the method fell out of scope entirely — an unguarded
+# endpoint reported PASS. Measured by planting a textbook IDOR (caller-supplied
+# `$id`, no ownership check) with the FQ attribute: gate-7 reported PASS; the
+# byte-identical body under `#[NoAdminRequired]` reported FAIL. No fleet file
+# uses the FQ form today, so this closes a hole before it is stepped in rather
+# than after — a false NEGATIVE on a security gate leaves no log to notice.
+_FQ = r"(?:\\?(?:OCP\\+AppFramework\\+Http\\+Attribute\\+))?"
 _NO_ADMIN_RE = re.compile(
-    r"^\s*\*\s*@NoAdminRequired\b|^\s*#\[NoAdminRequired\b",
+    r"^\s*\*\s*@NoAdminRequired\b|^\s*#\[\s*" + _FQ + r"NoAdminRequired\b",
     re.MULTILINE,
 )
 _PUBLIC_PAGE_ANNOTATION_RE = re.compile(
-    r"^\s*\*\s*@PublicPage\b|^\s*#\[PublicPage\b",
+    r"^\s*\*\s*@PublicPage\b|^\s*#\[\s*" + _FQ + r"PublicPage\b",
     re.MULTILINE,
 )
 # Reason-bearing explicit exemption: `@no-admin-idor-exempt <reason>` in the

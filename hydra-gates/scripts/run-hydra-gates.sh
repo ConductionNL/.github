@@ -1333,18 +1333,34 @@ _filter_preexisting() {
 # ---------------------------------------------------------------------------
 # Gate 1: SPDX / license headers on every lib/**/*.php
 # ---------------------------------------------------------------------------
-if [ -d lib ]; then
+#
+# ⚠️ AN EMPTY SCOPE IS NOT A CLEAN TREE (2026-08-08). This gate reported PASS
+# whenever it had nothing to look at — no lib/ at all, or lib/ present but no
+# PHP file in the diff. Measured on larpingapp: a README-only commit run with
+# --scope-to-diff produced `[gate-1] spdx-headers: PASS` having opened zero
+# files. That is the nldesign shape (a glob that matches nothing is
+# indistinguishable from a clean result), and it applied to gates 1, 2, 3, 5, 8,
+# 9, 10 and 11 simultaneously. `na` is the honest verdict — it keeps the gate
+# OUT of _EMITTED_GATES so the coverage summary reports it as not-run instead of
+# folding it into ALL GATES GREEN.
+if [ ! -d lib ]; then
+    _skip 1 "spdx-headers" na "no lib/ directory — this repo ships no PHP under lib/, so there is no file that could carry an @license/@copyright header."
+else
     # `grep -r lib/` is recursive but walks UNTRACKED and ignored trees too:
     # on openregister it saw 1242 .php paths vs 1218 tracked, i.e. 24 files the
     # repo does not ship were being judged for SPDX headers. Enumerate the
     # tracked surface instead; the header check itself is unchanged.
-    _spdx_files=$(_enum_tracked '\.php$' lib)
+    #
+    # Scope-filter FIRST, then read: the old order grepped every tracked file in
+    # the repo and discarded the out-of-scope answers afterwards.
+    _spdx_files=$(_enum_tracked '\.php$' lib | _filter_files_by_scope)
+    if [ -z "$(printf '%s' "${_spdx_files}" | grep . || true)" ]; then
+        _skip 1 "spdx-headers" na "0 tracked PHP file(s) under lib/ in this diff — nothing was inspected, so missing @license/@copyright headers are UNVERIFIED by this run."
+    else
     _missing_license=$(printf '%s\n' "${_spdx_files}" | grep . \
-        | xargs -r -d '\n' grep -LE '^[[:space:]]*\*[[:space:]]*@license[[:space:]]' 2>/dev/null \
-        | _filter_files_by_scope)
+        | xargs -r -d '\n' grep -LE '^[[:space:]]*\*[[:space:]]*@license[[:space:]]' 2>/dev/null)
     _missing_copyright=$(printf '%s\n' "${_spdx_files}" | grep . \
-        | xargs -r -d '\n' grep -LE '^[[:space:]]*\*[[:space:]]*@copyright[[:space:]]' 2>/dev/null \
-        | _filter_files_by_scope)
+        | xargs -r -d '\n' grep -LE '^[[:space:]]*\*[[:space:]]*@copyright[[:space:]]' 2>/dev/null)
     _ml=$(echo -n "${_missing_license}" | grep -c . || true)
     _mc=$(echo -n "${_missing_copyright}" | grep -c . || true)
     if [ "$((_ml + _mc))" -eq 0 ]; then
@@ -1356,27 +1372,57 @@ if [ -d lib ]; then
         } > ${HYDRA_GATE_LOG_DIR}/hydra-gate-spdx-headers.log
         _fail 1 "spdx-headers" "${_ml} missing @license, ${_mc} missing @copyright"
     fi
+    fi
 fi
 
 # ---------------------------------------------------------------------------
 # Gate 2: Forbidden debug helpers in lib/
 # ---------------------------------------------------------------------------
-if [ -d lib ]; then
-    : > ${HYDRA_GATE_LOG_DIR}/hydra-gate-forbidden-patterns.log
-    _forbidden=0
-    for pattern in var_dump die error_log print_r dd dump; do
-        _hits=$(grep -rnE "\\b${pattern}\\(" lib/ 2>/dev/null | grep -v 'vendor/' | _filter_grep_by_scope || true)
-        if [ -n "${_hits}" ]; then
-            _n=$(echo "${_hits}" | wc -l)
-            echo "${_n}x ${pattern}(" >> ${HYDRA_GATE_LOG_DIR}/hydra-gate-forbidden-patterns.log
-            echo "${_hits}" | head -3 | sed 's/^/  /' >> ${HYDRA_GATE_LOG_DIR}/hydra-gate-forbidden-patterns.log
-            _forbidden=$((_forbidden + _n))
-        fi
-    done
-    if [ "${_forbidden}" -eq 0 ]; then
-        _pass 2 "forbidden-patterns"
+#
+# ⚠️ SIX RAW-TEXT GREPS, FAILING BOTH WAYS (2026-08-08). `grep -rnE "\bNAME\("`
+# over lib/ missed `var_dump ($x)` (PHP allows whitespace before the argument
+# list), missed `die;` and `die "msg"` (`die` is a LANGUAGE CONSTRUCT, not a
+# function), and did not know `exit` at all — the same construct under a second
+# spelling, so one name was banned and its synonym left open. In the other
+# direction a comment saying "never use var_dump( here" and a string literal
+# `"select dd(x)"` were both reported. The rules moved into
+# scripts/lib/check_forbidden_patterns.py, which judges a comment- and
+# string-masked copy. See that file for why `: never` exempts `exit`.
+if [ ! -d lib ]; then
+    _skip 2 "forbidden-patterns" na "no lib/ directory — this repo ships no PHP under lib/, so there is no shipped server code that could carry a debug helper."
+else
+    _fp_files=()
+    while IFS= read -r f; do
+        [ -f "$f" ] || continue
+        _in_scope "$f" || continue
+        _fp_files+=("$f")
+    done < <(_enum_tracked '\.php$' lib)
+    _fp_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-forbidden-patterns.log
+    : > "${_fp_log}"
+    _fp_ran=1
+    _fp_helper="${SCRIPT_DIR}/lib/check_forbidden_patterns.py"
+    if [ "${#_fp_files[@]}" -eq 0 ]; then
+        _fp_ran=0
+        _skip 2 "forbidden-patterns" na "0 tracked PHP file(s) under lib/ in this diff — nothing was inspected, so shipped debug helpers (var_dump/die/exit/error_log/print_r/dd/dump) are UNVERIFIED by this run."
+    elif [ ! -f "${_fp_helper}" ]; then
+        _fp_ran=0
+        _skip 2 "forbidden-patterns" wiring "check_forbidden_patterns.py not found at ${_fp_helper} — ${#_fp_files[@]} PHP file(s) were in scope and NONE were inspected."
     else
-        _fail 2 "forbidden-patterns" "${_forbidden} forbidden calls"
+        set +e
+        python3 "${_fp_helper}" "${_fp_files[@]}" >> "${_fp_log}" 2>"${_fp_log}.err"
+        _fp_rc=$?
+        if [ "${_fp_rc}" -ne 0 ]; then
+            _fp_ran=0
+            _skip 2 "forbidden-patterns" wiring "check_forbidden_patterns.py exited ${_fp_rc} — ${#_fp_files[@]} PHP file(s) were in scope and NONE were judged. See ${_fp_log}.err."
+        fi
+    fi
+    if [ "${_fp_ran}" -eq 1 ]; then
+        _forbidden=$(wc -l < "${_fp_log}" 2>/dev/null || echo 0)
+        if [ "${_forbidden}" -eq 0 ]; then
+            _pass 2 "forbidden-patterns"
+        else
+            _fail 2 "forbidden-patterns" "${_forbidden} forbidden call(s) — see ${_fp_log}"
+        fi
     fi
 fi
 
@@ -1385,6 +1431,12 @@ fi
 # ---------------------------------------------------------------------------
 _stub_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-stub-scan.log
 : > "${_stub_log}"
+# How much surface did this gate actually get to look at? An empty scope must
+# not be reported as a clean one — see the gate-1 note.
+_stub_scope=0
+while IFS= read -r f; do
+    _in_scope "$f" && _stub_scope=$((_stub_scope + 1))
+done < <(_enum_tracked '\.(php|vue)$' lib src)
 grep -rn "In a complete implementation" lib/ src/ 2>/dev/null | _filter_grep_by_scope | head -5 >> "${_stub_log}" || true
 # A DELEGATING run() IS NOT A STUB, AND A DEAD LINE MUST NOT CLOSE THE GATE
 # (#226).
@@ -1475,6 +1527,10 @@ while IFS= read -r f; do
             fi
         done
 done < <(_enum_tracked '\.php$' lib/Service lib/Controller)
+if [ "${_stub_ran}" -eq 1 ] && [ "${_stub_scope}" -eq 0 ]; then
+    _stub_ran=0
+    _skip 3 "stub-scan" na "scope was empty — 0 tracked .php/.vue file(s) under lib/ or src/ in this diff, so NOTHING was inspected; stub code (unfinished run() bodies, 'In a complete implementation' markers, ignored caller-identity parameters) is UNVERIFIED by this run."
+fi
 if [ "${_stub_ran}" -eq 1 ]; then
     if [ -s "${_stub_log}" ]; then
         _fail 3 "stub-scan" "$(wc -l < "${_stub_log}") finding(s) — see ${_stub_log}"
@@ -1641,7 +1697,7 @@ fi
 #     posture matches the body.
 # ---------------------------------------------------------------------------
 if [ -f appinfo/routes.php ]; then
-    _ra_fail=0 _ra_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-route-auth.log
+    _ra_fail=0 _ra_judged=0 _ra_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-route-auth.log
     _ra_unresolved_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-route-auth-unresolved.log
     : > "${_ra_log}"
     : > "${_ra_unresolved_log}"
@@ -1758,6 +1814,10 @@ if [ -f appinfo/routes.php ]; then
                 continue
             fi
             head_masked=$(_head_block "${_ra_masked_path}" "${def_line}")
+            # This entry is about to be JUDGED — as opposed to skipped for
+            # scope or parked as unresolved. Counted so an all-skipped run
+            # cannot report PASS (see the verdict below).
+            _ra_judged=$((_ra_judged + 1))
             _ra_declared=0
             echo "$head_masked" | grep -qE '#\[[^]]*\b(PublicPage|NoAdminRequired|NoCSRFRequired|AuthorizedAdminSetting)\b' && _ra_declared=1
             if [ "${_ra_declared}" -eq 0 ]; then
@@ -1777,6 +1837,13 @@ if [ -f appinfo/routes.php ]; then
     # cannot be mistaken for a verdict line by any `^\[gate-` consumer.
     if [ "${_ra_unres}" -gt 0 ]; then
         echo "[hydra-gates] gate-5 route-auth: ${_ra_unres} routed entr(ies) NOT JUDGED (controller class unresolvable here) — see ${_ra_unresolved_log}. This is not a pass for them; reachability is gate-14's."
+    fi
+    if [ "${_ra_ran}" -eq 1 ] && [ "${_ra_judged}" -eq 0 ]; then
+        # An empty scope is not a clean tree — see the gate-1 note. Measured on
+        # larpingapp: a README-only commit run with --scope-to-diff reported
+        # `[gate-5] route-auth: PASS` having judged zero routed methods.
+        _ra_ran=0
+        _skip 5 "route-auth" na "0 routed method(s) were judged — appinfo/routes.php is not in this diff and no controller serving a route is either, so under ADR-020 no endpoint's auth posture changed in this PR. ${_ra_unres} entr(ies) were additionally unresolvable here."
     fi
     if [ "${_ra_ran}" -eq 1 ]; then
         if [ "${_ra_fail}" -eq 0 ]; then
@@ -1939,47 +2006,49 @@ fi
 # Gate 8: Unsafe-auth-resolver — no `catch (\Throwable) { return null; }`
 # in methods whose name contains Auth/Authorization/Permission/Role/Guard.
 # ---------------------------------------------------------------------------
+#
+# ⚠️ REWRITTEN 2026-08-08. The bash below extracted the method body with
+# `/^    \}/` and the catch block with `/^        \}/` — HARD-CODED INDENTATION,
+# four spaces and eight. On a tab-indented file neither terminator matches, so
+# "the body" ran to end of file: a correctly RETHROWING resolver was reported as
+# a fail-open because an unrelated cache method further down returned null from
+# its own catch. False positive on correct code, and the apparent detection of
+# tab-indented fail-opens was the same over-capture by luck. Braces are the
+# language's block delimiter, so scripts/lib/check_unsafe_auth_resolver.py walks
+# them, over a comment-masked copy (#184).
 _uar_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-unsafe-auth-resolver.log
 : > "${_uar_log}"
+_uar_files=()
 while IFS= read -r f; do
     [ -f "$f" ] || continue
     _in_scope "$f" || continue
-    grep -nE "^\s*(public|private|protected)\s+function\s+[a-zA-Z0-9_]*([Aa]uthori[sz]ation|[Aa]uth|[Pp]ermission|[Rr]ole|[Gg]uard)[a-zA-Z0-9_]*\s*\(" "$f" \
-        | while IFS=: read -r _line_no _; do
-            _method=$(sed -n "${_line_no}p" "$f" | grep -oE 'function\s+[a-zA-Z0-9_]+' | awk '{print $2}')
-            [ -z "$_method" ] && continue
-            _body=$(awk -v start="${_line_no}" 'NR >= start { print; if (NR > start && /^    \}/) exit }' "$f")
-            # Only flag when the `return null` is INSIDE the catch(\Throwable)
-            # block itself — that is the actual fail-open. Methods whose catch
-            # returns an error/deny value while a NORMAL (non-catch) path returns
-            # null are NOT fail-open and must not be flagged. Two real-world
-            # false positives this clears (procest ZgwService, 2026-05-26):
-            #   - validateJwtAuth(): catch returns a 403 JSONResponse, the
-            #     trailing `return null` is the success path → fail-closed.
-            #   - getConsumerAuthorisaties(): catch returns []; the normal-path
-            #     `return null` legitimately means "unrestricted".
-            # Extract the catch block (from the `catch (\Throwable` line to its
-            # closing brace at the method's inner indent) and check only that.
-            # NB: the catch line is `} catch (\Throwable $e) {` — it begins with
-            # the try's closing brace, so we capture it then only test the
-            # block-closing brace on SUBSEQUENT lines (else we'd exit on the
-            # catch line itself and miss its body).
-            _catch_block=$(echo "$_body" | awk '
-                /catch[[:space:]]*\([[:space:]]*\\?Throwable/ { inblk=1; print; next }
-                inblk && /^        \}/ { exit }
-                inblk { print }
-            ')
-            if [ -n "$_catch_block" ] && echo "$_catch_block" | grep -qE 'return\s+null\s*;'; then
-                echo "${f}:${_line_no} method=${_method} rule=throwable-caught-returns-null" >> "${_uar_log}"
-            fi
-        done
+    _uar_files+=("$f")
 done < <(_enum_tracked '\.php$' lib/Service lib/Controller)
-_filter_preexisting "${_uar_log}"
-_uar_fail=$(wc -l < "${_uar_log}" 2>/dev/null || echo 0)
-if [ "${_uar_fail}" -eq 0 ]; then
-    _pass 8 "unsafe-auth-resolver"
+_uar_ran=1
+_uar_helper="${SCRIPT_DIR}/lib/check_unsafe_auth_resolver.py"
+if [ "${#_uar_files[@]}" -eq 0 ]; then
+    _uar_ran=0
+    _skip 8 "unsafe-auth-resolver" na "scope was empty — 0 lib/Service or lib/Controller PHP file(s) in this diff, so NOTHING was inspected; fail-open auth resolvers (CWE-863) are UNVERIFIED by this run."
+elif [ ! -f "${_uar_helper}" ]; then
+    _uar_ran=0
+    _skip 8 "unsafe-auth-resolver" wiring "check_unsafe_auth_resolver.py not found at ${_uar_helper} — ${#_uar_files[@]} PHP file(s) were in scope and NONE were inspected; fail-open auth resolvers (CWE-863) are UNVERIFIED by this run."
 else
-    _fail 8 "unsafe-auth-resolver" "${_uar_fail} fail-open pattern(s) — see ${_uar_log}"
+    set +e
+    python3 "${_uar_helper}" "${_uar_files[@]}" >> "${_uar_log}" 2>"${_uar_log}.err"
+    _uar_rc=$?
+    if [ "${_uar_rc}" -ne 0 ]; then
+        _uar_ran=0
+        _skip 8 "unsafe-auth-resolver" wiring "check_unsafe_auth_resolver.py exited ${_uar_rc} — ${#_uar_files[@]} PHP file(s) were in scope and NONE were judged. See ${_uar_log}.err."
+    fi
+fi
+if [ "${_uar_ran}" -eq 1 ]; then
+    _filter_preexisting "${_uar_log}"
+    _uar_fail=$(wc -l < "${_uar_log}" 2>/dev/null || echo 0)
+    if [ "${_uar_fail}" -eq 0 ]; then
+        _pass 8 "unsafe-auth-resolver"
+    else
+        _fail 8 "unsafe-auth-resolver" "${_uar_fail} fail-open pattern(s) — see ${_uar_log}"
+    fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -2016,6 +2085,11 @@ while IFS= read -r f; do
     _sem_files+=("$f")
 done < <(_enum_tracked '\.php$' lib/Controller)
 _sem_ran=1
+if [ "${#_sem_files[@]}" -eq 0 ]; then
+    # An empty scope is not a clean tree — see the gate-1 note.
+    _sem_ran=0
+    _skip 9 "semantic-auth" na "scope was empty — 0 lib/Controller PHP file(s) in this diff, so NOTHING was inspected; auth-attribute-vs-body semantic mismatches are UNVERIFIED by this run."
+fi
 if [ "${#_sem_files[@]}" -gt 0 ]; then
     # The helper script is co-located with the gate runner. Two layouts:
     #   local repo: scripts/run-hydra-gates.sh + scripts/lib/check_semantic_auth.py
@@ -2055,17 +2129,55 @@ fi
 # on doriath where AdminRoot.vue read `dataset.version` instead of
 # `loadState('doriath', 'version', 'Unknown')`. ADR-004 hard rule.
 # ---------------------------------------------------------------------------
-if [ -d src ]; then
+#
+# ⚠️ THE SINGLE-LINE SHAPE WAS THE ONLY SHAPE IT KNEW (measured 2026-08-08).
+# `getElementById\s*\([^)]+\)[^.]*\.dataset` requires the lookup and the
+# `.dataset` read to sit on ONE line, so all three of these reported PASS:
+#
+#   const el = document.getElementById('x')      the TWO-STEP form — the one
+#   const v  = el.dataset.version                 doriath's AdminRoot.vue turns
+#                                                 into after any refactor
+#   document.querySelector('#x').dataset.version  a different lookup, same read
+#   document.getElementById('x').getAttribute('data-version')
+#
+# The gate is widened only along the axis it already covers — reading
+# server-injected data out of the DOM — and NOT to a bare `.dataset`, which
+# would flag every legitimate `event.target.dataset` in the fleet.
+if [ ! -d src ]; then
+    _skip 10 "initial-state" na "no src/ directory — this repo ships no frontend, so there is no code that could read server data out of the DOM."
+else
     _is_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-initial-state.log
     : > "${_is_log}"
-    grep -rnE "getElementById\s*\([^)]+\)[^.]*\.dataset\b" src/ \
-        --include='*.vue' --include='*.js' --include='*.ts' 2>/dev/null \
-        | _filter_grep_by_scope >> "${_is_log}" || true
-    _is_fail=$(wc -l < "${_is_log}" 2>/dev/null || echo 0)
-    if [ "${_is_fail}" -eq 0 ]; then
-        _pass 10 "initial-state"
+    _is_files=()
+    while IFS= read -r f; do
+        [ -f "$f" ] || continue
+        _in_scope "$f" || continue
+        _is_files+=("$f")
+    done < <(_enum_tracked '\.(vue|js|ts)$' src)
+    _is_ran=1
+    _is_helper="${SCRIPT_DIR}/lib/check_initial_state.py"
+    if [ "${#_is_files[@]}" -eq 0 ]; then
+        _is_ran=0
+        _skip 10 "initial-state" na "0 tracked .vue/.js/.ts file(s) under src/ in this diff — nothing was inspected, so DOM reads of server-injected data are UNVERIFIED by this run."
+    elif [ ! -f "${_is_helper}" ]; then
+        _is_ran=0
+        _skip 10 "initial-state" wiring "check_initial_state.py not found at ${_is_helper} — ${#_is_files[@]} frontend file(s) were in scope and NONE were inspected."
     else
-        _fail 10 "initial-state" "${_is_fail} DOM dataset read(s) — use loadState()/IInitialState — see ${_is_log}"
+        set +e
+        python3 "${_is_helper}" "${_is_files[@]}" >> "${_is_log}" 2>"${_is_log}.err"
+        _is_rc=$?
+        if [ "${_is_rc}" -ne 0 ]; then
+            _is_ran=0
+            _skip 10 "initial-state" wiring "check_initial_state.py exited ${_is_rc} — ${#_is_files[@]} frontend file(s) were in scope and NONE were judged. See ${_is_log}.err."
+        fi
+    fi
+    if [ "${_is_ran}" -eq 1 ]; then
+        _is_fail=$(wc -l < "${_is_log}" 2>/dev/null || echo 0)
+        if [ "${_is_fail}" -eq 0 ]; then
+            _pass 10 "initial-state"
+        else
+            _fail 10 "initial-state" "${_is_fail} DOM read(s) of server data — use loadState()/IInitialState — see ${_is_log}"
+        fi
     fi
 fi
 
@@ -2075,24 +2187,75 @@ fi
 # as a frontend URL, bypassing the admin check that Nextcloud's settings
 # framework enforces. ADR-004 hard rule. Observed 2026-04-30 on doriath
 # (commit c7c72e9 removed the dangerous /settings → AdminRoot route).
+#
+# ⚠️ THIS GATE WAS DEAD (measured 2026-08-08). It read FOUR hard-coded paths —
+# src/router/index.{js,ts} and src/router.{js,ts} — and exactly ONE fleet app of
+# fifteen (softwarecatalog) has a file at any of them. The other fourteen build
+# their router in `src/main.js`, so they were handed `[gate-11] admin-router:
+# PASS` with ZERO BYTES inspected. Proof it was dead rather than unexercised:
+# the doriath defect re-planted verbatim into larpingapp's real router,
+# `routes.push({ path: '/settings', component: AdminRoot })`, reported PASS;
+# the identical line in `src/router.js` reported FAIL.
+#
+# Routers are now DISCOVERED — anything under src/ that CONSTRUCTS one — with
+# the four legacy paths kept so softwarecatalog does not regress. No router at
+# all is `na`, never PASS: "no client-side router exists" and "the router is
+# clean" are different facts and only one of them was ever checked.
+#
+# The rules themselves live in scripts/lib/check_admin_router.py, which blanks
+# comments (#184) and resolves the ENCLOSING ROUTE OBJECT before judging a
+# `path:` — see that file for why a bare `path: '/settings'` grep would flag
+# openconnector's ADR-079 hand-off, i.e. the remediation, as the defect.
 # ---------------------------------------------------------------------------
 _ar_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-admin-router.log
 : > "${_ar_log}"
+_ar_routers=()
+while IFS= read -r f; do
+    [ -f "$f" ] || continue
+    grep -qE '\bcreateRouter\s*\(|\bnew[[:space:]]+VueRouter\s*\(' "$f" 2>/dev/null || continue
+    _ar_routers+=("$f")
+done < <(_enum_tracked '\.(js|ts|mjs)$' src)
+# The four conventional paths, kept even if they do not construct a router
+# themselves (a `routes.js` re-exported into main.js is still the routing table).
 for f in src/router/index.js src/router/index.ts src/router.js src/router.ts; do
     [ -f "$f" ] || continue
-    _in_scope "$f" || continue
-    # Imports of admin-prefixed components or anything from views/settings/
-    grep -nE "from\s+['\"][^'\"]*(/Admin[A-Z][A-Za-z]*\.vue|views/settings/)" "$f" 2>/dev/null \
-        | sed "s|^|${f}:import:|" >> "${_ar_log}" || true
-    # Routes whose path is /settings or /admin
-    grep -nE "path\s*:\s*['\"]/(settings|admin)\b" "$f" 2>/dev/null \
-        | sed "s|^|${f}:path:|" >> "${_ar_log}" || true
+    case " ${_ar_routers[*]-} " in *" ${f} "*) continue ;; esac
+    _ar_routers+=("$f")
 done
-_ar_fail=$(wc -l < "${_ar_log}" 2>/dev/null || echo 0)
-if [ "${_ar_fail}" -eq 0 ]; then
-    _pass 11 "admin-router"
+_ar_scoped=()
+for f in ${_ar_routers[@]+"${_ar_routers[@]}"}; do
+    _in_scope "$f" || continue
+    _ar_scoped+=("$f")
+done
+_ar_ran=1
+if [ "${#_ar_routers[@]}" -eq 0 ]; then
+    _ar_ran=0
+    _skip 11 "admin-router" na "no file under src/ constructs a vue-router (no \`createRouter(\` / \`new VueRouter(\`) and none of the four conventional router paths exist — this app has no client-side router, so an admin component cannot be registered as a frontend route."
+elif [ "${#_ar_scoped[@]}" -eq 0 ]; then
+    _ar_ran=0
+    _skip 11 "admin-router" na "this app's router(s) — ${_ar_routers[*]} — are not in this diff, so under ADR-020 the routing table is unchanged from the base branch."
 else
-    _fail 11 "admin-router" "${_ar_fail} admin route/import — register via AdminSettings.php instead — see ${_ar_log}"
+    _ar_helper="${SCRIPT_DIR}/lib/check_admin_router.py"
+    if [ ! -f "${_ar_helper}" ]; then
+        _ar_ran=0
+        _skip 11 "admin-router" wiring "check_admin_router.py not found at ${_ar_helper} — ${#_ar_scoped[@]} router file(s) were in scope and NONE were inspected; admin components reachable as frontend routes are UNVERIFIED by this run."
+    else
+        set +e
+        python3 "${_ar_helper}" "${_ar_scoped[@]}" >> "${_ar_log}" 2>"${_ar_log}.err"
+        _ar_rc=$?
+        if [ "${_ar_rc}" -ne 0 ]; then
+            _ar_ran=0
+            _skip 11 "admin-router" wiring "check_admin_router.py exited ${_ar_rc} — ${#_ar_scoped[@]} router file(s) were in scope and NONE were judged. See ${_ar_log}.err."
+        fi
+    fi
+fi
+if [ "${_ar_ran}" -eq 1 ]; then
+    _ar_fail=$(wc -l < "${_ar_log}" 2>/dev/null || echo 0)
+    if [ "${_ar_fail}" -eq 0 ]; then
+        _pass 11 "admin-router"
+    else
+        _fail 11 "admin-router" "${_ar_fail} admin route/import — register via AdminSettings.php instead — see ${_ar_log}"
+    fi
 fi
 
 # ---------------------------------------------------------------------------
