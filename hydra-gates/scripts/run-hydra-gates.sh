@@ -3247,7 +3247,23 @@ if [ -d src ]; then
         _ahf_ran=0
         _skip 37 "aria-hidden-focusable" wiring "check_aria_hidden_focusable.py not found at ${_ahf_helper} — ${#_ahf_files[@]} .vue file(s) were in scope and NONE were inspected; focusable elements hidden from assistive tech (WCAG 4.1.2) are UNVERIFIED by this run."
     else
-        python3 "${_ahf_helper}" "${_ahf_files[@]}" >> "${_ahf_log}" 2>/dev/null || true
+        # THE EXIT CODE IS A STATUS, THE FINDINGS ARE STDOUT (gate-19 / #249).
+        # `2>/dev/null || true` would swallow a traceback AND the failure, so a
+        # crashed helper left an empty log and the gate reported PASS. stderr
+        # is kept; a non-zero exit is a wiring failure, not a clean sheet.
+        #
+        # `set +e` because gate-19's block turns errexit ON and leaves it on
+        # for every gate after it, so a failing helper would kill the whole
+        # runner instead of reaching the _skip below.
+        case $- in *e*) _ahf_had_e=1 ;; *) _ahf_had_e=0 ;; esac
+        set +e
+        python3 "${_ahf_helper}" "${_ahf_files[@]}" >> "${_ahf_log}" 2>>"${_ahf_log}.err"
+        _ahf_rc=$?
+        [ "${_ahf_had_e}" -eq 1 ] && set -e
+        if [ "${_ahf_rc}" -ne 0 ]; then
+            _ahf_ran=0
+            _skip 37 "aria-hidden-focusable" wiring "check_aria_hidden_focusable.py exited ${_ahf_rc} — ${#_ahf_files[@]} .vue file(s) were in scope and no verdict was produced; focusable elements hidden from assistive tech (WCAG 4.1.2) are UNVERIFIED by this run. See ${_ahf_log}.err."
+        fi
     fi
     _ahf_fail=$(wc -l < "${_ahf_log}" 2>/dev/null || echo 0)
     if [ "${_ahf_ran}" -eq 1 ]; then
@@ -3603,7 +3619,18 @@ if [ -d src ]; then
         _th_ran=0
         _skip 43 "table-headers" wiring "check_table_headers.py not found at ${_th_helper} — ${#_th_files[@]} .vue file(s) were in scope and NONE were inspected; unassociated table headers (WCAG 1.3.1) are UNVERIFIED by this run."
     else
-        python3 "${_th_helper}" "${_th_files[@]}" >> "${_th_log}" 2>/dev/null || true
+        # Exit code is a STATUS, findings are STDOUT (gate-19 / #249); stderr
+        # is kept so a traceback is visible instead of becoming a clean sheet.
+        # `set +e` because gate-19's block leaves errexit on for later gates.
+        case $- in *e*) _th_had_e=1 ;; *) _th_had_e=0 ;; esac
+        set +e
+        python3 "${_th_helper}" "${_th_files[@]}" >> "${_th_log}" 2>>"${_th_log}.err"
+        _th_rc=$?
+        [ "${_th_had_e}" -eq 1 ] && set -e
+        if [ "${_th_rc}" -ne 0 ]; then
+            _th_ran=0
+            _skip 43 "table-headers" wiring "check_table_headers.py exited ${_th_rc} — ${#_th_files[@]} .vue file(s) were in scope and no verdict was produced; unassociated table headers (WCAG 1.3.1) are UNVERIFIED by this run. See ${_th_log}.err."
+        fi
     fi
     _th_fail=$(wc -l < "${_th_log}" 2>/dev/null || echo 0)
     if [ "${_th_ran}" -eq 1 ]; then
