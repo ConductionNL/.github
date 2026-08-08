@@ -337,6 +337,46 @@ def _has_uuid_format(prop):
     return False
 
 
+def _collect_nested_property_ids(prop, out, _depth=0):
+    """Register property dicts nested BELOW a top-level schema property.
+
+    A relation can legitimately live inside an array of objects — e.g.
+    `character.skillOverrides.items.properties.skill`, which carries
+    type/format/$ref and its `x-relation-filter` on the property itself,
+    byte-for-byte the same shape the gate accepts one level up.
+
+    Check (c) works by identity: `_raw_walk()` flags every `x-relation-filter`
+    whose containing dict is not in `property_ids`. That set used to be built
+    from `schema["properties"]` only — a single, non-recursive pass — so a
+    correctly-shaped nested relation was structurally unrepresentable to the
+    check and reported as "placed off a property" unconditionally. The finding
+    was unfixable in the app: the three ways to clear it (move the filter off
+    the property, flatten the array-of-objects, or drop the filter) are all
+    worse than the code being flagged.
+
+    Observed 2026-08-08 on larpingapp (ConductionNL/.github#231).
+
+    `_depth` bounds the walk; schemas nest a couple of levels at most, and an
+    unbounded recursion here would be a denial-of-service on a malformed doc.
+    """
+    if _depth > 8 or not isinstance(prop, dict):
+        return
+
+    # Arrays of objects: items.properties.*
+    items = prop.get("items")
+    if isinstance(items, dict):
+        _collect_nested_property_ids(items, out, _depth + 1)
+
+    # Inline object properties: properties.*
+    nested = prop.get("properties")
+    if isinstance(nested, dict):
+        for nname, nprop in nested.items():
+            if not isinstance(nprop, dict) or nname.startswith("@"):
+                continue
+            out.add(id(nprop))
+            _collect_nested_property_ids(nprop, out, _depth + 1)
+
+
 def _resolve_ref(ref, keys):
     """Return ('ok'|'warn'|'fail', normalized). Numeric → warn (live-schema
     form). Hash form resolves to its last path segment."""
@@ -386,6 +426,8 @@ def check_file(path, keys, findings, base_ref):
             if not isinstance(prop, dict) or pname.startswith("@"):
                 continue
             property_ids.add(id(prop))
+            # A relation nested in an array-of-objects is still a property.
+            _collect_nested_property_ids(prop, property_ids)
             pline = plines.get(pname, 0)
             in_diff = changed is None or pline in changed
 
