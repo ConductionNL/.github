@@ -113,6 +113,11 @@ if _run "${FIXTURES}/accidental"; then
     _expect_gate 38 FAIL "accidental: a bespoke shell with no skip link is still reported"
     _expect_log "${_SLLOG}" 'App\.vue: no <NcContent> shell' \
         "accidental: gate-38 names the root component"
+    # #214/#216 — the PHP half must keep a true positive. `standalone.php`
+    # emits <html> and <body>: it owns the document, so SC 2.4.1 is its to
+    # satisfy, and it does not.
+    _expect_log "${_SLLOG}" 'templates/standalone\.php: no <NcContent> shell' \
+        "accidental: a PHP template that OWNS the document and has no bypass link is still reported"
 fi
 
 # ---------------------------------------------------------------------------
@@ -128,7 +133,79 @@ if _run "${FIXTURES}/stated"; then
     _expect_gate 38 PASS "stated: a CnAppRoot shell counts as having NC's skip link"
     _expect_not_log "${_SLLOG}" 'App\.vue' \
         "stated: gate-38 log is empty"
+    _expect_not_log "${_SLLOG}" 'standalone\.php' \
+        "stated: a document-owning template WITH a bypass anchor is not a finding"
 fi
+
+# ---------------------------------------------------------------------------
+# 3. MOUNT POINT vs PAGE ROOT (#214 / #216 / #227).
+#
+#    These three assertions run against `accidental/` — the fixture where
+#    EVERYTHING ELSE fails. That is deliberate: asserting "not reported" in a
+#    tree where the gate reports nothing proves nothing at all. Here the gate
+#    is demonstrably firing (section 1 named App.vue and standalone.php in
+#    this same run), so an absence is a decision rather than an empty scope.
+# ---------------------------------------------------------------------------
+if _run "${FIXTURES}/accidental"; then
+    _expect_log "${_SLLOG}" 'App\.vue|standalone\.php' \
+        "mount-point control: gate-38 IS firing in this tree (positive control for the three below)"
+    _expect_not_log "${_SLLOG}" 'settings/admin\.php' \
+        "#214/#216: a fragment template (<div id=...> mount point) is not a page root"
+    _expect_not_log "${_SLLOG}" 'AdminRoot\.vue' \
+        "#227: an admin-settings surface cannot own a page shell, so it is not asked for one"
+    # And the narrowing must not have swallowed the whole PHP arm: exactly one
+    # template is named, and it is the document-owning one.
+    if [ "$(printf '%s\n' "${_SLLOG}" | grep -c '\.php:')" = "1" ]; then
+        _ok "#214/#216: exactly ONE of the two PHP templates is in scope — the one that owns the document"
+    else
+        _bad "#214/#216: expected exactly 1 .php finding, got $(printf '%s\n' "${_SLLOG}" | grep -c '\.php:')"
+        printf '%s\n' "${_SLLOG}" | sed 's/^/       /'
+    fi
+fi
+
+# ---------------------------------------------------------------------------
+# 4. A BROKEN CLASSIFIER MUST NOT REPORT PASS (#147 / #249).
+#
+#    gate-38's PHP arm is driven entirely by php_template_scope.py. If that
+#    helper crashes and the runner reads its exit byte as an answer, every
+#    template classifies as "fragment", the whole arm evaporates, and the gate
+#    reports PASS having inspected nothing — a falsely-green gate manufactured
+#    by its own plumbing. Both wiring failures are asserted here.
+# ---------------------------------------------------------------------------
+_broken="$(mktemp -d "${TMPDIR:-/tmp}/hydra-gate-broken.XXXXXXXX")"
+cp -r "${PKG_ROOT}" "${_broken}/pkg" 2>/dev/null
+_BROKEN_RUNNER="${_broken}/pkg/scripts/run-hydra-gates.sh"
+
+_expect_skip() {  # <runner> <description>
+    local _out _logdir
+    _logdir="$(mktemp -d "${TMPDIR:-/tmp}/hydra-gate-test.XXXXXXXX")"
+    _out="$(HYDRA_GATE_LOG_DIR="${_logdir}" bash "$1" "${FIXTURES}/stated" 2>&1 || true)"
+    local _line
+    _line="$(printf '%s' "${_out}" | grep -E '^\[gate-38\] ' | head -1)"
+    case "${_line}" in
+        *"SKIPPED"*) _ok "$2 — ${_line%%—*}" ;;
+        *": PASS"*)  _bad "$2 — reported PASS having classified NOTHING: ${_line}" ;;
+        *)           _bad "$2 — wanted SKIPPED, got: ${_line:-<no gate-38 line at all>}" ;;
+    esac
+}
+
+if [ -f "${_BROKEN_RUNNER}" ]; then
+    # 4a. helper absent
+    mv "${_broken}/pkg/scripts/lib/php_template_scope.py" \
+       "${_broken}/pkg/scripts/lib/php_template_scope.py.hidden"
+    _expect_skip "${_BROKEN_RUNNER}" "a MISSING classifier reports SKIPPED, not PASS (#147)"
+    mv "${_broken}/pkg/scripts/lib/php_template_scope.py.hidden" \
+       "${_broken}/pkg/scripts/lib/php_template_scope.py"
+    # 4b. helper present but crashing. This is the case an exit-byte boolean
+    #     could not tell from "fragment": a crash exits 1, and so does a
+    #     fragment. The answer must come from stdout.
+    printf 'import sys\nraise SystemExit("boom")\n' \
+        > "${_broken}/pkg/scripts/lib/php_template_scope.py"
+    _expect_skip "${_BROKEN_RUNNER}" "a CRASHING classifier reports SKIPPED, not PASS (#249)"
+else
+    _bad "could not stage a broken-helper copy of the package — wiring assertions did not run"
+fi
+rm -rf "${_broken}"
 
 echo
 echo "== summary =="
