@@ -610,5 +610,358 @@ def _write(root, rel_path, content):
     return full
 
 
+# ---------------------------------------------------------------------------
+# THE ATTRIBUTE-SCANNER SEAM (#200)
+#
+# gate-57 reported `pipelinq LeadService::createLead` — a curated, spec'd MCP
+# write tool — as an orphan. It is reached by attribute reflection: an
+# `#[McpTool]` attribute, a class listed by an `IMcpScannableServices`
+# implementation, and a `registerServiceAlias` binding that implementation
+# under `…IMcpScannableServices::<app>`. There is no `->createLead(` call site
+# anywhere and there never will be, so the caller index cannot see it. Acting
+# on the verdict would have DELETED a live tool — the failure mode this
+# module's docstring already records from hydra#106.
+#
+# Widening a checker until nothing trips it is the opposite failure. EVERY
+# exemption below is paired with a control that must still be REPORTED: the
+# attribute without the registration, the registration without the attribute,
+# an alias naming a class that does not implement the interface, an
+# implementation nobody aliases, the registration commented out, and the
+# attribute merely MENTIONED in a docblock.
+# ---------------------------------------------------------------------------
+
+_MCP_INFO_XML = "<?xml version='1.0'?>\n<info><id>demoapp</id></info>\n"
+
+_MCP_APPLICATION_TMPL = """<?php
+namespace OCA\\DemoApp\\AppInfo;
+
+use OCA\\DemoApp\\Mcp\\DemoScannableServices;
+
+class Application {
+    public function register($context): void {
+%s
+    }
+}
+"""
+
+_MCP_ALIAS_CALL = """        $context->registerServiceAlias(
+            'OCA\\\\OpenRegister\\\\Mcp\\\\IMcpScannableServices::demoapp',
+            DemoScannableServices::class
+        );"""
+
+_MCP_SCANNABLE_TMPL = """<?php
+namespace OCA\\DemoApp\\Mcp;
+
+use OCA\\OpenRegister\\Mcp\\IMcpScannableServices;
+use OCA\\DemoApp\\Service\\LeadService;
+
+class DemoScannableServices implements IMcpScannableServices
+{
+    public function getScannableServiceClasses(): array
+    {
+        return [
+            LeadService::class,
+        ];
+    }
+}
+"""
+
+# `createLead` is attributed; `createInvoice` is not. Both are write-verb
+# methods with zero `->method(` call sites anywhere in the fixture. The file
+# header deliberately MENTIONS `#[McpTool]` in prose, exactly as pipelinq's
+# real LeadService.php does on line 7.
+_MCP_LEAD_SERVICE_TMPL = """<?php
+/**
+ * Lead service.
+ *
+ * Both public entry points are annotated `#[McpTool]` (OpenRegister ADR-063).
+ * That sentence is PROSE and must not register anything.
+ */
+namespace OCA\\DemoApp\\Service;
+
+use OCA\\OpenRegister\\Mcp\\Attribute\\McpTool;
+
+class LeadService
+{
+%s
+    public function createLead(array $data): array
+    {
+        return $data;
+    }
+
+    /**
+     * No attribute on this one.
+     */
+    public function createInvoice(array $data): array
+    {
+        return $data;
+    }
+}
+"""
+
+_MCP_ATTRIBUTE = """    #[McpTool(
+        name: 'createLead',
+        description: 'Create a lead',
+        readOnlyHint: false,
+        scope: 'create'
+    )]"""
+
+
+class _McpFixture:
+    """A throwaway Nextcloud app tree wired for the attribute seam."""
+
+    def __init__(self, root: str, *, alias: str, attribute: str, scannable: bool = True):
+        self.root = root
+        _write(root, "appinfo/info.xml", _MCP_INFO_XML)
+        _write(root, "lib/AppInfo/Application.php", _MCP_APPLICATION_TMPL % alias)
+        if scannable:
+            _write(root, "lib/Mcp/DemoScannableServices.php", _MCP_SCANNABLE_TMPL)
+        self.service = _write(
+            root, "lib/Service/LeadService.php", _MCP_LEAD_SERVICE_TMPL % attribute
+        )
+
+    def methods(self) -> set:
+        out: list[str] = []
+        owc._scan_app(self.root, [self.service], out)
+        names = set()
+        for line in out:
+            for part in line.split():
+                if part.startswith("method="):
+                    names.add(part[len("method="):])
+        return names
+
+
+class McpAttributeSeamTest(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = os.path.join(self._tmp.name, "demoapp")
+        os.makedirs(self.root)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    # --- the fix: a genuinely wired tool is no longer named dead ---------
+    def test_registered_and_attributed_method_is_not_flagged(self):
+        f = _McpFixture(self.root, alias=_MCP_ALIAS_CALL, attribute=_MCP_ATTRIBUTE)
+        self.assertNotIn("createLead", f.methods())
+
+    # --- THE CONTROLS. Each must still be REPORTED. ----------------------
+    def test_an_unattributed_write_method_on_a_scannable_class_is_still_flagged(self):
+        # The seam is per METHOD, not per class. Exempting the whole class
+        # would hand every write method on LeadService a free pass.
+        f = _McpFixture(self.root, alias=_MCP_ALIAS_CALL, attribute=_MCP_ATTRIBUTE)
+        self.assertIn("createInvoice", f.methods())
+
+    def test_the_attribute_without_the_DI_alias_is_still_flagged(self):
+        # A bare `#[McpTool]` on a class nobody registers is not a seam —
+        # OpenRegister never reflects it, so the tool does not exist.
+        f = _McpFixture(self.root, alias="        // nothing registered", attribute=_MCP_ATTRIBUTE)
+        self.assertIn("createLead", f.methods())
+
+    def test_the_alias_without_the_attribute_is_still_flagged(self):
+        f = _McpFixture(self.root, alias=_MCP_ALIAS_CALL, attribute="")
+        self.assertIn("createLead", f.methods())
+
+    def test_a_scannable_implementation_that_does_not_exist_is_still_flagged(self):
+        f = _McpFixture(
+            self.root, alias=_MCP_ALIAS_CALL, attribute=_MCP_ATTRIBUTE, scannable=False
+        )
+        self.assertIn("createLead", f.methods())
+
+    def test_a_class_not_listed_by_the_implementation_is_still_flagged(self):
+        f = _McpFixture(self.root, alias=_MCP_ALIAS_CALL, attribute=_MCP_ATTRIBUTE)
+        _write(
+            self.root,
+            "lib/Mcp/DemoScannableServices.php",
+            _MCP_SCANNABLE_TMPL.replace("LeadService::class", "TicketService::class"),
+        )
+        self.assertIn("createLead", f.methods())
+
+    def test_an_aliased_class_that_does_not_implement_the_interface_grants_nothing(self):
+        # The alias names it, but OpenRegister's scanner only ever calls
+        # getScannableServiceClasses() on an IMcpScannableServices. A class
+        # that does not implement it is never reflected.
+        f = _McpFixture(self.root, alias=_MCP_ALIAS_CALL, attribute=_MCP_ATTRIBUTE)
+        _write(
+            self.root,
+            "lib/Mcp/DemoScannableServices.php",
+            _MCP_SCANNABLE_TMPL
+            .replace("use OCA\\OpenRegister\\Mcp\\IMcpScannableServices;\n", "")
+            .replace(" implements IMcpScannableServices", ""),
+        )
+        self.assertIn("createLead", f.methods())
+
+    def test_an_UNALIASED_implementation_grants_nothing_even_when_another_is_aliased(self):
+        # THE CONTROL FOR THE ALIAS REQUIREMENT. A registration exists — so the
+        # seam builder does not bail out early — but it names a DIFFERENT
+        # class. Any class in lib/ that happens to list `LeadService::class`
+        # must not become a seam on that basis.
+        alias = _MCP_ALIAS_CALL.replace(
+            "DemoScannableServices::class", "OtherScannableServices::class"
+        )
+        f = _McpFixture(self.root, alias=alias, attribute=_MCP_ATTRIBUTE)
+        _write(
+            self.root,
+            "lib/Mcp/OtherScannableServices.php",
+            _MCP_SCANNABLE_TMPL
+            .replace("class DemoScannableServices", "class OtherScannableServices")
+            .replace("LeadService::class,", ""),
+        )
+        self.assertIn("createLead", f.methods())
+
+    # --- the gate-64 shape: a comment is not a registration -------------
+    def test_a_COMMENTED_OUT_alias_grants_nothing(self):
+        # gate-64's `has_prelude()` matched inside comments, so a
+        # commented-out prelude counted as compliance. A seam matched in a
+        # comment exempts code that nothing calls.
+        commented = "\n".join(
+            "        // " + ln.strip() for ln in _MCP_ALIAS_CALL.split("\n")
+        )
+        f = _McpFixture(self.root, alias=commented, attribute=_MCP_ATTRIBUTE)
+        self.assertIn("createLead", f.methods())
+
+    def test_a_BLOCK_COMMENTED_alias_grants_nothing(self):
+        f = _McpFixture(
+            self.root,
+            alias="        /*\n" + _MCP_ALIAS_CALL + "\n        */",
+            attribute=_MCP_ATTRIBUTE,
+        )
+        self.assertIn("createLead", f.methods())
+
+    def test_a_docblock_that_merely_MENTIONS_the_attribute_is_not_an_attribute(self):
+        f = _McpFixture(
+            self.root,
+            alias=_MCP_ALIAS_CALL,
+            attribute="    /** Annotated with #[McpTool] elsewhere. */",
+        )
+        self.assertIn("createLead", f.methods())
+
+    # --- the SAME shape in the pre-existing seams -----------------------
+    def test_a_commented_out_event_listener_does_not_exempt_the_class(self):
+        # The listener seam exempts a WHOLE class, so a match inside a comment
+        # is a false GREEN. Latent rather than observed — a sweep of the eight
+        # repos under this gate found zero comment-only matches — but it is
+        # the same shape and it is now closed.
+        f = _McpFixture(self.root, alias="        // nothing", attribute="")
+        _write(
+            self.root,
+            "lib/AppInfo/Application.php",
+            _MCP_APPLICATION_TMPL
+            % "        // $context->registerEventListener(SomeEvent::class, LeadService::class);",
+        )
+        self.assertIn("createLead", f.methods())
+
+    def test_a_LIVE_event_listener_registration_still_exempts_the_class(self):
+        # THE CONTROL. Blanking comments must not have broken the seam itself.
+        f = _McpFixture(self.root, alias="        // nothing", attribute="")
+        _write(
+            self.root,
+            "lib/AppInfo/Application.php",
+            _MCP_APPLICATION_TMPL
+            % "        $context->registerEventListener(SomeEvent::class, LeadService::class);",
+        )
+        self.assertEqual(f.methods(), set())
+
+    def test_a_commented_out_background_job_does_not_exempt_the_class(self):
+        f = _McpFixture(self.root, alias="        // nothing", attribute="")
+        _write(
+            self.root,
+            "appinfo/info.xml",
+            "<?xml version='1.0'?>\n<info><id>demoapp</id><background-jobs>\n"
+            "<!-- <job>OCA\\DemoApp\\Service\\LeadService</job> -->\n"
+            "</background-jobs></info>\n",
+        )
+        self.assertIn("createLead", f.methods())
+
+    def test_a_LIVE_background_job_registration_still_exempts_the_class(self):
+        f = _McpFixture(self.root, alias="        // nothing", attribute="")
+        _write(
+            self.root,
+            "appinfo/info.xml",
+            "<?xml version='1.0'?>\n<info><id>demoapp</id><background-jobs>\n"
+            "<job>OCA\\DemoApp\\Service\\LeadService</job>\n"
+            "</background-jobs></info>\n",
+        )
+        self.assertEqual(f.methods(), set())
+
+
+class PhpCommentBlankerTest(unittest.TestCase):
+    """The blanker underpins every seam above, so it is tested directly."""
+
+    def test_preserves_line_numbers_and_length(self):
+        src = "<?php\n// gone\n$a = 1; /* gone\nstill gone */ $b = 2;\n# gone\n"
+        out = owc._blank_php_comments(src)
+        self.assertEqual(len(out), len(src))
+        self.assertEqual(out.count("\n"), src.count("\n"))
+        self.assertNotIn("gone", out)
+        self.assertIn("$a = 1;", out)
+        self.assertIn("$b = 2;", out)
+
+    def test_keeps_attributes_because_hash_bracket_is_not_a_comment(self):
+        # `#` opens a line comment in PHP; `#[` opens an ATTRIBUTE. Blanking
+        # attributes would delete the very thing the seam looks for.
+        src = "#[McpTool(name: 'x')]\npublic function createLead() {}\n"
+        self.assertIn("#[McpTool", owc._blank_php_comments(src))
+
+    def test_does_not_eat_a_hash_inside_a_string(self):
+        src = "<?php\n$u = 'http://x/#frag';\n$v = 2;\n"
+        out = owc._blank_php_comments(src)
+        self.assertIn("#frag", out)
+        self.assertIn("$v = 2;", out)
+
+    def test_does_not_treat_a_slash_slash_inside_a_string_as_a_comment(self):
+        src = "<?php\n$u = 'http://example.test';\n$v = 3;\n"
+        self.assertIn("$v = 3;", owc._blank_php_comments(src))
+
+
+class AttributeWalkUpTest(unittest.TestCase):
+    def test_an_attribute_argument_containing_the_word_class_is_still_read(self):
+        # `#[McpTool(handler: Foo::class)]` contains the word `class`. A
+        # word-based boundary stopped the walk-up before reaching it.
+        src = (
+            "<?php\nclass X\n{\n"
+            "    #[McpTool(handler: Foo::class)]\n"
+            "    public function createThing() {}\n}\n"
+        )
+        lines = owc._blank_php_comments(src).split("\n")
+        idx = next(i for i, ln in enumerate(lines) if "function createThing" in ln)
+        self.assertTrue(owc._method_has_mcp_attribute(lines, idx))
+
+    def test_a_previous_methods_attribute_does_not_leak_downward(self):
+        src = (
+            "<?php\nclass X\n{\n"
+            "    #[McpTool(name: 'a')]\n"
+            "    public function createA() { return 1; }\n"
+            "    public function createB() { return 2; }\n}\n"
+        )
+        lines = owc._blank_php_comments(src).split("\n")
+        idx = next(i for i, ln in enumerate(lines) if "function createB" in ln)
+        self.assertFalse(owc._method_has_mcp_attribute(lines, idx))
+
+
+class ExitContractTest(unittest.TestCase):
+    """gate-19 once returned its finding COUNT as an exit status — a byte — so
+    266 findings reported as 10 and exactly 256 would have reported PASS
+    (#209). This helper must not do that: it prints one line per finding and
+    always exits 0, and the bash gate counts the lines."""
+
+    def test_main_exits_zero_even_with_findings(self):
+        with _AppFixture() as root:
+            svc = _write(
+                root,
+                "lib/Service/OrphanService.php",
+                "<?php\nnamespace OCA\\Fixture\\Service;\nclass OrphanService {\n"
+                "    public function postJournalEntry(array $d): void {}\n"
+                "}\n",
+            )
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                rc = owc.main(["check_orphaned_write_capability.py", svc])
+            self.assertEqual(rc, 0, "the count must never be returned as an exit status")
+            self.assertGreater(
+                len([ln for ln in buf.getvalue().splitlines() if ln.strip()]), 0
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
