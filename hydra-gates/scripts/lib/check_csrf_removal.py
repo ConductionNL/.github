@@ -1,0 +1,92 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: EUPL-1.2
+"""Gate-48 csrf-cochange — which removed lines actually DROPPED CSRF protection?
+
+WHY THIS EXISTS (#191)
+----------------------
+The gate found removed attributes like this::
+
+    git diff -U0 "${BASE_REF}...HEAD" -- 'lib/Controller/*.php' \\
+        | grep -E '^-.*(@NoCSRFRequired|#\\[NoCSRFRequired\\])'
+
+`^-.*` puts no constraint on where in the line the token sits, so a comment
+that NAMES the attribute is indistinguishable from an attribute that was
+deleted. Measured on nldesign (`development` vs `origin/beta`): the gate was
+red, nothing about CSRF had changed, and the matched line was one removed
+sentence from a class docblock —
+
+    - * (#[PublicPage] + #[NoCSRFRequired]) and the response contract are owned by
+
+— replaced by another sentence saying the same thing.
+
+WHY THIS ONE IS ESPECIALLY BAD TO LEAVE
+---------------------------------------
+The cheapest way to clear the finding is to REWORD A COMMENT. That changes
+nothing about CSRF and teaches exactly the habit the gate exists to prevent,
+so a gate satisfiable by prose is worse than no gate: it manufactures the
+appearance of a security review. Same family as #184, where gate-64 grepped a
+quoted string literal and so matched every comment and missed every constant.
+
+THE RULE
+--------
+A removed line counts only when the token is in a CODE POSITION:
+
+  attribute form  after the `-`, optional whitespace, the content STARTS with
+                  `#[`, and that attribute list contains `NoCSRFRequired`.
+                  `#[NoAdminRequired, NoCSRFRequired]` counts; a sentence with
+                  `#[NoCSRFRequired]` in the middle of it does not.
+
+  docblock form   after the `-`, optional whitespace, an optional leading `*`
+                  and optional whitespace, the content STARTS with
+                  `@NoCSRFRequired`. That is the only position PHP's own
+                  docblock parsers accept a tag in, and it is not a position
+                  prose reaches.
+
+The nldesign line fails both — its `#[NoCSRFRequired]` sits mid-sentence after
+`(` — while a genuine deletion of either form still matches.
+
+Usage::
+
+    check_csrf_removal.py < unified.diff
+
+Prints the removed lines that are real CSRF removals, one per line. Exits 0
+always; the OUTPUT is the answer (#209).
+"""
+from __future__ import annotations
+
+import re
+import sys
+
+# `-` then optional whitespace then `#[`, with NoCSRFRequired inside the
+# attribute group. `[^]]*` is bounded by the closing bracket so a `#[Foo]`
+# followed later on the line by the word NoCSRFRequired in prose cannot match.
+ATTRIBUTE_REMOVED = re.compile(r'^-\s*#\[[^]]*\bNoCSRFRequired\b')
+# `-` then optional whitespace, an optional docblock star, optional
+# whitespace, then the tag AT THE START of the content.
+DOCBLOCK_TAG_REMOVED = re.compile(r'^-\s*(?:\*\s*)?@NoCSRFRequired\b')
+
+# A diff header line is `---` / `---` shaped; it is not a removed line of code.
+DIFF_HEADER = re.compile(r'^---(\s|$)')
+
+
+def removals(diff: str) -> list[str]:
+    out = []
+    for line in diff.splitlines():
+        if not line.startswith('-') or DIFF_HEADER.match(line):
+            continue
+        if ATTRIBUTE_REMOVED.match(line) or DOCBLOCK_TAG_REMOVED.match(line):
+            out.append(line)
+    return out
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) > 1:
+        print("usage: check_csrf_removal.py < unified.diff", file=sys.stderr)
+        return 2
+    for line in removals(sys.stdin.read()):
+        print(line)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

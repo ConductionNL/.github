@@ -1386,14 +1386,53 @@ fi
 _stub_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-stub-scan.log
 : > "${_stub_log}"
 grep -rn "In a complete implementation" lib/ src/ 2>/dev/null | _filter_grep_by_scope | head -5 >> "${_stub_log}" || true
+# A DELEGATING run() IS NOT A STUB, AND A DEAD LINE MUST NOT CLOSE THE GATE
+# (#226).
+#
+# This arm counted surviving lines after filtering out `try {`, `} catch` and
+# every logger call. For the canonical fail-safe wrapper —
+#
+#     protected function run($argument): void {
+#         try { $this->doRun(argument: $argument); }
+#         catch (Throwable $e) { $this->logger->error(...); }
+#     }
+#
+# — exactly ONE line survived, and the threshold was `< 2`. Measured on
+# portaliq: `lib/BackgroundJob/NotificationDispatchJob.php`, 530 lines and 11
+# private methods implementing a complete notification pipeline, reported as a
+# stub. Worse, the gate was CLOSED by adding an inert `$unused = 1;` and could
+# not be closed by writing correct code — the only other remedy was to inline
+# the pipeline back into run(), deleting the try/catch that keeps an exception
+# out of the NC cron runner. Both remedies are regressions, which is why
+# portaliq reported the finding instead of fixing it.
+#
+# scripts/lib/check_stub_run_body.py counts non-logger CALLS instead of lines,
+# over a comment-masked body with matched braces. Delegation passes; padding
+# does not.
+_stub_ran=1
 if [ -d lib/BackgroundJob ]; then
+    _stub_helper="${SCRIPT_DIR}/lib/check_stub_run_body.py"
+    _stub_jobs=()
     while IFS= read -r job; do
         [ -f "${job}" ] || continue
         _in_scope "${job}" || continue
-        _body=$(awk '/function run\(/,/^    }/' "${job}" | grep -vE '^\s*(//|\*|\s*\{|\s*\}|\s*$)' | grep -vE 'function run|logger->(info|warning|debug|error|notice)|try\s*\{|\}\s*catch|return;?$' || true)
-        _lc=$(echo "${_body}" | grep -cE '\S' || true)
-        [ "${_lc}" -lt 2 ] && echo "${job}: run() body has no non-logger statements (stub)" >> "${_stub_log}"
+        _stub_jobs+=("${job}")
     done < <(_enum_tracked '\.php$' lib/BackgroundJob)
+    if [ "${#_stub_jobs[@]}" -eq 0 ]; then
+        : # nothing in scope.
+    elif [ ! -f "${_stub_helper}" ]; then
+        _stub_ran=0
+        _skip 3 "stub-scan" wiring "check_stub_run_body.py not found at ${_stub_helper} — ${#_stub_jobs[@]} background job(s) were in scope and NONE had their run() body inspected."
+    else
+        set +e
+        _stub_err="${HYDRA_GATE_LOG_DIR}/hydra-gate-stub-scan.err"
+        python3 "${_stub_helper}" "${_stub_jobs[@]}" >> "${_stub_log}" 2>"${_stub_err}"
+        _stub_rc=$?
+        if [ "${_stub_rc}" -ne 0 ]; then
+            _stub_ran=0
+            _skip 3 "stub-scan" wiring "check_stub_run_body.py exited ${_stub_rc} — ${#_stub_jobs[@]} background job(s) were in scope and NONE were judged. See ${_stub_err}."
+        fi
+    fi
 fi
 if [ -d src ]; then
     while IFS= read -r vue; do
@@ -1436,10 +1475,12 @@ while IFS= read -r f; do
             fi
         done
 done < <(_enum_tracked '\.php$' lib/Service lib/Controller)
-if [ -s "${_stub_log}" ]; then
-    _fail 3 "stub-scan" "$(wc -l < "${_stub_log}") finding(s) — see ${_stub_log}"
-else
-    _pass 3 "stub-scan"
+if [ "${_stub_ran}" -eq 1 ]; then
+    if [ -s "${_stub_log}" ]; then
+        _fail 3 "stub-scan" "$(wc -l < "${_stub_log}") finding(s) — see ${_stub_log}"
+    else
+        _pass 3 "stub-scan"
+    fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -1556,12 +1597,94 @@ fi
 #     Per ADR-020 a routed method is now judged when the PR touched EITHER the
 #     controller that serves it OR appinfo/routes.php itself (adding/altering a
 #     route is exactly when its auth posture must be re-checked).
+#
+# (c) FIFTH DEFECT, 2026-08-08 (#196): A COMMENT SATISFIED THE GATE. The head
+#     block is raw text and the test was one grep, so an attribute NAME
+#     appearing anywhere — including inside a docblock — counted:
+#
+#         /**
+#          * ADMIN ONLY: `#[NoAdminRequired]` is deliberately NOT used here.
+#          */
+#         public function analytics(string $productId): JSONResponse
+#
+#     passed with no attribute at all. This is the EXPENSIVE direction for a
+#     security gate: a pass leaves no log, so any method whose prose mentions
+#     one of the four names was silently exempt, and anyone could switch the
+#     gate off for a method by writing about it. Live on openconnector's
+#     ProductSubscriptionsController, where `subscribe()` passed on exactly
+#     that sentence and its neighbour `analytics()` — identical auth posture,
+#     no such sentence — was reported (openconnector#1165). Two methods,
+#     opposite verdicts, decided entirely by prose.
+#
+#     The attribute test now runs over a COMMENT-MASKED copy of the file
+#     (scripts/lib/source_scope.py --mask php, which knows `#` opens a comment
+#     but `#[` opens an attribute — #184's distinction). The legacy docblock
+#     form is still accepted, but only at DOCBLOCK-TAG POSITION: preceded on
+#     its line by nothing but whitespace and comment punctuation. That is
+#     where PHP's own docblock parsers require it, and it is not a position
+#     prose reaches.
+#
+#     ⚠️ AND A DECLARATION, BECAUSE THE ALTERNATIVE IS AN UNCLOSABLE GATE.
+#     There is no way to say "admin only" with an attribute: the ABSENCE of
+#     `#[NoAdminRequired]` IS the admin gate, and adding `@NoAdminRequired`
+#     would make the endpoint non-admin. Documenting the posture was
+#     genuinely the only option available, and it happened to satisfy the
+#     regex — which is why this went unnoticed. Tightening alone would flag
+#     every such method across the fleet with no correct fix available, so
+#     the tightening lands WITH a marker in the `@spec exclude` family:
+#
+#         @auth admin-only <reason of at least 20 characters>
+#
+#     at docblock-tag position. An attribute is an attribute, a deliberate
+#     admin-only endpoint is DECLARED, and prose stops being load-bearing.
+#     gate-9 (semantic-auth) still owns the question of whether the declared
+#     posture matches the body.
 # ---------------------------------------------------------------------------
 if [ -f appinfo/routes.php ]; then
     _ra_fail=0 _ra_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-route-auth.log
     _ra_unresolved_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-route-auth-unresolved.log
     : > "${_ra_log}"
     : > "${_ra_unresolved_log}"
+    _ra_ran=1
+    _ra_helper="${SCRIPT_DIR}/lib/source_scope.py"
+    _ra_maskdir="${HYDRA_GATE_LOG_DIR}/route-auth-masked"
+    mkdir -p "${_ra_maskdir}" 2>/dev/null || true
+    # POSITIVE CONTROL ON THE MASK ITSELF. A helper that is missing, or that
+    # silently emits its input unchanged, would put the gate straight back
+    # into the false-negative it is here to close — and a false negative
+    # leaves no log to notice. So the mask is asked a question with a known
+    # answer before anything is judged: of these two lines, exactly ONE must
+    # survive. Anything else and the gate declines to run (#147, #245).
+    _ra_mask_ok=1
+    if [ ! -f "${_ra_helper}" ]; then
+        _ra_mask_ok=0
+    else
+        set +e
+        _ra_probe=$(printf '// #[NoAdminRequired]\n#[NoAdminRequired]\n' \
+            | python3 "${_ra_helper}" --mask php - 2>/dev/null \
+            | grep -c 'NoAdminRequired')
+        [ "${_ra_probe}" = "1" ] || _ra_mask_ok=0
+    fi
+    if [ "${_ra_mask_ok}" -eq 0 ]; then
+        _ra_ran=0
+        _skip 5 "route-auth" wiring "source_scope.py at ${_ra_helper} could not blank a PHP comment (positive control failed) — NO routed method was judged. Without it a docblock mentioning an attribute name would satisfy this gate silently (#196), so the run declines rather than reporting a pass it cannot support."
+    fi
+    # Comment-masked copy of a controller, cached per path. Echoes the masked
+    # path on success and nothing on failure — the caller treats an empty
+    # answer as UNRESOLVED, never as "no attribute".
+    _ra_masked_copy() {
+        local _src="$1" _dst
+        _dst="${_ra_maskdir}/$(printf '%s' "${_src}" | tr '/' '_')"
+        if [ ! -f "${_dst}" ]; then
+            set +e
+            if ! python3 "${_ra_helper}" --mask php "${_src}" > "${_dst}.tmp" 2>/dev/null; then
+                rm -f "${_dst}.tmp"
+                return 1
+            fi
+            mv "${_dst}.tmp" "${_dst}"
+        fi
+        printf '%s' "${_dst}"
+    }
     # Touching appinfo/routes.php puts every routed method back in scope.
     _ra_routes_touched=0
     _in_scope "appinfo/routes.php" && _ra_routes_touched=1
@@ -1579,6 +1702,8 @@ if [ -f appinfo/routes.php ]; then
     # was written — had never once been reached from either gate.
     while IFS='#' read -r ctrl method; do
             [ -n "${ctrl:-}" ] || continue
+            # The mask's positive control failed; nothing here can be judged.
+            [ "${_ra_ran}" -eq 1 ] || continue
             path=$(_ctrl_path_from_name "${ctrl}")
             if [ ! -f "$path" ]; then
                 if _apphost_serves "${ctrl}" || _di_binds_controller "${path}" \
@@ -1615,8 +1740,33 @@ if [ -f appinfo/routes.php ]; then
             # now go through _head_block, which takes the contiguous annotation
             # run OR the 20-line slice, whichever starts earlier, and keeps the
             # previous-member clamp.
+            #
+            # THREE QUESTIONS, THREE TEXTS (#196).
+            #
+            #   1. an ATTRIBUTE — asked of the comment-MASKED head block, so
+            #      `#[NoAdminRequired]` quoted in a docblock is not one.
+            #   2. a LEGACY DOCBLOCK TAG — asked of the ORIGINAL, because the
+            #      tag lives in a comment by definition, but only at
+            #      tag position: nothing before it on the line except
+            #      whitespace and comment punctuation.
+            #   3. an explicit ADMIN-ONLY DECLARATION with a reason.
+            #
             head_block=$(_head_block "$path" "${def_line}")
-            if ! echo "$head_block" | grep -qE '#\[(PublicPage|NoAdminRequired|NoCSRFRequired|AuthorizedAdminSetting)\b|@(PublicPage|NoAdminRequired|NoCSRFRequired)\b'; then
+            _ra_masked_path=$(_ra_masked_copy "$path")
+            if [ -z "${_ra_masked_path}" ]; then
+                echo "${path}:${def_line} method=${method} — the file could not be comment-masked; NOT JUDGED (a raw-text match here would be the #196 false negative)" >> "${_ra_unresolved_log}"
+                continue
+            fi
+            head_masked=$(_head_block "${_ra_masked_path}" "${def_line}")
+            _ra_declared=0
+            echo "$head_masked" | grep -qE '#\[[^]]*\b(PublicPage|NoAdminRequired|NoCSRFRequired|AuthorizedAdminSetting)\b' && _ra_declared=1
+            if [ "${_ra_declared}" -eq 0 ]; then
+                echo "$head_block" | grep -qE '^[[:space:]]*(/?\*+[[:space:]]*)?@(PublicPage|NoAdminRequired|NoCSRFRequired)\b' && _ra_declared=1
+            fi
+            if [ "${_ra_declared}" -eq 0 ]; then
+                echo "$head_block" | grep -qE '^[[:space:]]*(/?\*+[[:space:]]*)?@auth[[:space:]]+admin-only[[:space:]]+.{20,}' && _ra_declared=1
+            fi
+            if [ "${_ra_declared}" -eq 0 ]; then
                 echo "${path}:${def_line} method=${method} rule=missing-auth-attribute" >> "${_ra_log}"
             fi
     done < <(grep -oE "${_ROUTE_NAME_RX}" appinfo/routes.php \
@@ -1628,10 +1778,12 @@ if [ -f appinfo/routes.php ]; then
     if [ "${_ra_unres}" -gt 0 ]; then
         echo "[hydra-gates] gate-5 route-auth: ${_ra_unres} routed entr(ies) NOT JUDGED (controller class unresolvable here) — see ${_ra_unresolved_log}. This is not a pass for them; reachability is gate-14's."
     fi
-    if [ "${_ra_fail}" -eq 0 ]; then
-        _pass 5 "route-auth"
-    else
-        _fail 5 "route-auth" "${_ra_fail} routed method(s) missing auth attribute — see ${_ra_log}"
+    if [ "${_ra_ran}" -eq 1 ]; then
+        if [ "${_ra_fail}" -eq 0 ]; then
+            _pass 5 "route-auth"
+        else
+            _fail 5 "route-auth" "${_ra_fail} routed method(s) missing auth attribute — see ${_ra_log}"
+        fi
     fi
 fi
 
@@ -1948,29 +2100,60 @@ fi
 # inputLabel (or ariaLabelCombobox). Manual <label> elements break the
 # component's internal a11y wiring (WCAG 1.3.1 / 4.1.2). ADR-004 hard
 # rule. Observed 2026-04-30 on doriath.
+#
+# THE ELEMENT ENDS AT A `>` THAT IS NOT INSIDE AN ATTRIBUTE VALUE (#236).
+#
+# This gate used to extract elements with `grep -oE '<NcSelect[^>]*>'`.
+# `[^>]*` stops at the FIRST `>` in the source, and in an NcSelect that is
+# usually the arrow of `:reduce="(o) => o.id"` — so every prop written after
+# `:reduce` was cut off, including the two this gate looks for. Measured on
+# scholiq 2026-08-08: 18 findings, 18 of them false; each flagged element
+# already carried `:input-label` AND `:aria-label-combobox`, both after
+# `:reduce`. The gate was anti-correlated with its subject there — adding the
+# label could not clear it, removing `:reduce` could. Same shape as gate-9's
+# `[^)]*` in #198.
+#
+# The accepted prop set is UNCHANGED, deliberately — this fixes where an
+# element ends and which regions of the file are markup, not what counts as a
+# name, so the numbers stay comparable.
 # ---------------------------------------------------------------------------
 if [ -d src ]; then
     _il_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-nc-input-labels.log
     : > "${_il_log}"
+    _il_ran=1
+    _il_helper="${SCRIPT_DIR}/lib/check_nc_select_labels.py"
+    _il_files=()
     while IFS= read -r vue; do
+        [ -f "${vue}" ] || continue
         _in_scope "${vue}" || continue
-        _flat=$(tr '\n' ' ' < "${vue}")
-        echo "${_flat}" \
-            | grep -oE '<NcSelect[^>]*>' 2>/dev/null \
-            | while IFS= read -r tag; do
-                [ -z "${tag}" ] && continue
-                if ! echo "${tag}" | grep -qE "(input-label|inputLabel|aria-label-combobox|ariaLabelCombobox)"; then
-                    echo "${vue}: ${tag}" >> "${_il_log}"
-                fi
-            done
+        _il_files+=("${vue}")
         # .vue only: <NcSelect> is a Vue component. Gate 40 covers the
         # language-agnostic <input>/<select> label rule for PHP templates.
     done < <(find src -name '*.vue' 2>/dev/null)
-    _il_fail=$(wc -l < "${_il_log}" 2>/dev/null || echo 0)
-    if [ "${_il_fail}" -eq 0 ]; then
-        _pass 12 "nc-input-labels"
+    if [ "${#_il_files[@]}" -eq 0 ]; then
+        : # nothing in scope — ordinary diff scoping.
+    elif [ ! -f "${_il_helper}" ]; then
+        # A MISSING HELPER MUST NOT REPORT PASS (#147).
+        _il_ran=0
+        _skip 12 "nc-input-labels" wiring "check_nc_select_labels.py not found at ${_il_helper} — ${#_il_files[@]} component(s) were in scope and NONE had their NcSelect elements inspected; unnamed comboboxes are UNVERIFIED by this run."
     else
-        _fail 12 "nc-input-labels" "${_il_fail} NcSelect without inputLabel/ariaLabelCombobox — see ${_il_log}"
+        set +e
+        _il_err="${HYDRA_GATE_LOG_DIR}/hydra-gate-nc-input-labels.err"
+        python3 "${_il_helper}" "${_il_files[@]}" >> "${_il_log}" 2>"${_il_err}"
+        _il_rc=$?
+        if [ "${_il_rc}" -ne 0 ]; then
+            _il_ran=0
+            _skip 12 "nc-input-labels" wiring "check_nc_select_labels.py exited ${_il_rc} — ${#_il_files[@]} component(s) were in scope and NONE were judged. See ${_il_err}."
+        fi
+    fi
+    _il_fail=$(wc -l < "${_il_log}" 2>/dev/null || echo 0)
+    [ -z "${_il_fail}" ] && _il_fail=0
+    if [ "${_il_ran}" -eq 1 ]; then
+        if [ "${_il_fail}" -eq 0 ]; then
+            _pass 12 "nc-input-labels"
+        else
+            _fail 12 "nc-input-labels" "${_il_fail} NcSelect without inputLabel/ariaLabelCombobox — see ${_il_log}"
+        fi
     fi
 fi
 
@@ -3526,38 +3709,67 @@ fi
 # `<img>` elements need a text alternative; decorative images get `alt=""`.
 # Without it, screen-reader users hear the image filename or nothing.
 #
-# Scope: literal `<img ...>` tags in template/SFC sections of `.vue` files.
+# Scope: literal `<img ...>` tags in the RENDERED MARKUP of the file.
 # Excludes `<NcAvatarMenu>` / `<NcUserBubble>` / other component wrappers —
 # those handle accessibility internally per their own component contract.
+#
+# PROSE IS NOT MARKUP (#220, #235).
+#
+# This gate used to `tr '\n' ' '` the whole file and grep the result, so
+# `<script>`, `<style>` and every comment were scanned as if they rendered.
+# Measured: on openbuild ALL THREE findings were JSDoc lines reading
+# `* @param {Event} e - The `<img>` `error` event`, and on launchpad the one
+# finding was a docblock explaining that CnDashboardIcon resolves a URL to an
+# `<img>`. Neither repository contained an unlabelled image. The log itself
+# said so — a real tag prints with its attributes, those printed as the bare
+# four characters `<img>`.
+#
+# Extraction moved to scripts/lib/check_markup_a11y.py, which reads the
+# markup scope only (source_scope.markup_mask) and ends an element at a `>`
+# that is not inside a quoted attribute value. The RULE is unchanged — same
+# accepted alt spellings — so the numbers stay comparable.
 #
 # References:
 #   - ADR-010 (NL Design — WCAG 2.2 AA)
 #   - openspec/architecture/wcag-coverage.md SC 1.1.1
+#   - ConductionNL/.github#220, #235
 # ---------------------------------------------------------------------------
-if [ -d src ]; then
+if _a11y_has_markup_dir; then
     _ia_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-img-alt.log
     : > "${_ia_log}"
+    _ia_ran=1
+    _ia_helper="${SCRIPT_DIR}/lib/check_markup_a11y.py"
+    _ia_files=()
     while IFS= read -r vue; do
+        [ -f "${vue}" ] || continue
         _in_scope "${vue}" || continue
-        # Flatten multi-line attribute lists so a single grep can match the
-        # opening tag including all its attributes.
-        _flat=$(tr '\n' ' ' < "${vue}")
-        echo "${_flat}" \
-            | grep -oE '<img\b[^>]*>' 2>/dev/null \
-            | while IFS= read -r tag; do
-                [ -z "${tag}" ] && continue
-                # Any of: `alt=`, `:alt=`, `v-bind:alt=`, `alt-text=` (some
-                # Conduction components proxy the prop under this name).
-                if ! echo "${tag}" | grep -qE '(^|[[:space:]])(:?alt|v-bind:alt|alt-text)='; then
-                    echo "${vue}: ${tag}" >> "${_ia_log}"
-                fi
-            done
+        _ia_files+=("${vue}")
     done < <(_a11y_markup_files)
-    _ia_fail=$(wc -l < "${_ia_log}" 2>/dev/null || echo 0)
-    if [ "${_ia_fail}" -eq 0 ]; then
-        _pass 31 "img-alt"
+    if [ "${#_ia_files[@]}" -eq 0 ]; then
+        : # nothing in scope; the verdict below describes the diff.
+    elif [ ! -f "${_ia_helper}" ]; then
+        # A MISSING HELPER MUST NOT REPORT PASS (#147).
+        _ia_ran=0
+        _skip 31 "img-alt" wiring "check_markup_a11y.py not found at ${_ia_helper} — ${#_ia_files[@]} markup file(s) were in scope and NONE were inspected; images without a text alternative (WCAG 1.1.1) are UNVERIFIED by this run."
     else
-        _fail 31 "img-alt" "${_ia_fail} <img> tag(s) without alt attribute — see ${_ia_log}"
+        set +e
+        _ia_err="${HYDRA_GATE_LOG_DIR}/hydra-gate-img-alt.err"
+        python3 "${_ia_helper}" --rule img-alt "${_ia_files[@]}" >> "${_ia_log}" 2>"${_ia_err}"
+        _ia_rc=$?
+        if [ "${_ia_rc}" -ne 0 ]; then
+            # A CRASHED CHECKER IS NOT A CLEAN FILE (#245, #249). stderr kept.
+            _ia_ran=0
+            _skip 31 "img-alt" wiring "check_markup_a11y.py exited ${_ia_rc} — ${#_ia_files[@]} markup file(s) were in scope and NONE were judged. See ${_ia_err}."
+        fi
+    fi
+    _ia_fail=$(wc -l < "${_ia_log}" 2>/dev/null || echo 0)
+    [ -z "${_ia_fail}" ] && _ia_fail=0
+    if [ "${_ia_ran}" -eq 1 ]; then
+        if [ "${_ia_fail}" -eq 0 ]; then
+            _pass 31 "img-alt"
+        else
+            _fail 31 "img-alt" "${_ia_fail} <img> tag(s) without alt attribute — see ${_ia_log}"
+        fi
     fi
 fi
 
@@ -3582,62 +3794,63 @@ fi
 #   - ADR-010 (NL Design — WCAG 2.2 AA)
 #   - openspec/architecture/wcag-coverage.md SC 2.1.1, 4.1.2
 # ---------------------------------------------------------------------------
-if [ -d src ]; then
+# A COMMENT IS NOT AN ELEMENT — IN EITHER DIRECTION (#236).
+#
+# This gate flattened the whole file and grepped it, so the explanatory
+# comment above a repaired element was itself scored as the element. Measured
+# on softwarecatalog: three files reported, the logged "tag" was `<div
+# @click>` with no attributes — the comment, not the markup — and REWORDING
+# THE COMMENTS took the gate FAIL(3) -> PASS with the elements byte-identical
+# across both runs.
+#
+# The false positive is the cheap half. The expensive half is that a
+# genuinely bad element could be explained away by writing a comment about
+# it, and writing a comment is the natural next step for someone chasing this
+# gate. Scanning proceeds over markup scope only (comments and <script>
+# blanked) via scripts/lib/check_markup_a11y.py, which also ends an element at
+# a `>` outside a quoted value — so a `@click` written after
+# `:title="o.find(x => x.id)"` is now visible, which the old `[^>]*` could
+# not see at all.
+#
+# The RULE is carried over unchanged: same required trio, same `<a href>` and
+# bare-`@click.stop` exemptions.
+#
+#   - ConductionNL/.github#236
+# ---------------------------------------------------------------------------
+if _a11y_has_markup_dir; then
     _sc_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-semantic-controls.log
     : > "${_sc_log}"
+    _sc_ran=1
+    _sc_helper="${SCRIPT_DIR}/lib/check_markup_a11y.py"
+    _sc_files=()
     while IFS= read -r vue; do
+        [ -f "${vue}" ] || continue
         _in_scope "${vue}" || continue
-        _flat=$(tr '\n' ' ' < "${vue}")
-        # Match opening tags of non-semantic block/inline elements that have
-        # a click binding. `<a` is included but filtered below if `href` is
-        # also present.
-        echo "${_flat}" \
-            | grep -oE '<(div|span|a|p|li|article|section|header|footer|aside|main|nav)\b[^>]*(@click|v-on:click)[^>]*>' 2>/dev/null \
-            | while IFS= read -r tag; do
-                [ -z "${tag}" ] && continue
-                # Real anchor with href = native keyboard-accessible; skip.
-                if echo "${tag}" | grep -qE '^<a\b[^>]*\bhref='; then
-                    continue
-                fi
-                # Event-management-only handlers don't represent user
-                # interactions and shouldn't trigger the gate:
-                #   - `@click.stop` with no value     — pure event stop-propagation
-                #   - `@click.stop=""`                — same, explicit empty
-                # Only skip when the click is .stop AND there's no other
-                # `@click` (i.e. no real action handler on the tag). This
-                # closes the false-positive observed on opencatalogi
-                # PublicationCard.vue `<div @click.stop>` wrappers.
-                _stop_only=0
-                if echo "${tag}" | grep -qE '@click\.stop(\s|>|=("\s*"|'\''\s*'\''))'; then
-                    # Any `@click` outside the .stop form? If not, this is
-                    # event-mgmt-only.
-                    if ! echo "${tag}" | grep -qE '@click(\.[a-z]+)*\s*=\s*"[^"]+"' \
-                       || ! echo "${tag}" | grep -qE '@click(\.[a-z]+)*\s*=\s*"[^"]+"' | grep -qv '@click\.stop\s*=\s*""'; then
-                        _stop_only=1
-                    fi
-                fi
-                if [ "${_stop_only}" -eq 1 ]; then continue; fi
-                # Required trio: role= , tabindex= , and a key handler
-                _has_role=0
-                _has_tabindex=0
-                _has_keyhandler=0
-                echo "${tag}" | grep -qE '(^|[[:space:]])(:?role|v-bind:role)=' && _has_role=1
-                echo "${tag}" | grep -qE '(^|[[:space:]])(:?tabindex|v-bind:tabindex)=' && _has_tabindex=1
-                echo "${tag}" | grep -qE '(@keydown|@keyup|@keypress|v-on:keydown|v-on:keyup|v-on:keypress)' && _has_keyhandler=1
-                if [ "${_has_role}" -eq 0 ] || [ "${_has_tabindex}" -eq 0 ] || [ "${_has_keyhandler}" -eq 0 ]; then
-                    _missing=""
-                    [ "${_has_role}" -eq 0 ] && _missing="${_missing}role="
-                    [ "${_has_tabindex}" -eq 0 ] && _missing="${_missing}${_missing:+,}tabindex="
-                    [ "${_has_keyhandler}" -eq 0 ] && _missing="${_missing}${_missing:+,}@keydown"
-                    echo "${vue}: ${tag} rule=missing[${_missing}]" >> "${_sc_log}"
-                fi
-            done
+        _sc_files+=("${vue}")
     done < <(_a11y_markup_files)
-    _sc_fail=$(wc -l < "${_sc_log}" 2>/dev/null || echo 0)
-    if [ "${_sc_fail}" -eq 0 ]; then
-        _pass 32 "semantic-controls"
+    if [ "${#_sc_files[@]}" -eq 0 ]; then
+        : # nothing in scope; the verdict below describes the diff.
+    elif [ ! -f "${_sc_helper}" ]; then
+        _sc_ran=0
+        _skip 32 "semantic-controls" wiring "check_markup_a11y.py not found at ${_sc_helper} — ${#_sc_files[@]} markup file(s) were in scope and NONE were inspected; keyboard-inaccessible click targets (WCAG 2.1.1 / 4.1.2) are UNVERIFIED by this run."
     else
-        _fail 32 "semantic-controls" "${_sc_fail} non-semantic element(s) with @click but missing role/tabindex/keyboard handler — use <NcButton> or <button> — see ${_sc_log}"
+        set +e
+        _sc_err="${HYDRA_GATE_LOG_DIR}/hydra-gate-semantic-controls.err"
+        python3 "${_sc_helper}" --rule semantic-controls "${_sc_files[@]}" >> "${_sc_log}" 2>"${_sc_err}"
+        _sc_rc=$?
+        if [ "${_sc_rc}" -ne 0 ]; then
+            _sc_ran=0
+            _skip 32 "semantic-controls" wiring "check_markup_a11y.py exited ${_sc_rc} — ${#_sc_files[@]} markup file(s) were in scope and NONE were judged. See ${_sc_err}."
+        fi
+    fi
+    _sc_fail=$(wc -l < "${_sc_log}" 2>/dev/null || echo 0)
+    [ -z "${_sc_fail}" ] && _sc_fail=0
+    if [ "${_sc_ran}" -eq 1 ]; then
+        if [ "${_sc_fail}" -eq 0 ]; then
+            _pass 32 "semantic-controls"
+        else
+            _fail 32 "semantic-controls" "${_sc_fail} non-semantic element(s) with @click but missing role/tabindex/keyboard handler — use <NcButton> or <button> — see ${_sc_log}"
+        fi
     fi
 fi
 
@@ -3767,20 +3980,74 @@ fi
 # (Name, Role, Value) — native window dialogs don't expose a queryable
 # role to assistive tech that matches the surrounding NC shell.
 # ---------------------------------------------------------------------------
+#
+# IT GREPPED PROSE, AND IT MISSED THE BRACKET FORM (#224).
+#
+# `grep -rnE '\bwindow\.(confirm|alert|prompt)\s*\('` failed in both
+# directions, measured in four arms on doriath:
+#
+#   arm 1  a comment saying the component deliberately AVOIDS
+#          window.confirm()                             -> FAIL, false RED
+#   arm 2  the same file, comment deleted                -> PASS  (control)
+#   arm 3  `if (!window['confirm']('Delete everything?'))` -> PASS, false GREEN
+#   arm 4  the same code as `window.confirm(...)`        -> FAIL  (control)
+#
+# Arm 1 punishes the code that did the right thing and teaches people not to
+# write down why. Arm 3 is the serious one — on doriath the native call it
+# hid guarded a CASCADING DELETE, and `window['confirm']` is what several
+# minifiers and some lint autofixes emit. `const { confirm } = window` sails
+# through the old regex too.
+#
+# scripts/lib/check_js_call_sites.py anchors on the executable regions of the
+# file (comments blanked, string CONTENTS blanked) and then reads the
+# original text at the same offset, so a documentation string is not a call
+# and a bracket-access call is.
+#
+#   - ConductionNL/.github#224
+# ---------------------------------------------------------------------------
 if _a11y_has_markup_dir; then
     _wc_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-window-confirm.log
     : > "${_wc_log}"
+    _wc_ran=1
+    _wc_helper="${SCRIPT_DIR}/lib/check_js_call_sites.py"
+    _wc_files=()
     # templates/ too (#225): a native dialog opened from an inline <script> in a
     # PHP template breaks theming and WCAG exactly as one in a .vue does.
-    grep -rnE '\bwindow\.(confirm|alert|prompt)\s*\(' src/ templates/ appinfo/templates/ \
-        --include='*.vue' --include='*.js' --include='*.ts' \
-        --include='*.php' --include='*.html' --include='*.htm' 2>/dev/null \
-        | _filter_grep_by_scope >> "${_wc_log}" || true
-    _wc_fail=$(wc -l < "${_wc_log}" 2>/dev/null || echo 0)
-    if [ "${_wc_fail}" -eq 0 ]; then
-        _pass 34 "window-confirm"
+    while IFS= read -r _f; do
+        [ -f "${_f}" ] || continue
+        case "${_f}" in
+            *.vue|*.js|*.ts|*.php|*.html|*.htm) ;;
+            *) continue ;;
+        esac
+        _in_scope "${_f}" || continue
+        _wc_files+=("${_f}")
+    done < <(find src templates appinfo/templates -type f \
+        \( -name '*.vue' -o -name '*.js' -o -name '*.ts' \
+           -o -name '*.php' -o -name '*.html' -o -name '*.htm' \) 2>/dev/null \
+        | grep -vE '(^|/)(node_modules|vendor|dist|build|coverage|phpmetrics|\.git)/' || true)
+    if [ "${#_wc_files[@]}" -eq 0 ]; then
+        : # nothing in scope; the verdict below describes the diff.
+    elif [ ! -f "${_wc_helper}" ]; then
+        _wc_ran=0
+        _skip 34 "window-confirm" wiring "check_js_call_sites.py not found at ${_wc_helper} — ${#_wc_files[@]} file(s) were in scope and NONE were inspected; native browser dialogs are UNVERIFIED by this run."
     else
-        _fail 34 "window-confirm" "${_wc_fail} native dialog call(s) — use NcDialog / CnFormDialog — see ${_wc_log}"
+        set +e
+        _wc_err="${HYDRA_GATE_LOG_DIR}/hydra-gate-window-confirm.err"
+        python3 "${_wc_helper}" --rule native-dialog "${_wc_files[@]}" >> "${_wc_log}" 2>"${_wc_err}"
+        _wc_rc=$?
+        if [ "${_wc_rc}" -ne 0 ]; then
+            _wc_ran=0
+            _skip 34 "window-confirm" wiring "check_js_call_sites.py exited ${_wc_rc} — ${#_wc_files[@]} file(s) were in scope and NONE were judged. See ${_wc_err}."
+        fi
+    fi
+    _wc_fail=$(wc -l < "${_wc_log}" 2>/dev/null || echo 0)
+    [ -z "${_wc_fail}" ] && _wc_fail=0
+    if [ "${_wc_ran}" -eq 1 ]; then
+        if [ "${_wc_fail}" -eq 0 ]; then
+            _pass 34 "window-confirm"
+        else
+            _fail 34 "window-confirm" "${_wc_fail} native dialog call(s) — use NcDialog / CnFormDialog — see ${_wc_log}"
+        fi
     fi
 fi
 
@@ -4305,37 +4572,83 @@ fi
 # inherit it. Detect templates that emit an `<html>` element without a `lang`
 # attribute. Per WCAG 2.2 AA SC 3.1.1 (Language of Page).
 #
-# Heuristic: PHP template files containing `<html>` (opening tag) must also
-# carry `lang=` on that tag. Pure partial templates that never render
-# `<html>` are skipped.
+# Rule: a template that EMITS an `<html>` opening tag must carry `lang=` on
+# it. Templates that never render one are out of scope — measured, all 30 app
+# templates in this fleet are fragments substituted into core's page, and core
+# emitted their `<html lang>` long before the template's first byte.
+#
+# THREE DEFECTS FIXED 2026-08-08 (#266):
+#
+# (a) A PHP COMMENT MENTIONING `<html>` MADE A MOUNT POINT A PAGE ROOT. The
+#     search ran `re.search(r'<html\b([^>]*)>', txt)` over the RAW file, so
+#
+#         <?php
+#         // Core emitted the <html> element for it, with its lang attribute,
+#         // long before this file.
+#         ?>
+#         <div id="app-settings"></div>
+#
+#     reported `1 <html> tag(s) without lang=` for a file containing no
+#     `<html>` element at all. This is gate-64's defect (#184) and the one
+#     gate-38 shipped a fix for (#247), verbatim — and it fails the other way
+#     too: a commented-out `<html lang="en">` would have SATISFIED the gate
+#     for a template that really does emit an unlangged one. The search now
+#     runs over `php_template_scope.emitted_markup`, which is the same answer
+#     gate-38 uses. `[^>]*` also went — a `>` inside an attribute value is not
+#     the end of the tag (#198, #236).
+#
+# (b) A THIRD SCOPE DEFINITION. This gate enumerated its own
+#     `find templates appinfo/templates -name '*.php'`, which is
+#     `_a11y_markup_files` minus the exclusions, so a generated `phpmetrics/`
+#     or `vendor/` template was audited here and nowhere else. It was the last
+#     a11y gate with a private enumeration; there are now two definitions in
+#     the family, not three, and one of them is shared.
+#
+# (c) NO WIRING GUARD. The block was an inline `python3 - <<'PYHL' >> log
+#     2>/dev/null`, so a crashed interpreter left an empty log and the gate
+#     reported PASS (#147 / #249). Note this gate is quiet across the fleet
+#     today for a reason unrelated to it being correct — no app emits a
+#     document — so a silent failure here would have been invisible
+#     indefinitely.
 #
 # References:
 #   - openspec/architecture/wcag-coverage.md SC 3.1.1
+#   - ConductionNL/.github#266
 # ---------------------------------------------------------------------------
 if [ -d templates ] || [ -d appinfo/templates ]; then
     _hl_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-html-lang.log
     : > "${_hl_log}"
+    _hl_ran=1
+    _hl_helper="${SCRIPT_DIR}/lib/php_template_scope.py"
+    _hl_files=()
     while IFS= read -r _f; do
         [ -z "$_f" ] && continue
-        _in_scope "$_f" || continue
-        python3 - "$_f" <<'PYHL' >> "${_hl_log}" 2>/dev/null
-import re, sys
-fname = sys.argv[1]
-try:
-    txt = open(fname).read()
-except Exception:
-    sys.exit(0)
-m = re.search(r'<html\b([^>]*)>', txt, re.IGNORECASE)
-if not m: sys.exit(0)
-if not re.search(r'(^|\s)lang\s*=', m.group(1) or ''):
-    print(f'{fname}: <html> rule=html-tag-without-lang')
-PYHL
-    done < <(find templates appinfo/templates -name '*.php' 2>/dev/null)
-    _hl_fail=$(wc -l < "${_hl_log}" 2>/dev/null || echo 0)
-    if [ "${_hl_fail}" -eq 0 ]; then
-        _pass 41 "html-lang"
+        case "$_f" in *.php) ;; *) continue ;; esac
+        _in_scope "$_f" && _hl_files+=("$_f")
+    done < <(_a11y_markup_files)
+    if [ "${#_hl_files[@]}" -eq 0 ]; then
+        : # nothing in scope; the verdict below describes the diff.
+    elif [ ! -f "${_hl_helper}" ]; then
+        _hl_ran=0
+        _skip 41 "html-lang" wiring "php_template_scope.py not found at ${_hl_helper} — ${#_hl_files[@]} PHP template(s) were in scope and NONE were inspected; a document without a declared language (WCAG 3.1.1) is UNVERIFIED by this run."
     else
-        _fail 41 "html-lang" "${_hl_fail} <html> tag(s) without lang= — see ${_hl_log}"
+        set +e
+        _hl_err="${HYDRA_GATE_LOG_DIR}/hydra-gate-html-lang.err"
+        python3 "${_hl_helper}" --html-lang "${_hl_files[@]}" >> "${_hl_log}" 2>"${_hl_err}"
+        _hl_rc=$?
+        if [ "${_hl_rc}" -ne 0 ]; then
+            _hl_ran=0
+            _skip 41 "html-lang" wiring "php_template_scope.py exited ${_hl_rc} — ${#_hl_files[@]} PHP template(s) were in scope and NONE were judged. See ${_hl_err}."
+        fi
+    fi
+    _hl_fail=$(wc -l < "${_hl_log}" 2>/dev/null || echo 0)
+    [ -z "${_hl_fail}" ] && _hl_fail=0
+    if [ "${_hl_ran}" -eq 1 ]; then
+        if [ "${_hl_fail}" -eq 0 ]; then
+            _pass 41 "html-lang"
+        else
+            _fail 41 "html-lang" "${_hl_fail} <html> tag(s) without lang= — see ${_hl_log}"
+        fi
     fi
 fi
 
@@ -4690,10 +5003,43 @@ fi
 # ---------------------------------------------------------------------------
 _csrf_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-csrf-cochange.log
 : > "${_csrf_log}"
+_csrf_ran=1
 if [ "${SCOPE_TO_DIFF}" = "1" ] && [ -n "${BASE_REF}" ]; then
-    # Find removed @NoCSRFRequired lines in changed PHP files
-    _csrf_removed=$(git diff -U0 "${BASE_REF}...HEAD" -- 'lib/Controller/*.php' 2>/dev/null \
-        | grep -E '^-.*(@NoCSRFRequired|#\[NoCSRFRequired\])' || true)
+    # Find removed @NoCSRFRequired lines in changed PHP files.
+    #
+    # A REMOVED COMMENT IS NOT A REMOVED ATTRIBUTE (#191).
+    #
+    # This used to be `grep -E '^-.*(@NoCSRFRequired|#\[NoCSRFRequired\])'`.
+    # `^-.*` puts no constraint on where the token sits, so nldesign went red
+    # for ONE removed sentence of a class docblock —
+    #
+    #   - * (#[PublicPage] + #[NoCSRFRequired]) and the response contract are owned by
+    #
+    # replaced by another sentence saying the same thing. Nothing about CSRF
+    # changed in that diff, and the cheapest way to clear the finding was to
+    # REWORD A COMMENT: a gate satisfiable by prose manufactures the
+    # appearance of a security review. scripts/lib/check_csrf_removal.py
+    # requires the token in a code position — `#[` at the start of the
+    # content, or `@NoCSRFRequired` at docblock-tag position.
+    _csrf_helper="${SCRIPT_DIR}/lib/check_csrf_removal.py"
+    if [ ! -f "${_csrf_helper}" ]; then
+        # A MISSING HELPER MUST NOT REPORT PASS (#147). Without it the gate
+        # sees no removals at all and goes green on every diff.
+        _csrf_ran=0
+        _skip 48 "csrf-cochange" wiring "check_csrf_removal.py not found at ${_csrf_helper} — the controller diff was NOT examined; a dropped @NoCSRFRequired is UNVERIFIED by this run."
+        _csrf_removed=""
+    else
+        set +e
+        _csrf_err="${HYDRA_GATE_LOG_DIR}/hydra-gate-csrf-cochange.err"
+        _csrf_removed=$(git diff -U0 "${BASE_REF}...HEAD" -- 'lib/Controller/*.php' 2>/dev/null \
+            | python3 "${_csrf_helper}" 2>"${_csrf_err}")
+        _csrf_rc=$?
+        if [ "${_csrf_rc}" -ne 0 ]; then
+            _csrf_ran=0
+            _csrf_removed=""
+            _skip 48 "csrf-cochange" wiring "check_csrf_removal.py exited ${_csrf_rc} — the controller diff was NOT examined. See ${_csrf_err}."
+        fi
+    fi
     if [ -n "${_csrf_removed}" ]; then
         # Look for frontend co-change signals in the diff.
         #
@@ -4723,10 +5069,12 @@ set +e
 _csrf_fail=$(wc -l < "${_csrf_log}" 2>/dev/null | tr -d ' ')
 set +e
 [ -z "${_csrf_fail}" ] && _csrf_fail=0
-if [ "${_csrf_fail}" -eq 0 ]; then
-    _pass 48 "csrf-cochange"
-else
-    _fail 48 "csrf-cochange" "@NoCSRFRequired dropped without frontend CSRF co-change — see ${_csrf_log}"
+if [ "${_csrf_ran}" -eq 1 ]; then
+    if [ "${_csrf_fail}" -eq 0 ]; then
+        _pass 48 "csrf-cochange"
+    else
+        _fail 48 "csrf-cochange" "@NoCSRFRequired dropped without frontend CSRF co-change — see ${_csrf_log}"
+    fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -5540,25 +5888,65 @@ fi
 #
 # Skill: .claude/skills/hydra-gate-e2e-networkidle/SKILL.md
 # ---------------------------------------------------------------------------
+#
+# A COMMENT WARNING AGAINST IT IS NOT A USE OF IT (#230).
+#
+# The only filter this gate had was the `exclude` marker, so a comment
+# explaining why the last live call was removed counted as a live call.
+# Measured on larpingapp@development: FAIL — 1 finding, and the line was
+#
+#   // live `waitForLoadState('networkidle')` in the suite; every other mention
+#
+# The repo has ZERO live calls; all ten occurrences under tests/ are comments.
+# Doubly perverse: the more carefully a repo documents the ADR-074 rule 4
+# removal, the more findings it accrues — and larpingapp is the repo this gate
+# was written against, so it has the most such comments in the fleet. It was
+# also unfixable in the leaf: the only remedies were deleting the explanation
+# or putting an `exclude` marker on a comment.
+#
+# The naive fix — drop lines starting with `//` — was rejected: it still
+# counts a mention after code on the same line and every block-comment
+# interior line that begins with a letter, and it LOSES a real call carrying a
+# trailing comment. scripts/lib/check_js_call_sites.py blanks the comment
+# REGIONS instead, keeps offsets, and reads the `exclude` marker out of the
+# ORIGINAL line — the marker lives in a comment, which is precisely what the
+# mask removes.
+# ---------------------------------------------------------------------------
 _nwi_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-e2e-networkidle.log
 : > "${_nwi_log}"
+_nwi_ran=1
+_nwi_helper="${SCRIPT_DIR}/lib/check_js_call_sites.py"
+_nwi_files=()
 while IFS= read -r f; do
     [ -f "$f" ] || continue
     _in_scope "$f" || continue
-    grep -nE "waitForLoadState\([[:space:]]*['\"]networkidle['\"]|waitUntil:[[:space:]]*['\"]networkidle['\"]" "$f" 2>/dev/null \
-        | grep -v "e2e-networkidle exclude" \
-        | while IFS= read -r hit; do
-            echo "${f}:${hit}" >> "${_nwi_log}"
-        done
+    _nwi_files+=("$f")
 done < <(find tests/e2e -type f \( -name '*.ts' -o -name '*.js' \) 2>/dev/null)
+if [ "${#_nwi_files[@]}" -eq 0 ]; then
+    : # nothing in scope; ADR-020 diff scoping working as designed.
+elif [ ! -f "${_nwi_helper}" ]; then
+    _nwi_ran=0
+    _skip 58 "e2e-networkidle" wiring "check_js_call_sites.py not found at ${_nwi_helper} — ${#_nwi_files[@]} e2e file(s) were in scope and NONE were inspected; a wait that never settles is UNVERIFIED by this run."
+else
+    set +e
+    _nwi_err="${HYDRA_GATE_LOG_DIR}/hydra-gate-e2e-networkidle.err"
+    python3 "${_nwi_helper}" --rule networkidle "${_nwi_files[@]}" >> "${_nwi_log}" 2>"${_nwi_err}"
+    _nwi_rc=$?
+    if [ "${_nwi_rc}" -ne 0 ]; then
+        _nwi_ran=0
+        _skip 58 "e2e-networkidle" wiring "check_js_call_sites.py exited ${_nwi_rc} — ${#_nwi_files[@]} e2e file(s) were in scope and NONE were judged. See ${_nwi_err}."
+    fi
+fi
 set +e
 _nwi_fail=$(wc -l < "${_nwi_log}" 2>/dev/null | tr -d ' ')
 set +e
 [ -z "${_nwi_fail}" ] && _nwi_fail=0
-if [ "${_nwi_fail}" -eq 0 ]; then
-    _pass 58 "e2e-networkidle"
-else
-    _fail 58 "e2e-networkidle" "${_nwi_fail} networkidle wait(s) in changed e2e file(s) — never settles on Nextcloud, use waitUntil:'domcontentloaded' (ADR-074 rule 4); see ${_nwi_log}"
+if [ "${_nwi_ran}" -eq 1 ]; then
+    if [ "${_nwi_fail}" -eq 0 ]; then
+        _pass 58 "e2e-networkidle"
+    else
+        _fail 58 "e2e-networkidle" "${_nwi_fail} networkidle wait(s) in changed e2e file(s) — never settles on Nextcloud, use waitUntil:'domcontentloaded' (ADR-074 rule 4); see ${_nwi_log}"
+    fi
 fi
 
 # ---------------------------------------------------------------------------

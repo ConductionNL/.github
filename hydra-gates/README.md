@@ -399,6 +399,37 @@ protection. So every run states how many waivers it honoured:
 
 A green earned by passing is then distinguishable from one earned by waiving.
 
+### Declaring an admin-only endpoint (gate 5)
+
+`@auth admin-only <reason>` is a **declaration**, not a waiver, and it exists
+because gate 5 was otherwise unsatisfiable for a whole class of correct code.
+
+In Nextcloud, **admin is the default and is expressed by the ABSENCE of an
+attribute**: `#[NoAdminRequired]` *widens* access, so an admin-only controller
+method has no attribute available to declare itself with. Gate 5's finding is
+precisely "no attribute", so before 2026-08-08 such a method could only be
+reported — or silently exempted by the bug in
+[#196](https://github.com/ConductionNL/.github/issues/196), where a docblock
+*mentioning* `#[NoAdminRequired]` satisfied the grep. Two methods with
+identical auth posture got opposite verdicts depending on their prose.
+
+Closing that false negative without adding a declaration would have converted a
+silent false negative into a **permanent** false positive on correct code — the
+no-honest-end-state shape. So the posture is stated instead:
+
+```php
+/**
+ * @auth admin-only writes billing state for every tenant; admin posture is the absence of NoAdminRequired
+ */
+public function update(string $id): JSONResponse
+```
+
+The reason must be at least 20 characters and sit at docblock-tag position.
+**Making mere absence sufficient was considered and rejected**: absence is the
+only thing gate 5 reports, so accepting it would empty the gate completely.
+gate 9 (semantic-auth) still owns whether the declared posture matches the
+method body.
+
 ---
 
 ## Testing the package

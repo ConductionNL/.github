@@ -30,9 +30,30 @@ ways at once — so the classification is done on EMITTED MARKUP only:
   * `<!-- … -->` HTML comments are removed. Commented-out markup ships
     nothing.
 
+GATE-41 SHARES THIS, IT DOES NOT ADD A THIRD ANSWER (#266)
+----------------------------------------------------------
+gate-41 (html-lang, WCAG 3.1.1) asked the same question of the same files
+with `re.search(r'<html\\b([^>]*)>', txt)` over the RAW text, and had gate-38's
+pre-fix defect verbatim:
+
+    <?php
+    // This mount point is substituted into core's page. Core emitted the
+    // <html> element for it, with its lang attribute, long before this file.
+    ?>
+    <div id="app-settings"></div>
+
+    [gate-41] html-lang: FAIL — 1 <html> tag(s) without lang=
+
+The file contains no `<html>` element; the gate matched the comment
+explaining that it doesn't. It fails the other way too — a commented-out
+`<html lang="en">` would VOUCH for a template that really does emit an
+unlangged one. `--html-lang` below answers it from `emitted_markup`, so the
+two gates cannot drift into disagreeing about what a template emits.
+
 Usage:
     php_template_scope.py --owns-document <file>   # exit 0 = owns, 1 = fragment
     php_template_scope.py --classify <file>...     # "<path>: page-root|fragment"
+    php_template_scope.py --html-lang <file>...    # SC 3.1.1 findings
 """
 from __future__ import annotations
 
@@ -46,6 +67,13 @@ PHP_BLOCK = re.compile(r'<\?(?:php\b|=)?.*?(?:\?>|\Z)', re.DOTALL | re.IGNORECAS
 HTML_COMMENT = re.compile(r'<!--.*?-->', re.DOTALL)
 
 DOCUMENT_TAG = re.compile(r'<(?:html|body)\b', re.IGNORECASE)
+# The opening `<html>` element and its attribute text. Quote-aware, so a `>`
+# inside an attribute value does not end the tag — the `[^>]*` shape it
+# replaces is the same character-class-as-delimiter bug as gate-9's `[^)]*`
+# (#198) and gate-12's (#236).
+HTML_TAG = re.compile(
+    r'<html\b((?:"[^"]*"|\'[^\']*\'|[^>"\'])*)>', re.IGNORECASE | re.DOTALL)
+LANG_ATTR = re.compile(r'(^|\s)(?:xml:)?lang\s*=', re.IGNORECASE)
 
 
 def emitted_markup(src: str) -> str:
@@ -68,6 +96,22 @@ def owns_document(src: str) -> bool:
     return bool(DOCUMENT_TAG.search(emitted_markup(src)))
 
 
+def html_lang_findings(path: str, src: str) -> list[str]:
+    """SC 3.1.1 findings for one template: an emitted `<html>` with no `lang`.
+
+    Asked of EMITTED MARKUP, so neither a PHP comment naming the tag nor a
+    commented-out `<html lang="en">` can decide it. Every emitted `<html>` is
+    checked, not just the first — a template with two would previously have
+    been judged by whichever came first.
+    """
+    out = []
+    for m in HTML_TAG.finditer(emitted_markup(src)):
+        if LANG_ATTR.search(m.group(1) or ''):
+            continue
+        out.append(f'{path}: <html> rule=html-tag-without-lang')
+    return out
+
+
 def _read(path: str) -> str:
     with open(path, encoding='utf-8', errors='replace') as f:
         return f.read()
@@ -88,6 +132,18 @@ def main(argv: list[str]) -> int:
             except OSError:
                 kind = 'unreadable'
             print(f'{path}: {kind}')
+        return 0
+    if len(argv) >= 3 and argv[1] == '--html-lang':
+        for path in argv[2:]:
+            try:
+                src = _read(path)
+            except OSError:
+                # Unreadable is NOT clean. Say so on stderr and exit non-zero
+                # so the caller reports a wiring failure rather than a pass.
+                print(f'php_template_scope: cannot read {path}', file=sys.stderr)
+                return 2
+            for line in html_lang_findings(path, src):
+                print(line)
         return 0
     print(__doc__, file=sys.stderr)
     return 2
