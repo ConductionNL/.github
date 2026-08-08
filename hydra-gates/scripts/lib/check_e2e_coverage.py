@@ -79,7 +79,12 @@ Diff scope
 In gate mode (default), the gate is diff-scoped via ``HYDRA_GATE_BASE_REF``
 (default ``origin/development``): only scenarios in spec files that are ADDED or
 MODIFIED in the PR are checked. Scenarios in untouched spec files are never
-flagged. Exit code = number of uncovered (or bare-exclude) scenarios.
+flagged.
+
+Exit code is a STATUS, not a count: ``0`` pass, ``1`` fail, ``2`` error. The
+number of findings is on stdout, in the ``FAIL — <n> scenario(s)`` summary
+line. Read stdout; an exit status is one byte and this gate has already
+returned a count through it twice.
 
 Report mode (``--mode report``) scans the entire ``openspec/specs/`` tree and
 emits a JSON summary — not diff-scoped, always exits 0.
@@ -433,92 +438,292 @@ _E2E_SHORT_RE = re.compile(
 
 
 # ---------------------------------------------------------------------------
-# A PERMANENTLY-SKIPPED TEST IS NOT COVERAGE
+# A PERMANENTLY-SKIPPED TEST IS NOT COVERAGE — AND READING ONE IS A PARSE
+# ---------------------------------------------------------------------------
 #
 # Observed on decidesk: four tests with EMPTY BODIES and a hardcoded
 # `test.skip(true, ...)`. Each carried an `@e2e` tag, each was counted as
 # traceability, and together they asserted NOTHING. That is a dead gate by
 # construction — the tag says a scenario is proven, the test proves nothing,
-# and the gate cannot tell the difference.
+# and the gate cannot tell the difference. That rule stays.
 #
 # What is dead:
 #   test.skip('name', ...)      the modifier form — declares a skipped test
 #   it.skip(...) / xit / xtest / test.fixme(...)
 #   describe.skip(...)          takes every test inside it with it
-#   test.skip(true)             an UNCONDITIONAL skip at the top of a body
+#   test.skip(true)             an UNCONDITIONAL skip, as a DIRECT STATEMENT
+#                               of the body it belongs to
 #   test.skip()                 argument-less, same thing
 #   an empty body               nothing but whitespace and comments
 #
 # What is NOT dead, and must keep counting:
 #   test.skip(browserName === 'firefox', 'flaky on gecko')
 #   test.skip(!process.env.CI, 'needs a CI fixture')
+#   if (!reachable) { test.skip(true, 'app not reachable') }
 #
-# ...because those run somewhere. A RUNTIME CONDITION is a real test with a
-# guard; a literal `true` is a test someone turned off. Conflating them would
-# swap this gate's blindness for a different one — refusing legitimate
-# conditional skips — so the discriminator is the argument, not the call.
-# `\b` is not enough of a boundary: it matches the `test` in `rx.test(text)`,
-# and JavaScript's RegExp.prototype.test is not Playwright's test(). On
-# openconnector, `dead-letter-replay.spec.ts` has
+# WHY THIS IS NOW A PARSER (#234, #239, #244)
+# -------------------------------------------
+# Every previous version of this section read JavaScript with regular
+# expressions and a hand-rolled paren walk. Three separate false REDs came out
+# of that one decision, and all three were reported as the same sentence —
+# "referenced only by a test that never runs" — about tests that ran and
+# PASSED in the same CI run:
 #
-#     IGNORED_CONSOLE_PATTERNS.some((rx) => rx.test(text))
+#   #234  A TRAILING COMMA before the closing paren. The body was found by
+#         stepping back from `)` over whitespace and requiring a `}`. Prettier
+#         and `comma-dangle: always-multiline` put a `,` there, so `body`
+#         stayed "" and the empty-body rule fired on a real, asserting test.
 #
-# in a helper ABOVE its tests, and the forward search from the file-level
-# `@e2e` tags landed on it. `_ref_is_live` then read that call's "body" —
-# there is none — and reported all 11 refs as "referenced only by a test that
-# never runs", about a file whose tests run fine.
+#   #239  A CONDITIONAL `test.skip(true, reason)` INSIDE AN `if` GUARD. The
+#         old discriminator was the ARGUMENT alone, so the single most common
+#         defensive idiom in the fleet (111 call sites vs 4 genuinely
+#         unconditional ones) read as a permanent skip. Worse, the gate's
+#         suggested remedy is to replace the tag with `@e2e exclude`, i.e. to
+#         DELETE a true coverage claim.
 #
-# `(?<![.\w$])` rejects a member call (`rx.test`, `foo.it`) and an identifier
-# that merely ends in one (`latest(`, `submit(`), while leaving a bare
-# `test(` / `it(` / `describe(` at a statement boundary matching.
+#   #244  A TAG WRITTEN INSIDE THE `test(` ARGUMENT LIST:
 #
-# THAT LOOKBEHIND ALSO REJECTED PLAYWRIGHT'S OWN CANONICAL SPELLING.
-# `test.describe.skip(` is the form every fleet repo actually writes, and the
-# pattern above could not match it anywhere: at `test` the optional `mod`
-# needs `.skip|.fixme|.failing` and finds `.describe`, so the required `\(`
-# fails; at `describe` the lookbehind sees the preceding `.` and refuses. The
-# whole construct was INVISIBLE — not "seen and judged live", never seen.
-# Measured on the reproduction in #210: BOTH the tag above a
-# `test.describe.skip` and the tag inside one came back LIVE, so the issue's
-# own claim that the `above` case was handled correctly was too generous.
+#             test(
+#                 // @e2e openspec/specs/admin-settings/spec.md#…
+#                 'Settings panel appears in admin area',
+#                 async ({ page }) => { … },
+#             )
 #
-# The fix is an explicit, optional `test.` / `it.` NAMESPACE segment. It is
-# named rather than general (`\w+\.`) on purpose: `rx.test(` and `foo.it(`
-# must still be rejected, and only Playwright's two roots may open a block.
-# The `.serial` / `.parallel` / `.only` segments are Playwright's other
-# describe modifiers and are NOT switched-off markers — a `describe.only` runs
-# (and suppresses everything else), so it stays live.
-_TEST_DECL_RE = re.compile(
-    r"(?<![.\w$])(?:(?:test|it)\s*\.\s*)?(?P<fn>test|it|describe)"
-    r"(?:\s*\.\s*(?:serial|parallel))?"
-    r"(?P<mod>\s*\.\s*(?:skip|fixme|failing))?"
-    r"(?:\s*\.\s*only)?"
-    r"\s*\(",
+#         The tag resolution only ever searched FORWARD, so a tag written
+#         inside its own test's header resolved to the NEXT test in the file
+#         (or ran off the end). On nldesign that mis-binding, compounded by
+#         #234 on the test it landed on, produced 34 of 190 findings.
+#
+# So: tokenise the file once (strings, template literals, regex literals and
+# comments are blanked, delimiters kept), then build the real tree of
+# test/describe calls with their header and body ranges. Structure questions
+# are answered from that tree instead of from a pattern that happens to look
+# like the code.
+#
+# The identifier rules the regexes earned are kept, because they were right:
+#   * `rx.test(text)` is JavaScript's RegExp.prototype.test, not Playwright's
+#     test() — a member call is never a declaration (openconnector,
+#     `dead-letter-replay.spec.ts`, 11 refs).
+#   * `latest(` / `submit(` merely END in a declaration name.
+#   * `test.describe.skip(` is Playwright's canonical spelling and MUST be
+#     matched — a hand-written alternation could not see it at all (#210).
+#   * `.only` / `.serial` / `.parallel` are not switched-off markers; a
+#     `describe.only` runs (and suppresses everything else), so it stays live.
+#   * anything else after the root — `test.beforeEach(`, `test.use(`,
+#     `test.step(`, `test.setTimeout(`, `test.describe.configure(` — is not a
+#     declaration at all.
+
+# Keywords after which a `/` opens a regular expression rather than dividing.
+_JS_REGEX_KEYWORDS = frozenset({
+    "return", "typeof", "instanceof", "in", "of", "new", "delete", "void",
+    "throw", "case", "do", "else", "yield", "await",
+})
+
+# A call whose callee is a dotted chain rooted at one of Playwright's/Jest's
+# declaration names. Matched against the CODE MASK, so a `test(` inside a
+# string, a comment or a regex literal is not a candidate at all.
+_CALL_RE = re.compile(
+    r"(?<![.\w$])(?P<root>test|it|describe|xit|xtest|xdescribe)"
+    r"(?P<segs>(?:\s*\.\s*[A-Za-z_$][A-Za-z0-9_$]*)*)\s*\(",
 )
-_XTEST_RE = re.compile(r"\b(?:xit|xtest|xdescribe)\s*\(")
-# `test.skip(true)` / `test.skip( 1 )` / `test.skip()` — no runtime condition.
-_UNCONDITIONAL_SKIP_RE = re.compile(
-    r"\b(?:test|it)\s*\.\s*skip\s*\(\s*(?:\)|true\s*[,)]|1\s*[,)])"
-)
+_IDENT_RE = re.compile(r"[A-Za-z_$][A-Za-z0-9_$]*")
+
+_OFF_SEGMENTS = frozenset({"skip", "fixme", "failing"})
+_NEUTRAL_SEGMENTS = frozenset({"only", "serial", "parallel", "concurrent"})
+# Guards whose body may be written WITHOUT braces: `if (x) test.skip(true, …)`
+_GUARDS_WITH_PAREN = frozenset({"if", "while", "for", "catch"})
+_GUARDS_BARE = frozenset({"else", "do", "try"})
 
 
-def _strip_comments(text: str) -> str:
-    """Remove // and /* */ comments so an empty body is not mistaken for a
-    documented one. Crude but sufficient: this only ever decides "is there any
-    executable statement here", never what the statement means."""
-    text = re.sub(r"/\*.*?\*/", " ", text, flags=re.DOTALL)
-    text = re.sub(r"(?m)//.*$", " ", text)
-    return text
+def _skip_string(text: str, i: int) -> int:
+    """Index just past the quoted string whose opening quote is at *i*.
+
+    An unterminated literal stops at the newline rather than swallowing the
+    rest of the file — a lone apostrophe in a comment must not blank a suite.
+    """
+    quote = text[i]
+    n = len(text)
+    j = i + 1
+    while j < n:
+        c = text[j]
+        if c == "\\":
+            j += 2
+            continue
+        if c == quote:
+            return j + 1
+        if c == "\n":
+            return j
+        j += 1
+    return n
 
 
-def _close_paren(text: str, open_paren: int) -> int | None:
-    """Index of the `)` matching the `(` at *open_paren*, or None."""
+def _skip_template(text: str, i: int) -> int:
+    """Index just past the template literal whose backtick is at *i*.
+
+    `${ … }` substitutions are walked (they may contain braces, quotes and
+    further templates) but their contents are blanked along with the rest: a
+    test declaration inside a template substitution is not a thing.
+    """
+    n = len(text)
+    j = i + 1
+    depth = 0                       # ${ } nesting inside this template
+    while j < n:
+        c = text[j]
+        if c == "\\":
+            j += 2
+            continue
+        if depth == 0:
+            if c == "`":
+                return j + 1
+            if c == "$" and j + 1 < n and text[j + 1] == "{":
+                depth += 1
+                j += 2
+                continue
+            j += 1
+            continue
+        if c == "`":
+            j = _skip_template(text, j)
+            continue
+        if c in "'\"":
+            j = _skip_string(text, j)
+            continue
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+        j += 1
+    return n
+
+
+def _skip_regex(text: str, i: int) -> int:
+    """Index just past the regex literal starting at *i*, or -1 if it is not
+    one. A regex literal cannot span a newline, which is the cheap and
+    reliable disambiguator against division."""
+    n = len(text)
+    j = i + 1
+    in_class = False
+    while j < n:
+        c = text[j]
+        if c == "\\":
+            j += 2
+            continue
+        if c == "\n":
+            return -1
+        if in_class:
+            if c == "]":
+                in_class = False
+        elif c == "[":
+            in_class = True
+        elif c == "/":
+            j += 1
+            while j < n and (text[j].isalpha()):
+                j += 1
+            return j
+        j += 1
+    return -1
+
+
+def _regex_can_start(prev_char: str, prev_word: str) -> bool:
+    """Whether a `/` at this point opens a regex rather than dividing."""
+    if prev_char == "":
+        return True
+    if prev_char in ")]":
+        return False
+    if prev_char in "'\"`":
+        return False
+    if prev_char.isalnum() or prev_char in "_$":
+        return prev_word in _JS_REGEX_KEYWORDS
+    return True
+
+
+def _code_mask(text: str) -> str:
+    """A same-length copy of *text* with every non-code character blanked.
+
+    Comments, string contents, template contents and regex literals become
+    spaces; newlines survive so offsets and line numbers still line up with
+    the original, which is what lets `@e2e` tags (found in the ORIGINAL text,
+    inside comments) be located in the structure built from the mask.
+
+    String and template DELIMITERS are deliberately kept. "Is the first
+    argument a string literal" is the whole difference between
+
+        test.skip('name', fn)      a declaration that is switched off
+        test.skip(cond, 'reason')  a statement inside a running test
+
+    and that question has to survive the blanking.
+    """
+    out = list(text)
+    n = len(text)
+
+    def blank(a: int, b: int) -> None:
+        for k in range(max(a, 0), min(b, n)):
+            if out[k] != "\n":
+                out[k] = " "
+
+    i = 0
+    prev_char = ""          # last significant code character
+    prev_word = ""          # identifier ending at prev_char, when it is one
+    while i < n:
+        c = text[i]
+        if c == "/" and text.startswith("//", i):
+            j = text.find("\n", i)
+            j = n if j < 0 else j
+            blank(i, j)
+            i = j
+            continue
+        if c == "/" and text.startswith("/*", i):
+            j = text.find("*/", i + 2)
+            j = n if j < 0 else j + 2
+            blank(i, j)
+            i = j
+            continue
+        if c in "'\"":
+            j = _skip_string(text, i)
+            blank(i + 1, j)
+            if j - 1 > i and text[j - 1] == c:
+                out[j - 1] = c
+            prev_char, prev_word = c, ""
+            i = j
+            continue
+        if c == "`":
+            j = _skip_template(text, i)
+            blank(i + 1, j)
+            if j - 1 > i and text[j - 1] == "`":
+                out[j - 1] = "`"
+            prev_char, prev_word = "`", ""
+            i = j
+            continue
+        if c == "/" and _regex_can_start(prev_char, prev_word):
+            j = _skip_regex(text, i)
+            if j > 0:
+                blank(i, j)
+                prev_char, prev_word = ")", ""   # a regex literal is a value
+                i = j
+                continue
+        if c.isalnum() or c in "_$":
+            k = i
+            while k < n and (text[k].isalnum() or text[k] in "_$"):
+                k += 1
+            prev_word = text[i:k]
+            prev_char = text[k - 1]
+            i = k
+            continue
+        if not c.isspace():
+            prev_char, prev_word = c, ""
+        i += 1
+    return "".join(out)
+
+
+def _match_paren(mask: str, open_paren: int) -> int | None:
+    """Index of the `)` matching the `(` at *open_paren* in the CODE MASK."""
     depth = 0
     i = open_paren
-    while i < len(text):
-        if text[i] == "(":
+    n = len(mask)
+    while i < n:
+        c = mask[i]
+        if c == "(":
             depth += 1
-        elif text[i] == ")":
+        elif c == ")":
             depth -= 1
             if depth == 0:
                 return i
@@ -526,184 +731,307 @@ def _close_paren(text: str, open_paren: int) -> int | None:
     return None
 
 
-def _is_switched_off(decl: str) -> bool:
-    """True when *decl* opens a block that never runs.
+def _first_arg(mask: str, open_paren: int, close: int) -> str:
+    """Masked text of the first top-level argument, stripped."""
+    depth = 0
+    i = open_paren + 1
+    start = i
+    while i < close:
+        c = mask[i]
+        if c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+        elif c == "," and depth == 0:
+            break
+        i += 1
+    return mask[start:i].strip()
 
-    Reads the `mod` group of the declaration regex rather than re-deriving it,
-    so `test.describe.skip(` and `describe.skip(` are judged by one rule. The
-    hand-written pattern this replaces required the modifier to follow the
-    ROOT identifier (`(?:test|it|describe)\\s*\\.\\s*(?:skip|…)`) and therefore
-    could not see the namespaced form at all.
+
+def _is_unconditional_arg(first: str) -> bool:
+    """`test.skip()`, `test.skip(true, …)`, `test.skip(1)` — no runtime
+    condition. Anything else is a guard and the test runs somewhere."""
+    return first in ("", "true", "1")
+
+
+class _TestNode:
+    """One `test(...)` / `describe(...)` declaration and where its parts are."""
+
+    __slots__ = ("fn", "segments", "switched_off", "start", "open", "close",
+                 "body", "header", "parent", "children")
+
+    def __init__(self, fn: str, segments: list[str], switched_off: bool,
+                 start: int, open_paren: int, close: int) -> None:
+        self.fn = fn
+        self.segments = segments
+        self.switched_off = switched_off
+        self.start = start
+        self.open = open_paren
+        self.close = close
+        self.body: tuple[int, int] | None = None
+        self.header: tuple[int, int] = (open_paren + 1, close)
+        self.parent: "_TestNode | None" = None
+        self.children: list["_TestNode"] = []
+
+
+class _TestFile:
+    """The declaration tree of one e2e test file.
+
+    Built once per file and queried per `@e2e` tag, so a file with 17 tagged
+    tests is tokenised once rather than 17 times.
     """
-    if _XTEST_RE.match(decl):
-        return True
-    m = _TEST_DECL_RE.match(decl)
-    return bool(m and m.group("mod"))
 
+    def __init__(self, text: str) -> None:
+        self.text = text
+        self.mask = _code_mask(text)
+        self.nodes: list[_TestNode] = []
+        self.roots: list[_TestNode] = []
+        # (start, is_unconditional) for `test.skip(...)` / `test.fixme(...)`
+        # written as a STATEMENT rather than as a declaration.
+        self.skips: list[tuple[int, bool]] = []
+        self._build()
 
-def _decl_spans(text: str) -> list[tuple[int, int, str]]:
-    """Every test/describe declaration in *text*, as (start, end, decl_text).
+    # -- construction -------------------------------------------------------
 
-    `end` is the index of the declaration's closing paren, so `start..end`
-    spans the whole call including its callback body.
-    """
-    spans: list[tuple[int, int, str]] = []
-    for rex in (_TEST_DECL_RE, _XTEST_RE):
-        for m in rex.finditer(text):
-            close = _close_paren(text, m.end() - 1)
+    def _build(self) -> None:
+        mask = self.mask
+        for m in _CALL_RE.finditer(mask):
+            open_paren = m.end() - 1
+            close = _match_paren(mask, open_paren)
             if close is None:
                 continue
-            spans.append((m.start(), close, text[m.start():close + 1]))
-    spans.sort()
-    return spans
+            root = m.group("root")
+            segs = _IDENT_RE.findall(m.group("segs"))
+            if root[0] == "x":
+                if segs:
+                    continue                       # xit.something( — not ours
+                fn, switched_off = root[1:], True
+            else:
+                fn = root
+                if fn in ("test", "it") and segs and segs[0] == "describe":
+                    fn = "describe"
+                    segs = segs[1:]
+                if any(s not in _OFF_SEGMENTS and s not in _NEUTRAL_SEGMENTS
+                       for s in segs):
+                    # test.beforeEach( / test.use( / test.step( /
+                    # test.setTimeout( / test.describe.configure( / test.info(
+                    continue
+                switched_off = any(s in _OFF_SEGMENTS for s in segs)
+            first = _first_arg(mask, open_paren, close)
+            if (switched_off and fn != "describe"
+                    and not first.startswith(("'", '"', "`"))):
+                # `test.skip(cond, 'reason')` — a statement inside a body, not
+                # a declaration of a skipped test. Its conditionality is
+                # decided by the ARGUMENT; whether it switches anything off is
+                # decided later by WHERE it is written (#239).
+                self.skips.append((m.start(), _is_unconditional_arg(first)))
+                continue
+            node = _TestNode(fn, segs, switched_off, m.start(), open_paren, close)
+            self._attach_body(node)
+            self.nodes.append(node)
 
+        self.nodes.sort(key=lambda nd: nd.start)
+        stack: list[_TestNode] = []
+        for nd in self.nodes:
+            while stack and stack[-1].close < nd.start:
+                stack.pop()
+            nd.parent = stack[-1] if stack else None
+            if nd.parent is not None:
+                nd.parent.children.append(nd)
+            else:
+                self.roots.append(nd)
+            stack.append(nd)
 
-def _switched_off_ancestor(text: str, pos: int) -> str | None:
-    """The innermost switched-off block ENCLOSING *pos*, if any.
+    def _attach_body(self, node: _TestNode) -> None:
+        """Find the callback body: the last brace-balanced group in the call.
 
-    WHY THIS EXISTS (#210)
-    ----------------------
-    `_enclosing_block` only ever searches FORWARD, because the convention this
-    module documents puts the tag in a comment immediately ABOVE the test it
-    annotates. That is right for the test, and blind to everything wrapping it:
+        Scanning back from the closing paren skips whitespace AND a trailing
+        comma. `comma-dangle: always-multiline` — Prettier's default and
+        ESLint's recommended setting — puts a `,` exactly there, and requiring
+        a `}` at that position reported every such test as an empty body
+        (#234).
 
-        test.describe.skip('outer', () => {
-            // @e2e demo::something
-            test('inner', async ({ page }) => { … })   <-- forward search lands here
-        })
-
-    The forward search finds the inner, un-skipped `test()`, reports it live,
-    and the enclosing `describe.skip` — which is ABOVE the tag and takes every
-    test inside it with it — is never consulted. The tag counted as coverage
-    while nothing ran, and this is the position the convention itself tells
-    people to write the tag in.
-
-    Measured in the fleet at the time of the fix: 16 spec scenarios across
-    openconnector (11) and scholiq (5).
-
-    The rule is the same one the module docstring already states for
-    `describe.skip(...)`; only the ancestor direction was missing. An ancestor
-    that merely carries `.only` / `.serial` / `.parallel` is NOT switched off.
-    """
-    innermost: str | None = None
-    for start, end, decl in _decl_spans(text):
-        if start >= pos:
-            break            # spans are sorted; nothing later can enclose pos
-        if end < pos:
-            continue         # closed before the tag — a sibling, not a parent
-        if _is_switched_off(decl):
-            innermost = decl
-    return innermost
-
-
-def _enclosing_block(text: str, pos: int) -> tuple[str, str] | None:
-    """The nearest `test(`/`it(`/`describe(` declaration at or after *pos*, as
-    (declaration_text, body_text).
-
-    An `@e2e` tag conventionally sits in a comment immediately ABOVE the test
-    it annotates, so the search runs forward from the tag. See
-    :func:`_switched_off_ancestor` for the other direction, which this
-    function deliberately does not cover.
-    """
-    m = _TEST_DECL_RE.search(text, pos)
-    xm = _XTEST_RE.search(text, pos)
-    if xm and (not m or xm.start() < m.start()):
-        decl_start, open_paren = xm.start(), xm.end() - 1
-    elif m:
-        decl_start, open_paren = m.start(), m.end() - 1
-    else:
-        return None
-    # Walk to the matching close paren of the declaration.
-    i = _close_paren(text, open_paren)
-    if i is None:
-        return None
-    whole = text[decl_start:i + 1]
-    # THE BODY IS THE LAST BRACE-BALANCED GROUP, FOUND FROM THE END.
-    #
-    # Not the first `{`: in `test('name', async ({ page }) => { … })` the first
-    # brace opens the fixture DESTRUCTURING, so a forward search returns
-    # `{ page }) => {})` and an empty body then looks non-empty. Scanning back
-    # from the closing paren finds the callback body itself.
-    j = len(whole) - 2                      # skip the final ')'
-    while j >= 0 and whole[j].isspace():
-        j -= 1
-    body = ""
-    if j >= 0 and whole[j] == "}":
-        depth = 0
-        k = j
-        while k >= 0:
-            if whole[k] == "}":
-                depth += 1
-            elif whole[k] == "{":
-                depth -= 1
-                if depth == 0:
-                    break
+        The body cannot be found by searching FORWARD for the first `{`
+        either: in `test('n', async ({ page }) => { … })` the first brace opens
+        the fixture destructuring.
+        """
+        mask = self.mask
+        k = node.close - 1
+        while k > node.open and (mask[k].isspace() or mask[k] == ","):
             k -= 1
-        if k >= 0:
-            body = whole[k:j + 1]
-    return whole, body
+        if k > node.open and mask[k] == "}":
+            depth = 0
+            j = k
+            while j > node.open:
+                if mask[j] == "}":
+                    depth += 1
+                elif mask[j] == "{":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                j -= 1
+            if depth == 0 and mask[j] == "{":
+                node.body = (j, k)
+                node.header = (node.open + 1, j)
+                return
+        node.body = None
+        node.header = (node.open + 1, node.close)
 
+    # -- queries ------------------------------------------------------------
 
-def _has_own_unconditional_skip(block_body: str) -> bool:
-    """An unconditional `test.skip(true)` belonging to THIS block, not a child.
+    def owner(self, pos: int) -> _TestNode | None:
+        """The declaration an `@e2e` tag at *pos* annotates, or None.
 
-    WHY THE OWNERSHIP TEST IS NEEDED
-    --------------------------------
-    Once `test.describe(` became visible to the declaration regex, a file-level
-    tag started resolving to the enclosing describe rather than to the first
-    test inside it — which is more accurate, but it also handed this check a
-    body containing OTHER TESTS. A plain `_UNCONDITIONAL_SKIP_RE.search()` over
-    that body then found a `test.skip(true, …)` written inside ONE nested test
-    and condemned the whole group.
+        Three positions are all in fleet use and all mean the same thing:
 
-    Measured on launchpad `spec-coverage.spec.ts`: the header tag at :15 went
-    from live to dead because a single nested test at :185 guards itself with
-    `test.skip(true, 'allowUserDashboards is false in this environment')`. The
-    other tests in that describe run fine. Killing the ref for that is the
-    gate's blindness with the sign flipped, and it is not an improvement.
+            // @e2e a::b            tag ABOVE the declaration (the convention
+            test('name', fn)        this module documents)
 
-    Playwright does allow a group-level `test.skip()` — called directly in a
-    describe body it skips every test in the group — so the check is kept, and
-    only NESTED occurrences are disowned. An occurrence that starts exactly
-    where a declaration span starts IS the skip call itself (`test.skip(true)`
-    is both), so `<` is strict on the left.
-    """
-    nested = [(s, e) for s, e, _d in _decl_spans(block_body)]
-    for m in _UNCONDITIONAL_SKIP_RE.finditer(block_body):
-        if not any(s < m.start() < e for s, e in nested):
+            test(                   tag INSIDE the argument list, between the
+                // @e2e a::b        open paren and the title (#244 — nldesign
+                'name', fn,         writes every one of its tests this way)
+            )
+
+            test('name', async () => {
+                // @e2e a::b        tag INSIDE the body
+                …
+            })
+
+        Returning None means "no declaration owns this tag" — a file-level
+        annotation, which stays live: this function exists to find tests that
+        were switched OFF, not to invent a structural requirement.
+        """
+        containing: _TestNode | None = None
+        for nd in self.nodes:
+            if nd.start > pos:
+                break
+            if nd.close >= pos:
+                containing = nd          # sorted by start ⇒ last one is innermost
+        if containing is not None and containing.header[0] <= pos <= containing.header[1]:
+            return containing
+        siblings = containing.children if containing is not None else self.roots
+        for ch in siblings:
+            if ch.start >= pos:
+                return ch
+        return containing
+
+    def _innermost_body_owner(self, pos: int) -> _TestNode | None:
+        found: _TestNode | None = None
+        for nd in self.nodes:
+            if nd.start > pos:
+                break
+            if nd.body is not None and nd.body[0] < pos < nd.body[1]:
+                found = nd
+        return found
+
+    def _brace_depth(self, a: int, b: int) -> int:
+        region = self.mask[a:b]
+        return region.count("{") - region.count("}")
+
+    def _is_guarded(self, start: int, limit: int) -> bool:
+        """True when the statement at *start* is the braceless body of a guard.
+
+        `if (!response) test.skip(true, 'unreachable')` has brace depth 0 in
+        its enclosing test body, but it is still conditional.
+        """
+        mask = self.mask
+        k = start - 1
+        while k >= limit and mask[k].isspace():
+            k -= 1
+        if k < limit:
+            return False
+        if mask[k] == ")":
+            depth = 0
+            j = k
+            while j >= limit:
+                if mask[j] == ")":
+                    depth += 1
+                elif mask[j] == "(":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                j -= 1
+            if j < limit or depth != 0:
+                return False
+            j -= 1
+            while j >= limit and mask[j].isspace():
+                j -= 1
+            end = j + 1
+            while j >= limit and (mask[j].isalnum() or mask[j] in "_$"):
+                j -= 1
+            return mask[j + 1:end] in _GUARDS_WITH_PAREN
+        end = k + 1
+        j = k
+        while j >= limit and (mask[j].isalnum() or mask[j] in "_$"):
+            j -= 1
+        return mask[j + 1:end] in _GUARDS_BARE
+
+    def has_own_unconditional_skip(self, node: _TestNode) -> bool:
+        """An unconditional skip that belongs to THIS body, not to a child and
+        not to a guard.
+
+        Three things disown a `test.skip(true, …)`:
+
+        * it lives inside a NESTED declaration — one nested test guarding
+          itself must not condemn its whole describe (launchpad
+          `spec-coverage.spec.ts`, where a single nested skip at :185 killed
+          the header tag at :15);
+        * it is inside a braced block — `if (!reachable) { test.skip(true,
+          'app not reachable') }` is the fleet's standard defensive idiom, 111
+          call sites against 4 genuinely unconditional ones (#239);
+        * it is the braceless body of a guard, same reason.
+
+        What survives is what the rule was written for: a `test.skip(true)` as
+        a direct statement at the top of a body, which is a test someone
+        turned off. Playwright's group-level `test.skip()` — called directly
+        in a describe body — skips every test in the group, so it counts too.
+        """
+        if node.body is None:
+            return False
+        b0, b1 = node.body
+        for start, unconditional in self.skips:
+            if not unconditional or not (b0 < start < b1):
+                continue
+            if self._innermost_body_owner(start) is not node:
+                continue
+            if self._brace_depth(b0 + 1, start) != 0:
+                continue
+            if self._is_guarded(start, b0 + 1):
+                continue
             return True
-    return False
-
-
-def _ref_is_live(text: str, pos: int) -> bool:
-    """Does the test enclosing the `@e2e` tag at *pos* actually assert
-    anything?"""
-    # OUTWARD FIRST. A switched-off ancestor takes everything inside it with
-    # it, so no amount of body in the inner test can rescue the ref. Asking
-    # the forward search first would find that inner test and answer "live".
-    if _switched_off_ancestor(text, pos) is not None:
         return False
-    block = _enclosing_block(text, pos)
-    if block is None:
-        # No enclosing test at all — a file-level tag. Treated as live: this
-        # function exists to catch tests that were switched OFF, not to
-        # invent a structural requirement the gate never had.
+
+    def body_is_empty(self, node: _TestNode) -> bool:
+        if node.body is None:
+            return True
+        return not self.mask[node.body[0] + 1:node.body[1]].strip()
+
+
+def _ref_is_live(doc: _TestFile, pos: int) -> bool:
+    """Does the test that owns the `@e2e` tag at *pos* actually assert
+    anything?
+
+    Order matters. A switched-off ANCESTOR takes everything inside it with it
+    (#210), so no amount of body in the inner test can rescue the ref.
+    """
+    node = doc.owner(pos)
+    if node is None:
+        # No declaration owns this tag — a file-level annotation. Live: this
+        # function exists to catch tests that were switched OFF, not to invent
+        # a structural requirement the gate never had.
         return True
-    decl, body = block
-    head = decl[:decl.find("{") if "{" in decl else len(decl)]
-    if _is_switched_off(decl):
+    n: _TestNode | None = node
+    while n is not None:
+        if n.switched_off:
+            return False
+        n = n.parent
+    if doc.body_is_empty(node):
         return False
-    stripped = _strip_comments(body)
-    if _has_own_unconditional_skip(stripped):
-        return False
-    inner = stripped.strip()
-    if inner.startswith("{"):
-        inner = inner[1:]
-    if inner.endswith("}"):
-        inner = inner[:-1]
-    if not inner.strip():
-        return False
-    del head
+    n = node
+    while n is not None:
+        if doc.has_own_unconditional_skip(n):
+            return False
+        n = n.parent
     return True
 
 
@@ -741,10 +1069,14 @@ def collect_ref_status(app_dir: Path) -> tuple[set[str], dict[str, str]]:
             text = p.read_text(encoding="utf-8")
         except OSError:
             continue
+        # Tokenise ONCE per file, then ask it per tag. nldesign's
+        # admin-settings.spec.ts carries 17 tags; the old code re-scanned the
+        # whole file for each of them.
+        doc = _TestFile(text)
         for rex in (_E2E_PATH_RE, _E2E_SHORT_RE):
             for m in rex.finditer(text):
                 ref = f"{m.group('spec')}::{m.group('slug')}"
-                if _ref_is_live(text, m.end()):
+                if _ref_is_live(doc, m.end()):
                     live.add(ref)
                     dead.pop(ref, None)
                 elif ref not in live:
@@ -793,6 +1125,27 @@ def changed_spec_files(base_ref: str, app_dir: Path) -> set[str]:
 # Gate number for self-identification in output lines
 # ---------------------------------------------------------------------------
 GATE_NUM = 19
+
+# ---------------------------------------------------------------------------
+# AN EXIT CODE IS A STATUS. THE COUNT GOES ON STDOUT.
+# ---------------------------------------------------------------------------
+# This gate has now got the signalling wrong twice, in two different ways, and
+# both were only visible because someone compared two numbers for one
+# measurement:
+#
+#   * It returned the finding COUNT as its exit status. An exit status is one
+#     byte, so 266 findings left as 10 — and 256 findings would have left as
+#     0, which the runner reads as PASS. (.github#209)
+#   * The clamp that fixed the wrap made the byte carry NEITHER: a 404-finding
+#     run exited 255 while stdout said 404. A reader who trusted the byte got
+#     a number that was not the count and was not a status either. (#242)
+#
+# So the byte is a status now and nothing else. Two numbers for one
+# measurement means one of them came through a lossy channel; there is only
+# one number, and it is printed.
+EXIT_PASS = 0
+EXIT_FAIL = 1
+EXIT_ERROR = 2
 
 
 # ---------------------------------------------------------------------------
@@ -852,13 +1205,13 @@ def run_report(app_dir: Path) -> int:
 
 
 def run_gate(app_dir: Path) -> int:
-    """Diff-scoped gate. Returns the number of uncovered scenarios."""
+    """Diff-scoped gate. Returns EXIT_PASS / EXIT_FAIL; the COUNT is printed."""
     base_ref = os.environ.get("HYDRA_GATE_BASE_REF", "origin/development")
     touched = changed_spec_files(base_ref, app_dir)
 
     if not touched:
         print(f"[gate-{GATE_NUM}] e2e-coverage: PASS — no spec files in diff")
-        return 0
+        return EXIT_PASS
 
     covered_refs, dead_refs = collect_ref_status(app_dir)
 
@@ -895,18 +1248,11 @@ def run_gate(app_dir: Path) -> int:
     count = len(set(findings))
     if count == 0:
         print(f"[gate-{GATE_NUM}] e2e-coverage: PASS — {len(covered_refs)} reference(s) in e2e suite")
-    else:
-        print(
-            f"[gate-{GATE_NUM}] e2e-coverage: FAIL — {count} scenario(s) without a running e2e test"
-        )
-    # An exit code is one byte. Returning the raw count means 266 leaves as
-    # 10, and — the case that matters — a count of exactly 256 leaves as 0,
-    # which the caller reads as PASS on 256 uncovered scenarios.
-    #
-    # The printed summary above carries the true number and is what the bash
-    # gate now reports; this is only the pass/fail signal, so it is clamped
-    # into the byte and never allowed to wrap to zero while findings exist.
-    return min(count, 255)
+        return EXIT_PASS
+    print(
+        f"[gate-{GATE_NUM}] e2e-coverage: FAIL — {count} scenario(s) without a running e2e test"
+    )
+    return EXIT_FAIL
 
 
 # ---------------------------------------------------------------------------
@@ -927,9 +1273,16 @@ def main(argv: list[str]) -> int:
         app = rest[i]
         i += 1
     app_dir = Path(app).resolve()
-    if mode == "report":
-        return run_report(app_dir)
-    return run_gate(app_dir)
+    try:
+        if mode == "report":
+            return run_report(app_dir)
+        return run_gate(app_dir)
+    except Exception as exc:  # noqa: BLE001 — a crash must not read as PASS
+        # A gate that fell over has NOT inspected anything. Exiting 0 here
+        # would be the falsely-green shape this package exists to prevent, and
+        # exiting with a count would be a lie about what was measured.
+        print(f"[gate-{GATE_NUM}] e2e-coverage: ERROR — {type(exc).__name__}: {exc}")
+        return EXIT_ERROR
 
 
 if __name__ == "__main__":

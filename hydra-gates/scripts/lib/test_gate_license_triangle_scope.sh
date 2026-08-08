@@ -221,6 +221,202 @@ if _run; then
     _expect NOTAPPLICABLE "no lib/ at all: NOT APPLICABLE, never PASS (#172)"
 fi
 
+# ===========================================================================
+# APPENDED for ConductionNL/.github#178 — the ACCEPTANCE evidence the suite
+# above only approximated.
+#
+# #178 was filed against hermiq#159, a frontend + spec + docs PR, and #182
+# fixed it. The four cases above lock that fix in — verified by mutation: with
+# the `na` branch removed, cases 1 and 2 both go red. So why more?
+#
+# Because of what case 1 does NOT run. #178's claim is not "the gate prints
+# NOT APPLICABLE"; it is "**the run is not FAILED** by the coverage
+# requirement". The suite above never passes `--require-full-coverage`, so it
+# proves the first and infers the second. Those came apart once already: #164
+# made the flag default TRUE in the WORKFLOW while every local suite ran
+# without it, which is precisely how a gate can be green in this file and red
+# in CI. The pair below runs the flag and reads the runner's own verdict line.
+#
+# And case 2's control is the WEAKER of the two true positives. "No file
+# carried a tag" is `structural`; a file that carries the WRONG licence is a
+# `_fail` — a different branch, a different exit path, and the only one that
+# is the gate's actual purpose. Nothing end-to-end exercised it: the drift
+# rules are unit-tested in test_check_license_triangle.py, but the wiring from
+# helper stdout -> _lt_log -> `wc -l` -> `_fail 28` was not. A helper that
+# printed its findings to stderr would keep every unit test green and turn
+# this gate into a no-op.
+# ===========================================================================
+
+# _run_fullcov — same as _run, but with the flag CI actually sets. The runner
+# exits 98 on incomplete coverage; that status is deliberately NOT the
+# assertion. Statuses in this package have carried finding COUNTS rather than
+# verdicts (#209: gate-19 returned 266 findings as exit status 10, and 256
+# would have read as PASS), so the assertion reads the runner's own sentence
+# on stdout. The status is captured only to be reported alongside it.
+_OUT_FC=""
+_STATUS_FC=""
+_run_fullcov() {
+    local _logdir
+    _logdir="$(mktemp -d "${TMPDIR:-/tmp}/hydra-gate-test.XXXXXXXX")"
+    _OUT_FC="$(HYDRA_GATE_LOG_DIR="${_logdir}" bash "${RUNNER}" \
+        --app-dir "${_REPO}" --base "${_BASE}" --scope-to-diff \
+        --require-full-coverage 2>&1)"
+    _STATUS_FC=$?
+    rm -rf "${_logdir}"
+    if ! printf '%s' "${_OUT_FC}" | grep -q '^\[hydra-gates\] COVERAGE:'; then
+        _bad "full-coverage run in ${_REPO} ABORTED before the summary — not a result"
+        printf '%s\n' "${_OUT_FC}" | tail -15 | sed 's/^/       /'
+        return 1
+    fi
+    return 0
+}
+
+# _expect_gate28 <PASS|NOTAPPLICABLE|structural|FAIL> <output> <description>
+# A FAIL-aware sibling of _expect that reads a caller-supplied capture, so the
+# full-coverage runs can be asserted without disturbing _OUT.
+_expect_gate28() {
+    local _want="$1" _out="$2" _desc="$3" _line _pattern
+    _line="$(printf '%s' "${_out}" | grep -E '^\[gate-28\] ' | head -1)"
+    if [ -z "${_line}" ]; then
+        _bad "${_desc} — gate-28 emitted NO line at all (a silent gate is the #147 shape)"
+        return
+    fi
+    case "${_want}" in
+        PASS)          _pattern=': PASS' ;;
+        NOTAPPLICABLE) _pattern=': NOT APPLICABLE' ;;
+        structural)    _pattern=': SKIPPED \(structural\)' ;;
+        FAIL)          _pattern=': FAIL' ;;
+        *)
+            _bad "${_desc} — test bug: unknown expectation '${_want}'"
+            return ;;
+    esac
+    if printf '%s' "${_line}" | grep -qE "${_pattern}"; then
+        _ok "${_desc}"
+    else
+        _bad "${_desc} — got: ${_line}"
+    fi
+}
+
+# The runner's own sentence for "this run is being failed for coverage". Only
+# printed when --require-full-coverage is set AND a gate did not run.
+_COVFAIL_LINE='treating incomplete coverage as failure'
+
+_MISMATCHED_PHP='<?php
+/**
+ * @copyright Copyright (c) 2026 Conduction
+ * @license   AGPL-3.0-or-later
+ */
+
+namespace OCA\Fixture;
+
+class Drifted
+{
+    public function value(): int
+    {
+        return 3;
+    }
+}
+'
+
+# THE FIXTURES BELOW MUST BE OTHERWISE GREEN, and that is not a detail.
+#
+# The runner's coverage-failure branch lives inside `if [ "${_FAILED}" -eq 0 ]`.
+# If ANY other gate has already failed, the run exits with the failure count and
+# the coverage sentence is NEVER PRINTED. So an assertion of the form "the
+# coverage sentence is absent" passes automatically in any fixture that trips an
+# unrelated gate — including on a runner where #178 had been fully reverted.
+#
+# This was not hypothetical. The first version of case 5 wrote its Vue file to
+# `src/App.vue`, which gate-38 (skip-link) fails as a root component without
+# <NcContent>. Both full-coverage runs exited 1, not 98, and BOTH new
+# assertions were measuring gate-38's failure rather than gate-28's verdict —
+# the absence-assertion would have been dead. The file is written to
+# `src/components/Widget.vue` for that reason, and the assertion reads the
+# runner's positive "ALL … APPLICABLE GATES GREEN" sentence rather than the
+# absence of a negative one: a sentence that must be PRESENT cannot be
+# satisfied by a run that died earlier.
+#
+# For the same reason the control at case 6 CANNOT use untagged PHP: an
+# untagged file also fails gate-1 (spdx-headers), so `_FAILED` is never 0 and
+# the coverage branch is unreachable. It uses the other structural route
+# instead — a composer.json with no `license` field, with a correctly tagged
+# lib PHP file in the diff — which reaches `structural` with every other gate
+# green.
+
+# --- 5. #178 AS REPORTED: a frontend + docs diff (.vue + .md), no PHP at all,
+#        in a repo that HAS lib/ and a composer licence. Case 1 used a
+#        workflow file; this is the shape the issue was actually filed on.
+_mkrepo scope-frontend-only yes
+mkdir -p "${_REPO}/src/components"
+printf '<template><div>base</div></template>\n' > "${_REPO}/src/components/Widget.vue"
+git -C "${_REPO}" add -A >/dev/null 2>&1
+git -C "${_REPO}" commit -qm "add a frontend component" >/dev/null 2>&1
+_BASE="$(git -C "${_REPO}" rev-parse HEAD)"
+printf '<template><div>changed</div></template>\n' > "${_REPO}/src/components/Widget.vue"
+printf '# changed\n' > "${_REPO}/README.md"
+git -C "${_REPO}" add -A >/dev/null 2>&1
+git -C "${_REPO}" commit -qm "frontend + docs only, no PHP" >/dev/null 2>&1
+if _run_fullcov; then
+    _expect_gate28 NOTAPPLICABLE "${_OUT_FC}" \
+        "#178: .vue + .md diff in a tagged repo is NOT APPLICABLE, not structural"
+    # THE ASSERTION #178 IS ACTUALLY ABOUT: the run must not be failed for it.
+    # Read the POSITIVE verdict, per the note above.
+    if printf '%s' "${_OUT_FC}" | grep -qE '^\[hydra-gates\] ALL [0-9]+ APPLICABLE GATES GREEN'; then
+        _ok "#178: the PHP-free diff run is GREEN under --require-full-coverage (status ${_STATUS_FC})"
+    else
+        _bad "#178: PHP-free diff did not end green under --require-full-coverage (status ${_STATUS_FC}) — the false red is back, or the fixture trips an unrelated gate and this assertion is measuring nothing"
+    fi
+fi
+
+# --- 6. THE CONTROL FOR 5, and the one that makes it mean something. Same
+#        flag, same runner, an otherwise-identical fixture: a run whose ONLY
+#        problem is a structural gate-28 must still be failed for coverage.
+#        Without this, assertion 5 would also pass on a runner that had simply
+#        stopped enforcing coverage at all.
+#
+#        The licence field is dropped in a BASE-ADVANCING commit, not in the
+#        diff under test. Putting composer.json in the diff makes gate-4
+#        (composer-audit) applicable, and it fails on a fixture with no vendor
+#        tree — `_FAILED` becomes 1 and the coverage sentence is unreachable
+#        again. The diff must contain the lib PHP file and nothing else.
+_mkrepo scope-nolicense-fullcov yes
+printf '{\n  "name": "conduction/fixture"\n}\n' > "${_REPO}/composer.json"
+git -C "${_REPO}" add -A >/dev/null 2>&1
+git -C "${_REPO}" commit -qm "drop the composer license field" >/dev/null 2>&1
+_BASE="$(git -C "${_REPO}" rev-parse HEAD)"
+printf '%s\n// touched\n' "${_LICENSED_PHP}" > "${_REPO}/lib/Tagged.php"
+git -C "${_REPO}" add -A >/dev/null 2>&1
+git -C "${_REPO}" commit -qm "touch the tagged lib PHP file" >/dev/null 2>&1
+if _run_fullcov; then
+    _expect_gate28 structural "${_OUT_FC}" \
+        "control: composer.json with no license is still structural under --require-full-coverage"
+    if printf '%s' "${_OUT_FC}" | grep -qF "${_COVFAIL_LINE}"; then
+        _ok "control: --require-full-coverage DID fail the run on a real gap (status ${_STATUS_FC})"
+    else
+        _bad "control: --require-full-coverage did NOT fail a run whose only gap is gate-28 (status ${_STATUS_FC}) — the coverage requirement is inert here, so assertion 5 proves nothing"
+    fi
+fi
+
+# --- 7. THE GATE'S ACTUAL PURPOSE, end to end. A file declaring a licence
+#        that composer.json does not — the `_fail 28` branch, which no test
+#        above reaches. This is the assertion that would catch the helper
+#        writing findings anywhere but stdout.
+_mkrepo scope-mismatch yes
+printf '%s' "${_MISMATCHED_PHP}" > "${_REPO}/lib/Drifted.php"
+git -C "${_REPO}" add -A >/dev/null 2>&1
+git -C "${_REPO}" commit -qm "lib PHP declaring AGPL against an EUPL composer.json" >/dev/null 2>&1
+if _run; then
+    _expect_gate28 FAIL "${_OUT}" \
+        "licence MISMATCH in scope (@license AGPL vs composer EUPL): gate-28 FAILS"
+    # ...and it must fail for the RIGHT reason. A gate that failed here for any
+    # other cause would satisfy the line above while comparing nothing.
+    if printf '%s' "${_OUT}" | grep -qE '^\[gate-28\].*@license != composer\.json'; then
+        _ok "mismatch failure names the licence comparison as its cause"
+    else
+        _bad "mismatch failed, but not with the licence-comparison reason — cause unverified"
+    fi
+fi
+
 echo
 echo "== summary =="
 echo "   passed: ${_pass_n}"
