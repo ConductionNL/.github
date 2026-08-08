@@ -323,10 +323,28 @@ test('decomp', async () => {});
 
 def test_exclude_is_not_a_reference(program: str, tmp: Path) -> None:
     """`@e2e exclude …` inside a TEST file is a directive, not a scenario
-    reference. Reading it as one would let a bare `@e2e exclude` in a test
-    mark an arbitrary scenario covered."""
+    reference. Reading it as one lets an exclusion silently mark a scenario
+    COVERED — the opposite of what it says.
+
+    THE FIXTURE FORM MATTERS, and the mutation battery is what proved it. The
+    obvious fixture — `@e2e exclude some-slug`, space-separated — cannot
+    distinguish the guarded regex from the unguarded one: both capture
+    `exclude`, which contains neither `#` nor `::`, so neither resolves to a
+    slug. Written that way this test passed while proving nothing, and the
+    `exclude-directive-read-as-reference` mutant SURVIVED.
+
+    The separator forms are where the guard is load-bearing:
+
+        @e2e exclude::<slug>   guarded -> no ref   unguarded -> marks <slug> COVERED
+        @e2e exclude#<slug>    guarded -> no ref   unguarded -> marks <slug> COVERED
+
+    Both are plausible as a typo or shorthand for the documented
+    `@e2e exclude <reason>`, which is exactly why the guard exists.
+    """
     test = """import { test } from '@playwright/test';
-// @e2e exclude widget-renders-on-the-dashboard
+// @e2e exclude widget-refreshes-on-demand — server-side, covered by PHPUnit
+// @e2e exclude::widget-renders-on-the-dashboard
+// @e2e exclude#widget-shows-an-empty-state
 test('nothing', async () => {});
 """
     repo = tmp / "excl-ref"
@@ -337,6 +355,9 @@ test('nothing', async () => {});
           rep["e2eReferences"] == 0, f"got {rep['e2eReferences']}")
     check("exclude-in-test: nothing is marked covered",
           rep["coveredScenarios"] == 0, f"got {rep['coveredScenarios']}")
+    check("exclude-in-test: all 4 scenarios remain enforceable and uncovered",
+          rep["enforceableScenarios"] == 4 and rep["uncoveredScenarios"] == 4,
+          f"enforceable={rep['enforceableScenarios']} uncovered={rep['uncoveredScenarios']}")
 
 
 TESTS = [
@@ -351,6 +372,169 @@ TESTS = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# Mutation battery
+# ---------------------------------------------------------------------------
+# A test suite that passes proves nothing on its own — the question is whether
+# it would have NOTICED the bug. Each mutant below reintroduces one specific
+# defect into the shipped program; the suite must go RED for every one.
+#
+# A mutant that SURVIVES means the suite cannot reach that branch, and the fix
+# is a better fixture, not a shrug.
+#
+# The last entry is an ANTI-WIDENING CONTROL and inverts the expectation: it
+# perturbs a log string nothing asserts on, and the suite must stay GREEN.
+# Without it, a suite that failed on *any* edit would score a perfect kill rate
+# while being worthless.
+#
+# (name, find, replace, must_be_caught, why)
+MUTANTS: list[tuple[str, str, str, bool, str]] = [
+    (
+        "enforcement-removed",
+        "process.exit(1)",
+        "process.exit(0)",
+        True,
+        "the #189 defect verbatim: compute a verdict, then decline to act on it",
+    ),
+    (
+        "threshold-never-fires",
+        "if (coverage < THRESHOLD) {",
+        "if (coverage < -1) {",
+        True,
+        "a comparison that no real coverage value can satisfy",
+    ),
+    (
+        "zero-scenarios-scores-100",
+        "var coverage = measurable ? Math.round((covered / enforceable) * 100) : null;",
+        "var coverage = measurable ? Math.round((covered / enforceable) * 100) : 100;",
+        True,
+        "#189 defect 3: the unmeasured repo and the perfect one report the same number",
+    ),
+    (
+        "not-measurable-treated-as-pass",
+        "if (!measurable) {",
+        "if (false) {",
+        True,
+        "a failure to measure silently becomes a passing run",
+    ),
+    (
+        "exclusions-counted-as-covered",
+        "if (sc.excluded) { excluded++; sc.status = 'excluded'; continue; }",
+        "if (false) { excluded++; sc.status = 'excluded'; continue; }",
+        True,
+        "excluded scenarios re-enter the denominator, moving every ratio",
+    ),
+    (
+        "exclude-directive-read-as-reference",
+        "var REF_RE = /@e2e\\s+(?!exclude\\b)(\\S+)/g;",
+        "var REF_RE = /@e2e\\s+(\\S+)/g;",
+        True,
+        "`@e2e exclude x` in a TEST would mark scenario x covered",
+    ),
+    (
+        "scenario-headings-not-found",
+        "var SCENARIO_RE = /^#{4}\\s+Scenario:\\s*(.+)$/i;",
+        "var SCENARIO_RE = /^#{9}\\s+Scenario:\\s*(.+)$/i;",
+        True,
+        "the denominator collapses to zero — the shape that scored 100% before",
+    ),
+    (
+        "ANTI-WIDENING benign log rewording",
+        "console.log('Playwright test() calls:  '",
+        "console.log('Playwright test invocations: '",
+        False,
+        "no assertion depends on this wording; the suite must NOT fail here",
+    ),
+]
+
+
+def run_suite(program: str) -> tuple[int, int]:
+    """Run the whole suite against `program`, quietly. Returns (passes, fails)."""
+    PASSES.clear()
+    FAILURES.clear()
+    import contextlib
+    import io
+
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            for fn in TESTS:
+                try:
+                    fn(program, tmp)
+                except Exception as exc:  # noqa: BLE001
+                    FAILURES.append(f"{fn.__name__} raised {exc!r}")
+    return len(PASSES), len(FAILURES)
+
+
+def mutation_battery(program: str) -> int:
+    print("Mutation battery — each mutant reintroduces one defect; the suite "
+          "must notice.\n")
+    baseline_pass, baseline_fail = run_suite(program)
+    print(f"baseline (unmutated): {baseline_pass} passed, {baseline_fail} failed")
+    if baseline_fail:
+        print("FATAL: the suite is not green against the shipped program; "
+              "mutation results would be meaningless.")
+        return 1
+    print()
+
+    survivors: list[str] = []
+    wiring: list[str] = []
+    widened: list[str] = []
+
+    for name, find, replace, must_catch, why in MUTANTS:
+        if find not in program:
+            # A mutant that cannot be applied is a WIRING failure. Reporting it
+            # as a kill would be the same lie this whole file exists to stop.
+            wiring.append(name)
+            print(f"  SKIPPED (wiring)  {name}\n"
+                  f"                    anchor not found in the program: {find!r}")
+            continue
+
+        mutated = program.replace(find, replace)
+        _, fails = run_suite(mutated)
+
+        if must_catch:
+            if fails:
+                print(f"  KILLED   {name}  ({fails} assertion(s) flipped) — {why}")
+            else:
+                survivors.append(name)
+                print(f"  SURVIVED {name}  — SUITE STAYED GREEN. {why}")
+        else:
+            if fails:
+                widened.append(name)
+                print(f"  OVER-BROAD {name}  ({fails} flipped) — {why}")
+            else:
+                print(f"  (control) {name}: suite correctly stayed GREEN — {why}")
+
+    print()
+    killable = [m for m in MUTANTS if m[3]]
+    print(f"{len(killable) - len(survivors) - len([w for w in wiring if w])} "
+          f"of {len(killable)} defect-mutants killed; "
+          f"{len(survivors)} survived; {len(wiring)} unapplied (wiring).")
+
+    if wiring:
+        print("\nFAIL — a mutant could not be applied. The anchors have drifted "
+              "from the program; the battery is measuring less than it claims.")
+        return 1
+    if survivors:
+        print("\nFAIL — mutant(s) survived. The suite cannot reach that "
+              "behaviour, so it proves nothing about it. Fix the FIXTURE:")
+        for s in survivors:
+            print(f"  - {s}")
+        return 1
+    if widened:
+        print("\nFAIL — the anti-widening control was caught. The suite fails "
+              "on changes it should not care about, so its kills are not "
+              "evidence of anything specific:")
+        for w in widened:
+            print(f"  - {w}")
+        return 1
+
+    print("\nOK — every defect-mutant is caught, and the benign control is not.")
+    return 0
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("workflow", nargs="?", default=".github/workflows/quality.yml")
@@ -359,6 +543,12 @@ def main(argv: list[str]) -> int:
         action="store_true",
         help="Neuter the gate's non-zero exit and assert THIS SUITE then fails. "
         "A suite that cannot fail is the same defect it is testing for.",
+    )
+    ap.add_argument(
+        "--mutation-battery",
+        action="store_true",
+        help="Reintroduce each known defect one at a time and require the suite "
+        "to notice every one, plus a benign control it must NOT notice.",
     )
     args = ap.parse_args(argv)
 
@@ -374,6 +564,9 @@ def main(argv: list[str]) -> int:
     program = extract_program(workflow)
     print(f"Extracted {len(program.splitlines())} lines of Node from "
           f"{workflow}:jobs.playwright.steps[{STEP_NAME!r}]")
+
+    if args.mutation_battery:
+        return mutation_battery(program)
 
     if args.positive_control:
         # Turn every hard exit back into the warning-only behaviour #189

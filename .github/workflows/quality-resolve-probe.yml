@@ -145,6 +145,27 @@ jobs:
       - name: "Exercise the shipped spec-coverage program against fixtures"
         run: python3 scripts/test-spec-coverage-gate.py .github/workflows/quality.yml
 
+      # MUTATION BATTERY. A green suite proves nothing on its own — the question
+      # is whether it would have NOTICED. Each mutant reintroduces one specific
+      # defect (enforcement removed, threshold that never fires, zero scenarios
+      # scoring 100, exclusions folded back into the denominator, …) and the
+      # suite must go red for every one. A mutant that SURVIVES means the
+      # fixture cannot reach that branch, and the fix is a better fixture.
+      #
+      # This is not decorative: it caught a real hole on its first run. The
+      # obvious fixture for `@e2e exclude` in a test file could not tell the
+      # guarded regex from the unguarded one — both capture `exclude`, which
+      # resolves to no slug — so that assertion passed while proving nothing.
+      # The separator forms (`exclude::<slug>`, `exclude#<slug>`) are where the
+      # guard is load-bearing, and the fixture now uses them.
+      #
+      # The last mutant is an ANTI-WIDENING control: it reworks a log string
+      # nothing asserts on, and the suite must STAY GREEN. Without it, a suite
+      # that failed on any edit at all would score a perfect kill rate while
+      # being worthless.
+      - name: "Mutation battery — every known defect must be caught"
+        run: python3 scripts/test-spec-coverage-gate.py --mutation-battery .github/workflows/quality.yml
+
   seed-semantics:
     name: "A failing seed fails the job"
     runs-on: ubuntu-latest

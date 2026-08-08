@@ -2787,6 +2787,17 @@ jobs:
       # purpose — this job has no hydra-gates checkout, and adding one would
       # make the E2E job depend on a second repository to report a number.
       #
+      # KNOWN GAP, stated here rather than discovered later. gate-19 was
+      # rewritten in #249 to read test files with a real JS parser, so it can
+      # tell that an `@e2e` reference sits inside a `describe.skip` or an empty
+      # test body and refuse to count it. This step reads the annotation as
+      # TEXT, so it counts such a reference as covered. That makes this number
+      # an UPPER BOUND on real coverage, and the two figures can legitimately
+      # disagree in that one direction. It is a deliberate trade: closing the
+      # gap means shipping a JS parser into this heredoc, and gate-19 already
+      # catches the case on every PR that touches a spec. DO NOT read a passing
+      # threshold here as evidence that gate-19 would also pass.
+      #
       # WHY A HEREDOC RATHER THAN `node -e`. The program is now long enough to
       # need a test, and a `node -e` string with `${{ }}` interpolated into its
       # middle cannot be executed anywhere except inside a GitHub runner. As a
