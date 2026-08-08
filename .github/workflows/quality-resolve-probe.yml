@@ -76,6 +76,34 @@ jobs:
           fi
           echo "OK — the lint fails when it should. Its clean pass above is a verdict."
 
+  seed-semantics:
+    name: "A failing seed fails the job"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # POSITIVE CONTROL, FIRST — same discipline as the probe below. The
+      # battery is run against the PRE-#192 step, reconstructed verbatim, and
+      # must reject it. A battery that passed the known-bad body would pass
+      # the fixed one for reasons unrelated to the fix, and its verdict on the
+      # real workflow would mean nothing.
+      - name: "Positive control — the known-bad seed step must be rejected"
+        run: python3 scripts/assert-seed-step-fails-loudly.py --positive-control
+
+      # THE MEASUREMENT. Every step named "Seed test data" is EXTRACTED from
+      # the workflow — env block and run body both — and EXECUTED under the
+      # same shell GitHub uses, against seeds that include a failing `&&`
+      # chain, a legitimate multi-stage chain, and the assignment-prefix +
+      # `|| true` shape launchpad actually ships.
+      #
+      # Running the shipped text rather than grepping it is what found the
+      # THIRD instance of the defect: the Newman job has its own "Seed test
+      # data" step reading `newman-seed-command`, and openbuild passes it
+      # `php occ app:disable openbuild && php occ app:enable openbuild`.
+      - name: "Exercise every 'Seed test data' step in quality.yml"
+        run: python3 scripts/assert-seed-step-fails-loudly.py .github/workflows/quality.yml
+
   probe:
     name: "quality.yml resolves (job count > 0)"
     runs-on: ubuntu-latest
@@ -153,19 +181,20 @@ jobs:
   guard:
     name: "Shared-workflow guard"
     runs-on: ubuntu-latest
-    needs: [static-limits, probe]
+    needs: [static-limits, seed-semantics, probe]
     if: ${{ !cancelled() }}
     steps:
       - name: Assert both guards reached a verdict
         env:
           STATIC: ${{ needs.static-limits.result }}
+          SEED: ${{ needs.seed-semantics.result }}
           PROBE: ${{ needs.probe.result }}
         run: |
           set -eu
-          echo "static-limits=${STATIC} probe=${PROBE}"
+          echo "static-limits=${STATIC} seed-semantics=${SEED} probe=${PROBE}"
           # `skipped` is failed here on purpose. A guard that did not run is
           # not a guard that passed.
-          for pair in "static-limits:${STATIC}" "probe:${PROBE}"; do
+          for pair in "static-limits:${STATIC}" "seed-semantics:${SEED}" "probe:${PROBE}"; do
             name="${pair%%:*}"; result="${pair##*:}"
             [ "${result}" = "success" ] || {
               echo "::error::${name} did not succeed (result=${result}). A guard that \

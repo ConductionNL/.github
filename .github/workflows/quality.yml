@@ -1900,13 +1900,38 @@ jobs:
           ADMIN_PASSWORD: admin
           NC_ADMIN_USER: admin
           NC_ADMIN_PASS: admin
+          # THE SEED ARRIVES AS DATA — see the long note on the Playwright
+          # job's seed step (#192). The comment that used to sit here said
+          # "Use eval to support complex commands with pipes or &&", and that
+          # was the assurance the defect hid behind: because the interpolation
+          # was UNQUOTED, `a && b` was split by THIS shell before eval saw it,
+          # eval ran only `a`, and bash's `set -e` exemption for `&&` lists
+          # made a failing `a` exit 0.
+          #
+          # This job is not hypothetical. openbuild ships
+          #   `php occ app:disable openbuild && php occ app:enable openbuild`
+          # as its newman-seed-command — a failed disable meant the enable
+          # never ran and Newman tested whatever state was left, green.
+          SEED_COMMAND: ${{ inputs.newman-seed-command }}
         run: |
           cd server
-          echo "Running seed command: ${{ inputs.newman-seed-command }}"
-          # Run the seed command (e.g. maintenance:repair, custom script, etc.)
-          # Use eval to support complex commands with pipes or &&
-          eval ${{ inputs.newman-seed-command }}
-          echo "Seed command completed."
+          printf 'Running seed command: %s\n' "$SEED_COMMAND"
+          # eval is retained on purpose: fleet callers pass assignment
+          # prefixes (`SEED_SCOPE=register bash …`) and `||` lists. The fix is
+          # the QUOTING — the whole seed reaches eval as one unit, so eval's
+          # combined status is the step's.
+          eval "$SEED_COMMAND" && SEED_RC=0 || SEED_RC=$?
+          if [ "$SEED_RC" -ne 0 ]; then
+            # Diagnostics on STDERR — an `::error::` on stdout is swallowed by
+            # any caller that captures the step's output with `$(…)`.
+            {
+              echo "::error::Seed command failed with exit ${SEED_RC}: ${SEED_COMMAND}"
+              echo "Refusing to run Newman against a half-seeded instance — a full"
+              echo "collection tally from an unseeded server looks exactly like a real one."
+            } >&2
+            exit "$SEED_RC"
+          fi
+          echo "Seed command completed (exit 0)."
 
       - name: Setup Node.js and Newman
         uses: actions/setup-node@v4
@@ -2419,11 +2444,50 @@ jobs:
           ADMIN_PASSWORD: admin
           NC_ADMIN_USER: admin
           NC_ADMIN_PASS: admin
+          # THE SEED ARRIVES THROUGH THE ENVIRONMENT, NOT THE SCRIPT BODY.
+          #
+          # `${{ }}` is a TEXTUAL substitution performed before bash ever sees
+          # the script, so interpolating the input into the body made the seed
+          # part of this step's own source. Two things followed (#192):
+          #
+          #   1. `eval ${{ … }}` was UNQUOTED, so a seed of `a && b && c` was
+          #      parsed by THIS shell as `eval a` && `b` && `c`. eval received
+          #      only the first stage. And bash's `set -e` exemption for `&&`
+          #      lists ("except the command following the final &&") means a
+          #      failing first stage aborts nothing and exits 0 — the tail
+          #      never runs, the step goes green, and Playwright then tests a
+          #      half-seeded instance. Measured on pipelinq run 30800304506.
+          #   2. `echo "Running seed command: ${{ … }}"` expanded the seed's
+          #      own `$(…)` in THIS shell, before the seed ran. pipelinq's
+          #      bundle-truncation control printed identical before/after byte
+          #      counts by construction and could not have caught anything.
+          #
+          # Passing it as data fixes both, and also means a seed containing a
+          # quote can no longer reshape the surrounding script.
+          SEED_COMMAND: ${{ inputs.playwright-seed-command }}
         run: |
           cd server
-          echo "Running seed command: ${{ inputs.playwright-seed-command }}"
-          eval ${{ inputs.playwright-seed-command }}
-          echo "Seed command completed."
+          printf 'Running seed command: %s\n' "$SEED_COMMAND"
+          # `eval` IS still required. A survey of the fleet's callers found
+          # launchpad passing `OC_PASS=… php occ user:add … || true` — an
+          # assignment prefix and a `||` list. Running "$SEED_COMMAND" as a
+          # bare command would exec that whole string as one argv word.
+          # What matters is that the expansion is QUOTED, so the entire seed
+          # reaches eval as one unit and eval's combined status is the answer.
+          eval "$SEED_COMMAND" && SEED_RC=0 || SEED_RC=$?
+          if [ "$SEED_RC" -ne 0 ]; then
+            # Diagnostics on STDERR. An `::error::` written to stdout is eaten
+            # whole when a caller wraps the step's output in `$(…)`, leaving a
+            # bare non-zero exit with no stated cause.
+            {
+              echo "::error::Seed command failed with exit ${SEED_RC}: ${SEED_COMMAND}"
+              echo "Refusing to run Playwright against a half-seeded instance — a full,"
+              echo "credible-looking pass/fail tally from an unseeded server is worse than"
+              echo "no tally at all. Fix the seed, or unset playwright-seed-command."
+            } >&2
+            exit "$SEED_RC"
+          fi
+          echo "Seed command completed (exit 0)."
 
       - name: Run Playwright tests
         run: |
@@ -2936,11 +3000,32 @@ jobs:
 
       - name: Seed test data
         if: inputs.playwright-seed-command != ''
+        env:
+          # Same contract as the E2E job's seed step above — see the long note
+          # there. Short version (#192): interpolating the input into the
+          # script body made `eval ${{ … }}` unquoted, so an `a && b` seed was
+          # split by THIS shell, eval got only `a`, and bash's `set -e`
+          # exemption for `&&` lists let a failing first stage exit 0 while
+          # printing "Seed command completed."
+          SEED_COMMAND: ${{ inputs.playwright-seed-command }}
         run: |
           cd server
-          echo "Running seed command: ${{ inputs.playwright-seed-command }}"
-          eval ${{ inputs.playwright-seed-command }}
-          echo "Seed command completed."
+          printf 'Running seed command: %s\n' "$SEED_COMMAND"
+          # Quoted expansion: the whole seed reaches eval as one unit and
+          # eval's combined status is the step's. eval is retained because
+          # fleet callers pass assignment prefixes and `||` lists.
+          eval "$SEED_COMMAND" && SEED_RC=0 || SEED_RC=$?
+          if [ "$SEED_RC" -ne 0 ]; then
+            # Diagnostics on STDERR — an `::error::` on stdout is swallowed by
+            # any caller that captures the step's output with `$(…)`.
+            {
+              echo "::error::Seed command failed with exit ${SEED_RC}: ${SEED_COMMAND}"
+              echo "Refusing to capture documentation screenshots of a half-seeded"
+              echo "instance — the images would be committed and would look real."
+            } >&2
+            exit "$SEED_RC"
+          fi
+          echo "Seed command completed (exit 0)."
 
       - name: Run docs-capture Playwright project
         run: |

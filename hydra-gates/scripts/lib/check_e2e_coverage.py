@@ -471,9 +471,28 @@ _E2E_SHORT_RE = re.compile(
 # `(?<![.\w$])` rejects a member call (`rx.test`, `foo.it`) and an identifier
 # that merely ends in one (`latest(`, `submit(`), while leaving a bare
 # `test(` / `it(` / `describe(` at a statement boundary matching.
+#
+# THAT LOOKBEHIND ALSO REJECTED PLAYWRIGHT'S OWN CANONICAL SPELLING.
+# `test.describe.skip(` is the form every fleet repo actually writes, and the
+# pattern above could not match it anywhere: at `test` the optional `mod`
+# needs `.skip|.fixme|.failing` and finds `.describe`, so the required `\(`
+# fails; at `describe` the lookbehind sees the preceding `.` and refuses. The
+# whole construct was INVISIBLE — not "seen and judged live", never seen.
+# Measured on the reproduction in #210: BOTH the tag above a
+# `test.describe.skip` and the tag inside one came back LIVE, so the issue's
+# own claim that the `above` case was handled correctly was too generous.
+#
+# The fix is an explicit, optional `test.` / `it.` NAMESPACE segment. It is
+# named rather than general (`\w+\.`) on purpose: `rx.test(` and `foo.it(`
+# must still be rejected, and only Playwright's two roots may open a block.
+# The `.serial` / `.parallel` / `.only` segments are Playwright's other
+# describe modifiers and are NOT switched-off markers — a `describe.only` runs
+# (and suppresses everything else), so it stays live.
 _TEST_DECL_RE = re.compile(
-    r"(?<![.\w$])(?P<fn>test|it|describe)"
+    r"(?<![.\w$])(?:(?:test|it)\s*\.\s*)?(?P<fn>test|it|describe)"
+    r"(?:\s*\.\s*(?:serial|parallel))?"
     r"(?P<mod>\s*\.\s*(?:skip|fixme|failing))?"
+    r"(?:\s*\.\s*only)?"
     r"\s*\(",
 )
 _XTEST_RE = re.compile(r"\b(?:xit|xtest|xdescribe)\s*\(")
@@ -492,12 +511,99 @@ def _strip_comments(text: str) -> str:
     return text
 
 
+def _close_paren(text: str, open_paren: int) -> int | None:
+    """Index of the `)` matching the `(` at *open_paren*, or None."""
+    depth = 0
+    i = open_paren
+    while i < len(text):
+        if text[i] == "(":
+            depth += 1
+        elif text[i] == ")":
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return None
+
+
+def _is_switched_off(decl: str) -> bool:
+    """True when *decl* opens a block that never runs.
+
+    Reads the `mod` group of the declaration regex rather than re-deriving it,
+    so `test.describe.skip(` and `describe.skip(` are judged by one rule. The
+    hand-written pattern this replaces required the modifier to follow the
+    ROOT identifier (`(?:test|it|describe)\\s*\\.\\s*(?:skip|…)`) and therefore
+    could not see the namespaced form at all.
+    """
+    if _XTEST_RE.match(decl):
+        return True
+    m = _TEST_DECL_RE.match(decl)
+    return bool(m and m.group("mod"))
+
+
+def _decl_spans(text: str) -> list[tuple[int, int, str]]:
+    """Every test/describe declaration in *text*, as (start, end, decl_text).
+
+    `end` is the index of the declaration's closing paren, so `start..end`
+    spans the whole call including its callback body.
+    """
+    spans: list[tuple[int, int, str]] = []
+    for rex in (_TEST_DECL_RE, _XTEST_RE):
+        for m in rex.finditer(text):
+            close = _close_paren(text, m.end() - 1)
+            if close is None:
+                continue
+            spans.append((m.start(), close, text[m.start():close + 1]))
+    spans.sort()
+    return spans
+
+
+def _switched_off_ancestor(text: str, pos: int) -> str | None:
+    """The innermost switched-off block ENCLOSING *pos*, if any.
+
+    WHY THIS EXISTS (#210)
+    ----------------------
+    `_enclosing_block` only ever searches FORWARD, because the convention this
+    module documents puts the tag in a comment immediately ABOVE the test it
+    annotates. That is right for the test, and blind to everything wrapping it:
+
+        test.describe.skip('outer', () => {
+            // @e2e demo::something
+            test('inner', async ({ page }) => { … })   <-- forward search lands here
+        })
+
+    The forward search finds the inner, un-skipped `test()`, reports it live,
+    and the enclosing `describe.skip` — which is ABOVE the tag and takes every
+    test inside it with it — is never consulted. The tag counted as coverage
+    while nothing ran, and this is the position the convention itself tells
+    people to write the tag in.
+
+    Measured in the fleet at the time of the fix: 16 spec scenarios across
+    openconnector (11) and scholiq (5).
+
+    The rule is the same one the module docstring already states for
+    `describe.skip(...)`; only the ancestor direction was missing. An ancestor
+    that merely carries `.only` / `.serial` / `.parallel` is NOT switched off.
+    """
+    innermost: str | None = None
+    for start, end, decl in _decl_spans(text):
+        if start >= pos:
+            break            # spans are sorted; nothing later can enclose pos
+        if end < pos:
+            continue         # closed before the tag — a sibling, not a parent
+        if _is_switched_off(decl):
+            innermost = decl
+    return innermost
+
+
 def _enclosing_block(text: str, pos: int) -> tuple[str, str] | None:
     """The nearest `test(`/`it(`/`describe(` declaration at or after *pos*, as
     (declaration_text, body_text).
 
     An `@e2e` tag conventionally sits in a comment immediately ABOVE the test
-    it annotates, so the search runs forward from the tag.
+    it annotates, so the search runs forward from the tag. See
+    :func:`_switched_off_ancestor` for the other direction, which this
+    function deliberately does not cover.
     """
     m = _TEST_DECL_RE.search(text, pos)
     xm = _XTEST_RE.search(text, pos)
@@ -508,17 +614,8 @@ def _enclosing_block(text: str, pos: int) -> tuple[str, str] | None:
     else:
         return None
     # Walk to the matching close paren of the declaration.
-    depth = 0
-    i = open_paren
-    while i < len(text):
-        if text[i] == "(":
-            depth += 1
-        elif text[i] == ")":
-            depth -= 1
-            if depth == 0:
-                break
-        i += 1
-    if i >= len(text):
+    i = _close_paren(text, open_paren)
+    if i is None:
         return None
     whole = text[decl_start:i + 1]
     # THE BODY IS THE LAST BRACE-BALANCED GROUP, FOUND FROM THE END.
@@ -547,9 +644,45 @@ def _enclosing_block(text: str, pos: int) -> tuple[str, str] | None:
     return whole, body
 
 
+def _has_own_unconditional_skip(block_body: str) -> bool:
+    """An unconditional `test.skip(true)` belonging to THIS block, not a child.
+
+    WHY THE OWNERSHIP TEST IS NEEDED
+    --------------------------------
+    Once `test.describe(` became visible to the declaration regex, a file-level
+    tag started resolving to the enclosing describe rather than to the first
+    test inside it — which is more accurate, but it also handed this check a
+    body containing OTHER TESTS. A plain `_UNCONDITIONAL_SKIP_RE.search()` over
+    that body then found a `test.skip(true, …)` written inside ONE nested test
+    and condemned the whole group.
+
+    Measured on launchpad `spec-coverage.spec.ts`: the header tag at :15 went
+    from live to dead because a single nested test at :185 guards itself with
+    `test.skip(true, 'allowUserDashboards is false in this environment')`. The
+    other tests in that describe run fine. Killing the ref for that is the
+    gate's blindness with the sign flipped, and it is not an improvement.
+
+    Playwright does allow a group-level `test.skip()` — called directly in a
+    describe body it skips every test in the group — so the check is kept, and
+    only NESTED occurrences are disowned. An occurrence that starts exactly
+    where a declaration span starts IS the skip call itself (`test.skip(true)`
+    is both), so `<` is strict on the left.
+    """
+    nested = [(s, e) for s, e, _d in _decl_spans(block_body)]
+    for m in _UNCONDITIONAL_SKIP_RE.finditer(block_body):
+        if not any(s < m.start() < e for s, e in nested):
+            return True
+    return False
+
+
 def _ref_is_live(text: str, pos: int) -> bool:
     """Does the test enclosing the `@e2e` tag at *pos* actually assert
     anything?"""
+    # OUTWARD FIRST. A switched-off ancestor takes everything inside it with
+    # it, so no amount of body in the inner test can rescue the ref. Asking
+    # the forward search first would find that inner test and answer "live".
+    if _switched_off_ancestor(text, pos) is not None:
+        return False
     block = _enclosing_block(text, pos)
     if block is None:
         # No enclosing test at all — a file-level tag. Treated as live: this
@@ -558,11 +691,10 @@ def _ref_is_live(text: str, pos: int) -> bool:
         return True
     decl, body = block
     head = decl[:decl.find("{") if "{" in decl else len(decl)]
-    if _XTEST_RE.match(decl) or re.match(
-            r"\s*\b(?:test|it|describe)\s*\.\s*(?:skip|fixme|failing)\s*\(", decl):
+    if _is_switched_off(decl):
         return False
     stripped = _strip_comments(body)
-    if _UNCONDITIONAL_SKIP_RE.search(stripped):
+    if _has_own_unconditional_skip(stripped):
         return False
     inner = stripped.strip()
     if inner.startswith("{"):
