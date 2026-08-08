@@ -138,15 +138,47 @@ on:
         type: string
         default: ""
       enable-playwright-coverage:
-        description: "Collect V8 code coverage during Playwright tests and enforce threshold"
+        description: "Measure spec-to-test scenario coverage after the Playwright suite (and set COLLECT_COVERAGE for the suite itself). Produces playwright-coverage.json and enforces playwright-coverage-threshold."
         required: false
         type: boolean
         default: false
       playwright-coverage-threshold:
-        description: "Minimum line coverage percentage for Playwright tests (0-100). Only enforced when enable-playwright-coverage is true."
+        # #189. Three things were wrong with this knob and all three are fixed
+        # in the step that reads it ("Generate spec-to-test coverage report"):
+        #
+        #   1. It never enforced. Below-threshold emitted `::warning::` and the
+        #      job stayed green, so the value was decorative. pipelinq declared
+        #      75, its run printed 28%, and the run passed. It now `::error::`s
+        #      and exits non-zero.
+        #   2. The number was not coverage. It was
+        #      `count(test() calls) / count(scenario headings)` — two
+        #      independent totals, never compared to each other. Ten unrelated
+        #      tests raised it exactly as much as covering ten scenarios, and it
+        #      could exceed 100% while covering nothing. It is now real
+        #      per-scenario matching against `@e2e` references, using gate-19's
+        #      dialect. The old ratio is still reported, under the honest name
+        #      `testsPerScenarioPercent`, and is not gated on.
+        #   3. Zero scenarios scored 100% — the worst-covered repo and the best
+        #      produced the same number. Zero enforceable scenarios is now a
+        #      FAILURE TO MEASURE and fails.
+        #
+        # The description below is also corrected. It used to read "Only
+        # enforced when enable-playwright-coverage is true", which told a reader
+        # that setting the flag switched enforcement on. It did not.
+        #
+        # DEFAULT CHANGED 75 -> 0, deliberately, to bound the blast radius of
+        # making a dead gate live. Measured 2026-08-08 across all 31 fleet
+        # callers: exactly ONE repo (pipelinq) sets `enable-playwright-coverage:
+        # true`, and it also sets its own threshold explicitly. Every other
+        # caller leaves the flag false, so the step does not run at all. A
+        # default of 0 means a repo that switches measurement on gets the
+        # NUMBER without being turned red by a floor it never chose; gating is
+        # opt-in by setting a value, which is what a threshold input should
+        # mean.
+        description: "Minimum percentage of non-excluded openspec scenarios that must be referenced by an @e2e annotation in a Playwright test (0-100). ENFORCED — below this the Playwright job fails. Only evaluated when enable-playwright-coverage is true. Default 0 means measure and report, do not gate."
         required: false
         type: number
-        default: 75
+        default: 0
       enable-axe:
         # Same shape and the same reasoning as enable-hydra-gates below: a
         # control that goes red on inherited debt the moment it is switched on
@@ -984,6 +1016,57 @@ jobs:
           path: quality-results/
 
   # ── Group 3: Security ──────────────────────────
+  #
+  # ══ THIS JOB NO LONGER GATES THE TEST TIER (#194) ═════════════════════════
+  #
+  # `phpunit`, `newman`, `playwright` and `journeydoc-capture` each used to
+  # carry `&& needs.security.result != 'failure'` in their `if:`. That single
+  # clause answered TWO different questions with one conditional:
+  #
+  #   1. should a security failure block the MERGE?          — yes, and it still does
+  #   2. should a security failure DELETE the test evidence? — no, and it did
+  #
+  # WHAT HAPPENED, 2026-08-06. CVE-2026-67434 was published against
+  # `squizlabs/php_codesniffer <3.13.6`. `composer audit` queries the LIVE
+  # Packagist advisory feed on every run, so the moment the advisory began
+  # being served, `Security (composer)` went red in every repo in the fleet
+  # simultaneously — with no commit, no push and no code change anywhere. The
+  # clause above then turned PHPUnit, Newman and E2E into `skipped` across 16
+  # repositories at once.
+  #
+  # A SKIPPED JOB RENDERS AS A GREY TICK, NOT A RED X. Dashboards, `gh pr
+  # checks` tallies and any count of failures read zero and report success. The
+  # runs did not look broken; the tests simply had not run. It fooled a review
+  # into filing a "fully green" report over a fleet with no test coverage at
+  # all.
+  #
+  # The coupling was never justified by the risk it managed. The dependency in
+  # question is a CODE FORMATTER that never executes in production. There is no
+  # reading of "phpcs has a command-injection bug" that implies "we can no
+  # longer trust what PHPUnit reports". And the shape inverts the purpose of
+  # CI: at the exact moment a security problem appears — when you most want to
+  # know whether the code still works — it deleted the evidence that would tell
+  # you.
+  #
+  # WHAT REPLACES IT (option E of #194 — decouple, and render loudly):
+  #
+  #   * The test jobs no longer read `needs.security.result`. They always run
+  #     and always produce a verdict. `needs: [security]` is kept on some of
+  #     them for ORDERING only — every one of them carries `!cancelled()`,
+  #     which suppresses the implicit `success()` on `needs`.
+  #
+  #   * Security still blocks the merge, unchanged: this job is in the Quality
+  #     Report's `needs:`, and `quality / Quality Report` is a required context
+  #     on `main` and `beta` in all 25 fleet repos. NOTHING IS WEAKENED AT THE
+  #     MERGE GATE. The cost is a few CI minutes spent on a PR that could not
+  #     have merged anyway.
+  #
+  #   * The Quality Report gained a third gate — "a test-tier job that was
+  #     ENABLED but did not run" — so that if any future condition deletes the
+  #     test tier again, the report says so in words and fails, instead of
+  #     tallying the absence of a verdict as a pass. See that step for detail.
+  #
+  # ══════════════════════════════════════════════════════════════════════════
   security:
     runs-on: ubuntu-latest
     name: "Security (${{ matrix.ecosystem }})"
@@ -1455,13 +1538,24 @@ jobs:
     # suppressing 73 real findings: whether the test suite ran at all was
     # contingent on a suppression file.
     #
-    # The security gate is kept — a repo with a known-vulnerable dependency
-    # should not spin up servers. This also aligns PHPUnit with the playwright
-    # job below, which already deliberately declines to gate on php-quality.
+    # NOT gated on security either, as of #194 — and that clause used to be
+    # here, justified as "a repo with a known-vulnerable dependency should not
+    # spin up servers". The justification did not survive contact with a real
+    # advisory. See the block on the `security` job for the full argument and
+    # the 2026-08-06 incident; the short version is that `composer audit`
+    # queries the LIVE Packagist feed, so an advisory published against any
+    # shared dev dependency deleted the entire fleet's test tier at once, with
+    # no commit and no red. A skipped job is a grey tick, not a failure.
+    #
+    # Security still blocks the MERGE: `security` is in the Quality Report's
+    # `needs:`, and `quality / Quality Report` is the required context on main
+    # and beta in all 25 fleet repos. Decoupling costs a few CI minutes on a PR
+    # that cannot merge anyway; it buys a verdict that exists.
     #
     # `needs:` is retained for ordering only; with `!cancelled()` and no result
-    # condition on php-quality, PHPUnit runs regardless of static-analysis colour.
-    if: ${{ inputs.enable-php && inputs.enable-phpunit && !cancelled() && needs.security.result != 'failure' }}
+    # condition on either producer, PHPUnit runs regardless of static-analysis
+    # colour and regardless of the advisory feed.
+    if: ${{ inputs.enable-php && inputs.enable-phpunit && !cancelled() }}
     runs-on: ubuntu-latest
     name: "PHPUnit (PHP ${{ matrix.php-version }}, NC ${{ matrix.nextcloud-ref }})"
     needs: [php-quality, security]
@@ -1711,13 +1805,20 @@ jobs:
     # left behind. playwright already declines to gate on php-quality too, so
     # this brings the last server-spinning job into line with the other two.
     #
-    # The security gate is KEPT, matching phpunit and playwright: a repo with a
-    # known-vulnerable dependency should not spin up servers.
+    # The security gate is NOT kept, as of #194 — it was removed from phpunit,
+    # playwright and journeydoc-capture at the same time, for the same reason.
+    # See the `security` job for the argument and the 2026-08-06 incident.
+    # Short version: the clause below used to read `&& needs.security.result !=
+    # 'failure'`, and one advisory against one shared DEV dependency turned
+    # this job into `skipped` in every repo at once. That is the identical
+    # defect this comment block already describes for php-quality, arriving
+    # through a second door.
     #
     # `needs:` is retained for ordering only; with `!cancelled()` and no result
-    # condition on php-quality, Newman now runs regardless of static-analysis
-    # colour and reaches its own verdict.
-    if: ${{ inputs.enable-newman && !cancelled() && needs.security.result != 'failure' }}
+    # condition on either producer, Newman now runs regardless of
+    # static-analysis colour, regardless of the advisory feed, and reaches its
+    # own verdict.
+    if: ${{ inputs.enable-newman && !cancelled() }}
     runs-on: ubuntu-latest
     name: "Integration Tests (Newman)"
     needs: [php-quality, security]
@@ -2007,7 +2108,11 @@ jobs:
           tail -50 server/data/nextcloud.log 2>/dev/null | python3 -m json.tool --no-ensure-ascii 2>/dev/null || tail -50 server/data/nextcloud.log 2>/dev/null || echo "No log found"
 
   playwright:
-    if: ${{ inputs.enable-playwright && !cancelled() && needs.security.result != 'failure' }}
+    # `needs.security.result != 'failure'` was removed here by #194. E2E is the
+    # most expensive evidence this workflow produces and it was the easiest to
+    # delete: one advisory against a dev-only formatter took it out fleet-wide
+    # on 2026-08-06 and rendered as a grey tick. See the `security` job.
+    if: ${{ inputs.enable-playwright && !cancelled() }}
     runs-on: ubuntu-latest
     name: "E2E Tests (Playwright)"
     # `frontend-build` is a dependency purely so its artifact is available to
@@ -2650,80 +2755,292 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
+      # ══ Spec-to-test coverage (#189) ═══════════════════════════════════════
+      #
+      # This step used to compute, warn about, and ignore a number that was not
+      # coverage. All three halves of that are fixed here; the argument is
+      # recorded on the `playwright-coverage-threshold` input at the top of the
+      # file, and the short version is:
+      #
+      #   * `::warning::` with no non-zero exit -> the threshold could not fail
+      #     anything, ever. It now `::error::`s and exits 1.
+      #   * `tests.length / scenarios.length` is a ratio of two totals that are
+      #     never compared to each other. It is replaced by real per-scenario
+      #     matching. The old ratio survives as `testsPerScenarioPercent`,
+      #     reported and never gated on, so nobody loses a number they were
+      #     watching.
+      #   * `scenarios.length === 0 ? … : 100` scored a repo with no parseable
+      #     scenarios at 100%. Zero enforceable scenarios is now NOT MEASURABLE
+      #     and fails, because a measurement that could not be taken is not a
+      #     pass.
+      #
+      # WHAT "COVERED" MEANS NOW. A scenario is covered when some Playwright
+      # test file carries an `@e2e` reference that resolves to its slug —
+      # `@e2e <spec-name>::<slug>` or `@e2e openspec/specs/<name>/spec.md#<slug>`
+      # — and a scenario carrying `@e2e exclude <reason>` (at scenario,
+      # requirement or whole-spec level) leaves the denominator entirely. That
+      # is deliberately the SAME dialect as hydra-gates gate-19
+      # (`check_e2e_coverage.py`), so a repo annotates once and both numbers
+      # move together. The division of labour: gate-19 is DIFF-SCOPED and blocks
+      # a PR that adds an unannotated scenario; this is the WHOLE-REPO figure
+      # and blocks on the standing floor. gate-19 is not invoked from here on
+      # purpose — this job has no hydra-gates checkout, and adding one would
+      # make the E2E job depend on a second repository to report a number.
+      #
+      # WHY A HEREDOC RATHER THAN `node -e`. The program is now long enough to
+      # need a test, and a `node -e` string with `${{ }}` interpolated into its
+      # middle cannot be executed anywhere except inside a GitHub runner. As a
+      # file fed only by environment variables it is a plain Node program, and
+      # `scripts/test-spec-coverage-gate.py` extracts THIS text out of THIS file
+      # and runs it against fixtures — including a fixture that proves the gate
+      # can fail, which #189 correctly points out no run could previously show.
       - name: Generate spec-to-test coverage report
         if: ${{ inputs.enable-playwright-coverage && !cancelled() }}
+        env:
+          SPEC_COVERAGE_THRESHOLD: ${{ inputs.playwright-coverage-threshold }}
+          PLAYWRIGHT_TEST_PATH: ${{ inputs.playwright-test-path }}
         run: |
           cd server/apps/${{ inputs.app-name }}
-          node -e "
-          const fs = require('fs');
-          const path = require('path');
+          cat > /tmp/spec-coverage.js <<'SPEC_COVERAGE_JS'
+          // Spec-to-test coverage — real per-scenario matching.
+          //
+          // Env: SPEC_COVERAGE_THRESHOLD, PLAYWRIGHT_TEST_PATH, SPEC_COVERAGE_OUT
+          // Exit: 0 measured and at/above threshold; 1 below threshold, or the
+          //       measurement could not be taken at all.
+          'use strict';
 
-          // Collect all spec scenarios from openspec
-          const specDir = 'openspec/specs';
-          const changeDir = 'openspec/changes';
-          let scenarios = [];
+          var fs = require('fs');
+          var path = require('path');
 
-          function extractScenarios(dir) {
-            if (!fs.existsSync(dir)) return;
-            for (const entry of fs.readdirSync(dir, { recursive: true })) {
-              const file = path.join(dir, entry);
-              if (!file.endsWith('spec.md') && !file.endsWith('spec.md')) continue;
-              if (!fs.statSync(file).isFile()) continue;
-              const content = fs.readFileSync(file, 'utf8');
-              const matches = content.match(/^###?\s+(S\d+|Scenario[:\s]|REQ-)[^\n]*/gm) || [];
-              for (const m of matches) {
-                scenarios.push({ file: file.replace(/\\\\/g, '/'), scenario: m.replace(/^#+\s+/, '').trim() });
+          var THRESHOLD = Number(process.env.SPEC_COVERAGE_THRESHOLD || '0');
+          var TEST_DIR = process.env.PLAYWRIGHT_TEST_PATH || 'tests/e2e';
+          var OUT = process.env.SPEC_COVERAGE_OUT || 'playwright-coverage.json';
+          var SPEC_ROOT = 'openspec/specs';
+
+          function slugify(text) {
+            var t = String(text).toLowerCase();
+            t = t.replace(/[^a-z0-9\s-]/g, '');
+            t = t.replace(/[\s_]+/g, '-');
+            t = t.replace(/-{2,}/g, '-');
+            return t.replace(/^-+|-+$/g, '');
+          }
+
+          function walk(dir, acc) {
+            acc = acc || [];
+            if (!fs.existsSync(dir)) return acc;
+            var entries;
+            try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return acc; }
+            for (var i = 0; i < entries.length; i++) {
+              var e = entries[i];
+              var full = path.join(dir, e.name);
+              if (e.isDirectory()) walk(full, acc);
+              else if (e.isFile()) acc.push(full);
+            }
+            return acc;
+          }
+
+          var EXCLUDE_RE = /@e2e\s+exclude\b[ \t]*(.*?)\s*$/;
+          // A WHOLE-SPEC exclusion must be a standalone directive line (after
+          // optional markdown bullet/quote/heading markers), so prose that
+          // merely mentions the token does not silently void an entire spec.
+          var WHOLE_SPEC_EXCLUDE_RE = /^[ \t>*#-]*@e2e\s+exclude\b[ \t]*(.*?)\s*$/;
+
+          function parseExclusion(line) {
+            var m = EXCLUDE_RE.exec(line);
+            if (!m) return null;
+            return { reason: m[1].trim() || null };
+          }
+
+          // Format A: `#### Scenario: <title>`
+          var SCENARIO_RE = /^#{4}\s+Scenario:\s*(.+)$/i;
+          // Format B parent: `### Requirement: …` or `### REQ-xxx: …`
+          var REQUIREMENT_RE = /^#{3}\s+(?:Requirement:|REQ-[A-Za-z0-9_-]+:)\s*(.*)$/;
+          var ALT_MARKER_RE = /^\*\*Scenarios?:\*\*\s*$/i;
+          var ALT_ITEM_RE = /^(\d+)\.\s+\*\*(?:GIVEN|WHEN)\b/i;
+
+          function parseSpecFile(file) {
+            var specName = path.basename(path.dirname(file));
+            var lines = fs.readFileSync(file, 'utf8').split(/\r?\n/);
+            var out = [];
+
+            var wholeExcluded = false, wholeReason = null;
+            for (var h = 0; h < lines.length; h++) {
+              if (REQUIREMENT_RE.test(lines[h]) || SCENARIO_RE.test(lines[h])) break;
+              var wm = WHOLE_SPEC_EXCLUDE_RE.exec(lines[h]);
+              if (wm) { wholeExcluded = true; wholeReason = wm[1].trim() || null; break; }
+            }
+
+            var reqSlug = null, reqExcluded = false, reqReason = null;
+            var i = 0;
+            while (i < lines.length) {
+              var line = lines[i];
+
+              var rm = REQUIREMENT_RE.exec(line);
+              if (rm) {
+                var reqText = rm[1].trim() || line.replace(/^#+\s+/, '').trim();
+                reqSlug = slugify(reqText);
+                var rex = parseExclusion(line);
+                reqExcluded = !!rex;
+                reqReason = rex ? rex.reason : null;
+                for (var k = i + 1; k < lines.length && k <= i + 3; k++) {
+                  if (REQUIREMENT_RE.test(lines[k]) || SCENARIO_RE.test(lines[k])) break;
+                  var rex2 = parseExclusion(lines[k]);
+                  if (rex2) { reqExcluded = true; reqReason = reqReason || rex2.reason; break; }
+                }
+                i++;
+                continue;
               }
-            }
-          }
-          extractScenarios(specDir);
-          extractScenarios(changeDir);
 
-          // Collect all test descriptions from Playwright specs
-          const testDir = '${{ inputs.playwright-test-path }}';
-          let tests = [];
-          if (fs.existsSync(testDir)) {
-            for (const entry of fs.readdirSync(testDir, { recursive: true })) {
-              const file = path.join(testDir, entry);
-              if (!file.endsWith('.spec.ts') && !file.endsWith('.spec.js')) continue;
-              if (!fs.statSync(file).isFile()) continue;
-              const content = fs.readFileSync(file, 'utf8');
-              const matches = content.match(/test\(['\x60]([^'\x60]+)/g) || [];
-              for (const m of matches) {
-                tests.push({ file: file.replace(/\\\\/g, '/'), test: m.replace(/test\(['\x60]/, '').trim() });
+              var sm = SCENARIO_RE.exec(line);
+              if (sm) {
+                var title = sm[1].trim();
+                var block = [line];
+                var j = i + 1;
+                while (j < lines.length && !/^#{1,4}\s/.test(lines[j])) { block.push(lines[j]); j++; }
+                var sEx = null;
+                for (var b = 0; b < block.length; b++) { sEx = sEx || parseExclusion(block[b]); }
+                var excluded = wholeExcluded || reqExcluded || !!sEx;
+                var reason = wholeExcluded ? wholeReason : (sEx ? sEx.reason : (reqExcluded ? reqReason : null));
+                out.push({
+                  spec: specName, file: file, label: 'Scenario: ' + title,
+                  slug: slugify(title), excluded: excluded, reason: reason
+                });
+                i = j;
+                continue;
               }
+
+              if (ALT_MARKER_RE.test(line) && reqSlug) {
+                var j2 = i + 1;
+                while (j2 < lines.length && !/^#{1,4}\s/.test(lines[j2])) {
+                  var am = ALT_ITEM_RE.exec(lines[j2]);
+                  if (am) {
+                    var itemEx = parseExclusion(lines[j2]);
+                    var ex2 = wholeExcluded || reqExcluded || !!itemEx;
+                    var rsn2 = wholeExcluded ? wholeReason : (itemEx ? itemEx.reason : (reqExcluded ? reqReason : null));
+                    out.push({
+                      spec: specName, file: file, label: reqSlug + ' scenario ' + am[1],
+                      slug: reqSlug + '-scenario-' + am[1], excluded: ex2, reason: rsn2
+                    });
+                  }
+                  j2++;
+                }
+                i = j2;
+                continue;
+              }
+
+              i++;
+            }
+            return out;
+          }
+
+          // `@e2e <path>#<slug>` / `@e2e <spec>::<slug>`. `exclude` is a
+          // directive, not a reference, so it must not be read as one.
+          var REF_RE = /@e2e\s+(?!exclude\b)(\S+)/g;
+
+          function parseTestFile(file) {
+            var content = fs.readFileSync(file, 'utf8');
+            var refs = [];
+            var m;
+            REF_RE.lastIndex = 0;
+            while ((m = REF_RE.exec(content)) !== null) {
+              var raw = m[1];
+              var slug = null;
+              if (raw.indexOf('#') !== -1) slug = raw.split('#').pop();
+              else if (raw.indexOf('::') !== -1) slug = raw.split('::').pop();
+              if (slug) refs.push(slugify(slug));
+            }
+            var titles = content.match(/test\(['"`]([^'"`]+)/g) || [];
+            return { refs: refs, tests: titles.length };
+          }
+
+          var specFiles = walk(SPEC_ROOT).filter(function (f) {
+            var b = path.basename(f);
+            return b === 'spec.md' || b === 'specs.md';
+          });
+
+          var scenarios = [];
+          for (var s = 0; s < specFiles.length; s++) {
+            scenarios = scenarios.concat(parseSpecFile(specFiles[s]));
+          }
+
+          var testFiles = walk(TEST_DIR).filter(function (f) {
+            return /\.(spec|test)\.(ts|js)$/.test(f);
+          });
+
+          var referenced = Object.create(null);
+          var testCount = 0;
+          var refCount = 0;
+          for (var t = 0; t < testFiles.length; t++) {
+            var parsed = parseTestFile(testFiles[t]);
+            testCount += parsed.tests;
+            for (var r = 0; r < parsed.refs.length; r++) {
+              refCount++;
+              (referenced[parsed.refs[r]] = referenced[parsed.refs[r]] || []).push(testFiles[t]);
             }
           }
 
-          // Collect test flow files
-          const flowDir = 'tests/flows';
-          let flows = [];
-          if (fs.existsSync(flowDir)) {
-            for (const entry of fs.readdirSync(flowDir)) {
-              if (entry.endsWith('.md') && entry !== 'README.md') flows.push(entry);
-            }
+          var total = scenarios.length;
+          var excluded = 0, covered = 0;
+          var uncoveredList = [];
+          for (var x = 0; x < scenarios.length; x++) {
+            var sc = scenarios[x];
+            if (sc.excluded) { excluded++; sc.status = 'excluded'; continue; }
+            if (referenced[sc.slug]) { covered++; sc.status = 'covered'; sc.coveredBy = referenced[sc.slug]; }
+            else { sc.status = 'uncovered'; uncoveredList.push(sc.spec + '#' + sc.slug); }
           }
 
-          const report = {
-            specScenarios: scenarios.length,
-            playwrightTests: tests.length,
-            testFlows: flows.length,
-            coverage: scenarios.length > 0 ? Math.round((tests.length / scenarios.length) * 100) : 100,
-            scenarios,
-            tests,
-            flows,
+          var enforceable = total - excluded;
+          var measurable = enforceable > 0;
+          var coverage = measurable ? Math.round((covered / enforceable) * 100) : null;
+
+          var report = {
+            metric: 'scenario-coverage',
+            metricDescription: 'percent of non-excluded openspec scenarios referenced by an @e2e annotation in a Playwright test',
+            specScenarios: total,
+            excludedScenarios: excluded,
+            enforceableScenarios: enforceable,
+            coveredScenarios: covered,
+            uncoveredScenarios: enforceable - covered,
+            playwrightTests: testCount,
+            e2eReferences: refCount,
+            // The OLD number, kept under a name that says what it is: two
+            // independent totals divided by each other. Reported, never gated.
+            testsPerScenarioPercent: total > 0 ? Math.round((testCount / total) * 100) : null,
+            measurable: measurable,
+            coverage: coverage,
+            threshold: THRESHOLD,
+            uncovered: uncoveredList.slice(0, 200),
+            scenarios: scenarios
           };
 
-          fs.writeFileSync('playwright-coverage.json', JSON.stringify(report, null, 2));
-          console.log('Spec scenarios: ' + report.specScenarios);
-          console.log('Playwright tests: ' + report.playwrightTests);
-          console.log('Test flows: ' + report.testFlows);
-          console.log('Spec-to-test coverage: ' + report.coverage + '%');
+          fs.writeFileSync(OUT, JSON.stringify(report, null, 2));
 
-          if (report.coverage < ${{ inputs.playwright-coverage-threshold }}) {
-            console.log('::warning::Spec-to-test coverage ' + report.coverage + '% is below threshold ' + ${{ inputs.playwright-coverage-threshold }} + '%');
+          console.log('Spec scenarios found:     ' + total);
+          console.log('  @e2e-excluded:          ' + excluded);
+          console.log('  enforceable:            ' + enforceable);
+          console.log('  covered by an @e2e ref: ' + covered);
+          console.log('Playwright test() calls:  ' + testCount + '   (reported, NOT gated on)');
+          console.log('@e2e references found:    ' + refCount);
+          console.log('tests-per-scenario:       ' + report.testsPerScenarioPercent + '%  (reported, NOT gated on)');
+
+          if (!measurable) {
+            console.log('::error::NOT MEASURABLE - no enforceable scenarios found under ' + SPEC_ROOT + '. This is a FAILURE TO MEASURE, not 100% coverage: a repo with no parseable scenarios has proved nothing. Expected `#### Scenario: <title>` headings, or `### REQ-x:`/`### Requirement:` followed by `**Scenarios:**` and numbered `N. **GIVEN/WHEN**` items, in openspec/specs/*/spec.md.');
+            process.exit(1);
           }
-          "
+
+          console.log('Scenario coverage:        ' + coverage + '%  (threshold ' + THRESHOLD + '%)');
+
+          if (coverage < THRESHOLD) {
+            console.log('::error::Scenario coverage ' + coverage + '% is below the configured threshold of ' + THRESHOLD + '%. ' + (enforceable - covered) + ' of ' + enforceable + ' enforceable scenarios have no @e2e reference in any Playwright test.');
+            var show = uncoveredList.slice(0, 25);
+            for (var u = 0; u < show.length; u++) console.log('  uncovered: ' + show[u]);
+            if (uncoveredList.length > show.length) console.log('  ... and ' + (uncoveredList.length - show.length) + ' more (full list in ' + OUT + ')');
+            process.exit(1);
+          }
+
+          console.log('Scenario coverage meets the threshold.');
+          SPEC_COVERAGE_JS
+          node /tmp/spec-coverage.js
 
       - name: Upload Playwright report
         if: always()
@@ -2800,7 +3117,11 @@ jobs:
   # ╚══════════════════════════════════════════════╝
 
   journeydoc-capture:
-    if: ${{ inputs.enable-journeydoc-capture && !cancelled() && needs.security.result != 'failure' }}
+    # `needs.security.result != 'failure'` removed by #194, with the rest of the
+    # test tier. `needs: [security]` is kept for ordering only — `!cancelled()`
+    # suppresses the implicit `success()`, so this job reaches its own verdict
+    # whatever the advisory feed says. See the `security` job.
+    if: ${{ inputs.enable-journeydoc-capture && !cancelled() }}
     runs-on: ubuntu-latest
     name: "Journeydoc Capture (screenshots)"
     needs: [security]
@@ -3827,6 +4148,26 @@ jobs:
             esac
           }
 
+          # Test-tier icon (#194). `skipped` means two completely different
+          # things depending on whether the caller asked for the job:
+          #
+          #   enabled=false → the repo does not have this kind of test. ⏭️.
+          #   enabled=true  → the job was asked for and DID NOT RUN. That is
+          #                   the ABSENCE OF A VERDICT, and it must not share a
+          #                   glyph with "no tests configured" — which is
+          #                   exactly how a fleet-wide advisory deleted the test
+          #                   tier on 2026-08-06 while every report looked
+          #                   ordinary. Rendered in words, not a tick.
+          #
+          # $1 = needs.<job>.result, $2 = "true"/"false" for enabled
+          test_icon() {
+            if [ "$2" = "true" ] && [ "$1" = "skipped" ]; then
+              echo "🚨 **NO VERDICT — enabled but never ran**"
+            else
+              icon "$1"
+            fi
+          }
+
           # Build license info strings
           license_info() {
             local eco="$1"
@@ -3883,10 +4224,15 @@ jobs:
             sec_npm=$(read_result "results/result-security-npm/npm.txt")
             echo "| npm | | | $(icon "$sec_npm") | $(license_info "npm") | |"
 
-            # Test rows
-            echo "| PHPUnit | | | | | $(icon '${{ needs.phpunit.result }}') |"
-            echo "| Newman | | | | | $(icon '${{ needs.newman.result }}') |"
-            echo "| Playwright | | | | | $(icon '${{ needs.playwright.result }}') |"
+            # Test rows. `test_icon` rather than `icon`: see its definition —
+            # an enabled-but-skipped test job is the absence of a verdict and
+            # says so in words.
+            echo "| PHPUnit | | | | | $(test_icon '${{ needs.phpunit.result }}' '${{ inputs.enable-php && inputs.enable-phpunit }}') |"
+            echo "| Newman | | | | | $(test_icon '${{ needs.newman.result }}' '${{ inputs.enable-newman }}') |"
+            echo "| Playwright | | | | | $(test_icon '${{ needs.playwright.result }}' '${{ inputs.enable-playwright }}') |"
+            if [ '${{ inputs.enable-journeydoc-capture }}' = 'true' ]; then
+              echo "| Journeydoc capture | | | | | $(test_icon '${{ needs.journeydoc-capture.result }}' 'true') |"
+            fi
             # The Hydra gates were in this job's `needs:` and in its failure
             # gate below, so a red gates job did red the Quality Report — but
             # the report itself never mentioned them, in any state. The one
@@ -3941,12 +4287,26 @@ jobs:
           fi
 
           # Playwright spec-to-test coverage (if available)
+          # #189: this used to render "<coverage>% (<tests> tests / <specs>
+          # specs)", which stated the broken model out loud — a ratio of two
+          # totals that were never compared. The producer now emits real
+          # per-scenario matching, so the numerator and denominator here are
+          # the same population and the sentence means what it says. `.coverage`
+          # is null when the measurement could not be taken, and that case says
+          # so rather than printing "null%".
           COVERAGE_FILE="results/playwright-report/playwright-coverage.json"
           if [ -f "$COVERAGE_FILE" ]; then
-            SPEC_COUNT=$(jq '.specScenarios' "$COVERAGE_FILE")
-            TEST_COUNT=$(jq '.playwrightTests' "$COVERAGE_FILE")
-            COVERAGE=$(jq '.coverage' "$COVERAGE_FILE")
-            echo "**Spec coverage:** ${COVERAGE}% ($TEST_COUNT tests / $SPEC_COUNT specs)" >> "$REPORT"
+            MEASURABLE=$(jq -r '.measurable // "unknown"' "$COVERAGE_FILE")
+            if [ "$MEASURABLE" = "false" ]; then
+              echo "**Spec coverage:** ⚠️ NOT MEASURABLE — no enforceable openspec scenarios were found. This is a failure to measure, not full coverage." >> "$REPORT"
+            else
+              COVERED=$(jq -r '.coveredScenarios // 0' "$COVERAGE_FILE")
+              ENFORCEABLE=$(jq -r '.enforceableScenarios // 0' "$COVERAGE_FILE")
+              EXCLUDED=$(jq -r '.excludedScenarios // 0' "$COVERAGE_FILE")
+              COVERAGE=$(jq -r '.coverage // 0' "$COVERAGE_FILE")
+              THRESH=$(jq -r '.threshold // 0' "$COVERAGE_FILE")
+              echo "**Spec coverage:** ${COVERAGE}% — $COVERED of $ENFORCEABLE enforceable scenarios carry an \`@e2e\` reference (threshold ${THRESH}%, $EXCLUDED excluded with a reason)." >> "$REPORT"
+            fi
             echo "" >> "$REPORT"
           fi
 
@@ -4014,6 +4374,128 @@ jobs:
         if: ${{ always() && contains(needs.*.result, 'failure') }}
         run: |
           echo "::error::One or more quality jobs failed — see the report above."
+          exit 1
+
+      # ══ Gate 2 — an ENABLED test job that never ran (#194) ═════════════════
+      #
+      # The invariant, stated once: **`skipped` in the test tier must never be
+      # summarised as a pass.** `skipped` is not `failure`, so the gate above —
+      # `contains(needs.*.result, 'failure')` — reads straight past it, and the
+      # check renders in the same colour family as a success. On 2026-08-06 a
+      # single advisory against a dev-only formatter turned PHPUnit, Newman and
+      # E2E into `skipped` in 16 repositories at once and every one of those
+      # runs read as unremarkable. The absence of a verdict was indistinguishable
+      # from a good one, and that — not the security failure — is what cost us
+      # the morning.
+      #
+      # The cause of that particular skip is removed (the test jobs no longer
+      # read `needs.security.result`), but a cause is not an invariant. Any
+      # future `if:` clause, matrix collapse or producer edge can delete the
+      # same evidence the same way. This step is the invariant, so the next one
+      # is loud on arrival instead of being reconstructed from a timeline.
+      #
+      # WHY `enabled` IS PART OF THE TEST. `skipped` legitimately means "this
+      # repo has no Newman collections" for most of the fleet. The defect is
+      # only a defect when the CALLER ASKED FOR THE JOB and did not get it, so
+      # each row pairs `needs.<job>.result` with the input(s) that switch it on.
+      # That keeps the gate silent for the 20-odd repos that run no E2E at all.
+      #
+      # WHY THE SUPERSESSION CHECK IS REPEATED HERE. A run cancelled by
+      # `cancel-in-progress` can leave a not-yet-started job reporting `skipped`
+      # rather than `cancelled`. Failing on that would turn every rapid push
+      # red — the same wall of red the gate below exists to avoid — so this
+      # borrows its discriminator: a run whose head SHA is no longer the branch
+      # tip has been superseded, and the newer run is the one whose verdict
+      # counts.
+      - name: Gate — a test job that was ENABLED but never ran has no verdict
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          RUN_REF: ${{ github.head_ref || github.ref_name }}
+          SECURITY_RESULT: ${{ needs.security.result }}
+          PHPUNIT_ENABLED: ${{ inputs.enable-php && inputs.enable-phpunit }}
+          PHPUNIT_RESULT: ${{ needs.phpunit.result }}
+          NEWMAN_ENABLED: ${{ inputs.enable-newman }}
+          NEWMAN_RESULT: ${{ needs.newman.result }}
+          PLAYWRIGHT_ENABLED: ${{ inputs.enable-playwright }}
+          PLAYWRIGHT_RESULT: ${{ needs.playwright.result }}
+          JOURNEYDOC_ENABLED: ${{ inputs.enable-journeydoc-capture }}
+          JOURNEYDOC_RESULT: ${{ needs['journeydoc-capture'].result }}
+        run: |
+          set -uo pipefail
+
+          MISSING=""
+          RAN=""
+
+          # $1 = human label, $2 = enabled ("true"/"false"), $3 = job result
+          classify() {
+            if [ "$2" != "true" ]; then
+              echo "  - $1: not enabled by this caller — nothing expected."
+              return
+            fi
+            case "$3" in
+              skipped)
+                echo "  - $1: ENABLED but result=skipped — NO VERDICT EXISTS."
+                MISSING="${MISSING}${1}"$'\n'
+                ;;
+              success)
+                echo "  - $1: ran, passed."
+                RAN="${RAN}${1}"$'\n'
+                ;;
+              *)
+                echo "  - $1: ran, result=$3."
+                RAN="${RAN}${1}"$'\n'
+                ;;
+            esac
+          }
+
+          echo "Test-tier verdict census:"
+          classify "PHPUnit"            "$PHPUNIT_ENABLED"    "$PHPUNIT_RESULT"
+          classify "Newman"             "$NEWMAN_ENABLED"     "$NEWMAN_RESULT"
+          classify "Playwright"         "$PLAYWRIGHT_ENABLED" "$PLAYWRIGHT_RESULT"
+          classify "Journeydoc capture" "$JOURNEYDOC_ENABLED" "$JOURNEYDOC_RESULT"
+
+          if [ -z "$MISSING" ]; then
+            echo "Every enabled test job produced a verdict."
+            # State the distinction the 2026-08-06 reports could not make.
+            if [ "$SECURITY_RESULT" = "failure" ] && [ -n "$RAN" ]; then
+              echo "::notice::Security failed, and the test tier still ran and reported. This is 'tests produced a verdict, security did not pass' — NOT 'tests never ran'. The merge is blocked by the security failure, and the test results above are real."
+            fi
+            exit 0
+          fi
+
+          TIP="$(gh api "repos/${{ github.repository }}/commits/${RUN_REF}" --jq .sha 2>/dev/null || true)"
+          if [ -n "$TIP" ] && [ "$TIP" != "$RUN_SHA" ]; then
+            echo "::notice::Test job(s) did not run, but this run has been SUPERSEDED (${RUN_REF} is now at ${TIP:0:7}, this run is ${RUN_SHA:0:7}). The newer run is the one whose verdict counts — staying quiet."
+            exit 0
+          fi
+
+          echo "::error::TEST TIER NOT EXECUTED — NO VERDICT EXISTS for one or more enabled test jobs. A skipped test job is not a pass; it is the absence of a result. This gate cannot pass."
+          {
+            echo ""
+            echo "## 🚨 Gate failed — NO VERDICT EXISTS for the test tier"
+            echo ""
+            echo "These jobs were **enabled by this repository's caller** and did **not run**:"
+            echo ""
+            # `|| true` on the loop: the default shell is `bash -e`, and a final
+            # iteration whose `[ -n ]` test is false would make the pipeline
+            # return 1 and abort the rest of this summary block.
+            printf '%s' "$MISSING" | while IFS= read -r j; do
+              if [ -n "$j" ]; then echo "- \`$j\` — result \`skipped\`"; fi
+            done || true
+            echo ""
+            echo "**This is not a test failure. It is the absence of a test result.**"
+            echo "Nothing above should be read as evidence that the code works, because"
+            echo "no test was executed to produce that evidence."
+            echo ""
+            if [ "$SECURITY_RESULT" = "failure" ]; then
+              echo "\`Security\` also failed in this run. Note the two are now independent"
+              echo "(#194) — a security failure no longer skips the test tier, so if the"
+              echo "test tier is missing, something else deleted it. Investigate the"
+              echo "skipped job's \`if:\` condition."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
           exit 1
 
       # A CANCELLED job renders NO verdict, so treating it as merely

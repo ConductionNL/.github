@@ -96,6 +96,55 @@ jobs:
       - name: "Assert every verdict-producing job is in Quality Report's needs"
         run: python3 scripts/assert-quality-report-gates-every-leg.py .github/workflows/quality.yml
 
+      # ── THE OTHER DIRECTION (#194) ────────────────────────────────────────
+      #
+      # The two checks above close direction 1: a job's failure must be able to
+      # reach the required check. They say nothing about direction 2: whether
+      # the job RUNS AT ALL. A job deleted by an upstream result is `skipped`,
+      # `skipped` is not `failure`, and `contains(needs.*.result, 'failure')`
+      # reads straight past it — so a job can be perfectly wired into the gate
+      # and still contribute nothing, silently. That is #194: four test jobs
+      # carried `needs.security.result != 'failure'`, and one advisory against
+      # a dev-only formatter deleted PHPUnit, Newman and E2E in sixteen repos
+      # at once without turning anything red.
+      #
+      # Positive control first, same discipline as above.
+      - name: "Positive control — a producer that deletes a verdict must be detected"
+        run: python3 scripts/assert-no-producer-deletes-a-verdict.py --positive-control .github/workflows/quality.yml
+
+      - name: "Assert no job can be DELETED by a producer's result"
+        run: python3 scripts/assert-no-producer-deletes-a-verdict.py .github/workflows/quality.yml
+
+  coverage-gate-can-fail:
+    name: "The spec-coverage threshold can fail a run"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # #189: `playwright-coverage-threshold` had NEVER gated. Below-threshold
+      # emitted `::warning::` and returned zero, so the knob was decorative —
+      # pipelinq declared 75, its run printed 28%, and the run passed.
+      #
+      # POSITIVE CONTROL FIRST, and it is the whole point here: the suite is
+      # re-run with the gate neutered back to warning-only, and MUST go red. A
+      # suite that stays green against the known-bad program is not measuring
+      # enforcement, which is exactly how the defect survived this long.
+      - name: "Positive control — a warning-only gate must fail this suite"
+        run: python3 scripts/test-spec-coverage-gate.py --positive-control .github/workflows/quality.yml
+
+      # THE MEASUREMENT. The Node program is EXTRACTED from quality.yml's
+      # heredoc and executed against fixtures — below-threshold (must exit
+      # non-zero), at-threshold (must exit zero), zero-scenarios (must be NOT
+      # MEASURABLE rather than the old 100%), and a fixture proving ten
+      # unrelated `test()` calls no longer move the number.
+      #
+      # Running the shipped text rather than a transcription is deliberate: a
+      # test against a copy passes happily while the workflow does something
+      # else.
+      - name: "Exercise the shipped spec-coverage program against fixtures"
+        run: python3 scripts/test-spec-coverage-gate.py .github/workflows/quality.yml
+
   seed-semantics:
     name: "A failing seed fails the job"
     runs-on: ubuntu-latest
