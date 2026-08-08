@@ -480,11 +480,59 @@ _count() {
 # its own e.g. SettingsController.php keeps it, and the file therefore exists
 # and is judged normally. This helper only ever fires when the file is ABSENT.
 # ---------------------------------------------------------------------------
+# WHERE THE CALL LIVES IS NOT PART OF THE INVARIANT (ConductionNL/.github#237)
+# ---------------------------------------------------------------------------
+# This used to grep lib/AppInfo/Application.php and nothing else. That is not
+# where the call has to be, and the fleet's own quality gates push it out of
+# there: phpmd complains about a long `register()`, the app decomposes it into
+# per-concern registrars, and the AppHost call moves one file down. Procest did
+# exactly that (procest#717) and its `Bootstrap::register()` now lives in
+# lib/AppInfo/Registrar/AppHostRegistrar.php — so _HYDRA_APPHOST read 0 and all
+# four of its AppHost routes came back as `controller-class-not-found`. The
+# decomposition the gates asked for is what blinded this one.
+#
+# So: the evidence is "some file this repository ships calls
+# `\OCA\OpenRegister\AppHost\Bootstrap::register()`", and it is looked for
+# across the whole tracked lib/ tree. BOTH conditions must hold in the SAME
+# file — `AppHost\Bootstrap` (the symbol) and `Bootstrap::register(` (the call).
+# Split across two files they prove nothing: a comment naming AppHost in one
+# place and an unrelated `Bootstrap::register()` in another would combine into
+# a blanket exemption.
+#
+# The site is remembered so the NOT-JUDGED lines can name it. "This gate
+# believes you adopt AppHost" is a claim, and a claim with no evidence attached
+# is how #199 came to look fixed while still firing.
+#
+# ⚠️ COMMENTS DO NOT COUNT, and this is not a hypothetical. The first cut of
+# this widening was two raw `grep`s, and the very first fixture written to
+# disprove it — `delegated-registrar-absent/`, whose Application.php docblock
+# reads "NOTHING in this app calls \OCA\OpenRegister\AppHost\Bootstrap::register()"
+# — was EXEMPTED BY ITS OWN EXPLANATION. Prose about a call is not a call. The
+# old narrow version only ever read one file and was much less likely to meet
+# a sentence like that; widening the search to lib/ makes it near-certain,
+# because the file that explains the architecture is exactly the file that
+# names it. Same defect as gate-64 (.github#184): a checker that greps a
+# string matches every comment.
+_php_code_only() {
+    # Whole-line comments removed. `#[` at line start is a PHP ATTRIBUTE, not
+    # a comment, and must survive.
+    grep -vE '^[[:space:]]*(//|/\*|\*|#([^[]|$))' "$1" 2>/dev/null
+}
 _HYDRA_APPHOST=0
-if [ -f lib/AppInfo/Application.php ] \
-    && grep -qE 'AppHost\\+Bootstrap' lib/AppInfo/Application.php \
-    && grep -qE 'Bootstrap::register[[:space:]]*\(' lib/AppInfo/Application.php; then
-    _HYDRA_APPHOST=1
+_HYDRA_APPHOST_SITE=""
+if [ -d lib ]; then
+    while IFS= read -r _ah_f; do
+        [ -f "${_ah_f}" ] || continue
+        _ah_code=$(_php_code_only "${_ah_f}")
+        printf '%s\n' "${_ah_code}" | grep -qE 'Bootstrap::register[[:space:]]*\(' || continue
+        printf '%s\n' "${_ah_code}" | grep -qE 'AppHost\\+Bootstrap' || continue
+        _HYDRA_APPHOST=1
+        _HYDRA_APPHOST_SITE="${_ah_f}"
+        break
+    done < <(_enum_tracked '\.php$' lib \
+        | tr '\n' '\0' \
+        | xargs -0 -r grep -lE 'Bootstrap::register[[:space:]]*\(' 2>/dev/null \
+        || true)
 fi
 # The five controller class names Bootstrap::register() aliases, as route
 # slugs. Source of truth: openregister lib/AppHost/Bootstrap.php
@@ -500,6 +548,52 @@ if [ -f lib/AppInfo/Application.php ]; then
     _HYDRA_APP_NS=$(grep -m1 -oE '^namespace[[:space:]]+OCA\\[A-Za-z0-9_]+' lib/AppInfo/Application.php \
         | awk '{print $2}')
 fi
+
+# ---------------------------------------------------------------------------
+# THE CANONICAL APPHOST ROUTE TABLE (ConductionNL/.github#223)
+#
+# `appinfo/routes.php` is not the only place a route can be declared. An app
+# that adopts ADR-040 returns
+#
+#     \OCA\OpenRegister\AppHost\Routes::standard($extra)
+#
+# and that builder PREPENDS ten canonical route entries to `$extra` — the
+# dashboard page, the SPA catch-all, the settings quartet, the two preference
+# routes and the two observability routes. Their names never appear as literals
+# in the leaf's routes.php.
+#
+# Gate-14 invariant 1 asks "is there a route for this controller method?" with
+# `grep -qF "'slug#method'" appinfo/routes.php`. For an AppHost adopter that
+# question is being asked of the wrong file, and the answer is always no. Every
+# app that ships its OWN DashboardController / SettingsController — which is
+# the supported shape, `aliasControllerUnlessLeafDefinesIt` exists precisely to
+# allow it — was told its working `/` and `/api/settings` endpoints were
+# unroutable: 7/7 findings on launchpad, 5 on doriath, 5 on shillinq, and the
+# same on openconnector and procest.
+#
+# The list is explicit and mirrors openregister lib/AppHost/Routes.php
+# ::canonicalRoutes() + ::catchAllRoute() (verified against
+# openregister@1dcc92cf9, lines 110-126 + 165-176). NOT a wildcard and NOT
+# "AppHost adopters are exempt from invariant 1": a controller method with no
+# route is still a 404 and still fails, unless its route is one of these ten.
+# ---------------------------------------------------------------------------
+_HYDRA_APPHOST_ROUTE_NAMES="dashboard#page dashboard#catchAll settings#index settings#create settings#update settings#load preferences#getPreference preferences#setPreference metrics#index health#index"
+
+_HYDRA_APPHOST_ROUTE_TABLE=0
+if [ -f appinfo/routes.php ] \
+    && grep -qE 'AppHost\\+Routes::standard[[:space:]]*\(' appinfo/routes.php; then
+    _HYDRA_APPHOST_ROUTE_TABLE=1
+fi
+
+# _apphost_supplies_route <controller#method> — 0 when this app's routes.php
+# defers to Routes::standard() AND the name is one of the ten it supplies.
+_apphost_supplies_route() {
+    [ "${_HYDRA_APPHOST_ROUTE_TABLE}" -eq 1 ] || return 1
+    case " ${_HYDRA_APPHOST_ROUTE_NAMES} " in
+        *" $1 "*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
 
 # _apphost_serves <route-slug> — 0 when this app adopts AppHost AND the slug is
 # one of the generics AppHost provides, i.e. the missing file is expected.
@@ -519,10 +613,20 @@ _apphost_serves() {
 # derive a class name in their own way and then hand it here, so a change to
 # the matching rule can never apply to one shape and silently not the other.
 # ---------------------------------------------------------------------------
+# THE REGISTRATION SURFACE IS lib/AppInfo/, NOT Application.php
+# (ConductionNL/.github#237). Same argument as `_HYDRA_APPHOST` above: nothing
+# requires a `registerService()` call to sit in Application.php, and this
+# suite's own phpmd gate pushes it out — an app splits `register()` into
+# per-concern registrars and every binding moves one file down. Reading only
+# Application.php then answers "no such binding" for every controller, which
+# is indistinguishable from a correct verdict.
 _app_php_binds_class() {
     local _fqcn="$1"
-    [ -f lib/AppInfo/Application.php ] || return 1
     [ -n "${_fqcn}" ] || return 1
+
+    local _reg_files
+    _reg_files=$(_enum_tracked '\.php$' lib/AppInfo)
+    [ -n "${_reg_files}" ] || return 1
 
     # In PHP source the literal carries escaped backslashes.
     local _needle="${_fqcn//\\/\\\\}"
@@ -532,15 +636,28 @@ _app_php_binds_class() {
     # backslashes and never match the PHP literal. Silently — the helper just
     # answers "no such binding" for every controller, which reads exactly like
     # a correct verdict.
-    _HYDRA_DI_NEEDLE="${_needle}" awk '
-        BEGIN { needle = ENVIRON["_HYDRA_DI_NEEDLE"] }
-        /registerService(Alias)?[[:space:]]*\(/ { window = 6 }
-        window > 0 {
-            if (index($0, needle) > 0) { found = 1; exit }
-            window--
-        }
-        END { exit(found ? 0 : 1) }
-    ' lib/AppInfo/Application.php
+    # Comment lines removed first, for the reason spelled out at
+    # `_HYDRA_APPHOST` above: a docblock explaining which class a route
+    # resolves to is not a binding, and the file that explains the
+    # architecture is exactly the file that spells the class name out.
+    local _f
+    while IFS= read -r _f; do
+        [ -f "${_f}" ] || continue
+        if _php_code_only "${_f}" | _HYDRA_DI_NEEDLE="${_needle}" awk '
+            BEGIN { needle = ENVIRON["_HYDRA_DI_NEEDLE"] }
+            /registerService(Alias)?[[:space:]]*\(/ { window = 6 }
+            window > 0 {
+                if (index($0, needle) > 0) { found = 1; exit }
+                window--
+            }
+            END { exit(found ? 0 : 1) }
+        '; then
+            return 0
+        fi
+    done <<EOF
+${_reg_files}
+EOF
+    return 1
 }
 
 # ---------------------------------------------------------------------------
@@ -569,10 +686,39 @@ _app_php_binds_class() {
 # class name appearing as a literal within a few lines of a registerService
 # call — i.e. this repository can be shown to bind that specific name. A
 # controller that is simply missing still fails, which is the invariant.
+#
+# TWO WIDENINGS, both narrow (ConductionNL/.github#213, #237)
+# ----------------------------------------------------------
+# (1) THE REGISTRATION FILE. Same argument as `_HYDRA_APPHOST` above: a
+#     `registerService()` call is not required to sit in Application.php, and
+#     the phpmd pressure that decomposes Application.php into per-concern
+#     registrars moves it out. Every tracked .php under lib/AppInfo/ is read,
+#     not just Application.php.
+#
+# (2) THE UNPREFIXED DI KEY. NC's RouteParser::buildControllerName() appends
+#     'Controller' to the route-name segment VERBATIM and does NOT prefix the
+#     app namespace when the route name already contains a backslash. So
+#
+#         ['name' => 'AppHost\Controller\GenericHealth#index', ...]
+#
+#     is looked up in the container under the bare string
+#     'AppHost\Controller\GenericHealthController' — no OCA\<App>\Controller\
+#     prefix at all. openregister binds exactly that key (lib/AppInfo/
+#     Application.php::registerAppHostObservability, and its own comment
+#     records the 503 that taught it), and this helper — which only ever built
+#     the prefixed name — answered "no such binding" for both, so gate-14
+#     reported OR's own /api/health and /api/metrics as
+#     `controller-class-not-found`.
+#
+#     The bare key is accepted ONLY for a namespaced route name (one whose
+#     resolved class part contains a backslash), because that is the only case
+#     in which NC produces it. For a plain slug like `widget`, accepting the
+#     bare `WidgetController` as evidence would match any stray
+#     `WidgetController::class` near a registerService call and turn a genuine
+#     missing controller into an exemption.
 # ---------------------------------------------------------------------------
 _di_binds_controller() {
     local _p="$1"
-    [ -f lib/AppInfo/Application.php ] || return 1
 
     # lib/Controller/Sub/FooController.php -> Sub\FooController
     local _rel="${_p#lib/Controller/}"
@@ -580,7 +726,32 @@ _di_binds_controller() {
     local _cls="${_rel//\//\\}"
 
     [ -n "${_HYDRA_APP_NS}" ] || return 1
-    _app_php_binds_class "${_HYDRA_APP_NS}\\Controller\\${_cls}"
+    _app_php_binds_class "${_HYDRA_APP_NS}\\Controller\\${_cls}" && return 0
+
+    # ---------------------------------------------------------------------
+    # THE RELATIVE KEY (ConductionNL/.github#213). #217 fixed the FULLY
+    # QUALIFIED shape (`OCA\<App>\AppHost\Controller\GenericHealth`) and named
+    # this one as still-open rather than widening silently. It is the same
+    # mechanism one step over: NC's RouteParser appends 'Controller' to the
+    # route-name segment VERBATIM, so a route named
+    #
+    #     ['name' => 'AppHost\Controller\GenericHealth#index', …]
+    #
+    # is looked up under the bare string 'AppHost\Controller\GenericHealthController'
+    # — NOT prefixed with OCA\<App>\Controller\, because the name already
+    # contains a backslash. openregister binds exactly that key, and records
+    # the 503 that taught it, in
+    # lib/AppInfo/Application.php::registerAppHostObservability().
+    #
+    # Accepted ONLY for a namespaced name, because that is the only case in
+    # which NC produces the unprefixed key. For a plain slug the bare needle
+    # would be `WidgetController`, which any stray `WidgetController::class`
+    # near a registerService call would satisfy — turning a genuinely missing
+    # controller into an exemption.
+    case "${_cls}" in
+        *\\*) _app_php_binds_class "${_cls}" && return 0 ;;
+    esac
+    return 1
 }
 
 # ---------------------------------------------------------------------------
@@ -725,6 +896,72 @@ _ctrl_path_from_name() {
             echo "lib/Controller/${_cap}Controller.php"
             ;;
     esac
+}
+
+# ---------------------------------------------------------------------------
+# _head_block <php-file> <declaration-line> — the annotation region that
+# belongs to the method declared on <declaration-line>, as text.
+#
+# WHY NOT A FIXED 20-LINE SLICE
+# -----------------------------
+# Gate-5 and gate-30 both asked "is there an auth attribute above this
+# method?" by reading `sed -n "$((line-20)),${line}p"`. Twenty lines is an
+# arbitrary number and it is wrong in both directions:
+#
+#   TOO SHORT — openregister lib/Controller/Settings/FileSettingsController.php
+#               ::getFileExtractionStats() declares `@NoCSRFRequired` on line
+#               301 and opens on line 323, because a `@psalm-return` shape sits
+#               between them. The tag is 22 lines up, the window starts at 303,
+#               and gate-5 reported a correctly-annotated endpoint as
+#               `missing-auth-attribute`. Found 2026-08-08 the moment the
+#               backslash fix (#213) made `Settings\FileSettings#…` resolve at
+#               all — the route had never been judged before, so the window
+#               defect had never been reachable there.
+#   TOO LONG  — a short guarded method sitting within 20 lines above an
+#               unguarded one donated its `#[NoAdminRequired]` to its
+#               neighbour. That is a false NEGATIVE in a security gate, and it
+#               is why the `prev_close` clamp below exists.
+#
+# The region that actually belongs to a declaration is the CONTIGUOUS run of
+# attribute lines, PHPDoc lines, `//` comments and blanks immediately above it.
+# This walks that run and takes whichever of {the run, the 20-line slice} starts
+# EARLIER, so the window can only ever grow — nothing that passes today can
+# start failing because of this — and then applies the previous-member clamp
+# unchanged, so nothing can borrow an attribute either. Taking the union rather
+# than the run alone matters for a multi-line attribute
+# (`#[AuthorizedAdminSetting(\n  Application::APP_ID\n)]`), whose middle lines
+# are ordinary code and would otherwise cut the run short.
+# ---------------------------------------------------------------------------
+_head_block() {
+    local _file="$1" _def="$2"
+    awk -v D="${_def}" '
+        NR <= D { line[NR] = $0 }
+        NR > D  { exit }
+        END {
+            # The contiguous annotation run immediately above the declaration.
+            run = D
+            for (i = D - 1; i >= 1; i--) {
+                l = line[i]
+                if (l ~ /^[[:space:]]*$/)              { run = i; continue }
+                if (l ~ /^[[:space:]]*\/\*\*/)         { run = i; continue }
+                if (l ~ /^[[:space:]]*\*/)             { run = i; continue }
+                if (l ~ /^[[:space:]]*\/\//)           { run = i; continue }
+                if (l ~ /^[[:space:]]*#\[/)            { run = i; continue }
+                break
+            }
+            slice = (D > 20) ? D - 20 : 1
+            start = (run < slice) ? run : slice
+
+            # Clamp to the line after the previous member closes. An attribute
+            # or docblock for THIS method can only appear after it, so this can
+            # never hide a genuine attribute — only stop one being borrowed.
+            prev = 0
+            for (i = start; i < D; i++) { if (line[i] ~ /^[[:space:]]*\}/) prev = i }
+            if (prev >= start) { start = prev + 1 }
+
+            for (i = start; i <= D; i++) print line[i]
+        }
+    ' "${_file}"
 }
 
 # The one regex both route gates read `appinfo/routes.php` through.
@@ -1161,24 +1398,25 @@ if [ -f appinfo/routes.php ]; then
                 echo "${path}: routed method ${method} does not exist on this class; UNRESOLVED (see gate-14, which owns route reachability)" >> "${_ra_unresolved_log}"
                 continue
             fi
-            start=$((def_line > 20 ? def_line - 20 : 1))
             # ⚠️ THIRD DEFECT, found 2026-08-05 by this gate's own positive
             # control (scripts/lib/test_gate_route_auth.sh). The 20-line
-            # lookback is not bounded by the START OF THE METHOD, so it reads
+            # lookback was not bounded by the START OF THE METHOD, so it read
             # back over the PREVIOUS member. A short guarded method sitting
             # within 20 lines above an unguarded one donated its
             # `#[NoAdminRequired]` to its neighbour and the unguarded method
             # passed. That is a false NEGATIVE in a security gate — the
             # expensive direction, and invisible because a pass leaves no log.
-            # Clamp the window to the line after the previous member's closing
-            # brace: an attribute or docblock for THIS method can only appear
-            # after it, so this can never hide a genuine attribute — it can
-            # only stop one being borrowed.
-            prev_close=$(awk -v L="${def_line}" 'NR < L && /^[[:space:]]*\}/ { n = NR } END { print n + 0 }' "$path")
-            if [ "${prev_close}" -ge "${start}" ]; then
-                start=$((prev_close + 1))
-            fi
-            head_block=$(sed -n "${start},${def_line}p" "$path")
+            #
+            # ⚠️ FOURTH DEFECT, found 2026-08-08 the moment the `read -r` fix
+            # made openregister's `Settings\…` routes resolve: 20 lines is also
+            # TOO SHORT. `Settings\FileSettings#getFileExtractionStats` declares
+            # `@NoCSRFRequired` 22 lines above its `public function`, because a
+            # `@psalm-return` shape sits in between — and a correctly annotated
+            # endpoint was reported `missing-auth-attribute`. Both directions
+            # now go through _head_block, which takes the contiguous annotation
+            # run OR the 20-line slice, whichever starts earlier, and keeps the
+            # previous-member clamp.
+            head_block=$(_head_block "$path" "${def_line}")
             if ! echo "$head_block" | grep -qE '#\[(PublicPage|NoAdminRequired|NoCSRFRequired|AuthorizedAdminSetting)\b|@(PublicPage|NoAdminRequired|NoCSRFRequired)\b'; then
                 echo "${path}:${def_line} method=${method} rule=missing-auth-attribute" >> "${_ra_log}"
             fi
@@ -1356,7 +1594,7 @@ while IFS= read -r f; do
     [ -f "$f" ] || continue
     _in_scope "$f" || continue
     grep -nE "^\s*(public|private|protected)\s+function\s+[a-zA-Z0-9_]*([Aa]uthori[sz]ation|[Aa]uth|[Pp]ermission|[Rr]ole|[Gg]uard)[a-zA-Z0-9_]*\s*\(" "$f" \
-        | while IFS=: read _line_no _; do
+        | while IFS=: read -r _line_no _; do
             _method=$(sed -n "${_line_no}p" "$f" | grep -oE 'function\s+[a-zA-Z0-9_]+' | awk '{print $2}')
             [ -z "$_method" ] && continue
             _body=$(awk -v start="${_line_no}" 'NR >= start { print; if (NR > start && /^    \}/) exit }' "$f")
@@ -1665,7 +1903,16 @@ if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
             # (single-quoted controller#method) is unique enough in the file
             # that false positives from comments / docstrings are vanishingly
             # rare.
-            if ! grep -qF "'${_ctrl_slug}#${_m}'" appinfo/routes.php; then
+            #
+            # ⚠️ A literal in appinfo/routes.php is not the only way a route
+            # gets declared (ConductionNL/.github#223). An ADR-040 adopter
+            # returns `Routes::standard($extra)` and receives ten canonical
+            # entries it never spells out — see `_apphost_supplies_route`. For
+            # those apps this grep was asking the wrong file and answering "no"
+            # every time, which is why five apps were told their working
+            # `dashboard#page` / `settings#index` endpoints 404.
+            if ! grep -qF "'${_ctrl_slug}#${_m}'" appinfo/routes.php \
+                && ! _apphost_supplies_route "${_ctrl_slug}#${_m}"; then
                 echo "${_ctrl_path} method=${_m} expected_route='${_ctrl_slug}#${_m}' rule=missing-route" >> "${_rr_log}"
             fi
         done
@@ -2784,30 +3031,140 @@ fi
 # (Prometheus scraper, kubelet, external uptime monitor). Gate-5 (route-auth)
 # only verifies SOME annotation is present — this gate verifies the right one
 # is present for monitoring callers.
+#
+# THREE DEFECTS FIXED (ConductionNL/.github#213, #218)
+# ---------------------------------------------------
+# (a) THE SELECTOR WAS LOWERCASE-ONLY. `(metrics|health|…)` under `grep -E`
+#     matches no capital, so `AppHost\Controller\GenericHealth#index`,
+#     `genericMetrics#index` and `chatHealth#…` matched NOTHING. Four repos
+#     — openregister among them — reported PASS over a 0-byte log while
+#     shipping exactly the endpoints this gate exists for. A gate that
+#     selects zero inputs and prints PASS is indistinguishable from a gate
+#     that checked everything, which is the whole failure mode.
+#
+# (b) `read` WITHOUT -r, the same defect as gates 5 and 14: a namespaced
+#     route name lost its backslash before the file lookup.
+#
+# (c) IT MATCHED ANY CONTROLLER WITH 'health' IN THE NAME, and its remedy was
+#     a security regression. launchpad's `healthPing#show` is a per-placement
+#     status badge: `GET /api/health-ping/{placementId}`, 401 anonymous, then
+#     `canViewPlacement()` BEFORE any work is done. It is not a scrape target
+#     and adding `#[PublicPage]` to satisfy this gate would publish an
+#     outbound-ping oracle to anonymous callers.
+#
+#     The discriminator is not the name — it is the SHAPE OF THE ROUTE. A
+#     Prometheus scraper, a kubelet probe or an uptime monitor has no session
+#     and no object in mind: it issues a GET against a FIXED url. So a
+#     monitoring endpoint for the purposes of this gate is a name-matching
+#     route that is ALSO an unparameterised GET. `healthPing#show` carries a
+#     `{placementId}` (per-object, so per-object authorisation is correct and
+#     required); `healthPing#validate` is a POST (it submits a candidate
+#     config). Neither is something a monitor can call. `health#index` on
+#     `/api/health` still is, and is still enforced strictly.
+#
+# HOW THIS GATE MAY END (acceptance: never a silent green)
+# -------------------------------------------------------
+# PASS is reserved for a run that actually OPENED a monitoring method. Every
+# other outcome says which of the four it was, with counts, so "nothing to
+# check" can never again be printed as "checked and fine".
 # ---------------------------------------------------------------------------
 _pm_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-public-monitoring.log
+_pm_notes=${HYDRA_GATE_LOG_DIR}/hydra-gate-public-monitoring-notes.log
 : > "${_pm_log}"
+: > "${_pm_notes}"
+_pm_candidates=0
+_pm_targets=0
+_pm_scoped=0
+_pm_inspected=0
+_pm_absent=0
 if [ -f appinfo/routes.php ] && [ -d lib/Controller ]; then
-    # Find route entries whose `name` looks like `<monitoring-word>#<method>`
-    grep -oE "['\"]\s*name['\"]\s*=>\s*['\"][a-zA-Z0-9_\\\\]*(metrics|health|liveness|readiness|probe)[a-zA-Z0-9_]*#[a-zA-Z0-9_]+['\"]" appinfo/routes.php 2>/dev/null \
-        | grep -oE "[a-zA-Z0-9_\\\\]*(metrics|health|liveness|readiness|probe)[a-zA-Z0-9_]*#[a-zA-Z0-9_]+" | sort -u \
-        | while IFS='#' read _ctrl _method; do
-            [ -z "${_ctrl}" ] && continue
-            [ -z "${_method}" ] && continue
-            # Map snake_case route slug → PascalCase file basename. Real apps
-            # use `metrics_internal#index` (route) → `MetricsInternalController.php`.
-            # The single-char `toupper(substr(...,1,1))` form preserves underscores
-            # → `Metrics_internal` which doesn't exist on disk → silent skip.
-            # Gate-5 already uses the awk -F'_' pattern; copy it verbatim.
-            _ctrl_cap=$(printf '%s' "${_ctrl}" | awk -F'_' '{for(i=1;i<=NF;i++) printf toupper(substr($i,1,1)) substr($i,2); print ""}')
-            _ctrl_path="lib/Controller/${_ctrl_cap}Controller.php"
-            [ ! -f "${_ctrl_path}" ] && continue
-            _in_scope "${_ctrl_path}" || continue
-            _method_line=$(grep -nE "^[[:space:]]*public function ${_method}[[:space:]]*\(" "${_ctrl_path}" | head -1 | cut -d: -f1)
-            [ -z "${_method_line}" ] && continue
+    # Pull every route entry as `name<TAB>url<TAB>verb`. A route's url and verb
+    # are part of the evidence now (see (c) above), and grepping the name alone
+    # cannot see them. Entries are one-per-line in every fleet routes.php, but
+    # `requirements` sometimes wraps onto the next line, so the record is
+    # extended until both url and verb are in hand (bounded at 4 lines).
+    _pm_entries=$(awk '
+        /['"'"'"][[:space:]]*name[[:space:]]*['"'"'"][[:space:]]*=>/ {
+            buf = $0; n = 0
+            while (n < 4 && (buf !~ /['"'"'"]url['"'"'"][[:space:]]*=>/ || buf !~ /['"'"'"]verb['"'"'"][[:space:]]*=>/)) {
+                if ((getline nxt) <= 0) break
+                buf = buf " " nxt
+                n++
+            }
+            name = _val(buf, "name"); url = _val(buf, "url"); verb = _val(buf, "verb")
+            if (name != "") print name "\t" url "\t" verb
+        }
+        function _val(s, key,   rx, seg, q, rest, endq) {
+            rx = "[\"'"'"']" key "[\"'"'"'][[:space:]]*=>[[:space:]]*[\"'"'"']"
+            if (match(s, rx) == 0) return ""
+            rest = substr(s, RSTART + RLENGTH)
+            q = substr(s, RSTART + RLENGTH - 1, 1)
+            endq = index(rest, q)
+            if (endq == 0) return ""
+            return substr(rest, 1, endq - 1)
+        }
+    ' appinfo/routes.php 2>/dev/null)
+
+    # -i, so a capitalised or camelCased monitoring word is seen. Defect (a).
+    _pm_monitoring_rx='^[A-Za-z0-9_\]*(metrics|health|liveness|readiness|probe)[A-Za-z0-9_]*#[A-Za-z0-9_]+$'
+
+    while IFS=$'\t' read -r _pm_name _pm_url _pm_verb; do
+        [ -n "${_pm_name}" ] || continue
+        printf '%s' "${_pm_name}" | grep -qiE "${_pm_monitoring_rx}" || continue
+        _pm_candidates=$((_pm_candidates + 1))
+
+        # Defect (c): only an unparameterised GET is something an external
+        # monitor can call. Anything else is a domain endpoint that happens to
+        # have a monitoring word in its name, and demanding #[PublicPage] on it
+        # is asking for an authorisation bypass.
+        case "${_pm_verb}" in
+            GET|get|Get) ;;
+            *) echo "${_pm_name} — not a monitoring scrape target: verb is '${_pm_verb}', a monitor issues GET" >> "${_pm_notes}"; continue ;;
+        esac
+        case "${_pm_url}" in
+            *'{'*) echo "${_pm_name} — not a monitoring scrape target: url '${_pm_url}' is per-object (has a {placeholder}); its caller is a UI with a session, and per-object authorisation belongs here" >> "${_pm_notes}"; continue ;;
+        esac
+        _pm_targets=$((_pm_targets + 1))
+
+        # `read -r` above (defect (b)) plus the SHARED resolver, so a
+        # namespaced route name lands on the file gates 5 and 14 use. The
+        # private `awk -F'_'` copy this gate carried could not spell
+        # `AppHost\Controller\GenericHealth` at all.
+        _pm_ctrl="${_pm_name%%#*}"
+        _pm_method="${_pm_name#*#}"
+        _ctrl_path=$(_ctrl_path_from_name "${_pm_ctrl}")
+        if [ ! -f "${_ctrl_path}" ]; then
+            _pm_absent=$((_pm_absent + 1))
+            if _apphost_serves "${_pm_ctrl}" || _di_binds_controller "${_ctrl_path}"; then
+                echo "${_pm_name} — served by the OpenRegister AppHost generic controller (ADR-040); its posture lives in the openregister package and is NOT visible here" >> "${_pm_notes}"
+            else
+                echo "${_pm_name} — ${_ctrl_path} is not present in this repository; NOT JUDGED (reachability is gate-14's)" >> "${_pm_notes}"
+            fi
+            continue
+        fi
+        _in_scope "${_ctrl_path}" || { echo "${_pm_name} — ${_ctrl_path} not touched by this diff (ADR-020)" >> "${_pm_notes}"; continue; }
+        _pm_scoped=$((_pm_scoped + 1))
+        _ctrl="${_pm_ctrl}"
+        _method="${_pm_method}"
+        _method_line=$(grep -nE "^[[:space:]]*public function ${_method}[[:space:]]*\(" "${_ctrl_path}" | head -1 | cut -d: -f1)
+        if [ -z "${_method_line}" ]; then
+            echo "${_pm_name} — ${_ctrl_path} exists but has no public function ${_method}(); NOT JUDGED (gate-14 owns that)" >> "${_pm_notes}"
+            continue
+        fi
+        _pm_inspected=$((_pm_inspected + 1))
             # Inspect annotations above the method declaration (up to 20 lines back)
-            _ann_start=$((_method_line > 20 ? _method_line - 20 : 1))
-            _annotations=$(sed -n "${_ann_start},${_method_line}p" "${_ctrl_path}")
+            # Same window helper as gate-5. A monitoring controller's docblock
+            # is routinely longer than 20 lines (a `@psalm-return` shape, a
+            # metrics table), and this gate would then miss the `#[PublicPage]`
+            # sitting just above it — a false positive whose only remedy is to
+            # add an attribute that is already there.
+            _annotations=$(_head_block "${_ctrl_path}" "${_method_line}")
+            # Folded for the carve-out test below: the slug may be
+            # `GenericMetrics` or `AppHost\Controller\GenericMetrics`, and a
+            # case-sensitive `*metrics*` sees neither — the same lowercase-only
+            # blindness as defect (a), which would have applied the strict
+            # health rule to every capitalised metrics endpoint in the fleet.
+            _ctrl_fold=$(printf '%s' "${_ctrl}" | tr '[:upper:]' '[:lower:]')
             # An explicitly declared ADMIN posture is an answer too. What this
             # gate is really preventing is an ACCIDENTAL posture: in Nextcloud
             # the absence of `#[NoAdminRequired]` IS the admin gate, so a
@@ -2823,7 +3180,7 @@ if [ -f appinfo/routes.php ] && [ -d lib/Controller ]; then
             # this gate. Same anchoring gate-9 already applies for the same
             # reason (openregister#1419, 8 of 10 findings were prose).
             _pm_ok='^[[:space:]]*#\[PublicPage\]|^[[:space:]]*\*[[:space:]]*@PublicPage\b|^[[:space:]]*#\[AuthorizedAdminSetting\('
-            case "${_ctrl}" in
+            case "${_ctrl_fold}" in
                 *metrics*)
                     # ADR-006 makes /api/metrics admin-only ON PURPOSE, and the
                     # engine that owns the decision says so in prose rather than
@@ -2847,14 +3204,47 @@ if [ -f appinfo/routes.php ] && [ -d lib/Controller ]; then
             if ! echo "${_annotations}" | grep -qE "${_pm_ok}"; then
                 echo "${_ctrl_path}:${_method_line} method=${_method} rule=monitoring-endpoint-missing-public-page" >> "${_pm_log}"
             fi
-        done
+    # Process substitution, NOT a pipeline: the five counters below decide
+    # whether this gate is allowed to say PASS, and a `| while` runs the body
+    # in a subshell where every one of them stays 0. That is precisely how a
+    # gate reports "checked, fine" having opened nothing.
+    done < <(printf '%s\n' "${_pm_entries}")
 fi
 _filter_preexisting "${_pm_log}"
 _pm_fail=$(wc -l < "${_pm_log}" 2>/dev/null || echo 0)
-if [ "${_pm_fail}" -eq 0 ]; then
-    _pass 30 "public-monitoring"
-else
+# ---------------------------------------------------------------------------
+# THE VERDICT. PASS requires that a monitoring method was actually OPENED.
+#
+# Until 2026-08-08 this was `[ fail -eq 0 ] && PASS`, and an empty findings log
+# was the only input. An empty log has two causes that mean opposite things —
+# "every monitoring endpoint declares its posture" and "I selected no inputs" —
+# and the lowercase-only selector (defect (a)) made the second one common:
+# openregister, which OWNS the fleet's health/metrics engine, printed PASS over
+# a 0-byte log on every run. Each branch below states its counts so the reader
+# can tell which of the four happened without re-running anything.
+# ---------------------------------------------------------------------------
+if [ "${_pm_fail}" -gt 0 ]; then
     _fail 30 "public-monitoring" "${_pm_fail} monitoring endpoint(s) missing @PublicPage — see ${_pm_log}"
+elif [ "${_pm_inspected}" -gt 0 ]; then
+    # State the size of the evidence. A PASS with no number attached is the
+    # thing this whole block exists to stop being writable: gate-30 printed one
+    # over 0 inputs for months. Does NOT start with `[gate-` so it cannot be
+    # mistaken for a verdict line by any `^\[gate-` consumer — same convention
+    # as gate-5's NOT-JUDGED line.
+    echo "[hydra-gates] gate-30 public-monitoring: ${_pm_inspected} monitoring endpoint(s) inspected of ${_pm_candidates} name-matched candidate(s)${_pm_targets:+; ${_pm_targets} scrape target(s)}. See ${_pm_notes} for every candidate this run did NOT judge, and why."
+    _pass 30 "public-monitoring"
+elif [ ! -f appinfo/routes.php ] || [ ! -d lib/Controller ]; then
+    _skip 30 "public-monitoring" na "no appinfo/routes.php + lib/Controller in this repository — there is no routed monitoring endpoint to judge."
+elif [ "${_pm_candidates}" -eq 0 ]; then
+    _skip 30 "public-monitoring" na "appinfo/routes.php declares no route whose name contains metrics/health/liveness/readiness/probe."
+elif [ "${_pm_targets}" -eq 0 ]; then
+    _skip 30 "public-monitoring" na "${_pm_candidates} route name(s) contain a monitoring word but NONE is a monitoring scrape target (an unparameterised GET) — see ${_pm_notes}. Per-object and write endpoints keep their own authorisation; this gate deliberately did not judge them."
+elif [ "${_pm_absent}" -eq "${_pm_targets}" ]; then
+    _skip 30 "public-monitoring" na "${_pm_targets} monitoring endpoint(s) are routed here but their controller class is not in this repository (ADR-040 AppHost generics) — see ${_pm_notes}. Their posture lives in the openregister package; NOT a pass for them."
+elif [ "${_pm_scoped}" -eq 0 ]; then
+    _skip 30 "public-monitoring" na "${_pm_targets} monitoring endpoint(s) found; none of their controllers is touched by this diff (ADR-020) — see ${_pm_notes}."
+else
+    _skip 30 "public-monitoring" structural "${_pm_targets} monitoring endpoint(s) found and ${_pm_scoped} controller file(s) opened, but NOT ONE routed method could be located — see ${_pm_notes}. The posture of those endpoints is UNVERIFIED by this run."
 fi
 # ---------------------------------------------------------------------------
 # Gate 31: Img-alt — every `<img>` tag in .vue files must declare an `alt` /

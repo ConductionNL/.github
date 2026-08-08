@@ -339,9 +339,136 @@ _SELF_AUTH_RE = re.compile(
     r"->\s*checkPassword\s*\(|"
     r"\$\w*[Pp]assword\b|"
     r"\$\w*[Cc]redentials?\b|"
-    r"->\s*(resolve|validate|verify|check)\w*[Cc]redentials?\s*\(",
+    r"->\s*(resolve|validate|verify|check)\w*[Cc]redentials?\s*\(|"
+    # THE SESSION IS A CREDENTIAL IN THE REQUEST (ConductionNL/.github#221).
+    #
+    # `#[PublicPage]` in Nextcloud means "a login is NOT REQUIRED". It does
+    # not mean "there is no session" — a logged-in user hitting a PublicPage
+    # route arrives with their session cookie intact. So the progressive
+    # shape
+    #
+    #     $user = $this->session->getUser();
+    #     if ($user === null) { ...policy... return 401; }   // anonymous
+    #     ...                                                 // authenticated
+    #
+    # resolves a real credential from the request and denies on a stated
+    # policy. doriath ApplicationController::create is exactly this: admin
+    # auto-approves, an authenticated non-admin gets a pending row, and an
+    # anonymous caller is admitted ONLY when the app-config opt-in
+    # `anonymous_application_registration_enabled` is set — otherwise 401.
+    # The gate called that "denying on something the annotation guarantees is
+    # absent". The annotation guarantees no such thing.
+    #
+    # ⚠️ This does NOT soften rule 1 (`_PUBLIC_SESSION_AUTH_RE`). That rule is
+    # tested FIRST and this branch is its `elif`, so `requireAdmin()` under
+    # #[PublicPage] — the decidesk defect the gate was built for — still
+    # fires. What survives here is the shape with no credential of any kind:
+    # a #[PublicPage] method that returns 401/403 off a config read, a
+    # feature flag or nothing at all.
+    r"->\s*getUser\s*\(\s*\)|"
+    r"->\s*getUID\s*\(|"
+    r"->\s*getUserId\s*\(|"
+    r"\bIUserSession\b",
     re.IGNORECASE,
 )
+
+
+_ANY_METHOD_RE = re.compile(
+    r"\bfunction\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\(",
+)
+
+# `$this->helper(`, `self::helper(`, `static::helper(` — a call to a sibling
+# method of the same class.
+_SIBLING_CALL_RE = re.compile(
+    r"(?:\$this\s*->|self\s*::|static\s*::)\s*(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\(",
+)
+
+
+def _all_method_bodies(src: str) -> dict[str, str]:
+    """Every method in the file, at any visibility, as {name: body}.
+
+    ``_find_method_bodies`` deliberately only walks ``public function`` —
+    those are the routed entry points the rules judge. This one exists for a
+    different question: WHERE the credential is resolved, which is not
+    required to be in the entry point itself.
+    """
+    cleaned = _strip_strings_and_comments(src)
+    out: dict[str, str] = {}
+    for m in _ANY_METHOD_RE.finditer(cleaned):
+        start = m.start()
+        paren = 0
+        j = start
+        while j < len(cleaned):
+            c = cleaned[j]
+            if c == "(":
+                paren += 1
+            elif c == ")":
+                paren -= 1
+            elif c == "{" and paren == 0:
+                break
+            elif c == ";" and paren == 0:
+                # Abstract / interface declaration — no body.
+                j = len(cleaned)
+                break
+            j += 1
+        if j >= len(cleaned) or cleaned[j] != "{":
+            continue
+        depth = 0
+        k = j
+        while k < len(cleaned):
+            ck = cleaned[k]
+            if ck == "{":
+                depth += 1
+            elif ck == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+            k += 1
+        if depth != 0:
+            continue
+        # Slice from the ORIGINAL source: the exemption is tested against real
+        # text (with strings intact), exactly as the caller's `head + body` is.
+        out.setdefault(m.group("name"), src[j:k + 1])
+    return out
+
+
+def _credential_surface(src: str, head: str, body: str, all_bodies: dict[str, str]) -> str:
+    """The text in which "does this endpoint name its credential?" is decided.
+
+    THE CREDENTIAL IS OFTEN ONE FRAME DOWN (ConductionNL/.github#221)
+    ----------------------------------------------------------------
+    A controller that authenticates several endpoints the same way does not
+    repeat the resolution in each — it writes it once, in a private helper,
+    and every action calls that:
+
+        #[PublicPage]
+        public function show(): JSONResponse {
+            $userId = $this->resolveUserId();
+            if ($userId === null) { return ...STATUS_UNAUTHORIZED; }
+            ...
+        }
+
+        private function resolveUserId(): ?string {
+            return $this->session->getUser()?->getUID();
+        }
+
+    Reading only the entry point, the gate sees a 401 and no credential, and
+    reports "unsourced denial". The credential is right there, one call away,
+    in the same file. Extracting a helper is the refactor every other quality
+    gate in this suite asks for; it must not manufacture a security finding.
+
+    ONE FRAME, and only sibling methods of the same file. Not transitive:
+    following the call graph arbitrarily deep would eventually reach a service
+    that touches a token for unrelated reasons and exempt everything. Depth 1
+    is the shape actually observed, and it keeps the "no credential ANYWHERE
+    near this endpoint" positive control intact.
+    """
+    surface = [head, body]
+    for call in _SIBLING_CALL_RE.finditer(_strip_strings_and_comments(body)):
+        helper = all_bodies.get(call.group("name"))
+        if helper is not None:
+            surface.append(helper)
+    return "\n".join(surface)
 
 
 def _has_admin_if_with_throw(body: str) -> bool:
@@ -411,6 +538,9 @@ def scan_file(path: str) -> int:
     except OSError:
         return 0
     violations = 0
+    # Computed once per file, not per method: the unsourced-denial rule needs
+    # the bodies of the private helpers a public action delegates to.
+    all_bodies = _all_method_bodies(src)
     for name, head_start, body_start, body_end, line_no in _find_method_bodies(src):
         head = src[head_start:body_start]
         body = src[body_start:body_end]
@@ -444,7 +574,9 @@ def scan_file(path: str) -> int:
             # docblock describing a check the body does not perform.
             elif (
                 _PUBLIC_DENY_STATUS_RE.search(body)
-                and not _SELF_AUTH_RE.search(_strip_comments(head + body))
+                and not _SELF_AUTH_RE.search(
+                    _strip_comments(_credential_surface(src, head, body, all_bodies))
+                )
             ):
                 print(
                     f"{path}:{line_no} method={name} "
