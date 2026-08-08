@@ -3597,10 +3597,17 @@ if [ -d src ] || [ -d templates ] || [ -d appinfo/templates ]; then
     if [ -d templates ] || [ -d appinfo/templates ]; then
         _sl_helper="${SCRIPT_DIR}/lib/php_template_scope.py"
         _sl_php=()
+        # ONE SCOPE DEFINITION FOR THE FAMILY (#225 / #261). This arm used its
+        # own `find templates appinfo/templates -name '*.php'`, which is
+        # `_a11y_markup_files` minus the exclusions — so a generated
+        # phpmetrics/ or vendor/ template would have been audited here and
+        # nowhere else. Filtering the shared enumeration keeps the two from
+        # drifting, and there is deliberately no third definition.
         while IFS= read -r _f; do
             [ -z "$_f" ] && continue
+            case "$_f" in *.php) ;; *) continue ;; esac
             _in_scope "$_f" && _sl_php+=("$_f")
-        done < <(find templates appinfo/templates -name '*.php' 2>/dev/null)
+        done < <(_a11y_markup_files)
         if [ "${#_sl_php[@]}" -eq 0 ]; then
             :   # nothing in scope; the verdict below describes the diff, as everywhere else.
         elif [ ! -f "${_sl_helper}" ]; then
@@ -3611,19 +3618,15 @@ if [ -d src ] || [ -d templates ] || [ -d appinfo/templates ]; then
             _skip 38 "skip-link" wiring "php_template_scope.py not found at ${_sl_helper} — ${#_sl_php[@]} PHP template(s) were in scope and NONE were classified; a document-owning template with no bypass mechanism (WCAG 2.4.1) is UNVERIFIED by this run."
         else
             _sl_cls_err="${HYDRA_GATE_LOG_DIR}/hydra-gate-skip-link.classify.err"
-            # gate-19's block (line ~1901) turns `set -e` ON and leaves it on
-            # for every gate after it, even though this script's own header
-            # sets only `set -u`. A helper that exits non-zero would therefore
-            # kill the whole runner mid-sweep — every LATER gate silently
-            # unreported — instead of reaching the _skip below. Measured: the
-            # crashing-classifier assertion aborted the run right here, 21
-            # later gates lost. Disable errexit around the call and restore
-            # the caller's flag.
-            case $- in *e*) _sl_had_e=1 ;; *) _sl_had_e=0 ;; esac
+            # `set +e` only, never `set -e` after. Errexit is OFF for this
+            # whole script and nothing may turn it on (#243, and the invariant
+            # at the top of this file). Before that landed, a non-zero helper
+            # here killed the entire runner mid-sweep instead of reaching the
+            # _skip below — measured at 21 later gates silently lost, the run
+            # ending on the abort banner.
             set +e
             _sl_cls=$(python3 "${_sl_helper}" --classify "${_sl_php[@]}" 2>"${_sl_cls_err}")
             _sl_rc=$?
-            [ "${_sl_had_e}" -eq 1 ] && set -e
             if [ "${_sl_rc}" -ne 0 ]; then
                 # The classifier fell over. It answered nothing, so there is no
                 # verdict to give — stderr is KEPT, not discarded (#249).
