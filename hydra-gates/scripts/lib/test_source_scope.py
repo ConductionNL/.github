@@ -375,6 +375,38 @@ class TestScriptMask(unittest.TestCase):
         src = "<template><button @click=\"window.confirm('x') && go()\">g</button></template>\n"
         self.assertIn("window.confirm", ss.script_mask(src, "a.vue"))
 
+    def test_a_script_end_tag_with_junk_still_ends_the_script(self):
+        """CodeQL py/bad-tag-filter, HIGH, raised against this change.
+
+        `</script\\s*>` does not match `</script bar>`, and an HTML parser DOES
+        end the element there. The block regex then fails to match AT ALL, the
+        script body is never comment-masked, and a JSDoc `<img>` inside it is
+        scanned as markup — which is #235 exactly, reintroduced by the mask
+        meant to fix it.
+
+        ⚠️ The first version of this test used `vue_markup_mask`, which does
+        not go through `_SCRIPT_BLOCK` at all, and the mutant SURVIVED. Assert
+        the mutation applies AND kills before believing a mutation test.
+        """
+        src = (
+            "<script>\n"
+            "// renders an <img src=x> when a URL is picked\n"
+            "</script bar>\n"
+            '<img src="/real.png">\n'
+        )
+        tags = list(ss.iter_open_tags(ss.html_markup_mask(src), {"img"}))
+        self.assertEqual(len(tags), 1, "only the real tag; the JSDoc one is in script")
+        self.assertIn("/real.png", tags[0].attrs)
+
+    def test_a_script_end_tag_with_whitespace_and_junk(self):
+        src = (
+            "<div id=x></div>\n"
+            "<script>\n"
+            "// this template avoids window.confirm entirely\n"
+            "</script\t\n foo>\n"
+        )
+        self.assertNotIn("window.confirm", ss.script_mask(src, "templates/a.php"))
+
     def test_style_block_is_blanked(self):
         src = "<template><i/></template>\n<style>/* window.confirm */ .a{}</style>\n"
         self.assertNotIn("window.confirm", ss.script_mask(src, "a.vue"))

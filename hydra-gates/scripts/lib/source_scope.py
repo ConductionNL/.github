@@ -398,8 +398,14 @@ _PHP_BLOCK = re.compile(r'<\?(?:php\b|=)?.*?(?:\?>|\Z)', re.DOTALL | re.IGNORECA
 # it is the exact failure this whole change exists to prevent, so the block
 # boundaries are found by DEPTH, not by a lazy quantifier.
 _TEMPLATE_TAG = re.compile(r'<(/?)template\b[^>]*?(/?)>', re.IGNORECASE | re.DOTALL)
-_SCRIPT_BLOCK = re.compile(r'<script(\s[^>]*)?>(.*?)</script\s*>', re.DOTALL | re.IGNORECASE)
-_STYLE_BLOCK = re.compile(r'<style(\s[^>]*)?>(.*?)</style\s*>', re.DOTALL | re.IGNORECASE)
+# ⚠️ THE END TAG MAY CARRY JUNK. `</script\s*>` does not match `</script bar>`
+# or `</script\t\n foo>`, and an HTML parser ends the element at both — so the
+# regex would run the "script body" on past the real close and blank markup
+# that ships. Caught by CodeQL (py/bad-tag-filter, high) on this very change:
+# a mask that over-blanks is a gate that reports nothing, which is the failure
+# mode this whole change exists to remove.
+_SCRIPT_BLOCK = re.compile(r'<script(\s[^>]*)?>(.*?)</script(?:\s[^>]*)?>', re.DOTALL | re.IGNORECASE)
+_STYLE_BLOCK = re.compile(r'<style(\s[^>]*)?>(.*?)</style(?:\s[^>]*)?>', re.DOTALL | re.IGNORECASE)
 
 
 def _blank_span(buf: list[str], a: int, b: int) -> None:
