@@ -705,7 +705,14 @@ _ctrl_path_from_name() {
             # masked by `local`.
             local _last_cap
             _last_cap="$(printf '%s' "${_last}" | awk '{print toupper(substr($0,1,1)) substr($0,2)}')"
-            echo "lib/Controller/${_ns}/${_last_cap}Controller.php"
+            # EVERY remaining separator becomes a directory separator, not just
+            # the last one. `${_ns}` used to be interpolated raw, so a two-level
+            # name produced a path with a literal backslash inside it —
+            # `lib/Controller/AppHost\Controller/GenericHealthController.php` —
+            # which cannot exist on disk and so always resolved to "missing".
+            # Invisible until 2026-08-08 because plain `read` had been deleting
+            # the backslashes before this branch could ever see two of them.
+            echo "lib/Controller/${_ns//\\//}/${_last_cap}Controller.php"
             ;;
         *_*)
             local _camel
