@@ -488,5 +488,230 @@ class GateIsNotBlind(unittest.TestCase):
         self.assertEqual(len(_scan(php)), 2)
 
 
+class CredentialResolvedOneFrameDown(unittest.TestCase):
+    """ConductionNL/.github#221 — where the credential is resolved.
+
+    36 of gate-9's 39 fleet findings were false, and this class covers the
+    two shapes the token list still could not see. Both are correct code and
+    both had no closable remediation.
+
+    Every method here is one half of a control pair: for each shape that must
+    go quiet there is a sibling differing by the ONE thing the widening
+    accepts, and that sibling must still fire. Widening a rule that guards an
+    authorisation surface is the expensive direction, so the anti-widening
+    halves are the point of the class, not an afterthought.
+    """
+
+    # -- the session IS a credential in the request ------------------------
+    def test_fp_progressive_session_then_policy_denial_is_not_a_finding(self):
+        """doriath ApplicationController::create, structurally verbatim.
+
+        `#[PublicPage]` because the endpoint accepts anonymous registration
+        WHEN THE ADMIN HAS OPTED IN. The 401 is reached only for a caller
+        with no session on an instance that has not opted in — a stated
+        policy, not a check against something the annotation forbids.
+        """
+        php = CLASS % """
+    #[PublicPage]
+    #[NoCSRFRequired]
+    public function create(): JSONResponse
+    {
+        $user = $this->session->getUser();
+        if ($user === null) {
+            $anonEnabled = $this->appConfig->getValueString('doriath', 'anon_enabled', '0');
+            if ($anonEnabled !== '1') {
+                return new JSONResponse(['message' => 'Unauthorized'], Http::STATUS_UNAUTHORIZED);
+            }
+        }
+        return new JSONResponse(['ok' => true]);
+    }
+"""
+        self.assertEqual(_scan(php), [])
+
+    def test_tp_a_denial_off_a_config_read_alone_still_fires(self):
+        """The anti-widening half of the test above.
+
+        Identical but for the ONE line that resolves an identity. Nothing
+        here authenticates anybody: the endpoint is public and 401s on a
+        feature flag. That is the shape the rule exists for and it must
+        survive making the session count.
+        """
+        php = CLASS % """
+    #[PublicPage]
+    #[NoCSRFRequired]
+    public function create(): JSONResponse
+    {
+        $anonEnabled = $this->appConfig->getValueString('doriath', 'anon_enabled', '0');
+        if ($anonEnabled !== '1') {
+            return new JSONResponse(['message' => 'Unauthorized'], Http::STATUS_UNAUTHORIZED);
+        }
+        return new JSONResponse(['ok' => true]);
+    }
+"""
+        self.assertEqual(_rules(_scan(php)), ["public-page-annotation-with-unsourced-denial"])
+
+    # -- one frame down, in a private helper --------------------------------
+    def test_fp_credential_resolved_in_a_private_helper_is_not_a_finding(self):
+        """A controller that authenticates several actions the same way writes
+        the resolution ONCE. Extracting that helper is the refactor every
+        other gate in this suite asks for; it must not manufacture a finding.
+        """
+        php = CLASS % """
+    #[PublicPage]
+    #[NoCSRFRequired]
+    public function show(): JSONResponse
+    {
+        $userId = $this->resolveUserId();
+        if ($userId === null) {
+            return new JSONResponse(['error' => 'unauthorized'], Http::STATUS_UNAUTHORIZED);
+        }
+        return new JSONResponse(['ok' => true]);
+    }
+
+    private function resolveUserId(): ?string
+    {
+        return $this->session->getUser()?->getUID();
+    }
+"""
+        self.assertEqual(_scan(php), [])
+
+    def test_fp_a_helper_that_verifies_a_bearer_token_is_not_a_finding(self):
+        php = CLASS % """
+    #[PublicPage]
+    #[NoCSRFRequired]
+    public function inbox(): JSONResponse
+    {
+        if ($this->authenticateCaller() === false) {
+            return new JSONResponse(['error' => 'forbidden'], Http::STATUS_FORBIDDEN);
+        }
+        return new JSONResponse(['ok' => true]);
+    }
+
+    private function authenticateCaller(): bool
+    {
+        $header = $this->request->getHeader('Authorization');
+        return hash_equals($this->expected, substr($header, 7));
+    }
+"""
+        self.assertEqual(_scan(php), [])
+
+    def test_tp_a_helper_that_resolves_no_credential_still_fires(self):
+        """Anti-widening: calling a helper is not itself evidence.
+
+        Same delegation shape as the two above; the helper reads a config
+        value. If merely *having* a sibling call earned the exemption, this
+        would go quiet — and the rule would be closable by extracting any
+        method at all.
+        """
+        php = CLASS % """
+    #[PublicPage]
+    #[NoCSRFRequired]
+    public function show(): JSONResponse
+    {
+        if ($this->featureEnabled() === false) {
+            return new JSONResponse(['error' => 'forbidden'], Http::STATUS_FORBIDDEN);
+        }
+        return new JSONResponse(['ok' => true]);
+    }
+
+    private function featureEnabled(): bool
+    {
+        return $this->appConfig->getValueString('thing', 'enabled', '0') === '1';
+    }
+"""
+        self.assertEqual(_rules(_scan(php)), ["public-page-annotation-with-unsourced-denial"])
+
+    def test_tp_the_walk_is_one_frame_and_does_not_go_transitive(self):
+        """The documented bound, pinned.
+
+        The credential sits TWO calls away. Following the call graph to
+        arbitrary depth would eventually reach a service that touches a token
+        for unrelated reasons and exempt everything, so depth 1 is deliberate
+        — and a deliberate bound that no test asserts is a bound that will be
+        removed by the next person who reads the regex.
+        """
+        php = CLASS % """
+    #[PublicPage]
+    #[NoCSRFRequired]
+    public function show(): JSONResponse
+    {
+        if ($this->firstFrame() === false) {
+            return new JSONResponse(['error' => 'forbidden'], Http::STATUS_FORBIDDEN);
+        }
+        return new JSONResponse(['ok' => true]);
+    }
+
+    private function firstFrame(): bool
+    {
+        return $this->secondFrame();
+    }
+
+    private function secondFrame(): bool
+    {
+        return hash_equals($this->expected, $this->request->getHeader('X-Signature'));
+    }
+"""
+        self.assertEqual(_rules(_scan(php)), ["public-page-annotation-with-unsourced-denial"])
+
+    # -- rule 1 is untouched -----------------------------------------------
+    def test_tp_require_admin_under_public_page_is_unaffected_by_the_widening(self):
+        """`getUser()` now counts as a credential source. That must not reach
+        rule 1, which is tested FIRST and owns the genuine contradiction:
+        #[PublicPage] admits a caller with no login, and requireAdmin() can
+        only ever reject that caller. decidesk#44, the defect the gate was
+        built for.
+        """
+        php = CLASS % """
+    #[PublicPage]
+    public function load(): JSONResponse
+    {
+        $this->requireAdmin();
+        $user = $this->userSession->getUser();
+        return new JSONResponse(['user' => $user]);
+    }
+"""
+        self.assertEqual(_rules(_scan(php)), ["public-page-annotation-with-session-auth-body"])
+
+    def test_tp_user_session_null_check_is_unaffected_by_the_widening(self):
+        php = CLASS % """
+    #[PublicPage]
+    public function load(): JSONResponse
+    {
+        if ($this->userSession->getUser() === null) {
+            return new JSONResponse([], Http::STATUS_UNAUTHORIZED);
+        }
+        return new JSONResponse(['ok' => true]);
+    }
+"""
+        self.assertEqual(_rules(_scan(php)), ["public-page-annotation-with-session-auth-body"])
+
+    def test_tp_prose_in_a_helper_docblock_does_not_earn_the_exemption(self):
+        """The gate-64 failure mode, one frame down. The helper is inlined
+        into the credential surface, and that surface is comment-stripped
+        before the question is asked — so a docblock describing a token check
+        the helper does not perform still fires.
+        """
+        php = CLASS % """
+    #[PublicPage]
+    #[NoCSRFRequired]
+    public function show(): JSONResponse
+    {
+        if ($this->allowed() === false) {
+            return new JSONResponse(['error' => 'forbidden'], Http::STATUS_FORBIDDEN);
+        }
+        return new JSONResponse(['ok' => true]);
+    }
+
+    /**
+     * Verifies the caller's bearer token against the stored HMAC signature.
+     */
+    private function allowed(): bool
+    {
+        return $this->appConfig->getValueString('thing', 'enabled', '0') === '1';
+    }
+"""
+        self.assertEqual(_rules(_scan(php)), ["public-page-annotation-with-unsourced-denial"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
