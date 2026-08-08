@@ -31,7 +31,10 @@ Diff scope
 ==========
 
 ADDED ``.vue`` files are derived from ``git diff --diff-filter=A`` against
-``$HYDRA_GATE_BASE_REF`` (default ``origin/development``). For manifest pages,
+``$HYDRA_GATE_BASE_REF`` **when the caller sets it**. With no base ref the run
+is a FULL-TREE audit — every page component in the app — because a caller who
+asked for no scoping must not have its request silently narrowed to a diff
+(.github#242). For manifest pages,
 the page is in scope only when its ``component`` file is itself an ADDED file in
 the diff — so re-pointing an existing manifest entry at an existing component
 never trips the gate. Pre-existing pages (untouched legacy debt) are never
@@ -41,6 +44,33 @@ Usage::
 
     HYDRA_GATE_BASE_REF=origin/development python3 scripts/lib/check_visual_coverage.py [app-dir]
     python3 scripts/lib/check_visual_coverage.py [app-dir] --mode report
+
+Exit status is a STATUS, never a count
+======================================
+
+``run_gate`` used to ``return count`` — the number of uncovered page
+components — straight into ``sys.exit``. An exit status is ONE BYTE, so the
+count was taken mod 256 on its way out, and the caller
+(``run-hydra-gates.sh`` gate-26) read that byte as the finding count:
+
+    260 uncovered pages  ->  exit 4    ->  "[gate-26] FAIL — 4 ..."
+    256 uncovered pages  ->  exit 0    ->  "[gate-26] visual-coverage: PASS"
+
+Both were measured on openregister on 2026-08-08 with this file's own stdout
+reading ``FAIL — 256 new page component(s) without a visual baseline`` on the
+same run that the gate reported PASS. Two numbers for one measurement means
+one of them came through a lossy channel. This is the identical defect
+ConductionNL/.github#209 fixed in gate-19's helper.
+
+The status vocabulary now matches gate-25's helper
+(``check_contract_coverage.py``), which the runner already knows how to read:
+
+    0  pass — pages were inspected (or there were none) and all are covered
+    1  fail — at least one uncovered page; the COUNT is on stdout as
+              ``FAIL — <n> new page component(s)``
+    2  error
+    3  empty scope — the diff added no page component, so nothing was
+              inspected. NOT APPLICABLE, not a pass (#268).
 """
 from __future__ import annotations
 
@@ -52,6 +82,12 @@ import sys
 from pathlib import Path
 
 GATE_NUM = 26
+
+# Exit STATUS vocabulary — see the module docstring. Never a finding count.
+EXIT_PASS = 0
+EXIT_FAIL = 1
+EXIT_ERROR = 2
+EXIT_EMPTY_SCOPE = 3
 
 _PAGE_DIRS = ("src/views/", "src/pages/")
 
@@ -237,17 +273,51 @@ def is_covered(page: dict, visual_corpus: str, e2e_corpus: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _collect(app_dir: Path, base_ref: str) -> list[dict]:
-    added = added_files(base_ref, app_dir)
-    return discover_new_pages(app_dir, added)
+def _all_page_components(app_dir: Path) -> set[str]:
+    """Every page component in the tree, ignoring the diff entirely."""
+    found: set[str] = set()
+    for d in _PAGE_DIRS:
+        root = app_dir / d
+        if root.is_dir():
+            for p in root.rglob("*.vue"):
+                found.add(str(p.relative_to(app_dir)).replace("\\", "/"))
+    found.update(_manifest_page_components(app_dir).keys())
+    return found
+
+
+def _collect(app_dir: Path, base_ref: str | None) -> list[dict]:
+    if base_ref:
+        return discover_new_pages(app_dir, added_files(base_ref, app_dir))
+    # SCOPE IS THE CALLER'S DECISION, AND IT IS NOT DEFAULTED (.github#242,
+    # applied here). This helper defaulted `HYDRA_GATE_BASE_REF` to
+    # `origin/development` even on a run the caller had asked NOT to scope, so
+    # a full-tree audit was silently narrowed to a diff, came back empty, and
+    # printed a verdict having opened nothing — the same defect #242 fixed in
+    # gate-25's helper, where the honest full-tree number on openconnector was
+    # 32 endpoints against a scoped PASS. With no base ref, audit every page.
+    return discover_new_pages(app_dir, _all_page_components(app_dir))
 
 
 def run_gate(app_dir: Path) -> int:
-    base_ref = os.environ.get("HYDRA_GATE_BASE_REF", "origin/development")
+    base_ref = os.environ.get("HYDRA_GATE_BASE_REF") or None
     pages = _collect(app_dir, base_ref)
     if not pages:
-        print(f"[gate-{GATE_NUM}] visual-coverage: PASS — no new page components in diff")
-        return 0
+        # EMPTY SCOPE IS NOT A PASS (#268). The diff added no page component,
+        # so this run inspected nothing and has no verdict to give about the
+        # repository. The caller reports NOT APPLICABLE.
+        if base_ref:
+            print(
+                f"[gate-{GATE_NUM}] visual-coverage: EMPTY SCOPE — "
+                f"the diff against '{base_ref}' ADDED no page component, so no "
+                f"screen was inspected"
+            )
+            return EXIT_EMPTY_SCOPE
+        print(
+            f"[gate-{GATE_NUM}] visual-coverage: NOT APPLICABLE — this app has "
+            f"no page component at all (nothing under src/views|src/pages, no "
+            f"manifest \"type\":\"page\" entry resolving to a .vue)"
+        )
+        return EXIT_EMPTY_SCOPE
     visual_corpus = _e2e_corpus(app_dir, visual_only=True)
     e2e_corpus = _e2e_corpus(app_dir, visual_only=False)
     findings: list[str] = []
@@ -271,16 +341,19 @@ def run_gate(app_dir: Path) -> int:
             f"[gate-{GATE_NUM}] visual-coverage: PASS — "
             f"{len(pages)} new page(s), all have a visual proof"
         )
-    else:
-        print(
-            f"[gate-{GATE_NUM}] visual-coverage: FAIL — "
-            f"{count} new page component(s) without a visual baseline"
-        )
-    return count
+        return EXIT_PASS
+    # THE COUNT TRAVELS ON STDOUT. Returning it as the exit status truncated it
+    # to one byte and made 256 findings indistinguishable from zero — see the
+    # module docstring.
+    print(
+        f"[gate-{GATE_NUM}] visual-coverage: FAIL — "
+        f"{count} new page component(s) without a visual baseline"
+    )
+    return EXIT_FAIL
 
 
 def run_report(app_dir: Path) -> int:
-    base_ref = os.environ.get("HYDRA_GATE_BASE_REF", "origin/development")
+    base_ref = os.environ.get("HYDRA_GATE_BASE_REF") or None
     pages = _collect(app_dir, base_ref)
     visual_corpus = _e2e_corpus(app_dir, visual_only=True)
     e2e_corpus = _e2e_corpus(app_dir, visual_only=False)

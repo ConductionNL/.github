@@ -52,12 +52,50 @@ fi
 
 EXIT_CODE=0
 FOUND_ANY=0
+# Number of RULES that matched. Reported on the last line so the caller can
+# state the size of the evidence even in WARN mode, where the exit status is 0
+# either way.
+FINDING_COUNT=0
 SEARCH_ROOT="${1:-lib}"
 
 if [ ! -d "${SEARCH_ROOT}" ]; then
     echo "lint-or-abstraction-anti-patterns: search root '${SEARCH_ROOT}' not found; skipping."
     exit 0
 fi
+
+# ---------------------------------------------------------------------------
+# WHICH APP IS THIS?  (and why `basename $(pwd)` is not the answer)
+#
+# Rule 1 already needed to exempt one app from its own rule — openconnector
+# owns the PDOK adapter, so "do not call api.pdok.nl" cannot apply to it — and
+# it asked `basename $(pwd)`. That is the checkout DIRECTORY, which in CI is
+# whatever `actions/checkout` was told to call it, and in a git worktree is a
+# branch-shaped name. `appinfo/info.xml`'s `<id>` is the app's actual identity
+# and is what Nextcloud itself uses.
+#
+# THIS MATTERS BEYOND TIDINESS. Every rule below is an ADR-022 "consume the
+# OpenRegister abstraction instead of growing your own" rule, and each one
+# tries to exclude OpenRegister's own implementation with `grep -v -i
+# openregister`. That filter reads the FILE PATH — and when the linter runs
+# inside the openregister repository the paths are `lib/Db/AuditTrail.php`,
+# `lib/Db/ApprovalChain.php`, `lib/Service/Geo/PdokGeocoder.php`: not one of
+# them contains the string "openregister", so not one is excluded. Measured
+# 2026-08-08 on openregister at 28c5d19: 33 findings, every single one a
+# canonical OpenRegister implementation being told to consume itself. The gate
+# is in WARN mode until 2026-08-13; on that date it starts hard-failing the
+# foundation repository over its own source.
+#
+# So the exemption is expressed once, by app id, for the provider of each
+# abstraction — and it is PRINTED, never silent.
+_app_id() {
+    local _id=""
+    if [ -f appinfo/info.xml ]; then
+        _id=$(sed -n 's/.*<id>\([^<]*\)<\/id>.*/\1/p' appinfo/info.xml 2>/dev/null | head -1)
+    fi
+    [ -z "${_id}" ] && _id="$(basename "$(pwd)")"
+    printf '%s' "${_id}"
+}
+APP_ID="$(_app_id)"
 
 flag() {
     local rule="$1"
@@ -70,15 +108,31 @@ flag() {
         fi
     fi
     FOUND_ANY=1
+    FINDING_COUNT=$((FINDING_COUNT + 1))
     echo "  [${rule}] ${detail}"
     if [ "${MODE}" -eq 1 ]; then
         EXIT_CODE=1
     fi
 }
 
+# Rules 2-7 all say "consume the OpenRegister abstraction". OpenRegister IS the
+# abstraction; running them against it asks the provider to consume itself, and
+# every one of its canonical classes matches (see the _app_id block above).
+# The exemption is announced, so a reader can never mistake this run's silence
+# for a clean leaf app.
+IS_OR=0
+if [ "${APP_ID}" = "openregister" ]; then
+    IS_OR=1
+    echo "i lint-or-abstraction-anti-patterns: app id is 'openregister' — the ADR-022"
+    echo "  'consume the OR abstraction' rules (audit-trail, approval-chain, tenant,"
+    echo "  workflow-engine, rbac, and the ADR-051 capability table) do NOT apply to the"
+    echo "  repository that PROVIDES those abstractions and are not evaluated here."
+    echo "  They remain in force for every leaf app."
+fi
+
 # 1. shared-pdok-via-openconnector — direct PDOK API calls outside openconnector.
 # Scope: lib/ + src/ + frontend js/vue files; skip docs, scripts, and openspec.
-if [ "$(basename "$(pwd)")" != "openconnector" ]; then
+if [ "${APP_ID}" != "openconnector" ]; then
     matches="$(grep -rln --include='*.php' --include='*.js' --include='*.ts' --include='*.vue' "api\\.pdok\\.nl" "${SEARCH_ROOT}" src 2>/dev/null || true)"
     if [ -n "${matches}" ]; then
         flag "shared-pdok-via-openconnector" "direct api.pdok.nl reference found — route via openconnector PDOK adapter instead"
@@ -86,6 +140,7 @@ if [ "$(basename "$(pwd)")" != "openconnector" ]; then
     fi
 fi
 
+if [ "${IS_OR}" -eq 0 ]; then
 # 2. consume-or-audit-trail-fleet-wide — app-local audit listeners/validators/schemas.
 matches="$(find "${SEARCH_ROOT}" -type f \( -iname "*Audit*Listener.php" -o -iname "*Audit*Validator.php" -o -iname "*AuditTrail*.php" \) 2>/dev/null | grep -v -i "openregister" || true)"
 if [ -n "${matches}" ]; then
@@ -120,6 +175,7 @@ if [ -n "${matches}" ]; then
     flag "consume-or-rbac-fleet-wide" "app-local permission/authorization service found — enforce via OR rbac-scopes"
     echo "${matches}" | sed 's/^/    /'
 fi
+fi  # IS_OR == 0
 
 # ---------------------------------------------------------------------------
 # 7. ADR-051 §4 — OR-owned capability duplication (data-driven).
@@ -207,6 +263,7 @@ flag_capability() {
     fi
     CAP_FOUND_ANY=1
     FOUND_ANY=1
+    FINDING_COUNT=$((FINDING_COUNT + 1))
     echo "  [or-capability:${_cap_rule}] ${_cap_detail}"
     if [ "${CAP_MODE}" -eq 1 ]; then
         EXIT_CODE=1
@@ -215,7 +272,7 @@ flag_capability() {
 
 # The OpenRegister engine app IS the owner of these capabilities — skip
 # entirely (mirrors the openconnector skip on the PDOK rule above).
-if [ "$(basename "$(pwd)")" != "openregister" ]; then
+if [ "${IS_OR}" -eq 0 ]; then
     for _rule_row in "${OR_CAPABILITY_RULES[@]}"; do
         IFS='|' read -r _cap_key _cap_kind _cap_pattern _cap_msg <<< "${_rule_row}"
         case "${_cap_kind}" in
@@ -248,5 +305,12 @@ fi
 if [ "${FOUND_ANY}" -eq 0 ]; then
     echo "✓ OR-abstraction anti-pattern gate clean."
 fi
+
+# A MACHINE-READABLE TALLY, because in WARN mode the exit status is 0 whether
+# or not anything was found — so the caller cannot tell "clean" from "found
+# things and chose not to block" by the byte, which is exactly what gate-23 was
+# doing (it printed PASS over 33 findings on openregister and 1 on doriath).
+# The caller greps this line and states the number in its verdict.
+echo "or_abstraction_findings=${FINDING_COUNT} app_id=${APP_ID} mode=$([ "${MODE}" -eq 1 ] && echo BLOCK || echo WARN)"
 
 exit "${EXIT_CODE}"

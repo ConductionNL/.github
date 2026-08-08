@@ -2973,6 +2973,27 @@ if [ -d lib ]; then
     if [ -n "${_or_abs_script}" ]; then
         # Script defaults its search root to `lib` when no arg is passed.
         if bash "${_or_abs_script}" lib >> "${_or_abs_log}" 2>&1; then
+            # A WARN-MODE FINDING IS STILL A FINDING.
+            #
+            # The linter is bake-in gated: until its BLOCK epoch it exits 0
+            # whether it matched nothing or matched thirty things. This branch
+            # read only the byte, so `[gate-23] or-abstraction-anti-patterns:
+            # PASS` was printed over both — byte-identical output for a clean
+            # repo and for a repo full of the exact anti-patterns the gate
+            # exists to name. Measured 2026-08-08: doriath, one planted
+            # `lib/Service/TenantIsolationService.php`, gate said PASS and the
+            # log said `[consume-or-tenant-fleet-wide] … TenantIsolationService`.
+            #
+            # The linter now prints `or_abstraction_findings=<n>` as its last
+            # line. Read it, state it, and surface the matched rules — the same
+            # treatment gate-24 already gives its WARN-only advisory lines.
+            _or_abs_warn=$(sed -n 's/^or_abstraction_findings=\([0-9]*\).*/\1/p' "${_or_abs_log}" | tail -1)
+            [ -z "${_or_abs_warn}" ] && _or_abs_warn=$(_count '^\s+\[' "${_or_abs_log}")
+            if [ "${_or_abs_warn}" -gt 0 ]; then
+                echo "  [gate-23] OR-abstraction anti-patterns — ${_or_abs_warn} rule(s) MATCHED and are reported WARN-only until the bake-in epoch (they do not fail this run, and they will once it passes):"
+                grep -E '^  \[|^    ' "${_or_abs_log}" 2>/dev/null | head -40 | sed 's/^/  /'
+            fi
+            echo "[hydra-gates] gate-23 or-abstraction-anti-patterns: ${_or_abs_warn} rule(s) matched (see ${_or_abs_log}); $(sed -n 's/.*\bmode=\([A-Z]*\).*/\1/p' "${_or_abs_log}" | tail -1) mode."
             _pass 23 "or-abstraction-anti-patterns"
         else
             # In BLOCK mode (post bake-in epoch) the script exits 1 on any
@@ -2982,11 +3003,14 @@ if [ -d lib ]; then
             _fail 23 "or-abstraction-anti-patterns" "${_or_abs_hits} OR-abstraction match(es) — see ${_or_abs_log}"
         fi
     else
-        # Script missing — fail-open (don't block CI when the gate's own
-        # helper is unavailable; the umbrella-spec retro-fit will land it).
-        echo "lint-or-abstraction-anti-patterns.sh helper not found; skipping gate" >> "${_or_abs_log}"
-        _pass 23 "or-abstraction-anti-patterns"
+        # A MISSING HELPER MUST NOT REPORT PASS (#147). This branch said
+        # "fail-open" and then printed a PASS, which is not failing open — it
+        # is reporting a verdict nobody produced.
+        echo "lint-or-abstraction-anti-patterns.sh helper not found; nothing was inspected" >> "${_or_abs_log}"
+        _skip 23 "or-abstraction-anti-patterns" wiring "lint-or-abstraction-anti-patterns.sh not found next to this runner nor at scripts/ in the app — lib/ exists and NOT ONE file was inspected; ADR-022 OR-abstraction duplication is UNVERIFIED by this run."
     fi
+else
+    _skip 23 "or-abstraction-anti-patterns" na "this repository has no lib/ directory, so there is no PHP for an app-local approval chain / audit listener / tenant middleware / RBAC service / workflow engine to live in. Nothing was inspected and nothing could be."
 fi
 
 # ---------------------------------------------------------------------------
@@ -3068,15 +3092,15 @@ _parity_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-integration-parity.log
 # Deciding this from `[ -f scripts/check-integration-parity.sh ]` alone is what
 # made every repo in the fleet report the same skip regardless of whether it had
 # any leaves at all.
+_parity_has_php=0
+_parity_has_js=0
+if [ -d lib ] && grep -rqE 'new[[:space:]]+LeafDescriptor[[:space:]]*\(' lib/ --include='*.php' 2>/dev/null; then
+    _parity_has_php=1
+fi
+if [ -d src ] && grep -rqE '\bregisterIntegration[[:space:]]*\(' src/ 2>/dev/null; then
+    _parity_has_js=1
+fi
 if [ ! -f scripts/check-integration-parity.sh ]; then
-    _parity_has_php=0
-    _parity_has_js=0
-    if [ -d lib ] && grep -rqE 'new[[:space:]]+LeafDescriptor[[:space:]]*\(' lib/ --include='*.php' 2>/dev/null; then
-        _parity_has_php=1
-    fi
-    if [ -d src ] && grep -rqE '\bregisterIntegration[[:space:]]*\(' src/ 2>/dev/null; then
-        _parity_has_js=1
-    fi
     if [ "${_parity_has_php}" = "0" ] && [ "${_parity_has_js}" = "0" ]; then
         _skip 24 "integration-parity" na "no scripts/check-integration-parity.sh, and this repo registers no integration leaves at all — no \`new LeafDescriptor(\` in lib/ and no \`registerIntegration(\` in src/. There is no server↔JS pair for parity to correlate."
     else
@@ -3085,6 +3109,33 @@ if [ ! -f scripts/check-integration-parity.sh ]; then
 fi
 if [ -f scripts/check-integration-parity.sh ]; then
     if bash scripts/check-integration-parity.sh >> "${_parity_log}" 2>&1; then
+        # THE WRAPPER'S EXIT 0 HAS TWO MEANINGS, AND ONE OF THEM IS "I DIDN'T RUN".
+        #
+        # openregister's wrapper cannot always locate the canonical Node check
+        # (the published @conduction/nextcloud-vue package ships no scripts/
+        # dir), and in that case it prints
+        #
+        #   i integration parity: canonical JS check not found locally — skipping.
+        #
+        # and exits 0 — by design, so it does not break builds. This branch read
+        # that 0 as a pass, so openregister — the repo that owns the integration
+        # registry — printed `[gate-24] integration-parity: PASS` on every run
+        # while correlating exactly nothing. Measured 2026-08-08: the gate said
+        # PASS and its own log said "skipping" on the same run.
+        #
+        # A self-declared skip is classified on the gate's OWN SUBJECT MATTER,
+        # exactly as the no-wrapper branch above is — not on the wrapper's byte.
+        # (hermiq's wrapper is the honest shape: it exits 1 and says "Refusing
+        # to report a pass" when its machinery is absent, so it never lands
+        # here.)
+        if grep -qiE 'skipping|not found locally|could not be located' "${_parity_log}" 2>/dev/null \
+            && ! grep -qE '^(✓|✗)' "${_parity_log}" 2>/dev/null; then
+            if [ "${_parity_has_php}" = "0" ] && [ "${_parity_has_js}" = "0" ]; then
+                _skip 24 "integration-parity" na "scripts/check-integration-parity.sh ran but SKIPPED (it could not locate the canonical JS check), and this repo registers no integration leaves at all — no \`new LeafDescriptor(\` in lib/ and no \`registerIntegration(\` in src/. There is no server↔JS pair for parity to correlate. See ${_parity_log}."
+            else
+                _skip 24 "integration-parity" structural "scripts/check-integration-parity.sh ran but SKIPPED — it could not locate the canonical JS check, so NOTHING was correlated — while this repo DOES register integration leaves (lib/ LeafDescriptor: ${_parity_has_php}, src/ registerIntegration: ${_parity_has_js}). server↔JS leaf parity (ADR-066 Decisions 4/7: phantom render surfaces, orphan JS registrations, renderMode mismatch) is UNVERIFIED by this run — this is NOT a pass. See ${_parity_log}."
+            fi
+        else
         # The WARN-only ADR-066 cross-ref advisory lines start with `⚠`/its
         # bullets; surface them on PASS so a phantom/orphan leaf is visible in
         # CI during the bake-in epoch (they never fail the gate).
@@ -3093,6 +3144,7 @@ if [ -f scripts/check-integration-parity.sh ]; then
             grep -E '^(⚠|  - )' "${_parity_log}" 2>/dev/null | sed 's/^/    /'
         fi
         _pass 24 "integration-parity"
+        fi
     else
         # WARN-only advisory lines carry "phantom"/"orphan"/"NO matching" and a
         # `⚠` header — never "missing"/"mismatch"/`^✗` — so this hard-failure
@@ -3205,10 +3257,40 @@ if [ -d src ]; then
         _vc_lib_dir="${SCRIPT_DIR}/lib"
     fi
     if [ -f "${_vc_lib_dir}/check_visual_coverage.py" ]; then
+        # THE EXIT BYTE IS A STATUS, NOT A COUNT (#209's defect, in gate-26).
+        #
+        # `check_visual_coverage.py` used to `return len(findings)` into
+        # `sys.exit`, and this branch read that byte as the finding count. An
+        # exit status is one byte, so the count came back mod 256. Measured on
+        # openregister 2026-08-08 with 260 and then 256 planted uncovered page
+        # components:
+        #
+        #   260 findings  -> exit 4  -> "[gate-26] FAIL — 4 new page component(s)"
+        #   256 findings  -> exit 0  -> "[gate-26] visual-coverage: PASS"
+        #
+        # while the helper's own stdout said `FAIL — 256` on the same run. The
+        # helper now returns 0/1/2/3 like gate-25's and puts the count on
+        # stdout, and the count is read from there.
+        #
+        # stderr is folded into the log rather than discarded: `2>/dev/null`
+        # turned a traceback into a silent nonzero status, which this branch
+        # then printed as a confident finding count with an empty log (#245).
+        #
+        # SCOPE ONLY WHEN THE CALLER ASKED FOR IT (#242), same as gate-25 two
+        # blocks up. BASE_REF was exported unconditionally, so a full-tree run
+        # was narrowed to the diff against origin/development inside the
+        # helper, came back empty, and the gate reported a verdict having
+        # opened nothing. gate-26 was one of the six gates that could not be
+        # reached in full-repo mode at all.
         set +e
-        HYDRA_GATE_BASE_REF="${BASE_REF}" \
+        if [ "${SCOPE_TO_DIFF}" = "1" ]; then
+            HYDRA_GATE_BASE_REF="${BASE_REF}" \
+                python3 "${_vc_lib_dir}/check_visual_coverage.py" . \
+                >> "${_vc_log}" 2>&1
+        else
             python3 "${_vc_lib_dir}/check_visual_coverage.py" . \
-            >> "${_vc_log}" 2>/dev/null
+                >> "${_vc_log}" 2>&1
+        fi
         _vc_fail=$?
         set +e
     else
@@ -3216,10 +3298,22 @@ if [ -d src ]; then
         _skip 26 "visual-coverage" wiring "check_visual_coverage.py not found at ${_vc_lib_dir} — src/ is present but NO page component was inspected; visual-regression coverage of new screens is UNVERIFIED by this run."
     fi
     if [ "${_vc_ran}" -eq 1 ]; then
+        # THE COUNT COMES FROM STDOUT, not from the byte.
+        _vc_count=$(grep -oE 'FAIL — [0-9]+ new page component' "${_vc_log}" 2>/dev/null \
+            | tail -1 | grep -oE '[0-9]+' || true)
+        [ -z "${_vc_count}" ] && _vc_count="an unreported number of"
         if [ "${_vc_fail}" -eq 0 ]; then
             _pass 26 "visual-coverage"
+        elif [ "${_vc_fail}" -eq 3 ]; then
+            # EMPTY SCOPE — `na`, not PASS (#268). Same reading as gate-25's.
+            _vc_ran=0
+            _skip 26 "visual-coverage" na "the diff against '${BASE_REF}' ADDED no page component (nothing under src/views|src/pages, no new manifest page component), so no screen was inspected. Diff-scoped out under ADR-020 — not a gap: this PR adds no screen whose appearance could be unbaselined. See ${_vc_log}."
+        elif [ "${_vc_fail}" -ge 2 ]; then
+            # A CRASHED CHECKER IS NOT A CLEAN TREE (#245, #249).
+            _vc_ran=0
+            _skip 26 "visual-coverage" wiring "check_visual_coverage.py exited ${_vc_fail} (error) — no page verdict was produced; visual-regression coverage of new screens is UNVERIFIED by this run. See ${_vc_log}."
         else
-            _fail 26 "visual-coverage" "${_vc_fail} new page component(s) missing a visual baseline — see ${_vc_log}"
+            _fail 26 "visual-coverage" "${_vc_count} new page component(s) missing a visual baseline — see ${_vc_log}"
         fi
     fi
 fi
@@ -3276,8 +3370,25 @@ if [ "${#_pcar_files[@]}" -gt 0 ]; then
         _pcar_lib_dir="${SCRIPT_DIR}/lib"
     fi
     if [ -f "${_pcar_lib_dir}/check_phantom_cross_app_rpc.py" ]; then
+        # A CRASHED CHECKER IS NOT A CLEAN TREE (#245, #249).
+        #
+        # This was `2>/dev/null || true`, and the helper `return 0`s on every
+        # successful path — so the ONLY way it can exit nonzero is by dying.
+        # That state discarded the traceback, produced an empty findings log,
+        # and the count below then read 0 lines and printed PASS. A file this
+        # gate could not parse and a file with no phantom RPC in it were
+        # byte-identical in the output.
+        set +e
+        _pcar_err="${HYDRA_GATE_LOG_DIR}/hydra-gate-no-phantom-cross-app-rpc.err"
+        : > "${_pcar_err}"
         python3 "${_pcar_lib_dir}/check_phantom_cross_app_rpc.py" "${_pcar_files[@]}" \
-            >> "${_pcar_log}" 2>/dev/null || true
+            >> "${_pcar_log}" 2>"${_pcar_err}"
+        _pcar_rc=$?
+        set +e
+        if [ "${_pcar_rc}" -ne 0 ]; then
+            _pcar_ran=0
+            _skip 27 "no-phantom-cross-app-rpc" wiring "check_phantom_cross_app_rpc.py exited ${_pcar_rc} — ${#_pcar_files[@]} PHP/Vue/JS/TS file(s) were in scope and NONE were judged; phantom cross-app RPC patterns (ADR-041) are UNVERIFIED by this run. See ${_pcar_err}."
+        fi
     else
         _pcar_ran=0
         _skip 27 "no-phantom-cross-app-rpc" wiring "check_phantom_cross_app_rpc.py not found at ${_pcar_lib_dir} — ${#_pcar_files[@]} PHP/Vue/JS/TS file(s) were in scope and NONE were inspected; phantom cross-app RPC patterns (ADR-041) are UNVERIFIED by this run."
@@ -3292,7 +3403,12 @@ _pcar_fail=$(wc -l < "${_pcar_log}" 2>/dev/null | tr -d ' ')
 set +e
 [ -z "${_pcar_fail}" ] && _pcar_fail=0
 if [ "${_pcar_ran}" -eq 1 ]; then
-    if [ "${_pcar_fail}" -eq 0 ]; then
+    if [ "${#_pcar_files[@]}" -eq 0 ]; then
+        # NOTHING WAS OPENED. An empty findings log has two causes that mean
+        # opposite things, and PASS was printed for both: "every file is
+        # clean" and "I selected no files". Only the first is a verdict.
+        _skip 27 "no-phantom-cross-app-rpc" na "no lib/ or src/ PHP/Vue/JS/TS file is in scope for this run (no such file in the repository, or the diff touches none under ADR-020), so no cross-app call site was inspected. Nothing was judged and nothing could be."
+    elif [ "${_pcar_fail}" -eq 0 ]; then
         _pass 27 "no-phantom-cross-app-rpc"
     else
         _fail 27 "no-phantom-cross-app-rpc" "${_pcar_fail} phantom cross-app RPC pattern(s) — use the ADR-041 event recipe; see ${_pcar_log}"
@@ -3446,15 +3562,34 @@ fi
 # alongside a new .phpunit.cache/ ignore rule). Only fires under --scope-to-diff
 # because the check is intrinsically diff-relative.
 # ---------------------------------------------------------------------------
+#
+# WHAT THIS GATE DOES **NOT** DO, stated because two agents got it wrong on the
+# same day in the surrounding code: it never calls `git check-ignore`. That
+# command answers from the WORKING TREE by default and reports a file that is
+# already TRACKED as "not ignored" — a clean bill of health manufactured for
+# free — unless it is given `--no-index`. This gate asks the opposite,
+# tracked-side question directly (`git ls-files`), so the trap does not apply.
+# If a future edit reaches for `check-ignore` here, it needs `--no-index`.
+#
+# PASS REQUIRES THAT SOMETHING WAS OPENED. The verdict below used to be a bare
+# `[ fail -eq 0 ] && PASS`, and BOTH guards above fall through to it: an
+# unscoped (full-repo) run and a repo with no .gitignore each printed
+# `[gate-29] gitignore-then-commit: PASS` having read zero lines of diff. That
+# is byte-identical to the run that examined a real .gitignore change and found
+# it clean, which is the one distinction this gate's output has to carry.
 _gi_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-gitignore-then-commit.log
 : > "${_gi_log}"
+_gi_ran=0
+_gi_new_count=0
 if [ "${SCOPE_TO_DIFF}" = "1" ] && [ -f .gitignore ]; then
     # Lines newly added to .gitignore in this PR (excluding blanks + comments)
     _new_ignores=$(git -c safe.directory='*' diff "${BASE_REF}...HEAD" -- .gitignore 2>/dev/null \
         | grep -E '^\+[^+]' | sed 's/^+//' | grep -vE '^\s*(#|$)' || true)
+    _gi_ran=1
     if [ -n "${_new_ignores}" ]; then
         while IFS= read -r _pat; do
             [ -z "${_pat}" ] && continue
+            _gi_new_count=$((_gi_new_count + 1))
             # Strip leading slash + trailing slash to get the directory/file
             # prefix to match against `git ls-files` output.
             _prefix=$(echo "${_pat}" | sed -E 's|^/||; s|/$||; s|^\!||')
@@ -3464,8 +3599,13 @@ if [ "${SCOPE_TO_DIFF}" = "1" ] && [ -f .gitignore ]; then
             case "${_prefix}" in
                 \**|*\*\**) continue ;;
             esac
-            # Find tracked files whose path starts with the prefix (cap at 5)
-            git ls-files 2>/dev/null | grep -E "^${_prefix}(/|$)" | head -5 \
+            # Find tracked files whose path starts with the prefix (cap at 5).
+            # The prefix is DATA, not a pattern: `.phpunit.cache` was being
+            # interpolated raw into an ERE, where every `.` matches any
+            # character and a `+` or `(` is a syntax error that makes grep exit
+            # 2 and the finding disappear. Escape it.
+            _gi_rx=$(printf '%s' "${_prefix}" | sed -E 's/[][\\.^$*+?(){}|\/]/\\&/g')
+            git ls-files 2>/dev/null | grep -E "^${_gi_rx}(/|$)" | head -5 \
                 | while IFS= read -r _tracked; do
                     [ -z "${_tracked}" ] && continue
                     echo "ignore_pattern=${_pat} tracked_file=${_tracked} rule=gitignore-then-commit-oversight" >> "${_gi_log}"
@@ -3474,10 +3614,19 @@ if [ "${SCOPE_TO_DIFF}" = "1" ] && [ -f .gitignore ]; then
     fi
 fi
 _gi_fail=$(wc -l < "${_gi_log}" 2>/dev/null || echo 0)
-if [ "${_gi_fail}" -eq 0 ]; then
-    _pass 29 "gitignore-then-commit"
-else
+if [ "${_gi_fail}" -ne 0 ]; then
     _fail 29 "gitignore-then-commit" "${_gi_fail} tracked file(s) at newly-ignored path(s) — see ${_gi_log}"
+elif [ "${_gi_ran}" -eq 1 ] && [ "${_gi_new_count}" -gt 0 ]; then
+    # The only shape that earns a PASS: a diff that really added ignore rules,
+    # each of which was really looked up against the tracked file list.
+    echo "[hydra-gates] gate-29 gitignore-then-commit: ${_gi_new_count} newly-added .gitignore rule(s) checked against the tracked file list; none has tracked files behind it."
+    _pass 29 "gitignore-then-commit"
+elif [ "${SCOPE_TO_DIFF}" != "1" ]; then
+    _skip 29 "gitignore-then-commit" na "this check is intrinsically diff-relative — it asks whether THIS change adds an ignore rule over files that are already tracked — and this run is not --scope-to-diff, so there is no set of newly-added rules to look up. Nothing was inspected and nothing could be. It runs on every PR."
+elif [ ! -f .gitignore ]; then
+    _skip 29 "gitignore-then-commit" na "this repository has no .gitignore, so this diff cannot have added an ignore rule over already-tracked files."
+else
+    _skip 29 "gitignore-then-commit" na "the diff against '${BASE_REF}' adds no non-comment line to .gitignore, so there is no new ignore rule whose path could already be tracked. Diff-scoped out under ADR-020."
 fi
 
 # ---------------------------------------------------------------------------
@@ -3590,6 +3739,33 @@ if [ -f appinfo/routes.php ] && [ -d lib/Controller ]; then
         _pm_ctrl="${_pm_name%%#*}"
         _pm_method="${_pm_name#*#}"
         _ctrl_path=$(_ctrl_path_from_name "${_pm_ctrl}")
+        if [ ! -f "${_ctrl_path}" ]; then
+            # THE PSR-4 GUESS IS NOT THE ONLY PLACE THE CLASS CAN LIVE.
+            #
+            # A route name like `AppHost\Controller\GenericHealth#index` maps
+            # by convention to lib/Controller/AppHost/Controller/…, but
+            # openregister DI-BINDS that controller name to
+            # OCA\OpenRegister\AppHost\Controller\GenericHealthController,
+            # which sits at lib/AppHost/Controller/GenericHealthController.php.
+            # The guess misses, `_apphost_serves` then matches on the name, and
+            # this gate declared the file "not in this repository" — inside the
+            # repository that contains it. Measured 2026-08-08: with
+            # `#[PublicPage]` deleted from openregister's own
+            # GenericHealthController, in a diff that touched that very file,
+            # gate-30 still reported NOT APPLICABLE. The fleet's /api/health and
+            # /api/metrics were judged by this gate nowhere, including at home.
+            #
+            # So: before giving up, look for the class in this repo by its
+            # basename, and accept it only when exactly one tracked file under
+            # lib/ carries it. One match is an identification; two are a guess,
+            # and a guess is what produced the wrong answer above.
+            _pm_base="$(basename "${_ctrl_path}")"
+            _pm_found=$(_enum_tracked "/${_pm_base}\$" lib 2>/dev/null | head -3)
+            if [ "$(printf '%s\n' "${_pm_found}" | grep -c . )" = "1" ] && [ -f "${_pm_found}" ]; then
+                echo "${_pm_name} — resolved to ${_pm_found} (the PSR-4 path ${_ctrl_path} does not exist; this controller is DI-bound under a different directory). JUDGED." >> "${_pm_notes}"
+                _ctrl_path="${_pm_found}"
+            fi
+        fi
         if [ ! -f "${_ctrl_path}" ]; then
             _pm_absent=$((_pm_absent + 1))
             if _apphost_serves "${_pm_ctrl}" || _di_binds_controller "${_ctrl_path}"; then
@@ -3746,7 +3922,15 @@ if _a11y_has_markup_dir; then
         _ia_files+=("${vue}")
     done < <(_a11y_markup_files)
     if [ "${#_ia_files[@]}" -eq 0 ]; then
-        : # nothing in scope; the verdict below describes the diff.
+        # NOTHING WAS OPENED, so there is no verdict to give. The comment that
+        # used to sit here said "the verdict below describes the diff" — it did
+        # not: the verdict below was a bare `[ fail -eq 0 ] && PASS`, so an
+        # empty scope printed `[gate-31] img-alt: PASS`, byte-identical to a run
+        # that read every .vue in the app and found every image labelled. That
+        # is the shape the whole a11y band was falsely green in on nldesign
+        # (zero .vue files, eleven gates PASS).
+        _ia_ran=0
+        _skip 31 "img-alt" na "no markup file (src|templates|appinfo/templates **/*.vue|php|html) is in scope for this run — the repository has none, or the diff touches none under ADR-020. No <img> was inspected and none could be."
     elif [ ! -f "${_ia_helper}" ]; then
         # A MISSING HELPER MUST NOT REPORT PASS (#147).
         _ia_ran=0
@@ -3766,6 +3950,11 @@ if _a11y_has_markup_dir; then
     [ -z "${_ia_fail}" ] && _ia_fail=0
     if [ "${_ia_ran}" -eq 1 ]; then
         if [ "${_ia_fail}" -eq 0 ]; then
+            # State the size of the evidence: a PASS with no number attached is
+            # what eleven a11y gates printed on nldesign, which ships zero .vue
+            # files. Not prefixed `[gate-` so no `^\[gate-` consumer reads it as
+            # a verdict — same convention as gate-30's.
+            echo "[hydra-gates] gate-31 img-alt: ${#_ia_files[@]} markup file(s) inspected, 0 unlabelled <img>."
             _pass 31 "img-alt"
         else
             _fail 31 "img-alt" "${_ia_fail} <img> tag(s) without alt attribute — see ${_ia_log}"
@@ -3829,7 +4018,9 @@ if _a11y_has_markup_dir; then
         _sc_files+=("${vue}")
     done < <(_a11y_markup_files)
     if [ "${#_sc_files[@]}" -eq 0 ]; then
-        : # nothing in scope; the verdict below describes the diff.
+        # See gate-31 above: an empty scope was reported as PASS.
+        _sc_ran=0
+        _skip 32 "semantic-controls" na "no markup file (src|templates|appinfo/templates **/*.vue|php|html) is in scope for this run — the repository has none, or the diff touches none under ADR-020. No click target was inspected and none could be."
     elif [ ! -f "${_sc_helper}" ]; then
         _sc_ran=0
         _skip 32 "semantic-controls" wiring "check_markup_a11y.py not found at ${_sc_helper} — ${#_sc_files[@]} markup file(s) were in scope and NONE were inspected; keyboard-inaccessible click targets (WCAG 2.1.1 / 4.1.2) are UNVERIFIED by this run."
@@ -3847,6 +4038,7 @@ if _a11y_has_markup_dir; then
     [ -z "${_sc_fail}" ] && _sc_fail=0
     if [ "${_sc_ran}" -eq 1 ]; then
         if [ "${_sc_fail}" -eq 0 ]; then
+            echo "[hydra-gates] gate-32 semantic-controls: ${#_sc_files[@]} markup file(s) inspected, 0 mouse-only click target."
             _pass 32 "semantic-controls"
         else
             _fail 32 "semantic-controls" "${_sc_fail} non-semantic element(s) with @click but missing role/tabindex/keyboard handler — use <NcButton> or <button> — see ${_sc_log}"
@@ -3940,17 +4132,41 @@ if [ -f "${_axe_report}" ]; then
     # Parse with python so we don't add a jq dependency. Counts violations
     # by impact and emits one line per serious/critical violation for the
     # detail log. Exit code 0 if zero serious-or-critical; 1 otherwise.
-    python3 - "${_axe_report}" "${_axe_log}" <<'PYAXE' || _axe_fail_count=$?
+    # `{}` IS NOT "NO VIOLATIONS" (#148's remaining half).
+    #
+    # The skip branches above make an ABSENT report loud. A report that is
+    # PRESENT but carries no `violations` key at all was still read as a clean
+    # result — `data.get('violations', [])` supplies the empty list — so a
+    # crashed capture step, a truncated artifact or a placeholder file turned
+    # the loud skip into a silent PASS, which is strictly worse than never
+    # having run. Every real axe result object HAS the key (axe-core always
+    # emits `violations`, even when empty); its absence means the producer
+    # never got that far. Exit 2 = "this is not an axe report".
+    python3 - "${_axe_report}" "${_axe_log}" <<'PYAXE'
 import json, sys
 path, log = sys.argv[1], sys.argv[2]
 try:
     with open(path) as f:
         data = json.load(f)
 except Exception as e:
-    print(f"axe-report-unreadable: {e}", file=open(log, 'w'))
-    sys.exit(1)
-violations = data.get('violations', []) if isinstance(data, dict) else []
-blocking = [v for v in violations if v.get('impact') in ('serious', 'critical')]
+    with open(log, 'w') as f:
+        f.write(f"axe-report-unreadable: {e}\n")
+    sys.exit(2)
+if not isinstance(data, dict) or 'violations' not in data:
+    with open(log, 'w') as f:
+        f.write(
+            "axe-report-shapeless: %s parses as JSON but has no `violations` key, "
+            "so it is not an axe result object. axe-core always emits that key, "
+            "empty or not — its absence means the run that was supposed to "
+            "produce this file never reached the assertion.\n" % path
+        )
+    sys.exit(2)
+violations = data.get('violations') or []
+if not isinstance(violations, list):
+    with open(log, 'w') as f:
+        f.write("axe-report-shapeless: `violations` is not a list\n")
+    sys.exit(2)
+blocking = [v for v in violations if isinstance(v, dict) and v.get('impact') in ('serious', 'critical')]
 with open(log, 'w') as f:
     for v in blocking:
         rule = v.get('id', '?')
@@ -3961,10 +4177,19 @@ with open(log, 'w') as f:
             t = n.get('target', [])
             targets.append(' > '.join(t) if isinstance(t, list) else str(t))
         f.write(f"axe-rule={rule} impact={impact} nodes={len(v.get('nodes', []))} help={help_url} targets={targets}\n")
+print(
+    "[hydra-gates] gate-33 axe-core: report read — %d violation(s) present, "
+    "%d serious/critical. A PASS here is a PASS over that number, not over "
+    "silence." % (len(violations), len(blocking))
+)
 sys.exit(0 if not blocking else 1)
 PYAXE
+    _axe_rc=$?
     _axe_fail=$(wc -l < "${_axe_log}" 2>/dev/null || echo 0)
-    if [ "${_axe_fail}" -eq 0 ]; then
+    if [ "${_axe_rc}" -ge 2 ]; then
+        # Present but not an axe result object — see the parser's own message.
+        _skip 33 "axe-core" wiring "${_axe_report} exists but is not a readable axe result object ($(head -1 "${_axe_log}" 2>/dev/null)). NO rendered-DOM violation was inspected; runtime accessibility is UNVERIFIED by this run. Fix the step that writes the report, not this gate."
+    elif [ "${_axe_fail}" -eq 0 ]; then
         _pass 33 "axe-core"
     else
         _fail 33 "axe-core" "${_axe_fail} serious/critical axe violation(s) — see ${_axe_log}"
