@@ -3404,59 +3404,69 @@ fi
 #   - openspec/architecture/wcag-coverage.md SC 4.1.2 (Name, Role, Value)
 #   - axe-core rule `aria-hidden-focus` (impact: serious)
 # ---------------------------------------------------------------------------
-if [ -d src ]; then
+#
+# `tabindex="-1"` IS NOT FOCUSABLE (#222)
+# --------------------------------------
+# Until 2026-08-08 this gate treated `tabindex` WITH ANY VALUE as proof of
+# focusability. `tabindex="-1"` is the attribute that REMOVES an element from
+# the tab order — the one value that proves the opposite of what the gate
+# concluded — so the gate's own subject was inverted for every element that
+# had already been fixed. The canonical hidden-file-input pattern
+#
+#     <input type="file" :aria-hidden="true" tabindex="-1" @change="…">
+#
+# is correct, and the gate's advice was to remove `aria-hidden` (exposing an
+# unnamed control to screen readers) or to remove `tabindex="-1"` (putting a
+# control screen readers cannot see BACK in the tab order — the very defect
+# this gate exists to catch). Both remediations regress accessibility.
+#
+# Implementation moved to scripts/lib/check_aria_hidden_focusable.py, with
+# both-arms tests in scripts/lib/test_check_aria_hidden_focusable.py.
+# ---------------------------------------------------------------------------
+if _a11y_has_markup_dir; then
     _ahf_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-aria-hidden-focusable.log
     : > "${_ahf_log}"
+    _ahf_ran=1
+    _ahf_helper="${SCRIPT_DIR}/lib/check_aria_hidden_focusable.py"
+    _ahf_files=()
+    # `_a11y_markup_files`, not `find src -name '*.vue'` (#225 / #261). WCAG
+    # does not care which templating language produced the DOM, and an
+    # `aria-hidden` focusable is the same defect in a .php template as in a
+    # .vue one. The helper reads markup, not Vue specifically.
     while IFS= read -r vue; do
         _in_scope "${vue}" || continue
-        _flat=$(tr '\n' ' ' < "${vue}")
-        # Match every opening HTML tag that contains aria-hidden="true".
-        # We grep with -oE for the full tag including all attributes.
-        echo "${_flat}" \
-            | grep -oE '<[a-zA-Z][a-zA-Z0-9-]*\b[^>]*aria-hidden[[:space:]]*=[[:space:]]*"true"[^>]*>' 2>/dev/null \
-            | while IFS= read -r tag; do
-                [ -z "${tag}" ] && continue
-                # Extract the element name (between < and the first space-or->).
-                _elem=$(echo "${tag}" | sed -nE 's|^<([a-zA-Z][a-zA-Z0-9-]*)\b.*|\1|p')
-                [ -z "${_elem}" ] && continue
-                # Vue/NC component shells like <NcAvatar> or <RouterLink>
-                # are component invocations; their internal a11y wiring is
-                # the component's problem, not the consumer's. Skip
-                # PascalCase tags (starts with uppercase).
-                case "${_elem}" in
-                    [A-Z]*) continue ;;
-                esac
-                # Focusable signals:
-                #   1. native focusable tag
-                #   2. tabindex= attribute (any value)
-                #   3. interactive role=
-                _focusable=0
-                case "${_elem}" in
-                    a|button|input|select|textarea|details|summary|iframe|audio|video)
-                        # `<a>` is only focusable when href is set.
-                        if [ "${_elem}" = "a" ]; then
-                            echo "${tag}" | grep -qE '\bhref[[:space:]]*=' && _focusable=1
-                        else
-                            _focusable=1
-                        fi
-                        ;;
-                esac
-                if [ "${_focusable}" -eq 0 ]; then
-                    echo "${tag}" | grep -qE '(^|[[:space:]])(:?tabindex|v-bind:tabindex)[[:space:]]*=' && _focusable=1
-                fi
-                if [ "${_focusable}" -eq 0 ]; then
-                    echo "${tag}" | grep -qE 'role[[:space:]]*=[[:space:]]*"(button|link|menuitem|tab|checkbox|radio|switch|option|treeitem|gridcell|columnheader|rowheader|slider|spinbutton|searchbox|combobox|textbox)"' && _focusable=1
-                fi
-                if [ "${_focusable}" -eq 1 ]; then
-                    echo "${vue}: ${tag} rule=aria-hidden-on-focusable-element" >> "${_ahf_log}"
-                fi
-            done
+        _ahf_files+=("${vue}")
     done < <(_a11y_markup_files)
-    _ahf_fail=$(wc -l < "${_ahf_log}" 2>/dev/null || echo 0)
-    if [ "${_ahf_fail}" -eq 0 ]; then
-        _pass 37 "aria-hidden-focusable"
+    if [ "${#_ahf_files[@]}" -eq 0 ]; then
+        :   # nothing in scope; the PASS below describes the diff, as everywhere else.
+    elif [ ! -f "${_ahf_helper}" ]; then
+        # A MISSING HELPER MUST NOT REPORT PASS (#147).
+        _ahf_ran=0
+        _skip 37 "aria-hidden-focusable" wiring "check_aria_hidden_focusable.py not found at ${_ahf_helper} — ${#_ahf_files[@]} markup file(s) were in scope and NONE were inspected; focusable elements hidden from assistive tech (WCAG 4.1.2) are UNVERIFIED by this run."
     else
-        _fail 37 "aria-hidden-focusable" "${_ahf_fail} aria-hidden=true on focusable element(s) — remove aria-hidden OR remove the focusable mechanism — see ${_ahf_log}"
+        # THE EXIT CODE IS A STATUS, THE FINDINGS ARE STDOUT (gate-19 / #249).
+        # `2>/dev/null || true` would swallow a traceback AND the failure, so a
+        # crashed helper left an empty log and the gate reported PASS. stderr
+        # is kept; a non-zero exit is a wiring failure, not a clean sheet.
+        #
+        # `set +e` only, never `set -e` after: errexit is OFF for this whole
+        # script and nothing may turn it on (see the invariant at the top, and
+        # scripts/lib/test_gate_errexit_discipline.sh which enforces it).
+        set +e
+        python3 "${_ahf_helper}" "${_ahf_files[@]}" >> "${_ahf_log}" 2>>"${_ahf_log}.err"
+        _ahf_rc=$?
+        if [ "${_ahf_rc}" -ne 0 ]; then
+            _ahf_ran=0
+            _skip 37 "aria-hidden-focusable" wiring "check_aria_hidden_focusable.py exited ${_ahf_rc} — ${#_ahf_files[@]} markup file(s) were in scope and no verdict was produced; focusable elements hidden from assistive tech (WCAG 4.1.2) are UNVERIFIED by this run. See ${_ahf_log}.err."
+        fi
+    fi
+    _ahf_fail=$(wc -l < "${_ahf_log}" 2>/dev/null || echo 0)
+    if [ "${_ahf_ran}" -eq 1 ]; then
+        if [ "${_ahf_fail}" -eq 0 ]; then
+            _pass 37 "aria-hidden-focusable"
+        else
+            _fail 37 "aria-hidden-focusable" "${_ahf_fail} aria-hidden=true on focusable element(s) — remove aria-hidden OR remove the focusable mechanism — see ${_ahf_log}"
+        fi
     fi
 fi
 
@@ -3659,48 +3669,78 @@ fi
 # (Name, Role, Value).
 #
 # Pass conditions for a button tag:
-#   (a) has aria-label / :aria-label / aria-labelledby attribute, OR
-#   (b) has a title attribute, OR
-#   (c) has non-trivial text content (not just an icon-component child) OR
-#       a Vue interpolation {{ ... }} indicating dynamic text.
+#   (a) has aria-label / aria-labelledby / title / name, LITERAL OR BOUND, OR
+#   (b) has non-trivial text content (not just an icon-component child), a
+#       Vue interpolation {{ ... }}, or an explicit <template #default>.
+#
+# A BOUND NAME IS STILL A NAME (#222 family)
+# ------------------------------------------
+# The accepted-attribute regex was:
+#
+#     r'(^|\s)(:?aria-label|aria-labelledby|v-bind:aria-label|title)\s*='
+#
+# `:?` binds to the FIRST alternative only, so `:aria-label` was accepted
+# while `:title`, `v-bind:title` and `:aria-labelledby` were not. Vue
+# templates bind almost every user-visible string, because it has to go
+# through `t()`:
+#
+#     <button type="button" class="…__remove"
+#             :title="t('openbuild', 'Remove tab')"
+#             @click="removeTab(index)">
+#
+# That button HAS a name. ALL 22 of openbuild's findings were this exact
+# shape — a correctly translated bound title read as a missing one — and the
+# only way to close them was to add a second, redundant name. What matters is
+# whether the attribute reaches the DOM, and `:title` reaches it exactly as
+# `title` does. Note the gate already accepted static `title=`; accepting the
+# bound form is a consistency fix, not a new claim about how strong a name
+# `title` is.
+#
+# Implementation: scripts/lib/check_button_name.py, tests in
+# scripts/lib/test_check_button_name.py — every accepted shape ships with the
+# genuinely-unnamed button it must not swallow.
 #
 # References:
 #   - openspec/architecture/wcag-coverage.md SC 4.1.2
 # ---------------------------------------------------------------------------
-if [ -d src ]; then
+if _a11y_has_markup_dir; then
     _bn_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-button-name.log
     : > "${_bn_log}"
+    _bn_ran=1
+    _bn_helper="${SCRIPT_DIR}/lib/check_button_name.py"
+    _bn_files=()
+    # `_a11y_markup_files`, not `find src -name '*.vue'` (#225 / #261). An
+    # icon-only <button> with no name is the same defect in a .php template.
     while IFS= read -r vue; do
         _in_scope "${vue}" || continue
-        python3 - "$vue" <<'PYBN' >> "${_bn_log}" 2>/dev/null
-import re, sys
-fname = sys.argv[1]
-try:
-    src = open(fname).read()
-except Exception:
-    sys.exit(0)
-txt = src.replace('\n', ' ')
-for tag_re in (r'<NcButton\b([^>]*)>(.*?)</NcButton>', r'<button\b([^>]*)>(.*?)</button>'):
-    for m in re.finditer(tag_re, txt, re.IGNORECASE):
-        attrs = m.group(1) or ''
-        body = m.group(2) or ''
-        if re.search(r'(^|\s)(:?aria-label|aria-labelledby|v-bind:aria-label|title)\s*=', attrs):
-            continue
-        if '{{' in body and '}}' in body:
-            continue
-        body_text = re.sub(r'<[^>]+>', '', body)
-        body_text = re.sub(r'\s+', '', body_text)
-        if len(body_text) >= 2:
-            continue
-        opening = m.group(0).split('>')[0] + '>'
-        print(f'{fname}: {opening} rule=icon-only-button-without-accessible-name')
-PYBN
+        _bn_files+=("${vue}")
     done < <(_a11y_markup_files)
-    _bn_fail=$(wc -l < "${_bn_log}" 2>/dev/null || echo 0)
-    if [ "${_bn_fail}" -eq 0 ]; then
-        _pass 39 "button-name"
+    if [ "${#_bn_files[@]}" -eq 0 ]; then
+        :   # nothing in scope; the PASS below describes the diff, as everywhere else.
+    elif [ ! -f "${_bn_helper}" ]; then
+        # A MISSING HELPER MUST NOT REPORT PASS (#147).
+        _bn_ran=0
+        _skip 39 "button-name" wiring "check_button_name.py not found at ${_bn_helper} — ${#_bn_files[@]} markup file(s) were in scope and NONE were inspected; unnamed controls (WCAG 4.1.2) are UNVERIFIED by this run."
     else
-        _fail 39 "button-name" "${_bn_fail} icon-only button(s) without aria-label — see ${_bn_log}"
+        # Exit code is a STATUS, findings are STDOUT (gate-19 / #249); stderr
+        # is kept so a traceback is visible instead of becoming a clean sheet.
+        # `set +e` only, never `set -e` after — errexit is OFF for this whole
+        # script and nothing may turn it on (see the invariant at the top).
+        set +e
+        python3 "${_bn_helper}" "${_bn_files[@]}" >> "${_bn_log}" 2>>"${_bn_log}.err"
+        _bn_rc=$?
+        if [ "${_bn_rc}" -ne 0 ]; then
+            _bn_ran=0
+            _skip 39 "button-name" wiring "check_button_name.py exited ${_bn_rc} — ${#_bn_files[@]} markup file(s) were in scope and no verdict was produced; unnamed controls (WCAG 4.1.2) are UNVERIFIED by this run. See ${_bn_log}.err."
+        fi
+    fi
+    _bn_fail=$(wc -l < "${_bn_log}" 2>/dev/null || echo 0)
+    if [ "${_bn_ran}" -eq 1 ]; then
+        if [ "${_bn_fail}" -eq 0 ]; then
+            _pass 39 "button-name"
+        else
+            _fail 39 "button-name" "${_bn_fail} icon-only button(s) without an accessible name — see ${_bn_log}"
+        fi
     fi
 fi
 
@@ -3872,48 +3912,81 @@ PYLQ
 fi
 
 # ---------------------------------------------------------------------------
-# Gate 43: Table-headers — every `<table>` in `.vue` templates must have at
-# least one `<th>` with a `scope="col"` / `scope="row"` attribute. Without
-# it, screen readers can't associate data cells with their headers. Per
-# WCAG 2.2 AA SC 1.3.1 (Info and Relationships).
+# Gate 43: Table-headers — EVERY `<th>` in a `.vue` template must declare
+# `scope="col"` / `scope="row"`. Without it, screen readers can't associate
+# data cells with their headers. Per WCAG 2.2 AA SC 1.3.1 (Info and
+# Relationships).
+#
+# ONE `scope=` USED TO GREEN THE WHOLE TABLE (#222)
+# ------------------------------------------------
+# Until 2026-08-08 the check was:
+#
+#     if re.search(r'<th\b[^>]*\bscope\s*=', body): continue   # whole table OK
+#
+# A SINGLE `scope=` anywhere in the table accepted every other header in it.
+# Proven by negative control: removing exactly one `scope=` from a passing
+# table still reported PASS. The common shape — someone scopes the first
+# column and stops — was indistinguishable from a correct table, and the row
+# headers screen-reader users actually need were never asked for. The rule is
+# now "any unscoped header fails the table", not "any scoped header passes it".
 #
 # Two failure shapes:
-#   - rule=th-without-scope: <table> has <th> but no scope=
+#   - rule=th-without-scope: one or more <th> in the table lack scope=
+#     (the line reports `unscoped=N/M`)
 #   - rule=table-without-th: <table> with <td> rows but no <th> at all
 #
-# Wrapper components (<CnDataTable>, <NcTable>) are not in scope.
+# COUNTING: one finding per TABLE, not per <th> — the number stays a count of
+# defect sites, comparable with what this gate reported before the fix, and a
+# table is what a person actually sits down and repairs. A finding count is
+# not a defect count, and the two must not be silently swapped mid-repair.
+#
+# Wrapper components (<CnDataTable>, <NcTable>) own their own markup and are
+# not in scope, as before.
+#
+# Implementation: scripts/lib/check_table_headers.py, tests in
+# scripts/lib/test_check_table_headers.py.
 #
 # References:
 #   - openspec/architecture/wcag-coverage.md SC 1.3.1
 # ---------------------------------------------------------------------------
-if [ -d src ]; then
+if _a11y_has_markup_dir; then
     _th_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-table-headers.log
     : > "${_th_log}"
+    _th_ran=1
+    _th_helper="${SCRIPT_DIR}/lib/check_table_headers.py"
+    _th_files=()
+    # `_a11y_markup_files`, not `find src -name '*.vue'` (#225 / #261). An
+    # unscoped header is the same defect in a .php template as in a .vue one.
     while IFS= read -r vue; do
         _in_scope "${vue}" || continue
-        python3 - "$vue" <<'PYTH' >> "${_th_log}" 2>/dev/null
-import re, sys
-fname = sys.argv[1]
-try:
-    src = open(fname).read()
-except Exception:
-    sys.exit(0)
-txt = src.replace('\n', ' ')
-for m in re.finditer(r'<table\b([^>]*)>(.*?)</table>', txt, re.IGNORECASE | re.DOTALL):
-    body = m.group(2) or ''
-    if re.search(r'<th\b[^>]*\bscope\s*=', body, re.IGNORECASE):
-        continue
-    if re.search(r'<th\b', body, re.IGNORECASE):
-        print(f'{fname}: <table> rule=th-without-scope')
-    elif re.search(r'<td\b', body, re.IGNORECASE):
-        print(f'{fname}: <table> rule=table-without-th')
-PYTH
+        _th_files+=("${vue}")
     done < <(_a11y_markup_files)
-    _th_fail=$(wc -l < "${_th_log}" 2>/dev/null || echo 0)
-    if [ "${_th_fail}" -eq 0 ]; then
-        _pass 43 "table-headers"
+    if [ "${#_th_files[@]}" -eq 0 ]; then
+        :   # nothing in scope; the PASS below describes the diff, as everywhere else.
+    elif [ ! -f "${_th_helper}" ]; then
+        # A MISSING HELPER MUST NOT REPORT PASS (#147).
+        _th_ran=0
+        _skip 43 "table-headers" wiring "check_table_headers.py not found at ${_th_helper} — ${#_th_files[@]} markup file(s) were in scope and NONE were inspected; unassociated table headers (WCAG 1.3.1) are UNVERIFIED by this run."
     else
-        _fail 43 "table-headers" "${_th_fail} <table>(s) missing <th scope=> — see ${_th_log}"
+        # Exit code is a STATUS, findings are STDOUT (gate-19 / #249); stderr
+        # is kept so a traceback is visible instead of becoming a clean sheet.
+        # `set +e` only, never `set -e` after — errexit is OFF for this whole
+        # script and nothing may turn it on (see the invariant at the top).
+        set +e
+        python3 "${_th_helper}" "${_th_files[@]}" >> "${_th_log}" 2>>"${_th_log}.err"
+        _th_rc=$?
+        if [ "${_th_rc}" -ne 0 ]; then
+            _th_ran=0
+            _skip 43 "table-headers" wiring "check_table_headers.py exited ${_th_rc} — ${#_th_files[@]} markup file(s) were in scope and no verdict was produced; unassociated table headers (WCAG 1.3.1) are UNVERIFIED by this run. See ${_th_log}.err."
+        fi
+    fi
+    _th_fail=$(wc -l < "${_th_log}" 2>/dev/null || echo 0)
+    if [ "${_th_ran}" -eq 1 ]; then
+        if [ "${_th_fail}" -eq 0 ]; then
+            _pass 43 "table-headers"
+        else
+            _fail 43 "table-headers" "${_th_fail} <table>(s) with a <th> missing scope= — see ${_th_log}"
+        fi
     fi
 fi
 
