@@ -114,6 +114,51 @@ function slotColumns(slotName, overrides) {
 // ADR-036 Decision 1 single-12×12-custom-widget dashboard rule, with the
 // canonical error message from the gate-manifest-validates spec.
 // Returns [{ path, message }].
+// A FINDING COUNT IS NOT A DEFECT COUNT.
+//
+// Ajv with `allErrors: true` reports the APPLICATOR keyword alongside the leaf
+// cause. The manifest schema states the `_note` rule as a nested if/then/else
+// (ConductionNL/nextcloud-vue#315 relaxed it so a `Cn[A-Z]\w+` component is
+// self-documenting), so ONE missing `_note` on ONE page emits THREE errors:
+//
+//   at /pages/0: must have required property '_note' (keyword=required)  ← real
+//   at /pages/0: must match "else" schema (keyword=if)                   ← echo
+//   at /pages/0: must match "then" schema (keyword=if)                   ← echo
+//
+// That is how shillinq's gate-53 run reported "240 violations" for roughly 132
+// defects: 51 missing `_note` entries contributed 153 lines between them. The
+// inflated number is not a cosmetic problem — it is what makes a repo's
+// manifest debt look insurmountable and drives people to stop reading the log.
+//
+// The `if` lines carry no information the leaf error does not already state in
+// actionable terms ("must match else schema" tells you nothing you can fix).
+// They are dropped ONLY when a concrete sibling error exists at the same
+// instancePath, so an applicator failure that is genuinely the only signal at
+// that path still surfaces rather than vanishing — an error silently deleted
+// would be the same class of bug one level down.
+//
+// Exact duplicates are also collapsed: the merged AppHost schema can assert
+// `additionalProperties` twice over the same node, which emitted the identical
+// line twice at `/`.
+function collapseAjvErrors(errs) {
+	const APPLICATOR = new Set(['if', 'then', 'else'])
+	const concreteByPath = new Set()
+	for (const e of errs) {
+		if (!APPLICATOR.has(e.keyword)) concreteByPath.add(e.instancePath || '/')
+	}
+	const seen = new Set()
+	const out = []
+	for (const e of errs) {
+		const at = e.instancePath || '/'
+		if (APPLICATOR.has(e.keyword) && concreteByPath.has(at)) continue
+		const key = `${at} ${e.keyword} ${e.message}`
+		if (seen.has(key)) continue
+		seen.add(key)
+		out.push(e)
+	}
+	return out
+}
+
 function semanticChecks(manifest) {
 	const errors = []
 	const pages = Array.isArray(manifest.pages) ? manifest.pages : []
@@ -381,7 +426,7 @@ function main() {
 		if (validate(manifest)) {
 			console.error('[check_manifest] Ajv validation against merged canonical schema: PASS')
 		} else {
-			for (const err of validate.errors || []) {
+			for (const err of collapseAjvErrors(validate.errors || [])) {
 				errors.push({ path: err.instancePath || '/', message: `${err.message} (keyword=${err.keyword})` })
 			}
 		}
@@ -402,4 +447,11 @@ function finishStructural(manifest, degradedReason) {
 	return report(errors, degradedReason, manifest)
 }
 
-main()
+// Run as a script; expose the pure helper when required as a module, so
+// test_check_manifest_ajv_collapse.js can exercise collapseAjvErrors without
+// Ajv installed and without validating a manifest as a side effect.
+if (require.main === module) {
+	main()
+} else {
+	module.exports = { collapseAjvErrors }
+}

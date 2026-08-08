@@ -67,6 +67,9 @@ const VALIDATOR = path.join(LIB, 'check_manifest.js')
 		'registry-orphan/src/registry.js',
 		'registry-missing/src/manifest.json',
 		'registry-missing/src/registry.js',
+		'registry-dialects/src/manifest.json',
+		'registry-dialects/src/registry.js',
+		'registry-dialects/src/customComponents.js',
 	]
 	const missing = required.filter((rel) => !fs.existsSync(path.join(FIX, rel)))
 	if (missing.length > 0) {
@@ -282,6 +285,29 @@ function parseReport(stdout) {
 			&& errs.some((e) => e.message.includes("'SkillTree'")),
 		`commented-out registrations do NOT count as registrations (expected 2 errors, got ${errs.length})`)
 		fs.rmSync(tmp, { recursive: true, force: true })
+	}
+
+	// THE TWO REGISTRATION DIALECTS. Both of these produced FALSE FAILs on
+	// live repos after the first version of check (f) landed, because the
+	// blast radius was measured on five repos and none of them used either
+	// dialect. 34 false FAILs across hermiq and softwarecatalog.
+	{
+		const check = run([CHECKER, '--app-dir', REG('registry-dialects')])
+		const rep = parseReport(check.stdout)
+		const rx = rep.findings.filter((f) => f.check === 'registry-crossref')
+		const errs = rx.filter((f) => f.severity === 'error')
+		const msgs = rx.map((f) => f.message).join(' | ')
+
+		assert(!msgs.includes("'agent-form'"),
+			"a QUOTED HYPHENATED registry key resolves — 'agent-form' (hermiq's dialect, 25 false FAILs)")
+		assert(!msgs.includes("'agent-skills'"),
+			"a double-quoted hyphenated key resolves too — \"agent-skills\"")
+		assert(!msgs.includes("'LegacyOnlyPanel'"),
+			'a component registered ONLY in src/customComponents.js resolves — the second source (9 false FAILs on softwarecatalog)')
+		assert(errs.length === 1 && errs[0].message.includes("'NotAnywherePanel'"),
+			`THE CONTROL: a component in NEITHER file still FAILS (got ${errs.length} error(s))`)
+		assert(check.status === 1,
+			'registry-dialects: the one genuine miss still sets the exit code')
 	}
 
 	// No src/registry.js at all → check (f) is simply not applicable. The

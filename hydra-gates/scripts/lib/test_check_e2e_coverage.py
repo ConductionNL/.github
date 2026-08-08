@@ -518,8 +518,14 @@ class GateModeTest(unittest.TestCase):
             cwd=str(self.root), capture_output=True, text=True
         ).stdout.strip()
 
-    def test_pass_when_no_spec_files_in_diff(self):
-        # Baseline commit, then change a non-spec file
+    def test_no_specs_in_the_repo_at_all_is_NOT_APPLICABLE_not_a_pass(self):
+        """A repo with no specs has nothing to trace — say so, don't claim a pass.
+
+        This test used to assert PASS, which is the .github#242 defect written
+        down as an expectation: "I inspected nothing" and "I inspected
+        everything and it was fine" cannot share a verdict, because
+        --require-full-coverage has to be able to tell them apart.
+        """
         _write(self.root, "src/index.ts", "export const x = 1\n")
         base = self._commit("base")
         _write(self.root, "src/index.ts", "export const x = 2\n")
@@ -533,8 +539,9 @@ class GateModeTest(unittest.TestCase):
         finally:
             del os.environ["HYDRA_GATE_BASE_REF"]
 
-        self.assertEqual(rc, 0)
-        self.assertIn("PASS", buf.getvalue())
+        self.assertEqual(rc, cec.EXIT_NOT_APPLICABLE)
+        self.assertIn("NOT APPLICABLE", buf.getvalue())
+        self.assertNotIn("PASS", buf.getvalue())
 
     def _gate_with_n_scenarios(self, n: int):
         _write(self.root, "README.md", "# app\n")
@@ -584,21 +591,36 @@ class GateModeTest(unittest.TestCase):
         with redirect_stdout(buf):
             rc = cec.main(["check_e2e_coverage.py", str(self.root / "nope"),
                            "--mode", "boom"])
-        # A non-existent dir is simply empty, so this is a PASS, not a crash —
-        # assert the honest thing: it is a valid status, never a raw count.
-        self.assertIn(rc, (cec.EXIT_PASS, cec.EXIT_FAIL, cec.EXIT_ERROR))
-        del buf
+        # A non-existent dir used to be indistinguishable from an empty one, so
+        # this asserted only "some valid status". It is an ERROR now (#242):
+        # "there are no specs here" and "I could not look" produce the same
+        # empty set, and reporting the second as a benign verdict would retire
+        # the gate on the strength of a typo in a path.
+        self.assertEqual(rc, cec.EXIT_ERROR)
+        self.assertIn("ERROR", buf.getvalue())
+        self.assertNotIn("PASS", buf.getvalue())
 
     def test_run_gate_raising_is_reported_as_ERROR(self):
+        # A spec must exist, or the gate answers NOT APPLICABLE before it ever
+        # reaches the diff helper this test is monkeypatching.
+        _write(self.root, "openspec/specs/s/spec.md",
+               "# s Spec\n## Purpose\n### Requirement: R\n#### Scenario: One\n- WHEN a\n- THEN b\n")
+        self._commit("spec so the diff helper is reached")
         original = cec.changed_spec_files
         cec.changed_spec_files = lambda *_a, **_k: (_ for _ in ()).throw(
             RuntimeError("git exploded"))
+        # The diff helper is only consulted when a base ref is set — an unscoped
+        # run audits the whole tree and never calls it (#242). Set one, or this
+        # test monkeypatches a function the run never reaches and passes for a
+        # reason that has nothing to do with what it claims to check.
+        os.environ["HYDRA_GATE_BASE_REF"] = "HEAD"
         try:
             buf = io.StringIO()
             with redirect_stdout(buf):
                 rc = cec.main(["check_e2e_coverage.py", str(self.root)])
         finally:
             cec.changed_spec_files = original
+            del os.environ["HYDRA_GATE_BASE_REF"]
         self.assertEqual(rc, cec.EXIT_ERROR)
         self.assertIn("ERROR", buf.getvalue())
         self.assertNotIn("PASS", buf.getvalue())
@@ -737,9 +759,16 @@ class GateModeTest(unittest.TestCase):
         finally:
             del os.environ["HYDRA_GATE_BASE_REF"]
 
-        # old-spec is not in the diff → should not be flagged
-        self.assertEqual(rc, 0)
+        # THE ADR-020 INVARIANT, UNCHANGED: an untouched legacy spec is never
+        # flagged, so this PR is not blocked by debt it did not create.
         self.assertNotIn("old-spec", buf.getvalue())
+        # THE #242 CHANGE: the gate opened no spec, so it reports an EMPTY
+        # SCOPE rather than a PASS. A skip does not fail a run — but unlike a
+        # PASS it is visible to --require-full-coverage, which is the whole
+        # point. 407 uncovered scenarios on openconnector sat behind exactly
+        # this PASS.
+        self.assertEqual(rc, cec.EXIT_EMPTY_SCOPE)
+        self.assertIn("EMPTY SCOPE", buf.getvalue())
 
 
 # ---------------------------------------------------------------------------
