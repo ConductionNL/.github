@@ -150,6 +150,56 @@ fi
 mkdir -p "${HYDRA_GATE_LOG_DIR}" 2>/dev/null || true
 echo "[hydra-gates] findings logs: ${HYDRA_GATE_LOG_DIR}"
 
+# ---------------------------------------------------------------------------
+# WHICH PACKAGE PRODUCED THIS VERDICT (.github#268)
+#
+# The fleet consumes this package at `@main`, UNPINNED. So two runs minutes
+# apart can be two different programs, and nothing in the output said so.
+#
+# That is not hypothetical. On 2026-08-08 doriath's `development` tip was gated
+# green at 14:21:47Z; a classification change landed on main at 14:21:55Z —
+# EIGHT SECONDS later — and the next PR run was red. The diff between "green"
+# and "red" was the gates, not the code, and there was no way to see that from
+# either log.
+#
+# It matters most for the STRICT-SUBSET merge rule ("the PR's failing gate
+# names are a subset of the base branch's, so the PR introduced nothing new").
+# That rule compares a live measurement against a stored one. If the two were
+# produced by different packages it is comparing two different programs, and
+# the conclusion does not follow.
+#
+# This line does not FIX that — it makes it CHECKABLE. A comparison can now
+# state which package produced each side, and refuse to conclude when they
+# differ. The policy question (pin consumers? re-run the baseline with the
+# PR's package? record the package in the baseline artifact?) is deliberately
+# left open in #268; emitting the identity is the prerequisite for any of them.
+#
+# Resolution order, most to least trustworthy. The last resort prints UNKNOWN
+# rather than nothing: a silent omission is indistinguishable from an older
+# package that never had this line, and that ambiguity is the bug.
+# ---------------------------------------------------------------------------
+_pkg_sha="${HYDRA_GATES_PKG_SHA:-}"
+_pkg_origin="caller (HYDRA_GATES_PKG_SHA)"
+if [ -z "${_pkg_sha}" ]; then
+    # The package's own checkout — set when consumed as a git clone or submodule.
+    # `git -C` on the SCRIPT dir, never the app under test: resolving this
+    # against the repo being gated would report the APP's sha as the gates' sha,
+    # which is worse than reporting nothing.
+    _pkg_sha="$(git -C "${SCRIPT_DIR}" rev-parse HEAD 2>/dev/null || true)"
+    _pkg_origin="git checkout at ${SCRIPT_DIR}"
+fi
+if [ -z "${_pkg_sha}" ] && [ -f "${SCRIPT_DIR}/../VERSION" ]; then
+    _pkg_sha="$(tr -d '[:space:]' < "${SCRIPT_DIR}/../VERSION" 2>/dev/null || true)"
+    _pkg_origin="VERSION file"
+fi
+if [ -n "${_pkg_sha}" ]; then
+    echo "[hydra-gates] gate package: ${_pkg_sha} (${_pkg_origin})"
+else
+    echo "[hydra-gates] gate package: UNKNOWN — this run cannot say which version of the gates produced its verdicts."
+    echo "[hydra-gates] Comparing it against another run (e.g. a strict-subset baseline check) compares two possibly-different programs."
+    echo "[hydra-gates] Set HYDRA_GATES_PKG_SHA to make the comparison sound."
+fi
+
 SCOPE_TO_DIFF=0
 BASE_REF="origin/development"
 APP_DIR=""
@@ -1135,6 +1185,43 @@ _optout_text() {
 #
 # `structural` and `wiring` both count against coverage and both fail a run
 # started with --require-full-coverage. Only `na` does not.
+#
+# AN EMPTY ADR-020 DIFF SCOPE IS `na`, NEVER `structural` (.github#268)
+# ---------------------------------------------------------------------
+# The two are easy to confuse and the difference is whether ANYTHING IN THIS
+# REPOSITORY COULD HAVE MADE THE GATE RUN.
+#
+#   structural  something in this repo SHOULD have produced the input and did
+#               not, and the repo can be changed so that it does. An app with
+#               src/ that ships no axe report can ship one. A composer.json
+#               with no `license` field can declare one. The gap is REAL and
+#               it is ACTIONABLE HERE — which is exactly why it fails the run.
+#
+#   na          the input is absent from THIS DIFF. ADR-020 scoping excluded
+#               it, which is the entire purpose of ADR-020. Nothing in the
+#               repository is missing, nothing is broken, and NO CHANGE THE
+#               AUTHOR COULD MAKE would let this gate inspect a file the diff
+#               does not contain — short of manufacturing the gate's input,
+#               which is the false green this package exists to prevent.
+#
+# #258 correctly stopped gates 19/25/62/63 printing PASS over an unopened
+# scope, but filed the empty-scope case as `structural`. Under
+# --require-full-coverage that exited 98 on any PR that happened to touch no
+# spec and no manifest: 4 runs across 3 repos blocked on nothing, purely as a
+# function of which files the diff contained. Gates 4, 6, 7 and 28 already
+# called the identical situation `na` ("0 lib/Controller PHP file(s) in this
+# diff"), and the summary header has always read "subject matter absent from
+# this repo OR THIS DIFF" — so `na` is both the correct category and the one
+# the rest of this file was already using.
+#
+# What #258 bought is UNCHANGED by that reclassification, because it lives in
+# the rendering and not in the accounting: an empty scope prints
+# `NOT APPLICABLE`, which is not `PASS`. The invariant to hold when editing
+# this file is therefore:
+#
+#   * an unopened scope must never render as PASS   (#242/#240 — _skip, any category)
+#   * an unopened scope must never fail the run     (#268 — category `na`)
+#   * a gap the repo COULD close must still fail it (#169 — category structural/wiring)
 #
 # The category is validated, and an unrecognised one is a HARD FAILURE rather
 # than a default. A typo that silently resolved to `na` would be a lever for
@@ -2447,11 +2534,13 @@ if [ -d openspec/specs ] || [ -d tests/e2e ]; then
         if [ "${_e2e_fail}" -eq 0 ]; then
             _pass 19 "e2e-coverage"
         elif [ "${_e2e_fail}" -eq 3 ]; then
-            # EMPTY SCOPE. Specs exist; the diff selected none of them. That is
-            # not a pass — it is a gate that inspected nothing, and it must be
-            # visible to --require-full-coverage.
+            # EMPTY SCOPE. Specs exist; the diff selected none of them. Not a
+            # pass — the gate inspected nothing and says so out loud (#242).
+            # `na`, NOT structural (#268): nothing in this repository is
+            # missing and no change the author could make would put a spec
+            # file into a diff that does not touch one. See _skip's header.
             _e2e_ran=0
-            _skip 19 "e2e-coverage" structural "the diff against '${BASE_REF}' touched NO spec file, so no scenario was inspected; @e2e traceability (ADR-020) is UNVERIFIED by this run. See ${_e2e_log}."
+            _skip 19 "e2e-coverage" na "the diff against '${BASE_REF}' touched NO spec file, so no scenario was inspected. Diff-scoped out under ADR-020, exactly as gates 4/6/7 are for the same diff — not a gap: the specs in this repo are unchanged from the base branch, so this PR introduces no scenario whose @e2e traceability could be missing. This gate runs on the next PR that touches a spec. See ${_e2e_log}."
         elif [ "${_e2e_fail}" -eq 4 ]; then
             _e2e_ran=0
             _skip 19 "e2e-coverage" na "no openspec/specs/*/spec.md in this repository — there is no declared scenario for an e2e test to trace back to."
@@ -2892,8 +2981,9 @@ if [ -f appinfo/routes.php ]; then
         if [ "${_cc_fail}" -eq 0 ]; then
             _pass 25 "contract-coverage"
         elif [ "${_cc_fail}" -eq 3 ]; then
+            # EMPTY SCOPE — `na`, not structural (#268). See _skip's header.
             _cc_ran=0
-            _skip 25 "contract-coverage" structural "the diff against '${BASE_REF}' changed NO file, so no endpoint was inspected; wire-contract coverage is UNVERIFIED by this run. See ${_cc_log}."
+            _skip 25 "contract-coverage" na "the diff against '${BASE_REF}' touched NO lib/Controller file, so no endpoint was inspected. Diff-scoped out under ADR-020, exactly as gates 6/7 are for the same diff — not a gap: this PR exposes no new endpoint whose wire contract could be untested. This gate runs on the next PR that touches a controller. See ${_cc_log}."
         elif [ "${_cc_fail}" -eq 4 ]; then
             _cc_ran=0
             _skip 25 "contract-coverage" na "no appinfo/routes.php — this app exposes no routed endpoint whose wire contract could be tested."
@@ -5648,7 +5738,11 @@ set +e
 if [ "${_sp_rc}" -eq 0 ]; then
     _pass 62 "store-plane"
 elif [ "${_sp_rc}" -eq 3 ]; then
-    _skip 62 "store-plane" structural "the diff against '${BASE_REF}' touched no manifest or menu-layout, so NO manifest was inspected; ADR-080 store-plane naming/discovery is UNVERIFIED by this run. See ${_sp_log}."
+    # EMPTY SCOPE — `na`, not structural (#268). See _skip's header. A bugfix
+    # PR has no legitimate reason to edit src/manifest.json, so failing it here
+    # left the author only two moves: manufacture the gate's input, or switch
+    # --require-full-coverage off fleet-wide. Both are worse than the bug.
+    _skip 62 "store-plane" na "the diff against '${BASE_REF}' touched no manifest and no menu-layout, so NO manifest was inspected. Diff-scoped out under ADR-020 — not a gap: the manifests in this repo are unchanged from the base branch, so this PR introduces no store-plane naming or discovery decision (ADR-080) to judge. This gate runs on the next PR that touches a manifest. See ${_sp_log}."
 elif [ "${_sp_rc}" -eq 4 ]; then
     _skip 62 "store-plane" na "no src/manifest.json — a Tier-0 app declares no store plane for ADR-080 to constrain."
 else
@@ -5676,7 +5770,8 @@ if [ "${_ss_rc}" -eq 0 ]; then
 elif [ "${_ss_rc}" -eq 3 ]; then
     # The log used to say "gate skipped" while the verdict beside it said PASS.
     # Those cannot both be true, and PASS is the one every consumer counted.
-    _skip 63 "settings-surface" structural "the diff against '${BASE_REF}' touched no manifest or menu-layout, so NO manifest was inspected; ADR-079 settings placement is UNVERIFIED by this run. See ${_ss_log}."
+    # It is not PASS any more (#242) — and it is `na`, not structural (#268).
+    _skip 63 "settings-surface" na "the diff against '${BASE_REF}' touched no manifest and no menu-layout, so NO manifest was inspected. Diff-scoped out under ADR-020 — not a gap: the manifests in this repo are unchanged from the base branch, so this PR introduces no settings placement (ADR-079) to judge. This gate runs on the next PR that touches a manifest. See ${_ss_log}."
 elif [ "${_ss_rc}" -eq 4 ]; then
     _skip 63 "settings-surface" na "no src/manifest.json — a Tier-0 app declares no settings surface for ADR-079 to place."
 else

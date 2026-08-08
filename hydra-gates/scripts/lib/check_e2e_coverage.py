@@ -1150,7 +1150,7 @@ EXIT_ERROR = 2
 # that inspected everything and liked it. PASS and "empty scope" were the same
 # 0, so `--require-full-coverage` — whose entire job is to notice gates that did
 # not run — could not see this one. (.github#242)
-EXIT_EMPTY_SCOPE = 3      # scope resolved, selected nothing -> runner _skip structural
+EXIT_EMPTY_SCOPE = 3      # scope resolved, selected nothing -> runner _skip `na` (.github#268)
 EXIT_NOT_APPLICABLE = 4   # subject matter absent entirely   -> runner _skip na
 
 
