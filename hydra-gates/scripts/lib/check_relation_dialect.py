@@ -14,6 +14,34 @@ consumed (retired 2026-07-08), scholiq used bare-string FKs-by-convention
 (85 converted), and procest's ``case.status`` proved the rule-10 lifecycle
 carve-out (an FK-scoped editable picker, NOT a frozen ``readOnly`` field).
 
+NESTING (fixed 2026-08-08, issue #231)
+--------------------------------------
+Properties are collected RECURSIVELY through ``items.properties.*`` (arrays of
+objects) and ``properties.*`` (inline objects), because a relation is a relation
+at any depth. Before the fix the collector was a single non-recursive loop over
+``schema.properties.*`` while ``_raw_walk`` recursed into everything, so the gate
+was wrong in BOTH directions at once:
+
+  * FALSE POSITIVE on check (c) — a correctly shaped nested relation
+    (``character.requirementOverrides.items.properties.skill`` on larpingapp:
+    ``type`` + ``format:uuid`` + ``$ref`` + the filter on the same property) was
+    reported as "placed off a property" UNCONDITIONALLY, because the collector
+    could never contain it. The finding was unfixable in the app — the three
+    ways to clear it (move the filter off the property, flatten the array, drop
+    the filter) are all wrong.
+  * FALSE NEGATIVE on checks (b)/(d)/(f) — a nested relation missing its
+    ``$ref``, carrying a dangling ``$ref`` or an invalid filter token was never
+    inspected at all.
+
+Two invariants survive the recursion and are covered by regression tests:
+  * ``items`` itself is NOT a property. A filter riding on the ``items`` node
+    (rather than on one of ``items.properties.*``) is still a real rule-6
+    violation and is still reported.
+  * ``@object.<field>`` in check (d) resolves against the ROOT schema's
+    properties at every depth — ``@object`` is the object under edit, not the
+    nested array element. larpingapp's nested ``@object.setting`` points at
+    ``character.setting``, a top-level property.
+
 Checks (each offending location prints one finding to stdout; WARN-prefixed
 lines are advisory and never fail the gate):
   a. BANNED DIALECT   — any ``x-openregister-relations`` key anywhere in a
@@ -46,6 +74,19 @@ is ADDED or MODIFIED vs the base ref (going-forward enforcement, exactly like
 gate 28). Checks a/c/d/e/f apply to the whole changed file per the gate
 contract (a banned dialect or a dangling $ref anywhere in a file the PR
 touched is a structural defect).
+
+FINDING COUNT vs DEFECT COUNT
+----------------------------
+A finding count is not a defect count. Gate 53 turned ~132 defects into "240
+violations" because one missing ``_note`` emitted a triplet. This helper was
+audited for the same shape on 2026-08-08 and has exactly ONE overlap: a property
+carrying ``x-relation-filter`` but no ``$ref`` matches check (b) ("lacks
+canonical $ref") AND check (c) ("filter on a non-relation is inert") — one
+defect, one fix, two messages. Check (c)'s duplicate is now suppressed when (b)
+already reported that property, so the ratio here is 1:1. Checks (a), (d), (e)
+and (f) each emit once per offending location and do not overlap each other:
+(d) is intentionally per-TOKEN, so a filter with three bad tokens is three
+independent defects, not one.
 
 Usage:
     check_relation_dialect.py <log-path> <register.json> [<register.json> ...]
@@ -352,6 +393,56 @@ def _resolve_ref(ref, keys):
     return ("ok", r) if r in keys else ("fail", r)
 
 
+# Depth cap for the recursive property collector. Register documents in the
+# fleet nest two levels at most; 12 is far above anything real and exists only
+# so a hand-authored or generated pathological document cannot blow the Python
+# recursion limit and turn a gate into a crash (a crashed gate reports nothing,
+# which reads exactly like a pass).
+_MAX_PROPERTY_DEPTH = 12
+
+
+def _collect_properties(props, prefix, depth, seen, out):
+    """Recursively collect every schema property into ``out``.
+
+    Appends ``(qualified_name, prop_dict, declaration_line, depth)`` for each
+    property found under ``props``, then descends into:
+
+      * ``prop.items.properties.*``  — an array of objects (``items`` may also
+        be a LIST for tuple validation; both forms are walked);
+      * ``prop.properties.*``        — an inline object property.
+
+    ``items`` itself is deliberately NOT appended: it is a subschema, not a
+    property, so ``x-relation-filter`` riding on it stays a rule-6 violation.
+
+    ``seen`` holds ``id()`` of every dict already visited. A JSON document
+    parsed from a file is a tree and cannot contain a cycle, but this collector
+    is also called on dicts assembled in tests and by future callers, so the
+    guard is unconditional; ``_MAX_PROPERTY_DEPTH`` bounds depth as well. Both
+    guards terminate quietly — they are protection against a crash, not checks.
+    """
+    if not isinstance(props, dict) or depth > _MAX_PROPERTY_DEPTH:
+        return
+    plines = getattr(props, "key_lines", {})
+    for pname, prop in props.items():
+        if not isinstance(prop, dict) or pname.startswith("@"):
+            continue
+        if id(prop) in seen:
+            continue
+        seen.add(id(prop))
+        qname = pname if prefix == "" else f"{prefix}.{pname}"
+        out.append((qname, prop, plines.get(pname, 0), depth))
+
+        items = prop.get("items")
+        item_nodes = [items] if isinstance(items, dict) else (
+            [i for i in items if isinstance(i, dict)] if isinstance(items, list) else []
+        )
+        for node in item_nodes:
+            _collect_properties(
+                node.get("properties"), f"{qname}.items", depth + 1, seen, out
+            )
+        _collect_properties(prop.get("properties"), qname, depth + 1, seen, out)
+
+
 # --------------------------------------------------------------------------
 # Per-file checks.
 # --------------------------------------------------------------------------
@@ -367,9 +458,17 @@ def check_file(path, keys, findings, base_ref):
     changed = _changed_lines(path, base_ref) if base_ref else None
     schemas = _schemas_of(doc)
 
-    # Set of property dicts (by identity) that are legitimate direct schema
-    # properties — used to detect misplaced x-relation-filter (check c).
+    # Set of property dicts (by identity) that are legitimate schema
+    # properties AT ANY DEPTH — used to detect misplaced x-relation-filter
+    # (check c). Populated by the recursive collector: before issue #231 this
+    # was a flat one-level loop while _raw_walk recursed, so every nested
+    # relation was reported as misplaced and could not be represented at all.
     property_ids = set()
+    # Properties already reported by check (b) as missing a $ref. Check (c)'s
+    # "inert filter" message states the SAME defect and the SAME fix (add a
+    # $ref), so emitting both would count one defect twice — see the
+    # finding-vs-defect note in the module docstring.
+    missing_ref_ids = set()
 
     for sname, schema in schemas.items():
         if not isinstance(schema, dict):
@@ -380,13 +479,12 @@ def check_file(path, keys, findings, base_ref):
         lc = schema.get("x-openregister-lifecycle")
         lc_field = lc.get("field") if isinstance(lc, dict) else None
         lc_has_transitions = isinstance(lc, dict) and bool(lc.get("transitions"))
-        plines = getattr(props, "key_lines", {})
 
-        for pname, prop in props.items():
-            if not isinstance(prop, dict) or pname.startswith("@"):
-                continue
-            property_ids.add(id(prop))
-            pline = plines.get(pname, 0)
+        collected = []
+        _collect_properties(props, "", 0, set(), collected)
+        property_ids.update(id(prop) for _q, prop, _l, _d in collected)
+
+        for pname, prop, pline, depth in collected:
             in_diff = changed is None or pline in changed
 
             # (b) relation-shape heuristic — property-level diff scoped.
@@ -396,6 +494,7 @@ def check_file(path, keys, findings, base_ref):
                 if isinstance(items, dict):
                     desc = f"{desc} {items.get('description') or ''}"
                 if _RELATION_DESC_RE.search(desc):
+                    missing_ref_ids.add(id(prop))
                     findings.append((path, (
                         f"{path}: {sname}.{pname} — relation-shaped property "
                         f"(format:uuid + relation description) lacks canonical "
@@ -431,9 +530,12 @@ def check_file(path, keys, findings, base_ref):
                             f"or @object.<field>)"
                         )))
 
-            # (e) frozen lifecycle — rule 10.
+            # (e) frozen lifecycle — rule 10. Top-level only: a lifecycle
+            # 'field' names a property of the schema itself, never an element
+            # of a nested array, so a qualified name can never be the subject.
             if (
-                "$ref" in prop
+                depth == 0
+                and "$ref" in prop
                 and prop.get("readOnly") is True
                 and lc_field == pname
                 and isinstance(lc, dict)
@@ -464,23 +566,33 @@ def check_file(path, keys, findings, base_ref):
                     )))
 
     # (a) banned dialect + (c) misplaced/inert x-relation-filter — raw walk.
-    _raw_walk(doc, path, property_ids, findings)
+    _raw_walk(doc, path, property_ids, findings, missing_ref_ids)
 
 
-def _raw_walk(node, path, property_ids, findings):
+def _raw_walk(node, path, property_ids, findings, missing_ref_ids=frozenset(), loc=""):
+    """Walk every node of the document for checks (a) and (c).
+
+    ``loc`` is a slash-joined JSON pointer to ``node``. Both findings used to
+    name only the FILE, which in a 2000-line register left the reader with no
+    way to tell WHICH node was flagged — three identical lines, three different
+    nodes (that ambiguity is exactly what made issue #231 hard to triage).
+    """
     if isinstance(node, dict):
+        where = f" at {loc}" if loc else ""
         if "x-openregister-relations" in node:
             findings.append((path, (
-                f"{path}: banned dialect — 'x-openregister-relations' block "
-                f"(canonical dialect is a property-level $ref; the bespoke "
-                f"per-schema block was retired 2026-07-08, ADR-062 rule 7)"
+                f"{path}: banned dialect — 'x-openregister-relations' block"
+                f"{where} (canonical dialect is a property-level $ref; the "
+                f"bespoke per-schema block was retired 2026-07-08, "
+                f"ADR-062 rule 7)"
             )))
         if "x-relation-filter" in node:
             if id(node) not in property_ids:
                 findings.append((path, (
-                    f"{path}: x-relation-filter is placed off a property (inside "
-                    f"items / an x-* block / non-property node) — it rides only on "
-                    f"the relation property itself (ADR-062 rule 6)"
+                    f"{path}: x-relation-filter{where} is placed off a property "
+                    f"(inside items / an x-* block / non-property node) — it "
+                    f"rides only on the relation property itself "
+                    f"(ADR-062 rule 6)"
                 )))
             elif not (
                 ("$ref" in node)
@@ -491,16 +603,16 @@ def _raw_walk(node, path, property_ids, findings):
                     "$ref" in node["items"]
                     or "x-openregister-relation" in node["items"]
                 ))
-            ):
+            ) and id(node) not in missing_ref_ids:
                 findings.append((path, (
-                    f"{path}: x-relation-filter on a property with no $ref — "
-                    f"filter on a non-relation is inert (ADR-062 rule 6)"
+                    f"{path}: x-relation-filter{where} on a property with no "
+                    f"$ref — filter on a non-relation is inert (ADR-062 rule 6)"
                 )))
-        for v in node.values():
-            _raw_walk(v, path, property_ids, findings)
+        for k, v in node.items():
+            _raw_walk(v, path, property_ids, findings, missing_ref_ids, f"{loc}/{k}")
     elif isinstance(node, list):
-        for v in node:
-            _raw_walk(v, path, property_ids, findings)
+        for i, v in enumerate(node):
+            _raw_walk(v, path, property_ids, findings, missing_ref_ids, f"{loc}/{i}")
 
 
 def main(argv):
