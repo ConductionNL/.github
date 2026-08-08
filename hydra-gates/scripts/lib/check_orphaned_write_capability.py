@@ -11,8 +11,20 @@ non-test production caller, OR be invoked through a recognised INDIRECT
 seam: an OpenRegister ``handler``/``guard``/``requires``/``save``/
 ``fallbackGuard``/``preconditions`` entry in a register.d fragment, an
 event listener registered in ``lib/AppInfo/Application.php``, a
-background job registered in ``appinfo/info.xml``, or a documented
+background job registered in ``appinfo/info.xml``, an ``#[McpTool]``
+method on a class OpenRegister's ``AttributeToolScanner`` reflects
+(ADR-063 — see ``_build_mcp_attribute_seam``), or a documented
 ``Log*Adapter`` intentional log-only seam.
+
+TWO REMEDIES, NOT ONE. A zero-caller write capability can be dead OR
+redundant, and the finding text only suggests wiring. Before adding a
+route, establish whether the capability is ALREADY LIVE under a different
+method or class — measured on softwarecatalog, where
+``FederationService::publishEntryForFederation()`` had zero callers while
+``PublicationService::publish()`` served the same capability through a
+live route. Wiring the orphan would have duplicated a live endpoint and
+widened the auth surface (it had no per-object guard); deleting it was
+correct (softwarecatalog#447).
 
 Observed 2026-07-13 on shillinq (orphan-capability-sweep, 13 filed
 issues): ``DisposalJournalEmitter::emit()``, ``IntercompanyJournalService``,
@@ -115,6 +127,36 @@ _INTERFACE_RE = re.compile(
     re.MULTILINE,
 )
 _LOG_ADAPTER_RE = re.compile(r"Log\w*Adapter", re.IGNORECASE)
+
+# --- attribute-scanner seam (#200) -----------------------------------------
+# The interface OpenRegister's AttributeToolScanner enumerates (ADR-063).
+_MCP_SCANNABLE_INTERFACE = "IMcpScannableServices"
+# `registerServiceAlias('OCA\OpenRegister\Mcp\IMcpScannableServices::<app>', Impl::class)`
+# On disk the namespace separators are double-backslashed inside the PHP
+# string literal, so the pattern must accept either spelling.
+_MCP_ALIAS_RE = re.compile(
+    r"registerServiceAlias\s*\(\s*"
+    r"(['\"])[^'\"]*" + _MCP_SCANNABLE_INTERFACE + r"::[A-Za-z0-9_-]+\1"
+    r"\s*,\s*(?:[A-Za-z_][A-Za-z0-9_]*\s*\\+\s*)*"
+    r"([A-Za-z_][A-Za-z0-9_]*)\s*::\s*class",
+    re.DOTALL,
+)
+# `Foo::class` inside a scannable-services implementation.
+_CLASS_CONST_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\s*::\s*class")
+# `#[McpTool(...)]` — optionally namespace-qualified. NOT a comment: `#` opens
+# a line comment in PHP but `#[` opens an attribute, which is exactly why the
+# comment blanker below has to know the difference.
+_MCP_TOOL_ATTR_RE = re.compile(
+    r"#\[\s*(?:[A-Za-z_][A-Za-z0-9_]*\s*\\+\s*)*McpTool\b"
+)
+# Lines that cannot belong to the attribute block of the method below them.
+# ONLY the statement/block terminators. A word-based boundary (`\bclass\b`)
+# was tried first and is wrong: `#[McpTool(handler: Foo::class)]` contains the
+# word `class` inside its own arguments, so the walk-up would stop before
+# reading the attribute it exists to find. Everything that can legally sit
+# directly above a method's attribute block — the previous method's `}`, a
+# property or `use` `;`, the class's opening `{` — ends in one of these.
+_ATTR_BOUNDARY_RE = re.compile(r"[{};]\s*$")
 _EXCLUDE_RE = re.compile(
     r"@orphaned-write-capability\s+exclude\s+(?P<reason>.{10,})"
 )
@@ -239,6 +281,158 @@ def _build_register_handler_seam(app_root: str) -> set[tuple[str, str]]:
     return seam
 
 
+def _blank_php_comments(text: str) -> str:
+    """Replace PHP comment CONTENT with spaces, preserving length and newlines.
+
+    WHY THIS IS NOT OPTIONAL HERE
+    -----------------------------
+    Every seam this gate recognises is evidence that a method is REACHABLE, so
+    a seam matched inside a comment EXEMPTS live-looking code that nothing
+    actually calls — a false GREEN — and, for the attribute seam specifically,
+    prose is exactly where the phrase turns up. ``LeadService.php`` opens with
+
+        * Both public entry points are annotated `#[McpTool]` (OpenRegister…
+
+    on line 7, seven lines above anything executable. A raw-text search for
+    ``#[McpTool`` matches that sentence. This is the shape gate-64's
+    ``has_prelude()`` had — a checker that greps text misses every constant
+    AND matches every comment, failing in both directions at once.
+
+    Offsets and line numbers are preserved so the result can be used
+    line-for-line against the original.
+
+    ``#`` opens a line comment in PHP, but ``#[`` opens an ATTRIBUTE. Blanking
+    attributes would delete the very thing being looked for, so the two are
+    distinguished.
+    """
+    out = list(text)
+    i = 0
+    n = len(text)
+    while i < n:
+        ch = text[i]
+        if ch in ("'", '"'):
+            quote = ch
+            i += 1
+            while i < n:
+                if text[i] == "\\":
+                    i += 2
+                    continue
+                if text[i] == quote:
+                    i += 1
+                    break
+                i += 1
+            continue
+        if ch == "/" and i + 1 < n and text[i + 1] == "*":
+            j = text.find("*/", i + 2)
+            j = n if j == -1 else j + 2
+            for k in range(i, j):
+                if out[k] != "\n":
+                    out[k] = " "
+            i = j
+            continue
+        if (ch == "/" and i + 1 < n and text[i + 1] == "/") or (
+            ch == "#" and not (i + 1 < n and text[i + 1] == "[")
+        ):
+            j = text.find("\n", i)
+            j = n if j == -1 else j
+            for k in range(i, j):
+                out[k] = " "
+            i = j
+            continue
+        i += 1
+    return "".join(out)
+
+
+def _build_mcp_attribute_seam(app_root: str) -> set[str]:
+    """Short class names OpenRegister's ``AttributeToolScanner`` may reflect.
+
+    THE SEAM (#200, ADR-063). A method reached only by attribute reflection
+    has no ``->method(`` call site anywhere, so the caller index cannot see it
+    and the gate reported it dead. Measured on pipelinq:
+    ``LeadService::createLead`` — a curated, spec'd MCP write tool — was
+    flagged, and acting on that verdict would have deleted it. Same shape as
+    hydra#106, which this module's docstring already records as the failure
+    mode that matters.
+
+    THREE-PART EVIDENCE, all of which must hold, mirroring what the
+    register.d-handler and event-listener seams already demand:
+
+      1. ``lib/AppInfo/Application.php`` binds an implementation under the
+         ``…IMcpScannableServices::<app>`` DI alias, and
+      2. that implementation lists class constants (``Foo::class``), and
+      3. (checked per method in :func:`scan_file`) the method itself carries
+         an ``#[McpTool(...)]`` attribute.
+
+    So a bare ``#[McpTool]`` on a class nobody registers stays RED, a
+    registered class's write methods that carry NO attribute stay RED, and a
+    scannable-services implementation that is never aliased buys nothing.
+    """
+    bound_impls: set[str] = set()
+    lib_dir = os.path.join(app_root, "lib")
+    for dirpath, _dirnames, filenames in os.walk(lib_dir):
+        for fn in filenames:
+            if fn != "Application.php":
+                continue
+            try:
+                with open(os.path.join(dirpath, fn), encoding="utf-8", errors="replace") as fh:
+                    text = _blank_php_comments(fh.read())
+            except OSError:
+                continue
+            for m in _MCP_ALIAS_RE.finditer(text):
+                bound_impls.add(m.group(2))
+    if not bound_impls:
+        return set()
+
+    scannable: set[str] = set()
+    for dirpath, dirnames, filenames in os.walk(lib_dir):
+        dirnames[:] = [d for d in dirnames if d not in _PRUNE_DIRS]
+        for fn in filenames:
+            if not fn.endswith(".php"):
+                continue
+            fp = os.path.join(dirpath, fn)
+            try:
+                with open(fp, encoding="utf-8", errors="replace") as fh:
+                    raw = fh.read()
+            except OSError:
+                continue
+            text = _blank_php_comments(raw)
+            short = _class_short_name(text)
+            if short is None or short not in bound_impls:
+                continue
+            if _MCP_SCANNABLE_INTERFACE not in text:
+                # The alias named this class, but the class does not implement
+                # the scanner's interface — OpenRegister would never reflect
+                # it, so it grants nothing.
+                continue
+            for m in _CLASS_CONST_RE.finditer(text):
+                scannable.add(m.group(1))
+    scannable.discard("self")
+    scannable.discard("static")
+    scannable -= bound_impls
+    return scannable
+
+
+def _method_has_mcp_attribute(blanked_lines: list[str], method_line_idx: int) -> bool:
+    """Does an ``#[McpTool(...)]`` attribute apply to the method at *idx*?
+
+    Walks up over the attribute block only. *blanked_lines* must come from
+    :func:`_blank_php_comments`, so a docblock that merely MENTIONS
+    ``#[McpTool]`` in prose is already whitespace by the time it is read.
+    """
+    region: list[str] = []
+    j = method_line_idx - 1
+    while j >= 0:
+        stripped = blanked_lines[j].strip()
+        if stripped == "":
+            j -= 1
+            continue
+        if _ATTR_BOUNDARY_RE.search(stripped):
+            break
+        region.append(stripped)
+        j -= 1
+    return _MCP_TOOL_ATTR_RE.search("\n".join(region)) is not None
+
+
 def _build_listener_class_seam(app_root: str) -> set[str]:
     """Short class names registered via registerEventListener(...) in any
     AppInfo/Application.php — invoked by the event dispatcher, not by an
@@ -251,7 +445,16 @@ def _build_listener_class_seam(app_root: str) -> set[str]:
             fp = os.path.join(dirpath, fn)
             try:
                 with open(fp, encoding="utf-8", errors="replace") as fh:
-                    text = fh.read()
+                    # A COMMENTED-OUT REGISTRATION IS NOT A REGISTRATION.
+                    # This seam EXEMPTS a whole class, so matching one inside a
+                    # comment is a false GREEN: the listener is not wired, its
+                    # write methods are dead, and the gate says nothing.
+                    # Latent rather than observed — a sweep of the 8 repos
+                    # currently under gate found zero comment-only matches, so
+                    # this changes no verdict today — but it is the same shape
+                    # as gate-64's has_prelude(), where a commented-out prelude
+                    # counted as compliance.
+                    text = _blank_php_comments(fh.read())
             except OSError:
                 continue
             for m in re.finditer(
@@ -279,7 +482,10 @@ def _build_job_class_seam(app_root: str) -> set[str]:
         return seam
     try:
         with open(info_xml, encoding="utf-8", errors="replace") as fh:
-            text = fh.read()
+            # `<!-- <job>…</job> -->` is a job that is NOT scheduled. Same
+            # false-GREEN shape as the listener seam above: this exempts the
+            # whole class. XML comments, not PHP ones, so a separate strip.
+            text = re.sub(r"<!--.*?-->", " ", fh.read(), flags=re.DOTALL)
     except OSError:
         return seam
     for m in re.finditer(r"<job>\s*([A-Za-z0-9_\\]+)\s*</job>", text):
@@ -396,13 +602,14 @@ def _build_caller_index(app_root: str, extra_roots: list[str] | None = None) -> 
 
 
 def scan_file(file_path: str, app_root: str, seams, caller_counts, findings: list[str]):
-    register_seam, listener_seam, job_seam = seams
+    register_seam, listener_seam, job_seam, mcp_seam = seams
     try:
         with open(file_path, encoding="utf-8", errors="replace") as fh:
             text = fh.read()
     except OSError:
         return
     lines = text.split("\n")
+    blanked_lines = _blank_php_comments(text).split("\n")
     if _is_interface_or_trait(text):
         # Interface/trait method declarations have no body — there is
         # nothing to be dead. Only the concrete implementation's deadness
@@ -433,6 +640,18 @@ def scan_file(file_path: str, app_root: str, seams, caller_counts, findings: lis
         if _preceding_docblock_has_exclude(lines, idx):
             continue
         if class_short and (class_short, name) in register_seam:
+            continue
+        if (
+            class_short
+            and class_short in mcp_seam
+            and _method_has_mcp_attribute(blanked_lines, idx)
+        ):
+            # Attribute-scanner seam (#200): OpenRegister's AttributeToolScanner
+            # reflects this class and invokes this method. There is no
+            # `->method(` call site anywhere and there never will be, so the
+            # caller index cannot see it. PER METHOD, not per class — a write
+            # method on a scannable class that carries no `#[McpTool]` is still
+            # an orphan and still reported.
             continue
         if caller_counts.get(name, 0) > 0:
             continue
@@ -493,6 +712,7 @@ def _scan_app(app_root: str, files: list[str], findings: list[str]) -> None:
     register_seam = _build_register_handler_seam(app_root)
     listener_seam = _build_listener_class_seam(app_root)
     job_seam = _build_job_class_seam(app_root)
+    mcp_seam = _build_mcp_attribute_seam(app_root)
 
     # --- Cross-app caller awareness (hydra#106, FP class 1) --------------
     # A leaf app's services are consumed only by that app (ADR-022: apps
@@ -520,7 +740,13 @@ def _scan_app(app_root: str, files: list[str], findings: list[str]) -> None:
     caller_counts = _build_caller_index(app_root, extra_roots)
 
     for fp in files:
-        scan_file(fp, app_root, (register_seam, listener_seam, job_seam), caller_counts, findings)
+        scan_file(
+            fp,
+            app_root,
+            (register_seam, listener_seam, job_seam, mcp_seam),
+            caller_counts,
+            findings,
+        )
 
 
 def main(argv):
