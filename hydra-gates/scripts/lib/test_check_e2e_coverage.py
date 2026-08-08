@@ -869,5 +869,309 @@ class SkippedTestIsNotCoverageTest(unittest.TestCase):
         self.assertIn("my-spec::foo-does-bar", dead)
 
 
+# ---------------------------------------------------------------------------
+# A SWITCHED-OFF ANCESTOR TAKES THE TAG WITH IT  (#210)
+#
+# `_enclosing_block` searched FORWARD only. A tag written where the convention
+# says to write it — immediately above the `test()` it annotates — resolved to
+# that inner, un-skipped test, and the `test.describe.skip` wrapping both was
+# never consulted. The ref counted as coverage while nothing ran.
+#
+# A second, wider defect was found while writing these: `_TEST_DECL_RE` could
+# not match `test.describe.skip(` AT ALL. At `test` the modifier group finds
+# `.describe` instead of `.skip` so the required `(` fails; at `describe` the
+# `(?<![.\w$])` lookbehind sees the preceding dot and refuses. So the
+# "correctly dead" case in #210's own reproduction — the tag ABOVE the skipped
+# describe — was in fact reported LIVE too. Both are covered below.
+#
+# EVERY dead assertion here is paired with a live one. `describe.only`,
+# `describe.serial`, a live `describe`, and a sibling that merely follows a
+# closed skipped block must all keep counting: refusing them would trade this
+# gate's blindness for the opposite blindness, which is the same defect with
+# the sign flipped.
+# ---------------------------------------------------------------------------
+class SkippedAncestorTest(unittest.TestCase):
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def _refs(self, body: str) -> set:
+        _write(self.root, "tests/e2e/foo.spec.ts", body)
+        return cec.collect_covered_refs(self.root)
+
+    # --- dead: an ancestor that never runs ------------------------------
+    def test_tag_INSIDE_a_skipped_describe_does_not_count(self):
+        # THE #210 DEFECT, verbatim. The tag sits where the docstring says to
+        # put it and the forward search lands on the live inner `test()`.
+        self.assertEqual(self._refs(
+            "test.describe.skip('outer B', () => {\n"
+            "  // @e2e demo::inside\n"
+            "  test('inner b', async ({ page }) => {\n"
+            "    await expect(page).toBeTruthy()\n"
+            "  })\n"
+            "})\n"), set())
+
+    def test_tag_ABOVE_a_skipped_describe_does_not_count(self):
+        # #210 believed this case already worked. It did not: the namespaced
+        # `test.describe.skip(` was invisible to the declaration regex, so the
+        # forward search stepped straight over it onto the inner test.
+        self.assertEqual(self._refs(
+            "// @e2e demo::above\n"
+            "test.describe.skip('outer A', () => {\n"
+            "  test('inner a', async ({ page }) => {\n"
+            "    await expect(page).toBeTruthy()\n"
+            "  })\n"
+            "})\n"), set())
+
+    def test_bare_describe_skip_ancestor_does_not_count(self):
+        self.assertEqual(self._refs(
+            "describe.skip('outer', () => {\n"
+            "  // @e2e demo::inside\n"
+            "  it('inner', async () => { await go() })\n"
+            "})\n"), set())
+
+    def test_xdescribe_ancestor_does_not_count(self):
+        self.assertEqual(self._refs(
+            "xdescribe('outer', () => {\n"
+            "  // @e2e demo::inside\n"
+            "  it('inner', async () => { await go() })\n"
+            "})\n"), set())
+
+    def test_describe_fixme_ancestor_does_not_count(self):
+        self.assertEqual(self._refs(
+            "test.describe.fixme('outer', () => {\n"
+            "  // @e2e demo::inside\n"
+            "  test('inner', async ({ page }) => { await expect(page).toBeTruthy() })\n"
+            "})\n"), set())
+
+    def test_a_live_describe_nested_in_a_skipped_one_does_not_count(self):
+        # The INNERMOST enclosing block runs, and it still never executes.
+        self.assertEqual(self._refs(
+            "test.describe.skip('outer', () => {\n"
+            "  test.describe('inner group', () => {\n"
+            "    // @e2e demo::deep\n"
+            "    test('t', async ({ page }) => { await expect(page).toBeTruthy() })\n"
+            "  })\n"
+            "})\n"), set())
+
+    def test_the_scholiq_shape_repeated_tags_inside_the_block(self):
+        # scholiq peer-and-self-assessment.spec.ts: the header tags above the
+        # `describe.skip` were dead, and the SAME refs repeated inside the
+        # block resurrected them. Both copies must now be dead.
+        self.assertEqual(self._refs(
+            "// @e2e demo::a\n"
+            "// @e2e demo::b\n"
+            "test.describe.skip('needs an isolated instance', () => {\n"
+            "  // @e2e demo::a\n"
+            "  test('one', async ({ page }) => { await expect(page).toBeTruthy() })\n"
+            "  // @e2e demo::b\n"
+            "  test('two', async ({ page }) => { await expect(page).toBeTruthy() })\n"
+            "})\n"), set())
+
+    # --- live: must STILL count -----------------------------------------
+    def test_tag_inside_a_LIVE_describe_still_counts(self):
+        # THE CONTROL for every assertion above. If this ever fails, the
+        # ancestor walk has stopped discriminating and is simply killing
+        # everything nested.
+        self.assertIn("demo::inside", self._refs(
+            "test.describe('outer', () => {\n"
+            "  // @e2e demo::inside\n"
+            "  test('inner', async ({ page }) => {\n"
+            "    await expect(page).toBeTruthy()\n"
+            "  })\n"
+            "})\n"))
+
+    def test_describe_only_is_not_switched_off(self):
+        # `.only` RUNS — it suppresses everything else, which is the opposite
+        # of being skipped.
+        self.assertIn("demo::inside", self._refs(
+            "test.describe.only('outer', () => {\n"
+            "  // @e2e demo::inside\n"
+            "  test('inner', async ({ page }) => { await expect(page).toBeTruthy() })\n"
+            "})\n"))
+
+    def test_describe_serial_is_not_switched_off(self):
+        self.assertIn("demo::inside", self._refs(
+            "test.describe.serial('outer', () => {\n"
+            "  // @e2e demo::inside\n"
+            "  test('inner', async ({ page }) => { await expect(page).toBeTruthy() })\n"
+            "})\n"))
+
+    def test_describe_configure_is_not_a_declaration(self):
+        # `test.describe.configure({...})` is a settings call, not a block. It
+        # must neither open a block nor be mistaken for one by the forward
+        # search that follows a file-level tag.
+        self.assertIn("demo::top", self._refs(
+            "// @e2e demo::top\n"
+            "test.describe.configure({ mode: 'parallel' })\n"
+            "test('real', async ({ page }) => { await expect(page).toBeTruthy() })\n"))
+
+    def test_a_sibling_AFTER_a_closed_skipped_describe_still_counts(self):
+        # The span check must be "encloses", not "appears earlier". A skipped
+        # block that has already closed is a sibling and must not poison what
+        # follows it.
+        self.assertIn("demo::after", self._refs(
+            "test.describe.skip('dead group', () => {\n"
+            "  test('x', async ({ page }) => { await expect(page).toBeTruthy() })\n"
+            "})\n"
+            "// @e2e demo::after\n"
+            "test('live one', async ({ page }) => {\n"
+            "  await expect(page).toBeTruthy()\n"
+            "})\n"))
+
+    def test_a_runtime_conditional_skip_inside_a_live_describe_still_counts(self):
+        # The gate's original anti-blindness pair, now with an ancestor in the
+        # picture: this runs on every browser but one.
+        self.assertIn("demo::inside", self._refs(
+            "test.describe('outer', () => {\n"
+            "  // @e2e demo::inside\n"
+            "  test('inner', async ({ page, browserName }) => {\n"
+            "    test.skip(browserName === 'firefox', 'flaky on gecko')\n"
+            "    await expect(page).toBeTruthy()\n"
+            "  })\n"
+            "})\n"))
+
+    def test_a_live_sibling_rescues_a_ref_dead_inside_a_skipped_describe(self):
+        # Same rule the module already applies to skipped tests: one running
+        # reference is coverage. The gate reports UNCOVERED, not "you have a
+        # skipped describe".
+        self.assertIn("demo::both", self._refs(
+            "test.describe.skip('dead group', () => {\n"
+            "  // @e2e demo::both\n"
+            "  test('x', async ({ page }) => { await expect(page).toBeTruthy() })\n"
+            "})\n"
+            "// @e2e demo::both\n"
+            "test('live one', async ({ page }) => {\n"
+            "  await expect(page).toBeTruthy()\n"
+            "})\n"))
+
+    # --- the regex must still reject what it always rejected -------------
+    def test_a_member_call_named_test_is_still_not_a_declaration(self):
+        # The namespace segment added for `test.describe` must not have
+        # widened into "any member call". `rx.test(` is RegExp.prototype.test.
+        self.assertIn("demo::live", self._refs(
+            "// @e2e demo::live\n"
+            "const IGNORED = [/Deprecation/i]\n"
+            "function spy(page) {\n"
+            "  page.on('console', (msg) => {\n"
+            "    if (IGNORED.some((rx) => rx.test(msg.text()))) return\n"
+            "  })\n"
+            "}\n"
+            "test('the view mounts', async ({ page }) => {\n"
+            "  await expect(page).toBeTruthy()\n"
+            "})\n"))
+
+    # --- ownership of an unconditional skip -----------------------------
+    def test_a_nested_tests_own_skip_does_not_kill_the_whole_group(self):
+        # launchpad spec-coverage.spec.ts, in shape: a file-level tag now
+        # resolves to the enclosing `test.describe`, and ONE nested test in
+        # that group guards itself with `test.skip(true, …)`. The other tests
+        # run. Condemning the group is the gate's blindness with the sign
+        # flipped.
+        self.assertIn("demo::header", self._refs(
+            "// @e2e demo::header\n"
+            "test.describe('sidebar', () => {\n"
+            "  test('a', async ({ page }) => {\n"
+            "    await expect(page).toBeTruthy()\n"
+            "  })\n"
+            "  test('b', async ({ page }) => {\n"
+            "    test.skip(true, 'not available in this environment')\n"
+            "    await expect(page).toBeTruthy()\n"
+            "  })\n"
+            "})\n"))
+
+    def test_a_group_level_unconditional_skip_still_kills_the_group(self):
+        # THE CONTROL. Playwright's `test.skip()` called directly in a describe
+        # body skips every test in the group, and that must still be dead.
+        self.assertEqual(self._refs(
+            "// @e2e demo::header\n"
+            "test.describe('sidebar', () => {\n"
+            "  test.skip()\n"
+            "  test('a', async ({ page }) => {\n"
+            "    await expect(page).toBeTruthy()\n"
+            "  })\n"
+            "})\n"), set())
+
+    def test_a_tests_own_unconditional_skip_still_kills_that_test(self):
+        # The decidesk shape must not be rescued by the ownership rule.
+        self.assertEqual(self._refs(
+            "test.describe('group', () => {\n"
+            "  // @e2e demo::inner\n"
+            "  test('minutes are published', async ({ page }) => {\n"
+            "    test.skip(true, 'pending backend work')\n"
+            "  })\n"
+            "})\n"), set())
+
+    def test_the_four_case_fixture_from_the_issue(self):
+        # #210's minimal reproduction, whole, in one file — the shape the fix
+        # is measured against.
+        _write(self.root, "tests/e2e/a.spec.ts",
+               "import { test, expect } from '@playwright/test'\n"
+               "\n"
+               "// @e2e demo::tag-above-a-skipped-describe\n"
+               "test.describe.skip('outer A', () => {\n"
+               "  test('inner a', async ({ page }) => { await expect(page).toBeTruthy() })\n"
+               "})\n"
+               "\n"
+               "test.describe.skip('outer B', () => {\n"
+               "  // @e2e demo::tag-inside-a-skipped-describe\n"
+               "  test('inner b', async ({ page }) => { await expect(page).toBeTruthy() })\n"
+               "})\n"
+               "\n"
+               "// @e2e demo::plain-skipped-test\n"
+               "test.skip('plain skipped', async ({ page }) => { await expect(page).toBeTruthy() })\n"
+               "\n"
+               "// @e2e demo::genuinely-live\n"
+               "test('live one', async ({ page }) => { await expect(page).toBeTruthy() })\n")
+        live, dead = cec.collect_ref_status(self.root)
+        self.assertEqual(live, {"demo::genuinely-live"})
+        self.assertEqual(set(dead), {
+            "demo::plain-skipped-test",
+            "demo::tag-above-a-skipped-describe",
+            "demo::tag-inside-a-skipped-describe",
+        })
+
+
+# ---------------------------------------------------------------------------
+# The declaration regex, directly. These are the unit-level counterparts of the
+# behaviour above: `test.describe.skip(` matching AT ALL is the precondition
+# for every dead assertion in the class above, and `rx.test(` NOT matching is
+# the precondition for the live ones.
+# ---------------------------------------------------------------------------
+class DeclarationRegexTest(unittest.TestCase):
+    def _mod(self, src: str):
+        m = cec._TEST_DECL_RE.match(src)
+        return None if m is None else (m.group("fn"), m.group("mod"))
+
+    def test_namespaced_describe_skip_matches(self):
+        self.assertEqual(self._mod("test.describe.skip('a', () => {})")[0], "describe")
+        self.assertIsNotNone(self._mod("test.describe.skip('a', () => {})")[1])
+
+    def test_namespaced_describe_matches_and_is_live(self):
+        self.assertEqual(self._mod("test.describe('a', () => {})"), ("describe", None))
+
+    def test_bare_forms_still_match(self):
+        self.assertEqual(self._mod("test('a', () => {})"), ("test", None))
+        self.assertEqual(self._mod("describe('a', () => {})"), ("describe", None))
+        self.assertIsNotNone(self._mod("test.skip('a', () => {})")[1])
+
+    def test_serial_and_only_are_not_modifiers(self):
+        self.assertEqual(self._mod("test.describe.serial('a', () => {})"), ("describe", None))
+        self.assertEqual(self._mod("test.describe.only('a', () => {})"), ("describe", None))
+
+    def test_member_calls_are_still_rejected(self):
+        for src in ("rx.test(msg)", "foo.it(1)", "latest(versions)", "submit(form)"):
+            self.assertIsNone(cec._TEST_DECL_RE.match(src), src)
+
+    def test_hooks_and_config_calls_are_not_declarations(self):
+        for src in ("test.beforeEach(async () => {})",
+                    "test.use({ locale: 'nl' })",
+                    "test.step('x', async () => {})",
+                    "test.describe.configure({ mode: 'parallel' })"):
+            self.assertIsNone(cec._TEST_DECL_RE.match(src), src)
+
+
 if __name__ == "__main__":
     unittest.main()
