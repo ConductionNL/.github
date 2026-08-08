@@ -3737,7 +3737,21 @@ jobs:
   report:
     runs-on: ubuntu-latest
     name: "Quality Report"
-    needs: [php-quality, vue-quality, frontend-build, frontend-checks, security, license, phpunit, newman, playwright, journeydoc-capture, baseline-protection, sbom, features-check, features-extract, hydra-gates]
+    # EVERY verdict-producing job must be listed here, and `frontend-tests`
+    # was not (#190). This job is the ONLY meaningful required check on main
+    # and beta — measured across all 25 fleet repos, whose `Main`/`Beta Branch
+    # Protection` rulesets require exactly `branch-protection / check-branch`
+    # and `quality / Quality Report` — so a leg missing from this list cannot
+    # block a merge no matter how red it goes. `Frontend Tests (unit)` runs a
+    # real unit suite with no continue-on-error, and its failure reached
+    # nothing.
+    #
+    # Latent rather than observed: sampled across ten repos it is currently
+    # green everywhere (with some supersession cancellations), so nothing has
+    # been waved through yet. A gate that would not catch a failure is still a
+    # dead gate, and `scripts/assert-quality-report-gates-every-leg.py` now
+    # keeps the list complete.
+    needs: [php-quality, vue-quality, frontend-build, frontend-checks, frontend-tests, security, license, phpunit, newman, playwright, journeydoc-capture, baseline-protection, sbom, features-check, features-extract, hydra-gates]
     if: always()
     # Observed across 266 executions: median 0.6 min — but 2% of runs sit at
     # ~30 min because the `Install PDF tools` apt-get step stalls on the Ubuntu
