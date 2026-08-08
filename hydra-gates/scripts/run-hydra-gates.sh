@@ -1382,27 +1382,51 @@ fi
 # inputLabel (or ariaLabelCombobox). Manual <label> elements break the
 # component's internal a11y wiring (WCAG 1.3.1 / 4.1.2). ADR-004 hard
 # rule. Observed 2026-04-30 on doriath.
+#
+# THE ELEMENT ENDS AT A `>` THAT IS NOT INSIDE AN ATTRIBUTE VALUE.
+#
+# This gate used to extract elements with `grep -oE '<NcSelect[^>]*>'`.
+# `[^>]*` stops at the FIRST `>` in the source, and in an NcSelect that is
+# usually the arrow of `:reduce="(o) => o.id"` — so every prop written
+# after `:reduce` was cut off, including the two this gate looks for.
+# Measured on scholiq 2026-08-08: 18 findings, 18 of them false. Each
+# flagged element already carried `:input-label` AND
+# `:aria-label-combobox`, both after `:reduce`. The gate was
+# anti-correlated with its subject there: adding the label could not clear
+# it, removing `:reduce` could. Extraction now lives in a tested helper
+# using the same quote-aware tag pattern as gate-40's.
+#
+# The accepted prop set is UNCHANGED, deliberately — this fixes where an
+# element ends, not what counts as a name, so the numbers stay comparable.
 # ---------------------------------------------------------------------------
 if [ -d src ]; then
     _il_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-nc-input-labels.log
     : > "${_il_log}"
+    _il_ran=1
+    _il_helper="${SCRIPT_DIR}/lib/check_nc_select_labels.py"
+    _il_files=()
     while IFS= read -r vue; do
+        [ -f "${vue}" ] || continue
         _in_scope "${vue}" || continue
-        _flat=$(tr '\n' ' ' < "${vue}")
-        echo "${_flat}" \
-            | grep -oE '<NcSelect[^>]*>' 2>/dev/null \
-            | while IFS= read -r tag; do
-                [ -z "${tag}" ] && continue
-                if ! echo "${tag}" | grep -qE "(input-label|inputLabel|aria-label-combobox|ariaLabelCombobox)"; then
-                    echo "${vue}: ${tag}" >> "${_il_log}"
-                fi
-            done
+        _il_files+=("${vue}")
     done < <(find src -name '*.vue' 2>/dev/null)
-    _il_fail=$(wc -l < "${_il_log}" 2>/dev/null || echo 0)
-    if [ "${_il_fail}" -eq 0 ]; then
-        _pass 12 "nc-input-labels"
+    if [ "${#_il_files[@]}" -eq 0 ]; then
+        : # nothing in scope — ordinary diff scoping.
+    elif [ ! -f "${_il_helper}" ]; then
+        # A MISSING HELPER MUST NOT REPORT PASS (#147).
+        _il_ran=0
+        _skip 12 "nc-input-labels" wiring "check_nc_select_labels.py not found at ${_il_helper} — ${#_il_files[@]} component(s) were in scope and NONE had their NcSelect elements inspected; unnamed comboboxes are UNVERIFIED by this run."
     else
-        _fail 12 "nc-input-labels" "${_il_fail} NcSelect without inputLabel/ariaLabelCombobox — see ${_il_log}"
+        python3 "${_il_helper}" "${_il_files[@]}" >> "${_il_log}" 2>/dev/null || true
+    fi
+    _il_fail=$(wc -l < "${_il_log}" 2>/dev/null || echo 0)
+    [ -z "${_il_fail}" ] && _il_fail=0
+    if [ "${_il_ran}" -eq 1 ]; then
+        if [ "${_il_fail}" -eq 0 ]; then
+            _pass 12 "nc-input-labels"
+        else
+            _fail 12 "nc-input-labels" "${_il_fail} NcSelect without inputLabel/ariaLabelCombobox — see ${_il_log}"
+        fi
     fi
 fi
 
