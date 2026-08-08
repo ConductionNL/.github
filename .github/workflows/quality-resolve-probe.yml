@@ -76,6 +76,26 @@ jobs:
           fi
           echo "OK — the lint fails when it should. Its clean pass above is a verdict."
 
+  gate-completeness:
+    name: "Every leg is inside the required check"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      # POSITIVE CONTROL FIRST. Drop a job from the report's `needs:` in
+      # memory and require the lint to notice. A lint that had stopped reading
+      # the list would pass the real check forever.
+      - name: "Positive control — removing a leg must be detected"
+        run: python3 scripts/assert-quality-report-gates-every-leg.py --positive-control .github/workflows/quality.yml
+
+      # THE MEASUREMENT. `quality / Quality Report` is the only meaningful
+      # required check on main and beta in all 25 fleet repos, and its gating
+      # steps read `needs.*.result`. A job outside that list cannot block a
+      # merge however red it goes — which is what `frontend-tests` was (#190).
+      - name: "Assert every verdict-producing job is in Quality Report's needs"
+        run: python3 scripts/assert-quality-report-gates-every-leg.py .github/workflows/quality.yml
+
   seed-semantics:
     name: "A failing seed fails the job"
     runs-on: ubuntu-latest
@@ -181,20 +201,21 @@ jobs:
   guard:
     name: "Shared-workflow guard"
     runs-on: ubuntu-latest
-    needs: [static-limits, seed-semantics, probe]
+    needs: [static-limits, seed-semantics, gate-completeness, probe]
     if: ${{ !cancelled() }}
     steps:
       - name: Assert both guards reached a verdict
         env:
           STATIC: ${{ needs.static-limits.result }}
           SEED: ${{ needs.seed-semantics.result }}
+          LEGS: ${{ needs.gate-completeness.result }}
           PROBE: ${{ needs.probe.result }}
         run: |
           set -eu
-          echo "static-limits=${STATIC} seed-semantics=${SEED} probe=${PROBE}"
+          echo "static-limits=${STATIC} seed-semantics=${SEED} gate-completeness=${LEGS} probe=${PROBE}"
           # `skipped` is failed here on purpose. A guard that did not run is
           # not a guard that passed.
-          for pair in "static-limits:${STATIC}" "seed-semantics:${SEED}" "probe:${PROBE}"; do
+          for pair in "static-limits:${STATIC}" "seed-semantics:${SEED}" "gate-completeness:${LEGS}" "probe:${PROBE}"; do
             name="${pair%%:*}"; result="${pair##*:}"
             [ "${result}" = "success" ] || {
               echo "::error::${name} did not succeed (result=${result}). A guard that \
