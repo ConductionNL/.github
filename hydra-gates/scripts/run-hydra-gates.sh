@@ -2060,10 +2060,20 @@ if [ -d openspec/specs ] || [ -d tests/e2e ]; then
         # Capture the exit code directly — avoids the grep -c bug where grep
         # exits 1 on zero matches, causing "|| echo 0" to append a second "0",
         # leaving _e2e_fail="0\n0" which fails the -eq integer comparison.
+        # SCOPE ONLY WHEN THE CALLER ASKED FOR IT (#242). BASE_REF was passed
+        # unconditionally, so an UNSCOPED run — the mode a fleet audit uses —
+        # was silently narrowed to the diff against origin/development, came
+        # back empty, and the helper printed PASS over a repo it never opened.
+        # Measured on openconnector: 5 findings scoped, 412 over the full tree.
         set +e
-        HYDRA_GATE_BASE_REF="${BASE_REF}" \
+        if [ "${SCOPE_TO_DIFF}" = "1" ]; then
+            HYDRA_GATE_BASE_REF="${BASE_REF}" \
+                python3 "${_e2e_lib_dir}/check_e2e_coverage.py" . \
+                >> "${_e2e_log}" 2>&1
+        else
             python3 "${_e2e_lib_dir}/check_e2e_coverage.py" . \
-            >> "${_e2e_log}" 2>&1
+                >> "${_e2e_log}" 2>&1
+        fi
         _e2e_fail=$?
         set +e
     else
@@ -2081,6 +2091,15 @@ if [ -d openspec/specs ] || [ -d tests/e2e ]; then
         [ -z "${_e2e_count}" ] && _e2e_count="an unreported number of"
         if [ "${_e2e_fail}" -eq 0 ]; then
             _pass 19 "e2e-coverage"
+        elif [ "${_e2e_fail}" -eq 3 ]; then
+            # EMPTY SCOPE. Specs exist; the diff selected none of them. That is
+            # not a pass — it is a gate that inspected nothing, and it must be
+            # visible to --require-full-coverage.
+            _e2e_ran=0
+            _skip 19 "e2e-coverage" structural "the diff against '${BASE_REF}' touched NO spec file, so no scenario was inspected; @e2e traceability (ADR-020) is UNVERIFIED by this run. See ${_e2e_log}."
+        elif [ "${_e2e_fail}" -eq 4 ]; then
+            _e2e_ran=0
+            _skip 19 "e2e-coverage" na "no openspec/specs/*/spec.md in this repository — there is no declared scenario for an e2e test to trace back to."
         elif [ "${_e2e_fail}" -ge 2 ]; then
             # The helper fell over. It inspected nothing, so it has no verdict
             # to give — say so instead of reporting a fail count it never
@@ -2484,12 +2503,26 @@ if [ -f appinfo/routes.php ]; then
         _cc_lib_dir="${SCRIPT_DIR}/lib"
     fi
     if [ -f "${_cc_lib_dir}/check_contract_coverage.py" ]; then
-        # The helper exits with the uncovered-endpoint count (0 = PASS). Capture
-        # the exit code directly — avoids the grep -c double-zero bug.
+        # The helper exits with a STATUS: 0 pass, 1 fail, 2 error, 3 empty
+        # scope, 4 not applicable. It used to exit with the uncovered-endpoint
+        # COUNT, so the count below is read from stdout and never from the byte.
+        # stderr is folded into the log so a traceback is visible rather than
+        # discarded.
+        #
+        # SCOPE ONLY WHEN THE CALLER ASKED FOR IT (#242). BASE_REF was passed
+        # unconditionally, so an unscoped run was silently narrowed to the diff
+        # against origin/development, came back empty, and the helper printed
+        # PASS having opened nothing. Measured on openconnector: PASS scoped,
+        # 32 uncovered public endpoints over the full tree.
         set +e
-        HYDRA_GATE_BASE_REF="${BASE_REF}" \
+        if [ "${SCOPE_TO_DIFF}" = "1" ]; then
+            HYDRA_GATE_BASE_REF="${BASE_REF}" \
+                python3 "${_cc_lib_dir}/check_contract_coverage.py" . \
+                >> "${_cc_log}" 2>&1
+        else
             python3 "${_cc_lib_dir}/check_contract_coverage.py" . \
-            >> "${_cc_log}" 2>/dev/null
+                >> "${_cc_log}" 2>&1
+        fi
         _cc_fail=$?
         set +e
     else
@@ -2497,10 +2530,23 @@ if [ -f appinfo/routes.php ]; then
         _skip 25 "contract-coverage" wiring "check_contract_coverage.py not found at ${_cc_lib_dir} — appinfo/routes.php is present but NO endpoint was inspected; wire-contract coverage of newly-exposed endpoints is UNVERIFIED by this run."
     fi
     if [ "${_cc_ran}" -eq 1 ]; then
+        # THE COUNT COMES FROM STDOUT, not from the byte.
+        _cc_count=$(grep -oE 'FAIL — [0-9]+ new public endpoint' "${_cc_log}" 2>/dev/null \
+            | tail -1 | grep -oE '[0-9]+' || true)
+        [ -z "${_cc_count}" ] && _cc_count="an unreported number of"
         if [ "${_cc_fail}" -eq 0 ]; then
             _pass 25 "contract-coverage"
+        elif [ "${_cc_fail}" -eq 3 ]; then
+            _cc_ran=0
+            _skip 25 "contract-coverage" structural "the diff against '${BASE_REF}' changed NO file, so no endpoint was inspected; wire-contract coverage is UNVERIFIED by this run. See ${_cc_log}."
+        elif [ "${_cc_fail}" -eq 4 ]; then
+            _cc_ran=0
+            _skip 25 "contract-coverage" na "no appinfo/routes.php — this app exposes no routed endpoint whose wire contract could be tested."
+        elif [ "${_cc_fail}" -ge 2 ]; then
+            _cc_ran=0
+            _skip 25 "contract-coverage" wiring "check_contract_coverage.py exited ${_cc_fail} (error) — no endpoint verdict was produced; wire-contract coverage is UNVERIFIED by this run. See ${_cc_log}."
         else
-            _fail 25 "contract-coverage" "${_cc_fail} new public endpoint(s) missing a contract test — see ${_cc_log}"
+            _fail 25 "contract-coverage" "${_cc_count} new public endpoint(s) missing a contract test — see ${_cc_log}"
         fi
     fi
 fi
@@ -4877,12 +4923,25 @@ fi
 # ---------------------------------------------------------------------------
 _sp_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-store-plane.log
 : > "${_sp_log}"
+# `--base` ONLY WHEN THE CALLER ASKED TO SCOPE (#240 / #242). It was passed
+# unconditionally, so even an unscoped run diff-scoped itself, found no changed
+# manifest, and the helper returned 0 — printed as PASS beside a log line
+# reading "gate skipped". A full-tree audit was the one mode this gate could
+# never reach.
 set +e
-python3 "${SCRIPT_DIR}/lib/check_store_and_settings_surface.py" . --gate store --base "${BASE_REF}" > "${_sp_log}" 2>&1
+if [ "${SCOPE_TO_DIFF}" = "1" ]; then
+    python3 "${SCRIPT_DIR}/lib/check_store_and_settings_surface.py" . --gate store --base "${BASE_REF}" > "${_sp_log}" 2>&1
+else
+    python3 "${SCRIPT_DIR}/lib/check_store_and_settings_surface.py" . --gate store > "${_sp_log}" 2>&1
+fi
 _sp_rc=$?
 set +e
 if [ "${_sp_rc}" -eq 0 ]; then
     _pass 62 "store-plane"
+elif [ "${_sp_rc}" -eq 3 ]; then
+    _skip 62 "store-plane" structural "the diff against '${BASE_REF}' touched no manifest or menu-layout, so NO manifest was inspected; ADR-080 store-plane naming/discovery is UNVERIFIED by this run. See ${_sp_log}."
+elif [ "${_sp_rc}" -eq 4 ]; then
+    _skip 62 "store-plane" na "no src/manifest.json — a Tier-0 app declares no store plane for ADR-080 to constrain."
 else
     _sp_n=$(_count '^FAIL' "${_sp_log}")
     [ "${_sp_n}" -eq 0 ] && _sp_n=1
@@ -4894,12 +4953,23 @@ fi
 # ---------------------------------------------------------------------------
 _ss_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-settings-surface.log
 : > "${_ss_log}"
+# `--base` ONLY WHEN THE CALLER ASKED TO SCOPE — see gate 62 above (#240).
 set +e
-python3 "${SCRIPT_DIR}/lib/check_store_and_settings_surface.py" . --gate settings --base "${BASE_REF}" > "${_ss_log}" 2>&1
+if [ "${SCOPE_TO_DIFF}" = "1" ]; then
+    python3 "${SCRIPT_DIR}/lib/check_store_and_settings_surface.py" . --gate settings --base "${BASE_REF}" > "${_ss_log}" 2>&1
+else
+    python3 "${SCRIPT_DIR}/lib/check_store_and_settings_surface.py" . --gate settings > "${_ss_log}" 2>&1
+fi
 _ss_rc=$?
 set +e
 if [ "${_ss_rc}" -eq 0 ]; then
     _pass 63 "settings-surface"
+elif [ "${_ss_rc}" -eq 3 ]; then
+    # The log used to say "gate skipped" while the verdict beside it said PASS.
+    # Those cannot both be true, and PASS is the one every consumer counted.
+    _skip 63 "settings-surface" structural "the diff against '${BASE_REF}' touched no manifest or menu-layout, so NO manifest was inspected; ADR-079 settings placement is UNVERIFIED by this run. See ${_ss_log}."
+elif [ "${_ss_rc}" -eq 4 ]; then
+    _skip 63 "settings-surface" na "no src/manifest.json — a Tier-0 app declares no settings surface for ADR-079 to place."
 else
     _ss_n=$(_count '^FAIL' "${_ss_log}")
     [ "${_ss_n}" -eq 0 ] && _ss_n=1
