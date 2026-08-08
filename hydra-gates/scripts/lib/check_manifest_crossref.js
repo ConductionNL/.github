@@ -33,6 +33,17 @@
 //                        menu-layout.json#removals must, after assembly, leave
 //                        its route reachable via another surviving menu entry.
 //                        FAIL on an orphaned route.
+//   (f) registry-crossref— the manifest and src/registry.js must agree about
+//                        which components exist. A manifest `component` /
+//                        slot-override naming no registry export renders
+//                        NOTHING at runtime (FAIL); a registry export of kind
+//                        section/page/widget that no manifest position names
+//                        is unreachable UI (WARN — an orphan is either wired
+//                        or deleted and the gate cannot know which).
+//                        Cn* names resolve from the nextcloud-vue library, not
+//                        the app registry, and are exempt. Skipped entirely
+//                        when the app ships no src/registry.js.
+//                        Closes #238 / larpingapp#286.
 //
 // Report shape (mirrors gate-22 / check_manifest.js): on findings, ONE
 // machine-parseable per-file JSON line, then always the JSON summary line —
@@ -191,6 +202,140 @@ function collectSlugPairs(node, ptr, nearestId, out) {
 	for (const [k, v] of Object.entries(node)) {
 		if (k === '_note' || k === '_meta') continue
 		collectSlugPairs(v, `${ptr}/${k}`, ownId, out)
+	}
+}
+
+// --- (f) component-registry cross-reference ----------------------------------
+//
+// WHY THIS IS STATICALLY CHECKABLE AFTER ALL
+//
+// The gate used to decline the component registry wholesale — "src/registry.js
+// is app code, not statically checkable" — and that blind spot shipped
+// larpingapp#286: `EventRoster` was registered, resolvable, and named by no
+// manifest position, so the event check-in surface had no entry point. It was
+// unreachable UI long enough for its openspec task to be ticked over it, and
+// BOTH gates that exist to catch manifest cross-reference defects were silent,
+// in both directions.
+//
+// src/registry.js is app code but it is not opaque. It is a fixed-shape ES
+// module whose top-level `export default { … }` keys are the registry's public
+// surface. We cannot `import` it — it pulls in `.vue` SFCs — but the keys are
+// extractable with brace-depth tracking, which is exactly how the app-local
+// test in larpingapp#288 does it.
+//
+// DIRECTIONS, AND WHY THEY HAVE DIFFERENT SEVERITIES
+//
+//   2 → FAIL. A manifest `component` naming no registry key renders NOTHING.
+//       CnObjectSidebar.resolveTabComponent() logs `component "…" not found in
+//       registry or customComponents` and the tab comes up blank. This is
+//       gate-14 route-reachability one layer up: unambiguously broken.
+//   1 → WARN. A registered component no manifest position names is either a
+//       component that should be wired or one that should be deleted, and the
+//       gate cannot know which — the same "zero callers has two opposite
+//       fixes" property that made this worth reporting rather than prescribing.
+const REGISTRY_KINDS_REQUIRING_A_POSITION = new Set(['section', 'page', 'widget'])
+
+// `Cn[A-Z]…` names resolve from the nextcloud-vue library, not the app
+// registry. Treating them as unresolved would fail every well-formed manifest
+// in the fleet — the widening that would make this check useless on arrival.
+const LIB_COMPONENT = /^Cn[A-Z]\w*$/
+
+// Strip line and block comments so a commented-out entry is NOT counted as a
+// registration. A commented-out prelude counting as a prelude was a real
+// false-GREEN in gate-64; the same mistake here would let a deleted component
+// vouch for a manifest reference that resolves to nothing at runtime.
+function stripJsComments(src) {
+	return src
+		.replace(/\/\*[\s\S]*?\*\//g, ' ')
+		.replace(/(^|[^:])\/\/[^\n]*/g, '$1 ')
+}
+
+// Top-level keys of the `export default { … }` object, with their `kind`.
+// Brace-depth tracking keeps nested object keys (`component:`, `props:`) out.
+function parseRegistry(appDir) {
+	const file = path.join(appDir, 'src', 'registry.js')
+	let raw
+	try {
+		raw = fs.readFileSync(file, 'utf8')
+	} catch (e) {
+		return null // no registry — check (f) is not applicable
+	}
+	const src = stripJsComments(raw)
+	const start = src.search(/export\s+default\s*\{/)
+	if (start === -1) return { file, entries: new Map(), parsed: false }
+
+	const open = src.indexOf('{', start)
+	const entries = new Map()
+	let depth = 0
+	let i = open
+	let bodyStart = -1
+	for (; i < src.length; i++) {
+		const c = src[i]
+		if (c === '{') { depth++; if (depth === 1) bodyStart = i + 1 } else if (c === '}') {
+			depth--
+			if (depth === 0) break
+		}
+	}
+	if (depth !== 0 || bodyStart === -1) return { file, entries: new Map(), parsed: false }
+	const body = src.slice(bodyStart, i)
+
+	// Walk the body, recording `Name:` / `'Name':` / `"Name":` at depth 0 only.
+	depth = 0
+	const KEY = /(?:^|[,{\s])(?:['"]?)([A-Za-z_$][\w$]*)(?:['"]?)\s*:/g
+	// Depth map: for each index, how deep we are. Cheap enough for these files.
+	const depthAt = new Array(body.length).fill(0)
+	for (let j = 0; j < body.length; j++) {
+		const c = body[j]
+		if (c === '{' || c === '[') depth++
+		depthAt[j] = depth
+		if (c === '}' || c === ']') depth--
+	}
+	let m
+	while ((m = KEY.exec(body)) !== null) {
+		const at = m.index + m[0].indexOf(m[1])
+		if (depthAt[at] !== 0) continue
+		const name = m[1]
+		// `kind: 'section'` inside this entry's own braces.
+		const tail = body.slice(m.index, m.index + 400)
+		const km = /\bkind\s*:\s*['"]([a-z-]+)['"]/.exec(tail)
+		entries.set(name, { kind: km ? km[1] : null })
+	}
+	// Shorthand `Name,` entries (no colon) — a registration all the same.
+	const SHORT = /(?:^|[,{])\s*([A-Za-z_$][\w$]*)\s*(?=[,}])/g
+	while ((m = SHORT.exec(body)) !== null) {
+		const at = m.index + m[0].indexOf(m[1])
+		if (depthAt[at] !== 0) continue
+		if (!entries.has(m[1])) entries.set(m[1], { kind: null })
+	}
+	return { file, entries, parsed: true }
+}
+
+// Every manifest position that names a component by string. Covers
+// pages[].component, config.sections[].component, config.sidebar.tabs[].
+// component, widget component fields and `slots` overrides, at any depth.
+function collectComponentRefs(node, ptr, out) {
+	if (Array.isArray(node)) {
+		node.forEach((v, i) => collectComponentRefs(v, `${ptr}/${i}`, out))
+		return
+	}
+	if (!node || typeof node !== 'object') return
+	for (const [k, v] of Object.entries(node)) {
+		if (k === '_note' || k === '_meta') continue
+		if (k === 'component' && typeof v === 'string' && v !== '') {
+			out.push({ ptr: `${ptr}/component`, name: v })
+			continue
+		}
+		// `slots: { 'photos-leaf': 'ObjectDetail' }` — slot-override map whose
+		// VALUES are registry names.
+		if (k === 'slots' && v && typeof v === 'object' && !Array.isArray(v)) {
+			for (const [slot, target] of Object.entries(v)) {
+				if (typeof target === 'string' && target !== '') {
+					out.push({ ptr: `${ptr}/slots/${slot}`, name: target })
+				}
+			}
+			continue
+		}
+		collectComponentRefs(v, `${ptr}/${k}`, out)
 	}
 }
 
@@ -401,6 +546,32 @@ function main() {
 					fail('removals-invariant', `/menu-layout/removals/${i}`, `removal '${id}' orphans route '${entry.route}' — no surviving menu entry reaches it (ADR-044 no-functionality-loss)`)
 				}
 			})
+		}
+	}
+
+	// (f) component-registry cross-reference — larpingapp#286, both directions.
+	const registry = parseRegistry(APP_DIR)
+	if (registry && registry.parsed) {
+		const refs = []
+		collectComponentRefs({ pages: manifest.pages }, '', refs)
+		const named = new Set(refs.map((r) => r.name))
+
+		// Direction 2 — a manifest position naming a component nobody registers.
+		// Renders nothing at runtime, so this FAILS.
+		for (const { ptr, name } of refs) {
+			if (LIB_COMPONENT.test(name)) continue
+			if (registry.entries.has(name)) continue
+			fail('registry-crossref', ptr,
+				`component '${name}' is named by the manifest but is not exported by src/registry.js — resolveTabComponent() falls through and renders NOTHING`)
+		}
+
+		// Direction 1 — a registered component no manifest position names.
+		// Either wire it or delete it; the gate cannot know which, so WARN.
+		for (const [name, meta] of registry.entries) {
+			if (named.has(name)) continue
+			if (!REGISTRY_KINDS_REQUIRING_A_POSITION.has(meta.kind)) continue
+			warn('registry-crossref', '/pages',
+				`src/registry.js exports '${name}' (kind '${meta.kind}') but no manifest tabs[]/sections[]/page entry names it — the surface it renders has no entry point. Wire it, or delete it`)
 		}
 	}
 

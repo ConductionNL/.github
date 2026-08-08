@@ -61,6 +61,12 @@ const VALIDATOR = path.join(LIB, 'check_manifest.js')
 		'broken/src/manifest.d/10-besluiten.json',
 		'broken/src/menu-layout.json',
 		'broken/lib/Settings/zaken-register.json',
+		'registry-wired/src/manifest.json',
+		'registry-wired/src/registry.js',
+		'registry-orphan/src/manifest.json',
+		'registry-orphan/src/registry.js',
+		'registry-missing/src/manifest.json',
+		'registry-missing/src/registry.js',
 	]
 	const missing = required.filter((rel) => !fs.existsSync(path.join(FIX, rel)))
 	if (missing.length > 0) {
@@ -192,6 +198,99 @@ function parseReport(stdout) {
 		assert(/additionalProperties/.test(brokenVal.stderr + brokenVal.stdout),
 			'broken: the structural failure is the additionalProperties (layout) violation')
 		fs.rmSync(tmpDir, { recursive: true, force: true })
+	}
+}
+
+// --- (f) component-registry cross-reference (larpingapp#286) -----------------
+//
+// The acceptance test for ConductionNL/.github#238. Both directions, each with
+// its opposite as the control: a gate that only ever fires is as useless as one
+// that never does, so `registry-wired` must stay silent while the other two
+// speak.
+{
+	const REG = (name) => path.join(FIX, name)
+
+	// registry-wired — everything registered is positioned. Silence expected.
+	{
+		const check = run([CHECKER, '--app-dir', REG('registry-wired')])
+		const rep = parseReport(check.stdout)
+		const rx = rep.findings.filter((f) => f.check === 'registry-crossref')
+		assert(rx.length === 0, `registry-wired: zero registry-crossref findings (got ${rx.length})`)
+		assert(check.status === 0, 'registry-wired: checker exits 0')
+	}
+
+	// DIRECTION 1 — registered, positioned by nothing. larpingapp#286 as shipped.
+	{
+		const check = run([CHECKER, '--app-dir', REG('registry-orphan')])
+		const rep = parseReport(check.stdout)
+		const rx = rep.findings.filter((f) => f.check === 'registry-crossref')
+		assert(rx.length === 1 && rx[0].message.includes("'EventRoster'"),
+			`registry-orphan: exactly one registry-crossref finding naming EventRoster (got ${rx.length})`)
+		assert(rx.length === 1 && rx[0].severity === 'warn',
+			'registry-orphan: DIRECTION 1 is a WARN — an orphan is either wired or deleted and the gate cannot know which')
+		assert(check.status === 0,
+			'registry-orphan: a warn does not set the exit code')
+	}
+
+	// DIRECTION 2 — positioned, registered by nothing. Renders a blank tab.
+	{
+		const check = run([CHECKER, '--app-dir', REG('registry-missing')])
+		const rep = parseReport(check.stdout)
+		const errs = rep.findings.filter((f) => f.check === 'registry-crossref' && f.severity === 'error')
+		assert(errs.length === 1 && errs[0].message.includes("'ThisComponentDoesNotExistAnywhere'"),
+			`registry-missing: exactly one registry-crossref ERROR naming the unresolvable component (got ${errs.length})`)
+		assert(errs.length === 1 && errs[0].path === '/pages/0/config/sidebar/tabs/0/component',
+			'registry-missing: the error points at the exact manifest position, not just the page')
+		assert(check.status === 1,
+			'registry-missing: DIRECTION 2 sets the exit code — a component that resolves to nothing renders nothing')
+	}
+
+	// THE FALSE-POSITIVE CONTROLS. Each of these, if it regressed, would fail
+	// every well-formed manifest in the fleet — the widening that would make
+	// this check useless on arrival rather than after a slow drift.
+	{
+		const check = run([CHECKER, '--app-dir', REG('registry-wired')])
+		const rep = parseReport(check.stdout)
+		const msgs = rep.findings.map((f) => f.message).join(' | ')
+		assert(!msgs.includes('CnSearchPage'),
+			'control: a Cn* lib component is NOT reported unresolved — it resolves from nextcloud-vue, not the app registry')
+		assert(!msgs.includes('ConfirmDialog'),
+			"control: a kind:'modal' entry is NOT reported orphaned — open-modal targets are runtime-resolved and gate (b) already warns")
+		assert(!msgs.includes('featureFlags'),
+			'control: a metadata-only registry entry with no kind is NOT reported orphaned')
+	}
+
+	// The parser must not count a COMMENTED-OUT registration. A commented-out
+	// prelude counting as a prelude was a real false-GREEN in gate-64; here it
+	// would let a deleted component vouch for a manifest reference that
+	// resolves to nothing at runtime.
+	{
+		const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gate30-reg-'))
+		fs.mkdirSync(path.join(tmp, 'src'), { recursive: true })
+		fs.copyFileSync(path.join(REG('registry-wired'), 'src', 'manifest.json'),
+			path.join(tmp, 'src', 'manifest.json'))
+		fs.writeFileSync(path.join(tmp, 'src', 'registry.js'),
+			'export default {\n' +
+			'\t// EventRoster: { kind: "section", component: EventRoster },\n' +
+			'\t/* SkillTree: { kind: "page", component: SkillTree }, */\n' +
+			'}\n')
+		const check = run([CHECKER, '--app-dir', tmp])
+		const errs = parseReport(check.stdout).findings
+			.filter((f) => f.check === 'registry-crossref' && f.severity === 'error')
+		assert(errs.length === 2
+			&& errs.some((e) => e.message.includes("'EventRoster'"))
+			&& errs.some((e) => e.message.includes("'SkillTree'")),
+		`commented-out registrations do NOT count as registrations (expected 2 errors, got ${errs.length})`)
+		fs.rmSync(tmp, { recursive: true, force: true })
+	}
+
+	// No src/registry.js at all → check (f) is simply not applicable. The
+	// `good` fixture has none, so this also pins that the existing assertions
+	// above were not silently altered by adding this check.
+	{
+		const check = run([CHECKER, '--app-dir', path.join(FIX, 'good')])
+		const rx = parseReport(check.stdout).findings.filter((f) => f.check === 'registry-crossref')
+		assert(rx.length === 0, 'no src/registry.js → check (f) not applicable, zero findings')
 	}
 }
 
