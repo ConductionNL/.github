@@ -223,5 +223,149 @@ class GateIsNotBlind(unittest.TestCase):
                 self.assertEqual(_rules(_scan(body)), ["license-triangle-drift"])
 
 
+# ==========================================================================
+# APPENDED for ConductionNL/.github#178 — the helper's HALF of the
+# applicability decision.
+#
+# #178: gate-28 failed every PHP-free PR in a PHP repo, because scope came
+# from the DIFF while "subject matter exists" was judged from the REPO. #182
+# fixed the runner. Nothing here tested the helper side of that contract, and
+# the contract is narrow enough to break silently:
+#
+#   * The runner decides PASS vs `structural` on ONE number — the
+#     `declared_files=N` line this module writes. `declared_file_count()` had
+#     no test at all, in either direction.
+#   * It reaches the runner over a STREAM SPLIT: findings on stdout, the count
+#     on stderr, separated by `2>&1 >>log |`. A helper that printed the count
+#     to stdout instead would leave every assertion above green, put the count
+#     line into the findings log, and make `wc -l` report a finding that does
+#     not exist — a gate that FAILS a clean repo. The `main()` tests below pin
+#     which stream each half arrives on.
+#
+# The empty-list cases are the ones #178 turns on: with zero files in scope
+# the helper must report zero compared files and — the half that is easy to
+# get wrong — ZERO FINDINGS. A helper that manufactured a finding from an
+# empty scope would move the false red from the coverage block into the
+# failure count, which is worse, not better.
+# ==========================================================================
+import contextlib  # noqa: E402
+import io  # noqa: E402
+
+
+class DeclaredFileCount(unittest.TestCase):
+    """`declared_file_count()` is the runner's entire PASS-vs-structural
+    evidence. Both directions, because a function that always returns 0 and a
+    function that always returns len(files) each satisfy half of this."""
+
+    @staticmethod
+    def _write(d: str, name: str, body: str) -> str:
+        p = Path(d) / name
+        p.write_text(body, encoding="utf-8")
+        return str(p)
+
+    def test_empty_scope_counts_zero(self):
+        # #178's case: nothing was in scope, so nothing was compared.
+        self.assertEqual(clt.declared_file_count([]), 0)
+
+    def test_empty_scope_produces_no_findings(self):
+        # ...and must not invent one. An empty scope is not a defect.
+        self.assertEqual(clt.scan_files([], EUPL), [])
+
+    def test_a_tagged_file_counts_one(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(
+                clt.declared_file_count([self._write(d, "A.php", CLEAN)]), 1)
+
+    def test_an_untagged_file_counts_zero(self):
+        # The `structural` signal: files WERE in scope and declared nothing.
+        # This is the state that must keep failing, and the one an
+        # over-broad #178 fix would have swallowed.
+        with tempfile.TemporaryDirectory() as d:
+            body = "<?php\nnamespace OCA\\Fixture;\nclass Untagged {}\n"
+            self.assertEqual(
+                clt.declared_file_count([self._write(d, "A.php", body)]), 0)
+
+    def test_mixed_scope_counts_only_the_declaring_files(self):
+        with tempfile.TemporaryDirectory() as d:
+            files = [
+                self._write(d, "Tagged.php", CLEAN),
+                self._write(d, "Untagged.php", "<?php\nclass U {}\n"),
+                self._write(d, "Drifted.php", DRIFTED),
+            ]
+            # Tagged and Drifted both DECLARE; only Drifted is wrong. The count
+            # is "how many were compared", not "how many passed" — conflating
+            # those would make a wholly-drifted diff report structural and skip
+            # instead of fail.
+            self.assertEqual(clt.declared_file_count(files), 2)
+            self.assertEqual(_rules(clt.scan_files(files, EUPL)),
+                             ["license-triangle-drift"])
+
+    def test_an_unreadable_path_counts_zero_and_does_not_raise(self):
+        # A path the runner listed but the helper cannot open must not be
+        # counted as compared — that is the falsely-GREEN shape #172 opened on.
+        missing = str(Path(tempfile.gettempdir()) / "gate28-does-not-exist.php")
+        self.assertEqual(clt.declared_file_count([missing]), 0)
+        self.assertEqual(clt.scan_files([missing], EUPL), [])
+
+
+class MainStreamContract(unittest.TestCase):
+    """The runner parses `declared_files=` off STDERR and treats every STDOUT
+    line as a finding (`wc -l`). Pin both."""
+
+    @staticmethod
+    def _main(argv: list[str]) -> tuple[int, str, str]:
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            rc = clt.main(argv)
+        return rc, out.getvalue(), err.getvalue()
+
+    def test_empty_scope_prints_no_stdout_and_a_zero_count_on_stderr(self):
+        rc, out, err = self._main(["check_license_triangle.py", EUPL])
+        self.assertEqual(rc, 0)
+        # Every stdout line is counted as a finding by the runner. One stray
+        # line here fails a repo that has nothing wrong with it.
+        self.assertEqual(out, "")
+        self.assertIn("declared_files=0", err)
+
+    def test_the_count_is_on_stderr_not_stdout(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "A.php"
+            p.write_text(CLEAN, encoding="utf-8")
+            rc, out, err = self._main(
+                ["check_license_triangle.py", EUPL, str(p)])
+        self.assertEqual(rc, 0)
+        self.assertEqual(out, "")                    # clean file: no findings
+        self.assertIn("declared_files=1", err)
+        self.assertNotIn("declared_files=", out)     # the stream split holds
+
+    def test_a_finding_goes_to_stdout_while_the_count_stays_on_stderr(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "A.php"
+            p.write_text(DRIFTED, encoding="utf-8")
+            rc, out, err = self._main(
+                ["check_license_triangle.py", EUPL, str(p)])
+        self.assertEqual(rc, 0)
+        self.assertEqual(len(out.strip().splitlines()), 1)
+        self.assertIn("license-triangle-drift", out)
+        self.assertIn("declared_files=1", err)
+        self.assertNotIn("license-triangle-drift", err)
+
+    def test_the_return_code_is_a_status_not_a_finding_count(self):
+        # #209: gate-19 returned its finding COUNT as an exit status, so 266
+        # findings reported as 10 and 256 would have reported PASS. This helper
+        # must never adopt that shape — the count travels as text on stderr.
+        with tempfile.TemporaryDirectory() as d:
+            files = []
+            for i in range(3):
+                p = Path(d) / f"D{i}.php"
+                p.write_text(DRIFTED, encoding="utf-8")
+                files.append(str(p))
+            rc, out, err = self._main(
+                ["check_license_triangle.py", EUPL, *files])
+        self.assertEqual(len(out.strip().splitlines()), 3)   # 3 findings...
+        self.assertEqual(rc, 0)                              # ...status still 0
+        self.assertIn("declared_files=3", err)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
