@@ -1885,14 +1885,18 @@ if [ -d openspec/specs ] || [ -d tests/e2e ]; then
         _e2e_lib_dir="${SCRIPT_DIR}/lib"
     fi
     if [ -f "${_e2e_lib_dir}/check_e2e_coverage.py" ]; then
-        # check_e2e_coverage.py exits with the uncovered-scenario count (0 = PASS).
-        # Capture exit code directly — avoids the grep -c bug where grep exits 1
-        # on zero matches, causing "|| echo 0" to append a second "0", leaving
-        # _e2e_fail="0\n0" which fails the subsequent -eq integer comparison.
+        # check_e2e_coverage.py exits with a STATUS: 0 pass, 1 fail, 2 error.
+        # It used to exit with the finding COUNT, which is why the count below
+        # is read from stdout and never from the byte. stderr is folded into
+        # the log so a traceback is visible rather than discarded — a crash
+        # that printed nothing anywhere was how this gate hid before.
+        # Capture the exit code directly — avoids the grep -c bug where grep
+        # exits 1 on zero matches, causing "|| echo 0" to append a second "0",
+        # leaving _e2e_fail="0\n0" which fails the -eq integer comparison.
         set +e
         HYDRA_GATE_BASE_REF="${BASE_REF}" \
             python3 "${_e2e_lib_dir}/check_e2e_coverage.py" . \
-            >> "${_e2e_log}" 2>/dev/null
+            >> "${_e2e_log}" 2>&1
         _e2e_fail=$?
         set -e
     else
@@ -1900,15 +1904,22 @@ if [ -d openspec/specs ] || [ -d tests/e2e ]; then
         _skip 19 "e2e-coverage" wiring "check_e2e_coverage.py not found at ${_e2e_lib_dir} — no spec scenario was inspected; @e2e traceability (ADR-020) is UNVERIFIED by this run."
     fi
     if [ "${_e2e_ran}" -eq 1 ]; then
-        # Prefer the count the helper PRINTED over its exit status. An exit
-        # code is one byte: 266 findings left as 10, and 256 findings would
-        # have left as 0 — reported as PASS. The helper clamps its status now,
-        # but the honest number is the one in its summary line.
+        # THE COUNT COMES FROM STDOUT. An exit code is one byte: this helper
+        # once returned 266 findings as 10, and 256 findings would have left
+        # as 0 — reported as PASS. It later clamped, and then a 404-finding
+        # run exited 255, so the byte carried neither the count nor a status.
+        # It is a status now, and the honest number is the printed one.
         _e2e_count=$(grep -oE 'FAIL — [0-9]+ scenario' "${_e2e_log}" 2>/dev/null \
             | tail -1 | grep -oE '[0-9]+' || true)
-        [ -z "${_e2e_count}" ] && _e2e_count="${_e2e_fail}"
+        [ -z "${_e2e_count}" ] && _e2e_count="an unreported number of"
         if [ "${_e2e_fail}" -eq 0 ]; then
             _pass 19 "e2e-coverage"
+        elif [ "${_e2e_fail}" -ge 2 ]; then
+            # The helper fell over. It inspected nothing, so it has no verdict
+            # to give — say so instead of reporting a fail count it never
+            # measured. --require-full-coverage counts this against coverage.
+            _e2e_ran=0
+            _skip 19 "e2e-coverage" wiring "check_e2e_coverage.py exited ${_e2e_fail} (error) — no scenario verdict was produced; @e2e traceability (ADR-020) is UNVERIFIED by this run. See ${_e2e_log}."
         else
             _fail 19 "e2e-coverage" "${_e2e_count} scenario(s) missing @e2e — see ${_e2e_log}"
         fi
