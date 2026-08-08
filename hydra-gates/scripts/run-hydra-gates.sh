@@ -298,17 +298,59 @@ if [ "${SCOPE_TO_DIFF}" = "1" ]; then
             _push_base=""
         fi
         if [ -z "${_push_base:-}" ]; then
-            echo "[hydra-gates] ERROR: diff base '${BASE_REF}' IS HEAD (${_head_sha}) and the push's" >&2
-            echo "[hydra-gates] previous tip could not be used either (reason above)." >&2
-            echo "[hydra-gates] A scoped run against itself inspects nothing, and every gate" >&2
-            echo "[hydra-gates] would report PASS over an empty file set. Refusing." >&2
-            echo "[hydra-gates] Pass a --base that is actually behind HEAD, or set" >&2
-            echo "[hydra-gates] HYDRA_GATE_PUSH_BEFORE to the commit this push started from." >&2
-            exit 99
+            # AUDIT EVERYTHING RATHER THAN NOTHING (#183).
+            #
+            # This used to `exit 99`. The reasoning was sound about the evidence
+            # — a scoped run against itself inspects nothing — and wrong about
+            # the remedy. Refusing fires on every push where the previous tip is
+            # unreachable: a branch created by this push, a force-push, a
+            # freshly-cloned mirror. The run then reports NO gate at all (exit
+            # 99, zero `[gate-N]` lines), which is the same amount of
+            # information a green over an empty diff carries: none.
+            #
+            # The file already says this two screens up — "a permanently-red
+            # gate and a permanently-green gate say the same thing about the
+            # code, and both get filtered out by the people reading them".
+            #
+            # There IS a correct scope for "I cannot tell what this push
+            # changed": everything. Diffing against the EMPTY TREE yields every
+            # tracked file, which is exactly the full-tree audit mode
+            # (`--scope-to-diff --base <root>`) that fleet sweeps already use —
+            # and it needs no root commit, so it is unambiguous in a repository
+            # with several roots or a grafted history.
+            #
+            # A mainline push now gates the whole tree. That is slower and
+            # louder than a diff, and it is the honest answer: nobody told us
+            # what changed, so nothing is assumed unchanged.
+            _empty_tree=$(git -c safe.directory='*' hash-object -t tree /dev/null 2>/dev/null)
+            if [ -n "${_empty_tree}" ] \
+                && git -c safe.directory='*' cat-file -e "${_empty_tree}" 2>/dev/null; then
+                echo "[hydra-gates] The push's previous tip could not be resolved (reason above)."
+                echo "[hydra-gates] FALLING BACK TO A FULL-TREE AUDIT: every tracked file is in scope."
+                echo "[hydra-gates] This is deliberate. A scoped run against itself would inspect"
+                echo "[hydra-gates] nothing, and refusing outright would gate nothing either — both"
+                echo "[hydra-gates] say the same thing about the code. Auditing everything says"
+                echo "[hydra-gates] something. Set HYDRA_GATE_PUSH_BEFORE to scope a push narrowly."
+                BASE_REF="${_empty_tree}"
+            else
+                echo "[hydra-gates] ERROR: diff base '${BASE_REF}' IS HEAD (${_head_sha}), the push's" >&2
+                echo "[hydra-gates] previous tip could not be used, and the empty tree could not be" >&2
+                echo "[hydra-gates] resolved either — so there is no scope left to fall back to." >&2
+                echo "[hydra-gates] A scoped run against itself inspects nothing, and every gate" >&2
+                echo "[hydra-gates] would report PASS over an empty file set. Refusing." >&2
+                echo "[hydra-gates] Pass a --base that is actually behind HEAD, or set" >&2
+                echo "[hydra-gates] HYDRA_GATE_PUSH_BEFORE to the commit this push started from." >&2
+                exit 99
+            fi
         fi
     fi
 
-    if ! git -c safe.directory='*' merge-base "${BASE_REF}" HEAD > /dev/null 2>&1; then
+    # The empty tree deliberately shares no history with HEAD — that is what
+    # makes it mean "everything is in scope". The shallow-checkout guard below
+    # would reject it for exactly the property we selected it for, so skip it.
+    if [ "${BASE_REF}" = "${_empty_tree:-}" ]; then
+        :
+    elif ! git -c safe.directory='*' merge-base "${BASE_REF}" HEAD > /dev/null 2>&1; then
         echo "[hydra-gates] ERROR: '${BASE_REF}' resolves, but shares NO history with HEAD." >&2
         echo "[hydra-gates] This is what a SHALLOW checkout looks like (fetch-depth: 1)." >&2
         echo "[hydra-gates] The diff would be empty and every gate would pass having read" >&2
