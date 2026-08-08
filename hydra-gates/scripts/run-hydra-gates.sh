@@ -4067,7 +4067,7 @@ fi
 #   - ADR-010 (NL Design — WCAG 2.2 AA)
 #   - openspec/architecture/wcag-coverage.md SC 1.1.1 (Non-text Content)
 # ---------------------------------------------------------------------------
-if [ -d src ]; then
+if _a11y_has_markup_dir; then
     _iae_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-img-alt-empty-only.log
     : > "${_iae_log}"
     while IFS= read -r vue; do
@@ -4080,14 +4080,18 @@ if [ -d src ]; then
                 # Must have literal alt="" (not bound `:alt=""` — bound expressions
                 # with computed-default-empty are out of scope; the developer there
                 # at least went through a prop pipeline).
-                echo "${tag}" | grep -qE 'alt\s*=\s*"\s*"' || continue
+                # Both quote styles: `alt=''` renders identically to `alt=""`
+                # and was invisible here. Measured as a PASS on a planted
+                # `<img src='/img/avatar.png' alt=''> in both a .vue app and a
+                # PHP-template app.
+                echo "${tag}" | grep -qE 'alt[[:space:]]*=[[:space:]]*("[[:space:]]*"|'"'"'[[:space:]]*'"'"')' || continue
                 # Must have a src that names a semantic noun. A BOUND :src /
                 # v-bind:src carries the noun in its expression; a PHP template
                 # or plain HTML carries it in the literal attribute value
                 # (`src="<?php p($avatarUrl) ?>"`, `src="/img/avatar.png"`).
                 # Both mean the same thing — the author knew the image was a
                 # person or a picture and still gave it an empty alt (#225).
-                _src_expr=$(echo "${tag}" | grep -oE '(:src|v-bind:src|src)\s*=\s*"[^"]*"' | head -1 || true)
+                _src_expr=$(echo "${tag}" | grep -oE '(:src|v-bind:src|src)[[:space:]]*=[[:space:]]*("[^"]*"|'"'"'[^'"'"']*'"'"')' | head -1 || true)
                 [ -z "${_src_expr}" ] && continue
                 if echo "${_src_expr}" | grep -qiE '\b(avatar|photo|thumbnail|picture|headshot|portrait|profilePicture)\b'; then
                     echo "${vue}: ${tag} rule=empty-alt-on-semantic-bound-src" >> "${_iae_log}"
@@ -4123,7 +4127,12 @@ if _a11y_has_markup_dir; then
     # form where the value is bound (`:tabindex="..."` is reviewer-judgment).
     # templates/ too (#225): focus order is a property of the rendered DOM, not
     # of the language that emitted it.
-    grep -rnE 'tabindex[[:space:]]*=[[:space:]]*"[[:space:]]*[1-9][0-9]*[[:space:]]*"' src/ templates/ appinfo/templates/ \
+    #
+    # BOTH QUOTE STYLES. The pattern read `"` only, so `tabindex='5'` — the
+    # same rendered DOM, the same defect — reported PASS in both a .vue app
+    # and a PHP-template app when it was planted there. Zero occurrences in
+    # the fleet today, which is precisely why it could sit here unnoticed.
+    grep -rnE 'tabindex[[:space:]]*=[[:space:]]*["'"'"'][[:space:]]*[1-9][0-9]*[[:space:]]*["'"'"']' src/ templates/ appinfo/templates/ \
         --include='*.vue' --include='*.js' --include='*.ts' \
         --include='*.php' --include='*.html' --include='*.htm' 2>/dev/null \
         | _filter_grep_by_scope >> "${_tp_log}" || true
@@ -4526,7 +4535,7 @@ fi
 # References:
 #   - openspec/architecture/wcag-coverage.md SC 1.3.1, 3.3.2
 # ---------------------------------------------------------------------------
-if [ -d src ]; then
+if _a11y_has_markup_dir; then
     _fl_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-form-label-association.log
     : > "${_fl_log}"
     _fl_ran=1
@@ -4536,8 +4545,8 @@ if [ -d src ]; then
         _in_scope "${vue}" || continue
         _fl_files+=("${vue}")
     done < <(_a11y_markup_files)
-    # NOTE: an empty in-scope set is NOT declared `na` here. Every other
-    # `[ -d src ]` gate reports PASS over an empty diff scope — that is what
+    # NOTE: an empty in-scope set is NOT declared `na` here. Every other gate
+    # in this family reports PASS over an empty diff scope — that is what
     # ADR-020 diff scoping MEANS — and tests/test-hydra-gates-bin.sh asserts
     # that none of gates 10/12/13/26/31..45 goes NOT APPLICABLE while src/
     # exists. Making gate-40 alone answer differently would drift the
@@ -4553,7 +4562,24 @@ if [ -d src ]; then
         # ONE python process for the whole file set, not one per file. The
         # per-file heredoc this replaced took over two minutes on a 21-repo
         # sweep, almost all of it interpreter startup.
-        python3 "${_fl_helper}" "${_fl_files[@]}" >> "${_fl_log}" 2>/dev/null || true
+        #
+        # A CRASHED CHECKER MUST NOT REPORT PASS (#147 / #249). `2>/dev/null
+        # || true` discarded the traceback AND the failure, so a broken
+        # interpreter left an empty log and this gate called it clean.
+        # Measured 2026-08-08 on opencatalogi with a `python3` that exits 1 on
+        # every call: gate-40 printed PASS over the 13 real findings it had
+        # reported one run earlier, while every a11y gate that read its
+        # helper's return code correctly reported SKIPPED (wiring).
+        #
+        # `set +e` only, never `set -e` after — errexit is OFF for this whole
+        # script and nothing may turn it on (see the invariant at the top).
+        set +e
+        python3 "${_fl_helper}" "${_fl_files[@]}" >> "${_fl_log}" 2>>"${_fl_log}.err"
+        _fl_rc=$?
+        if [ "${_fl_rc}" -ne 0 ]; then
+            _fl_ran=0
+            _skip 40 "form-label-association" wiring "check_form_labels.py exited ${_fl_rc} — ${#_fl_files[@]} markup file(s) were in scope and no verdict was produced; unlabelled form controls (WCAG 1.3.1 / 3.3.2) are UNVERIFIED by this run. See ${_fl_log}.err."
+        fi
     fi
     _fl_fail=$(wc -l < "${_fl_log}" 2>/dev/null || echo 0)
     if [ "${_fl_ran}" -eq 1 ]; then
@@ -4662,45 +4688,60 @@ fi
 # make "Read more" accessible-in-context. Links with aria-label or Vue
 # interpolations are accepted unconditionally.
 #
+# A CRASHED CHECKER REPORTED PASS (#147 / #249)
+# --------------------------------------------
+# This gate ran `python3 - "$vue" <<'PYLQ' >> log 2>/dev/null` once per file
+# and never read an exit status. Measured 2026-08-08 on opencatalogi with a
+# `python3` on PATH that exits 1 on every call:
+#
+#   gate-40 PASS   gate-42 PASS   gate-44 PASS      <- the three inline ones
+#   gate-34/37/38/39/41/43 SKIPPED (wiring)         <- the six behind a helper
+#
+# gate-40 printed PASS over the 13 real findings it had reported a run
+# earlier. An empty log is not a clean sheet, and `2>/dev/null` hid the
+# traceback that would have said so. Implementation moved to
+# scripts/lib/check_link_text.py so this gate gets the same return-code guard
+# as the rest of the family — and one interpreter start for the whole file
+# set instead of one per file.
+#
 # References:
 #   - openspec/architecture/wcag-coverage.md SC 2.4.4
+#   - ConductionNL/.github#147, #249
 # ---------------------------------------------------------------------------
-if [ -d src ]; then
+if _a11y_has_markup_dir; then
     _lq_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-link-text-quality.log
     : > "${_lq_log}"
+    _lq_ran=1
+    _lq_helper="${SCRIPT_DIR}/lib/check_link_text.py"
+    _lq_files=()
     while IFS= read -r vue; do
         _in_scope "${vue}" || continue
-        python3 - "$vue" <<'PYLQ' >> "${_lq_log}" 2>/dev/null
-import re, sys
-fname = sys.argv[1]
-try:
-    src = open(fname).read()
-except Exception:
-    sys.exit(0)
-txt = src.replace('\n', ' ')
-patterns = [
-    (r'<a\b([^>]*)>(.*?)</a>', 'a'),
-    (r'<router-link\b([^>]*)>(.*?)</router-link>', 'router-link'),
-    (r'<RouterLink\b([^>]*)>(.*?)</RouterLink>', 'RouterLink'),
-]
-BAD = re.compile(r'^(click\s*here|here|read\s*more|learn\s*more|more|continue|see\s*more|details)\.?$', re.IGNORECASE)
-for pat, tagname in patterns:
-    for m in re.finditer(pat, txt, re.IGNORECASE | re.DOTALL):
-        attrs = m.group(1) or ''
-        body = m.group(2) or ''
-        if re.search(r'(:?aria-label|aria-labelledby)\s*=', attrs): continue
-        if '{{' in body and '}}' in body: continue
-        body_text = re.sub(r'<[^>]+>', '', body)
-        body_text = re.sub(r'\s+', ' ', body_text).strip()
-        if not body_text or BAD.match(body_text):
-            print(f'{fname}: <{tagname}> body="{body_text}" rule=link-text-not-descriptive')
-PYLQ
+        _lq_files+=("${vue}")
     done < <(_a11y_markup_files)
-    _lq_fail=$(wc -l < "${_lq_log}" 2>/dev/null || echo 0)
-    if [ "${_lq_fail}" -eq 0 ]; then
-        _pass 42 "link-text-quality"
+    if [ "${#_lq_files[@]}" -eq 0 ]; then
+        :   # nothing in scope; the PASS below describes the diff, as everywhere else.
+    elif [ ! -f "${_lq_helper}" ]; then
+        # A MISSING HELPER MUST NOT REPORT PASS (#147).
+        _lq_ran=0
+        _skip 42 "link-text-quality" wiring "check_link_text.py not found at ${_lq_helper} — ${#_lq_files[@]} markup file(s) were in scope and NONE were inspected; non-descriptive link text (WCAG 2.4.4) is UNVERIFIED by this run."
     else
-        _fail 42 "link-text-quality" "${_lq_fail} link(s) with non-descriptive text — see ${_lq_log}"
+        # `set +e` only, never `set -e` after — errexit is OFF for this whole
+        # script and nothing may turn it on (see the invariant at the top).
+        set +e
+        python3 "${_lq_helper}" "${_lq_files[@]}" >> "${_lq_log}" 2>>"${_lq_log}.err"
+        _lq_rc=$?
+        if [ "${_lq_rc}" -ne 0 ]; then
+            _lq_ran=0
+            _skip 42 "link-text-quality" wiring "check_link_text.py exited ${_lq_rc} — ${#_lq_files[@]} markup file(s) were in scope and no verdict was produced; non-descriptive link text (WCAG 2.4.4) is UNVERIFIED by this run. See ${_lq_log}.err."
+        fi
+    fi
+    _lq_fail=$(wc -l < "${_lq_log}" 2>/dev/null || echo 0)
+    if [ "${_lq_ran}" -eq 1 ]; then
+        if [ "${_lq_fail}" -eq 0 ]; then
+            _pass 42 "link-text-quality"
+        else
+            _fail 42 "link-text-quality" "${_lq_fail} link(s) with non-descriptive text — see ${_lq_log}"
+        fi
     fi
 fi
 
@@ -4789,40 +4830,64 @@ fi
 # attribute so password managers + browser autofill work. Per WCAG 2.2 AA
 # SC 1.3.5 (Identify Input Purpose).
 #
+# THREE DEFECTS FIXED 2026-08-08:
+#
+# (a) A CRASHED CHECKER REPORTED PASS. Inline `python3 - "$vue" <<'PYAC' >>
+#     log 2>/dev/null`, once per file, exit status never read — so a broken
+#     interpreter left an empty log and the gate called it clean (#147 /
+#     #249). Measured with a `python3` that exits 1: gates 40, 42 and 44 all
+#     said PASS while the six a11y gates behind a helper correctly said
+#     SKIPPED (wiring).
+#
+# (b) DOUBLE-QUOTED VALUES ONLY. `name\s*=\s*"([^"]+)"` never saw
+#     `<input id='b44-tel' type='text' name='telephone'>` — same rendered
+#     DOM, same defect, PASS in both a .vue app and a PHP-template app.
+#
+# (c) FIRST NAME-LIKE ATTRIBUTE WINS. `re.search` over name/id/v-model
+#     stopped at the first hit, so `<input id="e" type="text" name="email">`
+#     was judged on `e` alone. The plainest textbook case for this gate.
+#
+# `[^>]*` also went: a `>` inside an attribute value is not the end of the
+# tag (#259, #198, #236). Implementation in scripts/lib/check_autocomplete.py.
+#
 # References:
 #   - openspec/architecture/wcag-coverage.md SC 1.3.5
+#   - ConductionNL/.github#147, #249, #259
 # ---------------------------------------------------------------------------
-if [ -d src ]; then
+if _a11y_has_markup_dir; then
     _ac_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-autocomplete-attr.log
     : > "${_ac_log}"
+    _ac_ran=1
+    _ac_helper="${SCRIPT_DIR}/lib/check_autocomplete.py"
+    _ac_files=()
     while IFS= read -r vue; do
         _in_scope "${vue}" || continue
-        python3 - "$vue" <<'PYAC' >> "${_ac_log}" 2>/dev/null
-import re, sys
-fname = sys.argv[1]
-try:
-    src = open(fname).read()
-except Exception:
-    sys.exit(0)
-txt = src.replace('\n', ' ')
-SEM_RE = re.compile(r'(email|tel(?:ephone)?|phone|firstname|lastname|fullname|address|street|city|postal|postcode|zip|country|password|username|organization|birthday|dob)', re.IGNORECASE)
-for m in re.finditer(r'<input\b([^>]*)>', txt, re.IGNORECASE):
-    attrs = m.group(1) or ''
-    type_m = re.search(r'(^|\s)type\s*=\s*"(hidden|submit|button|reset|image|file|checkbox|radio|color|range)"', attrs, re.IGNORECASE)
-    if type_m: continue
-    if re.search(r'(^|\s)(:?autocomplete|v-bind:autocomplete)\s*=', attrs): continue
-    name_m = re.search(r'(^|\s)(?:name|id|:name|:id|v-model)\s*=\s*"([^"]+)"', attrs)
-    if not name_m: continue
-    val = name_m.group(2)
-    if SEM_RE.search(val):
-        print(f'{fname}: <input name/id="{val}" ...> rule=semantic-input-without-autocomplete')
-PYAC
+        _ac_files+=("${vue}")
     done < <(_a11y_markup_files)
-    _ac_fail=$(wc -l < "${_ac_log}" 2>/dev/null || echo 0)
-    if [ "${_ac_fail}" -eq 0 ]; then
-        _pass 44 "autocomplete-attr"
+    if [ "${#_ac_files[@]}" -eq 0 ]; then
+        :   # nothing in scope; the PASS below describes the diff, as everywhere else.
+    elif [ ! -f "${_ac_helper}" ]; then
+        # A MISSING HELPER MUST NOT REPORT PASS (#147).
+        _ac_ran=0
+        _skip 44 "autocomplete-attr" wiring "check_autocomplete.py not found at ${_ac_helper} — ${#_ac_files[@]} markup file(s) were in scope and NONE were inspected; inputs with no declared purpose (WCAG 1.3.5) are UNVERIFIED by this run."
     else
-        _fail 44 "autocomplete-attr" "${_ac_fail} semantic input(s) without autocomplete= — see ${_ac_log}"
+        # `set +e` only, never `set -e` after — errexit is OFF for this whole
+        # script and nothing may turn it on (see the invariant at the top).
+        set +e
+        python3 "${_ac_helper}" "${_ac_files[@]}" >> "${_ac_log}" 2>>"${_ac_log}.err"
+        _ac_rc=$?
+        if [ "${_ac_rc}" -ne 0 ]; then
+            _ac_ran=0
+            _skip 44 "autocomplete-attr" wiring "check_autocomplete.py exited ${_ac_rc} — ${#_ac_files[@]} markup file(s) were in scope and no verdict was produced; inputs with no declared purpose (WCAG 1.3.5) are UNVERIFIED by this run. See ${_ac_log}.err."
+        fi
+    fi
+    _ac_fail=$(wc -l < "${_ac_log}" 2>/dev/null || echo 0)
+    if [ "${_ac_ran}" -eq 1 ]; then
+        if [ "${_ac_fail}" -eq 0 ]; then
+            _pass 44 "autocomplete-attr"
+        else
+            _fail 44 "autocomplete-attr" "${_ac_fail} semantic input(s) without autocomplete= — see ${_ac_log}"
+        fi
     fi
 fi
 
@@ -6295,9 +6360,36 @@ _declare_na() {
     done
 }
 
-# `if [ -d src ]` — gates 10 12 13 26 31 32 34 35 36 37 39 40 42 43 44 45
+# `if [ -d src ]` — gates 10 12 13 26 45
 [ -d src ] || _declare_na "no src/ directory — this repo ships no frontend, so there is no .vue/.js/.ts source for this gate to inspect." \
-    10 12 13 26 31 32 34 35 36 37 39 40 42 43 44 45
+    10 12 13 26 45
+# `if _a11y_has_markup_dir` — gates 31 32 34 35 36 37 39 40 42 43 44
+#
+# THE TABLE HAD DRIFTED FROM THE GUARDS IT CLAIMS TO MIRROR.
+#
+# The block above listed the whole accessibility family under `[ -d src ]`,
+# and gave them all the reason "this repo ships no frontend, so there is no
+# .vue/.js/.ts source for this gate to inspect." After #225/#261 that reason
+# is simply untrue: the a11y family reads `_a11y_markup_files`, which is
+# .vue AND .php AND .html under src/, templates/ and appinfo/templates/,
+# because WCAG does not care which templating language produced the DOM.
+#
+# Measured 2026-08-08 on an app with a `templates/` full of markup and no
+# `src/` — one textbook true positive per gate planted in it:
+#
+#   gate-34/36/37/38/39/41/43   ran, and 4 of them FAILED on the plants
+#   gate-35/40/42/44            NOT APPLICABLE — "this repo ships no frontend"
+#
+# in the SAME run, over the SAME files. Four gates removed themselves from
+# coverage accounting entirely, with a reason contradicted three lines above
+# it in their own output. No fleet app is templates-only today, but nldesign
+# is one `rm` away: its `src/` holds a single `manifest.json`, which is the
+# exact shape that made twelve gates pass over nothing in #225.
+#
+# The condition here is now the SAME FUNCTION the gates call, not a restated
+# copy of it, so the two cannot drift again.
+_a11y_has_markup_dir || _declare_na "no src/, templates/ or appinfo/templates/ — this repo renders no markup, so there is no DOM for this accessibility gate to inspect." \
+    31 32 34 35 36 37 39 40 42 43 44
 # `if [ -f appinfo/routes.php ]` — gates 5 25
 [ -f appinfo/routes.php ] || _declare_na "no appinfo/routes.php — this repo registers no HTTP routes, so there is no endpoint for this gate to inspect." \
     5 25
@@ -6310,8 +6402,10 @@ _declare_na() {
 # `if [ -d openspec/specs ] || [ -d tests/e2e ]` — gate 19
 { [ -d openspec/specs ] || [ -d tests/e2e ]; } || _declare_na "no openspec/specs/ and no tests/e2e/ — there is neither a spec scenario to trace nor an e2e suite to trace it to." \
     19
-# `if [ -d src ] || [ -d templates ]` — gate 38
-{ [ -d src ] || [ -d templates ]; } || _declare_na "no src/ and no templates/ — this repo renders no markup, so there is no document for a skip link to be missing from." \
+# `if [ -d src ] || [ -d templates ] || [ -d appinfo/templates ]` — gate 38.
+# That is `_a11y_has_markup_dir` spelled out; the declaration omitted the
+# third arm, so it did not mirror the guard either.
+_a11y_has_markup_dir || _declare_na "no src/, templates/ or appinfo/templates/ — this repo renders no markup, so there is no document for a skip link to be missing from." \
     38
 # `if [ -d templates ] || [ -d appinfo/templates ]` — gate 41
 { [ -d templates ] || [ -d appinfo/templates ]; } || _declare_na "no templates/ and no appinfo/templates/ — this repo ships no server-rendered HTML document to carry a lang attribute." \
