@@ -66,6 +66,34 @@
 
 set -u
 
+# ---------------------------------------------------------------------------
+# ERREXIT IS OFF FOR THIS ENTIRE SCRIPT, AND NOTHING MAY TURN IT ON.
+#
+# A gate returning non-zero is NORMAL — it is how a gate reports findings. So
+# this runner deliberately runs under `set -u` only.
+#
+# Twenty-seven blocks used to wrap a helper call in `set +e … set -e`, reading
+# the trailing `set -e` as "restore". It is not a restore: it is an
+# unconditional ENABLE, because errexit was never on. The first sits in gate-19,
+# so gates 20-64 — forty-five gates — executed under an errexit the code around
+# them does not expect. Two comments further down (gate-27, gate-53) even
+# document the leak and work around it locally instead of fixing it.
+#
+# The consequence is not theoretical. Measured 2026-08-08 against a fixture with
+# a deliberately crashing `python3`: gate-39's unguarded
+# `python3 - "$vue" <<'PYBN'` returned 127, errexit was live, and the run DIED
+# THERE — 37 of 64 gates emitted a verdict and 27 NEVER EXECUTED. The abort
+# banner does fire, so the run is not silently green; it is simply a whole-suite
+# outage caused by one checker having a bad day.
+#
+# The invariant is therefore: a block MAY disable errexit and MUST NOT enable
+# it. Restore sites say `set +e`, which is the state this script actually runs
+# in. `scripts/lib/test_gate_errexit_discipline.sh` asserts that no bare
+# `set -e` re-enters this file, and `_pass`/`_fail`/`_skip` re-assert `set +e`
+# as a backstop so a future gate that leaks cannot carry the leak past its own
+# verdict line.
+# ---------------------------------------------------------------------------
+
 # Resolve this script's own directory ONCE, as an absolute path, BEFORE any
 # `cd` into the app dir below. Gates that shell out to co-located Python
 # helpers (scripts/lib/*.py) must use ${SCRIPT_DIR} — resolving via
@@ -757,13 +785,14 @@ _NA_GATES=""
 # wrapper — anchors on `^\[gate-`. A verdict that wraps onto a second line is
 # a verdict that silently loses its own reason.
 _fail() {
+    set +e   # backstop — see the errexit invariant at the top of this file
     local _reason
     _reason=$(printf '%s' "${3:-}" | tr '\n' ' ')
     echo "[gate-$1] $2: FAIL${_reason:+ — ${_reason}}"
     _FAILED=$((_FAILED + 1))
     _EMITTED_GATES="${_EMITTED_GATES}$1 "
 }
-_pass() { echo "[gate-$1] $2: PASS"; _EMITTED_GATES="${_EMITTED_GATES}$1 "; }
+_pass() { set +e; echo "[gate-$1] $2: PASS"; _EMITTED_GATES="${_EMITTED_GATES}$1 "; }
 
 # _optout_text — every place a reason-bearing `[hydra-gate-<name> exclude]` tag
 # may legitimately be written, as one stream to grep.
@@ -833,6 +862,7 @@ _optout_text() {
 # making any gate's absence stop counting — which is precisely the accounting
 # hole this whole block exists to close, re-opened from the inside.
 _skip() {
+    set +e   # backstop — see the errexit invariant at the top of this file
     local _cat _reason
     _cat="${3:-}"
     _reason=$(printf '%s' "${4:-}" | tr '\n' ' ')
@@ -2035,7 +2065,7 @@ if [ -d openspec/specs ] || [ -d tests/e2e ]; then
             python3 "${_e2e_lib_dir}/check_e2e_coverage.py" . \
             >> "${_e2e_log}" 2>&1
         _e2e_fail=$?
-        set -e
+        set +e
     else
         _e2e_ran=0
         _skip 19 "e2e-coverage" wiring "check_e2e_coverage.py not found at ${_e2e_lib_dir} — no spec scenario was inspected; @e2e traceability (ADR-020) is UNVERIFIED by this run."
@@ -2232,7 +2262,7 @@ if [ -f src/manifest.json ]; then
         set +e
         node "${_mv_validator}" src/manifest.json >> "${_mv_log}" 2>&1
         _mv_rc=$?
-        set -e
+        set +e
         # Advisory: run the app's own check:manifest when it exists, purely so
         # a divergence between it and the canonical validator is VISIBLE.
         _mv_app_note=""
@@ -2241,7 +2271,7 @@ if [ -f src/manifest.json ]; then
             set +e
             npm run --silent check:manifest >> "${_mv_log}" 2>&1
             _mv_app_rc=$?
-            set -e
+            set +e
             if [ "${_mv_app_rc}" -ne 0 ]; then
                 _mv_app_note=" [advisory: the app's own check:manifest also exits ${_mv_app_rc} — see ${_mv_log}]"
             fi
@@ -2461,7 +2491,7 @@ if [ -f appinfo/routes.php ]; then
             python3 "${_cc_lib_dir}/check_contract_coverage.py" . \
             >> "${_cc_log}" 2>/dev/null
         _cc_fail=$?
-        set -e
+        set +e
     else
         _cc_ran=0
         _skip 25 "contract-coverage" wiring "check_contract_coverage.py not found at ${_cc_lib_dir} — appinfo/routes.php is present but NO endpoint was inspected; wire-contract coverage of newly-exposed endpoints is UNVERIFIED by this run."
@@ -2506,7 +2536,7 @@ if [ -d src ]; then
             python3 "${_vc_lib_dir}/check_visual_coverage.py" . \
             >> "${_vc_log}" 2>/dev/null
         _vc_fail=$?
-        set -e
+        set +e
     else
         _vc_ran=0
         _skip 26 "visual-coverage" wiring "check_visual_coverage.py not found at ${_vc_lib_dir} — src/ is present but NO page component was inspected; visual-regression coverage of new screens is UNVERIFIED by this run."
@@ -2585,7 +2615,7 @@ fi
 # grep -c double-zero bug entirely (always exits 0, prints the line count).
 set +e
 _pcar_fail=$(wc -l < "${_pcar_log}" 2>/dev/null | tr -d ' ')
-set -e
+set +e
 [ -z "${_pcar_fail}" ] && _pcar_fail=0
 if [ "${_pcar_ran}" -eq 1 ]; then
     if [ "${_pcar_fail}" -eq 0 ]; then
@@ -3723,7 +3753,7 @@ else
 fi
 set +e
 _sae_fail=$(wc -l < "${_sae_log}" 2>/dev/null | tr -d ' ')
-set -e
+set +e
 [ -z "${_sae_fail}" ] && _sae_fail=0
 if [ "${_sae_ran}" -eq 1 ]; then
     if [ "${_sae_fail}" -eq 0 ]; then
@@ -3739,7 +3769,7 @@ if [ "${_sae_ran}" -eq 1 ]; then
         # the size of the job is legible from the summary line.
         set +e
         _sae_targets=$(sed 's/^[^:]*: //' "${_sae_log}" 2>/dev/null | sort -u | wc -l | tr -d ' ')
-        set -e
+        set +e
         [ -z "${_sae_targets}" ] && _sae_targets="?"
         _fail 46 "spec-anchor-existence" "${_sae_fail} unresolved @spec finding(s) from ${_sae_targets} distinct target(s) — fix the TARGET, not each tag; see ${_sae_log}"
     fi
@@ -3853,7 +3883,7 @@ if [ "${SCOPE_TO_DIFF}" = "1" ] && [ -n "${BASE_REF}" ]; then
 fi
 set +e
 _csrf_fail=$(wc -l < "${_csrf_log}" 2>/dev/null | tr -d ' ')
-set -e
+set +e
 [ -z "${_csrf_fail}" ] && _csrf_fail=0
 if [ "${_csrf_fail}" -eq 0 ]; then
     _pass 48 "csrf-cochange"
@@ -4007,7 +4037,7 @@ if [ -s "${_cxt_log}" ]; then
 fi
 set +e
 _cxt_fail=$(wc -l < "${_cxt_log}" 2>/dev/null | tr -d ' ')
-set -e
+set +e
 [ -z "${_cxt_fail}" ] && _cxt_fail=0
 if [ "${_cxt_fail}" -eq 0 ]; then
     _pass 49 "controller-exception-translation"
@@ -4083,7 +4113,7 @@ PY
 fi
 set +e
 _scfm_fail=$(wc -l < "${_scfm_log}" 2>/dev/null | tr -d ' ')
-set -e
+set +e
 [ -z "${_scfm_fail}" ] && _scfm_fail=0
 if [ "${_scfm_fail}" -eq 0 ]; then
     _pass 50 "security-config-fail-mode"
@@ -4140,7 +4170,7 @@ if [ "${#_spt_files[@]}" -gt 0 ]; then
 fi
 set +e
 _spt_fail=$(wc -l < "${_spt_log}" 2>/dev/null | tr -d ' ')
-set -e
+set +e
 [ -z "${_spt_fail}" ] && _spt_fail=0
 if [ "${_spt_ran}" -eq 1 ]; then
     if [ "${_spt_fail}" -eq 0 ]; then
@@ -4204,7 +4234,7 @@ if [ "${#_cwr_files[@]}" -gt 0 ]; then
             python3 "${_cwr_helper}" "${_cwr_files[@]}" >> "${_cwr_log}" 2>&1
         fi
         _cwr_fail=$?
-        set -e
+        set +e
     else
         _cwr_ran=0
         _skip 52 "custom-widget-ratchet" wiring "check_custom_widget_ratchet.py not found at ${_cwr_helper} — ${#_cwr_files[@]} frontend file(s) were in scope and NONE were inspected; custom kind:\"widget\" growth (ADR-049) is UNVERIFIED by this run — no base/head/delta counts were produced."
@@ -4340,7 +4370,7 @@ if [ -f src/manifest.json ]; then
                     echo "ALL" > "${_em_scope_file}"
                     _em_scope_rc=0
                 fi
-                set -e
+                set +e
                 if [ "${_em_scope_rc}" -ne 0 ]; then
                     # Could not compute a scope → do not narrow. Say so.
                     echo "ALL" > "${_em_scope_file}"
@@ -4372,7 +4402,7 @@ if [ -f src/manifest.json ]; then
             set +e
             node "${_em_validator}" "${_em_tmp}" ${_em_scope_flag} ${_em_scope_val} >> "${_em_log}" 2>&1
             _em_val_rc=$?
-            set -e
+            set +e
             if [ "${_em_val_rc}" -eq 3 ]; then
                 _em_reason="SCHEMA VALIDATION DID NOT HAPPEN — the vendored validator degraded to its structural lint (Ajv unresolvable mid-run); see ${_em_log}"
             elif [ "${_em_val_rc}" -ne 0 ]; then
@@ -4385,7 +4415,7 @@ if [ -f src/manifest.json ]; then
                 set +e
                 node "${_em_crossref}" --app-dir . --manifest "${_em_tmp}" ${_em_scope_flag} ${_em_scope_val} >> "${_em_log}" 2>&1
                 _em_cr_rc=$?
-                set -e
+                set +e
                 if [ "${_em_cr_rc}" -ne 0 ]; then
                     _em_n=$(grep -E '^at ' "${_em_log}" 2>/dev/null | grep -cvE ': (WARN|PRE-EXISTING) ' || true)
                     { [ -z "${_em_n}" ] || [ "${_em_n}" -eq 0 ]; } && _em_n=1
@@ -4466,7 +4496,7 @@ fi
 set +e
 _rd_fail=$(grep -cv '^WARN:' "${_rd_log}" 2>/dev/null | tr -d ' ')
 _rd_warn=$(grep -c '^WARN:' "${_rd_log}" 2>/dev/null | tr -d ' ')
-set -e
+set +e
 [ -z "${_rd_fail}" ] && _rd_fail=0
 [ -z "${_rd_warn}" ] && _rd_warn=0
 [ "${_rd_warn}" -gt 0 ] && echo "[gate-54] relation-dialect: ${_rd_warn} WARN finding(s) (non-blocking) — see ${_rd_log}"
@@ -4525,7 +4555,7 @@ if [ "${#_dpd_files[@]}" -gt 0 ]; then
 fi
 set +e
 _dpd_fail=$(wc -l < "${_dpd_log}" 2>/dev/null | tr -d ' ')
-set -e
+set +e
 [ -z "${_dpd_fail}" ] && _dpd_fail=0
 if [ "${_dpd_ran}" -eq 1 ]; then
     if [ "${_dpd_fail}" -eq 0 ]; then
@@ -4580,7 +4610,7 @@ if [ "${#_rhr_files[@]}" -gt 0 ]; then
 fi
 set +e
 _rhr_fail=$(wc -l < "${_rhr_log}" 2>/dev/null | tr -d ' ')
-set -e
+set +e
 [ -z "${_rhr_fail}" ] && _rhr_fail=0
 if [ "${_rhr_ran}" -eq 1 ]; then
     if [ "${_rhr_fail}" -eq 0 ]; then
@@ -4634,7 +4664,7 @@ if [ "${#_owc_files[@]}" -gt 0 ]; then
 fi
 set +e
 _owc_fail=$(wc -l < "${_owc_log}" 2>/dev/null | tr -d ' ')
-set -e
+set +e
 [ -z "${_owc_fail}" ] && _owc_fail=0
 if [ "${_owc_ran}" -eq 1 ]; then
     if [ "${_owc_fail}" -eq 0 ]; then
@@ -4685,7 +4715,7 @@ while IFS= read -r f; do
 done < <(find tests/e2e -type f \( -name '*.ts' -o -name '*.js' \) 2>/dev/null)
 set +e
 _nwi_fail=$(wc -l < "${_nwi_log}" 2>/dev/null | tr -d ' ')
-set -e
+set +e
 [ -z "${_nwi_fail}" ] && _nwi_fail=0
 if [ "${_nwi_fail}" -eq 0 ]; then
     _pass 58 "e2e-networkidle"
@@ -4717,7 +4747,7 @@ if [ -d lib ] && printf '%s\n' "${CHANGED_FILES}" | grep -qE '^lib/.*\.php$'; th
     set +e
     python3 "${SCRIPT_DIR}/lib/check_unclosable_gate.py" . > "${_ucg_log}" 2>&1
     _ucg_rc=$?
-    set -e
+    set +e
     if [ "${_ucg_rc}" -eq 0 ]; then
         _pass 59 "unclosable-gate"
     else
@@ -4774,7 +4804,7 @@ if [ -f src/manifest.json ]; then
         set +e
         python3 "${SCRIPT_DIR}/lib/check_icon_vocabulary.py" . ${_iv_args} > "${_iv_log}" 2>&1
         _iv_rc=$?
-        set -e
+        set +e
         # Surface warnings even on a pass — they are the deprecation pressure.
         grep -E '^(WARN|NOTE)' "${_iv_log}" || true
         if [ "${_iv_rc}" -eq 0 ]; then
@@ -4830,7 +4860,7 @@ if [ -d lib/AppInfo ]; then
     set +e
     python3 "${SCRIPT_DIR}/lib/check_listener_placement.py" . --base "${BASE_REF}" > "${_lwp_log}" 2>&1
     _lwp_rc=$?
-    set -e
+    set +e
     if [ "${_lwp_rc}" -eq 0 ]; then
         _pass 61 "listener-work-placement"
     else
@@ -4850,7 +4880,7 @@ _sp_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-store-plane.log
 set +e
 python3 "${SCRIPT_DIR}/lib/check_store_and_settings_surface.py" . --gate store --base "${BASE_REF}" > "${_sp_log}" 2>&1
 _sp_rc=$?
-set -e
+set +e
 if [ "${_sp_rc}" -eq 0 ]; then
     _pass 62 "store-plane"
 else
@@ -4867,7 +4897,7 @@ _ss_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-settings-surface.log
 set +e
 python3 "${SCRIPT_DIR}/lib/check_store_and_settings_surface.py" . --gate settings --base "${BASE_REF}" > "${_ss_log}" 2>&1
 _ss_rc=$?
-set -e
+set +e
 if [ "${_ss_rc}" -eq 0 ]; then
     _pass 63 "settings-surface"
 else
@@ -4919,7 +4949,7 @@ if [ -d lib/AppInfo ]; then
     set +e
     python3 "${SCRIPT_DIR}/lib/check_apphost_autoload_prelude.py" . > "${_aap_log}" 2>&1
     _aap_rc=$?
-    set -e
+    set +e
     if [ "${_aap_rc}" -eq 0 ]; then
         _pass 64 "apphost-autoload-prelude"
     else
