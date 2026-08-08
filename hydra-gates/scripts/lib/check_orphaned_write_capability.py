@@ -134,10 +134,27 @@ _MCP_SCANNABLE_INTERFACE = "IMcpScannableServices"
 # `registerServiceAlias('OCA\OpenRegister\Mcp\IMcpScannableServices::<app>', Impl::class)`
 # On disk the namespace separators are double-backslashed inside the PHP
 # string literal, so the pattern must accept either spelling.
+#
+# ⚠️ THE LEADING BACKSLASH (.github#276). The implementation argument's
+# namespace prefix was `(?:[A-Za-z_][A-Za-z0-9_]*\s*\\+\s*)*` — every segment
+# had to START with a letter. So the FULLY-QUALIFIED spelling
+#
+#     registerServiceAlias('…IMcpScannableServices::app', \OCA\App\Mcp\Impl::class)
+#
+# did not match, and it is the ordinary way to write an FQCN inside a
+# namespaced Application.php with no `use` for it. When it does not match,
+# `bound_impls` is empty, `_build_mcp_attribute_seam` short-circuits to the
+# empty set, and EVERY `#[McpTool]` write method in the app is reported dead —
+# which is #200 exactly: the finding whose remedy is deleting a live, curated
+# MCP write tool. Reproduced on shillinq with the two spellings side by side:
+# leading `\` -> the seam vanished; no leading `\` -> the seam held.
+#
+# The seam's three-part evidence is unchanged. This only stops the alias being
+# invisible because of how its author spelled a namespace.
 _MCP_ALIAS_RE = re.compile(
     r"registerServiceAlias\s*\(\s*"
     r"(['\"])[^'\"]*" + _MCP_SCANNABLE_INTERFACE + r"::[A-Za-z0-9_-]+\1"
-    r"\s*,\s*(?:[A-Za-z_][A-Za-z0-9_]*\s*\\+\s*)*"
+    r"\s*,\s*\\*(?:[A-Za-z_][A-Za-z0-9_]*\s*\\+\s*)*"
     r"([A-Za-z_][A-Za-z0-9_]*)\s*::\s*class",
     re.DOTALL,
 )
@@ -146,8 +163,22 @@ _CLASS_CONST_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\s*::\s*class")
 # `#[McpTool(...)]` — optionally namespace-qualified. NOT a comment: `#` opens
 # a line comment in PHP but `#[` opens an attribute, which is exactly why the
 # comment blanker below has to know the difference.
+#
+# ⚠️ SAME LEADING-BACKSLASH BLIND SPOT AS _MCP_ALIAS_RE ABOVE (.github#276),
+# and this is why the honest regression mutant is BOTH sites at once: the seam
+# needs the alias AND the attribute, so reverting either one alone still
+# reproduces the false positive, and reverting one while testing the other
+# looks like the fix did nothing.
+#
+#     #[McpTool(name: 'x')]                         matched before
+#     #[OCA\OpenRegister\Mcp\McpTool(name: 'x')]    matched before
+#     #[\OCA\OpenRegister\Mcp\McpTool(name: 'x')]   did NOT match
+#
+# The third is how the attribute is written with no `use` import for it — a
+# style choice that silently removed the method's only proof of reachability
+# and put a live MCP write tool back on the deletion list (#200).
 _MCP_TOOL_ATTR_RE = re.compile(
-    r"#\[\s*(?:[A-Za-z_][A-Za-z0-9_]*\s*\\+\s*)*McpTool\b"
+    r"#\[\s*\\*(?:[A-Za-z_][A-Za-z0-9_]*\s*\\+\s*)*McpTool\b"
 )
 # Lines that cannot belong to the attribute block of the method below them.
 # ONLY the statement/block terminators. A word-based boundary (`\bclass\b`)

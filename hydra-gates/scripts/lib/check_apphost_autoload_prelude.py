@@ -116,12 +116,67 @@ LOAD_APP = re.compile(r"""loadApp\s*\(\s*['"]openregister['"]\s*\)""")
 # and the escaped string form 'OCA\\OpenRegister\\AppHost\\Bootstrap'.
 BOOTSTRAP_REF = re.compile(r"OpenRegister\\{1,2}AppHost\\{1,2}Bootstrap")
 
-# Rule 2 — class_exists() on a literal AppHost name. This is the probe that
-# answers FALSE on a healthy instance.
-CLASS_EXISTS_APPHOST = re.compile(
-    r"class_exists\s*\(\s*['\"][^'\"]*OpenRegister\\{1,2}AppHost\\{1,2}[^'\"]*['\"]",
-    re.S,
+# Rule 2 — class_exists() on an AppHost name. This is the probe that answers
+# FALSE on a healthy instance.
+#
+# ⚠️ IT ONLY SAW A QUOTED STRING (.github#276). PHP has three ways to name a
+# class and this pattern recognised one of them:
+#
+#     class_exists('OCA\OpenRegister\AppHost\Controller\GenericHealthController')
+#     class_exists(\OCA\OpenRegister\AppHost\Controller\GenericHealthController::class)
+#     use OCA\OpenRegister\AppHost\Controller\GenericHealthController;
+#       … class_exists(GenericHealthController::class)
+#     private const AH = 'OCA\OpenRegister\AppHost\…';  class_exists(self::AH)
+#
+# Only the first failed. The other three were injected into larpingapp's
+# register() and the gate reported OK for all of them — an ADR-040 adoption
+# that is invisible because of the way its author spells a class name. This is
+# #184's lesson in the same file it was learned in: a checker that greps a
+# STRING LITERAL misses every constant.
+#
+# `Foo::class` itself does NOT autoload — it is resolved at compile time. It is
+# `class_exists()` that triggers the autoloader, which is why the CALL is what
+# is matched, in every spelling of its argument, and why a bare
+# `use OCA\OpenRegister\AppHost\…;` on its own is deliberately NOT a finding.
+CLASS_EXISTS_ARG = re.compile(r"class_exists\s*\(\s*([^,)]+)", re.S)
+_APPHOST_FQCN = re.compile(r"OpenRegister\\{1,2}AppHost\\{1,2}")
+QUOTED = re.compile(r"""^(['"])\\{0,2}([^'"]*)\1""")
+# `use A\B\C;` / `use A\B\C as Alias;` — how a short name is bound in this file.
+USE_IMPORT = re.compile(
+    r"use\s+\\?([A-Za-z_][A-Za-z0-9_\\]*)(?:\s+as\s+([A-Za-z_][A-Za-z0-9_]*))?\s*;"
 )
+# `const AH = 'OCA\OpenRegister\AppHost\…';` — a constant holding an FQCN.
+CONST_STR = re.compile(
+    r"""const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*['"]\\{0,2}([A-Za-z_][A-Za-z0-9_\\]*)['"]"""
+)
+
+# A class_exists() probe on ANY OCA\OpenRegister class, not just AppHost. The
+# autoloader mechanism is identical — during register() the OCA\OpenRegister\
+# PSR-4 prefix does not exist for any app whose id sorts earlier — so the guard
+# answers FALSE and everything inside it silently never happens.
+#
+# REPORTED AS A NON-BLOCKING NOTE, NOT A FAILURE, and the reason is measured:
+# gate-64 is not diff-scoped, so promoting this to a FAIL turns every PR in
+# six repos permanently red for pre-existing code the PR did not touch. That
+# is the trap this package already documented in check_store_and_settings_
+# surface.py ("blocked EVERY manifest-touching PR in that repo, permanently").
+#
+# Measured 2026-08-08 across apps-extra, lib/AppInfo/, comment-stripped, no
+# prelude present:
+#     larpingapp  3   'OCA\OpenRegister\Event\{DeepLinkRegistration,
+#                      ObjectCreating,ObjectUpdating}Event'  — LIVE-EXPOSED,
+#                      and ObjectCreating/ObjectUpdating carry larpingapp's
+#                      server-authoritative skill-requirement / XP-budget
+#                      enforcement on character writes.
+#     hermiq      2   flow-node + shareable-config registration
+#     nldesign    1   shareable-config registration
+# openconnector independently recorded `class_exists at register(): false` for
+# the same mechanism, and removing its guard took the flow-node registry from
+# 10 nodes to 12.
+#
+# The NOTE exists so a green gate-64 stops being read as evidence about this.
+_OPENREGISTER_FQCN = re.compile(r"(?:^|\\)OCA\\{1,2}OpenRegister\\{1,2}")
+REGISTER_FN = re.compile(r"function\s+register\s*\(")
 
 # OpenRegister owns AppHost; it cannot need a prelude for its own namespace.
 OWN_NAMESPACE = re.compile(r"namespace\s+OCA\\OpenRegister\b")
@@ -233,6 +288,101 @@ def has_prelude(text: str) -> bool:
     return False
 
 
+def class_exists_targets(text: str) -> list[str]:
+    """Every class name reached by a class_exists() call in *text*.
+
+    *text* must be comment-stripped. PHP offers three ways to write the same
+    class name and all three reach the autoloader through class_exists(), so
+    all three are resolved to a comparable FQCN string:
+
+      quoted FQCN     class_exists('OCA\\OpenRegister\\AppHost\\X')
+      ::class         class_exists(\\OCA\\OpenRegister\\AppHost\\X::class)
+                      class_exists(X::class)  with `use …AppHost\\X;` above
+      class constant  const AH = 'OCA\\OpenRegister\\AppHost\\X';
+                      class_exists(self::AH)
+
+    Reading only the first is what let an injected AppHost probe pass. Every
+    caller below asks its question of this ONE resolver, so a spelling that
+    escapes it escapes both the hard rule and the note — rather than escaping
+    whichever of them happened to be written second.
+    """
+    imports: dict[str, str] = {}
+    for m in USE_IMPORT.finditer(text):
+        fqcn = m.group(1)
+        alias = m.group(2) or fqcn.rsplit("\\", 1)[-1].rsplit("\\\\", 1)[-1]
+        imports[alias] = fqcn
+    constants = dict(CONST_STR.findall(text))
+
+    out: list[str] = []
+    for m in CLASS_EXISTS_ARG.finditer(text):
+        arg = m.group(1).strip()
+        q = QUOTED.match(arg)
+        if q:
+            out.append(q.group(2))
+            continue
+        if "::" not in arg:
+            continue
+        left, right = arg.split("::", 1)
+        left, right = left.strip().lstrip("\\"), right.strip()
+        if right.startswith("class"):
+            # `Foo\Bar::class` — an FQCN written inline, or an imported alias.
+            out.append(imports.get(left, left))
+        elif right in constants:
+            out.append(constants[right])
+    return out
+
+
+def apphost_class_exists(text: str) -> bool:
+    """True when *text* calls class_exists() on an AppHost class, any spelling."""
+    return any(_APPHOST_FQCN.search(t) for t in class_exists_targets(text))
+
+
+def register_body(text: str) -> str:
+    """The balanced body of `function register(...)`, or '' when absent.
+
+    Only register() matters for the OCA\\OpenRegister\\ note: boot() runs after
+    every app has registered, so a probe there resolves correctly and is not a
+    defect. Reporting it would be the false positive that gets a note ignored.
+    """
+    m = REGISTER_FN.search(text)
+    if m is None:
+        return ""
+    i = text.find("{", m.end())
+    if i < 0:
+        return ""
+    depth, j, n = 0, i, len(text)
+    while j < n:
+        if text[j] == "{":
+            depth += 1
+        elif text[j] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[i:j + 1]
+        j += 1
+    return text[i:]
+
+
+def openregister_probes(text: str) -> list[str]:
+    """Non-AppHost OCA\\OpenRegister\\ class_exists() probes inside register().
+
+    Resolves imports and constants against the WHOLE file (that is where `use`
+    and `const` live) but only reports probes whose call site is in register().
+    """
+    body = register_body(text)
+    if not body:
+        return []
+    header = text[:text.find(body)] if body in text else text
+    in_body = set(class_exists_targets(header + body)) - set(class_exists_targets(header))
+    out = []
+    for target in sorted(in_body):
+        if not _OPENREGISTER_FQCN.search("\\" + target.lstrip("\\")):
+            continue
+        if _APPHOST_FQCN.search(target):
+            continue  # already a hard failure above
+        out.append(target)
+    return out
+
+
 def suppression_reason(text: str) -> str | None:
     """Return the reason of a reason-bearing suppression, else None.
 
@@ -279,7 +429,7 @@ def scan_app(app_dir: str) -> list[tuple[str, str]]:
             findings.append(
                 (path, "references OCA\\OpenRegister\\AppHost\\Bootstrap")
             )
-        elif CLASS_EXISTS_APPHOST.search(text):
+        elif apphost_class_exists(text):
             findings.append(
                 (path, "calls class_exists() on an OCA\\OpenRegister\\AppHost\\ class")
             )
@@ -295,6 +445,30 @@ def scan_app(app_dir: str) -> list[tuple[str, str]]:
         )
 
     return findings
+
+
+def scan_notes(app_dir: str) -> list[tuple[str, list[str]]]:
+    """[(path, [probed FQCN, ...])] for non-AppHost register()-time probes.
+
+    Non-blocking. Same mechanism as the hard rules, different blast radius —
+    see CLASS_EXISTS_OR_LITERAL for why this is a note and what it measured.
+    """
+    sources = _sources(app_dir)
+    if not sources:
+        return []
+    code = {path: strip_comments(text) for path, text in sources.items()}
+    if any(OWN_NAMESPACE.search(text) for text in code.values()):
+        return []
+    if has_prelude("\n".join(code.values())):
+        return []
+    if suppression_reason("\n".join(sources.values())):
+        return []
+    out = []
+    for path, text in sorted(code.items()):
+        probes = openregister_probes(text)
+        if probes:
+            out.append((path, probes))
+    return out
 
 
 APP_ID = re.compile(r"<id>\s*([a-z0-9_\-]+)\s*</id>", re.I)
@@ -356,6 +530,20 @@ def main(argv: list[str] | None = None) -> int:
                 f"comment 'apphost-prelude exclude <reason>'."
             )
             failures += 1
+
+        for path, probes in scan_notes(target):
+            rel = os.path.relpath(path, target)
+            print(
+                f"NOTE {app}: {rel} calls class_exists() inside register() on "
+                f"{len(probes)} non-AppHost OpenRegister class(es) "
+                f"({', '.join(probes)}) with no ADR-040 prelude. Same mechanism, "
+                f"outside this gate's hard rule: the OCA\\OpenRegister\\ prefix is "
+                f"not on the autoloader yet, so each guard answers FALSE and "
+                f"everything inside it silently never happens. {severity}. NOT a "
+                f"failure — this gate is not diff-scoped, so failing it would "
+                f"block every PR in this repo on code the PR did not touch. "
+                f"Add the prelude, or move the probe into boot()."
+            )
 
     if failures:
         print(f"\n{failures} AppHost adoption(s) without the autoload prelude.")

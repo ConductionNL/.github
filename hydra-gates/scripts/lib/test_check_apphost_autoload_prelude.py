@@ -372,5 +372,221 @@ class Application {
         )
 
 
+_CLASS_EXISTS_APP = """<?php
+namespace OCA\\Leaf\\AppInfo;
+%(use)s
+class Application
+{
+%(const)s
+    public function register($context): void
+    {
+        if (class_exists(%(arg)s) === true) {
+            $context->registerEventListener(SomeEvent::class, SomeListener::class);
+        }
+    }
+}
+"""
+
+_AH = "OCA\\\\OpenRegister\\\\AppHost\\\\Controller\\\\GenericHealthController"
+
+
+class ClassNameSpellingTest(GateCase):
+    """RULE 2 SAW ONE OF PHP'S THREE WAYS TO NAME A CLASS (.github#276).
+
+    `CLASS_EXISTS_APPHOST` required a QUOTED literal, so only the first of
+    these was a finding — the other three were injected into larpingapp's
+    register() and the gate reported OK for every one:
+
+        class_exists('OCA\\OpenRegister\\AppHost\\…\\GenericHealthController')
+        class_exists(\\OCA\\OpenRegister\\AppHost\\…\\GenericHealthController::class)
+        use …\\GenericHealthController;  class_exists(GenericHealthController::class)
+        const AH = 'OCA\\OpenRegister\\AppHost\\…';  class_exists(self::AH)
+
+    That is #184's lesson in the file where it was learned: a checker that
+    greps a STRING LITERAL misses every constant. The class name is the
+    SUBJECT of this gate, so missing three of its four spellings is missing
+    the gate.
+
+    `Foo::class` does not itself autoload — it is compile-time. It is
+    `class_exists()` that reaches the autoloader, which is why the CALL is
+    what is matched and why a bare `use` import is deliberately NOT a finding
+    (asserted below, so the fix cannot drift into flagging imports).
+    """
+
+    def _app(self, *, arg: str, use: str = "", const: str = "") -> None:
+        self.app(
+            "Application.php",
+            _CLASS_EXISTS_APP % {"arg": arg, "use": use, "const": const},
+        )
+
+    def test_quoted_fqcn(self):
+        self._app(arg=f"'{_AH}'")
+        self.assertEqual(_run(self.dir)[0], 1)
+
+    def test_fully_qualified_class_constant(self):
+        self._app(arg="\\OCA\\OpenRegister\\AppHost\\Controller\\GenericHealthController::class")
+        self.assertEqual(_run(self.dir)[0], 1, "the ::class form is the same probe")
+
+    def test_imported_short_name_class_constant(self):
+        self._app(
+            arg="GenericHealthController::class",
+            use="use OCA\\OpenRegister\\AppHost\\Controller\\GenericHealthController;",
+        )
+        self.assertEqual(_run(self.dir)[0], 1, "a `use` import must be resolved")
+
+    def test_php_class_constant_holding_the_fqcn(self):
+        self._app(arg="self::AH_HEALTH", const=f"    private const AH_HEALTH = '{_AH}';")
+        self.assertEqual(_run(self.dir)[0], 1, "a constant is not a different defect")
+
+    def test_the_prelude_still_clears_every_spelling(self):
+        for arg, use, const in (
+            (f"'{_AH}'", "", ""),
+            ("\\OCA\\OpenRegister\\AppHost\\Controller\\GenericHealthController::class", "", ""),
+            ("self::AH_HEALTH", "", f"    private const AH_HEALTH = '{_AH}';"),
+        ):
+            with self.subTest(arg=arg):
+                self.app(
+                    "Application.php",
+                    _CLASS_EXISTS_APP % {"arg": arg, "use": use, "const": const}
+                    + "\nclass Prelude { function p() {" + PRELUDE + "} }\n",
+                )
+                self.assertEqual(_run(self.dir)[0], 0)
+
+    # --- ANTI-WIDENING -------------------------------------------------
+    def test_a_bare_use_import_is_not_a_finding(self):
+        """`use` is a compile-time alias. It does not autoload, so it is not
+        this defect — and treating it as one would newly redden four repos
+        (docudesk, opencatalogi, openconnector, openbuild) for code that
+        works. Measured before this fix landed."""
+        self.app("Application.php", """<?php
+namespace OCA\\Leaf\\AppInfo;
+use OCA\\OpenRegister\\AppHost\\Controller\\GenericHealthController;
+class Application { public function register($c): void { $c->x(); } }
+""")
+        self.assertEqual(_run(self.dir)[0], 0)
+
+    def test_class_exists_on_an_unrelated_class_is_not_a_finding(self):
+        self._app(arg="\\OCA\\Talk\\Manager::class")
+        self.assertEqual(_run(self.dir)[0], 0)
+
+    def test_a_comment_naming_the_probe_is_not_the_probe(self):
+        """#184's other direction, re-asserted on the new spellings."""
+        self.app("Application.php", """<?php
+namespace OCA\\Leaf\\AppInfo;
+class Application {
+    public function register($c): void {
+        // Deliberately NOT class_exists(\\OCA\\OpenRegister\\AppHost\\Bootstrap::class):
+        // ADR-040 says register the autoloader instead.
+        $c->x();
+    }
+}
+""")
+        self.assertEqual(_run(self.dir)[0], 0)
+
+
+_OR_EVENT_APP = """<?php
+namespace OCA\\Leaf\\AppInfo;
+%(use)s
+class Application
+{
+    public function register($context): void
+    {
+        if (class_exists(%(arg)s) === true) {
+            $context->registerEventListener(X::class, Y::class);
+        }
+    }
+
+    public function boot($context): void
+    {
+        if (class_exists('OCA\\\\OpenRegister\\\\Event\\\\BootTimeEvent') === true) {
+            $context->x();
+        }
+    }
+}
+"""
+
+
+class OpenRegisterProbeNoteTest(GateCase):
+    """A GREEN GATE-64 WAS NOT EVIDENCE ABOUT THIS (.github#276).
+
+    The gate's hard rule is scoped to `OCA\\OpenRegister\\AppHost\\`, but the
+    autoloader mechanism has nothing to do with AppHost: during register() the
+    whole `OCA\\OpenRegister\\` PSR-4 prefix is absent for any app sorting
+    earlier, so ANY class_exists() on it answers FALSE and everything it
+    guards silently never happens.
+
+    Measured 2026-08-08 across apps-extra with no prelude present:
+      larpingapp  3 — Event\\{DeepLinkRegistration,ObjectCreating,ObjectUpdating}
+                      and the last two carry larpingapp's server-authoritative
+                      skill-requirement / XP-budget enforcement on character
+                      writes, which therefore never registers.
+      hermiq      3 — flow-node, leaf-provider and shareable-config registration
+      nldesign    1 — shareable-config registration
+
+    Reported as a NOTE, not a FAIL, and deliberately: this gate is not
+    diff-scoped, so failing it turns every PR in three repos permanently red
+    for code the PR did not touch — the trap
+    check_store_and_settings_surface.py already records ("blocked EVERY
+    manifest-touching PR in that repo, permanently").
+    """
+
+    def _app(self, *, arg: str, use: str = "") -> None:
+        self.app("Application.php", _OR_EVENT_APP % {"arg": arg, "use": use})
+
+    def test_quoted_probe_is_noted_but_does_not_fail(self):
+        self._app(arg="'OCA\\\\OpenRegister\\\\Event\\\\ObjectCreatingEvent'")
+        rc, out = _run(self.dir)
+        self.assertEqual(rc, 0, "a NOTE must not fail the gate")
+        self.assertIn("NOTE", out)
+        self.assertIn("ObjectCreatingEvent", out)
+
+    def test_class_constant_probe_is_noted(self):
+        """The note must not repeat the string-literal blind spot it exists to
+        report. hermiq and nldesign write theirs as `::class`; a note that
+        could not see them would have measured 1 repo instead of 3."""
+        self._app(arg="\\OCA\\OpenRegister\\Service\\Flow\\RegisterFlowNodesEvent::class")
+        rc, out = _run(self.dir)
+        self.assertEqual(rc, 0)
+        self.assertIn("RegisterFlowNodesEvent", out)
+
+    def test_imported_probe_is_noted(self):
+        self._app(
+            arg="RegisterLeafProvidersEvent::class",
+            use="use OCA\\OpenRegister\\Event\\RegisterLeafProvidersEvent;",
+        )
+        self.assertIn("RegisterLeafProvidersEvent", _run(self.dir)[1])
+
+    def test_a_probe_in_boot_is_NOT_noted(self):
+        """boot() runs after every app has registered, so the prefix is on the
+        autoloader and the probe resolves. Noting it would be a false positive
+        — the reason a note gets ignored. The fixture's boot() carries
+        `BootTimeEvent` in every case above and it must never appear."""
+        self._app(arg="'OCA\\\\OpenRegister\\\\Event\\\\ObjectCreatingEvent'")
+        self.assertNotIn("BootTimeEvent", _run(self.dir)[1])
+
+    def test_the_prelude_silences_the_note(self):
+        self.app("Application.php", """<?php
+namespace OCA\\Leaf\\AppInfo;
+class Application {
+    public function register($context): void {
+%s
+        if (class_exists('OCA\\\\OpenRegister\\\\Event\\\\ObjectCreatingEvent') === true) {
+            $context->x();
+        }
+    }
+}
+""" % PRELUDE)
+        rc, out = _run(self.dir)
+        self.assertEqual(rc, 0)
+        self.assertNotIn("NOTE", out)
+
+    def test_an_apphost_probe_is_a_FAIL_not_a_note(self):
+        """The two rules must not double-report one defect."""
+        self._app(arg=f"'{_AH}'")
+        rc, out = _run(self.dir)
+        self.assertEqual(rc, 1)
+        self.assertNotIn("NOTE", out)
+
+
 if __name__ == "__main__":
     unittest.main()

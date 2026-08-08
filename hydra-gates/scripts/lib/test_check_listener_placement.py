@@ -538,7 +538,18 @@ class DiffScopeTest(unittest.TestCase):
             _write(root, 'README.md', 'unrelated\n')
             self._git(root, 'add', 'README.md')
             self._git(root, 'commit', '-qm', 'unrelated change')
-            self.assertEqual(self._run(root, 'base'), 0)
+            # EXIT_EMPTY_SCOPE (3), not 0 (.github#276).
+            #
+            # Both are non-blocking, and this test's intent — "the legacy
+            # backlog must not fail a PR that did not touch it" — is unchanged:
+            # the runner maps 3 to `_skip … na`, which does not count against
+            # --require-full-coverage. What changed is that 0 no longer has to
+            # mean two different things. It used to mean BOTH "I inspected the
+            # registrations and they were clean" and "the diff put all of them
+            # out of scope, so I inspected none", and the runner printed PASS
+            # for both — a verdict about work placement over a scope no run
+            # opened.
+            self.assertEqual(self._run(root, 'base'), clp.EXIT_EMPTY_SCOPE)
 
     def test_touching_the_listener_file_pulls_it_into_scope(self):
         """...and the same violation then fails. Same repo, same listener —
