@@ -373,6 +373,16 @@ def main(argv: list[str]) -> int:
         help="Newline-separated list of paths in scope (empty = scan all).",
     )
     parser.add_argument(
+        "--changed-files-file",
+        default="",
+        help=(
+            "Path to a file holding the newline-separated scope list. Prefer "
+            "this over --changed-files: a single argv string is capped at "
+            "MAX_ARG_STRLEN (128 KiB) regardless of ARG_MAX, and openregister's "
+            "root-scoped file list is 404 KB. See .github#245."
+        ),
+    )
+    parser.add_argument(
         "app_dir",
         nargs="?",
         default=".",
@@ -387,11 +397,26 @@ def main(argv: list[str]) -> int:
     )
     flat_paths = [p for group in candidates for p in group]
 
+    # A scope list can arrive as an argv string or as a file. The file form
+    # exists because the argv form has a hard ceiling the caller cannot see:
+    # a SINGLE argument is limited to MAX_ARG_STRLEN (128 KiB on Linux) even
+    # though ARG_MAX is 2 MB. openregister's root-scoped list is 404 KB across
+    # 7,224 files, so `--changed-files=<list>` raised E2BIG, python3 never
+    # started, and the gate reported "FAIL — 0 pass-through method(s)" — a
+    # crashed checker wearing a finding count. (.github#245)
+    _scope_text = args.changed_files
+    if args.changed_files_file:
+        try:
+            _scope_text = Path(args.changed_files_file).read_text(encoding="utf-8")
+        except OSError as exc:
+            print(f"# ERROR: could not read --changed-files-file: {exc}", file=sys.stderr)
+            return 2
+
     scope_filter: set[str] | None = None
-    if args.changed_files.strip():
+    if _scope_text.strip():
         scope_filter = {
             line.strip()
-            for line in args.changed_files.splitlines()
+            for line in _scope_text.splitlines()
             if line.strip()
         }
 

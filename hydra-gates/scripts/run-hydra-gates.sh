@@ -66,6 +66,34 @@
 
 set -u
 
+# ---------------------------------------------------------------------------
+# ERREXIT IS OFF FOR THIS ENTIRE SCRIPT, AND NOTHING MAY TURN IT ON.
+#
+# A gate returning non-zero is NORMAL — it is how a gate reports findings. So
+# this runner deliberately runs under `set -u` only.
+#
+# Twenty-seven blocks used to wrap a helper call in `set +e … set -e`, reading
+# the trailing `set -e` as "restore". It is not a restore: it is an
+# unconditional ENABLE, because errexit was never on. The first sits in gate-19,
+# so gates 20-64 — forty-five gates — executed under an errexit the code around
+# them does not expect. Two comments further down (gate-27, gate-53) even
+# document the leak and work around it locally instead of fixing it.
+#
+# The consequence is not theoretical. Measured 2026-08-08 against a fixture with
+# a deliberately crashing `python3`: gate-39's unguarded
+# `python3 - "$vue" <<'PYBN'` returned 127, errexit was live, and the run DIED
+# THERE — 37 of 64 gates emitted a verdict and 27 NEVER EXECUTED. The abort
+# banner does fire, so the run is not silently green; it is simply a whole-suite
+# outage caused by one checker having a bad day.
+#
+# The invariant is therefore: a block MAY disable errexit and MUST NOT enable
+# it. Restore sites say `set +e`, which is the state this script actually runs
+# in. `scripts/lib/test_gate_errexit_discipline.sh` asserts that no bare
+# `set -e` re-enters this file, and `_pass`/`_fail`/`_skip` re-assert `set +e`
+# as a backstop so a future gate that leaks cannot carry the leak past its own
+# verdict line.
+# ---------------------------------------------------------------------------
+
 # Resolve this script's own directory ONCE, as an absolute path, BEFORE any
 # `cd` into the app dir below. Gates that shell out to co-located Python
 # helpers (scripts/lib/*.py) must use ${SCRIPT_DIR} — resolving via
@@ -270,17 +298,59 @@ if [ "${SCOPE_TO_DIFF}" = "1" ]; then
             _push_base=""
         fi
         if [ -z "${_push_base:-}" ]; then
-            echo "[hydra-gates] ERROR: diff base '${BASE_REF}' IS HEAD (${_head_sha}) and the push's" >&2
-            echo "[hydra-gates] previous tip could not be used either (reason above)." >&2
-            echo "[hydra-gates] A scoped run against itself inspects nothing, and every gate" >&2
-            echo "[hydra-gates] would report PASS over an empty file set. Refusing." >&2
-            echo "[hydra-gates] Pass a --base that is actually behind HEAD, or set" >&2
-            echo "[hydra-gates] HYDRA_GATE_PUSH_BEFORE to the commit this push started from." >&2
-            exit 99
+            # AUDIT EVERYTHING RATHER THAN NOTHING (#183).
+            #
+            # This used to `exit 99`. The reasoning was sound about the evidence
+            # — a scoped run against itself inspects nothing — and wrong about
+            # the remedy. Refusing fires on every push where the previous tip is
+            # unreachable: a branch created by this push, a force-push, a
+            # freshly-cloned mirror. The run then reports NO gate at all (exit
+            # 99, zero `[gate-N]` lines), which is the same amount of
+            # information a green over an empty diff carries: none.
+            #
+            # The file already says this two screens up — "a permanently-red
+            # gate and a permanently-green gate say the same thing about the
+            # code, and both get filtered out by the people reading them".
+            #
+            # There IS a correct scope for "I cannot tell what this push
+            # changed": everything. Diffing against the EMPTY TREE yields every
+            # tracked file, which is exactly the full-tree audit mode
+            # (`--scope-to-diff --base <root>`) that fleet sweeps already use —
+            # and it needs no root commit, so it is unambiguous in a repository
+            # with several roots or a grafted history.
+            #
+            # A mainline push now gates the whole tree. That is slower and
+            # louder than a diff, and it is the honest answer: nobody told us
+            # what changed, so nothing is assumed unchanged.
+            _empty_tree=$(git -c safe.directory='*' hash-object -t tree /dev/null 2>/dev/null)
+            if [ -n "${_empty_tree}" ] \
+                && git -c safe.directory='*' cat-file -e "${_empty_tree}" 2>/dev/null; then
+                echo "[hydra-gates] The push's previous tip could not be resolved (reason above)."
+                echo "[hydra-gates] FALLING BACK TO A FULL-TREE AUDIT: every tracked file is in scope."
+                echo "[hydra-gates] This is deliberate. A scoped run against itself would inspect"
+                echo "[hydra-gates] nothing, and refusing outright would gate nothing either — both"
+                echo "[hydra-gates] say the same thing about the code. Auditing everything says"
+                echo "[hydra-gates] something. Set HYDRA_GATE_PUSH_BEFORE to scope a push narrowly."
+                BASE_REF="${_empty_tree}"
+            else
+                echo "[hydra-gates] ERROR: diff base '${BASE_REF}' IS HEAD (${_head_sha}), the push's" >&2
+                echo "[hydra-gates] previous tip could not be used, and the empty tree could not be" >&2
+                echo "[hydra-gates] resolved either — so there is no scope left to fall back to." >&2
+                echo "[hydra-gates] A scoped run against itself inspects nothing, and every gate" >&2
+                echo "[hydra-gates] would report PASS over an empty file set. Refusing." >&2
+                echo "[hydra-gates] Pass a --base that is actually behind HEAD, or set" >&2
+                echo "[hydra-gates] HYDRA_GATE_PUSH_BEFORE to the commit this push started from." >&2
+                exit 99
+            fi
         fi
     fi
 
-    if ! git -c safe.directory='*' merge-base "${BASE_REF}" HEAD > /dev/null 2>&1; then
+    # The empty tree deliberately shares no history with HEAD — that is what
+    # makes it mean "everything is in scope". The shallow-checkout guard below
+    # would reject it for exactly the property we selected it for, so skip it.
+    if [ "${BASE_REF}" = "${_empty_tree:-}" ]; then
+        :
+    elif ! git -c safe.directory='*' merge-base "${BASE_REF}" HEAD > /dev/null 2>&1; then
         echo "[hydra-gates] ERROR: '${BASE_REF}' resolves, but shares NO history with HEAD." >&2
         echo "[hydra-gates] This is what a SHALLOW checkout looks like (fetch-depth: 1)." >&2
         echo "[hydra-gates] The diff would be empty and every gate would pass having read" >&2
@@ -757,13 +827,14 @@ _NA_GATES=""
 # wrapper — anchors on `^\[gate-`. A verdict that wraps onto a second line is
 # a verdict that silently loses its own reason.
 _fail() {
+    set +e   # backstop — see the errexit invariant at the top of this file
     local _reason
     _reason=$(printf '%s' "${3:-}" | tr '\n' ' ')
     echo "[gate-$1] $2: FAIL${_reason:+ — ${_reason}}"
     _FAILED=$((_FAILED + 1))
     _EMITTED_GATES="${_EMITTED_GATES}$1 "
 }
-_pass() { echo "[gate-$1] $2: PASS"; _EMITTED_GATES="${_EMITTED_GATES}$1 "; }
+_pass() { set +e; echo "[gate-$1] $2: PASS"; _EMITTED_GATES="${_EMITTED_GATES}$1 "; }
 
 # _optout_text — every place a reason-bearing `[hydra-gate-<name> exclude]` tag
 # may legitimately be written, as one stream to grep.
@@ -832,7 +903,47 @@ _optout_text() {
 # than a default. A typo that silently resolved to `na` would be a lever for
 # making any gate's absence stop counting — which is precisely the accounting
 # hole this whole block exists to close, re-opened from the inside.
+# _a11y_markup_files — every file in this repo that ships MARKUP A USER SEES.
+#
+# WHY THIS EXISTS (.github#225)
+# ----------------------------
+# The whole accessibility family — gates 31, 32, 34, 35, 36, 37, 39, 40, 42, 43,
+# 44, 45 — enumerated `find src -name '*.vue'` and nothing else. An app that
+# renders its UI from PHP templates therefore had every one of those gates
+# iterate an empty list and report PASS.
+#
+# Measured 2026-08-08 on nldesign, which ships one `templates/settings/admin.php`
+# and a `src/` containing only `manifest.json`: one textbook true positive was
+# planted per gate — an `<img>` with no alt, a positive `tabindex`, a focusable
+# element inside `aria-hidden="true"`, an icon-only `<button>`, an unlabelled
+# `<input>`, a `<table>` with no `<th>`, "click here" link text, and the rest —
+# and ALL TWELVE GATES REPORTED PASS. The `[ -d src ]` guard passed, because
+# `src/` exists; the glob then matched nothing.
+#
+# WCAG does not care which templating language produced the DOM. Neither should
+# these gates.
+#
+# SCOPE. Only directories an app renders FROM: src/, templates/, and
+# appinfo/templates/. Deliberately NOT the repo root — nldesign carries a
+# generated `phpmetrics/*.html` report tree, and auditing build output would
+# manufacture findings nobody can act on. node_modules / vendor / dist / build /
+# coverage are excluded for the same reason.
+_a11y_markup_files() {
+    find src templates appinfo/templates -type f \
+        \( -name '*.vue' -o -name '*.php' -o -name '*.html' -o -name '*.htm' \) \
+        2>/dev/null \
+        | grep -vE '(^|/)(node_modules|vendor|dist|build|coverage|phpmetrics|\.git)/' \
+        || true
+}
+
+# The directories those files can live in — the guard that replaces `[ -d src ]`
+# for the a11y family. An app with no src/ but a templates/ still ships markup.
+_a11y_has_markup_dir() {
+    [ -d src ] || [ -d templates ] || [ -d appinfo/templates ]
+}
+
 _skip() {
+    set +e   # backstop — see the errexit invariant at the top of this file
     local _cat _reason
     _cat="${3:-}"
     _reason=$(printf '%s' "${4:-}" | tr '\n' ' ')
@@ -967,6 +1078,7 @@ if [ -d src ]; then
            && grep -qE "return\s*\[\s*\{\s*label:\s*'(Default|Personal|Test|Demo)" "${vue}"; then
             echo "${vue}: fetch*() returns hard-coded single-entry stub" >> "${_stub_log}"
         fi
+        # .vue only: a `fetch*()` stub is a Vue component-method pattern.
     done < <(find src -name '*.vue' 2>/dev/null)
 fi
 # Stub auth / ignored caller-identity parameter — decidesk#45 pattern
@@ -1526,6 +1638,8 @@ if [ -d src ]; then
                     echo "${vue}: ${tag}" >> "${_il_log}"
                 fi
             done
+        # .vue only: <NcSelect> is a Vue component. Gate 40 covers the
+        # language-agnostic <input>/<select> label rule for PHP templates.
     done < <(find src -name '*.vue' 2>/dev/null)
     _il_fail=$(wc -l < "${_il_log}" 2>/dev/null || echo 0)
     if [ "${_il_fail}" -eq 0 ]; then
@@ -1551,6 +1665,7 @@ if [ -d src ]; then
         if grep -qE '<NcModal[ \t>/]|<NcDialog[ \t>/]' "${vue}" 2>/dev/null; then
             echo "${vue}: inline NcModal/NcDialog — extract to src/modals/ or src/dialogs/" >> "${_mi_log}"
         fi
+        # .vue only: NcModal/NcDialog are Vue components with a .vue-file rule.
     done < <(find src -name '*.vue' 2>/dev/null)
     _mi_fail=$(wc -l < "${_mi_log}" 2>/dev/null || echo 0)
     if [ "${_mi_fail}" -eq 0 ]; then
@@ -1861,13 +1976,36 @@ SCRIPT_DIR_REDUNDANT="${SCRIPT_DIR}"
 # argparse to reject every file after the first as "unrecognized arguments"
 # and the gate to fail spuriously. Observed 2026-05-27 on PR #739 canary.
 _redundant_args=()
+# THE SCOPE LIST GOES IN A FILE, NOT IN ARGV (#245).
+#
+# `--changed-files=${CHANGED_FILES}` is ONE argument, and a single argument is
+# capped at MAX_ARG_STRLEN — 128 KiB on Linux — regardless of ARG_MAX being
+# 2 MB. openregister's root-scoped list is 404,828 bytes across 7,224 files, so
+# the exec raised E2BIG, python3 never started, the log held only the shell's
+# "Argument list too long", and `grep -c '^lib/'` counted zero findings in it.
+# The gate then reported `FAIL — 0 pass-through method(s)`: a crashed checker
+# wearing a finding count, and a count of zero at that. Reproduced verbatim in
+# openregister's root-scoped baseline.
+_redundant_scope_file="${HYDRA_GATE_LOG_DIR}/hydra-gate-17-scope.txt"
 if [ "${SCOPE_TO_DIFF}" = "1" ] && [ -n "${CHANGED_FILES}" ]; then
-    _redundant_args+=("--changed-files=${CHANGED_FILES}")
+    printf '%s\n' "${CHANGED_FILES}" > "${_redundant_scope_file}" 2>/dev/null \
+        && _redundant_args+=("--changed-files-file=${_redundant_scope_file}")
 fi
 _redundant_args+=("${APP_DIR}")
 if python3 "${SCRIPT_DIR_REDUNDANT}/lib/detect-redundant-controllers.py" \
         "${_redundant_args[@]}" > "${_redundant_log}" 2>&1; then
     _pass 17 "redundant-controller"
+elif ! grep -q '^# count=' "${_redundant_log}" 2>/dev/null; then
+    # THE CHECKER DID NOT FINISH. Its terminal `# count=<n>` marker is absent,
+    # so it never reached its own summary — E2BIG, a traceback, an OOM kill, a
+    # missing interpreter. It has no verdict to give, and the old code turned
+    # that into `FAIL — 0 pass-through method(s)` by counting matches in a log
+    # that contains an error message rather than findings.
+    #
+    # A crash is a distinct state: never PASS, and never a finding count that
+    # was never measured. --require-full-coverage counts this against coverage.
+    _redundant_why=$(head -3 "${_redundant_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+    _skip 17 "redundant-controller" wiring "detect-redundant-controllers.py did not complete — it never printed its terminal '# count=' marker, so NO controller or service method was inspected and ADR-022 pass-through wrappers are UNVERIFIED by this run. Checker output: ${_redundant_why:-<empty>}. See ${_redundant_log}."
 elif grep -q '^# count=0$' "${_redundant_log}" 2>/dev/null; then
     # The python script ran cleanly and printed its terminal `# count=0`
     # line — it found zero pass-through controllers. The non-zero exit
@@ -2030,12 +2168,22 @@ if [ -d openspec/specs ] || [ -d tests/e2e ]; then
         # Capture the exit code directly — avoids the grep -c bug where grep
         # exits 1 on zero matches, causing "|| echo 0" to append a second "0",
         # leaving _e2e_fail="0\n0" which fails the -eq integer comparison.
+        # SCOPE ONLY WHEN THE CALLER ASKED FOR IT (#242). BASE_REF was passed
+        # unconditionally, so an UNSCOPED run — the mode a fleet audit uses —
+        # was silently narrowed to the diff against origin/development, came
+        # back empty, and the helper printed PASS over a repo it never opened.
+        # Measured on openconnector: 5 findings scoped, 412 over the full tree.
         set +e
-        HYDRA_GATE_BASE_REF="${BASE_REF}" \
+        if [ "${SCOPE_TO_DIFF}" = "1" ]; then
+            HYDRA_GATE_BASE_REF="${BASE_REF}" \
+                python3 "${_e2e_lib_dir}/check_e2e_coverage.py" . \
+                >> "${_e2e_log}" 2>&1
+        else
             python3 "${_e2e_lib_dir}/check_e2e_coverage.py" . \
-            >> "${_e2e_log}" 2>&1
+                >> "${_e2e_log}" 2>&1
+        fi
         _e2e_fail=$?
-        set -e
+        set +e
     else
         _e2e_ran=0
         _skip 19 "e2e-coverage" wiring "check_e2e_coverage.py not found at ${_e2e_lib_dir} — no spec scenario was inspected; @e2e traceability (ADR-020) is UNVERIFIED by this run."
@@ -2051,6 +2199,15 @@ if [ -d openspec/specs ] || [ -d tests/e2e ]; then
         [ -z "${_e2e_count}" ] && _e2e_count="an unreported number of"
         if [ "${_e2e_fail}" -eq 0 ]; then
             _pass 19 "e2e-coverage"
+        elif [ "${_e2e_fail}" -eq 3 ]; then
+            # EMPTY SCOPE. Specs exist; the diff selected none of them. That is
+            # not a pass — it is a gate that inspected nothing, and it must be
+            # visible to --require-full-coverage.
+            _e2e_ran=0
+            _skip 19 "e2e-coverage" structural "the diff against '${BASE_REF}' touched NO spec file, so no scenario was inspected; @e2e traceability (ADR-020) is UNVERIFIED by this run. See ${_e2e_log}."
+        elif [ "${_e2e_fail}" -eq 4 ]; then
+            _e2e_ran=0
+            _skip 19 "e2e-coverage" na "no openspec/specs/*/spec.md in this repository — there is no declared scenario for an e2e test to trace back to."
         elif [ "${_e2e_fail}" -ge 2 ]; then
             # The helper fell over. It inspected nothing, so it has no verdict
             # to give — say so instead of reporting a fail count it never
@@ -2232,7 +2389,7 @@ if [ -f src/manifest.json ]; then
         set +e
         node "${_mv_validator}" src/manifest.json >> "${_mv_log}" 2>&1
         _mv_rc=$?
-        set -e
+        set +e
         # Advisory: run the app's own check:manifest when it exists, purely so
         # a divergence between it and the canonical validator is VISIBLE.
         _mv_app_note=""
@@ -2241,7 +2398,7 @@ if [ -f src/manifest.json ]; then
             set +e
             npm run --silent check:manifest >> "${_mv_log}" 2>&1
             _mv_app_rc=$?
-            set -e
+            set +e
             if [ "${_mv_app_rc}" -ne 0 ]; then
                 _mv_app_note=" [advisory: the app's own check:manifest also exits ${_mv_app_rc} — see ${_mv_log}]"
             fi
@@ -2454,23 +2611,50 @@ if [ -f appinfo/routes.php ]; then
         _cc_lib_dir="${SCRIPT_DIR}/lib"
     fi
     if [ -f "${_cc_lib_dir}/check_contract_coverage.py" ]; then
-        # The helper exits with the uncovered-endpoint count (0 = PASS). Capture
-        # the exit code directly — avoids the grep -c double-zero bug.
+        # The helper exits with a STATUS: 0 pass, 1 fail, 2 error, 3 empty
+        # scope, 4 not applicable. It used to exit with the uncovered-endpoint
+        # COUNT, so the count below is read from stdout and never from the byte.
+        # stderr is folded into the log so a traceback is visible rather than
+        # discarded.
+        #
+        # SCOPE ONLY WHEN THE CALLER ASKED FOR IT (#242). BASE_REF was passed
+        # unconditionally, so an unscoped run was silently narrowed to the diff
+        # against origin/development, came back empty, and the helper printed
+        # PASS having opened nothing. Measured on openconnector: PASS scoped,
+        # 32 uncovered public endpoints over the full tree.
         set +e
-        HYDRA_GATE_BASE_REF="${BASE_REF}" \
+        if [ "${SCOPE_TO_DIFF}" = "1" ]; then
+            HYDRA_GATE_BASE_REF="${BASE_REF}" \
+                python3 "${_cc_lib_dir}/check_contract_coverage.py" . \
+                >> "${_cc_log}" 2>&1
+        else
             python3 "${_cc_lib_dir}/check_contract_coverage.py" . \
-            >> "${_cc_log}" 2>/dev/null
+                >> "${_cc_log}" 2>&1
+        fi
         _cc_fail=$?
-        set -e
+        set +e
     else
         _cc_ran=0
         _skip 25 "contract-coverage" wiring "check_contract_coverage.py not found at ${_cc_lib_dir} — appinfo/routes.php is present but NO endpoint was inspected; wire-contract coverage of newly-exposed endpoints is UNVERIFIED by this run."
     fi
     if [ "${_cc_ran}" -eq 1 ]; then
+        # THE COUNT COMES FROM STDOUT, not from the byte.
+        _cc_count=$(grep -oE 'FAIL — [0-9]+ new public endpoint' "${_cc_log}" 2>/dev/null \
+            | tail -1 | grep -oE '[0-9]+' || true)
+        [ -z "${_cc_count}" ] && _cc_count="an unreported number of"
         if [ "${_cc_fail}" -eq 0 ]; then
             _pass 25 "contract-coverage"
+        elif [ "${_cc_fail}" -eq 3 ]; then
+            _cc_ran=0
+            _skip 25 "contract-coverage" structural "the diff against '${BASE_REF}' changed NO file, so no endpoint was inspected; wire-contract coverage is UNVERIFIED by this run. See ${_cc_log}."
+        elif [ "${_cc_fail}" -eq 4 ]; then
+            _cc_ran=0
+            _skip 25 "contract-coverage" na "no appinfo/routes.php — this app exposes no routed endpoint whose wire contract could be tested."
+        elif [ "${_cc_fail}" -ge 2 ]; then
+            _cc_ran=0
+            _skip 25 "contract-coverage" wiring "check_contract_coverage.py exited ${_cc_fail} (error) — no endpoint verdict was produced; wire-contract coverage is UNVERIFIED by this run. See ${_cc_log}."
         else
-            _fail 25 "contract-coverage" "${_cc_fail} new public endpoint(s) missing a contract test — see ${_cc_log}"
+            _fail 25 "contract-coverage" "${_cc_count} new public endpoint(s) missing a contract test — see ${_cc_log}"
         fi
     fi
 fi
@@ -2506,7 +2690,7 @@ if [ -d src ]; then
             python3 "${_vc_lib_dir}/check_visual_coverage.py" . \
             >> "${_vc_log}" 2>/dev/null
         _vc_fail=$?
-        set -e
+        set +e
     else
         _vc_ran=0
         _skip 26 "visual-coverage" wiring "check_visual_coverage.py not found at ${_vc_lib_dir} — src/ is present but NO page component was inspected; visual-regression coverage of new screens is UNVERIFIED by this run."
@@ -2585,7 +2769,7 @@ fi
 # grep -c double-zero bug entirely (always exits 0, prints the line count).
 set +e
 _pcar_fail=$(wc -l < "${_pcar_log}" 2>/dev/null | tr -d ' ')
-set -e
+set +e
 [ -z "${_pcar_fail}" ] && _pcar_fail=0
 if [ "${_pcar_ran}" -eq 1 ]; then
     if [ "${_pcar_fail}" -eq 0 ]; then
@@ -2888,7 +3072,7 @@ if [ -d src ]; then
                     echo "${vue}: ${tag}" >> "${_ia_log}"
                 fi
             done
-    done < <(find src -name '*.vue' 2>/dev/null)
+    done < <(_a11y_markup_files)
     _ia_fail=$(wc -l < "${_ia_log}" 2>/dev/null || echo 0)
     if [ "${_ia_fail}" -eq 0 ]; then
         _pass 31 "img-alt"
@@ -2968,7 +3152,7 @@ if [ -d src ]; then
                     echo "${vue}: ${tag} rule=missing[${_missing}]" >> "${_sc_log}"
                 fi
             done
-    done < <(find src -name '*.vue' 2>/dev/null)
+    done < <(_a11y_markup_files)
     _sc_fail=$(wc -l < "${_sc_log}" 2>/dev/null || echo 0)
     if [ "${_sc_fail}" -eq 0 ]; then
         _pass 32 "semantic-controls"
@@ -3103,11 +3287,14 @@ fi
 # (Name, Role, Value) — native window dialogs don't expose a queryable
 # role to assistive tech that matches the surrounding NC shell.
 # ---------------------------------------------------------------------------
-if [ -d src ]; then
+if _a11y_has_markup_dir; then
     _wc_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-window-confirm.log
     : > "${_wc_log}"
-    grep -rnE '\bwindow\.(confirm|alert|prompt)\s*\(' src/ \
-        --include='*.vue' --include='*.js' --include='*.ts' 2>/dev/null \
+    # templates/ too (#225): a native dialog opened from an inline <script> in a
+    # PHP template breaks theming and WCAG exactly as one in a .vue does.
+    grep -rnE '\bwindow\.(confirm|alert|prompt)\s*\(' src/ templates/ appinfo/templates/ \
+        --include='*.vue' --include='*.js' --include='*.ts' \
+        --include='*.php' --include='*.html' --include='*.htm' 2>/dev/null \
         | _filter_grep_by_scope >> "${_wc_log}" || true
     _wc_fail=$(wc -l < "${_wc_log}" 2>/dev/null || echo 0)
     if [ "${_wc_fail}" -eq 0 ]; then
@@ -3147,16 +3334,19 @@ if [ -d src ]; then
                 # with computed-default-empty are out of scope; the developer there
                 # at least went through a prop pipeline).
                 echo "${tag}" | grep -qE 'alt\s*=\s*"\s*"' || continue
-                # Must have a bound :src or v-bind:src that names a semantic noun.
-                # We match the BINDING expression body — substring search inside
-                # the :src="..." quotes for the semantic noun list.
-                _src_expr=$(echo "${tag}" | grep -oE '(:src|v-bind:src)\s*=\s*"[^"]*"' | head -1 || true)
+                # Must have a src that names a semantic noun. A BOUND :src /
+                # v-bind:src carries the noun in its expression; a PHP template
+                # or plain HTML carries it in the literal attribute value
+                # (`src="<?php p($avatarUrl) ?>"`, `src="/img/avatar.png"`).
+                # Both mean the same thing — the author knew the image was a
+                # person or a picture and still gave it an empty alt (#225).
+                _src_expr=$(echo "${tag}" | grep -oE '(:src|v-bind:src|src)\s*=\s*"[^"]*"' | head -1 || true)
                 [ -z "${_src_expr}" ] && continue
                 if echo "${_src_expr}" | grep -qiE '\b(avatar|photo|thumbnail|picture|headshot|portrait|profilePicture)\b'; then
                     echo "${vue}: ${tag} rule=empty-alt-on-semantic-bound-src" >> "${_iae_log}"
                 fi
             done
-    done < <(find src -name '*.vue' 2>/dev/null)
+    done < <(_a11y_markup_files)
     _iae_fail=$(wc -l < "${_iae_log}" 2>/dev/null || echo 0)
     if [ "${_iae_fail}" -eq 0 ]; then
         _pass 35 "img-alt-empty-only"
@@ -3178,14 +3368,17 @@ fi
 #   - WHATWG / W3C: "Authors should generally use `tabindex='0'` or
 #     `tabindex='-1'`. Positive integer values are very rarely useful."
 # ---------------------------------------------------------------------------
-if [ -d src ]; then
+if _a11y_has_markup_dir; then
     _tp_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-tabindex-positive.log
     : > "${_tp_log}"
     # Match tabindex with quoted positive integer. Allow whitespace
     # inside the quotes. Excludes tabindex="0", tabindex="-1", and any
     # form where the value is bound (`:tabindex="..."` is reviewer-judgment).
-    grep -rnE 'tabindex[[:space:]]*=[[:space:]]*"[[:space:]]*[1-9][0-9]*[[:space:]]*"' src/ \
-        --include='*.vue' --include='*.js' --include='*.ts' 2>/dev/null \
+    # templates/ too (#225): focus order is a property of the rendered DOM, not
+    # of the language that emitted it.
+    grep -rnE 'tabindex[[:space:]]*=[[:space:]]*"[[:space:]]*[1-9][0-9]*[[:space:]]*"' src/ templates/ appinfo/templates/ \
+        --include='*.vue' --include='*.js' --include='*.ts' \
+        --include='*.php' --include='*.html' --include='*.htm' 2>/dev/null \
         | _filter_grep_by_scope >> "${_tp_log}" || true
     _tp_fail=$(wc -l < "${_tp_log}" 2>/dev/null || echo 0)
     if [ "${_tp_fail}" -eq 0 ]; then
@@ -3258,7 +3451,7 @@ if [ -d src ]; then
                     echo "${vue}: ${tag} rule=aria-hidden-on-focusable-element" >> "${_ahf_log}"
                 fi
             done
-    done < <(find src -name '*.vue' 2>/dev/null)
+    done < <(_a11y_markup_files)
     _ahf_fail=$(wc -l < "${_ahf_log}" 2>/dev/null || echo 0)
     if [ "${_ahf_fail}" -eq 0 ]; then
         _pass 37 "aria-hidden-focusable"
@@ -3499,7 +3692,7 @@ for tag_re in (r'<NcButton\b([^>]*)>(.*?)</NcButton>', r'<button\b([^>]*)>(.*?)<
         opening = m.group(0).split('>')[0] + '>'
         print(f'{fname}: {opening} rule=icon-only-button-without-accessible-name')
 PYBN
-    done < <(find src -name '*.vue' 2>/dev/null)
+    done < <(_a11y_markup_files)
     _bn_fail=$(wc -l < "${_bn_log}" 2>/dev/null || echo 0)
     if [ "${_bn_fail}" -eq 0 ]; then
         _pass 39 "button-name"
@@ -3552,7 +3745,7 @@ if [ -d src ]; then
     while IFS= read -r vue; do
         _in_scope "${vue}" || continue
         _fl_files+=("${vue}")
-    done < <(find src -name '*.vue' 2>/dev/null)
+    done < <(_a11y_markup_files)
     # NOTE: an empty in-scope set is NOT declared `na` here. Every other
     # `[ -d src ]` gate reports PASS over an empty diff scope — that is what
     # ADR-020 diff scoping MEANS — and tests/test-hydra-gates-bin.sh asserts
@@ -3666,7 +3859,7 @@ for pat, tagname in patterns:
         if not body_text or BAD.match(body_text):
             print(f'{fname}: <{tagname}> body="{body_text}" rule=link-text-not-descriptive')
 PYLQ
-    done < <(find src -name '*.vue' 2>/dev/null)
+    done < <(_a11y_markup_files)
     _lq_fail=$(wc -l < "${_lq_log}" 2>/dev/null || echo 0)
     if [ "${_lq_fail}" -eq 0 ]; then
         _pass 42 "link-text-quality"
@@ -3712,7 +3905,7 @@ for m in re.finditer(r'<table\b([^>]*)>(.*?)</table>', txt, re.IGNORECASE | re.D
     elif re.search(r'<td\b', body, re.IGNORECASE):
         print(f'{fname}: <table> rule=table-without-th')
 PYTH
-    done < <(find src -name '*.vue' 2>/dev/null)
+    done < <(_a11y_markup_files)
     _th_fail=$(wc -l < "${_th_log}" 2>/dev/null || echo 0)
     if [ "${_th_fail}" -eq 0 ]; then
         _pass 43 "table-headers"
@@ -3755,7 +3948,7 @@ for m in re.finditer(r'<input\b([^>]*)>', txt, re.IGNORECASE):
     if SEM_RE.search(val):
         print(f'{fname}: <input name/id="{val}" ...> rule=semantic-input-without-autocomplete')
 PYAC
-    done < <(find src -name '*.vue' 2>/dev/null)
+    done < <(_a11y_markup_files)
     _ac_fail=$(wc -l < "${_ac_log}" 2>/dev/null || echo 0)
     if [ "${_ac_fail}" -eq 0 ]; then
         _pass 44 "autocomplete-attr"
@@ -3794,7 +3987,7 @@ for m in re.finditer(r'<style\b[^>]*>(.*?)</style>', src, re.IGNORECASE | re.DOT
         continue
     print(f'{fname}: <style> rule=motion-without-reduced-motion-fallback')
 PYRM
-    done < <(find src -name '*.vue' 2>/dev/null)
+    done < <(_a11y_markup_files)
     _rm_fail=$(wc -l < "${_rm_log}" 2>/dev/null || echo 0)
     if [ "${_rm_fail}" -eq 0 ]; then
         _pass 45 "prefers-reduced-motion"
@@ -3842,7 +4035,7 @@ else
 fi
 set +e
 _sae_fail=$(wc -l < "${_sae_log}" 2>/dev/null | tr -d ' ')
-set -e
+set +e
 [ -z "${_sae_fail}" ] && _sae_fail=0
 if [ "${_sae_ran}" -eq 1 ]; then
     if [ "${_sae_fail}" -eq 0 ]; then
@@ -3858,7 +4051,7 @@ if [ "${_sae_ran}" -eq 1 ]; then
         # the size of the job is legible from the summary line.
         set +e
         _sae_targets=$(sed 's/^[^:]*: //' "${_sae_log}" 2>/dev/null | sort -u | wc -l | tr -d ' ')
-        set -e
+        set +e
         [ -z "${_sae_targets}" ] && _sae_targets="?"
         _fail 46 "spec-anchor-existence" "${_sae_fail} unresolved @spec finding(s) from ${_sae_targets} distinct target(s) — fix the TARGET, not each tag; see ${_sae_log}"
     fi
@@ -3972,7 +4165,7 @@ if [ "${SCOPE_TO_DIFF}" = "1" ] && [ -n "${BASE_REF}" ]; then
 fi
 set +e
 _csrf_fail=$(wc -l < "${_csrf_log}" 2>/dev/null | tr -d ' ')
-set -e
+set +e
 [ -z "${_csrf_fail}" ] && _csrf_fail=0
 if [ "${_csrf_fail}" -eq 0 ]; then
     _pass 48 "csrf-cochange"
@@ -4126,7 +4319,7 @@ if [ -s "${_cxt_log}" ]; then
 fi
 set +e
 _cxt_fail=$(wc -l < "${_cxt_log}" 2>/dev/null | tr -d ' ')
-set -e
+set +e
 [ -z "${_cxt_fail}" ] && _cxt_fail=0
 if [ "${_cxt_fail}" -eq 0 ]; then
     _pass 49 "controller-exception-translation"
@@ -4202,7 +4395,7 @@ PY
 fi
 set +e
 _scfm_fail=$(wc -l < "${_scfm_log}" 2>/dev/null | tr -d ' ')
-set -e
+set +e
 [ -z "${_scfm_fail}" ] && _scfm_fail=0
 if [ "${_scfm_fail}" -eq 0 ]; then
     _pass 50 "security-config-fail-mode"
@@ -4259,7 +4452,7 @@ if [ "${#_spt_files[@]}" -gt 0 ]; then
 fi
 set +e
 _spt_fail=$(wc -l < "${_spt_log}" 2>/dev/null | tr -d ' ')
-set -e
+set +e
 [ -z "${_spt_fail}" ] && _spt_fail=0
 if [ "${_spt_ran}" -eq 1 ]; then
     if [ "${_spt_fail}" -eq 0 ]; then
@@ -4323,7 +4516,7 @@ if [ "${#_cwr_files[@]}" -gt 0 ]; then
             python3 "${_cwr_helper}" "${_cwr_files[@]}" >> "${_cwr_log}" 2>&1
         fi
         _cwr_fail=$?
-        set -e
+        set +e
     else
         _cwr_ran=0
         _skip 52 "custom-widget-ratchet" wiring "check_custom_widget_ratchet.py not found at ${_cwr_helper} — ${#_cwr_files[@]} frontend file(s) were in scope and NONE were inspected; custom kind:\"widget\" growth (ADR-049) is UNVERIFIED by this run — no base/head/delta counts were produced."
@@ -4459,7 +4652,7 @@ if [ -f src/manifest.json ]; then
                     echo "ALL" > "${_em_scope_file}"
                     _em_scope_rc=0
                 fi
-                set -e
+                set +e
                 if [ "${_em_scope_rc}" -ne 0 ]; then
                     # Could not compute a scope → do not narrow. Say so.
                     echo "ALL" > "${_em_scope_file}"
@@ -4491,7 +4684,7 @@ if [ -f src/manifest.json ]; then
             set +e
             node "${_em_validator}" "${_em_tmp}" ${_em_scope_flag} ${_em_scope_val} >> "${_em_log}" 2>&1
             _em_val_rc=$?
-            set -e
+            set +e
             if [ "${_em_val_rc}" -eq 3 ]; then
                 _em_reason="SCHEMA VALIDATION DID NOT HAPPEN — the vendored validator degraded to its structural lint (Ajv unresolvable mid-run); see ${_em_log}"
             elif [ "${_em_val_rc}" -ne 0 ]; then
@@ -4504,7 +4697,7 @@ if [ -f src/manifest.json ]; then
                 set +e
                 node "${_em_crossref}" --app-dir . --manifest "${_em_tmp}" ${_em_scope_flag} ${_em_scope_val} >> "${_em_log}" 2>&1
                 _em_cr_rc=$?
-                set -e
+                set +e
                 if [ "${_em_cr_rc}" -ne 0 ]; then
                     _em_n=$(grep -E '^at ' "${_em_log}" 2>/dev/null | grep -cvE ': (WARN|PRE-EXISTING) ' || true)
                     { [ -z "${_em_n}" ] || [ "${_em_n}" -eq 0 ]; } && _em_n=1
@@ -4585,7 +4778,7 @@ fi
 set +e
 _rd_fail=$(grep -cv '^WARN:' "${_rd_log}" 2>/dev/null | tr -d ' ')
 _rd_warn=$(grep -c '^WARN:' "${_rd_log}" 2>/dev/null | tr -d ' ')
-set -e
+set +e
 [ -z "${_rd_fail}" ] && _rd_fail=0
 [ -z "${_rd_warn}" ] && _rd_warn=0
 [ "${_rd_warn}" -gt 0 ] && echo "[gate-54] relation-dialect: ${_rd_warn} WARN finding(s) (non-blocking) — see ${_rd_log}"
@@ -4644,7 +4837,7 @@ if [ "${#_dpd_files[@]}" -gt 0 ]; then
 fi
 set +e
 _dpd_fail=$(wc -l < "${_dpd_log}" 2>/dev/null | tr -d ' ')
-set -e
+set +e
 [ -z "${_dpd_fail}" ] && _dpd_fail=0
 if [ "${_dpd_ran}" -eq 1 ]; then
     if [ "${_dpd_fail}" -eq 0 ]; then
@@ -4699,7 +4892,7 @@ if [ "${#_rhr_files[@]}" -gt 0 ]; then
 fi
 set +e
 _rhr_fail=$(wc -l < "${_rhr_log}" 2>/dev/null | tr -d ' ')
-set -e
+set +e
 [ -z "${_rhr_fail}" ] && _rhr_fail=0
 if [ "${_rhr_ran}" -eq 1 ]; then
     if [ "${_rhr_fail}" -eq 0 ]; then
@@ -4753,7 +4946,7 @@ if [ "${#_owc_files[@]}" -gt 0 ]; then
 fi
 set +e
 _owc_fail=$(wc -l < "${_owc_log}" 2>/dev/null | tr -d ' ')
-set -e
+set +e
 [ -z "${_owc_fail}" ] && _owc_fail=0
 if [ "${_owc_ran}" -eq 1 ]; then
     if [ "${_owc_fail}" -eq 0 ]; then
@@ -4804,7 +4997,7 @@ while IFS= read -r f; do
 done < <(find tests/e2e -type f \( -name '*.ts' -o -name '*.js' \) 2>/dev/null)
 set +e
 _nwi_fail=$(wc -l < "${_nwi_log}" 2>/dev/null | tr -d ' ')
-set -e
+set +e
 [ -z "${_nwi_fail}" ] && _nwi_fail=0
 if [ "${_nwi_fail}" -eq 0 ]; then
     _pass 58 "e2e-networkidle"
@@ -4836,7 +5029,7 @@ if [ -d lib ] && printf '%s\n' "${CHANGED_FILES}" | grep -qE '^lib/.*\.php$'; th
     set +e
     python3 "${SCRIPT_DIR}/lib/check_unclosable_gate.py" . > "${_ucg_log}" 2>&1
     _ucg_rc=$?
-    set -e
+    set +e
     if [ "${_ucg_rc}" -eq 0 ]; then
         _pass 59 "unclosable-gate"
     else
@@ -4893,11 +5086,18 @@ if [ -f src/manifest.json ]; then
         set +e
         python3 "${SCRIPT_DIR}/lib/check_icon_vocabulary.py" . ${_iv_args} > "${_iv_log}" 2>&1
         _iv_rc=$?
-        set -e
+        set +e
         # Surface warnings even on a pass — they are the deprecation pressure.
         grep -E '^(WARN|NOTE)' "${_iv_log}" || true
         if [ "${_iv_rc}" -eq 0 ]; then
             _pass 60 "icon-vocabulary"
+        elif [ "${_iv_rc}" -eq 5 ]; then
+            # vue-material-design-icons is not installed, so the "does this
+            # icon name exist upstream?" rule could not run. This gate has
+            # already shipped both dishonest answers to that: 43 confident
+            # FAILs when node_modules was absent, then — once those were
+            # guarded — a silent PASS over a rule that never executed (#233).
+            _skip 60 "icon-vocabulary" wiring "vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream — an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage. See ${_iv_log}."
         else
             _iv_n=$(_count '^FAIL' "${_iv_log}")
             [ "${_iv_n}" -eq 0 ] && _iv_n=1
@@ -4905,7 +5105,7 @@ if [ -f src/manifest.json ]; then
         fi
     fi
 else
-    _pass 60 "icon-vocabulary"
+    _skip 60 "icon-vocabulary" na "no src/manifest.json — this app declares no menu icon for the ADR-077 vocabulary to constrain."
 fi
 
 # ---------------------------------------------------------------------------
@@ -4949,7 +5149,7 @@ if [ -d lib/AppInfo ]; then
     set +e
     python3 "${SCRIPT_DIR}/lib/check_listener_placement.py" . --base "${BASE_REF}" > "${_lwp_log}" 2>&1
     _lwp_rc=$?
-    set -e
+    set +e
     if [ "${_lwp_rc}" -eq 0 ]; then
         _pass 61 "listener-work-placement"
     else
@@ -4966,12 +5166,25 @@ fi
 # ---------------------------------------------------------------------------
 _sp_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-store-plane.log
 : > "${_sp_log}"
+# `--base` ONLY WHEN THE CALLER ASKED TO SCOPE (#240 / #242). It was passed
+# unconditionally, so even an unscoped run diff-scoped itself, found no changed
+# manifest, and the helper returned 0 — printed as PASS beside a log line
+# reading "gate skipped". A full-tree audit was the one mode this gate could
+# never reach.
 set +e
-python3 "${SCRIPT_DIR}/lib/check_store_and_settings_surface.py" . --gate store --base "${BASE_REF}" > "${_sp_log}" 2>&1
+if [ "${SCOPE_TO_DIFF}" = "1" ]; then
+    python3 "${SCRIPT_DIR}/lib/check_store_and_settings_surface.py" . --gate store --base "${BASE_REF}" > "${_sp_log}" 2>&1
+else
+    python3 "${SCRIPT_DIR}/lib/check_store_and_settings_surface.py" . --gate store > "${_sp_log}" 2>&1
+fi
 _sp_rc=$?
-set -e
+set +e
 if [ "${_sp_rc}" -eq 0 ]; then
     _pass 62 "store-plane"
+elif [ "${_sp_rc}" -eq 3 ]; then
+    _skip 62 "store-plane" structural "the diff against '${BASE_REF}' touched no manifest or menu-layout, so NO manifest was inspected; ADR-080 store-plane naming/discovery is UNVERIFIED by this run. See ${_sp_log}."
+elif [ "${_sp_rc}" -eq 4 ]; then
+    _skip 62 "store-plane" na "no src/manifest.json — a Tier-0 app declares no store plane for ADR-080 to constrain."
 else
     _sp_n=$(_count '^FAIL' "${_sp_log}")
     [ "${_sp_n}" -eq 0 ] && _sp_n=1
@@ -4983,12 +5196,23 @@ fi
 # ---------------------------------------------------------------------------
 _ss_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-settings-surface.log
 : > "${_ss_log}"
+# `--base` ONLY WHEN THE CALLER ASKED TO SCOPE — see gate 62 above (#240).
 set +e
-python3 "${SCRIPT_DIR}/lib/check_store_and_settings_surface.py" . --gate settings --base "${BASE_REF}" > "${_ss_log}" 2>&1
+if [ "${SCOPE_TO_DIFF}" = "1" ]; then
+    python3 "${SCRIPT_DIR}/lib/check_store_and_settings_surface.py" . --gate settings --base "${BASE_REF}" > "${_ss_log}" 2>&1
+else
+    python3 "${SCRIPT_DIR}/lib/check_store_and_settings_surface.py" . --gate settings > "${_ss_log}" 2>&1
+fi
 _ss_rc=$?
-set -e
+set +e
 if [ "${_ss_rc}" -eq 0 ]; then
     _pass 63 "settings-surface"
+elif [ "${_ss_rc}" -eq 3 ]; then
+    # The log used to say "gate skipped" while the verdict beside it said PASS.
+    # Those cannot both be true, and PASS is the one every consumer counted.
+    _skip 63 "settings-surface" structural "the diff against '${BASE_REF}' touched no manifest or menu-layout, so NO manifest was inspected; ADR-079 settings placement is UNVERIFIED by this run. See ${_ss_log}."
+elif [ "${_ss_rc}" -eq 4 ]; then
+    _skip 63 "settings-surface" na "no src/manifest.json — a Tier-0 app declares no settings surface for ADR-079 to place."
 else
     _ss_n=$(_count '^FAIL' "${_ss_log}")
     [ "${_ss_n}" -eq 0 ] && _ss_n=1
@@ -5038,7 +5262,7 @@ if [ -d lib/AppInfo ]; then
     set +e
     python3 "${SCRIPT_DIR}/lib/check_apphost_autoload_prelude.py" . > "${_aap_log}" 2>&1
     _aap_rc=$?
-    set -e
+    set +e
     if [ "${_aap_rc}" -eq 0 ]; then
         _pass 64 "apphost-autoload-prelude"
     else

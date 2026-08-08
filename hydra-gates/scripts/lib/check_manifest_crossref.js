@@ -252,13 +252,13 @@ function stripJsComments(src) {
 
 // Top-level keys of the `export default { … }` object, with their `kind`.
 // Brace-depth tracking keeps nested object keys (`component:`, `props:`) out.
-function parseRegistry(appDir) {
-	const file = path.join(appDir, 'src', 'registry.js')
+function parseRegistry(appDir, rel) {
+	const file = path.join(appDir, 'src', rel || 'registry.js')
 	let raw
 	try {
 		raw = fs.readFileSync(file, 'utf8')
 	} catch (e) {
-		return null // no registry — check (f) is not applicable
+		return null // absent — nothing to add from this source
 	}
 	const src = stripJsComments(raw)
 	const start = src.search(/export\s+default\s*\{/)
@@ -280,8 +280,16 @@ function parseRegistry(appDir) {
 	const body = src.slice(bodyStart, i)
 
 	// Walk the body, recording `Name:` / `'Name':` / `"Name":` at depth 0 only.
+	//
+	// A QUOTED key may contain characters a bare identifier cannot — hermiq
+	// registers `'agent-form'`, `'agent-skills'`, `'agent-run-history'`. The
+	// first version of this matcher shared one character class with the bare
+	// form, so it captured `agent` and stopped at the hyphen: every hyphenated
+	// registration was invisible and every manifest reference to one was
+	// reported unresolved. 25 false FAILs on hermiq alone. Quoted and bare keys
+	// are therefore matched by SEPARATE alternatives with different classes.
 	depth = 0
-	const KEY = /(?:^|[,{\s])(?:['"]?)([A-Za-z_$][\w$]*)(?:['"]?)\s*:/g
+	const KEY = /(?:^|[,{\s])(?:'([^']+)'|"([^"]+)"|([A-Za-z_$][\w$]*))\s*:/g
 	// Depth map: for each index, how deep we are. Cheap enough for these files.
 	const depthAt = new Array(body.length).fill(0)
 	for (let j = 0; j < body.length; j++) {
@@ -292,9 +300,9 @@ function parseRegistry(appDir) {
 	}
 	let m
 	while ((m = KEY.exec(body)) !== null) {
-		const at = m.index + m[0].indexOf(m[1])
+		const name = m[1] || m[2] || m[3]
+		const at = m.index + m[0].indexOf(name)
 		if (depthAt[at] !== 0) continue
-		const name = m[1]
 		// `kind: 'section'` inside this entry's own braces.
 		const tail = body.slice(m.index, m.index + 400)
 		const km = /\bkind\s*:\s*['"]([a-z-]+)['"]/.exec(tail)
@@ -551,18 +559,29 @@ function main() {
 
 	// (f) component-registry cross-reference — larpingapp#286, both directions.
 	const registry = parseRegistry(APP_DIR)
+	// THE SECOND REGISTRATION SOURCE.
+	//
+	// The runtime resolution order is documented in every app's own
+	// customComponents.js, and the console error this gate quotes says it out
+	// loud: "not found in registry OR customComponents". The first version of
+	// this check read only registry.js and therefore reported 9 false FAILs on
+	// softwarecatalog and 1 on hermiq for components that are registered — just
+	// in the other file. A component resolvable by EITHER route resolves.
+	const legacy = parseRegistry(APP_DIR, 'customComponents.js')
 	if (registry && registry.parsed) {
 		const refs = []
 		collectComponentRefs({ pages: manifest.pages }, '', refs)
 		const named = new Set(refs.map((r) => r.name))
+		const registered = new Set(registry.entries.keys())
+		if (legacy && legacy.parsed) for (const k of legacy.entries.keys()) registered.add(k)
 
 		// Direction 2 — a manifest position naming a component nobody registers.
 		// Renders nothing at runtime, so this FAILS.
 		for (const { ptr, name } of refs) {
 			if (LIB_COMPONENT.test(name)) continue
-			if (registry.entries.has(name)) continue
+			if (registered.has(name)) continue
 			fail('registry-crossref', ptr,
-				`component '${name}' is named by the manifest but is not exported by src/registry.js — resolveTabComponent() falls through and renders NOTHING`)
+				`component '${name}' is named by the manifest but is registered in neither src/registry.js nor src/customComponents.js — resolution falls through and renders NOTHING`)
 		}
 
 		// Direction 1 — a registered component no manifest position names.
