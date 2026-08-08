@@ -46,6 +46,10 @@ cat > "${_APP}/src/Thing.vue" <<'VUE'
 		<img src="/no-alt.png">
 		<div @click="go()">click-only</div>
 		<NcSelect :options="opts" />
+		<button type="button"><span class="icon-delete" /></button>
+		<a href="/docs">click here</a>
+		<input type="text" name="email">
+		<NcCheckboxRadioSwitch :checked="on" @update:checked="v => on = v" />
 		<table>
 			<tr><th>Name</th><th>Size</th></tr>
 			<tr><td>a</td><td>1</td></tr>
@@ -139,6 +143,18 @@ _WIRED=(
     "34:window-confirm:check_js_call_sites.py"
     "41:html-lang:php_template_scope.py"
     "58:e2e-networkidle:check_js_call_sites.py"
+    # Added 2026-08-08. Gates 40, 42 and 44 were the last three a11y gates
+    # whose checker ran without a return-code guard: 40 as
+    # `python3 helper … 2>/dev/null || true`, 42 and 44 as per-file inline
+    # heredocs. Measured on opencatalogi with a `python3` that exits 1 on
+    # every call, all three reported PASS — gate-40 over the 13 real findings
+    # it had reported one run earlier — while every gate already in this table
+    # reported SKIPPED (wiring). gate-39 was wired correctly but never listed
+    # here, so nothing held it to that.
+    "39:button-name:check_button_name.py"
+    "40:form-label-association:check_form_labels.py"
+    "42:link-text-quality:check_link_text.py"
+    "44:autocomplete-attr:check_autocomplete.py"
 )
 
 # ---------------------------------------------------------------------------
