@@ -1235,6 +1235,18 @@ def run_gate(app_dir: Path) -> int:
                                  EMPTY SCOPE and reports as a skip, never a pass.
       HYDRA_GATE_BASE_REF unset  full-tree audit of every spec in the repo.
     """
+    # AN UNREADABLE APP DIR IS AN ERROR, NOT AN ABSENCE. "There is no
+    # openspec/specs here" and "I could not look" produce the same empty set,
+    # and reporting the second as NOT APPLICABLE would retire the gate on the
+    # strength of a typo in a path. Distinguish them before anything else.
+    if not app_dir.is_dir():
+        print(
+            f"[gate-{GATE_NUM}] e2e-coverage: ERROR — {app_dir} is not a "
+            f"readable directory, so nothing was inspected. This is not an "
+            f"absence of specs; it is a failure to look."
+        )
+        return EXIT_ERROR
+
     spec_root = app_dir / "openspec" / "specs"
     all_specs = (
         {str(p.relative_to(app_dir)) for p in spec_root.glob("*/spec.md")}
