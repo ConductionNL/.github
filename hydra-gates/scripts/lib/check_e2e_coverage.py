@@ -1146,6 +1146,12 @@ GATE_NUM = 19
 EXIT_PASS = 0
 EXIT_FAIL = 1
 EXIT_ERROR = 2
+# A gate that inspected NOTHING must not answer with the same byte as a gate
+# that inspected everything and liked it. PASS and "empty scope" were the same
+# 0, so `--require-full-coverage` — whose entire job is to notice gates that did
+# not run — could not see this one. (.github#242)
+EXIT_EMPTY_SCOPE = 3      # scope resolved, selected nothing -> runner _skip structural
+EXIT_NOT_APPLICABLE = 4   # subject matter absent entirely   -> runner _skip na
 
 
 # ---------------------------------------------------------------------------
@@ -1205,13 +1211,61 @@ def run_report(app_dir: Path) -> int:
 
 
 def run_gate(app_dir: Path) -> int:
-    """Diff-scoped gate. Returns EXIT_PASS / EXIT_FAIL; the COUNT is printed."""
-    base_ref = os.environ.get("HYDRA_GATE_BASE_REF", "origin/development")
-    touched = changed_spec_files(base_ref, app_dir)
+    """Audit @e2e traceability. Returns a status; the COUNT is printed.
 
-    if not touched:
-        print(f"[gate-{GATE_NUM}] e2e-coverage: PASS — no spec files in diff")
-        return EXIT_PASS
+    SCOPE IS THE CALLER'S DECISION, AND IT IS NOT DEFAULTED (.github#242)
+    --------------------------------------------------------------------
+    This function used to diff against ``HYDRA_GATE_BASE_REF`` UNCONDITIONALLY,
+    defaulting the ref to ``origin/development`` when the caller had not asked
+    for diff scoping at all. So on a full-tree run — the mode a fleet audit uses
+    — the default ref resolved, the diff came back empty, and the gate printed
+    ``PASS — no spec files in diff`` over a repository it had never opened.
+
+    Two things made that invisible. The scoping happened HERE, inside the
+    helper, BELOW the runner's base resolution, so the runner could not tell
+    that a full-tree request had been quietly narrowed to nothing. And the
+    verdict was ``PASS``, not a skip, so ``--require-full-coverage`` — the one
+    assertion built to catch gates that did not run — had nothing to catch.
+
+    Measured on openconnector 2026-08-08: **5** findings as the runner invoked
+    it, **412** against the root commit. 407 uncovered scenarios behind a green
+    line.
+
+      HYDRA_GATE_BASE_REF set    diff-scoped (ADR-020). An empty diff is an
+                                 EMPTY SCOPE and reports as a skip, never a pass.
+      HYDRA_GATE_BASE_REF unset  full-tree audit of every spec in the repo.
+    """
+    spec_root = app_dir / "openspec" / "specs"
+    all_specs = (
+        {str(p.relative_to(app_dir)) for p in spec_root.glob("*/spec.md")}
+        if spec_root.is_dir()
+        else set()
+    )
+
+    if not all_specs:
+        print(
+            f"[gate-{GATE_NUM}] e2e-coverage: NOT APPLICABLE — no "
+            f"openspec/specs/*/spec.md in this repository, so there is no "
+            f"declared scenario for an e2e test to trace back to."
+        )
+        return EXIT_NOT_APPLICABLE
+
+    base_ref = os.environ.get("HYDRA_GATE_BASE_REF")
+    if base_ref:
+        touched = changed_spec_files(base_ref, app_dir)
+        if not touched:
+            print(
+                f"[gate-{GATE_NUM}] e2e-coverage: EMPTY SCOPE — diff-scoped "
+                f"against '{base_ref}' and NO spec file was touched. "
+                f"{len(all_specs)} spec file(s) exist here and NONE were "
+                f"inspected: @e2e traceability (ADR-020) is UNVERIFIED by this "
+                f"run. This is not a pass. Audit the whole tree by running "
+                f"without HYDRA_GATE_BASE_REF, or with "
+                f"--scope-to-diff --base <root-commit>."
+            )
+            return EXIT_EMPTY_SCOPE
+    else:
+        touched = all_specs
 
     covered_refs, dead_refs = collect_ref_status(app_dir)
 
