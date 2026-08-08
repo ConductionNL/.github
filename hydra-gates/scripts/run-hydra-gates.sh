@@ -3350,9 +3350,14 @@ if [ -d src ] || [ -d templates ] || [ -d appinfo/templates ]; then
     # checker that greps a string literal misses every constant and matches
     # every comment, failing both ways at once. scripts/lib/php_template_scope.py
     # classifies EMITTED MARKUP, with PHP regions and HTML comments removed.
-    _sl_php_owns_document() {
-        python3 "${SCRIPT_DIR}/lib/php_template_scope.py" --owns-document "$1" 2>/dev/null
-    }
+    #
+    # THE ANSWER COMES FROM STDOUT, THE EXIT CODE IS A STATUS (gate-19 / #249).
+    # An earlier draft used the exit byte as the boolean — 0 owns, 1 fragment —
+    # and a helper that CRASHES also exits 1. Every template would have read as
+    # a fragment, the whole PHP arm would have evaporated, and the gate would
+    # have reported PASS on nothing. One `--classify` call for the whole set
+    # prints `<path>: page-root|fragment`, and a non-zero exit is a wiring
+    # failure rather than an answer.
     _sl_check() {
         local _f="$1"
         _in_scope "$_f" || return 0
@@ -3412,10 +3417,32 @@ if [ -d src ] || [ -d templates ] || [ -d appinfo/templates ]; then
             _sl_ran=0
             _skip 38 "skip-link" wiring "php_template_scope.py not found at ${_sl_helper} — ${#_sl_php[@]} PHP template(s) were in scope and NONE were classified; a document-owning template with no bypass mechanism (WCAG 2.4.1) is UNVERIFIED by this run."
         else
-            for _f in "${_sl_php[@]}"; do
-                _sl_php_owns_document "$_f" || continue
-                _sl_check "$_f"
-            done
+            _sl_cls_err="${HYDRA_GATE_LOG_DIR}/hydra-gate-skip-link.classify.err"
+            # gate-19's block (line ~1901) turns `set -e` ON and leaves it on
+            # for every gate after it, even though this script's own header
+            # sets only `set -u`. A helper that exits non-zero would therefore
+            # kill the whole runner mid-sweep — every LATER gate silently
+            # unreported — instead of reaching the _skip below. Measured: the
+            # crashing-classifier assertion aborted the run right here, 21
+            # later gates lost. Disable errexit around the call and restore
+            # the caller's flag.
+            case $- in *e*) _sl_had_e=1 ;; *) _sl_had_e=0 ;; esac
+            set +e
+            _sl_cls=$(python3 "${_sl_helper}" --classify "${_sl_php[@]}" 2>"${_sl_cls_err}")
+            _sl_rc=$?
+            [ "${_sl_had_e}" -eq 1 ] && set -e
+            if [ "${_sl_rc}" -ne 0 ]; then
+                # The classifier fell over. It answered nothing, so there is no
+                # verdict to give — stderr is KEPT, not discarded (#249).
+                _sl_ran=0
+                _skip 38 "skip-link" wiring "php_template_scope.py exited ${_sl_rc} — ${#_sl_php[@]} PHP template(s) were in scope and NONE were classified; a document-owning template with no bypass mechanism (WCAG 2.4.1) is UNVERIFIED by this run. See ${_sl_cls_err}."
+            else
+                while IFS= read -r _line; do
+                    case "${_line}" in
+                        *": page-root") _sl_check "${_line%: page-root}" ;;
+                    esac
+                done <<< "${_sl_cls}"
+            fi
         fi
     fi
     _sl_fail=$(wc -l < "${_sl_log}" 2>/dev/null || echo 0)

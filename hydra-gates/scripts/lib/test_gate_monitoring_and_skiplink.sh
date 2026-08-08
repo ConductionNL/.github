@@ -163,6 +163,50 @@ if _run "${FIXTURES}/accidental"; then
     fi
 fi
 
+# ---------------------------------------------------------------------------
+# 4. A BROKEN CLASSIFIER MUST NOT REPORT PASS (#147 / #249).
+#
+#    gate-38's PHP arm is driven entirely by php_template_scope.py. If that
+#    helper crashes and the runner reads its exit byte as an answer, every
+#    template classifies as "fragment", the whole arm evaporates, and the gate
+#    reports PASS having inspected nothing — a falsely-green gate manufactured
+#    by its own plumbing. Both wiring failures are asserted here.
+# ---------------------------------------------------------------------------
+_broken="$(mktemp -d "${TMPDIR:-/tmp}/hydra-gate-broken.XXXXXXXX")"
+cp -r "${PKG_ROOT}" "${_broken}/pkg" 2>/dev/null
+_BROKEN_RUNNER="${_broken}/pkg/scripts/run-hydra-gates.sh"
+
+_expect_skip() {  # <runner> <description>
+    local _out _logdir
+    _logdir="$(mktemp -d "${TMPDIR:-/tmp}/hydra-gate-test.XXXXXXXX")"
+    _out="$(HYDRA_GATE_LOG_DIR="${_logdir}" bash "$1" "${FIXTURES}/stated" 2>&1 || true)"
+    local _line
+    _line="$(printf '%s' "${_out}" | grep -E '^\[gate-38\] ' | head -1)"
+    case "${_line}" in
+        *"SKIPPED"*) _ok "$2 — ${_line%%—*}" ;;
+        *": PASS"*)  _bad "$2 — reported PASS having classified NOTHING: ${_line}" ;;
+        *)           _bad "$2 — wanted SKIPPED, got: ${_line:-<no gate-38 line at all>}" ;;
+    esac
+}
+
+if [ -f "${_BROKEN_RUNNER}" ]; then
+    # 4a. helper absent
+    mv "${_broken}/pkg/scripts/lib/php_template_scope.py" \
+       "${_broken}/pkg/scripts/lib/php_template_scope.py.hidden"
+    _expect_skip "${_BROKEN_RUNNER}" "a MISSING classifier reports SKIPPED, not PASS (#147)"
+    mv "${_broken}/pkg/scripts/lib/php_template_scope.py.hidden" \
+       "${_broken}/pkg/scripts/lib/php_template_scope.py"
+    # 4b. helper present but crashing. This is the case an exit-byte boolean
+    #     could not tell from "fragment": a crash exits 1, and so does a
+    #     fragment. The answer must come from stdout.
+    printf 'import sys\nraise SystemExit("boom")\n' \
+        > "${_broken}/pkg/scripts/lib/php_template_scope.py"
+    _expect_skip "${_BROKEN_RUNNER}" "a CRASHING classifier reports SKIPPED, not PASS (#249)"
+else
+    _bad "could not stage a broken-helper copy of the package — wiring assertions did not run"
+fi
+rm -rf "${_broken}"
+
 echo
 echo "== summary =="
 printf '   passed: %d\n   failed: %d\n' "${_pass_n}" "${_fail_n}"
