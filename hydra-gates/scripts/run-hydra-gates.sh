@@ -1934,13 +1934,36 @@ SCRIPT_DIR_REDUNDANT="${SCRIPT_DIR}"
 # argparse to reject every file after the first as "unrecognized arguments"
 # and the gate to fail spuriously. Observed 2026-05-27 on PR #739 canary.
 _redundant_args=()
+# THE SCOPE LIST GOES IN A FILE, NOT IN ARGV (#245).
+#
+# `--changed-files=${CHANGED_FILES}` is ONE argument, and a single argument is
+# capped at MAX_ARG_STRLEN — 128 KiB on Linux — regardless of ARG_MAX being
+# 2 MB. openregister's root-scoped list is 404,828 bytes across 7,224 files, so
+# the exec raised E2BIG, python3 never started, the log held only the shell's
+# "Argument list too long", and `grep -c '^lib/'` counted zero findings in it.
+# The gate then reported `FAIL — 0 pass-through method(s)`: a crashed checker
+# wearing a finding count, and a count of zero at that. Reproduced verbatim in
+# openregister's root-scoped baseline.
+_redundant_scope_file="${HYDRA_GATE_LOG_DIR}/hydra-gate-17-scope.txt"
 if [ "${SCOPE_TO_DIFF}" = "1" ] && [ -n "${CHANGED_FILES}" ]; then
-    _redundant_args+=("--changed-files=${CHANGED_FILES}")
+    printf '%s\n' "${CHANGED_FILES}" > "${_redundant_scope_file}" 2>/dev/null \
+        && _redundant_args+=("--changed-files-file=${_redundant_scope_file}")
 fi
 _redundant_args+=("${APP_DIR}")
 if python3 "${SCRIPT_DIR_REDUNDANT}/lib/detect-redundant-controllers.py" \
         "${_redundant_args[@]}" > "${_redundant_log}" 2>&1; then
     _pass 17 "redundant-controller"
+elif ! grep -q '^# count=' "${_redundant_log}" 2>/dev/null; then
+    # THE CHECKER DID NOT FINISH. Its terminal `# count=<n>` marker is absent,
+    # so it never reached its own summary — E2BIG, a traceback, an OOM kill, a
+    # missing interpreter. It has no verdict to give, and the old code turned
+    # that into `FAIL — 0 pass-through method(s)` by counting matches in a log
+    # that contains an error message rather than findings.
+    #
+    # A crash is a distinct state: never PASS, and never a finding count that
+    # was never measured. --require-full-coverage counts this against coverage.
+    _redundant_why=$(head -3 "${_redundant_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+    _skip 17 "redundant-controller" wiring "detect-redundant-controllers.py did not complete — it never printed its terminal '# count=' marker, so NO controller or service method was inspected and ADR-022 pass-through wrappers are UNVERIFIED by this run. Checker output: ${_redundant_why:-<empty>}. See ${_redundant_log}."
 elif grep -q '^# count=0$' "${_redundant_log}" 2>/dev/null; then
     # The python script ran cleanly and printed its terminal `# count=0`
     # line — it found zero pass-through controllers. The non-zero exit
@@ -4907,6 +4930,13 @@ if [ -f src/manifest.json ]; then
         grep -E '^(WARN|NOTE)' "${_iv_log}" || true
         if [ "${_iv_rc}" -eq 0 ]; then
             _pass 60 "icon-vocabulary"
+        elif [ "${_iv_rc}" -eq 5 ]; then
+            # vue-material-design-icons is not installed, so the "does this
+            # icon name exist upstream?" rule could not run. This gate has
+            # already shipped both dishonest answers to that: 43 confident
+            # FAILs when node_modules was absent, then — once those were
+            # guarded — a silent PASS over a rule that never executed (#233).
+            _skip 60 "icon-vocabulary" wiring "vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream — an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage. See ${_iv_log}."
         else
             _iv_n=$(_count '^FAIL' "${_iv_log}")
             [ "${_iv_n}" -eq 0 ] && _iv_n=1
@@ -4914,7 +4944,7 @@ if [ -f src/manifest.json ]; then
         fi
     fi
 else
-    _pass 60 "icon-vocabulary"
+    _skip 60 "icon-vocabulary" na "no src/manifest.json — this app declares no menu icon for the ADR-077 vocabulary to constrain."
 fi
 
 # ---------------------------------------------------------------------------
