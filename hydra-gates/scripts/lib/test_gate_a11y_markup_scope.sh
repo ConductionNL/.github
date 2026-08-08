@@ -251,7 +251,9 @@ _nosrc_caught=0
 _nosrc_total=0
 while IFS=: read -r _g _what; do
     [ -z "${_g}" ] && continue
-    case " 38 45 " in *" ${_g} "*) continue ;; esac   # not in the list above
+    # gate-45 (prefers-reduced-motion) is outside the 34-44 band this arm
+    # repairs and still guards on `[ -d src ]`; gate-38 is not in _expect.
+    case "${_g}" in 38|45) continue ;; esac
     _nosrc_total=$((_nosrc_total + 1))
     if grep -qE "^\[gate-${_g}\][^:]*: FAIL" "${_nosrc_out}"; then
         _nosrc_caught=$((_nosrc_caught + 1))
