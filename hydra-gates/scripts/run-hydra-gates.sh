@@ -3547,48 +3547,78 @@ fi
 # (Name, Role, Value).
 #
 # Pass conditions for a button tag:
-#   (a) has aria-label / :aria-label / aria-labelledby attribute, OR
-#   (b) has a title attribute, OR
-#   (c) has non-trivial text content (not just an icon-component child) OR
-#       a Vue interpolation {{ ... }} indicating dynamic text.
+#   (a) has aria-label / aria-labelledby / title / name, LITERAL OR BOUND, OR
+#   (b) has non-trivial text content (not just an icon-component child), a
+#       Vue interpolation {{ ... }}, or an explicit <template #default>.
+#
+# A BOUND NAME IS STILL A NAME (#222 family)
+# ------------------------------------------
+# The accepted-attribute regex was:
+#
+#     r'(^|\s)(:?aria-label|aria-labelledby|v-bind:aria-label|title)\s*='
+#
+# `:?` binds to the FIRST alternative only, so `:aria-label` was accepted
+# while `:title`, `v-bind:title` and `:aria-labelledby` were not. Vue
+# templates bind almost every user-visible string, because it has to go
+# through `t()`:
+#
+#     <button type="button" class="…__remove"
+#             :title="t('openbuild', 'Remove tab')"
+#             @click="removeTab(index)">
+#
+# That button HAS a name. ALL 22 of openbuild's findings were this exact
+# shape — a correctly translated bound title read as a missing one — and the
+# only way to close them was to add a second, redundant name. What matters is
+# whether the attribute reaches the DOM, and `:title` reaches it exactly as
+# `title` does. Note the gate already accepted static `title=`; accepting the
+# bound form is a consistency fix, not a new claim about how strong a name
+# `title` is.
+#
+# Implementation: scripts/lib/check_button_name.py, tests in
+# scripts/lib/test_check_button_name.py — every accepted shape ships with the
+# genuinely-unnamed button it must not swallow.
 #
 # References:
 #   - openspec/architecture/wcag-coverage.md SC 4.1.2
 # ---------------------------------------------------------------------------
-if [ -d src ]; then
+if _a11y_has_markup_dir; then
     _bn_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-button-name.log
     : > "${_bn_log}"
+    _bn_ran=1
+    _bn_helper="${SCRIPT_DIR}/lib/check_button_name.py"
+    _bn_files=()
+    # `_a11y_markup_files`, not `find src -name '*.vue'` (#225 / #261). An
+    # icon-only <button> with no name is the same defect in a .php template.
     while IFS= read -r vue; do
         _in_scope "${vue}" || continue
-        python3 - "$vue" <<'PYBN' >> "${_bn_log}" 2>/dev/null
-import re, sys
-fname = sys.argv[1]
-try:
-    src = open(fname).read()
-except Exception:
-    sys.exit(0)
-txt = src.replace('\n', ' ')
-for tag_re in (r'<NcButton\b([^>]*)>(.*?)</NcButton>', r'<button\b([^>]*)>(.*?)</button>'):
-    for m in re.finditer(tag_re, txt, re.IGNORECASE):
-        attrs = m.group(1) or ''
-        body = m.group(2) or ''
-        if re.search(r'(^|\s)(:?aria-label|aria-labelledby|v-bind:aria-label|title)\s*=', attrs):
-            continue
-        if '{{' in body and '}}' in body:
-            continue
-        body_text = re.sub(r'<[^>]+>', '', body)
-        body_text = re.sub(r'\s+', '', body_text)
-        if len(body_text) >= 2:
-            continue
-        opening = m.group(0).split('>')[0] + '>'
-        print(f'{fname}: {opening} rule=icon-only-button-without-accessible-name')
-PYBN
+        _bn_files+=("${vue}")
     done < <(_a11y_markup_files)
-    _bn_fail=$(wc -l < "${_bn_log}" 2>/dev/null || echo 0)
-    if [ "${_bn_fail}" -eq 0 ]; then
-        _pass 39 "button-name"
+    if [ "${#_bn_files[@]}" -eq 0 ]; then
+        :   # nothing in scope; the PASS below describes the diff, as everywhere else.
+    elif [ ! -f "${_bn_helper}" ]; then
+        # A MISSING HELPER MUST NOT REPORT PASS (#147).
+        _bn_ran=0
+        _skip 39 "button-name" wiring "check_button_name.py not found at ${_bn_helper} — ${#_bn_files[@]} markup file(s) were in scope and NONE were inspected; unnamed controls (WCAG 4.1.2) are UNVERIFIED by this run."
     else
-        _fail 39 "button-name" "${_bn_fail} icon-only button(s) without aria-label — see ${_bn_log}"
+        # Exit code is a STATUS, findings are STDOUT (gate-19 / #249); stderr
+        # is kept so a traceback is visible instead of becoming a clean sheet.
+        # `set +e` only, never `set -e` after — errexit is OFF for this whole
+        # script and nothing may turn it on (see the invariant at the top).
+        set +e
+        python3 "${_bn_helper}" "${_bn_files[@]}" >> "${_bn_log}" 2>>"${_bn_log}.err"
+        _bn_rc=$?
+        if [ "${_bn_rc}" -ne 0 ]; then
+            _bn_ran=0
+            _skip 39 "button-name" wiring "check_button_name.py exited ${_bn_rc} — ${#_bn_files[@]} markup file(s) were in scope and no verdict was produced; unnamed controls (WCAG 4.1.2) are UNVERIFIED by this run. See ${_bn_log}.err."
+        fi
+    fi
+    _bn_fail=$(wc -l < "${_bn_log}" 2>/dev/null || echo 0)
+    if [ "${_bn_ran}" -eq 1 ]; then
+        if [ "${_bn_fail}" -eq 0 ]; then
+            _pass 39 "button-name"
+        else
+            _fail 39 "button-name" "${_bn_fail} icon-only button(s) without an accessible name — see ${_bn_log}"
+        fi
     fi
 fi
 
