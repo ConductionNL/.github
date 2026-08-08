@@ -492,6 +492,15 @@ fi
 # a wildcard would let ANY missing controller hide behind AppHost adoption.
 _HYDRA_APPHOST_SLUGS="dashboard preferences settings health metrics"
 
+# The app's own top namespace, read from its own file:
+# `namespace OCA\<App>\AppInfo;`. Empty when there is no Application.php, which
+# every consumer below treats as "cannot decide" -> no exemption.
+_HYDRA_APP_NS=""
+if [ -f lib/AppInfo/Application.php ]; then
+    _HYDRA_APP_NS=$(grep -m1 -oE '^namespace[[:space:]]+OCA\\[A-Za-z0-9_]+' lib/AppInfo/Application.php \
+        | awk '{print $2}')
+fi
+
 # _apphost_serves <route-slug> — 0 when this app adopts AppHost AND the slug is
 # one of the generics AppHost provides, i.e. the missing file is expected.
 _apphost_serves() {
@@ -500,6 +509,38 @@ _apphost_serves() {
         *" $1 "*) return 0 ;;
         *) return 1 ;;
     esac
+}
+
+# ---------------------------------------------------------------------------
+# _app_php_binds_class <fully-qualified-class-name> — 0 when
+# lib/AppInfo/Application.php registers a service under EXACTLY that name.
+#
+# The SINGLE place the needle is built and matched. Both binding helpers below
+# derive a class name in their own way and then hand it here, so a change to
+# the matching rule can never apply to one shape and silently not the other.
+# ---------------------------------------------------------------------------
+_app_php_binds_class() {
+    local _fqcn="$1"
+    [ -f lib/AppInfo/Application.php ] || return 1
+    [ -n "${_fqcn}" ] || return 1
+
+    # In PHP source the literal carries escaped backslashes.
+    local _needle="${_fqcn//\\/\\\\}"
+
+    # Through the environment, NOT `awk -v`: -v runs escape processing over the
+    # value, so the `\\` pairs this needle is made of arrive as single
+    # backslashes and never match the PHP literal. Silently — the helper just
+    # answers "no such binding" for every controller, which reads exactly like
+    # a correct verdict.
+    _HYDRA_DI_NEEDLE="${_needle}" awk '
+        BEGIN { needle = ENVIRON["_HYDRA_DI_NEEDLE"] }
+        /registerService(Alias)?[[:space:]]*\(/ { window = 6 }
+        window > 0 {
+            if (index($0, needle) > 0) { found = 1; exit }
+            window--
+        }
+        END { exit(found ? 0 : 1) }
+    ' lib/AppInfo/Application.php
 }
 
 # ---------------------------------------------------------------------------
@@ -538,39 +579,94 @@ _di_binds_controller() {
     _rel="${_rel%.php}"
     local _cls="${_rel//\//\\}"
 
-    # The app's own namespace, from its own file: `namespace OCA\<App>\AppInfo;`
-    local _app_ns
-    _app_ns=$(grep -m1 -oE '^namespace[[:space:]]+OCA\\[A-Za-z0-9_]+' lib/AppInfo/Application.php \
-        | awk '{print $2}')
-    [ -n "${_app_ns}" ] || return 1
+    [ -n "${_HYDRA_APP_NS}" ] || return 1
+    _app_php_binds_class "${_HYDRA_APP_NS}\\Controller\\${_cls}"
+}
 
-    # In PHP source the literal carries escaped backslashes.
-    local _fqcn="${_app_ns}\\Controller\\${_cls}"
-    local _needle="${_fqcn//\\/\\\\}"
-
-    # Through the environment, NOT `awk -v`: -v runs escape processing over the
-    # value, so the `\\` pairs this needle is made of arrive as single
-    # backslashes and never match the PHP literal. Silently — the helper just
-    # answers "no such binding" for every controller, which reads exactly like
-    # a correct verdict.
-    _HYDRA_DI_NEEDLE="${_needle}" awk '
-        BEGIN { needle = ENVIRON["_HYDRA_DI_NEEDLE"] }
-        /registerService(Alias)?[[:space:]]*\(/ { window = 6 }
-        window > 0 {
-            if (index($0, needle) > 0) { found = 1; exit }
-            window--
-        }
-        END { exit(found ? 0 : 1) }
-    ' lib/AppInfo/Application.php
+# ---------------------------------------------------------------------------
+# _di_binds_fq_controller <route-controller-name> — 0 when the route names a
+# class that is ALREADY fully qualified under this app's own top namespace AND
+# lib/AppInfo/Application.php binds exactly that name + `Controller`.
+#
+# THIRD SHAPE, measured 2026-08-08 on opencatalogi origin/development
+# (9e63d9f3): gate-14 reported 6 findings, all of them wrong.
+#
+#   appinfo/routes.php
+#     ['name' => 'OCA\OpenCatalogi\AppHost\Controller\GenericDashboard#page', …]
+#   lib/AppInfo/Application.php
+#     $context->registerService(
+#         'OCA\\OpenCatalogi\\AppHost\\Controller\\GenericDashboardController',
+#         static fn ($c) => new GenericDashboardController(appName: self::APP_ID, …)
+#     );
+#
+# This resolves at runtime, and it is the ONLY thing that can. NC's
+# \OC\AppFramework\App::main() does `$container->get($controllerName)` FIRST,
+# with the literal name RouteParser::buildControllerName() produced — that
+# builder only does `underScoreToCamelCase(ucfirst($controller)) . 'Controller'`,
+# so the backslashes survive untouched. And the `catch (QueryException)`
+# fallback to `OCA\<App>\Controller\<name>` is not even reachable for this
+# shape: its first statement is
+#     if (str_contains($controllerName, '\\Controller\\')) { throw new
+#         HintException('App ' . strtolower($app) . ' is not enabled'); }
+# so a fully-qualified name that is not bound 500s rather than falling back.
+# (Read from /var/www/html/lib/private/AppFramework/App.php in a live NC 33.)
+#
+# Neither existing helper could see it, and each declined for its own correct
+# reason — which is why this needed a third, and not a loosening of either:
+#   * _apphost_serves     is keyed on the five short slugs Bootstrap aliases
+#                         (`dashboard`). The route name is the whole class.
+#   * _di_binds_controller takes a FILE PATH and rebuilds
+#                         `<app_ns>\Controller\<…>` from it. Fed this route it
+#                         reconstructed
+#                         `OCA\OpenCatalogi\Controller\OCAOpenCatalogiAppHostControllerGenericDashboardController`,
+#                         which matches nothing — the name had already been
+#                         flattened (see the `read -r` note in gate-5/gate-14).
+#
+# The narrower alternative — "add the six opencatalogi names to a list" — was
+# rejected: it is the `_HYDRA_APPHOST_SLUGS` failure mode a second time, and
+# 2026-08-07 already showed that list going stale against openconnector.
+# The BLIND alternative — "a route name containing backslashes is unverifiable,
+# skip it" — was rejected harder: it would retire the invariant for every
+# namespaced route in the fleet. The evidence demanded here is the same
+# evidence _di_binds_controller demands, no weaker: this repository must be
+# shown to bind that exact literal near a registerService call. An unbound
+# fully-qualified route still FAILS, which is the point.
+#
+# Scoped to the app's OWN namespace on purpose. `OCA\SomeOtherApp\…` is a class
+# this repository does not own and cannot vouch for, so it is left to fail.
+# ---------------------------------------------------------------------------
+_di_binds_fq_controller() {
+    local _name="$1"
+    [ -n "${_HYDRA_APP_NS}" ] || return 1
+    # Must be fully qualified UNDER THIS APP: `OCA\<App>\` + at least one more
+    # segment. The trailing `\` in the prefix is what stops `OCA\Foo` matching
+    # a sibling app whose name merely starts the same way (`OCA\FooBar\…`).
+    case "${_name}" in
+        "${_HYDRA_APP_NS}"\\*) ;;
+        *) return 1 ;;
+    esac
+    # The router appends `Controller` to whatever it was given; the DI key must
+    # therefore be the route name verbatim plus that suffix.
+    _app_php_binds_class "${_name}Controller"
 }
 
 # ---------------------------------------------------------------------------
 # _ctrl_path_from_name <route-slug> — the file a routed `controller#method`
-# name resolves to. Handles the three shapes Nextcloud accepts:
+# name resolves to. Handles the four shapes Nextcloud accepts:
 #
+#   OCA\App\AppHost\Controller\GenericDashboard
+#                    -> lib/AppHost/Controller/GenericDashboardController.php
 #   Settings\Foo  -> lib/Controller/Settings/FooController.php
 #   my_thing      -> lib/Controller/MyThingController.php   (snake_case)
 #   credentialVerify -> lib/Controller/CredentialVerifyController.php
+#
+# The first shape is PSR-4, not the `lib/Controller/` convention: a name that
+# is already fully qualified under the app's own top namespace is anchored at
+# `OCA\<App>\` -> `lib/`, so appending it to `lib/Controller/` would name a
+# file that could never exist. Added 2026-08-08 with the opencatalogi fix; see
+# _di_binds_fq_controller above for the measurement. A leaf that genuinely
+# SHIPS such a class (rather than binding a foreign one) is therefore opened
+# and judged normally by both gates, instead of being unresolvable.
 #
 # SHARED by gate-5 (route-auth) and gate-14 (route-reachability). It used to be
 # defined INSIDE gate-14 only, and gate-5 carried its own narrower copy —
@@ -587,6 +683,21 @@ _di_binds_controller() {
 _ctrl_path_from_name() {
     local _name="$1"
     case "${_name}" in
+        "${_HYDRA_APP_NS:-__no_app_ns__}"\\*)
+            # PSR-4: `OCA\<App>\` maps to `lib/`. Strip the app prefix, turn
+            # the remaining namespace separators into directory separators.
+            local _sub="${_name#"${_HYDRA_APP_NS}"\\}"
+            local _sub_last="${_sub##*\\}"
+            local _sub_ns="${_sub%\\*}"
+            local _sub_last_cap
+            _sub_last_cap="$(printf '%s' "${_sub_last}" | awk '{print toupper(substr($0,1,1)) substr($0,2)}')"
+            if [ "${_sub_ns}" = "${_sub}" ]; then
+                # `OCA\<App>\Foo` — no intermediate namespace.
+                echo "lib/${_sub_last_cap}Controller.php"
+            else
+                echo "lib/${_sub_ns//\\//}/${_sub_last_cap}Controller.php"
+            fi
+            ;;
         *\\*)
             local _last="${_name##*\\}"
             local _ns="${_name%\\*}"
@@ -594,7 +705,14 @@ _ctrl_path_from_name() {
             # masked by `local`.
             local _last_cap
             _last_cap="$(printf '%s' "${_last}" | awk '{print toupper(substr($0,1,1)) substr($0,2)}')"
-            echo "lib/Controller/${_ns}/${_last_cap}Controller.php"
+            # EVERY remaining separator becomes a directory separator, not just
+            # the last one. `${_ns}` used to be interpolated raw, so a two-level
+            # name produced a path with a literal backslash inside it —
+            # `lib/Controller/AppHost\Controller/GenericHealthController.php` —
+            # which cannot exist on disk and so always resolved to "missing".
+            # Invisible until 2026-08-08 because plain `read` had been deleting
+            # the backslashes before this branch could ever see two of them.
+            echo "lib/Controller/${_ns//\\//}/${_last_cap}Controller.php"
             ;;
         *_*)
             local _camel
@@ -1013,11 +1131,22 @@ if [ -f appinfo/routes.php ]; then
     _in_scope "appinfo/routes.php" && _ra_routes_touched=1
     # Process substitution, not a pipeline: the loop must run in THIS shell so
     # the log appends and the scope flags are read from one consistent state.
-    while IFS='#' read ctrl method; do
+    #
+    # `read -r`, not `read`. Without -r, `read` performs backslash removal on
+    # the value, so every NAMESPACED route name arrived here FLATTENED:
+    # `OCA\OpenCatalogi\AppHost\Controller\GenericDashboard` became
+    # `OCAOpenCatalogiAppHostControllerGenericDashboard`, and `Settings\Foo`
+    # became `SettingsFoo`. Measured 2026-08-08 on opencatalogi (6 routes) and
+    # openregister (55). The flattened name resolves to a path that cannot
+    # exist, which is why _ctrl_path_from_name's `Settings\Foo ->
+    # lib/Controller/Settings/FooController.php` branch — documented since it
+    # was written — had never once been reached from either gate.
+    while IFS='#' read -r ctrl method; do
             [ -n "${ctrl:-}" ] || continue
             path=$(_ctrl_path_from_name "${ctrl}")
             if [ ! -f "$path" ]; then
-                if _apphost_serves "${ctrl}" || _di_binds_controller "${path}"; then
+                if _apphost_serves "${ctrl}" || _di_binds_controller "${path}" \
+                    || _di_binds_fq_controller "${ctrl}"; then
                     echo "${ctrl}#${method} — served by the OpenRegister AppHost generic controller (ADR-040); its auth attribute lives in the openregister package and is NOT visible from this repository" >> "${_ra_unresolved_log}"
                 else
                     echo "${ctrl}#${method} — ${path} is not present in this repository; controller class UNRESOLVED (see gate-14, which owns route reachability)" >> "${_ra_unresolved_log}"
@@ -1545,7 +1674,10 @@ if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
     # ---- Invariant 2: every routed entry resolves to a method that exists.
     grep -oE "${_ROUTE_NAME_RX}" appinfo/routes.php \
         | grep -oE "${_ROUTE_PAIR_RX}" | sort -u \
-        | while IFS='#' read _ctrl _method; do
+        | while IFS='#' read -r _ctrl _method; do
+            # `read -r` for the reason spelled out in gate-5's loop: plain
+            # `read` strips the backslashes out of a namespaced route name, and
+            # this gate then reported the resulting nonsense path as a finding.
             # Resolver is shared with gate-5 — see _ctrl_path_from_name above.
             # It lived here, inline, while gate-5 carried a narrower private
             # copy; the divergence is what let 23 of scholiq's 37 routes go
@@ -1572,9 +1704,14 @@ if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
                 # class name is bound in the DI container, so the route
                 # resolves with no file on disk. Two ways in — Bootstrap
                 # aliasing one of its five generics, or the leaf registering
-                # the generic itself under the standard controller name.
+                # the generic itself under the standard controller name, or —
+                # opencatalogi, 2026-08-08 — the route naming the leaf's own
+                # fully-qualified class and Application.php binding that exact
+                # literal. Each is a NAMED binding this repo can be shown to
+                # make; an absence with no binding still fails below.
                 _apphost_serves "${_ctrl}" && continue
                 _di_binds_controller "${_path}" && continue
+                _di_binds_fq_controller "${_ctrl}" && continue
                 echo "${_path} route='${_ctrl}#${_method}' rule=controller-class-not-found" >> "${_rr_log}"
                 continue
             fi
