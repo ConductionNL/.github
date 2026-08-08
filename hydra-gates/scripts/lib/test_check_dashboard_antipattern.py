@@ -125,6 +125,38 @@ class CheckFileTest(unittest.TestCase):
         cda.check_file(vue, {"my-work"}, findings)
         self.assertEqual(len(findings), 1)
 
+    def test_extra_attributes_on_the_slot_tag_do_not_hide_it(self):
+        # .github#271/#274 — the same defect class as gate-44's "judged on the
+        # FIRST of name/id/v-model and stopped" (#272): the opening-tag pattern
+        # assumed the slot binding was the LAST thing before `>`, so ONE extra
+        # attribute made the whole element invisible and the nested dashboard
+        # inside it went unreported.
+        #
+        # Each of these was a silent miss before the fix.
+        for markup in (
+            '<template #widget-my-work class="wide">',
+            '<template v-slot:widget-my-work="{ item }" class="wide">',
+            "<template #widget-my-work='{ item }'>",
+            '<template #widget-my-work="{ item }" :data-x="a > b">',
+        ):
+            with self.subTest(markup=markup):
+                vue = self.dir / "MyDashboard.vue"
+                _write(vue, f"""
+<template>
+  <CnDashboardPage>
+    {markup}
+      <CnDashboardPage />
+    </template>
+  </CnDashboardPage>
+</template>
+""")
+                findings: list[str] = []
+                cda.check_file(vue, {"my-work"}, findings)
+                self.assertEqual(
+                    len(findings), 1,
+                    f"nested dashboard hidden by the extra attribute in: {markup}",
+                )
+
     def test_unknown_widget_id_is_ignored(self):
         # If the slot template targets a widget id not declared as
         # type=custom in any dashboard page, we don't care about its body.
@@ -179,7 +211,13 @@ class FullRunTest(unittest.TestCase):
         with redirect_stdout(buf):
             rc = cda.main(["check_dashboard_antipattern.py", str(self.dir)])
         self.assertEqual(rc, 0)
-        self.assertEqual(buf.getvalue(), "")
+        # The ONLY line on a clean run is the terminal marker (.github#271).
+        # The marker exists because gate-15 decided its verdict with `wc -l`
+        # over this stdout after `2>/dev/null || true`: a helper that crashed
+        # wrote nothing, so the count was 0, so the gate said PASS over a check
+        # that never ran. Its presence is how the runner tells "clean" from
+        # "did not execute", so a clean run MUST still emit it.
+        self.assertEqual(buf.getvalue(), "# count=0\n")
 
     def test_custom_page_with_dashboard_not_referenced_as_widget_passes(self):
         # Regression (pipelinq Rapportage, 2026-06-12): a type=custom page
@@ -205,7 +243,7 @@ class FullRunTest(unittest.TestCase):
         with redirect_stdout(buf):
             rc = cda.main(["check_dashboard_antipattern.py", str(self.dir)])
         self.assertEqual(rc, 0)
-        self.assertEqual(buf.getvalue(), "")
+        self.assertEqual(buf.getvalue(), "# count=0\n")
 
     def test_pipelinq_style_antipattern(self):
         # Pipelinq pattern: a custom page named "Dashboard" with component

@@ -35,6 +35,10 @@
 #
 #   routes-standard/            5 canonical routes exempt   -> gate-14 PASS on them
 #                               `gadget#run` has no route   -> gate-14 FAILS
+#   routes-standard-missing-update/
+#                               the SAME app minus SettingsController::update()
+#                               -> settings#update MUST be reported (#265)
+#                               the other nine canonical names MUST NOT be
 #   delegated-registrar/        AppHost call in a registrar -> 3 generics exempt
 #                               `gadget#run` bound nowhere  -> gate-14 FAILS
 #   delegated-registrar-absent/ the SAME app minus that one file -> all 4 FAIL
@@ -103,7 +107,8 @@ _expect_lines()   { local _n; _n=$(printf '%s' "$1" | grep -c . ); if [ "${_n}" 
 echo "== gate-5 / gate-14 / gate-30 route + registration detection =="
 echo
 
-for _f in routes-standard delegated-registrar delegated-registrar-absent \
+for _f in routes-standard routes-standard-missing-update \
+          delegated-registrar delegated-registrar-absent \
           monitoring-capitalised monitoring-per-object monitoring-per-object-only \
           monitoring-none; do
     [ -d "${FIXTURES}/${_f}" ] || _bad "fixture ${FIXTURES}/${_f} does not exist — this suite would be green on nothing"
@@ -122,6 +127,41 @@ if _run "${FIXTURES}/routes-standard"; then
         "routes-standard: settings#index / #create / #load likewise"
     _expect_lines "${_RRLOG}" 1 \
         "routes-standard: exactly ONE finding — the exemption is ten names, not a blanket"
+fi
+
+# ---------------------------------------------------------------------------
+# 1b. #265 — the ten Routes::standard() names must be JUDGED, not just exempted
+#
+# THE ANTI-WIDENING SIBLING OF 1, INVERTED. #223 taught invariant 1 that those
+# ten names exist so it would stop reporting working endpoints as unroutable.
+# Invariant 2 asks the opposite question — "does the method the route names
+# actually exist?" — and it never asked it about those ten, because it read
+# route names as LITERALS out of the leaf's appinfo/routes.php and they are not
+# there.
+#
+# `aliasControllerUnlessLeafDefinesIt()` makes that gap reachable: the moment a
+# leaf ships its own SettingsController it owes every method the canonical table
+# routes to `settings#`, and a missing one is a ReflectionException 500, not a
+# 404. Reproduced on shillinq 2026-08-08 by deleting `update()` — gate-14's
+# findings log came back EMPTY and the gate said PASS.
+#
+# The two fixtures differ by exactly that one method.
+# ---------------------------------------------------------------------------
+if _run "${FIXTURES}/routes-standard-missing-update"; then
+    _expect_gate 14 "FAIL" "routes-standard-missing-update: a canonical AppHost route whose method is gone IS a finding"
+    _expect_log "${_RRLOG}" "SettingsController\.php route='settings#update' rule=method-not-found-on-target-controller" \
+        "routes-standard-missing-update: settings#update is named, and named as method-not-found (a 500, not a 404)"
+    # THE CONTROL: the OTHER nine canonical names still resolve here, so this is
+    # not "an AppHost adopter now fails on all ten".
+    _expect_not_log "${_RRLOG}" "settings#index\|settings#create\|settings#load" \
+        "routes-standard-missing-update: index / create / load still resolve and are NOT reported"
+    _expect_not_log "${_RRLOG}" "DashboardController" \
+        "routes-standard-missing-update: dashboard#page / #catchAll are served by AppHost and stay exempt"
+    # Exactly two: the sibling's pre-existing `gadget#run`, plus the one method
+    # this fixture deletes. Anything more means the ten names stopped being
+    # exempt for the CLASS-ABSENT case and the widening went too far.
+    _expect_lines "${_RRLOG}" 2 \
+        "routes-standard-missing-update: exactly TWO findings — gadget#run and settings#update, nothing else"
 fi
 
 # ---------------------------------------------------------------------------

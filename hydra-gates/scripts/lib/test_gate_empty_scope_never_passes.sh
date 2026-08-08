@@ -309,6 +309,101 @@ else
     _bad "the run exited ${_violation_rc} with a planted ADR-079 violation in scope — a finding must fail the run on its own merits"
 fi
 
+# ---------------------------------------------------------------------------
+# GATES 12 AND 13: `src/` EXISTS, AND HOLDS NOT ONE .vue (.github#274, #271)
+#
+# The same defect one layer down from #272. Those four a11y gates declared
+# themselves NOT APPLICABLE on a templates-only repo; gates 12 and 13 did the
+# opposite on an nldesign-shaped one — `[ -d src ]` passed, `find src -name
+# '*.vue'` matched nothing, the findings log was empty, and both printed PASS.
+#
+# MEASURED at package sha fef032b (origin/main, post-#272) against a repo whose
+# `src/` holds a single `manifest.json` and whose `templates/` holds real
+# markup:
+#
+#     [gate-12] nc-input-labels: PASS
+#     [gate-13] modal-isolation: PASS
+#
+# That is nldesign's exact shape — the shape that let twelve gates certify it in
+# #225 — and it is not one `rm` away, it is current. `na` is the honest verdict:
+# NcSelect / NcModal / NcDialog are Vue SFC components, a PHP template cannot
+# instantiate one, so nothing in such a repo is unverified. But PASS says the
+# gate looked and found nothing, and it did not look.
+# ---------------------------------------------------------------------------
+_novue="${_tmp}/novue"
+mkdir -p "${_novue}/src" "${_novue}/templates"
+printf '{"name":"nl","pages":[]}\n' > "${_novue}/src/manifest.json"
+printf '<div><select name="x"></select></div>\n' > "${_novue}/templates/admin.php"
+(
+    cd "${_novue}" || exit 1
+    git init -q .
+    git add -A
+    git -c user.email=t@t -c user.name=t commit -qm init
+) >/dev/null 2>&1
+
+_novue_out="${_tmp}/novue.txt"
+_novue_logs="${_tmp}/novue-logs"
+mkdir -p "${_novue_logs}"
+(
+    cd "${_novue}" || exit 1
+    HYDRA_GATE_LOG_DIR="${_novue_logs}" bash "${_runner}" . > "${_novue_out}" 2>&1
+)
+for _g in 12 13; do
+    _v="$(_verdict "${_novue_out}" "${_g}")"
+    case "${_v}" in
+        "NOT APPLICABLE")
+            _ok "gate-${_g}: NOT APPLICABLE when src/ holds no .vue — it says it looked at nothing"
+            ;;
+        PASS)
+            _bad "gate-${_g}: PASS over a src/ containing zero .vue files — the nldesign shape, green over nothing (#225/#274)"
+            ;;
+        *)
+            _bad "gate-${_g}: returned '${_v:-none emitted}' on a src/ with no .vue — expected NOT APPLICABLE"
+            ;;
+    esac
+done
+# The reason must say WHY it cannot apply, not merely that it does not. The old
+# shared reason claimed these gates inspect ".vue/.js/.ts source", which is
+# false — they are .vue-only, and that is the judgement #274 asked to be made
+# explicit.
+if grep -qE '^\[gate-12\][^:]*: NOT APPLICABLE — .*(Vue SFC|no \.vue)' "${_novue_out}"; then
+    _ok "gate-12's na reason states the .vue-only judgement rather than a generic 'no frontend'"
+else
+    _bad "gate-12's na reason does not state why a template repo cannot contain its subject"
+fi
+
+# THE ANTI-WIDENING CONTROL. Add ONE .vue carrying the defect and both gates
+# must go back to judging — this is not "skip whenever src/ looks thin".
+mkdir -p "${_novue}/src/views"
+cat > "${_novue}/src/views/Probe.vue" <<'VUE'
+<template>
+  <div>
+    <NcSelect v-model="v" :options="o" :reduce="(option) => option.value" />
+    <NcModal v-if="open" @close="open = false"><p>inline</p></NcModal>
+  </div>
+</template>
+VUE
+(
+    cd "${_novue}" || exit 1
+    git add -A
+    git -c user.email=t@t -c user.name=t commit -qm probe
+) >/dev/null 2>&1
+_novue_out2="${_tmp}/novue2.txt"
+_novue_logs2="${_tmp}/novue-logs2"
+mkdir -p "${_novue_logs2}"
+(
+    cd "${_novue}" || exit 1
+    HYDRA_GATE_LOG_DIR="${_novue_logs2}" bash "${_runner}" . > "${_novue_out2}" 2>&1
+)
+for _g in 12 13; do
+    _v="$(_verdict "${_novue_out2}" "${_g}")"
+    if [ "${_v}" = "FAIL" ]; then
+        _ok "control: gate-${_g} FAILS on the planted defect once ONE .vue exists — the na is about absence, not about skipping"
+    else
+        _bad "control FAILED: gate-${_g} returned '${_v:-none}' with a planted unnamed NcSelect / inline NcModal in src/views/Probe.vue"
+    fi
+done
+
 echo
 if [ "${_failures}" -eq 0 ]; then
     echo "test_gate_empty_scope_never_passes.sh: ALL PASS"
