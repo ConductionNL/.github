@@ -358,6 +358,22 @@ class CollectorTest(unittest.TestCase):
 
 
 class ScopeDisciplineTest(_Base):
+    def test_beyond_the_depth_cap_over_reports_rather_than_hanging(self):
+        """The depth cap must fail in the SAFE direction. Past the bound a
+        nested property is no longer collected, so `_raw_walk` reports its
+        filter as misplaced — an over-report a human can dismiss. Silently
+        accepting everything past the bound would be the dangerous direction,
+        and it would look exactly like a pass."""
+        deep = _nested_relation()
+        for _ in range(g._MAX_PROPERTY_DEPTH + 4):
+            deep = {"type": "array",
+                    "items": {"type": "object", "properties": {"inner": deep}}}
+        msgs = self.run_check(_register({"veryDeep": dict(deep, title="Very deep")}))
+        self.assertTrue(
+            any("placed off a property" in m for m in msgs),
+            f"beyond-bound relation must be over-reported, got {msgs}",
+        )
+
     def test_lifecycle_check_stays_top_level(self):
         """Rule-10 names a property of the SCHEMA. A nested element property
         that happens to share the lifecycle field's name must not trip it."""
