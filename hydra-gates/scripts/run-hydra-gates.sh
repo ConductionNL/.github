@@ -3581,7 +3581,19 @@ if [ "${_sae_ran}" -eq 1 ]; then
     if [ "${_sae_fail}" -eq 0 ]; then
         _pass 46 "spec-anchor-existence"
     else
-        _fail 46 "spec-anchor-existence" "${_sae_fail} unresolved @spec target(s) — see ${_sae_log}"
+        # A FINDING COUNT IS NOT A DEFECT COUNT.
+        #
+        # One dangling target annotated on 15 methods emits 15 findings, and
+        # portaliq's "100 findings" were 29 distinct targets. Reporting only
+        # the raw line count made gate-46 look like a mountain of separate
+        # defects and drove people to grind tags one file at a time, when the
+        # actual work is one repoint per TARGET. Both numbers are printed so
+        # the size of the job is legible from the summary line.
+        set +e
+        _sae_targets=$(sed 's/^[^:]*: //' "${_sae_log}" 2>/dev/null | sort -u | wc -l | tr -d ' ')
+        set -e
+        [ -z "${_sae_targets}" ] && _sae_targets="?"
+        _fail 46 "spec-anchor-existence" "${_sae_fail} unresolved @spec finding(s) from ${_sae_targets} distinct target(s) — fix the TARGET, not each tag; see ${_sae_log}"
     fi
 fi
 
