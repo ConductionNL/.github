@@ -71,7 +71,7 @@ GATE_NUM = 25
 EXIT_PASS = 0
 EXIT_FAIL = 1
 EXIT_ERROR = 2
-EXIT_EMPTY_SCOPE = 3      # scope resolved, selected nothing -> runner _skip structural
+EXIT_EMPTY_SCOPE = 3      # scope resolved, selected nothing -> runner _skip `na` (.github#268)
 EXIT_NOT_APPLICABLE = 4   # subject matter absent entirely   -> runner _skip na
 
 # A routed name: 'controller#method' (snake_case controller, camelCase method,

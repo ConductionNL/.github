@@ -24,15 +24,40 @@
 #   gate-19   5 findings as the runner invoked it   ->  412 over the full tree
 #   gate-25   PASS as the runner invoked it         ->   32 over the full tree
 #
-# THREE ARMS, and all three are needed:
+# AND WHAT #268 CORRECTED
+# -----------------------
+# #258 filed the empty-scope case as `structural`, which COUNTS AGAINST
+# --require-full-coverage. So any PR that happened to touch no spec and no
+# manifest exited 98 for a gate that had nothing to judge — measured as 4 runs
+# across 3 repos (doriath x2, larpingapp, softwarecatalog) blocked on nothing.
+#
+# The category was the bug, not the skip. The runner's own definitions:
+#
+#   na          subject matter absent from this repo OR THIS DIFF. Nothing in
+#               the repository is missing and no change the author could make
+#               would put a spec file into a diff that does not touch one.
+#   structural  the subject matter EXISTS and nothing produced the gate's
+#               input — a gap the repo CAN close (the axe-report case).
+#
+# An empty ADR-020 diff scope is the first. Gates 4/6/7/28 already called the
+# identical situation `na`. What #258 bought survives the reclassification
+# because it lives in the RENDERING, not the accounting: the verdict is
+# `NOT APPLICABLE`, which is not `PASS`.
+#
+# FOUR ARMS, and all four are needed:
 #
 #   ARM 1  a planted TRUE POSITIVE is still caught in full-tree mode.
 #          Widening a checker until it catches nothing is not a fix, so this
 #          arm runs FIRST and everything else is meaningless without it.
-#   ARM 2  an empty scope produces a visible SKIP, and --require-full-coverage
-#          FAILS the run (exit 98).
+#   ARM 2  an empty scope is VISIBLE and is never PASS (#242/#240), and it does
+#          NOT fail --require-full-coverage (#268).
 #   ARM 3  a genuinely non-empty scope with nothing wrong still PASSes, so the
 #          fix has not simply turned every gate into a permanent skip.
+#   ARM 4  ANTI-WIDENING. A genuinely `structural` gap — the same tree, the
+#          same flags, plus --axe-enabled and no axe report — must STILL exit
+#          98. Without this arm, ARM 2 could be satisfied by neutering
+#          --require-full-coverage altogether, and `na` would become the hole
+#          that the whole coverage accounting exists to prevent.
 
 set -u
 
@@ -93,7 +118,11 @@ _run() {  # _run <outfile> [runner args...]
     return $?
 }
 
-_verdict() { grep -oE "^\[gate-$2\] [^:]+: [A-Z]+( \([a-z]+\))?" "$1" | head -1 | sed 's/^[^:]*: //'; }
+# NOTE the `( [A-Z]+)*`: the verdict word is not always one token. "NOT
+# APPLICABLE" parsed as "NOT" under the original single-token pattern, so every
+# arm comparing against a two-word verdict failed on the string rather than on
+# the behaviour it meant to test.
+_verdict() { grep -oE "^\[gate-$2\] [^:]+: [A-Z]+( [A-Z]+)*( \([a-z]+\))?" "$1" | head -1 | sed 's/^[^:]*: //'; }
 
 # ---------------------------------------------------------------------------
 # ARM 1 — the planted true positives are still caught, full-tree.
@@ -120,7 +149,8 @@ for _g in 62 63; do
 done
 
 # ---------------------------------------------------------------------------
-# ARM 2 — an empty scope is a visible SKIP, and it fails --require-full-coverage.
+# ARM 2 — an empty scope is VISIBLE and never PASS (#242/#240), and it does not
+#         fail --require-full-coverage (#268).
 # ---------------------------------------------------------------------------
 _scoped="${_tmp}/scoped.txt"
 _run "${_scoped}" --scope-to-diff --base HEAD~1 --require-full-coverage
@@ -129,33 +159,85 @@ _scoped_rc=$?
 for _g in 19 25 62 63; do
     _v="$(_verdict "${_scoped}" "${_g}")"
     case "${_v}" in
-        "SKIPPED (structural)")
-            _ok "gate-${_g} reports SKIPPED (structural) over an empty scope"
+        "NOT APPLICABLE")
+            _ok "gate-${_g} reports NOT APPLICABLE over an empty diff scope"
             ;;
         PASS)
             _bad "gate-${_g} reported PASS over a scope it never opened — this is the #242 defect"
             ;;
+        "SKIPPED (structural)"|"SKIPPED (wiring)")
+            _bad "gate-${_g} reported '${_v}' over an empty diff scope — this is the #268 regression: an empty ADR-020 scope counts against coverage and exits 98"
+            ;;
         *)
-            _bad "gate-${_g} empty-scope verdict is '${_v}' — expected SKIPPED (structural)"
+            _bad "gate-${_g} empty-scope verdict is '${_v}' — expected NOT APPLICABLE"
             ;;
     esac
 done
 
+# The exit code is the whole point of #268: this run has no findings and no
+# real coverage gap, so --require-full-coverage must let it through.
 if [ "${_scoped_rc}" -eq 98 ]; then
-    _ok "--require-full-coverage failed the run over the empty scopes (exit 98)"
+    _bad "--require-full-coverage exited 98 over an empty diff scope — the #268 regression: a PR that touches no spec and no manifest is blocked for a gate that had nothing to judge"
+elif [ "${_scoped_rc}" -eq 0 ]; then
+    _ok "--require-full-coverage let an empty diff scope through (exit 0)"
 else
-    _bad "--require-full-coverage exited ${_scoped_rc}, expected 98 — the skips are not being counted"
+    _bad "empty-scope run exited ${_scoped_rc}, expected 0 — unexpected verdict"
 fi
 
-# The skip must carry a REASON. A bare "SKIPPED" is how a gate disappears
-# quietly, which is the failure this whole accounting exists to stop.
+# ...and it must not be counted as a coverage gap in the summary either. The
+# exit code alone would still pass if the four were listed as DID NOT RUN while
+# some other gate happened to hold the run open.
+if grep -q 'GATES THAT DID NOT RUN' "${_scoped}"; then
+    _bad "the empty-scope run reported a coverage gap — expected none; DID-NOT-RUN list: $(sed -n '/GATES THAT DID NOT RUN/,$p' "${_scoped}" | grep -oE 'gate-[0-9]+' | tr '\n' ' ')"
+else
+    _ok "the empty-scope run reports NO coverage gap at all"
+fi
+
+# The declaration must carry a REASON naming the diff-scoping rule. A bare
+# "NOT APPLICABLE" is how a gate disappears quietly, which is the failure this
+# whole accounting exists to stop.
 for _g in 19 25 62 63; do
-    if grep -qE "^\[gate-${_g}\][^:]*: SKIPPED \(structural\) — .+UNVERIFIED" "${_scoped}"; then
-        _ok "gate-${_g}'s skip states what it left unverified"
+    if grep -qE "^\[gate-${_g}\][^:]*: NOT APPLICABLE — .+ADR-020" "${_scoped}"; then
+        _ok "gate-${_g} states WHY it was not applicable, and names ADR-020"
     else
-        _bad "gate-${_g}'s skip has no reason naming what went unverified"
+        _bad "gate-${_g}'s NOT APPLICABLE line has no reason naming ADR-020 diff scoping"
     fi
 done
+
+# ---------------------------------------------------------------------------
+# ARM 4 — ANTI-WIDENING. `na` must not have become a hole.
+#
+# ARM 2 asserts that --require-full-coverage does NOT fire over an empty diff
+# scope. On its own that assertion is satisfiable by breaking
+# --require-full-coverage outright, which would re-open .github#169 — the
+# accounting hole this whole mechanism was built to close.
+#
+# So: THE SAME TREE AND THE SAME FLAGS AS ARM 2, plus --axe-enabled and no
+# tests/axe/report.json. That is a GENUINELY structural gap — the input was
+# expected, the repo could produce it, and it did not arrive — and it must
+# still exit 98.
+#
+# It has to be this tree specifically. `_FAILED` is evaluated BEFORE the
+# coverage branch, so any gate with a real finding pre-empts exit 98 and the
+# arm would measure nothing. (Measured while writing this: run it after ARM 3's
+# manifest commit and gates 22/53 fail on an unresolvable ajv, the run exits 2,
+# and the assertion reads as a widening regression that is not there.)
+# ---------------------------------------------------------------------------
+_axe="${_tmp}/axe.txt"
+_run "${_axe}" --scope-to-diff --base HEAD~1 --require-full-coverage --axe-enabled
+_axe_rc=$?
+
+if grep -qE "^\[gate-33\][^:]*: SKIPPED \(structural\)" "${_axe}"; then
+    _ok "a genuinely structural gap is still categorised structural (gate-33, axe report expected and absent)"
+else
+    _bad "gate-33 did not report a structural skip with --axe-enabled and no report — got: $(_verdict "${_axe}" 33)"
+fi
+
+if [ "${_axe_rc}" -eq 98 ]; then
+    _ok "--require-full-coverage STILL fails a genuinely structural gap (exit 98) — \`na\` did not become a hole"
+else
+    _bad "--require-full-coverage exited ${_axe_rc} over a real structural gap, expected 98 — the #268 fix has widened into .github#169"
+fi
 
 # ---------------------------------------------------------------------------
 # ARM 3 — a NON-empty scope with nothing wrong still passes.
@@ -181,6 +263,51 @@ for _g in 62 63; do
         _bad "gate-${_g} returned '${_v}' for a real, clean, in-scope manifest — the gate has been skipped into uselessness"
     fi
 done
+
+# ---------------------------------------------------------------------------
+# ARM 5 — THE INVERSE INVARIANT. A gate must not report "nothing to judge"
+#         when its subject matter IS sitting in the diff.
+#
+# ARM 3 proves a clean in-scope manifest still PASSes. That is necessary but
+# not sufficient: a gate that had been neutered to always-`na` would fail ARM 3
+# loudly, but a gate that merely stopped ENFORCING would sail through it. So
+# plant a REAL ADR-079 violation in the manifest the diff touches — a
+# type:settings page claiming the reserved platform name — and require a FAIL.
+#
+# Together with ARM 2 this pins both directions:
+#   subject absent from the diff  -> na, does not fail the run
+#   subject present in the diff   -> a real verdict, and violations still FAIL
+# ---------------------------------------------------------------------------
+(
+    cd "${_app}" || exit 1
+    printf '{"name":"fx","menu":[],"pages":[{"id":"settings","type":"settings","title":"Settings"}]}\n' \
+        > src/manifest.json
+    git add src/manifest.json
+    git -c user.email=t@t -c user.name=t commit -qm "feat: a settings page claiming the reserved name"
+) >/dev/null 2>&1
+
+_violation="${_tmp}/violation.txt"
+_run "${_violation}" --scope-to-diff --base HEAD~1 --require-full-coverage
+_violation_rc=$?
+
+_v="$(_verdict "${_violation}" 63)"
+case "${_v}" in
+    FAIL)
+        _ok "gate-63 FAILs a real ADR-079 violation sitting in the diff — the subject was judged, not declared away"
+        ;;
+    "NOT APPLICABLE")
+        _bad "gate-63 declared NOT APPLICABLE over a manifest THE DIFF TOUCHED and which carries a real ADR-079 violation — \`na\` is swallowing a present subject"
+        ;;
+    *)
+        _bad "gate-63 returned '${_v}' for a planted ADR-079 violation in an in-scope manifest — expected FAIL"
+        ;;
+esac
+
+if [ "${_violation_rc}" -ne 0 ] && [ "${_violation_rc}" -ne 98 ]; then
+    _ok "the run exits non-zero on the planted violation (exit ${_violation_rc} = finding count, not a coverage verdict)"
+else
+    _bad "the run exited ${_violation_rc} with a planted ADR-079 violation in scope — a finding must fail the run on its own merits"
+fi
 
 echo
 if [ "${_failures}" -eq 0 ]; then
