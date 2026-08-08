@@ -118,6 +118,59 @@ class UnterminatedPhp(unittest.TestCase):
         self.assertFalse(pts.owns_document("<?php\n// <html> mentioned here\n$x = 1;\n"))
 
 
+class HtmlLang(unittest.TestCase):
+    """gate-41 (SC 3.1.1), #266 — the same defect gate-38 shipped a fix for.
+
+    The reproduction from the issue is a mount point whose PHP comment
+    mentions the tag. Both directions are asserted, because a checker that
+    greps raw text fails both ways at once: it fires on prose, and it is
+    SATISFIED by prose.
+    """
+
+    FRAGMENT = (
+        "<?php\n"
+        "// This mount point is substituted into core's page. Core emitted the\n"
+        "// <html> element for it, with its lang attribute, long before this file.\n"
+        "?>\n"
+        '<div id="app-settings"></div>\n'
+    )
+
+    def test_a_php_comment_naming_the_tag_is_not_the_tag(self):
+        self.assertEqual(pts.html_lang_findings('templates/fragment.php', self.FRAGMENT), [])
+
+    def test_a_template_that_really_emits_an_unlangged_html_is_reported(self):
+        """The positive control. Without it the fix is indistinguishable from
+        deleting the gate — and gate-41 is quiet across the fleet today
+        because all 30 app templates are fragments, so 'no findings' proves
+        nothing on its own."""
+        src = "<?php // standalone ?>\n<html>\n<body>hi</body>\n</html>\n"
+        self.assertEqual(len(pts.html_lang_findings('templates/page.php', src)), 1)
+
+    def test_a_lang_attribute_satisfies_it(self):
+        src = '<html lang="en">\n<body>hi</body>\n</html>\n'
+        self.assertEqual(pts.html_lang_findings('templates/page.php', src), [])
+
+    def test_a_commented_out_lang_does_not_vouch_for_a_real_tag(self):
+        """The other direction #266 names, and the more dangerous one."""
+        src = '<!-- <html lang="en"> -->\n<html>\n<body>hi</body>\n</html>\n'
+        self.assertEqual(len(pts.html_lang_findings('templates/page.php', src)), 1)
+
+    def test_an_html_tag_written_only_inside_a_php_string_is_not_emitted(self):
+        src = "<?php echo '<html>'; ?>\n<div id=x></div>\n"
+        self.assertEqual(pts.html_lang_findings('templates/x.php', src), [])
+
+    def test_every_emitted_html_tag_is_checked_not_just_the_first(self):
+        src = '<html lang="en"></html>\n<html></html>\n'
+        self.assertEqual(len(pts.html_lang_findings('templates/two.php', src)), 1)
+
+    def test_a_greater_than_in_an_attribute_value_does_not_end_the_tag(self):
+        src = '<html data-expr="a > b" lang="en">\n<body>x</body>\n</html>\n'
+        self.assertEqual(pts.html_lang_findings('templates/page.php', src), [])
+
+    def test_html_lang_cli_reports_an_unreadable_file_rather_than_passing_it(self):
+        self.assertEqual(pts.main(['x', '--html-lang', '/nope/does-not-exist.php']), 2)
+
+
 class Cli(unittest.TestCase):
     """The bash caller keys on the EXIT STATUS, so the status is a contract.
 

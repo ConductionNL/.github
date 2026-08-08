@@ -117,7 +117,7 @@ _expect_log() {   # <snapshot-var-contents> <regex> <description>
 echo "== gate-5 route-auth / gate-14 reachability control pairs =="
 echo
 
-for _f in unguarded guarded apphost apphost-unguarded orphan-route di-registered-generic; do
+for _f in unguarded guarded apphost apphost-unguarded orphan-route di-registered-generic prose-exempt auth-declared; do
     if [ ! -d "${FIXTURES}/${_f}" ]; then
         _bad "fixture ${FIXTURES}/${_f} does not exist — this suite would be green on nothing"
     fi
@@ -221,6 +221,44 @@ if _run "${FIXTURES}/di-registered-generic"; then
     _expect_gate 5 PASS "di-registered-generic fixture: the absent generic is not an auth finding either"
     _expect_log "${_UNRES}" 'genericPreferences#getPreference' \
         "di-registered-generic fixture: gate-5 states the generic was NOT JUDGED rather than dropping it"
+fi
+
+# ---------------------------------------------------------------------------
+# 5c. DEFECT (c) — #196. A COMMENT SATISFIED THE GATE.
+#
+#     This is a false-NEGATIVE fix, so the acceptance test runs the other way
+#     round from every pair above: the assertion is that the gate now CATCHES
+#     what it used to wave through. Measured against main before the fix, the
+#     prose-exempt fixture reported ONE finding (`analytics`); `subscribe`,
+#     whose only difference is a docblock sentence naming `#[NoAdminRequired]`,
+#     PASSED. Two methods, identical auth posture, opposite verdicts, decided
+#     by prose. It must now report TWO.
+#
+#     ⚠️ The count matters more than the verdict here. FAIL alone would still
+#     be FAIL if only `analytics` were found, so a suite asserting only the
+#     verdict would have been green BEFORE the fix.
+# ---------------------------------------------------------------------------
+if _run "${FIXTURES}/prose-exempt"; then
+    _expect_gate 5 FAIL "prose-exempt fixture: a docblock naming an attribute is not an attribute"
+    _expect_out 'gate-5\] route-auth: FAIL — 2 routed method' \
+        "prose-exempt fixture: BOTH methods are reported (pre-fix main reported 1)"
+    _RALOG="$(cat "${_LOGDIR}/hydra-gate-route-auth.log" 2>/dev/null || true)"
+    _expect_log "${_RALOG}" 'method=subscribe' \
+        "prose-exempt fixture: the method that used to pass on prose is named"
+    _expect_log "${_RALOG}" 'method=analytics' \
+        "prose-exempt fixture: its unchanged neighbour is still named"
+fi
+
+# 5d. THE CLOSING MOVE, and the anti-unclosable control. Absence of
+#     #[NoAdminRequired] IS the admin gate, so an admin-only method has no
+#     attribute to satisfy the check with — the tightening ships with an
+#     explicit `@auth admin-only <reason>` declaration. All three declaration
+#     forms must pass, and the class docblock in this fixture mentions
+#     `#[NoAdminRequired]` in prose exactly like prose-exempt's does, so a
+#     PASS here cannot come from the old raw-text behaviour creeping back.
+if _run "${FIXTURES}/auth-declared"; then
+    _expect_gate 5 PASS "auth-declared fixture: attribute, legacy docblock tag and @auth admin-only all satisfy the gate"
+    _expect_no_out 'NOT JUDGED' "auth-declared fixture: nothing unresolved"
 fi
 
 # ---------------------------------------------------------------------------
