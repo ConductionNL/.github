@@ -354,11 +354,48 @@ echo "[test] --require-full-coverage still FAILS on a structural gap"
 # the two halves of it. That is category (b) — structurally impossible — and it
 # must fail. Same fixture, same flag, opposite verdict: this is what proves the
 # pass above is a verdict and not an inability to fail.
-mkdir -p "${FIX}/src"
+mkdir -p "${FIX}/src" "${FIX}/src/components" "${FIX}/src/views" "${FIX}/tests/e2e/visual"
 cat > "${FIX}/src/leaf.js" <<'JS'
 // SPDX-License-Identifier: EUPL-1.2
 import { registerIntegration } from '@conduction/nextcloud-vue'
 registerIntegration({ id: 'fixture-leaf', renderMode: 'component' })
+JS
+# `src/` EXISTING IS NOT THE SAME AS MARKUP EXISTING. Gates 26/31/32 have a
+# narrower subject than `[ -d src ]`: a page component and a markup file. A
+# src/ holding one .js gives them nothing to open, and reporting PASS for that
+# is precisely the nldesign shape — src/ present, zero .vue, eleven a11y gates
+# green over nothing. They correctly report NOT APPLICABLE for it now, so the
+# positive control below has to supply their actual subject matter, not just a
+# directory. Both files are deliberately CLEAN: this control asks whether the
+# gates RUN, not whether they can fail (their own suites ask that).
+cat > "${FIX}/src/components/FixtureCard.vue" <<'VUE'
+<template>
+	<div class="fixture-card">
+		<img src="/apps/fixture/img/logo.png" alt="Fixture logo">
+		<button type="button" @click="go">Go</button>
+	</div>
+</template>
+
+<script>
+export default { name: 'FixtureCard', methods: { go() {} } }
+</script>
+VUE
+cat > "${FIX}/src/views/FixtureView.vue" <<'VUE'
+<template>
+	<div class="fixture-view">
+		<h1>Fixture</h1>
+	</div>
+</template>
+
+<script>
+export default { name: 'FixtureView' }
+</script>
+VUE
+cat > "${FIX}/tests/e2e/visual/fixture-view.spec.js" <<'JS'
+// Visual-regression proof for FixtureView, so gate-26 RUNS and passes.
+test('FixtureView', async ({ page }) => {
+	await expect(page).toHaveScreenshot('FixtureView.png')
+})
 JS
 git -C "${FIX}" add -A >/dev/null 2>&1
 git -C "${FIX}" commit -qm "fixture: register an integration leaf" >/dev/null 2>&1
