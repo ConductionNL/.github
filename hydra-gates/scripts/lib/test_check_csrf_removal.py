@@ -57,6 +57,19 @@ class TestMustGoRed(unittest.TestCase):
         line = "-    #[NoCSRFRequired]"
         self.assertEqual(gate.removals(line), [line])
 
+    def test_a_fully_qualified_attribute(self):
+        """FOUND BY MEASUREMENT, not by the issue.
+
+        The pre-fix regex alternated on the literal `#[NoCSRFRequired]`, so
+        the fully-qualified spelling — which is what an app that does not
+        import the attribute writes, and what several fleet controllers use —
+        matched NOTHING. Running arm 2 end-to-end through the runner reported
+        PASS on a genuine removal. The old gate had a false NEGATIVE of its
+        own hiding behind the false positive #191 reported.
+        """
+        line = "-    #[\\OCP\\AppFramework\\Http\\Attribute\\NoCSRFRequired]"
+        self.assertEqual(gate.removals(line), [line])
+
     def test_a_grouped_attribute_list(self):
         line = "-    #[NoAdminRequired, NoCSRFRequired]"
         self.assertEqual(gate.removals(line), [line])

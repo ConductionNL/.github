@@ -85,8 +85,15 @@ _DIALOGS = "confirm|alert|prompt"
 # "this offset is code", and the full pattern is then matched against the
 # ORIGINAL text at that same offset. Every mask in source_scope preserves
 # offsets precisely so this is available.
+# ⚠️ The `=` alternative is a LOOKAHEAD, so it consumes only the `=` itself.
+# Written as `=\s*window\s*[.\[]` it swallowed the `window` that follows, and
+# `finditer` (which returns NON-OVERLAPPING matches) then never offered the
+# `window` anchor — so `const r = window.confirm('x')` matched the alias rule,
+# failed it because a `(` follows, and reported NOTHING. A real call, silently
+# dropped by an anchor that was one character too greedy.
 DIALOG_ANCHOR = re.compile(
     r"(?<![.\w$])window\s*[.\[]"
+    r"|=(?=\s*window\s*[.\[])"
     r"|\{[^}\n]*\}\s*=\s*window\b"
 )
 NETWORKIDLE_ANCHOR = re.compile(r"waitForLoadState\s*\(|waitUntil\s*:")
@@ -94,11 +101,34 @@ NETWORKIDLE_ANCHOR = re.compile(r"waitForLoadState\s*\(|waitUntil\s*:")
 # `window.confirm(`, `window . confirm (`, and the bracket form. Anchored on
 # `window` so a component's own `this.confirm()` — an NcDialog wrapper, which
 # is the REMEDY this gate asks for — is not reported.
+# A USE, not a mention of the API.
+#
+# ⚠️ MEASURED BEFORE LANDING. The first cut accepted any `window.confirm`
+# reference, called or not. On openbuild that took the gate from 7 findings to
+# 14 — every native dialog there is written as
+#
+#     const ok = typeof window !== 'undefined' && window.confirm
+#         ? window.confirm(t('openbuild', 'Delete this automation?'))
+#         : true
+#
+# so the FEATURE-DETECTION GUARD and the call it guards were reported
+# separately. Seven defects, fourteen findings: a count that is not a defect
+# count, which is #254's lesson in another gate. A guard is not a second
+# native dialog, and inflating a security-adjacent number is its own kind of
+# false report.
+#
+# So a reference counts only when it is an ALIAS — bound to a name, where the
+# call site is elsewhere and invisible:
+#     const c = window.confirm            counts (aliased)
+#     const { confirm } = window          counts (destructured)
+#     x && window.confirm ? … : …         does NOT count (a truthiness test)
 NATIVE_DIALOG = re.compile(
     rf"""
-    (?<![.\w$])window\s*\.\s*(?:{_DIALOGS})\b            # window.confirm
-  | (?<![.\w$])window\s*\[\s*(['"])(?:{_DIALOGS})\1\s*\] # window['confirm']
-  | \{{[^}}\n]*\b(?:{_DIALOGS})\b[^}}\n]*\}}\s*=\s*window\b   # const {{confirm}} = window
+    (?<![.\w$])window\s*\.\s*(?:{_DIALOGS})\s*\(              # window.confirm(
+  | (?<![.\w$])window\s*\[\s*(['"])(?:{_DIALOGS})\1\s*\]\s*\( # window['confirm'](
+  | =\s*window\s*\.\s*(?:{_DIALOGS})\b(?!\s*\()               # const c = window.confirm
+  | =\s*window\s*\[\s*(['"])(?:{_DIALOGS})\2\s*\](?!\s*\()    # const c = window['confirm']
+  | \{{[^}}\n]*\b(?:{_DIALOGS})\b[^}}\n]*\}}\s*=\s*window\b     # const {{confirm}} = window
     """,
     re.VERBOSE,
 )

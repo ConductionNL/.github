@@ -95,6 +95,38 @@ class TestNativeDialogSpellings(unittest.TestCase):
         src = "<script>const c = window.confirm\n</script>"
         self.assertEqual(len(dialog(src)), 1)
 
+    def test_a_feature_detection_guard_is_not_a_second_dialog(self):
+        """MEASURED ON openbuild BEFORE THIS LANDED.
+
+        Every native dialog in that repo is written with a guard on the line
+        above the call. The first cut of this rule accepted a bare reference,
+        so 7 defects were reported as 14 findings — a count that is not a
+        defect count (#254). A guard is a truthiness test, not a use; only an
+        ALIAS (a binding, whose call site is elsewhere) counts without a call.
+        """
+        src = (
+            "<script>\n"
+            "const ok = typeof window !== 'undefined' && window.confirm\n"
+            "\t? window.confirm(t('openbuild', 'Delete this automation?'))\n"
+            "\t: true\n"
+            "</script>\n"
+        )
+        found = dialog(src)
+        self.assertEqual(len(found), 1, found)
+        self.assertIn(":3:", found[0], "the CALL is the finding, not the guard")
+
+    def test_the_guard_alone_with_no_call_is_not_reported(self):
+        src = "<script>const has = typeof window !== 'undefined' && window.confirm\n</script>"
+        self.assertEqual(dialog(src), [])
+
+    def test_a_call_assigned_to_a_variable_is_reported_once(self):
+        src = "<script>const r = window.confirm('x')\n</script>"
+        self.assertEqual(len(dialog(src)), 1)
+
+    def test_an_aliased_bracket_access_counts(self):
+        src = "<script>const c = window['confirm']\nc('x')\n</script>"
+        self.assertEqual(len(dialog(src)), 1)
+
     def test_a_component_method_named_confirm_is_not_reported(self):
         """The gate's own remedy is a `confirm()` method on an NcDialog
         wrapper. Reporting it would make the gate unclosable."""
