@@ -69,6 +69,13 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 VOCAB_PATH = os.path.join(HERE, '..', 'schemas', 'semantic-icons.json')
 
+# The rules this gate can enforce without node_modules are not all of them. When
+# vue-material-design-icons is absent the "does this icon name exist upstream?"
+# rule cannot run, and neither a FAIL nor a PASS is honest about that — the gate
+# has shipped both errors in turn (.github#233). This status says the third
+# thing, and the runner maps it to SKIPPED (wiring).
+EXIT_TOOLING_MISSING = 5
+
 # A manifest icon value that is NOT an MDI name: an image URL, a data URI, or a
 # raw SVG path. All three stay legal per ADR-077 rule 1.
 _URLISH = ('/', 'http://', 'https://', 'data:')
@@ -379,6 +386,17 @@ def main() -> int:
         # No silent caps: say what could not be checked.
         print('NOTE: vue-material-design-icons is not installed — could not verify '
               'that icon names exist upstream. Install dependencies for full coverage.')
+        # ...and do not let the caller read that NOTE as a clean bill of health.
+        #
+        # This gate once reported 43 confident FAILs when node_modules was
+        # absent ("Calendar does not exist"), turning an environment failure
+        # into findings. That was fixed by guarding the existence check on
+        # `available is not None` — which swapped it for the OPPOSITE error: the
+        # check silently stops happening and the gate returns 0, so the runner
+        # prints PASS over an invented-icon-name rule that never ran.
+        #
+        # Neither reading is honest. A missing dependency is a THIRD state:
+        # not a finding, and not a pass. (.github#233)
 
     for w in warns:
         print(f'WARN  {w}')
@@ -387,7 +405,15 @@ def main() -> int:
 
     print(f'\nchecked {len(paths)} manifest(s): {len(fails)} failure(s), '
           f'{len(warns)} warning(s)')
-    return 1 if fails else 0
+    if fails:
+        return 1
+    if available is None:
+        # Clean on every rule that COULD run, but the invented-name rule could
+        # not. The runner reports this as SKIPPED (wiring), which is visible to
+        # --require-full-coverage. Returning 0 here would claim the icon names
+        # were verified against the library when the library was not there.
+        return EXIT_TOOLING_MISSING
+    return 0
 
 
 if __name__ == '__main__':

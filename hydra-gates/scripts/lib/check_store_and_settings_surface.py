@@ -23,6 +23,20 @@ import subprocess
 import sys
 from pathlib import Path
 
+# ---------------------------------------------------------------------------
+# AN EXIT CODE IS A STATUS (.github#240 / #242)
+# ---------------------------------------------------------------------------
+# "I checked and it was fine", "there was nothing here to check", and "I was
+# handed an empty scope and checked nothing" were all the same 0. The runner
+# printed PASS for all three, and the log line beside the PASS literally read
+# "gate skipped". Only `na` is allowed not to count against coverage; the other
+# two must be visible to --require-full-coverage, so they get their own codes.
+EXIT_PASS = 0
+EXIT_FAIL = 1
+EXIT_ERROR = 2
+EXIT_EMPTY_SCOPE = 3      # scope resolved, selected nothing -> runner _skip structural
+EXIT_NOT_APPLICABLE = 4   # subject matter absent entirely   -> runner _skip na
+
 # ADR-077 vocabulary: the canonical glyph for each concept this gate names.
 STORE_ICON = "StoreOutline"
 TEMPLATE_ICON = "FileReplaceOutline"
@@ -264,7 +278,7 @@ def main() -> int:
     manifest_paths = _manifest_paths(root)
     if not manifest_paths:
         print("No manifest — gate not applicable (Tier 0 app).")
-        return 0
+        return EXIT_NOT_APPLICABLE
 
     changed = _changed_files(root, args.base)
     if changed is not None:
@@ -274,8 +288,22 @@ def main() -> int:
         ]
         layout_changed = "src/menu-layout.json" in changed
         if not scoped and not layout_changed:
-            print("No changed manifest / menu-layout — gate skipped (ADR-020 diff scoping).")
-            return 0
+            # THIS BRANCH USED TO `return 0`, and the runner printed PASS. The
+            # log line said "gate skipped" and the verdict line next to it said
+            # PASS — the two contradicted each other on the same screen, and the
+            # PASS is what every consumer counted. (.github#240)
+            #
+            # A full-tree audit was the one mode this gate could never reach:
+            # the runner passed --base unconditionally, so even an unscoped run
+            # landed here and reported a green over an unopened manifest.
+            print(
+                f"No changed manifest / menu-layout — EMPTY SCOPE (ADR-020 diff "
+                f"scoping against '{args.base}'). {len(manifest_paths)} manifest(s) "
+                f"exist here and NONE were inspected; this gate's placement rules "
+                f"are UNVERIFIED by this run. This is not a pass. Omit --base to "
+                f"audit the whole tree."
+            )
+            return EXIT_EMPTY_SCOPE
         manifest_paths = scoped or manifest_paths
 
     manifests = []
@@ -298,7 +326,7 @@ def main() -> int:
     hard = [f for f in findings if f.startswith("FAIL")]
     warn = [f for f in findings if f.startswith("WARN")]
     print(f"\nchecked {len(manifests)} manifest(s): {len(hard)} failure(s), {len(warn)} warning(s).")
-    return 1 if hard else 0
+    return EXIT_FAIL if hard else EXIT_PASS
 
 
 if __name__ == "__main__":

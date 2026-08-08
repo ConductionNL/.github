@@ -58,6 +58,22 @@ from pathlib import Path
 
 GATE_NUM = 25
 
+# ---------------------------------------------------------------------------
+# AN EXIT CODE IS A STATUS. THE COUNT GOES ON STDOUT.
+# ---------------------------------------------------------------------------
+# Same convention gate-19 settled on after returning its finding count as an
+# exit status (.github#209): a byte cannot carry a count, and a count cannot
+# carry a status. It carries a status; the number is printed.
+#
+# EMPTY_SCOPE exists because PASS and "I inspected nothing" used to be the same
+# 0, which is why --require-full-coverage — whose whole job is to notice gates
+# that did not run — could not see this one. (.github#242)
+EXIT_PASS = 0
+EXIT_FAIL = 1
+EXIT_ERROR = 2
+EXIT_EMPTY_SCOPE = 3      # scope resolved, selected nothing -> runner _skip structural
+EXIT_NOT_APPLICABLE = 4   # subject matter absent entirely   -> runner _skip na
+
 # A routed name: 'controller#method' (snake_case controller, camelCase method,
 # Settings\Foo namespaced controllers allowed).
 _ROUTE_NAME_RE = re.compile(
@@ -346,12 +362,108 @@ def _collect(app_dir: Path, base_ref: str) -> list[dict]:
     return scan_new_endpoints(app_dir, changed, routes)
 
 
+def _collect_from(app_dir: Path, changed: dict[str, set[int]]) -> list[dict]:
+    """``_collect`` with the line map supplied rather than derived from a diff.
+
+    Lets run_gate decide the scope — diff or whole tree — instead of the scope
+    being hardcoded to "diff" inside the collector, which is what hid 32
+    uncovered endpoints on openconnector behind a PASS (.github#242).
+    """
+    routes_path = app_dir / "appinfo" / "routes.php"
+    if not routes_path.is_file():
+        return []
+    return scan_new_endpoints(app_dir, changed, parse_routes(routes_path))
+
+
+def _all_controller_lines(app_dir: Path) -> dict[str, set[int]]:
+    """Every line of every controller — the full-tree equivalent of a diff.
+
+    ``scan_new_endpoints`` asks "was this method's declaration line ADDED?".
+    A full-tree audit answers yes for every line, which makes every registered
+    public endpoint a candidate exactly as it would be on the commit that first
+    introduced it.
+    """
+    out: dict[str, set[int]] = {}
+    cdir = app_dir / "lib" / "Controller"
+    if not cdir.is_dir():
+        return out
+    for cfile in cdir.rglob("*Controller.php"):
+        try:
+            n = len(cfile.read_text(encoding="utf-8").splitlines())
+        except OSError:
+            continue
+        out[str(cfile.relative_to(app_dir))] = set(range(1, n + 1))
+    return out
+
+
 def run_gate(app_dir: Path) -> int:
-    base_ref = os.environ.get("HYDRA_GATE_BASE_REF", "origin/development")
-    endpoints = _collect(app_dir, base_ref)
+    """Audit wire-contract coverage. Returns a status; the COUNT is printed.
+
+    SCOPE IS THE CALLER'S DECISION, AND IT IS NOT DEFAULTED (.github#242)
+    --------------------------------------------------------------------
+    This used to diff against ``HYDRA_GATE_BASE_REF`` UNCONDITIONALLY, with the
+    ref defaulted to ``origin/development`` even when the caller had asked for
+    no scoping at all. On a full-tree run the diff came back empty and the gate
+    printed ``PASS — no new public endpoints in diff`` having opened nothing.
+
+    Because the narrowing happened HERE — inside the helper, below the runner's
+    base resolution — the runner could not tell a full-tree request had been
+    reduced to nothing, and because the verdict was PASS rather than a skip,
+    ``--require-full-coverage`` could not see it either.
+
+    Measured on openconnector 2026-08-08: **PASS** as the runner invoked it,
+    **32** public endpoints with no contract test against the root commit.
+    """
+    base_ref = os.environ.get("HYDRA_GATE_BASE_REF")
+
+    if not (app_dir / "appinfo" / "routes.php").is_file():
+        print(
+            f"[gate-{GATE_NUM}] contract-coverage: NOT APPLICABLE — no "
+            f"appinfo/routes.php, so this app exposes no routed endpoint whose "
+            f"wire contract could be tested."
+        )
+        return EXIT_NOT_APPLICABLE
+
+    if base_ref:
+        changed = changed_lines(base_ref, app_dir)
+        # The scope that matters is CONTROLLER files, not "any file". A diff of
+        # a hundred docs commits still opens no controller, and reporting PASS
+        # for it claims a wire contract was checked when none was read.
+        changed = {
+            rel: lines for rel, lines in changed.items()
+            if rel.startswith("lib/Controller/") and rel.endswith("Controller.php")
+        }
+        if not changed:
+            print(
+                f"[gate-{GATE_NUM}] contract-coverage: EMPTY SCOPE — "
+                f"diff-scoped against '{base_ref}' and NO controller file was "
+                f"touched, so no endpoint was inspected. Wire-contract coverage "
+                f"is UNVERIFIED by this run. This is not a pass. Audit the whole "
+                f"tree by running without HYDRA_GATE_BASE_REF, or with "
+                f"--scope-to-diff --base <root-commit>."
+            )
+            return EXIT_EMPTY_SCOPE
+        endpoints = _collect_from(app_dir, changed)
+    else:
+        all_lines = _all_controller_lines(app_dir)
+        if not all_lines:
+            print(
+                f"[gate-{GATE_NUM}] contract-coverage: NOT APPLICABLE — "
+                f"appinfo/routes.php exists but there is no "
+                f"lib/Controller/*Controller.php for a route to reach."
+            )
+            return EXIT_NOT_APPLICABLE
+        endpoints = _collect_from(app_dir, all_lines)
+
     if not endpoints:
-        print(f"[gate-{GATE_NUM}] contract-coverage: PASS — no new public endpoints in diff")
-        return 0
+        scope_desc = (
+            f"the diff against '{base_ref}'" if base_ref else "the whole tree"
+        )
+        print(
+            f"[gate-{GATE_NUM}] contract-coverage: PASS — "
+            f"{scope_desc} contains no new public endpoint"
+        )
+        return EXIT_PASS
     newman = _newman_paths(app_dir)
     phpunit = _phpunit_text(app_dir)
     findings: list[str] = []
@@ -372,12 +484,15 @@ def run_gate(app_dir: Path) -> int:
             f"[gate-{GATE_NUM}] contract-coverage: PASS — "
             f"{len(endpoints)} new endpoint(s), all covered"
         )
-    else:
-        print(
-            f"[gate-{GATE_NUM}] contract-coverage: FAIL — "
-            f"{count} new public endpoint(s) without a contract test"
-        )
-    return count
+        return EXIT_PASS
+    print(
+        f"[gate-{GATE_NUM}] contract-coverage: FAIL — "
+        f"{count} new public endpoint(s) without a contract test"
+    )
+    # A STATUS, not the count. Returning the count meant 256 findings exited 0
+    # and read as PASS — the same byte-width bug gate-19 shipped (.github#209).
+    # The honest number is the one printed above, and the runner reads it there.
+    return EXIT_FAIL
 
 
 def run_report(app_dir: Path) -> int:
