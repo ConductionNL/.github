@@ -450,5 +450,197 @@ class GateIsNotBlind(unittest.TestCase):
                 self.assertFalse(_anchor(BI_EXPORT, frag))
 
 
+# --------------------------------------------------------------------------
+# Mode 6 — `#T3` / `#T02`, the shorthand spelling of "Task N". 117 fleet
+# findings (portaliq 76, procest 41). Paired controls below.
+# --------------------------------------------------------------------------
+PORTALIQ_TASKS = """# Tasks: contract-v2
+
+## Implementation Tasks
+
+### Task 1: Trust vocabulary + normalisation at the session edge
+### Task 2: Registry v2 — multi-audience discovery + minTrust manifest filtering
+### Task 3: Fail-closed trust re-checks on read and create paths
+### Task 9: Demo provider v2 vocabulary + seed claims data
+"""
+
+PROCEST_TASKS = """# Tasks: process-mining-bottlenecks
+
+## 1. Aggregation service
+- [x] 1.1 `ProcessMiningService::getReport()`
+
+## 2. Controller + routes
+- [x] 2.1 `ProcessMiningController`
+
+## 3. Frontend
+- [x] 3.1 `ProcessMiningDashboard.vue`
+
+## 4. Verification
+- [x] 4.1 Manual smoke
+"""
+
+
+class TaskShorthandRelaxed(unittest.TestCase):
+    """`#T3` names `### Task 3: …`; `#T02` names `## 2. …`.
+
+    Both spellings are emitted by real annotation tooling and neither has
+    ever resolved. The task is in the file; only the reference spelling is
+    unusual — which is not what this gate is for.
+    """
+
+    def test_fp_portaliq_T_shorthand_resolves_against_a_task_heading(self):
+        for frag in ("T1", "T2", "T3", "T9"):
+            with self.subTest(frag=frag):
+                self.assertTrue(_anchor(PORTALIQ_TASKS, frag))
+
+    def test_fp_procest_zero_padded_shorthand_resolves_against_a_numbered_section(self):
+        # Leading zeros stripped: the heading's lifted id token is `2`.
+        for frag in ("T01", "T02", "T03", "T04"):
+            with self.subTest(frag=frag):
+                self.assertTrue(_anchor(PROCEST_TASKS, frag))
+
+    def test_tp_a_task_number_the_file_does_not_have_still_fails(self):
+        # THE CONTROL, and it is not hypothetical: procest really does carry
+        # `#T05` against a file whose sections stop at 4, and that finding
+        # survives this relaxation. If this ever goes green the rule has
+        # stopped discriminating and the whole relaxation must come out.
+        for frag in ("T05", "T5", "T99", "T0"):
+            with self.subTest(frag=frag):
+                self.assertFalse(_anchor(PROCEST_TASKS, frag))
+        for frag in ("T4", "T10", "T99"):
+            with self.subTest(frag=frag):
+                self.assertFalse(_anchor(PORTALIQ_TASKS, frag))
+
+    def test_tp_the_shorthand_is_not_wired_to_the_positional_checkbox_rule(self):
+        # `#task-N` also means "the Nth checkbox". `T<n>` deliberately does
+        # NOT, or `#T99` would resolve against any file with 99 checkboxes —
+        # evidence about nothing. This file has 4 checkboxes and no `## 4.`
+        # sibling for T-numbers above it, so a shorthand that leaked into the
+        # positional rule would light up here.
+        checkboxes = "# Tasks\n\n" + "".join(f"- [x] item {i}\n" for i in range(1, 5))
+        for frag in ("T1", "T2", "T3", "T4"):
+            with self.subTest(frag=frag):
+                self.assertFalse(_anchor(checkboxes, frag))
+        # …while the established `#task-N` positional spelling still works.
+        self.assertTrue(_anchor(checkboxes, "task-3"))
+
+    def test_tp_a_bare_T_is_not_a_task_reference(self):
+        for frag in ("T", "TX", "Task", "trust"):
+            with self.subTest(frag=frag):
+                self.assertFalse(_anchor(PORTALIQ_TASKS, frag))
+
+
+# --------------------------------------------------------------------------
+# Mode 7 — the capability index: a spec resolves wherever archiving left it.
+# 28 fleet findings (procest 18 + 10). This is the "survives archiving" rule.
+# --------------------------------------------------------------------------
+CAP_SPEC = """# Process Mining Bottlenecks
+
+## ADDED Requirements
+
+### Requirement: Per-status dwell-time statistics
+
+#### Scenario: A closed case's dwell interval ends at the next transition
+"""
+
+TAGGED_PHP = """<?php
+/**
+ * @spec openspec/specs/process-mining-bottlenecks/spec.md#requirement-per-status-dwell-time-statistics
+ */
+class ProcessMiningService {}
+"""
+
+
+class CapabilityResolutionSurvivesArchiving(unittest.TestCase):
+    """A tag written ONCE keeps resolving through the whole change lifecycle.
+
+    This is acceptance criterion 3 for issue #228: after the SpecTagSniff is
+    repointed at `openspec/specs/<cap>/spec.md`, archiving a change must not
+    leave that anchor dangling. Before this rule it did — procest carries 18
+    tags written exactly as the corrected sniff instructs, whose spec only
+    ever existed inside the archived change directory.
+    """
+
+    def _lifecycle(self, spec_rel: str) -> list[str]:
+        return _scan({spec_rel: CAP_SPEC}, "lib/Service/ProcessMiningService.php", TAGGED_PHP)
+
+    def test_stage_1_in_flight_change_resolves(self):
+        self.assertEqual(self._lifecycle(
+            "openspec/changes/process-mining-bottlenecks/specs/"
+            "process-mining-bottlenecks/spec.md"), [])
+
+    def test_stage_2_archived_change_still_resolves(self):
+        # THE ARCHIVING PROOF. Same tag, same anchor, spec moved to archive.
+        self.assertEqual(self._lifecycle(
+            "openspec/changes/archive/2026-07-14-process-mining-bottlenecks/specs/"
+            "process-mining-bottlenecks/spec.md"), [])
+
+    def test_stage_3_promoted_to_canonical_still_resolves(self):
+        self.assertEqual(self._lifecycle(
+            "openspec/specs/process-mining-bottlenecks/spec.md"), [])
+
+    def test_a_capability_under_a_differently_named_change_resolves(self):
+        # procest's `realtime-updates-ui` capability lives under the change
+        # `adopt-live-updates-ui`. No CHANGE-keyed index can find it; a
+        # CAPABILITY-keyed one can. 10 findings.
+        self.assertEqual(self._lifecycle(
+            "openspec/changes/adopt-live-updates-ui/specs/"
+            "process-mining-bottlenecks/spec.md"), [])
+
+    def test_tp_a_requirement_nobody_wrote_still_fails(self):
+        # THE CONTROL THAT MATTERS MOST — doriath's shape, 77 findings.
+        # The capability index finds the spec file in all three homes; the
+        # anchor names a requirement that is in none of them. Widening WHERE
+        # we look must never widen WHAT counts as resolved.
+        bad = TAGGED_PHP.replace(
+            "#requirement-per-status-dwell-time-statistics",
+            "#requirement-listing-and-download")
+        for spec_rel in (
+            "openspec/specs/process-mining-bottlenecks/spec.md",
+            "openspec/changes/archive/2026-07-14-process-mining-bottlenecks/"
+            "specs/process-mining-bottlenecks/spec.md",
+        ):
+            with self.subTest(spec_rel=spec_rel):
+                findings = _scan({spec_rel: CAP_SPEC},
+                                 "lib/Service/ProcessMiningService.php", bad)
+                self.assertEqual(len(findings), 1, findings)
+                self.assertIn("anchor not found", findings[0])
+
+    def test_tp_a_capability_that_exists_nowhere_still_fails(self):
+        # larpingapp's shape: `manifest-v2-vue-scaffold` is in no home at all.
+        findings = _scan({"openspec/specs/something-else/spec.md": CAP_SPEC},
+                         "lib/Service/ProcessMiningService.php", TAGGED_PHP)
+        self.assertEqual(len(findings), 1, findings)
+        self.assertIn("target file not found", findings[0])
+
+    def test_tp_the_index_does_not_redirect_a_tag_whose_own_path_resolves(self):
+        # The capability index is LAST RESORT. When the tag's own path exists,
+        # the anchor is judged against THAT file — otherwise a stale archived
+        # copy could vouch for a requirement the canonical spec has dropped.
+        canonical = "openspec/specs/process-mining-bottlenecks/spec.md"
+        archived = ("openspec/changes/archive/2026-07-14-process-mining-bottlenecks/"
+                    "specs/process-mining-bottlenecks/spec.md")
+        findings = _scan(
+            {canonical: "# Process Mining Bottlenecks\n\n## Requirements\n\n"
+                        "### Requirement: Something completely different\n",
+             archived: CAP_SPEC},
+            "lib/Service/ProcessMiningService.php", TAGGED_PHP)
+        self.assertEqual(len(findings), 1, findings)
+        self.assertIn("anchor not found", findings[0])
+
+    def test_capability_of_declines_per_change_documents(self):
+        # tasks.md / design.md / proposal.md have no canonical home to
+        # migrate to; the change-keyed archive index already resolves them.
+        for p in ("openspec/changes/foo/tasks.md",
+                  "openspec/changes/foo/design.md",
+                  "openspec/changes/archive/2026-01-01-foo/proposal.md"):
+            with self.subTest(p=p):
+                self.assertIsNone(csa.capability_of(p))
+        self.assertEqual(
+            csa.capability_of("openspec/specs/bar/spec.md"), "bar")
+        self.assertEqual(
+            csa.capability_of("openspec/changes/foo/specs/bar/spec.md"), "bar")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

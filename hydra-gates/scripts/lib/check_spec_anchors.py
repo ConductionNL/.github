@@ -80,6 +80,22 @@ CHECKBOX_ID = re.compile(r'^\s*-\s*\[.\]\s*(?:\*\*)?([A-Za-z0-9][A-Za-z0-9.\-]*)
 # `(REQ-PAY-001)`, `[REQ-005]`, `(REQ-PAY-001, REQ-PAY-003)`
 DELIMITED = re.compile(r'[(\[]([^)\]]{1,120})[)\]]')
 
+# `#T1`, `#T02`, `#t9` — the shorthand spelling of "Task N".
+#
+# Two repos' annotation tooling emits it and nothing has ever accepted it:
+# portaliq writes `#T3` against `### Task 3: Fail-closed trust re-checks…`
+# and procest writes `#T02` against `## 2. Controller + routes`. The task is
+# right there in the file; only the spelling of the reference is unusual.
+# It is NOT a GitHub anchor — clicking it lands nowhere — but this gate asks
+# whether the tag NAMES SOMETHING REAL, and `Task 3` is real.
+#
+# Deliberately NOT wired into the positional-checkbox rule. `#task-N` means
+# "the Nth checkbox" as well as "the heading numbered N"; giving `#T99` that
+# second reading too would let it resolve against any file with 99 checkboxes,
+# which is evidence about nothing. `T<n>` resolves against HEADINGS only, so
+# `#T99` against a nine-task file still fails — see ``test_check_spec_anchors``.
+TASK_SHORTHAND = re.compile(r'^[Tt](\d+)$')
+
 # An "id-like" token: something that could be a requirement/task identifier
 # rather than a word of prose. It must contain a digit — `REQ-BIE-004-01`,
 # `2.3`, `T01`, `5.2` do; `retry`, `policy`, `Requirement` do not. Requiring a
@@ -263,7 +279,14 @@ def has_anchor(md_path: str, fragment: str) -> bool:
     # which matches neither alias: not the gh one (underscore rewritten) and
     # not the kebab one (`call-log-sessionid`, split at the underscore).
     # Reported as "anchor not found" on a tag whose link works.
-    frags = (frag_slug, frag_alt, fragment.lower())
+    frags = [frag_slug, frag_alt, fragment.lower()]
+    # `#T3` / `#T02` — see TASK_SHORTHAND. Leading zeros are stripped because
+    # the heading is `## 2. Controller + routes`, whose lifted id token is `2`.
+    sh = TASK_SHORTHAND.match(fragment)
+    if sh:
+        n = sh.group(1).lstrip('0') or '0'
+        frags.extend((f'task-{n}', n))
+    frags = tuple(frags)
     pos_m = re.fullmatch(r'(?:task-)?(\d+)', fragment)
     positional = int(pos_m.group(1)) if pos_m else None
     item_count = 0
@@ -313,6 +336,80 @@ def build_archive_index(root: str) -> dict[str, list[str]]:
     return index
 
 
+def build_capability_index(root: str) -> dict[str, list[str]]:
+    """Every home a capability's `spec.md` can occupy, keyed by capability.
+
+    THE ARCHIVING PROBLEM THIS SOLVES
+    ---------------------------------
+    A capability's spec moves house at least twice in its life:
+
+      1. in flight   `openspec/changes/<change>/specs/<cap>/spec.md`
+      2. archived    `openspec/changes/archive/<date>-<change>/specs/<cap>/spec.md`
+      3. canonical   `openspec/specs/<cap>/spec.md`
+
+    ``build_archive_index`` already carries a tag from (1) to (2), keyed on the
+    CHANGE name. That is not enough, and the gap is what made this gate a
+    treadmill:
+
+      * The project rule — and, after this change, the phpcs SpecTagSniff that
+        instructs authors — says point `@spec` at (3). But archiving in these
+        repos does NOT reliably promote the delta spec into `openspec/specs/`.
+        procest carries 18 tags at `openspec/specs/process-mining-bottlenecks/
+        spec.md`, written exactly as instructed, whose spec only ever existed
+        at (2). Following the correct advice produced a dangling reference.
+      * The change name need not equal the capability name. procest's
+        `realtime-updates-ui` capability lives under the change
+        `adopt-live-updates-ui`, so no CHANGE-keyed index can find it — 10
+        more findings.
+
+    Keying on the CAPABILITY instead spans all three homes and is stable across
+    both the archive move and the promotion that follows it, so a tag written
+    once keeps resolving no matter which stage the change has reached. That is
+    what "a rule that survives archiving" has to mean.
+
+    THIS IS NOT A WIDENING OF WHAT COUNTS AS RESOLVED
+    -------------------------------------------------
+    It only supplies additional FILES to look in, and it is consulted only when
+    every literal spelling has already failed (see ``resolve``). The fragment
+    still has to name a heading that EXISTS in one of them. A tag naming a
+    requirement nobody wrote fails exactly as before — doriath's 77 findings
+    are all of that shape and this index rescues none of them, which is the
+    point. ``test_check_spec_anchors.py`` pins that.
+    """
+    index: dict[str, list[str]] = {}
+    patterns = (
+        'openspec/specs/*/spec.md',
+        'openspec/changes/*/specs/*/spec.md',
+        'openspec/changes/archive/*/specs/*/spec.md',
+        'openspec/archive/*/specs/*/spec.md',
+    )
+    for pattern in patterns:
+        for f in glob.glob(os.path.join(root, pattern)):
+            if os.path.isfile(f):
+                index.setdefault(os.path.basename(os.path.dirname(f)), []).append(f)
+    # The flat spelling, `openspec/specs/<cap>.md`, predates the directory form.
+    for f in glob.glob(os.path.join(root, 'openspec/specs/*.md')):
+        if os.path.isfile(f):
+            index.setdefault(os.path.basename(f)[: -len('.md')], []).append(f)
+    return index
+
+
+def capability_of(path: str) -> str | None:
+    """The capability a spec-path addresses, whichever home it names.
+
+    Returns None for anything that is not a capability spec — `tasks.md`,
+    `design.md`, `proposal.md` — because those are per-CHANGE documents with
+    no canonical home to migrate to, and the change-keyed archive index is
+    already the right resolver for them.
+    """
+    m = re.match(r'openspec/(?:specs|changes/[^/]+/specs|changes/archive/[^/]+/specs|'
+                 r'archive/[^/]+/specs)/([^/]+)/spec\.md$', path)
+    if m:
+        return m.group(1)
+    m = re.match(r'openspec/specs/([^/]+)\.md$', path)
+    return m.group(1) if m else None
+
+
 def _path_shapes(path: str) -> list[str]:
     """The equivalent spellings of one spec path.
 
@@ -331,7 +428,12 @@ def _path_shapes(path: str) -> list[str]:
     return shapes
 
 
-def resolve(path: str, root: str, archive_index: dict[str, list[str]]) -> list[str]:
+def resolve(
+    path: str,
+    root: str,
+    archive_index: dict[str, list[str]],
+    capability_index: dict[str, list[str]] | None = None,
+) -> list[str]:
     """Existing candidate files for a tag path: the literal path, its
     flat/directory counterpart, and archived counterparts of both.
 
@@ -356,6 +458,19 @@ def resolve(path: str, root: str, archive_index: dict[str, list[str]]) -> list[s
             cand = os.path.join(d, m.group(2))
             if os.path.exists(cand) and cand not in cands:
                 cands.append(cand)
+    # LAST RESORT ONLY — see build_capability_index.
+    #
+    # Consulted solely when every literal spelling has already failed, so a
+    # tag whose own path resolves is judged against THAT file and nothing
+    # else. Reaching here means the spec is not where the tag says it is;
+    # the capability index says where it went. The anchor check that follows
+    # is unchanged, so this converts "file not found" into a real anchor
+    # verdict rather than into a pass.
+    if not cands and capability_index:
+        cap = capability_of(path)
+        for cand in capability_index.get(cap or '', []):
+            if cand not in cands:
+                cands.append(cand)
     return cands
 
 
@@ -363,6 +478,7 @@ def scan_files(files: list[str], root: str | None = None) -> list[str]:
     """Return one finding line per unresolved `@spec` target."""
     root = root or find_repo_root() or os.getcwd()
     archive_index = build_archive_index(root)
+    capability_index = build_capability_index(root)
     findings: list[str] = []
     for fp in files:
         try:
@@ -376,7 +492,7 @@ def scan_files(files: list[str], root: str | None = None) -> list[str]:
                 path, frag = target.split('#', 1)
             else:
                 path, frag = target, None
-            candidates = resolve(path, root, archive_index)
+            candidates = resolve(path, root, archive_index, capability_index)
             if not candidates:
                 findings.append(f"{fp}: @spec target file not found → {target}")
                 continue
