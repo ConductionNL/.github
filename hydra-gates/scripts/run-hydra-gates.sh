@@ -2123,15 +2123,39 @@ if [ -d src ]; then
     _il_ran=1
     _il_helper="${SCRIPT_DIR}/lib/check_nc_select_labels.py"
     _il_files=()
+    # Counted separately from the in-scope list so "this repo has no Vue
+    # component at all" can be told apart from "the diff touched none of them".
+    _il_present=0
     while IFS= read -r vue; do
         [ -f "${vue}" ] || continue
+        _il_present=$((_il_present + 1))
         _in_scope "${vue}" || continue
         _il_files+=("${vue}")
         # .vue only: <NcSelect> is a Vue component. Gate 40 covers the
         # language-agnostic <input>/<select> label rule for PHP templates.
     done < <(find src -name '*.vue' 2>/dev/null)
     if [ "${#_il_files[@]}" -eq 0 ]; then
-        : # nothing in scope — ordinary diff scoping.
+        # ZERO FILES IS NOT A PASS (.github#274, and #225 one layer down).
+        #
+        # `[ -d src ]` was the whole guard, and `src/` existing is not the same
+        # as `src/` containing a Vue component. nldesign's `src/` holds ONE
+        # file — `manifest.json` — and this gate printed PASS there, over an
+        # empty glob. That is the exact shape that let twelve a11y gates certify
+        # nldesign in #225; gates 12 and 13 were not in that band and kept it.
+        #
+        # `na`, not `structural`: nothing in the repository is missing. An app
+        # that renders from PHP templates has no `<NcSelect>` to name, because
+        # `NcSelect` is a Vue SFC component — a PHP template cannot instantiate
+        # one, which is why this gate stays `.vue`-only while gate-40 owns the
+        # language-agnostic `<input>`/`<select>` label rule for templates. That
+        # is the judgement #274 asked for, and it is stated in the reason so a
+        # reader can disagree with it.
+        _il_ran=0
+        if [ "${_il_present}" -eq 0 ]; then
+            _skip 12 "nc-input-labels" na "src/ exists but contains NO .vue component, so there is no <NcSelect> to name. This gate is deliberately .vue-only: NcSelect is a Vue SFC component and a PHP/HTML template cannot instantiate one — gate-40 owns the language-agnostic <input>/<select> label rule for templates/. Reported instead of PASS because an empty glob under an existing src/ is what let twelve gates certify nldesign in #225."
+        else
+            _skip 12 "nc-input-labels" na "${_il_present} .vue component(s) exist here and the diff against '${BASE_REF}' touched none of them, so no <NcSelect> was inspected. Diff-scoped out under ADR-020 — not a gap, and not a pass."
+        fi
     elif [ ! -f "${_il_helper}" ]; then
         # A MISSING HELPER MUST NOT REPORT PASS (#147).
         _il_ran=0
@@ -2165,18 +2189,32 @@ fi
 if [ -d src ]; then
     _mi_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-modal-isolation.log
     : > "${_mi_log}"
+    # See gate-12 above: `src/` existing is not the same as `src/` containing a
+    # Vue component, and this gate printed PASS over an empty glob on nldesign
+    # (whose src/ holds one manifest.json). Counted so the two cases can be told
+    # apart in the reason (.github#274).
+    _mi_present=0
+    _mi_scoped=0
     while IFS= read -r vue; do
         case "${vue}" in
             src/modals/*|src/dialogs/*) continue ;;
         esac
+        _mi_present=$((_mi_present + 1))
         _in_scope "${vue}" || continue
+        _mi_scoped=$((_mi_scoped + 1))
         if grep -qE '<NcModal[ \t>/]|<NcDialog[ \t>/]' "${vue}" 2>/dev/null; then
             echo "${vue}: inline NcModal/NcDialog — extract to src/modals/ or src/dialogs/" >> "${_mi_log}"
         fi
         # .vue only: NcModal/NcDialog are Vue components with a .vue-file rule.
     done < <(find src -name '*.vue' 2>/dev/null)
     _mi_fail=$(wc -l < "${_mi_log}" 2>/dev/null || echo 0)
-    if [ "${_mi_fail}" -eq 0 ]; then
+    if [ "${_mi_scoped}" -eq 0 ]; then
+        if [ "${_mi_present}" -eq 0 ]; then
+            _skip 13 "modal-isolation" na "src/ exists but contains NO .vue component outside src/modals/ and src/dialogs/, so there is no parent component that could inline a modal. NcModal/NcDialog are Vue SFC components; a PHP/HTML template cannot instantiate one. Reported instead of PASS because an empty glob under an existing src/ is what let twelve gates certify nldesign in #225."
+        else
+            _skip 13 "modal-isolation" na "${_mi_present} .vue component(s) exist here and the diff against '${BASE_REF}' touched none of them, so no component was inspected. Diff-scoped out under ADR-020 — not a gap, and not a pass."
+        fi
+    elif [ "${_mi_fail}" -eq 0 ]; then
         _pass 13 "modal-isolation"
     else
         _fail 13 "modal-isolation" "${_mi_fail} file(s) with inline modal/dialog — see ${_mi_log}"
@@ -2304,8 +2342,39 @@ if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
     done < <(_enum_tracked 'Controller\.php$' lib/Controller)
 
     # ---- Invariant 2: every routed entry resolves to a method that exists.
-    grep -oE "${_ROUTE_NAME_RX}" appinfo/routes.php \
-        | grep -oE "${_ROUTE_PAIR_RX}" | sort -u \
+    #
+    # THE ROUTES AN APPHOST ADOPTER NEVER SPELLS OUT ARE STILL ITS ROUTES
+    # (.github#265, closed here).
+    #
+    # This loop reads route names as LITERALS out of appinfo/routes.php. An
+    # ADR-040 adopter returns `\OCA\OpenRegister\AppHost\Routes::standard($extra)`
+    # and receives ten canonical entries whose names appear nowhere in its own
+    # file — so invariant 2 has never judged a single one of them. Invariant 1
+    # was taught about that table in #223 (`_apphost_supplies_route`); invariant
+    # 2 was not, and the two invariants ask opposite questions, so the fix to
+    # one does nothing for the other.
+    #
+    # What that costs is not hypothetical. `Bootstrap::aliasControllerUnlessLeaf-
+    # DefinesIt()` deliberately lets a leaf keep its OWN SettingsController — and
+    # the moment it does, it owes every method the canonical table routes to
+    # `settings#`. Delete `update()` and `PUT /api/settings` does not 404: the
+    # router matches, `ControllerMethodReflector` reflects, and the request dies
+    # with a ReflectionException 500. Reproduced 2026-08-08 on shillinq by
+    # deleting exactly that method — gate-14's findings log came back EMPTY and
+    # the gate reported PASS. shillinq's own docblock on `update()` spells the
+    # hazard out; the gate was the only thing not reading it.
+    #
+    # The ten names are appended only when this repo's routes.php actually
+    # defers to `Routes::standard()`. `_apphost_serves` / `_di_binds_controller`
+    # still exempt the legitimate absences below, so an adopter that does NOT
+    # ship its own controller is unaffected — the file is missing by design and
+    # those helpers say so.
+    {
+        grep -oE "${_ROUTE_NAME_RX}" appinfo/routes.php | grep -oE "${_ROUTE_PAIR_RX}"
+        if [ "${_HYDRA_APPHOST_ROUTE_TABLE}" -eq 1 ]; then
+            printf '%s\n' ${_HYDRA_APPHOST_ROUTE_NAMES}
+        fi
+    } | sort -u \
         | while IFS='#' read -r _ctrl _method; do
             # `read -r` for the reason spelled out in gate-5's loop: plain
             # `read` strips the backslashes out of a namespaced route name, and
@@ -2380,10 +2449,29 @@ if [ -f src/manifest.json ]; then
         _da_lib_dir="${SCRIPT_DIR}/lib"
     fi
     if [ -f "${_da_lib_dir}/check_dashboard_antipattern.py" ]; then
-        # The helper exits with the number of violations and prints one
-        # "<file>:<line> ..." per finding; capture both into the log.
+        # A CRASHED CHECKER IS NOT A CLEAN ONE (.github#271).
+        #
+        # This used to be `>> log 2>/dev/null || true` followed by `wc -l`. A
+        # helper that never started, or died on a traceback, wrote nothing —
+        # so the log was empty, the count was 0, and the gate printed PASS
+        # over a check that did not run. Proven 2026-08-08 by running the
+        # whole suite with a python3 stub that exits 1: gate-12 and gate-17
+        # said SKIPPED (wiring), gate-15 said PASS.
+        #
+        # stderr goes to a .err file (not /dev/null) so the reason is
+        # readable, and the helper's terminal `# count=` marker is what proves
+        # it reached its own summary.
+        _da_err="${HYDRA_GATE_LOG_DIR}/hydra-gate-dashboard-antipattern.err"
+        : > "${_da_err}"
         python3 "${_da_lib_dir}/check_dashboard_antipattern.py" . \
-            >> "${_da_log}" 2>/dev/null || true
+            >> "${_da_log}" 2>"${_da_err}" || true
+        if ! grep -qE '^# count=[0-9]+$' "${_da_log}" 2>/dev/null; then
+            _da_ran=0
+            _da_why=$(head -3 "${_da_err}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+            _skip 15 "dashboard-antipattern" wiring "check_dashboard_antipattern.py did not complete — it never printed its terminal '# count=' marker, so src/manifest.json and the .vue tree were NOT inspected and nested dashboard-in-dashboard patterns are UNVERIFIED by this run. Checker output: ${_da_why:-<empty>}. See ${_da_err}."
+        fi
+        # Drop the marker from the findings log so it is never counted as one.
+        sed -i '/^# count=[0-9]*$/d' "${_da_log}" 2>/dev/null || true
         # Filter to scope when --scope-to-diff is set — the helper reports
         # absolute paths, so strip the app-dir prefix before comparing.
         if [ "${SCOPE_TO_DIFF}" = "1" ]; then
@@ -2436,9 +2524,21 @@ if [ -d lib ] || [ -d src ]; then
         # non-default mainline (e.g. --base main) is honoured. Always diff-
         # scoped — a full-repo @spec sweep would flag the entire legacy
         # surface, which is the wrong contract (ADR-020).
+        # A CRASHED CHECKER IS NOT A CLEAN ONE (.github#271) — same repair as
+        # gate-15 above. `2>/dev/null || true` + `wc -l` reported PASS for a
+        # helper that never ran; verified 2026-08-08 with a python3 stub that
+        # exits 1. The terminal `# count=` marker is the evidence it finished.
+        _sc_err="${HYDRA_GATE_LOG_DIR}/hydra-gate-spec-coverage.err"
+        : > "${_sc_err}"
         HYDRA_GATE_BASE_REF="${BASE_REF}" \
             python3 "${_sc_lib_dir}/check_spec_coverage.py" . \
-            >> "${_sc_log}" 2>/dev/null || true
+            >> "${_sc_log}" 2>"${_sc_err}" || true
+        if ! grep -qE '^# count=[0-9]+$' "${_sc_log}" 2>/dev/null; then
+            _sc_ran=0
+            _sc_why=$(head -3 "${_sc_err}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+            _skip 16 "spec-coverage" wiring "check_spec_coverage.py did not complete — it never printed its terminal '# count=' marker, so NO changed method was inspected and @spec traceability (ADR-003/ADR-020) is UNVERIFIED by this run. Checker output: ${_sc_why:-<empty>}. See ${_sc_err}."
+        fi
+        sed -i '/^# count=[0-9]*$/d' "${_sc_log}" 2>/dev/null || true
         _sc_fail=$(wc -l < "${_sc_log}" 2>/dev/null || echo 0)
     else
         _sc_ran=0
@@ -2601,11 +2701,35 @@ _nd_ran=1
 if [ -n "${_nd_register_files}" ]; then
     _nd_lib_dir="${SCRIPT_DIR}/lib"
     if [ -f "${_nd_lib_dir}/check_notification_dialect.py" ]; then
+        # A CRASHED CHECKER IS NOT A CLEAN ONE (.github#271).
+        #
+        # This helper's own contract is "exit 0 always; the printed lines are
+        # the findings" — so ANY non-zero exit means it did not run, and the
+        # old `2>/dev/null || true` turned that into an empty log and a PASS.
+        # Verified 2026-08-08 with a python3 stub that exits 1: gate-18 said
+        # PASS while not one register file had been opened.
+        #
+        # The failure count is written to a file, not a variable: the loop runs
+        # in a pipeline subshell, so a variable assigned inside it does not
+        # survive (the classic `while read` + pipe trap).
+        _nd_err="${HYDRA_GATE_LOG_DIR}/hydra-gate-notification-dialect.err"
+        _nd_crash_marker="${HYDRA_GATE_LOG_DIR}/hydra-gate-notification-dialect.crashed"
+        : > "${_nd_err}"; rm -f "${_nd_crash_marker}"
         # shellcheck disable=SC2086
         echo "${_nd_register_files}" | while IFS= read -r _rf; do
             [ -n "${_rf}" ] || continue
-            python3 "${_nd_lib_dir}/check_notification_dialect.py" "${_rf}" >> "${_nd_log}" 2>/dev/null || true
+            python3 "${_nd_lib_dir}/check_notification_dialect.py" "${_rf}" >> "${_nd_log}" 2>>"${_nd_err}"
+            _nd_rc=$?
+            if [ "${_nd_rc}" -ne 0 ]; then
+                echo "${_rf} (exit ${_nd_rc})" >> "${_nd_crash_marker}"
+            fi
         done
+        if [ -s "${_nd_crash_marker}" ]; then
+            _nd_ran=0
+            _nd_why=$(head -3 "${_nd_err}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+            _nd_crashed_n=$(wc -l < "${_nd_crash_marker}" 2>/dev/null || echo '?')
+            _skip 18 "notification-dialect" wiring "check_notification_dialect.py exited non-zero on ${_nd_crashed_n} register file(s) — its contract is 'always exit 0, findings on stdout', so a non-zero exit means it did not judge the file. The obsolete legacy notification dialect (ADR-031) is UNVERIFIED for those files by this run. Checker output: ${_nd_why:-<empty>}. See ${_nd_err} and ${_nd_crash_marker}."
+        fi
     else
         _nd_ran=0
         _skip 18 "notification-dialect" wiring "check_notification_dialect.py not found at ${_nd_lib_dir} — register file(s) were in scope and NONE were inspected; the obsolete legacy notification dialect (ADR-031) is UNVERIFIED by this run. The imperative-dispatch advisory below is unaffected and still ran."
@@ -2713,8 +2837,22 @@ if [ -d openspec/specs ] || [ -d tests/e2e ]; then
         # It is a status now, and the honest number is the printed one.
         _e2e_count=$(grep -oE 'FAIL — [0-9]+ scenario' "${_e2e_log}" 2>/dev/null \
             | tail -1 | grep -oE '[0-9]+' || true)
+        # NO VERDICT LINE MEANS NO VERDICT (.github#271). Exit 1 is EXIT_FAIL,
+        # but a helper that died before printing anything cannot honour its own
+        # status contract — with a python3 that exits 1 for every invocation
+        # this gate reported "FAIL — an unreported number of scenario(s)". That
+        # is a finding count nobody measured, wearing a blocking verdict. If the
+        # helper never printed its own `FAIL — N scenario(s)` summary, it did
+        # not finish: wiring, not a fail.
+        _e2e_no_verdict=0
+        if [ "${_e2e_fail}" -eq 1 ] && [ -z "${_e2e_count}" ]; then
+            _e2e_no_verdict=1
+        fi
         [ -z "${_e2e_count}" ] && _e2e_count="an unreported number of"
-        if [ "${_e2e_fail}" -eq 0 ]; then
+        if [ "${_e2e_no_verdict}" -eq 1 ]; then
+            _e2e_ran=0
+            _skip 19 "e2e-coverage" wiring "check_e2e_coverage.py exited 1 (EXIT_FAIL) but never printed its own 'FAIL — N scenario(s)' summary, so it did not reach the end of its run — there is no finding count and no verdict. Reporting this as a failure would block a PR on a number nobody measured. @e2e traceability (ADR-020) is UNVERIFIED by this run. See ${_e2e_log}."
+        elif [ "${_e2e_fail}" -eq 0 ]; then
             _pass 19 "e2e-coverage"
         elif [ "${_e2e_fail}" -eq 3 ]; then
             # EMPTY SCOPE. Specs exist; the diff selected none of them. Not a
@@ -2756,35 +2894,91 @@ fi
 # named like an OR call is fabricated.
 #
 # Scoped to PHP files under lib/, diff-aware when --scope-to-diff is on.
+#
+# ---------------------------------------------------------------------------
+# A PATTERN THAT STARTS WITH `-` IS AN OPTION, NOT A PATTERN (.github#271)
+# ---------------------------------------------------------------------------
+# This gate has never fired. Not "rarely" — never, in any repo, since it was
+# written. The search was
+#
+#     grep -nE "->${_pat//(/\\(}" "${_file}"
+#
+# and the expanded pattern is `->findObjects\(`. grep parses that as OPTIONS
+# because it begins with `-`:
+#
+#     $ grep -nE "->findObjects\(" lib/Controller/ActionsController.php
+#     grep: invalid option -- '>'
+#     exit 2
+#
+# `2>/dev/null || true` swallowed both the message and the status, so `_hits`
+# came back empty for every pattern on every file, `_or_hits` stayed 0, and the
+# gate printed PASS. Measured 2026-08-08 by planting a textbook
+# `$this->objectService->findObjects(...)` in openregister: the gate reported
+# PASS over it.
+#
+# Two changes, and the second matters as much as the first:
+#
+#  1. `--` before the pattern, so grep stops option parsing. Without this the
+#     gate cannot fire at all.
+#
+#  2. THE RECEIVER IS NOW PART OF THE PATTERN. The old heuristic was "the FILE
+#     mentions ObjectService somewhere", which is not a statement about the
+#     call. Turning on (1) alone produces 14 findings on openregister and 5 on
+#     shillinq that are all FALSE: `createFromArray()` is a real method on
+#     OpenRegister's *Mappers* (`$this->registerMapper->createFromArray(...)`,
+#     `$this->schemaMapper->createFromArray(...)`), and those files mention
+#     ObjectService elsewhere. Repairing the grep without tightening the
+#     receiver would swap a dead gate for a noisy one, and a noisy gate gets
+#     switched off. The receiver must itself be named `*[Oo]bjectService`.
+#
+# With both, the fleet measurement across openregister + pipelinq + shillinq is
+# exactly ONE finding, and it is real: shillinq
+# lib/Controller/BookingNotificationController.php resolves
+# `OCA\OpenRegister\Service\ObjectService` from the container inside its
+# non-admin authorisation guard and calls `findObject(...)`, which does not
+# exist on it (verified against openregister lib/Service/ObjectService.php:
+# find / findAll / saveObject / deleteObject / createObject / updateObject).
+#
+# A grep that ERRORS (rc >= 2) is now a wiring skip, never a pass — the same
+# rule the helper-backed gates in this suite follow.
 # ---------------------------------------------------------------------------
 if [ -d lib ]; then
     _or_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-or-objectservice-api.log
     : > "${_or_log}"
     _or_hits=0
-    # Method-call style only — `->findObjects(` etc — to avoid matching
-    # legitimately-named methods on other services (notably $context->
-    # findObject in plugin code, which doesn't use OR's ObjectService).
-    # The leading `->` requires the call to be on an object, which the
-    # ObjectService usage always is.
-    for _pat in 'findObjects(' 'findObject(' 'createFromArray(' 'deleteFromId('; do
-        while IFS= read -r _file; do
-            [ -z "${_file}" ] && continue
-            _in_scope "${_file}" || continue
-            _hits=$(grep -nE "->${_pat//(/\\(}" "${_file}" 2>/dev/null || true)
-            [ -z "${_hits}" ] && continue
-            # Only flag when the call appears to be on an ObjectService
-            # instance — heuristic: the same file references
-            # ObjectService\>|objectService\> somewhere. If not, the
-            # method name is presumably legitimate on a different class.
-            if grep -qE 'ObjectService|objectService' "${_file}" 2>/dev/null; then
-                while IFS= read -r _line; do
-                    echo "${_file}:${_line}  rule=or-objectservice-fabricated-method (${_pat})" >> "${_or_log}"
-                    _or_hits=$((_or_hits + 1))
-                done <<< "${_hits}"
-            fi
-        done < <(_enum_tracked '\.php$' lib)
-    done
-    if [ "${_or_hits}" -eq 0 ]; then
+    _or_ran=1
+    _or_broken=""
+    # Receiver-anchored: the call must be made ON something named
+    # `*[Oo]bjectService` — `$this->objectService->`, `$objectService->`,
+    # `$this->orObjectService?->`. `$this->schemaMapper->createFromArray()` is
+    # a different class's real method and is deliberately not matched.
+    _OR_FABRICATED_RX='(\$this->[A-Za-z_]*[Oo]bjectService|\$[A-Za-z_]*[Oo]bjectService)\??->(findObjects|findObject|createFromArray|updateFromArray|deleteFromId)[[:space:]]*\('
+    while IFS= read -r _file; do
+        [ -z "${_file}" ] && continue
+        [ -f "${_file}" ] || continue
+        _in_scope "${_file}" || continue
+        # `--` terminates option parsing. The pattern is anchored on `$`, not
+        # `-`, since #271, but the guard stays: it is the whole defect.
+        _hits=$(grep -nE -- "${_OR_FABRICATED_RX}" "${_file}" 2>/dev/null)
+        _or_rc=$?
+        if [ "${_or_rc}" -ge 2 ]; then
+            # grep could not run (bad pattern, unreadable file, option-parse
+            # error). It has no verdict about this file; say so rather than
+            # counting its silence as clean.
+            _or_ran=0
+            _or_broken="${_file}"
+            break
+        fi
+        [ -z "${_hits}" ] && continue
+        while IFS= read -r _line; do
+            [ -z "${_line}" ] && continue
+            echo "${_file}:${_line}  rule=or-objectservice-fabricated-method" >> "${_or_log}"
+            _or_hits=$((_or_hits + 1))
+        done <<< "${_hits}"
+    done < <(_enum_tracked '\.php$' lib)
+    if [ "${_or_ran}" -eq 0 ]; then
+        _skip 20 "or-objectservice-api" wiring "grep exited >= 2 on ${_or_broken} — the fabricated-ObjectService-method search did NOT complete, so no call site was judged. Calls to methods that do not exist on OpenRegister's ObjectService are UNVERIFIED by this run."
+    elif [ "${_or_hits}" -eq 0 ]; then
         _pass 20 "or-objectservice-api"
     else
         _fail 20 "or-objectservice-api" "${_or_hits} call(s) to fabricated OR ObjectService methods (use find / findAll / saveObject / createObject / updateObject / deleteObject) — see ${_or_log}"
@@ -6360,9 +6554,25 @@ _declare_na() {
     done
 }
 
-# `if [ -d src ]` — gates 10 12 13 26 45
+# `if [ -d src ]` — gates 10 26 45
 [ -d src ] || _declare_na "no src/ directory — this repo ships no frontend, so there is no .vue/.js/.ts source for this gate to inspect." \
-    10 12 13 26 45
+    10 26 45
+# `if [ -d src ]` — gates 12 13, with the reason that is actually true of them
+# (.github#274).
+#
+# The line above claimed these two inspect ".vue/.js/.ts source". They inspect
+# `.vue` and ONLY `.vue`, because their subjects — `<NcSelect>`, `<NcModal>`,
+# `<NcDialog>` — are Vue SFC components. A PHP or HTML template cannot
+# instantiate one, so widening them the way #272 widened the a11y family would
+# be widening toward markup that cannot contain the defect. gate-40 owns the
+# language-agnostic `<input>`/`<select>` label rule for `templates/`.
+#
+# That is the judgement #274 asked for, written down where a reader can
+# disagree with it rather than left implicit in a shared reason string. Note
+# these two now ALSO report `na` when `src/` exists but holds no `.vue` — see
+# the gates themselves; this declaration only covers `src/` being absent.
+[ -d src ] || _declare_na "no src/ directory — this repo ships no .vue component, and <NcSelect>/<NcModal>/<NcDialog> are Vue SFC components that a PHP or HTML template cannot instantiate. gate-40 owns the language-agnostic <input>/<select> label rule for templates/." \
+    12 13
 # `if _a11y_has_markup_dir` — gates 31 32 34 35 36 37 39 40 42 43 44
 #
 # THE TABLE HAD DRIFTED FROM THE GUARDS IT CLAIMS TO MIRROR.

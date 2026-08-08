@@ -57,9 +57,27 @@ from pathlib import Path
 
 # Match an opening <template #widget-<id>> or <template #widget-<id>="...">
 # or the long-form <template v-slot:widget-<id>>. Group 1 captures the id.
+# THE TAG ENDS AT A `>`, NOT AT THE END OF THE SLOT BINDING (.github#271/#274).
+#
+# This used to be `(?:="[^"]*")?\s*>` — the slot name, an OPTIONAL double-quoted
+# binding, then immediately `>`. Anything else on the tag made the whole element
+# invisible:
+#
+#     <template #widget-kpis>                        matched
+#     <template #widget-kpis="{ item }">             matched
+#     <template #widget-kpis class="x">              NOT matched
+#     <template v-slot:widget-kpis="{ i }" class="x"> NOT matched
+#     <template #widget-kpis='a'>                    NOT matched  (single quotes)
+#
+# Same shape as gate-44's "judged on the FIRST of name/id/v-model and stopped"
+# (#272): a matcher that assumes an attribute is the LAST thing on the tag has a
+# blind spot shaped like attribute order, and one extra class attribute is
+# enough to hide the finding. The element now ends at a `>` that is not inside a
+# quoted attribute value — the same rule gate-12's helper and check_form_labels
+# already use.
 SLOT_OPEN_RE = re.compile(
     r"<template\s+(?:#|v-slot:)widget-([A-Za-z][A-Za-z0-9_\-]*)"
-    r"(?:=\"[^\"]*\")?\s*>",
+    r"(?:[^>\"']|\"[^\"]*\"|'[^']*')*>",
 )
 TEMPLATE_CLOSE_RE = re.compile(r"</template\s*>")
 TEMPLATE_OPEN_RE = re.compile(r"<template[\s>]")
@@ -252,7 +270,19 @@ def main(argv: list[str]) -> int:
 
     for line in findings:
         print(line)
-    return len(findings)
+    # TERMINAL MARKER (.github#271). The runner used to decide gate-15 with
+    # `wc -l` over this helper's stdout after `2>/dev/null || true`. A helper
+    # that CRASHED wrote nothing, so the log was empty, so the count was 0, so
+    # the gate reported PASS over a check that never executed — the exact shape
+    # #147/#233/#245 exist to remove, still live in three gates on 2026-08-08.
+    # Demonstrated by running the suite with a python3 that always exits 1:
+    # gates 12 and 17 said SKIPPED (wiring); gates 15, 16 and 18 said PASS.
+    #
+    # The marker is what makes "the checker finished" observable. Its absence
+    # is now a wiring skip, never a pass. The exit code is a STATUS (0 clean /
+    # 1 findings) and no longer the count — a count in one byte is #209.
+    print(f"# count={len(findings)}")
+    return 1 if findings else 0
 
 
 if __name__ == "__main__":

@@ -459,7 +459,19 @@ def run_gate(app_dir: Path) -> int:
 
     for line in sorted(set(findings)):
         print(line)
-    return len(set(findings))
+    # TERMINAL MARKER (.github#271) — see the note in
+    # check_dashboard_antipattern.py. gate-16 decided its verdict with `wc -l`
+    # over this helper's stdout after `2>/dev/null || true`, so a helper that
+    # crashed produced an empty log and the gate reported PASS. Verified
+    # 2026-08-08 by running the suite with a python3 stub that always exits 1:
+    # gate-16 said PASS while nothing had been inspected.
+    #
+    # The exit code is now a STATUS (0 clean / 1 findings), not the count. It
+    # used to be `len(set(findings))` — a count in one byte, which is #209:
+    # openregister's own root-scoped sweep is well past 255.
+    _count = len(set(findings))
+    print(f"# count={_count}")
+    return 1 if _count else 0
 
 
 def main(argv: list[str]) -> int:
