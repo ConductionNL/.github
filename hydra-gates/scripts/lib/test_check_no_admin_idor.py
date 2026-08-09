@@ -1602,5 +1602,76 @@ class TenancyGuardTest(unittest.TestCase):
             "$org = $entity->getOrganisation(); if ($org === null) { throw new DoesNotExistException(); }"))
 
 
+class FullyQualifiedAttributeIsStillTheAttribute(unittest.TestCase):
+    """`#[\\OCP\\AppFramework\\Http\\Attribute\\NoAdminRequired]` puts the method IN scope.
+
+    Measured 2026-08-08. The look-back matched `#[NoAdminRequired` only — the
+    imported short form. PHP equally permits the fully-qualified spelling, and
+    with it a textbook IDOR (caller-supplied `$id`, no ownership check) fell out
+    of scope entirely and the gate reported PASS. The byte-identical body under
+    the short form reported FAIL.
+
+    No fleet file uses the FQ form today, which is exactly why this needed
+    closing deliberately: a false NEGATIVE on a security gate leaves no log, so
+    the first FQ attribute anyone writes would have switched the gate off for
+    that method silently.
+    """
+
+    _LEAK = """<?php
+namespace OCA\\Fx\\Controller;
+class C extends Controller {
+    %s
+    public function fetch(string $id): JSONResponse
+    {
+        $obj = $this->objectService->find(id: $id);
+        return new JSONResponse(data: $obj);
+    }
+}
+"""
+
+    _GUARDED = """<?php
+namespace OCA\\Fx\\Controller;
+class C extends Controller {
+    %s
+    public function fetch(string $id): JSONResponse
+    {
+        $obj = $this->objectService->find(id: $id);
+        if ($obj->getOwner() !== $this->userSession->getUser()->getUID()) {
+            return new JSONResponse(data: [], statusCode: Http::STATUS_FORBIDDEN);
+        }
+
+        return new JSONResponse(data: $obj);
+    }
+}
+"""
+
+    def _scan(self, php: str) -> list[str]:
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "C.php"
+            p.write_text(php, encoding="utf-8")
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                cni.scan_file(str(p))
+        return [ln for ln in buf.getvalue().splitlines() if ln.strip()]
+
+    def test_short_form_leak_is_reported(self):
+        self.assertEqual(len(self._scan(self._LEAK % "#[NoAdminRequired]")), 1)
+
+    def test_fully_qualified_leak_is_reported(self):
+        php = self._LEAK % "#[\\OCP\\AppFramework\\Http\\Attribute\\NoAdminRequired]"
+        self.assertEqual(len(self._scan(php)), 1)
+
+    def test_fully_qualified_guarded_method_is_not_reported(self):
+        php = self._GUARDED % "#[\\OCP\\AppFramework\\Http\\Attribute\\NoAdminRequired]"
+        self.assertEqual(self._scan(php), [])
+
+    def test_short_form_guarded_method_is_not_reported(self):
+        self.assertEqual(self._scan(self._GUARDED % "#[NoAdminRequired]"), [])
+
+    def test_an_unannotated_method_stays_out_of_scope(self):
+        # Anti-widening: no NoAdminRequired at all means this gate has no say.
+        self.assertEqual(self._scan(self._LEAK % ""), [])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -291,15 +291,29 @@ _mkrepo() {
 
 # --- 6a. package.json-only diff on the fixture that DOES have a real finding.
 #     This is the exact shape that blocked scholiq. It must produce nothing —
-#     and note the finding IS there in the tree (assertion 1 proved it), so a
-#     PASS here is scoping, not absence.
+#     and note the finding IS there in the tree (assertion 1 proved it), so the
+#     verdict here is scoping, not absence.
+#
+#     ⚠️ RECLASSIFIED 2026-08-08 from PASS to NOT APPLICABLE. The sentence above
+#     is the whole argument: "a PASS here is scoping, not absence" is a fact the
+#     verdict PASS does not state and NOT APPLICABLE does. Measured on
+#     larpingapp, gate-5 reported PASS having judged ZERO routed methods, which
+#     is indistinguishable from a repo whose every endpoint was checked and
+#     found correct. `na` (not `structural`) per #268: an empty ADR-020 scope is
+#     subject matter absent from THIS DIFF, so it must not count against
+#     --require-full-coverage. Gates 4/6/7 already answered this situation the
+#     same way. 6b and 6c below are the controls that keep this honest — the
+#     identical finding must still FAIL the moment the diff touches the
+#     controller or appinfo/routes.php.
 _mkrepo unguarded scope-deps
 printf '{"name":"fixture","version":"1.0.1"}\n' > "${_REPO}/package.json"
 printf 'lockfile\n' > "${_REPO}/package-lock.json"
 git -C "${_REPO}" add package.json package-lock.json >/dev/null 2>&1
 git -C "${_REPO}" commit -q -m bump >/dev/null 2>&1
 if _run "${_REPO}" --scope-to-diff --base "${_BASE}"; then
-    _expect_gate 5 PASS "package.json-only diff: gate-5 reports NO finding (scoped out, not absent)"
+    _expect_gate 5 "NOT APPLICABLE" "package.json-only diff: gate-5 reports NO finding (scoped out, not absent)"
+    _expect_out '^\[gate-5\][^:]*: NOT APPLICABLE — 0 routed method\(s\) were judged' \
+        "package.json-only diff: gate-5 says how many routed methods it judged (zero)"
 fi
 
 # --- 6b. same repo, same finding, but the diff touches the controller.
@@ -328,7 +342,12 @@ printf '{"name":"fixture","version":"1.0.1"}\n' > "${_REPO}/package.json"
 git -C "${_REPO}" add package.json >/dev/null 2>&1
 git -C "${_REPO}" commit -q -m bump >/dev/null 2>&1
 if _run "${_REPO}" --scope-to-diff --base "${_BASE}"; then
-    _expect_gate 5 PASS "AppHost app, dependency-only diff: gate-5 clean (the scholiq case)"
+    # See 6a for why this is NOT APPLICABLE rather than PASS. On an AppHost app
+    # the distinction matters more, not less: the four routed entries here are
+    # served by the OpenRegister generic controllers and are UNRESOLVABLE from
+    # this repository, so "PASS" would have claimed a clean bill of health for
+    # four endpoints whose attributes this run cannot see at all.
+    _expect_gate 5 "NOT APPLICABLE" "AppHost app, dependency-only diff: gate-5 clean (the scholiq case)"
     _expect_gate 14 PASS "AppHost app, dependency-only diff: gate-14 clean"
 fi
 
