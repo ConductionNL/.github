@@ -5126,12 +5126,41 @@ fi
 # References:
 #   - openspec/architecture/wcag-coverage.md SC 2.3.3 (AAA, audit-common)
 # ---------------------------------------------------------------------------
-if [ -d src ]; then
+# THE GUARD MUST MIRROR THE ENUMERATOR (#225 / #261, finished here).
+#
+# This gate reads `_a11y_markup_files` — src/, templates/ and appinfo/templates/
+# — but was still gated on `[ -d src ]`, the guard that enumerator replaced.
+# On an app that renders from PHP templates and has no src/ (nldesign is the
+# fleet's example) the gate emitted nothing, and the central applicability
+# table then declared it NOT APPLICABLE — "this repo ships no frontend" — over
+# a `templates/settings/admin.php` that ships real markup. Measured 2026-08-08:
+# a textbook `transition:` with no reduced-motion fallback was planted in that
+# exact file and this gate reported NOT APPLICABLE while its siblings 31/32/34/
+# 36/37/39/43, which had been migrated, reported on it (43 FAILED on it).
+#
+# `na` over a live defect is worse than the PASS it replaced: PASS at least
+# counts as a claim someone can dispute, whereas `na` removes the gate from the
+# coverage arithmetic entirely — the run then reports "all applicable gates
+# green" with the defect inside it.
+if _a11y_has_markup_dir; then
     _rm_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-prefers-reduced-motion.log
     : > "${_rm_log}"
+    : > "${_rm_log}.err"
+    _rm_seen=0
+    _rm_rc=0
     while IFS= read -r vue; do
         _in_scope "${vue}" || continue
-        python3 - "$vue" <<'PYRM' >> "${_rm_log}" 2>/dev/null
+        _rm_seen=$((_rm_seen + 1))
+        # A CRASHED CHECKER MUST NOT REPORT PASS (#147 / #249 / #262).
+        #
+        # `2>/dev/null` alone discarded the traceback AND the failure, so a
+        # broken interpreter left an empty log and this gate called it clean.
+        # Measured 2026-08-08 with a `python3` that exits 1 on every call:
+        # every gate in this band that read its checker's return code said
+        # SKIPPED (wiring); this one said PASS. stderr is kept so the reason
+        # is recoverable, and the status is read.
+        set +e
+        python3 - "$vue" <<'PYRM' >> "${_rm_log}" 2>>"${_rm_log}.err"
 import re, sys
 fname = sys.argv[1]
 try:
@@ -5146,9 +5175,20 @@ for m in re.finditer(r'<style\b[^>]*>(.*?)</style>', src, re.IGNORECASE | re.DOT
         continue
     print(f'{fname}: <style> rule=motion-without-reduced-motion-fallback')
 PYRM
+        # `$?` immediately after a heredoc-fed command is the command's status;
+        # captured into a named variable rather than tested inline so
+        # ShellCheck's SC2181 ("check the exit code directly") does not fire on
+        # a construct where `if ! cmd <<HEREDOC` is not available.
+        _rm_one=$?
+        [ "${_rm_one}" -ne 0 ] && _rm_rc=1
     done < <(_a11y_markup_files)
     _rm_fail=$(wc -l < "${_rm_log}" 2>/dev/null || echo 0)
-    if [ "${_rm_fail}" -eq 0 ]; then
+    if [ "${_rm_rc}" -ne 0 ]; then
+        _skip 45 "prefers-reduced-motion" wiring "the inline reduced-motion checker exited non-zero on at least one of ${_rm_seen} markup file(s) — no verdict was produced for them; motion without a prefers-reduced-motion fallback is UNVERIFIED by this run. See ${_rm_log}.err."
+    elif [ "${_rm_seen}" -eq 0 ]; then
+        # AN UNOPENED SCOPE IS NEVER A PASS (#242/#240/#258/#268).
+        _skip 45 "prefers-reduced-motion" na "scope was empty — 0 markup file(s) (src/, templates/, appinfo/templates/) in this diff, so NO <style> block was inspected; motion without a prefers-reduced-motion fallback is UNVERIFIED by this run."
+    elif [ "${_rm_fail}" -eq 0 ]; then
         _pass 45 "prefers-reduced-motion"
     else
         _fail 45 "prefers-reduced-motion" "${_rm_fail} <style> block(s) with motion but no reduced-motion fallback — see ${_rm_log}"
@@ -5180,8 +5220,15 @@ done < <(find lib src \( -name '*.php' -o -name '*.vue' -o -name '*.js' -o -name
 _sae_ran=1
 _sae_helper="${SCRIPT_DIR}/lib/check_spec_anchors.py"
 if [ "${#_sae_files[@]}" -eq 0 ]; then
-    : # nothing in scope — ordinary diff scoping, same as before this gate
-      # moved into a helper. See the note on gate-40.
+    # AN UNOPENED SCOPE IS NEVER A PASS (#242/#240/#258/#268).
+    #
+    # This branch was a bare `:` and the gate fell through to `_pass 46`. On a
+    # diff that touches no lib/ or src/ file — a README, a workflow, a
+    # composer bump — the gate opened no file at all and printed PASS, exactly
+    # the shape #258 removed from gates 19/25/62/63 and #268 then categorised.
+    # Gates 4/6/7/28 have said `na` for the identical situation since #268.
+    _sae_ran=0
+    _skip 46 "spec-anchor-existence" na "scope was empty — 0 lib/ or src/ file(s) in this diff, so NO @spec target was resolved. Diff-scoped out under ADR-020: nothing in this repository is missing, and no change the author could make would let this gate inspect a file the diff does not contain. It runs on the next PR that touches annotated code."
 elif [ ! -f "${_sae_helper}" ]; then
     # A MISSING HELPER MUST NOT REPORT PASS (#147). The gate previously
     # carried its resolver inline, so "the helper is absent" was not a
@@ -5190,7 +5237,22 @@ elif [ ! -f "${_sae_helper}" ]; then
     _sae_ran=0
     _skip 46 "spec-anchor-existence" wiring "check_spec_anchors.py not found at ${_sae_helper} — ${#_sae_files[@]} file(s) were in scope and NONE had their @spec targets resolved; dangling spec references are UNVERIFIED by this run."
 else
-    python3 "${_sae_helper}" "${_sae_log}" "${_sae_files[@]}" || true
+    # A CRASHED CHECKER MUST NOT REPORT PASS (#147 / #249 / #262).
+    #
+    # `|| true` swallowed the status, so a resolver that died left an empty
+    # log and this gate called the repository clean. Measured 2026-08-08 with
+    # a `python3` that exits 1 on every call: gate-46 printed PASS over the
+    # 277 unresolved @spec findings, across 104 distinct targets, that it had
+    # reported one run earlier on the same tree. This gate has form here —
+    # its helper did not exist at all in packages before #246, which is how
+    # three repos pinned at v1.3.0 ran it and saw nothing.
+    set +e
+    python3 "${_sae_helper}" "${_sae_log}" "${_sae_files[@]}" 2>>"${_sae_log}.err"
+    _sae_rc=$?
+    if [ "${_sae_rc}" -ne 0 ]; then
+        _sae_ran=0
+        _skip 46 "spec-anchor-existence" wiring "check_spec_anchors.py exited ${_sae_rc} — ${#_sae_files[@]} file(s) were in scope and no verdict was produced; dangling @spec targets are UNVERIFIED by this run. See ${_sae_log}.err."
+    fi
 fi
 set +e
 _sae_fail=$(wc -l < "${_sae_log}" 2>/dev/null | tr -d ' ')
@@ -5233,7 +5295,17 @@ _scht_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-security-change-has-tests.log
 : > "${_scht_log}"
 _scht_ran=1
 _scht_helper="${SCRIPT_DIR}/lib/check_security_cochange.py"
-if [ "${SCOPE_TO_DIFF}" = "1" ] && [ -n "${BASE_REF}" ]; then
+if [ "${SCOPE_TO_DIFF}" != "1" ] || [ -z "${BASE_REF}" ]; then
+    # NO DIFF, NO VERDICT — and NOT a PASS (#242/#240/#258/#268).
+    #
+    # This gate's whole subject is "what did this change touch, and did it also
+    # touch a test". A builder full-repo run has no base to diff against, so the
+    # `if` above was simply false and the gate fell through to `_pass 47`,
+    # announcing a co-change verdict it had not formed. Every full-repo run in
+    # the fleet — every builder iteration — printed that green.
+    _scht_ran=0
+    _skip 47 "security-change-has-tests" na "this run is not diff-scoped (no --scope-to-diff / no base ref), so there is no change set to classify. This gate compares a PR's hunks against the tests it touched; on a whole-repository run there is no such pair, and no change in this repository could create one."
+elif [ "${SCOPE_TO_DIFF}" = "1" ] && [ -n "${BASE_REF}" ]; then
     if [ ! -f "${_scht_helper}" ]; then
         # A MISSING HELPER MUST NOT REPORT PASS (#147).
         _scht_ran=0
@@ -5252,7 +5324,25 @@ if [ "${SCOPE_TO_DIFF}" = "1" ] && [ -n "${BASE_REF}" ]; then
         # docblocks) was told to co-change tests. Neither used the opt-out,
         # which is the tell — people do not reach for an opt-out when they
         # believe the finding is wrong.
-        _scht_sec=$(python3 "${_scht_helper}" "${BASE_REF}" "$(pwd)" 2>/dev/null || true)
+        # A CRASHED CHECKER MUST NOT REPORT PASS (#147 / #249 / #262).
+        #
+        # `2>/dev/null || true` threw away the traceback and the status, and
+        # "no output" is exactly what a clean diff produces — so a dead
+        # classifier was indistinguishable from a clean bill of health.
+        # Measured 2026-08-08 on a diff that DROPS #[NoCSRFRequired] from a
+        # controller with no test co-change: this gate reported FAIL with a
+        # working interpreter and PASS with one that exits 1, while gate-48,
+        # which reads its helper's status, said SKIPPED (wiring) on the same
+        # run over the same diff.
+        set +e
+        _scht_err="${HYDRA_GATE_LOG_DIR}/hydra-gate-security-change-has-tests.err"
+        _scht_sec=$(python3 "${_scht_helper}" "${BASE_REF}" "$(pwd)" 2>"${_scht_err}")
+        _scht_rc=$?
+        if [ "${_scht_rc}" -ne 0 ]; then
+            _scht_ran=0
+            _scht_sec=""
+            _skip 47 "security-change-has-tests" wiring "check_security_cochange.py exited ${_scht_rc} — the diff was NOT classified; a security change shipping without a test co-change is UNVERIFIED by this run. See ${_scht_err}."
+        fi
         _scht_has_test=""
         while IFS= read -r f; do
             [ -z "$f" ] && continue
@@ -5294,7 +5384,13 @@ fi
 _csrf_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-csrf-cochange.log
 : > "${_csrf_log}"
 _csrf_ran=1
-if [ "${SCOPE_TO_DIFF}" = "1" ] && [ -n "${BASE_REF}" ]; then
+if [ "${SCOPE_TO_DIFF}" != "1" ] || [ -z "${BASE_REF}" ]; then
+    # NO DIFF, NO VERDICT — and NOT a PASS (#242/#240/#258/#268). Identical
+    # reasoning to gate-47 above: "was an attribute REMOVED" is a question only
+    # a diff can answer, and a full-repo run printed PASS without asking it.
+    _csrf_ran=0
+    _skip 48 "csrf-cochange" na "this run is not diff-scoped (no --scope-to-diff / no base ref), so there is no removal to detect. Whether a controller DROPPED @NoCSRFRequired is a property of a change set, not of a checkout, and no change in this repository could make a whole-repository run able to answer it."
+elif [ "${SCOPE_TO_DIFF}" = "1" ] && [ -n "${BASE_REF}" ]; then
     # Find removed @NoCSRFRequired lines in changed PHP files.
     #
     # A REMOVED COMMENT IS NOT A REMOVED ATTRIBUTE (#191).
@@ -5388,8 +5484,13 @@ while IFS= read -r f; do
     _in_scope "$f" || continue
     _cxt_files+=("$f")
 done < <(_enum_tracked '\.php$' lib/Controller)
+_cxt_rc=0
 if [ "${#_cxt_files[@]}" -gt 0 ]; then
-    python3 - "${_cxt_log}" "${_cxt_files[@]}" << 'PY'
+    # A CRASHED CHECKER MUST NOT REPORT PASS (#147 / #249 / #262). The status
+    # of this inline python was never read, so a broken interpreter left an
+    # empty log and the gate called every controller clean.
+    set +e
+    python3 - "${_cxt_log}" "${_cxt_files[@]}" 2>>"${_cxt_log}.err" << 'PY'
 import re, sys, os
 log_path = sys.argv[1]
 files = sys.argv[2:]
@@ -5502,6 +5603,7 @@ for fp in files:
                 g.write(f"{fp}:{m['start_line']}: {m['name']}() calls a service method that may throw a tracked exception, "
                         f"but has no matching try/catch and no @throws declaration\n")
 PY
+    _cxt_rc=$?
 fi
 # Opt-out: `[hydra-gate-controller-exception-translation exclude] <reason>` in
 # the PR body or head commit message (≥ 20 chars).
@@ -5515,7 +5617,13 @@ set +e
 _cxt_fail=$(wc -l < "${_cxt_log}" 2>/dev/null | tr -d ' ')
 set +e
 [ -z "${_cxt_fail}" ] && _cxt_fail=0
-if [ "${_cxt_fail}" -eq 0 ]; then
+if [ "${_cxt_rc}" -ne 0 ]; then
+    _skip 49 "controller-exception-translation" wiring "the inline exception-translation checker exited ${_cxt_rc} — ${#_cxt_files[@]} lib/Controller file(s) were in scope and no verdict was produced; untranslated service exceptions are UNVERIFIED by this run. See ${_cxt_log}.err."
+elif [ "${#_cxt_files[@]}" -eq 0 ]; then
+    # AN UNOPENED SCOPE IS NEVER A PASS (#242/#240/#258/#268) — same category
+    # gates 6/7 already use for the identical "0 controllers in this diff".
+    _skip 49 "controller-exception-translation" na "scope was empty — 0 lib/Controller PHP file(s) in this repo or this diff, so NO controller method was inspected; untranslated service exceptions (HTTP 500 on a defended path) are UNVERIFIED by this run."
+elif [ "${_cxt_fail}" -eq 0 ]; then
     _pass 49 "controller-exception-translation"
 else
     _fail 49 "controller-exception-translation" "${_cxt_fail} controller method(s) missing try/catch or @throws — see ${_cxt_log}"
@@ -5539,13 +5647,34 @@ while IFS= read -r f; do
     _in_scope "$f" || continue
     _scfm_files+=("$f")
 done < <(_enum_tracked '(Controller|Service)[^/]*\.php$' lib)
+_scfm_rc=0
 if [ "${#_scfm_files[@]}" -gt 0 ]; then
-    python3 - "${_scfm_log}" "${_scfm_files[@]}" << 'PY'
+    # A CRASHED CHECKER MUST NOT REPORT PASS (#147 / #249 / #262).
+    set +e
+    python3 - "${_scfm_log}" "${_scfm_files[@]}" 2>>"${_scfm_log}.err" << 'PY'
 import re, sys
 log_path = sys.argv[1]
 files = sys.argv[2:]
 SEC_KEY = re.compile(
-    r"getValue(?:String|Bool|Int)\s*\(\s*['\"][^'\"]+['\"]\s*,\s*['\"]"
+    # FIRST ARGUMENT: THE APP ID, IN ANY FORM.
+    #
+    # This was `['\"][^'\"]+['\"]` — a QUOTED STRING LITERAL only. The
+    # fleet-standard idiom is a class constant:
+    #
+    #     $this->appConfig->getValueString(Application::APP_ID, 'listing_register', '')
+    #
+    # so every read written that way was invisible to this gate. Measured
+    # 2026-08-08: an unguarded read of `listing_register` — the exact
+    # opencatalogi#86 defect this gate was built for — reported PASS with
+    # `Application::APP_ID`, and FAIL with `'larpingapp'`, one token apart.
+    # 7 real security-relevant reads across 5 fleet repos sit behind a
+    # constant today. Same family as #184: a checker that matches a string
+    # literal misses every constant.
+    #
+    # `[^,()]+` is deliberately shape-agnostic (literal, `self::APP_ID`,
+    # `Application::APP_ID`, `$this->appId`) and stops at the comma, so it
+    # cannot swallow the key argument this regex exists to capture.
+    r"getValue(?:String|Bool|Int)\s*\(\s*[^,()]+\s*,\s*['\"]"
     r"(?P<key>[^'\"]*"
     r"(?:register|schema|allow[_-]?list|allow_?list|whitelist|blocklist|"
     # Quote-or-underscore-anchored short tokens so `author_name`,
@@ -5571,12 +5700,85 @@ for fp in files:
     for m in SEC_KEY.finditer(src):
         # Find the line number of the match
         lineno = src[:m.start()].count('\n') + 1
-        # Window: 10 lines after the config read
-        window = ''.join(lines[lineno:lineno+10])
+        # WINDOW STARTS WHERE THE CALL ENDS, NOT WHERE IT STARTS.
+        #
+        # It was `lines[lineno:lineno+10]` — ten lines after the line the
+        # match BEGAN on, excluding that line. Two false positives fall out of
+        # that, and both are ordinary code:
+        #
+        #   multi-line call   PHPCS-formatted reads span five lines each:
+        #                         $registerId = $this->appConfig->getValueString(
+        #                             Application::APP_ID,
+        #                             'register',
+        #                             ''
+        #                         );
+        #                     Two of those plus a blank line put the guard on
+        #                     the ELEVENTH line — one outside the window.
+        #                     Measured on procest lib/Service/AiService.php:580
+        #                     and :967, where the guard is a textbook
+        #                     `if (empty($registerId) === true || empty($schemaId)
+        #                     === true) { $this->logger->warning(...); return; }`
+        #                     and the gate called both unguarded.
+        #
+        #   same-line guard   `'ai_api_key_set' => $this->appConfig->getValueString(
+        #                     Application::APP_ID, 'ai_api_key', '') !== ''`
+        #                     handles the empty default ON THE MATCH LINE, which
+        #                     the window started AFTER. procest:710.
+        #
+        # Both are fixed by anchoring the window to the END of the call
+        # expression: balance parentheses forward from the `(`, then take the
+        # remainder of THAT line plus ten more. A single-line read gets the
+        # same ten lines it always did, so nothing is loosened for the shape
+        # this gate was built on — only the shapes it could not see.
+        _open = src.find('(', m.start())
+        _depth, _p = 0, _open
+        while _p < len(src) and _p != -1:
+            if src[_p] == '(':
+                _depth += 1
+            elif src[_p] == ')':
+                _depth -= 1
+                if _depth == 0:
+                    break
+            _p += 1
+        _end_line = src[:_p].count('\n') + 1 if _p < len(src) else lineno
+        # `_end_line - 1` is the 0-based index of the call's closing line, so
+        # the window INCLUDES the rest of that line (the same-line case).
+        window = ''.join(lines[_end_line-1:_end_line+10])
         # Look for fail-mode signals
+        #
+        # THE EMPTY-COMPARE ARM MUST SURVIVE A COMPOUND CONDITION.
+        #
+        # It was `if\s*\(\s*[\$\w\->]+\s*(===|…)\s*['\"]{2}\s*\)` — a closing
+        # paren required IMMEDIATELY after the empty string. So the correct,
+        # idiomatic two-key guard
+        #
+        #     if ($reg === '' || $sch === '') { return []; }
+        #
+        # did not match, and BOTH reads above it were reported as unguarded.
+        # Measured 2026-08-08 on larpingapp: two findings, zero defects. That
+        # is the worst possible false positive for this gate, because the code
+        # it rejects is the code it is asking for — an author who "fixes" it
+        # by splitting into two single-key ifs has changed nothing and learned
+        # that the gate rewards shape over meaning.
+        #
+        # The trailing `\s*\)` is dropped: the condition continues with `||`,
+        # `&&`, `)` or anything else, and none of those change whether an
+        # empty-string comparison happened.
+        #
+        # The leading `if\s*\(` is dropped for the same reason. A guard does
+        # not have to be an `if` — larpingapp's SetupController::isProvisioned()
+        # fails closed with
+        #
+        #     return $registerId !== '' && $schemaMarker !== '';
+        #
+        # which is a complete empty-default handler and was reported as
+        # unguarded the moment the constant-app-id fix made the read visible.
+        # What this gate actually asks is "did the code compare the value
+        # against empty"; the statement it sits in is not the question.
         has_guard = re.search(
-            r"if\s*\(\s*[\$\w\-\>]+\s*(===|!==|==|!=)\s*['\"]{2}\s*\)"       # empty-string compare
-            r"|if\s*\(\s*empty\s*\("                                          # empty()
+            r"(===|!==|==|!=)\s*['\"]{2}"                                     # empty-string compare
+            r"|['\"]{2}\s*(===|!==|==|!=)"                                    # …written the other way round
+            r"|\bempty\s*\("                                                  # empty()
             r"|->logger->(warning|error|critical|alert)"                      # log-warn
             r"|throw\s+new\s+"                                                # throw
             r"|return\s+new\s+(JSONResponse|Response|DataResponse)",          # early return
@@ -5586,12 +5788,18 @@ for fp in files:
             with open(log_path, 'a', encoding='utf-8') as g:
                 g.write(f"{fp}:{lineno}: security-relevant config read of \"{m.group('key')}\" has no fail-mode guard within 10 lines\n")
 PY
+    _scfm_rc=$?
 fi
 set +e
 _scfm_fail=$(wc -l < "${_scfm_log}" 2>/dev/null | tr -d ' ')
 set +e
 [ -z "${_scfm_fail}" ] && _scfm_fail=0
-if [ "${_scfm_fail}" -eq 0 ]; then
+if [ "${_scfm_rc}" -ne 0 ]; then
+    _skip 50 "security-config-fail-mode" wiring "the inline security-config checker exited ${_scfm_rc} — ${#_scfm_files[@]} Controller/Service file(s) were in scope and no verdict was produced; a security-relevant config key silently defaulting to empty is UNVERIFIED by this run. See ${_scfm_log}.err."
+elif [ "${#_scfm_files[@]}" -eq 0 ]; then
+    # AN UNOPENED SCOPE IS NEVER A PASS (#242/#240/#258/#268).
+    _skip 50 "security-config-fail-mode" na "scope was empty — 0 lib/**/*Controller.php or *Service.php file(s) in this repo or this diff, so NO config read was inspected; a security-relevant key silently defaulting to empty is UNVERIFIED by this run."
+elif [ "${_scfm_fail}" -eq 0 ]; then
     _pass 50 "security-config-fail-mode"
 else
     _fail 50 "security-config-fail-mode" "${_scfm_fail} unsafe security-config read(s) — see ${_scfm_log}"
@@ -5633,11 +5841,19 @@ if [ "${#_spt_files[@]}" -gt 0 ]; then
         # title debt in a touched register never blocks an unrelated PR —
         # titles are enforced going forward only (mirrors gate-16). Builder
         # full-repo runs leave HYDRA_GATE_BASE_REF unset → ratchet every prop.
+        # A CRASHED CHECKER MUST NOT REPORT PASS (#147 / #249 / #262).
+        # `2>/dev/null || true` discarded both the traceback and the status.
+        set +e
         if [ "${SCOPE_TO_DIFF}" = "1" ]; then
             HYDRA_GATE_BASE_REF="${BASE_REF}" \
-                python3 "${_spt_helper}" "${_spt_files[@]}" >> "${_spt_log}" 2>/dev/null || true
+                python3 "${_spt_helper}" "${_spt_files[@]}" >> "${_spt_log}" 2>>"${_spt_log}.err"
         else
-            python3 "${_spt_helper}" "${_spt_files[@]}" >> "${_spt_log}" 2>/dev/null || true
+            python3 "${_spt_helper}" "${_spt_files[@]}" >> "${_spt_log}" 2>>"${_spt_log}.err"
+        fi
+        _spt_rc=$?
+        if [ "${_spt_rc}" -ne 0 ]; then
+            _spt_ran=0
+            _skip 51 "schema-property-titles" wiring "check_schema_property_meta.py exited ${_spt_rc} — ${#_spt_files[@]} register file(s) were in scope and no verdict was produced; schema properties missing a human-friendly title/description are UNVERIFIED by this run. See ${_spt_log}.err."
         fi
     else
         _spt_ran=0
@@ -5648,7 +5864,10 @@ set +e
 _spt_fail=$(wc -l < "${_spt_log}" 2>/dev/null | tr -d ' ')
 set +e
 [ -z "${_spt_fail}" ] && _spt_fail=0
-if [ "${_spt_ran}" -eq 1 ]; then
+if [ "${#_spt_files[@]}" -eq 0 ]; then
+    # AN UNOPENED SCOPE IS NEVER A PASS (#242/#240/#258/#268).
+    _skip 51 "schema-property-titles" na "scope was empty — 0 lib/Settings/*register*.json (or register.d/*.json) file(s) in this repo or this diff, so NO schema property was inspected; missing human-friendly titles are UNVERIFIED by this run."
+elif [ "${_spt_ran}" -eq 1 ]; then
     if [ "${_spt_fail}" -eq 0 ]; then
         _pass 51 "schema-property-titles"
     else
@@ -5700,8 +5919,19 @@ _cwr_ran=1
 if [ "${#_cwr_files[@]}" -gt 0 ]; then
     _cwr_helper="${SCRIPT_DIR}/lib/check_custom_widget_ratchet.py"
     if [ -f "${_cwr_helper}" ]; then
-        # Helper exit code = number of findings (capped at 99); stdout gets
-        # the finding blocks + the always-on counts report line.
+        # READ THE COUNT OFF STDOUT, NOT THE EXIT BYTE (#209).
+        #
+        # This was `_cwr_fail=$?` straight after the helper. An exit status
+        # carries two different facts on one channel — "how many findings" and
+        # "I did not finish" — and the gate could not tell them apart.
+        # Measured 2026-08-08 by injecting `raise RuntimeError(...)` into the
+        # helper's main(): Python exited 1 and the gate printed
+        # `FAIL — 1 custom-widget finding(s)`, a fabricated finding with a
+        # plausible message and nothing behind it. The helper's own count was
+        # also clamped to 99 to fit in the byte, so 100+ findings under-reported.
+        #
+        # The helper now prints `[custom-widget-ratchet] findings=N` on every
+        # completed run and exits boolean. No such line ⇒ it died ⇒ WIRING.
         set +e
         if [ "${SCOPE_TO_DIFF}" = "1" ]; then
             HYDRA_GATE_BASE_REF="${BASE_REF}" \
@@ -5709,8 +5939,22 @@ if [ "${#_cwr_files[@]}" -gt 0 ]; then
         else
             python3 "${_cwr_helper}" "${_cwr_files[@]}" >> "${_cwr_log}" 2>&1
         fi
-        _cwr_fail=$?
+        _cwr_rc=$?
+        _cwr_reported=$(grep -oE '\[custom-widget-ratchet\] findings=[0-9]+' "${_cwr_log}" 2>/dev/null \
+            | tail -1 | sed 's/.*findings=//')
         set +e
+        case "${_cwr_reported}" in
+            ''|*[!0-9]*)
+                # The helper produced no count line. It crashed, was killed, or
+                # is a version that predates the contract — either way it did
+                # NOT judge this repository, and saying "N findings" here would
+                # invent them.
+                _cwr_ran=0
+                _cwr_fail=0
+                _skip 52 "custom-widget-ratchet" wiring "check_custom_widget_ratchet.py exited ${_cwr_rc} without printing its \`findings=\` count — it did NOT finish, so ${#_cwr_files[@]} frontend file(s) were left uninspected and custom kind:\"widget\" growth (ADR-049) is UNVERIFIED by this run. This is a broken checker, NOT a finding about the code. See ${_cwr_log}."
+                ;;
+            *) _cwr_fail="${_cwr_reported}" ;;
+        esac
     else
         _cwr_ran=0
         _skip 52 "custom-widget-ratchet" wiring "check_custom_widget_ratchet.py not found at ${_cwr_helper} — ${#_cwr_files[@]} frontend file(s) were in scope and NONE were inspected; custom kind:\"widget\" growth (ADR-049) is UNVERIFIED by this run — no base/head/delta counts were produced."
@@ -5720,7 +5964,10 @@ fi
 # reported so migrations can show the number shrinking).
 _cwr_counts=$(grep -m1 -o 'base=[0-9]* head=[0-9]* delta=[+-]*[0-9]*.*' "${_cwr_log}" 2>/dev/null || true)
 [ -n "${_cwr_counts}" ] && echo "[gate-52] custom-widget-ratchet: ${_cwr_counts}"
-if [ "${_cwr_ran}" -eq 1 ]; then
+if [ "${#_cwr_files[@]}" -eq 0 ]; then
+    # AN UNOPENED SCOPE IS NEVER A PASS (#242/#240/#258/#268).
+    _skip 52 "custom-widget-ratchet" na "no src/**/*.{js,ts,vue} file(s) in this repo, so there is no component registry to hold a custom kind:\"widget\" entry and no ratchet to compute."
+elif [ "${_cwr_ran}" -eq 1 ]; then
     if [ "${_cwr_fail}" -eq 0 ]; then
         _pass 52 "custom-widget-ratchet"
     else
@@ -5790,8 +6037,16 @@ if [ -f src/manifest.json ]; then
         _em_touched=1
     fi
     if [ "${_em_touched}" -eq 0 ]; then
-        # PR touches no manifest input — informational pass (ADR-020).
-        _pass 53 "effective-manifest-crossref"
+        # AN UNOPENED SCOPE IS NEVER A PASS (#242/#240/#258/#268).
+        #
+        # "Informational pass" is a contradiction: the line printed is
+        # `[gate-53] effective-manifest-crossref: PASS`, and no consumer of
+        # this runner's stdout — the coverage assertion, the reviewer skill,
+        # a human reading the summary — can tell it apart from a manifest that
+        # was assembled, validated and cross-referenced. Gates 62 and 63 answer
+        # this identical condition ("touched no manifest and no menu-layout")
+        # with `na`, and this gate now agrees with them.
+        _skip 53 "effective-manifest-crossref" na "the diff against '${BASE_REF}' touched no manifest input (src/manifest.json, src/manifest.d/**, src/menu-layout.json, lib/Settings/*register*.json), so NO effective manifest was assembled or cross-referenced. Diff-scoped out under ADR-020 — not a gap: the manifests in this repo are unchanged from the base branch. This gate runs on the next PR that touches a manifest input."
     elif [ ! -f "${_em_builder}" ] || [ ! -f "${_em_crossref}" ] || [ ! -f "${_em_validator}" ]; then
         # Gate misconfiguration — a vendored helper is missing. Fail-closed.
         _fail 53 "effective-manifest-crossref" "vendored helper missing under ${SCRIPT_DIR}/lib (need build_effective_manifest.js + check_manifest_crossref.js + check_manifest.js) — fail-closed"
@@ -5910,6 +6165,56 @@ if [ -f src/manifest.json ]; then
         # green from reading as "the manifest is clean".
         _em_pre=$(_count '^at .*: PRE-EXISTING ' "${_em_log}")
         [ "${_em_pre}" -gt 0 ] && echo "[gate-53] effective-manifest-crossref: ${_em_pre} PRE-EXISTING finding(s) on manifest entries this PR did not touch (ADR-020, not blocking) — see ${_em_log}"
+
+        # -------------------------------------------------------------------
+        # ORPHANING A COMPONENT IN THIS PR IS NOT ADVISORY.
+        #
+        # This gate exists because of larpingapp#286 — `EventRoster` was
+        # registered in src/registry.js, resolvable, and named by no manifest
+        # position, so the event check-in surface had no entry point at all
+        # and a spec task was ticked over unreachable UI. Direction 1 of the
+        # registry cross-reference (registered, unreferenced) is reported as
+        # WARN, deliberately and correctly: for LEGACY debt the gate genuinely
+        # cannot tell "wire it" from "delete it", and forcing a choice
+        # fleet-wide is the widening that would make the check useless.
+        #
+        # But there is one case where it CAN tell, and it is the only case
+        # that matters for prevention: THE DIFF ITSELF REMOVED THE LAST
+        # REFERENCE. Measured 2026-08-08 — larpingapp#286 was reintroduced
+        # exactly (the `checkin` tab deleted from src/manifest.json, the
+        # registry entry left in place) and gate-53 reported
+        # `[gate-53] effective-manifest-crossref: PASS`. The gate built to
+        # catch that defect does not block the commit that creates it.
+        #
+        # So: a WARN whose component name appears on a REMOVED `"component":`
+        # line of this PR's own manifest diff is promoted to blocking. Nothing
+        # pre-existing changes severity — an app carrying legacy orphans (and
+        # larpingapp carries one today, `ObjectDetail`) is unaffected, so this
+        # is prevention rather than a burn-down list nobody can close.
+        # -------------------------------------------------------------------
+        _em_orphaned=""
+        if [ "${SCOPE_TO_DIFF}" = "1" ] && [ -n "${BASE_REF}" ] && [ "${_em_warns}" -gt 0 ]; then
+            set +e
+            _em_removed_refs=$(git diff -U0 "${BASE_REF}...HEAD" -- \
+                'src/manifest.json' 'src/manifest.d/*' 'src/menu-layout.json' 2>/dev/null \
+                | grep -E '^-' | grep -vE '^---' || true)
+            while IFS= read -r _em_wl; do
+                [ -z "${_em_wl}" ] && continue
+                _em_name=$(printf '%s' "${_em_wl}" | sed -n "s/.*exports '\\([^']*\\)'.*/\\1/p")
+                [ -z "${_em_name}" ] && continue
+                # `"component": "<name>"` on a line the PR deleted.
+                if printf '%s\n' "${_em_removed_refs}" \
+                    | grep -qE "\"component\"[[:space:]]*:[[:space:]]*\"${_em_name}\"" 2>/dev/null; then
+                    _em_orphaned="${_em_orphaned}${_em_orphaned:+, }${_em_name}"
+                fi
+            done <<< "$(grep -E '^at .*: WARN .*registry\.js exports ' "${_em_log}" 2>/dev/null || true)"
+            set +e
+        fi
+        if [ -n "${_em_orphaned}" ]; then
+            echo "[gate-53] this PR REMOVED the last manifest reference to: ${_em_orphaned} — promoted from WARN to blocking (larpingapp#286)." >> "${_em_log}"
+            _em_reason="${_em_reason:+${_em_reason}; }this PR removed the last manifest reference to ${_em_orphaned}, which src/registry.js still exports — the surface it renders is now unreachable (larpingapp#286). Delete the registry entry too, or keep an entry point (tabs[]/sections[]/page) that names it."
+        fi
+
         if [ -z "${_em_reason}" ]; then
             _pass 53 "effective-manifest-crossref"
         else
@@ -5958,11 +6263,21 @@ if [ "${#_rd_files[@]}" -gt 0 ]; then
         # Property-level diff-scoping for the relation-shape check when
         # --scope-to-diff is set (mirrors gate-51); other checks scope to the
         # changed file set. Builder full-repo runs leave the env unset.
+        # A CRASHED CHECKER MUST NOT REPORT PASS (#147 / #249 / #262).
+        # `>/dev/null 2>&1 || true` threw away the traceback and the status,
+        # and this gate's advisory WARN half reads the same empty log — so a
+        # dead helper silenced BOTH halves and printed PASS.
+        set +e
         if [ "${SCOPE_TO_DIFF}" = "1" ]; then
             HYDRA_GATE_BASE_REF="${BASE_REF}" \
-                python3 "${_rd_helper}" "${_rd_log}" "${_rd_files[@]}" >/dev/null 2>&1 || true
+                python3 "${_rd_helper}" "${_rd_log}" "${_rd_files[@]}" >/dev/null 2>>"${_rd_log}.err"
         else
-            python3 "${_rd_helper}" "${_rd_log}" "${_rd_files[@]}" >/dev/null 2>&1 || true
+            python3 "${_rd_helper}" "${_rd_log}" "${_rd_files[@]}" >/dev/null 2>>"${_rd_log}.err"
+        fi
+        _rd_rc=$?
+        if [ "${_rd_rc}" -ne 0 ]; then
+            _rd_ran=0
+            _skip 54 "relation-dialect" wiring "check_relation_dialect.py exited ${_rd_rc} — ${#_rd_files[@]} register file(s) were in scope and no verdict was produced; non-canonical relation dialects (ADR-062 rules 6/7/10) are UNVERIFIED by this run, and so is its advisory WARN half. See ${_rd_log}.err."
         fi
     else
         _rd_ran=0
@@ -5976,7 +6291,10 @@ set +e
 [ -z "${_rd_fail}" ] && _rd_fail=0
 [ -z "${_rd_warn}" ] && _rd_warn=0
 [ "${_rd_warn}" -gt 0 ] && echo "[gate-54] relation-dialect: ${_rd_warn} WARN finding(s) (non-blocking) — see ${_rd_log}"
-if [ "${_rd_ran}" -eq 1 ]; then
+if [ "${#_rd_files[@]}" -eq 0 ]; then
+    # AN UNOPENED SCOPE IS NEVER A PASS (#242/#240/#258/#268).
+    _skip 54 "relation-dialect" na "scope was empty — 0 lib/Settings/*register*.json (or register.d/*.json) file(s) in this repo or this diff, so NO relation property was inspected; non-canonical relation dialects (ADR-062 rules 6/7/10) are UNVERIFIED by this run."
+elif [ "${_rd_ran}" -eq 1 ]; then
     if [ "${_rd_fail}" -eq 0 ]; then
         _pass 54 "relation-dialect"
     else
@@ -6018,11 +6336,18 @@ if [ "${#_dpd_files[@]}" -gt 0 ]; then
         # Page-level diff-scoping when --scope-to-diff is set: only detail pages
         # the PR touches are checked. Builder full-repo runs leave the env unset
         # → every detail page in a changed manifest is checked.
+        # A CRASHED CHECKER MUST NOT REPORT PASS (#147 / #249 / #262).
+        set +e
         if [ "${SCOPE_TO_DIFF}" = "1" ]; then
             HYDRA_GATE_BASE_REF="${BASE_REF}" \
-                python3 "${_dpd_helper}" "${_dpd_log}" "${_dpd_files[@]}" >/dev/null 2>&1 || true
+                python3 "${_dpd_helper}" "${_dpd_log}" "${_dpd_files[@]}" >/dev/null 2>>"${_dpd_log}.err"
         else
-            python3 "${_dpd_helper}" "${_dpd_log}" "${_dpd_files[@]}" >/dev/null 2>&1 || true
+            python3 "${_dpd_helper}" "${_dpd_log}" "${_dpd_files[@]}" >/dev/null 2>>"${_dpd_log}.err"
+        fi
+        _dpd_rc=$?
+        if [ "${_dpd_rc}" -ne 0 ]; then
+            _dpd_ran=0
+            _skip 55 "detail-page-discipline" wiring "check_detail_page_discipline.py exited ${_dpd_rc} — ${#_dpd_files[@]} manifest file(s) were in scope and no verdict was produced; ADR-062 detail-page grid discipline is UNVERIFIED by this run. See ${_dpd_log}.err."
         fi
     else
         _dpd_ran=0
@@ -6033,7 +6358,10 @@ set +e
 _dpd_fail=$(wc -l < "${_dpd_log}" 2>/dev/null | tr -d ' ')
 set +e
 [ -z "${_dpd_fail}" ] && _dpd_fail=0
-if [ "${_dpd_ran}" -eq 1 ]; then
+if [ "${#_dpd_files[@]}" -eq 0 ]; then
+    # AN UNOPENED SCOPE IS NEVER A PASS (#242/#240/#258/#268).
+    _skip 55 "detail-page-discipline" na "scope was empty — 0 src/manifest.json or src/manifest.d/*.json file(s) in this repo or this diff, so NO type:\"detail\" page was inspected; ADR-062 grid discipline (render-path shadowing, widgets↔layout integrity, widget icons, row/viewAll routes) is UNVERIFIED by this run."
+elif [ "${_dpd_ran}" -eq 1 ]; then
     if [ "${_dpd_fail}" -eq 0 ]; then
         _pass 55 "detail-page-discipline"
     else
@@ -6585,10 +6913,10 @@ _declare_na() {
     done
 }
 
-# `if [ -d src ]` — gates 10 12 13 26 45
+# `if [ -d src ]` — gates 10 12 13 26
 [ -d src ] || _declare_na "no src/ directory — this repo ships no frontend, so there is no .vue/.js/.ts source for this gate to inspect." \
-    10 12 13 26 45
-# `if _a11y_has_markup_dir` — gates 31 32 34 35 36 37 39 40 42 43 44
+    10 12 13 26
+# `if _a11y_has_markup_dir` — gates 31 32 34 35 36 37 39 40 42 43 44 45
 #
 # THE TABLE HAD DRIFTED FROM THE GUARDS IT CLAIMS TO MIRROR.
 #
@@ -6611,10 +6939,21 @@ _declare_na() {
 # is one `rm` away: its `src/` holds a single `manifest.json`, which is the
 # exact shape that made twelve gates pass over nothing in #225.
 #
+# GATE-45 IS THE SAME DEFECT, AND #272 LEFT IT BEHIND (.github#274).
+#
+# It was the twelfth member of the family and stayed in the `[ -d src ]`
+# list above, with its own `[ -d src ]` guard. Measured 2026-08-08 on
+# nldesign, with a `transition:` and no reduced-motion fallback planted in
+# `templates/settings/admin.php`: gate-45 reported NOT APPLICABLE — "this
+# repo ships no frontend" — while gate-43, already migrated, FAILED on the
+# same tree in the same run. A partial fix to a table like this is the worst
+# outcome available: it removes the smell that would have led someone back
+# to the entry still carrying the defect.
+#
 # The condition here is now the SAME FUNCTION the gates call, not a restated
 # copy of it, so the two cannot drift again.
 _a11y_has_markup_dir || _declare_na "no src/, templates/ or appinfo/templates/ — this repo renders no markup, so there is no DOM for this accessibility gate to inspect." \
-    31 32 34 35 36 37 39 40 42 43 44
+    31 32 34 35 36 37 39 40 42 43 44 45
 # `if [ -f appinfo/routes.php ]` — gates 5 25
 [ -f appinfo/routes.php ] || _declare_na "no appinfo/routes.php — this repo registers no HTTP routes, so there is no endpoint for this gate to inspect." \
     5 25

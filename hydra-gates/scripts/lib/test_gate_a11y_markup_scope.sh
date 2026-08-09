@@ -230,7 +230,7 @@ _run "${_nosrc_app}" "${_nosrc_out}"
 
 _excused=""
 _still=""
-for _g in 31 32 34 35 36 37 39 40 42 43 44; do
+for _g in 31 32 34 35 36 37 39 40 42 43 44 45; do
     if grep -qE "^\[gate-${_g}\][^:]*: NOT APPLICABLE" "${_nosrc_out}"; then
         _excused="${_excused} ${_g}"
     elif ! grep -qE "^\[gate-${_g}\]" "${_nosrc_out}"; then
@@ -251,9 +251,20 @@ _nosrc_caught=0
 _nosrc_total=0
 while IFS=: read -r _g _what; do
     [ -z "${_g}" ] && continue
-    # gate-45 (prefers-reduced-motion) is outside the 34-44 band this arm
-    # repairs and still guards on `[ -d src ]`; gate-38 is not in _expect.
-    case "${_g}" in 38|45) continue ;; esac
+    # gate-38 is not in _expect (it is a whole-document rule, not a per-element
+    # one) so it has nothing to be counted against here.
+    #
+    # gate-45 USED TO BE EXCLUDED HERE TOO, AND THE EXCLUSION WAS THE BUG
+    # (.github#274). #272 migrated 35/40/42/44 off `[ -d src ]` and left the
+    # twelfth member of the family behind — still `[ -d src ]`-guarded, still
+    # listed under `[ -d src ]` in the applicability table — so on this exact
+    # templates-only fixture gate-45 reported NOT APPLICABLE ("this repo ships
+    # no frontend") over a `<style>` block with `transition: all .3s` and no
+    # reduced-motion fallback, sitting in the same file the arm above reads.
+    # The skip carried a comment saying so, which is the shape to distrust: a
+    # test that documents the defect it declines to assert on. Removing the
+    # name from this list IS the regression test.
+    case "${_g}" in 38) continue ;; esac
     _nosrc_total=$((_nosrc_total + 1))
     if grep -qE "^\[gate-${_g}\][^:]*: FAIL" "${_nosrc_out}"; then
         _nosrc_caught=$((_nosrc_caught + 1))
