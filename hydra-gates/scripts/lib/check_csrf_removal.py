@@ -67,15 +67,60 @@ DOCBLOCK_TAG_REMOVED = re.compile(r'^-\s*(?:\*\s*)?@NoCSRFRequired\b')
 
 # A diff header line is `---` / `---` shaped; it is not a removed line of code.
 DIFF_HEADER = re.compile(r'^---(\s|$)')
+# `+++ b/lib/Controller/X.php` — starts a new file's hunks. `+++` must be
+# tested before the `+` addition branch, exactly as `---` is before `-`.
+DIFF_FILE_HEADER = re.compile(r'^\+\+\+\s+(?:b/)?(?P<path>\S+)')
 
 
 def removals(diff: str) -> list[str]:
-    out = []
+    """Removed lines that genuinely DROPPED CSRF protection.
+
+    A REMOVAL PAIRED WITH AN IDENTICAL ADDITION IS A MOVE, NOT A REMOVAL.
+
+    Relocating a docblock line inside a file emits a `-` and a `+` carrying the
+    same bytes. Scanning only `^-` reads that as deleting the annotation, and
+    the gate reports a security regression for a diff in which nothing about
+    CSRF changed. Measured on larpingapp: #297 moved one comment line while
+    reordering `SettingsController`'s docblocks —
+
+        -     * @NoCSRFRequired removed to close the CSRF-forgery surface (closes #206).
+        +     * instance-wide configuration write needs. `@NoCSRFRequired` was removed
+        +     * @NoCSRFRequired removed to close the CSRF-forgery surface (closes #206).
+
+    — and gate-48 kept `Hydra Gates` red on that repo's `development` branch
+    from then on, over a commit that changed no auth posture at all.
+
+    Cancellation is per FILE and by MULTISET. Per file because a line deleted
+    from one controller and added to another is a real change of posture for
+    the first one; by multiset because a diff that removes a tag twice and
+    restores it once has removed it once.
+    """
+    # {path: [raw content of each added line]} and the removals in file order.
+    added: dict[str | None, list[str]] = {}
+    found: list[tuple[str | None, str]] = []
+    path: str | None = None
+
     for line in diff.splitlines():
+        header = DIFF_FILE_HEADER.match(line)
+        if header:
+            path = header.group('path')
+            continue
+        if line.startswith('+'):
+            added.setdefault(path, []).append(line[1:])
+            continue
         if not line.startswith('-') or DIFF_HEADER.match(line):
             continue
         if ATTRIBUTE_REMOVED.match(line) or DOCBLOCK_TAG_REMOVED.match(line):
-            out.append(line)
+            found.append((path, line))
+
+    out: list[str] = []
+    for file_path, line in found:
+        pool = added.get(file_path)
+        if pool is not None and line[1:] in pool:
+            # Consume the pairing so a second identical removal still reports.
+            pool.remove(line[1:])
+            continue
+        out.append(line)
     return out
 
 
