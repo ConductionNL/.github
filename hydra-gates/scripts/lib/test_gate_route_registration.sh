@@ -35,6 +35,19 @@
 #
 #   routes-standard/            5 canonical routes exempt   -> gate-14 PASS on them
 #                               `gadget#run` has no route   -> gate-14 FAILS
+#   routes-standard-missing-update/
+#                               the SAME app minus SettingsController::update()
+#                               -> settings#update MUST be reported (#265)
+#                               the other nine canonical names MUST NOT be
+#   psr4-namespaced-controller/ `AppHost\Controller\GenericHealth#index` resolves
+#                               to lib/AppHost/Controller/, the app root, NOT to
+#                               lib/Controller/ -> gate-14 PASS (#271)
+#                               a conventional `ping#index` in the same repo is
+#                               unaffected
+#   psr4-namespaced-controller-missing-method/
+#                               the SAME app with that method renamed
+#                               -> MUST be reported, and as
+#                               method-not-found (a 500), not class-not-found
 #   delegated-registrar/        AppHost call in a registrar -> 3 generics exempt
 #                               `gadget#run` bound nowhere  -> gate-14 FAILS
 #   delegated-registrar-absent/ the SAME app minus that one file -> all 4 FAIL
@@ -49,7 +62,13 @@
 set -uo pipefail
 
 PKG_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)"
-RUNNER="${PKG_ROOT}/scripts/run-hydra-gates.sh"
+# THE RUNNER MUST BE OVERRIDABLE, OR THIS SUITE CANNOT BE MUTATION-CHECKED
+# (.github#271). This was hardcoded, so pointing HYDRA_GATES_RUNNER_UNDER_TEST at
+# a pre-fix tree — the way every other suite in this package is proved
+# non-vacuous — silently kept running the FIXED runner and reported all-green.
+# A mutation check that cannot fail is the same defect as a gate that cannot
+# fail, one level up, and it is what this whole suite exists to catch.
+RUNNER="${HYDRA_GATES_RUNNER_UNDER_TEST:-${PKG_ROOT}/scripts/run-hydra-gates.sh}"
 FIXTURES="${PKG_ROOT}/scripts/test-fixtures/route-registration"
 
 _fail_n=0
@@ -103,7 +122,9 @@ _expect_lines()   { local _n; _n=$(printf '%s' "$1" | grep -c . ); if [ "${_n}" 
 echo "== gate-5 / gate-14 / gate-30 route + registration detection =="
 echo
 
-for _f in routes-standard delegated-registrar delegated-registrar-absent \
+for _f in routes-standard routes-standard-missing-update \
+          psr4-namespaced-controller psr4-namespaced-controller-missing-method \
+          delegated-registrar delegated-registrar-absent \
           monitoring-capitalised monitoring-per-object monitoring-per-object-only \
           monitoring-none; do
     [ -d "${FIXTURES}/${_f}" ] || _bad "fixture ${FIXTURES}/${_f} does not exist — this suite would be green on nothing"
@@ -122,6 +143,84 @@ if _run "${FIXTURES}/routes-standard"; then
         "routes-standard: settings#index / #create / #load likewise"
     _expect_lines "${_RRLOG}" 1 \
         "routes-standard: exactly ONE finding — the exemption is ten names, not a blanket"
+fi
+
+# ---------------------------------------------------------------------------
+# 1b. #265 — the ten Routes::standard() names must be JUDGED, not just exempted
+#
+# THE ANTI-WIDENING SIBLING OF 1, INVERTED. #223 taught invariant 1 that those
+# ten names exist so it would stop reporting working endpoints as unroutable.
+# Invariant 2 asks the opposite question — "does the method the route names
+# actually exist?" — and it never asked it about those ten, because it read
+# route names as LITERALS out of the leaf's appinfo/routes.php and they are not
+# there.
+#
+# `aliasControllerUnlessLeafDefinesIt()` makes that gap reachable: the moment a
+# leaf ships its own SettingsController it owes every method the canonical table
+# routes to `settings#`, and a missing one is a ReflectionException 500, not a
+# 404. Reproduced on shillinq 2026-08-08 by deleting `update()` — gate-14's
+# findings log came back EMPTY and the gate said PASS.
+#
+# The two fixtures differ by exactly that one method.
+# ---------------------------------------------------------------------------
+if _run "${FIXTURES}/routes-standard-missing-update"; then
+    _expect_gate 14 "FAIL" "routes-standard-missing-update: a canonical AppHost route whose method is gone IS a finding"
+    _expect_log "${_RRLOG}" "SettingsController\.php route='settings#update' rule=method-not-found-on-target-controller" \
+        "routes-standard-missing-update: settings#update is named, and named as method-not-found (a 500, not a 404)"
+    # THE CONTROL: the OTHER nine canonical names still resolve here, so this is
+    # not "an AppHost adopter now fails on all ten".
+    _expect_not_log "${_RRLOG}" "settings#index\|settings#create\|settings#load" \
+        "routes-standard-missing-update: index / create / load still resolve and are NOT reported"
+    _expect_not_log "${_RRLOG}" "DashboardController" \
+        "routes-standard-missing-update: dashboard#page / #catchAll are served by AppHost and stay exempt"
+    # Exactly two: the sibling's pre-existing `gadget#run`, plus the one method
+    # this fixture deletes. Anything more means the ten names stopped being
+    # exempt for the CLASS-ABSENT case and the widening went too far.
+    _expect_lines "${_RRLOG}" 2 \
+        "routes-standard-missing-update: exactly TWO findings — gadget#run and settings#update, nothing else"
+fi
+
+# ---------------------------------------------------------------------------
+# 1c. #271 — a NAMESPACED route name resolves relative to the APP ROOT
+#
+# NC's RouteParser::buildControllerName() does not prefix the app namespace when
+# the route name already contains a backslash, so
+# `AppHost\Controller\GenericHealth#index` is looked up as the bare class
+# `AppHost\Controller\GenericHealthController`. PSR-4 maps `OCA\<App>\` onto
+# `lib/`, so that class lives at lib/AppHost/Controller/ — NOT under
+# lib/Controller/, which is the only place the resolver looked.
+#
+# Reproduced 2026-08-08 against this package's own gates-23-33/planted fixture:
+#
+#   lib/Controller/AppHost/Controller/GenericHealthController.php
+#     route='AppHost\Controller\GenericHealth#index'
+#     rule=controller-class-not-found
+#
+# — a path that cannot exist, reported as a missing class, INSIDE the repository
+# that ships the file. Same shape as the gate-30 finding: the path the gate
+# derives is not the path the app uses.
+#
+# The false FAIL was only half. Where a DI binding rescued the absence the loop
+# `continue`d, so the method-existence check never ran at all — #265's defect at
+# a different address. The two fixtures differ by exactly that method.
+# ---------------------------------------------------------------------------
+if _run "${FIXTURES}/psr4-namespaced-controller"; then
+    _expect_gate 14 "PASS" "psr4-namespaced-controller: a namespaced route whose PSR-4 file EXISTS is not a finding"
+    _expect_not_log "${_RRLOG}" "controller-class-not-found" \
+        "psr4-namespaced-controller: no 'class not found' for a class sitting in lib/AppHost/Controller/"
+    _expect_not_log "${_RRLOG}" "lib/Controller/AppHost" \
+        "psr4-namespaced-controller: the impossible lib/Controller/AppHost/... path is never derived"
+fi
+
+if _run "${FIXTURES}/psr4-namespaced-controller-missing-method"; then
+    _expect_gate 14 "FAIL" "psr4-namespaced-controller-missing-method: the method-existence check now RUNS on a namespaced route"
+    _expect_log "${_RRLOG}" "lib/AppHost/Controller/GenericHealthController\.php route='AppHost.Controller.GenericHealth#index' rule=method-not-found-on-target-controller" \
+        "…and names the REAL path plus the real rule (a 500, not a missing class)"
+    # THE CONTROL: the conventional sibling in the same repo still resolves.
+    _expect_not_log "${_RRLOG}" "PingController" \
+        "psr4-namespaced-controller-missing-method: the conventional ping#index route is unaffected"
+    _expect_lines "${_RRLOG}" 1 \
+        "psr4-namespaced-controller-missing-method: exactly ONE finding"
 fi
 
 # ---------------------------------------------------------------------------

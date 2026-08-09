@@ -279,26 +279,88 @@ function mergeAppHostBlocks(base, canonical) {
 	return merged
 }
 
+// WHERE THE GATE PACKAGE HAPPENS TO SIT IS NOT A PROPERTY OF THE MANIFEST
+// (.github#271).
+//
+// A bare `require('ajv/dist/2020')` resolves relative to THIS FILE — Node walks
+// `node_modules` up from `__dirname`, then falls back to NODE_PATH. It never
+// looks at the repository being validated. So the gate's verdict depended on
+// where the gates were checked out:
+//
+//   vendor/conduction/hydra-gates/…   the walk passes through the app root and
+//                                     finds the app's ajv           -> validated
+//   a sibling clone of ConductionNL/.github
+//                                     the walk never reaches the app -> exit 3,
+//                                     "SCHEMA VALIDATION DID NOT HAPPEN"
+//
+// Measured 2026-08-08: run from openregister's own root, with
+// `node_modules/ajv` PRESENT one directory up from cwd, the validator printed
+// "Ajv is not resolvable from this process (no node_modules, no NODE_PATH)" —
+// a statement that was simply false — and gate-22 went FAIL. Exporting
+// NODE_PATH to the very same directory flipped it to PASS. Same tree, same
+// package, two verdicts: that is not a gate.
+//
+// Resolution is now anchored on the SUBJECT: the manifest's own repo root and
+// the process cwd come first, the gate package's own tree last. All three are
+// stated in the degradation message so "not resolvable" can be checked rather
+// than believed.
+function _ajvSearchPaths() {
+	const roots = []
+	// The repo that owns the manifest under validation: <root>/src/manifest.json
+	const manifestRepoRoot = path.resolve(path.dirname(MANIFEST_PATH), '..')
+	roots.push(manifestRepoRoot)
+	roots.push(process.cwd())
+	roots.push(__dirname)
+	const seen = new Set()
+	const out = []
+	for (const r of roots) {
+		let dir = r
+		// Walk up from each root so a manifest in a monorepo sub-package still
+		// finds the hoisted install.
+		for (;;) {
+			const nm = path.join(dir, 'node_modules')
+			if (!seen.has(nm)) { seen.add(nm); out.push(nm) }
+			const parent = path.dirname(dir)
+			if (parent === dir) break
+			dir = parent
+		}
+	}
+	return out
+}
+
+function _requireFrom(name, paths) {
+	try {
+		return require(require.resolve(name, { paths }))
+	} catch (_) {
+		try {
+			// Last resort: the ambient resolution (NODE_PATH / this file's own
+			// ancestry). Kept so a working setup never regresses.
+			return require(name)
+		} catch (__) {
+			return null
+		}
+	}
+}
+
 function loadAjv() {
 	// The schema is JSON Schema draft 2020-12; Ajv needs the ajv/dist/2020
 	// entry point. ajv-formats is best-effort (the "uri" format on $schema).
+	const paths = _ajvSearchPaths()
 	let Ajv = null
 	let addFormats = null
-	try {
-		Ajv = require('ajv/dist/2020').default || require('ajv/dist/2020')
-	} catch (_) {
-		try {
-			Ajv = require('ajv').default || require('ajv')
-		} catch (__) {
-			return { Ajv: null, addFormats: null }
+	const mod2020 = _requireFrom('ajv/dist/2020', paths)
+	if (mod2020) {
+		Ajv = mod2020.default || mod2020
+	} else {
+		const modPlain = _requireFrom('ajv', paths)
+		if (!modPlain) {
+			return { Ajv: null, addFormats: null, searched: paths }
 		}
+		Ajv = modPlain.default || modPlain
 	}
-	try {
-		addFormats = require('ajv-formats').default || require('ajv-formats')
-	} catch (_) {
-		addFormats = null
-	}
-	return { Ajv, addFormats }
+	const fmt = _requireFrom('ajv-formats', paths)
+	addFormats = fmt ? (fmt.default || fmt) : null
+	return { Ajv, addFormats, searched: paths }
 }
 
 // Structural fallback: validates the AppHost observability + deepLinks blocks
@@ -409,7 +471,7 @@ function main() {
 	console.error('[check_manifest] AppHost blocks (observability, deepLinks) validated against the hydra-vendored canonical ADR-040 schema')
 	const schema = mergeAppHostBlocks(base, canonical)
 
-	const { Ajv, addFormats } = loadAjv()
+	const { Ajv, addFormats, searched } = loadAjv()
 	if (Ajv) {
 		let validate
 		try {
@@ -434,8 +496,18 @@ function main() {
 		return report(errors, null, manifest)
 	}
 
+	// NAME WHERE WE LOOKED. The old message asserted "no node_modules, no
+	// NODE_PATH" — which was false in the case that produced it (.github#271):
+	// the app root one directory up from cwd had `node_modules/ajv` installed,
+	// and the resolver simply never looked there. An unverifiable claim about
+	// the environment is how a wiring failure passes for a fact.
+	const _searchedNote = (searched || []).slice(0, 6).join(', ')
 	console.error('[check_manifest] Ajv not installed; using AppHost structural lint (observability/deepLinks still validated for-real)')
-	return finishStructural(manifest, 'Ajv is not resolvable from this process (no node_modules, no NODE_PATH)')
+	console.error(`[check_manifest] ajv searched (first 6 of ${(searched || []).length}): ${_searchedNote}`)
+	return finishStructural(
+		manifest,
+		`Ajv is not resolvable from the manifest's own repo root, the process cwd, or the gate package tree. Searched: ${_searchedNote}`,
+	)
 }
 
 function finishStructural(manifest, degradedReason) {

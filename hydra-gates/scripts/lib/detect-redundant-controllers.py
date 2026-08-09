@@ -53,13 +53,47 @@ from typing import Iterable
 # Methods on OpenRegister's ObjectService that are pure CRUD pass-throughs.
 # A method body that calls ONE of these and nothing else of substance is
 # a redundant wrapper.
+# THE REAL ObjectService SURFACE, PLUS THE FABRICATED NAMES (.github#271)
+# ----------------------------------------------------------------------
+# Four of the six names this tuple used to hold — `findObjects`,
+# `createFromArray`, `updateFromArray`, `deleteFromId` — DO NOT EXIST on
+# OpenRegister's ObjectService. gate-20 in run-hydra-gates.sh exists precisely
+# to flag them as fabricated. The real surface, read off
+# openregister lib/Service/ObjectService.php (2026-08-08), is
+#
+#     find / findAll / saveObject / createObject / updateObject / deleteObject
+#
+# and only `find` and `saveObject` were in the list. So a genuine ADR-022
+# pass-through written against the REAL API —
+#
+#     public function fetchAll(): JSONResponse
+#     {
+#         return new JSONResponse($this->objectService->findAll([]));
+#     }
+#
+# — was not recognised as an ObjectService call at all. It then fell through to
+# RESCUE_PATTERNS, whose `\$this->\w+Service->\w+\(` rule ("any non-objectService
+# call → escape") matched it and returned False. The gate did not merely miss
+# the modern shape: it actively rescued it. Planted verbatim in openregister
+# on 2026-08-08 and gate-17 reported PASS.
+#
+# The fabricated names stay in the tuple. A wrapper around a method that does
+# not exist is still a wrapper, and removing them would lose the detections
+# this gate was originally written for (decidesk#60's createFromArray quintet).
 OBJECT_SERVICE_CRUD = (
+    # Real surface.
+    "findAll",
     "find",
+    "saveObject",
+    "createObject",
+    "updateObject",
+    "deleteObject",
+    # Fabricated names seen in the wild — see gate-20. Kept so a wrapper
+    # around a non-existent method is still detected as a wrapper.
     "findObjects",
     "createFromArray",
     "updateFromArray",
     "deleteFromId",
-    "saveObject",  # legacy alias
 )
 
 # Calls / constructs that are considered "wrapper noise" — present in any
@@ -286,14 +320,34 @@ def _is_redundant_body(body: str) -> bool:
         # marker usually lives) AND against the joined form for
         # multi-line statements that begin with e.g. `return new`.
         first_line = stmt.splitlines()[0] if stmt else ""
+        # THE CALL IS TESTED BEFORE THE NOISE (.github#271).
+        #
+        # `^\s*return\s+new\s+JSONResponse` is in WRAPPER_NOISE_PATTERNS, and
+        # this check used to run AFTER it. So the single most common shape a
+        # pass-through takes —
+        #
+        #     return new JSONResponse($this->objectService->findAll([]));
+        #
+        # was discarded as "response wrapping" with the ObjectService call
+        # still inside it. object_service_hits stayed 0 and the method was
+        # declared not-redundant. The gate could only ever fire when the call
+        # sat on its OWN statement (`$r = $this->objectService->findAll();`
+        # then `return new JSONResponse($r);`), which is the less common of the
+        # two spellings. Planted verbatim in openregister 2026-08-08: gate-17
+        # reported PASS.
+        #
+        # The noise list is a set of shapes that carry NO work. A line that
+        # carries the call is not one of them, whatever its outer shape, so the
+        # call has to be looked for first. Nothing here changes what counts as
+        # a call, or the CRUD-name filter, or the `@spec exclude` escape hatch.
+        if OBJECT_SERVICE_CALL_RE.search(stmt):
+            object_service_hits += 1
+            significant += 1
+            continue
         if any(p.search(first_line) for p in WRAPPER_NOISE_PATTERNS):
             continue
         if any(p.search(stmt) for p in WRAPPER_NOISE_PATTERNS):
             # `\$this->logger->info(...)` may sit on the second line.
-            continue
-        if OBJECT_SERVICE_CALL_RE.search(stmt):
-            object_service_hits += 1
-            significant += 1
             continue
         if any(p.search(stmt) for p in RESCUE_PATTERNS):
             # Real domain logic — escape.

@@ -435,6 +435,32 @@ fi
 # So the check is now on the REASON TEXT: the table's phrasings must not
 # appear once their prerequisite is satisfied. The drift this arm exists to
 # catch still fails it, because drift produces exactly those sentences.
+
+# ASSERT THE FIXTURE'S PREMISE BEFORE ASSERTING THE VERDICT (.github#271).
+#
+# This loop's claim is "src/ exists, therefore these gates have a subject", and
+# that stopped following once gates started distinguishing "src/ exists" from
+# "src/ contains what I read". #276 hit it for gates 26/31/32 and answered it
+# the right way — by giving the fixture two real .vue files so the positive
+# control supplies their subject matter instead of just a directory.
+#
+# Gates 12 and 13 read `.vue` for the same reason (<NcSelect>, <NcModal> and
+# <NcDialog> are Vue SFC components; a PHP template cannot instantiate one), so
+# they belong in the loop — but only for as long as those .vue files are there.
+# If a later change removes them, this loop would go on asserting "the gates
+# ran" while every one of them iterated an empty glob, which is the nldesign
+# shape it exists to prevent. So the premise is checked, not assumed.
+#
+# The zero-.vue case is asserted where its premise actually holds:
+# test_gate_empty_scope_never_passes.sh builds an nldesign-shaped repo (src/
+# holding one manifest.json) and requires `na` there, with a one-.vue control.
+_fix_vue_n=$(find "${FIX}/src" -name '*.vue' 2>/dev/null | grep -c . || true)
+if [ "${_fix_vue_n}" -ge 1 ]; then
+    _ok "fixture premise holds: ${FIX}/src supplies ${_fix_vue_n} .vue file(s), so the .vue-reading gates below have a subject"
+else
+    _bad "fixture premise BROKEN: ${FIX}/src has no .vue file, so gates 12/13/26/31/32 have nothing to open and 'they ran' below would assert nothing"
+fi
+
 _still_na=""
 for _g in 10 12 13 26 31 32 34 35 36 37 39 40 42 43 44 45; do
     printf '%s' "${OUT_STRUCT}" \
@@ -444,7 +470,7 @@ done
 if [ -z "${_still_na}" ]; then
     _ok "with src/ present, no gate is excused by the applicability table (it tracks its guards)"
 else
-    _bad "gates ${_still_na}were excused by the applicability table's own reason though src/ exists — the table has drifted from the guards it mirrors"
+    _bad "gates ${_still_na}were excused by the applicability table's own reason though src/ exists and holds ${_fix_vue_n} .vue file(s) — the table has drifted from the guards it mirrors"
 fi
 
 # ...and the pairing: a gate that DID reach its own code must say so in its own
