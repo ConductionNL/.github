@@ -414,14 +414,46 @@ fi
 # gates guarded by `[ -d src ]` must genuinely RUN. If the declaration table
 # ever drifts away from the guards it mirrors, it would keep calling them
 # not-applicable here — which is the one way this change could hide a live gate.
+#
+# WHAT THIS ASSERTS ON, AND WHY IT IS THE REASON AND NOT THE VERDICT
+# -------------------------------------------------------------------
+# It used to assert "no gate in the list says NOT APPLICABLE at all". That
+# conflated two different sentences that happen to share a verdict word:
+#
+#   the TABLE spoke   "no src/ directory — this repo ships no frontend"
+#                     A gate that never reached its own code. Drift. The bug.
+#   the GATE spoke    "scope was empty — 0 markup file(s) in this diff"
+#                     The gate ran, enumerated its subject, found none, and
+#                     said so with a reason only it could produce.
+#
+# The fixture here has `src/leaf.js` and no `.vue`/`.php`/`.html` at all, so the
+# WCAG family legitimately has nothing to inspect — and since 2026-08-08 those
+# gates say `na` with their own reason instead of printing PASS over an
+# unopened scope. Asserting on the verdict alone made the correct behaviour
+# indistinguishable from the drift it was written to catch.
+#
+# So the check is now on the REASON TEXT: the table's phrasings must not
+# appear once their prerequisite is satisfied. The drift this arm exists to
+# catch still fails it, because drift produces exactly those sentences.
 _still_na=""
 for _g in 10 12 13 26 31 32 34 35 36 37 39 40 42 43 44 45; do
-    printf '%s' "${OUT_STRUCT}" | grep -qE "^\[gate-${_g}\] [a-z-]+: NOT APPLICABLE" && _still_na="${_still_na}${_g} "
+    printf '%s' "${OUT_STRUCT}" \
+        | grep -qE "^\[gate-${_g}\] [a-z-]+: NOT APPLICABLE — no src/(,| directory)" \
+        && _still_na="${_still_na}${_g} "
 done
 if [ -z "${_still_na}" ]; then
-    _ok "with src/ present, every src-guarded gate really runs (applicability table tracks its guards)"
+    _ok "with src/ present, no gate is excused by the applicability table (it tracks its guards)"
 else
-    _bad "gates ${_still_na}were still called NOT APPLICABLE though src/ exists — the table has drifted from the guards it mirrors"
+    _bad "gates ${_still_na}were excused by the applicability table's own reason though src/ exists — the table has drifted from the guards it mirrors"
+fi
+
+# ...and the pairing: a gate that DID reach its own code must say so in its own
+# words. Without this, the reason-based check above could be satisfied by a
+# gate falling silent altogether.
+if printf '%s' "${OUT_STRUCT}" | grep -qE "^\[gate-45\] prefers-reduced-motion: (PASS|FAIL|NOT APPLICABLE — scope was empty)"; then
+    _ok "gate-45 reported from inside its own guard, not from the applicability table"
+else
+    _bad "gate-45 produced neither a verdict nor its own empty-scope reason: $(printf '%s' "${OUT_STRUCT}" | grep -E '^\[gate-45\]' | head -1)"
 fi
 
 echo "[test] an unrecognised skip category is a hard failure, never a silent 'na'"

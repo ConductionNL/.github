@@ -68,16 +68,57 @@ _PATH_PATTERNS = (
     re.compile(r"^lib/.*/(Auth|Session|Csrf|Rbac|Permission|Authorization)/.*$"),
 )
 
-# Tokens that are a security DECLARATION wherever they appear — including in a
-# docblock, because in Nextcloud the docblock form IS the declaration.
+# Tokens that are a security DECLARATION — but ONLY IN A CODE POSITION.
+#
+# WHY THIS IS POSITION-ANCHORED, AND WHY IT WAS BOTH WRONG DIRECTIONS AT ONCE
+# ---------------------------------------------------------------------------
+# This used to be an unanchored alternation: the literal `#[NoAdminRequired]`
+# or `@NoAdminRequired` matched anywhere on a changed line. Measured on
+# larpingapp 2026-08-08, it was wrong in both directions from the same regex —
+# the pairing #269 found in gate-48 and did not carry across to its sibling.
+#
+#   FALSE POSITIVE. `CharactersController.php` carries a docblock paragraph
+#   explaining why a method is deliberately admin-only:
+#
+#       * becomes `@NoAdminRequired` again, paired with a real ownership check.
+#
+#   Rewording that ONE SENTENCE — a change with no code in it at all — made
+#   gate-47 demand a test co-change. That is #191's shape one level up: the
+#   cheapest way to clear the finding is to reword the prose again, so the
+#   gate is satisfiable by prose and manufactures the appearance of a security
+#   review. The gate's own module docstring already committed to not doing
+#   this ("Prose that merely mentions IUserSession is not — it is a sentence");
+#   the annotation arm simply never implemented it.
+#
+#   FALSE NEGATIVE. `#\[NoAdminRequired\]` is a LITERAL, so the equally valid
+#   fully-qualified form is invisible:
+#
+#       #[\OCP\AppFramework\Http\Attribute\NoAdminRequired]
+#
+#   A commit adding exactly that line to a controller — opening an
+#   admin-only endpoint to every authenticated user — with no test in the diff
+#   was measured to report `[gate-47] security-change-has-tests: PASS`. Same
+#   class as #184: a checker that greps a string literal misses every
+#   qualified form and matches every comment, and so fails both ways at once.
+#
+# THE RULE (identical to check_csrf_removal.py, deliberately)
+#   attribute form  the line's content STARTS with `#[`, and the attribute
+#                   group contains the token. `[^]]*` is bounded by the closing
+#                   bracket, so `#[NoAdminRequired, NoCSRFRequired]` and the
+#                   fully-qualified form both count, while a sentence with
+#                   `#[NoAdminRequired]` in the middle of it does not.
+#   docblock form   an optional comment lead-in (`*`, `//`, `#`), then the tag
+#                   AT THE START of the content. That is the only position
+#                   PHP's docblock parsers accept a tag in, and it is not a
+#                   position prose reaches. The lead-in is permissive on
+#                   purpose — `// @PublicPage` is still a declaration-shaped
+#                   line, and narrowing to `*` only would trade this false
+#                   positive for a false negative, which is the trap #269
+#                   named. What is excluded is the tag appearing PART-WAY
+#                   THROUGH a sentence, which is the only shape prose takes.
 _ANNOTATION_RE = re.compile(
-    r"#\[NoAdminRequired\]"
-    r"|#\[AuthorizedAdminSetting\("
-    r"|#\[PublicPage\]"
-    r"|#\[NoCSRFRequired\]"
-    r"|@NoAdminRequired\b"
-    r"|@NoCSRFRequired\b"
-    r"|@PublicPage\b"
+    r"^\s*#\[[^]]*\b(?:NoAdminRequired|AuthorizedAdminSetting|PublicPage|NoCSRFRequired)\b"
+    r"|^\s*(?:\*+|//+|\#(?!\[)|/\*+)?\s*@(?:NoAdminRequired|NoCSRFRequired|PublicPage)\b"
 )
 
 # Tokens that are security-relevant only as CODE. In prose they are the name
@@ -112,11 +153,17 @@ def is_security_path(path: str) -> bool:
 def line_is_security_relevant(line: str) -> bool:
     """Is this ONE changed line a security change?
 
-    A comment line qualifies only via ``_ANNOTATION_RE``. `#[` is excluded
-    from the `#` comment shape so a PHP 8 attribute is never read as a shell
-    comment.
+    A comment line qualifies only via ``_ANNOTATION_RE``, and only when the
+    annotation is at DOCBLOCK-TAG POSITION — a docblock whose tag changed is a
+    changed auth declaration; a sentence that names the tag is not. `#[` is
+    excluded from the `#` comment shape so a PHP 8 attribute is never read as
+    a shell comment.
+
+    ``match`` rather than ``search``: ``_ANNOTATION_RE`` is anchored with
+    ``^`` on both branches, so the two are equivalent here, but ``match``
+    states the intent — position is the whole point of this regex.
     """
-    if _ANNOTATION_RE.search(line):
+    if _ANNOTATION_RE.match(line):
         return True
     if _COMMENT_LINE_RE.match(line):
         return False
