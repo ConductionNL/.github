@@ -5896,9 +5896,14 @@ elif [ "${SCOPE_TO_DIFF}" = "1" ] && [ -n "${BASE_REF}" ]; then
             if [ -f "${_csrf_callers_helper}" ] && [ -d src ]; then
                 set +e
                 _csrf_callers_err="${HYDRA_GATE_LOG_DIR}/hydra-gate-csrf-callers.err"
-                _csrf_unprotected=$(python3 "${_csrf_callers_helper}" . 2>"${_csrf_callers_err}")
-                if [ $? -eq 0 ]; then
+                # Assignment inside the `if` so the helper's own status is
+                # tested directly — a crashed interpreter must NOT be read as
+                # "no unprotected callers found", which is the fail-open shape
+                # this gate has been bitten by before.
+                if _csrf_unprotected=$(python3 "${_csrf_callers_helper}" . 2>"${_csrf_callers_err}"); then
                     _csrf_callers_ran=1
+                else
+                    _csrf_unprotected=""
                 fi
                 set +e
             fi
