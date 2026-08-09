@@ -415,38 +415,40 @@ fi
 # ever drifts away from the guards it mirrors, it would keep calling them
 # not-applicable here — which is the one way this change could hide a live gate.
 #
-# GATES 12 AND 13 ARE ASSERTED SEPARATELY, AND MORE STRICTLY (.github#271/#274).
+# ASSERT THE FIXTURE'S PREMISE BEFORE ASSERTING THE VERDICT (.github#271).
 #
-# This loop's premise is "src/ exists, therefore the gate has a subject". For
-# gate-12 (<NcSelect>) and gate-13 (<NcModal>/<NcDialog>) that does not follow:
-# their subjects are Vue SFC components, and THIS FIXTURE'S src/ contains one
-# .js file and no .vue at all. Until now both gates printed PASS here — a green
-# over an empty glob, which is nldesign's exact shape and the reason twelve
-# gates certified it in #225. Keeping them in this loop would have encoded that
-# belief as an assertion.
+# This loop's claim is "src/ exists, therefore these gates have a subject", and
+# that stopped following once gates started distinguishing "src/ exists" from
+# "src/ contains what I read". #276 hit it for gates 26/31/32 and answered it
+# the right way — by giving the fixture two real .vue files so the positive
+# control supplies their subject matter instead of just a directory.
 #
-# So they move out, and what replaces the loop entry is stronger than what it
-# asserted: not merely "did not say na", but "said na FOR THE RIGHT REASON".
+# Gates 12 and 13 read `.vue` for the same reason (<NcSelect>, <NcModal> and
+# <NcDialog> are Vue SFC components; a PHP template cannot instantiate one), so
+# they belong in the loop — but only for as long as those .vue files are there.
+# If a later change removes them, this loop would go on asserting "the gates
+# ran" while every one of them iterated an empty glob, which is the nldesign
+# shape it exists to prevent. So the premise is checked, not assumed.
+#
+# The zero-.vue case is asserted where its premise actually holds:
+# test_gate_empty_scope_never_passes.sh builds an nldesign-shaped repo (src/
+# holding one manifest.json) and requires `na` there, with a one-.vue control.
+_fix_vue_n=$(find "${FIX}/src" -name '*.vue' 2>/dev/null | grep -c . || true)
+if [ "${_fix_vue_n}" -ge 1 ]; then
+    _ok "fixture premise holds: ${FIX}/src supplies ${_fix_vue_n} .vue file(s), so the .vue-reading gates below have a subject"
+else
+    _bad "fixture premise BROKEN: ${FIX}/src has no .vue file, so gates 12/13/26/31/32 have nothing to open and 'they ran' below would assert nothing"
+fi
+
 _still_na=""
-for _g in 10 26 31 32 34 35 36 37 39 40 42 43 44 45; do
+for _g in 10 12 13 26 31 32 34 35 36 37 39 40 42 43 44 45; do
     printf '%s' "${OUT_STRUCT}" | grep -qE "^\[gate-${_g}\] [a-z-]+: NOT APPLICABLE" && _still_na="${_still_na}${_g} "
 done
 if [ -z "${_still_na}" ]; then
-    _ok "with src/ present, every src-guarded gate really runs (applicability table tracks its guards)"
+    _ok "with src/ present AND holding markup, every src-guarded gate really runs (applicability table tracks its guards)"
 else
-    _bad "gates ${_still_na}were still called NOT APPLICABLE though src/ exists — the table has drifted from the guards it mirrors"
+    _bad "gates ${_still_na}were still called NOT APPLICABLE though src/ exists and holds ${_fix_vue_n} .vue file(s) — the table has drifted from the guards it mirrors"
 fi
-
-for _g in 12 13; do
-    if printf '%s' "${OUT_STRUCT}" | grep -qE "^\[gate-${_g}\] [a-z-]+: NOT APPLICABLE — src/ exists but contains NO \.vue"; then
-        _ok "gate-${_g} reports na and NAMES the empty .vue glob — src/ exists here but holds no Vue component"
-    elif printf '%s' "${OUT_STRUCT}" | grep -qE "^\[gate-${_g}\] [a-z-]+: PASS"; then
-        _bad "gate-${_g} reported PASS over a src/ with zero .vue files — green over nothing (#225/#274)"
-    else
-        _v=$(printf '%s' "${OUT_STRUCT}" | grep -oE "^\[gate-${_g}\] [^:]+: [A-Z]+( [A-Z]+)*( \([a-z]+\))?" | head -1 | sed 's/^[^:]*: //')
-        _bad "gate-${_g} returned '${_v:-none emitted}' on a src/ with no .vue — expected na naming the empty glob"
-    fi
-done
 
 echo "[test] an unrecognised skip category is a hard failure, never a silent 'na'"
 # A typo'd category that defaulted to `na` would be a lever for making any

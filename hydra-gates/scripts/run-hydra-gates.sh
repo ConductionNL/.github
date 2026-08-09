@@ -1003,7 +1003,51 @@ _ctrl_path_from_name() {
             # which cannot exist on disk and so always resolved to "missing".
             # Invisible until 2026-08-08 because plain `read` had been deleting
             # the backslashes before this branch could ever see two of them.
-            echo "lib/Controller/${_ns//\\//}/${_last_cap}Controller.php"
+            #
+            # A NAMESPACED ROUTE NAME IS RELATIVE TO THE APP ROOT, NOT TO
+            # lib/Controller/ (.github#271).
+            #
+            # NC's RouteParser::buildControllerName() does NOT prefix the app
+            # namespace when the route name already contains a backslash — the
+            # class is looked up under the bare string
+            # `AppHost\Controller\GenericHealthController`. PSR-4 for an NC app
+            # maps `OCA\<App>\` onto `lib/`, so that class lives at
+            #
+            #     lib/AppHost/Controller/GenericHealthController.php
+            #
+            # and NOT under lib/Controller/. Deriving only the lib/Controller/
+            # spelling produced a path that cannot exist, and gate-14 reported
+            #
+            #   lib/Controller/AppHost/Controller/GenericHealthController.php
+            #     route='AppHost\Controller\GenericHealth#index'
+            #     rule=controller-class-not-found
+            #
+            # INSIDE the repository that ships the file — reproduced 2026-08-08
+            # against this package's own gates-23-33/planted fixture. Same shape
+            # as the gate-30 finding: a path the gate derives is not the path
+            # the app uses.
+            #
+            # The false FAIL is only half of it. When a DI binding rescued the
+            # absence (`_di_binds_fq_controller`), the loop `continue`d — so the
+            # method-existence check never ran, and a route pointing at a
+            # method that does not exist on a controller sitting right there in
+            # the tree was never judged. That is #265's defect at a different
+            # address.
+            #
+            # Both candidates are probed and the one that EXISTS wins. When
+            # neither does, the lib/Controller/ spelling is reported, exactly as
+            # before, so a genuinely missing controller reads the same as it
+            # always has.
+            local _ctrl_under _ctrl_psr4
+            _ctrl_under="lib/Controller/${_ns//\\//}/${_last_cap}Controller.php"
+            _ctrl_psr4="lib/${_ns//\\//}/${_last_cap}Controller.php"
+            if [ -f "${_ctrl_under}" ]; then
+                echo "${_ctrl_under}"
+            elif [ -f "${_ctrl_psr4}" ]; then
+                echo "${_ctrl_psr4}"
+            else
+                echo "${_ctrl_under}"
+            fi
             ;;
         *_*)
             local _camel
