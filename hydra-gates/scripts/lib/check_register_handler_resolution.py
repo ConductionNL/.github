@@ -76,11 +76,39 @@ def _class_def_re(short_name: str) -> re.Pattern:
     whitespace, never with the bare word `class`. Without this anchor the
     fallback search could silently treat a merely-MENTIONED class as
     "found", masking the exact fleet defect this gate exists to catch.
+
+    ⚠️ IT ONLY MATCHED `class`, AND ONLY ONE MODIFIER (.github#276).
+
+    The PSR-4 path guess above handles the conventional layout. This fallback
+    walk is what finds a type living where PSR-4 does not predict — a
+    DI-bound registration, a type not named after its file. That is exactly
+    the shape gate-30 was caught mis-resolving: `AppHost\\Controller\\
+    GenericHealth` PSR-4-maps to `lib/Controller/AppHost/Controller/…` while
+    openregister DI-binds it to `lib/AppHost/Controller/`. So every
+    declaration form the walk cannot match is a FALSE POSITIVE on a type that
+    genuinely exists — and the action `guard-class-not-found` invites is to
+    write the class a second time.
+
+    Measured, each against a real declaration at a non-conventional path:
+
+        enum ProbeState: string { … }        -> guard-class-not-found
+        interface ProbeContract { … }        -> guard-class-not-found
+        final readonly class ReadonlyProbe   -> guard-class-not-found
+
+    The third is not exotic: `final readonly` is ordinary PHP 8.2, and the
+    pattern allowed `final ` OR `abstract `, never two modifiers. Enums and
+    interfaces belong here too — a `handler` may name an enum-backed strategy
+    or an interface the container resolves to an implementation.
+
+    Only the DECLARATION FORMS widen. The line anchor — the thing that keeps
+    docblock prose out, and the reason this walk is trustworthy at all — is
+    unchanged, and asserted in both directions by the test suite.
     """
     pat = _CLASS_DEF_RE_CACHE.get(short_name)
     if pat is None:
         pat = re.compile(
-            r"^\s*(?:final\s+|abstract\s+)?class\s+" + re.escape(short_name) + r"\b",
+            r"^\s*(?:(?:final|abstract|readonly)\s+)*"
+            r"(?:class|interface|trait|enum)\s+" + re.escape(short_name) + r"\b",
             re.MULTILINE,
         )
         _CLASS_DEF_RE_CACHE[short_name] = pat

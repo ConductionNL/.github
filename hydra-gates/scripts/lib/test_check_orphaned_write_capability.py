@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import io
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -961,6 +962,117 @@ class ExitContractTest(unittest.TestCase):
             self.assertGreater(
                 len([ln for ln in buf.getvalue().splitlines() if ln.strip()]), 0
             )
+
+
+class McpSeamSpellingTest(unittest.TestCase):
+    """A LEADING BACKSLASH MUST NOT DISSOLVE THE SEAM (.github#276).
+
+    Both halves of the attribute seam matched a namespace prefix as
+    `(?:[A-Za-z_]\\w*\\s*\\\\+\\s*)*` — every segment had to START with a
+    letter. So the fully-qualified spelling, which is the ordinary way to
+    write a name with no `use` import for it, matched neither:
+
+        registerServiceAlias('…::demoapp', \\OCA\\DemoApp\\Mcp\\Impl::class)
+        #[\\OCA\\OpenRegister\\Mcp\\Attribute\\McpTool(name: 'createLead')]
+
+    Either miss alone empties the seam and puts `createLead` — pipelinq's
+    curated, spec'd MCP write tool — back on the finding list, which is
+    .github#200 verbatim: a finding whose only remedy is deleting a live
+    write tool.
+
+    THE MUTANT IS BOTH SITES AT ONCE. The seam needs the alias AND the
+    attribute, so reverting one regex while the other is fixed still
+    reproduces the false positive — and reverting one while testing the other
+    reads as "the fix changed nothing". `test_pre_fix_regexes_reproduce_the_
+    false_positive` therefore restores the pre-fix pair together and asserts
+    the finding comes BACK.
+    """
+
+    _FQ_ALIAS = """        $context->registerServiceAlias(
+            'OCA\\\\OpenRegister\\\\Mcp\\\\IMcpScannableServices::demoapp',
+            \\OCA\\DemoApp\\Mcp\\DemoScannableServices::class
+        );"""
+
+    _FQ_ATTRIBUTE = """    #[\\OCA\\OpenRegister\\Mcp\\Attribute\\McpTool(
+        name: 'createLead',
+        scope: 'create'
+    )]"""
+
+    # The two patterns exactly as they read before the fix.
+    _PRE_FIX_ALIAS = re.compile(
+        r"registerServiceAlias\s*\(\s*"
+        r"(['\"])[^'\"]*IMcpScannableServices::[A-Za-z0-9_-]+\1"
+        r"\s*,\s*(?:[A-Za-z_][A-Za-z0-9_]*\s*\\+\s*)*"
+        r"([A-Za-z_][A-Za-z0-9_]*)\s*::\s*class",
+        re.DOTALL,
+    )
+    _PRE_FIX_ATTR = re.compile(r"#\[\s*(?:[A-Za-z_][A-Za-z0-9_]*\s*\\+\s*)*McpTool\b")
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = os.path.join(self._tmp.name, "demoapp")
+        os.makedirs(self.root)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _fully_qualified(self):
+        return _McpFixture(
+            self.root, alias=self._FQ_ALIAS, attribute=self._FQ_ATTRIBUTE
+        )
+
+    def test_fully_qualified_alias_and_attribute_still_form_the_seam(self):
+        self.assertNotIn("createLead", self._fully_qualified().methods())
+
+    def test_fully_qualified_alias_with_short_attribute(self):
+        f = _McpFixture(self.root, alias=self._FQ_ALIAS, attribute=_MCP_ATTRIBUTE)
+        self.assertNotIn("createLead", f.methods())
+
+    def test_short_alias_with_fully_qualified_attribute(self):
+        f = _McpFixture(
+            self.root, alias=_MCP_ALIAS_CALL, attribute=self._FQ_ATTRIBUTE
+        )
+        self.assertNotIn("createLead", f.methods())
+
+    def test_pre_fix_regexes_reproduce_the_false_positive(self):
+        """THE MUTANT. Restore BOTH pre-fix patterns; the finding must return.
+
+        Without this the two assertions above could be green because the seam
+        never depended on those regexes at all.
+        """
+        old_alias, old_attr = owc._MCP_ALIAS_RE, owc._MCP_TOOL_ATTR_RE
+        self.assertIsNot(old_alias, self._PRE_FIX_ALIAS)
+        self.assertIsNot(old_attr, self._PRE_FIX_ATTR)
+        try:
+            owc._MCP_ALIAS_RE = self._PRE_FIX_ALIAS
+            owc._MCP_TOOL_ATTR_RE = self._PRE_FIX_ATTR
+            self.assertIn(
+                "createLead",
+                self._fully_qualified().methods(),
+                "the pre-fix patterns must reproduce the #200 false positive — "
+                "if they do not, this test is measuring nothing",
+            )
+        finally:
+            owc._MCP_ALIAS_RE, owc._MCP_TOOL_ATTR_RE = old_alias, old_attr
+
+    def test_the_controls_survive_the_widening(self):
+        """ANTI-WIDENING. Accepting a leading `\\` must not accept everything."""
+        # A DIFFERENT interface in the alias grants nothing.
+        f = _McpFixture(
+            self.root,
+            alias=self._FQ_ALIAS.replace("IMcpScannableServices", "ISomethingElse"),
+            attribute=self._FQ_ATTRIBUTE,
+        )
+        self.assertIn("createLead", f.methods())
+        # An attribute that is not McpTool grants nothing.
+        f = _McpFixture(
+            self.root,
+            alias=self._FQ_ALIAS,
+            attribute="    #[\\OCA\\Other\\Attribute\\NotAnMcpTool(name: 'x')]",
+        )
+        self.assertIn("createLead", f.methods())
+        # And a write method with no attribute on the same class is still dead.
+        self.assertIn("createInvoice", self._fully_qualified().methods())
 
 
 if __name__ == "__main__":

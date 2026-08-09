@@ -213,6 +213,121 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# gates 56 + 57 — a DEAD INTERPRETER must not read as a clean tree (.github#276)
+#
+# Both invoked their helper as `>> log 2>/dev/null || true` and then derived
+# the verdict from `wc -l` on the log. Stderr discarded, exit status
+# discarded, empty log — so a checker that never started reported PASS.
+#
+# Measured on shillinq against gate package 48c88ba, with a python3 shim that
+# exits 1 for exactly these two helpers:
+#
+#     [gate-56] register-handler-resolution: PASS      <- 153 registers
+#     [gate-57] orphaned-write-capability:   PASS      <- 316 services
+#
+# and gate-57 had reported 20 real findings over that same tree on the
+# previous run. That is gate-40's defect verbatim.
+#
+# Both helpers ALWAYS exit 0 when they run, by design (#209 — the count goes
+# to stdout, never into the exit byte), so a non-zero exit here can only be a
+# crash and never a finding count. TWO ARMS: the crash must be visible, and
+# the same tree with a working interpreter must still produce real verdicts —
+# otherwise "always skip" would pass this test.
+# ---------------------------------------------------------------------------
+_crash_app="${_tmp}/crash-5657"
+mkdir -p "${_crash_app}/lib/Settings/register.d" "${_crash_app}/lib/Service" \
+         "${_crash_app}/appinfo"
+printf '<?xml version="1.0"?>\n<info>\n <id>leaf</id>\n</info>\n' \
+    > "${_crash_app}/appinfo/info.xml"
+# The SECOND commit has to carry the subjects, or ADR-020 scopes them out and
+# both gates answer `na` — which would satisfy the crash arm for the wrong
+# reason. (Measured while writing this: with the plants in commit 1 and a
+# docs-only commit 2, all four assertions read NOT APPLICABLE.)
+(
+    cd "${_crash_app}" || exit 1
+    git init -q .
+    git add -A
+    git -c user.email=t@t -c user.name=t commit -qm init
+) >/dev/null 2>&1
+# One unresolvable guard (gate-56) and one caller-less write method (gate-57).
+cat > "${_crash_app}/lib/Settings/register.d/10-thing.json" <<'JSON'
+{"components":{"schemas":{"T":{"x-openregister-lifecycle":{"states":{
+  "s":{"guard":"OCA\\Leaf\\Lifecycle\\NoSuchGuard::may"}}}}}}}
+JSON
+# The body has to DO something: an empty `{}` is a stub, and gate-57
+# deliberately does not call a stub an orphaned write capability.
+cat > "${_crash_app}/lib/Service/ThingService.php" <<'PHP'
+<?php
+namespace OCA\Leaf\Service;
+class ThingService {
+    public function publishScore(string $id, float $score): void {
+        file_put_contents('/dev/null', $id . $score);
+    }
+}
+PHP
+(
+    cd "${_crash_app}" || exit 1
+    git add -A
+    git -c user.email=t@t -c user.name=t commit -qm "plant one TP per gate"
+) >/dev/null 2>&1
+_croot=$(cd "${_crash_app}" && git rev-parse HEAD~1)
+
+# ARM A — with a working interpreter, both gates must FAIL on the plants.
+_clogs_ok="${_tmp}/clogs-ok"; mkdir -p "${_clogs_ok}"
+_cout_ok="${_tmp}/crash-5657-ok.txt"
+(
+    cd "${_crash_app}" || exit 1
+    HYDRA_GATE_LOG_DIR="${_clogs_ok}" bash "${_runner}" \
+        --scope-to-diff --base "${_croot}" . > "${_cout_ok}" 2>&1
+)
+for _g in 56 57; do
+    if grep -qE "^\[gate-${_g}\][^:]*: FAIL" "${_cout_ok}"; then
+        _ok "gate-${_g} FAILs its planted true positive with a working interpreter"
+    else
+        _v=$(grep -oE "^\[gate-${_g}\] [^:]+: [A-Z]+( [A-Z]+)?( \([a-z]+\))?" "${_cout_ok}" | head -1 | sed 's/^[^:]*: //')
+        _bad "gate-${_g} returned '${_v:-none}' for a planted true positive — the crash arm below would then prove nothing"
+    fi
+done
+
+# ARM B — the same tree with a python3 that dies for these two helpers only.
+_shim="${_tmp}/shim"; mkdir -p "${_shim}"
+cat > "${_shim}/python3" <<'SHIM'
+#!/bin/bash
+for a in "$@"; do
+  case "$a" in
+    *check_register_handler_resolution.py|*check_orphaned_write_capability.py)
+      echo "Traceback (most recent call last): ModuleNotFoundError" >&2
+      exit 1 ;;
+  esac
+done
+exec /usr/bin/python3 "$@"
+SHIM
+chmod +x "${_shim}/python3"
+_clogs="${_tmp}/clogs"; mkdir -p "${_clogs}"
+_cout="${_tmp}/crash-5657.txt"
+(
+    cd "${_crash_app}" || exit 1
+    PATH="${_shim}:${PATH}" HYDRA_GATE_LOG_DIR="${_clogs}" bash "${_runner}" \
+        --scope-to-diff --base "${_croot}" . > "${_cout}" 2>&1
+)
+for _g in 56 57; do
+    _v=$(grep -oE "^\[gate-${_g}\] [^:]+: [A-Z]+( [A-Z]+)?( \([a-z]+\))?" "${_cout}" | head -1 | sed 's/^[^:]*: //')
+    case "${_v}" in
+        "SKIPPED (wiring)")
+            _ok "gate-${_g} reports SKIPPED (wiring) when its checker cannot run"
+            ;;
+        PASS)
+            _bad "gate-${_g} reported PASS over a checker that exited 1 — this is gate-40's defect: it FAILED the same tree one run earlier"
+            ;;
+        FAIL)
+            _bad "gate-${_g} reported FAIL from a crashed checker — a crash wearing a finding count (#209/#245)"
+            ;;
+        *)
+            _bad "gate-${_g} verdict is '${_v:-none emitted}' — expected SKIPPED (wiring)"
+            ;;
+    esac
+done
+
 # EVERY python-backed gate, with a python3 that cannot run (.github#271)
 #
 # The two arms above each test ONE gate against ONE way of failing. This arm
@@ -332,6 +447,14 @@ for _g in 12:nc-input-labels 15:dashboard-antipattern 16:spec-coverage \
             ;;
     esac
 done
+
+# ...and the crash must be RECOVERABLE, not silently discarded to /dev/null.
+if [ -s "${_clogs}/hydra-gate-register-handler-resolution.err" ] \
+   && [ -s "${_clogs}/hydra-gate-orphaned-write-capability.err" ]; then
+    _ok "both crashes left their stderr on disk for the reader"
+else
+    _bad "a crashed checker's stderr was discarded — the reason it died is unrecoverable"
+fi
 
 # Each skip must say WHAT went unchecked — a bare "skipped" is unactionable and
 # is how a wiring failure gets filed under "known noise".

@@ -85,6 +85,11 @@ GATE_NUM = 61
 
 # The three POST events. A listener on one of these cannot influence the write,
 # so its work does not belong on the request path.
+# Status codes, same contract as check_store_and_settings_surface.py so the
+# runner can tell "clean" from "I inspected nothing" (.github#240/#242/#276).
+EXIT_EMPTY_SCOPE = 3      # scope resolved, selected nothing -> runner _skip na
+EXIT_NOT_APPLICABLE = 4   # no post-event registration exists -> runner _skip na
+
 POST_EVENTS = {
     'ObjectCreatedEvent',
     'ObjectUpdatedEvent',
@@ -555,8 +560,8 @@ def main() -> int:
     repo = Path(args.repo).resolve()
     infos = appinfo_files(repo)
     if not infos:
-        print('checked 0 registration(s): 0 failure(s) — no lib/AppInfo')
-        return 0
+        print('checked 0 registration(s) — no lib/AppInfo, nothing to place.')
+        return EXIT_NOT_APPLICABLE
 
     if args.all:
         touched: dict[str, set[int]] = {}
@@ -675,7 +680,21 @@ def main() -> int:
     scope = 'all' if args.all else f'diff vs {args.base}'
     print(f'\nchecked {checked} post-event registration(s) [{scope}], '
           f'{skipped_out_of_scope} out of scope: {total} failure(s)')
-    return 1 if total else 0
+    if total:
+        return 1
+    # AN EXIT CODE IS A STATUS (.github#276, borrowing #240/#242's convention
+    # from check_store_and_settings_surface.py verbatim).
+    #
+    # "I checked N registrations and they were fine" and "the diff put all N
+    # out of scope, so I checked none" were the same 0, and the runner printed
+    # PASS for both. This gate is ALWAYS diff-scoped by design, so the second
+    # is the common case on any PR that does not touch a listener — a PASS
+    # asserted about work placement no run inspected.
+    if checked == 0 and skipped_out_of_scope > 0:
+        return EXIT_EMPTY_SCOPE
+    if checked == 0:
+        return EXIT_NOT_APPLICABLE
+    return 0
 
 
 if __name__ == '__main__':

@@ -6842,18 +6842,51 @@ fi
 _rhr_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-register-handler-resolution.log
 : > "${_rhr_log}"
 _rhr_files=()
+_rhr_present=0
 while IFS= read -r f; do
     [ -f "$f" ] || continue
+    _rhr_present=$((_rhr_present + 1))
     _in_scope "$f" || continue
     _rhr_files+=("$f")
 done < <(find lib/Settings -name '*register*.json' \
     -not -path '*/vendor/*' -not -path '*/node_modules/*' 2>/dev/null; \
     find lib/Settings/register.d -name '*.json' 2>/dev/null)
 _rhr_ran=1
-if [ "${#_rhr_files[@]}" -gt 0 ]; then
+# AN UNOPENED SCOPE IS NOT A PASS (.github#276 — the #242/#268 fix, applied to
+# the gates it was never applied to). Measured on shillinq with a docs-only
+# commit: gates 56, 57, 58, 59, 60 and 61 all printed PASS while 62 and 63 —
+# the two that had been fixed — correctly printed NOT APPLICABLE. Six gates
+# asserting a verdict about code no run had opened.
+if [ "${#_rhr_files[@]}" -eq 0 ]; then
+    _rhr_ran=0
+    if [ "${_rhr_present}" -eq 0 ]; then
+        _skip 56 "register-handler-resolution" na "no lib/Settings register JSON in this repo — this app declares no OpenRegister lifecycle guards or handlers for a class/method reference to dangle from."
+    else
+        _skip 56 "register-handler-resolution" na "${_rhr_present} register JSON(s) exist here and the diff against '${BASE_REF}' touched none of them, so NONE were inspected. Diff-scoped out under ADR-020 — this gate runs on the next PR that touches a register."
+    fi
+elif [ "${#_rhr_files[@]}" -gt 0 ]; then
     _rhr_helper="${SCRIPT_DIR}/lib/check_register_handler_resolution.py"
     if [ -f "${_rhr_helper}" ]; then
-        python3 "${_rhr_helper}" "${_rhr_files[@]}" >> "${_rhr_log}" 2>/dev/null || true
+        # A CHECKER THAT COULD NOT RUN MUST NOT JUDGE THE CODE (.github#276 —
+        # the #245/#233 rule, applied to the two gates it had not reached).
+        #
+        # This was `>> log 2>/dev/null || true`: stderr discarded, exit status
+        # discarded, and the verdict then taken from `wc -l` on an empty log,
+        # i.e. PASS. Measured on shillinq with a python3 that exits 1:
+        # `[gate-56] PASS` and `[gate-57] PASS` — and gate-57 had reported 20
+        # real findings over the same 316 services one run earlier. That is
+        # gate-40's defect verbatim.
+        #
+        # The helper ALWAYS returns 0 when it runs, by design (#209 — the
+        # count goes to stdout, never into the exit byte). So a non-zero exit
+        # here is unambiguously a crash and can never be a finding count.
+        _rhr_err="${HYDRA_GATE_LOG_DIR}/hydra-gate-register-handler-resolution.err"
+        python3 "${_rhr_helper}" "${_rhr_files[@]}" >> "${_rhr_log}" 2>"${_rhr_err}"
+        _rhr_rc=$?
+        if [ "${_rhr_rc}" -ne 0 ]; then
+            _rhr_ran=0
+            _skip 56 "register-handler-resolution" wiring "check_register_handler_resolution.py exited ${_rhr_rc} — ${#_rhr_files[@]} register file(s) were in scope and NONE were judged; whether every referenced handler class/method resolves is UNVERIFIED by this run. This helper always exits 0 when it runs, so this is a crash, not a finding count. See ${_rhr_err}."
+        fi
     else
         _rhr_ran=0
         _skip 56 "register-handler-resolution" wiring "check_register_handler_resolution.py not found at ${_rhr_helper} — ${#_rhr_files[@]} register file(s) were in scope and NONE were inspected; whether every referenced handler class/method actually resolves is UNVERIFIED by this run."
@@ -6898,16 +6931,36 @@ fi
 _owc_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-orphaned-write-capability.log
 : > "${_owc_log}"
 _owc_files=()
+_owc_present=0
 while IFS= read -r f; do
     [ -f "$f" ] || continue
+    _owc_present=$((_owc_present + 1))
     _in_scope "$f" || continue
     _owc_files+=("$f")
 done < <(_enum_tracked '\.php$' lib/Service | grep -v '/tests/')
 _owc_ran=1
-if [ "${#_owc_files[@]}" -gt 0 ]; then
+# An unopened scope is not a PASS — see gate 56 above (.github#276).
+if [ "${#_owc_files[@]}" -eq 0 ]; then
+    _owc_ran=0
+    if [ "${_owc_present}" -eq 0 ]; then
+        _skip 57 "orphaned-write-capability" na "no lib/Service PHP in this repo — there is no service layer for a write capability to be orphaned in."
+    else
+        _skip 57 "orphaned-write-capability" na "${_owc_present} lib/Service file(s) exist here and the diff against '${BASE_REF}' touched none of them, so NONE were inspected. Diff-scoped out under ADR-020 — this gate runs on the next PR that touches a service."
+    fi
+elif [ "${#_owc_files[@]}" -gt 0 ]; then
     _owc_helper="${SCRIPT_DIR}/lib/check_orphaned_write_capability.py"
     if [ -f "${_owc_helper}" ]; then
-        python3 "${_owc_helper}" "${_owc_files[@]}" >> "${_owc_log}" 2>/dev/null || true
+        # A crashed checker is not a finding — see gate 56 above (.github#276).
+        # Measured on shillinq: with python3 exiting 1 this gate printed PASS
+        # over the same 316 services it had reported 20 findings in one run
+        # earlier. The helper always returns 0 when it runs (#209).
+        _owc_err="${HYDRA_GATE_LOG_DIR}/hydra-gate-orphaned-write-capability.err"
+        python3 "${_owc_helper}" "${_owc_files[@]}" >> "${_owc_log}" 2>"${_owc_err}"
+        _owc_rc=$?
+        if [ "${_owc_rc}" -ne 0 ]; then
+            _owc_ran=0
+            _skip 57 "orphaned-write-capability" wiring "check_orphaned_write_capability.py exited ${_owc_rc} — ${#_owc_files[@]} service file(s) were in scope and NONE were judged; orphaned (mintable-but-unreachable) write capabilities are UNVERIFIED by this run. This helper always exits 0 when it runs, so this is a crash, not a finding count. See ${_owc_err}."
+        fi
     else
         _owc_ran=0
         _skip 57 "orphaned-write-capability" wiring "check_orphaned_write_capability.py not found at ${_owc_helper} — ${#_owc_files[@]} service file(s) were in scope and NONE were inspected; orphaned (mintable-but-unreachable) write capabilities are UNVERIFIED by this run."
@@ -6982,13 +7035,23 @@ _nwi_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-e2e-networkidle.log
 _nwi_ran=1
 _nwi_helper="${SCRIPT_DIR}/lib/check_js_call_sites.py"
 _nwi_files=()
+_nwi_present=0
 while IFS= read -r f; do
     [ -f "$f" ] || continue
+    _nwi_present=$((_nwi_present + 1))
     _in_scope "$f" || continue
     _nwi_files+=("$f")
 done < <(find tests/e2e -type f \( -name '*.ts' -o -name '*.js' \) 2>/dev/null)
 if [ "${#_nwi_files[@]}" -eq 0 ]; then
-    : # nothing in scope; ADR-020 diff scoping working as designed.
+    # WAS `: # nothing in scope`, which fell through to _pass — an unopened
+    # scope reported as a clean one (.github#276). ADR-020 scoping IS working
+    # as designed; the bug was calling its result PASS.
+    _nwi_ran=0
+    if [ "${_nwi_present}" -eq 0 ]; then
+        _skip 58 "e2e-networkidle" na "no tests/e2e/ files in this repo — there is no Playwright suite in which a wait could fail to settle."
+    else
+        _skip 58 "e2e-networkidle" na "${_nwi_present} tests/e2e file(s) exist here and the diff against '${BASE_REF}' touched none of them, so NONE were inspected. Diff-scoped out under ADR-020 (the fleet carries a 278-site legacy backlog this gate deliberately does not block on) — it runs on the next PR that touches an e2e file."
+    fi
 elif [ ! -f "${_nwi_helper}" ]; then
     _nwi_ran=0
     _skip 58 "e2e-networkidle" wiring "check_js_call_sites.py not found at ${_nwi_helper} — ${#_nwi_files[@]} e2e file(s) were in scope and NONE were inspected; a wait that never settles is UNVERIFIED by this run."
@@ -7034,7 +7097,17 @@ fi
 # ---------------------------------------------------------------------------
 _ucg_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-unclosable-gate.log
 : > "${_ucg_log}"
-if [ -d lib ] && printf '%s\n' "${CHANGED_FILES}" | grep -qE '^lib/.*\.php$'; then
+# DIFF-SCOPE ONLY WHEN THE CALLER ASKED TO (.github#276 — #240's defect, in a
+# gate #240 did not reach). `CHANGED_FILES` is populated ONLY under
+# --scope-to-diff; on an unscoped run it is the empty string. So the condition
+# `grep -qE '^lib/.*\.php$'` was false for EVERY full-tree audit, and this gate
+# printed PASS having walked no PHP at all. A full-tree audit was the one mode
+# it could never reach — the same sentence #240 wrote about gates 62/63.
+_ucg_scoped_out=0
+if [ "${SCOPE_TO_DIFF}" = "1" ] && ! printf '%s\n' "${CHANGED_FILES}" | grep -qE '^lib/.*\.php$'; then
+    _ucg_scoped_out=1
+fi
+if [ -d lib ] && [ "${_ucg_scoped_out}" -eq 0 ]; then
     set +e
     python3 "${SCRIPT_DIR}/lib/check_unclosable_gate.py" . > "${_ucg_log}" 2>&1
     _ucg_rc=$?
@@ -7044,8 +7117,12 @@ if [ -d lib ] && printf '%s\n' "${CHANGED_FILES}" | grep -qE '^lib/.*\.php$'; th
     else
         _fail 59 "unclosable-gate" "config gate(s) read but never written — guarded setup runs on every request (ADR-076 rule 3); see ${_ucg_log}"
     fi
+elif [ ! -d lib ]; then
+    _skip 59 "unclosable-gate" na "no lib/ in this repo — there is no PHP composition root in which a config gate could be read."
 else
-    _pass 59 "unclosable-gate"
+    # WAS `_pass 59`. lib/ exists and the diff touched none of it, so nothing
+    # was read and nothing was judged — that is `na`, not a pass (.github#276).
+    _skip 59 "unclosable-gate" na "lib/ exists here and the diff against '${BASE_REF}' touched no lib/**.php, so NO PHP was inspected. Diff-scoped out under ADR-020 — this gate runs on the next PR that touches lib/."
 fi
 
 # ---------------------------------------------------------------------------
@@ -7083,7 +7160,10 @@ if [ -f src/manifest.json ]; then
             _iv_changed="__none__"
         fi
         if [ "${_iv_changed}" = "__none__" ]; then
-            _pass 60 "icon-vocabulary"
+            # WAS `_pass 60`. No manifest in the diff means no icon was read
+            # — the same unopened scope gates 62/63 already report as `na`
+            # (.github#276).
+            _skip 60 "icon-vocabulary" na "src/manifest.json exists here and the diff against '${BASE_REF}' touched no manifest, so NO icon was inspected. Diff-scoped out under ADR-020 — this gate runs on the next PR that touches a manifest."
             _iv_args="__skip__"
         else
             for _f in ${_iv_changed}; do
@@ -7156,18 +7236,33 @@ _lwp_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-listener-work-placement.log
 : > "${_lwp_log}"
 if [ -d lib/AppInfo ]; then
     set +e
+    # `--base` UNCONDITIONALLY, and unlike gates 62/63 that is DELIBERATE:
+    # this gate is always diff-scoped in both modes because it is about NEW
+    # debt, and the fleet's 149-registration backlog is a work-list rather
+    # than a reason to redden every repo (see the header). Switching an
+    # unscoped run to `--all` was tried and reverted here: the builder runs
+    # unscoped, so it would have surfaced the whole backlog as blocking
+    # findings on every build. The helper still fails CLOSED when the base
+    # does not resolve, so an unscopable run is never reported as a clean one.
     python3 "${SCRIPT_DIR}/lib/check_listener_placement.py" . --base "${BASE_REF}" > "${_lwp_log}" 2>&1
     _lwp_rc=$?
     set +e
     if [ "${_lwp_rc}" -eq 0 ]; then
         _pass 61 "listener-work-placement"
+    elif [ "${_lwp_rc}" -eq 3 ]; then
+        # EMPTY SCOPE. This gate is always diff-scoped (ADR-020), so on any PR
+        # that touches no listener EVERY registration falls out of scope. That
+        # used to print PASS (.github#276).
+        _skip 61 "listener-work-placement" na "the diff against '${BASE_REF}' put every post-event registration out of scope, so NONE were inspected. Diff-scoped out under ADR-020 — the fleet's 149-registration backlog is a work-list, not a reason to block an unrelated PR. This gate runs on the next PR that touches a listener registration. See ${_lwp_log}."
+    elif [ "${_lwp_rc}" -eq 4 ]; then
+        _skip 61 "listener-work-placement" na "this repo registers no post-object-event listener, so there is no work to place on or off the write path (ADR-078). See ${_lwp_log}."
     else
         _lwp_n=$(_count '^FAIL' "${_lwp_log}")
         [ "${_lwp_n}" -eq 0 ] && _lwp_n=1
         _fail 61 "listener-work-placement" "${_lwp_n} post-event listener(s) doing synchronous work with no deferral and no justification (ADR-078); see ${_lwp_log}"
     fi
 else
-    _pass 61 "listener-work-placement"
+    _skip 61 "listener-work-placement" na "no lib/AppInfo/ — this repo has no Nextcloud composition root, so it registers no object-event listener."
 fi
 
 # ---------------------------------------------------------------------------
@@ -7224,7 +7319,32 @@ elif [ "${_ss_rc}" -eq 3 ]; then
     # The log used to say "gate skipped" while the verdict beside it said PASS.
     # Those cannot both be true, and PASS is the one every consumer counted.
     # It is not PASS any more (#242) — and it is `na`, not structural (#268).
-    _skip 63 "settings-surface" na "the diff against '${BASE_REF}' touched no manifest and no menu-layout, so NO manifest was inspected. Diff-scoped out under ADR-020 — not a gap: the manifests in this repo are unchanged from the base branch, so this PR introduces no settings placement (ADR-079) to judge. This gate runs on the next PR that touches a manifest. See ${_ss_log}."
+    #
+    # THE CONTROLLER-ONLY DIFF (.github#276).
+    #
+    # This gate's rules read src/manifest.json + src/manifest.d/ +
+    # src/menu-layout.json. A PR that changes a settings CONTROLLER, or adds
+    # or deletes a lib/Settings/*Admin.php section, therefore lands here — and
+    # the old reason read "this PR introduces no settings placement (ADR-079)
+    # to judge", which on such a diff is an OVERCLAIM. The author changed the
+    # settings surface; this gate simply does not adjudicate that half of it.
+    #
+    # WIDENING IT TO READ THE CONTROLLER WAS TRIED AND REVERTED, and the note
+    # is in check_store_and_settings_surface.py: a gate that only RUNS when a
+    # manifest changed and then judges code the PR never touched "blocked
+    # EVERY manifest-touching PR in that repo, permanently". So the verdict
+    # stays `na` and the rules stay manifest-only. What changes is that the
+    # line now says WHICH HALF it looked at, and names the PHP half when the
+    # diff contains it, so `na` cannot be read as a clearance for the change
+    # the author actually made.
+    _ss_php=$(printf '%s\n' "${CHANGED_FILES}" | grep -cE '^lib/(Settings/.*\.php|Controller/.*[Ss]ettings.*\.php)$' || true)
+    [ -z "${_ss_php}" ] && _ss_php=0
+    if [ "${_ss_php}" -gt 0 ]; then
+        _ss_extra="⚠️ This diff DOES touch the settings surface in PHP (${_ss_php} lib/Settings or settings-controller file(s)), and this gate did not look at any of it: ADR-079's placement rules are expressed in the manifest, and widening this gate to read controllers was tried and reverted because it blocked every manifest-touching PR in the repo permanently. Read this NOT APPLICABLE as 'no manifest placement decision to judge', never as 'the settings change was checked'."
+    else
+        _ss_extra="The manifests in this repo are unchanged from the base branch, so this PR introduces no manifest placement decision to judge."
+    fi
+    _skip 63 "settings-surface" na "the diff against '${BASE_REF}' touched no manifest and no menu-layout, so NO manifest was inspected. Diff-scoped out under ADR-020 — not a gap. This gate adjudicates ADR-079 placement as declared in src/manifest.json, src/manifest.d/ and src/menu-layout.json, and nothing else. ${_ss_extra} It runs on the next PR that touches one of those. See ${_ss_log}."
 elif [ "${_ss_rc}" -eq 4 ]; then
     _skip 63 "settings-surface" na "no src/manifest.json — a Tier-0 app declares no settings surface for ADR-079 to place."
 else
@@ -7270,13 +7390,24 @@ fi
 #
 # Spec: openspec/architecture/adr-040-apphost-adoption.md
 # ---------------------------------------------------------------------------
-_aap_log=/tmp/hydra-gate-apphost-autoload-prelude.log
+# PRIVATE PER-INVOCATION LOG, like every other gate. This was a hardcoded
+# `/tmp/hydra-gate-apphost-autoload-prelude.log` — the exact shared-path
+# non-determinism the HYDRA_GATE_LOG_DIR block at the top of this file was
+# introduced to remove, left behind in one gate (.github#276).
+_aap_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-apphost-autoload-prelude.log
 : > "${_aap_log}"
 if [ -d lib/AppInfo ]; then
     set +e
     python3 "${SCRIPT_DIR}/lib/check_apphost_autoload_prelude.py" . > "${_aap_log}" 2>&1
     _aap_rc=$?
     set +e
+    # Surface the non-blocking NOTE lines. A register()-time class_exists() on a
+    # non-AppHost OCA\OpenRegister\ class is the SAME autoloader mechanism as
+    # the hard rule and silently skips everything it guards, but this gate is
+    # not diff-scoped, so failing it would block every PR in the repo on
+    # pre-existing code. Printing it is what stops a green gate-64 being read
+    # as evidence about it (.github#276).
+    grep -E '^NOTE' "${_aap_log}" || true
     if [ "${_aap_rc}" -eq 0 ]; then
         _pass 64 "apphost-autoload-prelude"
     else
