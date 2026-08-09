@@ -424,6 +424,81 @@ class OneDefectOneFindingTest(_Base):
 
 
 # --------------------------------------------------------------------------
+# 5b. Cross-app references — the gate must be CLOSABLE.
+#
+# Measured 2026-08-09 on docudesk (gate package e7bde0a): two properties
+# reference a Zaak/case that lives in Procest's register, not DocuDesk's, and
+# say so with `x-external-register: procest`. There was no way to author them:
+#
+#   WITH    "$ref": "case"  -> "$ref 'case' does not resolve to a schema key
+#                              in the register set (case-exact)"        (f)
+#   WITHOUT "$ref"          -> "relation-shaped property (format:uuid +
+#                              relation description) lacks canonical $ref"  (b)
+#
+# Both arms fail, so the only way to reach green was to reword the description
+# until `_RELATION_DESC_RE` stopped matching — degrading documentation to dodge
+# a regex, which is exactly what a gate must never reward. `x-external-register`
+# appeared ZERO times in this checker: it had no concept of a cross-app
+# reference at all.
+#
+# The rule these tests pin: OpenRegister resolves `$ref` inside ONE register
+# set, so a foreign schema is not expressible as a relation. A property that
+# declares `x-external-register` is therefore a plain identifier — it must NOT
+# carry a `$ref`, and it must not be asked for one.
+# --------------------------------------------------------------------------
+class CrossAppReferenceTest(_Base):
+    EXTERNAL = {
+        "type": "string",
+        "format": "uuid",
+        "description": "UUID of the source Zaak (case) in Procest",
+        "x-external-register": "procest",
+        "title": "Case reference",
+    }
+
+    def test_external_reference_without_ref_is_accepted(self):
+        """The correct authoring must PASS — this is the closable arm."""
+        doc = _register({"caseReference": dict(self.EXTERNAL)})
+        msgs = self.run_check(doc)
+        self.assertEqual(
+            msgs, [],
+            "a cross-app identifier carrying x-external-register and no $ref is "
+            f"correctly authored and must not be reported, got {msgs}",
+        )
+
+    def test_external_reference_with_a_dangling_ref_is_still_reported(self):
+        """The true positive must SURVIVE. A `$ref` OpenRegister cannot resolve
+        is still wrong — the fix is to drop it, and the message must say so
+        rather than repeat the generic 'does not resolve'."""
+        prop = dict(self.EXTERNAL)
+        prop["$ref"] = "case"
+        msgs = self.run_check(_register({"caseReference": prop}))
+        self.assertEqual(len(msgs), 1, f"expected exactly one finding, got {msgs}")
+        self.assertIn("x-external-register", msgs[0])
+        self.assertIn("drop the $ref", msgs[0])
+
+    def test_a_local_dangling_ref_is_unaffected(self):
+        """Control: without x-external-register, a dangling $ref keeps its
+        original message. Widening a checker until it catches nothing is not a
+        fix."""
+        msgs = self.run_check(_register({"badRel": {
+            "type": "string",
+            "format": "uuid",
+            "$ref": "nosuchschema",
+            "title": "Bad rel",
+        }}))
+        self.assertEqual(len(msgs), 1, f"expected exactly one finding, got {msgs}")
+        self.assertIn("does not resolve", msgs[0])
+
+    def test_external_marker_does_not_excuse_a_bad_filter_token(self):
+        """Control: the exemption is scoped to the $ref rules only."""
+        prop = dict(self.EXTERNAL)
+        prop["x-relation-filter"] = {"setting": "@bogus"}
+        msgs = self.run_check(_register({"caseReference": prop}))
+        self.assertTrue(any("unknown token" in m for m in msgs),
+                        f"filter validation must still apply, got {msgs}")
+
+
+# --------------------------------------------------------------------------
 # 6. End-to-end through main() — findings land in the log file, not stdout.
 # --------------------------------------------------------------------------
 class EndToEndTest(_Base):

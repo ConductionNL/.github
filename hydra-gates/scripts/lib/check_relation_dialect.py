@@ -338,6 +338,33 @@ def _global_schema_keys(paths):
 _RELATION_DESC_RE = re.compile(r"\b(reference to|verwijzing naar|uuid of the|fk to)\b", re.I)
 
 
+def _is_external_ref(prop):
+    """True when a property points at a schema in ANOTHER app's register.
+
+    OpenRegister resolves ``$ref`` inside ONE register set, so a schema owned by
+    a different app is not expressible as a relation at all. Registers mark such
+    properties with ``x-external-register: <app>`` and carry the bare identifier
+    (``type: string`` + ``format: uuid``).
+
+    Without this notion the gate was UNCLOSABLE for a genuine cross-app
+    reference — measured 2026-08-09 on docudesk, whose `correspondence.
+    caseReference` and `generatedDocument.zaakId` point at a Zaak in Procest:
+
+      WITH    ``"$ref": "case"``  -> check (f) "does not resolve to a schema key
+                                     in the register set (case-exact)"
+      WITHOUT ``$ref``            -> check (b) "relation-shaped property ...
+                                     lacks canonical $ref (ADR-062 rule 7)"
+
+    Both arms failed, so the only route to green was rewording the description
+    until ``_RELATION_DESC_RE`` stopped matching — degrading documentation to
+    dodge a regex. The exemption is deliberately narrow: it suppresses ONLY the
+    two ``$ref`` rules, and a property that declares ``x-external-register``
+    *and* a ``$ref`` is still reported, because that ``$ref`` is one
+    OpenRegister can never resolve.
+    """
+    return isinstance(prop, dict) and bool(str(prop.get("x-external-register") or "").strip())
+
+
 def _ref_of(prop):
     """Return (raw_ref_value, is_array) for a relation property, or (None,_).
 
@@ -488,7 +515,10 @@ def check_file(path, keys, findings, base_ref):
             in_diff = changed is None or pline in changed
 
             # (b) relation-shape heuristic — property-level diff scoped.
-            if in_diff and _has_uuid_format(prop) and not _is_relation_prop(prop):
+            # A cross-app identifier is exempt: there is no local schema key it
+            # could ever name (see _is_external_ref).
+            if (in_diff and _has_uuid_format(prop) and not _is_relation_prop(prop)
+                    and not _is_external_ref(prop)):
                 desc = prop.get("description") or ""
                 items = prop.get("items")
                 if isinstance(items, dict):
@@ -551,7 +581,19 @@ def check_file(path, keys, findings, base_ref):
 
             # (f) $ref target resolution.
             ref, _is_arr = _ref_of(prop)
-            if ref is not None:
+            if ref is not None and _is_external_ref(prop):
+                # Still a defect — but the actionable fix is the opposite of the
+                # generic message. OpenRegister cannot resolve a schema in
+                # another app's register, so the $ref is dead weight and the
+                # bare identifier is the correct dialect.
+                findings.append((path, (
+                    f"{path}: {sname}.{pname} — carries x-external-register "
+                    f"'{prop.get('x-external-register')}' AND $ref '{ref}'; "
+                    f"OpenRegister resolves $ref within one register set and "
+                    f"cannot reach another app's schema — drop the $ref and keep "
+                    f"the bare identifier (ADR-062 rule 7)"
+                )))
+            elif ref is not None:
                 verdict, norm = _resolve_ref(ref, keys)
                 if verdict == "fail":
                     findings.append((path, (
