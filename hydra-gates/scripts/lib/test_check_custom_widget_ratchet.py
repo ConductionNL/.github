@@ -192,7 +192,19 @@ class ScopedRunTest(unittest.TestCase):
     def test_new_widget_without_note_fails_justification_and_ratchet(self):
         self._commit([NOTED, BUILTIN, PAGE_ENTRY, NOTELESS])
         rc, out = self._run()
-        self.assertEqual(rc, 2, out)
+        # THE COUNT COMES OFF STDOUT, NOT THE EXIT BYTE (#209).
+        #
+        # This asserted `rc == 2` — the helper returned its finding count as
+        # its exit status. That is the same channel the interpreter uses to
+        # report that the helper never finished, so a traceback (exit 1) was
+        # indistinguishable from one finding, and the gate duly printed
+        # "FAIL — 1 custom-widget finding(s)" over a crash. The count was also
+        # clamped to 99 to fit in a byte.
+        #
+        # Exit status is now boolean and the count is a line. Both are checked:
+        # asserting only the boolean would be weaker than what this test had.
+        self.assertEqual(rc, 1, out)
+        self.assertIn("[custom-widget-ratchet] findings=2", out)
         self.assertIn(
             'registry["dealHeatmap"] is kind:"widget" without a _note',
             out,
@@ -244,7 +256,17 @@ class ScopedRunTest(unittest.TestCase):
             cwd=self.repo, env=env, capture_output=True, text=True,
         )
         self.assertEqual(proc.returncode, 0, proc.stdout)
-        self.assertEqual(proc.stdout, "",
+        # The no-op must not COMPUTE OR REPORT THE RATCHET — that is the claim.
+        # It was written as `stdout == ""`, which also forbade the helper from
+        # saying it had finished. Since #209 the `findings=` line is how a
+        # caller tells a clean run from a helper that died, so a truly silent
+        # success is now indistinguishable from a crash. The assertion is on
+        # the ratchet and the findings, which is what the sentence meant.
+        self.assertNotIn("base=", proc.stdout)
+        self.assertNotIn("delta=", proc.stdout)
+        self.assertNotIn("ADR-049", proc.stdout)
+        self.assertEqual(proc.stdout.strip(),
+                         "[custom-widget-ratchet] findings=0",
                          "no-op pass must not compute/report the ratchet")
 
     def test_legacy_noteless_entry_untouched_not_flagged(self):

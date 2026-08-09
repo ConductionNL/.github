@@ -47,8 +47,31 @@ computed (there is no base to compare against).
 
 Output: one location-prefixed finding block per violation plus one
 ``[custom-widget-ratchet] base=N head=M delta=±K`` report line whenever the
-ratchet is computed. Exit code is the number of findings (capped at 99);
-the calling gate uses it as the failure count.
+ratchet is computed, and — ALWAYS, on every successful run — one
+
+    [custom-widget-ratchet] findings=N
+
+line. THAT line is the answer, not the exit status.
+
+WHY THE COUNT IS ON STDOUT AND NOT IN THE EXIT CODE (#209)
+----------------------------------------------------------
+This helper used to return its finding count as its exit status and the gate
+read it as the failure count. An exit status is ONE BYTE, and it is also how
+the interpreter reports that the helper never finished. Both meanings arrived
+on the same channel, so they were not distinguishable:
+
+  * a Python traceback exits 1, and the gate reported it as
+    ``FAIL — 1 custom-widget finding(s)``. Measured 2026-08-08 by injecting a
+    ``raise`` into ``main()``: the gate produced a plausible, actionable,
+    entirely fictional finding, and a reader chasing it would have gone
+    looking for a widget that does not exist.
+  * the count was clamped to 99 to stay inside the byte, so any run with 100+
+    findings under-reported — the same lossy-channel shape that made gate-19
+    report 266 findings as 10.
+
+Exit status is now a plain boolean (0 = clean, 1 = findings present). A gate
+that sees a non-zero exit WITHOUT a ``findings=`` line knows the helper died
+and must report WIRING, never a finding.
 """
 
 import os
@@ -355,12 +378,20 @@ def _changed_and_deleted(base_ref, candidate_paths):
 # --------------------------------------------------------------------------
 # Main.
 # --------------------------------------------------------------------------
+FINDINGS_LINE = "[custom-widget-ratchet] findings={n}"
+
+
 def _emit(findings, counts_line=None):
     if counts_line is not None:
         print(counts_line)
     for finding in findings:
         print(finding)
-    return min(len(findings), 99)
+    # The count, on stdout, unclamped — see the module docstring (#209).
+    # Printed LAST so it cannot be confused with a finding block's own text,
+    # and printed on EVERY successful run including the clean one, so its
+    # absence means "the helper did not finish".
+    print(FINDINGS_LINE.format(n=len(findings)))
+    return 1 if findings else 0
 
 
 def _format_delta(delta):
@@ -392,7 +423,9 @@ def main(argv):
         # ratchet needs a base to compare against and is not computed.
         head_count = sum(len(es) for es in head_customs.values())
         if head_count == 0:
-            return 0
+            # Still emit `findings=0` — the caller uses the PRESENCE of that
+            # line to tell a clean run from a helper that died (#209).
+            return _emit([])
         findings = [
             f"{path}:{e.line}: " + JUSTIFICATION_MSG.format(key=e.key)
             for path, es in sorted(head_customs.items())
@@ -433,7 +466,7 @@ def main(argv):
         for path in sorted(changed_head | base_only)
     )
     if not active:
-        return 0
+        return _emit([])
 
     # Per-app counts: unchanged files contribute identically to both sides.
     head_count = sum(len(es) for es in head_customs.values())

@@ -21,6 +21,7 @@ all docblock prose.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -274,6 +275,139 @@ class GateIsNotBlind(unittest.TestCase):
                      "        return new JSONResponse($rows);"):
             with self.subTest(line=line):
                 self.assertFalse(csc.line_is_security_relevant(line))
+
+
+class AnnotationMustBeInACodePosition(unittest.TestCase):
+    """The annotation arm was wrong in BOTH directions from one regex.
+
+    Measured on larpingapp 2026-08-08 against the pre-fix helper, which read::
+
+        _ANNOTATION_RE = re.compile(
+            r"#\\[NoAdminRequired\\]"
+            ...
+            r"|@NoAdminRequired\\b"
+            ...
+        )
+
+    unanchored, so position was never constrained and the attribute forms were
+    bare literals. Every case below was RUN against that regex first: the
+    false-positive cases matched it (they must not now) and the
+    fully-qualified cases did not (they must now). A test that only ever saw
+    the fixed code proves nothing about what the fix changed.
+    """
+
+    # The exact pre-fix pattern, kept verbatim so these assertions are a
+    # comparison and not an assertion about the current implementation.
+    _PRE_FIX = re.compile(
+        r"#\[NoAdminRequired\]"
+        r"|#\[AuthorizedAdminSetting\("
+        r"|#\[PublicPage\]"
+        r"|#\[NoCSRFRequired\]"
+        r"|@NoAdminRequired\b"
+        r"|@NoCSRFRequired\b"
+        r"|@PublicPage\b"
+    )
+
+    # Prose that NAMES an annotation. Verbatim from larpingapp's
+    # CharactersController.php docblock, which explains why the method is
+    # deliberately admin-only; rewording that sentence made gate-47 demand a
+    # test co-change on a diff containing no code at all.
+    PROSE = (
+        " * becomes `@NoAdminRequired` again, paired with a real ownership check.",
+        " * Deliberately NOT `@NoAdminRequired`. The body requires an administrator",
+        " * (#[PublicPage] + #[NoCSRFRequired]) and the response contract are owned by",
+        " * see the #[NoCSRFRequired] note above before changing this",
+    )
+
+    # The fully-qualified attribute forms. Valid PHP, in daily use, and
+    # invisible to a literal `#[NoAdminRequired]` match.
+    QUALIFIED = (
+        "    #[\\OCP\\AppFramework\\Http\\Attribute\\NoAdminRequired]",
+        "    #[\\OCP\\AppFramework\\Http\\Attribute\\NoCSRFRequired]",
+        "    #[\\OCP\\AppFramework\\Http\\Attribute\\PublicPage]",
+        "    #[NoAdminRequired, NoCSRFRequired]",
+    )
+
+    def test_the_pre_fix_regex_really_did_fail_both_ways(self):
+        """Positive control: show the mutant CAN fail before trusting the fix.
+
+        Without this, a green suite would be equally consistent with "the bug
+        was never there".
+        """
+        for line in self.PROSE:
+            with self.subTest(direction="false positive", line=line):
+                self.assertIsNotNone(
+                    self._PRE_FIX.search(line),
+                    "pre-fix regex was supposed to match this prose",
+                )
+        for line in self.QUALIFIED[:3]:
+            with self.subTest(direction="false negative", line=line):
+                self.assertIsNone(
+                    self._PRE_FIX.search(line),
+                    "pre-fix regex was supposed to MISS the qualified form",
+                )
+
+    def test_prose_naming_an_annotation_is_not_a_security_change(self):
+        for line in self.PROSE:
+            with self.subTest(line=line):
+                self.assertFalse(csc.line_is_security_relevant(line))
+
+    def test_a_fully_qualified_attribute_is_a_security_change(self):
+        for line in self.QUALIFIED:
+            with self.subTest(line=line):
+                self.assertTrue(csc.line_is_security_relevant(line))
+
+    def test_a_docblock_tag_at_tag_position_still_counts(self):
+        for line in ("     * @NoAdminRequired",
+                     "     * @NoCSRFRequired",
+                     "     * @PublicPage",
+                     "// @PublicPage",
+                     "    #[NoAdminRequired]",
+                     "    #[AuthorizedAdminSetting(Application::APP_ID)]"):
+            with self.subTest(line=line):
+                self.assertTrue(csc.line_is_security_relevant(line))
+
+    def test_end_to_end_a_qualified_attribute_with_no_test_is_reported(self):
+        """The whole-repo shape, not just the line classifier.
+
+        Reproduces the measured miss: a commit that opens an admin-only
+        endpoint to every authenticated user via the qualified attribute, with
+        no test in the diff, reported PASS.
+        """
+        repo = _Repo()
+        self.addCleanup(repo.close)
+        repo.write("lib/Controller/SetupController.php",
+                   "<?php\nclass SetupController {\n"
+                   "    public function status() { return 1; }\n}\n")
+        base = repo.commit("baseline")
+        repo.write("lib/Controller/SetupController.php",
+                   "<?php\nclass SetupController {\n"
+                   "    #[\\OCP\\AppFramework\\Http\\Attribute\\NoAdminRequired]\n"
+                   "    public function status() { return 1; }\n}\n")
+        repo.commit("open the endpoint to non-admins")
+        security, has_test = repo.scan(base)
+        self.assertEqual(security, ["lib/Controller/SetupController.php"])
+        self.assertFalse(has_test)
+
+    def test_end_to_end_a_comment_only_diff_is_not_reported(self):
+        repo = _Repo()
+        self.addCleanup(repo.close)
+        repo.write("lib/Controller/CharactersController.php",
+                   "<?php\nclass C {\n"
+                   "    /**\n"
+                   "     * becomes `@NoAdminRequired` again, with an ownership check.\n"
+                   "     */\n"
+                   "    public function report() { return 1; }\n}\n")
+        base = repo.commit("baseline")
+        repo.write("lib/Controller/CharactersController.php",
+                   "<?php\nclass C {\n"
+                   "    /**\n"
+                   "     * becomes admin-optional again, with an ownership check.\n"
+                   "     */\n"
+                   "    public function report() { return 1; }\n}\n")
+        repo.commit("reword one docblock sentence")
+        security, has_test = repo.scan(base)
+        self.assertEqual(security, [])
 
 
 if __name__ == "__main__":

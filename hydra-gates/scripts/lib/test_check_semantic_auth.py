@@ -713,5 +713,118 @@ class CredentialResolvedOneFrameDown(unittest.TestCase):
         self.assertEqual(_rules(_scan(php)), ["public-page-annotation-with-unsourced-denial"])
 
 
+class AdminEscalationBranchIsNotAnAdminRequirement(unittest.TestCase):
+    """`!isAdmin` guarding a TIGHTER per-owner check is not "admin required".
+
+    Measured 2026-08-08 on docudesk `SigningController::cancelRequest` and
+    procest `InspectionChecklistController::submitResult`. Both carry
+    `@NoAdminRequired` CORRECTLY and both were reported, because the rule
+    searched the `!isAdmin` block for a denial token AT ANY DEPTH.
+
+    The two shapes are semantically opposite:
+
+        if (!isAdmin) { return 403; }          admin IS required  -> finding
+        if (!isAdmin) { if (!owner) 403; }     admin NOT required  -> clean
+
+    In the second, a non-admin OWNER proceeds. The remedy gate-9 printed for it
+    — remove `@NoAdminRequired`, or switch to `#[AuthorizedAdminSetting]` —
+    would have made a per-user endpoint admin-only, locking out the very users
+    it exists for, and deleted the owner check's reason to exist.
+    """
+
+    def test_immediate_denial_under_not_admin_is_still_a_finding(self):
+        php = CLASS % """
+    #[NoAdminRequired]
+    public function purge(string $id): JSONResponse
+    {
+        if ($this->groupManager->isAdmin($this->userId) === false) {
+            return new JSONResponse([], Http::STATUS_FORBIDDEN);
+        }
+
+        return new JSONResponse([]);
+    }
+"""
+        self.assertEqual(
+            _rules(_scan(php)), ["no-admin-required-annotation-with-admin-body"]
+        )
+
+    def test_docudesk_escalation_branch_is_not_a_finding(self):
+        php = CLASS % """
+    #[NoAdminRequired]
+    public function cancelRequest(string $id): JSONResponse
+    {
+        $uid     = $this->userSession->getUser()->getUID();
+        $isAdmin = $this->groupManager->isAdmin($uid);
+        if ($isAdmin === false) {
+            $request = $this->signingService->getRequest(requestId: $id);
+            if (($request['initiatorUserId'] ?? '') !== $uid) {
+                return new JSONResponse([], Http::STATUS_FORBIDDEN);
+            }
+        }
+
+        return new JSONResponse($this->signingService->cancelRequest(requestId: $id));
+    }
+"""
+        self.assertEqual(_rules(_scan(php)), [])
+
+    def test_procest_escalation_branch_with_a_throw_is_not_a_finding(self):
+        php = CLASS % """
+    #[NoAdminRequired]
+    public function submitResult(string $id): JSONResponse
+    {
+        $uid = $this->userSession->getUser()->getUID();
+        if ($this->groupManager->isAdmin($uid) === false) {
+            $assignedUid = $this->request->getParams()['assignedInspector'] ?? '';
+            if ($assignedUid !== '' && $assignedUid !== $uid) {
+                throw new OCSForbiddenException('Not authorized');
+            }
+        }
+
+        return new JSONResponse([]);
+    }
+"""
+        self.assertEqual(_rules(_scan(php)), [])
+
+    def test_a_try_body_still_counts_as_unconditional(self):
+        # A `try` body executes whenever the block is entered, unlike an `if`.
+        php = CLASS % """
+    #[NoAdminRequired]
+    public function purge(string $id): JSONResponse
+    {
+        if ($this->groupManager->isAdmin($this->userId) === false) {
+            try {
+                return new JSONResponse([], Http::STATUS_FORBIDDEN);
+            } finally {
+                $this->logger->info('denied');
+            }
+        }
+
+        return new JSONResponse([]);
+    }
+"""
+        self.assertEqual(
+            _rules(_scan(php)), ["no-admin-required-annotation-with-admin-body"]
+        )
+
+    def test_requireAdmin_is_unaffected_by_the_narrowing(self):
+        php = CLASS % """
+    #[NoAdminRequired]
+    public function load(): JSONResponse
+    {
+        $this->requireAdmin();
+        return new JSONResponse([]);
+    }
+"""
+        self.assertEqual(
+            _rules(_scan(php)), ["no-admin-required-annotation-with-admin-body"]
+        )
+
+    def test_the_narrowing_helper_is_actually_wired_in(self):
+        # An unapplied change looks exactly like a passing test. Assert the
+        # guard exists before trusting the negatives above.
+        src = Path(csa.__file__).read_text(encoding="utf-8")
+        self.assertIn("_unconditional_part(body[body_start:i])", src)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
