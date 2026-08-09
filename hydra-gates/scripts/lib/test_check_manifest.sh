@@ -104,6 +104,74 @@ else
 		"malformed manifest without Ajv → exit 1 (a real finding still wins over the degradation)"
 fi
 
+# --- WHERE THE GATE PACKAGE SITS IS NOT A PROPERTY OF THE MANIFEST (#271) ---
+#
+# `require('ajv/dist/2020')` resolves relative to check_manifest.js, so Node
+# walks node_modules up from THIS file and then falls back to NODE_PATH. It
+# never looked at the repository being validated. The verdict therefore
+# depended on the checkout layout:
+#
+#   vendor/conduction/hydra-gates/…  the walk crosses the app root -> validated
+#   a sibling clone of ConductionNL/.github  it does not          -> exit 3
+#
+# Measured 2026-08-08: run from openregister's own root, with node_modules/ajv
+# PRESENT in that root, the validator printed "Ajv is not resolvable from this
+# process (no node_modules, no NODE_PATH)" — false — and gate-22 went FAIL.
+# Setting NODE_PATH to that same directory flipped it to PASS. Same tree, same
+# gate package, two verdicts.
+#
+# The assertion below is the one that matters: an app that HAS ajv installed
+# must validate no matter where the gates were invoked from.
+echo
+echo "== ajv resolves from the SUBJECT's node_modules, not the gate package's =="
+_ajv_entry="$(node -e "process.stdout.write(require.resolve('ajv/dist/2020'))" 2>/dev/null || true)"
+if [ -z "${_ajv_entry}" ]; then
+	echo "SKIP — no ajv anywhere on this machine; the resolution anchor cannot be exercised."
+else
+	# .../node_modules/ajv/dist/2020.js  ->  .../node_modules
+	_ajv_nm="${_ajv_entry%/ajv/dist/2020.js}"
+	if [ "${_ajv_nm}" = "${_ajv_entry}" ]; then
+		_ajv_nm="$(cd "$(dirname "${_ajv_entry}")/../.." && pwd)"
+	fi
+	_anchor_app="$(mktemp -d "${TMPDIR:-/tmp}/hydra-anchor.XXXXXX")"
+	mkdir -p "${_anchor_app}/src" "${_anchor_app}/node_modules"
+	cp "${FIX}/valid-apphost.manifest.json" "${_anchor_app}/src/manifest.json"
+	ln -s "${_ajv_nm}/ajv" "${_anchor_app}/node_modules/ajv" 2>/dev/null || true
+	[ -d "${_ajv_nm}/ajv-formats" ] && ln -s "${_ajv_nm}/ajv-formats" "${_anchor_app}/node_modules/ajv-formats" 2>/dev/null
+	# NODE_PATH deliberately cleared and cwd deliberately NOT the app: the only
+	# route to ajv is the manifest path's own repo root. That is the anchor.
+	( cd / && env -u NODE_PATH node "${VALIDATOR}" "${_anchor_app}/src/manifest.json" ) >"${_TCM_LOG}" 2>&1
+	_anchor_rc=$?
+	if [ "${_anchor_rc}" -eq 0 ]; then
+		_ok "an app with its own node_modules/ajv validates even when cwd and NODE_PATH point elsewhere (rc=0)"
+	else
+		_no "the app's own node_modules/ajv was not used: expected rc=0, got ${_anchor_rc}"
+		sed 's/^/    /' "${_TCM_LOG}"
+	fi
+	_assert_log 'Ajv validation against merged canonical schema' \
+		"the run says the schema was actually applied"
+
+	# THE CONTROL: with the app's ajv removed and nothing else reachable, it must
+	# still degrade LOUDLY — this is not "always find an ajv somewhere".
+	rm -f "${_anchor_app}/node_modules/ajv" "${_anchor_app}/node_modules/ajv-formats"
+	( cd / && env -u NODE_PATH node "${VALIDATOR}" "${_anchor_app}/src/manifest.json" ) >"${_TCM_LOG}" 2>&1
+	_ctrl_rc=$?
+	if [ "${_ctrl_rc}" -eq 3 ] || [ "${_ctrl_rc}" -eq 0 ]; then
+		# rc=0 here means this machine has a system-wide ajv the walk found; say
+		# so rather than asserting a degradation that legitimately did not occur.
+		if [ "${_ctrl_rc}" -eq 3 ]; then
+			_ok "control: with no reachable ajv the run still exits 3 DEGRADED, never 0"
+			_assert_log 'Searched:' "the degradation NAMES the directories it looked in (the old message asserted 'no node_modules' and was wrong)"
+		else
+			echo "SKIP — an ajv is reachable from / on this machine, so the no-ajv control cannot be isolated."
+		fi
+	else
+		_no "control: expected rc=3 (degraded) or a stated skip, got ${_ctrl_rc}"
+		sed 's/^/    /' "${_TCM_LOG}"
+	fi
+	rm -rf "${_anchor_app}"
+fi
+
 # --- ADR-020 diff scoping ---------------------------------------------------
 echo
 echo "== --scope-ids: findings on untouched entries must not block =="

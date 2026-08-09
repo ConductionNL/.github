@@ -176,6 +176,56 @@ def changed_lines(base_ref: str, cwd: Path) -> dict[str, set[int]]:
     return result
 
 
+def spec_tags_removed(base_ref: str, cwd: Path) -> set[str]:
+    """Return the files whose diff DELETES an ``@spec`` line.
+
+    WHY THIS EXISTS (.github#271)
+    -----------------------------
+    ``_overlaps`` walks FORWARD from the declaration line through the method
+    body. The docblock sits ABOVE the declaration, so it is outside the scope
+    window entirely — and the docblock is the only place ``@spec`` can live.
+
+    The consequence is that the one edit which REMOVES coverage is the one edit
+    this gate cannot see. Measured 2026-08-08 on a two-file fixture: delete the
+    ``@spec openspec/...`` line from a tagged method, leave the body
+    byte-identical, and the helper prints ``# count=0`` and exits 0. Every
+    ``@spec`` tag in a repository can be stripped and gate-16 stays green.
+
+    Worse, ``run_gate`` skips a file whose ``added`` set is empty, and a pure
+    deletion produces exactly that — so the file was never even opened.
+
+    Same family as the ``filter_preexisting_methods.py`` defect that lets an
+    auth-attribute removal be filed as pre-existing (gates 5/9/30): a
+    body-shaped scope cannot see a change that is not in the body. Gate-16 does
+    not route through that helper — its four call sites are gates 6, 7, 8 and
+    30 — it arrives at the same blind spot by its own path.
+
+    DELIBERATELY NARROW. This does NOT put every docblock edit in scope: fixing
+    a typo in a legacy untagged method's docblock must not surface that method
+    as a finding, because ADR-020 exists to stop inherited debt blocking
+    unrelated work. It fires only when the diff actually TOOK A TAG AWAY, which
+    is never inherited debt and is always the author's own doing.
+    """
+    removed: set[str] = set()
+    for form in ([f"{base_ref}...HEAD"], [base_ref]):
+        diff = _git(["diff", "-U0", "--diff-filter=ACMRD", *form], cwd)
+        if not diff.strip():
+            continue
+        current: str | None = None
+        for line in diff.splitlines():
+            if line.startswith("--- a/"):
+                current = line[6:]
+            elif line.startswith("+++ b/"):
+                # Prefer the new path for renames; fall back to the old one.
+                current = line[6:]
+            elif line.startswith("-") and not line.startswith("---"):
+                if current and (SPEC_RE.search(line) or SPEC_EXCLUDE_RE.search(line)):
+                    removed.add(current)
+        if removed:
+            break
+    return removed
+
+
 def _docblock_spec_status(lines: list[str], decl_idx: int) -> tuple[str, str | None]:
     """Classify the docblock immediately above ``decl_idx`` into one of:
       - ``("covered", None)``        — has ``@spec openspec/...``
@@ -432,16 +482,59 @@ def run_report(app_dir: Path) -> int:
     return 0
 
 
+def _git_show(base_ref: str, rel: str, cwd: Path) -> str:
+    """The file as it was at ``base_ref``; empty string when it did not exist."""
+    return _git(["show", f"{base_ref}:{rel}"], cwd)
+
+
+def _uncovered_in_text(rel: str, text: str) -> set[str]:
+    """Every in-scope method in ``text`` that carries no @spec, ignoring diff
+    scope. Used to diff a file against its own base version so only the methods
+    whose coverage CHANGED are reported (.github#271)."""
+    if not text:
+        return set()
+    out: list[str] = []
+    all_lines = set(range(1, len(text.splitlines()) + 2))
+    if rel.endswith(".php"):
+        if rel.startswith(BACKEND_EXEMPT_DIRS) or not rel.startswith(BACKEND_DIRS):
+            return set()
+        check_php_file(rel, text, all_lines, out)
+    elif _is_frontend_in_scope(rel):
+        check_frontend_file(rel, text, all_lines, out)
+    return set(out)
+
+
 def run_gate(app_dir: Path) -> int:
     base_ref = os.environ.get("HYDRA_GATE_BASE_REF", "origin/development")
     changed = changed_lines(base_ref, app_dir)
+    # Files this diff STRIPPED an @spec tag from (.github#271). A pure deletion
+    # produces an empty `added` set, which the loop below used to skip outright,
+    # so the file was not even opened.
+    stripped = spec_tags_removed(base_ref, app_dir)
     findings: list[str] = []
 
-    for rel, added in changed.items():
-        if not added:
-            continue
+    for rel in sorted(set(changed) | stripped):
+        added = changed.get(rel, set())
         path = app_dir / rel
         if not path.is_file():
+            continue
+        if rel in stripped:
+            # WHAT THIS PR TOOK AWAY, AND ONLY THAT.
+            #
+            # Evaluating the whole file here would name every untagged method in
+            # it, which on a legacy file is inherited debt the author did not
+            # touch — the thing ADR-020 exists to keep out of a PR. So the file
+            # is evaluated TWICE, once as it is and once as it was at the base,
+            # with the same walkers and therefore the same exemptions, and the
+            # findings are the DIFFERENCE. A file that lost one tag reports one
+            # finding; a file that lost none reports none, however much
+            # pre-existing debt it carries.
+            before = _uncovered_in_text(rel, _git_show(base_ref, rel, app_dir))
+            now = _uncovered_in_text(rel, path.read_text(encoding="utf-8"))
+            findings.extend(sorted(now - before))
+            if not added:
+                continue
+        elif not added:
             continue
         try:
             text = path.read_text(encoding="utf-8")
@@ -459,7 +552,19 @@ def run_gate(app_dir: Path) -> int:
 
     for line in sorted(set(findings)):
         print(line)
-    return len(set(findings))
+    # TERMINAL MARKER (.github#271) — see the note in
+    # check_dashboard_antipattern.py. gate-16 decided its verdict with `wc -l`
+    # over this helper's stdout after `2>/dev/null || true`, so a helper that
+    # crashed produced an empty log and the gate reported PASS. Verified
+    # 2026-08-08 by running the suite with a python3 stub that always exits 1:
+    # gate-16 said PASS while nothing had been inspected.
+    #
+    # The exit code is now a STATUS (0 clean / 1 findings), not the count. It
+    # used to be `len(set(findings))` — a count in one byte, which is #209:
+    # openregister's own root-scoped sweep is well past 255.
+    _count = len(set(findings))
+    print(f"# count={_count}")
+    return 1 if _count else 0
 
 
 def main(argv: list[str]) -> int:

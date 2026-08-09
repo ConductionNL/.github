@@ -328,6 +328,126 @@ for _g in 56 57; do
     esac
 done
 
+# EVERY python-backed gate, with a python3 that cannot run (.github#271)
+#
+# The two arms above each test ONE gate against ONE way of failing. This arm
+# breaks the interpreter for the whole suite at once and asks the only question
+# that matters: which gates notice?
+#
+# MEASURED 2026-08-08 on pipelinq at gate package cdfbd7ab, with
+# `python3` shadowed by a stub that prints a traceback and exits 1 — so NOT ONE
+# file was inspected by ANY python-backed gate:
+#
+#     gate-12 nc-input-labels        SKIPPED (wiring)   <- honest
+#     gate-15 dashboard-antipattern  PASS               <- green over nothing
+#     gate-16 spec-coverage          PASS               <- green over nothing
+#     gate-17 redundant-controller   SKIPPED (wiring)   <- honest
+#     gate-18 notification-dialect   PASS               <- green over nothing
+#     gate-19 e2e-coverage           FAIL — "an unreported number of scenario(s)"
+#
+# Three greens and one blocking failure whose count nobody measured, from a run
+# in which nothing was read. 12 and 17 got this right because they check the
+# helper's exit status; 15, 16 and 18 wrote `2>/dev/null || true` and counted
+# lines in an empty log.
+#
+# This arm keeps that from coming back. It is deliberately GENERIC: any future
+# python-backed gate that lands with the `|| true` idiom fails here on its first
+# run, without anyone remembering to add it to a list.
+# ---------------------------------------------------------------------------
+_fakebin="${_tmp}/fakebin"
+mkdir -p "${_fakebin}"
+cat > "${_fakebin}/python3" <<'SH'
+#!/bin/sh
+echo "Traceback (most recent call last): simulated interpreter failure" >&2
+exit 1
+SH
+chmod +x "${_fakebin}/python3"
+
+_pyapp="${_tmp}/pyapp"
+mkdir -p "${_pyapp}/lib/Controller" "${_pyapp}/lib/Settings" "${_pyapp}/src/views" "${_pyapp}/openspec/specs/thing"
+cat > "${_pyapp}/src/manifest.json" <<'JSON'
+{"name":"fx","pages":[{"id":"Dash","route":"/","type":"dashboard","title":"Dash","config":{"widgets":[{"id":"kpis","type":"custom"}]}}]}
+JSON
+cat > "${_pyapp}/src/views/Dash.vue" <<'VUE'
+<template><div><NcSelect :options="o" /></div></template>
+VUE
+cat > "${_pyapp}/lib/Controller/ThingController.php" <<'PHP'
+<?php
+namespace OCA\Fx\Controller;
+class ThingController {
+    public function index() { return 1; }
+}
+PHP
+cat > "${_pyapp}/lib/Settings/thing_register.json" <<'JSON'
+{"components":{"schemas":{"Thing":{"x-openregister-notifications":{"r":{"channel":"nc","recipient":"@self.owner"}}}}}}
+JSON
+cat > "${_pyapp}/openspec/specs/thing/spec.md" <<'MD'
+# Thing
+
+## Purpose
+
+Thing.
+
+### Requirement: The system SHALL thing
+
+#### Scenario: A thing happens
+
+- **GIVEN** a thing
+- **WHEN** it happens
+- **THEN** it happened
+MD
+(
+    cd "${_pyapp}" || exit 1
+    git init -q .
+    git add -A
+    git -c user.email=t@t -c user.name=t commit -qm init
+) >/dev/null 2>&1
+
+_pylogs="${_tmp}/pylogs"
+mkdir -p "${_pylogs}"
+_pyout="${_tmp}/pyrun.txt"
+(
+    cd "${_pyapp}" || exit 1
+    PATH="${_fakebin}:${PATH}" HYDRA_GATE_LOG_DIR="${_pylogs}" \
+        bash "${_runner}" . > "${_pyout}" 2>&1
+)
+
+# A control first: the stub really is in play. If python3 still works, every
+# assertion below would pass for the wrong reason — the exact "a check that did
+# not run looks like one that passed" shape this file is about.
+if grep -q 'simulated interpreter failure' "${_pyout}" \
+    || grep -rq 'simulated interpreter failure' "${_pylogs}" 2>/dev/null; then
+    _ok "control: the python3 stub was actually used (its traceback reached the run)"
+else
+    _bad "control FAILED: no evidence the python3 stub ran — the assertions below prove nothing"
+fi
+
+for _g in 12:nc-input-labels 15:dashboard-antipattern 16:spec-coverage \
+          17:redundant-controller 18:notification-dialect 19:e2e-coverage; do
+    _num="${_g%%:*}"
+    _name="${_g#*:}"
+    _v=$(grep -oE "^\[gate-${_num}\] [^:]+: [A-Z]+( \([a-z]+\))?" "${_pyout}" | head -1 | sed 's/^[^:]*: //')
+    case "${_v}" in
+        "SKIPPED (wiring)")
+            _ok "gate-${_num} ${_name}: SKIPPED (wiring) when python3 cannot run"
+            ;;
+        PASS)
+            _bad "gate-${_num} ${_name}: PASS — its checker never executed and it reported the code clean anyway"
+            ;;
+        FAIL)
+            _bad "gate-${_num} ${_name}: FAIL — an environment failure rendered as findings about the source"
+            ;;
+        "")
+            # A gate whose SUBJECT is absent may legitimately emit nothing;
+            # this fixture gives all six a subject, so silence is a defect.
+            _bad "gate-${_num} ${_name}: emitted NO verdict line at all, though this fixture gives it a subject"
+            ;;
+        *)
+            _bad "gate-${_num} ${_name}: verdict is '${_v}' — expected SKIPPED (wiring)"
+            ;;
+    esac
+done
+
 # ...and the crash must be RECOVERABLE, not silently discarded to /dev/null.
 if [ -s "${_clogs}/hydra-gate-register-handler-resolution.err" ] \
    && [ -s "${_clogs}/hydra-gate-orphaned-write-capability.err" ]; then
@@ -335,6 +455,42 @@ if [ -s "${_clogs}/hydra-gate-register-handler-resolution.err" ] \
 else
     _bad "a crashed checker's stderr was discarded — the reason it died is unrecoverable"
 fi
+
+# Each skip must say WHAT went unchecked — a bare "skipped" is unactionable and
+# is how a wiring failure gets filed under "known noise".
+for _num in 15 16 18; do
+    if grep -qE "^\[gate-${_num}\][^:]*: SKIPPED \(wiring\) — .*(UNVERIFIED|did not complete|exited)" "${_pyout}"; then
+        _ok "gate-${_num}'s skip names what it left unverified"
+    else
+        _bad "gate-${_num}'s skip does not say what went unchecked"
+    fi
+done
+
+# THE ANTI-WIDENING CONTROL. With a WORKING python3 the same fixture must
+# produce real verdicts — this must not become "skip whenever anything looks
+# odd". The fixture's register file carries the legacy dialect, so gate-18 has
+# something to find and MUST find it.
+_oklogs="${_tmp}/oklogs"
+mkdir -p "${_oklogs}"
+_okout="${_tmp}/pyrun-ok.txt"
+(
+    cd "${_pyapp}" || exit 1
+    HYDRA_GATE_LOG_DIR="${_oklogs}" bash "${_runner}" . > "${_okout}" 2>&1
+)
+if grep -qE '^\[gate-18\][^:]*: FAIL' "${_okout}"; then
+    _ok "control: with a working python3, gate-18 still FAILS on the planted legacy dialect"
+else
+    _v=$(grep -oE '^\[gate-18\] [^:]+: [A-Z]+( \([a-z]+\))?' "${_okout}" | head -1 | sed 's/^[^:]*: //')
+    _bad "control FAILED: gate-18 returned '${_v}' on a register file carrying channel/recipient/@self. — the skip logic is suppressing a real finding"
+fi
+for _num in 15 16; do
+    _v=$(grep -oE "^\[gate-${_num}\] [^:]+: [A-Z]+( \([a-z]+\))?" "${_okout}" | head -1 | sed 's/^[^:]*: //')
+    if [ "${_v}" = "SKIPPED (wiring)" ]; then
+        _bad "control FAILED: gate-${_num} still reports SKIPPED (wiring) with a working python3 — the marker check is broken, not the interpreter"
+    else
+        _ok "control: gate-${_num} produces a real verdict (${_v:-none}) with a working python3"
+    fi
+done
 
 echo
 if [ "${_failures}" -eq 0 ]; then

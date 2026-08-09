@@ -327,6 +327,88 @@ class FooService {
         self.assertNotIn("legacyUntagged", out)
         self.assertEqual(rc, 1)
 
+    def _spec_removal_fixture(self):
+        """A tagged method plus an untagged legacy one, committed as the base.
+        Returns the base sha."""
+        self._write("lib/Service/BarService.php", """<?php
+class BarService {
+    /**
+     * Does the thing.
+     *
+     * @spec openspec/specs/things/spec.md
+     */
+    public function doThing(string $id): array
+    {
+        return [$id];
+    }
+
+    /**
+     * Legacy, never tagged.
+     */
+    public function legacyThing(string $id): array
+    {
+        return [$id, 'legacy'];
+    }
+}
+""")
+        self._run("git", "add", "-A")
+        self._run("git", "commit", "-q", "-m", "base")
+        return subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(self.dir),
+                              capture_output=True, text=True).stdout.strip()
+
+    def _gate(self, base):
+        os.environ["HYDRA_GATE_BASE_REF"] = base
+        try:
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                rc = csc.main(["check_spec_coverage.py", str(self.dir)])
+        finally:
+            del os.environ["HYDRA_GATE_BASE_REF"]
+        return buf.getvalue(), rc
+
+    def test_deleting_an_at_spec_tag_is_caught(self):
+        # .github#271 — `_overlaps` walks FORWARD from the declaration, so the
+        # docblock is outside the scope window, and the docblock is the only
+        # place @spec can live. Deleting the tag left the body byte-identical:
+        # the helper printed `# count=0` and exited 0. Every @spec tag in a repo
+        # could be stripped and this gate stayed green — the one edit that
+        # removes coverage was the one it could not see.
+        #
+        # Worse, run_gate skipped any file whose `added` set was empty, and a
+        # pure deletion produces exactly that, so the file was never opened.
+        base = self._spec_removal_fixture()
+        text = (self.dir / "lib/Service/BarService.php").read_text()
+        old = "     *\n     * @spec openspec/specs/things/spec.md\n"
+        self.assertIn(old, text, "fixture premise: the @spec line must be there to delete")
+        self._write("lib/Service/BarService.php", text.replace(old, ""))
+        self._run("git", "add", "-A")
+        self._run("git", "commit", "-q", "-m", "strip the tag")
+
+        out, rc = self._gate(base)
+        self.assertIn("doThing", out, "the method that LOST its @spec must be named")
+        self.assertEqual(rc, 1)
+        # ...and ONLY that method. Naming every untagged method in the file
+        # would surface inherited debt the author never touched, which is what
+        # ADR-020 exists to keep out of a PR.
+        self.assertNotIn("legacyThing", out)
+
+    def test_an_unrelated_docblock_edit_does_not_surface_legacy_debt(self):
+        # The anti-widening control for the arm above. The fix must key on
+        # "a tag was TAKEN AWAY", not on "a docblock was touched" — otherwise a
+        # typo fix in a legacy untagged method's docblock becomes a finding.
+        base = self._spec_removal_fixture()
+        text = (self.dir / "lib/Service/BarService.php").read_text()
+        old = "     * Legacy, never tagged.\n"
+        self.assertIn(old, text)
+        self._write("lib/Service/BarService.php",
+                    text.replace(old, "     * Legacy, never tagged. Typo fixed.\n"))
+        self._run("git", "add", "-A")
+        self._run("git", "commit", "-q", "-m", "typo")
+
+        out, rc = self._gate(base)
+        self.assertEqual(out, "# count=0\n", f"expected a clean run, got: {out}")
+        self.assertEqual(rc, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -120,6 +120,30 @@ The upside: **gate 53 becomes usable under `--scope-to-diff`**. It was
 previously unenablable on any repo with manifest debt, because a one-line change
 reproduced the full-repo finding count exactly.
 
+### Gates 12–22, audited by planting a defect in each (`.github#271`)
+
+Every gate in this band was given one textbook true positive in a real fleet
+repo and asked to catch it. Four could not, and their PASS lines meant nothing:
+
+| Gate | What it was doing instead |
+|---|---|
+| **20** or-objectservice-api | **Had never fired, anywhere.** Its search pattern began with `->`, which `grep` parses as options (`invalid option -- '>'`, exit 2); `2>/dev/null \|\| true` discarded both the message and the status. Now uses `grep -- …`, and the receiver (`$…objectService->`) is part of the pattern rather than "the file mentions ObjectService", which alone would have produced 14 false findings on openregister. |
+| **17** redundant-controller | Four of the six names in its ObjectService CRUD list do not exist on ObjectService — they are what gate-20 flags as fabricated — and `return new JSONResponse($this->objectService->findAll(…))` was discarded as "response wrapping" before the call inside it was ever looked at. The commonest pass-through shape was invisible. |
+| **14** route-reachability | The ten routes `AppHost\Routes::standard()` supplies are not literals in a leaf's `appinfo/routes.php`, so invariant 2 never judged them. Deleting `SettingsController::update()` from an adopter left `PUT /api/settings` resolving to nothing — a ReflectionException 500, not a 404 — and the gate reported PASS (`#265`, closed). |
+| **15, 16, 18** | `2>/dev/null \|\| true` + `wc -l`: a checker that crashed wrote nothing, so the count was 0, so the gate said PASS. With `python3` replaced by a stub that always exits 1, gates 12 and 17 said `SKIPPED (wiring)` and 15/16/18 said `PASS`. They now require the checker's terminal `# count=` marker. |
+
+Also: **gate-22's verdict no longer depends on where the gates were checked
+out.** `ajv` was resolved relative to this package, so an app with
+`node_modules/ajv` installed in its own root still got
+`SCHEMA VALIDATION DID NOT HAPPEN` when the package sat outside its tree —
+and the message asserted "no node_modules", which was false. Resolution is now
+anchored on the manifest's own repo root, then cwd, then this package, and the
+degradation names every directory it searched.
+
+Verdicts move: gate-20 and gate-17 can now produce findings in repos that were
+green. Gates 15/16/18 can now report `SKIPPED (wiring)`, which is a coverage
+gap, not a pass — see *Reading a green*.
+
 ---
 
 ## What it needs at runtime
