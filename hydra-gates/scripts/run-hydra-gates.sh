@@ -5175,7 +5175,12 @@ for m in re.finditer(r'<style\b[^>]*>(.*?)</style>', src, re.IGNORECASE | re.DOT
         continue
     print(f'{fname}: <style> rule=motion-without-reduced-motion-fallback')
 PYRM
-        [ $? -ne 0 ] && _rm_rc=1
+        # `$?` immediately after a heredoc-fed command is the command's status;
+        # captured into a named variable rather than tested inline so
+        # ShellCheck's SC2181 ("check the exit code directly") does not fire on
+        # a construct where `if ! cmd <<HEREDOC` is not available.
+        _rm_one=$?
+        [ "${_rm_one}" -ne 0 ] && _rm_rc=1
     done < <(_a11y_markup_files)
     _rm_fail=$(wc -l < "${_rm_log}" 2>/dev/null || echo 0)
     if [ "${_rm_rc}" -ne 0 ]; then
@@ -5695,8 +5700,50 @@ for fp in files:
     for m in SEC_KEY.finditer(src):
         # Find the line number of the match
         lineno = src[:m.start()].count('\n') + 1
-        # Window: 10 lines after the config read
-        window = ''.join(lines[lineno:lineno+10])
+        # WINDOW STARTS WHERE THE CALL ENDS, NOT WHERE IT STARTS.
+        #
+        # It was `lines[lineno:lineno+10]` — ten lines after the line the
+        # match BEGAN on, excluding that line. Two false positives fall out of
+        # that, and both are ordinary code:
+        #
+        #   multi-line call   PHPCS-formatted reads span five lines each:
+        #                         $registerId = $this->appConfig->getValueString(
+        #                             Application::APP_ID,
+        #                             'register',
+        #                             ''
+        #                         );
+        #                     Two of those plus a blank line put the guard on
+        #                     the ELEVENTH line — one outside the window.
+        #                     Measured on procest lib/Service/AiService.php:580
+        #                     and :967, where the guard is a textbook
+        #                     `if (empty($registerId) === true || empty($schemaId)
+        #                     === true) { $this->logger->warning(...); return; }`
+        #                     and the gate called both unguarded.
+        #
+        #   same-line guard   `'ai_api_key_set' => $this->appConfig->getValueString(
+        #                     Application::APP_ID, 'ai_api_key', '') !== ''`
+        #                     handles the empty default ON THE MATCH LINE, which
+        #                     the window started AFTER. procest:710.
+        #
+        # Both are fixed by anchoring the window to the END of the call
+        # expression: balance parentheses forward from the `(`, then take the
+        # remainder of THAT line plus ten more. A single-line read gets the
+        # same ten lines it always did, so nothing is loosened for the shape
+        # this gate was built on — only the shapes it could not see.
+        _open = src.find('(', m.start())
+        _depth, _p = 0, _open
+        while _p < len(src) and _p != -1:
+            if src[_p] == '(':
+                _depth += 1
+            elif src[_p] == ')':
+                _depth -= 1
+                if _depth == 0:
+                    break
+            _p += 1
+        _end_line = src[:_p].count('\n') + 1 if _p < len(src) else lineno
+        # `_end_line - 1` is the 0-based index of the call's closing line, so
+        # the window INCLUDES the rest of that line (the same-line case).
+        window = ''.join(lines[_end_line-1:_end_line+10])
         # Look for fail-mode signals
         #
         # THE EMPTY-COMPARE ARM MUST SURVIVE A COMPOUND CONDITION.

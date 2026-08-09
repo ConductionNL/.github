@@ -36,6 +36,14 @@
 #      a guarded read and an unguarded one two lines apart.
 #
 # Run: bash hydra-gates/scripts/lib/test_gate_45_to_55_acceptance.sh
+#
+# ShellCheck: SC2016 is suppressed for this file only. The PHP and JS fixtures
+# below are written as single-quoted heredocs on purpose — `$reg`, `$sch`,
+# `$this->appConfig` are PHP variables that must reach the fixture VERBATIM.
+# Letting the shell expand them would write `  = ->appConfig->...` into the
+# file and silently turn every arm into a test of an empty fixture, which is
+# the exact "green over nothing" failure this suite exists to catch.
+# shellcheck disable=SC2016
 
 set -u
 
@@ -262,6 +270,66 @@ if grep -qE "^\[gate-50\][^:]*: FAIL — 1 unsafe" "${_outC5}"; then
 else
     _bad "gate-50 on a guarded+unguarded pair → $(grep -E '^\[gate-50\]' "${_outC5}" | head -1)"
 fi
+
+# C6 — ANTI-WIDENING. A PHPCS-FORMATTED MULTI-LINE READ.
+#
+# Verbatim shape from procest lib/Service/AiService.php:580 and :967. Two
+# five-line calls plus a blank line put the guard on the ELEVENTH line, one
+# outside a window that counted from where the call BEGAN. The constant-app-id
+# fix (C1) is what made these reads visible at all, so the window bug arrived
+# with it: 3 findings on procest, all three textbook `empty()` guards.
+_write_service '    public function writeAudit(): void
+    {
+        $registerId = $this->appConfig->getValueString(
+            Application::APP_ID,
+            '"'"'register'"'"',
+            '"'"''"'"'
+        );
+        $schemaId   = $this->appConfig->getValueString(
+            Application::APP_ID,
+            '"'"'ai_audit_entry_schema'"'"',
+            '"'"''"'"'
+        );
+
+        if (empty($registerId) === true || empty($schemaId) === true) {
+            $this->logger->warning('"'"'AI audit: register or schema ID not configured'"'"');
+            return;
+        }
+    }'
+_commit "${_appC}" "multi-line reads with a guard below them"
+_outC6="${_tmp}/c6.txt"
+_run "${_appC}" "${_outC6}"
+_expect "${_outC6}" 50 "PASS" "accepts a PHPCS-formatted multi-line read whose guard follows it"
+
+# C7 — ANTI-WIDENING. The guard on the SAME LINE as the read (procest:710).
+_write_service '    public function settings(): array
+    {
+        return [
+            '"'"'ai_api_key_set'"'"' => $this->appConfig->getValueString(Application::APP_ID, '"'"'ai_api_key'"'"', '"'"''"'"') !== '"'"''"'"',
+        ];
+    }'
+_commit "${_appC}" "same-line emptiness check"
+_outC7="${_tmp}/c7.txt"
+_run "${_appC}" "${_outC7}"
+_expect "${_outC7}" 50 "PASS" "accepts an emptiness check written on the read's own line"
+
+# C8 — the reverse control for C6/C7: the SAME multi-line shape with the guard
+# DELETED must still fail. Without this, C6 and C7 could be satisfied by a
+# window so wide the gate can no longer find anything.
+_write_service '    public function writeAudit(): void
+    {
+        $registerId = $this->appConfig->getValueString(
+            Application::APP_ID,
+            '"'"'register'"'"',
+            '"'"''"'"'
+        );
+
+        $this->objectService->saveObject($registerId, []);
+    }'
+_commit "${_appC}" "multi-line read with no guard at all"
+_outC8="${_tmp}/c8.txt"
+_run "${_appC}" "${_outC8}"
+_expect "${_outC8}" 50 "FAIL" "still fails a multi-line read with no guard anywhere"
 
 # ===========================================================================
 # FAMILY D — gate-53 must block the PR that CREATES larpingapp#286.
