@@ -700,8 +700,31 @@ fi
 _HYDRA_APPHOST_ROUTE_NAMES="dashboard#page dashboard#catchAll settings#index settings#create settings#update settings#load preferences#getPreference preferences#setPreference metrics#index health#index"
 
 _HYDRA_APPHOST_ROUTE_TABLE=0
+# A COMMENT NAMING THE BUILDER IS NOT A CALL TO IT.
+#
+# This grepped appinfo/routes.php as raw text, so a comment mentioning
+# `Routes::standard()` switched the table on and injected all ten canonical
+# names into gate-14's route list. Measured on larpingapp, whose routes.php is
+# a plain literal array carrying one accurate comment —
+#
+#     // Canonical AppHost settings write (OpenRegister\AppHost\Routes::standard()).
+#
+# — and which was told four routes it does not declare were unreachable
+# (dashboard#catchAll, health#index, metrics#index, settings#load), naming two
+# controllers it does not ship. Rewording only that comment, with the code
+# byte-identical, took gate-14 from `FAIL — 4` to `PASS`; the cheapest way to
+# clear it was therefore to delete accurate documentation, which is the
+# prose-satisfaction #191/#184 exist to stop.
+#
+# `_HYDRA_APPHOST`, the sibling detector for the same subject, has always
+# stripped comments via `_php_code_only`. One repository, one question, two
+# answers — which is visible in the findings themselves: `_apphost_serves`
+# correctly declined to exempt health/metrics because `_HYDRA_APPHOST` was 0,
+# which is exactly why the phantom routes surfaced instead of being waved
+# through. scholiq carries the same comment-only shape.
 if [ -f appinfo/routes.php ] \
-    && grep -qE 'AppHost\\+Routes::standard[[:space:]]*\(' appinfo/routes.php; then
+    && _php_code_only appinfo/routes.php \
+       | grep -qE 'AppHost\\+Routes::standard[[:space:]]*\(' ; then
     _HYDRA_APPHOST_ROUTE_TABLE=1
 fi
 
