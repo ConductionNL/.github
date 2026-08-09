@@ -118,6 +118,38 @@ _ASSIGN_RX = re.compile(
 )
 _THIS_ASSIGN_RX = re.compile(r"this\s*\.\s*(\w+)\s*=\s*" + _LOOKUP)
 
+# A name that is ALSO a function/arrow parameter somewhere in the file.
+#
+# The two-step rule matches by NAME across the whole file, which is scope-blind.
+# Measured on nldesign `js/admin.js`: line 1114 binds
+# `var btn = document.getElementById('nldesign-save-btn')`, and that one line
+# put EVERY `btn` in a 1700-line file into scope — including the three
+# `forEach(function (btn) { ... })` callbacks whose `btn` is the clicked element,
+# i.e. the component's own markup, not server state. Four false positives from
+# one binding.
+#
+# Rather than implement JS scoping, an AMBIGUOUS NAME IS DROPPED: if the
+# identifier is ever a parameter, this file cannot tell the two apart and
+# declines to guess. That can only UNDER-report, which is the correct direction
+# for a rule whose false positives would otherwise bury the real finding.
+_PARAM_RX = re.compile(
+    r"(?:function\s*\**\s*\w*\s*\(([^)]*)\)|\(([^)]*)\)\s*=>|(?:^|[^\w.])(\w+)\s*=>)",
+    re.M,
+)
+
+
+def _ambiguous_names(masked: str) -> set[str]:
+    out: set[str] = set()
+    for m in _PARAM_RX.finditer(masked):
+        for group in m.groups():
+            if not group:
+                continue
+            for part in group.split(","):
+                name = part.strip().split("=")[0].strip().lstrip(".").strip()
+                if re.fullmatch(r"\w+", name):
+                    out.add(name)
+    return out
+
 
 def scan_file(path: str) -> list[str]:
     try:
@@ -139,8 +171,10 @@ def scan_file(path: str) -> list[str]:
         hits.add(masked.count("\n", 0, m.start()) + 1)
 
     # Two-step: a name bound to a DOM lookup, then read for server data.
-    names = {m.group(1) for m in _ASSIGN_RX.finditer(masked)}
-    this_names = {m.group(1) for m in _THIS_ASSIGN_RX.finditer(masked)}
+    # Names that are also parameters somewhere are ambiguous — see _PARAM_RX.
+    ambiguous = _ambiguous_names(masked)
+    names = {m.group(1) for m in _ASSIGN_RX.finditer(masked)} - ambiguous
+    this_names = {m.group(1) for m in _THIS_ASSIGN_RX.finditer(masked)} - ambiguous
     for name in names:
         rx = re.compile(r"(?<![\w.])" + re.escape(name) + r"\s*[!?]?" + _READ)
         for m in rx.finditer(masked):

@@ -1003,6 +1003,37 @@ _ctrl_path_from_name() {
             # which cannot exist on disk and so always resolved to "missing".
             # Invisible until 2026-08-08 because plain `read` had been deleting
             # the backslashes before this branch could ever see two of them.
+            #
+            # ⚠️ TWO ROOTS, BECAUSE A NAMESPACED ROUTE NAME MAY OR MAY NOT SIT
+            # UNDER Controller\ (2026-08-08). Nextcloud resolves a route name
+            # `A\B\C` against `OCA\<App>\A\B\C`, and PSR-4 maps that to
+            # `lib/A/B/CController.php`. The single `lib/Controller/` root is
+            # right for `Settings\FileSettings` (which really is
+            # `OCA\<App>\Controller\Settings\FileSettings`) and WRONG for
+            # `AppHost\Controller\GenericHealth`, whose file is
+            # `lib/AppHost/Controller/GenericHealthController.php`.
+            #
+            # Measured on openregister — the repository that SHIPS those two
+            # classes. gate-5 derived a path that does not exist, `_apphost_serves`
+            # then matched the name, and both routed methods were filed as
+            #
+            #   "served by the OpenRegister AppHost generic controller (ADR-040);
+            #    its auth attribute ... is NOT visible from this repository"
+            #
+            # inside openregister. The gate punted to another package while
+            # standing in it, so `AppHost\Controller\GenericHealth#index` and
+            # `GenericMetrics#index` had their auth posture judged by NOBODY.
+            # A derived path is a GUESS; try each root and prefer one that
+            # exists. Falls back to the conventional form so an unresolvable
+            # name still reports the path a reader would expect.
+            local _cand
+            for _cand in "lib/Controller/${_ns//\\//}/${_last_cap}Controller.php" \
+                         "lib/${_ns//\\//}/${_last_cap}Controller.php"; do
+                if [ -f "${_cand}" ]; then
+                    echo "${_cand}"
+                    return 0
+                fi
+            done
             echo "lib/Controller/${_ns//\\//}/${_last_cap}Controller.php"
             ;;
         *_*)
@@ -2143,8 +2174,23 @@ fi
 # The gate is widened only along the axis it already covers — reading
 # server-injected data out of the DOM — and NOT to a bare `.dataset`, which
 # would flag every legitimate `event.target.dataset` in the fleet.
-if [ ! -d src ]; then
-    _skip 10 "initial-state" na "no src/ directory — this repo ships no frontend, so there is no code that could read server data out of the DOM."
+#
+# ⚠️ THE SURFACE IS src/ AND js/ (2026-08-08). Guarding on `[ -d src ]` and
+# enumerating only src/ produced the `na` BLACKOUT this whole exercise is about:
+# nldesign's src/ holds one file, manifest.json, and its entire hand-written
+# frontend lives in js/. gate-10 announced "this repo ships no frontend" over a
+# repo whose js/admin.js does exactly what this gate exists to catch —
+#
+#     var settingsEl = document.getElementById('nldesign-settings');
+#     var tokenSets  = JSON.parse(settingsEl.getAttribute('data-token-sets'));
+#
+# — the doriath AdminRoot defect, in the two-step form, in an ADMIN script. `na`
+# removes a gate from coverage accounting, so this silently left the
+# denominator. js/ is Nextcloud's conventional shipped-script directory; only
+# nldesign and openregister track anything there, and minified files are
+# excluded because a committed bundle is not authored code.
+if [ ! -d src ] && [ ! -d js ]; then
+    _skip 10 "initial-state" na "neither src/ nor js/ exists — this repo ships no frontend, so there is no code that could read server data out of the DOM."
 else
     _is_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-initial-state.log
     : > "${_is_log}"
@@ -2153,12 +2199,12 @@ else
         [ -f "$f" ] || continue
         _in_scope "$f" || continue
         _is_files+=("$f")
-    done < <(_enum_tracked '\.(vue|js|ts)$' src)
+    done < <(_enum_tracked '\.(vue|js|ts)$' src js | grep -v '\.min\.js$')
     _is_ran=1
     _is_helper="${SCRIPT_DIR}/lib/check_initial_state.py"
     if [ "${#_is_files[@]}" -eq 0 ]; then
         _is_ran=0
-        _skip 10 "initial-state" na "0 tracked .vue/.js/.ts file(s) under src/ in this diff — nothing was inspected, so DOM reads of server-injected data are UNVERIFIED by this run."
+        _skip 10 "initial-state" na "0 tracked, non-minified .vue/.js/.ts file(s) under src/ or js/ in this diff — nothing was inspected, so DOM reads of server-injected data are UNVERIFIED by this run."
     elif [ ! -f "${_is_helper}" ]; then
         _is_ran=0
         _skip 10 "initial-state" wiring "check_initial_state.py not found at ${_is_helper} — ${#_is_files[@]} frontend file(s) were in scope and NONE were inspected."
@@ -2214,7 +2260,7 @@ while IFS= read -r f; do
     [ -f "$f" ] || continue
     grep -qE '\bcreateRouter\s*\(|\bnew[[:space:]]+VueRouter\s*\(' "$f" 2>/dev/null || continue
     _ar_routers+=("$f")
-done < <(_enum_tracked '\.(js|ts|mjs)$' src)
+done < <(_enum_tracked '\.(js|ts|mjs)$' src js | grep -v '\.min\.js$')
 # The four conventional paths, kept even if they do not construct a router
 # themselves (a `routes.js` re-exported into main.js is still the routing table).
 for f in src/router/index.js src/router/index.ts src/router.js src/router.ts; do
@@ -2230,7 +2276,7 @@ done
 _ar_ran=1
 if [ "${#_ar_routers[@]}" -eq 0 ]; then
     _ar_ran=0
-    _skip 11 "admin-router" na "no file under src/ constructs a vue-router (no \`createRouter(\` / \`new VueRouter(\`) and none of the four conventional router paths exist — this app has no client-side router, so an admin component cannot be registered as a frontend route."
+    _skip 11 "admin-router" na "no file under src/ or js/ constructs a vue-router (no \`createRouter(\` / \`new VueRouter(\`) and none of the four conventional router paths exist — this app has no client-side router, so an admin component cannot be registered as a frontend route."
 elif [ "${#_ar_scoped[@]}" -eq 0 ]; then
     _ar_ran=0
     _skip 11 "admin-router" na "this app's router(s) — ${_ar_routers[*]} — are not in this diff, so under ADR-020 the routing table is unchanged from the base branch."
