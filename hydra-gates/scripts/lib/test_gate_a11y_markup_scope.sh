@@ -193,6 +193,79 @@ else
     _bad "gate-31 stopped catching a .vue <img> without alt — the widening REPLACED the Vue scope instead of adding to it"
 fi
 
+# ---------------------------------------------------------------------------
+# ARM 4 — A REPO WITH NO src/ AT ALL MUST NOT SILENCE HALF THE FAMILY.
+#
+# ARM 1 above passes with `src/` present but empty of markup, which is
+# nldesign's real shape. Delete that directory — a templates-only app — and
+# the guards diverge. Measured 2026-08-08 at package sha cdfbd7a, same files,
+# same run:
+#
+#   gate-34/36/37/38/39/41/43   ran; four of them FAILED on the plants
+#   gate-35/40/42/44            NOT APPLICABLE — "this repo ships no frontend,
+#                               so there is no .vue/.js/.ts source for this
+#                               gate to inspect"
+#
+# Those four still guarded on `[ -d src ]` while their siblings had moved to
+# `_a11y_has_markup_dir`, and the central applicability table listed the whole
+# family under `[ -d src ]`. `na` is the one verdict that removes a gate from
+# coverage accounting — so four accessibility gates excused themselves from a
+# repo full of markup, giving a reason the same run's own output contradicted.
+#
+# The assertion is deliberately about NOT-APPLICABLE rather than about the
+# findings: a gate that has become blind can still be caught by ARM 1, but a
+# gate that has declared itself irrelevant is invisible to every arm above.
+# ---------------------------------------------------------------------------
+_nosrc_app="${_tmp}/nosrc"
+_mkapp "${_nosrc_app}"
+cp "${_bad_app}/templates/settings/admin.php" "${_nosrc_app}/templates/settings/admin.php"
+rm -rf "${_nosrc_app}/src"
+(
+    cd "${_nosrc_app}" || exit 1
+    git add -A
+    git -c user.email=t@t -c user.name=t commit -qm nosrc
+) >/dev/null 2>&1
+_nosrc_out="${_tmp}/nosrc.txt"
+_run "${_nosrc_app}" "${_nosrc_out}"
+
+_excused=""
+_still=""
+for _g in 31 32 34 35 36 37 39 40 42 43 44; do
+    if grep -qE "^\[gate-${_g}\][^:]*: NOT APPLICABLE" "${_nosrc_out}"; then
+        _excused="${_excused} ${_g}"
+    elif ! grep -qE "^\[gate-${_g}\]" "${_nosrc_out}"; then
+        _still="${_still} ${_g}"
+    fi
+done
+if [ -n "${_excused}" ]; then
+    _bad "templates-only repo: gate(s)${_excused} declared NOT APPLICABLE over a templates/ full of markup — an accessibility gate excused itself from a DOM it can read"
+elif [ -n "${_still}" ]; then
+    _bad "templates-only repo: gate(s)${_still} emitted no verdict line at all — silence is byte-identical to success"
+else
+    _ok "a templates-only repo (no src/) keeps every accessibility gate applicable"
+fi
+
+# ...and the plants in it are still CAUGHT, not merely "not excused". A gate
+# that reports PASS over markup it never opened is the #225 defect itself.
+_nosrc_caught=0
+_nosrc_total=0
+while IFS=: read -r _g _what; do
+    [ -z "${_g}" ] && continue
+    # gate-45 (prefers-reduced-motion) is outside the 34-44 band this arm
+    # repairs and still guards on `[ -d src ]`; gate-38 is not in _expect.
+    case "${_g}" in 38|45) continue ;; esac
+    _nosrc_total=$((_nosrc_total + 1))
+    if grep -qE "^\[gate-${_g}\][^:]*: FAIL" "${_nosrc_out}"; then
+        _nosrc_caught=$((_nosrc_caught + 1))
+    else
+        _v=$(grep -oE "^\[gate-${_g}\] [^:]+: [A-Z ]+" "${_nosrc_out}" | head -1 | sed 's/^[^:]*: //')
+        _bad "templates-only repo: gate-${_g} did not catch: ${_what} (verdict: ${_v:-none emitted})"
+    fi
+done <<< "${_expect}"
+if [ "${_nosrc_caught}" -eq "${_nosrc_total}" ]; then
+    _ok "all ${_nosrc_total} accessibility gates caught their planted true positive with NO src/ directory at all"
+fi
+
 echo
 if [ "${_failures}" -eq 0 ]; then
     echo "test_gate_a11y_markup_scope.sh: ALL PASS"

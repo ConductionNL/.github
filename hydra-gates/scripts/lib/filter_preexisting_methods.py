@@ -154,8 +154,57 @@ def _extract_method_body(content: str, method: str) -> str | None:
                 depth -= 1
             j += 1
         if started and depth == 0:
-            return "\n".join(body_lines)
+            return "\n".join(_annotation_prefix(lines, start) + body_lines)
     return None
+
+
+_ANNOTATION_LINE = re.compile(r"^\s*(#\[|/\*|\*|//|\]|'|\"|[A-Za-z_\\][\w\\]*\s*[:=]|\))")
+
+
+def _annotation_prefix(lines: list[str], start: int) -> list[str]:
+    """The attribute + docblock region immediately above the declaration.
+
+    WHY THIS EXISTS — A DEFECT THIS FILTER USED TO ERASE
+    ----------------------------------------------------
+    Extraction began at the ``function NAME(`` line, so a method's ATTRIBUTES
+    and DOCBLOCK were outside the comparison. Delete ``#[PublicPage]`` from a
+    controller method and the body is byte-identical to the base ref, so the
+    entry was classified pre-existing and MOVED OUT of the gate log.
+
+    That is not a corner case: it is the ordinary way the defect enters a
+    repository. Measured 2026-08-08 on openregister — ``#[PublicPage]``
+    deleted from the engine's own ``GenericHealthController::index`` in the
+    diff under test:
+
+        hydra-gate-public-monitoring.log              (empty)  -> gate-30 PASS
+        hydra-gate-public-monitoring.log.preexisting  lib/AppHost/Controller/
+            GenericHealthController.php:78 method=index
+            rule=monitoring-endpoint-missing-public-page
+
+    The gate found it and this filter deleted it. Gates 5, 9 and 30 judge the
+    annotation region and nothing else, so for them a method whose annotations
+    changed IS a changed method.
+
+    Direction of the change: including more lines can only move entries from
+    ``preexisting`` back into the findings log. It cannot hide anything.
+    """
+    out: list[str] = []
+    i = start - 1
+    while i >= 0:
+        stripped = lines[i].strip()
+        if not stripped:
+            # A blank line ends the region: a docblock/attribute stack sits
+            # flush against its declaration.
+            break
+        if stripped.startswith(("}", "{")) or stripped.endswith((";", "{")):
+            # Previous statement / end of the preceding member.
+            break
+        if not _ANNOTATION_LINE.match(lines[i]):
+            break
+        out.append(lines[i])
+        i -= 1
+    out.reverse()
+    return out
 
 
 def _normalise(body: str) -> str:

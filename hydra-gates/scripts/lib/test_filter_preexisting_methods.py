@@ -238,6 +238,101 @@ def test_filter_safe_on_empty_log():
         assert rc == 0
 
 
+def test_filter_keeps_a_method_whose_ATTRIBUTE_was_removed():
+    """Deleting `#[PublicPage]` must keep the finding, not bury it.
+
+    THE DEFECT THIS PINS
+    --------------------
+    `_extract_method_body` began at the `function NAME(` line, so a method's
+    ATTRIBUTES and DOCBLOCK were outside the provenance comparison. Remove
+    `#[PublicPage]` from a monitoring controller and the body is byte-identical
+    to base, so the entry was classified pre-existing and MOVED OUT of the gate
+    log — and gate-30 reported PASS.
+
+    Measured 2026-08-08 on openregister with `#[PublicPage]` deleted from its
+    own `AppHost/Controller/GenericHealthController::index` inside the diff
+    under test: the findings log was empty and the `.preexisting` sibling held
+
+        lib/AppHost/Controller/GenericHealthController.php:78 method=index
+        rule=monitoring-endpoint-missing-public-page
+
+    Gates 5, 9 and 30 judge the annotation region and nothing else, so for them
+    a method whose annotations changed IS a changed method.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        base = {
+            "lib/Controller/H.php": (
+                "<?php\nclass H {\n"
+                "    /**\n     * GET /api/health.\n     */\n"
+                "    #[PublicPage]\n"
+                "    #[NoCSRFRequired]\n"
+                "    public function index(): int {\n        return 1;\n    }\n}\n"
+            ),
+        }
+        head = {
+            # SAME BODY. Only the attribute is gone.
+            "lib/Controller/H.php": (
+                "<?php\nclass H {\n"
+                "    /**\n     * GET /api/health.\n     */\n"
+                "    #[NoCSRFRequired]\n"
+                "    public function index(): int {\n        return 1;\n    }\n}\n"
+            ),
+        }
+        _make_repo(tmp, base_files=base, head_files=head)
+        log = tmp / "log.txt"
+        log.write_text(
+            "lib/Controller/H.php:8 method=index "
+            "rule=monitoring-endpoint-missing-public-page\n"
+        )
+        rc = subprocess.call(
+            ["python3", str(HERE / "filter_preexisting_methods.py"), "main", str(log)],
+            cwd=tmp,
+        )
+        assert rc == 0
+        remaining = log.read_text().strip().splitlines()
+        assert len(remaining) == 1, (
+            "the finding was buried in .preexisting: removing an attribute left "
+            f"the body byte-identical. log={remaining!r}"
+        )
+        assert "H.php" in remaining[0]
+
+
+def test_filter_still_buries_a_genuinely_untouched_method():
+    """Anti-widening control for the test above.
+
+    Including the annotation region must not turn every finding into a
+    PR-introduced one — otherwise the filter stops suppressing inherited debt,
+    which is the whole reason it exists (ADR-020).
+    """
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        method = (
+            "    /**\n     * GET /api/health.\n     */\n"
+            "    #[PublicPage]\n"
+            "    public function index(): int {\n        return 1;\n    }\n"
+        )
+        base = {"lib/Controller/H.php": "<?php\nclass H {\n" + method + "}\n"}
+        head = {
+            # The FILE changed; the method and its annotations did not.
+            "lib/Controller/H.php": "<?php\nclass H {\n" + method + "}\n// unrelated\n"
+        }
+        _make_repo(tmp, base_files=base, head_files=head)
+        log = tmp / "log.txt"
+        log.write_text("lib/Controller/H.php:6 method=index rule=some-rule\n")
+        rc = subprocess.call(
+            ["python3", str(HERE / "filter_preexisting_methods.py"), "main", str(log)],
+            cwd=tmp,
+        )
+        assert rc == 0
+        assert log.read_text().strip() == "", (
+            "an untouched method with untouched annotations must still be "
+            f"suppressed as pre-existing; log={log.read_text()!r}"
+        )
+        preex = log.with_name(log.name + ".preexisting")
+        assert preex.exists() and "H.php" in preex.read_text()
+
+
 # ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
@@ -254,6 +349,8 @@ def main():
         test_filter_safe_on_missing_base_ref,
         test_filter_safe_on_unparseable_log_line,
         test_filter_safe_on_empty_log,
+        test_filter_keeps_a_method_whose_ATTRIBUTE_was_removed,
+        test_filter_still_buries_a_genuinely_untouched_method,
     ]
     failures = 0
     for t in tests:
