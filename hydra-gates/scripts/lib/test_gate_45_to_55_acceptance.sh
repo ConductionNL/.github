@@ -331,6 +331,49 @@ _outC8="${_tmp}/c8.txt"
 _run "${_appC}" "${_outC8}"
 _expect "${_outC8}" 50 "FAIL" "still fails a multi-line read with no guard anywhere"
 
+# C9 — A DELIBERATE, MEASURED BLIND SPOT, PINNED SO IT CANNOT DRIFT SILENTLY.
+#
+# The first draft of the app-id fix accepted ANY expression up to the comma,
+# which also takes `$app` and `$this->appName`. A 12-repo before/after sweep
+# priced that: softwarecatalog went 23 -> 64 findings and 47 of the new ones
+# are entries in an array literal that assembles the admin settings payload —
+#
+#     'sendgridApiKey' => $this->config->getValueString($app, 'email_sendgrid_api_key', ''),
+#
+# There is no defense being deactivated in a settings read-out and nothing to
+# guard, so the finding has no legitimate end state (#252). The accepted app-id
+# shapes are therefore the ones actually measured as blind: a quoted literal
+# and a class constant.
+#
+# This arm asserts the CURRENT boundary rather than an ideal one. If someone
+# later teaches this gate to tell a scope decision from a read-out, this is the
+# arm to change — deliberately, with the number in front of them.
+_write_service '    public function readouts(): array
+    {
+        $app = '"'"'fx'"'"';
+        return [
+            '"'"'sendgridApiKey'"'"' => $this->config->getValueString($app, '"'"'email_sendgrid_api_key'"'"', '"'"''"'"'),
+            '"'"'mailgunApiKey'"'"'  => $this->config->getValueString($this->appName, '"'"'email_mailgun_api_key'"'"', '"'"''"'"'),
+        ];
+    }'
+_commit "${_appC}" "settings read-outs with a variable app id"
+_outC9="${_tmp}/c9.txt"
+_run "${_appC}" "${_outC9}"
+_expect "${_outC9}" 50 "PASS" "does not report settings read-outs whose app id is a plain variable (measured blind spot, not a safe shape)"
+
+# C10 — and the constant form of the SAME read is still caught, so C9 is a
+# boundary and not a hole the gate fell through.
+_write_service '    public function readouts(): array
+    {
+        return [
+            '"'"'sendgridApiKey'"'"' => $this->config->getValueString(Application::APP_ID, '"'"'email_sendgrid_api_key'"'"', '"'"''"'"'),
+        ];
+    }'
+_commit "${_appC}" "same read-out with a class-constant app id"
+_outC10="${_tmp}/c10.txt"
+_run "${_appC}" "${_outC10}"
+_expect "${_outC10}" 50 "FAIL" "still catches the same read written with a class-constant app id"
+
 # ===========================================================================
 # FAMILY D — gate-53 must block the PR that CREATES larpingapp#286.
 #

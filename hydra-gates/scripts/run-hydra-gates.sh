@@ -5880,10 +5880,35 @@ SEC_KEY = re.compile(
     # constant today. Same family as #184: a checker that matches a string
     # literal misses every constant.
     #
-    # `[^,()]+` is deliberately shape-agnostic (literal, `self::APP_ID`,
-    # `Application::APP_ID`, `$this->appId`) and stops at the comma, so it
-    # cannot swallow the key argument this regex exists to capture.
-    r"getValue(?:String|Bool|Int)\s*\(\s*[^,()]+\s*,\s*['\"]"
+    # LITERAL OR CLASS CONSTANT — AND DELIBERATELY NOT AN ARBITRARY EXPRESSION.
+    #
+    # The first draft of this fix accepted `[^,()]+`, i.e. anything up to the
+    # comma, which also takes `$app` and `$this->appName`. That is a strictly
+    # larger widening than the defect measured, and a before/after sweep of 12
+    # repos caught what it costs: softwarecatalog went 23 -> 64 findings, and
+    # 47 of the new ones are reads inside SETTINGS READ-OUTS —
+    #
+    #     'sendgridApiKey' => $this->config->getValueString($app, 'email_sendgrid_api_key', ''),
+    #
+    # entries in an array literal that assembles the admin settings payload.
+    # There is no defense being deactivated there and nothing to guard: the
+    # finding has no legitimate end state, which is the unclosable-gate shape
+    # (#252). A gate that emits 47 of those in one repo teaches people to stop
+    # reading it.
+    #
+    # So the accepted shapes are the ones the fleet actually writes for an app
+    # id — a quoted literal, or a class constant (`Application::APP_ID`,
+    # `self::APP_ID`, `static::APP_ID`) — which is exactly the blind spot that
+    # was measured: 7 security-relevant reads across 5 repos.
+    #
+    # KNOWN BLIND SPOT, STATED RATHER THAN QUIETLY ENFORCED: a read whose app
+    # id is a plain variable is still invisible to this gate. It is not a safe
+    # shape, it is an unmeasured one — separating the settings read-outs from
+    # the real scope decisions among them needs a data-flow question this
+    # regex cannot ask.
+    r"getValue(?:String|Bool|Int)\s*\(\s*"
+    r"(?:['\"][^'\"]*['\"]|(?:self|static|parent|[A-Z]\w*)(?:\\\w+)*::\w+)"
+    r"\s*,\s*['\"]"
     r"(?P<key>[^'\"]*"
     r"(?:register|schema|allow[_-]?list|allow_?list|whitelist|blocklist|"
     # Quote-or-underscore-anchored short tokens so `author_name`,
