@@ -42,8 +42,47 @@
 set -uo pipefail
 
 # Mode: 0 = WARN, 1 = BLOCK. Switches automatically once BLOCK_AFTER_EPOCH is reached.
-# Default: 90 days after the umbrella's acceptance date (2026-05-11 + 90d ≈ 2026-08-09).
-BLOCK_AFTER_EPOCH="${HYDRA_OR_GATE_BLOCK_AFTER_EPOCH:-1786636800}"  # 2026-08-09 00:00 UTC
+#
+# THIS CONSTANT NEVER MATCHED ITS OWN COMMENT. It was introduced as "90 days
+# after the umbrella's acceptance date (2026-05-11 + 90d)", which is
+# 2026-08-09 00:00 UTC = 1786233600. The value actually committed, 1786636800,
+# is 2026-08-13 16:00 UTC — four days and sixteen hours later, and not even a
+# midnight boundary, which is the tell that it was arrived at by hand rather
+# than computed. So the switch-over date could be read off neither the code
+# nor the comment, and the two answers differed by four days.
+#
+# The INTENT was the comment's: acceptance + 90 days = 2026-08-09. Taking the
+# comment literally would have flipped this gate to BLOCK on the morning the
+# discrepancy was found. That was measured before it was decided, and the
+# measurement said not to (see below).
+#
+# RECONCILED 2026-08-09 in favour of neither, DELIBERATELY, for three reasons:
+#
+#   1. The debt is real and is not four days of work. Measured across all 18
+#      Conduction app repositories at origin/development on 2026-08-09,
+#      ELEVEN would have started hard-failing: procest carries an entire
+#      multi-tenant SaaS stack (26 Tenant* classes, 5 workflow-engine classes)
+#      and hermiq a 6-class tenant control plane. Migrating those onto the
+#      OpenRegister tenant boundary and lifecycle is an architecture
+#      programme, not a deadline.
+#
+#   2. Blocking on evidence this noisy would have been wrong regardless of
+#      time. On that same measurement the MAJORITY of findings were false
+#      positives of the rules' own matching (see the rule-1 rewrite below, and
+#      the note on rules 2-7): openregister was flagged for a geocoder that
+#      routes through OpenConnector exactly as ADR-022 asks, procest for a
+#      frontend shim whose docblock CITES this rule, and docudesk for a
+#      listener that subscribes to OpenRegister's own ApprovalStep events. A
+#      gate must be believable before it is made blocking.
+#
+#   3. One date instead of two. ADR-022 enforcement previously had two
+#      unrelated cliff edges in this one file — the umbrella epoch here and
+#      CAP_BLOCK_AFTER_EPOCH for the ADR-051 capability table. Aligning them
+#      gives the fleet a single ADR-022 enforcement date to plan against.
+#
+# The deadline moved on purpose and says so. It was not waived per file and no
+# rule was weakened to meet it.
+BLOCK_AFTER_EPOCH="${HYDRA_OR_GATE_BLOCK_AFTER_EPOCH:-1790985600}"  # 2026-10-03 00:00 UTC
 NOW_EPOCH="$(date -u +%s)"
 MODE=0
 if [ "${NOW_EPOCH}" -ge "${BLOCK_AFTER_EPOCH}" ]; then
@@ -130,13 +169,111 @@ if [ "${APP_ID}" = "openregister" ]; then
     echo "  They remain in force for every leaf app."
 fi
 
+# ---------------------------------------------------------------------------
 # 1. shared-pdok-via-openconnector — direct PDOK API calls outside openconnector.
 # Scope: lib/ + src/ + frontend js/vue files; skip docs, scripts, and openspec.
+#
+# WHY THIS IS NOT `grep -l api.pdok.nl` ANY MORE.
+#
+# It was, and on 2026-08-09 that spelling produced three findings fleet-wide of
+# which TWO were the opposite of a violation:
+#
+#   * procest src/services/pdokService.js — the file is the openconnector-routed
+#     shim itself (`generateUrl('/apps/openconnector/api/pdok')`); it never
+#     contacts PDOK. Its only match was a docblock line reading "Direct browser
+#     calls to api.pdok.nl are NOT permitted from this app — see Hydra umbrella
+#     `shared-pdok-via-openconnector` (ADR-022)". The gate reported a file as
+#     violating the rule because it contains a sentence CITING the rule.
+#
+#   * openregister lib/Service/Geo/PdokGeocoder.php — matched on a `const`
+#     holding the Locatieserver base URL. That URL is the argument handed to
+#     OpenConnector's CallService; the class has no HTTP client of its own and
+#     returns null when OpenConnector is absent. It is the pattern ADR-022
+#     prescribes, reported as the thing ADR-022 forbids.
+#
+# Only procest's PdokLocatieserverService was real: it fopen()s the endpoint
+# directly whenever the `pdok_locatieserver_source` config key is empty, which
+# is its default.
+#
+# A hostname in a comment cannot make an HTTP request, and a hostname handed to
+# the shared adapter is the fix, not the defect. So the rule now asks the two
+# questions that actually distinguish them:
+#   (a) does the host appear on a line of CODE (comments stripped)?  and
+#   (b) does the file carry its own HTTP transport, or does it dispatch through
+#       OpenConnector?
+# Routed files are PRINTED as info, never silently dropped.
+#
+# This is strictly narrower on prose and NOT narrower on code: a bare URL with
+# no OpenConnector reference anywhere in the file still fires, so a file that
+# gains a direct fetch cannot slip through by omitting a known transport name.
+# ---------------------------------------------------------------------------
+
+# Echo a file with comment-only lines removed. `https://` must survive, so a
+# `//` is treated as a comment ONLY when it opens the line; `#` likewise, and
+# never for a PHP `#[Attribute]`. Trailing comments are deliberately left in
+# place — keeping them can only cause the gate to fire, never to stay silent.
+_code_lines() {
+    awk '
+        BEGIN { inblk = 0 }
+        {
+            t = $0
+            sub(/^[ \t]+/, "", t)
+            if (inblk == 1) { if (t ~ /\*\//) { inblk = 0 } ; next }
+            if (t ~ /^\/\*/) { if (t !~ /\*\//) { inblk = 1 } ; next }
+            if (t ~ /^\/\//) { next }
+            if (t ~ /^\*/)   { next }
+            if (t ~ /^#/ && t !~ /^#\[/) { next }
+            print $0
+        }
+    ' "$1" 2>/dev/null
+}
+
+# Tokens that mean "this file performs its own HTTP call".
+_PDOK_DIRECT_TRANSPORT='file_get_contents|fopen[[:space:]]*\(|stream_context_create|curl_init|curl_exec|curl_setopt|GuzzleHttp|HttpClient|XMLHttpRequest|fetch[[:space:]]*\(|axios\.(get|post|put|request)|\$\.ajax'
+
 if [ "${APP_ID}" != "openconnector" ]; then
-    matches="$(grep -rln --include='*.php' --include='*.js' --include='*.ts' --include='*.vue' "api\\.pdok\\.nl" "${SEARCH_ROOT}" src 2>/dev/null || true)"
-    if [ -n "${matches}" ]; then
-        flag "shared-pdok-via-openconnector" "direct api.pdok.nl reference found — route via openconnector PDOK adapter instead"
-        echo "${matches}" | sed 's/^/    /'
+    _pdok_candidates="$(grep -rl --include='*.php' --include='*.js' --include='*.ts' --include='*.vue' "api\\.pdok\\.nl" "${SEARCH_ROOT}" src 2>/dev/null || true)"
+    _pdok_direct=""
+    _pdok_routed=""
+    _pdok_prose=""
+    while IFS= read -r _pf; do
+        [ -z "${_pf}" ] && continue
+        _pf_code="$(_code_lines "${_pf}")"
+        # (a) host mentioned only in prose → not a call site.
+        if ! printf '%s\n' "${_pf_code}" | grep -q "api\\.pdok\\.nl"; then
+            _pdok_prose="${_pdok_prose}${_pf}"$'\n'
+            continue
+        fi
+        # (b) own transport alongside the host → direct call.
+        if printf '%s\n' "${_pf_code}" | grep -qE "${_PDOK_DIRECT_TRANSPORT}"; then
+            _pdok_direct="${_pdok_direct}${_pf}"$'\n'
+            continue
+        fi
+        # No transport of its own AND it names OpenConnector → routed.
+        if printf '%s\n' "${_pf_code}" | grep -qi 'openconnector'; then
+            _pdok_routed="${_pdok_routed}${_pf}"$'\n'
+            continue
+        fi
+        # Host on a code line, no transport named, no OpenConnector anywhere:
+        # routing cannot be demonstrated, so this counts against the app.
+        _pdok_direct="${_pdok_direct}${_pf}"$'\n'
+    done <<< "${_pdok_candidates}"
+
+    _pdok_direct="$(printf '%s' "${_pdok_direct}")"
+    _pdok_routed="$(printf '%s' "${_pdok_routed}")"
+    _pdok_prose="$(printf '%s' "${_pdok_prose}")"
+
+    if [ -n "${_pdok_direct}" ]; then
+        flag "shared-pdok-via-openconnector" "api.pdok.nl contacted with the file's own HTTP transport — route via the openconnector PDOK adapter instead"
+        echo "${_pdok_direct}" | sed 's/^/    /'
+    fi
+    if [ -n "${_pdok_routed}" ]; then
+        echo "  ℹ️  [shared-pdok-via-openconnector] references api.pdok.nl but dispatches through OpenConnector — compliant, not counted:"
+        echo "${_pdok_routed}" | sed 's/^/      /'
+    fi
+    if [ -n "${_pdok_prose}" ]; then
+        echo "  ℹ️  [shared-pdok-via-openconnector] names api.pdok.nl in comments only — no call site, not counted:"
+        echo "${_pdok_prose}" | sed 's/^/      /'
     fi
 fi
 
