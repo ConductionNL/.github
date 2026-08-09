@@ -51,11 +51,54 @@ _here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _scripts="$(cd "${_here}/.." && pwd)"
 _runner="${HYDRA_GATES_RUNNER_UNDER_TEST:-${_scripts}/run-hydra-gates.sh}"
 
+# ---------------------------------------------------------------------------
+# PREFLIGHT — ajv must be resolvable, or this suite reports GATE DEFECTS that
+# are really a WIRING fault, and one of them is a false pass.
+#
+# Measured 2026-08-09 on a fresh clone of main (c51a225, zero drift): with ajv
+# unresolvable, gate-53 fails closed ("ajv not resolvable ... refusing to run
+# fail-open"), and FOUR arms of FAMILY D then read as gate defects —
+#   D2  removing component + registry entry together : expected PASS, got FAIL
+#   D3  a pre-existing orphan stays advisory         : expected PASS, got FAIL
+#   D1b the finding NAMES EventRoster                : name never appears
+#   D3b the pre-existing orphan surfaces as a WARN   : WARN never appears
+# and this was reported upstream as "the suite expects blocking where the gate
+# was deliberately made advisory". It does not. The gate is correct.
+#
+# 🔑 Worse, arm D1 still printed `ok`. It expects FAIL and got FAIL — for a
+# completely unrelated reason. That is a FALSE PASS inside the very suite
+# built to catch false passes, and it is why this preflight aborts instead of
+# letting the run continue with a warning.
+#
+# ⚠️ `node -e "require('ajv')"` is NOT a valid check on its own: Node resolves
+# UPWARD from the cwd, so it can succeed against a node_modules belonging to
+# some ancestor directory rather than to the gates package. Resolve it from
+# the helpers' own directory — the same place the runner resolves it from —
+# and print the ABSOLUTE PATH, because the path is the evidence and the exit
+# code is not.
+# ---------------------------------------------------------------------------
+if ! command -v node >/dev/null 2>&1; then
+    echo "WIRING: node is not on PATH." >&2
+    echo "        Every gate in this band that shells out to a JS helper would fail" >&2
+    echo "        closed, and this suite would report that as a gate defect." >&2
+    exit 2
+fi
+_ajv_at="$(cd "${_scripts}/lib" && node -e "process.stdout.write(require.resolve('ajv'))" 2>/dev/null || true)"
+if [ -z "${_ajv_at}" ]; then
+    echo "WIRING: ajv is not resolvable from ${_scripts}/lib." >&2
+    echo "        gates 22 and 53 fail CLOSED without it, so this suite would report" >&2
+    echo "        four gate-53 defects that do not exist — and arm D1 would print 'ok'" >&2
+    echo "        for the wrong reason. Refusing to run rather than emit a false verdict." >&2
+    echo "        Fix: NODE_PATH=<dir containing ajv> bash ${BASH_SOURCE[0]}" >&2
+    exit 2
+fi
+
 _failures=0
 _ok()  { echo "  ok   — $1"; }
 _bad() { echo "  FAIL — $1"; _failures=$((_failures + 1)); }
 
 echo "test_gate_45_to_55_acceptance.sh"
+echo "  preflight — ajv resolves to ${_ajv_at}"
 
 _tmp="$(mktemp -d "${TMPDIR:-/tmp}/hydra-g4555.XXXXXX")"
 trap 'rm -rf "${_tmp}"' EXIT
