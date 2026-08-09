@@ -33,8 +33,52 @@ on:
         required: true
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # PREFLIGHT — fail in ten seconds naming the real cause.
+  #
+  # `required: true` on a secret means "the caller passed the KEY", not "the
+  # value is non-empty" and not "the value works". When PROJECT_TOKEN is
+  # unavailable it interpolates to the empty string, every job below still
+  # starts, and actions/github-script dies about a minute later naming
+  # `github-token` — the action's INPUT, not the missing secret. That reads as
+  # an action bug and sends you looking in the wrong place.
+  #
+  # Measured on openbuild 2026-08-09: `Issue Triage` had **34 runs and 0
+  # successes since its first run on 2026-07-23** and nobody noticed, because
+  # the error never named PROJECT_TOKEN. It is not the shared workflow at
+  # fault — docudesk (1/12) and pipelinq (3/15) have succeeded on this same
+  # file, which is exactly why the diagnosis has to be in the error message.
+  #
+  # Same defect and same remedy as the openspec-sync preflight (#284).
+  # ---------------------------------------------------------------------------
+  preflight:
+    name: Preflight (PROJECT_TOKEN)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: PROJECT_TOKEN must be present and valid
+        env:
+          PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+        run: |
+          set -uo pipefail
+          if [ -z "${PROJECT_TOKEN//[[:space:]]/}" ]; then
+            echo "::error title=PROJECT_TOKEN is empty or was never passed::Issue Triage cannot run. The caller declares the secret, but the value that arrived is empty — so every downstream actions/github-script step would fail about a minute from now complaining about 'github-token', which is the action's input, not the missing thing. Add PROJECT_TOKEN to this repository's (or organisation's) secrets and make sure the caller forwards it, e.g. 'secrets: {PROJECT_TOKEN: \${{ secrets.PROJECT_TOKEN }}}' or 'secrets: inherit'."
+            exit 1
+          fi
+          code=$(curl -sS -o /dev/null -w '%{http_code}' \
+                   -H "Authorization: token ${PROJECT_TOKEN}" \
+                   -H "Accept: application/vnd.github+json" \
+                   https://api.github.com/user || echo "000")
+          if [ "${code}" = "200" ]; then
+            echo "PROJECT_TOKEN present and accepted by the API."
+            exit 0
+          fi
+          echo "::error title=PROJECT_TOKEN was rejected (HTTP ${code})::The secret is set but the API refused it. 401 means expired or revoked; 403 means it lacks the required scopes (issues + project). Rotate or re-scope the token — do not paste its value anywhere."
+          exit 1
+
   triage-single:
     name: Triage New Issue
+    needs: preflight
     runs-on: ubuntu-latest
     # Observed across 8 executions: 0.1 min. A single actions/github-script
     # step labelling one issue; 15 min covers a slow GitHub API.
@@ -197,6 +241,7 @@ jobs:
 
   triage-decision:
     name: Handle Triage Decision
+    needs: preflight
     runs-on: ubuntu-latest
     # Same shape as triage-single: one actions/github-script step acting on a
     # single issue. No executed run was sampled, so this mirrors that bound.
@@ -336,6 +381,7 @@ jobs:
 
   backlog-triage:
     name: Backlog Triage Existing Issues
+    needs: preflight
     runs-on: ubuntu-latest
     # UNMEASURED: 6 skipped records, 0 executions in the fleet history sampled.
     # Unlike the two single-issue jobs it walks EVERY untriaged open issue and
