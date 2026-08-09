@@ -19,8 +19,20 @@ on:
         default: "ConductionNL"
     secrets:
       PROJECT_TOKEN:
-        description: "GitHub token with project and issues scope"
-        required: true
+        # NOT `required: true`. `required` means "the caller passed something",
+        # not "the something works" — a caller passing an empty or revoked
+        # secret satisfies it and then dies at the first API call. On
+        # 2026-08-08 that produced `HttpError: Bad credentials` (401) and made
+        # `sync / Sync OpenSpec to GitHub Issues` a failing job name on the
+        # `development` branch of FIVE repos at once, for a reason that had
+        # nothing to do with their code.
+        #
+        # The preflight step below draws the distinction this declaration
+        # cannot: token ABSENT -> skip with a notice and succeed (there was
+        # nowhere to sync to); token PRESENT but rejected -> FAIL LOUDLY,
+        # because that is a genuinely broken integration and silence hides it.
+        description: "Token with project+issues scope. Absent = sync skipped. Present but invalid = hard failure."
+        required: false
 
 jobs:
   sync:
@@ -40,7 +52,39 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Distinguishes "no token configured" from "token configured and broken".
+      # Without this the job dies inside github-script with a bare
+      # `HttpError: Bad credentials`, which reads as an app-quality failure on
+      # the caller's `development` branch. A project-management sync is not a
+      # code-quality verdict; a MISSING integration should skip, and a BROKEN
+      # one should shout. Never silently pass a configured-but-failing token —
+      # that is how a check stops measuring while still looking green.
+      - name: Preflight - is PROJECT_TOKEN present and valid?
+        id: preflight
+        env:
+          PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+        run: |
+          set -uo pipefail
+          if [ -z "${PROJECT_TOKEN//[[:space:]]/}" ]; then
+            echo "::notice title=OpenSpec sync skipped::PROJECT_TOKEN is not configured for this repository, so there is no project to sync to. This is a SKIP, not a pass - configure the secret to enable the sync."
+            echo "sync=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Read the status code directly; do not infer success from a body.
+          code=$(curl -sS -o /dev/null -w '%{http_code}' \
+                   -H "Authorization: token ${PROJECT_TOKEN}" \
+                   -H "Accept: application/vnd.github+json" \
+                   https://api.github.com/user || echo "000")
+          if [ "$code" = "200" ]; then
+            echo "PROJECT_TOKEN is present and accepted (HTTP 200)."
+            echo "sync=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "::error title=PROJECT_TOKEN is configured but rejected::GitHub answered HTTP ${code} for this token. The OpenSpec sync cannot run. This is a REAL failure - the secret exists but does not work (revoked, expired, or missing project/issues scope). Rotate or re-scope it; do not remove this job to make the build green."
+          exit 1
+
       - name: Sync OpenSpec changes to issues
+        if: steps.preflight.outputs.sync == 'true'
         uses: actions/github-script@v7
         env:
           PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
