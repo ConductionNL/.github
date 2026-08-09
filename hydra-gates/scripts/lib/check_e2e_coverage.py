@@ -670,8 +670,73 @@ def _has_own_unconditional_skip(block_body: str) -> bool:
     """
     nested = [(s, e) for s, e, _d in _decl_spans(block_body)]
     for m in _UNCONDITIONAL_SKIP_RE.finditer(block_body):
-        if not any(s < m.start() < e for s, e in nested):
-            return True
+        if any(s < m.start() < e for s, e in nested):
+            continue
+        if _skip_is_guarded(block_body, m.start()):
+            continue
+        return True
+    return False
+
+
+# Openers that make the block they introduce conditional. `try` is here because
+# a `test.skip(true)` in a try-body runs only while no earlier statement in that
+# body threw; `finally` is deliberately absent — it always runs.
+# ANCHORED AT THE END on purpose. A window-scan here matched the `try` in
+# `} finally {` and called a finally-block guarded — the exact inversion this
+# check exists to avoid. Only the token immediately before the `{` opens it.
+_GUARD_OPENER_RE = re.compile(
+    r"(?:^|[;{}\s)])(?:if|else\s+if|else|catch|for|while|switch|try)\s*"
+    r"(?:\((?:[^()]|\([^()]*\))*\)\s*)?$",
+)
+
+
+def _skip_is_guarded(body: str, skip_pos: int) -> bool:
+    """Is the `test.skip(true, …)` at *skip_pos* inside a conditional construct?
+
+    WHY THIS EXISTS
+    ---------------
+    `test.skip(true, 'reason')` is NOT the syntax for "this test is switched
+    off". It is Playwright's *skip from this point* form, and the condition
+    lives at the CALL SITE:
+
+        if (!response) { test.skip(true, 'container not reachable'); return }
+
+    That test runs, and passes, whenever the guard is false. Treating it as
+    permanently skipped is how this check came to report "referenced only by a
+    test that never runs" about a test that ran and passed in the same CI run.
+
+    Measured across 11 repos: **118** `test.skip(true, …)` call sites, of which
+    **114 are guarded** and only **4** are genuinely unconditional. So the rule
+    without this test misfires on ~96% of what it inspects.
+
+    The false positive is worse than a normal one because the gate's prescribed
+    remedy is `@e2e exclude` — so complying DELETES a true coverage claim and
+    marks a tested scenario permanently untestable.
+
+    HOW
+    ---
+    Walk backwards tracking brace depth to find the innermost `{` still open at
+    *skip_pos*, then ask what introduced it. Repeat outward: a skip nested three
+    blocks deep inside an `if` is still guarded. Stops at the enclosing test
+    body, whose opener is the `test(`/`it(` callback — not a guard.
+    """
+    depth = 0
+    i = skip_pos - 1
+    while i >= 0:
+        ch = body[i]
+        if ch == "}":
+            depth += 1
+        elif ch == "{":
+            if depth == 0:
+                # Innermost still-open block. What opened it?
+                head = body[max(0, i - 200):i]
+                if _GUARD_OPENER_RE.search(head):
+                    return True
+                # Not a guard (a function body, an object literal, the test
+                # callback). Keep walking outward — an `if` may enclose it.
+            else:
+                depth -= 1
+        i -= 1
     return False
 
 

@@ -1104,6 +1104,40 @@ class SkippedAncestorTest(unittest.TestCase):
             "  })\n"
             "})\n"), set())
 
+    # #239: a GUARDED `test.skip(true, …)` is a test that RUNS. Measured across
+    # 11 repos: 118 call sites, 114 guarded, 4 genuinely unconditional.
+    def test_guarded_skip_is_live(self):
+        self.assertEqual(self._refs(
+            "// @e2e demo::guarded\n"
+            "test('syncs when reachable', async ({ page }) => {\n"
+            "  if (!response) { test.skip(true, 'container not reachable'); return }\n"
+            "  await expect(page).toBeTruthy()\n"
+            "})\n"), {"demo::guarded"})
+
+    def test_bare_skip_is_still_dead(self):
+        # Negative control: if this passes, the rule was disabled, not fixed.
+        self.assertEqual(self._refs(
+            "// @e2e demo::bare\n"
+            "test('never runs', async ({ page }) => {\n"
+            "  test.skip(true, 'pending backend work')\n"
+            "  await expect(page).toBeTruthy()\n"
+            "})\n"), set())
+
+    def test_skip_in_finally_is_still_dead(self):
+        # `finally` always runs, so this skip is unconditional. Proves the
+        # check discriminates BETWEEN openers rather than treating any
+        # enclosing brace as a guard.
+        self.assertEqual(self._refs(
+            "// @e2e demo::finally\n"
+            "test('always skipped', async ({ page }) => {\n"
+            "  try {\n"
+            "    await probe()\n"
+            "  } finally {\n"
+            "    test.skip(true, 'always')\n"
+            "  }\n"
+            "  await expect(page).toBeTruthy()\n"
+            "})\n"), set())
+
     def test_the_four_case_fixture_from_the_issue(self):
         # #210's minimal reproduction, whole, in one file — the shape the fix
         # is measured against.
