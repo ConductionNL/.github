@@ -588,5 +588,94 @@ class Application {
         self.assertNotIn("NOTE", out)
 
 
+class LazyClosureTest(GateCase):
+    """THE EXEMPTION WAS DOCUMENTED AND NEVER IMPLEMENTED (.github#276).
+
+    This module's header has always said lazy service closures that merely
+    MENTION an AppHost class are deliberately NOT flagged, because their
+    bodies run at resolution time, long after every app has registered. Both
+    rules ran over the whole file, so they did not.
+
+    Measured on launchpad — a DIFFERENT repo shape from larpingapp, and the
+    one that matters here: launchpad's whole composition root resolves
+    OpenRegister lazily inside closures (it already does this for
+    `AppHost\\Observability\\ManifestLoader`), which is the documented leaf
+    pattern and the reason launchpad is green today. A closure body naming
+    Bootstrap reported byte-identically to an eager
+    `Bootstrap::register($context, …)`. The gate would have failed the one
+    repo doing it correctly, for doing it correctly, and the only remedy is
+    to stop writing the lazy form — i.e. to introduce the defect.
+    """
+
+    def _app(self, body: str) -> None:
+        self.app("Application.php", """<?php
+namespace OCA\\Leaf\\AppInfo;
+class Application {
+    public function register($context): void {
+%s
+    }
+}
+""" % body)
+
+    def test_a_closure_body_naming_bootstrap_is_not_a_finding(self):
+        self._app('        $context->registerService("L", function ($c) {\n'
+                  '            return new \\OCA\\OpenRegister\\AppHost\\Bootstrap($c);\n'
+                  '        });')
+        self.assertEqual(_run(self.dir)[0], 0)
+
+    def test_an_arrow_function_naming_bootstrap_is_not_a_finding(self):
+        self._app('        $context->registerService("L", '
+                  'fn ($c) => new \\OCA\\OpenRegister\\AppHost\\Bootstrap($c));')
+        self.assertEqual(_run(self.dir)[0], 0)
+
+    def test_a_closure_body_probing_an_apphost_class_is_not_a_finding(self):
+        self._app('        $context->registerService("L", function ($c) {\n'
+                  '            return class_exists(\\OCA\\OpenRegister\\AppHost'
+                  '\\Controller\\GenericHealthController::class);\n'
+                  '        });')
+        self.assertEqual(_run(self.dir)[0], 0)
+
+    def test_a_static_closure_is_also_lazy(self):
+        self._app('        $context->registerService("L", static function ($c) {\n'
+                  '            return new \\OCA\\OpenRegister\\AppHost\\Bootstrap($c);\n'
+                  '        });')
+        self.assertEqual(_run(self.dir)[0], 0)
+
+    # --- ANTI-WIDENING. The mask must not swallow eager code. ------------
+    def test_an_eager_reference_is_still_a_finding(self):
+        self._app('        \\OCA\\OpenRegister\\AppHost\\Bootstrap::register($context, "leaf", []);')
+        self.assertEqual(_run(self.dir)[0], 1)
+
+    def test_an_eager_reference_AFTER_a_closure_is_still_a_finding(self):
+        """The blanker walks every closure; a badly-bounded one would eat the
+        rest of register(). This is the arm that catches that."""
+        self._app('        $context->registerService("L", function ($c) { return 1; });\n'
+                  '        \\OCA\\OpenRegister\\AppHost\\Bootstrap::register($context, "leaf", []);')
+        self.assertEqual(_run(self.dir)[0], 1)
+
+    def test_an_eager_reference_BETWEEN_two_closures_is_still_a_finding(self):
+        self._app('        $context->registerService("A", function ($c) { return 1; });\n'
+                  '        \\OCA\\OpenRegister\\AppHost\\Bootstrap::register($context, "leaf", []);\n'
+                  '        $context->registerService("B", fn ($c) => 2);')
+        self.assertEqual(_run(self.dir)[0], 1)
+
+    def test_the_named_register_method_is_not_blanked(self):
+        """`public function register(` must never be treated as a closure —
+        blanking it would empty the gate entirely, which is the failure mode
+        that looks exactly like a fix."""
+        code = gate.blank_closure_bodies(
+            "<?php class A { public function register($c): void {"
+            " \\OCA\\OpenRegister\\AppHost\\Bootstrap::x(); } }")
+        self.assertIn("Bootstrap", code)
+
+    def test_a_probe_inside_a_closure_is_not_NOTEd_either(self):
+        self._app('        $context->registerService("L", function ($c) {\n'
+                  "            return class_exists('OCA\\\\OpenRegister\\\\Event\\\\ObjectCreatingEvent');\n"
+                  '        });')
+        rc, out = _run(self.dir)
+        self.assertEqual(rc, 0)
+        self.assertNotIn("NOTE", out)
+
+
 if __name__ == "__main__":
     unittest.main()

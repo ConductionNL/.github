@@ -6654,7 +6654,26 @@ if [ "${#_rhr_files[@]}" -eq 0 ]; then
 elif [ "${#_rhr_files[@]}" -gt 0 ]; then
     _rhr_helper="${SCRIPT_DIR}/lib/check_register_handler_resolution.py"
     if [ -f "${_rhr_helper}" ]; then
-        python3 "${_rhr_helper}" "${_rhr_files[@]}" >> "${_rhr_log}" 2>/dev/null || true
+        # A CHECKER THAT COULD NOT RUN MUST NOT JUDGE THE CODE (.github#276 —
+        # the #245/#233 rule, applied to the two gates it had not reached).
+        #
+        # This was `>> log 2>/dev/null || true`: stderr discarded, exit status
+        # discarded, and the verdict then taken from `wc -l` on an empty log,
+        # i.e. PASS. Measured on shillinq with a python3 that exits 1:
+        # `[gate-56] PASS` and `[gate-57] PASS` — and gate-57 had reported 20
+        # real findings over the same 316 services one run earlier. That is
+        # gate-40's defect verbatim.
+        #
+        # The helper ALWAYS returns 0 when it runs, by design (#209 — the
+        # count goes to stdout, never into the exit byte). So a non-zero exit
+        # here is unambiguously a crash and can never be a finding count.
+        _rhr_err="${HYDRA_GATE_LOG_DIR}/hydra-gate-register-handler-resolution.err"
+        python3 "${_rhr_helper}" "${_rhr_files[@]}" >> "${_rhr_log}" 2>"${_rhr_err}"
+        _rhr_rc=$?
+        if [ "${_rhr_rc}" -ne 0 ]; then
+            _rhr_ran=0
+            _skip 56 "register-handler-resolution" wiring "check_register_handler_resolution.py exited ${_rhr_rc} — ${#_rhr_files[@]} register file(s) were in scope and NONE were judged; whether every referenced handler class/method resolves is UNVERIFIED by this run. This helper always exits 0 when it runs, so this is a crash, not a finding count. See ${_rhr_err}."
+        fi
     else
         _rhr_ran=0
         _skip 56 "register-handler-resolution" wiring "check_register_handler_resolution.py not found at ${_rhr_helper} — ${#_rhr_files[@]} register file(s) were in scope and NONE were inspected; whether every referenced handler class/method actually resolves is UNVERIFIED by this run."
@@ -6718,7 +6737,17 @@ if [ "${#_owc_files[@]}" -eq 0 ]; then
 elif [ "${#_owc_files[@]}" -gt 0 ]; then
     _owc_helper="${SCRIPT_DIR}/lib/check_orphaned_write_capability.py"
     if [ -f "${_owc_helper}" ]; then
-        python3 "${_owc_helper}" "${_owc_files[@]}" >> "${_owc_log}" 2>/dev/null || true
+        # A crashed checker is not a finding — see gate 56 above (.github#276).
+        # Measured on shillinq: with python3 exiting 1 this gate printed PASS
+        # over the same 316 services it had reported 20 findings in one run
+        # earlier. The helper always returns 0 when it runs (#209).
+        _owc_err="${HYDRA_GATE_LOG_DIR}/hydra-gate-orphaned-write-capability.err"
+        python3 "${_owc_helper}" "${_owc_files[@]}" >> "${_owc_log}" 2>"${_owc_err}"
+        _owc_rc=$?
+        if [ "${_owc_rc}" -ne 0 ]; then
+            _owc_ran=0
+            _skip 57 "orphaned-write-capability" wiring "check_orphaned_write_capability.py exited ${_owc_rc} — ${#_owc_files[@]} service file(s) were in scope and NONE were judged; orphaned (mintable-but-unreachable) write capabilities are UNVERIFIED by this run. This helper always exits 0 when it runs, so this is a crash, not a finding count. See ${_owc_err}."
+        fi
     else
         _owc_ran=0
         _skip 57 "orphaned-write-capability" wiring "check_orphaned_write_capability.py not found at ${_owc_helper} — ${#_owc_files[@]} service file(s) were in scope and NONE were inspected; orphaned (mintable-but-unreachable) write capabilities are UNVERIFIED by this run."
@@ -7077,7 +7106,32 @@ elif [ "${_ss_rc}" -eq 3 ]; then
     # The log used to say "gate skipped" while the verdict beside it said PASS.
     # Those cannot both be true, and PASS is the one every consumer counted.
     # It is not PASS any more (#242) — and it is `na`, not structural (#268).
-    _skip 63 "settings-surface" na "the diff against '${BASE_REF}' touched no manifest and no menu-layout, so NO manifest was inspected. Diff-scoped out under ADR-020 — not a gap: the manifests in this repo are unchanged from the base branch, so this PR introduces no settings placement (ADR-079) to judge. This gate runs on the next PR that touches a manifest. See ${_ss_log}."
+    #
+    # THE CONTROLLER-ONLY DIFF (.github#276).
+    #
+    # This gate's rules read src/manifest.json + src/manifest.d/ +
+    # src/menu-layout.json. A PR that changes a settings CONTROLLER, or adds
+    # or deletes a lib/Settings/*Admin.php section, therefore lands here — and
+    # the old reason read "this PR introduces no settings placement (ADR-079)
+    # to judge", which on such a diff is an OVERCLAIM. The author changed the
+    # settings surface; this gate simply does not adjudicate that half of it.
+    #
+    # WIDENING IT TO READ THE CONTROLLER WAS TRIED AND REVERTED, and the note
+    # is in check_store_and_settings_surface.py: a gate that only RUNS when a
+    # manifest changed and then judges code the PR never touched "blocked
+    # EVERY manifest-touching PR in that repo, permanently". So the verdict
+    # stays `na` and the rules stay manifest-only. What changes is that the
+    # line now says WHICH HALF it looked at, and names the PHP half when the
+    # diff contains it, so `na` cannot be read as a clearance for the change
+    # the author actually made.
+    _ss_php=$(printf '%s\n' "${CHANGED_FILES}" | grep -cE '^lib/(Settings/.*\.php|Controller/.*[Ss]ettings.*\.php)$' || true)
+    [ -z "${_ss_php}" ] && _ss_php=0
+    if [ "${_ss_php}" -gt 0 ]; then
+        _ss_extra="⚠️ This diff DOES touch the settings surface in PHP (${_ss_php} lib/Settings or settings-controller file(s)), and this gate did not look at any of it: ADR-079's placement rules are expressed in the manifest, and widening this gate to read controllers was tried and reverted because it blocked every manifest-touching PR in the repo permanently. Read this NOT APPLICABLE as 'no manifest placement decision to judge', never as 'the settings change was checked'."
+    else
+        _ss_extra="The manifests in this repo are unchanged from the base branch, so this PR introduces no manifest placement decision to judge."
+    fi
+    _skip 63 "settings-surface" na "the diff against '${BASE_REF}' touched no manifest and no menu-layout, so NO manifest was inspected. Diff-scoped out under ADR-020 — not a gap. This gate adjudicates ADR-079 placement as declared in src/manifest.json, src/manifest.d/ and src/menu-layout.json, and nothing else. ${_ss_extra} It runs on the next PR that touches one of those. See ${_ss_log}."
 elif [ "${_ss_rc}" -eq 4 ]; then
     _skip 63 "settings-surface" na "no src/manifest.json — a Tier-0 app declares no settings surface for ADR-079 to place."
 else

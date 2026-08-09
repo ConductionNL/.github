@@ -337,6 +337,92 @@ def apphost_class_exists(text: str) -> bool:
     return any(_APPHOST_FQCN.search(t) for t in class_exists_targets(text))
 
 
+_CLOSURE_START = re.compile(r"(?<![A-Za-z0-9_$])(?:static\s+)?(?:function\s*\(|fn\s*\()")
+
+
+def blank_closure_bodies(text: str) -> str:
+    """*text* with the bodies of ANONYMOUS functions blanked, offsets kept.
+
+    THE EXEMPTION WAS DOCUMENTED AND NEVER IMPLEMENTED (.github#276).
+
+    This module's header has always said:
+
+        Lazy service closures that merely MENTION an AppHost class are
+        deliberately NOT flagged: their bodies run at resolution time, long
+        after every app has registered. Only register()-time resolution is
+        the defect.
+
+    Both rules ran over the whole file, so they did not. Measured on
+    launchpad — whose entire composition root is built on resolving
+    OpenRegister lazily inside closures, which is the documented leaf
+    pattern and the reason launchpad is green today:
+
+        $context->registerService('Lazy', function ($c) {
+            return new \\OCA\\OpenRegister\\AppHost\\Bootstrap($c);
+        });
+
+    reported byte-identically to an eager `Bootstrap::register($context, …)`
+    at the top of register(). The gate would have failed the one repo doing
+    it correctly, for doing it correctly, and the only remedy available is to
+    stop writing the lazy form — i.e. to introduce the defect.
+
+    NAMED methods are NOT blanked: `public function register(` has an
+    identifier between `function` and `(`, so the pattern cannot match it.
+    An eager reference AFTER a closure is still seen (asserted).
+    """
+    out = list(text)
+    n = len(text)
+
+    def blank(a: int, b: int) -> None:
+        for k in range(max(a, 0), min(b, n)):
+            if out[k] != "\n":
+                out[k] = " "
+
+    for m in _CLOSURE_START.finditer(text):
+        i, depth = m.end() - 1, 0
+        while i < n:
+            if text[i] == "(":
+                depth += 1
+            elif text[i] == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+            i += 1
+        j = i + 1
+        if m.group(0).lstrip().startswith("fn"):
+            # `fn (...) => <expr>` — blank to the first `,`/`;` or the
+            # enclosing closing bracket, at the expression's own depth.
+            d = 0
+            while j < n:
+                c = text[j]
+                if c in "([{":
+                    d += 1
+                elif c in ")]}":
+                    if d == 0:
+                        break
+                    d -= 1
+                elif c in ",;" and d == 0:
+                    break
+                j += 1
+            blank(i + 1, j)
+            continue
+        while j < n and text[j] not in "{;":
+            j += 1
+        if j >= n or text[j] == ";":
+            continue  # a signature with no body
+        d, k = 0, j
+        while k < n:
+            if text[k] == "{":
+                d += 1
+            elif text[k] == "}":
+                d -= 1
+                if d == 0:
+                    break
+            k += 1
+        blank(j + 1, k)
+    return "".join(out)
+
+
 def register_body(text: str) -> str:
     """The balanced body of `function register(...)`, or '' when absent.
 
@@ -425,6 +511,12 @@ def scan_app(app_dir: str) -> list[tuple[str, str]]:
 
     findings: list[tuple[str, str]] = []
     for path, text in sorted(code.items()):
+        # Only EAGER references are the defect. A mention inside an anonymous
+        # function or arrow function resolves when that closure is CALLED,
+        # long after every app has registered — this module's header has said
+        # so since it was written and nothing implemented it (.github#276).
+        # See blank_closure_bodies() for what launchpad measured.
+        text = blank_closure_bodies(text)
         if BOOTSTRAP_REF.search(text):
             findings.append(
                 (path, "references OCA\\OpenRegister\\AppHost\\Bootstrap")
@@ -465,7 +557,8 @@ def scan_notes(app_dir: str) -> list[tuple[str, list[str]]]:
         return []
     out = []
     for path, text in sorted(code.items()):
-        probes = openregister_probes(text)
+        # Eager only, for the same reason as the hard rules above.
+        probes = openregister_probes(blank_closure_bodies(text))
         if probes:
             out.append((path, probes))
     return out
