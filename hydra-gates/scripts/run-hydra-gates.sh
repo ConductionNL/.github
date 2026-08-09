@@ -5862,13 +5862,66 @@ elif [ "${SCOPE_TO_DIFF}" = "1" ] && [ -n "${BASE_REF}" ]; then
         _csrf_fe_signals="${_csrf_fe_signals%%$'\n'*}"
         case "${_csrf_fe_signals}" in ''|*[!0-9]*) _csrf_fe_signals=0 ;; esac
         if [ "${_csrf_fe_signals}" -eq 0 ]; then
+            # -----------------------------------------------------------------
+            # "NO CO-CHANGE IN THE DIFF" IS NOT "NO CO-CHANGE NEEDED".
+            #
+            # The question above is asked of the DIFF. A PR whose callers have
+            # ALWAYS sent a token has no signal to add, and so could not pass —
+            # the only exits were a waiver or staying red.
+            #
+            # Measured on larpingapp#298, which closes a LIVE CSRF-forgery hole:
+            # `SettingsController::create()` and `reimport()` carried
+            #
+            #     * @NoCSRFRequired removed to close the CSRF-forgery surface (closes #206).
+            #
+            # at docblock-tag position, where Nextcloud's
+            # ControllerMethodReflector reads it as the annotation being
+            # PRESENT — the sentence announcing the removal was what kept CSRF
+            # disabled. Deleting it is the fix, and all three callers already
+            # sent `requesttoken` while the shared CnAdminSettingsShell uses
+            # @nextcloud/axios. The cheapest way to green would have been a
+            # cosmetic edit under src/ containing the word `requesttoken`:
+            # exactly the prose-satisfaction #191 warns against.
+            #
+            # So ask the state instead of the diff — is any mutating caller
+            # unprotected RIGHT NOW? Conservative in the direction that matters:
+            # every caller protected => the endpoint's caller is protected too;
+            # any caller unprotected => we cannot show it is not this endpoint's,
+            # so the removal still blocks. opencatalogi#79 (a delete-modal
+            # fetch() with no header) is still caught — its own test pins that.
+            # -----------------------------------------------------------------
+            _csrf_callers_helper="${SCRIPT_DIR}/lib/check_csrf_callers.py"
+            _csrf_unprotected=""
+            _csrf_callers_ran=0
+            if [ -f "${_csrf_callers_helper}" ] && [ -d src ]; then
+                set +e
+                _csrf_callers_err="${HYDRA_GATE_LOG_DIR}/hydra-gate-csrf-callers.err"
+                _csrf_unprotected=$(python3 "${_csrf_callers_helper}" . 2>"${_csrf_callers_err}")
+                if [ $? -eq 0 ]; then
+                    _csrf_callers_ran=1
+                fi
+                set +e
+            fi
             # Check for opt-out
             _csrf_optout_re='\[hydra-gate-csrf-cochange exclude\][[:space:]]+.{20,}'
             _csrf_optout=""
             _optout_text | grep -qE "${_csrf_optout_re}" && _csrf_optout="1"
-            if [ -z "${_csrf_optout}" ]; then
+            if [ "${_csrf_callers_ran}" -eq 1 ] && [ -z "${_csrf_unprotected}" ]; then
+                # Stated, never silent: a green here is a claim about the
+                # callers, and the reader must be able to see which claim.
+                echo "[gate-48] no CSRF signal was ADDED by this diff, and none was needed:" \
+                    "every mutating call site under src/ already carries one" \
+                    "(requesttoken / OCS-APIRequest / getRequestToken / @nextcloud/axios)." \
+                    "Checked by scripts/lib/check_csrf_callers.py over the working tree."
+            elif [ -z "${_csrf_optout}" ]; then
                 echo "@NoCSRFRequired removed but no frontend CSRF-signal added in diff:" >> "${_csrf_log}"
                 echo "${_csrf_removed}" >> "${_csrf_log}"
+                if [ "${_csrf_callers_ran}" -eq 1 ] && [ -n "${_csrf_unprotected}" ]; then
+                    echo "UNPROTECTED mutating call site(s) — these are why the removal blocks:" >> "${_csrf_log}"
+                    echo "${_csrf_unprotected}" >> "${_csrf_log}"
+                elif [ "${_csrf_callers_ran}" -eq 0 ]; then
+                    echo "(caller state NOT inspected: check_csrf_callers.py missing or no src/ — falling back to the diff-only question)" >> "${_csrf_log}"
+                fi
             fi
         fi
     fi

@@ -98,6 +98,89 @@ class TestMustGoRed(unittest.TestCase):
         self.assertEqual(gate.removals("-    #[Route('/x')] // NoCSRFRequired"), [])
 
 
+class TestANetZeroMoveIsNotARemoval(unittest.TestCase):
+    """A `-` paired with an identical `+` is a MOVE.
+
+    Measured on larpingapp: #297 relocated one docblock line and gate-48 kept
+    `Hydra Gates` red on that repo's `development` from then on, over a commit
+    that changed no auth posture at all.
+    """
+
+    MOVED = "     * @NoCSRFRequired removed to close the CSRF-forgery surface (closes #206)."
+
+    def test_the_larpingapp_297_diff(self):
+        diff = "\n".join([
+            "--- a/lib/Controller/SettingsController.php",
+            "+++ b/lib/Controller/SettingsController.php",
+            "@@ -280 +284,16 @@",
+            "-" + self.MOVED,
+            "+     * instance-wide configuration write needs. `@NoCSRFRequired` was removed",
+            "@@ -301,0 +321,32 @@",
+            "+" + self.MOVED,
+        ])
+        self.assertEqual(gate.removals(diff), [])
+
+    def test_a_moved_attribute_line(self):
+        diff = "\n".join([
+            "+++ b/lib/Controller/X.php",
+            "-    #[NoCSRFRequired]",
+            "+    #[NoCSRFRequired]",
+        ])
+        self.assertEqual(gate.removals(diff), [])
+
+    def test_removed_twice_restored_once_still_reports_one(self):
+        """Multiset cancellation. Two deletions and one restoration is one
+        net deletion; reporting zero here would be the fix over-applied."""
+        diff = "\n".join([
+            "+++ b/lib/Controller/X.php",
+            "-    #[NoCSRFRequired]",
+            "-    #[NoCSRFRequired]",
+            "+    #[NoCSRFRequired]",
+        ])
+        self.assertEqual(gate.removals(diff), ["-    #[NoCSRFRequired]"])
+
+    def test_a_move_ACROSS_files_is_still_a_removal(self):
+        """Deleted from one controller, added to another. The first controller
+        genuinely lost the annotation, so cancelling across files would hide a
+        real posture change."""
+        diff = "\n".join([
+            "+++ b/lib/Controller/A.php",
+            "-    #[NoCSRFRequired]",
+            "+++ b/lib/Controller/B.php",
+            "+    #[NoCSRFRequired]",
+        ])
+        self.assertEqual(gate.removals(diff), ["-    #[NoCSRFRequired]"])
+
+    def test_a_genuine_removal_alongside_an_unrelated_move_still_reports(self):
+        diff = "\n".join([
+            "+++ b/lib/Controller/X.php",
+            "-     * @NoCSRFRequired",
+            "+     * @NoCSRFRequired",
+            "-    #[NoCSRFRequired]",
+        ])
+        self.assertEqual(gate.removals(diff), ["-    #[NoCSRFRequired]"])
+
+    def test_whitespace_is_not_normalised_away(self):
+        """A re-indented line is NOT the same line. Treating it as a move would
+        let a reformat swallow a genuine deletion."""
+        diff = "\n".join([
+            "+++ b/lib/Controller/X.php",
+            "-    #[NoCSRFRequired]",
+            "+        #[NoCSRFRequired]",
+        ])
+        self.assertEqual(gate.removals(diff), ["-    #[NoCSRFRequired]"])
+
+    def test_the_file_header_is_not_read_as_an_addition(self):
+        """`+++ b/...` starts with `+`. If it were pooled as an added line the
+        path would poison the cancellation set."""
+        diff = "\n".join([
+            "--- a/lib/Controller/X.php",
+            "+++ b/lib/Controller/X.php",
+            "-    #[NoCSRFRequired]",
+        ])
+        self.assertEqual(gate.removals(diff), ["-    #[NoCSRFRequired]"])
+
+
 class TestCli(unittest.TestCase):
     def test_arguments_are_rejected(self):
         self.assertEqual(gate.main(["check_csrf_removal.py", "extra"]), 2)
