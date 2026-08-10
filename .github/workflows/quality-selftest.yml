@@ -57,18 +57,13 @@ jobs:
     uses: ./.github/workflows/quality.yml
     with:
       app-name: github-selftest
-      # TEMPORARY — cache proof harness. REVERT TO false BEFORE MERGE.
-      enable-php: true
+      enable-php: false
       enable-npm: false
       enable-frontend: false
       enable-phpunit: false
       enable-newman: false
       enable-playwright: false
-      # TEMPORARY — proof harness for the forced-run scope change. REVERT TO
-      # false BEFORE MERGE. Turned on so a workflow_dispatch of this file
-      # actually materialises the Hydra Gates job and can be observed producing
-      # a verdict instead of "NOTHING WAS CHECKED".
-      enable-hydra-gates: true
+      enable-hydra-gates: false
       enable-license-check: false
       enable-journeydoc-capture: false
       enable-coverage-guard: false
