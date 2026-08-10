@@ -3849,86 +3849,85 @@ jobs:
   # The package is checked out as a SIBLING of the app checkout, not inside it,
   # so nothing in the gate package can ever be mistaken for app code under scan.
   hydra-gates:
-    # `!cancelled()` is retained deliberately even though this job now has NO
-    # `needs:`. With no producers there is no implicit `success()` left for it
-    # to suppress, so it is equivalent to a bare `inputs.enable-hydra-gates`
-    # today — it is kept so that re-adding a `needs:` entry later cannot
-    # silently reintroduce the implicit-`success()` trap that used to delete
-    # this job with no red, no skip and no trace. See the history below.
+    # `!cancelled()` is load-bearing, not decoration. `needs:` below implies
+    # `success()` on the Playwright job, which would make this whole job vanish
+    # for every repo that has the gates on and Playwright off — the gates would
+    # stop running on a majority of the fleet, silently, as a side effect of
+    # wiring up ONE gate's input. `!cancelled()` suppresses that implicit
+    # `success()`, so a skipped or failed Playwright job still lets the gates
+    # run and reach their own verdict.
+    #
+    # MEASURED, not assumed — ConductionNL/.github run 30909727531, a harness
+    # that reproduced this exact `needs:`/`if:` pair three times in one run and
+    # drove the producer into each of its three states:
+    #
+    #   producer succeeded -> gates RAN   (needs.playwright.result=success)
+    #   producer FAILED    -> gates RAN   (needs.playwright.result=failure)
+    #   producer SKIPPED   -> gates RAN   (needs.playwright.result=skipped)
+    #
+    # Do not "simplify" this to a bare `inputs.enable-hydra-gates`: that
+    # restores the implicit `success()` and deletes the job with no red, no
+    # skip and no trace whenever Playwright does not succeed.
     if: ${{ inputs.enable-hydra-gates && !cancelled() }}
     runs-on: ubuntu-latest
     name: "Hydra Gates"
-    # ── WHY THIS JOB NO LONGER DEPENDS ON PLAYWRIGHT ────────────────────────
+    # ── WHY THIS JOB DEPENDS ON PLAYWRIGHT (and why removing it failed) ────
     #
-    # It carried `needs: [playwright]` for ONE reason: gate-33 (axe-core)
-    # consumes `tests/axe/report.json`, which needs a browser against a booted
-    # instance, and the Playwright job is the only place in this file that has
-    # both. An artifact cannot be downloaded before its producer finishes, so
-    # the edge followed.
+    # gate-33 (axe-core) consumes `tests/axe/report.json`, which can only be
+    # produced by a browser against a booted instance. This job has neither: it
+    # is a checkout, a shell script and python. The Playwright job is the only
+    # place in this file with both, so the report is produced there and handed
+    # over as an artifact — and an artifact cannot be downloaded before the job
+    # that uploads it has finished. Hence the edge.
     #
-    # THAT EDGE HAS NEVER DELIVERED A SINGLE AXE REPORT TO ANY REPOSITORY.
-    # `enable-axe` is opt-in and defaults false; this file's own input
-    # documentation records gate-33 as having reported SKIPPED "in every repo
-    # in the fleet since it was written". Surveyed 2026-08-10 across all 20
-    # consumers of this workflow, on both `main` and `development`: ZERO set
-    # `enable-axe`, and eleven of them carry an explicit comment saying the
-    # omission is deliberate, because a vanilla Nextcloud 34 with no app
-    # installed already emits three serious/critical violations from core's own
-    # UI. So for 20 of 20 consumers the edge bought nothing and cost the gates
-    # their start time.
+    # REMOVING THIS EDGE WAS ATTEMPTED IN #326 AND REVERTED. Recorded here so
+    # the next person does not spend the same day on it.
     #
-    # And the cost was not small. The gates are a checkout, a shell script and
-    # python — 31s of work — but the edge put them behind the deepest chain in
-    # the graph: php-quality -> frontend-build -> playwright. Measured on
-    # openregister run 31358011759: php-quality 2m, frontend-build 1m37,
-    # playwright 3m59, hydra-gates 31s. The mechanical feedback a PR author
-    # actually acts on arrived at roughly t+7m instead of t+31s, for an input
-    # that was never produced.
+    # The reasoning was: `enable-axe` is opt-in and defaults false, a survey of
+    # all 20 consumers on both `main` and `development` found ZERO setting it,
+    # and this file's own input docs record gate-33 as SKIPPED "in every repo in
+    # the fleet since it was written". So the edge looked like pure
+    # serialisation — it put a 31s job behind php-quality -> frontend-build ->
+    # playwright, roughly t+7m instead of t+31s, for an input never produced.
     #
-    # WHAT THIS TRADES AWAY, STATED PLAINLY: with no edge, a caller that sets
-    # `enable-axe: true` can no longer receive the artifact — the gates job
-    # finishes long before Playwright uploads it. That is NOT left to race and
-    # resolve into a mystery: the step below refuses the configuration by name,
-    # up front, in seconds. Restoring the capability is deliberately a one-line
-    # change (put `needs: [playwright]` back and delete that refusal step); the
-    # download and provenance-validation steps are kept intact for exactly that
-    # reason, and are unreachable only while the refusal stands.
+    # TWO THINGS KILLED IT.
     #
-    # A bounded in-job WAIT for the artifact was considered and rejected: with
-    # zero consumers it could not be exercised even once before shipping, and a
-    # code path that has never executed is indistinguishable from one that
-    # works — which is the defect class this entire file exists to eliminate.
+    # 1. THE SURVEY WAS A SNAPSHOT, NOT A PROPERTY. docudesk#423 is open to set
+    #    `enable-axe: true`. "No consumer does X" is a fact with an expiry date,
+    #    and building a structural decision on one means the decision expires
+    #    with it — silently, in someone else's repository.
     #
-    # HISTORICAL NOTE, kept because it is the reason `!cancelled()` survives
-    # above. ConductionNL/.github run 30909727531 drove the old
-    # `needs: [playwright]` / `if:` pair through all three producer states
-    # (success, failure, skipped) and the gates job ran in every one. The guard
-    # worked; it is the edge itself that turned out to be unnecessary.
+    # 2. THE REPLACEMENT WAS WORSE THAN THE PROBLEM. With the edge gone, an
+    #    `enable-axe: true` caller cannot receive the artifact, so the job
+    #    refused the configuration up front. MEASURED on run 31370581318:
+    #    ZERO `[gate-*]` lines were emitted. The refusal sat before the
+    #    checkout, so gate-33 produced no verdict AND NEITHER DID THE OTHER 63.
+    #    It did not `_skip` with a named reason and it did not `_pass` — the
+    #    whole job died. That is precisely the outcome the note on the
+    #    `axe-check` step below already forbids: a gate that suppresses sixty
+    #    other gates to report itself is its own kind of outage. The axe failure
+    #    is RECORDED there and RAISED at the END for exactly this reason.
     #
-    # The gates are shell + python over a PR-sized diff. Bounded generously:
-    # the slowest observed component is the manifest gate's node startup.
+    # WHAT WAS KEPT INSTEAD. `php-quality` was removed from the `needs:` of
+    # phpunit, newman and playwright, where it gated nothing (see the note on
+    # the phpunit job). Playwright therefore starts earlier, and this job's
+    # verdict lands at roughly t+4.8m rather than t+7m — a real improvement with
+    # no new machinery and no case that has never been exercised.
+    #
+    # THE WAY TO GET FULL PARALLELISM, if someone wants it: `needs:` cannot be
+    # conditional in GitHub Actions, so it requires two mutually exclusive jobs
+    # (one with the edge for `enable-axe`, one without), which today would mean
+    # duplicating ~120 lines of steps for a security-critical runner — and two
+    # copies that can drift is the failure mode this file exists to document.
+    # Extract these steps into a composite action referenced as
+    # `ConductionNL/.github/.github/actions/hydra-gates@main` FIRST (note: a
+    # bare `./` path in a reusable workflow resolves against the CALLER's
+    # checkout, not this repo), then the two jobs become thin. That is a
+    # separate change with its own testing, not a rider on a caching PR.
+    needs: [playwright]
     timeout-minutes: 20
 
     steps:
-      # ── enable-axe requires the Playwright edge this job no longer has ─────
-      #
-      # First step in the job, deliberately: this configuration cannot produce
-      # an accessibility verdict, and the fastest possible named refusal beats
-      # running sixty-four gates and then failing with "no axe report reached
-      # this job", which would be true but would point at the Playwright job
-      # rather than at the actual cause.
-      #
-      # This is a REFUSAL, never a downgrade. `enable-axe: true` is an opt-in to
-      # ENFORCEMENT; silently continuing with gate-33 reporting SKIPPED is the
-      # precise shape — absence of a check rendering as the check succeeding —
-      # that this job exists to prevent. No caller in the fleet sets this input,
-      # so nothing that is green today turns red.
-      - name: enable-axe is not supported while the gates run in parallel
-        if: ${{ inputs.enable-axe }}
-        run: |
-          echo "::error::enable-axe is set, but the Hydra Gates job no longer depends on the Playwright job and therefore cannot receive tests/axe/report.json — the gates finish minutes before that artifact is uploaded. gate-33 would measure nothing, and this run would carry no accessibility verdict. Set enable-axe: false to state deliberately that this repo does not enforce runtime accessibility yet. To restore enforcement instead, re-add 'needs: [playwright]' to the hydra-gates job in ConductionNL/.github and delete this step — the download and provenance-validation steps below are intact and will work again unchanged."
-          exit 1
-
       - name: Checkout app
         uses: actions/checkout@v4
         with:
@@ -4244,12 +4243,7 @@ jobs:
         id: axe-check
         if: ${{ inputs.enable-axe }}
         env:
-          # Was `${{ needs.playwright.result }}`. This job no longer declares
-          # `needs:`, and `needs.playwright` would be an unresolvable context —
-          # it must not be referenced here. Unreachable today in any case: the
-          # refusal step at the top of this job fails the run before this point
-          # whenever `enable-axe` is set. Restore both together.
-          PLAYWRIGHT_RESULT: "not-a-dependency-of-this-job"
+          PLAYWRIGHT_RESULT: ${{ needs.playwright.result }}
         run: |
           set -uo pipefail
           REPORT="${GITHUB_WORKSPACE}/app/tests/axe/report.json"
