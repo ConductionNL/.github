@@ -5819,6 +5819,46 @@ fi
 #
 # Skill: .claude/skills/hydra-gate-spec-anchor-existence/SKILL.md
 # ---------------------------------------------------------------------------
+# THE SCOPE MUST BE EVERY PLACE A `@spec` TAG IS WRITTEN (#322).
+#
+# The enumerator was `find lib src`. It has never opened a test file — and
+# `tests/` is where a large share of the fleet's `@spec` tags live, because a
+# test is the natural place to name the requirement it proves. Measured
+# 2026-08-09 across the 21 apps that carry an `openspec/`: 272 unresolved
+# targets in `tests/`, in 16 repos, that no run has ever reported.
+#
+# The textbook case is procest. `tests/Unit/BackgroundJob/DsoDeadlineJobTest.php`
+# carries `@spec openspec/changes/dso-omgevingsloket/tasks.md#T14`, and that
+# tasks.md numbers its tasks T01–T08 and its verifications V01–V10. There is no
+# T14 and there never was. The identical tag in `lib/` would have failed this
+# gate since #246.
+#
+# `tests/` ONLY — `openspec/` IS DELIBERATELY NOT IN SCOPE.
+#
+# It looks like the obvious next directory and it is a trap, measured rather
+# than assumed: adding it yields 292 findings, and the bulk are documentation
+# TEMPLATES that quote the tag syntax rather than use it —
+# `openspec/changes/{name}/tasks.md#task-N`, `openspec/changes/<slug>/tasks.md`,
+# `openspec/.../tasks.md#task-N` — in context-briefs and proposals across
+# shillinq, pipelinq and others. Those placeholders cannot resolve and are not
+# meant to. Auditing them would make gate-46 a noise generator on exactly the
+# files that explain what the gate wants, which is how a real finding gets
+# buried. If per-document annotation is wanted later it needs a way to tell a
+# quoted example from a live tag; it is not this gate's job today.
+#
+# WHAT THIS IS NOT. #322 as filed reports that `tasks.md` targets are "never
+# existence-checked" — 353 of them on doriath. That premise does not hold on
+# this package, and the correction is recorded here so nobody re-fixes it: a
+# planted `@spec openspec/changes/does-not-exist-at-all/tasks.md#task-1` IS
+# reported as "target file not found", and a planted `#task-99999` against a
+# real tasks.md IS reported as "anchor not found". The 353 tags all resolve
+# through `build_archive_index`, which exists precisely for the
+# archived-under-a-date-prefix case the issue describes — doriath's
+# `openspec/changes/implement-user-sharing/tasks.md` resolves to
+# `openspec/changes/archive/2026-06-14-implement-user-sharing/tasks.md`, and
+# that file exists at the very commit the issue measured. What made the gate
+# say PASS there is ADR-020 diff scoping, not blindness. The REAL hole the
+# investigation uncovered is the one fixed above: `tests/` was never enumerated.
 _sae_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-spec-anchor-existence.log
 : > "${_sae_log}"
 _sae_files=()
@@ -5826,7 +5866,7 @@ while IFS= read -r f; do
     [ -f "$f" ] || continue
     _in_scope "$f" || continue
     _sae_files+=("$f")
-done < <(find lib src \( -name '*.php' -o -name '*.vue' -o -name '*.js' -o -name '*.ts' -o -name '*.md' \) \
+done < <(find lib src tests \( -name '*.php' -o -name '*.vue' -o -name '*.js' -o -name '*.ts' -o -name '*.md' \) \
     -not -path '*/vendor/*' -not -path '*/node_modules/*' \
     -not -path '*/dist/*' -not -path '*/build/*' 2>/dev/null)
 _sae_ran=1
@@ -5840,7 +5880,7 @@ if [ "${#_sae_files[@]}" -eq 0 ]; then
     # the shape #258 removed from gates 19/25/62/63 and #268 then categorised.
     # Gates 4/6/7/28 have said `na` for the identical situation since #268.
     _sae_ran=0
-    _skip 46 "spec-anchor-existence" na "scope was empty — 0 lib/ or src/ file(s) in this diff, so NO @spec target was resolved. Diff-scoped out under ADR-020: nothing in this repository is missing, and no change the author could make would let this gate inspect a file the diff does not contain. It runs on the next PR that touches annotated code."
+    _skip 46 "spec-anchor-existence" na "scope was empty — 0 lib/, src/ or tests/ file(s) in this diff, so NO @spec target was resolved. Diff-scoped out under ADR-020: nothing in this repository is missing, and no change the author could make would let this gate inspect a file the diff does not contain. It runs on the next PR that touches annotated code."
 elif [ ! -f "${_sae_helper}" ]; then
     # A MISSING HELPER MUST NOT REPORT PASS (#147). The gate previously
     # carried its resolver inline, so "the helper is absent" was not a
