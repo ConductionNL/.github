@@ -1339,6 +1339,45 @@ _a11y_has_markup_dir() {
     [ -d src ] || [ -d templates ] || [ -d appinfo/templates ]
 }
 
+# _a11y_style_files — every STANDALONE STYLESHEET this repo ships.
+#
+# WHY THIS EXISTS (.github#287)
+# -----------------------------
+# Gate-45 (prefers-reduced-motion) has never read a stylesheet. It scans
+# `<style>` blocks inside markup and nothing else, so every green it has
+# produced is a statement about markup, not about CSS. Motion in a `.css`
+# file — which is where a Nextcloud app's app-wide motion actually lives,
+# because `css/` is what `Util::addStyle()` loads — was invisible.
+#
+# Measured 2026-08-09:
+#   nldesign     3 stylesheets declaring motion, 0 `prefers-reduced-motion`
+#                guards (css/admin.css, css/systems/nldesign/theme.css,
+#                css/systems/summer-breeze/element-overrides.css) — gate-45 PASS
+#   openregister css/main.css, 7 motion declarations, 0 guards — gate-45 PASS
+#                both before and after the file was touched
+#
+# SCOPE mirrors `_a11y_markup_files` and adds `css/`, the Nextcloud-conventional
+# home for an app's stylesheets. Excluded on purpose:
+#   - the same generated/third-party trees (node_modules, vendor, dist, build,
+#     coverage, phpmetrics)
+#   - `*.min.css` — minified third-party output. A minified file is one line, so
+#     it would be audited as a single enormous block, and it is not ours to fix.
+_a11y_style_files() {
+    find css src templates appinfo/templates -type f \
+        \( -name '*.css' -o -name '*.scss' -o -name '*.sass' -o -name '*.less' \) \
+        2>/dev/null \
+        | grep -vE '(^|/)(node_modules|vendor|dist|build|coverage|phpmetrics|\.git)/' \
+        | grep -vE '\.min\.(css|scss|sass|less)$' \
+        || true
+}
+
+# The directories a stylesheet can live in. `css/` is deliberately included even
+# though no other a11y gate reads it: an app can ship `css/` with no src/ and no
+# templates/ at all, and that stylesheet is still loaded into a real page.
+_a11y_has_style_dir() {
+    [ -d css ] || _a11y_has_markup_dir
+}
+
 _skip() {
     set +e   # backstop — see the errexit invariant at the top of this file
     local _cat _reason
@@ -5587,12 +5626,80 @@ fi
 # counts as a claim someone can dispute, whereas `na` removes the gate from the
 # coverage arithmetic entirely — the run then reports "all applicable gates
 # green" with the defect inside it.
-if _a11y_has_markup_dir; then
+# A STYLESHEET IS WHERE THE MOTION ACTUALLY IS (#287).
+#
+# This gate scanned `<style>` blocks in markup and NOTHING ELSE — it had never
+# opened a `.css` file in its entire existence. In a Nextcloud app the app-wide
+# motion lives in `css/`, because that is what `Util::addStyle()` loads; a
+# `<style scoped>` block only ever styles one component.
+#
+# Measured 2026-08-09: nldesign ships three stylesheets with motion and zero
+# reduced-motion guards, and openregister's `css/main.css` has seven motion
+# declarations and zero guards. Gate-45 said PASS on both. Every gate-45 green
+# in the fleet before this commit was a statement about markup only.
+#
+# The unit differs by file type, and deliberately so:
+#   markup      one `<style>` block. A guard in a DIFFERENT block on the same
+#               page does not cover this one — `scoped` blocks are independent.
+#   stylesheet  the whole file. `@media (prefers-reduced-motion: reduce)`
+#               is conventionally written once at the bottom of a stylesheet
+#               and disables motion for everything above it, so requiring a
+#               guard per rule would flag correct code.
+if _a11y_has_style_dir; then
     _rm_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-prefers-reduced-motion.log
     : > "${_rm_log}"
     : > "${_rm_log}.err"
     _rm_seen=0
     _rm_rc=0
+    # THE GATE MUST ACCEPT THE FIX PEOPLE WILL ACTUALLY WRITE (#287).
+    #
+    # The canonical remedy for unguarded motion is ONE universal reset, written
+    # once for the whole app:
+    #
+    #   @media (prefers-reduced-motion: reduce) {
+    #     *, *::before, *::after {
+    #       animation-duration: 0.01ms !important;
+    #       transition-duration: 0.01ms !important;
+    #     }
+    #   }
+    #
+    # It lives in a single stylesheet and covers every other one. A per-file
+    # rule would report every OTHER stylesheet as a finding the day that reset
+    # lands — the gate would punish the correct fix. So the whole style corpus
+    # is scanned once for a universal reset first, and a repo that has one is
+    # globally guarded.
+    #
+    # NOT diff-scoped, deliberately: the reset is usually in a file this PR did
+    # not touch. Scoping it would resurrect the false positives it exists to
+    # prevent. Measured 2026-08-09: NO repo in the fleet has one today, so this
+    # pre-pass suppresses nothing right now — it is here so that fixing the
+    # 43 findings this commit surfaces actually turns the gate green.
+    #
+    # Fails CLOSED: any error leaves the flag at 0, i.e. more findings, never
+    # fewer. A crashed pre-pass must not manufacture a global exemption.
+    _rm_global=0
+    if [ -n "$(_a11y_style_files)" ]; then
+        _rm_global=$(_a11y_style_files | python3 -c '
+import re, sys
+UNIVERSAL = re.compile(
+    r"@media[^{]*prefers-reduced-motion[^{]*\{(?:[^{}]|\{[^{}]*\})*?(?<![\w.#\[-])\*",
+    re.IGNORECASE | re.DOTALL)
+for line in sys.stdin:
+    p = line.strip()
+    if not p:
+        continue
+    try:
+        if UNIVERSAL.search(open(p, encoding="utf-8", errors="replace").read()):
+            print(1)
+            break
+    except Exception:
+        continue
+else:
+    print(0)
+' 2>>"${_rm_log}.err" || echo 0)
+        [ "${_rm_global}" = "1" ] || _rm_global=0
+    fi
+    export HYDRA_RM_GLOBAL_GUARD="${_rm_global}"
     while IFS= read -r vue; do
         _in_scope "${vue}" || continue
         _rm_seen=$((_rm_seen + 1))
@@ -5606,19 +5713,79 @@ if _a11y_has_markup_dir; then
         # is recoverable, and the status is read.
         set +e
         python3 - "$vue" <<'PYRM' >> "${_rm_log}" 2>>"${_rm_log}.err"
-import re, sys
+import os, re, sys
 fname = sys.argv[1]
 try:
-    src = open(fname).read()
+    src = open(fname, encoding='utf-8', errors='replace').read()
 except Exception:
     sys.exit(0)
-for m in re.finditer(r'<style\b[^>]*>(.*?)</style>', src, re.IGNORECASE | re.DOTALL):
-    block = m.group(1)
-    if not re.search(r'\b(transition|animation)\s*:', block):
-        continue
-    if re.search(r'@media\s*\(\s*prefers-reduced-motion\s*:\s*reduce\s*\)', block, re.IGNORECASE):
-        continue
-    print(f'{fname}: <style> rule=motion-without-reduced-motion-fallback')
+
+# A repo-wide universal reduced-motion reset covers every stylesheet AND every
+# scoped <style> block (it is `*` + `!important`), so it globally guards. See
+# the pre-pass in the runner for why this is not diff-scoped.
+if os.environ.get('HYDRA_RM_GLOBAL_GUARD') == '1':
+    sys.exit(0)
+
+STYLESHEET = re.compile(r'\.(css|scss|sass|less)$', re.IGNORECASE)
+MOTION = re.compile(r'\b(transition|animation)\s*:\s*([^;}]*)', re.IGNORECASE)
+
+# THE GUARD MUST RECOGNISE THE MEDIA QUERIES PEOPLE ACTUALLY WRITE (#287).
+#
+# The old pattern demanded `@media` followed IMMEDIATELY by `(`. It therefore
+# did not recognise `@media screen and (prefers-reduced-motion: reduce)`, nor
+# the `@media (prefers-reduced-motion)` shorthand, nor the inverse
+# `@media (prefers-reduced-motion: no-preference) { ...motion here... }` idiom.
+# All three are correct, and all three would have been reported as findings the
+# moment stylesheets came into scope — a false-positive engine.
+GUARD = re.compile(r'@media[^{]*prefers-reduced-motion', re.IGNORECASE)
+
+# A COMMENTED-OUT DECLARATION IS NOT A DECLARATION (#294, same lesson).
+def _mask_comments(text, scss):
+    text = re.sub(r'/\*.*?\*/', lambda m: re.sub(r'[^\n]', ' ', m.group(0)), text, flags=re.DOTALL)
+    if scss:
+        # `//` only in SCSS/SASS/LESS dialects, and never the `//` of a
+        # `url(https://...)`, which is why the colon is excluded before it.
+        text = re.sub(r'(?<!:)//[^\n]*', lambda m: ' ' * len(m.group(0)), text)
+    return text
+
+def _motion_without_guard(block):
+    """True when the block animates something and never guards it.
+
+    `transition: none` / `animation: none` are how a reduced-motion fallback
+    is WRITTEN. Counting them as motion would make every correct guard block
+    its own finding."""
+    if GUARD.search(block):
+        return False
+    for m in MOTION.finditer(block):
+        value = m.group(2).strip().lower()
+        if value.split()[0:1] in ([], ['none'], ['unset'], ['initial'], ['inherit']):
+            continue
+        return True
+    return False
+
+def _is_minified(text):
+    """Generated/minified output, detected by CONTENT rather than by filename.
+
+    `.min.css` is caught by the enumerator, but webpack writes `css/main-<hash>
+    .chunk.css` with no `.min` in the name — app-versions ships five of them,
+    every one a single 3 kB line of `data-v-` scoped rules. Findings in
+    generated CSS are unactionable in the file they are reported against: the
+    fix belongs in the source the bundler compiled. A 500-character line is
+    something no hand-written stylesheet has and every minified one does."""
+    return any(len(line) > 500 for line in text.split('\n'))
+
+if STYLESHEET.search(fname):
+    if _is_minified(src):
+        sys.exit(0)
+    scss = not fname.lower().endswith('.css')
+    if _motion_without_guard(_mask_comments(src, scss)):
+        print(f'{fname}: stylesheet rule=motion-without-reduced-motion-fallback')
+else:
+    for m in re.finditer(r'<style\b([^>]*)>(.*?)</style>', src, re.IGNORECASE | re.DOTALL):
+        attrs, block = m.group(1), m.group(2)
+        scss = bool(re.search(r'lang\s*=\s*["\']?(scss|sass|less)', attrs, re.IGNORECASE))
+        if _motion_without_guard(_mask_comments(block, scss)):
+            print(f'{fname}: <style> rule=motion-without-reduced-motion-fallback')
 PYRM
         # `$?` immediately after a heredoc-fed command is the command's status;
         # captured into a named variable rather than tested inline so
@@ -5626,17 +5793,17 @@ PYRM
         # a construct where `if ! cmd <<HEREDOC` is not available.
         _rm_one=$?
         [ "${_rm_one}" -ne 0 ] && _rm_rc=1
-    done < <(_a11y_markup_files)
+    done < <(_a11y_markup_files; _a11y_style_files)
     _rm_fail=$(wc -l < "${_rm_log}" 2>/dev/null || echo 0)
     if [ "${_rm_rc}" -ne 0 ]; then
-        _skip 45 "prefers-reduced-motion" wiring "the inline reduced-motion checker exited non-zero on at least one of ${_rm_seen} markup file(s) — no verdict was produced for them; motion without a prefers-reduced-motion fallback is UNVERIFIED by this run. See ${_rm_log}.err."
+        _skip 45 "prefers-reduced-motion" wiring "the inline reduced-motion checker exited non-zero on at least one of ${_rm_seen} markup/stylesheet file(s) — no verdict was produced for them; motion without a prefers-reduced-motion fallback is UNVERIFIED by this run. See ${_rm_log}.err."
     elif [ "${_rm_seen}" -eq 0 ]; then
         # AN UNOPENED SCOPE IS NEVER A PASS (#242/#240/#258/#268).
-        _skip 45 "prefers-reduced-motion" na "scope was empty — 0 markup file(s) (src/, templates/, appinfo/templates/) in this diff, so NO <style> block was inspected; motion without a prefers-reduced-motion fallback is UNVERIFIED by this run."
+        _skip 45 "prefers-reduced-motion" na "scope was empty — 0 markup or stylesheet file(s) (css/, src/, templates/, appinfo/templates/) in this diff, so NO <style> block and NO stylesheet was inspected; motion without a prefers-reduced-motion fallback is UNVERIFIED by this run."
     elif [ "${_rm_fail}" -eq 0 ]; then
         _pass 45 "prefers-reduced-motion"
     else
-        _fail 45 "prefers-reduced-motion" "${_rm_fail} <style> block(s) with motion but no reduced-motion fallback — see ${_rm_log}"
+        _fail 45 "prefers-reduced-motion" "${_rm_fail} <style> block(s)/stylesheet(s) with motion but no reduced-motion fallback — see ${_rm_log}"
     fi
 fi
 
