@@ -71,7 +71,7 @@ fi
 # ---------------------------------------------------------------------------
 _run_gate29() {
 	local added="$1"; shift
-	local root rc
+	local root
 	root="$(mktemp -d "${TMPDIR:-/tmp}/g29fixture.XXXXXX")" || return 1
 	(
 		cd "${root}" || exit 1
