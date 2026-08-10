@@ -71,6 +71,59 @@ NC_SLOT_COMPONENTS = {'nccheckboxradioswitch'}
 # `type=` values that carry their own name or take none.
 EXEMPT_INPUT_TYPES = {'hidden', 'submit', 'button', 'reset', 'image'}
 
+# NOT IN THE ACCESSIBILITY TREE (.github#273)
+# ------------------------------------------
+# An element that is not in the accessibility tree has no accessible name, so
+# `aria-label` on it is INERT. Demanding a name from one is demanding either a
+# no-op edit or the deletion of the very attribute that hides it — the same
+# unclosable shape `check_table_headers.py` already resolves by exempting a
+# `<th aria-hidden="true">`, because "a header with no accessible name names
+# nothing".
+#
+# #273 keyed this on `aria-hidden` / `tabindex="-1"`. MEASURED FLEET-WIDE, that
+# spelling matches NOTHING: of gate-40's 471 findings, `aria-hidden="true"`
+# appears on 0 and `display:none` on 8 — so an exemption written for
+# `aria-hidden` would have swallowed zero of the findings it was proposed for.
+# The canonical hidden file picker in this fleet is spelled with a style:
+#
+#   <input type="file" ref="fileInput" style="display: none" @change="onPick">
+#   <NcButton @click="$refs.fileInput.click()">Import</NcButton>
+#
+# Both spellings are therefore recognised, but NOT on the same terms, because
+# they are not equally static:
+#
+#   aria-hidden="true"   an explicit authored declaration that the element is
+#                        out of the tree. Honoured on any input, literal or
+#                        `:aria-hidden="true"` — the same evidence gate-43 uses.
+#
+#   display:none         a STYLE, and #273 is right that JS can toggle a style,
+#                        so an element hidden this way may be exposed at
+#                        runtime. Honoured ONLY for `type="file"`, where
+#                        hidden-and-clicked-programmatically is the canonical
+#                        pattern (the visible, labelled trigger is a separate
+#                        button) and a toggled-visible file input is not a real
+#                        shape. All 8 fleet occurrences are exactly this; 0 are
+#                        anything else, so the restriction costs nothing today
+#                        and is what stops the exemption becoming a blanket
+#                        "style yourself invisible to silence the gate".
+#
+# A dynamic `:aria-hidden="someVar"` is NOT accepted — its value is unknown at
+# scan time. See `NotInTheAccessibilityTree` in the tests, where each arm ships
+# with the true positive it must not swallow.
+ARIA_HIDDEN_TRUE = re.compile(r'(^|\s)(?::|v-bind:)?aria-hidden\s*=\s*[\'"]true[\'"]', re.IGNORECASE)
+DISPLAY_NONE = re.compile(r'(^|\s)style\s*=\s*[\'"][^\'"]*display\s*:\s*none', re.IGNORECASE)
+
+
+def _not_in_accessibility_tree(input_type: str, attrs: str) -> bool:
+    """True when the element is removed from the accessibility tree, so no
+    accessible name is possible and none can be demanded. See the note above
+    for why the two spellings carry different scopes."""
+    if ARIA_HIDDEN_TRUE.search(attrs):
+        return True
+    if input_type == 'file' and DISPLAY_NONE.search(attrs):
+        return True
+    return False
+
 TAG = re.compile(
     r'<(/?)([A-Za-z][A-Za-z0-9._:-]*)((?:"[^"]*"|\'[^\']*\'|[^>"\'])*?)(/?)>',
     re.DOTALL,
@@ -152,22 +205,65 @@ def scan_source(fname: str, src: str) -> list[str]:
             if v and _norm_expr(v) in label_for:
                 return True
         if name in NC_PROP_COMPONENTS:
-            # `input-id` is what an Nc* wrapper puts on the <input> it renders,
-            # and it is the documented way to point an EXTERNAL <label for> at
-            # that input. The association is real HTML — the same one accepted
+            # An Nc* wrapper is named by an EXTERNAL `<label for>` when the id
+            # that label points at is the id the wrapper puts on the `<input>`
+            # it renders. The association is real HTML — the same one accepted
             # for a native element two lines up — so it is an accessible name
             # by the same evidence.
             #
-            # Without this, a field written the way the shared components
-            # document it was reported as unlabelled, and the only way to
-            # close the finding was to add a redundant aria-label overriding
-            # the visible label, or a second visible one:
+            # TWO SPELLINGS REACH THE <input>, AND WHICH ONE DOES IS
+            # PER-COMPONENT (.github#310)
+            # ------------------------------------------------------
+            # `input-id` is a real prop on the NcSelect / NcActionInput /
+            # NcSelectUsers / NcFormBoxSwitch family, and it is kept here so
+            # this gate stays correct if one of those is ever added to
+            # NC_PROP_COMPONENTS.
             #
-            #   <label :for="filePathId">File path or glob</label>
-            #   <NcTextField :input-id="filePathId" ... />
-            v = _attr(attrs, 'input-id')
-            if v and _norm_expr(v) in label_for:
-                return True
+            # It is NOT a prop on NcTextField / NcInputField — the family this
+            # gate actually judges. Measured against the published package,
+            # which is the authority on a component's props:
+            #
+            #   nc-vue 9.9.0  `grep -ril inputid dist/components/NcTextField/
+            #                  dist/components/NcInputField/` -> no matches;
+            #                 NcTextField.vue.d.ts declares `id`, `label`,
+            #                 `placeholder`, `inputClass`, `helperText`,
+            #                 `modelValue` — no `inputId`.
+            #   nc-vue 8.39.0 zero occurrences of `inputId` in NcTextField.
+            #
+            # So `:input-id="x"` on an NcTextField is not a prop at all: it
+            # falls through `$attrs` onto the `<input>` as a literal
+            # `input-id="x"` attribute, which no browser or AT consumes.
+            #
+            # `id` is what reaches the `<input>`, on BOTH major lines:
+            #
+            #   9.9.0   NcInputField-5Sg6EUP6.mjs renders
+            #             createElementVNode("input", mergeProps(_ctx.$attrs, {
+            #               id: __props.id, ...
+            #           i.e. the declared `id` prop lands on the <input>.
+            #   8.39.0  NcInputField is `inheritAttrs: false` and computes
+            #             computedId() { return this.$attrs.id && this.$attrs.id !== ''
+            #                              ? this.$attrs.id : this.inputName }
+            #           i.e. a consumer-supplied `id` is DELIBERATELY read out
+            #           of $attrs and used as the input's id, with a generated
+            #           one only as the fallback.
+            #
+            # Before this, `<label for="x">` + `<NcTextField id="x">` — a
+            # correct, working association — was reported unlabelled (11 in
+            # openregister alone), and the only two edits that closed the
+            # finding were a no-op `input-id` attribute or an `aria-label`,
+            # which OVERRIDES the visible label and breaks WCAG 2.5.3 Label in
+            # Name. A gate whose only remediations are a no-op and a
+            # regression cannot be closed honestly.
+            #
+            # This is not a relaxation of the rule, it is the rule the native
+            # branch already applies: the id must still match a `<label for>`
+            # that exists in the file. An Nc* control with no `label` prop, no
+            # `aria-*`, no wrapping `<label>` and no matching `<label for>` is
+            # still reported.
+            for _attr_name in ('input-id', 'id'):
+                v = _attr(attrs, _attr_name)
+                if v and _norm_expr(v) in label_for:
+                    return True
         return False
 
     def _report(name: str, attrs: str, rule: str) -> None:
@@ -198,11 +294,12 @@ def scan_source(fname: str, src: str) -> list[str]:
 
         if name == 'input':
             t = (_attr(attrs, 'type') or 'text').strip().lower()
-            if t not in EXEMPT_INPUT_TYPES:
+            if t not in EXEMPT_INPUT_TYPES and not _not_in_accessibility_tree(t, attrs):
                 if not (_named_by_attrs(name, attrs) or label_depth > 0):
                     _report(raw_name, attrs, 'input-without-label')
         elif name == 'textarea':
-            if not (_named_by_attrs(name, attrs) or label_depth > 0):
+            if not _not_in_accessibility_tree('textarea', attrs) and not (
+                    _named_by_attrs(name, attrs) or label_depth > 0):
                 _report(raw_name, attrs, f'{name}-without-label')
         elif name in NC_PROP_COMPONENTS:
             named = _named_by_attrs(name, attrs) or label_depth > 0

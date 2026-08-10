@@ -1625,6 +1625,38 @@ while IFS= read -r f; do
             _method=$(echo "$_sig" | grep -oE 'function\s+\w+' | awk '{print $2}')
             _param=$(echo "$_sig" | grep -oE '\$(uid|callerUid|userId|caller)\b' | head -1)
             [ -z "$_method" ] || [ -z "$_param" ] && continue
+            # A BODILESS DECLARATION HAS NO BODY TO IGNORE THE PARAM IN
+            # (.github#291).
+            #
+            # The body extraction below stops at a line matching `^    \}`. An
+            # INTERFACE file contains no such line — its methods end in `;` and
+            # the interface's own closing brace is at column 0 — so for an
+            # interface method the awk ran from the declaration to EOF and
+            # called the result "the body". The `< 4` skip below, whose comment
+            # says it means to skip "abstract/interface forwards", therefore
+            # never fired: the synthesised body is as long as the rest of the
+            # file.
+            #
+            # Measured on pipelinq: `lib/Service/Cti/CtiAdapterInterface.php:78`
+            #
+            #     public function subscribeToPresence(string $userId, string $extension): void;
+            #
+            # 92-line file, declaration at 78, zero `^    \}` matches, extraction
+            # = 15 lines, reported as `rule=caller-identity-ignored`.
+            #
+            # There is NO correct fix available to the app author: the parameter
+            # is part of the interface contract and is genuinely used by the
+            # implementor (`AsteriskAdapter::subscribeToPresence` references
+            # `$userId` — and is still checked here, with a real body). A
+            # declaration cannot reference anything. The only ways to silence it
+            # were to delete the parameter, breaking the contract, or to move the
+            # method away from the end of the file.
+            #
+            # Decide it on the SIGNATURE's terminator, which is the property that
+            # actually distinguishes the two: `;` = declaration, `{` = body.
+            _sig_region=$(awk -v start="${_line_no}" 'NR >= start { printf "%s", $0; if (/[;{]/) exit }' "$f")
+            _sig_term=$(printf '%s' "${_sig_region}" | grep -oE '[;{]' | head -1)
+            [ "${_sig_term}" = ";" ] && continue
             _body=$(awk -v start="${_line_no}" 'NR >= start { print; if (NR > start && /^    \}/) exit }' "$f")
             _body_lines=$(echo "${_body}" | wc -l)
             # A legitimate ≥3-line method that accepts a caller-identity
@@ -2110,7 +2142,19 @@ if [ "${_idor_ran}" -eq 1 ]; then
     if [ "${_idor_fail}" -eq 0 ]; then
         _pass 7 "no-admin-idor"
     else
-        _fail 7 "no-admin-idor" "${_idor_fail} method(s) with NoAdminRequired + no guard — see ${_idor_log}"
+        # THE GUARD MAY BE TWO FRAMES DOWN (.github#315). The checker can only
+        # read the controller method's own body. On a repo that enforces
+        # multi-tenancy at the DATA-ACCESS layer, the service in between looks
+        # unscoped — `findAll(filters:)`, `updateFromArray(id:)`, no
+        # organisation in sight — because the scoping lives in the MAPPER
+        # (`MultiTenancyTrait::applyOrganisationFilter()`).
+        #
+        # Measured on openregister: 8 of 9 findings were that shape, and TWO
+        # WERE NEARLY FILED AS VULNERABILITIES by a reader who stopped at the
+        # service layer — which is where reading naturally stops, because the
+        # service is what the controller calls. Saying so here costs nothing
+        # and is the difference between a triage and a wrong security report.
+        _fail 7 "no-admin-idor" "${_idor_fail} method(s) with NoAdminRequired + no guard — see ${_idor_log}. BEFORE treating any of these as real: the checker sees ONLY the controller method body. If the endpoint reaches storage through a service or mapper, check whether the guard is enforced THERE (e.g. an organisation/tenant filter applied in the query builder) — and note that a deliberate 404-style tenancy refusal IS a guard, chosen so a 403 cannot become an existence oracle for another tenant's ids."
     fi
 fi
 
@@ -4170,6 +4214,12 @@ _gi_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-gitignore-then-commit.log
 : > "${_gi_log}"
 _gi_ran=0
 _gi_new_count=0
+# Negations added by this diff. Counted separately from _gi_new_count because a
+# `!` line is not an ignore rule, but it IS a line this gate read and decided
+# about — folding it into "nothing was added" would print a verdict that
+# misdescribes the diff, and folding it into "rules checked" would claim a
+# lookup that never happened. See .github#293.
+_gi_neg_count=0
 if [ "${SCOPE_TO_DIFF}" = "1" ] && [ -f .gitignore ]; then
     # Lines newly added to .gitignore in this PR (excluding blanks + comments)
     _new_ignores=$(git -c safe.directory='*' diff "${BASE_REF}...HEAD" -- .gitignore 2>/dev/null \
@@ -4178,10 +4228,41 @@ if [ "${SCOPE_TO_DIFF}" = "1" ] && [ -f .gitignore ]; then
     if [ -n "${_new_ignores}" ]; then
         while IFS= read -r _pat; do
             [ -z "${_pat}" ] && continue
+            # A LEADING `!` IS A NEGATION — IT UN-IGNORES (.github#293).
+            #
+            # This loop used to strip the bang (`sed 's|^\!||'`) and look the
+            # remainder up in `git ls-files`, which inverts the rule's meaning:
+            # a `!` line that matches a tracked file is the CORRECT, INTENDED
+            # state, not an oversight. Measured on openbuild@development:
+            #
+            #   ignore_pattern=!tests/vitest/setup.js      tracked=tests/vitest/setup.js
+            #   ignore_pattern=!tests/e2e/global-setup.ts  tracked=tests/e2e/global-setup.ts
+            #
+            # both of which exist to rescue real source from a broader
+            # `**/setup*` rule three lines above them.
+            #
+            # That is worse than a noisy finding: the only edit that clears it
+            # is DELETING the negations, which would ignore two real test
+            # files — so the gate could talk an author into causing the exact
+            # defect it exists to detect. It was also unclosable; openbuild
+            # fixed its 5 genuine findings (openbuild#161) and this stayed at 2.
+            #
+            # NOTE FOR ANY FUTURE EDIT: do NOT reach for `git check-ignore` to
+            # decide this. It EXITS 0 WHEN A NEGATION MATCHES, so an exit-code
+            # probe reports "ignored" for a file that is explicitly un-ignored
+            # — the wrong instrument in the other direction. Whether a line is
+            # an ignore rule is a property of the PATTERN, answered here.
+            case "${_pat}" in
+                [[:space:]]*\!*|\!*)
+                    case "$(printf '%s' "${_pat}" | sed -E 's|^[[:space:]]+||')" in
+                        \!*) _gi_neg_count=$((_gi_neg_count + 1)); continue ;;
+                    esac
+                    ;;
+            esac
             _gi_new_count=$((_gi_new_count + 1))
             # Strip leading slash + trailing slash to get the directory/file
             # prefix to match against `git ls-files` output.
-            _prefix=$(echo "${_pat}" | sed -E 's|^/||; s|/$||; s|^\!||')
+            _prefix=$(echo "${_pat}" | sed -E 's|^/||; s|/$||')
             [ -z "${_prefix}" ] && continue
             # Skip wildcard-only entries (e.g. "*.log") — they'd match too broadly
             # in `git ls-files` and the real signal is path-prefix shape.
@@ -4208,8 +4289,17 @@ if [ "${_gi_fail}" -ne 0 ]; then
 elif [ "${_gi_ran}" -eq 1 ] && [ "${_gi_new_count}" -gt 0 ]; then
     # The only shape that earns a PASS: a diff that really added ignore rules,
     # each of which was really looked up against the tracked file list.
-    echo "[hydra-gates] gate-29 gitignore-then-commit: ${_gi_new_count} newly-added .gitignore rule(s) checked against the tracked file list; none has tracked files behind it."
+    _gi_neg_note=""
+    if [ "${_gi_neg_count}" -gt 0 ]; then
+        _gi_neg_note=" ${_gi_neg_count} negation(s) (\`!\`) were NOT looked up — a negation un-ignores, so a tracked file behind one is the intended state (.github#293)."
+    fi
+    echo "[hydra-gates] gate-29 gitignore-then-commit: ${_gi_new_count} newly-added .gitignore rule(s) checked against the tracked file list; none has tracked files behind it.${_gi_neg_note}"
     _pass 29 "gitignore-then-commit"
+elif [ "${_gi_ran}" -eq 1 ] && [ "${_gi_neg_count}" -gt 0 ]; then
+    # The diff added lines, but every one of them was a negation. Saying
+    # "adds no non-comment line" here (the branch below) would misdescribe the
+    # diff, and PASS would claim a lookup that never happened.
+    _skip 29 "gitignore-then-commit" na "the diff adds ${_gi_neg_count} .gitignore line(s) and every one is a NEGATION (\`!\`), which un-ignores rather than ignores. A tracked file behind a negation is the intended state, so there is no new ignore rule whose path could already be tracked. See .github#293."
 elif [ "${SCOPE_TO_DIFF}" != "1" ]; then
     _skip 29 "gitignore-then-commit" na "this check is intrinsically diff-relative — it asks whether THIS change adds an ignore rule over files that are already tracked — and this run is not --scope-to-diff, so there is no set of newly-added rules to look up. Nothing was inspected and nothing could be. It runs on every PR."
 elif [ ! -f .gitignore ]; then

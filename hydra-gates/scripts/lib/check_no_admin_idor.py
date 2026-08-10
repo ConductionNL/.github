@@ -780,6 +780,45 @@ _OR_RBAC_ACCESS_RE = re.compile(
 # zero-input method that returns instance-wide data is a different defect class
 # (broken access control / information disclosure) and is out of this gate's
 # contract — condition 3 is what keeps such a method from being cleared here.
+#
+# ---------------------------------------------------------------------------
+# Pattern 3b — zero-input READ, without the session-identity requirement
+# ---------------------------------------------------------------------------
+#
+# .github#297. Condition 3 above is positive evidence of caller-scoping, and it
+# is the right requirement for an endpoint that returns the caller's OWN data.
+# But it also withheld the clear from a method that reads nothing caller-
+# specific at all — a static catalogue, a published public key, a feature flag
+# — and for those the scope note's own reasoning cuts the other way: the
+# finding is filed under `no-admin-idor`, and IDOR is *structurally impossible*
+# when the caller controls no value whatsoever. Every authenticated user
+# receives a byte-identical response; there is no reference to substitute.
+#
+# THIS DELIBERATELY MOVES THE LINE THE SCOPE NOTE ABOVE DREW, so it is bounded
+# by measurement rather than by argument. All six fleet findings that satisfy
+# it were read individually; every one is a single delegation to a
+# ZERO-ARGUMENT service call:
+#
+#   nldesign      CatalogController::tokenSets        -> getPublicCatalogue()
+#   openregister  FederatedConfigController::types    -> types()
+#   openregister  FederatedConfigController::publicKey-> publicKey()   (public by design)
+#   openregister  FlowController::eventCatalog        -> getCatalog()  (static triggers)
+#   doriath       SettingsController::getPolicy       -> getPolicy()
+#   procest       AssistantController::availability    -> isAvailable()
+#
+# None takes an argument, so no caller-controlled value can reach storage.
+#
+# THE ABUSE CONTROL is that this clears READS ONLY. A zero-input method that
+# MUTATES (`->save*`, `->delete*`, `->reset*`, `->purge*`, …) is still
+# reported: "the caller names no object" is not a reason to let an unguarded
+# side effect through, and a zero-parameter `purgeAll()` is precisely the shape
+# that argument would otherwise wave past. See
+# `ZeroInputReadOnlyEndpoints` in test_check_no_admin_idor.py, where each arm
+# ships with the true positive it must not swallow.
+#
+# What is NOT cleared, and stays out of contract as before: a zero-input method
+# that returns instance-wide data is still not an IDOR, but if it also writes,
+# or if it reads the request at all, this pattern does not apply.
 
 # Anything that pulls caller-controlled input in through the request object.
 # Presence of ANY of these disqualifies the pattern: the method then has an
@@ -792,6 +831,46 @@ _REQUEST_INPUT_RE = re.compile(
     r"|\$_(?:GET|POST|REQUEST|COOKIE|FILES)\b"
     r"|php://input"
 )
+
+# OBJECT ACCESS. Pattern 3b's second condition, and the one that keeps it from
+# becoming a blanket.
+#
+# The first draft of Pattern 3b cleared any zero-input READ, and that was too
+# wide — it swallowed
+#
+#     public function listEverything() { return $this->svc->findAll(); }
+#     public function index() { $data = $this->mapper->findAll(); ... }
+#
+# which are unscoped instance-wide enumerations, and which this suite already
+# pinned as findings (`test_zero_params_without_session_identity_still_flagged`,
+# `test_cors_plus_data_access_not_exempted`). Six existing tests failed on that
+# draft, which is exactly what they are for.
+#
+# So Pattern 3b also requires #297's own second condition: the body performs no
+# OBJECT ACCESS. What remains clearable is the shape actually measured in the
+# fleet — a single delegation to a zero-argument catalogue/config/status call
+# (`getPublicCatalogue()`, `publicKey()`, `getCatalog()`, `isAvailable()`) —
+# while anything that reaches the store still reports.
+_DATA_ACCESS_RE = re.compile(
+    r"->\s*(?:find|load|fetch|query|search|list|count)[A-Za-z0-9_]*\s*\("
+    r"|->\s*getObjects?\s*\("
+    r"|->\s*getBy[A-Za-z0-9_]*\s*\("
+    r"|->\s*mapper\b"
+    r"|->\s*objectService\b"
+    r"|\bObjectService\b"
+    r"|\bQueryBuilder\b"
+    r"|->\s*getQueryBuilder\s*\(",
+    re.IGNORECASE)
+
+# A side effect. Pattern 3b clears READS ONLY: "the caller names no object" is
+# not a reason to let an unguarded mutation through, and a zero-parameter
+# `purgeAll()` / `resetSettings()` is exactly the shape that argument would
+# otherwise wave past.
+_MUTATION_CALL_RE = re.compile(
+    r"->\s*(?:save|store|insert|update|delete|remove|create|persist|destroy"
+    r"|purge|reset|truncate|drop|flush|clear|revoke|grant|enable|disable"
+    r"|write|import|migrate|rebuild|regenerate|rotate|sync)[A-Za-z0-9_]*\s*\(",
+    re.IGNORECASE)
 
 # Positive evidence that the method is scoped to the *session* user.
 _SESSION_IDENTITY_RE = re.compile(
@@ -842,6 +921,34 @@ def _is_session_scoped_no_reference(params, body: str) -> bool:
     if _REQUEST_INPUT_RE.search(body):
         return False
     return bool(_SESSION_IDENTITY_RE.search(body))
+
+
+def _is_zero_input_read_only(params, body: str) -> bool:
+    """True when the caller controls NO value and the method only reads.
+
+    Pattern 3b (.github#297). With no parameters and no request reads there is
+    no direct object reference to substitute, so IDOR is structurally
+    impossible. Two further conditions keep the clear narrow:
+
+      * no MUTATION — "the caller names no object" is not a reason to let an
+        unguarded `purgeAll()` through;
+      * no OBJECT ACCESS — a zero-input `findAll()` is an unscoped instance-wide
+        enumeration, which this gate has always reported and still must.
+
+    What is left is the shape actually measured in the fleet: one delegation to
+    a zero-argument catalogue / config / status call.
+    """
+    if params is None:
+        return False
+    if params.strip() != "":
+        return False
+    if _REQUEST_INPUT_RE.search(body):
+        return False
+    if _MUTATION_CALL_RE.search(body):
+        return False
+    if _DATA_ACCESS_RE.search(body):
+        return False
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -1032,9 +1139,24 @@ def scan_file(path: str) -> int:
         # there is no direct object reference for an attacker to substitute,
         # so IDOR is not structurally possible. See the Pattern 3 commentary
         # for why all three conditions are required.
-        if _is_session_scoped_no_reference(_parameter_list(cleaned, sig_start), body):
+        _params = _parameter_list(cleaned, sig_start)
+        if _is_session_scoped_no_reference(_params, body):
             continue
 
+        # ---- Pattern 3b: zero-input READ, no session identity needed ----
+        # The caller controls no value at all, so there is no direct object
+        # reference to substitute and IDOR is structurally impossible. Reads
+        # only — a zero-input mutation still reports. See .github#297 and the
+        # Pattern 3b commentary.
+        if _is_zero_input_read_only(_params, body):
+            continue
+
+        # NOTE (.github#315): the guidance that goes with this finding — that
+        # the guard may live in a service or mapper two frames down — is
+        # printed ONCE by the runner's gate-7 FAIL message, not appended here.
+        # `filter_preexisting_methods.py` parses this line with
+        # `rule=(?P<rule>.+)$`, so anything added after `rule=` becomes part of
+        # the rule NAME and would silently break pre-existing filtering.
         print(
             f"{path}:{line_no} method={name} rule=no-auth-guard-in-body"
         )

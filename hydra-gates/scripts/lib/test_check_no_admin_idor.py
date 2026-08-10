@@ -1673,5 +1673,133 @@ class C extends Controller {
         self.assertEqual(self._scan(self._LEAK % ""), [])
 
 
+class ZeroInputReadOnlyEndpoints(unittest.TestCase):
+    """Pattern 3b (.github#297) — a routed method that takes NO parameters and
+    reads NOTHING from the request has no direct object reference for an
+    attacker to substitute, so IDOR is structurally impossible. Every
+    authenticated caller gets a byte-identical response.
+
+    Before this, the only way to close such a finding was
+    `@no-admin-idor-exempt <reason>` — and a reason-tag on a finding that was
+    never real is indistinguishable, six months later, from a reason-tag on one
+    that was. nldesign left the gate red rather than tag it.
+
+    THE RELAXATION IS BOUNDED TO READS. `_MUTATION_CALL_RE` keeps a zero-input
+    side effect reportable, because "the caller names no object" is not a
+    reason to let an unguarded `purgeAll()` through — that is the shape this
+    argument would otherwise wave past, and it is the abuse control here.
+    """
+
+    _TPL = """<?php
+class CatalogController {
+    #[NoAdminRequired]
+    public function %s
+}
+"""
+
+    def _scan1(self, method_src: str) -> list[str]:
+        return _scan(self._TPL % method_src)
+
+    # -- the false positives, gone ----------------------------------------
+    def test_fp_a_zero_input_catalogue_read_is_not_an_idor(self):
+        # nldesign CatalogController::tokenSets, verbatim.
+        self.assertEqual(self._scan1(
+            "tokenSets(): JSONResponse\n"
+            "    {\n"
+            "        return new JSONResponse(['tokenSets' => "
+            "$this->tokenSetService->getPublicCatalogue()]);\n"
+            "    }"), [])
+
+    def test_fp_a_published_public_key_is_not_an_idor(self):
+        # openregister FederatedConfigController::publicKey.
+        self.assertEqual(self._scan1(
+            "publicKey(): JSONResponse\n"
+            "    {\n"
+            "        return new JSONResponse(['publicKey' => "
+            "$this->service->publicKey()]);\n"
+            "    }"), [])
+
+    def test_fp_a_static_event_catalogue_is_not_an_idor(self):
+        # openregister FlowController::eventCatalog.
+        self.assertEqual(self._scan1(
+            "eventCatalog(): JSONResponse\n"
+            "    {\n"
+            "        $results = $this->eventCatalog->getCatalog();\n"
+            "        return new JSONResponse(['results' => $results, "
+            "'total' => count($results)]);\n"
+            "    }"), [])
+
+    # -- THE ABUSE CONTROL: reads only ------------------------------------
+    def test_abuse_control_a_zero_input_MUTATION_is_still_reported(self):
+        # No parameters, no request reads — and it deletes everything. If
+        # Pattern 3b ever drops its read-only condition, this goes quiet.
+        out = self._scan1(
+            "purgeAll(): JSONResponse\n"
+            "    {\n"
+            "        $this->objectService->deleteAll();\n"
+            "        return new JSONResponse(['purged' => true]);\n"
+            "    }")
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("method=purgeAll", out[0])
+
+    def test_abuse_control_a_zero_input_reset_is_still_reported(self):
+        out = self._scan1(
+            "resetSettings(): JSONResponse\n"
+            "    {\n"
+            "        $this->settingsService->resetToDefaults();\n"
+            "        return new JSONResponse(['ok' => true]);\n"
+            "    }")
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("method=resetSettings", out[0])
+
+    # -- THE ABUSE CONTROL THAT CAUGHT THE FIRST DRAFT --------------------
+    # Pattern 3b's first draft cleared any zero-input READ. These two shapes
+    # are why that was wrong, and six existing tests failed on it. They are
+    # restated here so the reason travels with the pattern rather than living
+    # only in the classes that happened to use them as fixtures.
+    def test_abuse_control_a_zero_input_findAll_is_still_reported(self):
+        out = self._scan1(
+            "listEverything(): JSONResponse\n"
+            "    {\n"
+            "        return new JSONResponse($this->svc->findAll());\n"
+            "    }")
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("method=listEverything", out[0])
+
+    def test_abuse_control_a_zero_input_mapper_read_is_still_reported(self):
+        out = self._scan1(
+            "index(): JSONResponse\n"
+            "    {\n"
+            "        $data = $this->mapper->findAll();\n"
+            "        return new JSONResponse($data);\n"
+            "    }")
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("method=index", out[0])
+
+    # -- THE TRUE POSITIVES THIS MUST NOT SWALLOW -------------------------
+    def test_tp_a_method_taking_an_id_is_still_reported(self):
+        # The moment the caller names an object, IDOR is possible again.
+        out = self._scan1(
+            "show(string $id): JSONResponse\n"
+            "    {\n"
+            "        return new JSONResponse($this->service->find($id));\n"
+            "    }")
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("method=show", out[0])
+
+    def test_tp_a_zero_param_method_that_READS_THE_REQUEST_is_still_reported(self):
+        # Zero declared parameters is not the same as zero caller input —
+        # `getParam` is the other door, and it is exactly what IDOR walks in
+        # through.
+        out = self._scan1(
+            "show(): JSONResponse\n"
+            "    {\n"
+            "        $id = $this->request->getParam('id');\n"
+            "        return new JSONResponse($this->service->find($id));\n"
+            "    }")
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("method=show", out[0])
+
+
 if __name__ == "__main__":
     unittest.main()

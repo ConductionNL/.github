@@ -128,6 +128,48 @@ def added_files(base_ref: str, cwd: Path) -> set[str]:
 # ---------------------------------------------------------------------------
 
 
+_DEFAULT_IMPORT_RE = re.compile(
+    r"""import\s+([A-Za-z_$][\w$]*)\s+from\s*['"]([^'"]+\.vue)['"]""")
+
+_ALIAS_CACHE: dict[str, dict[str, str]] = {}
+
+
+def _alias_map(app_dir: Path) -> dict[str, str]:
+    """{imported identifier: repo-relative .vue path} across all of src/.
+
+    A manifest page's ``component`` is the name the app REGISTERED, which need
+    not match the filename — see the note in ``_resolve``. This follows the
+    default-import statement that created the alias.
+    """
+    key = str(app_dir.resolve())
+    cached = _ALIAS_CACHE.get(key)
+    if cached is not None:
+        return cached
+    out: dict[str, str] = {}
+    for path in _src_code_files(app_dir):
+        try:
+            text = path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        for ident, spec in _DEFAULT_IMPORT_RE.findall(text):
+            if spec.startswith("."):
+                target = (path.parent / spec).resolve()
+            elif spec.startswith("@/"):
+                target = (app_dir / "src" / spec[2:]).resolve()
+            elif spec.startswith("src/"):
+                target = (app_dir / spec).resolve()
+            else:
+                continue
+            try:
+                rel = str(target.relative_to(app_dir.resolve())).replace("\\", "/")
+            except ValueError:
+                continue
+            if target.is_file():
+                out.setdefault(ident, rel)
+    _ALIAS_CACHE[key] = out
+    return out
+
+
 def _manifest_page_components(app_dir: Path) -> dict[str, str]:
     """Return {component-relpath: page-id} for every ``"type": "page"`` entry in
     src/manifest.json whose ``component`` resolves to a src/ .vue file.
@@ -162,16 +204,28 @@ def _manifest_page_components(app_dir: Path) -> dict[str, str]:
         for p in (app_dir / "src").rglob(stem):
             if p.is_file():
                 return str(p.relative_to(app_dir)).replace("\\", "/")
-        return None
+        # THE MANIFEST NAMES THE REGISTERED COMPONENT, NOT THE FILE.
+        # `customComponents.js` registers a `.vue` under a different identifier:
+        #
+        #   import PortfolioReportView from './views/organisaties/PortfolioReport.vue'
+        #
+        # and the manifest page says `"component": "PortfolioReportView"`. No
+        # filename anywhere is `PortfolioReportView.vue`, so every lookup above
+        # misses and a REAL routed page (`/portfolio-report` on softwarecatalog)
+        # resolves to nothing. Follow the alias.
+        return _alias_map(app_dir).get(component)
+
+    def _record(node) -> None:
+        comp = node.get("component") or node.get("componentName") or ""
+        rel = _resolve(comp) if isinstance(comp, str) else None
+        if rel:
+            page_id = str(node.get("id") or node.get("name") or Path(rel).stem)
+            result[rel] = page_id
 
     def _walk(node):
         if isinstance(node, dict):
             if str(node.get("type", "")).lower() == "page":
-                comp = node.get("component") or node.get("componentName") or ""
-                rel = _resolve(comp) if isinstance(comp, str) else None
-                if rel:
-                    page_id = str(node.get("id") or node.get("name") or Path(rel).stem)
-                    result[rel] = page_id
+                _record(node)
             for v in node.values():
                 _walk(v)
         elif isinstance(node, list):
@@ -179,7 +233,128 @@ def _manifest_page_components(app_dir: Path) -> dict[str, str]:
                 _walk(v)
 
     _walk(data)
+
+    # MANIFEST V2: `type:"page"` NEVER OCCURS (.github#309)
+    # ----------------------------------------------------
+    # A v2 manifest declares its screens in a top-level `pages[]` array whose
+    # entries carry an `id`, a `route` and a `type` drawn from the RENDERER
+    # vocabulary — `index`, `detail`, `logs`, `dashboard`, `custom`, … — so the
+    # `type == "page"` test above matched NOTHING. Measured on openconnector:
+    # 35 declared pages, `_manifest_page_components()` resolved **0**. The
+    # manifest half of this gate has been dead on every v2 app, leaving only
+    # the src/views/ directory heuristic — which is the very thing #309 is
+    # about.
+    #
+    # A v2 entry is a page because it has a ROUTE. Only `type:"custom"` entries
+    # name a `component`; the rest are drawn by the manifest renderer and have
+    # no .vue file of their own, so there is nothing to demand a baseline for
+    # and they correctly contribute nothing here.
+    pages_node = data.get("pages") if isinstance(data, dict) else None
+    if isinstance(pages_node, list):
+        for entry in pages_node:
+            if isinstance(entry, dict) and entry.get("route"):
+                _record(entry)
     return result
+
+
+# ---------------------------------------------------------------------------
+# A DIRECTORY IS NOT A PAGE (.github#309)
+# ---------------------------------------
+# Rule (a) below — "a .vue ADDED under src/views/" — is a PATH-SHAPED PROXY for
+# a semantic property. Any child component that happens to live beside its page
+# was classified as a page. Measured full-tree:
+#
+#   openconnector    40 findings, of which src/views/Rule/actionForms/*.vue,
+#                    src/views/Synchronization/*Mapping*.vue and
+#                    src/views/admin/DsoPkiSettings.vue are not pages at all
+#                    (#309 measured 13 diff-scoped, 6 of them real)
+#   softwarecatalog  8 of 11 false (73%), all under src/views/settings/sections/**
+#                    and src/views/widgets/**
+#
+# Why the inflation is worse than a wrong number: for a NON-page, only the
+# third remedy the finding offers is reachable — `@visual exclude <reason>`. So
+# an over-matching heuristic systematically MANUFACTURES WAIVERS, and a fleet
+# trained to write waivers for false positives will write them for true ones.
+# `DsoPkiSettings.vue` is the sharpest case — NC renders it server-side through
+# the settings framework, so no amount of SPA e2e will ever "drive the page".
+#
+# The replacement asks for REACHABILITY, which is what "page" actually means,
+# and it is deliberately CONSERVATIVE: a file is dropped only when there is
+# positive evidence it is somebody's child. Absence of evidence keeps it in
+# scope, so a genuinely new page nothing has wired up yet is still flagged.
+#
+#   PAGE    named by a manifest `"type": "page"` entry            (routable), or
+#           referenced from a router module                       (routable), or
+#           imported by NOTHING in src/                (cannot be proved a child)
+#   CHILD   imported by some other src/ component that is not a router, and
+#           named by neither the manifest nor a router
+# ---------------------------------------------------------------------------
+_ROUTER_SIGNALS = ("createRouter(", "new VueRouter(", "vue-router", "createWebHashHistory")
+_SRC_CODE_EXT = (".vue", ".js", ".ts", ".mjs", ".jsx", ".tsx")
+
+
+def _src_code_files(app_dir: Path) -> list[Path]:
+    src = app_dir / "src"
+    if not src.is_dir():
+        return []
+    out: list[Path] = []
+    for p in src.rglob("*"):
+        if p.is_file() and p.suffix in _SRC_CODE_EXT:
+            if "node_modules" in p.parts:
+                continue
+            out.append(p)
+    return out
+
+
+def _import_graph(app_dir: Path) -> tuple[set[str], set[str]]:
+    """(imported_by_non_router, referenced_by_router) as sets of file stems.
+
+    Stems, not resolved paths: an import is written `./Rule/actionForms/UploadForm.vue`
+    or `@/views/UploadForm`, and resolving every alias form correctly is more
+    machinery than this decision needs. A stem collision can only ever make the
+    gate MORE conservative in the router set and less so in the child set, so
+    the tie-break below prefers 'page' whenever both fire.
+    """
+    imported_non_router: set[str] = set()
+    referenced_by_router: set[str] = set()
+    import_re = re.compile(
+        r"""(?:import\s+[^;\n]*?from\s*|import\s*\(\s*|require\s*\(\s*)['"]([^'"]+)['"]""")
+    for path in _src_code_files(app_dir):
+        try:
+            text = path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        rel = str(path.relative_to(app_dir)).replace("\\", "/")
+        is_router = (
+            "/router/" in f"/{rel}"
+            or Path(rel).stem.lower() in {"router", "routes"}
+            or any(sig in text for sig in _ROUTER_SIGNALS)
+        )
+        for spec in import_re.findall(text):
+            stem = Path(spec).name
+            if stem.endswith(".vue"):
+                stem = stem[:-4]
+            if not stem:
+                continue
+            if is_router:
+                referenced_by_router.add(stem)
+            else:
+                # A file importing ITSELF is not a parent of itself.
+                if stem != Path(rel).stem:
+                    imported_non_router.add(stem)
+    return imported_non_router, referenced_by_router
+
+
+def _is_child_component(rel: str, manifest_pages: dict[str, str],
+                        imported_non_router: set[str],
+                        referenced_by_router: set[str]) -> bool:
+    """True when *rel* is positively evidenced to be somebody's child."""
+    if rel in manifest_pages:
+        return False                      # the manifest says it is a page
+    stem = Path(rel).stem
+    if stem in referenced_by_router:
+        return False                      # the router says it is a page
+    return stem in imported_non_router    # only then is it a child
 
 
 def discover_new_pages(app_dir: Path, added: set[str]) -> list[dict]:
@@ -189,12 +364,17 @@ def discover_new_pages(app_dir: Path, added: set[str]) -> list[dict]:
     Deduplicated by path.
     """
     pages: dict[str, dict] = {}
-    # 1. ADDED .vue files under src/views or src/pages.
+    manifest_pages = _manifest_page_components(app_dir)
+    imported_non_router, referenced_by_router = _import_graph(app_dir)
+    # 1. ADDED .vue files under src/views or src/pages that are REACHABLE.
     for rel in added:
         if rel.endswith(".vue") and any(rel.startswith(d) for d in _PAGE_DIRS):
+            if _is_child_component(rel, manifest_pages, imported_non_router,
+                                   referenced_by_router):
+                continue
             pages[rel] = {"path": rel, "id": Path(rel).stem, "source": "dir"}
-    # 2. Manifest type:"page" entries whose component file was ADDED.
-    manifest_pages = _manifest_page_components(app_dir)
+    # 2. Manifest type:"page" entries whose component file was ADDED. A manifest
+    #    page is ALWAYS in scope — it is routable by declaration.
     for rel, page_id in manifest_pages.items():
         if rel in added and rel not in pages:
             pages[rel] = {"path": rel, "id": page_id, "source": "manifest"}

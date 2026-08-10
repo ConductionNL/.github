@@ -420,9 +420,32 @@ def check_page(path, page, page_ids, findings):
     _collect(widgets, "icon", icons)
     for ic in icons:
         if isinstance(ic, str) and ic and ic not in ICON_REGISTRY:
+            # THE SYMPTOM IS SILENT, NOT A '?' (.github#304).
+            #
+            # This message used to say the icon "renders the '?' fallback".
+            # It does not. Read from nextcloud-vue
+            # src/components/CnWidgetGrid/widgetIcons.js:
+            #
+            #     export const DEFAULT_ICON = 'ViewDashboard'
+            #     export function getIconComponent (name) {
+            #         …
+            #         return DASHBOARD_ICONS[name] || DASHBOARD_ICONS[DEFAULT_ICON]
+            #     }
+            #
+            # An unknown name resolves to ViewDashboard — verified as
+            # DEFAULT_ICON in every shipped build checked (1.0.0-beta.197,
+            # 1.0.0-beta.220, 2.2.0-vue3.3, 2.2.0-vue3.6). A '?' would at least
+            # look broken; a generic dashboard glyph looks deliberate, so the
+            # author's intent is lost INVISIBLY. That is worse to triage, and
+            # saying it accurately is the difference between "someone will
+            # notice this in review" and "nobody ever will".
             findings.append(
                 f"{path}: page '{pid}' — widget icon '{ic}' is not in the shared "
-                f"icon registry (renders the '?' fallback, ADR-062 rule 8)"
+                f"icon registry, so it silently renders the DEFAULT icon "
+                f"('ViewDashboard') instead — the intent is lost with no visible "
+                f"breakage (ADR-062 rule 8). NOTE: this checks the nextcloud-vue "
+                f"widget vocabulary only; the app's own src/icons.js registration "
+                f"is gate-60's subject, and an icon must be in BOTH to render"
             )
 
     # (f) viewAllRoute / rowRoute must resolve to a page id.
@@ -482,9 +505,41 @@ def check_file(path, page_ids, findings, base_ref):
         check_page(path, page, page_ids, findings)
 
 
+_USAGE = (
+    "usage: check_detail_page_discipline.py <logfile> <manifest.json>...\n"
+    "\n"
+    "This helper writes its findings to <logfile> and ALWAYS exits 0 when it\n"
+    "runs — the runner decides FAIL by COUNTING LOG LINES, so the exit status\n"
+    "is not the verdict and a clean exit proves nothing about the result.\n"
+    "To read a verdict, read the log.\n"
+    "\n"
+    "It takes no options. `--app-dir` in particular is NOT this helper's\n"
+    "interface (it is check_visual_coverage.py's): passing it used to make\n"
+    "argv[1] the literal string '--app-dir', inspect nothing, print nothing\n"
+    "and exit 0 — a perfect silent false green over a tree with real findings.\n"
+    "See .github#304.\n"
+)
+
+
 def main(argv):
-    if len(argv) < 3:
-        return 0
+    # A MALFORMED INVOCATION MUST NOT LOOK CLEAN (.github#304).
+    #
+    # This used to be `if len(argv) < 3: return 0`, so every wrong call — a
+    # missing log path, an option this helper does not take — produced empty
+    # output and success. Measured:
+    #
+    #   check_detail_page_discipline.py --app-dir .
+    #     EXIT=0  stdout: 0 lines  stderr: 0 bytes   <- inspected NOTHING
+    #
+    #   check_detail_page_discipline.py <log> <24 manifests>   (the real contract)
+    #     EXIT=0  stderr: 0 bytes  findings written to the log: 28
+    #
+    # Two indistinguishable clean exits, one of which had opened no file at
+    # all. The runner reads `_dpd_rc`, so returning non-zero here surfaces as
+    # `SKIPPED (wiring)` — "no verdict was produced" — instead of PASS.
+    if len(argv) < 3 or any(a.startswith("-") for a in argv[1:]):
+        sys.stderr.write(_USAGE)
+        return 2
     log_path = argv[1]
     paths = argv[2:]
     base_ref = os.environ.get("HYDRA_GATE_BASE_REF", "").strip()
