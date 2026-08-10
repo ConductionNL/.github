@@ -4062,7 +4062,12 @@ jobs:
             echo "::notice::No package.json at the app root, so this repo has no node dependencies to install. Gates that need them (60 icon-vocabulary) will report NOT APPLICABLE or SKIPPED with their own reason — this step is not what decides that."
           elif [ ! -f "${DIR}/package-lock.json" ]; then
             echo "install=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::package.json is present at the app root but package-lock.json is not, and `npm ci` requires a lockfile. The app's node dependencies are NOT installed, so gate-60 cannot verify that a manifest icon exists upstream and will skip as 'wiring'. Commit a package-lock.json to close that gap."
+            # NOTE the escaped backticks. Inside a double-quoted string bash
+            # treats a bare backtick pair as COMMAND SUBSTITUTION, so writing
+            # this message with plain backticks would have EXECUTED `npm ci`
+            # here and pasted its output into the warning — in the one branch
+            # that fires precisely when the install is supposed to be skipped.
+            echo "::warning::package.json is present at the app root but package-lock.json is not, and \`npm ci\` requires a lockfile. The app's node dependencies are NOT installed, so gate-60 cannot verify that a manifest icon exists upstream and will skip as 'wiring'. Commit a package-lock.json to close that gap."
           else
             echo "install=true" >> "$GITHUB_OUTPUT"
             echo "Found package.json + package-lock.json at the app root — the app's node dependencies will be installed."
