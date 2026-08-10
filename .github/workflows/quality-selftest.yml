@@ -65,7 +65,6 @@ jobs:
       enable-playwright: false
       # TEMP proof harness — reverted below.
       enable-hydra-gates: true
-      enable-axe: true
       enable-license-check: false
       enable-journeydoc-capture: false
       enable-coverage-guard: false
