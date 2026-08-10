@@ -436,12 +436,31 @@ jobs:
           extensions: mbstring, intl, zip, gd, curl, xml, json
           tools: composer:v2
 
+      # `composer.json` joins the key deliberately. `hashFiles` returns an EMPTY
+      # string when nothing matches its pattern, so on the three fleet repos
+      # that ship no composer.lock (hermiq, hrmq, zaakafhandelapp) this key
+      # collapsed to the constant `Linux-composer-`. A GitHub Actions cache
+      # entry is IMMUTABLE once written, so those repos restored the same
+      # `vendor/` forever and no dependency change could ever rotate it — a
+      # cache that cannot expire is a stale tree with a fast install. Naming
+      # both files gives every repo a key that moves when its dependencies do.
       - name: Cache Composer dependencies
         uses: actions/cache@v4
         with:
           path: vendor
-          key: ${{ runner.os }}-composer-${{ hashFiles('composer.lock') }}
+          key: ${{ runner.os }}-composer-${{ hashFiles('composer.lock', 'composer.json') }}
           restore-keys: ${{ runner.os }}-composer-
+
+      # Second, independent cache: composer's DOWNLOAD directory. The `vendor`
+      # cache above only helps when dependencies are unchanged; this one is what
+      # makes the install after a dependency change fast, because the archives
+      # are already local. They are not redundant — they cover opposite cases.
+      - name: Cache Composer downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer
+          key: ${{ runner.os }}-composer-files-${{ hashFiles('composer.lock', 'composer.json') }}
+          restore-keys: ${{ runner.os }}-composer-files-
 
       - name: Install dependencies
         run: composer install --no-progress --prefer-dist --optimize-autoloader
@@ -1089,6 +1108,22 @@ jobs:
           php-version: ${{ inputs.php-version }}
           tools: composer:v2
 
+      # Composer's download cache for the composer leg of this matrix. Only the
+      # composer leg has anything to restore, and gating the step keeps the npm
+      # leg's log free of a cache entry that would always miss.
+      #
+      # This job checks out the app at the repository ROOT (no Nextcloud server
+      # alongside), so the composer files are keyed by their root paths. Both
+      # `composer.lock` and `composer.json` are listed because three fleet repos
+      # ship no lockfile; `hashFiles` skips patterns that match nothing.
+      - name: Cache Composer downloads
+        if: matrix.ecosystem == 'composer' && inputs.enable-php
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer
+          key: ${{ runner.os }}-composer-files-${{ hashFiles('composer.lock', 'composer.json') }}
+          restore-keys: ${{ runner.os }}-composer-files-
+
       # `enable-npm` must be in this condition, not only in the audit step below.
       # actions/setup-node with `cache: npm` HARD-FAILS when there is no
       # package-lock.json, so on a PHP-only repo (enable-npm: false) this step
@@ -1224,6 +1259,22 @@ jobs:
         with:
           php-version: ${{ inputs.php-version }}
           tools: composer:v2
+
+      # Composer's download cache for the composer leg of this matrix. Only the
+      # composer leg has anything to restore, and gating the step keeps the npm
+      # leg's log free of a cache entry that would always miss.
+      #
+      # This job checks out the app at the repository ROOT (no Nextcloud server
+      # alongside), so the composer files are keyed by their root paths. Both
+      # `composer.lock` and `composer.json` are listed because three fleet repos
+      # ship no lockfile; `hashFiles` skips patterns that match nothing.
+      - name: Cache Composer downloads
+        if: matrix.ecosystem == 'composer' && inputs.enable-php
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer
+          key: ${{ runner.os }}-composer-files-${{ hashFiles('composer.lock', 'composer.json') }}
+          restore-keys: ${{ runner.os }}-composer-files-
 
       # See the identical note on the security job's Setup Node.js step —
       # `cache: npm` hard-fails without a package-lock.json, so this must also
@@ -1552,13 +1603,38 @@ jobs:
     # and beta in all 25 fleet repos. Decoupling costs a few CI minutes on a PR
     # that cannot merge anyway; it buys a verdict that exists.
     #
-    # `needs:` is retained for ordering only; with `!cancelled()` and no result
-    # condition on either producer, PHPUnit runs regardless of static-analysis
-    # colour and regardless of the advisory feed.
+    # ── `php-quality` REMOVED from `needs:`; `security` KEPT ────────────────
+    #
+    # `needs:` in GitHub Actions is a SCHEDULING edge as well as a conditional
+    # one. `!cancelled()` suppresses the implicit `success()`, so this job
+    # already ran regardless of static-analysis colour — but suppressing the
+    # condition does not release the job to START. So PHPUnit sat behind
+    # php-quality for a verdict it never consumed.
+    #
+    # That php-quality is not load-bearing here is not an inference — it is
+    # recorded directly above by #194 and by the 2026-08-04 procest incident:
+    # gating on it meant a phpmd COMPLEXITY finding deleted the entire test
+    # tier, and the loss rendered as a grey "skipping" placeholder. The `if:`
+    # clause was removed then; the `needs:` entry was simply left behind, and
+    # the comment that survived called it "retained for ordering only".
+    # Ordering was the whole cost. Measured on openregister run 31358011759:
+    # php-quality 2m, with the 4m test jobs queued behind it.
+    #
+    # `security` STAYS. It resolves in seconds (9s and 16s for its two legs in
+    # the runs measured on this change), so it buys back no meaningful time,
+    # and keeping it preserves the conventional ordering with no latency cost.
+    # It is still NOT a gate — the `if:` reads no result from it, so the
+    # 2026-08-06 advisory shape (one CVE against a dev-only formatter deleting
+    # the fleet's test tier) cannot return through this edge.
+    #
+    # Nothing in this job's steps reads `needs.php-quality.*` or
+    # `needs.security.*` — verified across the whole file, where every
+    # surviving `needs.` expression belongs to the `report` job or to the
+    # Playwright job's frontend-build artifact check.
     if: ${{ inputs.enable-php && inputs.enable-phpunit && !cancelled() }}
     runs-on: ubuntu-latest
     name: "PHPUnit (PHP ${{ matrix.php-version }}, NC ${{ matrix.nextcloud-ref }})"
-    needs: [php-quality, security]
+    needs: [security]
     # Observed across 337 SUCCESSFUL executions: median 1.7 min, p95 13.6 min,
     # max 18.9 min (shillinq, green). The spread is huge because each leg
     # installs a full Nextcloud server before the suite runs, so a tight bound
@@ -1668,6 +1744,21 @@ jobs:
       # that fatals with an uncaught \Error (NC core only catches \Exception),
       # killing the step. Matches the newman/playwright/journeydoc jobs, which
       # already composer-install before enabling the app.
+      # Composer's download cache. Same reasoning as the newman / playwright /
+      # journeydoc jobs — see the long note there. The PHP version is in the key
+      # because this job is a matrix over `php-version` and composer resolves
+      # platform-dependent packages differently per version; sharing one cache
+      # entry across the legs would make the restored archives depend on
+      # whichever leg happened to save first.
+      - name: Cache Composer downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer
+          key: ${{ runner.os }}-composer-files-php${{ matrix.php-version }}-${{ hashFiles(format('server/apps/{0}/composer.lock', inputs.app-name), format('server/apps/{0}/composer.json', inputs.app-name)) }}
+          restore-keys: |
+            ${{ runner.os }}-composer-files-php${{ matrix.php-version }}-
+            ${{ runner.os }}-composer-files-
+
       - name: Install app dependencies and enable app
         run: |
           cd server/apps/${{ inputs.app-name }}
@@ -1818,10 +1909,16 @@ jobs:
     # condition on either producer, Newman now runs regardless of
     # static-analysis colour, regardless of the advisory feed, and reaches its
     # own verdict.
+    #
+    # `php-quality` REMOVED from `needs:`, `security` KEPT — see the full note
+    # on the phpunit job. The php-quality edge gated nothing (this job's `if:`
+    # reads no result from it) and only delayed the start; security resolves in
+    # seconds, so keeping it costs no measurable time. No step here reads
+    # `needs.*`.
     if: ${{ inputs.enable-newman && !cancelled() }}
     runs-on: ubuntu-latest
     name: "Integration Tests (Newman)"
-    needs: [php-quality, security]
+    needs: [security]
     # Observed across 39 executions: median 1.9 min, max 7.5 min (launchpad).
     # Also installs a full Nextcloud server first, so 30 min — 4x the worst run.
     timeout-minutes: 30
@@ -1908,6 +2005,31 @@ jobs:
               php occ app:enable "$name" || echo "::warning::Failed to enable $name, continuing..."
             done
           fi
+
+      # ── Composer's DOWNLOAD cache, not `vendor/` ──────────────────────────
+      #
+      # `~/.cache/composer` holds the fetched dist archives and the metadata
+      # composer would otherwise re-download from Packagist on every run.
+      # Caching it is safe in a way that caching `vendor/` is not: composer
+      # still resolves and installs normally, so a stale or partial cache
+      # produces a slower install, never a wrong tree.
+      #
+      # The key names the app's own composer files by explicit path rather than
+      # a `**/` glob, because these jobs check out the whole Nextcloud server
+      # alongside the app and a glob would fold NC's composer files into the
+      # key — rotating the cache whenever `nextcloud-test-refs` moves, for
+      # dependencies that did not change.
+      #
+      # `composer.lock` is listed first and `composer.json` second because
+      # three fleet repos (hermiq, hrmq, zaakafhandelapp) ship no lockfile at
+      # all. `hashFiles` ignores patterns that match nothing, so those repos key
+      # on composer.json and everyone else keys on both.
+      - name: Cache Composer downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer
+          key: ${{ runner.os }}-composer-files-${{ hashFiles(format('server/apps/{0}/composer.lock', inputs.app-name), format('server/apps/{0}/composer.json', inputs.app-name)) }}
+          restore-keys: ${{ runner.os }}-composer-files-
 
       - name: Install and enable app
         run: |
@@ -2039,6 +2161,32 @@ jobs:
         with:
           node-version: "${{ inputs.node-version }}"
 
+      # ── Why actions/cache and not setup-node's own `cache: npm` ────────────
+      #
+      # `actions/setup-node` with `cache: npm` HARD-FAILS when no lockfile
+      # exists at the path it is given. This file already carries that scar
+      # twice — see the notes on the `security` and `frontend-tests` jobs, where
+      # it turned into a permanent red on every repo that legitimately has no
+      # package.json. `actions/cache` has no such failure mode: a `hashFiles`
+      # pattern that matches nothing yields an empty key segment, the restore
+      # misses, and the job continues. For a step that only needs to warm
+      # `~/.npm`, that is strictly the safer instrument.
+      #
+      # `~/.npm` is npm's download cache, so it serves `npm install -g newman`
+      # here even though newman is not in the app's lockfile: the tarballs land
+      # in the same cache and are restored on the next run. Keyed on the app's
+      # lockfile only because that gives a stable key that rotates when the
+      # toolchain does; the restore-key means a key miss still reuses the most
+      # recent cache rather than starting cold.
+      - name: Cache npm downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-newman-${{ inputs.node-version }}-${{ hashFiles(format('server/apps/{0}/package-lock.json', inputs.app-name)) }}
+          restore-keys: |
+            ${{ runner.os }}-npm-newman-${{ inputs.node-version }}-
+            ${{ runner.os }}-npm-
+
       - name: Install Newman
         run: npm install -g newman
 
@@ -2121,7 +2269,22 @@ jobs:
     # frontend-build still lets this job run and reach its own verdict. When
     # the artifact is absent for any reason the build step below runs exactly
     # as it did before this dependency existed.
-    needs: [php-quality, security, frontend-build]
+    #
+    # `php-quality` REMOVED from this list — see the note on the phpunit job. It
+    # was never read by this job's `if:` or by any step; it was a leftover from
+    # the gating clause #194 deleted, and all it did was delay the start of the
+    # most expensive evidence in the workflow.
+    #
+    # `security` STAYS: it resolves in seconds, so removing it would buy no
+    # measurable time. It remains a scheduling edge only — the `if:` above reads
+    # no result from it, exactly as #194 established.
+    #
+    # `frontend-build` STAYS, and it is the one edge here that is real: the step
+    # below reads `needs.frontend-build.outputs.built` and downloads its
+    # artifact. It is still not a gate — `!cancelled()` above suppresses the
+    # implicit `success()`, so a failed or skipped frontend-build still lets this
+    # job run and simply rebuild the bundle itself.
+    needs: [security, frontend-build]
     # No job in this file declared a timeout, so a hung suite ran to GitHub's
     # 6-hour default. Observed durations once the suite is healthy: 4-10 min
     # (planix 0.8, doriath 4.2, zaakafhandelapp 5.3, softwarecatalog 6.1,
@@ -2214,6 +2377,31 @@ jobs:
             done
           fi
 
+      # ── Composer's DOWNLOAD cache, not `vendor/` ──────────────────────────
+      #
+      # `~/.cache/composer` holds the fetched dist archives and the metadata
+      # composer would otherwise re-download from Packagist on every run.
+      # Caching it is safe in a way that caching `vendor/` is not: composer
+      # still resolves and installs normally, so a stale or partial cache
+      # produces a slower install, never a wrong tree.
+      #
+      # The key names the app's own composer files by explicit path rather than
+      # a `**/` glob, because these jobs check out the whole Nextcloud server
+      # alongside the app and a glob would fold NC's composer files into the
+      # key — rotating the cache whenever `nextcloud-test-refs` moves, for
+      # dependencies that did not change.
+      #
+      # `composer.lock` is listed first and `composer.json` second because
+      # three fleet repos (hermiq, hrmq, zaakafhandelapp) ship no lockfile at
+      # all. `hashFiles` ignores patterns that match nothing, so those repos key
+      # on composer.json and everyone else keys on both.
+      - name: Cache Composer downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer
+          key: ${{ runner.os }}-composer-files-${{ hashFiles(format('server/apps/{0}/composer.lock', inputs.app-name), format('server/apps/{0}/composer.json', inputs.app-name)) }}
+          restore-keys: ${{ runner.os }}-composer-files-
+
       - name: Install and enable app
         run: |
           cd server/apps/${{ inputs.app-name }}
@@ -2225,6 +2413,20 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "${{ inputs.node-version }}"
+
+      # Deliberately actions/cache rather than setup-node's `cache: npm`: the
+      # install below is guarded on `[ -f package.json ]` precisely because a
+      # repo may not have one, and `cache: npm` HARD-FAILS on a missing
+      # lockfile — it would turn an optional install into a mandatory one and
+      # take the whole job with it. See the same note on the Newman job.
+      - name: Cache npm downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ inputs.node-version }}-${{ hashFiles(format('server/apps/{0}/package-lock.json', inputs.app-name)) }}
+          restore-keys: |
+            ${{ runner.os }}-npm-${{ inputs.node-version }}-
+            ${{ runner.os }}-npm-
 
       - name: Install app npm dependencies
         run: |
@@ -3132,6 +3334,11 @@ jobs:
     # test tier. `needs: [security]` is kept for ordering only — `!cancelled()`
     # suppresses the implicit `success()`, so this job reaches its own verdict
     # whatever the advisory feed says. See the `security` job.
+    #
+    # `needs: [security]` KEPT. It is a scheduling edge only (the `if:` reads no
+    # result from it) and security resolves in seconds, so it costs no
+    # measurable time. Unlike php-quality on the phpunit/newman/playwright jobs,
+    # there was nothing here worth removing.
     if: ${{ inputs.enable-journeydoc-capture && !cancelled() }}
     runs-on: ubuntu-latest
     name: "Journeydoc Capture (screenshots)"
@@ -3232,6 +3439,31 @@ jobs:
             done
           fi
 
+      # ── Composer's DOWNLOAD cache, not `vendor/` ──────────────────────────
+      #
+      # `~/.cache/composer` holds the fetched dist archives and the metadata
+      # composer would otherwise re-download from Packagist on every run.
+      # Caching it is safe in a way that caching `vendor/` is not: composer
+      # still resolves and installs normally, so a stale or partial cache
+      # produces a slower install, never a wrong tree.
+      #
+      # The key names the app's own composer files by explicit path rather than
+      # a `**/` glob, because these jobs check out the whole Nextcloud server
+      # alongside the app and a glob would fold NC's composer files into the
+      # key — rotating the cache whenever `nextcloud-test-refs` moves, for
+      # dependencies that did not change.
+      #
+      # `composer.lock` is listed first and `composer.json` second because
+      # three fleet repos (hermiq, hrmq, zaakafhandelapp) ship no lockfile at
+      # all. `hashFiles` ignores patterns that match nothing, so those repos key
+      # on composer.json and everyone else keys on both.
+      - name: Cache Composer downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer
+          key: ${{ runner.os }}-composer-files-${{ hashFiles(format('server/apps/{0}/composer.lock', inputs.app-name), format('server/apps/{0}/composer.json', inputs.app-name)) }}
+          restore-keys: ${{ runner.os }}-composer-files-
+
       - name: Install and enable app
         run: |
           cd server/apps/${{ inputs.app-name }}
@@ -3243,6 +3475,20 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "${{ inputs.node-version }}"
+
+      # Deliberately actions/cache rather than setup-node's `cache: npm`: the
+      # install below is guarded on `[ -f package.json ]` precisely because a
+      # repo may not have one, and `cache: npm` HARD-FAILS on a missing
+      # lockfile — it would turn an optional install into a mandatory one and
+      # take the whole job with it. See the same note on the Newman job.
+      - name: Cache npm downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ inputs.node-version }}-${{ hashFiles(format('server/apps/{0}/package-lock.json', inputs.app-name)) }}
+          restore-keys: |
+            ${{ runner.os }}-npm-${{ inputs.node-version }}-
+            ${{ runner.os }}-npm-
 
       - name: Install app npm dependencies
         run: |
@@ -3613,30 +3859,19 @@ jobs:
     #
     # MEASURED, not assumed — ConductionNL/.github run 30909727531, a harness
     # that reproduced this exact `needs:`/`if:` pair three times in one run and
-    # drove the producer into each of its three states. This guard, and the
-    # `always() && inputs.enable-hydra-gates` alternative, behaved identically
-    # and correctly in all three:
+    # drove the producer into each of its three states:
     #
     #   producer succeeded -> gates RAN   (needs.playwright.result=success)
     #   producer FAILED    -> gates RAN   (needs.playwright.result=failure)
     #   producer SKIPPED   -> gates RAN   (needs.playwright.result=skipped)
     #
-    # The job never vanished. So `!cancelled()` is sufficient and there is no
-    # reason to reach for `always()`, which would additionally run the gates
-    # during a cancellation and produce a verdict nobody asked for. Do not
-    # "simplify" this back to a bare `inputs.enable-hydra-gates`: that restores
-    # the implicit `success()` and deletes the job with no red, no skip and no
-    # trace whenever Playwright does not succeed.
-    #
-    # What the measurement also settled: keeping the job alive is the RIGHT
-    # behaviour for the other 60 gates and precisely what makes gate-33
-    # dangerous, because a live job with an absent artifact used to go green
-    # having measured no accessibility at all. That hole is closed at the
-    # `enable-axe` step below, not here.
+    # Do not "simplify" this to a bare `inputs.enable-hydra-gates`: that
+    # restores the implicit `success()` and deletes the job with no red, no
+    # skip and no trace whenever Playwright does not succeed.
     if: ${{ inputs.enable-hydra-gates && !cancelled() }}
     runs-on: ubuntu-latest
     name: "Hydra Gates"
-    # ── Why this job now depends on Playwright ──────────────────────────────
+    # ── WHY THIS JOB DEPENDS ON PLAYWRIGHT (and why removing it failed) ────
     #
     # gate-33 (axe-core) consumes `tests/axe/report.json`, which can only be
     # produced by a browser against a booted instance. This job has neither: it
@@ -3645,18 +3880,51 @@ jobs:
     # over as an artifact — and an artifact cannot be downloaded before the job
     # that uploads it has finished. Hence the edge.
     #
-    # The alternative — booting a second Nextcloud here — duplicates ~150 lines
-    # of install/build/serve for one gate, and the second instance would be a
-    # second thing that can differ from the one the specs ran against.
+    # REMOVING THIS EDGE WAS ATTEMPTED IN #326 AND REVERTED. Recorded here so
+    # the next person does not spend the same day on it.
     #
-    # Cost, stated honestly: this job used to start at t=0 and now starts after
-    # Playwright resolves. That does NOT move the workflow's own verdict —
-    # `report` already needs both jobs, so the wall-clock to a complete result
-    # is unchanged — but the "Hydra Gates" check now appears later in the PR's
-    # check list than it used to.
+    # The reasoning was: `enable-axe` is opt-in and defaults false, a survey of
+    # all 20 consumers on both `main` and `development` found ZERO setting it,
+    # and this file's own input docs record gate-33 as SKIPPED "in every repo in
+    # the fleet since it was written". So the edge looked like pure
+    # serialisation — it put a 31s job behind php-quality -> frontend-build ->
+    # playwright, roughly t+7m instead of t+31s, for an input never produced.
+    #
+    # TWO THINGS KILLED IT.
+    #
+    # 1. THE SURVEY WAS A SNAPSHOT, NOT A PROPERTY. docudesk#423 is open to set
+    #    `enable-axe: true`. "No consumer does X" is a fact with an expiry date,
+    #    and building a structural decision on one means the decision expires
+    #    with it — silently, in someone else's repository.
+    #
+    # 2. THE REPLACEMENT WAS WORSE THAN THE PROBLEM. With the edge gone, an
+    #    `enable-axe: true` caller cannot receive the artifact, so the job
+    #    refused the configuration up front. MEASURED on run 31370581318:
+    #    ZERO `[gate-*]` lines were emitted. The refusal sat before the
+    #    checkout, so gate-33 produced no verdict AND NEITHER DID THE OTHER 63.
+    #    It did not `_skip` with a named reason and it did not `_pass` — the
+    #    whole job died. That is precisely the outcome the note on the
+    #    `axe-check` step below already forbids: a gate that suppresses sixty
+    #    other gates to report itself is its own kind of outage. The axe failure
+    #    is RECORDED there and RAISED at the END for exactly this reason.
+    #
+    # WHAT WAS KEPT INSTEAD. `php-quality` was removed from the `needs:` of
+    # phpunit, newman and playwright, where it gated nothing (see the note on
+    # the phpunit job). Playwright therefore starts earlier, and this job's
+    # verdict lands at roughly t+4.8m rather than t+7m — a real improvement with
+    # no new machinery and no case that has never been exercised.
+    #
+    # THE WAY TO GET FULL PARALLELISM, if someone wants it: `needs:` cannot be
+    # conditional in GitHub Actions, so it requires two mutually exclusive jobs
+    # (one with the edge for `enable-axe`, one without), which today would mean
+    # duplicating ~120 lines of steps for a security-critical runner — and two
+    # copies that can drift is the failure mode this file exists to document.
+    # Extract these steps into a composite action referenced as
+    # `ConductionNL/.github/.github/actions/hydra-gates@main` FIRST (note: a
+    # bare `./` path in a reusable workflow resolves against the CALLER's
+    # checkout, not this repo), then the two jobs become thin. That is a
+    # separate change with its own testing, not a rider on a caching PR.
     needs: [playwright]
-    # The gates are shell + python over a PR-sized diff. Bounded generously:
-    # the slowest observed component is the manifest gate's node startup.
     timeout-minutes: 20
 
     steps:
@@ -3787,10 +4055,98 @@ jobs:
           fi
           echo "Pinned gates package at '${REF}' provides every path this workflow executes."
 
+      # ── Does the APP have node dependencies this job can install? ──────────
+      #
+      # Detection runs BEFORE setup-node, and the reason is the same one
+      # documented on the security and frontend-build jobs: `actions/setup-node`
+      # with `cache: npm` HARD-FAILS when there is no lockfile at the path it is
+      # given. A PHP-only repo would then lose all sixty-odd gates to a cache
+      # setting. So the cache is requested only once a lockfile is known to
+      # exist, and its absence is announced rather than fatal.
+      #
+      # The path is the app ROOT, not `inputs.frontend-path`, because the app
+      # root is the only place the gates resolve `node_modules` FROM —
+      # scripts/lib/check_icon_vocabulary.py looks in `<app>/node_modules` and
+      # `<app>/../node_modules` and nowhere else. Installing into a frontend
+      # subdirectory would produce a tree the gates cannot see, which is the
+      # current bug wearing a fix's clothing.
+      - name: Does the app have node dependencies?
+        id: appnode
+        run: |
+          set -u
+          DIR="${GITHUB_WORKSPACE}/app"
+          if [ ! -f "${DIR}/package.json" ]; then
+            echo "install=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No package.json at the app root, so this repo has no node dependencies to install. Gates that need them (60 icon-vocabulary) will report NOT APPLICABLE or SKIPPED with their own reason — this step is not what decides that."
+          elif [ ! -f "${DIR}/package-lock.json" ]; then
+            echo "install=false" >> "$GITHUB_OUTPUT"
+            # NOTE the escaped backticks. Inside a double-quoted string bash
+            # treats a bare backtick pair as COMMAND SUBSTITUTION, so writing
+            # this message with plain backticks would have EXECUTED `npm ci`
+            # here and pasted its output into the warning — in the one branch
+            # that fires precisely when the install is supposed to be skipped.
+            echo "::warning::package.json is present at the app root but package-lock.json is not, and \`npm ci\` requires a lockfile. The app's node dependencies are NOT installed, so gate-60 cannot verify that a manifest icon exists upstream and will skip as 'wiring'. Commit a package-lock.json to close that gap."
+          else
+            echo "install=true" >> "$GITHUB_OUTPUT"
+            echo "Found package.json + package-lock.json at the app root — the app's node dependencies will be installed."
+          fi
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "${{ inputs.node-version }}"
+          # Empty string = no caching, which is what setup-node does by
+          # default. Written as an expression rather than omitted so the cache
+          # is enabled exactly when a lockfile exists to key it on.
+          cache: ${{ steps.appnode.outputs.install == 'true' && 'npm' || '' }}
+          cache-dependency-path: app/package-lock.json
+
+      # ── The app's own node dependencies ───────────────────────────────────
+      #
+      # WHY THIS JOB INSTALLS THE APP'S DEPENDENCIES AT ALL.
+      #
+      # It used to install only the gates package's own `ajv` and nothing else,
+      # so `<app>/node_modules` did not exist. gate-60 (icon-vocabulary) resolves
+      # `vue-material-design-icons` from there to answer one question: does this
+      # manifest icon name exist upstream, or was it invented? With no
+      # node_modules it cannot answer, and it reports `SKIPPED (wiring)` — which
+      # `--require-full-coverage` counts as a coverage gap and turns into a job
+      # failure. Every repo in the fleet declares vue-material-design-icons
+      # directly, so the gate's authority was never in doubt; only its
+      # environment was missing.
+      #
+      # MEASURED, as an A/B on one tree that differs ONLY in whether the app's
+      # node_modules is present. The subject is a planted true positive: a menu
+      # icon named `LedgerOutline`, an MDI component that does not exist
+      # upstream and would render blank in every app that copied it.
+      #
+      #   deps ABSENT (main today) : [gate-60] SKIPPED (wiring)
+      #                              RESULT: ALL GATES PASSED — EXCEPT GATES 60,
+      #                              WHICH DID NOT RUN.   exit 98
+      #   deps PRESENT (this change): [gate-60] FAIL — 1 icon(s) outside the
+      #                              canonical vocabulary (ADR-077)   exit 1
+      #
+      # Read the failing arm carefully: today the job DOES go red, but it goes
+      # red about coverage and never names the invented icon. The finding was
+      # not merely unreported, it was unobtainable — which is why a `wiring`
+      # skip is not a softer version of a FAIL.
+      #
+      # Removing the planted icon on the same tree returns exit 0 and
+      # `[gate-60] icon-vocabulary: PASS`, so the gate is shown able to answer
+      # in both directions rather than merely to stop complaining.
+      #
+      # Deliberately NOT a `download-artifact` from frontend-build. An
+      # artifact-dependent job SKIPS when its producer fails, and a skipped job
+      # renders as a grey tick rather than a red X — this file already carries
+      # several notes about that failure class. Installing in-job keeps the
+      # gates both independent and parallel.
+      - name: Install the app's node dependencies
+        if: steps.appnode.outputs.install == 'true'
+        working-directory: app
+        # `--ignore-scripts` because this job never builds or runs the app: it
+        # reads the tree. Lifecycle scripts would be arbitrary code executed for
+        # no benefit to any gate, on a job that checks out pull-request content.
+        run: npm ci --no-audit --no-fund --ignore-scripts
 
       - name: Install ajv for the manifest gates
         # Installed INTO the package dir so `require('ajv')` from
@@ -3940,24 +4296,72 @@ jobs:
             echo "::error::enable-axe is set and the axe report was REJECTED for the reason above, so this run has no accessibility verdict. A rejected report is the same amount of evidence as no report: none. Fix the producer, or set enable-axe: false. The remaining gates still run below; this job will fail at the end."
           fi
 
-      - name: Resolve the diff base
+      # ── Which SCOPE is this run entitled to, and why ────────────────────────
+      #
+      # A FORCED RUN MUST PRODUCE A VERDICT. It did not.
+      #
+      # On `workflow_dispatch` there is no pull request, so there is no target
+      # branch to diff against, and there is no `github.event.before` either —
+      # that field belongs to a push. The package's auto-detection then resolves
+      # `origin/HEAD`, which on a dispatch from a mainline branch IS HEAD. The
+      # wrapper correctly refuses to gate a self-comparison and exits 99. That
+      # refusal is right — a run that inspected nothing must never wear a
+      # green — but the conclusion drawn from it was wrong: the answer to "no
+      # diff is available" is not "gate nothing", it is "gate everything".
+      #
+      # REPRODUCED, on a fixture repository whose `origin/main` equals HEAD,
+      # which is exactly the dispatch shape:
+      #
+      #   default scope : [hydra-gates] FATAL: the diff base is HEAD ...
+      #                   NOTHING WAS CHECKED.                      exit 99
+      #   --full        : Base ref: n/a — --full requested, scanning the entire
+      #                   tree.   28 of 28 applicable gates ran.     real verdict
+      #
+      # So a dispatch is scoped FULL-REPO. This is not a relaxation: ADR-020
+      # diff-scoping exists to stop INHERITED debt blocking a PR, and a forced
+      # run is the one context where inherited debt is the thing being asked
+      # about. Expect a dispatch to be redder than a PR — that is the honest
+      # answer, and it is the answer someone pressing "Run workflow" wants.
+      #
+      # `--full` is safe to pass at ANY pin. Verified against every published
+      # tag of the gate package (v1.0.0 through v1.6.0): all of them parse
+      # `--full`. It therefore needs none of the capability probing that
+      # `--axe-enabled` and `--require-full-coverage` require, whose parsers
+      # would otherwise swallow an unknown flag as the app directory.
+      - name: Resolve the diff base and the scope
         id: base
         run: |
           set -u
-          if [ "${{ github.event_name }}" = "pull_request" ] || [ "${{ github.event_name }}" = "pull_request_target" ]; then
+          EVENT="${{ github.event_name }}"
+          if [ "${EVENT}" = "pull_request" ] || [ "${EVENT}" = "pull_request_target" ]; then
             # The PR's real target branch. This is the only base that answers
             # the question the gates are being asked: "what does this PR add?"
             BASE="origin/${{ github.base_ref }}"
-          else
-            # Not a PR. We deliberately set NOTHING and let the package's own
-            # precedence chain resolve origin/HEAD -> origin/development ->
-            # origin/main -> origin/master, printing which one won and exiting
-            # 99 if none do. Inventing a base here would be the HEAD~1 mistake
-            # wearing a different name.
+            SCOPE="diff"
+            WHY="this is a ${EVENT}, so the PR's target branch is the base and ADR-020 diff-scoping applies."
+          elif [ "${EVENT}" = "push" ]; then
+            # A push HAS a previous tip. We deliberately set NOTHING and let the
+            # package's own precedence chain resolve origin/HEAD ->
+            # origin/development -> origin/main -> origin/master, then re-scope
+            # to github.event.before when that lands on HEAD. Inventing a base
+            # here would be the HEAD~1 mistake wearing a different name.
             BASE=""
+            SCOPE="diff"
+            WHY="this is a push, so the previous tip (github.event.before) is a real base and ADR-020 diff-scoping applies."
+          else
+            # workflow_dispatch, schedule, and anything else with no diff to
+            # take. Full-repo, stated out loud, never silently empty.
+            BASE=""
+            SCOPE="full"
+            WHY="this is a '${EVENT}' run, which has neither a pull-request target branch nor a previous pushed tip, so no diff exists to scope to. Scanning the ENTIRE tree instead of refusing to run."
           fi
           echo "base=${BASE}" >> "$GITHUB_OUTPUT"
-          echo "Diff base for this run: ${BASE:-<auto-detect, see the run output>}"
+          echo "scope=${SCOPE}" >> "$GITHUB_OUTPUT"
+          {
+            echo "SCOPE FOR THIS RUN: ${SCOPE}"
+            echo "REASON: ${WHY}"
+            echo "Diff base: ${BASE:-<none set — see the run output for what the package resolved>}"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Run the Hydra gates
         id: gates
@@ -3986,6 +4390,16 @@ jobs:
         run: |
           set -u
           ARGS="--app-dir ${GITHUB_WORKSPACE}/app"
+          # Full-repo scope for a run that has no diff to take (see the scope
+          # step above). Passed unconditionally at any pin: every published tag
+          # of the gate package parses --full, so unlike --axe-enabled it
+          # cannot be swallowed as a positional and clobber --app-dir.
+          if [ "${{ steps.base.outputs.scope }}" = "full" ]; then
+            ARGS="${ARGS} --full"
+            echo "SCOPE: full-repo. ${{ github.event_name }} has no diff base, so every gate is run against the entire tree rather than refused."
+          else
+            echo "SCOPE: diff. ADR-020 diff-scoping against the base resolved above."
+          fi
           if [ "${{ inputs.hydra-gates-require-full-coverage }}" = "true" ]; then
             if [ "${{ steps.gatecap.outputs.categories }}" = "1" ]; then
               ARGS="${ARGS} --require-full-coverage"
@@ -4024,8 +4438,43 @@ jobs:
           # the call in an `&& / ||` list suspends errexit for it, so we get the
           # real code. This is the 0/1 collapse the contract forbids, and it is
           # one character away at all times.
-          bash "${GITHUB_WORKSPACE}/gates/hydra-gates/bin/hydra-gates" ${ARGS} && RC=0 || RC=$?
+          # Output goes to a FILE and is printed afterwards, rather than through
+          # a pipe. `bash -e {0}` plus a pipeline is how the exit code — which
+          # carries the failure COUNT — gets replaced by the last stage's
+          # status. Redirecting keeps the proven `&& / ||` form byte-for-byte
+          # while still giving the assertion below something to read.
+          GATES_OUT="${RUNNER_TEMP}/hydra-gates-output.txt"
+          bash "${GITHUB_WORKSPACE}/gates/hydra-gates/bin/hydra-gates" ${ARGS} > "${GATES_OUT}" 2>&1 && RC=0 || RC=$?
+          cat "${GATES_OUT}"
           echo "rc=${RC}" >> "$GITHUB_OUTPUT"
+
+          # ── A FORCED RUN MUST NEVER REPORT GREEN OVER NOTHING ──────────────
+          #
+          # Full-repo scope removes the empty-diff failure mode, but it does not
+          # by itself prove that any gate actually inspected anything: a repo
+          # with no PHP, no src/ and no manifest would legitimately reach
+          # "0 applicable gates" and exit 0, and that green would be
+          # indistinguishable from a real one — the exact defect making the
+          # dispatch produce a verdict was supposed to eliminate.
+          #
+          # So the count is READ, not assumed. The wrapper emits exactly one
+          # `COVERAGE: <n> of <m> declared gates reported a result` line; <n> is
+          # the number of gates that returned PASS or FAIL. Zero is not a pass.
+          #
+          # A missing COVERAGE line is also failed, not ignored — an assertion
+          # that cannot find its subject must never resolve to "fine".
+          if [ "${{ steps.base.outputs.scope }}" = "full" ] && [ "${RC}" -eq 0 ]; then
+            REPORTED="$(sed -n 's/^\[hydra-gates\] COVERAGE: \([0-9][0-9]*\) of .*/\1/p' "${GATES_OUT}" | head -1)"
+            if [ -z "${REPORTED}" ]; then
+              echo "::error::This was a forced full-repo run that exited 0, but no COVERAGE line could be found in the gate output, so the number of gates that actually reported a result is UNKNOWN. An unverifiable green is not a green. Failing the job rather than publishing a verdict nothing backs."
+              exit 1
+            fi
+            if [ "${REPORTED}" -eq 0 ]; then
+              echo "::error::This was a forced full-repo run and ZERO gates reported a result — every gate found no subject matter in this repository. Exit 0 here means 'nothing was measured', not 'everything passed', and a forced run exists precisely to avoid publishing that as a green. Failing the job."
+              exit 1
+            fi
+            echo "Forced full-repo run: ${REPORTED} gate(s) reported a real PASS/FAIL result."
+          fi
 
           if [ "${RC}" -eq 0 ]; then
             echo "All gates that ran passed. Read the COVERAGE block above before treating this as complete."
@@ -4633,12 +5082,38 @@ jobs:
         with:
           node-version: "${{ inputs.node-version }}"
 
+      # `npm ci` below is gated on enable-frontend, and a repo can have that on
+      # without a lockfile, so this is actions/cache rather than setup-node's
+      # `cache: npm` — the latter hard-fails on a missing lockfile. Same note as
+      # the Newman and Playwright jobs.
+      - name: Cache npm downloads
+        if: ${{ inputs.enable-frontend }}
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ inputs.node-version }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-${{ inputs.node-version }}-
+            ${{ runner.os }}-npm-
+
+      # `composer.json` joins the key for the same reason as on the php-quality
+      # job: `hashFiles` yields an empty string when nothing matches, which
+      # collapsed this key to a constant on the three fleet repos with no
+      # composer.lock — and an Actions cache entry is immutable once written, so
+      # a constant key can never be rotated by a dependency change.
       - name: Cache Composer dependencies
         uses: actions/cache@v4
         with:
           path: vendor
-          key: ${{ runner.os }}-composer-${{ hashFiles('composer.lock') }}
+          key: ${{ runner.os }}-composer-${{ hashFiles('composer.lock', 'composer.json') }}
           restore-keys: ${{ runner.os }}-composer-
+
+      - name: Cache Composer downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer
+          key: ${{ runner.os }}-composer-files-${{ hashFiles('composer.lock', 'composer.json') }}
+          restore-keys: ${{ runner.os }}-composer-files-
 
       - name: Install Composer dependencies
         run: composer install --no-progress --prefer-dist --optimize-autoloader

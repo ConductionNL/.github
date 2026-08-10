@@ -1678,5 +1678,164 @@ class CodeMaskTest(unittest.TestCase):
         self.assertTrue(cec._ref_is_live(doc, src.index("@e2e") + 4))
 
 
+# ---------------------------------------------------------------------------
+# .github#308 — a file the Playwright config never runs is as dead as
+# `describe.skip`, and this gate could not see it.
+#
+# The config below is openregister's real one, reduced: a top-level
+# `testIgnore` carrying `**/api-direct/**`, a default project that REPEATS it
+# (a project-level `testIgnore` REPLACES the top-level one — Playwright does
+# not merge them, which is why every fleet config repeats the entry), and two
+# opt-in projects that pull `visual/**` and `docs-screenshots.spec.ts` BACK IN
+# via `testMatch`.
+#
+# That last part is the whole false-positive surface. `**/visual/**` and
+# `**/docs-screenshots.spec.ts` appear in a `testIgnore` in fourteen of the
+# fleet's configs; treating "named in some testIgnore" as dead would strip
+# coverage credit from every visual and docs spec in the fleet. Validated
+# against all 21 real configs: 0 dead files anywhere except the api-direct
+# trees that are excluded on purpose (openregister 25, openconnector 6).
+_FLEET_CONFIG = """
+import { defineConfig, devices } from '@playwright/test'
+
+export default defineConfig({
+\ttestDir: './tests/e2e',
+\tprojects: [
+\t\t{
+\t\t\tname: 'chromium',
+\t\t\t// NOTE: a project-level testIgnore REPLACES the top-level testIgnore
+\t\t\t// for this project, so the api-direct exclusion must be repeated here.
+\t\t\ttestIgnore: [
+\t\t\t\t'**/docs-screenshots.spec.ts',
+\t\t\t\t'**/api-direct/**',
+\t\t\t\t'**/visual/**',
+\t\t\t],
+\t\t\tuse: { ...devices['Desktop Chrome'] },
+\t\t},
+\t\t{
+\t\t\tname: 'docs-capture',
+\t\t\ttestMatch: /docs-screenshots\\.spec\\.ts$/,
+\t\t},
+\t\t{
+\t\t\tname: 'visual',
+\t\t\ttestMatch: /visual\\/.*\\.visual\\.spec\\.ts$/,
+\t\t\ttestIgnore: [],
+\t\t},
+\t],
+\ttestIgnore: [
+\t\t'**/node_modules/**',
+\t\t// API-direct specs are HTTP-contract assertions covered by Newman,
+\t\t// not UI-driving Playwright tests.
+\t\t'**/api-direct/**',
+\t],
+})
+"""
+
+_SPEC_MD = """# Saved search views
+
+#### Scenario: Presentation of a saved view
+
+- **WHEN** a user opens a saved view
+- **THEN** the columns are rendered in the stored order
+"""
+
+
+class PlaywrightConfigScopeTest(unittest.TestCase):
+    """A scenario proved only by a file no project runs is NOT covered."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.root, True)
+        _write(self.root, "playwright.config.ts", _FLEET_CONFIG)
+        _write(self.root, "openspec/specs/saved-search-views/spec.md", _SPEC_MD)
+        self.ref = "saved-search-views::presentation-of-a-saved-view"
+        self.tag = ("// @e2e openspec/specs/saved-search-views/spec.md"
+                    "#presentation-of-a-saved-view\n"
+                    "test('renders', async ({ page }) => {\n"
+                    "  await page.goto('/apps/openregister/views')\n"
+                    "})\n")
+
+    def test_a_tag_in_an_IGNORED_directory_does_not_cover_the_scenario(self):
+        # The measured shape: openregister's
+        # tests/e2e/api-direct/search-views-presentation.spec.ts.
+        _write(self.root, "tests/e2e/api-direct/search-views-presentation.spec.ts",
+               self.tag)
+        live, dead = cec.collect_ref_status(self.root)
+        self.assertNotIn(self.ref, live)
+        self.assertIn(self.ref, dead)
+        self.assertIn("no Playwright project runs", dead[self.ref])
+
+    def test_the_SAME_tag_in_a_run_directory_DOES_cover_it(self):
+        # Anti-widening control. Same tag, same file contents, one directory
+        # over. If this ever goes red the gate has stopped counting real tests.
+        _write(self.root, "tests/e2e/search-views-presentation.spec.ts", self.tag)
+        live, _dead = cec.collect_ref_status(self.root)
+        self.assertIn(self.ref, live)
+
+    def test_a_VISUAL_spec_still_covers_although_the_default_project_ignores_it(self):
+        # `**/visual/**` is in the chromium project's testIgnore; the `visual`
+        # project's testMatch runs it. Fourteen fleet configs have this shape.
+        _write(self.root, "tests/e2e/visual/views.visual.spec.ts", self.tag)
+        live, _dead = cec.collect_ref_status(self.root)
+        self.assertIn(self.ref, live)
+
+    def test_a_DOCS_SCREENSHOT_spec_still_covers_for_the_same_reason(self):
+        _write(self.root, "tests/e2e/docs-screenshots.spec.ts", self.tag)
+        live, _dead = cec.collect_ref_status(self.root)
+        self.assertIn(self.ref, live)
+
+    def test_one_live_reference_rescues_a_ref_also_named_in_an_ignored_file(self):
+        # A ref is dead only when NOTHING live references it.
+        _write(self.root, "tests/e2e/api-direct/search-views.spec.ts", self.tag)
+        _write(self.root, "tests/e2e/search-views.spec.ts", self.tag)
+        live, dead = cec.collect_ref_status(self.root)
+        self.assertIn(self.ref, live)
+        self.assertNotIn(self.ref, dead)
+
+    def test_NO_config_means_every_file_runs(self):
+        # Uncertainty resolves to LIVE — a repo whose config cannot be read
+        # behaves exactly as it did before #308.
+        (self.root / "playwright.config.ts").unlink()
+        _write(self.root, "tests/e2e/api-direct/search-views.spec.ts", self.tag)
+        live, _dead = cec.collect_ref_status(self.root)
+        self.assertIn(self.ref, live)
+
+    def test_an_UNPARSABLE_config_means_every_file_runs(self):
+        _write(self.root, "playwright.config.ts",
+               "export default defineConfig(loadFromSomewhere())\n")
+        _write(self.root, "tests/e2e/api-direct/search-views.spec.ts", self.tag)
+        live, _dead = cec.collect_ref_status(self.root)
+        self.assertIn(self.ref, live)
+
+    def test_a_testIgnore_quoted_INSIDE_A_COMMENT_is_not_configuration(self):
+        # Every fleet config explains the replace-not-merge rule in prose that
+        # contains the word `testIgnore:`. Parsing the explanation instead of
+        # the setting is #294's mistake in a different file.
+        _write(self.root, "playwright.config.ts",
+               "export default defineConfig({\n"
+               "\ttestDir: './tests/e2e',\n"
+               "\t// testIgnore: ['**/*.spec.ts'],  <- historical, do not use\n"
+               "})\n")
+        _write(self.root, "tests/e2e/search-views.spec.ts", self.tag)
+        live, _dead = cec.collect_ref_status(self.root)
+        self.assertIn(self.ref, live)
+
+
+class GlobTranslationTest(unittest.TestCase):
+    def test_double_star_slash_matches_zero_directories(self):
+        r = cec._glob_to_re("**/api-direct/**")
+        self.assertTrue(r.match("api-direct/x.spec.ts"))
+        self.assertTrue(r.match("deep/nest/api-direct/x.spec.ts"))
+
+    def test_single_star_does_not_cross_a_separator(self):
+        r = cec._glob_to_re("*.spec.ts")
+        self.assertTrue(r.match("a.spec.ts"))
+        self.assertFalse(r.match("dir/a.spec.ts"))
+
+    def test_extglob_and_braces_are_refused_rather_than_guessed(self):
+        self.assertIsNone(cec._glob_to_re("**/*.@(spec|test).ts"))
+        self.assertIsNone(cec._glob_to_re("**/{a,b}/**"))
+
+
 if __name__ == "__main__":
     unittest.main()

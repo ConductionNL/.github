@@ -1035,6 +1035,255 @@ def _ref_is_live(doc: _TestFile, pos: int) -> bool:
     return True
 
 
+# ---------------------------------------------------------------------------
+# Playwright config scope — WHICH FILES DOES CI ACTUALLY RUN? (.github#308)
+# ---------------------------------------------------------------------------
+# This gate counted every `*.spec.ts` under `tests/e2e/**` as a running test.
+# Playwright does not. A file excluded by `testIgnore` — or living outside
+# `testDir`, or not matched by any project's `testMatch` — is never executed,
+# and a scenario referenced ONLY from such a file has no automated proof at all.
+#
+# Measured 2026-08-09 by planting an `@e2e` anchor in a CI-ignored directory:
+# the uncovered count dropped 271 → 270 and the scenario was reported COVERED.
+# The gate could see `describe.skip` (#239) but not the config that silently
+# does the same thing to a whole directory.
+#
+# The live shape in the fleet is openregister's
+# `tests/e2e/api-direct/search-views-presentation.spec.ts`, which carries
+# `@e2e openspec/specs/saved-search-views/spec.md` and sits under
+# `**/api-direct/**` — excluded at top level AND repeated in every project's
+# own `testIgnore`, because a project-level `testIgnore` REPLACES the top-level
+# one rather than merging with it. openconnector's config says so in a comment.
+#
+# WHY A PARSER AND NOT A GLOB LIST
+# --------------------------------
+# `**/visual/**` and `**/docs-screenshots.spec.ts` are ignored by the default
+# project and pulled BACK IN by the `visual` / `docs-capture` projects via
+# `testMatch`. Treating "appears in some testIgnore" as dead would kill both,
+# in every repo that has them — the largest false-positive surface here. A file
+# is dead only when NO project would run it.
+#
+# CONSERVATIVE BY CONSTRUCTION. This reads a TypeScript literal with regexes;
+# it is not a TS evaluator. Every uncertainty resolves to LIVE (i.e. to the
+# pre-existing behaviour): no config, an unparsable config, a `testMatch` that
+# is not a plain regex/string literal, a `testDir` that is not a literal. The
+# gate therefore only ever loses coverage credit for an exclusion it could
+# actually read, and a repo whose config it cannot parse behaves exactly as
+# before this change.
+_PW_CONFIGS = ("playwright.config.ts", "playwright.config.js",
+               "playwright.config.mts", "playwright.config.cjs")
+
+_STR_RE = re.compile(r"""['"]([^'"]*)['"]""")
+
+
+def _strip_ts_comments(text: str) -> str:
+    """Blank out `//` and `/* */` comments, preserving offsets and newlines.
+
+    Not cosmetic. These configs explain themselves at length, and the
+    explanations quote the very keys being parsed — openregister and
+    openconnector both carry a `NOTE: a project-level testIgnore REPLACES the
+    top-level testIgnore` comment. Parsing that sentence as configuration is
+    the #294 mistake in a different file.
+    """
+    out: list[str] = []
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if c in "\"'`":
+            j = i + 1
+            while j < n and text[j] != c:
+                j += 2 if text[j] == "\\" else 1
+            out.append(text[i:min(j + 1, n)])
+            i = j + 1
+        elif text.startswith("//", i):
+            j = text.find("\n", i)
+            j = n if j < 0 else j
+            out.append(" " * (j - i))
+            i = j
+        elif text.startswith("/*", i):
+            j = text.find("*/", i + 2)
+            j = n if j < 0 else j + 2
+            out.append("".join(ch if ch == "\n" else " " for ch in text[i:j]))
+            i = j
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
+
+
+def _glob_to_re(glob: str) -> re.Pattern[str] | None:
+    """Minimatch-style glob → regex, for the subset Playwright configs use.
+
+    `**/` matches zero or more directories (so `**/api-direct/**` matches
+    `api-direct/x.spec.ts`), `**` matches anything, `*` matches within one
+    segment, `?` matches one character. Anything with brace/extglob syntax
+    returns None — unparsable means LIVE, never a guess.
+    """
+    if any(ch in glob for ch in "{}()[]!+@"):
+        return None
+    out, i, n = [], 0, len(glob)
+    while i < n:
+        if glob.startswith("**/", i):
+            out.append(r"(?:[^/]+/)*")
+            i += 3
+        elif glob.startswith("**", i):
+            out.append(r".*")
+            i += 2
+        elif glob[i] == "*":
+            out.append(r"[^/]*")
+            i += 1
+        elif glob[i] == "?":
+            out.append(r"[^/]")
+            i += 1
+        else:
+            out.append(re.escape(glob[i]))
+            i += 1
+    try:
+        return re.compile("^" + "".join(out) + "$")
+    except re.error:
+        return None
+
+
+def _match_bracket(text: str, start: int, open_ch: str, close_ch: str) -> int | None:
+    depth = 0
+    for i in range(start, len(text)):
+        if text[i] == open_ch:
+            depth += 1
+        elif text[i] == close_ch:
+            depth -= 1
+            if depth == 0:
+                return i
+    return None
+
+
+def _value_after(region: str, key: str) -> str | None:
+    """The raw source of `<key>: <value>` inside *region*, at any depth."""
+    m = re.search(r"\b" + key + r"\s*:\s*", region)
+    if not m:
+        return None
+    i = m.end()
+    if i >= len(region):
+        return None
+    if region[i] == "[":
+        end = _match_bracket(region, i, "[", "]")
+        return region[i:end + 1] if end is not None else None
+    end = region.find("\n", i)
+    return region[i:end if end >= 0 else len(region)].rstrip().rstrip(",")
+
+
+def _patterns(raw: str | None) -> list[str] | None:
+    """String literals from a `testIgnore`/`testMatch` value, or None."""
+    if raw is None:
+        return None
+    found = _STR_RE.findall(raw)
+    return found if found else None
+
+
+def _regexes(raw: str | None) -> list[re.Pattern[str]] | None:
+    """`testMatch` as compiled regexes. A `/…/` literal is a JS regex; a
+    quoted value is a glob. Returns None when neither shape is recognised —
+    which the caller reads as "no constraint", i.e. LIVE."""
+    if raw is None:
+        return None
+    out: list[re.Pattern[str]] = []
+    for lit in re.findall(r"/((?:[^/\\\n]|\\.)+)/[gimsuy]*", raw):
+        try:
+            out.append(re.compile(lit))
+        except re.error:
+            return None
+    for s in _STR_RE.findall(raw):
+        r = _glob_to_re(s)
+        if r is None:
+            return None
+        out.append(r)
+    return out or None
+
+
+class _PlaywrightScope:
+    """Answers: would ANY project run this test file?"""
+
+    def __init__(self, app_dir: Path) -> None:
+        self.parsed = False
+        self.test_dir = ""
+        self.projects: list[tuple[list[str] | None, list[re.Pattern[str]] | None]] = []
+        for name in _PW_CONFIGS:
+            cfg = app_dir / name
+            if cfg.is_file():
+                try:
+                    self._parse(_strip_ts_comments(cfg.read_text(encoding="utf-8")))
+                except OSError:
+                    return
+                return
+
+    def _parse(self, text: str) -> None:
+        m = re.search(r"\bprojects\s*:\s*\[", text)
+        blocks: list[str] = []
+        if m:
+            end = _match_bracket(text, m.end() - 1, "[", "]")
+            if end is None:
+                return
+            arr, top = text[m.end():end], text[:m.start()] + text[end + 1:]
+            i = 0
+            while i < len(arr):
+                if arr[i] == "{":
+                    close = _match_bracket(arr, i, "{", "}")
+                    if close is None:
+                        return
+                    blocks.append(arr[i:close + 1])
+                    i = close + 1
+                else:
+                    i += 1
+        else:
+            top = text
+
+        td = _value_after(top, "testDir")
+        if td:
+            lit = _STR_RE.findall(td)
+            if lit:
+                self.test_dir = lit[0].lstrip("./").rstrip("/")
+
+        top_ignore = _patterns(_value_after(top, "testIgnore"))
+        top_match = _regexes(_value_after(top, "testMatch"))
+
+        # A project's OWN testIgnore/testMatch REPLACES the top-level one —
+        # Playwright does not merge them. Both openregister and openconnector
+        # carry that fact as a comment because they were bitten by it.
+        for b in blocks or [""]:
+            ign = _patterns(_value_after(b, "testIgnore")) if b else None
+            mat = _regexes(_value_after(b, "testMatch")) if b else None
+            if b and re.search(r"\btestIgnore\s*:\s*\[\s*\]", b):
+                ign = []          # an explicit empty list clears the top-level one
+            self.projects.append((
+                top_ignore if ign is None else ign,
+                top_match if mat is None else mat,
+            ))
+        self.parsed = True
+
+    def runs(self, rel_to_app: str) -> bool:
+        """True unless the config PROVES no project executes this file."""
+        if not self.parsed or not self.projects:
+            return True
+        if self.test_dir and not rel_to_app.startswith(self.test_dir + "/"):
+            return True   # outside a testDir we may have mis-read — never accuse
+        rel_to_dir = (rel_to_app[len(self.test_dir) + 1:]
+                      if self.test_dir and rel_to_app.startswith(self.test_dir + "/")
+                      else rel_to_app)
+        for ignore, match in self.projects:
+            if match is not None and not any(
+                r.search(rel_to_dir) or r.search(rel_to_app) for r in match
+            ):
+                continue
+            if ignore:
+                compiled = [_glob_to_re(g) for g in ignore]
+                if any(c is None for c in compiled):
+                    return True   # an unreadable glob is not evidence
+                if any(c.match(rel_to_dir) or c.match(rel_to_app)
+                       for c in compiled if c is not None):
+                    continue
+            return True
+        return False
+
+
 def collect_covered_refs(app_dir: Path) -> set[str]:
     """Return the set of ``<spec>::<slug>`` refs found in any e2e test file.
 
@@ -1057,6 +1306,7 @@ def collect_ref_status(app_dir: Path) -> tuple[set[str], dict[str, str]]:
     e2e_dir = app_dir / "tests" / "e2e"
     if not e2e_dir.is_dir():
         return live, dead
+    scope = _PlaywrightScope(app_dir)
     for p in e2e_dir.rglob("*"):
         if not p.is_file():
             continue
@@ -1069,6 +1319,13 @@ def collect_ref_status(app_dir: Path) -> tuple[set[str], dict[str, str]]:
             text = p.read_text(encoding="utf-8")
         except OSError:
             continue
+        # A FILE THE CONFIG NEVER RUNS IS AS DEAD AS `describe.skip` (#308).
+        #
+        # Checked per file rather than per tag: `testIgnore` switches off the
+        # whole file, so every ref in it is unproven for the same reason, and
+        # the reason names the mechanism so the finding is actionable.
+        rel = str(p.relative_to(app_dir))
+        file_runs = scope.runs(rel)
         # Tokenise ONCE per file, then ask it per tag. nldesign's
         # admin-settings.spec.ts carries 17 tags; the old code re-scanned the
         # whole file for each of them.
@@ -1076,13 +1333,16 @@ def collect_ref_status(app_dir: Path) -> tuple[set[str], dict[str, str]]:
         for rex in (_E2E_PATH_RE, _E2E_SHORT_RE):
             for m in rex.finditer(text):
                 ref = f"{m.group('spec')}::{m.group('slug')}"
-                if _ref_is_live(doc, m.end()):
+                if file_runs and _ref_is_live(doc, m.end()):
                     live.add(ref)
                     dead.pop(ref, None)
                 elif ref not in live:
                     dead[ref] = (
-                        f"referenced only by a test that never runs "
-                        f"({p.relative_to(app_dir)})"
+                        f"referenced only by a file no Playwright project "
+                        f"runs — excluded by playwright.config testIgnore/"
+                        f"testMatch ({rel})"
+                        if not file_runs else
+                        f"referenced only by a test that never runs ({rel})"
                     )
     return live, dead
 
