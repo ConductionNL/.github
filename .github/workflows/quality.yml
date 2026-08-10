@@ -1603,29 +1603,38 @@ jobs:
     # and beta in all 25 fleet repos. Decoupling costs a few CI minutes on a PR
     # that cannot merge anyway; it buys a verdict that exists.
     #
-    # `needs:` USED to be retained "for ordering only" — and ordering was the
-    # entire cost. With `!cancelled()` and no result condition, this job already
-    # ran regardless of static-analysis colour and regardless of the advisory
-    # feed; the edges did not gate anything, they only made it WAIT.
+    # ── `php-quality` REMOVED from `needs:`; `security` KEPT ────────────────
     #
-    # They are now removed. `needs:` in GitHub Actions is a scheduling edge as
-    # well as a conditional one: `!cancelled()` suppresses the implicit
-    # `success()`, but it does not release the job to start. So PHPUnit sat
-    # behind php-quality for no verdict it consumed. Measured on openregister
-    # run 31358011759: php-quality 2m, and PHPUnit is the 4m job behind it.
+    # `needs:` in GitHub Actions is a SCHEDULING edge as well as a conditional
+    # one. `!cancelled()` suppresses the implicit `success()`, so this job
+    # already ran regardless of static-analysis colour — but suppressing the
+    # condition does not release the job to START. So PHPUnit sat behind
+    # php-quality for a verdict it never consumed.
+    #
+    # That php-quality is not load-bearing here is not an inference — it is
+    # recorded directly above by #194 and by the 2026-08-04 procest incident:
+    # gating on it meant a phpmd COMPLEXITY finding deleted the entire test
+    # tier, and the loss rendered as a grey "skipping" placeholder. The `if:`
+    # clause was removed then; the `needs:` entry was simply left behind, and
+    # the comment that survived called it "retained for ordering only".
+    # Ordering was the whole cost. Measured on openregister run 31358011759:
+    # php-quality 2m, with the 4m test jobs queued behind it.
+    #
+    # `security` STAYS. It resolves in seconds (9s and 16s for its two legs in
+    # the runs measured on this change), so it buys back no meaningful time,
+    # and keeping it preserves the conventional ordering with no latency cost.
+    # It is still NOT a gate — the `if:` reads no result from it, so the
+    # 2026-08-06 advisory shape (one CVE against a dev-only formatter deleting
+    # the fleet's test tier) cannot return through this edge.
     #
     # Nothing in this job's steps reads `needs.php-quality.*` or
-    # `needs.security.*` — verified across the whole file, where every surviving
-    # `needs.` expression belongs to the `report` job or to the Playwright job's
-    # frontend-build artifact check.
-    #
-    # Security still blocks the MERGE, exactly as before and by the same
-    # mechanism: `security` is in the Quality Report's `needs:`, and
-    # `quality / Quality Report` is the required context on main and beta in
-    # every fleet repo. Nothing is weakened; a job simply stops waiting.
+    # `needs.security.*` — verified across the whole file, where every
+    # surviving `needs.` expression belongs to the `report` job or to the
+    # Playwright job's frontend-build artifact check.
     if: ${{ inputs.enable-php && inputs.enable-phpunit && !cancelled() }}
     runs-on: ubuntu-latest
     name: "PHPUnit (PHP ${{ matrix.php-version }}, NC ${{ matrix.nextcloud-ref }})"
+    needs: [security]
     # Observed across 337 SUCCESSFUL executions: median 1.7 min, p95 13.6 min,
     # max 18.9 min (shillinq, green). The spread is huge because each leg
     # installs a full Nextcloud server before the suite runs, so a tight bound
@@ -1901,12 +1910,15 @@ jobs:
     # static-analysis colour, regardless of the advisory feed, and reaches its
     # own verdict.
     #
-    # `needs: [php-quality, security]` REMOVED — see the equivalent note on the
-    # phpunit job. Those edges gated nothing (this job's `if:` reads neither
-    # result) and only delayed the start; no step here reads `needs.*`.
+    # `php-quality` REMOVED from `needs:`, `security` KEPT — see the full note
+    # on the phpunit job. The php-quality edge gated nothing (this job's `if:`
+    # reads no result from it) and only delayed the start; security resolves in
+    # seconds, so keeping it costs no measurable time. No step here reads
+    # `needs.*`.
     if: ${{ inputs.enable-newman && !cancelled() }}
     runs-on: ubuntu-latest
     name: "Integration Tests (Newman)"
+    needs: [security]
     # Observed across 39 executions: median 1.9 min, max 7.5 min (launchpad).
     # Also installs a full Nextcloud server first, so 30 min — 4x the worst run.
     timeout-minutes: 30
@@ -2258,17 +2270,21 @@ jobs:
     # the artifact is absent for any reason the build step below runs exactly
     # as it did before this dependency existed.
     #
-    # `php-quality` and `security` REMOVED from this list — see the note on the
-    # phpunit job. Neither was ever read by this job's `if:` or by any step; they
-    # were leftovers from the gating clauses #194 deleted, and all they did was
-    # delay the start of the most expensive evidence in the workflow.
+    # `php-quality` REMOVED from this list — see the note on the phpunit job. It
+    # was never read by this job's `if:` or by any step; it was a leftover from
+    # the gating clause #194 deleted, and all it did was delay the start of the
+    # most expensive evidence in the workflow.
+    #
+    # `security` STAYS: it resolves in seconds, so removing it would buy no
+    # measurable time. It remains a scheduling edge only — the `if:` above reads
+    # no result from it, exactly as #194 established.
     #
     # `frontend-build` STAYS, and it is the one edge here that is real: the step
     # below reads `needs.frontend-build.outputs.built` and downloads its
     # artifact. It is still not a gate — `!cancelled()` above suppresses the
     # implicit `success()`, so a failed or skipped frontend-build still lets this
     # job run and simply rebuild the bundle itself.
-    needs: [frontend-build]
+    needs: [security, frontend-build]
     # No job in this file declared a timeout, so a hung suite ran to GitHub's
     # 6-hour default. Observed durations once the suite is healthy: 4-10 min
     # (planix 0.8, doriath 4.2, zaakafhandelapp 5.3, softwarecatalog 6.1,
@@ -3319,11 +3335,14 @@ jobs:
     # suppresses the implicit `success()`, so this job reaches its own verdict
     # whatever the advisory feed says. See the `security` job.
     #
-    # `needs: [security]` REMOVED — it was documented directly above as kept
-    # "for ordering only", and ordering was the whole cost. See the phpunit job.
+    # `needs: [security]` KEPT. It is a scheduling edge only (the `if:` reads no
+    # result from it) and security resolves in seconds, so it costs no
+    # measurable time. Unlike php-quality on the phpunit/newman/playwright jobs,
+    # there was nothing here worth removing.
     if: ${{ inputs.enable-journeydoc-capture && !cancelled() }}
     runs-on: ubuntu-latest
     name: "Journeydoc Capture (screenshots)"
+    needs: [security]
     # UNMEASURED: no caller in the fleet currently sets
     # `enable-journeydoc-capture: true`, so this job has never executed (312
     # skipped records, 0 executions, across 15 repos). Its step list is a
