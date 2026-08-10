@@ -3288,13 +3288,42 @@ fi
 #
 # A grep that ERRORS (rc >= 2) is now a wiring skip, never a pass — the same
 # rule the helper-backed gates in this suite follow.
+#
+# ---------------------------------------------------------------------------
+# A COMMENTED-OUT CALL IS NOT A CALL (.github#294)
+# ---------------------------------------------------------------------------
+# The first thing the un-blinded gate reported in the fleet was not a call. It
+# was openconnector `lib/Service/SearchService.php:189`:
+#
+#     // $directory = $this->objectService->findObjects(filters: [...]);
+#
+# a line that has been commented out. grep has no idea what a comment is, so
+# the gate's very first live finding was false — and a gate whose first finding
+# is false is a gate people learn to ignore.
+#
+# The fix is the pass gate-5 received in #196: run the file through
+# `source_scope.py --mask php` first, which blanks `//`, `#` and `/* */`
+# comments while PRESERVING offsets and newlines, so grep still reports the
+# real line number. `#[` is left alone — it opens a PHP 8 attribute, not a
+# comment, and swallowing it would delete `#[NoAdminRequired]`.
+#
+# String CONTENTS are kept (php_mask's default). A fabricated method name
+# inside a string is not a call either, but blanking strings would delete
+# evidence other gates in this file rely on, and no fleet repo has that shape.
+#
+# The mask is a helper, so it inherits this gate's own rule: if it cannot run,
+# the gate reports `wiring` and NOT a pass. A mask that silently returned
+# nothing would blank every file and make this gate green everywhere — the
+# 2026-08-08 failure mode in a new costume.
 # ---------------------------------------------------------------------------
 if [ -d lib ]; then
     _or_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-or-objectservice-api.log
     : > "${_or_log}"
+    : > "${_or_log}.err"
     _or_hits=0
     _or_ran=1
     _or_broken=""
+    _or_mask="${SCRIPT_DIR}/lib/source_scope.py"
     # Receiver-anchored: the call must be made ON something named
     # `*[Oo]bjectService` — `$this->objectService->`, `$objectService->`,
     # `$this->orObjectService?->`. `$this->schemaMapper->createFromArray()` is
@@ -3304,9 +3333,23 @@ if [ -d lib ]; then
         [ -z "${_file}" ] && continue
         [ -f "${_file}" ] || continue
         _in_scope "${_file}" || continue
+        # Comments blanked BEFORE the search (#294). Offsets and newlines are
+        # preserved by php_mask, so grep's -n line numbers still address the
+        # real file.
+        set +e
+        _or_masked=$(python3 "${_or_mask}" --mask php "${_file}" 2>>"${_or_log}.err")
+        _or_mrc=$?
+        if [ "${_or_mrc}" -ne 0 ] || [ ! -f "${_or_mask}" ]; then
+            # A MASK THAT DID NOT RUN IS NOT AN EMPTY FILE. Falling back to the
+            # raw text would silently restore the #294 false positive; treating
+            # its empty output as clean would make this gate green everywhere.
+            _or_ran=0
+            _or_broken="${_file}"
+            break
+        fi
         # `--` terminates option parsing. The pattern is anchored on `$`, not
         # `-`, since #271, but the guard stays: it is the whole defect.
-        _hits=$(grep -nE -- "${_OR_FABRICATED_RX}" "${_file}" 2>/dev/null)
+        _hits=$(printf '%s\n' "${_or_masked}" | grep -nE -- "${_OR_FABRICATED_RX}" 2>/dev/null)
         _or_rc=$?
         if [ "${_or_rc}" -ge 2 ]; then
             # grep could not run (bad pattern, unreadable file, option-parse
@@ -3319,12 +3362,17 @@ if [ -d lib ]; then
         [ -z "${_hits}" ] && continue
         while IFS= read -r _line; do
             [ -z "${_line}" ] && continue
-            echo "${_file}:${_line}  rule=or-objectservice-fabricated-method" >> "${_or_log}"
+            # The match was made on the MASK; report the ORIGINAL line, so the
+            # log shows the code a reader will find at that line rather than a
+            # row of spaces where a comment used to be.
+            _or_no=${_line%%:*}
+            _or_src=$(sed -n "${_or_no}p" "${_file}" 2>/dev/null)
+            echo "${_file}:${_or_no}:${_or_src}  rule=or-objectservice-fabricated-method" >> "${_or_log}"
             _or_hits=$((_or_hits + 1))
         done <<< "${_hits}"
     done < <(_enum_tracked '\.php$' lib)
     if [ "${_or_ran}" -eq 0 ]; then
-        _skip 20 "or-objectservice-api" wiring "grep exited >= 2 on ${_or_broken} — the fabricated-ObjectService-method search did NOT complete, so no call site was judged. Calls to methods that do not exist on OpenRegister's ObjectService are UNVERIFIED by this run."
+        _skip 20 "or-objectservice-api" wiring "the comment mask or grep did NOT complete on ${_or_broken} — no call site was judged from that file onward. Calls to methods that do not exist on OpenRegister's ObjectService are UNVERIFIED by this run. See ${_or_log}.err."
     elif [ "${_or_hits}" -eq 0 ]; then
         _pass 20 "or-objectservice-api"
     else
