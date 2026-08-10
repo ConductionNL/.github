@@ -138,7 +138,10 @@ if grep -q 'BookingNotificationController.php:9:' "$(cat "${_LAST_LOG_PTR}")" 2>
 else
     _bad "wrong line number: $(cat "$(cat "${_LAST_LOG_PTR}")" 2>/dev/null)"
 fi
-if grep -qF 'findObject($id)' "$(cat "${_LAST_LOG_PTR}")" 2>/dev/null; then
+# Double-quoted with an escaped `$` rather than single-quoted: ShellCheck's
+# SC2016 fires on ANY single-quoted string containing `$`, and it is fatal in
+# this repository. `\$` inside double quotes is a literal dollar.
+if grep -qF "findObject(\$id)" "$(cat "${_LAST_LOG_PTR}")" 2>/dev/null; then
     _ok "the log shows the ORIGINAL source line, not the blanked mask"
 else
     _bad "the log does not carry the original source line"
