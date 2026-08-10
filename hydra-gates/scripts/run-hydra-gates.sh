@@ -2476,9 +2476,39 @@ fi
 # its own file under src/modals/ or src/dialogs/, not inline in parent
 # components. ADR-004 hard rule. Observed 2026-04-30 on doriath.
 # ---------------------------------------------------------------------------
+# THE PATTERN REQUIRED A DELIMITER ON THE SAME LINE (#321).
+#
+# The test was `grep -qE '<NcModal[ \t>/]|<NcDialog[ \t>/]'`. `grep` matches
+# line by line, so a tag opened across several lines — which is how Vue
+# components with more than one or two props are ACTUALLY written, and what
+# every formatter produces —
+#
+#     <NcDialog
+#         :open="showConfirm"
+#         name="Delete lead">
+#
+# has nothing after `<NcDialog` on its own line. The character class cannot
+# match end-of-line, so the tag was invisible.
+#
+# Measured 2026-08-09 on pipelinq: 0 of 9 real violations seen. The gate passed
+# its own planted true positive the whole time, because a plant is written on
+# one line. That is the trap this band keeps meeting — a minimal plant and a
+# real defect differing in precisely the feature the regex depends on.
+#
+# The delimiter itself is kept, and end-of-line is added to it: `<NcDialogHeader`
+# and `<NcModalX` must still NOT match, or the gate would report every
+# component whose name merely starts with the same letters.
+#
+# COMMENTS ARE MASKED (#294's lesson, applied before it costs anything).
+# Measured across the fleet: masking suppresses zero findings today, so this
+# buys no reduction now — it stops `<!-- <NcDialog … -->` in a TODO from
+# becoming a finding later, which is exactly how gate-20 acquired its
+# commented-out call.
 if [ -d src ]; then
     _mi_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-modal-isolation.log
     : > "${_mi_log}"
+    : > "${_mi_log}.err"
+    _mi_rc=0
     # See gate-12 above: `src/` existing is not the same as `src/` containing a
     # Vue component, and this gate printed PASS over an empty glob on nldesign
     # (whose src/ holds one manifest.json). Counted so the two cases can be told
@@ -2492,13 +2522,40 @@ if [ -d src ]; then
         _mi_present=$((_mi_present + 1))
         _in_scope "${vue}" || continue
         _mi_scoped=$((_mi_scoped + 1))
-        if grep -qE '<NcModal[ \t>/]|<NcDialog[ \t>/]' "${vue}" 2>/dev/null; then
-            echo "${vue}: inline NcModal/NcDialog — extract to src/modals/ or src/dialogs/" >> "${_mi_log}"
-        fi
+        # A CRASHED CHECKER MUST NOT REPORT PASS (#147 / #249 / #262). stderr is
+        # kept and the status is read, so a broken interpreter reports `wiring`
+        # rather than leaving an empty log this gate would call clean.
+        set +e
+        python3 - "${vue}" <<'PYMI' >> "${_mi_log}" 2>>"${_mi_log}.err"
+import re, sys
+fname = sys.argv[1]
+try:
+    src = open(fname, encoding='utf-8', errors='replace').read()
+except Exception:
+    sys.exit(0)
+
+# HTML comments in the template, block and line comments in <script>.
+# `(?<![:\w])` keeps the `//` of a `https://` URL from blanking the rest of
+# the line — the same trap gate-45 hit on `url(https://…)`.
+src = re.sub(r'<!--.*?-->', lambda m: re.sub(r'[^\n]', ' ', m.group(0)), src, flags=re.DOTALL)
+src = re.sub(r'/\*.*?\*/', lambda m: re.sub(r'[^\n]', ' ', m.group(0)), src, flags=re.DOTALL)
+src = re.sub(r'(?<![:\w])//[^\n]*', lambda m: ' ' * len(m.group(0)), src)
+
+# The delimiter set, PLUS end-of-line and any other whitespace. A lookahead
+# rather than a consuming class so the boundary is asserted without being
+# eaten. `<NcDialogHeader` still does not match: `H` is neither whitespace,
+# `>`, `/`, nor end of input.
+if re.search(r'<(NcModal|NcDialog)(?=[\s>/]|$)', src):
+    print(f'{fname}: inline NcModal/NcDialog — extract to src/modals/ or src/dialogs/')
+PYMI
+        _mi_one=$?
+        [ "${_mi_one}" -ne 0 ] && _mi_rc=1
         # .vue only: NcModal/NcDialog are Vue components with a .vue-file rule.
     done < <(find src -name '*.vue' 2>/dev/null)
     _mi_fail=$(wc -l < "${_mi_log}" 2>/dev/null || echo 0)
-    if [ "${_mi_scoped}" -eq 0 ]; then
+    if [ "${_mi_rc}" -ne 0 ]; then
+        _skip 13 "modal-isolation" wiring "the inline modal-isolation checker exited non-zero on at least one of ${_mi_scoped} component(s) — no verdict was produced for them; inline NcModal/NcDialog markup is UNVERIFIED by this run. See ${_mi_log}.err."
+    elif [ "${_mi_scoped}" -eq 0 ]; then
         if [ "${_mi_present}" -eq 0 ]; then
             _skip 13 "modal-isolation" na "src/ exists but contains NO .vue component outside src/modals/ and src/dialogs/, so there is no parent component that could inline a modal. NcModal/NcDialog are Vue SFC components; a PHP/HTML template cannot instantiate one. Reported instead of PASS because an empty glob under an existing src/ is what let twelve gates certify nldesign in #225."
         else
