@@ -1837,5 +1837,161 @@ class GlobTranslationTest(unittest.TestCase):
         self.assertIsNone(cec._glob_to_re("**/{a,b}/**"))
 
 
+# ---------------------------------------------------------------------------
+# .github#331 — the gate read a DIFFERENT config than CI executes.
+#
+# The shared workflow does:
+#
+#     CONFIG="${{ inputs.playwright-test-path }}/playwright.config.ts"
+#     if [ ! -f "$CONFIG" ] && [ -f "playwright.config.ts" ]; then
+#       CONFIG="playwright.config.ts"
+#     fi
+#     npx playwright test --config="$CONFIG"
+#
+# so a config under `playwright-test-path` WINS. The gate read the root one
+# unconditionally, and scored a suite CI never runs.
+#
+# The fixture below is openregister's real layout: a root config whose
+# `testDir` spans all of `tests/e2e`, and a `tests/e2e/ci/playwright.config.ts`
+# whose `testDir: '.'` means `tests/e2e/ci` — its OWN directory, not the repo
+# root. Measured on that repo: 63 spec files under `tests/e2e`, 4 under
+# `tests/e2e/ci`, 205 `@e2e` anchors, and ZERO of them in the executed path.
+_ROOT_CONFIG = """
+import { defineConfig } from '@playwright/test'
+export default defineConfig({
+\ttestDir: './tests/e2e',
+\tprojects: [{ name: 'chromium' }],
+})
+"""
+
+# `testDir: '.'` is relative to THIS FILE's directory.
+_CI_CONFIG = """
+import { defineConfig } from '@playwright/test'
+export default defineConfig({
+\ttestDir: '.',
+\tprojects: [{ name: 'chromium' }],
+})
+"""
+
+_CALLER_WF = """
+name: Code Quality
+on: [push]
+jobs:
+  quality:
+    uses: ConductionNL/.github/.github/workflows/quality.yml@main
+    with:
+      app-name: demo
+      enable-playwright: true
+      playwright-test-path: tests/e2e/ci
+"""
+
+
+class PlaywrightConfigResolutionTest(unittest.TestCase):
+    """The gate must score the config CI runs, not the one at the root."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.root, True)
+        self._env = os.environ.pop("PLAYWRIGHT_TEST_PATH", None)
+        self.addCleanup(self._restore_env)
+        _write(self.root, "openspec/specs/saved-search-views/spec.md", _SPEC_MD)
+        self.ref = "saved-search-views::presentation-of-a-saved-view"
+        self.tag = ("// @e2e openspec/specs/saved-search-views/spec.md"
+                    "#presentation-of-a-saved-view\n"
+                    "test('renders', async ({ page }) => {\n"
+                    "  await page.goto('/apps/openregister/views')\n"
+                    "})\n")
+
+    def _restore_env(self):
+        os.environ.pop("PLAYWRIGHT_TEST_PATH", None)
+        if self._env is not None:
+            os.environ["PLAYWRIGHT_TEST_PATH"] = self._env
+
+    def _two_configs(self):
+        _write(self.root, "playwright.config.ts", _ROOT_CONFIG)
+        _write(self.root, "tests/e2e/ci/playwright.config.ts", _CI_CONFIG)
+        _write(self.root, ".github/workflows/code-quality.yml", _CALLER_WF)
+
+    # -- the defect ---------------------------------------------------------
+    def test_an_anchor_OUTSIDE_the_executed_config_does_NOT_cover(self):
+        # openregister's shape: the anchor sits in tests/e2e/, which the ROOT
+        # config runs and the CI config does not. 205 real anchors are here.
+        self._two_configs()
+        _write(self.root, "tests/e2e/search-views.spec.ts", self.tag)
+        live, dead = cec.collect_ref_status(self.root)
+        self.assertNotIn(self.ref, live)
+        self.assertIn(self.ref, dead)
+        self.assertIn("tests/e2e/ci/playwright.config.ts", dead[self.ref])
+
+    # -- the reverse --------------------------------------------------------
+    def test_the_same_anchor_INSIDE_the_executed_config_DOES_cover(self):
+        self._two_configs()
+        _write(self.root, "tests/e2e/ci/search-views.spec.ts", self.tag)
+        live, _dead = cec.collect_ref_status(self.root)
+        self.assertIn(self.ref, live)
+
+    # -- one config or two, per the coordinator's don't-double-count note ----
+    def test_a_repo_that_COLLAPSED_to_one_root_config_still_covers(self):
+        # launchpad#85 / openregister#2410 remove the second config. After
+        # that, tests/e2e IS the executed path and the anchor must count.
+        _write(self.root, "playwright.config.ts", _ROOT_CONFIG)
+        _write(self.root, ".github/workflows/code-quality.yml", _CALLER_WF)
+        _write(self.root, "tests/e2e/search-views.spec.ts", self.tag)
+        live, _dead = cec.collect_ref_status(self.root)
+        self.assertIn(self.ref, live)
+
+    def test_no_workflow_at_all_falls_back_to_the_root_config(self):
+        _write(self.root, "playwright.config.ts", _ROOT_CONFIG)
+        _write(self.root, "tests/e2e/search-views.spec.ts", self.tag)
+        live, _dead = cec.collect_ref_status(self.root)
+        self.assertIn(self.ref, live)
+
+    # -- resolution details -------------------------------------------------
+    def test_testDir_dot_means_the_configs_OWN_directory_not_the_repo_root(self):
+        self._two_configs()
+        scope = cec._PlaywrightScope(self.root)
+        self.assertEqual(scope.config_rel, "tests/e2e/ci/playwright.config.ts")
+        self.assertEqual(scope.test_dir, "tests/e2e/ci")
+
+    def test_the_declared_path_is_read_from_the_caller_workflow(self):
+        self._two_configs()
+        self.assertEqual(cec._declared_test_path(self.root), "tests/e2e/ci")
+
+    def test_a_QUOTED_declared_path_is_read(self):
+        # hermiq writes it as `playwright-test-path: "tests/e2e/spec-coverage"`.
+        _write(self.root, ".github/workflows/code-quality.yml",
+               'jobs:\n  q:\n    with:\n'
+               '      playwright-test-path: "tests/e2e/spec-coverage"\n')
+        self.assertEqual(cec._declared_test_path(self.root),
+                         "tests/e2e/spec-coverage")
+
+    def test_a_COMMENTED_OUT_declaration_is_not_configuration(self):
+        # Several fleet workflows explain this input at length right above it.
+        _write(self.root, ".github/workflows/code-quality.yml",
+               "jobs:\n  q:\n    with:\n"
+               "      # playwright-test-path: tests/e2e/ci  <- historical\n"
+               "      app-name: demo\n")
+        self.assertEqual(cec._declared_test_path(self.root), "tests/e2e")
+
+    def test_the_env_var_wins_over_the_workflow(self):
+        self._two_configs()
+        os.environ["PLAYWRIGHT_TEST_PATH"] = "tests/e2e"
+        self.assertEqual(cec._declared_test_path(self.root), "tests/e2e")
+
+    def test_the_default_is_the_shared_workflows_own_default(self):
+        self.assertEqual(cec._declared_test_path(self.root), "tests/e2e")
+
+    def test_a_config_at_the_DEFAULT_path_beats_the_root_one(self):
+        # opencatalogi / openconnector / doriath / softwarecatalog / larpingapp
+        # all carry tests/e2e/playwright.config.ts alongside a root config and
+        # declare no explicit path.
+        _write(self.root, "playwright.config.ts", _ROOT_CONFIG)
+        _write(self.root, "tests/e2e/playwright.config.ts",
+               "export default { testDir: '.', projects: [{ name: 'chromium' }] }\n")
+        scope = cec._PlaywrightScope(self.root)
+        self.assertEqual(scope.config_rel, "tests/e2e/playwright.config.ts")
+        self.assertEqual(scope.test_dir, "tests/e2e")
+
+
 if __name__ == "__main__":
     unittest.main()
