@@ -57,7 +57,8 @@ jobs:
     uses: ./.github/workflows/quality.yml
     with:
       app-name: github-selftest
-      enable-php: false
+      # TEMPORARY — cache proof harness. REVERT TO false BEFORE MERGE.
+      enable-php: true
       enable-npm: false
       enable-frontend: false
       enable-phpunit: false
