@@ -519,5 +519,118 @@ class EndToEndTest(_Base):
         self.assertNotIn("placed off a property", text)
 
 
+# --------------------------------------------------------------------------
+# 5c. Polymorphic references — the gate must be CLOSABLE here too.
+#
+# Measured 2026-08-10 on scholiq (gate package 94c855b). Two report rows point
+# at a DIFFERENT schema per row, named by a sibling discriminator:
+#
+#   CoursePackageImportReport.entries[].targetId  ← sibling `targetType`
+#     (Course / Lesson / Material / Item / LtiToolPlacement / Assignment / Rubric)
+#   LearningRecordExport.coverageReport[].sourceId ← sibling `sourceSchema`
+#
+# Both arms failed, the same way the cross-app case did before
+# `x-external-register` existed:
+#
+#   WITHOUT $ref -> "relation-shaped property ... lacks canonical $ref"   (b)
+#   WITH    $ref -> resolves, and is a LIE: OpenRegister would resolve every
+#                   row against the one schema the author happened to pick.
+#
+# So the only route to green was rewording the description until
+# `_RELATION_DESC_RE` stopped matching. The marker is
+# `x-relation-schema-field: <siblingPropertyName>`, and it is a CLAIM THE GATE
+# VERIFIES — the named sibling must exist — not a string that silences a rule.
+# --------------------------------------------------------------------------
+class PolymorphicReferenceTest(_Base):
+    @staticmethod
+    def _entries(target_extra=None):
+        """An array of report rows: a discriminator + the identifier it names."""
+        target = {
+            "type": "string",
+            "format": "uuid",
+            "nullable": True,
+            "description": "UUID of the created object named by targetType.",
+            "x-relation-schema-field": "targetType",
+            "title": "Target ID",
+        }
+        target.update(target_extra or {})
+        return {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "targetType": {
+                        "type": "string",
+                        "title": "Target Type",
+                        "description": "The schema the resource was materialised as.",
+                    },
+                    "targetId": target,
+                },
+            },
+        }
+
+    def test_polymorphic_identifier_without_ref_is_accepted(self):
+        """The correct authoring must PASS — this is the closable arm."""
+        msgs = self.run_check(_register({"entries": self._entries()}))
+        self.assertEqual(
+            msgs, [],
+            "a polymorphic identifier naming a real sibling discriminator and "
+            f"carrying no $ref is correctly authored, got {msgs}",
+        )
+
+    def test_the_true_positive_survives_without_the_marker(self):
+        """CONTROL, and the whole point. Drop the marker and the SAME fixture
+        must go red — otherwise the exemption is just a hole and this suite
+        would be green about a rule that no longer fires."""
+        entries = self._entries()
+        del entries["items"]["properties"]["targetId"]["x-relation-schema-field"]
+        msgs = self.run_check(_register({"entries": entries}))
+        self.assertEqual(len(msgs), 1, f"expected exactly one finding, got {msgs}")
+        self.assertIn("lacks canonical $ref", msgs[0])
+
+    def test_a_discriminator_that_is_not_a_sibling_is_reported(self):
+        """The marker is a verified claim. Naming a field that does not exist
+        cannot resolve a schema at runtime, so it is decoration — and if this
+        passed, `x-relation-schema-field: anything` would be a blanket waiver."""
+        entries = self._entries()
+        entries["items"]["properties"]["targetId"]["x-relation-schema-field"] = "nope"
+        msgs = self.run_check(_register({"entries": entries}))
+        self.assertEqual(len(msgs), 1, f"expected exactly one finding, got {msgs}")
+        self.assertIn("not a property of the same object", msgs[0])
+
+    def test_polymorphic_marker_plus_a_ref_is_reported(self):
+        """Declaring both says the target varies per row AND is fixed. The
+        `$ref` is the half OpenRegister acts on, so the fix is to drop it."""
+        msgs = self.run_check(_register({
+            "entries": self._entries({"$ref": "skill"}),
+        }))
+        self.assertEqual(len(msgs), 1, f"expected exactly one finding, got {msgs}")
+        self.assertIn("x-relation-schema-field", msgs[0])
+        self.assertIn("drop the $ref", msgs[0])
+
+    def test_marker_does_not_excuse_a_bad_filter_token(self):
+        """Control: the exemption is scoped to the $ref rules only."""
+        msgs = self.run_check(_register({
+            "entries": self._entries({"x-relation-filter": {"setting": "@bogus"}}),
+        }))
+        self.assertTrue(any("unknown token" in m for m in msgs),
+                        f"filter validation must still apply, got {msgs}")
+
+    def test_marker_on_a_top_level_property_resolves_against_its_siblings(self):
+        """The discriminator is looked up among the property's OWN siblings at
+        whatever depth it sits — not only inside an array's items."""
+        msgs = self.run_check(_register({
+            "sourceSchema": {"type": "string", "title": "Source Schema"},
+            "sourceId": {
+                "type": "string",
+                "format": "uuid",
+                "description": "UUID of the source object this entry reports on.",
+                "x-relation-schema-field": "sourceSchema",
+                "title": "Source ID",
+            },
+        }))
+        self.assertEqual(msgs, [], f"expected a clean run, got {msgs}")
+
+
 if __name__ == "__main__":
     unittest.main()

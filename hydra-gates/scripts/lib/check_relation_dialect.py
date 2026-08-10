@@ -50,6 +50,13 @@ lines are advisory and never fail the gate):
                         with ``format: uuid`` + a relation-shaped description
                         but NO ``$ref`` (conservative: format:uuid alone is
                         NOT enough — NC-user-id fields legitimately lack $ref).
+                        Two identifiers are exempt because no local schema key
+                        can express them: ``x-external-register`` (the target
+                        lives in another app's register) and
+                        ``x-relation-schema-field`` (POLYMORPHIC — the target is
+                        named per row by a sibling discriminator). Neither is a
+                        waiver: the discriminator must be a real sibling
+                        property, and both forbid a ``$ref``.
   c. FILTER PLACEMENT — ``x-relation-filter`` anywhere except directly on a
                         property; or on a property that is not a relation
                         (filter on non-relation is inert).
@@ -365,6 +372,58 @@ def _is_external_ref(prop):
     return isinstance(prop, dict) and bool(str(prop.get("x-external-register") or "").strip())
 
 
+def _discriminator_of(prop):
+    """The sibling property that names this identifier's target schema, or ``''``.
+
+    A POLYMORPHIC reference points at a different schema per ROW: the target is
+    chosen by a sibling discriminator field, not fixed at author time. A single
+    ``$ref`` cannot express it, and picking one of the possible targets would
+    make the register state something false — OpenRegister would then resolve
+    every row against that one schema.
+
+    Measured 2026-08-10 on scholiq (gate package 94c855b). Two report rows
+    carry exactly this shape:
+
+      ``CoursePackageImportReport.entries[].targetId`` — "UUID of the created
+      object named by targetType", where the sibling ``targetType`` is one of
+      Course / Lesson / Material / Item / LtiToolPlacement / Assignment / Rubric.
+      ``LearningRecordExport.coverageReport[].sourceId`` — "UUID of the source
+      object this entry reports on", discriminated by the sibling
+      ``sourceSchema``.
+
+    Both arms failed, exactly as the cross-app case did before
+    ``x-external-register`` existed:
+
+      WITH    a ``$ref``  -> the register asserts ONE target for a field whose
+                             target varies per row; check (f) passes only
+                             because the lie resolves.
+      WITHOUT a ``$ref``  -> check (b) "relation-shaped property ... lacks
+                             canonical $ref (ADR-062 rule 7)".
+
+    So the only route to green was rewording the description until
+    ``_RELATION_DESC_RE`` stopped matching — degrading documentation to dodge a
+    regex, the one thing a gate must never reward.
+
+    The marker is ``x-relation-schema-field: <siblingPropertyName>``, and it is
+    deliberately NOT a waiver: the named sibling must EXIST on the same object
+    (checked below), so declaring it is a claim the gate verifies rather than a
+    string that silences a rule. Like ``x-external-register`` it suppresses ONLY
+    the two ``$ref`` rules; filter placement and token validation still apply.
+
+    Read from the property, or from its ``items`` for the array form — the same
+    two places ``_ref_of`` looks for a ``$ref``.
+    """
+    if not isinstance(prop, dict):
+        return ""
+    val = str(prop.get("x-relation-schema-field") or "").strip()
+    if val:
+        return val
+    items = prop.get("items")
+    if isinstance(items, dict):
+        return str(items.get("x-relation-schema-field") or "").strip()
+    return ""
+
+
 def _ref_of(prop):
     """Return (raw_ref_value, is_array) for a relation property, or (None,_).
 
@@ -428,7 +487,7 @@ def _resolve_ref(ref, keys):
 _MAX_PROPERTY_DEPTH = 12
 
 
-def _collect_properties(props, prefix, depth, seen, out):
+def _collect_properties(props, prefix, depth, seen, out, parents=None):
     """Recursively collect every schema property into ``out``.
 
     Appends ``(qualified_name, prop_dict, declaration_line, depth)`` for each
@@ -446,6 +505,12 @@ def _collect_properties(props, prefix, depth, seen, out):
     is also called on dicts assembled in tests and by future callers, so the
     guard is unconditional; ``_MAX_PROPERTY_DEPTH`` bounds depth as well. Both
     guards terminate quietly — they are protection against a crash, not checks.
+
+    ``parents`` is an OPTIONAL out-dict mapping ``id(prop)`` to the ``properties``
+    map the property was declared in — i.e. its SIBLINGS. Only the polymorphic
+    discriminator check needs it, and it is optional rather than a sixth tuple
+    element so that every existing caller (and every existing test that unpacks
+    the 4-tuple) keeps working unchanged.
     """
     if not isinstance(props, dict) or depth > _MAX_PROPERTY_DEPTH:
         return
@@ -458,6 +523,8 @@ def _collect_properties(props, prefix, depth, seen, out):
         seen.add(id(prop))
         qname = pname if prefix == "" else f"{prefix}.{pname}"
         out.append((qname, prop, plines.get(pname, 0), depth))
+        if parents is not None:
+            parents[id(prop)] = props
 
         items = prop.get("items")
         item_nodes = [items] if isinstance(items, dict) else (
@@ -465,9 +532,11 @@ def _collect_properties(props, prefix, depth, seen, out):
         )
         for node in item_nodes:
             _collect_properties(
-                node.get("properties"), f"{qname}.items", depth + 1, seen, out
+                node.get("properties"), f"{qname}.items", depth + 1, seen, out, parents
             )
-        _collect_properties(prop.get("properties"), qname, depth + 1, seen, out)
+        _collect_properties(
+            prop.get("properties"), qname, depth + 1, seen, out, parents
+        )
 
 
 # --------------------------------------------------------------------------
@@ -508,17 +577,38 @@ def check_file(path, keys, findings, base_ref):
         lc_has_transitions = isinstance(lc, dict) and bool(lc.get("transitions"))
 
         collected = []
-        _collect_properties(props, "", 0, set(), collected)
+        parents = {}
+        _collect_properties(props, "", 0, set(), collected, parents)
         property_ids.update(id(prop) for _q, prop, _l, _d in collected)
 
         for pname, prop, pline, depth in collected:
             in_diff = changed is None or pline in changed
 
+            # A polymorphic identifier names its discriminator instead of a
+            # target. The claim is VERIFIED here, not taken on trust: a
+            # discriminator that is not a sibling property cannot name a schema
+            # at runtime, so the marker would be decoration. Reported whether or
+            # not the description happens to trip _RELATION_DESC_RE — an
+            # unresolvable discriminator is wrong on its own terms.
+            disc = _discriminator_of(prop)
+            if disc and disc not in (parents.get(id(prop)) or {}):
+                findings.append((path, (
+                    f"{path}: {sname}.{pname} — x-relation-schema-field names "
+                    f"'{disc}', which is not a property of the same object; a "
+                    f"discriminator that does not exist cannot name a target "
+                    f"schema (ADR-062 rule 7)"
+                )))
+                # Deliberately NOT falling through to (b). One defect, one fix
+                # (name a real discriminator) — emitting "lacks canonical $ref"
+                # as well would count it twice, which is the exact ratio defect
+                # the module docstring pins for gate 53.
+
             # (b) relation-shape heuristic — property-level diff scoped.
-            # A cross-app identifier is exempt: there is no local schema key it
-            # could ever name (see _is_external_ref).
+            # Two identifiers are exempt because no local schema key can express
+            # them: a cross-app reference (see _is_external_ref) and a
+            # polymorphic one whose target varies per row (_discriminator_of).
             if (in_diff and _has_uuid_format(prop) and not _is_relation_prop(prop)
-                    and not _is_external_ref(prop)):
+                    and not _is_external_ref(prop) and not disc):
                 desc = prop.get("description") or ""
                 items = prop.get("items")
                 if isinstance(items, dict):
@@ -592,6 +682,16 @@ def check_file(path, keys, findings, base_ref):
                     f"OpenRegister resolves $ref within one register set and "
                     f"cannot reach another app's schema — drop the $ref and keep "
                     f"the bare identifier (ADR-062 rule 7)"
+                )))
+            elif ref is not None and _discriminator_of(prop):
+                # Same shape, opposite direction: the register declares that the
+                # target is chosen per row AND pins one target. One of the two
+                # is false, and the $ref is the one OpenRegister would act on.
+                findings.append((path, (
+                    f"{path}: {sname}.{pname} — carries x-relation-schema-field "
+                    f"'{_discriminator_of(prop)}' AND $ref '{ref}'; a target "
+                    f"chosen per row cannot also be fixed at author time — drop "
+                    f"the $ref and keep the bare identifier (ADR-062 rule 7)"
                 )))
             elif ref is not None:
                 verdict, norm = _resolve_ref(ref, keys)
