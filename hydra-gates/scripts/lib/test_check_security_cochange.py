@@ -49,6 +49,23 @@ class _Repo:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(body, encoding="utf-8")
 
+    def move(self, src: str, dst: str) -> None:
+        """`git mv`, with the destination directory created first.
+
+        `git mv` FAILS when the destination directory does not exist, and
+        `_git` swallows the error (check=False, output captured). A test that
+        moved into a new directory therefore changed nothing, committed
+        nothing, and diffed an EMPTY change set — which every assertion of the
+        form `assertEqual(security, [])` passes for the wrong reason. Caught
+        by `test_the_rename_map_pairs_source_to_destination`, which asserts a
+        NON-empty result and so cannot pass on an empty diff.
+        """
+        (self.root / dst).parent.mkdir(parents=True, exist_ok=True)
+        proc = subprocess.run(["git", "-C", str(self.root), "mv", src, dst],
+                              check=False, capture_output=True, text=True)
+        if proc.returncode != 0:
+            raise AssertionError(f"git mv {src} -> {dst} failed: {proc.stderr}")
+
     def commit(self, msg: str) -> str:
         self._git("add", "-A")
         self._git("commit", "-qm", msg)
@@ -408,6 +425,80 @@ class AnnotationMustBeInACodePosition(unittest.TestCase):
         repo.commit("reword one docblock sentence")
         security, has_test = repo.scan(base)
         self.assertEqual(security, [])
+
+
+VUE_WITH_CSRF = """<template>
+  <div class="import"/>
+</template>
+
+<script>
+export default {
+  methods: {
+    async upload() {
+      return axios.post(url, body, {
+        headers: { requesttoken: OC.requestToken },
+      })
+    },
+  },
+}
+</script>
+"""
+
+
+class RenamesAreNotContentChanges(unittest.TestCase):
+    """A pathspec is applied BEFORE rename detection.
+
+    Asking git for the destination path alone removes the source side of the
+    pair, so git reports the destination as `new file mode` with every line
+    added — and a pure move of a file that merely CONTAINS a security token
+    classified as a security change of the whole file. That is the same
+    classify-the-file-not-the-hunks defect this module exists to remove,
+    arriving through the pathspec instead of through grep.
+
+    Measured 2026-08-10 on pipelinq#763, where `git mv
+    src/components/ContactImportDialog.vue src/dialogs/` — `similarity index
+    100%`, `0 insertions(+), 0 deletions(-)` — was reported as 230 added
+    lines and one security-touching change, on a PR that changed no code at
+    all.
+    """
+
+    def setUp(self):
+        self.repo = _Repo()
+
+    def tearDown(self):
+        self.repo.close()
+
+    def test_fp_a_pure_rename_is_not_a_security_change(self):
+        self.repo.write("src/components/ImportDialog.vue", VUE_WITH_CSRF)
+        base = self.repo.commit("base")
+        self.repo.move("src/components/ImportDialog.vue",
+                       "src/dialogs/ImportDialog.vue")
+        self.repo.commit("move the dialog into src/dialogs (gate-13)")
+        security, _ = self.repo.scan(base)
+        self.assertEqual(security, [])
+
+    def test_tp_a_rename_that_also_edits_security_code_still_fires(self):
+        self.repo.write("src/components/ImportDialog.vue",
+                        VUE_WITH_CSRF.replace(
+                            "        headers: { requesttoken: OC.requestToken },\n", ""))
+        base = self.repo.commit("base")
+        self.repo.move("src/components/ImportDialog.vue",
+                       "src/dialogs/ImportDialog.vue")
+        self.repo.write("src/dialogs/ImportDialog.vue", VUE_WITH_CSRF)
+        self.repo.commit("move the dialog AND add a CSRF header")
+        security, _ = self.repo.scan(base)
+        self.assertEqual(security, ["src/dialogs/ImportDialog.vue"])
+
+    def test_the_rename_map_pairs_source_to_destination(self):
+        self.repo.write("src/components/ImportDialog.vue", VUE_WITH_CSRF)
+        base = self.repo.commit("base")
+        self.repo.move("src/components/ImportDialog.vue",
+                       "src/dialogs/ImportDialog.vue")
+        self.repo.commit("move")
+        self.assertEqual(
+            csc.rename_map(base, str(self.repo.root)),
+            {"src/dialogs/ImportDialog.vue": "src/components/ImportDialog.vue"},
+        )
 
 
 if __name__ == "__main__":

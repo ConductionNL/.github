@@ -170,23 +170,44 @@ def line_is_security_relevant(line: str) -> bool:
     return bool(_CODE_TOKEN_RE.search(line))
 
 
-def changed_lines(base_ref: str, path: str, cwd: str) -> list[str]:
+def changed_lines(base_ref: str, path: str, cwd: str,
+                  old_path: str | None = None) -> list[str]:
     """The added/removed lines for *path*, without diff framing.
 
     `-U0` so no context line is mistaken for a change: context is precisely
     the code the PR did NOT touch, and treating it as touched is the defect
     this function exists to remove.
+
+    *old_path* is the pre-rename spelling when the file was renamed, and it
+    MUST be in the pathspec alongside *path*. A pathspec is applied BEFORE
+    rename detection runs, so asking for the destination alone deletes the
+    source side of the pair from the diff and git has nothing left to match
+    it against — it then reports the destination as `new file mode` with
+    every line added. A pure move of a file that merely CONTAINS a security
+    token (`requesttoken`, a session lookup) therefore classified as a
+    security change of the whole file, which is the same
+    classify-the-file-not-the-hunks defect this module was written to
+    remove, arriving through the pathspec instead of through grep.
+
+    Measured 2026-08-10 on pipelinq#763: `git mv src/components/X.vue
+    src/dialogs/X.vue` (`similarity index 100%`, `0 insertions(+), 0
+    deletions(-)`) was reported by this gate as 230 added lines and one
+    security-touching change.
+
+    With both spellings present git pairs them again, so a pure rename
+    yields no lines and a rename-with-edits yields exactly its real hunks.
     """
+    pathspec = [path] if old_path is None else [old_path, path]
     proc = subprocess.run(
         ["git", "-c", "safe.directory=*", "diff", "-U0", "--no-color",
-         f"{base_ref}...HEAD", "--", path],
+         "-M", f"{base_ref}...HEAD", "--", *pathspec],
         cwd=cwd, capture_output=True, text=True, check=False,
     )
     out = proc.stdout
     if not out.strip():
         proc = subprocess.run(
             ["git", "-c", "safe.directory=*", "diff", "-U0", "--no-color",
-             base_ref, "--", path],
+             "-M", base_ref, "--", *pathspec],
             cwd=cwd, capture_output=True, text=True, check=False,
         )
         out = proc.stdout
@@ -217,10 +238,36 @@ def changed_files(base_ref: str, cwd: str) -> list[str]:
     return [ln.strip() for ln in out.splitlines() if ln.strip()]
 
 
+def rename_map(base_ref: str, cwd: str) -> dict[str, str]:
+    """``{destination: source}`` for every file the diff reports as renamed.
+
+    Read once, unscoped, so rename detection actually has both sides to pair.
+    `changed_lines` needs the source spelling to ask git a question whose
+    answer is not an artefact of the pathspec — see its docstring.
+    """
+    out = ""
+    for ref in (f"{base_ref}...HEAD", base_ref):
+        proc = subprocess.run(
+            ["git", "-c", "safe.directory=*", "diff", "--name-status",
+             "-M", "--no-color", ref],
+            cwd=cwd, capture_output=True, text=True, check=False,
+        )
+        out = proc.stdout
+        if out.strip():
+            break
+    renames: dict[str, str] = {}
+    for raw in out.splitlines():
+        parts = raw.split("\t")
+        if len(parts) == 3 and parts[0].startswith("R"):
+            renames[parts[2].strip()] = parts[1].strip()
+    return renames
+
+
 def scan(base_ref: str, cwd: str = ".") -> tuple[list[str], bool]:
     """(security-touching files, whether the diff also touches a test)."""
     files = changed_files(base_ref, cwd)
     has_test = any(is_test_path(f) for f in files)
+    renames = rename_map(base_ref, cwd)
     security: list[str] = []
     for f in files:
         if is_security_path(f):
@@ -228,7 +275,7 @@ def scan(base_ref: str, cwd: str = ".") -> tuple[list[str], bool]:
             continue
         if not _CANDIDATE_RE.match(f):
             continue
-        for line in changed_lines(base_ref, f, cwd):
+        for line in changed_lines(base_ref, f, cwd, renames.get(f)):
             if line_is_security_relevant(line):
                 security.append(f)
                 break
