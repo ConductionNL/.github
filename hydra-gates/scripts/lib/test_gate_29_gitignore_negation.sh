@@ -97,11 +97,10 @@ _run_gate29() {
 
 	local logdir out
 	logdir="$(mktemp -d "${TMPDIR:-/tmp}/g29logs.XXXXXX")"
+	# The runner's exit status is DELIBERATELY not captured: it aggregates 60+
+	# gates and says nothing about gate-29. The verdict is the log.
 	out="$(cd "${root}" && HYDRA_GATE_LOG_DIR="${logdir}" \
 		bash "${RUNNER}" --scope-to-diff --base base 2>&1)"
-	rc=$?
-	# Read the LOG, never the exit code — the runner's status is an aggregate
-	# over 60+ gates and says nothing about gate-29.
 	if [ -f "${logdir}/hydra-gate-gitignore-then-commit.log" ]; then
 		cat "${logdir}/hydra-gate-gitignore-then-commit.log"
 	fi

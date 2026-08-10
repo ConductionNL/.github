@@ -60,9 +60,15 @@ _run_gate3() {
 		git add -A && git commit -qm base
 	) >/dev/null 2>&1
 	logdir="$(mktemp -d "${TMPDIR:-/tmp}/g3logs.XXXXXX")"
+	# The runner's exit status is DELIBERATELY not captured: it aggregates 60+
+	# gates and says nothing about gate-3. The verdict is the log.
 	out="$(cd "${root}" && HYDRA_GATE_LOG_DIR="${logdir}" bash "${RUNNER}" . 2>&1)"
 	# READ THE LOG, NOT THE EXIT CODE — the runner's status aggregates 60+ gates.
 	grep 'caller-identity-ignored' "${logdir}/hydra-gate-stub-scan.log" 2>/dev/null
+	# Surface gate-3's own verdict line on stderr so a human debugging this
+	# suite can see whether the gate ran at all rather than guessing from an
+	# empty result — an unrun gate and a clean one look identical otherwise.
+	printf '%s\n' "${out}" | grep -E '\[gate-3\]' >&2
 	rm -rf "${root}" "${logdir}"
 	return 0
 }
@@ -70,6 +76,7 @@ _run_gate3() {
 # The pipelinq fixture: a long interface whose LAST method declares $userId.
 # The trailing docblocks matter — they are what put the declaration >=4 lines
 # from EOF, which is the condition under which the old code reported it.
+# shellcheck disable=SC2016  # $userId is PHP source, not a shell expansion — single quotes are REQUIRED here
 _INTERFACE='<?php
 
 namespace OCA\Pipelinq\Service\Cti;
@@ -112,6 +119,7 @@ interface CtiAdapterInterface
 
 # The TRUE POSITIVE: a real class method with a body that ignores $userId.
 # This is decidesk#45's shape, the defect the rule exists for.
+# shellcheck disable=SC2016  # $userId is PHP source, not a shell expansion — single quotes are REQUIRED here
 _STUB_CLASS='<?php
 
 namespace OCA\Pipelinq\Service;
@@ -136,6 +144,7 @@ class PresenceService
 '
 
 # The other true positive: a real class method that DOES use $userId.
+# shellcheck disable=SC2016  # $userId is PHP source, not a shell expansion — single quotes are REQUIRED here
 _GOOD_CLASS='<?php
 
 namespace OCA\Pipelinq\Service;
@@ -202,6 +211,7 @@ fi
 # the extraction from the declaration to EOF is exactly 4 lines, so `< 4` does
 # not fire and a two-method interface is judged like a stub. The bug was never
 # about being last in the file, only about there being no `^    \}` to stop at.
+# shellcheck disable=SC2016  # $userId is PHP source, not a shell expansion — single quotes are REQUIRED here
 _out="$(_run_gate3 "lib/Service/Cti/OtherInterface.php" '<?php
 
 interface OtherInterface
