@@ -63,7 +63,11 @@ jobs:
       enable-phpunit: false
       enable-newman: false
       enable-playwright: false
-      enable-hydra-gates: false
+      # TEMPORARY — proof harness for the forced-run scope change. REVERT TO
+      # false BEFORE MERGE. Turned on so a workflow_dispatch of this file
+      # actually materialises the Hydra Gates job and can be observed producing
+      # a verdict instead of "NOTHING WAS CHECKED".
+      enable-hydra-gates: true
       enable-license-check: false
       enable-journeydoc-capture: false
       enable-coverage-guard: false
