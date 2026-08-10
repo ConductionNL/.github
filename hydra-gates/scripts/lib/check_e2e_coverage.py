@@ -1199,21 +1199,121 @@ def _regexes(raw: str | None) -> list[re.Pattern[str]] | None:
     return out or None
 
 
+_WF_TEST_PATH_RE = re.compile(
+    r"^[^\S\n]*playwright-test-path[^\S\n]*:[^\S\n]*(['\"]?)([^'\"#\n]+)\1",
+    re.MULTILINE)
+
+
+def _declared_test_path(app_dir: Path) -> str:
+    """The `playwright-test-path` the app's CI actually declares.
+
+    Resolution mirrors how the value reaches the shared workflow:
+
+      1. ``$PLAYWRIGHT_TEST_PATH`` — set by a caller or a local run
+      2. the ``playwright-test-path:`` input in the app's own caller workflow
+      3. ``tests/e2e`` — the shared workflow's declared default
+
+    Read out of the caller workflow rather than plumbed through a new env var
+    on purpose: the gate has to agree with the file that decides the
+    behaviour, and a second source of truth would drift from it exactly the
+    way the root config drifted from the CI config.
+    """
+    env = os.environ.get("PLAYWRIGHT_TEST_PATH", "").strip()
+    if env:
+        return env.strip("/")
+    wf_dir = app_dir / ".github" / "workflows"
+    if wf_dir.is_dir():
+        for wf in sorted(wf_dir.glob("*.y*ml")):
+            try:
+                text = wf.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            for m in _WF_TEST_PATH_RE.finditer(text):
+                value = m.group(2).strip().strip("/")
+                # `#` starts a YAML comment, so a commented-out or
+                # documentation line yields nothing usable. Several fleet
+                # workflows explain this input at length directly above it.
+                if value and not value.startswith("#"):
+                    return value
+    return "tests/e2e"
+
+
+def _resolve_config(app_dir: Path) -> Path | None:
+    """The config CI executes — NOT necessarily the one at the repo root.
+
+    THE GATE READ A DIFFERENT FILE THAN CI RAN (.github#331)
+    -------------------------------------------------------
+    The shared workflow does exactly this:
+
+        CONFIG="${{ inputs.playwright-test-path }}/playwright.config.ts"
+        if [ ! -f "$CONFIG" ] && [ -f "playwright.config.ts" ]; then
+          CONFIG="playwright.config.ts"
+        fi
+        npx playwright test --config="$CONFIG"
+
+    so a config under `playwright-test-path` WINS over the root one. This gate
+    read the root config unconditionally, so in every repo carrying both it
+    scored a suite CI never executes.
+
+    Measured 2026-08-10 on openregister, which declares
+    `playwright-test-path: tests/e2e/ci`:
+
+        root config   testDir './tests/e2e'  -> 63 spec files
+        CI config     testDir '.'            ->  4 spec files
+        @e2e anchors  205 under tests/e2e, and ZERO of them under tests/e2e/ci
+
+    Every "covered" verdict gate-19 ever produced on that repo came from a
+    file CI does not run.
+
+    `.ts` is tried first at both locations because that is the literal the
+    workflow builds; the other extensions are a fallback for repos that do not
+    go through the shared workflow at all.
+    """
+    sub = _declared_test_path(app_dir)
+    if sub:
+        cand = app_dir / sub / "playwright.config.ts"
+        if cand.is_file():
+            return cand
+    cand = app_dir / "playwright.config.ts"
+    if cand.is_file():
+        return cand
+    for name in _PW_CONFIGS:
+        cand = app_dir / name
+        if cand.is_file():
+            return cand
+    return None
+
+
 class _PlaywrightScope:
     """Answers: would ANY project run this test file?"""
 
     def __init__(self, app_dir: Path) -> None:
         self.parsed = False
         self.test_dir = ""
+        self.config_dir = ""
+        self.config_rel = ""
         self.projects: list[tuple[list[str] | None, list[re.Pattern[str]] | None]] = []
-        for name in _PW_CONFIGS:
-            cfg = app_dir / name
-            if cfg.is_file():
-                try:
-                    self._parse(_strip_ts_comments(cfg.read_text(encoding="utf-8")))
-                except OSError:
-                    return
-                return
+        cfg = _resolve_config(app_dir)
+        if cfg is None:
+            return
+        try:
+            self.config_rel = os.path.relpath(str(cfg), str(app_dir)).replace(os.sep, "/")
+        except ValueError:
+            self.config_rel = cfg.name
+        # `testDir` is relative to the CONFIG's own directory, not to the repo
+        # root. openregister's CI config says `testDir: '.'` and means
+        # `tests/e2e/ci`, not the whole repository — reading it as repo-relative
+        # is what makes a 4-file suite look like a 63-file one.
+        try:
+            self.config_dir = os.path.relpath(str(cfg.parent), str(app_dir)).replace(os.sep, "/")
+        except ValueError:
+            return
+        if self.config_dir == ".":
+            self.config_dir = ""
+        try:
+            self._parse(_strip_ts_comments(cfg.read_text(encoding="utf-8")))
+        except OSError:
+            return
 
     def _parse(self, text: str) -> None:
         m = re.search(r"\bprojects\s*:\s*\[", text)
@@ -1236,11 +1336,17 @@ class _PlaywrightScope:
         else:
             top = text
 
+        # `testDir` is resolved against the CONFIG's directory (#331). An absent
+        # `testDir` means the config's own directory, which is Playwright's
+        # documented default and NOT "the whole repository".
         td = _value_after(top, "testDir")
+        raw = ""
         if td:
             lit = _STR_RE.findall(td)
             if lit:
-                self.test_dir = lit[0].lstrip("./").rstrip("/")
+                raw = lit[0]
+        joined = os.path.normpath(os.path.join(self.config_dir or ".", raw or "."))
+        self.test_dir = "" if joined in (".", "") else joined.replace(os.sep, "/").strip("/")
 
         top_ignore = _patterns(_value_after(top, "testIgnore"))
         top_match = _regexes(_value_after(top, "testMatch"))
@@ -1263,8 +1369,21 @@ class _PlaywrightScope:
         """True unless the config PROVES no project executes this file."""
         if not self.parsed or not self.projects:
             return True
+        # OUTSIDE `testDir` IS NOT RUN, AND THAT IS THE WHOLE POINT (#331).
+        #
+        # This used to return True here — "outside a testDir we may have
+        # mis-read, never accuse". That caution was sound while the gate was
+        # reading the ROOT config, whose `testDir` spans everything anyway. It
+        # is exactly wrong once the CI config is resolved: openregister's CI
+        # config confines the suite to `tests/e2e/ci`, and 59 of its 63 spec
+        # files are outside it. Treating "outside testDir" as run is what made
+        # 205 anchors in never-executed files count as proof.
+        #
+        # The safety property is kept where it belongs — `test_dir` is only
+        # non-empty when a literal was parsed, and an absent `testDir` leaves
+        # it at the config's own directory, per Playwright's default.
         if self.test_dir and not rel_to_app.startswith(self.test_dir + "/"):
-            return True   # outside a testDir we may have mis-read — never accuse
+            return False
         rel_to_dir = (rel_to_app[len(self.test_dir) + 1:]
                       if self.test_dir and rel_to_app.startswith(self.test_dir + "/")
                       else rel_to_app)
@@ -1339,8 +1458,9 @@ def collect_ref_status(app_dir: Path) -> tuple[set[str], dict[str, str]]:
                 elif ref not in live:
                     dead[ref] = (
                         f"referenced only by a file no Playwright project "
-                        f"runs — excluded by playwright.config testIgnore/"
-                        f"testMatch ({rel})"
+                        f"runs — {rel} is outside testDir or excluded by "
+                        f"testIgnore/testMatch in {scope.config_rel or 'playwright.config.ts'}, "
+                        f"which is the config CI executes"
                         if not file_runs else
                         f"referenced only by a test that never runs ({rel})"
                     )
