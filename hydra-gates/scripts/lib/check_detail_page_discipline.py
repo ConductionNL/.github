@@ -56,6 +56,30 @@ import sys
 # This list is a hardcoded mirror — when the registry changes, replace the
 # names below (kept as a single, alphabetically-ordered constant on purpose so
 # the swap is a trivial one-line edit).
+#
+# ⚠️ MIRROR THE OBJECT KEYS, NOT THE IMPORT FILENAMES.
+#
+# `CnIcon` resolves a name with a plain key lookup:
+#
+#     _registry[name] || DASHBOARD_ICONS[name] || ... || HelpCircleOutline
+#
+# so what must appear here is the KEY on the left of each entry in
+# `DASHBOARD_ICONS`. Two keys deliberately differ from the file they import,
+# because the registry name is the concept and the file is just the glyph
+# chosen for it:
+#
+#     ClipboardList: ClipboardListIcon   <- 'vue-material-design-icons/ClipboardListOutline.vue'
+#     Map:           MapIcon             <- 'vue-material-design-icons/MapOutline.vue'
+#
+# Deriving this set by grepping the import statements therefore produces
+# `ClipboardListOutline` / `MapOutline` — names that are NOT registry keys and
+# that render the "?" fallback — while dropping the two that work. That mistake
+# is what .github#304 reported as a registry drift; the mirror was right about
+# `ClipboardList` and the measurement was wrong. Do not "fix" it in that
+# direction.
+#
+# `Map` was the one genuine omission (added by nextcloud-vue's Map dashboard
+# widget); without it the gate REJECTED a valid icon.
 # --------------------------------------------------------------------------
 ICON_REGISTRY = {
     "Account", "AccountBoxOutline", "AccountGroup", "AlertCircleOutline",
@@ -64,7 +88,7 @@ ICON_REGISTRY = {
     "ClipboardList", "Cog", "CurrencyEur", "DatabaseOutline", "Earth", "Email",
     "FileDocument", "FileSign", "FilterVariant", "FolderOutline", "Gauge",
     "Gavel", "HandshakeOutline", "Heart", "History", "Home", "Lightbulb",
-    "LinkVariant", "MapMarker", "MessageTextOutline", "NoteTextOutline",
+    "LinkVariant", "Map", "MapMarker", "MessageTextOutline", "NoteTextOutline",
     "OfficeBuilding", "Package", "Percent", "Phone", "RocketLaunch",
     "ScaleBalance", "School", "ShieldCheckOutline", "Sitemap", "SourceBranch",
     "Star", "TableColumn", "TagOutline", "Timeline", "TrendingDown",
