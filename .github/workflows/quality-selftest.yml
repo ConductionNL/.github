@@ -63,8 +63,7 @@ jobs:
       enable-phpunit: false
       enable-newman: false
       enable-playwright: false
-      # TEMPORARY proof harness — REVERTED in the next commit.
-      enable-hydra-gates: true
+      enable-hydra-gates: false
       enable-license-check: false
       enable-journeydoc-capture: false
       enable-coverage-guard: false
