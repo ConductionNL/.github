@@ -572,6 +572,47 @@ _count() {
     printf '%s' "${_n}"
 }
 
+# _helper_finished <log> <terminal-marker-regex> — did the checker reach its
+# own summary line?
+#
+# WHY THIS EXISTS (.github#330) — THE MIRROR IMAGE OF THE gate-20 DEFECT
+# ---------------------------------------------------------------------
+# Gates 59-64 use a NUMERIC EXIT PROTOCOL from their helper: 0 pass, 1 findings,
+# 3 empty scope, 4 not applicable, 5 tooling missing. The runner switched on
+# those codes and sent everything unrecognised to a `_fail` — so a CRASH, which
+# also exits 1, arrived at the findings branch. And because the crash wrote a
+# traceback rather than `FAIL` lines, `_count '^FAIL'` came back 0 and the next
+# line read `[ "${_n}" -eq 0 ] && _n=1`: the runner INVENTED a finding count of
+# one for a check that had measured nothing.
+#
+# MEASURED 2026-08-10 at package 71e01bf, one fixture, two runs:
+#
+#   working python3                 python3 that exits 1
+#   [gate-59] unclosable-gate: PASS   [gate-59] ... FAIL — config gate(s) read but never written
+#   [gate-62] store-plane: NOT APPL.  [gate-62] ... FAIL — 1 naming or discovery violation(s)
+#   [gate-63] settings-surface: NOT A [gate-63] ... FAIL — 1 naming or discovery violation(s)
+#
+# Two of those repos do not even HAVE the subject matter the gate blocked them
+# on. This is .github#233/#245's "an environment failure rendered as findings
+# about the source" — the same disease as gate-20's silent green, wearing red
+# instead. A blind gate and a lying gate are both gates you cannot read.
+#
+# THE EXIT BYTE CANNOT SEPARATE THEM, because 1 means both "I found things" and
+# "I died". What CAN separate them is that every one of these helpers prints a
+# TERMINAL SUMMARY LINE — `checked N manifest(s): M failure(s)`,
+# `N unclosable gate(s).`, `apphost-autoload-prelude: OK` — on every path that
+# reaches a verdict, and a process that died before its own summary never
+# printed it. That is the same evidence gates 15/16/17 take from their
+# `# count=` marker (.github#271), read from the summary these helpers already
+# emit rather than from a marker they would have to grow.
+#
+# The failure direction is deliberate: no marker ⇒ `_skip ... wiring`, which
+# still fails a --require-full-coverage run. This converts a fabricated finding
+# into an honest "I could not look", never into a pass.
+_helper_finished() {
+    grep -qE "$2" "$1" 2>/dev/null
+}
+
 # ---------------------------------------------------------------------------
 # ADR-040 AppHost adoption — shared between gate-5 (route-auth) and gate-14
 # (route-reachability).
@@ -2051,8 +2092,36 @@ if [ "${#_oa_files[@]}" -gt 0 ]; then
         _oa_lib_dir="${SCRIPT_DIR}/lib"
     fi
     if [ -f "${_oa_lib_dir}/check_orphan_auth.py" ]; then
+        # A CHECKER THAT COULD NOT RUN MUST NOT JUDGE THE CODE (.github#330 —
+        # the #245/#233/#276 rule, applied to the three security gates it had
+        # not reached).
+        #
+        # This was `>> log 2>/dev/null || true`: the helper's message AND its
+        # exit status both discarded, with the verdict then taken from
+        # `wc -l` on a log nothing had written to — i.e. PASS. That is the
+        # gate-20 mechanism verbatim, and gate-20 had NEVER fired in any repo
+        # in its entire existence because of it.
+        #
+        # MEASURED 2026-08-10 at package 71e01bf, one fixture, two runs:
+        #   working python3   [gate-6] orphan-auth: FAIL — 1 orphan method(s)
+        #   python3 exit 1    [gate-6] orphan-auth: PASS
+        # Same tree, same files in scope. The green was over nothing.
+        #
+        # The helper ALWAYS returns 0 when it runs, by design (#209 — the
+        # count goes to stdout, never into the exit byte; see its `main()`).
+        # So a non-zero exit here is unambiguously a crash and can never be a
+        # finding count. stderr goes to a .err file rather than /dev/null so
+        # the reason it died is recoverable by the reader.
+        _oa_err="${_oa_log}.err"
+        : > "${_oa_err}"
         python3 "${_oa_lib_dir}/check_orphan_auth.py" "${_oa_files[@]}" \
-            >> "${_oa_log}" 2>/dev/null || true
+            >> "${_oa_log}" 2>"${_oa_err}"
+        _oa_rc=$?
+        if [ "${_oa_rc}" -ne 0 ]; then
+            _oa_ran=0
+            _oa_why=$(head -3 "${_oa_err}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+            _skip 6 "orphan-auth" wiring "check_orphan_auth.py exited ${_oa_rc} — ${#_oa_files[@]} PHP file(s) were in scope and NONE were judged; orphaned (defined-but-never-called) authorization methods are UNVERIFIED by this run. This helper always exits 0 when it runs, so this is a crash, not a finding count. Checker output: ${_oa_why:-<empty>}. See ${_oa_err}."
+        fi
     else
         _oa_ran=0
         _skip 6 "orphan-auth" wiring "check_orphan_auth.py not found at ${_oa_lib_dir} — ${#_oa_files[@]} PHP file(s) were in scope and NONE were inspected; orphaned (defined-but-never-called) authorization methods are UNVERIFIED by this run."
@@ -2129,8 +2198,31 @@ if [ "${#_idor_files[@]}" -gt 0 ]; then
         _gate_lib_dir="${SCRIPT_DIR}/lib"
     fi
     if [ -f "${_gate_lib_dir}/check_no_admin_idor.py" ]; then
+        # A CHECKER THAT COULD NOT RUN MUST NOT JUDGE THE CODE (.github#330).
+        # Same repair, same reason, same measurement as gate-6 above — see the
+        # note there. This gate's green history is the one that matters most:
+        # a missing helper already made it report PASS over 11 real unguarded
+        # IDOR endpoints once (.github#147), and `2>/dev/null || true` left the
+        # SECOND route to that same false green — a helper that is present but
+        # cannot run — wide open.
+        #
+        # MEASURED 2026-08-10 at package 71e01bf, one fixture, two runs:
+        #   working python3   [gate-7] no-admin-idor: FAIL — 1 method(s)
+        #   python3 exit 1    [gate-7] no-admin-idor: PASS
+        #
+        # check_no_admin_idor.py ends `return 0  # exit 0 always — caller
+        # counts printed lines`, so a non-zero byte here is a crash and never
+        # a count.
+        _idor_err="${_idor_log}.err"
+        : > "${_idor_err}"
         python3 "${_gate_lib_dir}/check_no_admin_idor.py" "${_idor_files[@]}" \
-            >> "${_idor_log}" 2>/dev/null || true
+            >> "${_idor_log}" 2>"${_idor_err}"
+        _idor_rc=$?
+        if [ "${_idor_rc}" -ne 0 ]; then
+            _idor_ran=0
+            _idor_why=$(head -3 "${_idor_err}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+            _skip 7 "no-admin-idor" wiring "check_no_admin_idor.py exited ${_idor_rc} — ${#_idor_files[@]} controller file(s) were in scope and NONE were judged; unguarded #[NoAdminRequired] endpoints (IDOR, OWASP A01:2021) are UNVERIFIED by this run. This helper always exits 0 when it runs, so this is a crash, not a finding count. Checker output: ${_idor_why:-<empty>}. See ${_idor_err}."
+        fi
     else
         _idor_ran=0
         _skip 7 "no-admin-idor" wiring "check_no_admin_idor.py not found at ${_gate_lib_dir} — ${#_idor_files[@]} controller file(s) were in scope and NONE were inspected; unguarded #[NoAdminRequired] endpoints (IDOR, OWASP A01:2021) are UNVERIFIED by this run."
@@ -2262,8 +2354,26 @@ if [ "${#_sem_files[@]}" -gt 0 ]; then
         fi
     done
     if [ -n "${_sem_helper}" ]; then
+        # A CHECKER THAT COULD NOT RUN MUST NOT JUDGE THE CODE (.github#330).
+        # Same repair as gates 6 and 7 above.
+        #
+        # MEASURED 2026-08-10 at package 71e01bf, one fixture, two runs:
+        #   working python3   [gate-9] semantic-auth: FAIL — 1 mismatch(es)
+        #   python3 exit 1    [gate-9] semantic-auth: PASS
+        #
+        # check_semantic_auth.py ends `return 0  # exit 0 always — caller
+        # counts printed lines`, so a non-zero byte here is a crash and never
+        # a count.
+        _sem_err="${_sem_log}.err"
+        : > "${_sem_err}"
         python3 "${_sem_helper}" "${_sem_files[@]}" \
-            >> "${_sem_log}" 2>/dev/null || true
+            >> "${_sem_log}" 2>"${_sem_err}"
+        _sem_rc=$?
+        if [ "${_sem_rc}" -ne 0 ]; then
+            _sem_ran=0
+            _sem_why=$(head -3 "${_sem_err}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+            _skip 9 "semantic-auth" wiring "check_semantic_auth.py exited ${_sem_rc} — ${#_sem_files[@]} controller file(s) were in scope and NONE were judged; auth-attribute-vs-body semantic mismatches are UNVERIFIED by this run. This helper always exits 0 when it runs, so this is a crash, not a finding count. Checker output: ${_sem_why:-<empty>}. See ${_sem_err}."
+        fi
     else
         _sem_ran=0
         _skip 9 "semantic-auth" wiring "check_semantic_auth.py not found near ${SCRIPT_DIR} — ${#_sem_files[@]} controller file(s) were in scope and NONE were inspected; auth-attribute-vs-body semantic mismatches are UNVERIFIED by this run."
@@ -7597,8 +7707,18 @@ if [ -d lib ] && [ "${_ucg_scoped_out}" -eq 0 ]; then
     set +e
     if [ "${_ucg_rc}" -eq 0 ]; then
         _pass 59 "unclosable-gate"
+    elif ! _helper_finished "${_ucg_log}" '^([0-9]+ unclosable gate\(s\)\.|unclosable-gate: OK)$'; then
+        # A CRASH IS NOT A FINDING (.github#330) — see _helper_finished. This
+        # branch used to be the only alternative to PASS, so a python3 that
+        # exited 1 was reported as "config gate(s) read but never written".
+        _ucg_why=$(head -3 "${_ucg_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+        _skip 59 "unclosable-gate" wiring "check_unclosable_gate.py exited ${_ucg_rc} without printing its terminal summary line, so NO PHP composition root was judged and read-but-never-written config gates (ADR-076 rule 3) are UNVERIFIED by this run. Checker output: ${_ucg_why:-<empty>}. See ${_ucg_log}."
     else
-        _fail 59 "unclosable-gate" "config gate(s) read but never written — guarded setup runs on every request (ADR-076 rule 3); see ${_ucg_log}"
+        # The helper does not prefix its findings with `FAIL`, so the count
+        # comes off its own terminal summary line rather than being invented.
+        _ucg_n=$(grep -oE '^[0-9]+ unclosable gate\(s\)\.$' "${_ucg_log}" 2>/dev/null | grep -oE '^[0-9]+' | tail -1)
+        case "${_ucg_n}" in ''|*[!0-9]*) _ucg_n=1 ;; esac
+        _fail 59 "unclosable-gate" "${_ucg_n} config gate(s) read but never written — guarded setup runs on every request (ADR-076 rule 3); see ${_ucg_log}"
     fi
 elif [ ! -d lib ]; then
     _skip 59 "unclosable-gate" na "no lib/ in this repo — there is no PHP composition root in which a config gate could be read."
@@ -7670,6 +7790,10 @@ if [ -f src/manifest.json ]; then
             # FAILs when node_modules was absent, then — once those were
             # guarded — a silent PASS over a rule that never executed (#233).
             _skip 60 "icon-vocabulary" wiring "vue-material-design-icons is not installed, so icon names could NOT be verified to exist upstream — an invented MDI name would render blank and this run would not have caught it (ADR-077 rule 1). Every other icon rule passed. Run npm ci to restore full coverage. See ${_iv_log}."
+        elif ! _helper_finished "${_iv_log}" '^(checked [0-9]+ manifest\(s\):|no manifest in scope)'; then
+            # A CRASH IS NOT A FINDING (.github#330) — see _helper_finished.
+            _iv_why=$(head -3 "${_iv_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+            _skip 60 "icon-vocabulary" wiring "check_icon_vocabulary.py exited ${_iv_rc} without printing its terminal 'checked N manifest(s)' summary, so NO icon was judged and the ADR-077 vocabulary is UNVERIFIED by this run. Checker output: ${_iv_why:-<empty>}. See ${_iv_log}."
         else
             _iv_n=$(_count '^FAIL' "${_iv_log}")
             [ "${_iv_n}" -eq 0 ] && _iv_n=1
@@ -7739,6 +7863,10 @@ if [ -d lib/AppInfo ]; then
         _skip 61 "listener-work-placement" na "the diff against '${BASE_REF}' put every post-event registration out of scope, so NONE were inspected. Diff-scoped out under ADR-020 — the fleet's 149-registration backlog is a work-list, not a reason to block an unrelated PR. This gate runs on the next PR that touches a listener registration. See ${_lwp_log}."
     elif [ "${_lwp_rc}" -eq 4 ]; then
         _skip 61 "listener-work-placement" na "this repo registers no post-object-event listener, so there is no work to place on or off the write path (ADR-078). See ${_lwp_log}."
+    elif ! _helper_finished "${_lwp_log}" '^checked [0-9]+ (post-event )?registration\(s\)'; then
+        # A CRASH IS NOT A FINDING (.github#330) — see _helper_finished.
+        _lwp_why=$(head -3 "${_lwp_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+        _skip 61 "listener-work-placement" wiring "check_listener_placement.py exited ${_lwp_rc} without printing its terminal 'checked N ... registration(s)' summary, so NO post-object-event listener was judged and ADR-078 work placement is UNVERIFIED by this run. Checker output: ${_lwp_why:-<empty>}. See ${_lwp_log}."
     else
         _lwp_n=$(_count '^FAIL' "${_lwp_log}")
         [ "${_lwp_n}" -eq 0 ] && _lwp_n=1
@@ -7776,6 +7904,16 @@ elif [ "${_sp_rc}" -eq 3 ]; then
     _skip 62 "store-plane" na "the diff against '${BASE_REF}' touched no manifest and no menu-layout, so NO manifest was inspected. Diff-scoped out under ADR-020 — not a gap: the manifests in this repo are unchanged from the base branch, so this PR introduces no store-plane naming or discovery decision (ADR-080) to judge. This gate runs on the next PR that touches a manifest. See ${_sp_log}."
 elif [ "${_sp_rc}" -eq 4 ]; then
     _skip 62 "store-plane" na "no src/manifest.json — a Tier-0 app declares no store plane for ADR-080 to constrain."
+elif ! _helper_finished "${_sp_log}" '^(checked [0-9]+ manifest\(s\):|FAIL )'; then
+    # A CRASH IS NOT A FINDING (.github#330) — see _helper_finished. MEASURED:
+    # on a fixture with no src/manifest.json at all, where the honest verdict
+    # is NOT APPLICABLE, a python3 that exits 1 made this gate report
+    # `FAIL — 1 store/templates/catalogue naming or discovery violation(s)`.
+    # The `FAIL ` alternative in the marker keeps the helper's early
+    # unparseable-JSON return — a real finding printed before the summary —
+    # on the failing side where it belongs.
+    _sp_why=$(head -3 "${_sp_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+    _skip 62 "store-plane" wiring "check_store_and_settings_surface.py --gate store exited ${_sp_rc} without printing its terminal 'checked N manifest(s)' summary or any FAIL line, so NO manifest was judged and ADR-080 store-plane naming/discovery is UNVERIFIED by this run. Checker output: ${_sp_why:-<empty>}. See ${_sp_log}."
 else
     _sp_n=$(_count '^FAIL' "${_sp_log}")
     [ "${_sp_n}" -eq 0 ] && _sp_n=1
@@ -7830,6 +7968,10 @@ elif [ "${_ss_rc}" -eq 3 ]; then
     _skip 63 "settings-surface" na "the diff against '${BASE_REF}' touched no manifest and no menu-layout, so NO manifest was inspected. Diff-scoped out under ADR-020 — not a gap. This gate adjudicates ADR-079 placement as declared in src/manifest.json, src/manifest.d/ and src/menu-layout.json, and nothing else. ${_ss_extra} It runs on the next PR that touches one of those. See ${_ss_log}."
 elif [ "${_ss_rc}" -eq 4 ]; then
     _skip 63 "settings-surface" na "no src/manifest.json — a Tier-0 app declares no settings surface for ADR-079 to place."
+elif ! _helper_finished "${_ss_log}" '^(checked [0-9]+ manifest\(s\):|FAIL )'; then
+    # A CRASH IS NOT A FINDING (.github#330) — see gate 62 above, same helper.
+    _ss_why=$(head -3 "${_ss_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+    _skip 63 "settings-surface" wiring "check_store_and_settings_surface.py --gate settings exited ${_ss_rc} without printing its terminal 'checked N manifest(s)' summary or any FAIL line, so NO manifest was judged and ADR-079 settings placement is UNVERIFIED by this run. Checker output: ${_ss_why:-<empty>}. See ${_ss_log}."
 else
     _ss_n=$(_count '^FAIL' "${_ss_log}")
     [ "${_ss_n}" -eq 0 ] && _ss_n=1
@@ -7893,9 +8035,15 @@ if [ -d lib/AppInfo ]; then
     grep -E '^NOTE' "${_aap_log}" || true
     if [ "${_aap_rc}" -eq 0 ]; then
         _pass 64 "apphost-autoload-prelude"
+    elif ! _helper_finished "${_aap_log}" '^([0-9]+ AppHost adoption\(s\) without the autoload prelude\.|apphost-autoload-prelude: OK)$'; then
+        # A CRASH IS NOT A FINDING (.github#330) — see _helper_finished.
+        _aap_why=$(head -3 "${_aap_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+        _skip 64 "apphost-autoload-prelude" wiring "check_apphost_autoload_prelude.py exited ${_aap_rc} without printing its terminal summary line, so NO register() body was judged and ADR-040 autoload preludes are UNVERIFIED by this run. Checker output: ${_aap_why:-<empty>}. See ${_aap_log}."
     else
-        _aap_n=$(_count '^FAIL' "${_aap_log}")
-        [ "${_aap_n}" -eq 0 ] && _aap_n=1
+        # The helper does not prefix its findings with `FAIL`, so the count
+        # comes off its own terminal summary line rather than being invented.
+        _aap_n=$(grep -oE '^[0-9]+ AppHost adoption\(s\) without the autoload prelude\.$' "${_aap_log}" 2>/dev/null | grep -oE '^[0-9]+' | tail -1)
+        case "${_aap_n}" in ''|*[!0-9]*) _aap_n=1 ;; esac
         _fail 64 "apphost-autoload-prelude" "${_aap_n} AppHost adoption(s) with no OpenRegister autoload prelude (ADR-040); see ${_aap_log}"
     fi
 else

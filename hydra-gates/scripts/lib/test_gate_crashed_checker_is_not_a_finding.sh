@@ -422,7 +422,24 @@ else
     _bad "control FAILED: no evidence the python3 stub ran — the assertions below prove nothing"
 fi
 
-for _g in 12:nc-input-labels 15:dashboard-antipattern 16:spec-coverage \
+# Gates 6, 7 and 9 joined this list in .github#330. All three invoked their
+# helper as `>> log 2>/dev/null || true` — the gate-20 construct verbatim,
+# discarding the message AND the status — and then took the verdict from
+# `wc -l` on a log nothing had written to.
+#
+# MEASURED 2026-08-10 at package 71e01bf, one fixture, two runs:
+#
+#     working python3              python3 that exits 1
+#     [gate-6] orphan-auth: FAIL     [gate-6] orphan-auth: PASS
+#     [gate-7] no-admin-idor: FAIL   [gate-7] no-admin-idor: PASS
+#     [gate-9] semantic-auth: FAIL   [gate-9] semantic-auth: PASS
+#
+# Three SECURITY gates — dead authorization code, IDOR, and auth-attribute
+# mismatch — reporting a tree clean that they had not opened. gate-7 is the
+# gate a missing helper had already blinded once, over 11 real unguarded
+# endpoints (.github#147); this was the second route to the same false green.
+for _g in 6:orphan-auth 7:no-admin-idor 9:semantic-auth \
+          12:nc-input-labels 15:dashboard-antipattern 16:spec-coverage \
           17:redundant-controller 18:notification-dialect 19:e2e-coverage; do
     _num="${_g%%:*}"
     _name="${_g#*:}"
@@ -491,6 +508,155 @@ for _num in 15 16; do
         _ok "control: gate-${_num} produces a real verdict (${_v:-none}) with a working python3"
     fi
 done
+
+# ---------------------------------------------------------------------------
+# GATES 59-64 — A CRASH MUST NOT WEAR A FINDING COUNT (.github#330)
+#
+# The mirror image of everything above. These six gates take a NUMERIC EXIT
+# PROTOCOL from their helper (0 pass / 1 findings / 3 empty scope / 4 n-a /
+# 5 tooling missing) and sent every unrecognised code to `_fail`. A crash also
+# exits 1, so it arrived at the findings branch — and because a traceback
+# contains no `FAIL` lines, `_count '^FAIL'` returned 0 and the runner then ran
+# `[ "${_n}" -eq 0 ] && _n=1`, INVENTING a finding count of one for a check
+# that had measured nothing.
+#
+# MEASURED 2026-08-10 at package 71e01bf, one fixture, two runs:
+#
+#     working python3                    python3 that exits 1
+#     [gate-59] unclosable-gate: PASS      FAIL — config gate(s) read but never written
+#     [gate-62] store-plane: NOT APPLICABLE FAIL — 1 naming or discovery violation(s)
+#     [gate-63] settings-surface: NOT APPL. FAIL — 1 naming or discovery violation(s)
+#
+# 62 and 63 blocked a repo that does not even HAVE the subject matter. A gate
+# that is wrong in the RED direction burns the same credit as one that is wrong
+# in the green direction, and it is the reason a suite gets switched off.
+#
+# TWO ARMS, as everywhere in this file: the planted true positives must still
+# be caught with a working interpreter, or "always skip" would satisfy the
+# crash arm.
+# ---------------------------------------------------------------------------
+_hi_app="${_tmp}/highgates"
+mkdir -p "${_hi_app}/lib/AppInfo" "${_hi_app}/lib/Service" "${_hi_app}/src" \
+         "${_hi_app}/appinfo"
+printf '<?xml version="1.0"?>\n<info>\n <id>hg</id>\n</info>\n' \
+    > "${_hi_app}/appinfo/info.xml"
+# gate-59: a config key READ but never WRITTEN (the docudesk shape, ADR-076).
+cat > "${_hi_app}/lib/Service/SettingsInitializer.php" <<'PHP'
+<?php
+namespace OCA\Hg\Service;
+class SettingsInitializer {
+    public function initialize(): void {
+        $v = $this->config->getAppValue('hg', 'configuration_version', '');
+        if ($v === '') {
+            $this->importFromApp();
+        }
+    }
+}
+PHP
+# gate-64: an AppHost adoption with no OpenRegister autoload prelude (ADR-040).
+cat > "${_hi_app}/lib/AppInfo/Application.php" <<'PHP'
+<?php
+namespace OCA\Hg\AppInfo;
+use OCP\AppFramework\App;
+use OCP\AppFramework\Bootstrap\IRegistrationContext;
+class Application extends App {
+    public function register(IRegistrationContext $context): void {
+        \OCA\OpenRegister\AppHost\Bootstrap::register($context, 'hg');
+    }
+}
+PHP
+# gate-60: an icon outside the canonical vocabulary (ADR-077).
+cat > "${_hi_app}/src/manifest.json" <<'JSON'
+{"name":"hg","menu":[{"label":"Dashboard","icon":"CarSportOutline","route":"/d"}]}
+JSON
+(
+    cd "${_hi_app}" || exit 1
+    git init -q .
+    git add -A
+    git -c user.email=t@t -c user.name=t commit -qm init
+) >/dev/null 2>&1
+
+# ARM A — working interpreter. The plants must be caught.
+_hilogs_ok="${_tmp}/hilogs-ok"; mkdir -p "${_hilogs_ok}"
+_hiout_ok="${_tmp}/highgates-ok.txt"
+(
+    cd "${_hi_app}" || exit 1
+    HYDRA_GATE_LOG_DIR="${_hilogs_ok}" bash "${_runner}" . > "${_hiout_ok}" 2>&1
+)
+for _g in 59:unclosable-gate 60:icon-vocabulary 64:apphost-autoload-prelude; do
+    _num="${_g%%:*}"; _name="${_g#*:}"
+    if grep -qE "^\[gate-${_num}\][^:]*: FAIL" "${_hiout_ok}"; then
+        _ok "gate-${_num} ${_name}: FAILs its planted true positive with a working interpreter"
+    else
+        _v=$(grep -oE "^\[gate-${_num}\] [^:]+: [A-Z]+( [A-Z]+)?( \([a-z]+\))?" "${_hiout_ok}" | head -1 | sed 's/^[^:]*: //')
+        _bad "gate-${_num} ${_name}: returned '${_v:-none}' for a planted true positive — the crash arm below would prove nothing"
+    fi
+done
+
+# The count must be MEASURED, not invented. Gates 59 and 64 print no `FAIL`-
+# prefixed lines at all, so `_count '^FAIL'` was always 0 and the fallback
+# `_n=1` fired on EVERY real failure — a number nobody had counted.
+if grep -qE '^\[gate-59\][^:]*: FAIL — [0-9]+ config gate\(s\)' "${_hiout_ok}"; then
+    _ok "gate-59's failure carries a measured count, not a bare verdict"
+else
+    _bad "gate-59's failure line has no measured count"
+fi
+
+# ARM B — the same tree, interpreter dead. No FAIL, no PASS: a named wiring skip.
+_hilogs="${_tmp}/hilogs"; mkdir -p "${_hilogs}"
+_hiout="${_tmp}/highgates-crash.txt"
+(
+    cd "${_hi_app}" || exit 1
+    PATH="${_fakebin}:${PATH}" HYDRA_GATE_LOG_DIR="${_hilogs}" \
+        bash "${_runner}" . > "${_hiout}" 2>&1
+)
+for _g in 59:unclosable-gate 60:icon-vocabulary 61:listener-work-placement \
+          62:store-plane 63:settings-surface 64:apphost-autoload-prelude; do
+    _num="${_g%%:*}"; _name="${_g#*:}"
+    _v=$(grep -oE "^\[gate-${_num}\] [^:]+: [A-Z]+( [A-Z]+)?( \([a-z]+\))?" "${_hiout}" | head -1 | sed 's/^[^:]*: //')
+    case "${_v}" in
+        "SKIPPED (wiring)")
+            _ok "gate-${_num} ${_name}: SKIPPED (wiring) when its checker cannot run"
+            ;;
+        FAIL)
+            _bad "gate-${_num} ${_name}: FAIL from a crashed checker — an environment failure rendered as findings about the source (#233/#245/#330)"
+            ;;
+        PASS)
+            _bad "gate-${_num} ${_name}: PASS over a checker that never executed"
+            ;;
+        *)
+            _bad "gate-${_num} ${_name}: verdict is '${_v:-none emitted}' — expected SKIPPED (wiring)"
+            ;;
+    esac
+done
+
+# ---------------------------------------------------------------------------
+# THE CONSTRUCT ITSELF — `2>/dev/null || true` on a helper invocation.
+#
+# Every specific assertion above is a statement about the gates that exist
+# today. This one is about the SHAPE, so the next gate to land with it fails
+# here on its first run rather than after a fleet-wide false green.
+#
+# `2>/dev/null` on a helper discards the reason it died; `|| true` discards the
+# fact that it died. Together they are why gate-20 had never fired in any repo
+# in its entire existence: its grep pattern began with `->`, grep parsed that as
+# options and exited 2, and both halves of the evidence went in the bin.
+# ---------------------------------------------------------------------------
+_offenders=$(grep -nE '(python3|node|npx|bash)[^|]*2>/dev/null[[:space:]]*\|\|[[:space:]]*true' "${_scripts}/run-hydra-gates.sh" \
+    | grep -vE '^[0-9]+:[[:space:]]*#' || true)
+# Multi-line invocations put the redirect on a continuation line, so also look
+# for a `2>/dev/null || true` whose PREVIOUS line ends in a backslash after an
+# interpreter name.
+_offenders2=$(awk '
+    /(python3|node |npx |bash )/ && /\\$/ { prev=NR; next }
+    /2>\/dev\/null[[:space:]]*\|\|[[:space:]]*true/ && NR == prev+1 { print NR": "$0 }
+' "${_scripts}/run-hydra-gates.sh")
+if [ -z "${_offenders}${_offenders2}" ]; then
+    _ok "no helper in run-hydra-gates.sh is invoked with '2>/dev/null || true' (the gate-20 construct)"
+else
+    _bad "a helper is still invoked with '2>/dev/null || true' — message and status both discarded:"
+    printf '%s\n%s\n' "${_offenders}" "${_offenders2}" | sed '/^$/d' | sed 's/^/         /'
+fi
 
 echo
 if [ "${_failures}" -eq 0 ]; then
