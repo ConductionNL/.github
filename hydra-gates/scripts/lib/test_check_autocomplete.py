@@ -165,5 +165,101 @@ class TheMutantIsTheWholePreFixChecker(unittest.TestCase):
             "fixture — the rewrite is unverified")
 
 
+class SemanticTokenBoundaries(unittest.TestCase):
+    """.github#319 — the SEMANTIC test was a bare substring alternation, so
+    `city` matched inside `capacity` and `tel` inside `hotel`.
+
+    But TOKEN BOUNDARIES ALONE DO NOT FIX IT, which is the part the issue's
+    suggested `\\b` anchoring would have missed. All three nldesign findings
+    have `email` as a WHOLE hyphen-delimited token:
+
+        nldesign-email-footer-org-name
+        nldesign-email-footer-accessibility-url
+        nldesign-email-footer-privacy-url
+
+    They are the email-FOOTER settings; the fields collect an organisation
+    name and two URLs. What separates them from a real one is which token is
+    the NOUN — an identifier names its subject at the end.
+
+    Each false positive below is paired with the true positive it must not
+    swallow, and the last class is the abuse control: qualifier tails.
+    """
+
+    # -- the false positives, gone ----------------------------------------
+    def test_fp_nldesign_email_footer_fields(self):
+        for name in ("nldesign-email-footer-org-name",
+                     "nldesign-email-footer-accessibility-url",
+                     "nldesign-email-footer-privacy-url"):
+            with self.subTest(name=name):
+                self.assertEqual(
+                    rules(f'<input type="text" id="{name}">',
+                          "templates/settings/admin.php"), [], name)
+
+    def test_fp_capacity_is_not_city(self):
+        for name in ("queue-edit-max-capacity", "queue-new-max-capacity",
+                     "max-capacity", "opacity", "velocity", "simplicity",
+                     "electricity"):
+            with self.subTest(name=name):
+                self.assertEqual(
+                    rules(f'<input type="number" min="1" name="{name}">'),
+                    [], name)
+
+    def test_fp_gzip_is_not_zip_and_hotel_is_not_tel(self):
+        for name in ("gzip", "unzip", "hotel", "hostel"):
+            with self.subTest(name=name):
+                self.assertEqual(rules(f'<input type="text" name="{name}">'),
+                                 [], name)
+
+    # -- THE TRUE POSITIVES THIS MUST NOT SWALLOW -------------------------
+    def test_tp_a_trailing_semantic_noun_still_fires(self):
+        # pipelinq's five real findings, verbatim.
+        for name in ("portal-phone", "portal-address", "portal-change-email",
+                     "form.granteeEmail", "portal-reset-email", "user-city"):
+            with self.subTest(name=name):
+                self.assertEqual(
+                    rules(f'<input type="text" id="{name}">'),
+                    ["semantic-input-without-autocomplete"], name)
+
+    def test_tp_a_noun_followed_by_a_qualifier_still_fires(self):
+        # nextcloud-vue CnExportWizard: `:id="fieldIdFor('emailRecipient')"` on
+        # an `<input type="email">`. A strict noun-must-be-LAST rule dropped
+        # this real finding; the two-token window is why it is back. If the
+        # window is ever narrowed to one, this is the test that says so.
+        self.assertEqual(
+            rules("""<input :id="fieldIdFor('emailRecipient')"
+                     v-model="formData.emailRecipient" type="email">"""),
+            ["semantic-input-without-autocomplete"])
+
+    def test_tp_camel_case_compounds_still_fire(self):
+        for name in ("firstName", "lastName", "fullName", "userName",
+                     "zipCode", "granteeEmail"):
+            with self.subTest(name=name):
+                self.assertEqual(
+                    rules(f'<input type="text" name="{name}">'),
+                    ["semantic-input-without-autocomplete"], name)
+
+    # -- THE ABUSE CONTROL ------------------------------------------------
+    # A generic tail word must let the noun one place back still count —
+    # otherwise `postal-code` and `phone-number`, the plainest WCAG 1.3.5
+    # fields there are, would go quiet. This is the arm that proves the
+    # "noun must be last" rule did not become "anything with a suffix passes".
+    def test_abuse_control_a_generic_tail_does_not_hide_the_noun(self):
+        for name in ("postal-code", "post-code", "zip-code", "phone-number",
+                     "tel-number", "street-address", "email-address"):
+            with self.subTest(name=name):
+                self.assertEqual(
+                    rules(f'<input type="text" name="{name}">'),
+                    ["semantic-input-without-autocomplete"], name)
+
+    def test_abuse_control_a_generic_tail_over_a_NON_noun_stays_quiet(self):
+        # The other side of the same rule: `org-name` and `privacy-url` have
+        # exactly the shape above, and must NOT fire.
+        for name in ("org-name", "privacy-url", "accessibility-url",
+                     "project-name", "queue-id", "footer-text"):
+            with self.subTest(name=name):
+                self.assertEqual(rules(f'<input type="text" name="{name}">'),
+                                 [], name)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

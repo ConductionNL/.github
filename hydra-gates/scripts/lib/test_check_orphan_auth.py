@@ -286,5 +286,141 @@ class MailService {
         self.assertEqual(_scan_in_repo("lib/Service/MailService.php", src), [])
 
 
+_LAUNCHPAD_CONTROLLER = """\
+<?php
+class LiveTileController {
+    public function validateSource(string $userId, string $url): JSONResponse
+    {
+        if (!$this->service->isHostAllowed($url)) {
+            throw new \\OCP\\AppFramework\\OCS\\OCSForbiddenException('blocked host');
+        }
+        return new JSONResponse(['ok' => true]);
+    }
+}
+"""
+
+_ROUTES = """\
+<?php
+return ['routes' => [
+    ['name' => 'liveTile#validateSource', 'url' => '/api/livetile/validate-source', 'verb' => 'POST'],
+]];
+"""
+
+
+class RoutedControllerActionIsNotAnOrphan(unittest.TestCase):
+    """.github#290 — the router invokes a controller action by reflection from
+    `appinfo/routes.php`, so it has NO `->method(` call site anywhere and the
+    lib/+src/ corpus cannot contain one. Every routed action whose name starts
+    with a gate verb was reported `defined-but-never-called` while live.
+
+    Measured on launchpad: `LiveTileController::validateSource` — routed at
+    appinfo/routes.php:557, called from src/services/liveTileClient.js by URL,
+    and unit-tested — was reported as an orphan.
+
+    Each relaxation below ships with the true positive it must not swallow.
+    The route table is treated as EVIDENCE, not a name heuristic: the
+    controller and the method must both match the `'liveTile#validateSource'`
+    entry.
+    """
+
+    # -- the false positive, gone -----------------------------------------
+    def test_fp_a_routed_controller_action_is_not_an_orphan(self):
+        self.assertEqual(
+            _scan_in_repo("lib/Controller/LiveTileController.php",
+                          _LAUNCHPAD_CONTROLLER,
+                          {"appinfo/routes.php": _ROUTES}),
+            [])
+
+    def test_fp_a_routes_subdirectory_table_also_counts(self):
+        self.assertEqual(
+            _scan_in_repo("lib/Controller/LiveTileController.php",
+                          _LAUNCHPAD_CONTROLLER,
+                          {"appinfo/routes/api.php": _ROUTES}),
+            [])
+
+    def test_fp_an_attribute_routed_action_is_not_an_orphan(self):
+        # NC attribute routing needs no routes.php entry at all.
+        src = """\
+<?php
+class LiveTileController {
+    #[ApiRoute(verb: 'POST', url: '/api/livetile/validate-source')]
+    public function validateSource(string $userId, string $url): JSONResponse
+    {
+        if (!$this->service->isHostAllowed($url)) {
+            throw new \\OCP\\AppFramework\\OCS\\OCSForbiddenException('blocked host');
+        }
+        return new JSONResponse(['ok' => true]);
+    }
+}
+"""
+        self.assertEqual(
+            _scan_in_repo("lib/Controller/LiveTileController.php", src), [])
+
+    # -- THE TRUE POSITIVE THIS MUST NOT SWALLOW --------------------------
+    def test_tp_an_unrouted_controller_action_is_still_an_orphan(self):
+        # No route table at all: the method really is unreachable.
+        findings = _scan_in_repo("lib/Controller/LiveTileController.php",
+                                 _LAUNCHPAD_CONTROLLER)
+        self.assertEqual(len(findings), 1, findings)
+        self.assertIn("method=validateSource", findings[0])
+
+    def test_tp_a_route_table_naming_a_DIFFERENT_method_does_not_clear_it(self):
+        # THE ABUSE CONTROL. If the match ever degrades to "this controller
+        # appears in the route table", every unrouted action on a routed
+        # controller goes quiet — and that is most of them.
+        routes = """\
+<?php
+return ['routes' => [
+    ['name' => 'liveTile#index', 'url' => '/api/livetile', 'verb' => 'GET'],
+]];
+"""
+        findings = _scan_in_repo("lib/Controller/LiveTileController.php",
+                                 _LAUNCHPAD_CONTROLLER,
+                                 {"appinfo/routes.php": routes})
+        self.assertEqual(len(findings), 1, findings)
+        self.assertIn("method=validateSource", findings[0])
+
+    def test_tp_a_route_on_a_DIFFERENT_controller_does_not_clear_it(self):
+        routes = """\
+<?php
+return ['routes' => [
+    ['name' => 'other#validateSource', 'url' => '/api/other/validate', 'verb' => 'POST'],
+]];
+"""
+        findings = _scan_in_repo("lib/Controller/LiveTileController.php",
+                                 _LAUNCHPAD_CONTROLLER,
+                                 {"appinfo/routes.php": routes})
+        self.assertEqual(len(findings), 1, findings)
+        self.assertIn("method=validateSource", findings[0])
+
+    def test_tp_a_SERVICE_is_never_cleared_by_the_route_table(self):
+        # A service is not routable. This is the arm that proves the exemption
+        # stays inside the controller layer instead of becoming a blanket:
+        # the decidesk isTransitionAllowed/validateQuorum family lives in
+        # services, and a route entry must never quiet one.
+        src = """\
+<?php
+class MeetingService {
+    public function validateQuorum(string $userId, string $meetingId): bool
+    {
+        if (!$this->acl->isAllowed($userId)) {
+            throw new \\OCP\\AppFramework\\OCS\\OCSForbiddenException('no quorum rights');
+        }
+        return true;
+    }
+}
+"""
+        routes = """\
+<?php
+return ['routes' => [
+    ['name' => 'meeting#validateQuorum', 'url' => '/api/meeting/quorum', 'verb' => 'POST'],
+]];
+"""
+        findings = _scan_in_repo("lib/Service/MeetingService.php", src,
+                                 {"appinfo/routes.php": routes})
+        self.assertEqual(len(findings), 1, findings)
+        self.assertIn("method=validateQuorum", findings[0])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

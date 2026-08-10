@@ -67,10 +67,81 @@ HAS_AUTOCOMPLETE = re.compile(r'(?:^|\s)(?::|v-bind:)?autocomplete\s*=')
 NAME_LIKE = re.compile(
     r'(?:^|\s)(?::|v-bind:)?(?:name|id|v-model)\s*=\s*'
     r'(?:"([^"]+)"|\'([^\']+)\')')
-SEMANTIC = re.compile(
-    r'(email|tel(?:ephone)?|phone|firstname|lastname|fullname|address|street'
-    r'|city|postal|postcode|zip|country|password|username|organization'
-    r'|birthday|dob)', re.IGNORECASE)
+# WHICH TOKEN IS THE NOUN (.github#319)
+# ------------------------------------
+# This was a bare substring alternation with no word boundaries:
+#
+#     re.compile(r'(email|tel(?:ephone)?|phone|...|city|postal|zip|...)')
+#
+# so `city` matched inside `capa*city*`, and equally would match `opacity`,
+# `velocity`, `simplicity`, `electricity`; `tel` matched inside `ho*tel*`; `zip`
+# inside `g*zip*`/`un*zip*`. Measured on pipelinq: two `type="number"`
+# `min="1"` queue-capacity settings (`queue-edit-max-capacity`,
+# `queue-new-max-capacity`) reported as collecting a personal detail.
+#
+# TOKEN BOUNDARIES ALONE ARE NOT ENOUGH, which is why this does more than
+# #319's suggested `\b` anchoring. Measured on nldesign, all three findings:
+#
+#     nldesign-email-footer-org-name
+#     nldesign-email-footer-accessibility-url
+#     nldesign-email-footer-privacy-url
+#
+# `email` IS a whole hyphen-delimited token in each, so a `\b`-anchored regex
+# still fires — yet these are the EMAIL FOOTER settings, and the three fields
+# collect an organisation name and two URLs. None collects an email address.
+#
+# What separates them is WHERE the noun sits. An identifier names its subject
+# at the END and qualifies it at the front: `portal-change-email` collects an
+# email; `nldesign-email-footer-org-name` collects a NAME, and `email` there is
+# context ("the email footer"), not the datum. So the semantic term must fall
+# in the LAST TWO tokens.
+#
+# The window is two rather than one because the noun legitimately carries a
+# qualifier on either side:
+#
+#   postal-code   zip-code   phone-number   street-address   post-code
+#   emailRecipient                       <- noun first, qualifier after
+#
+# Measured: a strict last-token-only rule dropped nextcloud-vue's
+# `fieldIdFor('emailRecipient')` — an `<input type="email">` that genuinely
+# wants `autocomplete="email"` — so it was widened to two and that true
+# positive is pinned by a test.
+#
+# The vocabulary is deliberately NOT extended while fixing a false-positive
+# defect. `organisation` (British spelling) was tried and reverted: it made
+# decidesk's admin-settings "Organization name" field a finding, and that is
+# site configuration, not information about the user, so WCAG 1.3.5 does not
+# apply to it. Widening a vocabulary is a different change with a different
+# burden of proof.
+#
+# Every relaxation here ships with the true positive it must not swallow —
+# see `SemanticTokenBoundaries` in test_check_autocomplete.py.
+_SEMANTIC_TOKENS = {
+    'email', 'tel', 'telephone', 'phone', 'firstname', 'lastname', 'fullname',
+    'address', 'street', 'city', 'postal', 'postcode', 'zip', 'country',
+    'password', 'username', 'organization', 'birthday', 'dob',
+}
+
+_TOKEN_SPLIT = re.compile(r'[^A-Za-z0-9]+|(?<=[a-z0-9])(?=[A-Z])')
+
+
+def _tokens(value: str) -> list[str]:
+    """`portal-change-email` / `form.granteeEmail` -> lowercase word tokens."""
+    return [t.lower() for t in _TOKEN_SPLIT.split(value) if t]
+
+
+def _is_semantic(value: str) -> bool:
+    """True when the identifier NAMES a well-known personal detail."""
+    toks = _tokens(value)
+    if not toks:
+        return False
+    window = toks[-2:]
+    if any(t in _SEMANTIC_TOKENS for t in window):
+        return True
+    # `first-name` / `firstName` / `post-code` join into one known term.
+    if len(window) == 2 and (window[0] + window[1]) in _SEMANTIC_TOKENS:
+        return True
+    return False
 
 
 def scan_source(fname: str, src: str) -> list[str]:
@@ -94,7 +165,7 @@ def scan_source(fname: str, src: str) -> list[str]:
         # textbook case this gate has.
         for name_m in NAME_LIKE.finditer(attrs):
             val = name_m.group(1) if name_m.group(1) is not None else name_m.group(2)
-            if SEMANTIC.search(val):
+            if _is_semantic(val):
                 findings.append(
                     f'{fname}: <input name/id="{val}" ...> '
                     f'rule=semantic-input-without-autocomplete')

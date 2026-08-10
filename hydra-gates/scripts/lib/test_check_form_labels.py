@@ -201,6 +201,131 @@ class InputIdOnAWrapperComponent(unittest.TestCase):
         """), ["nctextfield-without-label-prop"])
 
 
+class PlainIdOnAWrapperComponent(unittest.TestCase):
+    """.github#310 — `id` is the attribute that reaches the `<input>` on the
+    NcTextField / NcInputField family, so `<label for="x">` + `<NcTextField
+    id="x">` is a correct association and must not be reported.
+
+    Evidence is the published package, which is the authority on props:
+    nc-vue 9.9.0's NcInputField renders `id: __props.id` onto its `<input>`;
+    8.39.0's is `inheritAttrs: false` and computes
+    `computedId() { return this.$attrs.id ? this.$attrs.id : this.inputName }`.
+    Neither declares `inputId` at all — `grep -ril inputid` across
+    `dist/components/NcTextField/` and `dist/components/NcInputField/`
+    returns nothing on 9.9.0, and 8.39.0 has zero occurrences.
+
+    The reason this one matters more than its count: the two edits that
+    closed the finding before were a no-op `input-id` attribute and an
+    `aria-label` that OVERRIDES the visible label (WCAG 2.5.3 Label in Name).
+    A gate whose only remediations are a no-op and a regression is a gate
+    that teaches the fleet to ship regressions.
+    """
+
+    def test_fp_a_literal_id_matching_a_label_for_associates(self):
+        # openregister, verbatim shape — 11 findings of exactly this.
+        self.assertEqual(rules("""
+            <label for="dolphin-endpoint">Dolphin API Endpoint</label>
+            <NcTextField id="dolphin-endpoint" v-model="fileSettings.dolphinApiEndpoint" />
+        """), [])
+
+    def test_fp_a_bound_id_matching_a_bound_label_for_associates(self):
+        self.assertEqual(rules("""
+            <label :for="`f-${uid}`">Endpoint</label>
+            <NcInputField :id="`f-${uid}`" :model-value="v" />
+        """), [])
+
+    # -- the true positives this must not swallow -------------------------
+    def test_tp_an_id_no_label_points_at_is_still_reported(self):
+        # THE ABUSE CONTROL. If the acceptance ever degrades into "has an id
+        # at all", every wrapper whose label was deleted, renamed or never
+        # written goes quiet — and `id` is on almost every control in the
+        # fleet, so that degradation would be a blanket, not a narrowing.
+        self.assertEqual(rules("""
+            <label for="some-other-field">Endpoint</label>
+            <NcTextField id="dolphin-endpoint" :model-value="v" />
+        """), ["nctextfield-without-label-prop"])
+
+    def test_tp_an_id_with_no_label_anywhere_is_still_reported(self):
+        self.assertEqual(rules("""
+            <NcTextField id="dolphin-endpoint" :model-value="v" />
+        """), ["nctextfield-without-label-prop"])
+
+    def test_tp_a_label_for_pointing_at_nothing_names_nothing(self):
+        # A `<label for>` with no control carrying that id is a dangling
+        # association; the unnamed control beside it is still unnamed.
+        self.assertEqual(rules("""
+            <label for="dolphin-endpoint">Dolphin API Endpoint</label>
+            <NcTextField :model-value="v" />
+        """), ["nctextfield-without-label-prop"])
+
+    def test_tp_a_bare_wrapper_with_no_naming_source_is_still_reported(self):
+        self.assertEqual(rules('<NcTextField :model-value="v" />'),
+                         ["nctextfield-without-label-prop"])
+
+
+class NotInTheAccessibilityTree(unittest.TestCase):
+    """.github#273 — an element out of the accessibility tree has no
+    accessible name, so `aria-label` on it is inert and the finding cannot be
+    closed honestly. Same principle `check_table_headers.py` already applies
+    to `<th aria-hidden="true">`.
+
+    #273 keyed this on `aria-hidden`/`tabindex`. Measured fleet-wide, that
+    spelling matches NOTHING: `aria-hidden="true"` appears on 0 of gate-40's
+    471 findings and `display:none` on 8 — ALL 8 of them `type="file"`. So the
+    exemption is written for the spelling that actually occurs, and the
+    `display:none` arm is bounded to `type="file"` because a style, unlike an
+    ARIA attribute, can be toggled by JS.
+
+    Four arms, after the model of openbuild's gate-54 verification — the third
+    is the one that proves the exemption stays narrow rather than becoming a
+    blanket.
+    """
+
+    # arm 1 — the canonical hidden picker is exempt
+    def test_fp_a_display_none_file_picker_is_exempt(self):
+        # openregister ImportRegister.vue / nldesign admin.php, verbatim shape.
+        self.assertEqual(rules(
+            '<input ref="fileInput" type="file" accept=".json" '
+            'style="display: none" @change="handleFileUpload">'), [])
+
+    def test_fp_an_aria_hidden_input_is_exempt(self):
+        # #273's own fixture shape.
+        self.assertEqual(rules(
+            '<input ref="picker" type="file" :aria-hidden="true" '
+            'tabindex="-1" @change="onPick">'), [])
+
+    # arm 2 — remove the hiding attribute and it must fail again
+    def test_tp_the_same_file_input_visible_is_still_reported(self):
+        self.assertEqual(rules(
+            '<input ref="fileInput" type="file" accept=".json" '
+            '@change="handleFileUpload">'), ["input-without-label"])
+
+    # arm 3 — THE ABUSE CONTROL. `display:none` must not become a blanket
+    # silencer for any control an author would rather not name. Only
+    # `type="file"` earns it; a hidden text field is a control that may be
+    # shown at any moment by the same JS that hid it.
+    def test_tp_display_none_on_a_non_file_input_is_still_reported(self):
+        self.assertEqual(rules(
+            '<input type="text" v-model="q" style="display: none">'),
+            ["input-without-label"])
+
+    def test_tp_display_none_on_a_textarea_is_still_reported(self):
+        self.assertEqual(rules(
+            '<textarea v-model="q" style="display: none"></textarea>'),
+            ["textarea-without-label"])
+
+    # arm 4 — a DYNAMIC aria-hidden proves nothing at scan time
+    def test_tp_a_bound_dynamic_aria_hidden_is_not_an_exemption(self):
+        self.assertEqual(rules(
+            '<input type="text" v-model="q" :aria-hidden="isCollapsed">'),
+            ["input-without-label"])
+
+    def test_tp_aria_hidden_false_is_not_an_exemption(self):
+        self.assertEqual(rules(
+            '<input type="text" v-model="q" aria-hidden="false">'),
+            ["input-without-label"])
+
+
 # --------------------------------------------------------------------------
 # Mode 4 — markup that does not ship.
 # --------------------------------------------------------------------------

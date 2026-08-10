@@ -197,6 +197,185 @@ with _repo(3, covered=True) as t:
         out.strip()[-140:],
     )
 
+# ---------------------------------------------------------------------------
+# .github#309 — A DIRECTORY IS NOT A PAGE
+# ---------------------------------------------------------------------------
+# The `src/views/` rule is a path-shaped proxy: any child component living
+# beside its page was called a page. Measured full-tree, openconnector reported
+# 40 and softwarecatalog 17, the majority of both being rows, widgets, form
+# fragments and NC settings panels.
+#
+# The remedy the finding offers a non-page is only ever `@visual exclude`, so
+# an over-matching heuristic MANUFACTURES WAIVERS — and a fleet trained to
+# waive false positives will waive true ones.
+#
+# The replacement asks for reachability and is conservative: a file is dropped
+# only on POSITIVE evidence that it is somebody's child. Every arm below pairs
+# a relaxation with the true positive it must not swallow.
+print()
+print("== gate-26: a directory is not a page (.github#309) ==")
+
+
+def _repo_mixed(*, manifest: str | None = None,
+                extra: dict[str, str] | None = None) -> tempfile.TemporaryDirectory:
+    """A repo with one routed page and one child component beside it."""
+    tmp = tempfile.TemporaryDirectory()
+    root = Path(tmp.name)
+    (root / "src" / "views").mkdir(parents=True)
+    (root / "README.md").write_text("base\n")
+    _git(["init", "-q"], root)
+    _git(["add", "-A"], root)
+    _git(["commit", "-qm", "base"], root)
+    (root / "src" / "views" / "FlowDetailPage.vue").write_text(PAGE.format(n=1))
+    (root / "src" / "views" / "FlowStepRow.vue").write_text(PAGE.format(n=2))
+    # The page imports the row: that import is the evidence of child-ness.
+    (root / "src" / "views" / "FlowDetailPage.vue").write_text(
+        "<template><div><FlowStepRow /></div></template>\n"
+        "<script>\nimport FlowStepRow from './FlowStepRow.vue'\n"
+        "export default { name: 'FlowDetailPage', components: { FlowStepRow } }\n"
+        "</script>\n")
+    if manifest is not None:
+        (root / "src" / "manifest.json").write_text(manifest)
+    for rel, body in (extra or {}).items():
+        p = root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(body)
+    _git(["add", "-A"], root)
+    _git(["commit", "-qm", "add", "--allow-empty"], root)
+    return tmp
+
+
+_MANIFEST_V2 = """{
+  "pages": [
+    {"id": "FlowDetail", "type": "custom", "route": "/flows/:id", "component": "FlowDetailPage"}
+  ]
+}"""
+
+# arm 1 — the child component is no longer a finding; the routed page still is.
+with _repo_mixed(manifest=_MANIFEST_V2) as t:
+    rc, out = _run(Path(t), None)
+    check(
+        "arm 1: a child component beside its page is NOT reported",
+        "FlowStepRow" not in out,
+        out.strip()[-200:],
+    )
+    check(
+        "arm 1: the routed page beside it IS still reported",
+        rc == EXIT_FAIL and "FlowDetailPage.vue" in out and _reported_count(out) == 1,
+        f"rc={rc} out={out.strip()[-200:]}",
+    )
+
+# arm 2 — THE TRUE POSITIVE. With nothing importing it, a page-dir component
+# cannot be PROVED a child, so it stays in scope. Absence of evidence must not
+# become evidence of absence.
+with _repo(3) as t:
+    rc, out = _run(Path(t), None)
+    check(
+        "arm 2: unimported page-dir components are all still reported",
+        rc == EXIT_FAIL and _reported_count(out) == 3,
+        f"rc={rc} out={out.strip()[-160:]}",
+    )
+
+# arm 3 — THE ABUSE CONTROL. A manifest page is ALWAYS in scope, even when some
+# other component also imports it. Otherwise a single stray import anywhere in
+# src/ would silence a genuinely routed screen — the blanket this must not be.
+_IMPORTER = ("<template><div><FlowDetailPage /></div></template>\n"
+             "<script>\nimport FlowDetailPage from './views/FlowDetailPage.vue'\n"
+             "export default { name: 'Shell' }\n</script>\n")
+with _repo_mixed(manifest=_MANIFEST_V2, extra={"src/Shell.vue": _IMPORTER}) as t:
+    rc, out = _run(Path(t), None)
+    check(
+        "arm 3: a manifest-declared page stays in scope even when imported",
+        rc == EXIT_FAIL and "FlowDetailPage.vue" in out,
+        f"rc={rc} out={out.strip()[-200:]}",
+    )
+
+# arm 4 — a router reference is reachability too, with no manifest at all.
+_ROUTER = ("import { createRouter } from 'vue-router'\n"
+           "import FlowDetailPage from './views/FlowDetailPage.vue'\n"
+           "export default createRouter({ routes: [{ path: '/flows/:id',"
+           " component: FlowDetailPage }] })\n")
+with _repo_mixed(extra={"src/router.js": _ROUTER, "src/Shell.vue": _IMPORTER}) as t:
+    rc, out = _run(Path(t), None)
+    check(
+        "arm 4: a router-referenced page stays in scope with no manifest",
+        rc == EXIT_FAIL and "FlowDetailPage.vue" in out,
+        f"rc={rc} out={out.strip()[-200:]}",
+    )
+    check(
+        "arm 4: the child beside it is still dropped",
+        "FlowStepRow" not in out,
+        out.strip()[-200:],
+    )
+
+# ---------------------------------------------------------------------------
+# .github#309 (second defect, found while fixing the first) — the manifest half
+# of this gate was DEAD on every manifest-V2 app. `type:"page"` never occurs in
+# a v2 manifest; screens are declared in a top-level `pages[]` array whose
+# `type` is a RENDERER kind (index/detail/custom/…). Measured on openconnector:
+# 35 declared pages, 0 resolved.
+#
+# And the `component` a v2 page names is the REGISTERED identifier, which need
+# not match the filename — softwarecatalog's `/portfolio-report` names
+# `PortfolioReportView`, aliased by `customComponents.js` to
+# `views/organisaties/PortfolioReport.vue`. Without following that alias the
+# reachability rule above drops a genuinely routed page.
+print()
+print("== gate-26: manifest-V2 pages resolve, including aliased components ==")
+
+_MANIFEST_ALIASED = """{
+  "pages": [
+    {"id": "FlowDetail", "type": "custom", "route": "/flows/:id", "component": "FlowDetailView"}
+  ]
+}"""
+_ALIAS_REGISTRY = ("import FlowDetailView from './views/FlowDetailPage.vue'\n"
+                   "export default { FlowDetailView }\n")
+
+sys.path.insert(0, str(HERE))
+import check_visual_coverage as _cvc  # noqa: E402
+
+with _repo_mixed(manifest=_MANIFEST_V2) as t:
+    # Directly on the unit that was broken: 0 resolved on every v2 app.
+    getattr(_cvc, '_ALIAS_CACHE', {}).clear()
+    _mp = _cvc._manifest_page_components(Path(t.name if hasattr(t, "name") else str(t)))
+    check(
+        "a manifest-V2 pages[] entry resolves to its component file",
+        list(_mp.values()) == ["FlowDetail"],
+        f"resolved={_mp}",
+    )
+
+with _repo_mixed(manifest=_MANIFEST_ALIASED,
+                 extra={"src/customComponents.js": _ALIAS_REGISTRY,
+                        "src/Shell.vue": _IMPORTER}) as t:
+    getattr(_cvc, '_ALIAS_CACHE', {}).clear()
+    _mp = _cvc._manifest_page_components(Path(t.name if hasattr(t, "name") else str(t)))
+    check(
+        "a v2 page whose component is an ALIAS resolves to the aliased file",
+        list(_mp.keys()) == ["src/views/FlowDetailPage.vue"],
+        f"resolved={_mp}",
+    )
+    rc, out = _run(Path(t), None)
+    check(
+        "a v2 page whose component is an ALIAS still resolves and is reported",
+        rc == EXIT_FAIL and "FlowDetailPage.vue" in out,
+        f"rc={rc} out={out.strip()[-220:]}",
+    )
+
+# The control for the alias resolver: an alias that points at NOTHING must not
+# invent a page.
+_MANIFEST_DANGLING = """{
+  "pages": [
+    {"id": "Ghost", "type": "custom", "route": "/ghost", "component": "NoSuchView"}
+  ]
+}"""
+with _repo_mixed(manifest=_MANIFEST_DANGLING) as t:
+    rc, out = _run(Path(t), None)
+    check(
+        "a manifest component resolving to no file adds no page",
+        "NoSuchView" not in out,
+        out.strip()[-200:],
+    )
+
 print()
 print(f"{_passed}/{_passed + len(_failed)} passed")
 if _failed:

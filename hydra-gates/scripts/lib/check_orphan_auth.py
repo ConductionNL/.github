@@ -53,6 +53,17 @@ external caller anywhere in ``lib/`` or ``src/`` is fine — the gate only
 flags access-control methods that are *defined but never called*
 (OWASP A01:2021 — an unwired guard is identical to no guard).
 
+THE ROUTER IS ALSO A CALLER (.github#290)
+-----------------------------------------
+A routed controller action is reached by reflection from the route table,
+so it has no ``->method(`` call site anywhere and the corpus above cannot
+contain one. Such a method is therefore ALSO not an orphan when it is
+named in ``appinfo/routes.php`` (or ``appinfo/routes/*.php``) as
+``'<lowerCamelController>#<method>'``, or carries a ``#[Route]`` /
+``#[ApiRoute]`` attribute. This is keyed on the exact declaration that
+makes it reachable — see ``_is_routed`` — and applies to controllers only,
+because a service is not routable.
+
 Usage::
 
     python3 scripts/lib/check_orphan_auth.py <php-file> [<php-file> ...]
@@ -284,9 +295,97 @@ def _build_caller_corpus() -> str:
     return "\n".join(chunks)
 
 
+# ---------------------------------------------------------------------------
+# THE ROUTE TABLE IS A CALL SITE (.github#290)
+# --------------------------------------------
+# A ROUTED CONTROLLER ACTION HAS NO `->method(` ANYWHERE, EVER. Nextcloud's
+# router invokes it by reflection from the `'name' => 'liveTile#validateSource'`
+# entry in `appinfo/routes.php`, and the frontend calls the URL
+# (`/apps/launchpad/api/livetile/validate-source`), not the PHP method name. So
+# the `lib/` + `src/` corpus above — which is every caller this gate could see
+# — cannot contain a reference to it by construction.
+#
+# The result was that any controller action whose name happens to start with a
+# gate verb (`validate*`, `check*`, `is*`, `verify*`…) was reported
+# `defined-but-never-called` while being routed, called by the frontend and
+# unit-tested. Measured on launchpad: `LiveTileController::validateSource`,
+# routed at appinfo/routes.php:557, called from src/services/liveTileClient.js,
+# covered by tests/Unit/Controller/LiveTileControllerTest.php — reported as an
+# orphan.
+#
+# That is worse than noise. This gate's whole framing is "an unwired guard is
+# identical to no guard", so a false orphan is an accusation that a live
+# security check is dead — and it makes the real findings harder to trust.
+#
+# The match is keyed on the EXACT declaration that makes the method reachable,
+# so it is evidence, not a name heuristic: `<lowerCamelController>#<method>` in
+# the route table, or a `#[Route]` / `#[ApiRoute]` attribute on the method
+# itself (NC's attribute-routing form, which needs no routes.php entry).
+# ---------------------------------------------------------------------------
+_ROUTE_FILES = ("appinfo/routes.php",)
+_ROUTE_DIRS = ("appinfo/routes",)
+
+# `#[Route(...)]` / `#[ApiRoute(...)]` / `#[FrontpageRoute(...)]` — NC's
+# attribute routing. Present on the method's head, so no route table is needed.
+_ROUTE_ATTR_RE = re.compile(r"#\[\s*(?:\\?OCP\\AppFramework\\Http\\Attribute\\)?"
+                            r"(?:Api|Frontpage)?Route\s*\(", re.IGNORECASE)
+
+
+def _build_route_corpus() -> str:
+    """Every route-table source in the app, concatenated."""
+    chunks: list[str] = []
+    for name in _ROUTE_FILES:
+        p = Path(name)
+        if p.is_file():
+            try:
+                chunks.append(p.read_text(encoding="utf-8", errors="ignore"))
+            except OSError:
+                pass
+    for name in _ROUTE_DIRS:
+        d = Path(name)
+        if not d.is_dir():
+            continue
+        for p in sorted(d.rglob("*.php")):
+            try:
+                chunks.append(p.read_text(encoding="utf-8", errors="ignore"))
+            except OSError:
+                continue
+    return "\n".join(chunks)
+
+
+def _route_prefix(path: str) -> str | None:
+    """`lib/Controller/LiveTileController.php` -> `liveTile`.
+
+    Returns None for anything that is not a controller, so a SERVICE method is
+    never cleared by the route table — a service is not routable, and letting
+    one match here would be exactly the blanket this must not become.
+    """
+    m = re.search(r"(?:^|/)Controller/([A-Za-z0-9_]+)Controller\.php$",
+                  path.replace("\\", "/"))
+    if not m:
+        return None
+    cls = m.group(1)
+    return cls[:1].lower() + cls[1:]
+
+
+def _is_routed(path: str, method: str, head: str, route_corpus: str) -> bool:
+    """True when the router — not a `->method(` call — reaches this method."""
+    if _ROUTE_ATTR_RE.search(head):
+        return True
+    prefix = _route_prefix(path)
+    if not prefix:
+        return False
+    # `'liveTile#validateSource'` / `"liveTile#validateSource"`, quote-agnostic
+    # and whitespace-tolerant, but the controller AND the method must both
+    # match — `#validateSource` alone would clear the method on any controller.
+    pat = re.compile(r"['\"]" + re.escape(prefix) + r"\s*#\s*" + re.escape(method) + r"['\"]")
+    return bool(pat.search(route_corpus))
+
+
 def scan_files(files: list[str]) -> list[str]:
     """Return finding lines for the given candidate files."""
     corpus = _build_caller_corpus()
+    route_corpus = _build_route_corpus()
     findings: list[str] = []
     for f in files:
         try:
@@ -302,6 +401,9 @@ def scan_files(files: list[str]) -> list[str]:
             seen.add(name)
             caller_re = re.compile(r"->" + re.escape(name) + r"\s*\(")
             if caller_re.search(corpus):
+                continue
+            # The router is a caller the `lib/`+`src/` corpus cannot contain.
+            if _is_routed(f, name, head, route_corpus):
                 continue
             findings.append(f"{f}:{line_no} method={name} rule=defined-but-never-called")
     return findings
