@@ -63,7 +63,9 @@ jobs:
       enable-phpunit: false
       enable-newman: false
       enable-playwright: false
-      enable-hydra-gates: false
+      # TEMP proof harness — reverted below.
+      enable-hydra-gates: true
+      enable-axe: true
       enable-license-check: false
       enable-journeydoc-capture: false
       enable-coverage-guard: false
