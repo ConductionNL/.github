@@ -425,8 +425,37 @@ _DATA_ACCESS_RE = re.compile(
 # FAIL message endorses).  Gate-7 was confirmed NOT blind on that repo first:
 # a textbook IDOR planted into the tracked AgentVersionController took the
 # count 3 → 4.
+#
+# ``.github#360`` — THE TOKEN MAY ALSO COME FIRST.  ``#353`` relaxed where the
+# auth token may sit, but left the segment before it MANDATORY
+# (``[A-Z][A-Za-z0-9_]*`` with no ``?``), so the token could never be the first
+# segment after the prefix.  ``hasPermission()`` and ``canAccess()`` — about as
+# conventional as a per-object guard name gets — were therefore still reported
+# as unguarded IDOR, before AND after ``#353``.  Making that segment repeatable
+# and optional (``(?:[A-Z][a-z0-9_]*)*?``) admits the token in ANY position,
+# first included.  Measured, old regex vs new:
+#
+#     hasPermission canAccess isOwner isAllowed mayAccess hasAccess   ✗ → ✓
+#     canUserAccessAgent hasOwnerPermissionForRun isAdmin
+#     canEditPermission canViewOwner hasACLAccess assertOwner         ✓ → ✓
+#     canRender hasChanges canUserModifyAgent hasPendingRevision
+#     isVisible canDelete hasItems                                    ✗ → ✗
+#
+# AN AUTH TOKEN IS STILL REQUIRED, and the token SET is unchanged: the newly
+# admitted names are exactly ``{is,has,can,may}`` + token + optional object
+# noun.  ``canRender``/``hasChanges`` remain non-guards, which is the abuse
+# control — widening this to "any is/has/can/may method" would let gate-7 clear
+# real IDORs.  ``canUserModifyAgent`` also stays unmatched, correctly: "Modify"
+# is not an auth token, and an earlier note listing it beside
+# ``canUserAccessAgent`` as fixed by ``#353`` was wrong.
+#
+# Also corrected for the record: the ``#353`` commit message says ``canAccess``
+# matched.  Measured against BOTH the pre- and post-``#353`` regexes, it never
+# did.  ``#353`` was still a clean widening — nothing it used to match was lost
+# — but its message overstated the scope, and this comment is where that stops
+# being repeated.
 _GUARD_HELPER_NAME_RE = re.compile(
-    r"^(?:is|has|can|may)[A-Z][A-Za-z0-9_]*"
+    r"^(?:is|has|can|may)(?:[A-Z][a-z0-9_]*)*?"
     r"(?:Admin|Access|Permission|Permitted|Owner|Allowed|Authori[sz]ed)"
     r"(?:[A-Z][A-Za-z0-9_]*)?$"
     r"|^(?:assert|guard|deny|verify|authori[sz]e)[A-Za-z0-9_]*$"

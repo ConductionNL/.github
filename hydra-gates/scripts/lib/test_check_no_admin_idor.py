@@ -2041,6 +2041,40 @@ class DraftController {
         self.assertFalse(matches("canUserModifyAgent"))
         self.assertFalse(matches("hasPendingRevision"))
 
+    def test_the_auth_token_may_be_the_first_segment(self):
+        """`.github#360` — the SHORT idiomatic guard names.
+
+        `#353` relaxed WHERE the auth token may sit but left the segment
+        before it mandatory, so the token could never come first.  The most
+        conventional per-object guard names in the fleet are exactly that
+        shape, and gate-7 reported every method delegating to one as an
+        unguarded IDOR — before AND after `#353`.  Measured end-to-end in
+        `test_gate7_verb_object_guards.sh`: a controller guarded by
+        `hasPermission()` and `canAccess()` produced 2 findings, and produces
+        0 now, while the same fixture still goes red under the pre-#360 regex.
+        """
+        matches = cni._GUARD_HELPER_NAME_RE.match
+        for name in (
+            "hasPermission", "canAccess", "isOwner", "isAllowed",
+            "mayAccess", "hasAccess", "isPermitted", "canAccessAgentForUser",
+        ):
+            self.assertTrue(matches(name), f"{name} should be a guard name")
+
+    def test_360_did_not_widen_into_silence(self):
+        """The abuse control for `#360`: no token, no guard.
+
+        Making the pre-token segment optional must not turn the pattern into
+        "any is/has/can/may method".  If it had, gate-7 would clear real
+        IDORs — the failure mode that is strictly worse than the false
+        positives `#360` removes.
+        """
+        matches = cni._GUARD_HELPER_NAME_RE.match
+        for name in (
+            "canRender", "hasChanges", "isVisible", "canDelete", "hasItems",
+            "isReady", "mayRetry", "canUserModifyAgent", "hasPendingRevision",
+        ):
+            self.assertFalse(matches(name), f"{name} must NOT be a guard name")
+
 
 if __name__ == "__main__":
     unittest.main()
