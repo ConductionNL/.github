@@ -7924,7 +7924,58 @@ if [ -d lib/AppInfo ]; then
         # EMPTY SCOPE. This gate is always diff-scoped (ADR-020), so on any PR
         # that touches no listener EVERY registration falls out of scope. That
         # used to print PASS (.github#276).
-        _skip 61 "listener-work-placement" na "the diff against '${BASE_REF}' put every post-event registration out of scope, so NONE were inspected. Diff-scoped out under ADR-020 — the fleet's 149-registration backlog is a work-list, not a reason to block an unrelated PR. This gate runs on the next PR that touches a listener registration. See ${_lwp_log}."
+        #
+        # BUT AN EMPTY SCOPE HAS TWO CAUSES AND ONLY ONE OF THEM IS A DIFF
+        # (.github#347). `bin/hydra-gates` forwards `--base` only on a
+        # diff-scoped run, so on `--full` the runner keeps its own
+        # `origin/development` default and hands it over anyway. On
+        # `development` itself that diffs the branch against itself, the
+        # checker returns 3, and this gate printed
+        #
+        #   NOT APPLICABLE — the diff against 'origin/development' put every
+        #   post-event registration out of scope
+        #
+        # two lines after the run's own preamble said `Base ref: n/a — --full
+        # requested`. THERE WAS NO DIFF. The verdict was defensible; the stated
+        # reason named a thing that did not exist, and an unfalsifiable reason
+        # is how this stood fleet-wide for weeks. Sibling of `.github#361` —
+        # `check_listener_placement.py:555` carries the same non-empty argparse
+        # default. Positive control on the same tree, changing only the scope
+        # flag: `--all` -> 45 registrations checked, 3 failures.
+        #
+        # THE VERDICT DOES NOT CHANGE, DELIBERATELY. Sweeping the tree on an
+        # unscoped run was tried here before and reverted (see the invocation
+        # comment above): the builder runs unscoped, so `--all` would surface
+        # the fleet's whole registration backlog as blocking findings on every
+        # build. `na` with an HONEST reason is the third answer — it cannot go
+        # false-RED, and it stops the run claiming an exclusion nothing
+        # performed. What was missing was the SIZE of what went unread, so an
+        # advisory sweep supplies it: informational, never a verdict.
+        if [ "${SCOPE_TO_DIFF}" = "1" ]; then
+            _skip 61 "listener-work-placement" na "the diff against '${BASE_REF}' put every post-event registration out of scope, so NONE were inspected. Diff-scoped out under ADR-020 — the fleet's 149-registration backlog is a work-list, not a reason to block an unrelated PR. This gate runs on the next PR that touches a listener registration. See ${_lwp_log}."
+        else
+            # ADVISORY ONLY. Its exit status is discarded on purpose: a sweep
+            # that finds inherited debt must not become this run's verdict, and
+            # a sweep that CRASHES must not either — the count is quoted only
+            # when the helper printed its own terminal summary line.
+            _lwp_all_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-listener-work-placement.advisory.log
+            python3 "${SCRIPT_DIR}/lib/check_listener_placement.py" . --all \
+                > "${_lwp_all_log}" 2>&1 || true
+            #
+            # THE SUMMARY IS RECOMPOSED, NOT QUOTED. The helper's own line ends
+            # "…, 0 out of scope: 1 failure(s)", and pasting that in would put
+            # the phrase "out of scope" back into a reason on a run that
+            # computed no scope — the exact sentence this fix removes, smuggled
+            # in as a quotation. The suite asserts against that phrase
+            # gate-agnostically and caught it here.
+            _lwp_backlog=""
+            if grep -qE '^checked [0-9]+ post-event registration' "${_lwp_all_log}" 2>/dev/null; then
+                _lwp_all_n=$(grep -oE '^checked [0-9]+ post-event registration' "${_lwp_all_log}" | tail -1 | grep -oE '[0-9]+' | head -1)
+                _lwp_all_f=$(grep -oE '[0-9]+ failure\(s\)' "${_lwp_all_log}" | tail -1 | grep -oE '[0-9]+' | head -1)
+                _lwp_backlog=" ADVISORY, and it decides nothing here: a whole-tree sweep of this same tree reaches ${_lwp_all_n:-an unreported number of} registration(s) carrying ${_lwp_all_f:-an unreported number of} finding(s), NONE of which this run judged — see ${_lwp_all_log}."
+            fi
+            _skip 61 "listener-work-placement" na "this run computed NO diff (--full / unscoped), and gate-61 is diff-scoped by design (ADR-078/ADR-020, it is about NEW debt) — so NO post-event registration was inspected and ADR-078 work placement is UNVERIFIED by this run. This is NOT a clean bill of health, and NO diff excluded anything: there was no diff. Re-measure with an explicit base (HYDRA_GATE_BASE_REF=origin/beta) or run with --scope-to-diff.${_lwp_backlog} See ${_lwp_log}."
+        fi
     elif [ "${_lwp_rc}" -eq 4 ]; then
         _skip 61 "listener-work-placement" na "this repo registers no post-object-event listener, so there is no work to place on or off the write path (ADR-078). See ${_lwp_log}."
     elif ! _helper_finished "${_lwp_log}" '^checked [0-9]+ (post-event )?registration\(s\)'; then

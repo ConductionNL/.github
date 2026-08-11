@@ -166,17 +166,41 @@ else
     _bad "the --full run did not announce itself as unscoped; the rest of this arm is unsafe to interpret"
 fi
 
+#
+# `.github#347` HAS LANDED, so this arm now asserts the CORRECT behaviour
+# instead of recording the defect. The verdict deliberately stays `na` — the
+# invocation comment in the runner records that sweeping the tree on an
+# unscoped run was tried and reverted, because the builder runs unscoped and
+# `--all` would surface the whole backlog as blocking findings on every build.
+# What changed is that the REASON no longer names a diff the run never
+# computed, and that the size of what went unread is stated.
 _v="$(gf_verdict "${_out}" 61)"
-_still_broken=1
 case "${_v}" in
     *"NOT APPLICABLE"*)
-        # Is the reason a diff-based one? That is the specific defect.
-        if printf '%s' "${_v}" | grep -qF 'out of scope'; then _still_broken=0; fi
+        _ok "gate-61 on --full declines rather than sweeping — the verdict that was deliberately preserved"
         ;;
+    *FAIL*)
+        _bad ".github#347 was fixed by SWEEPING THE WHOLE TREE on an unscoped run. That was tried and reverted before: the BUILDER runs unscoped, so this surfaces the fleet's whole registration backlog as blocking findings on every build. Expected NOT APPLICABLE with an honest reason. Got: ${_v:0:160}"
+        ;;
+    *)  _bad "gate-61 on --full gave an unrecognised verdict: ${_v:0:160}" ;;
 esac
-_known_defect ".github#347" \
-    "gate-61 on --full reports NOT APPLICABLE citing 'the diff against origin/development put every post-event registration out of scope' — on a run that computed no diff, over a tree whose single registration the positive control just failed. 0 of 1 inspected." \
-    "${_still_broken}"
+if printf '%s' "${_v}" | grep -qF 'out of scope'; then
+    _bad ".github#347 is LIVE: gate-61 on --full still claims 'the diff ... put every post-event registration out of scope', on a run whose own preamble says it computed no diff, over a tree whose single registration the positive control just failed. 0 of 1 inspected, and the reason cites a diff that does not exist."
+else
+    _ok "gate-61's --full reason no longer claims a diff excluded anything"
+fi
+if printf '%s' "${_v}" | grep -qF 'computed NO diff'; then
+    _ok "gate-61's --full reason names the ABSENCE of a diff — the falsifiable form"
+else
+    _bad "gate-61's --full reason does not state that the run computed no diff, so a reader still cannot tell an empty scope from an empty tree: ${_v:0:200}"
+fi
+# The size of what went unread must be stated, or the skip is unfalsifiable in
+# the other direction: '0 of 1' and '0 of 45' print identically without it.
+if printf '%s' "${_v}" | grep -qE 'ADVISORY.*[0-9]+ registration\(s\) carrying [0-9]+ finding\(s\)'; then
+    _ok "gate-61's --full skip states the size of the backlog it did not inspect"
+else
+    _bad "gate-61's --full skip does not state how many registrations went unread — the advisory sweep is missing, so '0 of 1' and '0 of 45' are typographically identical: ${_v:0:200}"
+fi
 
 # ===========================================================================
 echo
