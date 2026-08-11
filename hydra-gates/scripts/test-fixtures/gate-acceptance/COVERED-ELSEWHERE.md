@@ -20,6 +20,7 @@ identically to `UNCOVERED.md`.
 
 | gate | name | suite | fixtures |
 |---|---|---|---|
+| gate-16 | spec-coverage | `test_gate16_spec_coverage_scope.sh` | `test-fixtures/spec-coverage-scope/app` — diff/full scope matrix over a real two-commit history, `.github#361` |
 | gate-19 | e2e-coverage | `test_gate19_coverage_credibility.sh` | `test-fixtures/e2e-credibility/{req-inherit,scenario-level,file-level-tag,honest}` — `.github#356`, `#343`, `#345` and the never-false `test.skip` guard |
 | gate-23 | or-abstraction-anti-patterns | `test_gates_23_33_never_green_over_nothing.sh` | `test-fixtures/gates-23-33/{planted,clean}` |
 | gate-24 | integration-parity | `test_gates_23_33_never_green_over_nothing.sh` | `test-fixtures/gates-23-33/{planted,clean}` |
