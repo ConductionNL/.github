@@ -2888,7 +2888,45 @@ jobs:
           # --no-save: this checkout is the app's own tree, and the report is
           # the artefact we want out of it — not a mutated package.json.
           npm install --no-save --no-audit --no-fund "@axe-core/playwright@${{ inputs.axe-version }}"
-          node -e "const m=require('@axe-core/playwright'); if (typeof (m.AxeBuilder||m.default)!=='function') { console.error('::error::@axe-core/playwright installed but exports no AxeBuilder constructor.'); process.exit(1);} console.log('@axe-core/playwright resolved.');"
+
+          # ── this control used to pass for the wrong reason ─────────────────
+          #
+          # The runner is executed BY ABSOLUTE PATH from OUTSIDE this package
+          # tree (`${GITHUB_WORKSPACE}/gates/...`, see the next step), and
+          # CommonJS resolves a module's own `require` calls by walking up from
+          # the DIRECTORY OF THE FILE — never from the process cwd. `gates/` is
+          # a sibling of `server/`, so that walk never reaches
+          # `server/apps/<app>/node_modules` and nothing the step above
+          # installed is reachable.
+          #
+          # `node -e`, which is what this control was, resolves from the cwd —
+          # here `server/apps/<app>` — so it found the package the runner could
+          # not and printed success. docudesk#423 died one step later on
+          # `Cannot find module '@playwright/test'` with this control green
+          # directly above it.
+          #
+          # NODE_PATH is a global fallback consulted whatever directory the
+          # entry file sits in, so it is what makes the cross-tree invocation
+          # resolve at all. The probe then asks the question through
+          # `createRequire` ANCHORED ON THE RUNNER, so it resolves exactly the
+          # way the runner does and fails exactly when the runner would.
+          export NODE_PATH="${PWD}/node_modules"
+          RUNNER="${GITHUB_WORKSPACE}/gates/hydra-gates/scripts/axe-run.cjs" \
+          node -e "
+            const { createRequire } = require('module');
+            const req = createRequire(process.env.RUNNER);
+            const m = req('@axe-core/playwright');
+            if (typeof (m.AxeBuilder || m.default) !== 'function') {
+              console.error('::error::@axe-core/playwright installed but exports no AxeBuilder constructor.');
+              process.exit(1);
+            }
+            const pw = req('@playwright/test');
+            if (!pw.chromium) {
+              console.error('::error::@playwright/test resolved from the axe runner but exports no chromium.');
+              process.exit(1);
+            }
+            console.log('axe runner resolves @playwright/test and @axe-core/playwright.');
+          "
 
       - name: Run axe-core against the app routes
         id: axe
@@ -2942,6 +2980,13 @@ jobs:
           # `bash -e` would abort on a failing node before `RC=$?` ever ran, so
           # the cleanup would be skipped and the reason lost. Same `&& / ||`
           # idiom the hydra-gates job uses for the same reason.
+          # NODE_PATH, because the entry file is in `gates/` and the packages
+          # are in `server/apps/<app>/node_modules`. CommonJS resolves from the
+          # entry file's own directory upwards, and those two paths are
+          # siblings — without this the runner cannot require `@playwright/test`
+          # no matter what the install step put on disk. See the probe in that
+          # step for the measurement.
+          NODE_PATH="${PWD}/node_modules" \
           node "${GITHUB_WORKSPACE}/gates/hydra-gates/scripts/axe-run.cjs" && RC=0 || RC=$?
           exit "$RC"
 
