@@ -404,11 +404,31 @@ _DATA_ACCESS_RE = re.compile(
 # ---------------------------------------------------------------------------
 
 # A same-class helper counts as guard-bearing if its NAME reads like an
-# authorisation predicate.  Anchored so only the classic guard shapes match —
-# ``canRender`` / ``hasChanges`` (no auth suffix) deliberately do NOT.
+# authorisation predicate.  An auth token (``Admin``/``Access``/``Permission``/
+# ``Permitted``/``Owner``/``Allowed``/``Authorised``) is REQUIRED; it may sit
+# anywhere after the ``is``/``has``/``can``/``may`` prefix as a complete
+# CamelCase segment, not only at the end.  That admits the very common
+# verb-object spelling where the object noun trails the auth token —
+# ``canUserAccessAgent()``, ``canUserModifyAgent()``,
+# ``hasOwnerPermissionForRun()`` — which are genuine authorisation predicates.
+# ``canRender`` / ``hasChanges`` still deliberately do NOT match: they carry no
+# auth token at all, in any position.
+#
+# Evidence for relaxing the position: ConductionNL/hermiq @ development
+# (cd23f547), full-scope run 31490144919 / job 93776678440 — gate-7 reported
+# FAIL with 3 methods, and all three were false positives caused by this
+# anchoring: AgentsController::index (filters every result through
+# ``canUserAccessAgent()`` in-body) and AgentVersionController::index / ::diff
+# (both delegate to ``loadAccessibleAgent()``, which calls
+# ``canUserAccessAgent()`` and returns null, on which the caller returns
+# ``Http::STATUS_NOT_FOUND`` — the 404-style tenancy refusal this gate's own
+# FAIL message endorses).  Gate-7 was confirmed NOT blind on that repo first:
+# a textbook IDOR planted into the tracked AgentVersionController took the
+# count 3 → 4.
 _GUARD_HELPER_NAME_RE = re.compile(
     r"^(?:is|has|can|may)[A-Z][A-Za-z0-9_]*"
-    r"(?:Admin|Access|Permission|Permitted|Owner|Allowed|Authori[sz]ed)$"
+    r"(?:Admin|Access|Permission|Permitted|Owner|Allowed|Authori[sz]ed)"
+    r"(?:[A-Z][A-Za-z0-9_]*)?$"
     r"|^(?:assert|guard|deny|verify|authori[sz]e)[A-Za-z0-9_]*$"
     r"|^(?:require|ensure|check)[A-Z][A-Za-z0-9_]*$"
     r"|^isAdmin$"
