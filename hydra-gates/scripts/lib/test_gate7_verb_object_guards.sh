@@ -101,8 +101,11 @@ python3 - "${_OLDCK}" <<'PYREVERT'
 import re, sys
 p = sys.argv[1]
 s = open(p).read()
+# The CURRENT shape (post-#360: the middle segment is repeatable and optional,
+# so the auth token may lead). Updated when #360 reshaped it — the suite's own
+# guard below demanded exactly that rather than letting the arm rot.
 new_alt = (
-    'r"^(?:is|has|can|may)[A-Z][A-Za-z0-9_]*"\n'
+    'r"^(?:is|has|can|may)(?:[A-Z][a-z0-9_]*)*?"\n'
     '    r"(?:Admin|Access|Permission|Permitted|Owner|Allowed|Authori[sz]ed)"\n'
     '    r"(?:[A-Z][A-Za-z0-9_]*)?$"'
 )
@@ -180,13 +183,14 @@ fi
 
 # ===========================================================================
 echo
-echo "== live false-positive class: idiomatic short guard names =="
+echo "== idiomatic SHORT guard names: the auth token may come first (#360) =="
 # ===========================================================================
-# Measured end-to-end, not inferred from the regex: a controller guarded by
-# `hasPermission()` or `canAccess()` is STILL reported as an unguarded IDOR,
-# before and after #353. The middle `[A-Z][A-Za-z0-9_]*` segment is mandatory
-# and must precede the token, so the token can never be the FIRST segment after
-# the prefix.
+# Measured end-to-end, not inferred from the regex. This arm was a live KNOWN
+# DEFECT until `.github#360`: a controller guarded by `hasPermission()` or
+# `canAccess()` was reported as TWO unguarded IDORs, before AND after #353,
+# because the middle `[A-Z][A-Za-z0-9_]*` segment was mandatory and had to
+# precede the token — so the token could never be the FIRST segment after the
+# prefix. #360 made that segment repeatable and optional.
 _FP="${_WORK}/fp"
 mkdir -p "${_FP}/lib/Controller"
 cat > "${_FP}/${TARGET}" <<'PHPFP'
@@ -223,13 +227,39 @@ class AgentController extends Controller {
 PHPFP
 ( cd "${_FP}" && git init -q . && git config user.email f@example.invalid \
     && git config user.name F && git add -f . >/dev/null && git commit -qm fp >/dev/null )
-_fp_n="$( cd "${_FP}" && python3 "${CHECKER}" "${TARGET}" 2>/dev/null | grep -c . || true )"
-if [ "${_fp_n}" -gt 0 ]; then
-    _defect_n=$((_defect_n + 1))
-    printf 'KNOWN DEFECT (still live, unfiled) — %s\n' \
-        "gate-7 reports ${_fp_n} finding(s) against a controller guarded by hasPermission() and canAccess(). Both are per-object guards; neither is recognised. _GUARD_HELPER_NAME_RE requires a non-empty CamelCase segment BETWEEN the is/has/can/may prefix and the auth token, so the token can never be the first segment — 'hasPermission', 'canAccess', 'isOwner', 'mayAccess' and 'isAllowed' all fail, before AND after #353. Note the #353 commit message states 'canAccess matched' — measured against both regexes, it never did."
+_fp_out="$( cd "${_FP}" && python3 "${CHECKER}" "${TARGET}" 2>/dev/null )"
+_fp_n="$( printf '%s' "${_fp_out}" | grep -c . || true )"
+if [ "${_fp_n}" -eq 0 ]; then
+    _ok "hasPermission() and canAccess() are recognised as per-object guards (#360) — 0 findings"
 else
-    _bad "the hasPermission()/canAccess() false positives no longer reproduce — this is a FIX. Delete this known-defect arm and assert 0 findings instead."
+    _bad "gate-7 reports ${_fp_n} finding(s) against a controller guarded by hasPermission() and canAccess(). Both are genuine per-object guards. This is .github#360 returning: _GUARD_HELPER_NAME_RE must let the auth token be the FIRST segment after the is/has/can/may prefix. Findings: ${_fp_out}"
+fi
+
+# ANTI-DEAD-TEST for #360, the same treatment #353 gets above: substitute the
+# pre-#360 regex and require this arm to go RED. A fixture that passes under the
+# broken regex too would assert nothing about the fix.
+_OLD360="${_WORK}/check_no_admin_idor_PRE360.py"
+cp "${CHECKER}" "${_OLD360}"
+if ! python3 - "${_OLD360}" <<'PYREVERT360'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+new_alt = 'r"^(?:is|has|can|may)(?:[A-Z][a-z0-9_]*)*?"'
+old_alt = 'r"^(?:is|has|can|may)[A-Z][A-Za-z0-9_]*"'
+if new_alt not in s:
+    sys.stderr.write("REVERT-FAILED: the post-#360 regex shape was not found\n")
+    sys.exit(2)
+open(p, "w").write(s.replace(new_alt, old_alt, 1))
+PYREVERT360
+then
+    _bad "could not reconstruct the pre-#360 regex — _GUARD_HELPER_NAME_RE has been reshaped, so this control no longer proves the fixture is live. Re-derive the revert and update it here rather than deleting this arm."
+else
+    _old360_n="$( cd "${_FP}" && python3 "${_OLD360}" "${TARGET}" 2>/dev/null | grep -c . || true )"
+    if [ "${_old360_n}" -eq 2 ]; then
+        _ok "the short-guard arm goes RED (2 findings) under the pre-#360 regex — it genuinely discriminates fixed from broken"
+    else
+        _bad "the short-guard arm produced ${_old360_n} finding(s) under the pre-#360 regex, wanted 2. Either the revert did not land or this fixture is a DEAD TEST that would have passed before #360."
+    fi
 fi
 
 echo
