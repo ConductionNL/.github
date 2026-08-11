@@ -1,0 +1,18 @@
+# ShellCheck configuration for ConductionNL/.github
+#
+# external-sources: follow `. "${SOME_ROOT}/path/helper.sh"` when the script
+# carries a `# shellcheck source=./helper.sh` directive above it.
+#
+# Without this, ShellCheck emits SC1091 ("Not following: ... was not specified
+# as input") for every sourced helper. The workflow's wrapper step exits 1 on
+# ANY finding — including `note:` severity — so three of those notes were enough
+# to fail the build even though the ShellCheck action itself reported success.
+#
+# The `# shellcheck source=` directives were already present and correct; they
+# simply had no effect because external sourcing was not enabled. This turns
+# them on rather than suppressing the diagnostic, so a genuinely missing or
+# misspelled helper path is still reported.
+#
+# Note: .github/workflows/shellcheck.yml already lists `.shellcheckrc` in its
+# `paths:` trigger, so this file was expected to exist and did not.
+external-sources=true

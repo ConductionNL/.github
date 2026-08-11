@@ -232,7 +232,7 @@ _rc=$?
 # APPENDS a second "0" and the variable becomes "0\n0", which every later
 # integer test rejects with "integer expression expected" — and those errors go
 # to stderr while the assertion still prints PASS.
-_declared_fail="$(grep -E '^\[gate-[0-9]+\].*: FAIL' "${WORK}/rc.txt" 2>/dev/null | wc -l | tr -d ' ')"
+_declared_fail="$(grep -cE '^\[gate-[0-9]+\].*: FAIL' "${WORK}/rc.txt" 2>/dev/null || true)"
 if [ "${_rc}" -eq 99 ]; then
     _bad "the wrapper exited 99 (could not run at all) on a well-formed fixture"
 elif [ "${_declared_fail}" -eq 0 ] && [ "${_rc}" -ne 0 ]; then
