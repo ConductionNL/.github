@@ -355,7 +355,14 @@ class ItemController {
 """
         self.assertEqual(_scan(src), [])
 
-    def test_status_unauthorized_passes(self):
+    def test_status_unauthorized_from_an_authentication_check_is_FLAGGED(self):
+        """INVERTED by `.github#365`. This test used to assert `[]`.
+
+        It is the defect, written down and pinned as correct behaviour: a
+        `no user -> 401` preamble is AUTHENTICATION, `$this->service->find($id)`
+        below it still takes an arbitrary caller-supplied id, and the gate went
+        silent. gate-7 reported 0 in all 18 fleet apps on the strength of this.
+        """
         src = """\
 <?php
 class ItemController {
@@ -368,6 +375,92 @@ class ItemController {
             return new JSONResponse([], Http::STATUS_UNAUTHORIZED);
         }
         return new JSONResponse($this->service->find($id));
+    }
+}
+"""
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("show", findings[0])
+
+    def test_status_unauthorized_from_a_per_object_check_still_passes(self):
+        """The other half of `#365`, and the one that keeps this fix honest.
+
+        Byte-identical response line, byte-identical status constant — the ONLY
+        difference from the test above is that the condition compares object
+        data against the caller. That is a real authorisation guard written with
+        the wrong status code, and flagging it would be the false positive that
+        made gate-7 untrusted (`#353`, `#360`).
+        """
+        src = """\
+<?php
+class ItemController {
+    /**
+     * @NoAdminRequired
+     */
+    public function show(string $id): JSONResponse
+    {
+        $item = $this->service->find($id);
+        if ($item['ownerId'] !== $this->userId) {
+            return new JSONResponse([], Http::STATUS_UNAUTHORIZED);
+        }
+        return new JSONResponse($item);
+    }
+}
+"""
+        self.assertEqual(_scan(src), [])
+
+    def test_authentication_preamble_answering_403_is_also_FLAGGED(self):
+        """The status code is not what makes a check an authorisation guard.
+
+        `#365` as filed proposes dropping `401`/`UNAUTHORIZED` from the guard
+        regex. That repair would leave this method green — and turning
+        `STATUS_UNAUTHORIZED` into `STATUS_FORBIDDEN` is a one-token edit, so
+        the silence could be bought straight back by making the code WORSE.
+        Authentication-ness is a property of the CONDITION.
+        """
+        src = """\
+<?php
+class ItemController {
+    /**
+     * @NoAdminRequired
+     */
+    public function show(string $id): JSONResponse
+    {
+        if ($this->userSession->getUser() === null) {
+            return new JSONResponse([], Http::STATUS_FORBIDDEN);
+        }
+        return new JSONResponse($this->service->find($id));
+    }
+}
+"""
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("show", findings[0])
+
+    def test_presence_test_wrapping_the_body_does_not_blank_the_guard(self):
+        """Polarity control — the blanking must not eat a whole method body.
+
+        `if ($user !== null) { ...everything... }` is a WRAPPER, not a guard
+        clause. Blanking it would erase the real ownership check inside and
+        report a correctly-guarded method.
+        """
+        src = """\
+<?php
+class ItemController {
+    /**
+     * @NoAdminRequired
+     */
+    public function show(string $id): JSONResponse
+    {
+        $user = $this->userSession->getUser();
+        if ($user !== null) {
+            $item = $this->service->find($id);
+            if ($item['ownerId'] !== $user->getUID()) {
+                return new JSONResponse([], Http::STATUS_FORBIDDEN);
+            }
+            return new JSONResponse($item);
+        }
+        return new JSONResponse([], Http::STATUS_NOT_FOUND);
     }
 }
 """
@@ -801,7 +894,40 @@ class WidgetController {
 # ---------------------------------------------------------------------------
 
 class NumericStatusParityTest(unittest.TestCase):
-    def test_numeric_403_statuscode_named_arg_passes(self):
+    def test_numeric_statuscode_named_arg_parity_holds_for_a_real_guard(self):
+        """`statusCode: 403` is recognised exactly as `Http::STATUS_FORBIDDEN` is.
+
+        REWRITTEN by `.github#365`. The original body of this test was named
+        for 403 and actually wrote `statusCode: 401` behind a `no user` check —
+        so it asserted the numeric-parity property over an AUTHENTICATION
+        clause, and pinned the `#365` defect while appearing to test spelling
+        parity. The parity property is real and is kept; the subject is now a
+        per-object comparison, which is what the parity was ever for.
+        """
+        src = """\
+<?php
+class ItemController {
+    /**
+     * @NoAdminRequired
+     */
+    public function show(string $id): JSONResponse
+    {
+        $item = $this->service->find($id);
+        if ($item['ownerId'] !== $this->userId) {
+            return new JSONResponse([], statusCode: 403);
+        }
+        return new JSONResponse($item);
+    }
+}
+"""
+        self.assertEqual(_scan(src), [])
+
+    def test_numeric_401_statuscode_named_arg_from_authentication_is_FLAGGED(self):
+        """The spelling-parity fix must not carry the authentication clause in.
+
+        Same named-argument spelling, same numeric literal position — but the
+        condition asks "is anyone logged in?", so it clears nothing.
+        """
         src = """\
 <?php
 class ItemController {
@@ -817,7 +943,9 @@ class ItemController {
     }
 }
 """
-        self.assertEqual(_scan(src), [])
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("show", findings[0])
 
     def test_numeric_403_positional_arg_passes(self):
         src = """\
@@ -915,7 +1043,16 @@ class C {
 """
         self.assertEqual(_scan(src), [])
 
-    def test_instance_response_helper_unauthorized_passes(self):
+    def test_instance_response_helper_unauthorized_from_authentication_is_FLAGGED(self):
+        """INVERTED by `.github#365`. This test used to assert `[]`.
+
+        `->unauthorized(` is the third spelling of the same defect — `#365`
+        names `UNAUTHORIZED` and `401`, and the helper-call form was accepting
+        the identical authentication clause. The response-helper SPELLING
+        parity that this class exists to test is unaffected: see the sibling
+        test, where `->unauthorized()` behind a per-object comparison still
+        clears.
+        """
         src = """\
 <?php
 class C {
@@ -927,6 +1064,27 @@ class C {
             return $this->responses->unauthorized();
         }
         return $this->svc->get($id);
+    }
+}
+"""
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("act", findings[0])
+
+    def test_instance_response_helper_unauthorized_after_a_real_check_passes(self):
+        """Same helper call, same spelling — a per-object condition clears it."""
+        src = """\
+<?php
+class C {
+    /**
+     * @NoAdminRequired
+     */
+    public function act(string $id) {
+        $item = $this->svc->get($id);
+        if ($item['ownerId'] !== $this->userId) {
+            return $this->responses->unauthorized();
+        }
+        return $item;
     }
 }
 """
@@ -1215,8 +1373,25 @@ class TestController {
 """
         self.assertEqual(_scan_app(src, {"ParticipationResponder": _RESPONDER}), [])
 
-    def test_citizenAction_delegation_is_recognised_as_guarded(self):
-        """citizenAction() denies an anonymous caller with 401 -> not flagged."""
+    def test_citizenAction_delegation_is_FLAGGED_it_only_authenticates(self):
+        """INVERTED by `.github#365`. This test used to assert `[]`.
+
+        It is the decidesk measurement's own counter-example, and the sharpest
+        statement of the defect available: `staffAction()` and `citizenAction()`
+        sit side by side in one collaborator, and only ONE of them is an
+        authorisation guard.
+
+            requireStaff()   currentUid() === null -> 401   (authentication)
+                             isStaff()     === false -> 403 (AUTHORISATION)
+            citizenAction()  currentUid() === null -> 401   (authentication)
+                             ...and nothing else.
+
+        `staffAction()` still clears — its 403 arm survives the blanking, and
+        the sibling test above pins that. `citizenAction()` clears nothing: a
+        caller routed through it may submit a proposal against ANY budgetId,
+        which is the finding. The 401 arm was never doing the work; it was
+        borrowing credibility from the 403 arm next door.
+        """
         src = """\
 <?php
 namespace OCA\\Decidesk\\Controller;
@@ -1238,7 +1413,9 @@ class TestController {
     }
 }
 """
-        self.assertEqual(_scan_app(src, {"ParticipationResponder": _RESPONDER}), [])
+        findings = _scan_app(src, {"ParticipationResponder": _RESPONDER})
+        self.assertEqual(len(findings), 1)
+        self.assertIn("submitProposal", findings[0])
 
     def test_three_hop_intra_class_chain_to_collaborator_guard(self):
         """validateProposal -> approve/reject -> applyDecision -> staffAction().
@@ -2074,6 +2251,207 @@ class DraftController {
             "isReady", "mayRetry", "canUserModifyAgent", "hasPendingRevision",
         ):
             self.assertFalse(matches(name), f"{name} must NOT be a guard name")
+
+
+# ---------------------------------------------------------------------------
+# `.github#365` — AUTHENTICATION IS NOT AUTHORISATION
+# ---------------------------------------------------------------------------
+
+_IDOR_BODY = """\
+        $entry = $this->ledger->find($entryId);
+        return new JSONResponse($entry);
+"""
+
+
+def _method(preamble: str, body: str = _IDOR_BODY) -> str:
+    """One `@NoAdminRequired` method: *preamble*, then a fixed IDOR body.
+
+    Every arm below shares `_IDOR_BODY` verbatim, so a verdict difference
+    between two arms can only be explained by the preamble. That is what makes
+    these a control rather than a collection of samples.
+    """
+    return (
+        "<?php\nclass LedgerController {\n"
+        "    /**\n     * @NoAdminRequired\n     */\n"
+        "    public function show(string $entryId): JSONResponse\n    {\n"
+        + preamble + body + "    }\n}\n"
+    )
+
+
+class AuthenticationIsNotAuthorisationTest(unittest.TestCase):
+    """The `#365` three-arm control, at the level of one method body.
+
+    Measured on a committed-plant rig before the fix (canonical package
+    @ 57bcb2b): the bare arm reported 1, the byte-identical arm behind a
+    `no user -> 401` preamble reported 0, and gate-7 reported 0 in all
+    EIGHTEEN fleet apps while 453 of 791 controller files carried that
+    preamble.
+    """
+
+    def test_arm_1_bare_is_flagged(self):
+        """The positive control. If this stops firing, nothing else here means anything."""
+        findings = _scan(_method(""))
+        self.assertEqual(len(findings), 1)
+
+    def test_arm_2_authentication_preamble_is_flagged(self):
+        """THE DEFECT: identical body, a 401 preamble, and the gate went quiet."""
+        findings = _scan(_method(
+            "        $user = $this->userSession->getUser();\n"
+            "        if ($user === null) {\n"
+            "            return new JSONResponse([], Http::STATUS_UNAUTHORIZED);\n"
+            "        }\n"
+        ))
+        self.assertEqual(len(findings), 1)
+
+    def test_arm_3_real_guard_after_the_same_preamble_passes(self):
+        """The abuse control: the preamble is IGNORED, not PUNISHED."""
+        self.assertEqual(_scan(_method(
+            "        $user = $this->userSession->getUser();\n"
+            "        if ($user === null) {\n"
+            "            return new JSONResponse([], Http::STATUS_UNAUTHORIZED);\n"
+            "        }\n"
+            "        $e = $this->ledger->find($entryId);\n"
+            "        if ($e['ownerId'] !== $user->getUID()) {\n"
+            "            return new JSONResponse([], Http::STATUS_FORBIDDEN);\n"
+            "        }\n"
+        )), [])
+
+    def test_every_authentication_spelling_is_demoted(self):
+        """Spelling-agnostic by construction — see the doriath retraction.
+
+        `#365`'s own re-audit enumerated three spellings of "who is the
+        caller", missed `sessionUserId()`, and manufactured 19 false positives
+        from that one gap. Identity is recognised by TOKEN in an
+        argument-free expression, so a resolver nobody has thought of yet is
+        still recognised.
+        """
+        for preamble in (
+            "        if ($this->userSession->getUser() === null) { return new JSONResponse([], 401); }\n",
+            "        $uid = $this->sessionUserId();\n        if ($uid === null) { return new JSONResponse([], 401); }\n",
+            "        $u = $this->userSession->getUser();\n        if ($u === null) { return new JSONResponse([], 401); }\n",
+            "        if (empty($this->userId)) { return new JSONResponse([], 401); }\n",
+            "        if (!$this->userId) { return new JSONResponse([], 401); }\n",
+            "        $user = $this->userSession->getUser();\n        if (!$user instanceof IUser) { return new JSONResponse([], 401); }\n",
+            "        if ($this->userSession->isLoggedIn() === false) { throw new OCSException('', 401); }\n",
+            "        $currentUser = $this->userService->currentUser();\n        if ($currentUser === null) { return $this->responses->unauthorized(); }\n",
+        ):
+            with self.subTest(preamble=preamble.strip()[:60]):
+                self.assertEqual(len(_scan(_method(preamble))), 1)
+
+    def test_a_real_comparison_is_never_demoted(self):
+        """The false-positive control, one arm per shape that must survive."""
+        for preamble in (
+            "        $e = $this->ledger->find($entryId);\n        if ($e['ownerId'] !== $this->userId) { return new JSONResponse([], 401); }\n",
+            "        $e = $this->ledger->find($entryId);\n        if ($e['ownerId'] !== $this->userId) { return new JSONResponse([], 404); }\n",
+            "        if ($this->isCurrentUserAdmin() === false) { return new JSONResponse([], 403); }\n",
+            "        if ($this->hasPermission($entryId) === false) { return new JSONResponse([], 403); }\n",
+        ):
+            with self.subTest(preamble=preamble.strip()[:60]):
+                self.assertEqual(_scan(_method(preamble)), [])
+
+    def test_a_non_refusing_conditional_is_left_alone(self):
+        """Control 3 — a clause that computes rather than refuses is not a guard clause.
+
+        It must not be blanked, because blanking a body region is a
+        destructive operation on the text every other pattern reads.
+        """
+        src = _method(
+            "        $user = $this->userSession->getUser();\n"
+            "        if ($user === null) {\n"
+            "            $this->logger->debug('anon');\n"
+            "        }\n"
+            "        if ($this->ledger->find($entryId)['ownerId'] !== $this->userId) {\n"
+            "            return new JSONResponse([], Http::STATUS_FORBIDDEN);\n"
+            "        }\n"
+        )
+        self.assertEqual(_scan(src), [])
+
+
+class SessionIdentityHandoffTest(unittest.TestCase):
+    """Pattern 6 — the shape that keeps the `#365` fix from being a wolf-cry.
+
+    Measured on doriath @ bfd6da6: shipping the `#365` blanking WITHOUT this
+    pattern reported 45 findings there, and that app's real gate-7 exposure was
+    hand-read as ZERO. `AttachmentService::loadOwnedSecret()` refuses on
+    `$secret->getOwnerId() !== $userId`; the controller's job is to hand the
+    identity down, and it does.
+    """
+
+    def test_identity_handed_to_the_data_call_passes(self):
+        self.assertEqual(_scan(_method(
+            "        $userId = $this->sessionUserId();\n"
+            "        if ($userId === null) { return new JSONResponse([], 401); }\n",
+            "        return new JSONResponse($this->ledger->findOwned(entryId: $entryId, userId: $userId));\n",
+        )), [])
+
+    def test_identity_resolved_but_NOT_handed_over_is_flagged(self):
+        """The discriminator. Resolving the caller is not scoping the query."""
+        findings = _scan(_method(
+            "        $userId = $this->sessionUserId();\n"
+            "        if ($userId === null) { return new JSONResponse([], 401); }\n",
+            "        $this->audit->logForUser($userId, 'read');\n"
+            "        return new JSONResponse($this->ledger->find($entryId));\n",
+        ))
+        self.assertEqual(len(findings), 1)
+
+    def test_a_caller_supplied_userId_proves_nothing(self):
+        """`find($id, $userId)` where `$userId` came off the route is not a guard.
+
+        This exclusion is the whole reason Pattern 6 is not a blanket: without
+        it, any endpoint that takes a `userId` parameter would clear itself.
+        """
+        src = (
+            "<?php\nclass LedgerController {\n"
+            "    /**\n     * @NoAdminRequired\n     */\n"
+            "    public function show(string $entryId, string $userId): JSONResponse\n    {\n"
+            "        return new JSONResponse($this->ledger->findOwned($entryId, $userId));\n"
+            "    }\n}\n"
+        )
+        self.assertEqual(len(_scan(src)), 1)
+
+    def test_one_unscoped_call_beside_a_scoped_one_still_reports(self):
+        """The ALL-quantifier. `any` would let a log line clear a real IDOR."""
+        findings = _scan(_method(
+            "        $userId = $this->sessionUserId();\n"
+            "        if ($userId === null) { return new JSONResponse([], 401); }\n",
+            "        $mine  = $this->ledger->listOwned($entryId, $userId);\n"
+            "        $other = $this->ledger->find($entryId);\n"
+            "        return new JSONResponse([$mine, $other]);\n",
+        ))
+        self.assertEqual(len(findings), 1)
+
+
+class OwnershipComparisonGuardTest(unittest.TestCase):
+    """Pattern 7 — the 404-style ownership refusal, which the gate's own FAIL
+    message has always endorsed in prose and never recognised in code."""
+
+    def test_ownership_mismatch_answered_404_passes(self):
+        self.assertEqual(_scan(_method(
+            "        $e = $this->ledger->find($entryId);\n"
+            "        if ($e['ownerId'] !== $this->userId) {\n"
+            "            return new JSONResponse(['message' => 'Not found'], Http::STATUS_NOT_FOUND);\n"
+            "        }\n"
+        )), [])
+
+    def test_a_bare_404_without_a_comparison_still_reports(self):
+        """Not-found is not access-denied. Only the COMPARISON clears."""
+        findings = _scan(_method(
+            "        $e = $this->ledger->find($entryId);\n"
+            "        if ($e === null) {\n"
+            "            return new JSONResponse(['message' => 'Not found'], Http::STATUS_NOT_FOUND);\n"
+            "        }\n"
+        ))
+        self.assertEqual(len(findings), 1)
+
+    def test_a_status_string_containing_user_is_not_an_identity(self):
+        """`'user_draft'` must not read as the caller. String literals are excluded."""
+        findings = _scan(_method(
+            "        $e = $this->ledger->find($entryId);\n"
+            "        if ($e['state'] !== 'user_draft') {\n"
+            "            return new JSONResponse([], Http::STATUS_NOT_FOUND);\n"
+            "        }\n"
+        ))
+        self.assertEqual(len(findings), 1)
 
 
 if __name__ == "__main__":

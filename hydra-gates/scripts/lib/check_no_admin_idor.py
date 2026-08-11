@@ -16,6 +16,24 @@ Recognised guard patterns (body must contain at least one):
   - ``TemplateResponse`` return — SPA renderers; NC middleware already
     guarantees an authenticated session so there is no object access to gate
 
+WHAT IS *NOT* A GUARD, AND IS THE MOST IMPORTANT LINE IN THIS FILE
+(``ConductionNL/.github#365``): an AUTHENTICATION check.
+
+    $user = $this->userSession->getUser();
+    if ($user === null) { return new JSONResponse([], Http::STATUS_UNAUTHORIZED); }
+
+answers "is anyone logged in?". This gate exists to answer "may THIS caller
+touch THIS object?". Under ``#[NoAdminRequired]`` the framework has already
+settled the first question before the method runs, so the clause cannot even
+fail — and it was clearing the gate. Measured: gate-7 reported **0 in all
+eighteen fleet apps** while **453 of 791** controller files carried that
+preamble. An ``if`` whose condition tests only whether a caller identity is
+ABSENT, and whose consequent refuses, is therefore blanked out of the text
+every guard pattern here reads — WHATEVER STATUS IT ANSWERS WITH, because
+authentication-ness is a property of the condition, not of the status code.
+See the ``#365`` commentary further down for the three controls that keep that
+blanking from eating a real guard.
+
 Two additional *delegated*-guard patterns are recognised so the gate stops
 emitting whole-repo false positives on codebases that centralise their
 authorisation one call-hop away from the routed method:
@@ -79,6 +97,16 @@ authorisation one call-hop away from the routed method:
     anonymous-session rejection) starts or continues a chain.  Every hop must
     also occur before the caller's first data mutation, so a guard that runs
     only after the write still fails the gate.
+
+  Pattern 6 — session-identity hand-off (``.github#365``).
+    Every call that receives a caller-supplied value ALSO receives a
+    session-derived identity, so the object reference is resolved under a
+    scope the caller cannot forge (``findOwned(entryId: $id, userId: $uid)``).
+
+  Pattern 7 — in-body ownership comparison (``.github#365``).
+    A refusing ``if`` that compares a session-derived identity against object
+    data is an authorisation guard whatever status it answers with — including
+    the 404 chosen deliberately so a 403 cannot become an existence oracle.
 
 Exemptions (method skipped entirely):
   1. ``__construct`` — not a routed action, the 20-line look-back window can
@@ -476,8 +504,13 @@ _HELPER_GUARD_BODY_RE = re.compile(
     r"|->\s*(?:authorize|require|ensure|check|assert|guard)[A-Z][A-Za-z0-9_]*\s*\("
     r"|Http::STATUS_(?:UNAUTHORIZED|FORBIDDEN|NOT_FOUND)"
     r"|(?:statusCode:\s*|,\s*)(?:401|403|404)\b"
-    r"|getUser\s*\(\s*\)\s*===\s*null"
 )
+# `.github#365` removed a `getUser() === null` alternative from the line above.
+# It named an AUTHENTICATION test as a guard, which is the whole defect; and in
+# the only shape that matters — inside a refusing `if` — the clause is now
+# blanked before this pattern ever runs, so the alternative was simultaneously
+# dead and a re-entry point. Outside a refusing `if` it never described a guard
+# at all (`$anon = $this->userSession->getUser() === null;` computes a flag).
 
 # First data-mutation in a method body — used to enforce "guard before write".
 _MUTATION_RE = re.compile(
@@ -512,8 +545,607 @@ _STRICT_GUARD_BODY_RE = re.compile(
     r"|->\s*(?:authorize|authorise|require|ensure|assert|guard)[A-Z][A-Za-z0-9_]*\s*\("
     r"|Http::STATUS_(?:UNAUTHORIZED|FORBIDDEN)"
     r"|(?:statusCode:\s*|,\s*)(?:401|403)\b"
-    r"|(?:getUser|getUID|currentUid|getCurrentUserId)\s*\(\s*\)\s*===\s*null"
 )
+# `.github#365` removed the `(?:getUser|getUID|currentUid|getCurrentUserId)()
+# === null` alternative from the line above — the "anonymous-session rejection"
+# the Pattern-4 commentary lists as a legitimate chain seed. It is not one: an
+# anonymous-session rejection is AUTHENTICATION, and seeding a delegation chain
+# with it let a `citizenAction()`-style wrapper clear every action routed
+# through it. decidesk's three `citizenAction()` callers were cleared exactly
+# this way and become findings again with this change; that is the intended
+# direction, not a regression.
+
+# ---------------------------------------------------------------------------
+# AUTHENTICATION IS NOT AUTHORISATION (ConductionNL/.github#365)
+# ---------------------------------------------------------------------------
+#
+# THE DEFECT. Every guard regex above accepts `Http::STATUS_UNAUTHORIZED`, the
+# numeric `401`, `->unauthorized(` and `getUser() === null` as a guard. Those
+# tokens spell the house-style preamble
+#
+#     $user = $this->userSession->getUser();
+#     if ($user === null) {
+#         return new JSONResponse(['error' => 'Unauthorized'], Http::STATUS_UNAUTHORIZED);
+#     }
+#
+# which answers "is anyone logged in?" — AUTHENTICATION. Gate-7 exists to ask
+# "may THIS caller touch THIS object?" — AUTHORISATION. The preamble cannot
+# answer that question, and under `#[NoAdminRequired]` it cannot even fail:
+# Nextcloud's own middleware has already rejected the anonymous caller before
+# the method runs, so the clause is dead defensive code that nonetheless
+# silenced the gate.
+#
+# Measured with a three-arm committed-plant control (same file, same commit,
+# same run, byte-identical data-access bodies):
+#
+#     bare unguarded method                          -> 1 finding
+#     + a `no user -> 401` preamble, nothing else    -> 0 findings
+#     + a real per-object ownership check            -> 0 findings  (correct)
+#
+# Fleet scale at the time of the fix: gate-7 reported 0 in ALL EIGHTEEN apps
+# while 453 of 791 controller files carried that preamble.
+#
+# WHY THIS IS NOT "DROP 401 FROM THE REGEX". Two shapes make the token-level
+# repair both too narrow and too wide, and both were measured:
+#
+#   TOO WIDE — a REAL per-object decision that answers with the wrong status:
+#
+#       if ($account['ownerId'] !== $user->getUID()) {
+#           return new JSONResponse([], Http::STATUS_UNAUTHORIZED);
+#       }
+#
+#     That is a genuine authorisation guard written with a 401. Deleting the
+#     token turns it into a false POSITIVE — and false positives are exactly
+#     how gate-7 lost its credibility (`#353`, `#360`), which is why its
+#     silences were believed long enough for this defect to survive.
+#
+#   TOO NARROW — the same authentication clause answering 403:
+#
+#       if ($user === null) {
+#           return new JSONResponse([], Http::STATUS_FORBIDDEN);
+#       }
+#
+#     Still authentication. If only `401` were dropped, one character of
+#     edit would buy the silence straight back — a gate made green by
+#     weakening the code it inspects.
+#
+# So AUTHENTICATION-NESS IS A PROPERTY OF THE CONDITION, NOT OF THE STATUS
+# CODE. What is neutralised below is an `if` statement whose condition tests
+# only whether a caller identity is ABSENT and whose consequent refuses. The
+# whole statement — condition and consequent — is blanked to same-length
+# whitespace before any guard regex runs, so byte offsets, line numbers and
+# every other pattern in this file are untouched. A method left with no other
+# guard is then reported; a method that also carries a real check still clears
+# on that check.
+#
+# THREE CONTROLS KEEP THE BLANKING NARROW, each one closing a way this could
+# have eaten a real guard:
+#
+#   1. POLARITY. Only an ABSENCE test is blanked (`=== null`, `=== false`,
+#      `empty()`, `!$user`, `!$user instanceof IUser`). A PRESENCE test is
+#      not: `if ($user !== null) { ...whole method body... }` is a wrapper,
+#      and blanking it would erase every guard inside it.
+#   2. ZERO-ARGUMENT OPERANDS ONLY. The tested expression may contain no call
+#      arguments and no array subscript, so `$this->access->canAccess($id,
+#      $user)` and `$account['ownerId']` are never mistaken for an identity —
+#      the first is a guard, the second is object data.
+#   3. THE CONSEQUENT MUST REFUSE (`return` / `throw` / `exit` / `die`).
+#      A conditional that merely computes something is not a guard clause and
+#      is left alone.
+#
+# The identity test is deliberately spelling-AGNOSTIC. `#365`'s own re-audit
+# built the opposite mistake into its triage tool — it enumerated three
+# spellings of "who is the caller" (`getUID(`, `->uid(`, `getCurrentUserId(`),
+# and doriath's `sessionUserId()` matched none, producing 19 false positives
+# from one unrecognised name. A regex that enumerates spellings of a concept
+# reports the spellings it does not know as ABSENCE, and on a security
+# detector absence is the alarming answer. So identity is recognised by TOKEN
+# (`user` / `uid` / `session` / `actor` / `caller` / `principal` / `login`)
+# anywhere in a call-argument-free expression, plus a one-hop alias lookup for
+# `$u = $this->userSession->getUser();`.
+
+# Tokens that make an expression read as "the caller's identity". Deliberately
+# excludes `account`, `owner`, `member` and similar: those name the OBJECT in
+# the fleet's controllers (`$accountId`, `$ownerId`) and treating them as
+# identity would blank real ownership comparisons.
+_IDENTITY_TOKEN_RE = re.compile(
+    r"user|uid|session|actor|caller|principal|logged_?in|login",
+    re.IGNORECASE,
+)
+
+# ...but an AUTHORISATION token anywhere in the expression vetoes it, whatever
+# else it spells. Caught by this suite's own `test_predicate_named_helper_
+# clears_caller`, which the first draft of this fix broke:
+#
+#     if ($this->isCurrentUserAdmin() === false) { return new JSONResponse([], 403); }
+#
+# is an argument-free call containing `User`, compared against a falsy literal
+# — structurally identical to an identity-absence test, and a REAL admin guard.
+# Blanking it produced exactly the false positive that made gate-7 untrusted in
+# the first place. The veto is what keeps this fix from re-entering that.
+_AUTHORISATION_TOKEN_RE = re.compile(
+    r"admin|access|permission|permitted|owner|allow|authori[sz]|grant|revoke"
+    r"|role|scope|tenant|organisation|organization|entitle",
+    re.IGNORECASE,
+)
+
+# The right-hand side of an absence comparison.
+_NULLISH_LITERAL_RE = re.compile(r"^(?:null|false|''|\"\"|\[\s*\])$", re.IGNORECASE)
+
+# A consequent that does not refuse is not a guard clause.
+_REFUSAL_RE = re.compile(r"\b(?:return|throw|exit|die)\b")
+
+
+def _matching_close(text: str, open_pos: int) -> int:
+    """Index of the bracket closing the one at *open_pos*, or ``-1``."""
+    pairs = {"(": ")", "[": "]", "{": "}"}
+    opener = text[open_pos]
+    closer = pairs.get(opener)
+    if closer is None:
+        return -1
+    depth = 0
+    for i in range(open_pos, len(text)):
+        if text[i] == opener:
+            depth += 1
+        elif text[i] == closer:
+            depth -= 1
+            if depth == 0:
+                return i
+    return -1
+
+
+def _top_level_split(text: str, sep: str) -> list:
+    """Split *text* on *sep* at bracket depth 0."""
+    parts: list = []
+    depth = 0
+    start = 0
+    i = 0
+    n = len(text)
+    while i < n:
+        c = text[i]
+        if c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+        elif depth == 0 and text.startswith(sep, i):
+            parts.append(text[start:i])
+            i += len(sep)
+            start = i
+            continue
+        i += 1
+    parts.append(text[start:])
+    return [p.strip() for p in parts]
+
+
+def _is_identity_expression(expr: str, context: str = "") -> bool:
+    """True when *expr* reads as "the caller's identity" and nothing else.
+
+    Control 2 of the three listed above: the expression may carry no call
+    ARGUMENTS and no array subscript, so a guard call (``canAccess($id, $uid)``)
+    and object data (``$account['ownerId']``) can never be read as an identity
+    however their names are spelled.
+    """
+    expr = expr.strip()
+    if expr == "":
+        return False
+    if expr[0] in ("'", '"'):
+        # A string literal is never an identity. Without this, a status
+        # constant like `'user_draft'` would read as one wherever a comparison
+        # is classified.
+        return False
+    if re.search(r"\(\s*[^)\s]", expr):  # any call with arguments
+        return False
+    if "[" in expr:
+        return False
+    if _AUTHORISATION_TOKEN_RE.search(expr):
+        return False
+    if _IDENTITY_TOKEN_RE.search(expr):
+        return True
+    # One-hop alias: `$u = $this->userSession->getUser();` earlier in scope.
+    m = re.fullmatch(r"\$([A-Za-z_][A-Za-z0-9_]*)", expr)
+    if m is not None and context:
+        assigns = re.findall(
+            r"\$" + re.escape(m.group(1)) + r"\s*=\s*([^;\n]{1,200});", context
+        )
+        if assigns and _IDENTITY_TOKEN_RE.search(assigns[-1]):
+            return True
+    return False
+
+
+def _is_identity_absence_atom(atom: str, context: str = "") -> bool:
+    """True when *atom* asserts that a caller identity is ABSENT.
+
+    Control 1: polarity is tracked through ``!``, so ``$user === null`` and
+    ``!$user`` qualify while ``$user !== null`` — the wrapper shape — does not.
+    """
+    atom = atom.strip()
+    negated = False
+    while True:
+        if atom.startswith("!"):
+            negated = not negated
+            atom = atom[1:].strip()
+            continue
+        if (
+            atom.startswith("(")
+            and atom.endswith(")")
+            and _matching_close(atom, 0) == len(atom) - 1
+        ):
+            atom = atom[1:-1].strip()
+            continue
+        break
+    if atom == "":
+        return False
+
+    m = re.fullmatch(r"(?:empty|is_null)\s*\((.*)\)", atom, re.S)
+    if m is not None:
+        # empty($user) / is_null($user) assert absence; negated, presence.
+        return not negated and _is_identity_expression(m.group(1), context)
+    m = re.fullmatch(r"isset\s*\((.*)\)", atom, re.S)
+    if m is not None:
+        return negated and _is_identity_expression(m.group(1), context)
+
+    parts = _top_level_split(atom, " instanceof ")
+    if len(parts) == 2:
+        # `$user instanceof IUser` asserts presence; `!$user instanceof IUser`
+        # asserts absence (instanceof binds tighter than `!` in PHP).
+        return negated and _is_identity_expression(parts[0], context)
+
+    op = None
+    for candidate in ("===", "!==", "==", "!="):
+        if candidate in atom:
+            op = candidate
+            break
+    if op is not None:
+        parts = _top_level_split(atom, op)
+        if len(parts) != 2:
+            return False
+        lhs, rhs = parts
+        if _NULLISH_LITERAL_RE.match(rhs):
+            expr = lhs
+        elif _NULLISH_LITERAL_RE.match(lhs):
+            expr = rhs
+        else:
+            # Two substantive operands — this is a COMPARISON, the shape a real
+            # per-object check takes. Never an authentication test.
+            return False
+        equality = op in ("===", "==")
+        # `$user === null` is absence; `$user !== null` is presence; a leading
+        # `!` flips whichever it was.
+        return (equality is not negated) and _is_identity_expression(expr, context)
+
+    # A relational operator means this is a magnitude test, not a presence
+    # test. `->` and `=>` are stripped first: their `>` is not an operator, and
+    # reading it as one made `!$this->userId` — one of the commonest spellings
+    # of the whole defect — fall through unrecognised. Caught by the
+    # spelling-agnosticism test rather than by review.
+    if re.search(r"[<>]", atom.replace("->", "").replace("=>", "")):
+        return False
+    # Bare truthiness: `!$user` is absence, `$user` is presence.
+    return negated and _is_identity_expression(atom, context)
+
+
+def _is_authentication_only_condition(cond: str, context: str = "") -> bool:
+    """True when *cond* tests ONLY whether a caller identity is absent."""
+    cond = cond.strip()
+    if cond == "":
+        return False
+    if re.search(r"\?(?!\?|->)", cond):  # a ternary is too complex to classify
+        return False
+    if re.search(r"\b(?:and|or|xor)\b", cond, re.IGNORECASE):
+        return False
+    atoms: list = []
+    for chunk in _top_level_split(cond, "&&"):
+        atoms.extend(_top_level_split(chunk, "||"))
+    atoms = [a for a in atoms if a != ""]
+    if not atoms:
+        return False
+    return all(_is_identity_absence_atom(a, context) for a in atoms)
+
+
+def _consequent_end(cleaned: str, i: int) -> int:
+    """End offset of the statement/block starting at *i*, or ``-1``."""
+    n = len(cleaned)
+    while i < n and cleaned[i].isspace():
+        i += 1
+    if i >= n:
+        return -1
+    if cleaned[i] == "{":
+        close = _matching_close(cleaned, i)
+        return -1 if close == -1 else close + 1
+    if cleaned[i] == ":":
+        # Alternative `if (): ... endif;` syntax — not classified.
+        return -1
+    depth = 0
+    while i < n:
+        c = cleaned[i]
+        if c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+        elif c == ";" and depth == 0:
+            return i + 1
+        i += 1
+    return -1
+
+
+def _authentication_only_guard_spans(cleaned: str, src: str) -> list:
+    """``(start, end)`` spans of every authentication-only guard clause.
+
+    *cleaned* (strings and comments blanked, byte offsets preserved) is used to
+    find structure; *src* is used to classify text, because
+    ``_strip_strings_and_comments`` would have erased the ``''`` in
+    ``$userId === ''``.
+    """
+    spans: list = []
+    for m in re.finditer(r"\bif\s*\(", cleaned):
+        open_paren = cleaned.find("(", m.start())
+        close = _matching_close(cleaned, open_paren)
+        if close == -1:
+            continue
+        end = _consequent_end(cleaned, close + 1)
+        if end == -1:
+            continue
+        # Control 3: a clause that does not refuse is not a guard clause.
+        if not _REFUSAL_RE.search(cleaned[close + 1:end]):
+            continue
+        context = src[max(0, m.start() - 1500):m.start()]
+        if not _is_authentication_only_condition(src[open_paren + 1:close], context):
+            continue
+        spans.append((m.start(), end))
+    return spans
+
+
+def _blank_authentication_only_guards(cleaned: str, src: str) -> str:
+    """*src* with every authentication-only guard clause blanked out.
+
+    Length-preserving and newline-preserving, so every offset, span and line
+    number computed elsewhere in this module stays valid.
+    """
+    spans = _authentication_only_guard_spans(cleaned, src)
+    if not spans:
+        return src
+    out = list(src)
+    for start, end in spans:
+        for i in range(start, min(end, len(out))):
+            if out[i] != "\n":
+                out[i] = " "
+    return "".join(out)
+
+
+def _guard_source(src: str, cleaned: str = None) -> str:
+    """The text guard patterns are matched against: *src* minus authentication."""
+    if cleaned is None:
+        cleaned = _strip_strings_and_comments(src)
+    return _blank_authentication_only_guards(cleaned, src)
+
+
+# ---------------------------------------------------------------------------
+# Pattern 6 — the SESSION-IDENTITY HAND-OFF (the other half of `.github#365`)
+# ---------------------------------------------------------------------------
+#
+# WHY THIS SHIPS IN THE SAME CHANGE AS THE #365 FIX, AND MUST.
+#
+# Blanking the authentication preamble takes away a clear that ~453 of 791
+# fleet controller files were relying on. Most of those files deserve the
+# finding. Some do not, and they fail in one specific, RECOGNISABLE shape —
+# doriath writes almost every endpoint this way:
+#
+#     $userId = $this->sessionUserId();
+#     if ($userId === null) { return ... 401 ... }          <- authentication
+#     $this->attachmentService->delete(attachmentId: $id, userId: $userId);
+#
+# and `AttachmentService::loadOwnedSecret()` two frames down does
+#
+#     if ($secret->getOwnerId() !== $userId) { throw ... 'Not authorized' }
+#
+# The caller supplies `$id`; the SCOPE it is resolved under is an identity the
+# caller cannot forge. That is not an IDOR — it is the correct way to write the
+# endpoint. doriath's whole gate-7 exposure was hand-read as ZERO for exactly
+# this reason, and shipping the #365 fix without this pattern would have
+# reported 45 findings in that one app, all false.
+#
+# THE FALSE-POSITIVE HISTORY IS WHY THIS IS NOT OPTIONAL. gate-7's #365 defect
+# survived because its known failure mode was false POSITIVES (`#353`, `#360` —
+# verb-object predicates, `hasPermission`, `canAccess`), so reviewers were
+# trained to distrust its findings and therefore to trust its silences. Fixing a
+# false negative by manufacturing 45 false positives would restart that cycle
+# with the same gate.
+#
+# THE RULE, and it is deliberately an ALL-quantifier rather than an ANY:
+#
+#   EVERY method call that receives a CALLER-SUPPLIED PARAMETER must ALSO
+#   receive a SESSION-DERIVED IDENTITY.
+#
+# `any` would be far too generous — a method that reads one object unscoped and
+# then calls `$this->audit->logForUser($userId)` would clear itself with the log
+# line. `all` says: wherever the caller's own value reaches a call, the caller's
+# identity is alongside it. One unqualified data call and the method reports.
+#
+# SESSION-DERIVED is load-bearing and is checked, not assumed:
+#   * a local assigned in this body from an argument-free identity expression
+#     (`$this->sessionUserId()`, `$this->userSession->getUser()?->getUID()`) —
+#     the same argument-free / no-subscript / no-authorisation-token test the
+#     blanking uses, so it stays spelling-agnostic; or
+#   * an argument-free identity expression written inline (`$this->userId`).
+#   * NEVER a declared parameter. `find($id, $userId)` where `$userId` came off
+#     the route proves nothing at all, and that exclusion is what stops this
+#     pattern from being a blanket.
+#
+# WHAT THIS DELIBERATELY DOES NOT CATCH, stated because it is a real residual:
+# a callee that ACCEPTS the identity and ignores it. pipelinq's `NotesService`
+# resolves `$currentUserId` and uses it only to compute an `isOwn` display flag.
+# Gate-7 sees one method body by contract — its own FAIL message says the guard
+# may live two frames down — so this residual is symmetrical with the guidance
+# already printed to reviewers, and it is the price of not re-poisoning the
+# gate's credibility. It is narrowed, not eliminated, by the ALL-quantifier.
+
+# A method call: `->name(` or `::name(`. Used to locate argument lists.
+_METHOD_CALL_RE = re.compile(r"(?:->|::)\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(")
+
+
+def _declared_parameter_names(params: str) -> set:
+    """Variable names declared in a raw parameter-list text."""
+    if not params:
+        return set()
+    return set(re.findall(r"\$([A-Za-z_][A-Za-z0-9_]*)", params))
+
+
+def _session_identity_names(body: str, declared: set) -> set:
+    """Locals in *body* assigned from an argument-free identity expression."""
+    out: set = set()
+    for m in re.finditer(r"\$([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([^;\n]{1,200});", body):
+        name, rhs = m.group(1), m.group(2)
+        if name in declared:
+            # A reassigned parameter is still a name the caller chose the first
+            # value of. Refuse it rather than reason about flow.
+            continue
+        if _is_identity_expression(rhs):
+            out.add(name)
+    return out
+
+
+def _split_arguments(arg_text: str) -> list:
+    """Split a raw argument list on top-level commas."""
+    return [a.strip() for a in _top_level_split(arg_text, ",") if a.strip() != ""]
+
+
+def _argument_is_session_identity(arg: str, declared: set, session: set) -> bool:
+    """True when one argument carries the caller's session-derived identity."""
+    arg = arg.strip()
+    # Named-argument syntax: `userId: $userId`.
+    named = re.match(r"^[A-Za-z_][A-Za-z0-9_]*\s*:\s*(?!:)(.*)$", arg, re.S)
+    if named is not None:
+        arg = named.group(1).strip()
+    m = re.fullmatch(r"\$([A-Za-z_][A-Za-z0-9_]*)", arg)
+    if m is not None:
+        if m.group(1) in session:
+            return True
+        if m.group(1) in declared:
+            return False  # caller-supplied: proves nothing
+        return False
+    return _is_identity_expression(arg)
+
+
+# Locals bound from the request are caller-supplied exactly as parameters are.
+_REQUEST_BOUND_ASSIGN_RE = re.compile(
+    r"\$([A-Za-z_][A-Za-z0-9_]*)\s*=\s*[^;\n]*"
+    r"(?:->\s*getParams?\s*\(|->\s*getQueryParam|->\s*getBody\s*\("
+    r"|->\s*getUploadedFile\s*\(|\$_(?:GET|POST|REQUEST|COOKIE|FILES)\b)"
+)
+
+
+def _has_session_identity_handoff(body: str, params) -> bool:
+    """Pattern 6 — see the commentary above.
+
+    Three clauses, and all three are required:
+
+      1. a session-derived identity exists in this body;
+      2. EVERY method call that receives a caller-supplied value (a declared
+         parameter, or a local bound from the request) ALSO receives that
+         identity;
+      3. at least ONE method call receives the identity — the positive
+         evidence that the data access is actually scoped, without which
+         clause 2 is vacuously true over a method that never uses its input.
+    """
+    if params is None:
+        return False
+    declared = _declared_parameter_names(params)
+    declared |= set(_REQUEST_BOUND_ASSIGN_RE.findall(body))
+    session = _session_identity_names(body, declared) - declared
+    if not session and not _IDENTITY_TOKEN_RE.search(body):
+        return False
+
+    saw_scoped_call = False
+    for m in _METHOD_CALL_RE.finditer(body):
+        open_paren = body.find("(", m.start())
+        close = _matching_close(body, open_paren)
+        if close == -1:
+            continue
+        args = _split_arguments(body[open_paren + 1:close])
+        if not args:
+            continue
+        identity_here = any(
+            _argument_is_session_identity(a, declared, session) for a in args
+        )
+        caller_value_here = any(
+            re.search(r"\$" + re.escape(p) + r"\b", a) for a in args for p in declared
+        )
+        if caller_value_here and not identity_here:
+            return False  # a caller-controlled value reaching an unscoped call
+        if identity_here:
+            saw_scoped_call = True
+    return saw_scoped_call
+
+
+# ---------------------------------------------------------------------------
+# Pattern 7 — an in-body OWNERSHIP comparison, whatever status it answers with
+# ---------------------------------------------------------------------------
+#
+# The dual of the `#365` rule. If authentication-ness is a property of the
+# CONDITION rather than of the status code, so is authorisation-ness — and
+# `_GUARD_BODY_RE` recognises a guard only by the code it returns. It
+# deliberately excludes 404, because not-found is not access-denied. But the
+# fleet's most careful controllers answer an ownership mismatch with 404 ON
+# PURPOSE, so that a 403 cannot become an existence oracle for another user's
+# ids — which is the reasoning gate-7's OWN FAIL message prints to reviewers:
+#
+#     "a deliberate 404-style tenancy refusal IS a guard, chosen so a 403
+#      cannot become an existence oracle for another tenant's ids."
+#
+# Until now that sentence was advice to a human, not something the checker
+# could act on, and Pattern 5 only implemented it for ORGANISATION-level
+# tenancy (`belongsTo`, `activeOrganisation`). Per-USER ownership was left out,
+# so doriath's
+#
+#     if ($secret->getOwnerType() !== 'user' || $secret->getOwnerId() !== $userId) {
+#         return new JSONResponse(['message' => 'Not found'], Http::STATUS_NOT_FOUND);
+#     }
+#
+# — a textbook correct guard — was invisible. It did not MATTER before `#365`,
+# because the 401 preamble above it cleared the method anyway. Removing that
+# clear is what exposes it, so it belongs in this change rather than after it.
+#
+# The rule: a refusing `if` whose condition COMPARES a session-derived identity
+# against a substantive non-identity operand is an authorisation guard. Both
+# halves are required, and the nullish-literal case is excluded — that is the
+# authentication shape this same change just finished demoting.
+
+
+def _has_ownership_comparison_guard(cleaned: str, src: str, start: int, end: int) -> bool:
+    """True when the body compares a caller identity against object data and refuses."""
+    for m in re.finditer(r"\bif\s*\(", cleaned[start:end]):
+        at = start + m.start()
+        open_paren = cleaned.find("(", at)
+        close = _matching_close(cleaned, open_paren)
+        if close == -1 or close >= end:
+            continue
+        stop = _consequent_end(cleaned, close + 1)
+        if stop == -1 or stop > end:
+            continue
+        if not _REFUSAL_RE.search(cleaned[close + 1:stop]):
+            continue
+        cond = src[open_paren + 1:close]
+        atoms: list = []
+        for chunk in _top_level_split(cond, "&&"):
+            atoms.extend(_top_level_split(chunk, "||"))
+        for atom in atoms:
+            op = None
+            for candidate in ("===", "!==", "==", "!="):
+                if candidate in atom:
+                    op = candidate
+                    break
+            if op is None:
+                continue
+            parts = _top_level_split(atom, op)
+            if len(parts) != 2:
+                continue
+            lhs, rhs = parts
+            if _NULLISH_LITERAL_RE.match(lhs) or _NULLISH_LITERAL_RE.match(rhs):
+                continue  # an absence test — authentication, already demoted
+            if _is_identity_expression(lhs) or _is_identity_expression(rhs):
+                return True
+    return False
+
 
 # ---------------------------------------------------------------------------
 # Pattern 5 — the TENANCY guard (ConductionNL/.github#160)
@@ -686,7 +1318,11 @@ def _collaborator_guard_methods(class_file: str) -> set:
     except OSError:
         _COLLABORATOR_GUARD_CACHE[class_file] = set()
         return set()
-    result = _strict_guard_methods(_strip_strings_and_comments(src), src)
+    cleaned = _strip_strings_and_comments(src)
+    # `.github#365`: a collaborator whose only "guard" is a `no user -> 401`
+    # preamble (decidesk's `citizenAction()` is the measured example) must not
+    # seed a delegation chain either — the defect is the same one call-hop away.
+    result = _strict_guard_methods(cleaned, _guard_source(src, cleaned))
     _COLLABORATOR_GUARD_CACHE[class_file] = result
     return result
 
@@ -1098,14 +1734,20 @@ def scan_file(path: str) -> int:
 
     # One-time, per-file context for the two delegated-guard patterns.
     cleaned = _strip_strings_and_comments(src)
+    # `.github#365`: every guard lookup below runs against `gsrc`, which is
+    # `src` with authentication-only guard clauses blanked to same-length
+    # whitespace. Offsets, spans and line numbers are unchanged — only the text
+    # the guard patterns get to see is. `src` itself is still what gets
+    # reported, so findings name real lines.
+    gsrc = _blank_authentication_only_guards(cleaned, src)
     is_or_repo = bool(_OR_NAMESPACE_RE.search(cleaned))
-    guard_helpers = _collect_guard_helpers(cleaned, src, is_or_repo)
+    guard_helpers = _collect_guard_helpers(cleaned, gsrc, is_or_repo)
     # Pattern 4 context: resolve this class's typed collaborators to real files
     # and read their guard-bearing methods out of their own source, then close
     # the same-class delegation graph over that. Both are lazy/cached; a file
     # with no @NoAdminRequired method never pays for them.
     collaborator_guards = _collaborator_guard_map(cleaned, path)
-    delegated_guards = _delegated_guard_methods(cleaned, src, collaborator_guards)
+    delegated_guards = _delegated_guard_methods(cleaned, gsrc, collaborator_guards)
 
     violations = 0
     for name, head_start, sig_start, body_start, body_end, line_no in _find_method_bodies(src):
@@ -1115,7 +1757,11 @@ def scan_file(path: str) -> int:
         # in the return-type hint is recognised (mirrors the bash gate's
         # behaviour of starting _body at the function declaration line).
         sig = src[sig_start:body_start]
-        body = src[body_start:body_end]
+        # `.github#365`: guard lookups read the de-authenticated body. Only the
+        # authentication-only clauses differ from `src[body_start:body_end]`,
+        # and those carry no data access, so the CORS and zero-input patterns
+        # below are unaffected by reading it too.
+        body = gsrc[body_start:body_end]
 
         # ---- Exemption 1: constructor -----------------------------------
         if name == "__construct":
@@ -1155,6 +1801,14 @@ def scan_file(path: str) -> int:
         # At least one authorisation guard must appear in the body OR the
         # function signature (e.g. TemplateResponse in the return type hint).
         if _GUARD_BODY_RE.search(sig + body):
+            continue
+
+        # ---- Pattern 7: in-body ownership comparison --------------------
+        # An ownership mismatch answered with 404 rather than 403 is the
+        # deliberate anti-oracle choice this gate's own FAIL message endorses.
+        # Recognised by the CONDITION, for the same reason authentication is
+        # demoted by the condition rather than by the status code.
+        if _has_ownership_comparison_guard(cleaned, gsrc, body_start, body_end):
             continue
 
         # ---- Pattern 1: private guard-helper delegation -----------------
@@ -1198,6 +1852,15 @@ def scan_file(path: str) -> int:
         # only — a zero-input mutation still reports. See .github#297 and the
         # Pattern 3b commentary.
         if _is_zero_input_read_only(_params, body):
+            continue
+
+        # ---- Pattern 6: session-identity hand-off ------------------------
+        # Every call that receives a caller-supplied parameter also receives a
+        # session-derived identity, so the object reference is resolved under a
+        # scope the caller cannot forge. This is the shape `.github#365`'s
+        # blanking would otherwise have turned into 45 false positives in
+        # doriath alone. See the Pattern 6 commentary.
+        if _has_session_identity_handoff(body, _params):
             continue
 
         # NOTE (.github#315): the guidance that goes with this finding — that
