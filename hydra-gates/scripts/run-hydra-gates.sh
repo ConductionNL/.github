@@ -3031,10 +3031,41 @@ if [ -d lib ] || [ -d src ]; then
         # exits 1. The terminal `# count=` marker is the evidence it finished.
         _sc_err="${HYDRA_GATE_LOG_DIR}/hydra-gate-spec-coverage.err"
         : > "${_sc_err}"
-        HYDRA_GATE_BASE_REF="${BASE_REF}" \
-            python3 "${_sc_lib_dir}/check_spec_coverage.py" . \
-            >> "${_sc_log}" 2>"${_sc_err}" || true
-        if ! grep -qE '^# count=[0-9]+$' "${_sc_log}" 2>/dev/null; then
+        # EMPTY SCOPE IS NOT A PASS (.github#361). gate-16 is diff-scoped BY
+        # DESIGN (see the ADR-020 note above). On a full-repo run there is no
+        # diff to scope to: the runner passes BASE_REF unguarded, the checker
+        # falls back to its `origin/development` default, and on `development`
+        # itself that diffs the branch against itself — `# count=0` → PASS over
+        # a scope nothing was ever read from.
+        #
+        # Measured on one tree, changing only this input: pipelinq 0 / 185
+        # (origin/beta) / 1466 (report) · openregister 0 / 232 / 234 · docudesk
+        # 0 / 290 / 471 · procest 0 / 113 / 445. Caught live on openregister
+        # #2422, where gates 19/25/26 printed NOT APPLICABLE and gate-16 printed
+        # PASS four lines apart over the same empty scope.
+        #
+        # gate-19 already guards this (the #242 fix, ~285 lines below); gate-16
+        # was simply never given the same treatment. Deliberately NOT a literal
+        # copy of gate-19's else-branch: gate-19 falls back to a full sweep,
+        # which for gate-16 would flag the entire legacy @spec surface — the
+        # wrong contract per ADR-020, and a false RED in every repo. Reporting
+        # NOT APPLICABLE with a reason that names the ABSENCE of a diff is both
+        # honest and incapable of going false-RED.
+        if [ "${SCOPE_TO_DIFF}" = "1" ]; then
+            HYDRA_GATE_BASE_REF="${BASE_REF}" \
+                python3 "${_sc_lib_dir}/check_spec_coverage.py" . \
+                >> "${_sc_log}" 2>"${_sc_err}" || true
+        else
+            _sc_ran=0
+            # Category MUST be one of na|structural|wiring — `_skip` treats
+            # anything else as an internal-error FAIL, which would be exactly
+            # the false RED this change exists to avoid. `na` is the honest
+            # one: the gate is not applicable to a run that has no diff, and
+            # the reason names the ABSENCE of a diff rather than claiming a
+            # diff excluded something (the invariant .github#359 asserts).
+            _skip 16 "spec-coverage" na "full-repo run computed NO diff, and gate-16 is diff-scoped by design (ADR-020) — so NO changed method was inspected and @spec traceability is UNVERIFIED by this run. This is NOT a pass. Re-measure with an explicit base (HYDRA_GATE_BASE_REF=origin/beta) or run with --scope-to-diff."
+        fi
+        if [ "${_sc_ran}" != "0" ] && ! grep -qE '^# count=[0-9]+$' "${_sc_log}" 2>/dev/null; then
             _sc_ran=0
             _sc_why=$(head -3 "${_sc_err}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
             _skip 16 "spec-coverage" wiring "check_spec_coverage.py did not complete — it never printed its terminal '# count=' marker, so NO changed method was inspected and @spec traceability (ADR-003/ADR-020) is UNVERIFIED by this run. Checker output: ${_sc_why:-<empty>}. See ${_sc_err}."
