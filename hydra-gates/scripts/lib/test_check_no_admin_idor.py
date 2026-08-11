@@ -1801,5 +1801,246 @@ class CatalogController {
         self.assertIn("method=show", out[0])
 
 
+class VerbObjectGuardHelperNames(unittest.TestCase):
+    """A guard helper may spell its object noun AFTER the auth token.
+
+    ``_GUARD_HELPER_NAME_RE``'s first alternative used to require the auth
+    token (``Access``/``Permission``/``Owner``/…) to be the FINAL CamelCase
+    segment, so ``canAccess`` matched but ``canUserAccessAgent`` did not. That
+    rejected the very common verb-object spelling and made gate-7 blind to
+    genuine authorisation predicates, reporting every method that delegates to
+    one as an unguarded IDOR.
+
+    MEASURED: ConductionNL/hermiq @ development (cd23f547), full-scope run
+    31490144919 / job 93776678440 — gate-7 FAIL, 3 methods, all three false
+    positives of exactly the two shapes below. Gate-7 was proven NOT blind on
+    that repo first: a textbook IDOR planted into the TRACKED file
+    ``lib/Controller/AgentVersionController.php`` took the count 3 → 4.
+
+    AN AUTH TOKEN IS STILL REQUIRED — only its POSITION is relaxed. The
+    negative controls at the bottom are the abuse control: ``canRender`` /
+    ``hasChanges`` carry no auth token in ANY position and must still be
+    reported. The unguarded-fetch positive control for this shape already
+    exists twice and is deliberately not duplicated here:
+    ``RealIdorViolationTest.test_no_guard_at_all_is_flagged`` (docblock form)
+    and ``ZeroInputReadOnlyEndpoints.test_tp_a_method_taking_an_id_is_still_reported``
+    (attribute form).
+    """
+
+    # -- SHAPE A: in-body per-object filter through a verb-object predicate --
+    #
+    # NOTE ON THE FIXTURE. The pagination read (``$this->request->getParams()``)
+    # is load-bearing, not decoration: without it the method takes no caller
+    # input at all and the session-scoped / zero-reference exemption clears it
+    # before the guard-helper pattern is ever consulted — the first draft of
+    # this test passed identically with the OLD regex for that reason. The real
+    # hermiq method reads pagination params, so the reference is real and the
+    # only thing standing between it and a finding is the helper's NAME. The
+    # two abuse controls below pin that: drop the helper, or rename it to a
+    # name with no auth token, and the finding comes back.
+    _SHAPE_A = """\
+<?php
+class AgentsController {
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    public function index(): JSONResponse
+    {
+        $userId = (string) $this->userSession->getUser()?->getUID();
+        $params = $this->request->getParams();
+        $limit  = (int) ($params['_limit'] ?? 50);
+        $offset = (int) ($params['_offset'] ?? 0);
+
+        $agents = $this->objectService->findAll(
+            config: ['limit' => $limit, 'offset' => $offset]
+        );
+
+        $results = [];
+        foreach ($agents as $agent) {
+            if ($this->%s(agent: $agent, userId: $userId) === true) {
+                $results[] = $agent->getObject();
+            }
+        }
+
+        return new JSONResponse(data: ['results' => $results]);
+    }
+%s
+}
+"""
+
+    _SHAPE_A_HELPER = """
+    private function %s(ObjectEntity $agent, string $userId): bool
+    {
+        $data = $agent->getObject();
+        if (($data['isPrivate'] ?? null) === false) {
+            return true;
+        }
+        if ($agent->getOwner() === $userId) {
+            return true;
+        }
+        return in_array($userId, ($data['invitedUsers'] ?? []), true);
+    }
+"""
+
+    def test_in_body_verb_object_predicate_clears_caller(self):
+        """hermiq AgentsController::index — every result filtered in-body."""
+        src = self._SHAPE_A % (
+            "canUserAccessAgent",
+            self._SHAPE_A_HELPER % "canUserAccessAgent",
+        )
+        self.assertEqual(_scan(src), [])
+
+    def test_shape_a_without_the_helper_is_still_reported(self):
+        """Abuse control: the same body with NO helper defined stays a finding."""
+        findings = _scan(self._SHAPE_A % ("canUserAccessAgent", ""))
+        self.assertEqual(len(findings), 1, findings)
+        self.assertIn("method=index", findings[0])
+
+    def test_shape_a_with_a_tokenless_helper_name_is_still_reported(self):
+        """Abuse control: rename the helper to a name carrying no auth token
+        and the finding returns — the NAME is what clears it, nothing else."""
+        findings = _scan(
+            self._SHAPE_A
+            % ("canRenderAgent", self._SHAPE_A_HELPER % "canRenderAgent")
+        )
+        self.assertEqual(len(findings), 1, findings)
+        self.assertIn("method=index", findings[0])
+
+    # -- SHAPE B: Pattern-4 transitive closure through a loader --------------
+    def test_loader_delegating_to_verb_object_predicate_clears_caller(self):
+        """hermiq AgentVersionController::index / ::diff — routed method →
+        ``loadAccessibleAgent()`` → ``canUserAccessAgent()``, caller returns
+        ``Http::STATUS_NOT_FOUND`` on null (the 404-style tenancy refusal this
+        gate's own FAIL message endorses). Exercises the transitive closure:
+        the loader itself has no auth token in its name and no strict deny
+        signal in its body — it is guard-bearing only because it CALLS one.
+        """
+        src = """\
+<?php
+class AgentVersionController {
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    public function index(string $id): JSONResponse
+    {
+        $userId = (string) $this->userSession->getUser()?->getUID();
+
+        $agent = $this->loadAccessibleAgent(id: $id, userId: $userId);
+        if ($agent === null) {
+            return new JSONResponse(['error' => 'Agent not found'], Http::STATUS_NOT_FOUND);
+        }
+
+        $versions = $this->agentVersionService->listVersions(agentUuid: $id);
+        return new JSONResponse(['results' => $versions, 'total' => count($versions)]);
+    }
+
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    public function diff(string $id): JSONResponse
+    {
+        $userId = (string) $this->userSession->getUser()?->getUID();
+
+        $agent = $this->loadAccessibleAgent(id: $id, userId: $userId);
+        if ($agent === null) {
+            return new JSONResponse(['error' => 'Agent not found'], Http::STATUS_NOT_FOUND);
+        }
+
+        $from = (string) $this->request->getParam('from', '');
+        $to   = (string) $this->request->getParam('to', '');
+        return new JSONResponse($this->agentVersionService->diff($id, $from, $to));
+    }
+
+    private function loadAccessibleAgent(string $id, string $userId): ?ObjectEntity
+    {
+        $agent = $this->objectService->find(id: $id);
+        if (($agent instanceof ObjectEntity) === false) {
+            return null;
+        }
+
+        if ($this->canUserAccessAgent(agent: $agent, userId: $userId) === false) {
+            return null;
+        }
+
+        return $agent;
+    }
+
+    private function canUserAccessAgent(ObjectEntity $agent, string $userId): bool
+    {
+        $data = $agent->getObject();
+        if (($data['isPrivate'] ?? null) === false) {
+            return true;
+        }
+        if ($agent->getOwner() === $userId) {
+            return true;
+        }
+        return in_array($userId, ($data['invitedUsers'] ?? []), true);
+    }
+}
+"""
+        self.assertEqual(_scan(src), [])
+
+    # -- NEGATIVE CONTROLS: no auth token in ANY position -------------------
+    def test_canRender_helper_does_not_clear_caller(self):
+        """``canRender`` has the can- prefix but no auth token — still flagged."""
+        src = """\
+<?php
+class WidgetController {
+    #[NoAdminRequired]
+    public function show(string $id): JSONResponse
+    {
+        $widget = $this->objectService->find($id);
+        if ($this->canRender($widget) === false) {
+            return new JSONResponse(['results' => []]);
+        }
+        return new JSONResponse($widget);
+    }
+
+    private function canRender(ObjectEntity $widget): bool
+    {
+        return ($widget->getObject()['template'] ?? null) !== null;
+    }
+}
+"""
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1, findings)
+        self.assertIn("method=show", findings[0])
+
+    def test_hasChanges_helper_does_not_clear_caller(self):
+        """``hasChanges`` has the has- prefix but no auth token — still flagged."""
+        src = """\
+<?php
+class DraftController {
+    #[NoAdminRequired]
+    public function update(string $id): JSONResponse
+    {
+        $draft = $this->objectService->find($id);
+        if ($this->hasChanges($draft) === true) {
+            $this->objectService->saveObject($draft);
+        }
+        return new JSONResponse($draft);
+    }
+
+    private function hasChanges(ObjectEntity $draft): bool
+    {
+        return $draft->getUpdated() > $draft->getCreated();
+    }
+}
+"""
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1, findings)
+        self.assertIn("method=update", findings[0])
+
+    def test_verb_object_name_without_an_auth_token_is_not_a_guard_name(self):
+        """The regex itself: a token is REQUIRED, only its position is free."""
+        matches = cni._GUARD_HELPER_NAME_RE.match
+        # Auth token in a trailing-object position — now accepted.
+        self.assertTrue(matches("canUserAccessAgent"))
+        self.assertTrue(matches("hasOwnerPermissionForRun"))
+        self.assertTrue(matches("mayUserAdminTenant"))
+        # No auth token anywhere — still rejected.
+        self.assertFalse(matches("canRender"))
+        self.assertFalse(matches("hasChanges"))
+        self.assertFalse(matches("canUserModifyAgent"))
+        self.assertFalse(matches("hasPendingRevision"))
+
+
 if __name__ == "__main__":
     unittest.main()
