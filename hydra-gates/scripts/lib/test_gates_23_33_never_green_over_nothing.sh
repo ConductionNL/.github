@@ -219,6 +219,49 @@ fi
 
 # ===========================================================================
 echo
+echo "== gate-24: BOTH registration APIs count as having leaves (.github#349) =="
+# ===========================================================================
+# `clean/` has no parity wrapper AND no leaf, so its NOT APPLICABLE above is
+# correct. Drop ONE file on top of it — a leaf registered through
+# `OCA.OpenRegister.integrations.register(...)`, the direct form — and the
+# verdict must become SKIPPED (structural): the repo now has a server↔JS pair
+# to correlate and nothing correlated it.
+#
+# The distinction is not cosmetic. `na` does NOT count against coverage;
+# `structural` does. A gate that misreads its own subject matter as absent
+# switches itself off silently, and prints a confident absence claim while
+# doing it — measured on decidesk, whose registered leaf id was enumerable from
+# the live JS registry in the same repo's Playwright run.
+#
+# THE PAIRED ARM MATTERS: `clean/` untouched must STAY `na`. A fix that made
+# gate-24 structural everywhere would pass a one-armed version of this test and
+# would be a false gap in every repo in the fleet.
+_DIRECT="$(mktemp -d "${TMPDIR:-/tmp}/hydra-gate-24-direct.XXXXXXXX")"
+cp -r "${FIXTURES}/clean/." "${_DIRECT}/"
+cp "${FIXTURES}/direct-registry-overlay/src/integration-leaf-direct.js" "${_DIRECT}/src/"
+if [ ! -f "${_DIRECT}/src/integration-leaf-direct.js" ]; then
+    _bad "the direct-registry overlay did not land — every assertion in this arm would be vacuous"
+elif grep -rq 'scripts/check-integration-parity.sh' "${_DIRECT}" 2>/dev/null \
+     || [ -f "${_DIRECT}/scripts/check-integration-parity.sh" ]; then
+    _bad "the direct-registry arm inherited a parity wrapper from clean/, so it exercises the wrapper path and not the leaf-detection path this arm is about"
+elif _run "${_DIRECT}"; then
+    _expect 24 "SKIPPED (structural)" \
+        "gate-24 recognises a leaf registered via integrations.register( — structural, not na"
+    _expect 24 "DOES register integration leaves" \
+        "gate-24 says WHY it is structural"
+    # And the reason must not still claim the repo has no leaves.
+    _l24="$(_verdict 24)"
+    case "${_l24}" in
+        *"registers no integration leaves at all"*)
+            _bad "gate-24 still asserts 'registers no integration leaves at all' over a tree that registers one — .github#349 is live: ${_l24:0:160}"
+            ;;
+        *)  _ok "gate-24 no longer claims the leaf set is empty" ;;
+    esac
+fi
+rm -rf "${_DIRECT}"
+
+# ===========================================================================
+echo
 echo "== gate-23 in WARN mode: a finding must still be VISIBLE =="
 # ===========================================================================
 # Before the bake-in epoch the linter exits 0 whatever it found, so the gate

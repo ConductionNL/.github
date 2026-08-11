@@ -3877,12 +3877,39 @@ _parity_has_js=0
 if [ -d lib ] && grep -rqE 'new[[:space:]]+LeafDescriptor[[:space:]]*\(' lib/ --include='*.php' 2>/dev/null; then
     _parity_has_php=1
 fi
-if [ -d src ] && grep -rqE '\bregisterIntegration[[:space:]]*\(' src/ 2>/dev/null; then
+# THE JS PROBE MUST MATCH BOTH SUPPORTED REGISTRATION APIs, NOT ONE.
+#
+# `registerIntegration(descriptor)` is the convenience wrapper exported from
+# @conduction/nextcloud-vue (src/integrations/registry.js). The registry object
+# it wraps is equally canonical and is called directly as
+# `OCA.OpenRegister.integrations.register(descriptor)` — including by
+# nextcloud-vue's OWN built-in leaves (src/integrations/builtin/files.js).
+#
+# Probing for only the wrapper made this gate produce a FALSE ABSENCE CLAIM, and
+# the claim was load-bearing: an app registering leaves via the direct form was
+# told "this repo registers no integration leaves at all", which routes it to
+# `na` (not counted as a gap) instead of `structural` (counted). So the one gate
+# that exists to correlate the server and JS halves of a leaf switched itself
+# off, silently, in exactly the repos that have leaves to correlate.
+#
+# MEASURED across the fleet checkout, both forms are live:
+#   registerIntegration(     -> hermiq/src/integration-leaf.js,
+#                               openconnector/src/integration.js,
+#                               procest/src/main.js
+#   integrations.register(   -> decidesk/src/integrations/registerDecisionsLeaf.js,
+#                               openregister/src/main.js
+# decidesk registers `decidesk-decisions` through the second form and was
+# reported by this gate as having no leaves at all, on a --full run, while that
+# very id was present in the live JS registry.
+#
+# `integrations\.register` cannot collide with `unregister(` (the qualifier is
+# part of the match) nor with `registerIntegrationIcons(` (the `\(` anchors it).
+if [ -d src ] && grep -rqE '\b(registerIntegration|integrations\.register)[[:space:]]*\(' src/ 2>/dev/null; then
     _parity_has_js=1
 fi
 if [ ! -f scripts/check-integration-parity.sh ]; then
     if [ "${_parity_has_php}" = "0" ] && [ "${_parity_has_js}" = "0" ]; then
-        _skip 24 "integration-parity" na "no scripts/check-integration-parity.sh, and this repo registers no integration leaves at all — no \`new LeafDescriptor(\` in lib/ and no \`registerIntegration(\` in src/. There is no server↔JS pair for parity to correlate."
+        _skip 24 "integration-parity" na "no scripts/check-integration-parity.sh, and this repo registers no integration leaves at all — no \`new LeafDescriptor(\` in lib/ and neither \`registerIntegration(\` nor \`integrations.register(\` in src/. There is no server↔JS pair for parity to correlate."
     else
         _skip 24 "integration-parity" structural "no scripts/check-integration-parity.sh, but this repo DOES register integration leaves (lib/ LeafDescriptor: ${_parity_has_php}, src/ registerIntegration: ${_parity_has_js}). server↔JS leaf parity (ADR-066 Decisions 4/7: phantom render surfaces, orphan JS registrations, renderMode mismatch) is UNVERIFIED — a leaf whose other half never registered is invisible to this run."
     fi
@@ -3911,7 +3938,7 @@ if [ -f scripts/check-integration-parity.sh ]; then
         if grep -qiE 'skipping|not found locally|could not be located' "${_parity_log}" 2>/dev/null \
             && ! grep -qE '^(✓|✗)' "${_parity_log}" 2>/dev/null; then
             if [ "${_parity_has_php}" = "0" ] && [ "${_parity_has_js}" = "0" ]; then
-                _skip 24 "integration-parity" na "scripts/check-integration-parity.sh ran but SKIPPED (it could not locate the canonical JS check), and this repo registers no integration leaves at all — no \`new LeafDescriptor(\` in lib/ and no \`registerIntegration(\` in src/. There is no server↔JS pair for parity to correlate. See ${_parity_log}."
+                _skip 24 "integration-parity" na "scripts/check-integration-parity.sh ran but SKIPPED (it could not locate the canonical JS check), and this repo registers no integration leaves at all — no \`new LeafDescriptor(\` in lib/ and neither \`registerIntegration(\` nor \`integrations.register(\` in src/. There is no server↔JS pair for parity to correlate. See ${_parity_log}."
             else
                 _skip 24 "integration-parity" structural "scripts/check-integration-parity.sh ran but SKIPPED — it could not locate the canonical JS check, so NOTHING was correlated — while this repo DOES register integration leaves (lib/ LeafDescriptor: ${_parity_has_php}, src/ registerIntegration: ${_parity_has_js}). server↔JS leaf parity (ADR-066 Decisions 4/7: phantom render surfaces, orphan JS registrations, renderMode mismatch) is UNVERIFIED by this run — this is NOT a pass. See ${_parity_log}."
             fi
