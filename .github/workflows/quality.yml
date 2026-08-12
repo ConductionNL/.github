@@ -92,6 +92,26 @@ on:
         required: false
         type: string
         default: "[]"
+      enable-check-code:
+        description: "Run `occ app:check-code` against the Nextcloud version the app declares in info.xml. Nextcloud's own tool for private and deprecated API usage; the general form of the hand-written \\OC::$server sniff. Reports without blocking unless check-code-blocking is also set."
+        required: false
+        type: boolean
+        default: true
+      check-code-blocking:
+        description: "Turn app:check-code findings into a build failure. OFF by default on purpose: every app in this fleet reaches into server internals somewhere, and a gate that is red on arrival is a gate nobody turns on. Flip it per app once the findings are worked down."
+        required: false
+        type: boolean
+        default: false
+      enable-reuse:
+        description: "Run the REUSE/SPDX linter, as Nextcloud does on every app. Broader than the PHPCS @license sniff, which only sees PHP docblocks."
+        required: false
+        type: boolean
+        default: true
+      reuse-blocking:
+        description: "Turn REUSE findings into a build failure. OFF by default — most fleet apps ship no REUSE.toml or LICENSES/ directory yet."
+        required: false
+        type: boolean
+        default: false
       enable-license-check:
         description: "Run dependency license compliance check (composer + npm)"
         required: false
@@ -557,6 +577,149 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: result-php-quality-${{ matrix.tool }}
+          path: quality-results/
+
+  # ── occ app:check-code — private and deprecated Nextcloud API usage ────
+  #
+  # Nextcloud's own tooling for "is this app using things it should not?".
+  # This fleet ran no equivalent. The closest we had was ONE hand-written PHPCS
+  # sniff covering ONE symbol (\OC::$server, removed in NC 34) — written by
+  # hand precisely because static analysis could not see the removal while
+  # nextcloud/ocp was pinned below the declared min-version.
+  #
+  # app:check-code is the general form of that sniff. It knows the whole private
+  # API surface of the server version it ships with, so it needs no per-symbol
+  # maintenance and it moves forward when Nextcloud does.
+  #
+  # WARN, NOT FAIL, and deliberately so. Every app in this fleet reaches into
+  # server internals somewhere — OCA\DAV, OC_App, Doctrine\DBAL are all
+  # ignored in phpstan-base.neon by name. Turning this red on day one would make
+  # it a gate nobody can turn on, which is how the E2E job in openregister ended
+  # up never having succeeded. It reports, the findings get worked down, and the
+  # `check-code-blocking` input flips it to a hard failure per app when that app
+  # is ready.
+  app-check-code:
+    if: ${{ inputs.enable-php && inputs.enable-check-code }}
+    runs-on: ubuntu-latest
+    name: "Nextcloud API check (app:check-code)"
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: ${{ inputs.app-name }}
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php-version }}
+          extensions: mbstring, intl, zip, gd, curl, xml, json, sqlite3, pdo_sqlite
+          coverage: none
+
+      # The server version the app DECLARES it supports, not a hardcoded one.
+      # Anchored to the <nextcloud> element: info.xml carries min-version on
+      # <php> too, and <php> comes first. Measured across 18 apps, an
+      # unanchored pattern returned 8 for thirteen of them and a plausible-but
+      # -wrong 28 for a fourteenth.
+      - name: Fetch the declared Nextcloud server
+        id: server
+        run: |
+          set -euo pipefail
+          NCVERSION=$(grep -oP '<nextcloud[^>]*min-version="\K[0-9]+' "${{ inputs.app-name }}/appinfo/info.xml" | head -1)
+          [ -n "${NCVERSION}" ] || { echo "::error::appinfo/info.xml declares no <nextcloud min-version>."; exit 1; }
+          echo "Declared min-version: ${NCVERSION}"
+          URL=$(curl -sS "https://updates.nextcloud.com/updater_server/latest?channel=stable&version=${NCVERSION}" | jq -r '.downloads.zip[0]')
+          if [ -z "$URL" ] || [ "$URL" = "null" ]; then
+            URL=$(curl -sS "https://updates.nextcloud.com/updater_server/latest?channel=beta&version=${NCVERSION}" | jq -r '.downloads.zip[0]')
+          fi
+          [ -n "$URL" ] && [ "$URL" != "null" ] || { echo "::error::No Nextcloud download for min-version ${NCVERSION}."; exit 1; }
+          curl -sSL "$URL" -o nextcloud.zip
+          unzip -q nextcloud.zip
+          test -f nextcloud/occ || { echo "::error::The archive has no nextcloud/occ."; exit 1; }
+
+      - name: app:check-code
+        id: check
+        run: |
+          set +e
+          cp -r "${{ inputs.app-name }}" "nextcloud/apps/${{ inputs.app-name }}"
+          php -d memory_limit=512M nextcloud/occ app:check-code "${{ inputs.app-name }}" > check-code.log 2>&1
+          RC=$?
+          set -e
+          cat check-code.log
+
+          # POSITIVE CONTROL. occ exits 0 on paths that inspect nothing — an app
+          # directory it cannot see, a command that bailed on the environment
+          # check. A silent exit 0 must not read as "no private API usage".
+          if ! grep -qiE 'App is compliant|[0-9]+ error|deprecated|private' check-code.log; then
+            echo "::error::app:check-code produced no recognisable verdict (exit ${RC}). It inspected nothing, so private-API usage is UNVERIFIED by this run."
+            exit 1
+          fi
+
+          if [ "$RC" -ne 0 ]; then
+            if [ "${{ inputs.check-code-blocking }}" = "true" ]; then
+              echo "::error::app:check-code reported findings and check-code-blocking is on."
+              exit "$RC"
+            fi
+            echo "::warning::app:check-code reported findings. Not blocking yet — set check-code-blocking: true once they are worked down."
+          fi
+          exit 0
+
+      - name: Record result
+        if: always()
+        run: |
+          mkdir -p quality-results
+          echo "${{ job.status }}" > quality-results/app-check-code.txt
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-app-check-code
+          path: quality-results/
+
+  # ── REUSE / SPDX compliance ────────────────────────────────────────────
+  #
+  # Nextcloud runs reuse.yml on every app. We had a PHPCS sniff that checks for
+  # @license and @copyright in PHP docblocks, which is a proxy for one file type
+  # and says nothing about images, JSON, YAML, or the LICENSES/ directory REUSE
+  # requires.
+  #
+  # It also closes a loop opened by the coding-standard migration: the SPDX
+  # `InvalidEndChar` exception in the shared PHPCS ruleset exists because a
+  # trailing full stop would turn a machine-parsed SPDX expression into an
+  # invalid one. That exception is only worth having if something actually
+  # parses those expressions. This is that something.
+  #
+  # Non-blocking by default for the same reason as app:check-code — 2 of the 4
+  # apps sampled ship a REUSE.toml at all.
+  reuse:
+    if: ${{ inputs.enable-reuse }}
+    runs-on: ubuntu-latest
+    name: "REUSE compliance"
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: REUSE lint
+        id: lint
+        continue-on-error: ${{ !inputs.reuse-blocking }}
+        uses: fsfe/reuse-action@v5
+
+      - name: Explain a non-blocking failure
+        if: steps.lint.outcome == 'failure' && !inputs.reuse-blocking
+        run: |
+          echo "::warning::REUSE reported findings. Not blocking yet — set reuse-blocking: true once this app ships a REUSE.toml and a LICENSES/ directory."
+
+      - name: Record result
+        if: always()
+        run: |
+          mkdir -p quality-results
+          echo "${{ steps.lint.outcome }}" > quality-results/reuse.txt
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-reuse
           path: quality-results/
 
   # ── Group 2: Vue Quality ────────────────────────
