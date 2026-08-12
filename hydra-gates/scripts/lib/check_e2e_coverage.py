@@ -121,6 +121,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from exclusion_reason import exclude_pattern, is_reason_bearing  # noqa: E402
+
 # ---------------------------------------------------------------------------
 # Slug helpers
 # ---------------------------------------------------------------------------
@@ -160,16 +163,21 @@ _ALT_SCENARIO_ITEM_RE = re.compile(
 )
 
 # Exclusion marker: `@e2e exclude <reason>` (inline or on its own line)
-_EXCLUDE_RE = re.compile(r"@e2e\s+exclude\b[ \t]*(?P<reason>.*?)\s*$")
+#
+# What counts as a <reason> is decided by exclusion_reason.is_reason_bearing(),
+# shared with gates 16, 25 and 26. Both forms below used plain truthiness, under
+# which `@e2e exclude .` was reason-bearing (.github#400). That mattered most
+# HERE: an exclusion scores as POSITIVE coverage (#345) and the whole-spec form
+# below blankets every scenario in the file (#356), so one full stop could
+# credit dozens of scenarios at once.
+_EXCLUDE_RE = re.compile(exclude_pattern("e2e"))
 
 # Whole-spec exclusion must be a STANDALONE directive line: the `@e2e exclude`
 # token is the dominant content of the line, optionally prefixed by markdown
 # bullet / blockquote / heading markers. Prose that merely *mentions*
 # `@e2e exclude` mid-sentence (e.g. a Purpose paragraph "...scenarios annotated
 # @e2e exclude below") must NOT exclude the entire spec.
-_WHOLE_SPEC_EXCLUDE_RE = re.compile(
-    r"^[ \t>*#\-]*@e2e\s+exclude\b[ \t]*(?P<reason>.*?)\s*$"
-)
+_WHOLE_SPEC_EXCLUDE_RE = re.compile(exclude_pattern("e2e", standalone=True))
 
 
 def _parse_exclusion(text: str) -> tuple[bool, str | None]:
@@ -184,7 +192,8 @@ def _parse_exclusion(text: str) -> tuple[bool, str | None]:
     if not m:
         return False, None
     reason = m.group("reason").strip()
-    return True, reason if reason else None
+    # `reason if reason else None` was .github#400.
+    return True, reason if is_reason_bearing(reason) else None
 
 
 def _parse_whole_spec_exclusion(text: str) -> tuple[bool, str | None]:
@@ -199,7 +208,9 @@ def _parse_whole_spec_exclusion(text: str) -> tuple[bool, str | None]:
     if not m:
         return False, None
     reason = m.group("reason").strip()
-    return True, reason if reason else None
+    # `reason if reason else None` was .github#400 — and this is the form that
+    # blankets an entire spec file, so it is the most expensive of the four.
+    return True, reason if is_reason_bearing(reason) else None
 
 
 def _make_scenario_entry(

@@ -56,6 +56,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from exclusion_reason import exclude_pattern, is_reason_bearing  # noqa: E402
+
 GATE_NUM = 25
 
 # ---------------------------------------------------------------------------
@@ -97,7 +100,10 @@ _PUBLIC_AUTH_RE = re.compile(
 )
 
 _CONTRACT_REF_RE = re.compile(r"@contract\s+(?!exclude\b)(?P<ref>\S+)")
-_CONTRACT_EXCLUDE_RE = re.compile(r"@contract\s+exclude\b[ \t]*(?P<reason>.*?)\s*$")
+# What counts as a <reason> is decided by exclusion_reason.is_reason_bearing(),
+# shared with gates 16, 19 and 26 — all four graded it with plain truthiness, so
+# `@contract exclude .` was a reason (.github#400).
+_CONTRACT_EXCLUDE_RE = re.compile(exclude_pattern("contract"))
 
 
 # ---------------------------------------------------------------------------
@@ -300,7 +306,10 @@ def _contract_status(lines: list[str], decl_idx: int) -> tuple[str, str | None]:
         m = _CONTRACT_EXCLUDE_RE.search(b)
         if m:
             reason = m.group("reason").strip().rstrip("*/").strip()
-            return ("excluded", reason) if reason else ("exclude_noreason", None)
+            # `if reason:` here was .github#400.
+            if is_reason_bearing(reason):
+                return ("excluded", reason)
+            return ("exclude_noreason", None)
     return ("none", None)
 
 
