@@ -244,6 +244,45 @@ if [ -f "${ELSEWHERE_FILE}" ]; then
         [ -n "${_n}" ] && _elsewhere+=("${_n}") && COVERED+=("${_n}")
     done < <(grep -oE '^\| *gate-[0-9]+' "${ELSEWHERE_FILE}" 2>/dev/null | grep -oE '[0-9]+' || true)
     echo "   counted ${#_elsewhere[@]} gate(s) as covered by a sibling suite (COVERED-ELSEWHERE.md)"
+
+    # -----------------------------------------------------------------------
+    # DOES THE CREDITED SUITE STILL EXIST?
+    #
+    # COVERED-ELSEWHERE.md credits coverage by gate NUMBER, and the suite that
+    # supposedly provides it is named in PROSE. Nothing resolved that name to a
+    # file until 2026-08-12. A row whose suite has been renamed or deleted is a
+    # claim the ratchet counts as COVERAGE and cannot see is false — and it is
+    # counted toward "58 of 65 gates fixtured", the headline this whole suite
+    # exists to make honest.
+    #
+    # All 19 suites named there resolved on the day this check was added, so it
+    # pins a true state rather than reporting a backlog. That is the cheapest
+    # moment to pin a registry, and this package has now been bitten three times
+    # by the same shape: UNCOVERED.md, COVERED-ELSEWHERE.md and the findings
+    # files EACH disagreed with the code on 2026-08-12, all understating
+    # coverage, none cross-checked against it. 36 of 43 UNCOVERED rows were
+    # wrong. A registry nothing resolves is a registry that rots silently.
+    # -----------------------------------------------------------------------
+    mapfile -t _elsewhere_suites < <(
+        grep -oE '`test_[A-Za-z0-9_]+\.sh`' "${ELSEWHERE_FILE}" 2>/dev/null \
+            | tr -d '`' | sort -u
+    )
+    if [ "${#_elsewhere_suites[@]}" -lt 10 ]; then
+        # NEVER GREEN OVER NOTHING, applied to this check itself: a name
+        # extraction that matches zero rows would report "every suite resolves"
+        # and be trivially true. That is the exact defect the check exists to
+        # catch, one layer up.
+        _bad "read only ${#_elsewhere_suites[@]} suite name(s) out of COVERED-ELSEWHERE.md — the extraction no longer matches that file's shape. Refusing to report that every credited suite resolves, because a check over zero names passes for free."
+    else
+        _missing_suites=0
+        for _suite in "${_elsewhere_suites[@]}"; do
+            if [ ! -f "${PKG_ROOT}/scripts/lib/${_suite}" ]; then
+                _bad "COVERED-ELSEWHERE.md credits '${_suite}', which does not exist at scripts/lib/${_suite}. The gate rows citing it are counted as COVERED by the ratchet, so that is coverage credited to nothing."
+                _missing_suites=$((_missing_suites + 1))
+            fi
+        done
+        [ "${_missing_suites}" -eq 0 ] && _ok "all ${#_elsewhere_suites[@]} suite(s) named in COVERED-ELSEWHERE.md resolve to a file under scripts/lib/"
+    fi
 else
     _bad "no COVERED-ELSEWHERE.md at ${ELSEWHERE_FILE} — gates fixtured by the sibling suites would be miscounted as untested"
 fi
