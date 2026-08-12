@@ -132,7 +132,10 @@ probe() {
     local name="$1" expect="$2"; shift 2
     local d="$WORK/$name"
     rm -rf "$d"; scaffold "$d"
-    ( cd "$d" && eval "$@" )
+    # Every probe below passes its defect as ONE shell string (quoted sed/rm
+    # commands), so the string form is what this has always meant. eval "$@"
+    # only looked array-shaped — SC2294.
+    ( cd "$d" && eval "$*" )
     local o; o="$(run "$d")"
     if printf '%s' "$o" | grep -q "FAIL ${expect}:"; then
         ok "detects ${name} (${expect})"
