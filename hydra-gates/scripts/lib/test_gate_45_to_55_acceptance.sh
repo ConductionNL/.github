@@ -160,12 +160,55 @@ for _g in 45 46 49 50 51 53 54 55; do
     _expect "${_outA}" "${_g}" "NOT APPLICABLE" "on a README-only diff (nothing inspected)"
 done
 
-# Gates 47/48 legitimately RAN here — they classified the diff and found no
-# security change — so PASS is the correct verdict and the arm below is the
-# anti-widening pair for family A: the fix must not turn every gate into a
-# permanent skip.
-_expect "${_outA}" 47 "PASS" "classified a real (non-security) diff"
-_expect "${_outA}" 48 "PASS" "examined a real (no-removal) diff"
+# ⚠️ THIS PAIR ASSERTED THE DEFECT. FLIPPED, DELIBERATELY (.github#401).
+#
+# It used to read:
+#
+#   # Gates 47/48 legitimately RAN here — they classified the diff and found no
+#   # security change — so PASS is the correct verdict and the arm below is the
+#   # anti-widening pair for family A.
+#   _expect "${_outA}" 47 "PASS" "classified a real (non-security) diff"
+#   _expect "${_outA}" 48 "PASS" "examined a real (no-removal) diff"
+#
+# The premise is false, and it is false in the same sentence that every other
+# gate in family A is being corrected for. **`${_appA}`'s diff is README.md and
+# nothing else.** There was no hunk under lib/ or src/ to classify and no
+# controller for an attribute to be dropped from — so "they classified the diff
+# and found no security change" describes something that did not happen. The
+# tree HAS a controller and a registry; the DIFF does not, and these are delta
+# gates, so the tree is not their scope.
+#
+# That is precisely `.github#401(b)`: on this exact shape gates 19, 29 and 61
+# declined and named what they had excluded, while 16, 47 and 48 printed a
+# green — and that green counted toward "N of N applicable gates ran". Fixing
+# 47/48 without flipping this pair is impossible, and flipping it without
+# saying so would look like a suite edited to fit a change.
+#
+# 🔑 Same shape as `#378` being blocked by a required check that asserted the
+# contract it superseded: THE ASSERTION WAS THE DEFECT, WRITTEN DOWN.
+#
+# THE ANTI-WIDENING INTENT IS REAL AND IS NOT LOST — it is rehomed immediately
+# below, onto a diff that genuinely contains this gate's subject matter. That
+# is what the original pair was reaching for; it was simply attached to an arm
+# that could not carry it.
+_expect "${_outA}" 47 "NOT APPLICABLE" "on a README-only diff (no lib/ or src/ hunk to classify)"
+_expect "${_outA}" 48 "NOT APPLICABLE" "on a README-only diff (no controller to drop an attribute from)"
+
+# THE REHOMED ANTI-WIDENING PAIR. A diff that DOES touch this gate's subject
+# matter — a real controller edit, in a real hunk — and is nonetheless not a
+# security change and drops no attribute. Both gates must reach a verdict and
+# that verdict must be PASS, so the empty-delta guards above cannot have been
+# widened into "always decline", which is a strictly worse hole than the PASS
+# they replace.
+printf '%s\n' '<?php' 'namespace OCA\Fx\Controller;' 'class ThingController {' \
+    '    public function index() { return 2; }' \
+    '    public function total() { return 3; }' '}' \
+    > "${_appA}/lib/Controller/ThingController.php"
+_commit "${_appA}" "a real, non-security controller edit"
+_outAreal="${_tmp}/a-real.txt"
+_run "${_appA}" "${_outAreal}" --scope-to-diff --base "$(git -C "${_appA}" rev-parse HEAD~1)"
+_expect "${_outAreal}" 47 "PASS" "classified a REAL controller hunk and found no security change"
+_expect "${_outAreal}" 48 "PASS" "examined a REAL controller hunk and found no attribute removal"
 
 # ...and on a run with NO diff at all, 47/48 cannot form a verdict.
 _outAfull="${_tmp}/a-full.txt"
