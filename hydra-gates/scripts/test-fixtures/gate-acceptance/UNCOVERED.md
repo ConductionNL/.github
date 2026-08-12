@@ -40,9 +40,17 @@ A reason is a testable claim, so each row states which of four kinds it is.
 
 Two notes on authoring, both measured rather than assumed:
 
-1. `scripts/test-fixtures/gate-acceptance/auth-guards/` exists but carries no
+1. ~~`scripts/test-fixtures/gate-acceptance/auth-guards/` exists but carries no
    `expect.conf` and no source files beyond `appinfo/info.xml`, so it currently
-   contributes **zero** covered gates. It is a stub, not coverage.
+   contributes **zero** covered gates. It is a stub, not coverage.~~
+   **Superseded.** `auth-guards/` is now a real bundle (gate-7, `#353` —
+   verb-object guard predicates), and `authn-vs-authz/` joins it (gate-7,
+   `#365` — an authentication check is not an authorisation guard). Two bundles
+   assert the same gate from opposite directions on purpose: `auth-guards`
+   pins that a real guard is RECOGNISED (the false-positive failure mode),
+   `authn-vs-authz` pins that a non-guard is REFUSED (the false-negative one).
+   A single bundle could be passed by a checker that is broken in the other
+   direction — which is exactly how `#365` survived `#353` and `#360`.
 2. `_enum_tracked` prefers `git ls-files`, and a fixture directory sits inside
    this repository's own work tree — so a planted file must be **committed** to
    be enumerated at all. An untracked plant reproduces the very silence these

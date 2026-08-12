@@ -11,10 +11,31 @@ Recognised guard patterns (body must contain at least one):
   - ``OCSForbiddenException`` thrown
   - ``isAdmin(`` check
   - ``->authorize*(`` / ``->require*(`` / ``->ensure*(`` service call
-  - ``#[PublicPage]`` or ``@PublicPage`` annotation on the same method
+  - ``#[PublicPage]`` / ``@PublicPage`` — but only when no caller-supplied
+    identifier reaches a lookup the caller can steer.  "May be called
+    without a session" is not "every object it can reach is public"; see
+    the Pattern 8 commentary.
   - ``Http::STATUS_UNAUTHORIZED`` or ``Http::STATUS_FORBIDDEN``
   - ``TemplateResponse`` return — SPA renderers; NC middleware already
     guarantees an authenticated session so there is no object access to gate
+
+WHAT IS *NOT* A GUARD, AND IS THE MOST IMPORTANT LINE IN THIS FILE
+(``ConductionNL/.github#365``): an AUTHENTICATION check.
+
+    $user = $this->userSession->getUser();
+    if ($user === null) { return new JSONResponse([], Http::STATUS_UNAUTHORIZED); }
+
+answers "is anyone logged in?". This gate exists to answer "may THIS caller
+touch THIS object?". Under ``#[NoAdminRequired]`` the framework has already
+settled the first question before the method runs, so the clause cannot even
+fail — and it was clearing the gate. Measured: gate-7 reported **0 in all
+eighteen fleet apps** while **453 of 791** controller files carried that
+preamble. An ``if`` whose condition tests only whether a caller identity is
+ABSENT, and whose consequent refuses, is therefore blanked out of the text
+every guard pattern here reads — WHATEVER STATUS IT ANSWERS WITH, because
+authentication-ness is a property of the condition, not of the status code.
+See the ``#365`` commentary further down for the three controls that keep that
+blanking from eating a real guard.
 
 Two additional *delegated*-guard patterns are recognised so the gate stops
 emitting whole-repo false positives on codebases that centralise their
@@ -79,6 +100,16 @@ authorisation one call-hop away from the routed method:
     anonymous-session rejection) starts or continues a chain.  Every hop must
     also occur before the caller's first data mutation, so a guard that runs
     only after the write still fails the gate.
+
+  Pattern 6 — session-identity hand-off (``.github#365``).
+    Every call that receives a caller-supplied value ALSO receives a
+    session-derived identity, so the object reference is resolved under a
+    scope the caller cannot forge (``findOwned(entryId: $id, userId: $uid)``).
+
+  Pattern 7 — in-body ownership comparison (``.github#365``).
+    A refusing ``if`` that compares a session-derived identity against object
+    data is an authorisation guard whatever status it answers with — including
+    the 404 chosen deliberately so a 403 cannot become an existence oracle.
 
 Exemptions (method skipped entirely):
   1. ``__construct`` — not a routed action, the 20-line look-back window can
@@ -391,6 +422,12 @@ _GUARD_BODY_RE = re.compile(
     r"|TemplateResponse",
 )
 
+# The same set WITHOUT the ``TemplateResponse`` alternative, for `@PublicPage`
+# methods. See the note at its use in ``scan_file``.
+_PUBLIC_TEMPLATE_STRIPPED_RE = re.compile(
+    _GUARD_BODY_RE.pattern.replace(r"|TemplateResponse", ""),
+)
+
 # Patterns that indicate a CORS-headers-only body (exemption 3).
 _CORS_HEADER_RE = re.compile(r"Access-Control-Allow|applyCorsHeaders")
 # Patterns that indicate data access (disqualifies exemption 3).
@@ -470,14 +507,21 @@ _HELPER_GUARD_BODY_RE = re.compile(
     r"OCSForbiddenException"
     r"|NotPermittedException"
     r"|ForbiddenException"
-    r"|\bthrow\b"
+    r"|\bthrow\b[^;\n]{0,120}?"
+    r"(?:Forbidden|Unauthori[sz]ed|NotPermitted|NotAllowed|AccessDenied"
+    r"|Permission|NotAuthenticated|Authori[sz]ation|Tenan|Owner)"
     r"|isAdmin\s*\("
     r"|isCurrentUserAdmin\s*\("
     r"|->\s*(?:authorize|require|ensure|check|assert|guard)[A-Z][A-Za-z0-9_]*\s*\("
     r"|Http::STATUS_(?:UNAUTHORIZED|FORBIDDEN|NOT_FOUND)"
     r"|(?:statusCode:\s*|,\s*)(?:401|403|404)\b"
-    r"|getUser\s*\(\s*\)\s*===\s*null"
 )
+# `.github#365` removed a `getUser() === null` alternative from the line above.
+# It named an AUTHENTICATION test as a guard, which is the whole defect; and in
+# the only shape that matters — inside a refusing `if` — the clause is now
+# blanked before this pattern ever runs, so the alternative was simultaneously
+# dead and a re-entry point. Outside a refusing `if` it never described a guard
+# at all (`$anon = $this->userSession->getUser() === null;` computes a flag).
 
 # First data-mutation in a method body — used to enforce "guard before write".
 _MUTATION_RE = re.compile(
@@ -512,8 +556,637 @@ _STRICT_GUARD_BODY_RE = re.compile(
     r"|->\s*(?:authorize|authorise|require|ensure|assert|guard)[A-Z][A-Za-z0-9_]*\s*\("
     r"|Http::STATUS_(?:UNAUTHORIZED|FORBIDDEN)"
     r"|(?:statusCode:\s*|,\s*)(?:401|403)\b"
-    r"|(?:getUser|getUID|currentUid|getCurrentUserId)\s*\(\s*\)\s*===\s*null"
 )
+# `.github#365` removed the `(?:getUser|getUID|currentUid|getCurrentUserId)()
+# === null` alternative from the line above — the "anonymous-session rejection"
+# the Pattern-4 commentary lists as a legitimate chain seed. It is not one: an
+# anonymous-session rejection is AUTHENTICATION, and seeding a delegation chain
+# with it let a `citizenAction()`-style wrapper clear every action routed
+# through it. decidesk's three `citizenAction()` callers were cleared exactly
+# this way and become findings again with this change; that is the intended
+# direction, not a regression.
+
+# ---------------------------------------------------------------------------
+# AUTHENTICATION IS NOT AUTHORISATION (ConductionNL/.github#365)
+# ---------------------------------------------------------------------------
+#
+# THE DEFECT. Every guard regex above accepts `Http::STATUS_UNAUTHORIZED`, the
+# numeric `401`, `->unauthorized(` and `getUser() === null` as a guard. Those
+# tokens spell the house-style preamble
+#
+#     $user = $this->userSession->getUser();
+#     if ($user === null) {
+#         return new JSONResponse(['error' => 'Unauthorized'], Http::STATUS_UNAUTHORIZED);
+#     }
+#
+# which answers "is anyone logged in?" — AUTHENTICATION. Gate-7 exists to ask
+# "may THIS caller touch THIS object?" — AUTHORISATION. The preamble cannot
+# answer that question, and under `#[NoAdminRequired]` it cannot even fail:
+# Nextcloud's own middleware has already rejected the anonymous caller before
+# the method runs, so the clause is dead defensive code that nonetheless
+# silenced the gate.
+#
+# Measured with a three-arm committed-plant control (same file, same commit,
+# same run, byte-identical data-access bodies):
+#
+#     bare unguarded method                          -> 1 finding
+#     + a `no user -> 401` preamble, nothing else    -> 0 findings
+#     + a real per-object ownership check            -> 0 findings  (correct)
+#
+# Fleet scale at the time of the fix: gate-7 reported 0 in ALL EIGHTEEN apps
+# while 453 of 791 controller files carried that preamble.
+#
+# WHY THIS IS NOT "DROP 401 FROM THE REGEX". Two shapes make the token-level
+# repair both too narrow and too wide, and both were measured:
+#
+#   TOO WIDE — a REAL per-object decision that answers with the wrong status:
+#
+#       if ($account['ownerId'] !== $user->getUID()) {
+#           return new JSONResponse([], Http::STATUS_UNAUTHORIZED);
+#       }
+#
+#     That is a genuine authorisation guard written with a 401. Deleting the
+#     token turns it into a false POSITIVE — and false positives are exactly
+#     how gate-7 lost its credibility (`#353`, `#360`), which is why its
+#     silences were believed long enough for this defect to survive.
+#
+#   TOO NARROW — the same authentication clause answering 403:
+#
+#       if ($user === null) {
+#           return new JSONResponse([], Http::STATUS_FORBIDDEN);
+#       }
+#
+#     Still authentication. If only `401` were dropped, one character of
+#     edit would buy the silence straight back — a gate made green by
+#     weakening the code it inspects.
+#
+# So AUTHENTICATION-NESS IS A PROPERTY OF THE CONDITION, NOT OF THE STATUS
+# CODE. What is neutralised below is an `if` statement whose condition tests
+# only whether a caller identity is ABSENT and whose consequent refuses. The
+# whole statement — condition and consequent — is blanked to same-length
+# whitespace before any guard regex runs, so byte offsets, line numbers and
+# every other pattern in this file are untouched. A method left with no other
+# guard is then reported; a method that also carries a real check still clears
+# on that check.
+#
+# THREE CONTROLS KEEP THE BLANKING NARROW, each one closing a way this could
+# have eaten a real guard:
+#
+#   1. POLARITY. Only an ABSENCE test is blanked (`=== null`, `=== false`,
+#      `empty()`, `!$user`, `!$user instanceof IUser`). A PRESENCE test is
+#      not: `if ($user !== null) { ...whole method body... }` is a wrapper,
+#      and blanking it would erase every guard inside it.
+#   2. ZERO-ARGUMENT OPERANDS ONLY. The tested expression may contain no call
+#      arguments and no array subscript, so `$this->access->canAccess($id,
+#      $user)` and `$account['ownerId']` are never mistaken for an identity —
+#      the first is a guard, the second is object data.
+#   3. THE CONSEQUENT MUST REFUSE (`return` / `throw` / `exit` / `die`).
+#      A conditional that merely computes something is not a guard clause and
+#      is left alone.
+#
+# The identity test is deliberately spelling-AGNOSTIC. `#365`'s own re-audit
+# built the opposite mistake into its triage tool — it enumerated three
+# spellings of "who is the caller" (`getUID(`, `->uid(`, `getCurrentUserId(`),
+# and doriath's `sessionUserId()` matched none, producing 19 false positives
+# from one unrecognised name. A regex that enumerates spellings of a concept
+# reports the spellings it does not know as ABSENCE, and on a security
+# detector absence is the alarming answer. So identity is recognised by TOKEN
+# (`user` / `uid` / `session` / `actor` / `caller` / `principal` / `login`)
+# anywhere in a call-argument-free expression, plus a one-hop alias lookup for
+# `$u = $this->userSession->getUser();`.
+
+# Tokens that make an expression read as "the caller's identity". Deliberately
+# excludes `account`, `owner`, `member` and similar: those name the OBJECT in
+# the fleet's controllers (`$accountId`, `$ownerId`) and treating them as
+# identity would blank real ownership comparisons.
+_IDENTITY_TOKEN_RE = re.compile(
+    r"user|uid|session|actor|caller|principal|logged_?in|login",
+    re.IGNORECASE,
+)
+
+# ...but an AUTHORISATION token anywhere in the expression vetoes it, whatever
+# else it spells. Caught by this suite's own `test_predicate_named_helper_
+# clears_caller`, which the first draft of this fix broke:
+#
+#     if ($this->isCurrentUserAdmin() === false) { return new JSONResponse([], 403); }
+#
+# is an argument-free call containing `User`, compared against a falsy literal
+# — structurally identical to an identity-absence test, and a REAL admin guard.
+# Blanking it produced exactly the false positive that made gate-7 untrusted in
+# the first place. The veto is what keeps this fix from re-entering that.
+_AUTHORISATION_TOKEN_RE = re.compile(
+    r"admin|access|permission|permitted|owner|allow|authori[sz]|grant|revoke"
+    r"|role|scope|tenant|organisation|organization|entitle",
+    re.IGNORECASE,
+)
+
+# The right-hand side of an absence comparison.
+_NULLISH_LITERAL_RE = re.compile(r"^(?:null|false|''|\"\"|\[\s*\])$", re.IGNORECASE)
+
+# A consequent that does not refuse is not a guard clause.
+_REFUSAL_RE = re.compile(r"\b(?:return|throw|exit|die)\b")
+
+
+def _matching_close(text: str, open_pos: int) -> int:
+    """Index of the bracket closing the one at *open_pos*, or ``-1``."""
+    pairs = {"(": ")", "[": "]", "{": "}"}
+    opener = text[open_pos]
+    closer = pairs.get(opener)
+    if closer is None:
+        return -1
+    depth = 0
+    for i in range(open_pos, len(text)):
+        if text[i] == opener:
+            depth += 1
+        elif text[i] == closer:
+            depth -= 1
+            if depth == 0:
+                return i
+    return -1
+
+
+def _top_level_split(text: str, sep: str) -> list:
+    """Split *text* on *sep* at bracket depth 0."""
+    parts: list = []
+    depth = 0
+    start = 0
+    i = 0
+    n = len(text)
+    while i < n:
+        c = text[i]
+        if c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+        elif depth == 0 and text.startswith(sep, i):
+            parts.append(text[start:i])
+            i += len(sep)
+            start = i
+            continue
+        i += 1
+    parts.append(text[start:])
+    return [p.strip() for p in parts]
+
+
+def _is_identity_expression(expr: str, context: str = "") -> bool:
+    """True when *expr* reads as "the caller's identity" and nothing else.
+
+    Control 2 of the three listed above: the expression may carry no call
+    ARGUMENTS and no array subscript, so a guard call (``canAccess($id, $uid)``)
+    and object data (``$account['ownerId']``) can never be read as an identity
+    however their names are spelled.
+    """
+    expr = expr.strip()
+    if expr == "":
+        return False
+    if expr[0] in ("'", '"'):
+        # A string literal is never an identity. Without this, a status
+        # constant like `'user_draft'` would read as one wherever a comparison
+        # is classified.
+        return False
+    if re.search(r"\(\s*[^)\s]", expr):  # any call with arguments
+        return False
+    if "[" in expr:
+        return False
+    if _AUTHORISATION_TOKEN_RE.search(expr):
+        return False
+    if _IDENTITY_TOKEN_RE.search(expr):
+        return True
+    # One-hop alias: `$u = $this->userSession->getUser();` earlier in scope.
+    m = re.fullmatch(r"\$([A-Za-z_][A-Za-z0-9_]*)", expr)
+    if m is not None and context:
+        assigns = re.findall(
+            r"\$" + re.escape(m.group(1)) + r"\s*=\s*([^;\n]{1,200});", context
+        )
+        if assigns and _IDENTITY_TOKEN_RE.search(assigns[-1]):
+            return True
+    return False
+
+
+def _is_identity_absence_atom(atom: str, context: str = "") -> bool:
+    """True when *atom* asserts that a caller identity is ABSENT.
+
+    Control 1: polarity is tracked through ``!``, so ``$user === null`` and
+    ``!$user`` qualify while ``$user !== null`` — the wrapper shape — does not.
+    """
+    atom = atom.strip()
+    negated = False
+    while True:
+        if atom.startswith("!"):
+            negated = not negated
+            atom = atom[1:].strip()
+            continue
+        if (
+            atom.startswith("(")
+            and atom.endswith(")")
+            and _matching_close(atom, 0) == len(atom) - 1
+        ):
+            atom = atom[1:-1].strip()
+            continue
+        break
+    if atom == "":
+        return False
+
+    m = re.fullmatch(r"(?:empty|is_null)\s*\((.*)\)", atom, re.S)
+    if m is not None:
+        # empty($user) / is_null($user) assert absence; negated, presence.
+        return not negated and _is_identity_expression(m.group(1), context)
+    m = re.fullmatch(r"isset\s*\((.*)\)", atom, re.S)
+    if m is not None:
+        return negated and _is_identity_expression(m.group(1), context)
+
+    parts = _top_level_split(atom, " instanceof ")
+    if len(parts) == 2:
+        # `$user instanceof IUser` asserts presence; `!$user instanceof IUser`
+        # asserts absence (instanceof binds tighter than `!` in PHP).
+        return negated and _is_identity_expression(parts[0], context)
+
+    op = None
+    for candidate in ("===", "!==", "==", "!="):
+        if candidate in atom:
+            op = candidate
+            break
+    if op is not None:
+        parts = _top_level_split(atom, op)
+        if len(parts) != 2:
+            return False
+        lhs, rhs = parts
+        if _NULLISH_LITERAL_RE.match(rhs):
+            expr = lhs
+        elif _NULLISH_LITERAL_RE.match(lhs):
+            expr = rhs
+        else:
+            # Two substantive operands — this is a COMPARISON, the shape a real
+            # per-object check takes. Never an authentication test.
+            return False
+        equality = op in ("===", "==")
+        # `$user === null` is absence; `$user !== null` is presence; a leading
+        # `!` flips whichever it was.
+        return (equality is not negated) and _is_identity_expression(expr, context)
+
+    # A relational operator means this is a magnitude test, not a presence
+    # test. `->` and `=>` are stripped first: their `>` is not an operator, and
+    # reading it as one made `!$this->userId` — one of the commonest spellings
+    # of the whole defect — fall through unrecognised. Caught by the
+    # spelling-agnosticism test rather than by review.
+    if re.search(r"[<>]", atom.replace("->", "").replace("=>", "")):
+        return False
+    # Bare truthiness: `!$user` is absence, `$user` is presence.
+    return negated and _is_identity_expression(atom, context)
+
+
+def _is_authentication_only_condition(cond: str, context: str = "") -> bool:
+    """True when *cond* tests ONLY whether a caller identity is absent."""
+    cond = cond.strip()
+    if cond == "":
+        return False
+    if re.search(r"\?(?!\?|->)", cond):  # a ternary is too complex to classify
+        return False
+    if re.search(r"\b(?:and|or|xor)\b", cond, re.IGNORECASE):
+        return False
+    atoms: list = []
+    for chunk in _top_level_split(cond, "&&"):
+        atoms.extend(_top_level_split(chunk, "||"))
+    atoms = [a for a in atoms if a != ""]
+    if not atoms:
+        return False
+    return all(_is_identity_absence_atom(a, context) for a in atoms)
+
+
+def _consequent_end(cleaned: str, i: int) -> int:
+    """End offset of the statement/block starting at *i*, or ``-1``."""
+    n = len(cleaned)
+    while i < n and cleaned[i].isspace():
+        i += 1
+    if i >= n:
+        return -1
+    if cleaned[i] == "{":
+        close = _matching_close(cleaned, i)
+        return -1 if close == -1 else close + 1
+    if cleaned[i] == ":":
+        # Alternative `if (): ... endif;` syntax — not classified.
+        return -1
+    depth = 0
+    while i < n:
+        c = cleaned[i]
+        if c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+        elif c == ";" and depth == 0:
+            return i + 1
+        i += 1
+    return -1
+
+
+def _authentication_only_guard_spans(cleaned: str, src: str) -> list:
+    """``(start, end)`` spans of every authentication-only guard clause.
+
+    *cleaned* (strings and comments blanked, byte offsets preserved) is used to
+    find structure; *src* is used to classify text, because
+    ``_strip_strings_and_comments`` would have erased the ``''`` in
+    ``$userId === ''``.
+    """
+    spans: list = []
+    for m in re.finditer(r"\bif\s*\(", cleaned):
+        open_paren = cleaned.find("(", m.start())
+        close = _matching_close(cleaned, open_paren)
+        if close == -1:
+            continue
+        end = _consequent_end(cleaned, close + 1)
+        if end == -1:
+            continue
+        # Control 3: a clause that does not refuse is not a guard clause.
+        if not _REFUSAL_RE.search(cleaned[close + 1:end]):
+            continue
+        context = src[max(0, m.start() - 1500):m.start()]
+        if not _is_authentication_only_condition(src[open_paren + 1:close], context):
+            continue
+        spans.append((m.start(), end))
+    return spans
+
+
+def _blank_authentication_only_guards(cleaned: str, src: str) -> str:
+    """*src* with every authentication-only guard clause blanked out.
+
+    Length-preserving and newline-preserving, so every offset, span and line
+    number computed elsewhere in this module stays valid.
+    """
+    spans = _authentication_only_guard_spans(cleaned, src)
+    if not spans:
+        return src
+    out = list(src)
+    for start, end in spans:
+        for i in range(start, min(end, len(out))):
+            if out[i] != "\n":
+                out[i] = " "
+    return "".join(out)
+
+
+def _guard_source(src: str, cleaned: str = None) -> str:
+    """The text guard patterns are matched against: *src* minus authentication."""
+    if cleaned is None:
+        cleaned = _strip_strings_and_comments(src)
+    return _blank_authentication_only_guards(cleaned, src)
+
+
+# ---------------------------------------------------------------------------
+# Pattern 6 — the SESSION-IDENTITY HAND-OFF (the other half of `.github#365`)
+# ---------------------------------------------------------------------------
+#
+# WHY THIS SHIPS IN THE SAME CHANGE AS THE #365 FIX, AND MUST.
+#
+# Blanking the authentication preamble takes away a clear that ~453 of 791
+# fleet controller files were relying on. Most of those files deserve the
+# finding. Some do not, and they fail in one specific, RECOGNISABLE shape —
+# doriath writes almost every endpoint this way:
+#
+#     $userId = $this->sessionUserId();
+#     if ($userId === null) { return ... 401 ... }          <- authentication
+#     $this->attachmentService->delete(attachmentId: $id, userId: $userId);
+#
+# and `AttachmentService::loadOwnedSecret()` two frames down does
+#
+#     if ($secret->getOwnerId() !== $userId) { throw ... 'Not authorized' }
+#
+# The caller supplies `$id`; the SCOPE it is resolved under is an identity the
+# caller cannot forge. That is not an IDOR — it is the correct way to write the
+# endpoint. doriath's whole gate-7 exposure was hand-read as ZERO for exactly
+# this reason, and shipping the #365 fix without this pattern would have
+# reported 45 findings in that one app, all false.
+#
+# THE FALSE-POSITIVE HISTORY IS WHY THIS IS NOT OPTIONAL. gate-7's #365 defect
+# survived because its known failure mode was false POSITIVES (`#353`, `#360` —
+# verb-object predicates, `hasPermission`, `canAccess`), so reviewers were
+# trained to distrust its findings and therefore to trust its silences. Fixing a
+# false negative by manufacturing 45 false positives would restart that cycle
+# with the same gate.
+#
+# THE RULE, and it is deliberately an ALL-quantifier rather than an ANY:
+#
+#   EVERY method call that receives a CALLER-SUPPLIED PARAMETER must ALSO
+#   receive a SESSION-DERIVED IDENTITY.
+#
+# `any` would be far too generous — a method that reads one object unscoped and
+# then calls `$this->audit->logForUser($userId)` would clear itself with the log
+# line. `all` says: wherever the caller's own value reaches a call, the caller's
+# identity is alongside it. One unqualified data call and the method reports.
+#
+# SESSION-DERIVED is load-bearing and is checked, not assumed:
+#   * a local assigned in this body from an argument-free identity expression
+#     (`$this->sessionUserId()`, `$this->userSession->getUser()?->getUID()`) —
+#     the same argument-free / no-subscript / no-authorisation-token test the
+#     blanking uses, so it stays spelling-agnostic; or
+#   * an argument-free identity expression written inline (`$this->userId`).
+#   * NEVER a declared parameter. `find($id, $userId)` where `$userId` came off
+#     the route proves nothing at all, and that exclusion is what stops this
+#     pattern from being a blanket.
+#
+# WHAT THIS DELIBERATELY DOES NOT CATCH, stated because it is a real residual:
+# a callee that ACCEPTS the identity and ignores it. pipelinq's `NotesService`
+# resolves `$currentUserId` and uses it only to compute an `isOwn` display flag.
+# Gate-7 sees one method body by contract — its own FAIL message says the guard
+# may live two frames down — so this residual is symmetrical with the guidance
+# already printed to reviewers, and it is the price of not re-poisoning the
+# gate's credibility. It is narrowed, not eliminated, by the ALL-quantifier.
+
+# A method call: `->name(` or `::name(`. Used to locate argument lists.
+_METHOD_CALL_RE = re.compile(r"(?:->|::)\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(")
+
+
+def _declared_parameter_names(params: str) -> set:
+    """Variable names declared in a raw parameter-list text."""
+    if not params:
+        return set()
+    return set(re.findall(r"\$([A-Za-z_][A-Za-z0-9_]*)", params))
+
+
+def _session_identity_names(body: str, declared: set) -> set:
+    """Locals in *body* assigned from an argument-free identity expression."""
+    out: set = set()
+    for m in re.finditer(r"\$([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([^;\n]{1,200});", body):
+        name, rhs = m.group(1), m.group(2)
+        if name in declared:
+            # A reassigned parameter is still a name the caller chose the first
+            # value of. Refuse it rather than reason about flow.
+            continue
+        if _is_identity_expression(rhs):
+            out.add(name)
+    return out
+
+
+def _split_arguments(arg_text: str) -> list:
+    """Split a raw argument list on top-level commas."""
+    return [a.strip() for a in _top_level_split(arg_text, ",") if a.strip() != ""]
+
+
+def _argument_is_session_identity(arg: str, declared: set, session: set) -> bool:
+    """True when one argument carries the caller's session-derived identity."""
+    arg = arg.strip()
+    # Named-argument syntax: `userId: $userId`.
+    named = re.match(r"^[A-Za-z_][A-Za-z0-9_]*\s*:\s*(?!:)(.*)$", arg, re.S)
+    if named is not None:
+        arg = named.group(1).strip()
+    m = re.fullmatch(r"\$([A-Za-z_][A-Za-z0-9_]*)", arg)
+    if m is not None:
+        if m.group(1) in session:
+            return True
+        if m.group(1) in declared:
+            return False  # caller-supplied: proves nothing
+        return False
+    return _is_identity_expression(arg)
+
+
+# Locals bound from the request are caller-supplied exactly as parameters are.
+_REQUEST_BOUND_ASSIGN_RE = re.compile(
+    r"\$([A-Za-z_][A-Za-z0-9_]*)\s*=\s*[^;\n]*"
+    r"(?:->\s*getParams?\s*\(|->\s*getQueryParam|->\s*getBody\s*\("
+    r"|->\s*getUploadedFile\s*\(|\$_(?:GET|POST|REQUEST|COOKIE|FILES)\b)"
+)
+
+
+def _has_session_identity_handoff(body: str, params) -> bool:
+    """Pattern 6 — see the commentary above.
+
+    Three clauses, and all three are required:
+
+      1. a session-derived identity exists in this body;
+      2. EVERY method call that receives a caller-supplied value (a declared
+         parameter, or a local bound from the request) ALSO receives that
+         identity;
+      3. at least ONE method call receives the identity — the positive
+         evidence that the data access is actually scoped, without which
+         clause 2 is vacuously true over a method that never uses its input.
+    """
+    if params is None:
+        return False
+    declared = _declared_parameter_names(params)
+    declared |= set(_REQUEST_BOUND_ASSIGN_RE.findall(body))
+    session = _session_identity_names(body, declared) - declared
+    if not session and not _IDENTITY_TOKEN_RE.search(body):
+        return False
+
+    saw_scoped_call = False
+    for m in _METHOD_CALL_RE.finditer(body):
+        open_paren = body.find("(", m.start())
+        close = _matching_close(body, open_paren)
+        if close == -1:
+            continue
+        args = _split_arguments(body[open_paren + 1:close])
+        if not args:
+            continue
+        identity_here = any(
+            _argument_is_session_identity(a, declared, session) for a in args
+        )
+        caller_value_here = any(
+            re.search(r"\$" + re.escape(p) + r"\b", a) for a in args for p in declared
+        )
+        if caller_value_here and not identity_here:
+            return False  # a caller-controlled value reaching an unscoped call
+        if identity_here:
+            saw_scoped_call = True
+    return saw_scoped_call
+
+
+# ---------------------------------------------------------------------------
+# Pattern 7 — an in-body OWNERSHIP comparison, whatever status it answers with
+# ---------------------------------------------------------------------------
+#
+# The dual of the `#365` rule. If authentication-ness is a property of the
+# CONDITION rather than of the status code, so is authorisation-ness — and
+# `_GUARD_BODY_RE` recognises a guard only by the code it returns. It
+# deliberately excludes 404, because not-found is not access-denied. But the
+# fleet's most careful controllers answer an ownership mismatch with 404 ON
+# PURPOSE, so that a 403 cannot become an existence oracle for another user's
+# ids — which is the reasoning gate-7's OWN FAIL message prints to reviewers:
+#
+#     "a deliberate 404-style tenancy refusal IS a guard, chosen so a 403
+#      cannot become an existence oracle for another tenant's ids."
+#
+# Until now that sentence was advice to a human, not something the checker
+# could act on, and Pattern 5 only implemented it for ORGANISATION-level
+# tenancy (`belongsTo`, `activeOrganisation`). Per-USER ownership was left out,
+# so doriath's
+#
+#     if ($secret->getOwnerType() !== 'user' || $secret->getOwnerId() !== $userId) {
+#         return new JSONResponse(['message' => 'Not found'], Http::STATUS_NOT_FOUND);
+#     }
+#
+# — a textbook correct guard — was invisible. It did not MATTER before `#365`,
+# because the 401 preamble above it cleared the method anyway. Removing that
+# clear is what exposes it, so it belongs in this change rather than after it.
+#
+# The rule: a refusing `if` whose condition COMPARES a session-derived identity
+# against a substantive non-identity operand is an authorisation guard. Both
+# halves are required, and the nullish-literal case is excluded — that is the
+# authentication shape this same change just finished demoting.
+
+
+# A consequent that DENIES, as opposed to one that merely returns.
+#
+# `_REFUSAL_RE` accepts any `return`, which is right inside a routed method —
+# there is nothing to return but the answer. It is WRONG inside a predicate
+# HELPER, where `return true` is a GRANT written in the same shape. The
+# package's own abuse control caught this: `canRenderAgent()` doing
+# `if ($agent->getOwner() === $userId) { return true; }` is a tokenless
+# predicate the fleet has decided must NOT clear the gate (`#353`/`#360`
+# coordinator note: "Modify"/"Render" are not auth tokens), and reading it as
+# an ownership guard silently reversed that decision.
+_DENIAL_CONSEQUENT_RE = re.compile(
+    r"\bthrow\b"
+    r"|return\s+null\b"
+    r"|return\s*;"
+    r"|return\s+(?:false|\[\s*\])\s*;"
+    r"|Http::STATUS_"
+    r"|(?:statusCode:\s*|,\s*)(?:401|403|404)\b"
+    r"|Response\s*\(",
+)
+
+
+def _has_ownership_comparison_guard(cleaned: str, src: str, start: int, end: int,
+                                    require_denial: bool = False) -> bool:
+    """True when the body compares a caller identity against object data and refuses.
+
+    *require_denial* tightens ``refuses`` from "any return" to an actual
+    denial — used when the body being read is a HELPER rather than a routed
+    method. See ``_DENIAL_CONSEQUENT_RE``.
+    """
+    for m in re.finditer(r"\bif\s*\(", cleaned[start:end]):
+        at = start + m.start()
+        open_paren = cleaned.find("(", at)
+        close = _matching_close(cleaned, open_paren)
+        if close == -1 or close >= end:
+            continue
+        stop = _consequent_end(cleaned, close + 1)
+        if stop == -1 or stop > end:
+            continue
+        consequent = cleaned[close + 1:stop]
+        if not _REFUSAL_RE.search(consequent):
+            continue
+        if require_denial and not _DENIAL_CONSEQUENT_RE.search(consequent):
+            continue
+        cond = src[open_paren + 1:close]
+        atoms: list = []
+        for chunk in _top_level_split(cond, "&&"):
+            atoms.extend(_top_level_split(chunk, "||"))
+        for atom in atoms:
+            op = None
+            for candidate in ("===", "!==", "==", "!="):
+                if candidate in atom:
+                    op = candidate
+                    break
+            if op is None:
+                continue
+            parts = _top_level_split(atom, op)
+            if len(parts) != 2:
+                continue
+            lhs, rhs = parts
+            if _NULLISH_LITERAL_RE.match(lhs) or _NULLISH_LITERAL_RE.match(rhs):
+                continue  # an absence test — authentication, already demoted
+            if _is_identity_expression(lhs) or _is_identity_expression(rhs):
+                return True
+    return False
+
 
 # ---------------------------------------------------------------------------
 # Pattern 5 — the TENANCY guard (ConductionNL/.github#160)
@@ -686,7 +1359,11 @@ def _collaborator_guard_methods(class_file: str) -> set:
     except OSError:
         _COLLABORATOR_GUARD_CACHE[class_file] = set()
         return set()
-    result = _strict_guard_methods(_strip_strings_and_comments(src), src)
+    cleaned = _strip_strings_and_comments(src)
+    # `.github#365`: a collaborator whose only "guard" is a `no user -> 401`
+    # preamble (decidesk's `citizenAction()` is the measured example) must not
+    # seed a delegation chain either — the defect is the same one call-hop away.
+    result = _strict_guard_methods(cleaned, _guard_source(src, cleaned))
     _COLLABORATOR_GUARD_CACHE[class_file] = result
     return result
 
@@ -1001,6 +1678,570 @@ def _is_zero_input_read_only(params, body: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Pattern 8 — a `#[PublicPage]` handler must resolve a caller-supplied
+# identifier inside a DECLARED-PUBLIC SCOPE
+# ---------------------------------------------------------------------------
+#
+# THE SECOND BLINDING EXEMPTION, and the larger of the two.
+#
+# Until now this file skipped every `#[PublicPage]` method unconditionally,
+# commented "intentionally open to unauthenticated callers". That conflates
+# "may be called WITHOUT A SESSION" with "every object it can reach is
+# PUBLIC". The second does not follow from the first, and the exemption
+# carried no stated reason, so there was nothing to audit.
+#
+# It is not safe by construction. opencatalogi#856, merged as `963f832a`,
+# was exactly this shape: `GET /api/themes/{id}` was `@PublicPage` and its
+# `find()` carried no register and no schema, so it fell through to
+# OpenRegister's `findAcrossAllMagicTables()` path and served an anonymous
+# caller — no session at all — a municipal `zaak` status record out of an
+# unrelated register. That commit's own message records the second half of
+# the lesson: "`_rbac: true` was never sufficient on its own: OpenRegister
+# grants read by default on a schema that declares no authorization block".
+#
+# MEASURED, at package `57bcb2b`, on a nine-arm rig in one file/commit/run:
+# a byte-identical IDOR plant carrying `#[PublicPage]` — including an
+# UNAUTHENTICATED WRITE to an arbitrary `$id` — reported PASS.
+#
+# 🔑 AND THE EXEMPTION IS NOT WHERE THE BLINDING MOSTLY LIVES. Deleting it
+# and changing nothing else moves ONLY the arm that carries BOTH attributes.
+# A `#[PublicPage]`-only method never reaches the exemption at all: it is
+# dropped one branch earlier by the `_NO_ADMIN_RE` scope filter. Across the
+# fleet's `lib/Controller` trees that is 267 of 357 public methods — 75% —
+# invisible to any edit of the exemption. Hence this pattern widens the
+# SCOPE FILTER as well, and a `#[PublicPage]` method is now judged.
+#
+# THE PREDICATE, and why it is not the `#[NoAdminRequired]` one. There is no
+# "current user" to compare an owner against, so ownership guards do not
+# transfer. What a correct public endpoint does instead — measured on the
+# fix opencatalogi shipped, and on doriath's machine-credential endpoints —
+# is CONSTRAIN THE LOOKUP TO A SCOPE IT DECLARES PUBLIC rather than resolve
+# the caller's identifier globally. So:
+#
+#   in scope   a caller-supplied SCALAR value reaches a selection call
+#              (`array $data` is a payload, not a selector; a `$token` /
+#              `$secret` IS the authorisation — Nextcloud's own public-share
+#              convention — and neither is a selector).
+#
+#   cleared    every such value reaches at least one selection that is
+#              CONSTRAINED, by any of five measured spellings:
+#                a. an argument the caller did not supply and that carries a
+#                   value (`$themeConfig['register']`). A bare literal does
+#                   NOT constrain — `_rbac: true` is the counter-example the
+#                   opencatalogi fix names by name;
+#                b. a callee whose name declares publicness as a COMPLETE
+#                   CamelCase segment (`findPublished`), so that
+#                   `getPublicationById` is not read as one;
+#                c. a receiver already carrying the scope as STATE —
+#                   `$svc->setRegister(...); $svc->setSchema(...); $svc->find($id)`
+#                   is how OpenRegister's ObjectService is scoped fleet-wide;
+#                d. a CONTAINER RESOLUTION: this call's own result constrains
+#                   a later selection AND an unresolvable container is
+#                   refused. That is opencatalogi's own fix shape — resolve
+#                   the catalog, refuse if it does not exist, then look the
+#                   id up inside it;
+#                e. one resolved delegation hop — `publicationDownload($id)`
+#                   handing straight to `PublicationService::download()`,
+#                   which opens with `isObjectInCatalogScope($id) === false
+#                   -> 404`. Read out of the collaborator's own file, never
+#                   assumed from a name.
+#              plus a whole-body clear: a refusing `if` whose CONDITION tests
+#              a publication / visibility / enablement predicate. That is the
+#              dual of Pattern 7 — the decision was made just after the read
+#              rather than inside it.
+#
+# PER SELECTOR, NOT PER CALL. Once a value has been resolved inside a scope,
+# later uses of that same value are "verify in scope, then act" — the
+# commonest correct public shape in the fleet (opencatalogi's `attachments()`
+# proves the object is in the catalog, refuses 404 if not, and only then
+# fetches by id). Judging each call in isolation reports the second half of
+# a correct method.
+#
+# ⚠️ THE FAILURE MODE BEING REPAIRED HERE IS DISTRUST. gate-7's KNOWN defect
+# was false POSITIVES (`#353`, `#360`), which is exactly why the fleet came
+# to trust its silences. A public-page rule that lights up the apps getting
+# it right would restart that cycle, so clears a–e were each derived from a
+# shape that was READ in a fleet app, and the two-directional control is
+# `ThemesController::show` before and after `963f832a`: FLAGGED at
+# `f6e86ab`, SILENT at `963f832`, same file, same method, same checker.
+
+# A capability identifier: the value IS the authorisation, so substituting
+# another one is not an authorisation bypass but a guess at a secret. This is
+# Nextcloud's own public-share convention and doriath's link-share,
+# ephemeral-send and secret-request-fill routes.
+_PUBLIC_CAPABILITY_RE = re.compile(
+    r"(?:^|_)(?:token|secret|hash|signature|nonce|otp|key)s?$"
+    r"|[a-z](?:Token|Secret|Hash|Signature|Nonce|Otp|Key)s?$",
+)
+
+# Publicness declared as a COMPLETE CamelCase segment or snake word. The
+# segment requirement is the same device `_GUARD_HELPER_NAME_RE` uses, and it
+# is what stops `getPublicationById` — a plain object read — being mistaken
+# for a publicness constraint because its name happens to start with "public".
+_PUBLICNESS_SEGMENT_RE = re.compile(
+    r"(?:^|_)(?:public|published|publicly|publishable|anonymous|guest|visible"
+    r"|listable|unauthenticated)(?![a-z])"
+    r"|(?<=[a-z0-9])(?:Public|Published|Publicly|Publishable|Anonymous"
+    r"|Guest|Visible|Listable|Unauthenticated)(?![a-z])",
+)
+
+# The same, widened for the whole-body REFUSAL test only: a public endpoint
+# that refuses when the resource is not switched on for public consumption has
+# made the publication decision, whatever noun it uses for it.
+_PUBLICNESS_REFUSAL_RE = re.compile(
+    _PUBLICNESS_SEGMENT_RE.pattern
+    + r"|(?:^|_|(?<=[a-z0-9]))(?:Enabled|Disabled|Harvestable|Exposed|Listed)"
+      r"(?![a-z])"
+    + r"|(?:^|_)(?:enabled|disabled|harvestable|exposed|listed)(?![a-z])",
+)
+
+_PUBLIC_CALL_RE = re.compile(r"(?:->|::)\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(")
+
+# A call that RESOLVES an identifier: reads that select a record, and writes
+# that target one. A bare `create`/`submit` selects nothing, which is why a
+# public form submission — portaliq's entire reason for existing — is not in
+# scope here.
+_PUBLIC_SELECTION_RE = re.compile(
+    r"^(?:find|load|fetch|get|query|search|read|show|render|resolve|lookup"
+    r"|save|store|update|patch|delete|remove|destroy|revoke|publish|depublish"
+    r"|unpublish|download|serve|stream|attach|detach|assign|handle|process)",
+    re.IGNORECASE)
+
+# `array $data` is a request BODY, not a selector.
+_PUBLIC_PAYLOAD_TYPE_RE = re.compile(r"\b(?:array|object|iterable)\b")
+
+# A non-caller argument only CONSTRAINS if it carries a value.
+_PUBLIC_SUBSTANTIVE_RE = re.compile(r"\$[A-Za-z_]|::|->|\bself\b|\bstatic\b")
+
+_PUBLIC_RECEIVER_CALL_RE = re.compile(
+    r"(\$[A-Za-z_]\w*(?:\s*->\s*\w+)*?)\s*->\s*([A-Za-z_]\w*)\s*\(")
+_PUBLIC_SCOPE_SETTER_RE = re.compile(
+    r"^(?:set|with|scope|restrict|constrain|limit)[A-Z]")
+
+_PUBLIC_ASSIGN_RE = re.compile(
+    r"\$([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([^;\n]{1,400});")
+_PUBLIC_FOREACH_RE = re.compile(
+    r"foreach\s*\(([^)]{1,200}?)\s+as\s+"
+    r"(?:\$[A-Za-z_]\w*\s*=>\s*)?\$([A-Za-z_]\w*)\s*\)")
+_PUBLIC_THIS_PROP_CALL_TEMPLATE = (
+    r"\$this\s*->\s*%s\s*->\s*([A-Za-z_]\w*)\s*\(")
+
+
+def _public_declared_names(params, body: str) -> set:
+    """EVERY caller-supplied name, payload and capability ones included.
+
+    Used to disqualify an argument from CONSTRAINING: `save($id, $data)` is
+    not scoped by its own payload.
+    """
+    out = set(re.findall(r"\$([A-Za-z_][A-Za-z0-9_]*)", params or ""))
+    out |= set(_REQUEST_BOUND_ASSIGN_RE.findall(body))
+    return out
+
+
+def _public_tainted_names(params, body: str) -> set:
+    """Caller-supplied values that could SELECT an object.
+
+    Taint propagates through casts, concatenation and array indexing, but NOT
+    through a `->method()` call: the caller chose WHICH record, and the values
+    inside the record the server handed back are the server's. Every
+    laundering hop through a selection call is itself judged by this pattern,
+    so nothing is lost by stopping taint there.
+    """
+    tainted = set()
+    for chunk in _top_level_split(params or "", ","):
+        m = re.search(r"\$([A-Za-z_][A-Za-z0-9_]*)", chunk)
+        if m is None:
+            continue
+        if _PUBLIC_PAYLOAD_TYPE_RE.search(chunk[:m.start()]):
+            continue
+        if _PUBLIC_CAPABILITY_RE.search(m.group(1)):
+            continue
+        tainted.add(m.group(1))
+    for name in _REQUEST_BOUND_ASSIGN_RE.findall(body):
+        if not _PUBLIC_CAPABILITY_RE.search(name):
+            tainted.add(name)
+
+    for _ in range(4):  # bounded fixpoint
+        grew = False
+        for m in _PUBLIC_ASSIGN_RE.finditer(body):
+            name, rhs = m.group(1), m.group(2)
+            if name in tainted:
+                continue
+            if _PUBLIC_CALL_RE.search(rhs):
+                continue
+            if re.search(r"::\s*[A-Za-z_]\w*\s*\[", rhs):
+                # Read out of a CLASS CONSTANT — `self::RESOURCE_MAP[$resource]`.
+                # The caller picked the key; the VALUE is one the app wrote
+                # down, so it is not a caller-supplied selector.
+                continue
+            if any(re.search(r"\$" + re.escape(t) + r"\b", rhs) for t in tainted):
+                tainted.add(name)
+                grew = True
+        if not grew:
+            break
+    return tainted
+
+
+def _public_derivation(body: str) -> dict:
+    """``name -> names it was derived from`` (assignments and foreach binds)."""
+    out: dict = {}
+    for m in _PUBLIC_ASSIGN_RE.finditer(body):
+        out.setdefault(m.group(1), set()).update(
+            re.findall(r"\$([A-Za-z_][A-Za-z0-9_]*)", m.group(2)))
+    for m in _PUBLIC_FOREACH_RE.finditer(body):
+        out.setdefault(m.group(2), set()).update(
+            re.findall(r"\$([A-Za-z_][A-Za-z0-9_]*)", m.group(1)))
+    return out
+
+
+def _public_origins(name: str, deriv: dict, depth: int = 6) -> set:
+    """Transitive closure of what *name* was derived from."""
+    seen: set = set()
+    frontier = {name}
+    for _ in range(depth):
+        nxt: set = set()
+        for n in frontier:
+            for src in deriv.get(n, ()):  # noqa: SIM118
+                if src not in seen:
+                    seen.add(src)
+                    nxt.add(src)
+        if not nxt:
+            break
+        frontier = nxt
+    return seen
+
+
+def _public_refused_on(var: str, body: str) -> bool:
+    """True when a refusing ``if`` tests *var* — the container-resolution gate."""
+    for m in re.finditer(r"\bif\s*\(", body):
+        op = body.find("(", m.start())
+        cl = _matching_close(body, op)
+        if cl == -1:
+            continue
+        if not re.search(r"\$" + re.escape(var) + r"\b", body[op + 1:cl]):
+            continue
+        end = _consequent_end(body, cl + 1)
+        if end > cl and _REFUSAL_RE.search(body[cl:end]):
+            return True
+    return False
+
+
+def _public_refuses_on_publicness(body: str) -> bool:
+    """A refusing ``if`` whose CONDITION tests a publication predicate."""
+    for m in re.finditer(r"\bif\s*\(", body):
+        op = body.find("(", m.start())
+        cl = _matching_close(body, op)
+        if cl == -1:
+            continue
+        if not _PUBLICNESS_REFUSAL_RE.search(body[op + 1:cl]):
+            continue
+        end = _consequent_end(body, cl + 1)
+        if end > cl and _REFUSAL_RE.search(body[cl:end]):
+            return True
+    return False
+
+
+def _public_refuses_on_scope_predicate(body: str) -> bool:
+    """A refusing ``if`` whose CONDITION calls an authorisation/scope predicate.
+
+    opencatalogi's `PublicationService::download()` opens with
+
+        if ($this->isObjectInCatalogScope(objectId: $id) === false) {
+            return new JSONResponse(['error' => 'Not Found'], 404);
+        }
+
+    — a real per-object scope decision, deliberately answered 404 so a 403
+    cannot become an existence oracle for an anonymous caller. `_GUARD_BODY_RE`
+    cannot see it (no 401/403, no `authorize*`/`require*` prefix) and Pattern 7
+    cannot either (no identity to compare — there is no session here). Same
+    reasoning as Pattern 7 and as `#365` itself: recognise the DECISION by its
+    CONDITION, not by the status code it answers with.
+    """
+    for m in re.finditer(r"\bif\s*\(", body):
+        op = body.find("(", m.start())
+        cl = _matching_close(body, op)
+        if cl == -1:
+            continue
+        cond = body[op + 1:cl]
+        if "(" not in cond:
+            continue  # a predicate CALL, not a bare field comparison
+        if not _AUTHORISATION_TOKEN_RE.search(cond):
+            continue
+        end = _consequent_end(body, cl + 1)
+        if end > cl and _REFUSAL_RE.search(body[cl:end]):
+            return True
+    return False
+
+
+def _public_state_scoped_receivers(body: str, declared: set) -> dict:
+    """Receivers handed a scope as STATE before the lookup runs."""
+    out: dict = {}
+    for m in _PUBLIC_RECEIVER_CALL_RE.finditer(body):
+        recv, callee = m.group(1).strip(), m.group(2)
+        if not _PUBLIC_SCOPE_SETTER_RE.match(callee):
+            continue
+        op = body.find("(", m.start())
+        cl = _matching_close(body, op)
+        if cl == -1:
+            continue
+        args = _split_arguments(body[op + 1:cl])
+        if not args:
+            continue
+        if any(re.search(r"\$" + re.escape(d) + r"\b", a)
+               for a in args for d in declared):
+            continue  # a scope the CALLER chose is not a scope
+        if not any(_PUBLIC_SUBSTANTIVE_RE.search(a) for a in args):
+            continue
+        out.setdefault(recv, cl)
+    return out
+
+
+def _public_collaborator_files(cleaned: str, path: str) -> dict:
+    """``propertyName -> [class file]`` for this class's typed collaborators.
+
+    Same resolution rule as Pattern 4: PSR-4 basename, confirmed by an actual
+    ``class <Name>`` declaration. A type that does not resolve contributes
+    nothing, which is the fail-closed direction.
+    """
+    root = _app_root_for(path)
+    if root is None:
+        return {}
+    index = _class_index(root)
+    out: dict = {}
+    for type_name, prop in _PROPERTY_DECL_RE.findall(cleaned):
+        short = type_name.rsplit("\\", 1)[-1]
+        if short.lower() in _COLLABORATOR_SKIP_TYPES:
+            continue
+        decl_re = re.compile(_CLASS_DECL_TEMPLATE % re.escape(short))
+        for candidate in index.get(short, []):
+            if os.path.abspath(candidate) == os.path.abspath(path):
+                continue
+            try:
+                with open(candidate, encoding="utf-8") as fh:
+                    csrc = fh.read()
+            except OSError:
+                continue
+            if decl_re.search(_strip_strings_and_comments(csrc)):
+                out.setdefault(prop, []).append(candidate)
+    return out
+
+
+def _public_delegate_scopes(prop: str, method: str, files) -> bool:
+    """One resolved hop: does ``<prop>-><method>()`` scope its own lookups?
+
+    The callee's body is READ out of the collaborator's file and put through
+    the same predicate, with every one of its own parameters treated as
+    caller-supplied. No recursion: a second hop is not resolved, so an
+    unscoped delegate two frames down still reports.
+
+    ⚠️ POSITIVE EVIDENCE IS REQUIRED, and the first draft of this hop did not
+    demand it. "The callee has no unscoped selector" is VACUOUSLY TRUE of a
+    leaf data-access method — `ThemeService::find($id) { return $row; }` has
+    no selection call of its own — so the probe cleared every delegation to
+    the data layer, which is precisely the shape being hunted. Caught by the
+    rig: all three plants went silent. The callee must now SHOW a guard, a
+    declared-publicness refusal, or a lookup it scoped itself.
+    """
+    for class_file in files or ():
+        try:
+            with open(class_file, encoding="utf-8") as fh:
+                csrc = fh.read()
+        except OSError:
+            continue
+        ccleaned = _strip_strings_and_comments(csrc)
+        cguard = _blank_authentication_only_guards(ccleaned, csrc)
+        for (cname, _chead, csig, cbstart, cbend, _cline) in _find_method_bodies(csrc):
+            if cname != method:
+                continue
+            cparams = _parameter_list(ccleaned, csig)
+            cbody = cguard[cbstart:cbend]
+            if _GUARD_BODY_RE.search(csrc[csig:cbstart] + cbody):
+                return True
+            if _public_refuses_on_publicness(cbody):
+                return True
+            if _public_refuses_on_scope_predicate(cbody):
+                return True
+            selects, validated = _public_selection_scope(cbody, cparams, None)
+            if selects and not (selects - validated):
+                return True
+    return False
+
+
+def _public_unscoped_selectors(body: str, params, delegate_probe=None) -> list:
+    """Caller-supplied selectors that NEVER reach a scoped lookup.
+
+    Empty list = nothing to report: either the method takes no selector, no
+    selector reaches a selection call, or every one of them was resolved
+    inside a declared scope. *delegate_probe* is an optional
+    ``(prop, method) -> bool`` used for the one-hop collaborator clear.
+    """
+    if params is None:
+        return []
+    if _public_refuses_on_publicness(body):
+        return []
+    if _public_refuses_on_scope_predicate(body):
+        return []
+    selects, validated = _public_selection_scope(body, params, delegate_probe)
+    return sorted(selects - validated)
+
+
+def _public_selection_scope(body: str, params, delegate_probe=None):
+    """``(selectors that reach a lookup, those that reach a SCOPED one)``."""
+    if params is None:
+        return (set(), set())
+    tainted = _public_tainted_names(params, body)
+    if not tainted:
+        return (set(), set())
+
+    declared = _public_declared_names(params, body)
+    capability = {d for d in declared if _PUBLIC_CAPABILITY_RE.search(d)}
+    state_scoped = _public_state_scoped_receivers(body, declared)
+    deriv = _public_derivation(body)
+
+    # ALLOW-LIST VALIDATION. A caller value used as a subscript into a class
+    # constant, with a refusal when it does not resolve, can only ever name a
+    # member of a closed set the app wrote down. decidesk's `OriController`
+    # does exactly this — `self::RESOURCE_MAP[$resource] ?? null`, unknown =>
+    # 404 — and there is no object to steer afterwards.
+    for t in list(tainted):
+        for am in re.finditer(
+                r"\$([A-Za-z_]\w*)\s*=\s*[^;\n]{0,80}?"
+                r"(?:self|static|parent|[A-Za-z_]\w*)::[A-Za-z_]\w*\s*\[\s*\$"
+                + re.escape(t) + r"\b", body):
+            if _public_refused_on(am.group(1), body):
+                tainted.discard(t)
+                break
+
+    # Everything that constrains SOME selection, and everything those values
+    # were derived from. A call whose RESULT lands in here resolved a
+    # container rather than an object.
+    constraint_origins: set = set()
+    for m in _PUBLIC_CALL_RE.finditer(body):
+        if not _PUBLIC_SELECTION_RE.match(m.group(1)):
+            continue
+        op = body.find("(", m.start())
+        cl = _matching_close(body, op)
+        if cl == -1:
+            continue
+        for arg in _split_arguments(body[op + 1:cl]):
+            if any(re.search(r"\$" + re.escape(d) + r"\b", arg) for d in declared):
+                continue
+            for var in re.findall(r"\$([A-Za-z_][A-Za-z0-9_]*)", arg):
+                constraint_origins.add(var)
+                constraint_origins |= _public_origins(var, deriv)
+
+    selects: set = set()
+    validated: set = set()
+
+    # CAPABILITY VALIDATION. A caller value checked ALONGSIDE an unguessable
+    # capability, with a refusal on the result, has been authorised by the
+    # secret. shillinq's `lookupByToken` does
+    #
+    #     $result = $this->tokens->validate($appointmentId, $token);
+    #     if ($result['ok'] === false) { return ...; }
+    #     $appointment = $this->loadAppointment(appointmentId: $appointmentId);
+    #
+    # — the later load carries no token, but by then the pair has been proven.
+    if capability:
+        for m in _PUBLIC_CALL_RE.finditer(body):
+            op = body.find("(", m.start())
+            cl = _matching_close(body, op)
+            if cl == -1:
+                continue
+            args = _split_arguments(body[op + 1:cl])
+            if not any(re.search(r"\$" + re.escape(c) + r"\b", a)
+                       for a in args for c in capability):
+                continue
+            paired = {t for t in tainted
+                      if any(re.search(r"\$" + re.escape(t) + r"\b", a) for a in args)}
+            if not paired:
+                continue
+            lhs = re.search(r"\$([A-Za-z_]\w*)\s*=\s*[^;\n]{0,200}$", body[:m.start()])
+            if lhs is not None and _public_refused_on(lhs.group(1), body):
+                validated |= paired
+    for m in _PUBLIC_CALL_RE.finditer(body):
+        callee = m.group(1)
+        if not _PUBLIC_SELECTION_RE.match(callee):
+            continue
+        op = body.find("(", m.start())
+        cl = _matching_close(body, op)
+        if cl == -1:
+            continue
+        args = _split_arguments(body[op + 1:cl])
+        if not args:
+            continue
+        here = set()
+        for t in tainted:
+            if any(re.search(r"\$" + re.escape(t) + r"\b", a) for a in args):
+                here.add(t)
+        if not here:
+            continue
+        selects |= here
+
+        scoped = False
+        if _PUBLICNESS_SEGMENT_RE.search(callee):
+            scoped = True
+        # A CAPABILITY alongside the identifier constrains it: shillinq's
+        # `lookupByToken` resolves the appointment by an unguessable token and
+        # merely NARROWS with `appointmentId`. The secret is the scope.
+        if not scoped and any(
+                re.search(r"\$" + re.escape(c) + r"\b", a)
+                for a in args for c in capability):
+            scoped = True
+        if not scoped:
+            for arg in args:
+                if any(re.search(r"\$" + re.escape(d) + r"\b", arg)
+                       for d in declared):
+                    continue
+                if (_PUBLICNESS_SEGMENT_RE.search(arg)
+                        or _PUBLIC_SUBSTANTIVE_RE.search(arg)):
+                    scoped = True
+                    break
+        if not scoped:
+            before = body[:m.start()].rstrip()
+            for recv, setpos in state_scoped.items():
+                if setpos < m.start() and before.endswith(recv):
+                    scoped = True
+                    break
+        if not scoped:
+            lhs = re.search(
+                r"\$([A-Za-z_][A-Za-z0-9_]*)\s*=\s*[^;\n]{0,200}$",
+                body[:m.start()])
+            if (lhs is not None and lhs.group(1) in constraint_origins
+                    and _public_refused_on(lhs.group(1), body)):
+                scoped = True
+        if not scoped and delegate_probe is not None:
+            prop = re.search(
+                r"\$this\s*->\s*([A-Za-z_]\w*)\s*->\s*$", body[:m.start() + 2])
+            if prop is None:
+                prop = re.search(
+                    r"\$this\s*->\s*([A-Za-z_]\w*)\s*$", body[:m.start()])
+            if prop is not None and delegate_probe(prop.group(1), callee):
+                scoped = True
+        if scoped:
+            validated |= here
+
+    return (selects, validated)
+
+
+def _public_page_lookup_is_unscoped(cleaned: str, path: str, sig_start: int,
+                                    body: str) -> bool:
+    """Pattern 8 entry point — see the commentary above."""
+    params = _parameter_list(cleaned, sig_start)
+    if params is None:
+        return False  # unparsed signature judges nothing
+    files = None
+
+    def probe(prop, method):
+        nonlocal files
+        if files is None:
+            files = _public_collaborator_files(cleaned, path)
+        return _public_delegate_scopes(prop, method, files.get(prop))
+
+    return bool(_public_unscoped_selectors(body, params, probe))
+
+
+# ---------------------------------------------------------------------------
 # Exemption helpers
 # ---------------------------------------------------------------------------
 
@@ -1036,13 +2277,39 @@ def _collect_guard_helpers(cleaned: str, src: str, is_or_repo: bool) -> set:
     exactly as Pattern 2 intends — just one call-hop away.  Still OR-scoped,
     so leaf-app helpers are never assumed to guard.
     """
+    # 🔴 THE BODY TEST READS COMMENT-FREE TEXT, and it did not used to.
+    #
+    # `src` here is the AUTH-BLANKED SOURCE, which still contains every
+    # comment — so `_HELPER_GUARD_BODY_RE` was matching prose. MEASURED on
+    # hermiq `AgentWebhookController::loadOwnedAgent`, whose body contains no
+    # `throw` statement at all; the word appears only in a code comment
+    # explaining why the helper CATCHES one:
+    #
+    #     // caller invokes this helper OUTSIDE its own try block — so the throw
+    #     // would escape as a framework 500 …
+    #
+    # That comment made the helper guard-bearing, and Pattern 1 then cleared
+    # all four routed methods that call it. A gate that can be silenced by a
+    # sentence in a comment is not measuring the code. `_blank_…(cleaned,
+    # cleaned)` keeps the `#365` blanking while dropping comments and string
+    # literals, so an authentication-only helper still does not qualify.
+    guard_text = _blank_authentication_only_guards(cleaned, cleaned)
     helpers: set = set()
     for name, body_start, body_end in _all_method_spans(cleaned):
         if _GUARD_HELPER_NAME_RE.match(name):
             helpers.add(name)
             continue
-        body = src[body_start:body_end]
+        body = guard_text[body_start:body_end]
         if _HELPER_GUARD_BODY_RE.search(body):
+            helpers.add(name)
+            continue
+        # An OWNERSHIP COMPARISON is a guard wherever it is written, including
+        # in a helper that answers with `null` rather than a status code —
+        # hermiq's `loadOwnedAgent()` is exactly that, and it is the reason the
+        # narrowed `throw` alternative above costs no true clear. Same rule as
+        # Pattern 7: recognise the decision by its CONDITION.
+        if _has_ownership_comparison_guard(cleaned, src, body_start, body_end,
+                                           require_denial=True):
             helpers.add(name)
             continue
         if is_or_repo and _OR_RBAC_ACCESS_RE.search(body):
@@ -1098,14 +2365,20 @@ def scan_file(path: str) -> int:
 
     # One-time, per-file context for the two delegated-guard patterns.
     cleaned = _strip_strings_and_comments(src)
+    # `.github#365`: every guard lookup below runs against `gsrc`, which is
+    # `src` with authentication-only guard clauses blanked to same-length
+    # whitespace. Offsets, spans and line numbers are unchanged — only the text
+    # the guard patterns get to see is. `src` itself is still what gets
+    # reported, so findings name real lines.
+    gsrc = _blank_authentication_only_guards(cleaned, src)
     is_or_repo = bool(_OR_NAMESPACE_RE.search(cleaned))
-    guard_helpers = _collect_guard_helpers(cleaned, src, is_or_repo)
+    guard_helpers = _collect_guard_helpers(cleaned, gsrc, is_or_repo)
     # Pattern 4 context: resolve this class's typed collaborators to real files
     # and read their guard-bearing methods out of their own source, then close
     # the same-class delegation graph over that. Both are lazy/cached; a file
     # with no @NoAdminRequired method never pays for them.
     collaborator_guards = _collaborator_guard_map(cleaned, path)
-    delegated_guards = _delegated_guard_methods(cleaned, src, collaborator_guards)
+    delegated_guards = _delegated_guard_methods(cleaned, gsrc, collaborator_guards)
 
     violations = 0
     for name, head_start, sig_start, body_start, body_end, line_no in _find_method_bodies(src):
@@ -1115,7 +2388,11 @@ def scan_file(path: str) -> int:
         # in the return-type hint is recognised (mirrors the bash gate's
         # behaviour of starting _body at the function declaration line).
         sig = src[sig_start:body_start]
-        body = src[body_start:body_end]
+        # `.github#365`: guard lookups read the de-authenticated body. Only the
+        # authentication-only clauses differ from `src[body_start:body_end]`,
+        # and those carry no data access, so the CORS and zero-input patterns
+        # below are unaffected by reading it too.
+        body = gsrc[body_start:body_end]
 
         # ---- Exemption 1: constructor -----------------------------------
         if name == "__construct":
@@ -1129,8 +2406,14 @@ def scan_file(path: str) -> int:
         if _is_preflight_cors_method(name):
             continue
 
-        # Only methods carrying @NoAdminRequired / #[NoAdminRequired] are in scope.
-        if not _NO_ADMIN_RE.search(head):
+        # Methods carrying @NoAdminRequired / #[NoAdminRequired] are in scope,
+        # and so — since Pattern 8 — are @PublicPage ones. Before that, a
+        # PublicPage method with no NoAdminRequired was dropped HERE, one
+        # branch before the exemption that was blamed for the blindness: 267
+        # of the fleet's 357 public controller methods never reached it. See
+        # the Pattern 8 commentary.
+        is_public_page = bool(_PUBLIC_PAGE_ANNOTATION_RE.search(head))
+        if not _NO_ADMIN_RE.search(head) and not is_public_page:
             continue
 
         # ---- Exemption 3: CORS-headers-only body ------------------------
@@ -1138,9 +2421,17 @@ def scan_file(path: str) -> int:
         if _is_cors_only_body(body):
             continue
 
-        # @PublicPage on the *same* method satisfies the gate — the method
-        # is intentionally open to unauthenticated callers.
-        if _PUBLIC_PAGE_ANNOTATION_RE.search(head):
+        # ---- Exemption 3b: @PublicPage that resolves nothing global -------
+        # WAS: `@PublicPage` on the same method exempted it unconditionally,
+        # "intentionally open to unauthenticated callers". That is a claim
+        # about the CALLER, and the gate's question is about the OBJECT.
+        # A public page still exempts — but only once Pattern 8 has read the
+        # body and found that no caller-supplied identifier reaches a lookup
+        # it can steer. Everything else in this loop still applies, so a
+        # public method that carries a real guard, a resolved delegation or a
+        # reason-bearing exempt tag clears exactly as it would have.
+        if is_public_page and not _public_page_lookup_is_unscoped(
+                cleaned, path, sig_start, body):
             continue
 
         # ---- Exemption 4: reason-bearing explicit exempt tag -------------
@@ -1154,7 +2445,25 @@ def scan_file(path: str) -> int:
 
         # At least one authorisation guard must appear in the body OR the
         # function signature (e.g. TemplateResponse in the return type hint).
-        if _GUARD_BODY_RE.search(sig + body):
+        #
+        # ⚠️ The TemplateResponse alternative is withheld from a `@PublicPage`
+        # method. Its stated reason — "NC middleware already guarantees an
+        # authenticated session so there is no object access to gate" — is
+        # true under `@NoAdminRequired` and FALSE under `@PublicPage`, which
+        # is the annotation that turns the session guarantee off. A public
+        # renderer that resolves a caller-supplied id into its template
+        # parameters is the same exposure as a JSON one. An exemption's
+        # reason is a testable claim; this one does not survive the move.
+        if (_PUBLIC_TEMPLATE_STRIPPED_RE if is_public_page
+                else _GUARD_BODY_RE).search(sig + body):
+            continue
+
+        # ---- Pattern 7: in-body ownership comparison --------------------
+        # An ownership mismatch answered with 404 rather than 403 is the
+        # deliberate anti-oracle choice this gate's own FAIL message endorses.
+        # Recognised by the CONDITION, for the same reason authentication is
+        # demoted by the condition rather than by the status code.
+        if _has_ownership_comparison_guard(cleaned, gsrc, body_start, body_end):
             continue
 
         # ---- Pattern 1: private guard-helper delegation -----------------
@@ -1200,15 +2509,29 @@ def scan_file(path: str) -> int:
         if _is_zero_input_read_only(_params, body):
             continue
 
+        # ---- Pattern 6: session-identity hand-off ------------------------
+        # Every call that receives a caller-supplied parameter also receives a
+        # session-derived identity, so the object reference is resolved under a
+        # scope the caller cannot forge. This is the shape `.github#365`'s
+        # blanking would otherwise have turned into 45 false positives in
+        # doriath alone. See the Pattern 6 commentary.
+        if _has_session_identity_handoff(body, _params):
+            continue
+
         # NOTE (.github#315): the guidance that goes with this finding — that
         # the guard may live in a service or mapper two frames down — is
         # printed ONCE by the runner's gate-7 FAIL message, not appended here.
         # `filter_preexisting_methods.py` parses this line with
         # `rule=(?P<rule>.+)$`, so anything added after `rule=` becomes part of
         # the rule NAME and would silently break pre-existing filtering.
-        print(
-            f"{path}:{line_no} method={name} rule=no-auth-guard-in-body"
-        )
+        # A `@PublicPage` finding gets its OWN rule name. The remedy differs:
+        # there is no session identity to compare an owner against, so the
+        # fix is to constrain the lookup to a scope the endpoint declares
+        # public — not to add an ownership check. A distinct name also lets
+        # triage separate the two populations without re-reading every hit.
+        rule = ("publicpage-unscoped-object-lookup" if is_public_page
+                else "no-auth-guard-in-body")
+        print(f"{path}:{line_no} method={name} rule={rule}")
         violations += 1
 
     return violations

@@ -121,11 +121,36 @@ _out="${_tmp}/run.txt"
         --scope-to-diff --base "${_root}" . > "${_out}" 2>&1
 )
 
-_v17=$(grep -oE '^\[gate-17\] [^:]+: [A-Z]+( \([a-z]+\))?' "${_out}" | head -1 | sed 's/^[^:]*: //')
+# NOTE the `( [A-Z]+)*`: the verdict word is not always one token. Under the
+# original single-token pattern "NOT APPLICABLE" parsed as "NOT" and every
+# comparison below failed on the STRING rather than on the behaviour — the same
+# trap test_gate_empty_scope_never_passes.sh records in its own `_verdict`.
+_v17=$(grep -oE '^\[gate-17\] [^:]+: [A-Z]+( [A-Z]+)*( \([a-z]+\))?' "${_out}" | head -1 | sed 's/^[^:]*: //')
 if grep -qE '^\[gate-17\][^:]*: FAIL — 0 ' "${_out}"; then
     _bad "gate-17 reported 'FAIL — 0 pass-through method(s)' — a crash rendered as a finding count"
 elif [ "${_v17}" = "PASS" ] || [ "${_v17}" = "FAIL" ]; then
     _ok "gate-17 produced a real verdict (${_v17}) over a ${_scope_bytes}-byte scope list"
+elif [ "${_v17}" = "NOT APPLICABLE" ]; then
+    # ADDED WITH .github#374, AND IT IS A STRONGER ASSERTION THAN THE TWO ABOVE.
+    #
+    # The diff here is `root...HEAD`, and ThingController.php lives in the ROOT
+    # commit — so the change set is 3,000 filler `.ts` files and not one PHP
+    # file under lib/. `NOT APPLICABLE` is therefore the honest verdict, and it
+    # only became reachable when gate-17 stopped calling a `# count=0` over an
+    # unopened scope a PASS.
+    #
+    # But it must not become a way to DODGE this arm, whose whole subject is
+    # E2BIG: a scope list over MAX_ARG_STRLEN used to stop python3 from starting
+    # at all. So the marker is required. gate-17 can only reach its
+    # empty-scope branch from a path where the checker exited cleanly, so a
+    # `# count=` in the log is proof the interpreter ran over the
+    # ${_scope_bytes}-byte list. If E2BIG returns there is no marker, and the
+    # gate reports SKIPPED (wiring) — handled below, and never NOT APPLICABLE.
+    if grep -q '^# count=' "${_logs}/hydra-gate-redundant-controller.log" 2>/dev/null; then
+        _ok "gate-17 reported NOT APPLICABLE over an empty PHP scope, and its checker DID complete over the ${_scope_bytes}-byte scope list (terminal '# count=' marker present)"
+    else
+        _bad "gate-17 reported NOT APPLICABLE but its log carries no terminal '# count=' marker — the checker never finished, so this is a CRASH wearing an empty-scope verdict. That is the E2BIG defect returning through a new door."
+    fi
 elif [ "${_v17}" = "SKIPPED (wiring)" ]; then
     _ok "gate-17 reported SKIPPED (wiring) — honest, though the scope file should have avoided the crash"
 else

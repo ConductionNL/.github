@@ -158,5 +158,78 @@ class GateIsNotBlind(unittest.TestCase):
             shutil.rmtree(root, ignore_errors=True)
 
 
+class CaptionsAreNotMenuEntriesForThisGate(unittest.TestCase):
+    """The gate-60 / gate-62 divergence, and the decision that resolved it.
+
+    Until 2026-08-12 these two gates disagreed about one node, in the same
+    package: gate 60 exempted a `type: "caption"` entry, and gate 62 failed it
+    TWICE. Reproduced on a fixture carrying
+    `{"type":"caption","label":"Store","icon":"ViewGridOutline"}` —
+    gate-60 → 0 findings, gate-62 → 2 FAILs.
+
+    Decided against the RENDERER, not by aligning whichever was easier to
+    change. `CnAppNav.vue` renders a caption as
+    `<NcAppNavigationCaption :name=... :data-testid=... />` — no `#icon` slot,
+    no `:to`, no children loop — and its docblock states "Caption entries
+    ignore `route`, `href`, `action`, `icon`, `count`, `children`, and
+    `pinned`". The manifest schema says the same independently. Every rule in
+    `check_store` is a claim about a rendered icon or a resolved route, and a
+    caption has neither, so gate 62 was emitting unclosable findings about
+    dead metadata. Gate 62 was aligned to gate 60; gate 60 now WARNs about the
+    dead keys so the information is not merely dropped.
+    """
+
+    def _findings(self, entry, gate="store"):
+        root = Path(tempfile.mkdtemp())
+        try:
+            data = {"id": "app", "menu": [entry], "pages": []}
+            findings: list[str] = []
+            fn = css.check_store if gate == "store" else css.check_settings
+            fn(root, [(root / "src" / "manifest.json", data)], findings)
+            return findings
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_a_caption_claiming_the_store_concept_is_not_failed(self):
+        findings = self._findings({
+            "id": "cap", "type": "caption", "label": "Store",
+            "icon": "ViewGridOutline"})
+        self.assertEqual(findings, [])
+
+    def test_the_identical_node_without_type_caption_still_fails_twice(self):
+        # THE DECISIVE PAIR. Same label, same icon; only `type` differs. If
+        # this arm ever goes green the exemption has become a hole.
+        findings = self._findings({
+            "id": "cap", "label": "Store", "icon": "ViewGridOutline"})
+        self.assertEqual(len(findings), 2, findings)
+        self.assertTrue(all(f.startswith("FAIL") for f in findings))
+
+    def test_a_child_of_a_caption_is_not_judged_either(self):
+        # The renderer does not walk a caption's children, so nothing under it
+        # is drawn. gate 60 skips the subtree for the same reason.
+        findings = self._findings({
+            "id": "cap", "type": "caption", "label": "Section",
+            "children": [{"id": "s", "label": "Store", "icon": "ViewGridOutline"}]})
+        self.assertEqual(findings, [])
+
+    def test_a_non_caption_parent_still_has_its_children_judged(self):
+        # ANTI-WIDENING for the arm above: the subtree skip must be caused by
+        # `type: "caption"` and by nothing else.
+        findings = self._findings({
+            "id": "grp", "label": "Section",
+            "children": [{"id": "s", "label": "Store", "icon": "ViewGridOutline"}]})
+        self.assertEqual(len(findings), 2, findings)
+
+    def test_gate_63_still_walks_captions_because_labels_ARE_rendered(self):
+        # SCOPE OF THE DECISION. It covers icon and route rules only. A
+        # caption's LABEL is honoured by the renderer, so ADR-079 D4 — which is
+        # a rule about the label — must keep applying to one.
+        findings = self._findings(
+            {"id": "cap", "type": "caption", "label": "Settings",
+             "section": "settings"},
+            gate="settings")
+        self.assertTrue(any("ADR-079 D4" in f for f in findings), findings)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
