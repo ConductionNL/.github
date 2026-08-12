@@ -75,10 +75,24 @@ EC
 {
     "name": "fixture",
     "scripts": {
-        "stylelint": "stylelint \"src/**/*.{vue,scss,css}\""
+        "stylelint": "stylelint \"src/**/*.{vue,scss,css}\"",
+        "stylelint:fix": "stylelint \"src/**/*.{vue,scss,css}\" --fix"
     }
 }
 JSON
+
+    cat > "$d/phpmd.xml" <<'XML'
+<?xml version="1.0"?>
+<ruleset name="fixture">
+    <rule ref="vendor/conduction/hydra-gates/quality-config/phpmd.xml"/>
+</ruleset>
+XML
+
+    cat > "$d/phpstan.neon" <<'NEON'
+includes:
+    - vendor/conduction/hydra-gates/quality-config/phpstan-base.neon
+    - phpstan-baseline.neon
+NEON
 
     mkdir -p "$d/.github/workflows"
     cat > "$d/.github/workflows/code-quality.yml" <<'YML'
@@ -163,6 +177,80 @@ probe gates-ref-pinned         gates-ref-pinned                    "printf '    
 probe workflow-pinned          shared-workflow-pinned              "sed -i 's|quality.yml@main|quality.yml@v2.0.0|' .github/workflows/code-quality.yml"
 probe package-pinned-exact     shared-package-pinned               "sed -i 's|\"conduction/coding-standard\": \"^1.0\"|\"conduction/coding-standard\": \"1.0.0\"|' composer.json"
 probe package-pinned-branch    shared-package-pinned               "sed -i 's|\"conduction/coding-standard\": \"^1.0\"|\"conduction/coding-standard\": \"dev-some-branch\"|' composer.json"
+
+probe phpmd-not-central        phpmd-not-centralised \
+                               "sed -i 's|vendor/conduction/hydra-gates/quality-config/phpmd.xml|rulesets/codesize.xml|' phpmd.xml"
+probe local-unusedparams       local-phpmd-unusedparams            'printf "<ruleset/>\n" > phpmd-unusedparams.xml'
+probe phpstan-not-central      phpstan-not-centralised \
+                               "sed -i '/phpstan-base.neon/d' phpstan.neon"
+probe prettierrc-unwired       prettier-config-without-prettier    'printf "{}\n" > .prettierrc'
+probe stylelintfix-unquoted    stylelint-glob-unquoted \
+                               "sed -i 's|\"stylelint:fix\": \"stylelint \\\\\"src/\\*\\*/\\*.{vue,scss,css}\\\\\" --fix\"|\"stylelint:fix\": \"stylelint src/**/*.vue --fix\"|' package.json"
+
+# ── PRETTIER IS NOT FORBIDDEN, ONLY UNWIRED PRETTIER ──────────────────────
+# Nextcloud publishes @nextcloud/prettier-config and nextcloud/forms consumes it
+# properly. A rule that failed every prettier config would push apps away from
+# the aligned form, which is the opposite of this gate's purpose.
+D="$WORK/prettierwired"
+rm -rf "$D"; scaffold "$D"
+printf '{}\n' > "$D/.prettierrc"
+cat > "$D/package.json" <<'JSON'
+{
+    "name": "fixture",
+    "devDependencies": {
+        "@nextcloud/prettier-config": "^1.2.0",
+        "prettier": "^3.9.6"
+    },
+    "scripts": {
+        "format": "prettier --check .",
+        "stylelint": "stylelint \"src/**/*.{vue,scss,css}\""
+    }
+}
+JSON
+out="$(run "$D")"
+if printf '%s' "$out" | grep -q 'FAIL prettier-config-without-prettier:'; then
+    no "a PROPERLY WIRED prettier config was reported — the rule cannot tell wired from inert" "$out"
+else
+    ok "accepts a prettier config that has prettier as a dependency"
+fi
+
+# ── A COMMENTED-OUT PHPSTAN INCLUDE IS NOT AN INCLUDE ─────────────────────
+D="$WORK/phpstancommented"
+rm -rf "$D"; scaffold "$D"
+cat > "$D/phpstan.neon" <<'NEON'
+includes:
+    # - vendor/conduction/hydra-gates/quality-config/phpstan-base.neon
+    - phpstan-baseline.neon
+NEON
+out="$(run "$D")"
+if printf '%s' "$out" | grep -q 'FAIL phpstan-not-centralised:'; then
+    ok "a commented-out phpstan include does not count as centralised"
+else
+    no "a COMMENTED-OUT phpstan include was accepted as centralised" "$out"
+fi
+
+# ── A DELIBERATE PHPMD DIVERGENCE IS STILL CENTRALISED ────────────────────
+# exclude + re-declare is the sanctioned pattern for the six apps that diverge;
+# failing it would make the rule unadoptable for exactly those apps.
+D="$WORK/phpmddiverge"
+rm -rf "$D"; scaffold "$D"
+cat > "$D/phpmd.xml" <<'XML'
+<?xml version="1.0"?>
+<ruleset name="fixture">
+    <rule ref="vendor/conduction/hydra-gates/quality-config/phpmd.xml">
+        <exclude name="ShortVariable"/>
+    </rule>
+    <rule ref="rulesets/naming.xml/ShortVariable">
+        <properties><property name="exceptions" value="x,y,h"/></properties>
+    </rule>
+</ruleset>
+XML
+out="$(run "$D")"
+if printf '%s' "$out" | grep -q 'FAIL phpmd-not-centralised:'; then
+    no "the sanctioned exclude+re-declare divergence was reported as not centralised" "$out"
+else
+    ok "accepts a deliberate divergence declared as exclude + re-declare"
+fi
 
 probe matrix-absent            test-matrix-not-declared \
                                "sed -i '/nextcloud-test-refs/d' .github/workflows/code-quality.yml"
