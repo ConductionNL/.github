@@ -1,0 +1,297 @@
+<?xml version="1.0"?>
+<ruleset xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="Conduction" xsi:noNamespaceSchemaLocation="phpcs.xsd">
+    <description>
+        The Conduction PHP coding standard. ONE copy, here. Apps consume it through a
+        four-line stub phpcs.xml; nothing below is duplicated into an app repository.
+
+        DELIBERATE DIVERGENCE FROM NEXTCLOUD — read before changing an indentation,
+        brace or spacing rule. Nextcloud core formats PHP with php-cs-fixer and
+        `nextcloud/coding-standard`, which sets TABS (`Config::setIndent("\t")`) and
+        same-line opening braces. This ruleset is PEAR-derived and sets FOUR SPACES
+        with next-line braces for classes and functions. The two cannot both be
+        satisfied by the same file.
+
+        The divergence is a choice, not an accident, and it is documented at
+        https://docs.conduction.nl/WayOfWork/ci-cd/. What matters operationally is
+        that ONLY ONE of the two formatters may be wired up in an app. See the
+        `cs:check` / `cs:fix` note in that page: those two script names belong to
+        nextcloud/coding-standard, and in this fleet they are aliases for PHPCS.
+    </description>
+
+    <!-- NO <file> ELEMENT HERE, AND THAT IS LOAD-BEARING.
+         PHPCS resolves <file> relative to the directory of the ruleset that
+         DECLARES it, not to the working directory, and it DOES propagate through
+         `<rule ref>`. A `<file>lib</file>` here therefore resolves to
+         <package>/quality-config/lib in every consuming app and phpcs exits 3
+         with `The file "lib" does not exist` — measured, phpcs 3.13.6 and 4.0.4.
+         The scanned tree is an app-level fact; the app stub declares it. -->
+
+    <exclude-pattern>*/vendor/*</exclude-pattern>
+    <exclude-pattern>*/vendor-bin/*</exclude-pattern>
+    <exclude-pattern>*/node_modules/*</exclude-pattern>
+    <exclude-pattern>composer-setup.php</exclude-pattern>
+    <!-- Apps that ship a verbatim template snapshot under lib/Resources/template/
+         (openbuild) keep it out of lint scope; a no-op everywhere else. -->
+    <exclude-pattern>lib/Resources/template/*</exclude-pattern>
+
+    <!-- Surface warnings (e.g. SpecTagSniff) in the log without failing the build.
+         The shared quality workflow ALSO maps phpcs exit 1 to success, so this is
+         belt and braces; do not add `--warning-severity=0` to the composer script,
+         which suppresses the reporting as well and makes the warnings invisible. -->
+    <config name="ignore_warnings_on_exit" value="1"/>
+
+    <arg name="basepath" value="."/>
+    <arg name="colors"/>
+    <arg name="parallel" value="75"/>
+    <arg name="extensions" value="php"/>
+    <arg value="p"/>
+
+    <!-- Don't hide tokenizer exceptions -->
+    <rule ref="Internal.Tokenizer.Exception">
+        <type>error</type>
+    </rule>
+
+    <!-- Include the whole PEAR standard -->
+    <rule ref="PEAR">
+        <exclude name="PEAR.NamingConventions.ValidFunctionName"/>
+        <exclude name="PEAR.NamingConventions.ValidVariableName"/>
+        <exclude name="PEAR.Commenting.ClassComment"/>
+        <exclude name="PEAR.Commenting.FileComment.MissingCategoryTag"/>
+        <exclude name="PEAR.Commenting.FileComment.MissingPackageTag"/>
+        <exclude name="PEAR.Commenting.FileComment.MissingLinkTag"/>
+        <exclude name="PEAR.Commenting.FileComment.MissingVersion"/>
+        <exclude name="PEAR.Commenting.InlineComment"/>
+        <!-- Exclude indentation rules we'll configure separately -->
+        <exclude name="PEAR.WhiteSpace.ScopeIndent"/>
+    </rule>
+
+    <!-- Include some sniffs from other standards that don't conflict with PEAR -->
+    <rule ref="Squiz.Arrays.ArrayBracketSpacing"/>
+    <rule ref="Squiz.ControlStructures.ControlSignature"/>
+    <rule ref="Squiz.ControlStructures.ElseIfDeclaration"/>
+    <rule ref="Squiz.Commenting.ClosingDeclarationComment"/>
+    <rule ref="Squiz.Commenting.BlockComment"/>
+    <rule ref="Squiz.Commenting.DocCommentAlignment"/>
+    <rule ref="Squiz.Commenting.EmptyCatchComment"/>
+    <rule ref="Squiz.Commenting.InlineComment"/>
+    <rule ref="Squiz.Commenting.LongConditionClosingComment"/>
+    <rule ref="Squiz.Commenting.PostStatementComment"/>
+    <rule ref="Squiz.Commenting.VariableComment"/>
+    <rule ref="Squiz.Functions.FunctionDeclarationArgumentSpacing"/>
+    <rule ref="Squiz.Operators.ComparisonOperatorUsage"/>
+    <rule ref="Squiz.PHP.DisallowInlineIf"/>
+    <rule ref="Squiz.Scope.MethodScope"/>
+    <rule ref="Squiz.Strings.ConcatenationSpacing">
+        <properties>
+            <property name="ignoreNewlines" value="true"/>
+        </properties>
+    </rule>
+    <rule ref="Squiz.WhiteSpace.ControlStructureSpacing"/>
+    <rule ref="Squiz.WhiteSpace.FunctionSpacing">
+        <properties>
+            <property name="spacing" value="1"/>
+            <property name="spacingAfterLast" value="0"/>
+            <property name="spacingBeforeFirst" value="0"/>
+        </properties>
+    </rule>
+    <rule ref="Squiz.WhiteSpace.MemberVarSpacing"/>
+    <rule ref="Squiz.WhiteSpace.OperatorSpacing"/>
+    <rule ref="Squiz.WhiteSpace.SuperfluousWhitespace"/>
+    <rule ref="Generic.Arrays.DisallowLongArraySyntax"/>
+    <rule ref="Generic.Commenting.Todo">
+        <exclude name="Generic.Commenting.Todo"/>
+    </rule>
+    <rule ref="Generic.ControlStructures.DisallowYodaConditions"/>
+    <rule ref="Generic.ControlStructures.InlineControlStructure"/>
+    <rule ref="Generic.Formatting.DisallowMultipleStatements"/>
+    <rule ref="Generic.Formatting.SpaceAfterCast"/>
+    <rule ref="Generic.Files.LineLength">
+        <properties>
+            <property name="lineLimit" value="150"/>
+            <property name="absoluteLineLimit" value="150"/>
+        </properties>
+    </rule>
+    <rule ref="Generic.NamingConventions.ConstructorName"/>
+    <rule ref="Generic.PHP.DeprecatedFunctions"/>
+    <rule ref="Generic.PHP.LowerCaseKeyword"/>
+    <rule ref="Generic.Strings.UnnecessaryStringConcat">
+        <properties>
+            <property name="allowMultiline" value="true"/>
+        </properties>
+    </rule>
+    <rule ref="Generic.WhiteSpace.IncrementDecrementSpacing"/>
+    <rule ref="PSR2.Classes.PropertyDeclaration"/>
+    <rule ref="PSR2.Methods.MethodDeclaration"/>
+    <rule ref="PSR2.Files.EndFileNewline"/>
+    <rule ref="PSR12.Files.OpenTag"/>
+    <rule ref="Zend.Files.ClosingTag"/>
+
+    <!-- PEAR uses warnings for inline control structures, so switch back to errors -->
+    <rule ref="Generic.ControlStructures.InlineControlStructure">
+        <properties>
+            <property name="error" value="true"/>
+        </properties>
+    </rule>
+
+    <!-- We use custom indent rules for arrays -->
+    <rule ref="Generic.Arrays.ArrayIndent"/>
+
+    <!-- Selectively include array rules, excluding alignment rules -->
+    <rule ref="Squiz.Arrays.ArrayDeclaration">
+        <exclude name="Squiz.Arrays.ArrayDeclaration.KeyNotAligned"/>
+        <exclude name="Squiz.Arrays.ArrayDeclaration.ValueNotAligned"/>
+        <exclude name="Squiz.Arrays.ArrayDeclaration.CloseBraceNotAligned"/>
+        <exclude name="Squiz.Arrays.ArrayDeclaration.CloseBraceNewLine"/>
+        <exclude name="Squiz.Arrays.ArrayDeclaration.MultiLineNotAllowed"/>
+        <exclude name="Squiz.Arrays.ArrayDeclaration.SingleLineNotAllowed"/>
+    </rule>
+
+    <!-- Check var names, but we don't want leading underscores for private vars -->
+    <rule ref="Squiz.NamingConventions.ValidVariableName"/>
+    <rule ref="Squiz.NamingConventions.ValidVariableName.PrivateNoUnderscore">
+        <severity>0</severity>
+    </rule>
+
+    <!-- Only one argument per line in multi-line function calls -->
+    <rule ref="PEAR.Functions.FunctionCallSignature">
+        <properties>
+            <property name="allowMultipleArguments" value="false"/>
+            <property name="indent" value="8"/>
+            <property name="requiredSpacesAfterOpen" value="0"/>
+            <property name="requiredSpacesBeforeClose" value="0"/>
+        </properties>
+    </rule>
+
+    <!-- Disable the indentation rule for multiline function declarations -->
+    <rule ref="PEAR.Functions.FunctionCallSignature.Indent">
+        <severity>0</severity>
+    </rule>
+
+    <!-- Disable the opening placement for multiline arrays -->
+    <rule ref="PEAR.Functions.FunctionCallSignature.OpeningIndent">
+        <severity>0</severity>
+    </rule>
+
+    <!-- Set standard indentation but don't apply it to function parameters.
+         FOUR SPACES, tabIndent=false. This is the line that diverges from
+         Nextcloud core; see the <description> above. -->
+    <rule ref="Generic.WhiteSpace.ScopeIndent">
+        <properties>
+            <property name="indent" value="4"/>
+            <property name="tabIndent" value="false"/>
+            <property name="ignoreIndentationTokens" type="array">
+                <element value="T_FUNCTION"/>
+                <element value="T_CLOSURE"/>
+                <element value="T_USE"/>
+                <element value="T_PRIVATE"/>
+                <element value="T_PROTECTED"/>
+                <element value="T_PUBLIC"/>
+                <element value="T_READONLY"/>
+                <element value="T_ARRAY"/>
+                <element value="T_OPEN_SHORT_ARRAY"/>
+            </property>
+        </properties>
+    </rule>
+
+    <!-- Have 12 chars padding maximum and always show as errors -->
+    <rule ref="Generic.Formatting.MultipleStatementAlignment">
+        <properties>
+            <property name="maxPadding" value="12"/>
+            <property name="error" value="true"/>
+        </properties>
+    </rule>
+
+    <!-- Ban some functions -->
+    <rule ref="Generic.PHP.ForbiddenFunctions">
+        <properties>
+            <property name="forbiddenFunctions" type="array">
+                <element key="sizeof" value="count"/>
+                <element key="delete" value="unset"/>
+                <element key="print" value="echo"/>
+                <element key="is_null" value="null"/>
+                <element key="create_function" value="null"/>
+                <element key="var_dump" value="null"/>
+                <element key="die" value="null"/>
+                <element key="error_log" value="null"/>
+            </property>
+        </properties>
+    </rule>
+
+    <!-- Private methods MUST not be prefixed with an underscore -->
+    <rule ref="PSR2.Methods.MethodDeclaration.Underscore">
+        <type>error</type>
+    </rule>
+
+    <!-- Private properties MUST not be prefixed with an underscore -->
+    <rule ref="PSR2.Classes.PropertyDeclaration.Underscore">
+        <type>error</type>
+    </rule>
+
+    <!--
+        InvalidEndChar demands that every inline comment end in `.`, `!` or `?`.
+        Every occurrence in a fleet lib/ tree is the REUSE-mandated SPDX header
+
+            // SPDX-License-Identifier: EUPL-1.2
+
+        whose value is a machine-parsed SPDX expression: a trailing full stop
+        makes it a DIFFERENT, invalid identifier and breaks REUSE compliance.
+        The two requirements are in direct conflict and REUSE wins.
+
+        Recorded as a WARNING rather than left to be inherited, because the state
+        it preserves used to be accidental. Under php_codesniffer 3.13.5 these
+        findings were warnings, so `composer phpcs` exited 1 and the gate passed.
+        3.13.6 — adopted to clear CVE-2026-67434 — reclassifies them as errors,
+        so the same unchanged code exits 2 and the gate fails. Nothing about the
+        code changed; only the tool's severity mapping did. Declaring the posture
+        here makes it explicit and version-independent.
+
+        Scope is deliberately narrow: only InvalidEndChar is downgraded. Every
+        other Squiz.Commenting.InlineComment sniff (WrongStyle, NotCapital,
+        SpacingBefore, Empty, …) still fails the build as an error.
+
+        First discovered and fixed in decidesk; hoisted here so the other 17 apps
+        do not each rediscover it on their next php_codesniffer bump.
+    -->
+    <rule ref="Squiz.Commenting.InlineComment.InvalidEndChar">
+        <type>warning</type>
+    </rule>
+
+    <!-- Explicitly exclude other rules that might conflict -->
+    <rule ref="Squiz.Functions.MultiLineFunctionDeclaration.SpaceAfterFunction">
+        <severity>0</severity>
+    </rule>
+    <rule ref="Squiz.Functions.MultiLineFunctionDeclaration.FirstParamSpacing">
+        <severity>0</severity>
+    </rule>
+    <rule ref="Squiz.Functions.MultiLineFunctionDeclaration.Indent">
+        <severity>0</severity>
+    </rule>
+    <rule ref="PEAR.WhiteSpace.ScopeIndent.Incorrect">
+        <severity>0</severity>
+    </rule>
+
+    <!-- ── Conduction custom sniffs ────────────────────────────────────────
+         Paths are relative to THIS file, so they resolve wherever the package
+         is checked out or vendored. An app stub must not repeat them. -->
+
+    <!-- Enforce named parameters on internal calls. -->
+    <rule ref="./phpcs-custom-sniffs/CustomSniffs/Sniffs/Functions/NamedParametersSniff.php">
+        <type>error</type>
+    </rule>
+
+    <!-- Block calls to \OC::$server->getX() / \OC::$server->query(), removed in
+         Nextcloud 34. This sniff exists because static analysis CANNOT see the
+         removal: every app pins nextcloud/ocp to a major below its declared
+         min-version, so psalm has no NC34 API surface to compare against. -->
+    <rule ref="./phpcs-custom-sniffs/CustomSniffs/Sniffs/Nextcloud/NoLegacyServerAccessorsSniff.php">
+        <type>error</type>
+    </rule>
+
+    <!-- Warn when a class or public method is missing the @spec PHPDoc tag
+         (hydra ADR-003). Warnings, not errors, so CI surfaces the gap without
+         blocking merges. -->
+    <rule ref="./phpcs-custom-sniffs/CustomSniffs/Sniffs/Commenting/SpecTagSniff.php">
+        <type>warning</type>
+    </rule>
+
+</ruleset>

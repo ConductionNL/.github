@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<ruleset xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="APP_NAME" xsi:noNamespaceSchemaLocation="phpcs.xsd">
+    <description>APP_NAME — Conduction PHP coding standard (single source: conduction/hydra-gates).</description>
+
+    <!-- The scanned tree MUST be declared here, not centrally: phpcs resolves
+         <file> relative to the ruleset that declares it. -->
+    <file>lib</file>
+
+    <rule ref="vendor/conduction/hydra-gates/quality-config/phpcs.xml"/>
+
+    <!-- App-specific deviations go BELOW this line, each with a reason and a
+         tracking issue. A deviation with no reason is caught by the
+         quality-config-drift gate. -->
+</ruleset>
