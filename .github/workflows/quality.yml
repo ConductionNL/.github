@@ -4906,16 +4906,29 @@ jobs:
     #                   point: the wiring must already be there, or flipping the
     #                   input would be a no-op nobody notices.
     #   reuse           same shape, via `continue-on-error: ${{ !inputs.reuse-blocking }}`.
-    #   info-xml        HAS NO SUCH FLAG AND IS BLOCKING ON ARRIVAL. Measured in
-    #                   #383 across all 18 core apps: 5 pass, 13 fail, twelve of
-    #                   those on xs:sequence element ORDER and one on a summary
-    #                   over the schema's length cap. Live-confirmed on
-    #                   openregister run 31591669849 — `Element 'documentation':
-    #                   This element is not expected`. So listing it here turns
-    #                   13 of 18 apps red until their manifests are reordered,
-    #                   and that is the authorised trade: the App Store rejects
-    #                   the same files at upload time, after the release has been
-    #                   built, tagged and published.
+    #   info-xml        HAS NO SUCH FLAG AND IS BLOCKING ON ARRIVAL. #383
+    #                   measured 5 pass / 13 fail before it merged. RE-MEASURED
+    #                   2026-08-12 14:20Z against every repo's live `development`
+    #                   tip, same App Store XSD: 6 PASS / 12 FAIL. Eleven of the
+    #                   twelve are xs:sequence element ORDER; the twelfth
+    #                   (zaakafhandelapp) is a <summary> over the schema's length
+    #                   cap. The one-app difference is not drift in the
+    #                   instrument — larpingapp's manifest was reordered by
+    #                   efa6aead at 11:28:48Z, and validating that one file at
+    #                   both refs gives FAIL then PASS.
+    #
+    #                   Live-confirmed against CI, not only locally: openregister
+    #                   run 31591669849 emitted `Element 'documentation': This
+    #                   element is not expected` — the same message, byte for
+    #                   byte, as the local validator.
+    #
+    #                   So listing it here turns 12 of 18 apps red until their
+    #                   manifests are reordered, and that is the authorised
+    #                   trade: the App Store rejects the same files at upload
+    #                   time, after the release has been built, tagged and
+    #                   published. TREAT THE 12 AS DECAYING — it is a count over
+    #                   files several agents edit daily, so re-measure before
+    #                   quoting it.
     #
     # The two remaining Nextcloud checks are NOT missing from this list. Multi
     # database PHPUnit is a matrix dimension of `phpunit`, which is already
