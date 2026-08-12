@@ -297,6 +297,57 @@ case "${HYDRA_GATE_SCOPE:-full}" in
         ;;
 esac
 BASE_REF="${HYDRA_GATE_BASE_REF:-}"
+# ---------------------------------------------------------------------------
+# THE SCOPE DECISION HAS EXACTLY ONE SOURCE, AND IT IS THIS SHELL (.github#416)
+# ---------------------------------------------------------------------------
+# The line above CONSUMES the variable. It is an INPUT to this runner — one of
+# three, alongside `--base` and the auto-detection below — and once read, the
+# decision lives in `${BASE_REF}` and `${SCOPE_TO_DIFF}`, both of which are
+# printed. So the variable is removed from this process's environment right
+# here, and every checker below is spawned into an environment that does not
+# contain it.
+#
+# WHY, and it is not hygiene. TEN helpers in scripts/lib/ read
+# `HYDRA_GATE_BASE_REF` from `os.environ` and diff-scope themselves when they
+# find it. Three of them — gate-16's, gate-53's scoper and gate-61's — are
+# always handed their base explicitly and were never exposed. The other SEVEN
+# (gates 19, 25, 26, 51, 52, 54, 55) are invoked through the same shape:
+#
+#     if [ "${SCOPE_TO_DIFF}" = "1" ]; then
+#         HYDRA_GATE_BASE_REF="${BASE_REF}" python3 …/check_x.py .
+#     else
+#         python3 …/check_x.py .          # <-- inherits the AMBIENT variable
+#     fi
+#
+# That `if` guards the EXPLICIT pass and was added for `#242`. It cannot guard
+# the environment: on any run where the caller exported the variable, the
+# `else` branch spawned a child that read it anyway, and the gate silently
+# diff-scoped itself on a run this script had already announced as full scope.
+#
+# The shared quality workflow exports it on `pull_request` and leaves it empty
+# on `push` — so this reopened `#242` on exactly the event that gates a merge,
+# and nowhere else. Measured on docudesk (`ConductionNL/.github@5e73e640`), one
+# tree, one base, `SCOPE-MODE: full` in both arms, only the delivery channel
+# different: gates 19/25/26 reported `NOT APPLICABLE` when the base arrived
+# through the environment and `FAIL — 396` / `PASS` / `FAIL — 6` when the same
+# base arrived through `--base`. The preamble printed four lines above says
+# "every other gate reads the whole tree"; those three did not, and no reader
+# could tell.
+#
+# Unsetting it here rather than patching the seven `else` branches is
+# deliberate. A per-gate `env -u` is a fix each of the seven has to remember,
+# and gate 51/52/54/55's authors each wrote the same shape after gate-19's
+# author had already written the `#242` comment explaining it. A new gate added
+# tomorrow with the same `if/else` is correct BY CONSTRUCTION under this line,
+# and cannot be made incorrect by anything a caller exports.
+#
+# The invariant, stated so it can be tested (and it is, by
+# scripts/lib/test_gate_base_ref_delivery_channel.sh): FOR ONE TREE AND ONE
+# BASE, THE PER-GATE VERDICTS MUST NOT DEPEND ON WHICH CHANNEL DELIVERED THE
+# BASE. `--base X` and `HYDRA_GATE_BASE_REF=X` are two spellings of one input;
+# a gate that can tell them apart is reading a second, unprinted source of
+# scope.
+unset HYDRA_GATE_BASE_REF
 while [ $# -gt 0 ]; do
     case "$1" in
         --scope-to-diff|--diff) SCOPE_TO_DIFF=1; shift ;;
