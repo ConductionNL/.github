@@ -86,7 +86,41 @@ _PRUNE_DIRS = {"custom_apps", "vendor", "node_modules", "tests", ".git"}
 # is*/has*/get*/find*/list*/validate*/check*/ensure*/require*/authorize* —
 # those read-or-guard shapes are gate-6's (orphan-auth) territory, not
 # this gate's.
+#
+# THE VERB LIST *IS* THE DETECTOR (.github, 2026-08-12).
+# ------------------------------------------------------
+# Everything else in this module — four indirect seams, a cross-app caller
+# index, comment blanking — only ever REMOVES findings. Nothing is examined
+# at all unless its name starts with one of these words, so a verb that is
+# missing is not a weaker check, it is NO check.
+#
+# Measured on a controlled probe: four orphaned write methods on one service,
+# `postJournalEntry` / `updateLedgerBalance` / `sendRemittanceAdvice` /
+# `deleteJournalEntry`, all with zero callers and no seam. The gate reported
+# exactly ONE — `post*`. The other three were invisible, and `delete*`'s
+# absence was already load-bearing enough that the fleet board had to warn
+# agents to "plant with `post*`" or they would wrongly record the gate as
+# blind.
+#
+# The original seventeen skew heavily to LEDGER vocabulary (`post`, `settle`,
+# `reconcile`, `issue`, `record`, `seed`) because the gate was written from a
+# shillinq bookkeeping sweep. The additions below are the ordinary write verbs
+# any app uses.
+#
+# WIDENING A VOCABULARY LIST IS HOW A GATE STARTS CRYING WOLF, so each verb
+# below was measured on twelve fleet repos BEFORE being added, and every
+# finding it produced was read. The set adds 35 findings to a baseline of 41.
+# Deliberately REJECTED after measurement, with their costs:
+#
+#   apply    (6)  applyFilters/applyDefaults are pure transforms
+#   process  (7)  processResponse/processRow are frequently pure
+#   register (4)  collides with OpenRegister's core NOUN, and with this
+#                 gate's own "registered seam" concept
+#   set/add  (--) never measured and never will be: every PHP setter matches
+#
+# One measured false positive drove _PREFIX_ONLY_VERBS below.
 WRITE_VERB_PREFIXES = (
+    # --- ledger/accounting vocabulary (original seventeen) ---
     "post",
     "create",
     "save",
@@ -104,7 +138,54 @@ WRITE_VERB_PREFIXES = (
     "seed",
     "publish",
     "issue",
+    # --- ordinary persistence writes ---
+    "update",
+    "delete",
+    "remove",
+    "persist",
+    "store",
+    "insert",
+    "upsert",
+    "patch",
+    "replace",
+    "purge",
+    "flush",
+    # --- outward side effects ---
+    "send",
+    "upload",
+    "import",
+    "sync",
+    "transfer",
+    # --- state transitions ---
+    "archive",
+    "cancel",
+    "approve",
+    "assign",
+    "mark",
+    "finalize",
+    "sign",
+    "revoke",
+    "grant",
+    # --- deferred work ---
+    "schedule",
+    "enqueue",
+    "trigger",
 )
+
+# Verbs that are ALSO ordinary English NOUNS, and so may name a pure accessor
+# when used as a whole method name. For these, only the PREFIX form counts
+# (`scheduleReminder` yes, `schedule` no).
+#
+# Measured, not guessed: `KapitaallastenCalculator::schedule()` in shillinq is
+# a PURE function returning a depreciation table — no side effect anywhere in
+# its body — and it was the single false positive among the 35 findings the
+# widening added. `flush()` and `sync()`, the only other bare-name matches in
+# the fleet, are genuine writes and are deliberately NOT listed here.
+#
+# The original seventeen are left alone on purpose: changing their exact-match
+# behaviour would drop existing findings, which is a different change from the
+# one being measured here.
+_PREFIX_ONLY_VERBS = frozenset({"schedule"})
 
 _METHOD_RE = re.compile(
     r"^\s*public\s+function\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\("
@@ -194,7 +275,15 @@ _EXCLUDE_RE = re.compile(
 
 
 def _is_write_method(name: str) -> bool:
-    return any(name.startswith(v) and len(name) > len(v) and name[len(v)].isupper() for v in WRITE_VERB_PREFIXES) or name in WRITE_VERB_PREFIXES
+    if any(
+        name.startswith(v) and len(name) > len(v) and name[len(v)].isupper()
+        for v in WRITE_VERB_PREFIXES
+    ):
+        return True
+    # Exact-name match, except for the noun-shaped verbs (see
+    # _PREFIX_ONLY_VERBS): `schedule()` is as likely to RETURN a schedule as to
+    # write one, and in the fleet it does exactly that.
+    return name in WRITE_VERB_PREFIXES and name not in _PREFIX_ONLY_VERBS
 
 
 def _class_short_name(src: str) -> str | None:

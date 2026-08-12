@@ -7252,13 +7252,44 @@ SEC_KEY = re.compile(
     # `self::APP_ID`, `static::APP_ID`) — which is exactly the blind spot that
     # was measured: 7 security-relevant reads across 5 repos.
     #
-    # KNOWN BLIND SPOT, STATED RATHER THAN QUIETLY ENFORCED: a read whose app
-    # id is a plain variable is still invisible to this gate. It is not a safe
-    # shape, it is an unmeasured one — separating the settings read-outs from
-    # the real scope decisions among them needs a data-flow question this
-    # regex cannot ask.
+    # THE BLIND SPOT IS NOW CLOSED, AND THE SEPARATION IT NEEDED IS SYNTACTIC.
+    #
+    # The paragraph above used to end here, saying a variable app id "is not a
+    # safe shape, it is an unmeasured one". It has now been measured, and it
+    # was hiding the gate's own founding defect IN THE APP THE GATE WAS BUILT
+    # FOR. opencatalogi reads
+    #
+    #     $this->config->getValueString($this->appName, 'listing_register', '')
+    #     $this->config->getValueString($this->appName, 'listing_schema',   '')
+    #
+    # unguarded, and 14 more of exactly that shape across CatalogiService,
+    # DirectoryService, PublicationService and SetupController — `catalog_
+    # register`, `catalog_schema`, `publication_register`, `publication_schema`.
+    # Sixteen reads of the opencatalogi#86 keys, in opencatalogi, reported
+    # PASS, because the app id is spelled `$this->appName` rather than
+    # `'opencatalogi'`. Same family as #184 and as the class-constant fix
+    # above: a matcher that only handles the spellings someone thought of is a
+    # floor, not a count. (The fleet has ~30 `method_exists($x, $variable)`
+    # sites invisible to literal greps for the same reason.)
+    #
+    # WHAT THE FIRST ATTEMPT GOT WRONG, AND WHY THIS ONE IS DIFFERENT.
+    # The rejected draft accepted `[^,()]+` and softwarecatalog went 23 -> 64,
+    # with 47 of the new findings being SETTINGS READ-OUTS. That cost is real
+    # and it is why the widening was backed out. But the diagnosis was wrong:
+    # the noise does not come from the app id being a variable, it comes from
+    # the read sitting in an ARRAY-LITERAL VALUE POSITION, where the gate's own
+    # remedy cannot be written. Measured over 12 repos, the two populations
+    # separate perfectly on that one syntactic fact:
+    #
+    #     softwarecatalog  +47 new, 47 of 47 in `'key' => ...` position
+    #     docudesk         + 1 new,  1 of  1 in `'key' => ...` position
+    #     opencatalogi     +16 new,  0 of 16 in `'key' => ...` position
+    #
+    # So the app id is widened to include a variable, and the array-literal
+    # value position is exempted instead — see _ARRAY_VALUE below.
     r"getValue(?:String|Bool|Int)\s*\(\s*"
-    r"(?:['\"][^'\"]*['\"]|(?:self|static|parent|[A-Z]\w*)(?:\\\w+)*::\w+)"
+    r"(?:['\"][^'\"]*['\"]|(?:self|static|parent|[A-Z]\w*)(?:\\\w+)*::\w+"
+    r"|\$this\s*->\s*\w+|\$\w+)"
     r"\s*,\s*['\"]"
     r"(?P<key>[^'\"]*"
     r"(?:register|schema|allow[_-]?list|allow_?list|whitelist|blocklist|"
@@ -7275,6 +7306,42 @@ SEC_KEY = re.compile(
     r"['\"]",
     re.IGNORECASE,
 )
+
+# THE ONE EXEMPTION THIS GATE GRANTS, AND THE CLAIM THAT JUSTIFIES IT.
+#
+# Shape:   'someLabel' => $this->config->getValueString($app, 'x_key', ''),
+#
+# CLAIM (testable): at this syntactic position NONE of the six remedies the
+# gate's own guard vocabulary recognises — an empty-compare, `empty()`, a
+# logger->warning, a `throw`, or an early Response return — can be written
+# without restructuring the surrounding expression. There is no local variable
+# to test and no statement slot to put a test in. A finding here names a line
+# at which no closing action exists, which is the unclosable-gate shape
+# (#252) that gate 59 exists to forbid, and 47 of them in one repo is how a
+# gate teaches people to stop reading it.
+#
+# TEST OF THE CLAIM: read the sites. softwarecatalog
+# ArchiMateImportService::getAmefConfiguration() builds `$decoded` as one array
+# literal of eight such reads; the only place a guard can go is the consumer of
+# `$decoded`, in a different function. The near-miss arm in
+# test_gate_45_to_55_acceptance.sh plants the SAME key read into a local
+# variable and asserts the gate still FAILS, so the exemption is about the
+# position and not about the key.
+#
+# NOT SILENT. An exemption that produces silence is how a gate's quiet gets
+# believed. Every demoted read is written to <log>.notes with its file, line
+# and key, so "the gate saw it and demoted it" is checkable rather than
+# indistinguishable from "the gate never looked".
+#
+# DELIBERATELY NOT EXEMPTED: `fn() => $this->config->getValueString(...)`. The
+# pattern requires an array KEY before the `=>`, and an arrow function has `)`
+# there, so a single-expression closure is still reported.
+_ARRAY_VALUE = re.compile(
+    r"(?:['\"][^'\"]*['\"]|\w+)\s*=>\s*"
+    r"(?:[\w\$]+(?:\s*(?:->|::)\s*[\w\$]+)*\s*(?:->|::)\s*)?$"
+)
+notes_path = log_path + '.notes'
+open(notes_path, 'w', encoding='utf-8').close()
 for fp in files:
     try:
         with open(fp, encoding='utf-8', errors='replace') as f:
@@ -7370,6 +7437,14 @@ for fp in files:
             window,
         )
         if not has_guard:
+            if _ARRAY_VALUE.search(src[max(0, m.start() - 200):m.start()]):
+                with open(notes_path, 'a', encoding='utf-8') as g:
+                    g.write(f"{fp}:{lineno}: NOTE security-relevant config read of "
+                            f"\"{m.group('key')}\" is unguarded but sits in an "
+                            f"array-literal value position, where no guard can be "
+                            f"written — demoted, not ignored. Guard it at the "
+                            f"consumer of the assembled array.\n")
+                continue
             with open(log_path, 'a', encoding='utf-8') as g:
                 g.write(f"{fp}:{lineno}: security-relevant config read of \"{m.group('key')}\" has no fail-mode guard within 10 lines\n")
 PY
