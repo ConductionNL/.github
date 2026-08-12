@@ -1,0 +1,46 @@
+<?php
+/**
+ * SPDX-FileCopyrightText: 2026 Conduction
+ * SPDX-License-Identifier: EUPL-1.2
+ *
+ * THE ANTI-WIDENING ARM (.github#395) — the same reformat as `.knr`, plus ONE
+ * real change: `totalRowWeights()` now SUBTRACTS each weight instead of adding
+ * it.
+ *
+ * This is the half that matters most. "Ignore brace style" could have been
+ * written as "ignore reformatted files", or as any normalisation loose enough
+ * to swallow an operator — and a gate that stops reporting is worse than one
+ * that over-reports, because this gate's entire job is traceability.
+ *
+ * So gate-16 must FAIL here, must NAME `totalRowWeights`, and must NOT name
+ * `buildRowLabel` — which carries the same reformat and no change at all.
+ */
+
+namespace OCA\SpecCoverageFixture\Controller;
+
+class ReformattedController {
+	/**
+	 * Build a label for a row. No @spec — inherited debt, and it stays that way.
+	 */
+	public function buildRowLabel(
+		string $id,
+		string $kind,
+	): string {
+		$prefix = 'row';
+
+		return $prefix . ':' . $kind
+			. ':' . $id;
+	}
+
+	/**
+	 * Total the weights of the given rows. No @spec — inherited debt.
+	 */
+	public function totalRowWeights(array $rows): int {
+		$total = 0;
+		foreach ($rows as $row) {
+			$total = $total - (int)($row['weight'] ?? 0);
+		}
+
+		return $total;
+	}
+}

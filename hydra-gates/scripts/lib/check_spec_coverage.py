@@ -19,6 +19,13 @@ those added lines. A method that exists in the diff's context but was not
 itself touched is never flagged — so untouched legacy methods stay green even
 when a neighbouring method changes.
 
+That added-line set is then narrowed to the lines whose CONTENT changed, not
+merely their layout (``.github#395``): brace style, indentation, intra-line
+spacing and a PHP trailing comma are normalised away on both sides before a
+line counts as added. Only a line the normalisation still shows as different
+puts a method in scope — and the narrowing is an intersection with git's own
+answer, so it can never widen the scope.
+
 This runs against the CURRENT working directory's git repo (the script is
 repo-agnostic — it lives in hydra but operates on whatever app is checked out
 at cwd).
@@ -66,6 +73,7 @@ import os
 import re
 import subprocess
 import sys
+from difflib import SequenceMatcher
 from pathlib import Path
 
 SPEC_RE = re.compile(r"@spec\s+openspec/")
@@ -133,6 +141,191 @@ VUE_METHOD_RE = re.compile(
     r"\([^)]*\)\s*\{",
 )
 
+# ---- cosmetic-reformat normalisation (.github#395) --------------------------
+#
+# A line whose only difference from its base version is LAYOUT is not a changed
+# method. `git diff -w` cannot express that: the brace of Nextcloud's K&R style
+# is a TOKEN THAT MOVED LINES, not whitespace that changed width, so
+# `public function foo()` and `public function foo() {` differ under `-w` and
+# every method in a reformatted app reads as modified.
+#
+# Each rule below is narrow enough that the two forms it equates are the same
+# program. Nothing here is a heuristic about intent.
+
+# `foo() {` -> `foo()`. The brace still has to be SOMEWHERE — Allman puts it on
+# its own line, which normalises to the empty string and is dropped — so no
+# information is lost, only its position.
+_NORM_TRAILING_BRACE_RE = re.compile(r"\s*\{$")
+_NORM_WS_RE = re.compile(r"\s+")
+# A complete single- or double-quoted literal, escapes included. Whitespace
+# INSIDE one is content and is left exactly as it is: `'a b'` -> `'ab'` is a
+# change to what a user sees and must stay visible to this gate.
+_NORM_STRING_RE = re.compile(r"'(?:\\.|[^'\\])*'|\"(?:\\.|[^\"\\])*\"")
+
+
+def _unify_quote_style(literal: str) -> str:
+    """``"abc"`` -> ``'abc'`` when the two forms denote the SAME string.
+
+    Only a double-quoted literal is rewritten, and only when its body has no
+    ``$`` or ``{`` (interpolation, in both simple and complex syntax), no ``'``
+    (which would need escaping on the other side), and no backslash other than
+    the ones spelling ``\\"``. Those exclusions are the whole safety argument:
+    they are exactly what makes a double-quoted string mean something a
+    single-quoted one does not. ``"\\n"`` is a newline and ``'\\n'`` is two
+    characters, so a literal carrying any other escape is left alone; ``"a\\"b"``
+    and ``'a"b'`` are the same three characters in PHP and in JS alike, so that
+    one is unescaped and equated. This equates two spellings of one value, never
+    two values.
+    """
+    if not literal.startswith('"'):
+        return literal
+    body = literal[1:-1]
+    if any(c in body for c in ("$", "{", "'")):
+        return literal
+    if "\\" in body.replace('\\"', ""):
+        return literal
+    return "'" + body.replace('\\"', '"') + "'"
+
+
+def _normalise_code_line(line: str) -> str | None:
+    """A layout-independent key for ``line``, or ``None`` if the line carries no
+    code identity at all (blank, or a bare docblock ``*``, or a lone brace).
+
+    Applied to BOTH sides of the comparison, so the only question it answers is
+    "are these two lines the same program". What it deliberately equates:
+
+    * brace placement — K&R vs Allman (``.github#395``, and gate-14's ``#391``);
+    * indentation and intra-line spacing, including operator and cast spacing
+      (``(array) $x`` / ``(array)$x``) and docblock column alignment;
+    * quote style, under the narrow rule in ``_unify_quote_style``.
+
+    What it deliberately does NOT equate: anything INSIDE a string literal.
+    ``'a b'`` -> ``'ab'`` changes what a user reads and stays visible to this
+    gate, which is why literals are lifted out before whitespace is touched.
+
+    Whitespace outside a literal is REMOVED rather than collapsed because
+    php-cs-fixer both adds it (``'a'.$b`` -> ``'a' . $b``) and removes it
+    (``(array) $x`` -> ``(array)$x``); collapsing to a single space leaves the
+    second form differing, and was measured on procest#819 to recover 71 of the
+    185 false findings against 183 for removal. Removal can in principle weld
+    two tokens together (``else if`` -> ``elseif``, which procest's diff
+    actually contains), but each pair it can weld is either the same program —
+    that one is — or one half of it does not parse, so it cannot equate two
+    different WORKING programs.
+    """
+    s = line.strip()
+    if s == "" or s == "*":
+        return None
+    s = _NORM_TRAILING_BRACE_RE.sub("", s)
+    if s == "":
+        return None
+    out: list[str] = []
+    pos = 0
+    for m in _NORM_STRING_RE.finditer(s):
+        out.append(_NORM_WS_RE.sub("", s[pos:m.start()]))
+        out.append(_unify_quote_style(m.group(0)))
+        pos = m.end()
+    out.append(_NORM_WS_RE.sub("", s[pos:]))
+    return "".join(out)
+
+
+def _comparison_keys(text: str, is_php: bool) -> tuple[list[int], list[str], list[str]]:
+    """``(line_numbers, keys, keys_with_trailing_comma_kept)`` for ``text``.
+
+    Two variants of the same key, index-aligned, because the two comparisons
+    below want different things from a trailing comma. Line-vs-line, a PHP
+    trailing comma is a no-op and must be ignored — php-cs-fixer adds one to
+    every multi-line parameter list, which is 2 of procest's 185 findings on its
+    own. Region-vs-region (the re-wrap rule) has to keep it, because there the
+    commas are load-bearing punctuation of the joined statement.
+    """
+    numbers: list[int] = []
+    keys: list[str] = []
+    keys_full: list[str] = []
+    for i, raw in enumerate(text.splitlines()):
+        k = _normalise_code_line(raw)
+        if k is None:
+            continue
+        numbers.append(i + 1)
+        keys_full.append(k)
+        keys.append(k[:-1] if is_php and k.endswith(",") else k)
+    return numbers, keys, keys_full
+
+
+def _is_pure_rewrap(base_region: list[str], head_region: list[str], is_php: bool) -> bool:
+    """True if the two regions are the SAME CHARACTERS, distributed differently
+    across lines — a line-length reflow such as ``'a '.`` + ``'b'`` becoming
+    ``'a '`` + ``.'b'``, or a long call broken after an argument.
+
+    PHP ONLY, and never across a line comment. Both restrictions are about the
+    one thing a line break can do besides layout: END something. JavaScript has
+    automatic semicolon insertion, so joining ``return`` and ``x`` changes what
+    the function returns; PHP has no ASI. And in either language a ``//`` runs
+    to the end of the line, so inserting a break after one UNCOMMENTS whatever
+    followed — the same characters, a different program. Refusing the rule
+    whenever the region contains a comment introducer costs only precision.
+    """
+    if not is_php or not base_region or not head_region:
+        return False
+    joined_base = "".join(base_region)
+    if joined_base != "".join(head_region):
+        return False
+    return "//" not in joined_base and "#" not in joined_base
+
+
+def _substantively_changed_lines(base_text: str, head_text: str, is_php: bool) -> set[int]:
+    """1-based line numbers in ``head_text`` that are not present, unchanged, in
+    ``base_text`` once both sides are normalised by ``_normalise_code_line``."""
+    _, base_keys, base_full = _comparison_keys(base_text, is_php)
+    head_numbers, head_keys, head_full = _comparison_keys(head_text, is_php)
+    matcher = SequenceMatcher(None, base_keys, head_keys, autojunk=False)
+    changed: set[int] = set()
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag not in ("replace", "insert"):
+            continue
+        if _is_pure_rewrap(base_full[i1:i2], head_full[j1:j2], is_php):
+            continue
+        for j in range(j1, j2):
+            changed.add(head_numbers[j])
+    return changed
+
+
+def _is_in_gate_scope(rel: str) -> bool:
+    """True if this path is one gate-16 would evaluate at all."""
+    if rel.endswith(".php"):
+        return rel.startswith(BACKEND_DIRS) and not rel.startswith(BACKEND_EXEMPT_DIRS)
+    return _is_frontend_in_scope(rel)
+
+
+def _drop_cosmetic_only(
+    changed: dict[str, set[int]], base_commit: str, cwd: Path,
+) -> dict[str, set[int]]:
+    """Narrow each file's added-line set to the lines that are not pure layout.
+
+    INTERSECTS with git's own set — it can only ever REMOVE lines, never add
+    one. A file that is new at HEAD (no base blob) or that cannot be read keeps
+    git's answer untouched, so the failure mode of every lookup here is the
+    PRE-EXISTING behaviour, not silence.
+    """
+    out: dict[str, set[int]] = {}
+    for rel, added in changed.items():
+        if not added or not _is_in_gate_scope(rel):
+            out[rel] = added
+            continue
+        base_text = _git(["show", f"{base_commit}:{rel}"], cwd)
+        if not base_text:
+            # Added by this branch, or unreadable at the base: every line of it
+            # is genuinely new.
+            out[rel] = added
+            continue
+        try:
+            head_text = (cwd / rel).read_text(encoding="utf-8")
+        except OSError:
+            out[rel] = added
+            continue
+        out[rel] = added & _substantively_changed_lines(base_text, head_text, rel.endswith(".php"))
+    return out
+
 
 def _git(args: list[str], cwd: Path) -> str:
     try:
@@ -153,10 +346,21 @@ def changed_lines(base_ref: str, cwd: Path) -> dict[str, set[int]]:
 
     Falls back from ``BASE...HEAD`` to ``BASE`` (working-tree diff) so the
     gate works both on a PR branch and on an uncommitted local checkout.
+
+    A LINE THAT ONLY MOVED IS NOT A CHANGED METHOD (.github#395). git's answer
+    is then narrowed by ``_drop_cosmetic_only``: each in-scope file is compared
+    against its own base version with layout normalised away, and any added line
+    that survives normalisation as identical is dropped from the scope. Measured
+    on ConductionNL/procest#819, a `conduction/coding-standard` adoption PR of
+    921 PHP files: 185 findings before, 0 after, and PHP's own tokeniser agrees
+    — the 54 files those findings named are token-identical to their base once
+    whitespace, comments, trailing commas and quote style are set aside.
     """
     diff = _git(["diff", "-U0", "--diff-filter=ACMR", f"{base_ref}...HEAD"], cwd)
+    three_dot = True
     if not diff.strip():
         diff = _git(["diff", "-U0", "--diff-filter=ACMR", base_ref], cwd)
+        three_dot = False
     result: dict[str, set[int]] = {}
     current: str | None = None
     hunk_re = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
@@ -173,7 +377,14 @@ def changed_lines(base_ref: str, cwd: Path) -> dict[str, set[int]]:
                 count = int(m.group(2)) if m.group(2) is not None else 1
                 for n in range(start, start + count):
                     result[current].add(n)
-    return result
+    # `A...B` diffs against the MERGE BASE, so that — not `base_ref` itself — is
+    # the version each file has to be compared with. Getting this wrong would
+    # compare against a commit the branch never saw and silently stop
+    # suppressing anything, which is why it is resolved rather than assumed.
+    base_commit = base_ref
+    if three_dot:
+        base_commit = _git(["merge-base", base_ref, "HEAD"], cwd).strip() or base_ref
+    return _drop_cosmetic_only(result, base_commit, cwd)
 
 
 def spec_tags_removed(base_ref: str, cwd: Path) -> set[str]:
