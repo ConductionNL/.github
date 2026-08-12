@@ -8705,8 +8705,8 @@ if [ -d lib/AppInfo ]; then
         # gate verdict — the same shape as a PR body echoed into the gates log,
         # where a quoted failure became a finding in the artefact meant to
         # disprove it. Say what this gate did; do not re-emit the run's banner.
-        _lwp_scope_note=" judged DIFF-SCOPED against base '${BASE_REF}' (gate-61 is always diff-scoped, ADR-078/ADR-020) even though the run itself is full-scope and forwarded no base — so this covers ONLY the registrations that diff touched and is NOT a whole-tree result;"
-        echo "[gate-61] NOTE: this is a full-scope run, but gate-61 is always diff-scoped and judged this tree against '${BASE_REF}' (the runner's own default — --full forwards no base). Read its verdict as a statement about that diff, not about the whole tree."
+        _lwp_scope_note=" judged DIFF-SCOPED against delta base '${BASE_REF}' (gate-61 is always diff-scoped, ADR-078/ADR-020) even though the run itself reads the whole tree — so this covers ONLY the registrations that diff touched and is NOT a whole-tree result;"
+        echo "[gate-61] NOTE: this run reads the whole tree, but gate-61 is always diff-scoped and judged this tree against the delta base '${BASE_REF}' (named by --base or \$HYDRA_GATE_BASE_REF, or resolved from the remote's default branch). Read its verdict as a statement about that diff, not about the whole tree."
     fi
     if [ "${_lwp_rc}" -eq 0 ]; then
         _pass 61 "listener-work-placement"

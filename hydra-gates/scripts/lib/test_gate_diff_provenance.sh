@@ -139,8 +139,13 @@ else
 
     # THE CONTROL FIRST: this must be a --full run, or nothing below is about
     # the defect. An arm that silently ran diff-scoped would pass trivially.
-    if grep -qF 'Base ref: n/a' "${_o61}"; then
-        _ok "control: the run really is full-scope (its preamble reports no base)"
+    # Reads SCOPE-MODE, not the old 'Base ref: n/a' string. Under the
+    # full-scope-by-default change (#378) the preamble was reworded AND the two
+    # facts came apart: a run is now full-scope independently of whether a
+    # delta base resolved, so "reports no base" no longer means "is full-scope".
+    # This control only ever wanted the latter.
+    if grep -qE '^\[hydra-gates\] SCOPE-MODE: full' "${_o61}"; then
+        _ok "control: the run really is full-scope (its preamble states SCOPE-MODE: full)"
     else
         _bad "control FAILED: this run is not full-scope — the gate-61 assertions below prove nothing"
     fi
