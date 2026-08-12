@@ -89,6 +89,7 @@ jobs:
     uses: ConductionNL/.github/.github/workflows/quality.yml@main
     with:
       app-name: fixture
+      nextcloud-test-refs: '["stable34", "stable32", "stable33"]'
       enable-hydra-gates: true
 YML
 
@@ -162,6 +163,79 @@ probe gates-ref-pinned         gates-ref-pinned                    "printf '    
 probe workflow-pinned          shared-workflow-pinned              "sed -i 's|quality.yml@main|quality.yml@v2.0.0|' .github/workflows/code-quality.yml"
 probe package-pinned-exact     shared-package-pinned               "sed -i 's|\"conduction/coding-standard\": \"^1.0\"|\"conduction/coding-standard\": \"1.0.0\"|' composer.json"
 probe package-pinned-branch    shared-package-pinned               "sed -i 's|\"conduction/coding-standard\": \"^1.0\"|\"conduction/coding-standard\": \"dev-some-branch\"|' composer.json"
+
+probe matrix-absent            test-matrix-not-declared \
+                               "sed -i '/nextcloud-test-refs/d' .github/workflows/code-quality.yml"
+probe matrix-misses-floor      test-matrix-misses-declared-versions \
+                               "sed -i 's|\\[\\\"stable34\\\", \\\"stable32\\\", \\\"stable33\\\"\\]|[\\\"stable34\\\"]|' .github/workflows/code-quality.yml"
+probe matrix-outside-range     test-matrix-tests-unsupported-version \
+                               "sed -i 's|\\[\\\"stable34\\\", \\\"stable32\\\", \\\"stable33\\\"\\]|[\\\"stable31\\\", \\\"stable32\\\", \\\"stable33\\\", \\\"stable34\\\"]|' .github/workflows/code-quality.yml"
+
+# ── A COMMENTED-OUT MATRIX IS NOT A MATRIX ────────────────────────────────
+# The rule must not accept a declaration that only exists inside a comment.
+D="$WORK/matrixcommented"
+rm -rf "$D"; scaffold "$D"
+sed -i "s|      nextcloud-test-refs: .*|      # nextcloud-test-refs: '[\"stable34\", \"stable32\", \"stable33\"]'|" "$D/.github/workflows/code-quality.yml"
+# NOTE: capture first, then grep. `set -o pipefail` is on, and the checker exits
+# with its VIOLATION COUNT — so `run | grep -q` returns non-zero on a successful
+# match whenever the fixture is dirty, which is every positive control here.
+out="$(run "$D")"
+if printf '%s' "$out" | grep -q 'FAIL test-matrix-not-declared:'; then
+    ok "a commented-out nextcloud-test-refs does not count as declared"
+else
+    no "a COMMENTED-OUT matrix was accepted as the declared matrix" "$out"
+fi
+
+# ── info.xml's RANGE MUST COME FROM THE ELEMENT, NOT A COMMENT ────────────
+# procest's info.xml carries an explanatory comment containing a literal
+# `<nextcloud min-version="28" .../>` ABOVE the live element. Reading the raw
+# text returns 28 where the app declares 32 — which silently LOWERS the bar
+# rules 9 and 11 enforce, the worst direction for a check to be wrong in.
+D="$WORK/infocomment"
+rm -rf "$D"; scaffold "$D"
+cat > "$D/appinfo/info.xml" <<'XML'
+<?xml version="1.0"?>
+<info>
+    <id>fixture</id>
+    <version>1.0.0</version>
+    <dependencies>
+        <!-- History: this app once declared
+             <nextcloud min-version="28" max-version="30"/>. It was true when
+             written and is not any more. -->
+        <nextcloud min-version="32" max-version="34"/>
+    </dependencies>
+</info>
+XML
+out="$(run "$D")"
+if printf '%s' "$out" | grep -qE 'FAIL test-matrix-(misses-declared-versions|tests-unsupported-version):'; then
+    no "the range was read from a COMMENT, not the live <nextcloud> element" "$out"
+else
+    ok "reads the declared range from the element, ignoring a commented-out one"
+fi
+
+# ...and the positive control for that same fixture: with the comment ignored,
+# a matrix that covers 28-30 instead of 32-34 must still be caught. Without
+# this, the assertion above would also pass on a checker that reads nothing.
+D="$WORK/infocomment2"
+rm -rf "$D"; scaffold "$D"
+cat > "$D/appinfo/info.xml" <<'XML'
+<?xml version="1.0"?>
+<info>
+    <id>fixture</id>
+    <version>1.0.0</version>
+    <dependencies>
+        <!-- <nextcloud min-version="28" max-version="30"/> -->
+        <nextcloud min-version="32" max-version="34"/>
+    </dependencies>
+</info>
+XML
+sed -i "s|      nextcloud-test-refs: .*|      nextcloud-test-refs: '[\"stable28\", \"stable29\", \"stable30\"]'|" "$D/.github/workflows/code-quality.yml"
+out="$(run "$D")"
+if printf '%s' "$out" | grep -q 'FAIL test-matrix-misses-declared-versions:'; then
+    ok "a matrix matching only the commented-out range is still a finding"
+else
+    no "matrix covering the commented range was accepted" "$out"
+fi
 
 # ── ^1.0 IS NOT A PIN ─────────────────────────────────────────────────────
 # The rule must distinguish "floats within a major" from "frozen". If it cannot,

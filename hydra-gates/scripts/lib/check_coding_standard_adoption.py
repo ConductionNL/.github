@@ -65,6 +65,20 @@ preference:
      system moving independently. `^1.0` is not a pin — it floats within a major
      and is correct. An exact version, a `dev-<branch>` constraint, or a
      `hydra-gates-ref` that is not `main`, is.
+ 11. A TEST MATRIX THAT DISAGREES WITH info.xml — the range in info.xml is a
+     promise to the App Store, and `nextcloud-test-refs` is the only thing that
+     can redeem it. This fleet broke that promise in BOTH directions inside one
+     programme: first 18 apps declared 32-34 and tested 31/32, so nothing ran on
+     the version being adopted; then the migration that fixed it REPLACED the
+     list with `'["stable34"]'` instead of extending it, and 16 apps stopped
+     testing their own declared floor. The second defect was introduced by the
+     change that fixed the first, and no check noticed either.
+
+     The out-of-range half is not merely wasteful. A stable31 leg survived long
+     after openregister raised its floor to 32, so `occ app:enable openregister`
+     failed with only a ::warning::, the run continued with no data layer, and
+     every /apps/openregister/... call returned Nextcloud's HTML 404 page. That
+     leg's red said nothing and its green said less.
 
 USAGE
     check_coding_standard_adoption.py <app-root>
@@ -315,7 +329,13 @@ def check(root: str) -> tuple[list[str], int]:
     # ── 9. ocp major vs info.xml min-version ─────────────────────────────
     info = read(os.path.join(root, "appinfo", "info.xml"))
     if info is not None and composer is not None:
-        m = re.search(r'<nextcloud[^>]*min-version="(\d+)"', info)
+        # Comments FIRST. procest's info.xml carries an explanatory comment
+        # containing a literal `<nextcloud min-version="28" .../>` describing an
+        # older declaration, and it sits ABOVE the live element — so a search of
+        # the raw text returns 28 where the app declares 32. That does not fail
+        # loudly; it silently RAISES the bar this rule will accept, which is the
+        # worst direction for a check to be wrong in.
+        m = re.search(r'<nextcloud[^>]*min-version="(\d+)"', strip_xml_comments(info))
         req = {}
         req.update(composer.get("require") or {})
         req.update(composer.get("require-dev") or {})
@@ -403,6 +423,85 @@ def check(root: str) -> tuple[list[str], int]:
                     "other apps — which is the entire reason it is shared.",
                 )
                 break
+
+        # ── 11. the tested matrix covers the declared range ──────────────
+        # An app's appinfo/info.xml is a PROMISE to the App Store: these server
+        # majors work. `nextcloud-test-refs` is the only thing that can redeem
+        # it. When they disagree, the promise is the part users act on and the
+        # matrix is the part that would have caught it being wrong.
+        #
+        # This fleet has now made that mistake in BOTH directions inside one
+        # programme. First every app declared 32-34 and tested 31/32, so nothing
+        # was ever exercised on the version being adopted. Then the migration
+        # that fixed it REPLACED the list with '["stable34"]' instead of
+        # extending it, and 16 apps stopped testing their own declared floor.
+        # Same defect, opposite end, and the second one was introduced by the
+        # change that fixed the first.
+        #
+        # A leg OUTSIDE the range is the other half of the rule, and it is not
+        # merely wasteful: the fleet ran a stable31 leg long after openregister
+        # raised its floor to 32, so `occ app:enable openregister` failed with
+        # only a ::warning::, the run continued with no data layer, and every
+        # /apps/openregister/... call returned Nextcloud's HTML 404 page. That
+        # leg's red said nothing, and its green said less.
+        if info is not None:
+            info_body = strip_xml_comments(info)
+            lo = re.search(r'<nextcloud[^>]*\bmin-version="(\d+)"', info_body)
+            hi = re.search(r'<nextcloud[^>]*\bmax-version="(\d+)"', info_body)
+            if lo and hi:
+                checked += 1
+                declared = set(range(int(lo.group(1)), int(hi.group(1)) + 1))
+                rm = re.search(
+                    r"^\s*nextcloud-test-refs:\s*'(\[[^']*\])'", body, re.M
+                )
+                if rm is None:
+                    fail(
+                        "test-matrix-not-declared",
+                        f"appinfo/info.xml declares NC "
+                        f"{lo.group(1)}-{hi.group(1)} but code-quality.yml passes "
+                        "no nextcloud-test-refs, so the matrix is whatever the "
+                        "shared workflow currently defaults to. A default cannot "
+                        "know this app's declared range; state the range here.",
+                    )
+                else:
+                    try:
+                        refs = json.loads(rm.group(1))
+                    except json.JSONDecodeError as exc:
+                        fail(
+                            "test-matrix-unparseable",
+                            f"nextcloud-test-refs is not valid JSON ({exc}): "
+                            f"{rm.group(1)!r}. The workflow calls fromJSON() on "
+                            "it, so this fails at matrix expansion.",
+                        )
+                        refs = []
+                    tested = {
+                        int(r[len("stable") :])
+                        for r in refs
+                        if isinstance(r, str) and re.fullmatch(r"stable\d+", r)
+                    }
+                    missing = sorted(declared - tested)
+                    outside = sorted(tested - declared)
+                    if missing:
+                        fail(
+                            "test-matrix-misses-declared-versions",
+                            f"appinfo/info.xml declares NC "
+                            f"{lo.group(1)}-{hi.group(1)}, but no job runs on "
+                            + ", ".join(f"stable{v}" for v in missing)
+                            + f". The matrix is {refs!r}. Those majors are "
+                            "advertised to the App Store and exercised by "
+                            "nothing — not known-broken, unmeasured. Either add "
+                            "the legs or narrow what info.xml claims.",
+                        )
+                    if outside:
+                        fail(
+                            "test-matrix-tests-unsupported-version",
+                            "the matrix runs on "
+                            + ", ".join(f"stable{v}" for v in outside)
+                            + f", outside the declared range {lo.group(1)}-"
+                            f"{hi.group(1)}. A leg on a version the app does not "
+                            "support cannot pass for the right reason, and this "
+                            "fleet has had one pass for the wrong one.",
+                        )
 
     return fails, checked
 
