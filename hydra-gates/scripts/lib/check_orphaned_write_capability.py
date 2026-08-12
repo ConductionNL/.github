@@ -662,12 +662,68 @@ def _enumerate_lib_php(app_root: str, include_untracked: bool = False) -> list[s
     return files
 
 
+_INFO_XML_ID_RE = re.compile(r"<id>\s*([A-Za-z0-9_.-]+)\s*</id>")
+
+
+def _app_id(app_root: str) -> tuple[str, str]:
+    """Resolve the app's IDENTITY and say where it came from.
+
+    Returns ``(app_id, source)``. ``source`` is one of ``appinfo/info.xml``
+    or ``basename`` and is printed by ``_scan_app`` on every run, so which
+    arm engaged is readable from the log rather than inferred.
+
+    WHY NOT THE DIRECTORY NAME (``ConductionNL/.github#398``)
+    --------------------------------------------------------
+    This function used to *be* ``os.path.basename(app_root)``. The
+    ``quality.yml`` hydra-gates job checks the app out with ``path: app``,
+    so under CI the basename is the literal string ``app`` for EVERY repo —
+    which is in no fleet's ``FOUNDATION_APPS`` set. The hydra#106 fail-safe
+    below therefore **never engaged in CI, for any repository, ever**, and
+    nothing said so. Four-arm control on one openregister tree, varying only
+    the directory name: ``openregister`` → **0 findings + SKIP**, renamed to
+    ``app`` → **8 findings**. A leaf app (docudesk) gave **3 under both
+    names**, which is what proves the difference is this guard and not the
+    rename.
+
+    A guard keyed on a path component is keyed on something the CALLER
+    controls and the checker cannot see. ``appinfo/info.xml``'s ``<id>`` is
+    intrinsic: it travels inside the tree, so it is identical under
+    ``path: app``, under a worktree, under a fleet sweep from
+    ``apps-extra/``, and in a clone named anything at all.
+
+    WHY NOT ``GITHUB_REPOSITORY`` either. It is process-wide, and ``main()``
+    groups its argv by app root and judges each root separately — a fleet
+    sweep legitimately hands this one process files from several repos. An
+    environment variable would stamp ONE repository's name onto EVERY root,
+    which is the same defect wearing different clothes: identity taken from
+    the invocation instead of from the thing being judged.
+
+    WHEN IT IS ABSENT. ``_app_root_for`` already locates the root by looking
+    for exactly this file, so root-finding and identity come from one
+    artifact and cannot disagree. If it is missing or carries no ``<id>``
+    (a bare fixture directory, not a Nextcloud app), identity falls back to
+    the basename — the historical behaviour, so fixtures keep working — but
+    the fallback is ANNOUNCED with ``source=basename``. The defect being
+    removed here is a fail-safe that stopped being a fail-safe *without
+    saying so*; a fallback that names itself in the log is not that.
+    """
+    info = os.path.join(app_root, "appinfo", "info.xml")
+    try:
+        with open(info, encoding="utf-8", errors="replace") as fh:
+            m = _INFO_XML_ID_RE.search(fh.read())
+        if m is not None:
+            return m.group(1), "appinfo/info.xml"
+    except OSError:
+        pass
+    return os.path.basename(os.path.abspath(app_root)), "basename"
+
+
 def _is_foundation(app_root: str) -> bool:
     """True when the repo under scan is one every leaf app consumes."""
     env = os.environ.get("HYDRA_OWC_FOUNDATION")
     if env is not None:
         return env.strip() not in ("", "0", "false", "no")
-    return os.path.basename(os.path.abspath(app_root)) in FOUNDATION_APPS
+    return _app_id(app_root)[0] in FOUNDATION_APPS
 
 
 def _find_sibling_app_roots(app_root: str) -> list[str]:
@@ -841,7 +897,18 @@ def _scan_app(app_root: str, files: list[str], findings: list[str]) -> None:
     # repo is different: its public methods exist to be called from sibling
     # apps, so proving deadness requires those siblings on disk.
     extra_roots: list[str] = []
-    if _is_foundation(app_root):
+    # `.github#398`: state the identity and its SOURCE on every run. The
+    # previous defect was not that the guard was wrong, it was that nobody
+    # could tell it had stopped engaging — in CI it had never engaged at all
+    # and every log looked exactly the same as one where it had.
+    _id, _id_source = _app_id(app_root)
+    _foundation = _is_foundation(app_root)
+    print(
+        f"[orphaned-write-capability] identity: app_id={_id} source={_id_source} "
+        f"foundation={'yes' if _foundation else 'no'} root={app_root}",
+        file=sys.stderr,
+    )
+    if _foundation:
         extra_roots = _find_sibling_app_roots(app_root)
         if not extra_roots:
             # FAIL SAFE: the consumers of this foundation repo are not on
@@ -850,7 +917,7 @@ def _scan_app(app_root: str, files: list[str], findings: list[str]) -> None:
             # Reporting here is what made the gate dangerous — it named
             # live code dead. Report nothing and say why.
             print(
-                f"[orphaned-write-capability] SKIP: {os.path.basename(app_root)} is a "
+                f"[orphaned-write-capability] SKIP: {_id} is a "
                 "foundation repo and no sibling apps were found next to it — cross-app "
                 "callers cannot be resolved, so deadness is unprovable. See hydra#106.",
                 file=sys.stderr,

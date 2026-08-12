@@ -272,15 +272,16 @@ class _FleetFixture:
     invokes the gate. See ForeignCwdTest.
     """
 
-    def __init__(self, app_name: str, cwd: str = "app"):
+    def __init__(self, app_name: str, cwd: str = "app", app_id: str = None):
         self._tmp = tempfile.TemporaryDirectory()
         self._app_name = app_name
         self._cwd_mode = cwd
+        self._app_id = app_id
         self._old_cwd = None
 
     def __enter__(self):
         self.parent = self._tmp.name
-        self.app_root = self.add_app(self._app_name)
+        self.app_root = self.add_app(self._app_name, self._app_id)
         self._old_cwd = os.getcwd()
         os.chdir(self.app_root if self._cwd_mode == "app" else self.parent)
         return self
@@ -289,10 +290,19 @@ class _FleetFixture:
         os.chdir(self._old_cwd)
         self._tmp.cleanup()
 
-    def add_app(self, name: str) -> str:
+    def add_app(self, name: str, app_id: str = None) -> str:
+        """*app_id* writes a real ``<id>`` into info.xml (`.github#398`).
+
+        Left None by default so every pre-existing fixture keeps exercising
+        the basename fallback — those are the arms that prove the fallback
+        still works, and they must not silently migrate to the new path.
+        """
         root = os.path.join(self.parent, name)
         os.makedirs(os.path.join(root, "lib"), exist_ok=True)
-        self.write(root, "appinfo/info.xml", "<?xml version='1.0'?><info></info>\n")
+        body = "" if app_id is None else "<id>%s</id>" % app_id
+        self.write(
+            root, "appinfo/info.xml",
+            "<?xml version='1.0'?><info>%s</info>\n" % body)
         return root
 
     def write(self, root: str, rel_path: str, content: str) -> str:
@@ -380,6 +390,77 @@ class CrossAppCallerTest(unittest.TestCase):
             out = _run_main(svc)
             self.assertEqual(len(out), 1, out)
             self.assertIn("method=emitDisposalJournal", out[0])
+
+
+class CheckoutDirectoryNameTest(unittest.TestCase):
+    """`.github#398` — the foundation fail-safe must not key on the PATH.
+
+    `quality.yml`'s hydra-gates job checks the app out with ``path: app``, so
+    in CI the directory basename is the literal string ``app`` for every
+    repository in the fleet. Keyed on the basename, the hydra#106 fail-safe
+    therefore NEVER ENGAGED IN CI, for any repo, ever — and nothing in the
+    log said so, which is what made it survive.
+
+    Four-arm control on one real openregister tree, varying only the
+    directory name: named ``openregister`` → 0 findings + SKIP; renamed to
+    ``app`` → 8 findings. A leaf app (docudesk) gave 3 under BOTH names,
+    which is what proves the difference is this guard and not the rename.
+    """
+
+    def test_foundation_recognised_when_checked_out_as_app(self):
+        """THE DEFECT. Directory named ``app`` — as CI always names it — with
+        info.xml declaring the real id. The fail-safe must engage."""
+        with _FleetFixture("app", app_id="openregister") as fx:
+            svc = fx.write(fx.app_root, "lib/Service/ObjectService.php",
+                           _FOUNDATION_SVC)
+            self.assertEqual(_run_main(svc), [])
+
+    def test_directory_name_alone_no_longer_decides(self):
+        """The converse, and the arm that stops a basename fallback from
+        quietly reinstating the old behaviour: a directory NAMED
+        ``openregister`` whose info.xml declares a leaf app is NOT the
+        foundation repo, so its genuinely dead method is still reported."""
+        with _FleetFixture("openregister", app_id="shillinq") as fx:
+            svc = fx.write(
+                fx.app_root, "lib/Service/DisposalJournalEmitter.php",
+                "<?php\nnamespace OCA\\Shillinq\\Service;\n"
+                "class DisposalJournalEmitter {\n"
+                "    public function emitDisposalJournal(): void { /* dead */ }\n"
+                "}\n")
+            out = _run_main(svc)
+            self.assertEqual(len(out), 1, out)
+            self.assertIn("method=emitDisposalJournal", out[0])
+
+    def test_identity_and_its_source_are_announced(self):
+        """A fail-safe that stops engaging must not be able to do it in
+        silence. Every run states the id, where it came from, and whether the
+        guard applies — so 'it never engaged in CI' is readable from a log
+        instead of needing a four-arm experiment to discover."""
+        import contextlib
+        with _FleetFixture("app", app_id="openregister") as fx:
+            svc = fx.write(fx.app_root, "lib/Service/ObjectService.php",
+                           _FOUNDATION_SVC)
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                owc.main(["check", svc])
+            line = err.getvalue()
+            self.assertIn("app_id=openregister", line)
+            self.assertIn("source=appinfo/info.xml", line)
+            self.assertIn("foundation=yes", line)
+
+    def test_absent_info_xml_falls_back_to_basename_and_says_so(self):
+        """When the intrinsic source is absent the fallback is the historical
+        basename — but it NAMES ITSELF, which is the whole difference between
+        a documented fallback and the defect being removed."""
+        import contextlib
+        with _FleetFixture("openregister") as fx:  # info.xml carries no <id>
+            svc = fx.write(fx.app_root, "lib/Service/ObjectService.php",
+                           _FOUNDATION_SVC)
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                owc.main(["check", svc])
+            self.assertIn("source=basename", err.getvalue())
+            self.assertIn("foundation=yes", err.getvalue())
 
 
 class ForeignCwdTest(unittest.TestCase):

@@ -1044,8 +1044,215 @@ _REQUEST_BOUND_ASSIGN_RE = re.compile(
     r"|->\s*getUploadedFile\s*\(|\$_(?:GET|POST|REQUEST|COOKIE|FILES)\b)"
 )
 
+# ---------------------------------------------------------------------------
+# Pattern 6, clause 2: which calls can actually RESOLVE AN OBJECT
+# (`ConductionNL/.github#398`)
+# ---------------------------------------------------------------------------
+#
+# Clause 2 vetoes when "a caller-controlled value reaches an unscoped call".
+# It used to treat EVERY method call as such a call, so a method that was
+# already correctly scoped was flipped to a finding by a line that touches no
+# store at all. Isolated in both directions on one body:
+#
+#     $safeKey = $this->sanitizeKey($key);       <- ADDING this line: 0 -> 1
+#     return $this->store->find($key, $uid);     <- unchanged, still scoped
+#
+# and adding a session identity to the SANITISER's own argument list cleared it
+# again — which is the tell that the veto, not the data access, was deciding.
+#
+# ⚠️ ADDING AN AUTHORISATION GUARD IS THE WRONG REPAIR for that shape. The
+# method is already scoped; a guard would be dead code written to satisfy a
+# misreading, and gate-7's whole credibility problem is that the fleet learned
+# to trust its silences.
+#
+# THE FIX IS IN TWO HALVES AND *BOTH* ARE REQUIRED. The second one alone is a
+# recall regression, which is the trap this class is laid over:
+#
+#   (A) TAINT PROPAGATION. A local assigned from an expression mentioning a
+#       caller-supplied value IS caller-supplied. Before this, `$safeKey` was
+#       invisible to clause 2 — so
+#
+#           $safeKey = $this->sanitizeKey($key);
+#           return $this->store->find($safeKey);      // REAL IDOR
+#
+#       was reported ONLY BY ACCIDENT, via the same veto that produced the
+#       false positive above. Exempting the sanitiser without (A) would have
+#       silently cleared that method. (A) is a recall INCREASE and lands first.
+#
+#   (B) A same-class `$this->helper(...)` that demonstrably resolves nothing
+#       does not, by itself, veto. The helper is looked up in this class's own
+#       source and ITS BODY IS READ — nothing is inferred from its name, for
+#       the same reason Pattern 4 refuses to infer anything from a property
+#       name. A body that performs any data access, any mutation or any
+#       request read is NOT clearable, and an unresolvable callee is NOT
+#       clearable. Fail-closed in every direction.
+#
+# With both, the sanitiser case clears and the IDOR case above still reports —
+# proven by the `SanitiserHelperFalsePositiveTest` near-miss arms.
+_TAINT_ASSIGN_RE = re.compile(
+    r"\$([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([^;\n]{1,400});")
+_TAINT_FOREACH_RE = re.compile(
+    r"\bforeach\s*\(\s*([^)]{1,200}?)\s+as\s+(?:\$[A-Za-z_][A-Za-z0-9_]*\s*=>\s*)?"
+    r"\$([A-Za-z_][A-Za-z0-9_]*)")
 
-def _has_session_identity_handoff(body: str, params) -> bool:
+# PSR-3 logging is the other call shape that cannot resolve an object. The
+# interface is fixed, every method returns void, and a controller that puts a
+# caller-supplied id into its error message is doing diagnostics, not a
+# lookup. Measured while hand-reading the sample: openbuild's
+# `AppOverrideController::getUser` is correctly scoped
+# (`getUserDelta(appId: $appId, uid: $user->getUID())`) and would STILL have
+# been reported after (B), purely because of
+# `$this->logger->error('... appId '.$appId, ...)`.
+# Exempting it can only suppress a finding whose sole unscoped call was a log
+# line — i.e. one where nothing was resolved at all. The
+# `test_logger_exempt_does_not_hide_a_real_lookup` arm pins that.
+_PSR3_LOG_RECEIVER_RE = re.compile(
+    r"\$this\s*->\s*(?:logger|log|psrLogger)\s*$")
+_PSR3_LOG_LEVELS = frozenset(
+    ("debug", "info", "notice", "warning", "warn", "error",
+     "critical", "alert", "emergency", "log"))
+
+# A helper body containing any data-access, mutation or request-input token is
+# treated as capable of resolving or changing an object, so it keeps its veto.
+# `_is_non_resolving_helper` reads `_DATA_ACCESS_RE` / `_MUTATION_CALL_RE` /
+# `_REQUEST_INPUT_RE` by NAME at call time — they are defined further down this
+# module. That indirection is deliberate: this rule must stay the UNION of the
+# gate's existing vocabularies, and re-spelling them here would let the two
+# copies drift, which is how a checker quietly stops checking.
+#
+# ⚠️ NOTE FOR A FUTURE READER: `_DATA_ACCESS_RE` is defined TWICE in this file
+# (once around the Pattern-3 block, once in the Pattern-3b block). Python keeps
+# the LAST one, which is the object-access spelling — the one wanted here. The
+# earlier definition is dead. Left as found rather than fixed blind; recorded
+# so nobody "tidies" the surviving one away.
+
+
+def _class_method_bodies(cleaned: str, src: str) -> dict:
+    """name -> body text for EVERY method declared in this file.
+
+    Private helpers included: Pattern 6's clause 2 has to reason about the
+    helper a routed method delegates to, and those are private by design.
+    """
+    out: dict = {}
+    for name, start, end in _all_method_spans(cleaned):
+        out.setdefault(name, src[start:end])
+    return out
+
+
+def _is_non_resolving_helper(name: str, bodies: dict, _seen=None,
+                             _depth: int = 0) -> bool:
+    """True when same-class helper *name* provably resolves/changes nothing.
+
+    Fail-closed: an unknown callee, a recursion, a body past the depth limit,
+    or any data-access / mutation / request-read token all return False.
+    """
+    if _depth > 3:
+        return False
+    if name not in bodies:
+        return False  # not a same-class method — nothing was read, clear nothing
+    _seen = set() if _seen is None else _seen
+    if name in _seen:
+        # A cycle. Purity here is a GREATEST fixpoint, so assuming it on the
+        # back-edge is sound rather than lax: every body in the cycle has
+        # already run the three impure-token checks below — those happen
+        # BEFORE this function recurses — so a data access anywhere in the
+        # cycle has already returned False. Refusing instead was measured
+        # wrong on openregister's `SecurityService::sanitizeInput`, which
+        # recurses through `array_map` to sanitise array members and is
+        # otherwise pure string handling.
+        return True
+    _seen = _seen | {name}
+    body = bodies[name]
+    for rx in (_DATA_ACCESS_RE, _MUTATION_CALL_RE, _REQUEST_INPUT_RE):
+        if rx.search(body):
+            return False
+    # EVERY outbound call must be accounted for. Only two shapes are:
+    #   * a plain PHP function (`trim`, `preg_replace`, `array_map`, …) — no
+    #     `->` / `::` receiver, so it reaches no collaborator; and
+    #   * a same-class `$this->helper(` that is itself non-resolving.
+    # ANYTHING ELSE — `$this->prop->method(`, `Foo::bar(`, `$var->method(` —
+    # returns False.
+    #
+    # ⚠️ THIS LOOP USED TO ONLY FOLLOW `$this->name(`, AND THAT WAS FAIL-OPEN.
+    # Caught by hand-reading the cleared set rather than by any arm I had
+    # written: procest's `ZaakdossierDownloadController::downloadZip` calls
+    # `$this->zipExporter->collectDocuments(caseId: $caseId)` with NO session
+    # identity, and `collectDocuments` resolves the dossier via
+    # `$this->dossierService->getDossierForCase(caseId: $caseId)`. That call
+    # matches none of the three vocabularies above — `getDossierForCase` is
+    # not `getObject`/`getBy`/`find`/`load` — and the old loop did not follow
+    # a `$this->prop->` hop at all, so the helper was declared "pure" and a
+    # REAL unguarded case download was SILENTLY CLEARED. Pinned by
+    # `test_helper_delegating_to_a_collaborator_is_not_pure`.
+    for m in _METHOD_CALL_RE.finditer(body):
+        receiver = body[max(0, m.start() - 60):m.start()]
+        if re.search(r"\$this\s*$", receiver):
+            if _is_non_resolving_helper(m.group(1), bodies, _seen, _depth + 1):
+                continue
+        return False
+    return True
+
+
+def _taint_closure(body: str, seeds: set, session: set) -> set:
+    """Names carrying a caller-supplied value, closed to a fixpoint.
+
+    A local assigned from — or a `foreach` variable iterated over — an
+    expression mentioning a tainted name is itself tainted. Without this,
+    laundering a parameter through ANY expression made it invisible to
+    clause 2 (see the commentary above); this is the half of `#398` that
+    ADDS findings.
+
+    ⚠️ TAINT STOPS AT A SCOPED RESULT, and leaving that out is a false-RED
+    generator. Measured on the fleet before this clause existed: **6 new
+    findings, and all six were false** —
+
+        $result   = $this->userService->revokeApiToken($currentUser, $id);
+        $response = new JSONResponse(data: $result);
+        return $this->securityService->addSecurityHeaders(response: $response);
+
+    `revokeApiToken` is correctly scoped (it takes the session user), but the
+    taint flowed out of it into `$result`, then into `$response`, and the
+    header decorator — which resolves nothing whatsoever — became "a
+    caller-controlled value reaching an unscoped call".
+
+    The rule that fixes it is the same one Pattern 6 is built on: a value
+    produced by a call that ALSO received the caller's own identity was
+    resolved under a scope the caller cannot forge, so it is data, not a
+    steerable reference. Propagation stops there. A call that did NOT receive
+    the identity keeps tainting its result — and that call has already vetoed
+    on its own account anyway.
+    """
+    tainted = set(seeds)
+    scoped_re = re.compile(
+        "|".join([r"\$" + re.escape(s) + r"\b" for s in sorted(session)])
+    ) if session else None
+
+    def _is_scoped_rhs(expr: str) -> bool:
+        if _SESSION_IDENTITY_RE.search(expr):
+            return True
+        return scoped_re is not None and scoped_re.search(expr) is not None
+
+    for _ in range(8):  # fixpoint; bodies are far shallower than this
+        grew = False
+        for rx, src_grp, dst_grp in (
+                (_TAINT_ASSIGN_RE, 2, 1), (_TAINT_FOREACH_RE, 1, 2)):
+            for m in rx.finditer(body):
+                dst, expr = m.group(dst_grp), m.group(src_grp)
+                if dst in tainted or dst in session:
+                    continue
+                if _is_scoped_rhs(expr):
+                    continue
+                if any(re.search(r"\$" + re.escape(t) + r"\b", expr)
+                       for t in tainted):
+                    tainted.add(dst)
+                    grew = True
+        if not grew:
+            break
+    return tainted
+
+
+def _has_session_identity_handoff(body: str, params, helper_bodies=None,
+                                  collaborator_bodies=None) -> bool:
     """Pattern 6 — see the commentary above.
 
     Three clauses, and all three are required:
@@ -1057,14 +1264,24 @@ def _has_session_identity_handoff(body: str, params) -> bool:
       3. at least ONE method call receives the identity — the positive
          evidence that the data access is actually scoped, without which
          clause 2 is vacuously true over a method that never uses its input.
+
+    `#398`: clause 2 now applies only to calls that could RESOLVE something —
+    see the commentary above `_TAINT_ASSIGN_RE`. *helper_bodies* is this
+    class's `name -> body` map; when it is None no helper is clearable, so a
+    caller that cannot supply it keeps the old, stricter behaviour.
     """
     if params is None:
         return False
     declared = _declared_parameter_names(params)
     declared |= set(_REQUEST_BOUND_ASSIGN_RE.findall(body))
+    # `session` is computed from the UNTAINTED seed set, exactly as before, so
+    # this change cannot move which names count as a session identity.
     session = _session_identity_names(body, declared) - declared
     if not session and not _IDENTITY_TOKEN_RE.search(body):
         return False
+    # `#398` half (A): follow the caller's value through the locals it is
+    # laundered into, so half (B) below cannot silently drop a real IDOR.
+    declared = _taint_closure(body, declared, session)
 
     saw_scoped_call = False
     for m in _METHOD_CALL_RE.finditer(body):
@@ -1082,6 +1299,26 @@ def _has_session_identity_handoff(body: str, params) -> bool:
             re.search(r"\$" + re.escape(p) + r"\b", a) for a in args for p in declared
         )
         if caller_value_here and not identity_here:
+            # `#398` half (B): a call that provably resolves NOTHING is not
+            # evidence of an unscoped lookup. Two shapes, both fail-closed —
+            # anything not positively cleared here still vetoes.
+            receiver = body[max(0, m.start() - 60):m.start()]
+            callee = m.group(1)
+            if (_PSR3_LOG_RECEIVER_RE.search(receiver)
+                    and callee.lower() in _PSR3_LOG_LEVELS):
+                continue  # PSR-3 diagnostics: returns void, resolves nothing
+            if (helper_bodies is not None
+                    and re.search(r"\$this\s*$", receiver)
+                    and _is_non_resolving_helper(callee, helper_bodies)):
+                continue  # same-class helper, body READ, resolves nothing
+            if collaborator_bodies:
+                pm = re.search(
+                    r"\$this\s*->\s*([A-Za-z_][A-Za-z0-9_]*)\s*$", receiver)
+                if (pm is not None
+                        and pm.group(1) in collaborator_bodies
+                        and _is_non_resolving_helper(
+                            callee, collaborator_bodies[pm.group(1)])):
+                    continue  # collaborator method, body READ, resolves nothing
             return False  # a caller-controlled value reaching an unscoped call
         if identity_here:
             saw_scoped_call = True
@@ -1401,6 +1638,49 @@ def _collaborator_guard_map(cleaned: str, path: str) -> dict:
             guards |= _collaborator_guard_methods(candidate)
         if guards:
             out.setdefault(prop, set()).update(guards)
+    return out
+
+
+def _collaborator_method_bodies(cleaned: str, path: str) -> dict:
+    """Map ``propertyName -> {methodName: body}`` for this class's collaborators.
+
+    The read-only twin of :func:`_collaborator_guard_map`, resolving types the
+    same way and for the same reason: `#398`'s clause-2 exemption must READ the
+    callee, never infer it from a name. An unresolvable type contributes
+    nothing, so the routed method keeps its veto — the fail-closed direction.
+
+    Needed because the sanitiser false positive also occurs ONE HOP OUT.
+    Measured on openregister `UserController::updateMe`, which is correctly
+    scoped (`updateUserProperties(user: $currentUser, data: $sanitizedData)`)
+    yet was vetoed by `$this->securityService->sanitizeInput(input: $value)`.
+    Restricting the exemption to same-class `$this->helper()` would have left
+    that one — and it was a false positive this change itself created, by
+    tainting the `foreach` variable that reaches the sanitiser.
+    """
+    root = _app_root_for(path)
+    if root is None:
+        return {}
+    index = _class_index(root)
+    out: dict = {}
+    for type_name, prop in _PROPERTY_DECL_RE.findall(cleaned):
+        short = type_name.rsplit("\\", 1)[-1]
+        if short.lower() in _COLLABORATOR_SKIP_TYPES:
+            continue
+        decl_re = re.compile(_CLASS_DECL_TEMPLATE % re.escape(short))
+        for candidate in index.get(short, []):
+            if os.path.abspath(candidate) == os.path.abspath(path):
+                continue
+            try:
+                with open(candidate, encoding="utf-8") as fh:
+                    csrc = fh.read()
+            except OSError:
+                continue
+            ccleaned = _strip_strings_and_comments(csrc)
+            if not decl_re.search(ccleaned):
+                continue
+            bodies = _class_method_bodies(ccleaned, csrc)
+            if bodies:
+                out.setdefault(prop, {}).update(bodies)
     return out
 
 
@@ -2379,6 +2659,10 @@ def scan_file(path: str) -> int:
     # with no @NoAdminRequired method never pays for them.
     collaborator_guards = _collaborator_guard_map(cleaned, path)
     delegated_guards = _delegated_guard_methods(cleaned, gsrc, collaborator_guards)
+    # `#398` Pattern 6 context: this class's own method bodies, so clause 2 can
+    # READ a `$this->helper()` it is about to veto on instead of assuming.
+    helper_bodies = _class_method_bodies(cleaned, gsrc)
+    collaborator_bodies = _collaborator_method_bodies(cleaned, path)
 
     violations = 0
     for name, head_start, sig_start, body_start, body_end, line_no in _find_method_bodies(src):
@@ -2515,7 +2799,8 @@ def scan_file(path: str) -> int:
         # scope the caller cannot forge. This is the shape `.github#365`'s
         # blanking would otherwise have turned into 45 false positives in
         # doriath alone. See the Pattern 6 commentary.
-        if _has_session_identity_handoff(body, _params):
+        if _has_session_identity_handoff(body, _params, helper_bodies,
+                                         collaborator_bodies):
             continue
 
         # NOTE (.github#315): the guidance that goes with this finding — that
