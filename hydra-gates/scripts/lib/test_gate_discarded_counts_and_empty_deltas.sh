@@ -1,18 +1,20 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: EUPL-1.2
 #
-# test_gate_discarded_counts_and_empty_deltas.sh — four repairs, one theme:
+# test_gate_discarded_counts_and_empty_deltas.sh — five repairs, one theme:
 # A GATE MUST NOT PRINT A VERDICT ABOUT SOMETHING IT DID NOT MEASURE.
 #
 #   .github#396  gate-15 computed its finding and then THREW IT AWAY.
 #   .github#394  gate-23 turned a CRASHED linter into a finding of size 1.
 #   .github#401  gate-48's advisory DISPLACED its own verdict, and gates 47
 #                and 48 passed over a delta containing zero inspectable files.
+#   .github#403  gate-57 printed PASS over a scope its checker had EXPLICITLY
+#                DECLINED to judge — a false green that arrived through a FIX.
 #
 # WHY A SEPARATE SUITE RATHER THAN AN expect.conf BUNDLE
 # -----------------------------------------------------
 # The acceptance matrix runs each bundle as a plain directory, with no git
-# history and no flags. Three of the four defects here are invisible at that
+# history and no flags. Four of the five defects here are invisible at that
 # scope by construction:
 #
 #   * gate-15's defect only exists UNDER `--scope-to-diff`. At full scope the
@@ -22,6 +24,8 @@
 #     so a bundle can only ever observe the branch that was already honest.
 #   * gate-23's defect needs the linter to CRASH, which needs the helper
 #     replaced — the runner resolves it from its own SCRIPT_DIR.
+#   * gate-57's turns on whether a SIBLING app exists beside the repo, which
+#     is a property of the parent directory, not of the fixture.
 #
 # So this suite materialises real repositories with real base refs, and shadows
 # the package directory when a crash is the subject. It is discovered and run
@@ -539,6 +543,124 @@ else
 fi
 
 # ===========================================================================
+# gate-57 — A CHECKER THAT DECLINED TO JUDGE IS NOT A PASS (.github#403 follow-up)
+# ===========================================================================
+#
+# `#403` repaired the hydra#106 fail-safe so it keys on the intrinsic
+# `appinfo/info.xml` id instead of the checkout directory name. It had never
+# engaged in CI, for any repository, because `quality.yml` checks out to
+# `path: app`. Now that it engages, a foundation repo with no siblings beside
+# it makes the checker REFUSE — correctly, since a cross-app caller cannot be
+# told from no caller at all.
+#
+# 🔑 But the refusal is on STDERR and this gate counted STDOUT lines, so a
+# checker that judged nothing produced zero lines and zero lines printed PASS.
+# **Repairing a guard that had never engaged replaced a false RED with a false
+# GREEN** — the `#374` family arriving through a fix rather than a bug.
+#
+# The three arms below differ by exactly ONE thing at a time, which is what
+# makes them a control rather than three observations.
+echo
+echo "== gate-57: a declined judgement is not a clean bill =="
+
+_owc_p1="${_tmp}/owc-with-sibling"
+_owc_p2="${_tmp}/owc-alone"
+_owc_p3="${_tmp}/owc-leaf"
+for _p in "${_owc_p1}" "${_owc_p2}" "${_owc_p3}"; do mkdir -p "${_p}"; done
+
+_owc_make_foundation() {  # <parent>
+    local _a="$1/openregister"
+    mkdir -p "${_a}/appinfo" "${_a}/lib/Service"
+    printf '<?xml version="1.0"?>\n<info><id>openregister</id><name>Open Register</name></info>\n' \
+        > "${_a}/appinfo/info.xml"
+    cat > "${_a}/lib/Service/JournalEmitter.php" <<'PHP'
+<?php
+namespace OCA\OpenRegister\Service;
+
+class JournalEmitter {
+	public function postJournalEntry(string $subject): void {
+	}
+}
+PHP
+}
+_owc_make_foundation "${_owc_p1}"
+_owc_make_foundation "${_owc_p2}"
+# The ONLY difference between p1 and p2: a sibling Nextcloud app beside it.
+mkdir -p "${_owc_p1}/docudesk/appinfo" "${_owc_p1}/docudesk/lib"
+printf '<?xml version="1.0"?>\n<info><id>docudesk</id></info>\n' > "${_owc_p1}/docudesk/appinfo/info.xml"
+printf '<?php\nnamespace OCA\\Docudesk;\nclass Noop {}\n' > "${_owc_p1}/docudesk/lib/Noop.php"
+
+# ARM 57.1 — POSITIVE CONTROL FIRST. With a sibling on disk the checker CAN
+# resolve callers, and the planted orphan must be reported by name. Without
+# this arm, arm 57.2 could be satisfied by a fixture carrying no subject at all.
+_l571="${_tmp}/logs-57-sibling"; mkdir -p "${_l571}"
+_o571="$(HYDRA_GATE_LOG_DIR="${_l571}" HYDRA_OR_GATE_BLOCK_AFTER_EPOCH=0 \
+    bash "${RUNNER}" --full "${_owc_p1}/openregister" 2>&1 || true)"
+if printf '%s' "$(gf_verdict "${_o571}" 57)" | grep -qF ': FAIL'; then
+    _ok "control: with a sibling app beside it, gate-57 judges the tree and FAILs the planted orphan"
+else
+    _bad "control FAILED: gate-57 did not report the planted orphan even with a sibling present — the fixture carries no subject, so arm 57.2 would prove nothing. Got: $(gf_verdict "${_o571}" 57)"
+fi
+if grep -qF 'method=postJournalEntry' "${_l571}/hydra-gate-orphaned-write-capability.log" 2>/dev/null; then
+    _ok "control: the finding NAMES the planted method (method=postJournalEntry)"
+else
+    _bad "control FAILED: gate-57 failed without naming the planted method — it failed for some other reason"
+fi
+
+# ARM 57.2 — THE DEFECT. The same tree, the same planted orphan, ONE thing
+# changed: no sibling. The checker declines on stderr and the gate saw zero
+# lines on stdout.
+_l572="${_tmp}/logs-57-alone"; mkdir -p "${_l572}"
+_o572="$(HYDRA_GATE_LOG_DIR="${_l572}" HYDRA_OR_GATE_BLOCK_AFTER_EPOCH=0 \
+    bash "${RUNNER}" --full "${_owc_p2}/openregister" 2>&1 || true)"
+if ! grep -qF '[orphaned-write-capability] SKIP:' "${_l572}/hydra-gate-orphaned-write-capability.err" 2>/dev/null; then
+    _bad "control FAILED: the checker did not emit its SKIP marker on the no-sibling arm, so the assertion below is measuring something else"
+else
+    _ok "control: the checker emitted its SKIP marker (it declined to judge this tree)"
+fi
+_v572="$(gf_verdict "${_o572}" 57)"
+case "${_v572}" in
+    *": PASS"*)
+        _bad "gate-57 printed PASS over a scope the checker EXPLICITLY DECLINED to judge — repairing the hydra#106 guard turned a false red into a false green, and that PASS counts toward the applicable-gate arithmetic. Line: ${_v572}" ;;
+    *"NOT APPLICABLE"*)
+        _ok "gate-57 reports NOT APPLICABLE when the checker declines, rather than a green" ;;
+    *)
+        _bad "gate-57's verdict over a declined judgement is neither PASS nor NOT APPLICABLE: ${_v572}" ;;
+esac
+# ⚠️ The wording is load-bearing. A `na` whose reason reads as "nothing to
+# find here" is the same false green with a different word on it — these two
+# repos' orphaned capabilities are unverified in CI and always were.
+if printf '%s' "${_v572}" | grep -qF 'NOT A CLEAN BILL OF HEALTH'; then
+    _ok "gate-57's decline says it is NOT a clean bill of health, so a reader cannot take it for one"
+else
+    _bad "gate-57 declined without saying that the capabilities are UNVERIFIED — a decline that reads like a clean tree is the same false green wearing a different word"
+fi
+
+# ARM 57.3 — ANTI-WIDENING. A LEAF app, alone, with a clean service must still
+# reach a real verdict. Without this arm the repair could be "decline whenever
+# the checker writes anything to stderr", which retires the gate fleet-wide.
+mkdir -p "${_owc_p3}/docudesk/appinfo" "${_owc_p3}/docudesk/lib/Service"
+printf '<?xml version="1.0"?>\n<info><id>docudesk</id></info>\n' > "${_owc_p3}/docudesk/appinfo/info.xml"
+cat > "${_owc_p3}/docudesk/lib/Service/ThingService.php" <<'PHP'
+<?php
+namespace OCA\Docudesk\Service;
+
+class ThingService {
+	public function ping(): int {
+		return 1;
+	}
+}
+PHP
+_l573="${_tmp}/logs-57-leaf"; mkdir -p "${_l573}"
+_o573="$(HYDRA_GATE_LOG_DIR="${_l573}" HYDRA_OR_GATE_BLOCK_AFTER_EPOCH=0 \
+    bash "${RUNNER}" --full "${_owc_p3}/docudesk" 2>&1 || true)"
+if printf '%s' "$(gf_verdict "${_o573}" 57)" | grep -qF ': PASS'; then
+    _ok "anti-widening: a LEAF app checked out alone still gets a real gate-57 verdict"
+else
+    _bad "gate-57 no longer reaches a verdict for a leaf app — the decline has widened into a permanent skip: $(gf_verdict "${_o573}" 57)"
+fi
+
+# ===========================================================================
 # .github#401 — THE PARSERS THEMSELVES
 # ===========================================================================
 #
@@ -597,8 +719,8 @@ echo
 echo "== summary =="
 echo "   assertions: ${_asserts}"
 echo "   failures:   ${_failures}"
-if [ "${_asserts}" -lt 28 ]; then
-    echo "FAIL — only ${_asserts} assertions ran; this suite declares 28+. A short run is not a green run."
+if [ "${_asserts}" -lt 34 ]; then
+    echo "FAIL — only ${_asserts} assertions ran; this suite declares 34+. A short run is not a green run."
     exit 1
 fi
 [ "${_failures}" -eq 0 ] || exit 1

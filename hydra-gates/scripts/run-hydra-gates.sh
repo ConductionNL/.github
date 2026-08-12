@@ -8617,6 +8617,41 @@ elif [ "${#_owc_files[@]}" -gt 0 ]; then
         if [ "${_owc_rc}" -ne 0 ]; then
             _owc_ran=0
             _skip 57 "orphaned-write-capability" wiring "check_orphaned_write_capability.py exited ${_owc_rc} — ${#_owc_files[@]} service file(s) were in scope and NONE were judged; orphaned (mintable-but-unreachable) write capabilities are UNVERIFIED by this run. This helper always exits 0 when it runs, so this is a crash, not a finding count. See ${_owc_err}."
+        elif grep -qF '[orphaned-write-capability] SKIP:' "${_owc_err}" 2>/dev/null; then
+            # THE CHECKER DECLINED TO JUDGE. THAT ZERO IS A SKIP, NOT A CLEAN
+            # BILL (.github#403 follow-up).
+            #
+            # `#403` repaired the hydra#106 fail-safe: it keys on the intrinsic
+            # `appinfo/info.xml` `<id>` instead of the checkout directory name,
+            # so on a foundation repo with no sibling apps beside it the
+            # checker now refuses — cross-app callers cannot be resolved, so
+            # deadness is unprovable. That is exactly right, and it is CI's
+            # normal shape: `quality.yml` checks out to `path: app`, one repo,
+            # no siblings.
+            #
+            # But the refusal is written to STDERR, and this gate counts lines
+            # on STDOUT. A checker that judged nothing therefore produced zero
+            # lines, and zero lines printed PASS — so repairing a guard that
+            # had never engaged replaced a FALSE RED with a FALSE GREEN, over a
+            # scope the checker had explicitly declined. That is the `#374`
+            # family arriving through a fix rather than through a bug, and it
+            # is why the marker is a contract rather than a log line.
+            #
+            # Reproduced 2026-08-12 on a two-arm control differing by exactly
+            # ONE thing — whether a sibling app exists beside the repo — over a
+            # tree carrying one planted orphan: no sibling gave PASS with the
+            # SKIP on stderr; a sibling gave `FAIL — 1` naming the method. The
+            # subject was present and mintable in BOTH arms.
+            #
+            # ⚠️ THE REASON MUST NOT READ AS A CLEAN BILL, because it is not
+            # one and never was. openregister's and openconnector's orphaned
+            # capabilities are UNVERIFIED in CI and always have been: the guard
+            # never engaged there, so the eleven findings CI printed were the
+            # unlabelled output of a check that could not see cross-app
+            # callers. `#403` REMOVES those eleven; it does not clean anything.
+            _owc_ran=0
+            _owc_why=$(grep -F '[orphaned-write-capability] SKIP:' "${_owc_err}" 2>/dev/null | head -1 | cut -c1-300)
+            _skip 57 "orphaned-write-capability" na "the checker DECLINED to judge: ${#_owc_files[@]} lib/Service file(s) were in scope and NONE were assessed for deadness, because this is a foundation repo checked out with no sibling apps beside it, so a cross-app caller cannot be distinguished from no caller at all (hydra#106). THIS IS NOT A CLEAN BILL OF HEALTH AND NOT A PASS — orphaned (mintable-but-unreachable) write capabilities in this repository are UNVERIFIED by this run, as they have been in every single-repo CI run. To get a verdict, run this gate from a checkout that has the consuming apps beside it (a fleet sweep from apps-extra/), not from a one-repo CI workspace. Checker said: ${_owc_why:-<marker present but unreadable>}. See ${_owc_err}."
         fi
     else
         _owc_ran=0
