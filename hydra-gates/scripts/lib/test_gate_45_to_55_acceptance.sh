@@ -374,23 +374,37 @@ _outC8="${_tmp}/c8.txt"
 _run "${_appC}" "${_outC8}"
 _expect "${_outC8}" 50 "FAIL" "still fails a multi-line read with no guard anywhere"
 
-# C9 — A DELIBERATE, MEASURED BLIND SPOT, PINNED SO IT CANNOT DRIFT SILENTLY.
+# C9 — THE BOUNDARY, MOVED DELIBERATELY AND WITH THE NUMBER IN FRONT OF US.
 #
-# The first draft of the app-id fix accepted ANY expression up to the comma,
-# which also takes `$app` and `$this->appName`. A 12-repo before/after sweep
-# priced that: softwarecatalog went 23 -> 64 findings and 47 of the new ones
-# are entries in an array literal that assembles the admin settings payload —
+# The previous revision of C9/C10 encoded the boundary as the APP ID'S
+# SPELLING: a variable app id was a measured blind spot (PASS), a class
+# constant was caught (FAIL). C10's own comment named the condition for
+# changing it — "if someone later teaches this gate to tell a scope decision
+# from a read-out, this is the arm to change" — and that is what happened on
+# 2026-08-12.
 #
-#     'sendgridApiKey' => $this->config->getValueString($app, 'email_sendgrid_api_key', ''),
+# The old boundary was in the wrong place. Measured over 12 repos, accepting a
+# variable app id adds:
 #
-# There is no defense being deactivated in a settings read-out and nothing to
-# guard, so the finding has no legitimate end state (#252). The accepted app-id
-# shapes are therefore the ones actually measured as blind: a quoted literal
-# and a class constant.
+#     softwarecatalog  +47 new, 47 of 47 in `'key' => ...` position
+#     docudesk         + 1 new,  1 of  1 in `'key' => ...` position
+#     opencatalogi     +16 new,  0 of 16 in `'key' => ...` position
 #
-# This arm asserts the CURRENT boundary rather than an ideal one. If someone
-# later teaches this gate to tell a scope decision from a read-out, this is the
-# arm to change — deliberately, with the number in front of them.
+# The noise is not caused by the app id being a variable — it is caused by the
+# read sitting in an ARRAY-LITERAL VALUE POSITION, and the two populations
+# separate perfectly on that one syntactic fact. Meanwhile the 16 that are NOT
+# read-outs are `listing_register` / `listing_schema` / `catalog_register` /
+# `publication_schema` read unguarded via `$this->appName` — the exact
+# opencatalogi#86 defect this gate was BUILT for, in opencatalogi, reported
+# PASS for its whole life.
+#
+# So the discriminator is now the POSITION, not the spelling, and it applies
+# uniformly to every app-id form. C9 and C10 below assert that uniformity;
+# C11 asserts the defect the old boundary was hiding.
+#
+# ⚠️ PRICE OF THIS CHANGE, STATED: 21 findings the fleet reports today stop
+# failing (softwarecatalog 17, pipelinq 4). All 21 are `'key' => ...` reads.
+# They are not deleted — they are written to <log>.notes, and C10 asserts that.
 _write_service '    public function readouts(): array
     {
         $app = '"'"'fx'"'"';
@@ -402,20 +416,85 @@ _write_service '    public function readouts(): array
 _commit "${_appC}" "settings read-outs with a variable app id"
 _outC9="${_tmp}/c9.txt"
 _run "${_appC}" "${_outC9}"
-_expect "${_outC9}" 50 "PASS" "does not report settings read-outs whose app id is a plain variable (measured blind spot, not a safe shape)"
+_expect "${_outC9}" 50 "PASS" "does not fail settings read-outs in array-literal value position (no guard can be written there)"
 
-# C10 — and the constant form of the SAME read is still caught, so C9 is a
-# boundary and not a hole the gate fell through.
+# C10 — THE EXEMPTION MUST NOT BE A SILENCE, and it must not depend on how the
+# app id is spelled. Same read-out written with a CLASS CONSTANT: also demoted
+# (uniformity), and BOTH forms must appear in the .notes sidecar by name.
+#
+# An exemption that produces silence is how a gate's quiet gets believed —
+# gate-7 reported 0 IDORs across 18 apps while 167 sat in the tree. So the
+# demotion is asserted to be *legible*: file, line and key, in a file a
+# reviewer can read.
+_g50notes="${_tmp}/g50notes"
+mkdir -p "${_g50notes}"
 _write_service '    public function readouts(): array
     {
         return [
             '"'"'sendgridApiKey'"'"' => $this->config->getValueString(Application::APP_ID, '"'"'email_sendgrid_api_key'"'"', '"'"''"'"'),
+            '"'"'mailgunApiKey'"'"'  => $this->config->getValueString($this->appName, '"'"'email_mailgun_api_key'"'"', '"'"''"'"'),
         ];
     }'
-_commit "${_appC}" "same read-out with a class-constant app id"
+_commit "${_appC}" "same read-out, constant and variable app id side by side"
 _outC10="${_tmp}/c10.txt"
-_run "${_appC}" "${_outC10}"
-_expect "${_outC10}" 50 "FAIL" "still catches the same read written with a class-constant app id"
+(
+    cd "${_appC}" || exit 1
+    HYDRA_GATE_LOG_DIR="${_g50notes}" bash "${_runner}" . > "${_outC10}" 2>&1
+)
+_expect "${_outC10}" 50 "PASS" "demotes the read-out identically whether the app id is a constant or a variable"
+if [ -s "${_g50notes}/hydra-gate-security-config-fail-mode.log.notes" ] \
+   && grep -qF 'email_sendgrid_api_key' "${_g50notes}/hydra-gate-security-config-fail-mode.log.notes" \
+   && grep -qF 'email_mailgun_api_key' "${_g50notes}/hydra-gate-security-config-fail-mode.log.notes"; then
+    _ok "gate-50 RECORDS both demoted read-outs by key in .notes — demoted, not silent"
+else
+    _bad "gate-50 demoted the read-outs but left no note: $(wc -c < "${_g50notes}/hydra-gate-security-config-fail-mode.log.notes" 2>/dev/null || echo 'no file')"
+fi
+
+# C11 — THE DEFECT THE OLD BOUNDARY HID. Verbatim shape from opencatalogi
+# CatalogiService / DirectoryService / PublicationService: the app id is
+# `$this->appName`, the value lands in a LOCAL VARIABLE, and nothing guards it.
+# Sixteen of these live in opencatalogi today and every one reported PASS.
+# This is the arm that must fail, or the whole change bought nothing.
+_write_service '    public function scope(): array
+    {
+        $listingRegister = $this->config->getValueString($this->appName, '"'"'listing_register'"'"', '"'"''"'"');
+        $listingSchema   = $this->config->getValueString($this->appName, '"'"'listing_schema'"'"', '"'"''"'"');
+        return [$listingRegister, $listingSchema];
+    }'
+_commit "${_appC}" "opencatalogi#86 shape with a variable app id"
+_outC11="${_tmp}/c11.txt"
+_run "${_appC}" "${_outC11}"
+_expect "${_outC11}" 50 "FAIL" "sees the opencatalogi#86 defect written with a \$this->appName app id"
+
+# C12 — ANTI-WIDENING for C11. The SAME variable-app-id reads, correctly
+# guarded, must go green. Widening a matcher is how a gate starts crying wolf;
+# this arm proves the new shape does not fire on correct code.
+_write_service '    public function scope(): array
+    {
+        $listingRegister = $this->config->getValueString($this->appName, '"'"'listing_register'"'"', '"'"''"'"');
+        $listingSchema   = $this->config->getValueString($this->appName, '"'"'listing_schema'"'"', '"'"''"'"');
+        if ($listingRegister === '"'"''"'"' || $listingSchema === '"'"''"'"') {
+            return [];
+        }
+        return [$listingRegister, $listingSchema];
+    }'
+_commit "${_appC}" "variable app id, correctly guarded"
+_outC12="${_tmp}/c12.txt"
+_run "${_appC}" "${_outC12}"
+_expect "${_outC12}" 50 "PASS" "accepts a correctly-guarded read whose app id is a variable"
+
+# C13 — the exemption is about an ARRAY KEY, not about the `=>` token. A
+# single-expression arrow closure has `)` before its `=>`, so it is NOT a
+# read-out and stays reported. Pins the exemption's edge so it cannot quietly
+# widen into "anything after a fat arrow".
+_write_service '    public function lazyScope(): callable
+    {
+        return fn() => $this->config->getValueString($this->appName, '"'"'listing_register'"'"', '"'"''"'"');
+    }'
+_commit "${_appC}" "arrow closure returning an unguarded read"
+_outC13="${_tmp}/c13.txt"
+_run "${_appC}" "${_outC13}"
+_expect "${_outC13}" 50 "FAIL" "does not mistake an arrow closure's => for an array key"
 
 # ===========================================================================
 # FAMILY D — gate-53 must block the PR that CREATES larpingapp#286.

@@ -194,22 +194,50 @@ wrong.
 
 ---
 
-## Diff scoping and the base ref
+## Scope: full by default (ADR-020 is superseded)
 
-The gates are diff-scoped per ADR-020: a PR is judged on what it changed, not on
-what it inherited. This matters — openbuild fails 16 gates on a full-repo run
-today and passes when scoped to a real diff. `composer gates:full` gives the
-audit view and is deliberately not what `check:strict` runs.
+**The gates scan the ENTIRE tracked tree by default. Diff scoping is opt-in.**
 
-Diff scoping is only as trustworthy as the base ref, and a base that resolves to
-nothing produces a report of zero failures that is indistinguishable from a
-clean one. So:
+ADR-020 scoped every gate to the PR's diff so inherited debt could never block a
+PR. That is reversed, deliberately — see
+[ADR-020-SUPERSEDED.md](ADR-020-SUPERSEDED.md) for the decision, the reasoning,
+and what it costs (the first `development → beta` run after it lands surfaces
+the fleet backlog at once; the last wide-scope measurement was ~3,900 findings).
+
+The scope is **two independent, named inputs**, and both are printed every run:
+
+| input | controls | default | how to set it |
+|---|---|---|---|
+| **file scope** | which files the **state** gates open | `full` | `--scope-to-diff` / `--diff`, or `HYDRA_GATE_SCOPE=full\|diff` |
+| **delta base** | what the five **delta** gates compare against | resolved whenever possible | `--base REF` / `$HYDRA_GATE_BASE_REF` / auto-detect / `github.event.before` |
+
+Every run emits exactly one machine-readable `[hydra-gates] SCOPE-MODE: full|diff`
+line. **Read that, never the prose** — inferring the scope from whether a base was
+printed, or from a gate's own wording, has been wrong at least once each.
+
+Gates **16, 29, 47, 48 and 61** ask what a *change* did and cannot be answered by a
+checkout. With a base they run at any file scope; with none they report
+`NOT APPLICABLE` **by name, with a reason** — never `PASS`, and never counted as one.
+
+To get the old behaviour explicitly:
+
+```bash
+hydra-gates --scope-to-diff --base origin/development
+HYDRA_GATE_SCOPE=diff hydra-gates
+```
+
+### The base ref
+
+A base that resolves to nothing produces a report of zero failures that is
+indistinguishable from a clean one. So:
 
 - The base is resolved from a stated precedence chain and **printed** every run:
   `--base` → `$HYDRA_GATE_BASE_REF` → `origin/HEAD` → `origin/development` →
   `origin/main` → `origin/master`.
-- **An unresolvable base stops the run with exit 99.** It is never treated as an
-  empty diff, and no green is printed.
+- **On a diff-scoped run, an unresolvable base stops the run with exit 99.** It is
+  never treated as an empty diff, and no green is printed. **At full scope it is
+  NOT fatal** — it costs the five delta gates and nothing else, so refusing would
+  discard 59 real verdicts to punish one bad input. The five say so by name.
 - **A base you named explicitly is never silently replaced.** Substituting a
   different one would scope the run to something you did not ask for and would
   not read about.
@@ -381,7 +409,7 @@ reporting that it did nothing did nothing. But only two of the three fail:
 
 | verdict | meaning | counts against coverage? |
 |---|---|---|
-| `NOT APPLICABLE` | the gate's subject matter does not exist in this repo or this diff — no `src/` at all, or a diff with no composer file under ADR-020 scoping | **no** |
+| `NOT APPLICABLE` | the gate's subject matter does not exist in this repo, or (on an opt-in diff-scoped run) in this diff — no `src/` at all, no composer file in the change set; **or the gate is a DELTA gate and this run has no base** | **no** |
 | `SKIPPED (structural)` | the subject matter EXISTS and nothing produced the gate's input — e.g. a repo that registers integration leaves but ships no parity check | yes |
 | `SKIPPED (wiring)` | the gate's own machinery is missing — a helper script, a tool not on PATH | yes |
 

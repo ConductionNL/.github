@@ -84,4 +84,9 @@ gf_run_wrapper() {
 }
 
 # gf_verdict <output> <gate-n>
-gf_verdict() { printf '%s' "$1" | grep -E "^\[gate-$2\] " | head -1; }
+# A gate may print advisory lines that carry its own `[gate-N] ` prefix before
+# it prints its verdict — gate-61's provenance NOTE is the first. `head -1` used
+# to return whichever came first, so a NOTE silently DISPLACED the verdict and
+# every assertion here read "no FAIL" while the gate was failing correctly. Skip
+# the advisory forms; a verdict is `[gate-N] <name>: <VERDICT>`.
+gf_verdict() { printf '%s' "$1" | grep -E "^\[gate-$2\] " | grep -vE "^\[gate-[0-9]+\] (NOTE|WARN|INFO):" | head -1; }

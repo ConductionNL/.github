@@ -223,6 +223,54 @@ jobs:
 
       # ── Package ──
 
+      # ── Commit the version to the repository, BEFORE the tag exists ──
+      #
+      # This retires "Version Is Not In The Repository". The version used to
+      # exist only inside the built package: `sed` rewrote appinfo/info.xml in
+      # the copy under package/, and the committed file kept whatever stale
+      # number was last hand-edited.
+      #
+      # That is incompatible with Nextcloud's own release template, which reads
+      # the version FROM appinfo/info.xml and asserts the tag matches:
+      #
+      #     [ "$APP_VERSION" = "v$(xpath info.xml //version)" ]
+      #
+      # Following Nextcloud means the repository has to be the source of truth,
+      # so the bump is committed here and the tag is cut from that commit. The
+      # tag then names a tree whose info.xml says what the tag says.
+      #
+      # `[skip ci]` because this commit changes one number in one XML file and
+      # the quality suite has already run on the code being released. Without
+      # it, every release starts a second full pipeline on a tree that differs
+      # from the tested one by a version string.
+      #
+      # No push on a dry run and no push when the number has not moved — a
+      # re-run of a release that already happened must not create an empty
+      # commit and re-tag it.
+      - name: Commit the version bump
+        run: |
+          set -euo pipefail
+          CURRENT=$(grep -oP '(?<=<version>)[^<]+' appinfo/info.xml | head -1)
+          if [ "$CURRENT" = "${{ env.NEW_VERSION }}" ]; then
+            echo "appinfo/info.xml already says ${{ env.NEW_VERSION }} — nothing to commit."
+            exit 0
+          fi
+          sed -i "s|<version>.*</version>|<version>${{ env.NEW_VERSION }}</version>|" appinfo/info.xml
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add appinfo/info.xml
+          git commit -m "chore(release): ${{ env.NEW_VERSION }} [skip ci]"
+          if ! git push origin HEAD:${{ github.ref_name }}; then
+            echo "::error::Could not push the version bump to ${{ github.ref_name }}."
+            echo "The tag must name a tree whose appinfo/info.xml matches it, so this"
+            echo "is a hard stop rather than a warning — releasing past it would put"
+            echo "the old version number inside a package labelled with the new one."
+            echo "If the branch is protected, allow the GitHub Actions bot to push to"
+            echo "it, or route the bump through a PR before the release runs."
+            exit 1
+          fi
+          echo "Committed ${CURRENT} -> ${{ env.NEW_VERSION }} on ${{ github.ref_name }}"
+
       - name: Copy files into package directory
         run: |
           mkdir -p package/${{ inputs.app-name }}
@@ -323,6 +371,67 @@ jobs:
         run: |
           echo "${{ secrets.NEXTCLOUD_SIGNING_KEY }}" > signing-key.key
           echo "${{ secrets.NEXTCLOUD_SIGNING_CERT }}" > signing-cert.crt
+
+      # ── Nextcloud's own integrity signature ──
+      #
+      # THE GAP THIS CLOSES: every release this fleet has ever published went
+      # out WITHOUT appinfo/signature.json. We signed the tarball — which is
+      # what the App Store API authenticates the upload with — and stopped
+      # there. Nextcloud's integrity checker verifies something else entirely:
+      # a per-file manifest INSIDE the app directory. Without it, `occ
+      # integrity:check-app <app>` reports the app as unverifiable, and an
+      # administrator running an integrity check sees our apps as the ones that
+      # cannot be vouched for.
+      #
+      # `occ` has to come from somewhere, so the server is fetched at the
+      # version the app declares it needs. Reading min-version from info.xml
+      # rather than hardcoding it is the same principle as
+      # icewind1991/nextcloud-version-matrix: the release cannot drift from what
+      # the app says it supports, because it is computed from it.
+      #
+      # NOT continue-on-error. An unsigned package that ships looks exactly like
+      # a signed one until an administrator checks, which is precisely the class
+      # of silent gap this whole change is about.
+      - name: Fetch Nextcloud server for occ
+        run: |
+          set -euo pipefail
+          # ANCHORED TO THE <nextcloud> ELEMENT ON PURPOSE. info.xml carries
+          # min-version on <php> too, and <php> comes FIRST in every fleet
+          # app. Measured across all 18 on 2026-08-12, an unanchored
+          # `(?<=min-version=")[0-9]+` returned:
+          #   13 apps -> 8    (from <php min-version="8.3"/>)
+          #   portaliq -> 28  (from a <nextcloud> further down, but the WRONG one)
+          # The first form fails loudly, because updates.nextcloud.com has no
+          # NC 8. The second does not: it resolves a real server and signs the
+          # app against a Nextcloud four majors below what it supports.
+          NCVERSION=$(grep -oP '<nextcloud[^>]*min-version="\K[0-9]+' appinfo/info.xml | head -1)
+          [ -n "${NCVERSION}" ] || { echo "::error::appinfo/info.xml declares no <nextcloud min-version>."; exit 1; }
+          echo "App declares min-version ${NCVERSION}; fetching that server to sign with."
+          URL=$(curl -sS "https://updates.nextcloud.com/updater_server/latest?channel=stable&version=${NCVERSION}" | jq -r '.downloads.zip[0]')
+          if [ -z "$URL" ] || [ "$URL" = "null" ]; then
+            echo "::warning::No stable download for NC ${NCVERSION}; falling back to the beta channel."
+            URL=$(curl -sS "https://updates.nextcloud.com/updater_server/latest?channel=beta&version=${NCVERSION}" | jq -r '.downloads.zip[0]')
+          fi
+          [ -n "$URL" ] && [ "$URL" != "null" ] || { echo "::error::Could not resolve a Nextcloud server download for min-version ${NCVERSION}."; exit 1; }
+          curl -sSL "$URL" -o nextcloud.zip
+          unzip -q nextcloud.zip
+          test -f nextcloud/occ || { echo "::error::The downloaded archive has no nextcloud/occ."; exit 1; }
+
+      - name: Sign the app with occ integrity:sign-app
+        run: |
+          set -euo pipefail
+          php nextcloud/occ integrity:sign-app \
+            --privateKey="$PWD/signing-key.key" \
+            --certificate="$PWD/signing-cert.crt" \
+            --path="$PWD/package/${{ inputs.app-name }}"
+          SIG="package/${{ inputs.app-name }}/appinfo/signature.json"
+          # POSITIVE CONTROL. `integrity:sign-app` exits 0 on several paths that
+          # produce no manifest, so the exit code alone is not evidence. Assert
+          # the artefact exists and actually enumerates files.
+          test -f "$SIG" || { echo "::error::integrity:sign-app exited 0 but wrote no ${SIG}. The package would ship unsigned."; exit 1; }
+          COUNT=$(jq -r '.hashes | length' "$SIG" 2>/dev/null || echo 0)
+          [ "${COUNT:-0}" -gt 0 ] || { echo "::error::${SIG} exists but hashes 0 files — an empty manifest verifies nothing."; exit 1; }
+          echo "Signed ${COUNT} file(s) into ${SIG}"
 
       - name: Create tarball
         run: |

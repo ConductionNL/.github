@@ -44,15 +44,25 @@ A reason is a testable claim, so each row states which of four kinds it is.
 
 Two notes on authoring, both measured rather than assumed:
 
-1. ⚠️ **CORRECTED 2026-08-12.** This note used to read *"`auth-guards/` exists
-   but carries no `expect.conf` and no source files beyond `appinfo/info.xml`,
-   so it contributes zero covered gates."* That has not been true since the
-   bundle was finished: it has an `expect.conf` and a controller/service pair
-   in both arms, and it covers gate-7. The general point it was making stands
-   and is worth keeping — **a fixture directory with no `expect.conf` is not
-   coverage, and the ratchet counts directories, so an empty bundle would
-   otherwise read as progress.** The driver enforces this directly: a bundle
-   without an `expect.conf`, or missing either arm, is a hard failure.
+1. ~~`scripts/test-fixtures/gate-acceptance/auth-guards/` exists but carries no
+   `expect.conf` and no source files beyond `appinfo/info.xml`, so it currently
+   contributes **zero** covered gates. It is a stub, not coverage.~~
+   ⚠️ **Superseded, corrected 2026-08-12.** `auth-guards/` is now a real bundle
+   (gate-7, `#353` — verb-object guard predicates) with an `expect.conf` and a
+   controller/service pair in both arms, and `authn-vs-authz/` joins it (gate-7,
+   `#365` — an authentication check is not an authorisation guard). Two bundles
+   assert the same gate from opposite directions on purpose: `auth-guards`
+   pins that a real guard is RECOGNISED (the false-positive failure mode),
+   `authn-vs-authz` pins that a non-guard is REFUSED (the false-negative one).
+   A single bundle could be passed by a checker that is broken in the other
+   direction — which is exactly how `#365` survived `#353` and `#360`.
+
+   **The general point the struck-through text was making still stands, which
+   is why it is struck through rather than deleted** — a fixture directory with
+   no `expect.conf` is not coverage, and the ratchet counts directories, so an
+   empty bundle would otherwise read as progress. The driver enforces it
+   directly: a bundle without an `expect.conf`, or missing either arm, is a
+   hard failure.
 2. `_enum_tracked` prefers `git ls-files`, and a fixture directory sits inside
    this repository's own work tree — so a planted file must be **committed** to
    be enumerated at all. An untracked plant reproduces the very silence these
@@ -79,8 +89,6 @@ Two notes on authoring, both measured rather than assumed:
 | gate-18 | notification-dialect | no-fixture-yet | A planted `lib/Settings/register.json` whose `x-openregister-notifications` block uses the obsolete singular `channel`/`recipient` + `lifecycleEnter` dialect would trip the blocking half (a); the clean arm uses plural `channels`/`recipients` + `trigger.type`. Half (b) is advisory and never decides the verdict. |
 | gate-20 | or-objectservice-api | no-fixture-yet | A planted `lib/Service/Thing.php` calling `$this->objectService->findObjects(...)` would trip it; the clean arm calls `findAll()`. A second clean file with the same call **commented out** would pin the `source_scope.py --mask php` behaviour. Nothing blocks it. |
 | gate-22 | manifest-validation | needs-external | `scripts/test-fixtures/manifest-validation/` exists but feeds `check_manifest.js` directly via `test_check_manifest.sh` rather than driving the wrapper. Wrapper-level coverage additionally needs `node` on PATH **and** `ajv/dist/2020` resolvable: no `node_modules` ships anywhere in this package, so today the validator exits 3 and the clean arm cannot go green. |
-| gate-25 | contract-coverage | no-fixture-yet | A planted `appinfo/routes.php` entry plus a `#[PublicPage]` controller method with no Postman collection assertion, no PHPUnit controller test and no `@contract exclude <reason>` would trip it. The helper audits the full tree when unscoped, so no diff is required. |
-| gate-28 | license-triangle | no-fixture-yet | A planted `composer.json` declaring `"license": "EUPL-1.2"` alongside a `lib/` PHP file whose docblock says `@license MIT` would trip it; the clean arm makes the two agree. Nothing blocks it. |
 | gate-34 | window-confirm | no-fixture-yet | A planted `src/components/Thing.vue` calling `window.confirm(...)` — and the bracket form `window['confirm'](...)`, which the old regex missed — would trip it; the clean arm uses `NcDialog`. Nothing blocks it. |
 | gate-37 | aria-hidden-focusable | no-fixture-yet | A planted element with `aria-hidden="true"` and `tabindex="0"` would trip it; the clean arm must include the canonical `aria-hidden` + `tabindex="-1"` hidden file input, which is correct code this gate previously reported. Nothing blocks it. |
 | gate-38 | skip-link | no-fixture-yet | `scripts/test-fixtures/monitoring-skiplink/` exists but is driven by `scripts/lib/test_gate_monitoring_and_skiplink.sh` at helper level, not as a planted/clean pair through the wrapper. A planted `src/App.vue` that is neither an `<NcContent>` nor a `<CnAppRoot>` and carries no skip-link anchor would give it wrapper-level coverage. |
@@ -94,12 +102,10 @@ Two notes on authoring, both measured rather than assumed:
 | gate-46 | spec-anchor-existence | no-fixture-yet | A planted `@spec openspec/specs/nope/spec.md#no-such-anchor` in a `lib/` file (and one under `tests/`, the directory the enumerator only recently gained) would trip it; the clean arm points at a spec file and heading that exist. Nothing blocks it. |
 | gate-47 | security-change-has-tests | needs-diff | The gate reports `na` outright unless `--scope-to-diff` is active with a resolvable base, because its whole subject is "which hunks did this change touch, and did it also touch a test". It needs a purpose-built commit pair, which a static fixture directory cannot express. |
 | gate-48 | csrf-cochange | needs-diff | Same shape as gate-47: "was `@NoCSRFRequired` REMOVED" is a property of a change set, not of a checkout, and the gate reports `na` on any non-diff-scoped run. It needs a two-commit history where the attribute is present in the base and absent in the head. |
-| gate-49 | controller-exception-translation | no-fixture-yet | A planted `lib/Controller/ThingController.php::destroy()` calling `$this->objectService->deleteObject(...)` with neither a `catch` nor a `@throws` would trip it; the clean arm catches `\Throwable`, which must be accepted (it was rejected on hermiq#162). Nothing blocks it. |
 | gate-50 | security-config-fail-mode | no-fixture-yet | A planted `$this->appConfig->getValueString(Application::APP_ID, 'listing_register', '')` with no empty-value guard within the window would trip it — using the class-constant app id, which was the measured blind spot. The clean arm adds `if ($reg === '' \|\| $sch === '')`. |
 | gate-51 | schema-property-titles | no-fixture-yet | A planted `lib/Settings/register.json` with a schema property carrying neither `title` nor `description` would trip it; the clean arm supplies both. Unscoped runs ratchet every property, so no diff is required. |
 | gate-52 | custom-widget-ratchet | no-fixture-yet | A planted `kind:"widget"` component-registry entry with no `_note` field would trip the justification half, which is what runs unscoped; the clean arm adds the `_note`. The count-ratchet half additionally needs a base ref and is therefore not exercised by a fixture pair. |
 | gate-53 | effective-manifest-crossref | needs-external | `scripts/test-fixtures/effective-manifest/` exists but is driven at helper level by `test_check_manifest_crossref.js` / `test_build_effective_manifest.js`, not through the wrapper. Wrapper-level coverage needs `node` plus `ajv/dist/2020` resolvable from `scripts/lib`; no `node_modules` ships in this package, so the gate currently fails closed with "ajv not resolvable" on both arms. |
-| gate-54 | relation-dialect | no-fixture-yet | A planted `lib/Settings/register.json` carrying the banned per-schema `x-openregister-relations` block, or a `format:uuid` relation property with no `$ref`, would trip it; the clean arm uses the ADR-062 canonical shape. Nothing blocks it. |
 | gate-55 | detail-page-discipline | no-fixture-yet | A planted `type:"detail"` page declaring both page-level `widgets[]` and `config.widgets` (render-path shadowing) would trip it; the clean arm keeps one render path. Unscoped runs check every detail page in the manifest, so no diff is required. |
 | gate-56 | register-handler-resolution | no-fixture-yet | A planted `lib/Settings/register.d/10-thing.json` naming a `guard` class that does not exist in the tree, plus a real class with a `::method` that was never written, would trip both rules; the clean arm ships both. Nothing blocks it. |
 | gate-57 | orphaned-write-capability | no-fixture-yet | A planted `lib/Service/JournalEmitter.php::emit()` with no non-test production caller and no register.d/listener/background-job seam would trip it; the clean arm wires one of the recognised seams. Nothing blocks it. |

@@ -405,6 +405,235 @@ for _g in 12 13; do
 done
 
 echo
+# ===========================================================================
+# ARM 6 — THE PROPERTY, ACROSS THE WHOLE PACKAGE, NOT SEVEN GATES BY NAME
+# ===========================================================================
+#
+# Everything above names its gates. That is how this suite covered 12, 13, 19,
+# 25, 33, 62 and 63 — SEVEN of 64 — while gates 14, 17, 18, 20, 21, 22, 34-44
+# and 52 carried the identical defect for months (.github#374). A property
+# enforced gate-by-gate is enforced by whoever remembered to add a line.
+#
+# So this arm asserts the property ITSELF, gate-agnostically:
+#
+#   OVER A TREE THAT CARRIES REAL, PLANTED DEFECTS, NO GATE MAY REPORT `PASS`
+#   ON A RUN WHOSE SCOPE EXCLUDES EVERY ONE OF THEM.
+#
+# The fixture is the shape #374 was measured on: a tree with a planted defect
+# for a broad slice of the package, and a docs-only second commit. Any gate
+# that says PASS there said it having opened nothing.
+#
+# ⚠️ THE ALLOWLIST IS THE LOAD-BEARING PART, AND IT MAY ONLY SHRINK.
+# A gate on it is one whose PASS over this diff is HONEST — it computed a real
+# answer about a real change set. Adding a gate to it to make this arm green is
+# how the defect comes back, so each entry states what it computed.
+echo
+echo "-- ARM 6: the property, across the package --"
+
+_wide="${_tmp}/wide"
+mkdir -p "${_wide}/lib/Controller" "${_wide}/lib/Settings" "${_wide}/appinfo" \
+         "${_wide}/src/views" "${_wide}/templates"
+cat > "${_wide}/lib/Controller/ThingController.php" <<'PHP'
+<?php
+namespace OCA\Fx\Controller;
+class ThingController {
+    public function index(): JSONResponse
+    {
+        return new JSONResponse($this->objectService->findAll([]));
+    }
+    public function orphan(): JSONResponse
+    {
+        return new JSONResponse($this->objectService->findObjects([]));
+    }
+}
+PHP
+printf '<?php\nreturn [];\n' > "${_wide}/appinfo/routes.php"
+printf '{"schemas":[{"slug":"thing","notifications":{"onCreate":{"subject":"x"}}}]}\n' \
+    > "${_wide}/lib/Settings/register.json"
+printf '<<<<<<< HEAD\nconst a = 1;\n=======\nconst a = 2;\n>>>>>>> other\n' \
+    > "${_wide}/src/conflicted.js"
+cat > "${_wide}/src/views/Probe.vue" <<'VUE'
+<template>
+  <div>
+    <p @click="go">clicky</p>
+    <img src="/avatar.png" alt="" />
+    <span tabindex="3">tabbed</span>
+    <div aria-hidden="true"><button>hidden but focusable</button></div>
+    <input type="text" name="email" />
+    <a href="/x">click here</a>
+    <table><tr><th>Name</th></tr></table>
+  </div>
+</template>
+<script>
+export default { methods: { go() { if (window.confirm('sure?')) { return true } } } }
+</script>
+VUE
+printf '<html>\n<body><p>hi</p></body>\n</html>\n' > "${_wide}/templates/admin.php"
+printf '{"name":"fx","menu":[],"pages":[]}\n' > "${_wide}/src/manifest.json"
+(
+    cd "${_wide}" || exit 1
+    git init -q .
+    git add -A
+    git -c user.email=t@t -c user.name=t commit -qm "the planted tree"
+    printf 'docs only\n' > README.md
+    git add README.md
+    git -c user.email=t@t -c user.name=t commit -qm docs
+) >/dev/null 2>&1
+
+_wide_full="${_tmp}/wide-full.txt"
+_wide_logs="${_tmp}/wide-logs"; mkdir -p "${_wide_logs}"
+(
+    cd "${_wide}" || exit 1
+    HYDRA_GATE_LOG_DIR="${_wide_logs}" bash "${_runner}" . > "${_wide_full}" 2>&1
+)
+_wide_diff="${_tmp}/wide-diff.txt"
+_wide_logs2="${_tmp}/wide-logs2"; mkdir -p "${_wide_logs2}"
+(
+    cd "${_wide}" || exit 1
+    HYDRA_GATE_LOG_DIR="${_wide_logs2}" bash "${_runner}" --scope-to-diff --base HEAD~1 . \
+        > "${_wide_diff}" 2>&1
+)
+
+# THE POSITIVE CONTROL RUNS FIRST AND EVERYTHING ELSE IS MEANINGLESS WITHOUT
+# IT. If the full run finds nothing, the fixture is broken and "no gate passed
+# over the empty scope" would be satisfied by a runner that gates nothing.
+_wide_fails=$(grep -cE '^\[gate-[0-9]+\][^:]*: FAIL' "${_wide_full}" || true)
+_wide_fails="${_wide_fails:-0}"
+if [ "${_wide_fails}" -ge 8 ]; then
+    _ok "positive control: the planted tree FAILS ${_wide_fails} gate(s) at full scope"
+else
+    _bad "positive control BROKEN: the planted tree fails only ${_wide_fails} gate(s) at full scope — the fixture no longer plants what this arm assumes, so every assertion below proves nothing"
+fi
+
+# Gates whose PASS over THIS diff is a real answer to a real question.
+# Each computed something; none of them is passing over an unopened scope.
+#   4  composer-audit  — no composer file in this tree at all; it declines by
+#                        subject matter, not by scope (it reports na, listed
+#                        here only so a future change of that verdict is not
+#                        silently swallowed)
+#   15 dashboard-antipattern — its helper reads the WHOLE tree and the diff
+#                        filter is applied to its FINDINGS, so it did open the
+#                        manifest and the .vue tree. See the note below.
+#   16 spec-coverage   — a DELTA gate with a real base: it diffed HEAD~1..HEAD
+#                        and found no changed method. That is a computed zero.
+#   23 or-abstraction-anti-patterns — never diff-scoped; it lints all of lib/.
+#   47 security-change-has-tests — DELTA, real base: it classified the docs-only
+#                        hunks and found no security change. Computed.
+#   48 csrf-cochange   — DELTA, real base: it looked for a removed attribute in
+#                        the diff and found none. Computed.
+_ARM6_ALLOWED=" 4 15 16 23 47 48 "
+
+_wide_bad=""
+while IFS= read -r _g; do
+    [ -z "${_g}" ] && continue
+    case "${_ARM6_ALLOWED}" in
+        *" ${_g} "*) continue ;;
+    esac
+    _wide_bad="${_wide_bad}${_g} "
+done < <(grep -E '^\[gate-[0-9]+\][^:]*: PASS' "${_wide_diff}" \
+    | grep -oE '^\[gate-[0-9]+\]' | grep -oE '[0-9]+' | sort -un)
+
+if [ -z "${_wide_bad}" ]; then
+    _ok "no gate reports PASS over a diff that excludes every planted defect (the .github#374 property, package-wide)"
+else
+    _bad "gate(s) ${_wide_bad}reported PASS over a scope that excludes every planted defect — this is the .github#374 defect. Each of them printed the same word as a gate that read the whole tree and found it clean. Fix the gate's fall-through (see _skip_empty_scope in run-hydra-gates.sh); do NOT add it to _ARM6_ALLOWED unless you can state what it computed."
+fi
+
+# ANTI-WIDENING. ARM 6 is satisfiable by making every gate skip always, so the
+# same tree at FULL scope must still produce those findings — asserted by name,
+# so "the gate went quiet" cannot pass as "the gate went green".
+_wide_missing=""
+for _g in 14 17 21 22 34 35 36 38 40 41 42 43 44; do
+    grep -qE "^\[gate-${_g}\][^:]*: FAIL" "${_wide_full}" || _wide_missing="${_wide_missing}${_g} "
+done
+if [ -z "${_wide_missing}" ]; then
+    _ok "anti-widening: every one of those gates still FAILS the planted tree at full scope"
+else
+    _bad "gate(s) ${_wide_missing}no longer FAIL the planted tree at FULL scope — the empty-scope fix has widened into a permanent skip, which is the strictly worse defect"
+fi
+
+# ===========================================================================
+# ARM 7 — A RELATIVE APP-DIR PATH MUST PRODUCE THE SAME VERDICTS (.github#374)
+# ===========================================================================
+#
+# `run-hydra-gates.sh:238` never absolutised APP_DIR before its `cd`, and
+# gate-17 is the only gate that hands `${APP_DIR}` to its checker afterwards —
+# so the scan root resolved a SECOND time, against the app dir itself, and the
+# checker read `relapp/relapp`. It found nothing, printed its terminal
+# `# count=0`, and gate-17 reported PASS. Same tree, absolute path: FAIL — 1.
+#
+# ⚠️ THIS IS THE ARM THE REST OF THE PACKAGE STRUCTURALLY CANNOT HAVE.
+# `test_gate_acceptance_matrix.sh` builds every fixture path from `${PKG_ROOT}`,
+# so its driver can only ever reproduce the SAFE invocation. A suite that can
+# only express the safe call cannot test the unsafe one, and that is worth more
+# than the bug: the invocation this runner's own header documents for humans
+# (`./scripts/run-hydra-gates.sh [options] [app-dir]`) was untestable here.
+#
+# So this arm deliberately `cd`s to the PARENT and passes a BARE RELATIVE NAME.
+echo
+echo "-- ARM 7: a relative app-dir path --"
+
+_rel_parent="${_tmp}/relparent"
+mkdir -p "${_rel_parent}/relapp/lib/Controller" "${_rel_parent}/relapp/appinfo"
+cat > "${_rel_parent}/relapp/lib/Controller/ThingController.php" <<'PHP'
+<?php
+namespace OCA\Fx\Controller;
+class ThingController {
+    public function index(): JSONResponse
+    {
+        return new JSONResponse($this->objectService->findAll([]));
+    }
+}
+PHP
+printf '<?php\nreturn [];\n' > "${_rel_parent}/relapp/appinfo/routes.php"
+(
+    cd "${_rel_parent}/relapp" || exit 1
+    git init -q .
+    git add -A
+    git -c user.email=t@t -c user.name=t commit -qm init
+) >/dev/null 2>&1
+
+_rel_abs_out="${_tmp}/rel-abs.txt"
+_rel_rel_out="${_tmp}/rel-rel.txt"
+_rel_logs="${_tmp}/rel-logs"; mkdir -p "${_rel_logs}"
+_rel_logs2="${_tmp}/rel-logs2"; mkdir -p "${_rel_logs2}"
+(
+    cd "${_rel_parent}" || exit 1
+    HYDRA_GATE_LOG_DIR="${_rel_logs}" bash "${_runner}" "${_rel_parent}/relapp" \
+        > "${_rel_abs_out}" 2>&1
+)
+(
+    # THE WHOLE POINT: parent directory, bare relative name, no leading `./`.
+    cd "${_rel_parent}" || exit 1
+    HYDRA_GATE_LOG_DIR="${_rel_logs2}" bash "${_runner}" relapp > "${_rel_rel_out}" 2>&1
+)
+
+# Positive control FIRST: the absolute invocation must catch the plant, or the
+# comparison below is between two meaningless numbers.
+if grep -qE '^\[gate-17\][^:]*: FAIL' "${_rel_abs_out}"; then
+    _ok "positive control: gate-17 FAILS the planted pass-through wrapper via an ABSOLUTE path"
+else
+    _bad "positive control BROKEN: gate-17 did not catch the planted ADR-022 wrapper even via an absolute path — got: $(_verdict "${_rel_abs_out}" 17)"
+fi
+
+_rel_abs_v="$(_verdict "${_rel_abs_out}" 17)"
+_rel_rel_v="$(_verdict "${_rel_rel_out}" 17)"
+if [ "${_rel_abs_v}" = "${_rel_rel_v}" ]; then
+    _ok "gate-17 returns the same verdict ('${_rel_rel_v}') for a relative and an absolute app-dir"
+else
+    _bad "gate-17 verdict DEPENDS ON HOW THE CALLER SPELLED THE PATH: absolute '${_rel_abs_v}' vs relative '${_rel_rel_v}'. This is .github#374 — APP_DIR is not absolutised before the cd, so the checker resolves it a second time against the app dir."
+fi
+
+# And the invariant that makes it impossible rather than merely fixed: the run
+# must STATE the absolute path it resolved. A silent fix is one refactor from
+# regressing with nothing to notice it.
+if grep -qE '^\[hydra-gates\] App dir: /.* \(absolute\)$' "${_rel_rel_out}"; then
+    _ok "the run states the ABSOLUTE app dir it resolved, so a future relative path cannot reach a checker unannounced"
+else
+    _bad "the run does not print an absolute 'App dir:' line — nothing in the output distinguishes a relative invocation from an absolute one"
+fi
+
+echo
 if [ "${_failures}" -eq 0 ]; then
     echo "test_gate_empty_scope_never_passes.sh: ALL PASS"
     exit 0

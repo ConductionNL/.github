@@ -1075,5 +1075,122 @@ class McpSeamSpellingTest(unittest.TestCase):
         self.assertIn("createInvoice", self._fully_qualified().methods())
 
 
+class WriteVerbVocabularyTest(unittest.TestCase):
+    """The verb list IS the detector — everything else only removes findings.
+
+    Nothing in this module is examined at all unless the method name starts
+    with a `WRITE_VERB_PREFIXES` entry, so a missing verb is not a weaker
+    check, it is NO check. Measured on a controlled probe before the fix: four
+    orphaned write methods on one service — `postJournalEntry`,
+    `updateLedgerBalance`, `sendRemittanceAdvice`, `deleteJournalEntry`, all
+    zero-caller, no seam — and the gate reported exactly ONE. `delete*`'s
+    absence was load-bearing enough that the fleet board had to warn agents to
+    "plant with `post*`" or they would wrongly record the gate as blind.
+    """
+
+    _FOUR = (
+        "<?php\nnamespace OCA\\Fixture\\Service;\nclass LedgerService {\n"
+        "    public function postJournalEntry(array $e): void { $this->x = $e; }\n"
+        "    public function updateLedgerBalance(array $e): void { $this->x = $e; }\n"
+        "    public function sendRemittanceAdvice(array $e): void { $this->x = $e; }\n"
+        "    public function deleteJournalEntry(string $i): void { $this->x = $i; }\n"
+        "}\n"
+    )
+
+    def _write(self, root, rel, content):
+        full = os.path.join(root, rel)
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        with open(full, "w", encoding="utf-8") as fh:
+            fh.write(content)
+        return full
+
+    def test_all_four_orphaned_write_shapes_are_reported(self):
+        with _AppFixture() as root:
+            path = self._write(root, "lib/Service/LedgerService.php", self._FOUR)
+            out = _run_main(path)
+            self.assertEqual(len(out), 4, out)
+            for name in ("postJournalEntry", "updateLedgerBalance",
+                         "sendRemittanceAdvice", "deleteJournalEntry"):
+                self.assertTrue(any(f"method={name}" in ln for ln in out), (name, out))
+
+    def test_the_same_four_with_callers_are_silent(self):
+        """ANTI-WIDENING. Widening a vocabulary list is exactly how a gate
+        starts crying wolf, so every added verb must be proven NOT to fire on
+        correct code."""
+        with _AppFixture() as root:
+            body = self._FOUR.replace(
+                "}\n",
+                "    public function run(): void {\n"
+                "        $this->postJournalEntry([]);\n"
+                "        $this->updateLedgerBalance([]);\n"
+                "        $this->sendRemittanceAdvice([]);\n"
+                "        $this->deleteJournalEntry('x');\n"
+                "    }\n}\n",
+            )
+            path = self._write(root, "lib/Service/LedgerService.php", body)
+            self.assertEqual(_run_main(path), [])
+
+    def test_each_added_verb_family_fires_on_an_orphan(self):
+        """One representative per family, so a verb cannot be dropped silently."""
+        families = [
+            "persistLoonStrook", "storeInbound", "insertRow", "upsertRecord",
+            "patchDocument", "replaceAttachment", "purgeExpired", "flushQueue",
+            "removeFromQueue", "uploadMedia", "importContact", "syncAbonnement",
+            "transferToIncasso", "archiveAndDelete", "cancelRedemption",
+            "approveRequest", "assignReviewer", "markOptedOut", "finalizeInvoice",
+            "signDocument", "revokeGrant", "grantAccess", "scheduleReminder",
+            "enqueueDispatch", "triggerTerugvordering",
+        ]
+        with _AppFixture() as root:
+            body = ("<?php\nnamespace OCA\\Fixture\\Service;\nclass WideService {\n"
+                    + "".join(f"    public function {n}(): void {{ $this->x = 1; }}\n"
+                              for n in families)
+                    + "}\n")
+            path = self._write(root, "lib/Service/WideService.php", body)
+            out = _run_main(path)
+            missed = [n for n in families
+                      if not any(f"method={n}" in ln for ln in out)]
+            self.assertEqual(missed, [], f"verbs the gate cannot see: {missed}")
+
+    def test_noun_shaped_verbs_are_prefix_only(self):
+        """A MEASURED false positive, not a hypothetical one.
+
+        `KapitaallastenCalculator::schedule()` in shillinq is a PURE function
+        returning a depreciation table. It was the single false positive among
+        the 35 findings the widening added across 12 repos, and it is why
+        `_PREFIX_ONLY_VERBS` exists: `scheduleReminder` counts, bare
+        `schedule` does not.
+        """
+        self.assertFalse(owc._is_write_method("schedule"))
+        self.assertTrue(owc._is_write_method("scheduleReminder"))
+        with _AppFixture() as root:
+            path = self._write(
+                root, "lib/Service/CalculatorService.php",
+                "<?php\nnamespace OCA\\Fixture\\Service;\nclass CalculatorService {\n"
+                "    public function schedule(float $b, int $n): array\n"
+                "    { return array_fill(0, $n, $b / $n); }\n"
+                "}\n")
+            self.assertEqual(_run_main(path), [])
+
+    def test_bare_verbs_that_are_genuine_writes_still_count(self):
+        """ANTI-WIDENING for the arm above: the prefix-only rule must apply to
+        `schedule` and to nothing else. `flush()` and `sync()` are the only
+        other bare-name matches in the fleet and both are real writes."""
+        self.assertTrue(owc._is_write_method("flush"))
+        self.assertTrue(owc._is_write_method("sync"))
+        self.assertTrue(owc._is_write_method("post"))
+
+    def test_read_and_guard_shapes_are_still_gate_6s_territory(self):
+        """The exclusions the gate declares in its own docstring must hold —
+        and `apply*` / `process*` / `register*` were measured and REJECTED
+        (6, 7 and 4 findings, all pure transforms or noun collisions)."""
+        for name in ("isReady", "hasAccess", "getBalance", "findAll",
+                     "listItems", "validateInput", "checkQuorum",
+                     "ensureSchema", "requireAdmin", "authorizeUser",
+                     "applyFilters", "processResponse", "registerHooks",
+                     "setRegister", "addRow"):
+            self.assertFalse(owc._is_write_method(name), name)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -191,11 +191,76 @@ def parse_routes(routes_path: Path) -> dict[str, str]:
 # ---------------------------------------------------------------------------
 
 
+def _decl_preamble(lines: list[str], decl_idx: int) -> list[str]:
+    """The lines PHP itself binds to the declaration at ``decl_idx``.
+
+    Walks upward from the declaration and accepts only what belongs to that
+    declaration's own preamble — its attribute list, its ONE docblock, `//`
+    notes and blank lines — stopping at the first line that belongs to
+    something else (a closing brace, a statement, another declaration).
+
+    WHY THIS IS NOT A LINE WINDOW (.github#363)
+    -------------------------------------------
+    This used to be ``lines[decl_idx - 20 : decl_idx + 1]``. A distance in
+    LINES is not the relationship being tested, and it was wrong in both
+    directions at once — confirmed live in ONE file, ONE run, 2026-08-12:
+
+        listThings      #[PublicPage] on its own line above it   correct
+        adminOnlyPurge  NO auth attribute of its own             FLAGGED —
+                        the window reached back over the previous method's
+                        closing brace and read ITS #[PublicPage]
+        farAttribute    #[PublicPage] 21 lines up, separated only
+                        by its own (long) docblock               MISSED —
+                        its own attribute fell outside the window
+
+    So the gate reported an administrator-only endpoint as a newly-exposed
+    public one, and stayed SILENT about a genuinely public, genuinely
+    untested one. The silent half is the dangerous one: detecting a
+    newly-exposed endpoint is the entire purpose of this gate, and
+    attributes-before-a-long-docblock is simply what a house style with long
+    descriptions produces.
+
+    Structure decides, not distance. ``_docblock_block`` below already walked
+    upward this way for the @contract tag; the auth question now asks it the
+    same way.
+    """
+    out: list[str] = []
+    i = decl_idx - 1
+    seen_doc = False
+    while i >= 0:
+        raw = lines[i]
+        s = raw.strip()
+        # Blank lines, PHP attributes (`#[...]`, incl. the `]` / `)]` tail of a
+        # multi-line one) and `//` notes are all part of the preamble.
+        if s == "" or s.startswith("#[") or s.startswith("]") or s.startswith(")]") \
+                or s.startswith("//"):
+            out.append(raw)
+            i -= 1
+            continue
+        # The declaration's own docblock — exactly one, and only when it ENDS
+        # on this line. Consume it whole, then keep walking: an attribute
+        # written ABOVE the docblock still belongs to this declaration.
+        if not seen_doc and s.endswith("*/"):
+            j = i
+            while j >= 0 and "/*" not in lines[j]:
+                j -= 1
+            if j < 0:
+                break
+            out.extend(lines[j : i + 1])
+            i = j - 1
+            seen_doc = True
+            continue
+        break
+    return out
+
+
 def _method_is_public_endpoint(lines: list[str], decl_idx: int) -> bool:
     """True if the method at ``decl_idx`` carries a PublicPage / NoAdminRequired
-    attribute or docblock tag in the ~20 lines above its declaration."""
-    start = max(0, decl_idx - 20)
-    head = "\n".join(lines[start : decl_idx + 1])
+    attribute or docblock tag IN ITS OWN declaration preamble.
+
+    Never in a neighbour's — see ``_decl_preamble``.
+    """
+    head = "\n".join(_decl_preamble(lines, decl_idx) + [lines[decl_idx]])
     return bool(_PUBLIC_AUTH_RE.search(head))
 
 

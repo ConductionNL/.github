@@ -355,7 +355,14 @@ class ItemController {
 """
         self.assertEqual(_scan(src), [])
 
-    def test_status_unauthorized_passes(self):
+    def test_status_unauthorized_from_an_authentication_check_is_FLAGGED(self):
+        """INVERTED by `.github#365`. This test used to assert `[]`.
+
+        It is the defect, written down and pinned as correct behaviour: a
+        `no user -> 401` preamble is AUTHENTICATION, `$this->service->find($id)`
+        below it still takes an arbitrary caller-supplied id, and the gate went
+        silent. gate-7 reported 0 in all 18 fleet apps on the strength of this.
+        """
         src = """\
 <?php
 class ItemController {
@@ -368,6 +375,92 @@ class ItemController {
             return new JSONResponse([], Http::STATUS_UNAUTHORIZED);
         }
         return new JSONResponse($this->service->find($id));
+    }
+}
+"""
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("show", findings[0])
+
+    def test_status_unauthorized_from_a_per_object_check_still_passes(self):
+        """The other half of `#365`, and the one that keeps this fix honest.
+
+        Byte-identical response line, byte-identical status constant — the ONLY
+        difference from the test above is that the condition compares object
+        data against the caller. That is a real authorisation guard written with
+        the wrong status code, and flagging it would be the false positive that
+        made gate-7 untrusted (`#353`, `#360`).
+        """
+        src = """\
+<?php
+class ItemController {
+    /**
+     * @NoAdminRequired
+     */
+    public function show(string $id): JSONResponse
+    {
+        $item = $this->service->find($id);
+        if ($item['ownerId'] !== $this->userId) {
+            return new JSONResponse([], Http::STATUS_UNAUTHORIZED);
+        }
+        return new JSONResponse($item);
+    }
+}
+"""
+        self.assertEqual(_scan(src), [])
+
+    def test_authentication_preamble_answering_403_is_also_FLAGGED(self):
+        """The status code is not what makes a check an authorisation guard.
+
+        `#365` as filed proposes dropping `401`/`UNAUTHORIZED` from the guard
+        regex. That repair would leave this method green — and turning
+        `STATUS_UNAUTHORIZED` into `STATUS_FORBIDDEN` is a one-token edit, so
+        the silence could be bought straight back by making the code WORSE.
+        Authentication-ness is a property of the CONDITION.
+        """
+        src = """\
+<?php
+class ItemController {
+    /**
+     * @NoAdminRequired
+     */
+    public function show(string $id): JSONResponse
+    {
+        if ($this->userSession->getUser() === null) {
+            return new JSONResponse([], Http::STATUS_FORBIDDEN);
+        }
+        return new JSONResponse($this->service->find($id));
+    }
+}
+"""
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("show", findings[0])
+
+    def test_presence_test_wrapping_the_body_does_not_blank_the_guard(self):
+        """Polarity control — the blanking must not eat a whole method body.
+
+        `if ($user !== null) { ...everything... }` is a WRAPPER, not a guard
+        clause. Blanking it would erase the real ownership check inside and
+        report a correctly-guarded method.
+        """
+        src = """\
+<?php
+class ItemController {
+    /**
+     * @NoAdminRequired
+     */
+    public function show(string $id): JSONResponse
+    {
+        $user = $this->userSession->getUser();
+        if ($user !== null) {
+            $item = $this->service->find($id);
+            if ($item['ownerId'] !== $user->getUID()) {
+                return new JSONResponse([], Http::STATUS_FORBIDDEN);
+            }
+            return new JSONResponse($item);
+        }
+        return new JSONResponse([], Http::STATUS_NOT_FOUND);
     }
 }
 """
@@ -801,7 +894,40 @@ class WidgetController {
 # ---------------------------------------------------------------------------
 
 class NumericStatusParityTest(unittest.TestCase):
-    def test_numeric_403_statuscode_named_arg_passes(self):
+    def test_numeric_statuscode_named_arg_parity_holds_for_a_real_guard(self):
+        """`statusCode: 403` is recognised exactly as `Http::STATUS_FORBIDDEN` is.
+
+        REWRITTEN by `.github#365`. The original body of this test was named
+        for 403 and actually wrote `statusCode: 401` behind a `no user` check —
+        so it asserted the numeric-parity property over an AUTHENTICATION
+        clause, and pinned the `#365` defect while appearing to test spelling
+        parity. The parity property is real and is kept; the subject is now a
+        per-object comparison, which is what the parity was ever for.
+        """
+        src = """\
+<?php
+class ItemController {
+    /**
+     * @NoAdminRequired
+     */
+    public function show(string $id): JSONResponse
+    {
+        $item = $this->service->find($id);
+        if ($item['ownerId'] !== $this->userId) {
+            return new JSONResponse([], statusCode: 403);
+        }
+        return new JSONResponse($item);
+    }
+}
+"""
+        self.assertEqual(_scan(src), [])
+
+    def test_numeric_401_statuscode_named_arg_from_authentication_is_FLAGGED(self):
+        """The spelling-parity fix must not carry the authentication clause in.
+
+        Same named-argument spelling, same numeric literal position — but the
+        condition asks "is anyone logged in?", so it clears nothing.
+        """
         src = """\
 <?php
 class ItemController {
@@ -817,7 +943,9 @@ class ItemController {
     }
 }
 """
-        self.assertEqual(_scan(src), [])
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("show", findings[0])
 
     def test_numeric_403_positional_arg_passes(self):
         src = """\
@@ -915,7 +1043,16 @@ class C {
 """
         self.assertEqual(_scan(src), [])
 
-    def test_instance_response_helper_unauthorized_passes(self):
+    def test_instance_response_helper_unauthorized_from_authentication_is_FLAGGED(self):
+        """INVERTED by `.github#365`. This test used to assert `[]`.
+
+        `->unauthorized(` is the third spelling of the same defect — `#365`
+        names `UNAUTHORIZED` and `401`, and the helper-call form was accepting
+        the identical authentication clause. The response-helper SPELLING
+        parity that this class exists to test is unaffected: see the sibling
+        test, where `->unauthorized()` behind a per-object comparison still
+        clears.
+        """
         src = """\
 <?php
 class C {
@@ -927,6 +1064,27 @@ class C {
             return $this->responses->unauthorized();
         }
         return $this->svc->get($id);
+    }
+}
+"""
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("act", findings[0])
+
+    def test_instance_response_helper_unauthorized_after_a_real_check_passes(self):
+        """Same helper call, same spelling — a per-object condition clears it."""
+        src = """\
+<?php
+class C {
+    /**
+     * @NoAdminRequired
+     */
+    public function act(string $id) {
+        $item = $this->svc->get($id);
+        if ($item['ownerId'] !== $this->userId) {
+            return $this->responses->unauthorized();
+        }
+        return $item;
     }
 }
 """
@@ -1215,8 +1373,25 @@ class TestController {
 """
         self.assertEqual(_scan_app(src, {"ParticipationResponder": _RESPONDER}), [])
 
-    def test_citizenAction_delegation_is_recognised_as_guarded(self):
-        """citizenAction() denies an anonymous caller with 401 -> not flagged."""
+    def test_citizenAction_delegation_is_FLAGGED_it_only_authenticates(self):
+        """INVERTED by `.github#365`. This test used to assert `[]`.
+
+        It is the decidesk measurement's own counter-example, and the sharpest
+        statement of the defect available: `staffAction()` and `citizenAction()`
+        sit side by side in one collaborator, and only ONE of them is an
+        authorisation guard.
+
+            requireStaff()   currentUid() === null -> 401   (authentication)
+                             isStaff()     === false -> 403 (AUTHORISATION)
+            citizenAction()  currentUid() === null -> 401   (authentication)
+                             ...and nothing else.
+
+        `staffAction()` still clears — its 403 arm survives the blanking, and
+        the sibling test above pins that. `citizenAction()` clears nothing: a
+        caller routed through it may submit a proposal against ANY budgetId,
+        which is the finding. The 401 arm was never doing the work; it was
+        borrowing credibility from the 403 arm next door.
+        """
         src = """\
 <?php
 namespace OCA\\Decidesk\\Controller;
@@ -1238,7 +1413,9 @@ class TestController {
     }
 }
 """
-        self.assertEqual(_scan_app(src, {"ParticipationResponder": _RESPONDER}), [])
+        findings = _scan_app(src, {"ParticipationResponder": _RESPONDER})
+        self.assertEqual(len(findings), 1)
+        self.assertIn("submitProposal", findings[0])
 
     def test_three_hop_intra_class_chain_to_collaborator_guard(self):
         """validateProposal -> approve/reject -> applyDecision -> staffAction().
@@ -2074,6 +2251,441 @@ class DraftController {
             "isReady", "mayRetry", "canUserModifyAgent", "hasPendingRevision",
         ):
             self.assertFalse(matches(name), f"{name} must NOT be a guard name")
+
+
+# ---------------------------------------------------------------------------
+# `.github#365` — AUTHENTICATION IS NOT AUTHORISATION
+# ---------------------------------------------------------------------------
+
+_IDOR_BODY = """\
+        $entry = $this->ledger->find($entryId);
+        return new JSONResponse($entry);
+"""
+
+
+def _method(preamble: str, body: str = _IDOR_BODY) -> str:
+    """One `@NoAdminRequired` method: *preamble*, then a fixed IDOR body.
+
+    Every arm below shares `_IDOR_BODY` verbatim, so a verdict difference
+    between two arms can only be explained by the preamble. That is what makes
+    these a control rather than a collection of samples.
+    """
+    return (
+        "<?php\nclass LedgerController {\n"
+        "    /**\n     * @NoAdminRequired\n     */\n"
+        "    public function show(string $entryId): JSONResponse\n    {\n"
+        + preamble + body + "    }\n}\n"
+    )
+
+
+class AuthenticationIsNotAuthorisationTest(unittest.TestCase):
+    """The `#365` three-arm control, at the level of one method body.
+
+    Measured on a committed-plant rig before the fix (canonical package
+    @ 57bcb2b): the bare arm reported 1, the byte-identical arm behind a
+    `no user -> 401` preamble reported 0, and gate-7 reported 0 in all
+    EIGHTEEN fleet apps while 453 of 791 controller files carried that
+    preamble.
+    """
+
+    def test_arm_1_bare_is_flagged(self):
+        """The positive control. If this stops firing, nothing else here means anything."""
+        findings = _scan(_method(""))
+        self.assertEqual(len(findings), 1)
+
+    def test_arm_2_authentication_preamble_is_flagged(self):
+        """THE DEFECT: identical body, a 401 preamble, and the gate went quiet."""
+        findings = _scan(_method(
+            "        $user = $this->userSession->getUser();\n"
+            "        if ($user === null) {\n"
+            "            return new JSONResponse([], Http::STATUS_UNAUTHORIZED);\n"
+            "        }\n"
+        ))
+        self.assertEqual(len(findings), 1)
+
+    def test_arm_3_real_guard_after_the_same_preamble_passes(self):
+        """The abuse control: the preamble is IGNORED, not PUNISHED."""
+        self.assertEqual(_scan(_method(
+            "        $user = $this->userSession->getUser();\n"
+            "        if ($user === null) {\n"
+            "            return new JSONResponse([], Http::STATUS_UNAUTHORIZED);\n"
+            "        }\n"
+            "        $e = $this->ledger->find($entryId);\n"
+            "        if ($e['ownerId'] !== $user->getUID()) {\n"
+            "            return new JSONResponse([], Http::STATUS_FORBIDDEN);\n"
+            "        }\n"
+        )), [])
+
+    def test_every_authentication_spelling_is_demoted(self):
+        """Spelling-agnostic by construction — see the doriath retraction.
+
+        `#365`'s own re-audit enumerated three spellings of "who is the
+        caller", missed `sessionUserId()`, and manufactured 19 false positives
+        from that one gap. Identity is recognised by TOKEN in an
+        argument-free expression, so a resolver nobody has thought of yet is
+        still recognised.
+        """
+        for preamble in (
+            "        if ($this->userSession->getUser() === null) { return new JSONResponse([], 401); }\n",
+            "        $uid = $this->sessionUserId();\n        if ($uid === null) { return new JSONResponse([], 401); }\n",
+            "        $u = $this->userSession->getUser();\n        if ($u === null) { return new JSONResponse([], 401); }\n",
+            "        if (empty($this->userId)) { return new JSONResponse([], 401); }\n",
+            "        if (!$this->userId) { return new JSONResponse([], 401); }\n",
+            "        $user = $this->userSession->getUser();\n        if (!$user instanceof IUser) { return new JSONResponse([], 401); }\n",
+            "        if ($this->userSession->isLoggedIn() === false) { throw new OCSException('', 401); }\n",
+            "        $currentUser = $this->userService->currentUser();\n        if ($currentUser === null) { return $this->responses->unauthorized(); }\n",
+        ):
+            with self.subTest(preamble=preamble.strip()[:60]):
+                self.assertEqual(len(_scan(_method(preamble))), 1)
+
+    def test_a_real_comparison_is_never_demoted(self):
+        """The false-positive control, one arm per shape that must survive."""
+        for preamble in (
+            "        $e = $this->ledger->find($entryId);\n        if ($e['ownerId'] !== $this->userId) { return new JSONResponse([], 401); }\n",
+            "        $e = $this->ledger->find($entryId);\n        if ($e['ownerId'] !== $this->userId) { return new JSONResponse([], 404); }\n",
+            "        if ($this->isCurrentUserAdmin() === false) { return new JSONResponse([], 403); }\n",
+            "        if ($this->hasPermission($entryId) === false) { return new JSONResponse([], 403); }\n",
+        ):
+            with self.subTest(preamble=preamble.strip()[:60]):
+                self.assertEqual(_scan(_method(preamble)), [])
+
+    def test_a_non_refusing_conditional_is_left_alone(self):
+        """Control 3 — a clause that computes rather than refuses is not a guard clause.
+
+        It must not be blanked, because blanking a body region is a
+        destructive operation on the text every other pattern reads.
+        """
+        src = _method(
+            "        $user = $this->userSession->getUser();\n"
+            "        if ($user === null) {\n"
+            "            $this->logger->debug('anon');\n"
+            "        }\n"
+            "        if ($this->ledger->find($entryId)['ownerId'] !== $this->userId) {\n"
+            "            return new JSONResponse([], Http::STATUS_FORBIDDEN);\n"
+            "        }\n"
+        )
+        self.assertEqual(_scan(src), [])
+
+
+class SessionIdentityHandoffTest(unittest.TestCase):
+    """Pattern 6 — the shape that keeps the `#365` fix from being a wolf-cry.
+
+    Measured on doriath @ bfd6da6: shipping the `#365` blanking WITHOUT this
+    pattern reported 45 findings there, and that app's real gate-7 exposure was
+    hand-read as ZERO. `AttachmentService::loadOwnedSecret()` refuses on
+    `$secret->getOwnerId() !== $userId`; the controller's job is to hand the
+    identity down, and it does.
+    """
+
+    def test_identity_handed_to_the_data_call_passes(self):
+        self.assertEqual(_scan(_method(
+            "        $userId = $this->sessionUserId();\n"
+            "        if ($userId === null) { return new JSONResponse([], 401); }\n",
+            "        return new JSONResponse($this->ledger->findOwned(entryId: $entryId, userId: $userId));\n",
+        )), [])
+
+    def test_identity_resolved_but_NOT_handed_over_is_flagged(self):
+        """The discriminator. Resolving the caller is not scoping the query."""
+        findings = _scan(_method(
+            "        $userId = $this->sessionUserId();\n"
+            "        if ($userId === null) { return new JSONResponse([], 401); }\n",
+            "        $this->audit->logForUser($userId, 'read');\n"
+            "        return new JSONResponse($this->ledger->find($entryId));\n",
+        ))
+        self.assertEqual(len(findings), 1)
+
+    def test_a_caller_supplied_userId_proves_nothing(self):
+        """`find($id, $userId)` where `$userId` came off the route is not a guard.
+
+        This exclusion is the whole reason Pattern 6 is not a blanket: without
+        it, any endpoint that takes a `userId` parameter would clear itself.
+        """
+        src = (
+            "<?php\nclass LedgerController {\n"
+            "    /**\n     * @NoAdminRequired\n     */\n"
+            "    public function show(string $entryId, string $userId): JSONResponse\n    {\n"
+            "        return new JSONResponse($this->ledger->findOwned($entryId, $userId));\n"
+            "    }\n}\n"
+        )
+        self.assertEqual(len(_scan(src)), 1)
+
+    def test_one_unscoped_call_beside_a_scoped_one_still_reports(self):
+        """The ALL-quantifier. `any` would let a log line clear a real IDOR."""
+        findings = _scan(_method(
+            "        $userId = $this->sessionUserId();\n"
+            "        if ($userId === null) { return new JSONResponse([], 401); }\n",
+            "        $mine  = $this->ledger->listOwned($entryId, $userId);\n"
+            "        $other = $this->ledger->find($entryId);\n"
+            "        return new JSONResponse([$mine, $other]);\n",
+        ))
+        self.assertEqual(len(findings), 1)
+
+
+class OwnershipComparisonGuardTest(unittest.TestCase):
+    """Pattern 7 — the 404-style ownership refusal, which the gate's own FAIL
+    message has always endorsed in prose and never recognised in code."""
+
+    def test_ownership_mismatch_answered_404_passes(self):
+        self.assertEqual(_scan(_method(
+            "        $e = $this->ledger->find($entryId);\n"
+            "        if ($e['ownerId'] !== $this->userId) {\n"
+            "            return new JSONResponse(['message' => 'Not found'], Http::STATUS_NOT_FOUND);\n"
+            "        }\n"
+        )), [])
+
+    def test_a_bare_404_without_a_comparison_still_reports(self):
+        """Not-found is not access-denied. Only the COMPARISON clears."""
+        findings = _scan(_method(
+            "        $e = $this->ledger->find($entryId);\n"
+            "        if ($e === null) {\n"
+            "            return new JSONResponse(['message' => 'Not found'], Http::STATUS_NOT_FOUND);\n"
+            "        }\n"
+        ))
+        self.assertEqual(len(findings), 1)
+
+    def test_a_status_string_containing_user_is_not_an_identity(self):
+        """`'user_draft'` must not read as the caller. String literals are excluded."""
+        findings = _scan(_method(
+            "        $e = $this->ledger->find($entryId);\n"
+            "        if ($e['state'] !== 'user_draft') {\n"
+            "            return new JSONResponse([], Http::STATUS_NOT_FOUND);\n"
+            "        }\n"
+        ))
+        self.assertEqual(len(findings), 1)
+
+
+# ---------------------------------------------------------------------------
+# Pattern 8 — `#[PublicPage]` must resolve inside a declared-public scope
+# ---------------------------------------------------------------------------
+
+_PUBLIC_TPL = """\
+<?php
+class CatalogueController {
+%s
+}
+"""
+
+
+def _public(body: str, attrs: str = "    #[PublicPage]\n",
+            sig: str = "string $id", ret: str = "JSONResponse") -> str:
+    return _PUBLIC_TPL % (
+        attrs
+        + "    public function show(%s): %s\n    {\n%s    }\n" % (sig, ret, body)
+    )
+
+
+class PublicPageScopeTest(unittest.TestCase):
+    """`#[PublicPage]` says the CALLER may be anonymous. It says nothing about
+    which OBJECTS the endpoint may reach. Reproduced at package 57bcb2b: a
+    byte-identical IDOR plant carrying the annotation — including an
+    unauthenticated write to an arbitrary id — reported PASS."""
+
+    # -- fires -------------------------------------------------------------
+
+    def test_public_page_only_with_arbitrary_id_is_reported(self):
+        """opencatalogi#856's shape: no session, a caller-chosen id, a global
+        lookup. THE annotation must not exempt it."""
+        findings = _public("        return new JSONResponse($this->svc->find($id));\n")
+        out = _scan(findings)
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("rule=publicpage-unscoped-object-lookup", out[0])
+
+    def test_public_page_only_is_in_scope_at_all(self):
+        """🔑 The blinding is mostly NOT the exemption. A `#[PublicPage]`
+        method carrying no `#[NoAdminRequired]` was dropped one branch EARLIER,
+        by the scope filter — 267 of the fleet's 357 public controller methods.
+        Deleting the exemption alone would not have moved this test."""
+        out = _scan(_public(
+            "        return new JSONResponse($this->svc->find($id));\n"))
+        self.assertEqual(len(out), 1, out)
+
+    def test_public_page_unauthenticated_write_is_reported(self):
+        """A public WRITE to an arbitrary id. `array $data` is a payload, not a
+        selector, so the finding is about `$id` alone."""
+        out = _scan(_public(
+            "        return new JSONResponse($this->svc->update($id, $data));\n",
+            sig="string $id, array $data"))
+        self.assertEqual(len(out), 1, out)
+
+    def test_both_attributes_still_reported(self):
+        """The arm the documented exemption actually cleared."""
+        out = _scan(_public(
+            "        return new JSONResponse($this->svc->find($id));\n",
+            attrs="    #[NoAdminRequired]\n    #[PublicPage]\n"))
+        self.assertEqual(len(out), 1, out)
+
+    def test_template_response_does_not_clear_a_public_renderer(self):
+        """`TemplateResponse` clears a `@NoAdminRequired` method because NC
+        guarantees a session there. `@PublicPage` is the annotation that turns
+        that guarantee OFF, so the reason does not survive the move."""
+        out = _scan(_public(
+            "        $o = $this->svc->find($id);\n"
+            "        return new TemplateResponse('app', 'index', ['object' => $o]);\n",
+            ret="TemplateResponse"))
+        self.assertEqual(len(out), 1, out)
+
+    # -- stays silent ------------------------------------------------------
+
+    def test_public_page_with_no_identifier_is_not_reported(self):
+        """No caller-supplied value, nothing to steer."""
+        out = _scan(_public(
+            "        return new JSONResponse($this->svc->listPublished());\n",
+            sig=""))
+        self.assertEqual(out, [])
+
+    def test_public_page_scoped_to_a_configured_namespace_is_not_reported(self):
+        """The shape opencatalogi shipped in 963f832a — resolve the configured
+        register/schema, refuse if unconfigured, then look the id up inside."""
+        out = _scan(_public(
+            "        $scope = $this->themeConfiguration();\n"
+            "        if ($scope === null) {\n"
+            "            return new JSONResponse([], 503);\n"
+            "        }\n"
+            "        $o = $this->svc->find($id, $scope['register'], $scope['schema']);\n"
+            "        return new JSONResponse($o);\n"))
+        self.assertEqual(out, [])
+
+    def test_public_page_with_a_publicness_named_lookup_is_not_reported(self):
+        """`findPublished($id)` declares the constraint in the callee name."""
+        out = _scan(_public(
+            "        return new JSONResponse($this->svc->findPublished($id));\n"))
+        self.assertEqual(out, [])
+
+    def test_a_publication_named_lookup_is_NOT_a_publicness_constraint(self):
+        """Abuse control for the CamelCase-segment rule: `getPublicationById`
+        starts with the letters of `public` and is a plain object read. If the
+        token were matched as a substring, every `publication`-flavoured app in
+        the fleet would exempt itself by naming."""
+        out = _scan(_public(
+            "        return new JSONResponse($this->svc->getPublicationById($id));\n"))
+        self.assertEqual(len(out), 1, out)
+
+    def test_public_page_with_a_capability_identifier_is_not_reported(self):
+        """The identifier IS the authorisation — NC's public-share convention."""
+        out = _scan(_public(
+            "        return new JSONResponse($this->svc->find($shareToken));\n",
+            sig="string $shareToken"))
+        self.assertEqual(out, [])
+
+    def test_public_form_submission_is_not_reported(self):
+        """A payload-only public POST selects nothing. portaliq's entire public
+        forms surface is this shape and must not light up."""
+        out = _scan(_public(
+            "        return new JSONResponse($this->svc->create($data));\n",
+            sig="array $data"))
+        self.assertEqual(out, [])
+
+    def test_verify_in_scope_then_act_is_not_reported(self):
+        """Per SELECTOR, not per call. opencatalogi's `attachments()` proves the
+        object is in the catalog, refuses, and only then fetches by id — judging
+        each call alone reports the second half of a correct method."""
+        out = _scan(_public(
+            "        $cat = $this->catalogs->getBySlug($catalogSlug);\n"
+            "        if ($cat === null) {\n"
+            "            return new JSONResponse([], 404);\n"
+            "        }\n"
+            "        $o = $this->svc->findInCatalog($id, $cat['id']);\n"
+            "        if ($o === null) {\n"
+            "            return new JSONResponse([], 404);\n"
+            "        }\n"
+            "        return new JSONResponse($this->svc->attachments($id));\n",
+            sig="string $catalogSlug, string $id"))
+        self.assertEqual(out, [])
+
+    def test_state_scoped_receiver_is_not_reported(self):
+        """OpenRegister's ObjectService is scoped as STATE fleet-wide."""
+        out = _scan(_public(
+            "        $loc = $this->query->locate($id, $this->publishedRegisters());\n"
+            "        if ($loc === null) {\n"
+            "            return new JSONResponse([], 404);\n"
+            "        }\n"
+            "        $svc = $this->objectService();\n"
+            "        $svc->setRegister($loc['register']);\n"
+            "        $svc->setSchema($loc['schema']);\n"
+            "        return new JSONResponse($svc->find($id));\n"))
+        self.assertEqual(out, [])
+
+    def test_allow_listed_identifier_is_not_reported(self):
+        """decidesk's `OriController`: `self::RESOURCE_MAP[$resource] ?? null`
+        with a refusal on a miss can only ever name a member of a closed set."""
+        out = _scan(_public(
+            "        $schema = self::RESOURCE_MAP[$resource] ?? null;\n"
+            "        if ($schema === null) {\n"
+            "            return new JSONResponse([], 404);\n"
+            "        }\n"
+            "        return new JSONResponse($this->svc->findAll($schema, $resource));\n",
+            sig="string $resource"))
+        self.assertEqual(out, [])
+
+    def test_rbac_true_alone_does_not_scope(self):
+        """⚠️ The counter-example opencatalogi's own fix commit names: `_rbac:
+        true` was never sufficient, because OpenRegister grants read by default
+        on a schema declaring no authorization block. A bare literal argument
+        does not constrain."""
+        out = _scan(_public(
+            "        return new JSONResponse($this->svc->find($id, _rbac: true,"
+            " _multitenancy: false));\n"))
+        self.assertEqual(len(out), 1, out)
+
+
+class HelperGuardEvidenceTest(unittest.TestCase):
+    """A gate that can be silenced by a sentence in a comment is not measuring
+    the code."""
+
+    _OWNED = """\
+<?php
+class AgentController {
+    #[NoAdminRequired]
+    public function rotate(string $id): JSONResponse
+    {
+        $user = $this->userSession->getUser();
+        if ($user === null) {
+            return new JSONResponse([], Http::STATUS_UNAUTHORIZED);
+        }
+        $agent = $this->%s(agentId: $id);
+        if ($agent === null) {
+            return new JSONResponse([], Http::STATUS_NOT_FOUND);
+        }
+        return new JSONResponse($this->webhooks->rotate(agent: $agent));
+    }
+
+    private function %s(string $agentId): ?ObjectEntity
+    {
+%s    }
+}
+"""
+
+    _OWNERSHIP_BODY = (
+        "        $agent = $this->objectService->find(id: $agentId);\n"
+        "        if ($agent->getOwner() !== $this->userId) {\n"
+        "            return null;\n"
+        "        }\n"
+        "        return $agent;\n"
+    )
+
+    _COMMENT_ONLY_BODY = (
+        "        // The caller invokes this helper OUTSIDE its own try block, so\n"
+        "        // the throw would escape as a framework 500.\n"
+        "        return $this->objectService->find(id: $agentId);\n"
+    )
+
+    def test_a_comment_mentioning_throw_is_not_a_guard(self):
+        """MEASURED on hermiq `AgentWebhookController::loadOwnedAgent`: the body
+        contains no `throw` statement at all — the word appears only in a code
+        comment explaining why the helper CATCHES one — and that made the helper
+        guard-bearing, clearing all four routed methods that call it."""
+        src = self._OWNED % ("loadAgent", "loadAgent", self._COMMENT_ONLY_BODY)
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1, findings)
+        self.assertIn("method=rotate", findings[0])
+
+    def test_an_ownership_helper_answering_null_still_clears(self):
+        """…and the narrowing costs no true clear: a helper that compares
+        ownership and answers `null` — the deliberate anti-oracle choice — is
+        recognised by its CONDITION, which is how hermiq's real
+        `loadOwnedAgent()` keeps clearing its four callers."""
+        src = self._OWNED % ("loadAgent", "loadAgent", self._OWNERSHIP_BODY)
+        self.assertEqual(_scan(src), [])
 
 
 if __name__ == "__main__":
