@@ -219,6 +219,18 @@ Gates **16, 29, 47, 48 and 61** ask what a *change* did and cannot be answered b
 checkout. With a base they run at any file scope; with none they report
 `NOT APPLICABLE` **by name, with a reason** — never `PASS`, and never counted as one.
 
+A delta gate also has to decide what *counts* as a change, and a plain `git diff`
+answers "a line moved". gate-16 therefore compares each changed file against its
+own base version with layout normalised away on both sides: brace style (K&R vs
+Allman), indentation and intra-line spacing, a PHP trailing comma, two spellings
+of one string, and a PHP statement re-wrapped across lines. Adopting
+`nextcloud/coding-standard` consequently reports nothing, while a changed value,
+a new parameter or an edited string still reports (`.github#395` — measured
+1071 → 0 findings across the fleet's seven adoption PRs, with a positive control
+per rule). The narrowing intersects git's own answer, so it can only ever shrink
+the scope. `git diff -w` does **not** express this: a brace is a token that moved
+lines, not whitespace that changed width.
+
 To get the old behaviour explicitly:
 
 ```bash

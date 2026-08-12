@@ -293,6 +293,103 @@ else
     _ok "gate-16 does NOT sweep the inherited legacy surface even at full file scope — the delta contract survived the reversal"
 fi
 
+# ===========================================================================
+echo
+echo "== arm 4 — a CODING-STANDARD REFORMAT is not a set of changed methods =="
+# ===========================================================================
+#
+# `.github#395`, the third false positive of this class after gate-14 (#391)
+# and gate-48 (#388). gate-16 derived its changed-method set from a plain
+# `git diff -U0`, so when `nextcloud/coding-standard` moved every `{` onto its
+# signature line, EVERY method in the app read as modified and every one of them
+# was asked for an `@spec` tag it never had. MEASURED on ConductionNL/procest#819
+# (921 PHP files, gate package `80691a7a`): 1 finding on the base branch, 185 on
+# the reformat. `git diff -w` does not help — the brace is a token that MOVED
+# LINES, not whitespace whose width changed.
+#
+# The two arms below are the same tree twice, and they pull in opposite
+# directions:
+#
+#   4a  reformat ONLY            -> gate-16 must report NOTHING
+#   4b  reformat + ONE operator  -> gate-16 must still report THAT method, and
+#                                   must not report the untouched one beside it
+#
+# 4b is the arm that stops the fix from being a false-negative machine: a
+# normalisation loose enough to swallow `+` -> `-` would pass 4a and retire the
+# gate. The `.knr` and `.knr-changed` fixtures differ in exactly one character.
+gf_build_repo "${WORK}/reformat" "${SRC}"
+gf_commit_all "${WORK}/reformat" "base: app before the coding-standard reformat"
+gf_mark_base  "${WORK}/reformat"
+cp "${SRC}/lib/Controller/ReformattedController.php.knr" \
+   "${WORK}/reformat/lib/Controller/ReformattedController.php"
+rm -f "${WORK}/reformat/lib/Controller/ReformattedController.php.knr" \
+      "${WORK}/reformat/lib/Controller/ReformattedController.php.knr-changed"
+gf_commit_paths "${WORK}/reformat" "style: adopt nextcloud/coding-standard" \
+    lib/Controller/ReformattedController.php
+
+# PRE-CONDITION 1 — the reformat has to BE a diff. If the two fixtures were
+# accidentally identical, 4a would pass on an empty change set and prove nothing.
+_churn="$(cd "${WORK}/reformat" && git diff --numstat "$(git rev-parse refs/remotes/origin/development)"...HEAD -- lib/Controller/ReformattedController.php)"
+_churn_added="$(printf '%s' "${_churn}" | awk '{print $1}')"
+if [ "${_churn_added:-0}" -ge 10 ]; then
+    _ok "pre-condition: the reformat rewrites ${_churn_added} lines of ReformattedController.php — 4a is judging a real diff"
+else
+    _bad "pre-condition: the reformat produced ${_churn_added:-0} added line(s). The two fixture variants must differ, or arm 4a is vacuous."
+fi
+
+# PRE-CONDITION 2 — those methods must be findable subject matter. Both are
+# public, in lib/Controller, non-accessor and untagged; if they were not, a
+# silent gate-16 in 4a would be silence about nothing.
+_pc4="$(cd "${WORK}/reformat" && python3 "${CHECKER}" . --mode report 2>&1)"
+if printf '%s' "${_pc4}" | grep -qF 'ReformattedController.php::totalRowWeights'; then
+    _ok "pre-condition: the checker's own report mode names ReformattedController::totalRowWeights as untagged — it IS in scope and IS uncovered"
+else
+    _bad "pre-condition: report mode does not name ReformattedController::totalRowWeights, so arms 4a/4b are not measuring an in-scope untagged method at all"
+fi
+
+_out4="$(gf_run_wrapper "${WORK}/reformat" "${WORK}/log-reformat")"
+_v4="$(gf_verdict "${_out4}" 16)"
+case "${_v4}" in
+    *PASS*) _ok "gate-16 PASSES on a formatting-only reformat — brace style is not a changed method (#395)" ;;
+    *FAIL*) _bad ".github#395 is LIVE: gate-16 reports changed methods on a diff whose only content is brace placement, indentation, quote style and a trailing comma. Got: ${_v4:0:160}" ;;
+    "")     _bad "gate-16 emitted no verdict at all on the reformat arm" ;;
+    *)      _bad "gate-16 gave an unrecognised verdict on the reformat arm: ${_v4:0:160}" ;;
+esac
+if grep -qF 'ReformattedController.php' "${WORK}/log-reformat/hydra-gate-spec-coverage.log" 2>/dev/null; then
+    _bad "gate-16 named ReformattedController.php on a formatting-only diff — even without a FAIL that is #395 still in the log, and it is what a reviewer is asked to act on"
+else
+    _ok "gate-16 writes no finding for the reformatted file"
+fi
+
+# --- 4b — the same reformat with one operator changed ----------------------
+gf_build_repo "${WORK}/reformat-plus" "${SRC}"
+gf_commit_all "${WORK}/reformat-plus" "base: app before the coding-standard reformat"
+gf_mark_base  "${WORK}/reformat-plus"
+cp "${SRC}/lib/Controller/ReformattedController.php.knr-changed" \
+   "${WORK}/reformat-plus/lib/Controller/ReformattedController.php"
+rm -f "${WORK}/reformat-plus/lib/Controller/ReformattedController.php.knr" \
+      "${WORK}/reformat-plus/lib/Controller/ReformattedController.php.knr-changed"
+gf_commit_paths "${WORK}/reformat-plus" "style: adopt the standard, and change one operator" \
+    lib/Controller/ReformattedController.php
+
+_out4b="$(gf_run_wrapper "${WORK}/reformat-plus" "${WORK}/log-reformat-plus")"
+_v4b="$(gf_verdict "${_out4b}" 16)"
+case "${_v4b}" in
+    *FAIL*) _ok "gate-16 still FAILS when a method's BODY changed inside the reformat — ${_v4b:0:90}" ;;
+    *)      _bad "gate-16 did NOT report a method whose operator changed, because the change arrived inside a reformatted file. The normalisation has become a false-negative machine — worse than the over-reporting it replaced. Got: ${_v4b:0:160}" ;;
+esac
+_log4b="${WORK}/log-reformat-plus/hydra-gate-spec-coverage.log"
+if grep -qF 'ReformattedController.php::totalRowWeights' "${_log4b}" 2>/dev/null; then
+    _ok "gate-16 NAMES totalRowWeights — the method whose body actually changed"
+else
+    _bad "gate-16 failed without naming totalRowWeights; a verdict with no evidence cannot be acted on"
+fi
+if grep -qF '::buildRowLabel' "${_log4b}" 2>/dev/null; then
+    _bad "gate-16 also named buildRowLabel, which carries the SAME reformat and no change. The normalisation is not being applied per method — one real change re-opens the whole file, which is #395 at file granularity."
+else
+    _ok "gate-16 does NOT name buildRowLabel — the reformatted-but-unchanged method beside it stays out of scope"
+fi
+
 echo
 echo "== summary =="
 echo "   passed: ${_pass_n}"
