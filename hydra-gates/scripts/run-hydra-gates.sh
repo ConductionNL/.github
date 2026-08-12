@@ -8166,6 +8166,51 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Gate 65: coding-standard-adoption — the app must still be on the fleet's
+# shared standard, and must not have pinned itself away from it.
+#
+# WHY THIS EXISTS
+# ---------------
+# Centralising configuration does not stop it drifting. The 18 mutually
+# different psalm.xml files measured on 2026-08-12 were all copies of something
+# that had been shared once. What stops recurrence is a check that fails when an
+# app walks away from the centre — including by freezing itself against it.
+#
+# NOT DIFF-SCOPED, deliberately. The subject is the app's standing configuration,
+# not the lines a PR touched: an app that never touches phpcs.xml again must not
+# thereby become exempt from having one. Every rule is a whole-repo property that
+# is either true today or is not.
+#
+# The checker prints one `FAIL <rule>: <detail>` per violation and a terminal
+# `checked N rule(s)`. Its ABSENCE is treated as a wiring failure rather than a
+# pass — a crashed checker and a clean repo are otherwise the same silence.
+# ---------------------------------------------------------------------------
+_csa_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-coding-standard-adoption.log
+: > "${_csa_log}"
+if [ -f composer.json ] || [ -f phpcs.xml ]; then
+    set +e
+    python3 "${SCRIPT_DIR}/lib/check_coding_standard_adoption.py" . > "${_csa_log}" 2>&1
+    _csa_rc=$?
+    set +e
+    grep -E '^FAIL ' "${_csa_log}" || true
+    if ! _helper_finished "${_csa_log}" '^checked [0-9]+ rule\(s\)$'; then
+        # A CRASH IS NOT A FINDING (.github#330).
+        _csa_why=$(head -3 "${_csa_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+        _skip 65 "coding-standard-adoption" wiring "check_coding_standard_adoption.py exited ${_csa_rc} without printing its terminal 'checked N rule(s)' summary, so NO rule was evaluated and this repo's adoption of the shared standard is UNVERIFIED by this run. Checker output: ${_csa_why:-<empty>}. See ${_csa_log}."
+    elif [ "${_csa_rc}" -eq 0 ]; then
+        _pass 65 "coding-standard-adoption"
+    else
+        # Count comes off the checker's own FAIL lines, not off the exit code,
+        # so a future exit-code change cannot silently alter the number.
+        _csa_n=$(grep -cE '^FAIL ' "${_csa_log}" 2>/dev/null || true)
+        case "${_csa_n}" in ''|*[!0-9]*) _csa_n=1 ;; esac
+        _fail 65 "coding-standard-adoption" "${_csa_n} deviation(s) from the shared coding standard; see ${_csa_log}"
+    fi
+else
+    _skip 65 "coding-standard-adoption" na "no composer.json and no phpcs.xml — this repo ships no PHP for a coding standard to apply to."
+fi
+
+# ---------------------------------------------------------------------------
 # Summary + COVERAGE ACCOUNTING
 #
 # The banner used to read "ALL 63 GATES GREEN" whenever the failure count was
