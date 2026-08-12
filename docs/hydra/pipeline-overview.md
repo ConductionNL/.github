@@ -60,6 +60,14 @@ The pipeline is driven entirely by GitHub issue labels. The supervisor polls eve
 
 Every failure path terminates in `needs-input`; there is no retry and no fix-iteration loop.
 
+## Code standards
+
+The gates check code against a standard defined outside this document:
+Nextcloud's, extended but never contradicted. See
+[Way of Work → CI/CD and Code Standards](../WayOfWork/ci-cd.md) for the rules,
+the tool split (php-cs-fixer owns formatting, PHP_CodeSniffer owns semantics),
+and gate-65, which fails any app that drifts from it or pins itself against it.
+
 ## Labels
 
 | Label                                                     | On       | Meaning                                                                                                                                      | Set by                                | Removed by                        |
