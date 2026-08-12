@@ -2800,6 +2800,32 @@ if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
         # opening `{`, and grep that buffer for any `): ...Response` return
         # type. Done in plain awk for portability (no pcregrep dependency).
         # Helper-prefixed names are excluded by the gate convention.
+        #
+        # ⚠️ THE BUFFER MUST END AT THE SIGNATURE LINE WHEN THAT LINE ALREADY
+        # OPENS THE BODY (K&R braces). Both stop conditions below are tested
+        # against `nxt` — the lines READ AHEAD — and never against `$0`, so
+        # under Allman the buffer stopped at the very next line (`{` alone) and
+        # under K&R it did not stop at all: it ran on through the body, the
+        # closing brace and the NEXT method's docblock until it hit that
+        # method's signature. The buffer then contained a `: SomeResponse` that
+        # belongs to a DIFFERENT method, and the gate reported the first one as
+        # an unrouted endpoint.
+        #
+        # That is not a corner case now. Nextcloud's coding standard is K&R,
+        # and the fleet is migrating to it: every `__construct` immediately
+        # followed by a Response-returning action becomes a phantom finding the
+        # moment an app reformats. MEASURED on openconnector#1229 —
+        # `lib/Controller/UiController.php method=__construct
+        # expected_route='ui#__construct' rule=missing-route`, where the
+        # inherited return type came from `makeSpaResponse(): TemplateResponse`
+        # eleven lines below. The SAME awk over the SAME file in Allman braces
+        # prints nothing. Brace style is not supposed to be an input to this
+        # gate, and while it was, the reformat looked like the defect.
+        #
+        # Reading nothing ahead is correct rather than merely quieter: if the
+        # signature line ends in `{`, the whole signature — parameters, return
+        # type and all — is ON that line, so there is nothing further to find.
+        # A K&R method that DOES return a Response still matches on `$0`.
         _methods=$(awk -v RESPONSE_RX='Response[ |\\{]' '
             /^[[:space:]]*public[[:space:]]+function[[:space:]]+[a-zA-Z_][a-zA-Z0-9_]*[[:space:]]*\(/ {
                 method = $0
@@ -2808,7 +2834,7 @@ if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
                 if (method ~ /^(helper|assert|validate|guard|ensure|prepare|format|render)/) next
                 buf = $0
                 n = 0
-                while (n < 12) {
+                while (n < 12 && $0 !~ /\{[[:space:]]*$/) {
                     if ((getline nxt) <= 0) break
                     buf = buf "\n" nxt
                     n++
