@@ -34,11 +34,26 @@ spec → code → test traceability chain.
 Annotation convention
 ======================
 
-In an e2e test file, reference a scenario with **either** form (in a comment or
-inside a test title/describe string):
+In an e2e test file, reference a scenario with **either** form:
 
     // @e2e openspec/specs/<spec-name>/spec.md#<scenario-slug>
     // @e2e <spec-name>::<scenario-slug>
+
+**A MENTION IS NOT A DIRECTIVE.** The anchor only counts where it is attached
+to something that executes, which means one of exactly two positions:
+
+* **leading in a comment** — nothing but whitespace and markdown / jsdoc
+  leaders (``*``, ``-``, ``>``, ``#``, ``!``) before the ``@`` on that line,
+  in a comment above, inside the argument list of, or inside the body of the
+  declaration it annotates. This is how every anchor in the fleet is written;
+* **inside the TITLE of a ``test(`` / ``describe(``** — the anchor is part of
+  the name of a running thing (Playwright's own tag convention).
+
+A sentence that merely names an anchor — ``// TODO: still unwritten, its
+anchor is @e2e a::b`` — is prose and is reported as such. So is an anchor in a
+selector string, in a regex literal, or trailing the last test in a file with
+nothing after it to run. Writing *about* coverage is not coverage
+(``.github#358``).
 
 **Format A slug:** kebab-case of the ``#### Scenario:`` heading text
 (lower-case, punctuation stripped, words joined with ``-``).
@@ -714,6 +729,115 @@ def _code_mask(text: str) -> str:
     return "".join(out)
 
 
+# ---------------------------------------------------------------------------
+# A MENTION IS NOT A DIRECTIVE (.github#358)
+# ---------------------------------------------------------------------------
+# The `@e2e` regexes run over the ORIGINAL text, because the convention this
+# module documents puts the tag in a COMMENT and a comment is blanked by the
+# code mask. That is right, and it is also how a sentence of prose came to be
+# scored as coverage:
+#
+#     // TODO: the second scenario is still unwritten. Its anchor is
+#     //       @e2e tag::beta
+#
+# Measured on a two-scenario fixture: the honest arm and that arm both print
+#
+#     [gate-19] e2e-coverage: PASS — 2 reference(s) in e2e suite
+#
+# byte for byte, so no downstream reader can tell them apart. It is not a
+# hypothetical: two agents documenting this very defect silenced the gate they
+# were describing, and `.github#358` records comments quoting old dangling
+# anchors being re-parsed as live ones.
+#
+# THE DISCRIMINATOR IS POSITION WITHIN THE COMMENT, AND IT IS FREE
+# ----------------------------------------------------------------
+# The fleet already writes every anchor the same way: the tag is the LEADING
+# content of its comment line, after nothing but whitespace and the markdown /
+# jsdoc leaders (`*`, `-`, `>`, `#`, `!`). Surveyed 2026-08-12 across the 16
+# app checkouts that have an e2e suite — decidesk 307, openbuild 206, pipelinq
+# 145, openregister 129, docudesk 120, larpingapp 115, procest 114, hermiq 107,
+# softwarecatalog 101, openconnector 96, nldesign 64, opencatalogi 59, scholiq
+# 56, doriath 44, shillinq 35 — **1,918 anchors, 1,918 of them leading.** Not
+# one prose mention, not one in a string, not one in code. So requiring the
+# leading position costs the fleet exactly zero real coverage and removes the
+# counterfeit entirely.
+#
+# This is the same shape as `_parse_whole_spec_exclusion` twenty lines up,
+# which already refuses a Purpose paragraph that merely MENTIONS
+# `@e2e exclude`. One rule, two directives.
+#
+# The remaining accepted position is the one the module docstring promises and
+# nobody currently uses: the anchor inside the TITLE of a test or describe —
+# Playwright's own tag convention, where the anchor is literally part of the
+# name of a thing that runs. It is honoured rather than dropped precisely
+# because zero anchors depend on it: keeping a documented form that cannot
+# regress anything is cheaper than a docstring that lies.
+_ANCHOR_LEADERS = frozenset(" \t*-#>!/")
+
+
+def _literal_spans(text: str) -> list[tuple[str, int, int]]:
+    """`(kind, inner_start, inner_end)` for every comment / string / regex.
+
+    Same tokenizer walk as :func:`_code_mask` — it has to be, because the only
+    way to know where a comment really begins is to know where strings and
+    regex literals end (`'http://x'` opens no comment). This one records the
+    spans instead of blanking them, so an `@e2e` match found in the ORIGINAL
+    text can be asked *what kind of text am I standing in, and what precedes
+    me on this line*.
+
+    `inner_*` bound the CONTENT, not the delimiters, so the leader test does
+    not have to know how long the opener was.
+    """
+    out: list[tuple[str, int, int]] = []
+    i, n = 0, len(text)
+    prev_char, prev_word = "", ""
+    while i < n:
+        c = text[i]
+        if c == "/" and text.startswith("//", i):
+            j = text.find("\n", i)
+            j = n if j < 0 else j
+            out.append(("comment", i + 2, j))
+            i = j
+            continue
+        if c == "/" and text.startswith("/*", i):
+            j = text.find("*/", i + 2)
+            j = n if j < 0 else j + 2
+            out.append(("comment", i + 2, max(i + 2, j - 2)))
+            i = j
+            continue
+        if c in "'\"":
+            j = _skip_string(text, i)
+            out.append(("string", i + 1, max(i + 1, j - 1)))
+            prev_char, prev_word = c, ""
+            i = j
+            continue
+        if c == "`":
+            j = _skip_template(text, i)
+            out.append(("string", i + 1, max(i + 1, j - 1)))
+            prev_char, prev_word = "`", ""
+            i = j
+            continue
+        if c == "/" and _regex_can_start(prev_char, prev_word):
+            j = _skip_regex(text, i)
+            if j > 0:
+                out.append(("regex", i, j))
+                prev_char, prev_word = ")", ""
+                i = j
+                continue
+        if c.isalnum() or c in "_$":
+            k = i
+            while k < n and (text[k].isalnum() or text[k] in "_$"):
+                k += 1
+            prev_word = text[i:k]
+            prev_char = text[k - 1]
+            i = k
+            continue
+        if not c.isspace():
+            prev_char, prev_word = c, ""
+        i += 1
+    return out
+
+
 def _match_paren(mask: str, open_paren: int) -> int | None:
     """Index of the `)` matching the `(` at *open_paren* in the CODE MASK."""
     depth = 0
@@ -731,8 +855,8 @@ def _match_paren(mask: str, open_paren: int) -> int | None:
     return None
 
 
-def _first_arg(mask: str, open_paren: int, close: int) -> str:
-    """Masked text of the first top-level argument, stripped."""
+def _first_arg_span(mask: str, open_paren: int, close: int) -> tuple[int, int]:
+    """`(start, end)` of the first top-level argument, delimiters included."""
     depth = 0
     i = open_paren + 1
     start = i
@@ -745,7 +869,13 @@ def _first_arg(mask: str, open_paren: int, close: int) -> str:
         elif c == "," and depth == 0:
             break
         i += 1
-    return mask[start:i].strip()
+    return start, i
+
+
+def _first_arg(mask: str, open_paren: int, close: int) -> str:
+    """Masked text of the first top-level argument, stripped."""
+    start, end = _first_arg_span(mask, open_paren, close)
+    return mask[start:end].strip()
 
 
 def _is_unconditional_arg(first: str) -> bool:
@@ -784,6 +914,7 @@ class _TestFile:
     def __init__(self, text: str) -> None:
         self.text = text
         self.mask = _code_mask(text)
+        self.literals = _literal_spans(text)
         self.nodes: list[_TestNode] = []
         self.roots: list[_TestNode] = []
         # (start, is_unconditional) for `test.skip(...)` / `test.fixme(...)`
@@ -915,6 +1046,49 @@ class _TestFile:
                 return ch
         return containing
 
+    def is_directive(self, at: int) -> bool:
+        """Is the `@e2e` whose `@` sits at *at* a DIRECTIVE rather than prose?
+
+        Two positions qualify, and nothing else does:
+
+        * **leading in a comment** — only whitespace and markdown / jsdoc
+          leaders between the start of the anchor's line (or the comment's own
+          opening, whichever is later) and the `@`. This is how all 1,918
+          anchors in the fleet are written;
+        * **inside the title of a declaration** — the anchor is part of the
+          name of a test or describe, i.e. of a thing that runs. Playwright's
+          own tag convention, and the form the module docstring promises.
+
+        A prose mention, an anchor in a non-title string, one in a regex
+        literal and one sitting in bare code are all refused. The refusal is
+        reported by name so nobody is sent to add a tag that is already
+        visible in the file.
+        """
+        kind: str | None = None
+        inner_start = 0
+        for k, a, b in self.literals:
+            if a <= at < b:
+                kind, inner_start = k, a
+        if kind is None:
+            return False                       # bare code — not a tag at all
+        if kind == "comment":
+            line_start = self.text.rfind("\n", 0, at) + 1
+            lead = self.text[max(line_start, inner_start):at]
+            return all(ch in _ANCHOR_LEADERS for ch in lead)
+        if kind != "string":
+            return False                       # inside a regex literal
+        # A string counts only when it is the FIRST argument — the title — of a
+        # declaration. `page.click('#x @e2e a::b')` is a selector, not a claim.
+        for nd in self.nodes:
+            if nd.start > at:
+                break
+            if nd.close < at:
+                continue
+            lo, hi = _first_arg_span(self.mask, nd.open, nd.close)
+            if lo <= at < hi:
+                return True
+        return False
+
     def _innermost_body_owner(self, pos: int) -> _TestNode | None:
         found: _TestNode | None = None
         for nd in self.nodes:
@@ -1016,10 +1190,20 @@ def _ref_is_live(doc: _TestFile, pos: int) -> bool:
     """
     node = doc.owner(pos)
     if node is None:
-        # No declaration owns this tag — a file-level annotation. Live: this
-        # function exists to catch tests that were switched OFF, not to invent
-        # a structural requirement the gate never had.
-        return True
+        # NOTHING RUNS AFTER THIS TAG, SO NOTHING PROVES IT.
+        #
+        # This used to return True and call the case "a file-level annotation".
+        # It is not: `owner()` already binds a file-header tag FORWARD to the
+        # first declaration in the file, so a header tag never reaches here.
+        # None means there is no `test(` or `describe(` at or after the anchor
+        # anywhere in the file — a tag trailing the last test, or a tag in a
+        # file that declares none. Neither is attached to anything that
+        # executes, which is the whole property this gate measures.
+        #
+        # Cost measured 2026-08-12 across the fleet's 16 e2e suites: **0 of
+        # 1,918 anchors** currently land here, so this closes a hole rather
+        # than moving a number.
+        return False
     n: _TestNode | None = node
     while n is not None:
         if n.switched_off:
@@ -1452,18 +1636,35 @@ def collect_ref_status(app_dir: Path) -> tuple[set[str], dict[str, str]]:
         for rex in (_E2E_PATH_RE, _E2E_SHORT_RE):
             for m in rex.finditer(text):
                 ref = f"{m.group('spec')}::{m.group('slug')}"
-                if file_runs and _ref_is_live(doc, m.end()):
+                # A MENTION IS NOT A DIRECTIVE (#358). Checked before liveness
+                # on purpose: prose that names an anchor is not a weak tag on a
+                # good test, it is not a tag, and the finding has to say so or
+                # the author will go looking for a test to unskip.
+                directive = doc.is_directive(m.start())
+                if directive and file_runs and _ref_is_live(doc, m.end()):
                     live.add(ref)
                     dead.pop(ref, None)
                 elif ref not in live:
-                    dead[ref] = (
-                        f"referenced only by a file no Playwright project "
-                        f"runs — {rel} is outside testDir or excluded by "
-                        f"testIgnore/testMatch in {scope.config_rel or 'playwright.config.ts'}, "
-                        f"which is the config CI executes"
-                        if not file_runs else
-                        f"referenced only by a test that never runs ({rel})"
-                    )
+                    if not directive:
+                        reason = (
+                            f"named only in PROSE, not in an @e2e directive "
+                            f"({rel}) — the anchor appears mid-sentence in a "
+                            f"comment, in a selector or in some other string. "
+                            f"Writing about an anchor is not covering it. Put "
+                            f"the tag at the start of its own comment line "
+                            f"above the test that proves the scenario"
+                        )
+                    elif not file_runs:
+                        reason = (
+                            f"referenced only by a file no Playwright project "
+                            f"runs — {rel} is outside testDir or excluded by "
+                            f"testIgnore/testMatch in "
+                            f"{scope.config_rel or 'playwright.config.ts'}, "
+                            f"which is the config CI executes"
+                        )
+                    else:
+                        reason = f"referenced only by a test that never runs ({rel})"
+                    dead[ref] = reason
     return live, dead
 
 
@@ -1677,14 +1878,23 @@ def run_gate(app_dir: Path) -> int:
                     f"{s['ref']} — @e2e exclude without reason (reason required)"
                 )
             elif s["ref"] in dead_refs:
-                # Named, but by a test that never runs. Saying "missing @e2e"
-                # here would send someone to add a tag that is already there.
-                findings.append(
-                    f"{s['ref']} — @e2e tag present but the test does not run: "
-                    f"{dead_refs[s['ref']]}. A permanently-skipped or empty test is "
-                    f"not coverage: unskip it, give it a body, or replace the tag "
-                    f"with a reason-bearing `@e2e exclude`."
-                )
+                # Named, but not by a running test. Saying "missing @e2e" here
+                # would send someone to add a tag that is already visible in
+                # the file, so the finding names the mechanism instead — and
+                # the two mechanisms need different remedies.
+                reason = dead_refs[s["ref"]]
+                if reason.startswith("named only in PROSE"):
+                    findings.append(
+                        f"{s['ref']} — {reason}, or exclude the scenario with a "
+                        f"reason-bearing `@e2e exclude`."
+                    )
+                else:
+                    findings.append(
+                        f"{s['ref']} — @e2e tag present but the test does not run: "
+                        f"{reason}. A permanently-skipped or empty test is "
+                        f"not coverage: unskip it, give it a body, or replace the tag "
+                        f"with a reason-bearing `@e2e exclude`."
+                    )
             elif s["ref"] not in covered_refs:
                 findings.append(f"{s['ref']} — missing @e2e")
 
