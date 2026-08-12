@@ -2688,5 +2688,147 @@ class AgentController {
         self.assertEqual(_scan(src), [])
 
 
+# ---------------------------------------------------------------------------
+# `.github#398` — Pattern 6 clause 2 vetoed on calls that resolve NOTHING
+# ---------------------------------------------------------------------------
+
+class SanitiserHelperFalsePositiveTest(unittest.TestCase):
+    """A correctly-scoped method must not be flagged by a sanitiser call.
+
+    ⚠️ ANCHORED SUBJECTS. Every assertion here pins BOTH the count AND the
+    method name, and the fixtures below differ from one another by ONE
+    LINE. `authn-vs-authz` went green over a reverted fix because it asserted
+    `method=preamble` while a sibling logged `method=preambleForbiddenCode`,
+    which CONTAINS it — so a substring match cannot tell these apart. The
+    method here is always `show`, and the arms are separated by the count and
+    by which fixture is used, never by a name prefix.
+
+    The arms are a matrix, and the negative ones are the point: a fix that
+    merely quietened the sanitiser case would pass arms 1-3 and silently
+    break arms 5, 6 and 9 — each of which is a REAL unguarded lookup.
+    """
+
+    # `show` is scoped: `find($key, $uid)` carries the session identity.
+    _TMPL = """\
+<?php
+namespace OCA\\Demo\\Controller;
+use OCP\\AppFramework\\Controller;
+use OCP\\AppFramework\\Http\\Attribute\\NoAdminRequired;
+class ThingController extends Controller {
+    #[NoAdminRequired]
+    public function show(string $key): JSONResponse {
+        $user = $this->userSession->getUser();
+        if ($user === null) { return new JSONResponse([], Http::STATUS_UNAUTHORIZED); }
+        $uid = $this->userSession->getUser()->getUID();
+%s
+    }
+%s
+}
+"""
+    _SANITISER = ("    private function sanitizeKey(string $k): string "
+                  "{ return preg_replace('/[^a-z0-9]/i', '', $k); }")
+    # Token-clean, but delegates to a collaborator that RESOLVES.
+    _DELEGATING = ("    private function collect(string $k) "
+                   "{ $d = $this->dossierService->getDossierForCase(caseId: $k); "
+                   "return $d['items'] ?? []; }")
+    # A helper that resolves in its own body.
+    _RESOLVING = ("    private function findCatalogItem(string $k) "
+                  "{ return $this->objectService->find($k); }")
+
+    def _scan_body(self, body, helper):
+        return _scan(self._TMPL % (body, helper))
+
+    def test_1_scoped_method_is_clean(self):
+        """Control: the unmodified scoped method is not flagged."""
+        self.assertEqual(self._scan_body(
+            "        return new JSONResponse($this->store->find($key, $uid));",
+            self._SANITISER), [])
+
+    def test_2_sanitiser_call_does_not_create_a_finding(self):
+        """THE DEFECT. Adding only `$safeKey = $this->sanitizeKey($key);` to the
+        clean method above used to flip it to a finding, though the data access
+        it performs is byte-identical and still carries `$uid`."""
+        self.assertEqual(self._scan_body(
+            "        $safeKey = $this->sanitizeKey($key);\n"
+            "        return new JSONResponse($this->store->find($key, $uid));",
+            self._SANITISER), [])
+
+    def test_3_identity_in_the_helper_call_also_clears(self):
+        """The other direction of the original isolation: handing the identity
+        to the SANITISER cleared it even before the fix. Pinned so a future
+        change cannot make the two arms disagree."""
+        self.assertEqual(self._scan_body(
+            "        $safeKey = $this->sanitizeKey($key, $uid);\n"
+            "        return new JSONResponse($this->store->find($key, $uid));",
+            self._SANITISER), [])
+
+    def test_5_a_LAUNDERED_lookup_is_still_reported(self):
+        """⚠️ THE ARM THAT MATTERS. A scoped call exists (so clause 3 is
+        satisfied) AND the sanitised value reaches an UNSCOPED lookup. Only
+        taint propagation catches this; with half (A) removed and half (B)
+        kept, this fixture goes SILENT and a real IDOR ships.
+
+        Measured exactly that way during development: pre-fix 1, fixed 1,
+        taint-disabled 0."""
+        findings = self._scan_body(
+            "        $safeKey = $this->sanitizeKey($key);\n"
+            "        $mine = $this->store->listOwned($uid);\n"
+            "        return new JSONResponse($this->store->find($safeKey));",
+            self._SANITISER)
+        self.assertEqual(len(findings), 1, findings)
+        self.assertIn("method=show", findings[0])
+
+    def test_6_logger_exempt_does_not_hide_a_real_lookup(self):
+        """The PSR-3 exemption must not clear a method that also performs an
+        unscoped lookup."""
+        findings = self._scan_body(
+            '        $this->logger->error("failed for ".$key);\n'
+            "        $mine = $this->store->listOwned($uid);\n"
+            "        return new JSONResponse($this->store->find($key));",
+            self._SANITISER)
+        self.assertEqual(len(findings), 1, findings)
+        self.assertIn("method=show", findings[0])
+
+    def test_7_a_logger_only_veto_clears(self):
+        """…and the exemption does its job when the real lookup IS scoped.
+        Measured on openbuild/procest: a caller-supplied id inside an error
+        message was reported as an unscoped object resolution."""
+        self.assertEqual(self._scan_body(
+            '        $this->logger->error("looking up ".$key);\n'
+            "        return new JSONResponse($this->store->find($key, $uid));",
+            self._SANITISER), [])
+
+    def test_8_a_helper_that_resolves_keeps_its_veto(self):
+        """A same-class helper is cleared by READING IT, never by its name: one
+        that performs data access in its own body still reports."""
+        findings = self._scan_body(
+            "        $item = $this->findCatalogItem($key);\n"
+            "        $mine = $this->store->listOwned($uid);\n"
+            "        return new JSONResponse($item);",
+            self._RESOLVING)
+        self.assertEqual(len(findings), 1, findings)
+        self.assertIn("method=show", findings[0])
+
+    def test_9_helper_delegating_to_a_collaborator_is_not_pure(self):
+        """⚠️ REGRESSION PIN — this shape was SILENTLY CLEARED by the first
+        draft, and no arm I had written caught it; hand-reading the cleared
+        fleet set did.
+
+        `collect()` contains no data-access, mutation or request-read token of
+        its own — `getDossierForCase` matches none of the gate's vocabularies —
+        but it reaches a collaborator that resolves. The purity walk therefore
+        has to fail closed on ANY call it cannot account for, not just on the
+        tokens it recognises. Real subject: procest
+        `ZaakdossierDownloadController::downloadZip`, an unguarded case-dossier
+        download."""
+        findings = self._scan_body(
+            "        $docs = $this->collect($key);\n"
+            "        $mine = $this->store->listOwned($uid);\n"
+            "        return new JSONResponse($docs);",
+            self._DELEGATING)
+        self.assertEqual(len(findings), 1, findings)
+        self.assertIn("method=show", findings[0])
+
+
 if __name__ == "__main__":
     unittest.main()
