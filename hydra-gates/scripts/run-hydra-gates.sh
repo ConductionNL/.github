@@ -40,13 +40,32 @@
 # for apps following the standard Conduction NC app layout: lib/ + appinfo/
 # + optional src/ + tests/.
 #
+# SCOPE: FULL BY DEFAULT. ADR-020 IS SUPERSEDED — see
+# hydra-gates/ADR-020-SUPERSEDED.md for the decision and what it costs.
+#
+# The scope is TWO independent, named inputs, and both are printed every run:
+#
+#   FILE SCOPE   which files the STATE gates open. Defaults to the entire
+#                tracked tree. `--scope-to-diff` narrows it to the change.
+#   DELTA BASE   what the five DELTA gates (16, 29, 47, 48, 61) compare
+#                against. Resolved independently of the file scope, so a
+#                full-scope run on a PR still judges the change.
+#
 # Options:
-#   --scope-to-diff [BASE]   — Phase G: only scan files changed vs BASE
-#                              (default origin/development). Inherited debt
-#                              in unchanged files is ignored. Required for
-#                              reviewer/security post-flight enforcement;
-#                              optional for builder (build mode runs full).
-#   --base BRANCH            — override the diff base (default origin/development)
+#   --full                   — scan the whole tree. THIS IS THE DEFAULT; the
+#                              flag names it rather than switching to it.
+#   --scope-to-diff, --diff  — the old ADR-020 behaviour, now OPT-IN: judge only
+#                              the files this change touched. Inherited debt in
+#                              unchanged files is not judged.
+#   --base BRANCH            — the delta base. Also the file-scope base when
+#                              --scope-to-diff is given. NO DEFAULT: the old
+#                              hardcoded `origin/development` is the shared root
+#                              cause of .github#347 and #361 — a base nobody
+#                              supplied, silently diffing a branch against
+#                              itself, and printing PASS.
+#   $HYDRA_GATE_SCOPE        — `full` | `diff`, the env form of the two flags.
+#                              Anything else stops the run: a run whose scope
+#                              nobody can name is not evidence about anything.
 #
 # When the base resolves to the SAME COMMIT as HEAD — which is what every push
 # to a mainline branch looks like — the scope is taken from the push's own
