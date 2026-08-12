@@ -395,7 +395,17 @@ jobs:
       - name: Fetch Nextcloud server for occ
         run: |
           set -euo pipefail
-          NCVERSION=$(grep -oP '(?<=min-version=")[0-9]+' appinfo/info.xml | head -1)
+          # ANCHORED TO THE <nextcloud> ELEMENT ON PURPOSE. info.xml carries
+          # min-version on <php> too, and <php> comes FIRST in every fleet
+          # app. Measured across all 18 on 2026-08-12, an unanchored
+          # `(?<=min-version=")[0-9]+` returned:
+          #   13 apps -> 8    (from <php min-version="8.3"/>)
+          #   portaliq -> 28  (from a <nextcloud> further down, but the WRONG one)
+          # The first form fails loudly, because updates.nextcloud.com has no
+          # NC 8. The second does not: it resolves a real server and signs the
+          # app against a Nextcloud four majors below what it supports.
+          NCVERSION=$(grep -oP '<nextcloud[^>]*min-version="\K[0-9]+' appinfo/info.xml | head -1)
+          [ -n "${NCVERSION}" ] || { echo "::error::appinfo/info.xml declares no <nextcloud min-version>."; exit 1; }
           echo "App declares min-version ${NCVERSION}; fetching that server to sign with."
           URL=$(curl -sS "https://updates.nextcloud.com/updater_server/latest?channel=stable&version=${NCVERSION}" | jq -r '.downloads.zip[0]')
           if [ -z "$URL" ] || [ "$URL" = "null" ]; then
