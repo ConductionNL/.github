@@ -105,6 +105,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 
 
 # --------------------------------------------------------------------------
@@ -268,6 +269,117 @@ def _is_tracked_at(file_path, base_ref):
         return proc.returncode == 0
     except (OSError, ValueError):
         return False
+
+
+# --------------------------------------------------------------------------
+# INHERITED vs INTRODUCED
+#
+# Checks (a) and (c)-(f) are FILE-scoped by design: the module docstring says
+# "a banned dialect or a dangling $ref anywhere in a file the PR touched is a
+# structural defect", and that stays true — a register you edited is a
+# register you own. Only check (b) is narrowed to the property level.
+#
+# The COST of that design was invisible in the output. Measured 2026-08-12:
+# a base commit carrying an `x-openregister-relations` block, and a head
+# commit whose ENTIRE diff is one `"title"` string, produced
+#
+#     [gate-54] relation-dialect: FAIL — 1 non-canonical relation dialect finding(s)
+#
+# with nothing anywhere saying the finding predates the change. The verdict
+# was right and unreadable: a reader cannot act on a finding without knowing
+# whether they wrote it, and "byte-identical base and head findings" is what
+# a fleet sweep sees over and over with no way to rank them.
+#
+# The verdict is deliberately UNCHANGED — an inherited structural defect in a
+# file you touched still blocks, and softening it here would be making the
+# gate green by weakening it. What changes is that every finding now says
+# which it is, so a reader can triage and a sweep can count the two apart.
+# --------------------------------------------------------------------------
+def _base_revision_text(path, base_ref):
+    """This file's content at *base_ref*, or None when it cannot be read.
+
+    None covers BOTH "the file is new in this change" and "git could not be
+    asked" — the caller must not print either as a fact, so it distinguishes
+    them with ``_is_tracked_at`` before labelling anything.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "show", f"{base_ref}:{path}"],
+            capture_output=True, text=True, check=False,
+        )
+    except (OSError, ValueError):
+        return None
+    if proc.returncode != 0:
+        return None
+    return proc.stdout
+
+
+def _findings_at_base(path, keys, base_ref):
+    """The same checks, run over this file's content AT *base_ref*.
+
+    Returns a set of finding messages (rewritten to name the real path), or
+    None when the base revision could not be produced — in which case NOTHING
+    is labelled, because an unknown must never be printed as a verdict.
+
+    The base revision is written to a temp file and pushed back through
+    ``check_file`` with ``base_ref=None``, so the ONLY variable between the two
+    runs is the file's own content: the register-set key set is held at the
+    head value, and check (b)'s property-level diff scope — which is already
+    diff-scoped and therefore introduced by construction — is switched off on
+    the base side rather than being asked a question about itself.
+    """
+    text = _base_revision_text(path, base_ref)
+    if text is None:
+        return None
+    tmp = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".json", delete=False, encoding="utf-8"
+        ) as fh:
+            fh.write(text)
+            tmp = fh.name
+        sub = []
+        check_file(tmp, keys, sub, None)
+        return {msg.replace(tmp, path) for _p, msg in sub}
+    except OSError:
+        return None
+    finally:
+        if tmp:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+
+
+def _label_inheritance(path, findings, start, keys, base_ref):
+    """Suffix each finding this file produced with INHERITED or INTRODUCED.
+
+    A SUFFIX, never a prefix: the runner counts failures with
+    ``grep -cv '^WARN:'`` and warnings with ``grep -c '^WARN:'``, so anything
+    written in front of a message would silently re-bucket it.
+    """
+    if not base_ref or start >= len(findings):
+        return
+    existed_at_base = _is_tracked_at(path, base_ref)
+    if not existed_at_base:
+        for i in range(start, len(findings)):
+            p, msg = findings[i]
+            findings[i] = (p, msg + " [INTRODUCED — this file did not exist at "
+                                    f"'{base_ref}']")
+        return
+    base_msgs = _findings_at_base(path, keys, base_ref)
+    if base_msgs is None:
+        return          # unknown: label nothing rather than guess
+    for i in range(start, len(findings)):
+        p, msg = findings[i]
+        if msg in base_msgs:
+            findings[i] = (p, msg + f" [INHERITED — identical finding already "
+                                    f"present at '{base_ref}'; this change did "
+                                    f"not introduce it, but it is in a file this "
+                                    f"change touched]")
+        else:
+            findings[i] = (p, msg + f" [INTRODUCED — not present at "
+                                    f"'{base_ref}']")
 
 
 # --------------------------------------------------------------------------
@@ -543,6 +655,7 @@ def _collect_properties(props, prefix, depth, seen, out, parents=None):
 # Per-file checks.
 # --------------------------------------------------------------------------
 def check_file(path, keys, findings, base_ref):
+    _first = len(findings)
     try:
         with open(path, encoding="utf-8") as fh:
             text = fh.read()
@@ -709,6 +822,9 @@ def check_file(path, keys, findings, base_ref):
 
     # (a) banned dialect + (c) misplaced/inert x-relation-filter — raw walk.
     _raw_walk(doc, path, property_ids, findings, missing_ref_ids)
+
+    # Every finding this file produced now says whether this change wrote it.
+    _label_inheritance(path, findings, _first, keys, base_ref)
 
 
 def _raw_walk(node, path, property_ids, findings, missing_ref_ids=frozenset(), loc=""):

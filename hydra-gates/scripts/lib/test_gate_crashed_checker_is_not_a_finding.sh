@@ -631,6 +631,237 @@ for _g in 59:unclosable-gate 60:icon-vocabulary 61:listener-work-placement \
 done
 
 # ---------------------------------------------------------------------------
+# GATES 22, 25, 28 — A CRASH MUST NOT WEAR A FINDING'S CLOTHES
+#
+# The three gates in this package that INVENTED a claim about the source when
+# their checker died. Everything above this block reaches gates 6-21 and 56-64;
+# these three sat outside every arm and were measured by hand on 2026-08-12,
+# one fixture, two runs, only the interpreter varying:
+#
+#     working interpreters               interpreter exits 1
+#     [gate-22] manifest-validation: PASS  FAIL — 1 schema violation(s) in src/manifest.json
+#     [gate-25] contract-coverage:   FAIL 1 FAIL — an unreported number of new public endpoint(s)
+#     [gate-28] license-triangle:    PASS  SKIPPED (structural) — … not one carried an @license
+#
+# Each is a different mechanism and the same disease:
+#
+#   22  the catch-all branch ran `_count '^at '` over the log and then
+#       `[ "$n" -eq 0 ] && n=1`. node prints its stack trace INDENTED, so a
+#       dead validator scored zero `^at ` lines and was CLAMPED UP to one.
+#       A finding count of one that nobody had measured, against a manifest
+#       that validates clean.
+#   25  EXIT_FAIL is 1 and a traceback also exits 1. The runner could not read
+#       a count out of the log, substituted the string "an unreported number
+#       of", and BLOCKED on it. The gate said the words "I did not measure
+#       this" and failed the build anyway.
+#   28  the worst of the three, because it names the repository. The helper ran
+#       inside a pipeline whose value was sed's, so the status was discarded and
+#       the traceback was eaten by sed and never written to disk. Zero compared
+#       files then fell through to the `structural` branch, which states that
+#       not one file in scope carried a licence declaration — WHEN BOTH FILES
+#       IN THIS FIXTURE CARRY ONE. gate-28's own header was written to prevent
+#       exactly this sentence and guards only the MISSING-helper case; a helper
+#       that is present and crashes walked straight past it.
+#
+# None of the three is a false green. That is not the point. A gate that sends
+# someone to fix a defect that does not exist spends the same credit as one that
+# hides a defect that does, and it spends it on the reader: they look, find
+# nothing, and learn that this gate can be ignored.
+#
+# TWO ARMS, as everywhere in this file.
+# ---------------------------------------------------------------------------
+_ml_app="${_tmp}/manifest-contract-licence"
+mkdir -p "${_ml_app}/src" "${_ml_app}/lib/Controller" "${_ml_app}/lib/Service" \
+         "${_ml_app}/appinfo"
+printf '<?xml version="1.0"?>\n<info>\n <id>mcl</id>\n</info>\n' \
+    > "${_ml_app}/appinfo/info.xml"
+echo "fixture" > "${_ml_app}/README.md"
+(
+    cd "${_ml_app}" || exit 1
+    git init -q .
+    git add -A
+    git -c user.email=t@t -c user.name=t commit -qm init
+) >/dev/null 2>&1
+# gate-22: a manifest that VALIDATES. The crash arm must not be able to hide
+# behind a manifest that was going to fail anyway.
+cat > "${_ml_app}/src/manifest.json" <<'JSON'
+{
+  "$schema": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
+  "version": "2.0.0",
+  "menu": [],
+  "pages": []
+}
+JSON
+# gate-25: one routed, public, untested endpoint — a REAL finding, so the crash
+# arm is distinguishable from the gate simply having nothing to say.
+cat > "${_ml_app}/appinfo/routes.php" <<'PHP'
+<?php
+return [
+    'routes' => [
+        ['name' => 'thing#listThings', 'url' => '/api/things', 'verb' => 'GET'],
+    ],
+];
+PHP
+cat > "${_ml_app}/lib/Controller/ThingController.php" <<'PHP'
+<?php
+/**
+ * Thing controller.
+ *
+ * @license EUPL-1.2
+ * @copyright Conduction
+ */
+
+namespace OCA\Mcl\Controller;
+
+use OCP\AppFramework\Controller;
+use OCP\AppFramework\Http\Attribute\PublicPage;
+
+class ThingController extends Controller {
+    #[PublicPage]
+    public function listThings(): array {
+        return [];
+    }
+}
+PHP
+# gate-28: composer and BOTH php files agree. Any run that says otherwise has
+# stated something false about this tree.
+printf '{\n  "name": "conduction/mcl",\n  "license": "EUPL-1.2"\n}\n' \
+    > "${_ml_app}/composer.json"
+cat > "${_ml_app}/lib/Service/ThingService.php" <<'PHP'
+<?php
+/**
+ * Thing service.
+ *
+ * @license EUPL-1.2
+ * @copyright Conduction
+ */
+
+namespace OCA\Mcl\Service;
+
+class ThingService {
+    public function noop(): void {
+    }
+}
+PHP
+(
+    cd "${_ml_app}" || exit 1
+    git add -A
+    git -c user.email=t@t -c user.name=t commit -qm "one subject per gate"
+) >/dev/null 2>&1
+_mlroot=$(cd "${_ml_app}" && git rev-parse HEAD~1)
+
+# ARM A — working interpreters. Real verdicts, and gate-25 must find its plant.
+_mllogs_ok="${_tmp}/mllogs-ok"; mkdir -p "${_mllogs_ok}"
+_mlout_ok="${_tmp}/mcl-ok.txt"
+(
+    cd "${_ml_app}" || exit 1
+    HYDRA_GATE_LOG_DIR="${_mllogs_ok}" bash "${_runner}" \
+        --scope-to-diff --base "${_mlroot}" . > "${_mlout_ok}" 2>&1
+)
+# gate-22 is asserted as "a real verdict" rather than PASS: without ajv on
+# NODE_PATH the vendored validator legitimately exits 3 and the gate FAILs with
+# a named reason. Both are answers. SKIPPED is not, and that is the assertion.
+_v22ok=$(grep -oE '^\[gate-22\] [^:]+: [A-Z]+( \([a-z]+\))?' "${_mlout_ok}" | head -1 | sed 's/^[^:]*: //')
+case "${_v22ok}" in
+    PASS|FAIL) _ok "gate-22 produces a real verdict (${_v22ok}) with a working node" ;;
+    *) _bad "gate-22 returned '${_v22ok:-none}' with a working node — the crash arm below would prove nothing" ;;
+esac
+if grep -qE '^\[gate-25\][^:]*: FAIL — 1 new public endpoint' "${_mlout_ok}"; then
+    _ok "gate-25 FAILs its planted true positive with a MEASURED count (1) with a working python3"
+else
+    _v=$(grep -oE '^\[gate-25\] [^:]+: [A-Z]+( \([a-z]+\))?' "${_mlout_ok}" | head -1 | sed 's/^[^:]*: //')
+    _bad "gate-25 returned '${_v:-none}' over one routed public untested endpoint — the crash arm below would prove nothing"
+fi
+if grep -qE '^\[gate-28\][^:]*: PASS' "${_mlout_ok}"; then
+    _ok "gate-28 PASSes a tree whose files and composer.json agree, with a working python3"
+else
+    _v=$(grep -oE '^\[gate-28\] [^:]+: [A-Z]+( \([a-z]+\))?' "${_mlout_ok}" | head -1 | sed 's/^[^:]*: //')
+    _bad "gate-28 returned '${_v:-none}' over two files that BOTH declare @license EUPL-1.2 against composer's EUPL-1.2"
+fi
+
+# ARM B — the same tree, both interpreters dead for these checkers only.
+_mlshim="${_tmp}/mlshim"; mkdir -p "${_mlshim}"
+cat > "${_mlshim}/python3" <<'SHIM'
+#!/bin/bash
+for a in "$@"; do
+  case "$a" in
+    *check_contract_coverage.py|*check_license_triangle.py)
+      echo "Traceback (most recent call last): ModuleNotFoundError: simulated" >&2
+      exit 1 ;;
+  esac
+done
+exec /usr/bin/python3 "$@"
+SHIM
+chmod +x "${_mlshim}/python3"
+# node is shimmed rather than removed: `command -v node` failing is ALREADY
+# handled by a named wiring skip. The unhandled state is a node that exists and
+# whose validator dies — which is what an uncaught throw on import looks like,
+# stack trace indented and all.
+cat > "${_mlshim}/node" <<'SHIM'
+#!/bin/bash
+for a in "$@"; do
+  case "$a" in
+    *check_manifest.js)
+      echo "/x/check_manifest.js:1" >&2
+      echo "Error: simulated interpreter failure" >&2
+      echo "    at Object.<anonymous> (/x/check_manifest.js:1:7)" >&2
+      exit 1 ;;
+  esac
+done
+exec /usr/bin/node "$@"
+SHIM
+chmod +x "${_mlshim}/node"
+_mllogs="${_tmp}/mllogs"; mkdir -p "${_mllogs}"
+_mlout="${_tmp}/mcl-crash.txt"
+(
+    cd "${_ml_app}" || exit 1
+    PATH="${_mlshim}:${PATH}" HYDRA_GATE_LOG_DIR="${_mllogs}" bash "${_runner}" \
+        --scope-to-diff --base "${_mlroot}" . > "${_mlout}" 2>&1
+)
+# The control FIRST: if the shims were not used, every assertion below passes
+# for the wrong reason.
+if grep -q 'simulated' "${_mlout}" || grep -rq 'simulated' "${_mllogs}" 2>/dev/null; then
+    _ok "control: the 22/25/28 shims were actually used (their output reached the run)"
+else
+    _bad "control FAILED: no evidence the 22/25/28 shims ran — the assertions below prove nothing"
+fi
+for _g in 22:manifest-validation 25:contract-coverage 28:license-triangle; do
+    _num="${_g%%:*}"; _name="${_g#*:}"
+    _v=$(grep -oE "^\[gate-${_num}\] [^:]+: [A-Z]+( [A-Z]+)?( \([a-z]+\))?" "${_mlout}" | head -1 | sed 's/^[^:]*: //')
+    case "${_v}" in
+        "SKIPPED (wiring)")
+            _ok "gate-${_num} ${_name}: SKIPPED (wiring) when its checker cannot run"
+            ;;
+        FAIL)
+            _bad "gate-${_num} ${_name}: FAIL from a crashed checker — an environment failure rendered as findings about the source (#233/#245/#330)"
+            ;;
+        "SKIPPED (structural)")
+            _bad "gate-${_num} ${_name}: SKIPPED (structural) from a crashed checker — 'structural' is a claim about the REPOSITORY, and this fixture refutes it"
+            ;;
+        PASS)
+            _bad "gate-${_num} ${_name}: PASS over a checker that never executed"
+            ;;
+        *)
+            _bad "gate-${_num} ${_name}: verdict is '${_v:-none emitted}' — expected SKIPPED (wiring)"
+            ;;
+    esac
+done
+# gate-28 specifically: the sentence must NOT appear. Asserted by TEXT as well
+# as by verdict, because 'structural' could be reworded and this claim about
+# the repository is the thing that must never be printed over a crash.
+if grep -qF 'not one carried an @license' "${_mlout}"; then
+    _bad "gate-28 still tells this repository that not one file carried an @license — both files in this fixture declare EUPL-1.2"
+else
+    _ok "gate-28 makes no claim about the files' licence headers when it could not read them"
+fi
+# ...and every crash must leave its reason on disk.
+if [ -s "${_mllogs}/hydra-gate-license-triangle.log.err" ]; then
+    _ok "gate-28's crash left its stderr on disk (it used to be eaten by the sed in a pipeline)"
+else
+    _bad "gate-28's crash discarded its stderr — the reason it died is unrecoverable"
+fi
+
+# ---------------------------------------------------------------------------
 # THE CONSTRUCT ITSELF — `2>/dev/null || true` on a helper invocation.
 #
 # Every specific assertion above is a statement about the gates that exist
