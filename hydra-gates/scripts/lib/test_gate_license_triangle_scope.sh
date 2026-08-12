@@ -97,7 +97,16 @@ _mkrepo() {
         git config user.email "ci@example.invalid"
         git config user.name "gate28 test"
         printf '<?xml version="1.0"?>\n<info><id>fixture</id><version>1.0.0</version></info>\n' > appinfo/info.xml
-        printf '{\n  "name": "conduction/fixture",\n  "license": "EUPL-1.2"\n}\n' > composer.json
+        # gate-65 (coding-standard-adoption) is deliberately NOT diff-scoped:
+        # it judges the repo's standing configuration, so it fires on this
+        # fixture too. Two assertions below require the whole run to end
+        # GREEN, and a fixture that has not adopted the shared standard cannot
+        # produce that — the arm would be measuring gate-65 instead of gate-28.
+        # So the fixture adopts it, mirroring the compliant scaffold in
+        # test_check_coding_standard_adoption.sh.
+        printf '{\n  "name": "conduction/fixture",\n  "license": "EUPL-1.2",\n  "require-dev": {\n    "conduction/coding-standard": "^1.0"\n  },\n  "scripts": {\n    "cs:check": "php-cs-fixer fix --dry-run --diff",\n    "cs:fix": "php-cs-fixer fix"\n  }\n}\n' > composer.json
+        printf '<?php\nrequire_once __DIR__ . %s/vendor/autoload.php%s;\n$config = new Conduction\\CodingStandard\\Config();\n$config->getFinder()->in(__DIR__ . %s/lib%s);\nreturn $config;\n' "'" "'" "'" "'" > .php-cs-fixer.dist.php
+        printf 'root = true\n\n[*]\nindent_style = tab\n' > .editorconfig
         printf 'name: ci\non: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo base\n' > .github/workflows/ci.yml
         if [ "${_withlib}" = "yes" ]; then
             mkdir -p lib
@@ -379,8 +388,14 @@ fi
 #        (composer-audit) applicable, and it fails on a fixture with no vendor
 #        tree — `_FAILED` becomes 1 and the coverage sentence is unreachable
 #        again. The diff must contain the lib PHP file and nothing else.
+#        For the same reason the rewrite below drops ONLY the licence field and
+#        keeps the coding-standard wiring: rewriting composer.json down to a
+#        bare name also un-adopts the shared standard, gate-65 fails, `_FAILED`
+#        is 1 again and the coverage sentence this control reads is never
+#        reached — the control would report the coverage requirement inert when
+#        it is simply never consulted.
 _mkrepo scope-nolicense-fullcov yes
-printf '{\n  "name": "conduction/fixture"\n}\n' > "${_REPO}/composer.json"
+printf '{\n  "name": "conduction/fixture",\n  "require-dev": {\n    "conduction/coding-standard": "^1.0"\n  },\n  "scripts": {\n    "cs:check": "php-cs-fixer fix --dry-run --diff",\n    "cs:fix": "php-cs-fixer fix"\n  }\n}\n' > "${_REPO}/composer.json"
 git -C "${_REPO}" add -A >/dev/null 2>&1
 git -C "${_REPO}" commit -qm "drop the composer license field" >/dev/null 2>&1
 _BASE="$(git -C "${_REPO}" rev-parse HEAD)"
