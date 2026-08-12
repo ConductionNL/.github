@@ -38,9 +38,48 @@ are all carried over verbatim from the bash blocks. This changes WHERE the
 gate looks, not what it asks, so before/after counts stay comparable and a
 drop in findings is attributable to prose leaving the scope.
 
+GATE-35 AND GATE-36 JOINED THEM (2026-08-12)
+--------------------------------------------
+They were the last two raw greps in the 31–36 family and each failed in one
+direction, measured on a purpose-built fixture through the real wrapper.
+
+gate-35 (img-alt-empty-only) was BLIND. Its noun list was `\\b`-anchored::
+
+    grep -qiE '\\b(avatar|photo|thumbnail|picture|...)\\b'
+
+`\\b` is a WORD-character boundary, and `U` is a word character, so
+`avatarUrl`, `thumbnailUrl`, `photoUrl` and `pictureUrl` — the four commonest
+spellings in a Vue codebase — could not match. A seven-image probe in which
+every image was a violation reported **3**. Underscore is a word character
+too, so `avatar_url` was invisible for the same reason. The fix TOKENISES the
+src expression on camelCase / `_` / `-` / `.` / `/` boundaries and asks for
+token EQUALITY. Equality, not substring: `photograph` and `pictures` stay out,
+so recall is not bought with noise — which is what an over-broad `<noun>Url`
+substring match would have done to code that is fine.
+
+gate-36 (tabindex-positive) was NOISY. `grep -rnE` over raw bytes reported
+
+    <!-- never write tabindex="5" here; positive values break focus order -->
+
+as a positive tabindex. That is the gate-32 shape exactly (#236): a comment
+documenting the defect scored AS the defect, so the better a team documents
+its focus-order rule the redder its repo gets. The fix masks COMMENTS ONLY —
+not the markup scope — because a positive tabindex is a property of the
+rendered DOM wherever it is emitted from, including `<script>` and PHP code.
+Blanking those regions would have narrowed the gate while removing the noise,
+which is not a repair.
+
+⚠️ Live fleet exposure of BOTH was zero on 2026-08-12, positive-controlled
+across all 18 apps: zero positive tabindex values, and 17 `<img` occurrences
+in total (14 real tags; the other 3 are JSDoc prose in openbuild), exactly one
+of which carries `alt=""` — docudesk's `uploadIcon`, correctly silent under
+both the old rule and the new one. So neither fix closes a live defect. Both
+exist because a gate that cries wolf gets its silences believed, and gate-7
+spent months reporting 0 IDORs across 18 apps for precisely that reason.
+
 Usage::
 
-    check_markup_a11y.py --rule img-alt|semantic-controls <file> [<file>...]
+    check_markup_a11y.py --rule img-alt|semantic-controls|img-alt-empty-only|tabindex-positive <file> [<file>...]
 
 Prints one finding per line in the shape the bash gates emitted, so the
 runner still counts lines. Exits 0 always; the count is the answer and the
@@ -54,7 +93,13 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from source_scope import iter_open_tags, markup_mask, read_text  # noqa: E402
+from source_scope import (  # noqa: E402
+    html_markup_mask,
+    iter_open_tags,
+    js_comment_mask,
+    markup_mask,
+    read_text,
+)
 
 # --- gate-31 ---------------------------------------------------------------
 # `alt=`, `:alt=`, `v-bind:alt=`, `alt-text=` (some Conduction components
@@ -108,20 +153,104 @@ def _semantic_controls(path: str, masked: str) -> list[str]:
     return out
 
 
+# --- gate-35 ---------------------------------------------------------------
+# A LITERAL empty alt. A BOUND `:alt="x"` is out of scope on purpose (carried
+# over from the bash gate): the developer there went through a prop pipeline
+# and the value is a reviewer judgement, not a lie told to gate-31.
+EMPTY_ALT = re.compile(r'(^|\s)alt\s*=\s*(""|\'\')')
+# `:src` / `v-bind:src` carry the noun in a Vue expression; a plain `src`
+# carries it in a literal attribute value (`src="/img/avatar.png"`, or a PHP
+# template's `src="<?php p($avatarUrl) ?>"`). Both mean the same thing.
+SRC_ATTR = re.compile(r'(^|\s)(:src|v-bind:src|src)\s*=\s*("([^"]*)"|\'([^\']*)\')')
+# Content nouns. An image the author NAMED after a person or a picture and then
+# declared decorative with alt="" is the "I made gate-31 green by lying" shape.
+SEMANTIC_NOUNS = frozenset(
+    {"avatar", "photo", "thumbnail", "picture", "headshot", "portrait"}
+)
+# camelCase / PascalCase / SCREAMING_CASE splitting, then every non-alphanumeric
+# run is a separator. `avatarUrl` -> {avatar, url}; `AVATAR_URL` -> {avatar,
+# url}; `/img/avatar.png` -> {img, avatar, png}; `profilePicture` -> {profile,
+# picture}. The `\b`-anchored predicate this replaces could see NONE of the
+# camelCase forms and none of the underscore ones either.
+_CAMEL_1 = re.compile(r"([a-z0-9])([A-Z])")
+_CAMEL_2 = re.compile(r"([A-Z]+)([A-Z][a-z])")
+_NON_ALNUM = re.compile(r"[^A-Za-z0-9]+")
+
+
+def _tokens(text: str) -> set[str]:
+    """Lowercased identifier tokens of *text*, split on case and punctuation."""
+    spaced = _CAMEL_2.sub(r"\1 \2", _CAMEL_1.sub(r"\1 \2", text))
+    return {t for t in _NON_ALNUM.sub(" ", spaced).lower().split() if t}
+
+
+def _img_alt_empty_only(path: str, masked: str) -> list[str]:
+    out = []
+    for tag in iter_open_tags(masked, {"img"}):
+        if not EMPTY_ALT.search(tag.attrs):
+            continue
+        m = SRC_ATTR.search(tag.attrs)
+        if m is None:
+            continue
+        value = m.group(4) if m.group(4) is not None else (m.group(5) or "")
+        if _tokens(value) & SEMANTIC_NOUNS:
+            out.append(f"{path}:{tag.line}: {tag.flat} rule=empty-alt-on-semantic-bound-src")
+    return out
+
+
+# --- gate-36 ---------------------------------------------------------------
+# A QUOTED positive integer. A bound `:tabindex="n"` is reviewer judgement and
+# stays out, exactly as the bash gate had it.
+TABINDEX_POSITIVE = re.compile(r'(^|[\s>"\'])tabindex\s*=\s*["\']\s*[1-9][0-9]*\s*["\']')
+_JS_EXTS = (".js", ".ts", ".mjs", ".cjs", ".jsx", ".tsx")
+
+
+def _comment_mask(src: str, path: str) -> str:
+    """Comments blanked, EVERYTHING ELSE KEPT — offsets preserved.
+
+    Deliberately NOT `markup_mask`. That returns the markup scope, which blanks
+    `<script>`, `<style>` and PHP code wholesale; a positive tabindex emitted
+    from a render function or from `echo '<div tabindex="5">'` would stop being
+    a finding. Removing the false positive must not cost a true one, so only
+    comments go: HTML `<!-- -->` plus JS comments inside `<script>` bodies for
+    markup files, and JS comments for `.js`/`.ts`. String CONTENTS are kept,
+    because for this gate the string IS the evidence (gate-34's lesson).
+    """
+    if os.path.splitext(path)[1].lower() in _JS_EXTS:
+        return js_comment_mask(src)
+    return html_markup_mask(src)
+
+
+def _tabindex_positive(path: str, masked: str) -> list[str]:
+    out = []
+    for n, line in enumerate(masked.splitlines(), start=1):
+        if TABINDEX_POSITIVE.search(line):
+            out.append(f"{path}:{n}:{line.rstrip()[:200]}")
+    return out
+
+
 RULES = {
     "img-alt": _img_alt,
     "semantic-controls": _semantic_controls,
+    "img-alt-empty-only": _img_alt_empty_only,
+    "tabindex-positive": _tabindex_positive,
 }
+
+# Rules whose mask is "comments only", not "the markup scope". See _comment_mask.
+_COMMENT_SCOPE_RULES = {"tabindex-positive"}
 
 
 def scan_source(rule: str, path: str, src: str) -> list[str]:
+    if rule in _COMMENT_SCOPE_RULES:
+        return RULES[rule](path, _comment_mask(src, path))
     return RULES[rule](path, markup_mask(src, path))
 
 
 def main(argv: list[str]) -> int:
     if len(argv) < 4 or argv[1] != "--rule" or argv[2] not in RULES:
         print(
-            "usage: check_markup_a11y.py --rule img-alt|semantic-controls <file>...",
+            "usage: check_markup_a11y.py --rule "
+            + "|".join(sorted(RULES))
+            + " <file>...",
             file=sys.stderr,
         )
         return 2

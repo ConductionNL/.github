@@ -3947,6 +3947,44 @@ fi
 # --scope-to-diff is on). The marker pattern is anchored to start-of-
 # line + at least 7 chars + space, which is git's canonical conflict
 # marker shape and unlikely to collide with prose / code.
+#
+# ⚠️ A BARE `=======` IS ALSO A MARKDOWN SETEXT H1 UNDERLINE (2026-08-12).
+# `^={7}$` is git's separator AND, at exactly seven characters, a legal
+# Markdown heading underline:
+#
+#     Release
+#     =======
+#
+# Reproduced on a purpose-built fixture: one conflicted `.php` plus one
+# perfectly ordinary `openspec/notes.md` reported as `2 file(s) with
+# unresolved conflict markers`. Measured live pressure at the same time:
+# pipelinq carries two setext underlines inside this gate's own find scope
+# (`openspec/specs/admin-settings/spec.md:732` and its archived twin), both 26
+# characters — so the fleet is TWO KEYSTROKES from a false red, and the gate's
+# quiet today is luck, not correctness.
+#
+# The discriminator is structural, not a relaxation of the pattern: git cannot
+# emit a `=======` separator without a `<<<<<<< ` above it and a `>>>>>>> `
+# below, so in a Markdown file a bare `=======` with NEITHER companion marker
+# anywhere in the file is a heading. Non-Markdown files are untouched — a lone
+# `=======` in `.php`/`.json` is still a finding, which is where every incident
+# this gate was built for actually happened (DSOIntakeController.php,
+# appinfo/routes.php, package.json, l10n/*.json).
+#
+# ENUMERATION: `find`, NOT `_enum_tracked` — DELIBERATE, and here is why.
+# This is the only gate in 1–21 that does not enumerate via `git ls-files`, and
+# that asymmetry was reviewed rather than removed. An untracked file carrying
+# conflict markers is a real state on this fleet's shared checkouts (several
+# agents write into one work tree), and the cost of the wider corpus is one
+# grep per file. `git ls-files` would also make the gate blind to exactly the
+# file a developer has not staged yet — which is the moment this gate is
+# supposed to speak. Switching it would NARROW the true-positive class to buy
+# tidiness, so it stays.
+# ⚠️ What WAS wrong in the enumeration: `appinfo` was named TWICE, so `find`
+# walked it twice and every file under it was inspected twice. A conflicted
+# `appinfo/routes.php` — incident #12, one of the three this gate was written
+# for — was therefore reported as `2 file(s)`. Verified: `find lib appinfo src
+# tests openspec l10n appinfo -name '*.xml'` prints `appinfo/info.xml` twice.
 # ---------------------------------------------------------------------------
 _cm_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-conflict-markers.log
 : > "${_cm_log}"
@@ -3967,10 +4005,18 @@ while IFS= read -r _file; do
     # grep -l would short-circuit but we want a line count for the log.
     _matches=$(grep -nE '^(<{7}[[:space:]]|>{7}[[:space:]]|={7}$)' "${_file}" 2>/dev/null || true)
     [ -z "${_matches}" ] && continue
+    # Markdown only: a bare `=======` with no `<<<<<<< ` or `>>>>>>> ` anywhere
+    # in the same file is a setext H1 underline, not half a conflict.
+    case "${_file}" in
+        *.md|*.markdown)
+            printf '%s\n' "${_matches}" \
+                | grep -qE '^[0-9]+:(<{7}|>{7})[[:space:]]' || continue
+            ;;
+    esac
     echo "${_file}:" >> "${_cm_log}"
     echo "${_matches}" | head -5 | sed 's/^/  /' >> "${_cm_log}"
     _cm_hits=$((_cm_hits + 1))
-done < <(find lib appinfo src tests openspec l10n appinfo \
+done < <(find lib appinfo src tests openspec l10n \
             \( -name '*.php' -o -name '*.js' -o -name '*.ts' \
              -o -name '*.vue' -o -name '*.json' -o -name '*.md' \
              -o -name '*.yaml' -o -name '*.yml' -o -name '*.xml' \) \
@@ -5613,6 +5659,29 @@ fi
 # `<img src="img/decoration.svg" alt="">`). The gate only fires when the
 # bound src name explicitly signals dynamic user content.
 #
+# ⚠️ THE NOUN LIST WAS `\b`-ANCHORED AND THEREFORE BLIND (2026-08-12).
+# `grep -qiE '\b(avatar|photo|thumbnail|picture|…)\b'` cannot match
+# `avatarUrl`: `\b` is a WORD-character boundary and `U` is a word character.
+# Nor `avatar_url`, for the same reason — `_` is a word character too. So the
+# four commonest spellings in a Vue codebase were invisible. Measured on a
+# seven-image probe in which EVERY image was a violation: the gate reported
+# THREE. `avatarUrl`, `thumbnailUrl`, `photoUrl`, `pictureUrl` all passed.
+#
+# Extraction moved to scripts/lib/check_markup_a11y.py — the same helper
+# gates 31 and 32 already use — which reads the markup scope only and
+# tokenises the src expression on camelCase / `_` / `-` / `.` / `/` boundaries,
+# then asks for token EQUALITY against the noun set. Equality is the part that
+# matters: a substring match on `<noun>Url` would also light up
+# `photographerBio` and `pictures`, and buying recall with noise is how a gate
+# earns the reputation that makes its silences believed.
+#
+# ⚠️ Live fleet exposure was ZERO when this was fixed, positive-controlled
+# across all 18 apps: 17 `<img` occurrences fleet-wide, of which 3 are JSDoc
+# prose in openbuild and exactly ONE carries `alt=""` — docudesk's
+# `uploadIcon`, correctly silent before and after. This repair buys
+# trustworthiness, not a closed defect. Sizing note for whoever reads the
+# number next: do not infer urgency from it.
+#
 # References:
 #   - ADR-010 (NL Design — WCAG 2.2 AA)
 #   - openspec/architecture/wcag-coverage.md SC 1.1.1 (Non-text Content)
@@ -5620,47 +5689,52 @@ fi
 if _a11y_has_markup_dir; then
     _iae_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-img-alt-empty-only.log
     : > "${_iae_log}"
-    # COUNT WHAT WAS OPENED (.github#374). This gate greps rather than calling
-    # a helper, so it had no file array to test for emptiness and fell through
-    # to `_pass 35` having read nothing.
-    _iae_inspected=0
+    # COUNT WHAT WAS OPENED (.github#374). main added `_iae_inspected` because
+    # the grep implementation had no file array to test for emptiness and fell
+    # through to `_pass 35` having read nothing. This branch removes the grep
+    # entirely in favour of the helper, so the file array IS that count — the
+    # invariant #374 asked for is kept, by the structure rather than a counter.
+    _iae_ran=1
+    _iae_helper="${SCRIPT_DIR}/lib/check_markup_a11y.py"
+    _iae_files=()
     while IFS= read -r vue; do
+        [ -f "${vue}" ] || continue
         _in_scope "${vue}" || continue
-        _iae_inspected=$((_iae_inspected + 1))
-        _flat=$(tr '\n' ' ' < "${vue}")
-        echo "${_flat}" \
-            | grep -oE '<img\b[^>]*>' 2>/dev/null \
-            | while IFS= read -r tag; do
-                [ -z "${tag}" ] && continue
-                # Must have literal alt="" (not bound `:alt=""` — bound expressions
-                # with computed-default-empty are out of scope; the developer there
-                # at least went through a prop pipeline).
-                # Both quote styles: `alt=''` renders identically to `alt=""`
-                # and was invisible here. Measured as a PASS on a planted
-                # `<img src='/img/avatar.png' alt=''> in both a .vue app and a
-                # PHP-template app.
-                echo "${tag}" | grep -qE 'alt[[:space:]]*=[[:space:]]*("[[:space:]]*"|'"'"'[[:space:]]*'"'"')' || continue
-                # Must have a src that names a semantic noun. A BOUND :src /
-                # v-bind:src carries the noun in its expression; a PHP template
-                # or plain HTML carries it in the literal attribute value
-                # (`src="<?php p($avatarUrl) ?>"`, `src="/img/avatar.png"`).
-                # Both mean the same thing — the author knew the image was a
-                # person or a picture and still gave it an empty alt (#225).
-                _src_expr=$(echo "${tag}" | grep -oE '(:src|v-bind:src|src)[[:space:]]*=[[:space:]]*("[^"]*"|'"'"'[^'"'"']*'"'"')' | head -1 || true)
-                [ -z "${_src_expr}" ] && continue
-                if echo "${_src_expr}" | grep -qiE '\b(avatar|photo|thumbnail|picture|headshot|portrait|profilePicture)\b'; then
-                    echo "${vue}: ${tag} rule=empty-alt-on-semantic-bound-src" >> "${_iae_log}"
-                fi
-            done
+        _iae_files+=("${vue}")
     done < <(_a11y_markup_files)
-    _iae_fail=$(wc -l < "${_iae_log}" 2>/dev/null || echo 0)
-    if [ "${_iae_inspected}" -eq 0 ]; then
-        # AN UNOPENED SCOPE IS NEVER A PASS (.github#374). See _skip_empty_scope.
+    if [ "${#_iae_files[@]}" -eq 0 ]; then
+        # AN EMPTY SCOPE IS NOT A PASS (#147, .github#374) — the shape the whole
+        # a11y band was falsely green in on nldesign. Reported through main's
+        # `_skip_empty_scope`, not the hand-written reason this branch carried:
+        # that reason named ADR-020 as the rule in force, and under #378 diff
+        # scoping is opt-in, so it would state the wrong cause on every
+        # full-scope run. The shared helper says which of the two actually
+        # emptied the scope.
+        _iae_ran=0
         _skip_empty_scope 35 "img-alt-empty-only" "markup file (src|templates|appinfo/templates **/*.vue|php|html)"
-    elif [ "${_iae_fail}" -eq 0 ]; then
-        _pass 35 "img-alt-empty-only"
+    elif [ ! -f "${_iae_helper}" ]; then
+        _iae_ran=0
+        _skip 35 "img-alt-empty-only" wiring "check_markup_a11y.py not found at ${_iae_helper} — ${#_iae_files[@]} markup file(s) were in scope and NONE were inspected; content images silenced with alt=\"\" (WCAG 1.1.1) are UNVERIFIED by this run."
     else
-        _fail 35 "img-alt-empty-only" "${_iae_fail} <img alt=\"\"> on semantic-bound src — see ${_iae_log}"
+        set +e
+        _iae_err="${HYDRA_GATE_LOG_DIR}/hydra-gate-img-alt-empty-only.err"
+        python3 "${_iae_helper}" --rule img-alt-empty-only "${_iae_files[@]}" >> "${_iae_log}" 2>"${_iae_err}"
+        _iae_rc=$?
+        if [ "${_iae_rc}" -ne 0 ]; then
+            # A CRASHED CHECKER IS NOT A CLEAN FILE (#245, #249).
+            _iae_ran=0
+            _skip 35 "img-alt-empty-only" wiring "check_markup_a11y.py exited ${_iae_rc} — ${#_iae_files[@]} markup file(s) were in scope and NONE were judged. See ${_iae_err}."
+        fi
+    fi
+    _iae_fail=$(wc -l < "${_iae_log}" 2>/dev/null || echo 0)
+    [ -z "${_iae_fail}" ] && _iae_fail=0
+    if [ "${_iae_ran}" -eq 1 ]; then
+        if [ "${_iae_fail}" -eq 0 ]; then
+            echo "[hydra-gates] gate-35 img-alt-empty-only: ${#_iae_files[@]} markup file(s) inspected, 0 content image silenced with alt=\"\"."
+            _pass 35 "img-alt-empty-only"
+        else
+            _fail 35 "img-alt-empty-only" "${_iae_fail} <img alt=\"\"> on semantic-bound src — see ${_iae_log}"
+        fi
     fi
 fi
 
@@ -5677,45 +5751,86 @@ fi
 #   - WHATWG / W3C: "Authors should generally use `tabindex='0'` or
 #     `tabindex='-1'`. Positive integer values are very rarely useful."
 # ---------------------------------------------------------------------------
+# ⚠️ THE LAST RAW GREP IN THE 31–36 FAMILY, AND IT READ COMMENTS (2026-08-12).
+# `grep -rnE` over raw bytes reported
+#
+#     <!-- never write tabindex="5" here; positive values break focus order -->
+#
+# as a positive tabindex. That is gate-32's #236 defect exactly: the comment
+# written to document the rule scores AS a violation of it, so the better a
+# team documents its focus order the redder its repo goes — and a gate a
+# comment can redden is a gate whose findings reviewers learn to discard.
+#
+# Extraction moved to scripts/lib/check_markup_a11y.py. The VALUE rule is
+# carried over character for character (quoted positive integer, both quote
+# styles, whitespace inside the quotes allowed, bound `:tabindex` still out of
+# scope), so before/after counts stay comparable.
+#
+# ⚠️ THE MASK IS COMMENTS-ONLY, NOT THE MARKUP SCOPE — deliberately. gates 31,
+# 32 and 35 use `markup_mask`, which blanks `<script>`, `<style>` and PHP code
+# wholesale. That is right for `<img>`, which only a template renders, and
+# WRONG here: a positive tabindex is a property of the rendered DOM whoever
+# emitted it, including a render function and `echo '<div tabindex="5">'`.
+# Blanking those would have removed the noise by removing detection, which is
+# not a repair. `.js`/`.ts` stay in scope for the same reason.
+#
+# ⚠️ Live fleet exposure was ZERO when this was fixed — positive-controlled,
+# all 18 apps, zero positive tabindex values anywhere. As with gate-35 this
+# buys trustworthiness rather than closing a defect; do not read urgency into
+# the number.
 if _a11y_has_markup_dir; then
     _tp_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-tabindex-positive.log
     : > "${_tp_log}"
-    # Match tabindex with quoted positive integer. Allow whitespace
-    # inside the quotes. Excludes tabindex="0", tabindex="-1", and any
-    # form where the value is bound (`:tabindex="..."` is reviewer-judgment).
-    # templates/ too (#225): focus order is a property of the rendered DOM, not
-    # of the language that emitted it.
-    #
-    # BOTH QUOTE STYLES. The pattern read `"` only, so `tabindex='5'` — the
-    # same rendered DOM, the same defect — reported PASS in both a .vue app
-    # and a PHP-template app when it was planted there. Zero occurrences in
-    # the fleet today, which is precisely why it could sit here unnoticed.
-    grep -rnE 'tabindex[[:space:]]*=[[:space:]]*["'"'"'][[:space:]]*[1-9][0-9]*[[:space:]]*["'"'"']' src/ templates/ appinfo/templates/ \
-        --include='*.vue' --include='*.js' --include='*.ts' \
-        --include='*.php' --include='*.html' --include='*.htm' 2>/dev/null \
-        | _filter_grep_by_scope >> "${_tp_log}" || true
-    # COUNT WHAT WAS OPENED (.github#374). `grep -r` gives no file list back,
-    # so emptiness is measured against the SAME corpus the grep walks — the
-    # identical directory set and --include list, not the shared
-    # `_a11y_markup_files` (which omits .js/.ts and would call this gate empty
-    # over a repo whose only frontend is JavaScript).
-    _tp_inspected=0
-    while IFS= read -r _f; do
-        [ -z "${_f}" ] && continue
-        _in_scope "${_f}" || continue
-        _tp_inspected=$((_tp_inspected + 1))
+    # COUNT WHAT WAS OPENED (.github#374). main measured emptiness with a
+    # `_tp_inspected` counter because `grep -r` hands back no file list. The
+    # helper takes an explicit file array, so that array IS the corpus and the
+    # count — including the .js/.ts extensions `_a11y_markup_files` omits,
+    # which is the distinction #374 was careful to preserve.
+    _tp_ran=1
+    _tp_helper="${SCRIPT_DIR}/lib/check_markup_a11y.py"
+    # Same three roots and same six extensions the grep used — `.js`/`.ts`
+    # included, which `_a11y_markup_files` does not carry. Generated trees are
+    # pruned as everywhere else in this family.
+    _tp_files=()
+    while IFS= read -r _tpf; do
+        [ -f "${_tpf}" ] || continue
+        _in_scope "${_tpf}" || continue
+        _tp_files+=("${_tpf}")
     done < <(find src templates appinfo/templates -type f \
-        \( -name '*.vue' -o -name '*.js' -o -name '*.ts' \
-           -o -name '*.php' -o -name '*.html' -o -name '*.htm' \) 2>/dev/null \
-        | grep -vE '(^|/)(node_modules|vendor|dist|build|coverage|phpmetrics|\.git)/' || true)
-    _tp_fail=$(wc -l < "${_tp_log}" 2>/dev/null || echo 0)
-    if [ "${_tp_inspected}" -eq 0 ]; then
-        # AN UNOPENED SCOPE IS NEVER A PASS (.github#374). See _skip_empty_scope.
+                \( -name '*.vue' -o -name '*.js' -o -name '*.ts' \
+                 -o -name '*.php' -o -name '*.html' -o -name '*.htm' \) \
+                2>/dev/null \
+                | grep -vE '(^|/)(node_modules|vendor|dist|build|coverage|phpmetrics|\.git)/' \
+                || true)
+    if [ "${#_tp_files[@]}" -eq 0 ]; then
+        # AN UNOPENED SCOPE IS NEVER A PASS (.github#374). Through main's shared
+        # helper rather than the hand-written reason this branch carried: that
+        # reason named ADR-020 as the rule in force, and under #378 diff scoping
+        # is opt-in, so it would state the wrong cause on every full-scope run.
+        _tp_ran=0
         _skip_empty_scope 36 "tabindex-positive" "frontend source file (src|templates|appinfo/templates **/*.vue|js|ts|php|html)"
-    elif [ "${_tp_fail}" -eq 0 ]; then
-        _pass 36 "tabindex-positive"
+    elif [ ! -f "${_tp_helper}" ]; then
+        _tp_ran=0
+        _skip 36 "tabindex-positive" wiring "check_markup_a11y.py not found at ${_tp_helper} — ${#_tp_files[@]} file(s) were in scope and NONE were inspected; positive tabindex values (WCAG 2.4.3) are UNVERIFIED by this run."
     else
-        _fail 36 "tabindex-positive" "${_tp_fail} positive tabindex value(s) — use \"0\" or \"-1\" — see ${_tp_log}"
+        set +e
+        _tp_err="${HYDRA_GATE_LOG_DIR}/hydra-gate-tabindex-positive.err"
+        python3 "${_tp_helper}" --rule tabindex-positive "${_tp_files[@]}" >> "${_tp_log}" 2>"${_tp_err}"
+        _tp_rc=$?
+        if [ "${_tp_rc}" -ne 0 ]; then
+            _tp_ran=0
+            _skip 36 "tabindex-positive" wiring "check_markup_a11y.py exited ${_tp_rc} — ${#_tp_files[@]} file(s) were in scope and NONE were judged. See ${_tp_err}."
+        fi
+    fi
+    _tp_fail=$(wc -l < "${_tp_log}" 2>/dev/null || echo 0)
+    [ -z "${_tp_fail}" ] && _tp_fail=0
+    if [ "${_tp_ran}" -eq 1 ]; then
+        if [ "${_tp_fail}" -eq 0 ]; then
+            echo "[hydra-gates] gate-36 tabindex-positive: ${#_tp_files[@]} file(s) inspected, 0 positive tabindex."
+            _pass 36 "tabindex-positive"
+        else
+            _fail 36 "tabindex-positive" "${_tp_fail} positive tabindex value(s) — use \"0\" or \"-1\" — see ${_tp_log}"
+        fi
     fi
 fi
 

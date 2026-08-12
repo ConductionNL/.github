@@ -94,6 +94,42 @@ check("a METHOD call ->exit() is NOT reported", f == [], repr(f))
 f = run("    public function a(): void { $exit_code = 1; }")
 check("an identifier `exit_code` is NOT reported", f == [], repr(f))
 
+# --- A DECLARATION IS NOT A CALL (2026-08-12) ------------------------------
+# `die`/`exit` are SEMI-RESERVED in PHP: illegal as a free function name, legal
+# as a method name. The construct pattern saw the parameter list's `(` and
+# reported the method HEADER as a call. Both arms below, so a fix that removes
+# the false positive by dropping the construct rule fails the second one.
+f = run("    private function exit(): void { $this->exitCode = 1; }")
+check("a method DECLARATION `function exit()` is NOT reported", f == [], repr(f))
+
+f = run("    private function die(): void { $this->done = true; }")
+check("a method DECLARATION `function die()` is NOT reported", f == [], repr(f))
+
+f = run("    private function &exit(): array { return []; }")
+check("a by-reference declaration `function &exit()` is NOT reported", f == [], repr(f))
+
+f = run("    abstract protected function exit(): void;")
+check("a BODILESS declaration `function exit();` is NOT reported", f == [], repr(f))
+
+f = run("    public function a(): void { self::exit(); }")
+check("a STATIC call ::exit() is NOT reported", f == [], repr(f))
+
+# The true-positive half. Exempting the header must not exempt the body, nor a
+# construct in a method whose NAME merely starts with the word.
+f = run("    private function exit(): void { exit; }")
+check(
+    "`exit;` INSIDE a method named exit() is STILL reported (header only is exempt)",
+    len(f) == 1,
+    repr(f),
+)
+
+f = run("    public function exitEarly(): void { exit(0); }")
+check(
+    "`exit(0)` in a method named exitEarly() is STILL reported",
+    len(f) == 1,
+    repr(f),
+)
+
 # --- MUTATION CHECK: assert the guards exist before trusting the negatives --
 _SRC = open(
     os.path.join(
@@ -103,6 +139,7 @@ _SRC = open(
 check("the `: never` exemption is in the source", "_never_spans" in _SRC)
 check("string blanking is requested", "blank_strings=True" in _SRC)
 check("die/exit are matched as constructs", "_CONSTRUCT_RX" in _SRC)
+check("the declaration discriminator is in the source", "_declared_name_offsets" in _SRC)
 
 print()
 if _FAILED:
