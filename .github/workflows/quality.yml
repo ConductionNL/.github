@@ -18,10 +18,25 @@ on:
         type: string
         default: '["8.3", "8.4"]'
       nextcloud-test-refs:
-        description: "JSON array of Nextcloud server branches for PHPUnit matrix"
+        # A caller SHOULD pass the whole range its own appinfo/info.xml declares.
+        # This default exists for callers that do not, and it has to be a
+        # configuration that can actually exist.
+        #
+        # It was '["stable31", "stable32"]', which no longer could. Every app in
+        # the fleet installs openregister as a fixture dependency, openregister
+        # declares min-version="32", and `occ app:enable openregister` on NC31
+        # fails with only a ::warning:: — so the run continued with no data layer
+        # and every /apps/openregister/... call returned Nextcloud's HTML 404
+        # page. A stable31 leg's red said nothing, and its green said less.
+        #
+        # The order is load-bearing, not cosmetic. `fromJSON(...)[0]` is read
+        # below as THE single server for newman, playwright, journeydoc-capture
+        # and the coverage guard, so entry 0 must be a version the fixture can
+        # load — and is the one version those jobs actually exercise.
+        description: "JSON array of Nextcloud server branches for the PHPUnit matrix. Entry [0] is also THE single server used by newman, playwright, journeydoc-capture and the coverage guard, so it must be a version the app and its fixture dependencies can install. Pass every major inside the range your appinfo/info.xml declares."
         required: false
         type: string
-        default: '["stable31", "stable32"]'
+        default: '["stable34", "stable32", "stable33"]'
       enable-php:
         description: "Master switch for the PHP toolchain (php-quality, PHPUnit, composer security/license legs, SBOM). Set false for JS-only repos without composer.json."
         required: false
