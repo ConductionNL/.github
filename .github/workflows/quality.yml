@@ -92,6 +92,11 @@ on:
         required: false
         type: string
         default: "[]"
+      database-test-matrix:
+        description: "JSON array of databases to run PHPUnit against, e.g. '[\"pgsql\", \"mysql\", \"sqlite\"]'. Nextcloud runs its own suites on mariadb, mysql, oci and sqlite separately, because database-portability bugs are invisible on a single backend. DEFAULT IS EMPTY, which means 'use the single `database` input' — today's behaviour exactly, so this change is inert until an app opts in."
+        required: false
+        type: string
+        default: "[]"
       enable-check-code:
         description: "Run `occ app:check-code` against the Nextcloud version the app declares in info.xml. Nextcloud's own tool for private and deprecated API usage; the general form of the hand-written \\OC::$server sniff. Reports without blocking unless check-code-blocking is also set."
         required: false
@@ -1796,7 +1801,7 @@ jobs:
     # Playwright job's frontend-build artifact check.
     if: ${{ inputs.enable-php && inputs.enable-phpunit && !cancelled() }}
     runs-on: ubuntu-latest
-    name: "PHPUnit (PHP ${{ matrix.php-version }}, NC ${{ matrix.nextcloud-ref }})"
+    name: "PHPUnit (PHP ${{ matrix.php-version }}, NC ${{ matrix.nextcloud-ref }}, ${{ matrix.database }})"
     needs: [security]
     # Observed across 337 SUCCESSFUL executions: median 1.7 min, p95 13.6 min,
     # max 18.9 min (shillinq, green). The spread is huge because each leg
@@ -1805,9 +1810,13 @@ jobs:
     # observed green run and still cuts a hang from 6 hours to 45 minutes.
     timeout-minutes: 45
 
+    # A service whose `image` evaluates to an empty string is not started, which
+    # is how one job definition serves several backends. Both are keyed off
+    # matrix.database rather than inputs.database so a multi-database matrix
+    # starts the right container per leg.
     services:
       postgres:
-        image: ${{ inputs.database == 'pgsql' && 'postgres:16' || '' }}
+        image: ${{ matrix.database == 'pgsql' && 'postgres:16' || '' }}
         env:
           POSTGRES_USER: nextcloud
           POSTGRES_PASSWORD: nextcloud
@@ -1819,11 +1828,34 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
+      mysql:
+        image: ${{ matrix.database == 'mysql' && 'mysql:8.4' || '' }}
+        env:
+          MYSQL_ROOT_PASSWORD: nextcloud
+          MYSQL_USER: nextcloud
+          MYSQL_PASSWORD: nextcloud
+          MYSQL_DATABASE: nextcloud
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -unextcloud -pnextcloud"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
 
     strategy:
       matrix:
         php-version: ${{ fromJSON(inputs.php-test-versions) }}
         nextcloud-ref: ${{ fromJSON(inputs.nextcloud-test-refs) }}
+        # An empty database-test-matrix collapses to the single `database`
+        # input, which is what every caller uses today — so the matrix keeps
+        # exactly its current dimensions until an app opts in. Routed through
+        # fromJSON on BOTH sides on purpose: a string comparison against '[]'
+        # accepts '[ ]' and '[""]' and then resolves to an empty matrix vector,
+        # and an empty vector does not skip a job — it DELETES it from the run,
+        # with no row, no annotation and no trace. Measured on this repo's
+        # self-test for frontend-checks: 19 jobs instead of 21.
+        database: ${{ join(fromJSON(inputs.database-test-matrix), ',') != '' && fromJSON(inputs.database-test-matrix) || fromJSON(format('["{0}"]', inputs.database)) }}
       fail-fast: false
 
     steps:
@@ -1870,29 +1902,64 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php-version }}
-          extensions: mbstring, intl, sqlite3, pgsql, pdo_pgsql, zip, gd, curl, xml, json
+          # pdo_mysql joins the list unconditionally: setup-php installs
+          # extensions per leg, and a leg that does not use MySQL pays only the
+          # install cost. Making it conditional would mean a mysql leg silently
+          # falling back to the else-branch of the install below and testing
+          # sqlite while its name said mysql.
+          extensions: mbstring, intl, sqlite3, pgsql, pdo_pgsql, mysqli, pdo_mysql, zip, gd, curl, xml, json
           coverage: xdebug
           tools: composer:v2
 
       - name: Install Nextcloud
         run: |
           cd server
-          if [ "${{ inputs.database }}" = "pgsql" ]; then
-            php occ maintenance:install \
-              --database pgsql \
-              --database-host 127.0.0.1 \
-              --database-port 5432 \
-              --database-name nextcloud \
-              --database-user nextcloud \
-              --database-pass nextcloud \
-              --admin-user admin \
-              --admin-pass admin
-          else
-            php occ maintenance:install \
-              --database ${{ inputs.database }} \
-              --admin-user admin \
-              --admin-pass admin
+          DB="${{ matrix.database }}"
+          case "$DB" in
+            pgsql)
+              php occ maintenance:install \
+                --database pgsql \
+                --database-host 127.0.0.1 \
+                --database-port 5432 \
+                --database-name nextcloud \
+                --database-user nextcloud \
+                --database-pass nextcloud \
+                --admin-user admin \
+                --admin-pass admin
+              ;;
+            mysql|mariadb)
+              php occ maintenance:install \
+                --database mysql \
+                --database-host 127.0.0.1 \
+                --database-port 3306 \
+                --database-name nextcloud \
+                --database-user nextcloud \
+                --database-pass nextcloud \
+                --admin-user admin \
+                --admin-pass admin
+              ;;
+            sqlite)
+              php occ maintenance:install \
+                --database sqlite \
+                --admin-user admin \
+                --admin-pass admin
+              ;;
+            *)
+              echo "::error::Unknown database '$DB'. Supported: pgsql, mysql, mariadb, sqlite."
+              exit 1
+              ;;
+          esac
+          # POSITIVE CONTROL. `maintenance:install` can exit 0 having fallen back
+          # to a different backend, and a suite that passes on sqlite while the
+          # leg is named mysql is worse than no leg at all. Assert the server is
+          # actually on the backend this leg claims.
+          ACTUAL=$(php occ config:system:get dbtype)
+          EXPECT="$DB"; [ "$DB" = "mariadb" ] && EXPECT="mysql"
+          if [ "$ACTUAL" != "$EXPECT" ]; then
+            echo "::error::This leg is named '$DB' but the server installed on '$ACTUAL'. The result would describe the wrong backend."
+            exit 1
           fi
+          echo "Installed on $ACTUAL, as declared."
           if [ '${{ inputs.additional-apps }}' != '[]' ]; then
             echo '${{ inputs.additional-apps }}' | jq -r '.[].app' | while read -r name; do
               echo "Enabling app: $name"
