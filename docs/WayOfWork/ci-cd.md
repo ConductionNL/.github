@@ -378,47 +378,39 @@ with the reason written next to the constraint.
 ### Publishing, and how to tell it actually published
 
 Submitting a repository creates a push webhook on it automatically —
-`https://packagist.org/api/github`, `push` events. **That webhook on its own does
-not keep the package up to date.** Measured 2026-08-12 on
-`conduction/coding-standard`: a real push delivered `202 OK`, and ten minutes
-later Packagist's `dev-main` still pointed at the previous commit.
+`https://packagist.org/api/github`, `push` events. There is nothing to wire up by
+hand and nothing for `gh` to configure; GitHub Apps cannot be installed through
+the API in any case.
 
-The missing piece is the **Packagist GitHub App**, which was not installed on the
-`ConductionNL` organisation. Install it once, org-wide, at
-[github.com/apps/packagist](https://github.com/apps/packagist) — it is a browser
-flow by design, since GitHub Apps cannot be installed through the API, so there is
-no `gh` command for it and no way to script it.
+**Verify against the endpoint Composer actually reads.** Packagist serves package
+metadata from two places, and they do not update together:
 
-Until then, publishing is manual: click **Update** on the package page, or
+| endpoint | who reads it | freshness |
+| --- | --- | --- |
+| `repo.packagist.org/p2/<vendor>/<pkg>.json` | **Composer** | current |
+| `packagist.org/packages/<vendor>/<pkg>.json` | the website | lags, sometimes by tens of minutes |
 
-```bash
-curl -XPOST -H'content-type:application/json' \
-  "https://packagist.org/api/update-package?username=<user>&apiToken=<token>" \
-  -d '{"repository":{"url":"https://github.com/ConductionNL/<repo>"}}'
-```
+Measured 2026-08-12: `conduction/hydra-gates` `v1.7.0` was tagged and pushed. The
+web endpoint showed `v1.6.0` as the newest tag for the next half hour, while the
+p2 endpoint already had `v1.7.0` — and `composer require conduction/hydra-gates:^1.0`
+resolved to `v1.7.0 (b9c6520a)` throughout. Nothing was broken. The instrument was.
 
-Either way, there is something to **verify**, and it is easy to get wrong in three
-separate ways:
+That mistake is worth naming because it produced a confident, wrong diagnosis: a
+webhook returning `202`, a package that "had not updated", and a missing Packagist
+GitHub App all pointed at a publishing failure that was not happening.
 
-1. **A `ping` delivery is not a `push` delivery.** Packagist sends a ping on
-   install; it proves the endpoint answers a handshake and nothing more.
-2. **HTTP `202` is not "published".** 202 means *accepted for processing* —
-   Packagist queues the crawl — and a queued crawl it never runs still answers
-   202. A green delivery list is consistent with a package that has not moved,
-   which is exactly what was observed here.
-3. **`package.time` is the creation timestamp**, not the last update. It will not
-   change no matter how many times you publish.
-
-The only claim worth making is that the **source reference moved**:
+So the check is one command, and it is the one Composer would make:
 
 ```bash
-curl -s https://packagist.org/packages/<vendor>/<pkg>.json \
-  | jq -r '.package.versions["dev-main"] | "\(.time)  \(.source.reference[0:8])"'
+curl -s https://repo.packagist.org/p2/<vendor>/<pkg>.json \
+  | jq -r '.packages | to_entries[0].value[0] | "\(.version)  \(.source.reference[0:8])"'
 ```
 
-Compare that SHA to `git rev-parse HEAD`. If they differ, the queue has not caught
-up — or the hook is not working, and those two look identical for the first few
-minutes. Wait, then re-read; do not read the delivery log and call it done.
+Compare that SHA to `git rev-parse HEAD`. Three things that are **not** evidence:
+a `ping` delivery (Packagist sends one on install, it proves only that the
+endpoint answers a handshake), an HTTP `202` (it means *accepted for processing*),
+and `package.time` on the web endpoint (that is the package's **creation**
+timestamp and never moves).
 
 ### npm
 
