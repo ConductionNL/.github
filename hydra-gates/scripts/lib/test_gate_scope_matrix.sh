@@ -154,16 +154,39 @@ fi
 
 # ===========================================================================
 echo
-echo "== arm 3 — FULL scope, same tree as arm 1 =="
+echo "== arm 3 — FULL file scope, NO delta base =="
 # ===========================================================================
-# `--full` exists to report inherited debt. The positive control above proves
-# the debt is there and findable. Anything other than a FAIL here is the defect.
-_out="$(gf_run_wrapper "${WORK}/inherited" "${WORK}/log-full" --full)"
+#
+# RE-KEYED FOR THE ADR-020 REVERSAL (hydra-gates/ADR-020-SUPERSEDED.md).
+#
+# This arm ran `--full` against a tree `gf_mark_base` had given a
+# `refs/remotes/origin/development` ref, and asserted that the run computed no
+# diff — because `--full` used to mean BOTH "read the whole tree" AND "compute
+# no diff".
+#
+# ⚠️ AND THAT CONFLATION IS THE VERY THING `.github#347` WAS. The invariant this
+# file enforces — *a NOT APPLICABLE may not blame a diff on a run that computed
+# none* — is exactly right and stays. What was wrong is its TRIGGER: it keyed on
+# the FILE SCOPE (`--full`) when the property is about whether A DIFF WAS
+# COMPUTED. Those are two inputs now, and the suite was reading the wrong one —
+# the same mistake, one layer up, inside the test that catches it.
+#
+# So arm 3 removes the base rather than the file scope, and arm 3b below covers
+# the case that used to be unreachable and is now the COMMON one: full file
+# scope WITH a real base, where naming the diff is a TRUE statement.
+gf_build_repo "${WORK}/inherited-nobase" "${SRC}"
+gf_commit_all "${WORK}/inherited-nobase" "base: app carrying an inherited post-event listener"
+printf '\n- unrelated doc tweak\n' >> "${WORK}/inherited-nobase/docs/CHANGELOG.md" 2>/dev/null \
+    || printf 'docs\n' > "${WORK}/inherited-nobase/README.md"
+gf_commit_all "${WORK}/inherited-nobase" "docs: unrelated change"
 
-if printf '%s' "${_out}" | grep -qF 'Base ref: n/a — --full requested'; then
-    _ok "the --full run states it computed no diff"
+_out="$(gf_run_wrapper "${WORK}/inherited-nobase" "${WORK}/log-full")"
+
+if printf '%s' "${_out}" | grep -qF 'SCOPE-MODE: full' \
+    && printf '%s' "${_out}" | grep -qF 'Delta base: NONE'; then
+    _ok "the run states BOTH its file scope (full) and that it resolved no delta base"
 else
-    _bad "the --full run did not announce itself as unscoped; the rest of this arm is unsafe to interpret"
+    _bad "the run did not state both 'SCOPE-MODE: full' and 'Delta base: NONE'; the rest of this arm is unsafe to interpret because nothing pins which inputs produced it"
 fi
 
 #
@@ -204,7 +227,60 @@ fi
 
 # ===========================================================================
 echo
-echo "== the general property: no NOT APPLICABLE may blame a diff on a --full run =="
+echo "== arm 3b — FULL file scope WITH a delta base (the new common case) =="
+# ===========================================================================
+#
+# Full file scope is now the DEFAULT, so this is what every PR in the fleet
+# runs: the whole tree open to the state gates, a real base for the delta gates.
+# Under the old default this combination was unreachable, which is why nothing
+# asserted it.
+#
+# Naming the diff here is a TRUE statement — one was computed — so the invariant
+# below must NOT fire on it. What has to hold instead is the falsifiability
+# condition that made `#347` undetectable for weeks: **if a reason names a diff,
+# the run must have printed the base it diffed against**, so a reader can check
+# the claim rather than trust it.
+_outb="$(gf_run_wrapper "${WORK}/inherited" "${WORK}/log-full-base")"
+
+if printf '%s' "${_outb}" | grep -qE '^\[hydra-gates\] Delta base: [^N]'; then
+    _ok "the full-scope run resolved a delta base and NAMED it"
+else
+    _bad "the full-scope run resolved no delta base though the fixture has refs/remotes/origin/development — arm 3b would then be re-measuring arm 3 and proving nothing"
+fi
+
+_vb="$(gf_verdict "${_outb}" 61)"
+case "${_vb}" in
+    *"NOT APPLICABLE"*)
+        _ok "gate-61 still declines at full file scope — the deliberate delta-scoping survived the reversal"
+        ;;
+    *FAIL*)
+        _bad "gate-61 SWEPT THE TREE once full scope became the default. That was tried and reverted before: the builder runs unscoped, so this surfaces the whole registration backlog as blocking findings on every build. Got: ${_vb:0:160}"
+        ;;
+    *) _bad "gate-61 gave an unrecognised verdict at full scope with a base: ${_vb:0:160}" ;;
+esac
+
+# A reason may name a diff ONLY on a run that computed one. Asserted from the
+# other side here, so the pair pins both directions.
+if printf '%s' "${_vb}" | grep -qF 'the diff against'; then
+    if printf '%s' "${_outb}" | grep -qE '^\[hydra-gates\] Delta base: [^N]'; then
+        _ok "gate-61 names the diff it was actually given, on a run that printed that base — a checkable claim, not #347's unfalsifiable one"
+    else
+        _bad ".github#347 IS LIVE BY A NEW ROUTE: gate-61 names a diff on a run that announced no delta base"
+    fi
+fi
+
+# The backlog SIZE must be stated here too. This is now the common path, and
+# without it '0 of 1' and '0 of 45' print identically on every PR in the fleet —
+# the exact ambiguity the advisory sweep was added to remove on the other path.
+if printf '%s' "${_vb}" | grep -qE 'ADVISORY.*[0-9]+ registration\(s\) carrying [0-9]+ finding\(s\)'; then
+    _ok "gate-61 states the size of the backlog it did not inspect at FULL scope too, not only when there is no base"
+else
+    _bad "gate-61's full-scope skip does not state how many registrations went unread. This is the common case now, so the ambiguity the advisory sweep removed on the no-base path has simply moved to the path everyone runs: ${_vb:0:200}"
+fi
+
+# ===========================================================================
+echo
+echo "== the general property: no NOT APPLICABLE may blame a diff on a run that COMPUTED NONE =="
 # ===========================================================================
 # Generic, gate-agnostic. Catches the next gate that does this.
 #

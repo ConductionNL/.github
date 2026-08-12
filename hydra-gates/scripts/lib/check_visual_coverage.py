@@ -81,6 +81,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from source_scope import js_comment_mask  # noqa: E402
+
 GATE_NUM = 26
 
 # Exit STATUS vocabulary — see the module docstring. Never a finding count.
@@ -408,10 +411,42 @@ def _visual_exclude_status(vue_text: str) -> tuple[bool, str | None]:
 
 
 def _e2e_corpus(app_dir: Path, visual_only: bool) -> str:
-    """Concatenated text of e2e test files.
+    """Concatenated EXECUTABLE text of e2e test files.
 
     visual_only=True → only tests/e2e/visual/**.
     visual_only=False → all of tests/e2e/**.
+
+    A COMMENT IS NOT A BASELINE (.github#358)
+    -----------------------------------------
+    This corpus used to be the raw bytes of every file, and ``is_covered()``
+    asks nothing more than "does the component's name appear in it". So it did:
+
+        // NOTE: we still owe a baseline for Dashboard — see the issue.
+
+    A sentence saying you have NOT done the thing satisfied the gate that
+    checks whether you have done it. Reproduced on a two-file fixture: the
+    comment-only arm and a real spec that navigates to the page and calls
+    ``toHaveScreenshot`` both print
+
+        [gate-26] visual-coverage: PASS — 1 new page(s), all have a visual proof
+
+    byte for byte. Measured in the fleet as docudesk 7, openregister 6,
+    opencatalogi 3, procest 2, softwarecatalog 2, pipelinq 2 — and doriath
+    *triggered* it while writing the warning paragraph that documents it, which
+    is the sharpest possible statement of the problem: the better your comments,
+    the greener the gate.
+
+    So ``.ts``/``.js`` files enter the corpus through
+    ``source_scope.js_comment_mask``, which blanks comments and regex literals
+    and KEEPS string literals. Strings have to stay: ``page.goto('/dashboard')``,
+    ``toHaveScreenshot('Dashboard.png')`` and a locator are all real references
+    to the screen, and blanking them would turn a noisy gate into a dead one —
+    the mistake `.github#230` records for gate-58. Offsets are preserved, so the
+    mask is a drop-in for the raw text.
+
+    ``.png`` baselines contribute their FILENAME (that is the whole reference),
+    and ``.json``/``.txt`` snapshots are data rather than prose and are left
+    alone.
     """
     root = app_dir / "tests" / "e2e"
     if visual_only:
@@ -425,6 +460,8 @@ def _e2e_corpus(app_dir: Path, visual_only: bool) -> str:
             # record the name rather than the bytes.
             if p.suffix == ".png":
                 buf.append(p.name)
+            elif p.suffix in (".ts", ".js"):
+                buf.append(js_comment_mask(_read(p)))
             else:
                 buf.append(_read(p))
     return "\n".join(buf)

@@ -142,14 +142,46 @@ fi
 
 # ===========================================================================
 echo
-echo "== arm 3 — FULL scope, same tree as arm 1 (.github#361) =="
+echo "== arm 3 — FULL file scope, NO delta base (.github#361 / #374) =="
 # ===========================================================================
-_outf="$(gf_run_wrapper "${WORK}/inherited" "${WORK}/log-full" --full)"
+#
+# REWRITTEN FOR THE ADR-020 REVERSAL (hydra-gates/ADR-020-SUPERSEDED.md).
+#
+# This arm used to run `--full` against a tree that `gf_mark_base` had given a
+# `refs/remotes/origin/development` ref, and assert NOT APPLICABLE — because
+# `--full` used to mean BOTH "read the whole tree" AND "compute no diff".
+#
+# Those are now two separate inputs, and that conflation was the bug: a full
+# file scope says nothing about whether a base exists. gate-16 is a DELTA gate;
+# what it needs is a BASE, not a narrowed file list. So the arm splits:
+#
+#   3a  full file scope, NO base   -> NOT APPLICABLE, with a reason  (below)
+#   3b  full file scope, WITH base -> it JUDGES the change set, and still does
+#                                     NOT sweep the legacy surface  (further down)
+#
+# 3b is the one that matters most: it is the only assertion standing between
+# this package and the false RED `#361`'s fix was written to avoid — reporting
+# every legacy `@spec` gap in the fleet because the file scope went wide.
+#
+# The tree is arm 1's, rebuilt WITHOUT `gf_mark_base`, so nothing in it
+# resolves as a base. Building it explicitly rather than deleting the ref keeps
+# the two arms independent.
+gf_build_repo "${WORK}/inherited-nobase" "${SRC}"
+gf_commit_all "${WORK}/inherited-nobase" "base: app carrying inherited @spec debt"
+printf '\n- unrelated doc tweak\n' >> "${WORK}/inherited-nobase/docs/CHANGELOG.md"
+gf_commit_paths "${WORK}/inherited-nobase" "docs: unrelated change" docs/CHANGELOG.md
 
-if printf '%s' "${_outf}" | grep -qF 'Base ref: n/a — --full requested'; then
-    _ok "the --full run states it computed no diff"
+_outf="$(gf_run_wrapper "${WORK}/inherited-nobase" "${WORK}/log-full" --full)"
+
+if printf '%s' "${_outf}" | grep -qF 'SCOPE-MODE: full'; then
+    _ok "the run announces its file scope in one machine-readable line"
 else
-    _bad "the --full run did not announce itself as unscoped; the rest of this arm is unsafe to interpret"
+    _bad "the run printed no 'SCOPE-MODE: full' line; the rest of this arm is unsafe to interpret because nothing states which scope produced it"
+fi
+if printf '%s' "${_outf}" | grep -qF 'Delta base: NONE'; then
+    _ok "the run states it resolved NO delta base"
+else
+    _bad "the run did not state that it has no delta base — a delta gate's NOT APPLICABLE below would then be unattributable to any input"
 fi
 
 _vf="$(gf_verdict "${_outf}" 16)"
@@ -158,10 +190,10 @@ case "${_vf}" in
         _ok "gate-16 on --full reports NOT APPLICABLE instead of PASSing over a scope it never read"
         ;;
     *PASS*)
-        _bad ".github#361 is LIVE: gate-16 printed PASS on a --full run that computed no diff, over a tree whose two untagged methods the positive control just named. 0 inspected, and this PASS counts toward 'N of N applicable gates ran'."
+        _bad ".github#361 is LIVE: gate-16 printed PASS on a run with NO delta base, over a tree whose two untagged methods the positive control just named. 0 inspected, and this PASS counts toward 'N of N applicable gates ran'."
         ;;
     *FAIL*)
-        _bad ".github#361 was fixed by SWEEPING THE WHOLE TREE. That is the wrong contract (ADR-020) and a false RED in every repo in the fleet — it reports inherited @spec debt the author never touched. Expected NOT APPLICABLE. Got: ${_vf:0:140}"
+        _bad ".github#361 was fixed by SWEEPING THE WHOLE TREE. gate-16 is a DELTA gate: widening its FILE scope does not give it a change set, it just reports inherited @spec debt the author never touched — a false RED in every repo in the fleet, and exactly what the ADR-020 reversal must NOT do to this gate. Expected NOT APPLICABLE. Got: ${_vf:0:140}"
         ;;
     "")  _bad "gate-16 emitted no verdict at all on the --full arm" ;;
     *)   _bad "gate-16 on --full gave an unrecognised verdict: ${_vf:0:140}" ;;
@@ -201,10 +233,64 @@ else
 fi
 
 # And it must be counted as not-applicable, not as a silent no-show.
-if printf '%s' "${_outf}" | grep -qE '^\[hydra-gates\][[:space:]]+gate-16 spec-coverage'; then
+if printf '%s' "${_outf}" | grep -qE '^\[hydra-gates\] NOT APPLICABLE: .*\b16\b'; then
     _ok "gate-16 is named in the NOT APPLICABLE block of the coverage summary"
 else
     _bad "gate-16 did not appear in the coverage summary's NOT APPLICABLE block — it is being counted as a gate that simply did not run, which --require-full-coverage would fail on"
+fi
+
+# ===========================================================================
+echo
+echo "== arm 3b — FULL file scope WITH a delta base (the ADR-020 reversal) =="
+# ===========================================================================
+#
+# THE ARM THAT DID NOT EXIST, AND THE ONE THE REVERSAL MAKES NECESSARY.
+#
+# Full file scope is now the DEFAULT, so this is the shape every PR in the
+# fleet runs in: the whole tree open to the state gates, and a real base for
+# the five delta gates. Two things must hold simultaneously, and they pull in
+# opposite directions:
+#
+#   1. gate-16 must still JUDGE THE CHANGE — otherwise flipping the default
+#      silently retired @spec enforcement fleet-wide, which is a straight
+#      downgrade dressed as an improvement.
+#   2. gate-16 must still NOT NAME THE LEGACY SURFACE — otherwise the wide file
+#      scope leaked into a delta gate and every repo goes red on inherited debt
+#      nobody touched. That is `#361`'s false-RED, arriving by a new route.
+#
+# Arm 1 already proves (2) under `--scope-to-diff`. It proves nothing about the
+# default any more, because the default changed.
+_outfb="$(gf_run_wrapper "${WORK}/newwork" "${WORK}/log-full-base" --full)"
+
+if printf '%s' "${_outfb}" | grep -qE '^\[hydra-gates\] Delta base: [^N]'; then
+    _ok "the full-scope run resolved a delta base and named it"
+else
+    _bad "the full-scope run resolved NO delta base though the fixture has refs/remotes/origin/development — arm 3b would then be measuring arm 3a again and proving nothing"
+fi
+
+_vfb="$(gf_verdict "${_outfb}" 16)"
+case "${_vfb}" in
+    *FAIL*)
+        _ok "gate-16 still JUDGES the change at full file scope — the delta gate survived the reversal: ${_vfb:0:90}"
+        ;;
+    *"NOT APPLICABLE"*)
+        _bad "gate-16 went NOT APPLICABLE at full file scope DESPITE a resolved base. This is the regression the reversal must not cause: keying a delta gate on the FILE scope retires it on every PR in the fleet. Got: ${_vfb:0:160}"
+        ;;
+    *PASS*)
+        _bad "gate-16 PASSed at full file scope over a diff that ADDS an untagged method. It had a base and did not use it. Got: ${_vfb:0:160}"
+        ;;
+    *) _bad "gate-16 gave an unrecognised verdict on the full+base arm: ${_vfb:0:160}" ;;
+esac
+
+if grep -qF 'NewWorkController.php' "${WORK}/log-full-base/hydra-gate-spec-coverage.log" 2>/dev/null; then
+    _ok "gate-16 names the NEWLY ADDED file at full file scope"
+else
+    _bad "gate-16 did not name NewWorkController.php at full file scope — it produced a verdict without evidence"
+fi
+if grep -qF 'LegacyDebtController.php' "${WORK}/log-full-base/hydra-gate-spec-coverage.log" 2>/dev/null; then
+    _bad "the full-scope run wrote INHERITED legacy @spec debt into gate-16's log. The wide file scope has leaked into a delta gate — this is #361's false RED arriving by a new route, and it would redden every repo in the fleet on code nobody touched."
+else
+    _ok "gate-16 does NOT sweep the inherited legacy surface even at full file scope — the delta contract survived the reversal"
 fi
 
 echo

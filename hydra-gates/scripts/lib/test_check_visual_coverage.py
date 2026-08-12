@@ -376,6 +376,85 @@ with _repo_mixed(manifest=_MANIFEST_DANGLING) as t:
         out.strip()[-200:],
     )
 
+# ---------------------------------------------------------------------------
+# A COMMENT IS NOT A BASELINE (.github#358)
+# ---------------------------------------------------------------------------
+# `is_covered()` asks only whether the component's name appears anywhere in the
+# concatenated e2e corpus, and the corpus was the RAW BYTES of every file. So a
+# sentence saying you still OWE a baseline satisfied the gate that checks
+# whether you have one — measured in the fleet as docudesk 7, openregister 6,
+# opencatalogi 3, procest 2, softwarecatalog 2, pipelinq 2, and triggered by
+# doriath *while writing the warning paragraph that documents it*.
+#
+# Both arms below are required. Without the second, "blank the whole corpus"
+# would score as a repair — and blanking string literals specifically is the
+# `.github#230` mistake (gate-58's evidence IS a string), so the accepted arm
+# deliberately proves coverage through a string.
+print()
+print("== gate-26: a comment must not be enough (.github#358) ==")
+
+_VISUAL_REAL = """import { test, expect } from '@playwright/test'
+test('the page renders', async ({ page }) => {
+\tawait page.goto('/index.php/apps/fx/#/flow-detail')
+\tawait expect(page.locator('.page-1')).toBeVisible()
+\tawait expect(page).toHaveScreenshot('FlowDetailPage.png')
+})
+"""
+
+_VISUAL_COMMENT_ONLY = """import { test, expect } from '@playwright/test'
+// NOTE: FlowDetailPage still owes a baseline — tracked separately. Do not
+// add one in this file.
+test('something else entirely', async ({ page }) => {
+\tawait page.goto('/')
+\tawait expect(page.locator('body')).toBeVisible()
+})
+"""
+
+with _repo_mixed(extra={"tests/e2e/visual/x.spec.ts": _VISUAL_COMMENT_ONLY}) as t:
+    rc, out = _run(Path(t), None)
+    check(
+        "a comment saying a page still OWES a baseline is not coverage",
+        rc == EXIT_FAIL and "FlowDetailPage.vue" in out,
+        f"rc={rc} out={out.strip()[-220:]}",
+    )
+
+with _repo_mixed(extra={"tests/e2e/visual/x.spec.ts": _VISUAL_REAL}) as t:
+    rc, out = _run(Path(t), None)
+    check(
+        "a spec that navigates to the page and screenshots it still counts",
+        rc == EXIT_PASS,
+        f"rc={rc} out={out.strip()[-220:]}",
+    )
+
+# The reference lives ONLY inside a string literal. Blanking string contents
+# would make this arm red and turn the repair into a dead gate (.github#230).
+_VISUAL_STRING_ONLY = """import { test, expect } from '@playwright/test'
+test('baseline', async ({ page }) => {
+\tawait page.goto('/')
+\tawait expect(page).toHaveScreenshot('FlowDetailPage.png')
+})
+"""
+with _repo_mixed(extra={"tests/e2e/visual/x.spec.ts": _VISUAL_STRING_ONLY}) as t:
+    rc, out = _run(Path(t), None)
+    check(
+        "a reference that exists only as a STRING literal still counts",
+        rc == EXIT_PASS,
+        f"rc={rc} out={out.strip()[-220:]}",
+    )
+
+# A .png baseline named after the component is the canonical proof and must be
+# untouched by the corpus change — its filename is the whole reference.
+with _repo_mixed() as t:
+    _b = Path(t) / "tests" / "e2e" / "visual"
+    _b.mkdir(parents=True)
+    (_b / "FlowDetailPage.png").write_bytes(b"\x89PNG\r\n")
+    rc, out = _run(Path(t), None)
+    check(
+        "a .png baseline named after the component still counts",
+        rc == EXIT_PASS,
+        f"rc={rc} out={out.strip()[-220:]}",
+    )
+
 print()
 print(f"{_passed}/{_passed + len(_failed)} passed")
 if _failed:
