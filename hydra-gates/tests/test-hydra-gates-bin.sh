@@ -1126,15 +1126,39 @@ if printf '%s\n' "${OUT_FULLBASE}" | grep -qE '^\[hydra-gates\] Delta base: [^N]
 else
     _bad "a full-scope run with an explicit --base did not report a delta base — the five delta gates have been retired by the default flip"
 fi
+#    ⚠️ gate-48 IS ASSERTED ON A DIFFERENT FIXTURE, AND IT HAS TO BE
+#    (.github#401). `${FIX}` ships no `lib/Controller/` at all — not in the
+#    diff, not anywhere in the tree — so gate-48 has never had a subject here.
+#    Before `#401` it printed PASS over that nothing, and "produced a verdict"
+#    was satisfied by a gate that had opened no file: this clause was GREEN
+#    while meaning nothing for gate-48, which is the same disease the clause
+#    exists to detect, one level up.
+#
+#    Now that a delta with no candidate file declines by name, keeping gate-48
+#    in this loop would read as "the default flip retired it" when what
+#    actually happened is that the fixture never contained a controller.
+#    `${SECFIX}` was purpose-built for exactly this — a controller IN THE DIFF,
+#    for gates 6/7, with the comment above it saying so — and `SEC_WITH` is
+#    already a full-scope run of it against a real base. That is where the
+#    anti-widening claim can be made truthfully, so that is where it is made.
+#
+#    gates 16 and 47 stay here: `${FIX}`'s diff genuinely carries lib/ and src/
+#    files, so both have real subject matter and a decline from either would be
+#    the retirement this clause is guarding against.
 _delta_na=""
-for _g in 16 47 48; do
+for _g in 16 47; do
     printf '%s\n' "${OUT_FULLBASE}" | grep -qE "^\[gate-${_g}\][^:]*: NOT APPLICABLE" \
         && _delta_na="${_delta_na}${_g} "
 done
 if [ -z "${_delta_na}" ]; then
-    _ok "delta gates 16/47/48 still produce a verdict at full scope when a base is present"
+    _ok "delta gates 16/47 still produce a verdict at full scope when a base is present"
 else
-    _bad "delta gate(s) ${_delta_na}went NOT APPLICABLE at full scope though a base WAS resolved — the delta gates are keyed on the file scope instead of on the base, which retires them on every PR"
+    _bad "delta gate(s) ${_delta_na}went NOT APPLICABLE at full scope though a base WAS resolved and \${FIX}'s diff carries lib/ and src/ files — the delta gates are keyed on the file scope instead of on the base, which retires them on every PR"
+fi
+if printf '%s\n' "${SEC_WITH}" | grep -qE "^\[gate-48\][^:]*: NOT APPLICABLE"; then
+    _bad "gate-48 went NOT APPLICABLE at full scope over a diff that ADDS lib/Controller/ThingController.php — a base was resolved and the gate's own subject matter is in the change set, so this is the delta gates being keyed on file scope, which retires them on every PR"
+else
+    _ok "gate-48 still produces a verdict at full scope when a base is present AND the diff contains a controller"
 fi
 
 # 5. And with NO base they must decline BY NAME rather than pass. This is the
