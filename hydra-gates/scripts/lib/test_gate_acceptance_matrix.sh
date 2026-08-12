@@ -276,9 +276,17 @@ if [ -f "${ELSEWHERE_FILE}" ]; then
     # coverage, none cross-checked against it. 36 of 43 UNCOVERED rows were
     # wrong. A registry nothing resolves is a registry that rots silently.
     # -----------------------------------------------------------------------
+    # Scoped to TABLE ROWS, because the table is where the credit is granted —
+    # the intro prose names this driver itself, which is not a credited suite,
+    # and counting it would overstate the number this check reports. Measured:
+    # 21 over the whole file, 20 over the rows.
+    # The names are written in backticks, but the pattern does NOT anchor on
+    # them: a backtick inside a single-quoted string reads to ShellCheck as a
+    # command substitution (SC2016), and some rows carry a `scripts/lib/` prefix
+    # inside the backticks, which a backtick-anchored pattern would miss.
     mapfile -t _elsewhere_suites < <(
-        grep -oE '`test_[A-Za-z0-9_]+\.sh`' "${ELSEWHERE_FILE}" 2>/dev/null \
-            | tr -d '`' | sort -u
+        grep -E '^\|' "${ELSEWHERE_FILE}" 2>/dev/null \
+            | grep -oE 'test_[A-Za-z0-9_]+\.sh' | sort -u
     )
     if [ "${#_elsewhere_suites[@]}" -lt 10 ]; then
         # NEVER GREEN OVER NOTHING, applied to this check itself: a name
