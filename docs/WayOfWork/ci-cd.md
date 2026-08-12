@@ -3,16 +3,20 @@ id: ci-cd
 title: CI/CD and Code Standards
 sidebar_label: CI/CD and Code Standards
 sidebar_position: 4
-description: What our pipeline actually runs, where the configuration lives, and exactly where we diverge from Nextcloud's own app CI/CD
+description: What our pipeline runs, where the configuration lives, and how we stay strictly compatible with Nextcloud's own app CI/CD
 ---
 
 # CI/CD and Code Standards
 
-We build Nextcloud apps, and Nextcloud has its own app CI/CD conventions. Ours is
-not the same. Most of the differences are deliberate; a few are accidents worth
-knowing about before they bite you. This page states both, so that a contributor
-arriving from the Nextcloud ecosystem — or an auditor asking why our checks look
-unfamiliar — can see the whole picture in one place.
+We build Nextcloud apps, so we hold ourselves to Nextcloud's rules:
+
+> **Conduction code must pass Nextcloud's own checks unchanged. We may be
+> stricter than Nextcloud; we may not be different from it.**
+
+"Stricter" means adding a rule Nextcloud has no opinion on. It never means giving
+one of their rules a different value — code that satisfies us must still satisfy
+them. Where a difference exists today it is a defect, not a dialect, and this page
+is where each one is tracked.
 
 Two companion pages stay authoritative for what they cover:
 [Development Pipeline](development-pipeline.md) for the branch flow and
@@ -68,58 +72,128 @@ theirs survives the org repo being unavailable and pins its supply chain harder.
 **Action SHA-pinning is the one we should adopt** — it is a supply-chain control,
 not a style preference.
 
-## PHP: where we diverge, and how much
+## PHP
 
-### Formatting — the important one
+### Formatting — one standard, and it is Nextcloud's
 
-Nextcloud formats PHP with **php-cs-fixer** via `nextcloud/coding-standard`, whose
-`Config` calls `setIndent("\t")`. Nextcloud core's `.editorconfig` says
-`indent_style = tab`, `indent_size = 4`.
+**Conduction code must pass `nextcloud/coding-standard` unchanged. We may be
+stricter than Nextcloud; we may not be different from it.**
 
-We format PHP with **PHP_CodeSniffer** against a PEAR-derived ruleset that sets
-`indent=4, tabIndent=false`. All 18 apps agree on this.
+That rule is newer than most of the code. Measured 2026-08-12 against
+openregister's `lib/`, **all 1,427 files failed** Nextcloud's standard:
 
-| Rule | Conduction (PHPCS) | Nextcloud (php-cs-fixer) |
+| php-cs-fixer rule | files affected |
+| --- | ---: |
+| `curly_braces_position` | 1,427 — 100% |
+| `indentation_type` | 1,409 — 98.7% |
+| `phpdoc_align` | 1,221 — 85.6% |
+| `binary_operator_spaces` | 1,104 — 77.4% |
+| `trailing_comma_in_multiline` | 693 — 48.6% |
+| `cast_spaces` | 676 — 47.4% |
+| `concat_space` | 583 — 40.9% |
+
+The fleet had been formatting with a PEAR-derived PHPCS ruleset — four spaces,
+next-line braces, `(int) $x`, `'a'.'b'` — which is not a stricter standard but a
+different dialect. Under the rule above it has to go, and it has.
+
+#### Two tools, disjoint jurisdiction
+
+| Concern | Tool | Where the config lives |
 | --- | --- | --- |
-| Indentation | **4 spaces** | **tabs** |
-| Class / function opening brace | next line (PEAR) | same line (`curly_braces_position`) |
-| Cast spacing | `(int) $x` (`Generic.Formatting.SpaceAfterCast`) | `(int)$x` (`cast_spaces: none`) |
-| Concatenation | `'a'.'b'` (`Squiz.Strings.ConcatenationSpacing`) | `'a' . 'b'` (`concat_space: one`) |
-| Line length | hard limit 150 | not enforced |
-| Yoda conditions | disallowed | disallowed ✅ agree |
-| Named parameters on internal calls | **required** (custom sniff) | no such rule |
+| **Formatting** — whitespace, braces, imports, quotes, casts | php-cs-fixer | [`conduction/coding-standard`](https://github.com/ConductionNL/coding-standard) |
+| **Semantics** — named parameters, `@spec`, banned functions, removed NC APIs, line length | PHP_CodeSniffer | [`quality-config/`](https://github.com/ConductionNL/.github/tree/main/quality-config) |
+| **Types** | Psalm + PHPStan | `quality-config/` |
 
-These are not reconcilable file-by-file. **A file cannot satisfy both**, so an app
-must wire up exactly one formatter.
+`Conduction\CodingStandard\Config` **extends** Nextcloud's and merges a private
+`ADDITIONS` array onto `parent::getRules()`. The package's invariant test fails
+the build if `ADDITIONS` shares a single key with the parent set, if any parent
+rule is dropped, or if any parent rule's *value* changed. The policy is therefore
+enforced by construction, not by review — and each assertion carries a positive
+control, because a suite that cannot fail is indistinguishable from one that
+passes.
 
-:::warning `cs:check` and `cs:fix` do not mean here what they mean upstream
+`ADDITIONS` is currently **empty**, which is a result rather than an omission.
+Every rule this fleet wants beyond Nextcloud's is semantic, not typographic, and
+php-cs-fixer cannot express any of them.
 
-`cs:check` and `cs:fix` are the script names that `nextcloud/coding-standard`
-defines, and they are what Nextcloud's own `lint-php-cs.yml` invokes. In this
-fleet those same two names are **aliases for PHPCS**:
+#### Why PHPCS had to be cut back, not just re-pointed
 
-```json
-"cs:check": "./vendor/bin/phpcs --standard=phpcs.xml",
-"cs:fix":   "./vendor/bin/phpcbf --standard=phpcs.xml"
+Left alone, the two tools contradict each other and the app becomes unfixable —
+`composer cs:fix` and `composer phpcs` demand opposite things and neither can be
+satisfied. That was the fleet's real state. Running the old ruleset over
+php-cs-fixer-formatted code produced **111,932 findings, 111,747 of them
+auto-fixable formatting**:
+
+```
+Generic.WhiteSpace.DisallowTabIndent                62,123
+Generic.WhiteSpace.ScopeIndent                      35,030
+Generic.Arrays.ArrayIndent                           3,726
+PEAR.Commenting.FunctionComment (param spacing)      2,797
+PEAR.Functions.FunctionDeclaration (indent + brace)  2,576
+Generic.Formatting.MultipleStatementAlignment        1,132
+Generic.Formatting.SpaceAfterCast                      909
+Squiz.Strings.ConcatenationSpacing                     534
+Squiz.ControlStructures.ElseIfDeclaration               31
 ```
 
-So a contributor who runs the documented Nextcloud command gets our 4-space PEAR
-reformatting, not Nextcloud's tabs. Worse, **17 of 18 apps also list
-`nextcloud/coding-standard:^1.4` in `require-dev`** while shipping no
-`.php-cs-fixer.dist.php` and never invoking php-cs-fixer anywhere in CI. It is a
-dead dependency that pulls `php-cs-fixer/shim` into every `vendor/` tree, and it
-is loaded and ready to reformat the entire codebase the wrong way for anyone who
-finds it.
+That last line is the shape of the whole problem: Squiz's sniff **forbids** the
+`elseif` keyword Nextcloud's `elseif` fixer **requires**. Two tools cannot both be
+right about one token.
 
-Either drop the dependency or adopt the standard. Do not keep both.
+With every formatting sniff removed, the same measurement yields **185 findings,
+all semantic** — 181 missing `@spec`, 2 over the 150-character line limit, 2 SPDX
+end-char. The named-parameter and legacy-accessor sniffs fire **zero** times,
+which is what stricter-but-compatible looks like when it is true rather than
+assumed.
+
+Docblock *presence* stays; docblock *layout* is `phpdoc_align`'s. The alignment
+codes are excluded individually rather than by dropping the sniff — losing the
+presence requirement would be a real regression.
+
+`quality-config/tests/compatibility.sh` makes this permanent: format a fixture,
+run PHPCS over the result, fail on any formatting sniff.
+
+#### What migrating an app looks like
+
+Proven end-to-end on `nextcloud-app-template`
+([PR #141](https://github.com/ConductionNL/nextcloud-app-template/pull/141)):
+
+```
+php-cs-fixer   Found 0 of 23 files that can be fixed
+phpcs          39 violations, ALL WARNINGS (35 @spec, 4 SPDX). Zero errors.
+```
+
+:::warning `cs:check` and `cs:fix` used to lie
+
+They are the script names `nextcloud/coding-standard` defines, and what
+Nextcloud's own `lint-php-cs.yml` invokes. In this fleet they were **aliases for
+PHPCS** — so a contributor running the documented Nextcloud command got four-space
+PEAR reformatting. Worse, 17 of 18 apps carried `nextcloud/coding-standard` in
+`require-dev` with no `.php-cs-fixer.dist.php` and no invocation anywhere: loaded,
+and ready to reformat the whole codebase for whoever found it.
+
+They now run php-cs-fixer, and the direct dependency is dropped — it arrives
+transitively at a version `conduction/coding-standard` has tested against.
+:::
+
+:::danger A missing autoloader reports as a clean tree
+
+`.php-cs-fixer.dist.php` **must** start with `require_once __DIR__ . '/vendor/autoload.php';`.
+php-cs-fixer includes the config before your autoloader runs, so without it the
+run dies with `Class not found` — and in `--format=json` that fatal is reported as
+**zero files needing changes**. It reads exactly like a pass.
 :::
 
 ### The `.editorconfig` gap
 
-**No fleet app ships an `.editorconfig`.** Nextcloud core does. An editor opening
-one of our PHP files therefore falls back to whatever the user configured — and
-for anyone whose defaults came from Nextcloud work, that is tabs, which PHPCS then
-rejects. This is a one-file fix and it belongs in every app.
+**No fleet app shipped an `.editorconfig`.** Nextcloud core does. An editor
+opening one of our PHP files fell back to whatever the user configured — and for
+anyone whose defaults came from Nextcloud work, that is tabs, which the old PHPCS
+ruleset then rejected.
+
+Nextcloud's `.editorconfig` is now copied **verbatim** into every app
+(`indent_style = tab`, `indent_size = 4`, two-space YAML and `package*.json`). It
+agrees with the formatter instead of fighting it.
 
 ### Static analysis and the Nextcloud version it is analysing against
 
