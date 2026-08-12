@@ -160,13 +160,79 @@ class TestANetZeroMoveIsNotARemoval(unittest.TestCase):
         ])
         self.assertEqual(gate.removals(diff), ["-    #[NoCSRFRequired]"])
 
-    def test_whitespace_is_not_normalised_away(self):
-        """A re-indented line is NOT the same line. Treating it as a move would
-        let a reformat swallow a genuine deletion."""
+    def test_a_reindented_line_is_the_same_line(self):
+        """REVERSED, deliberately (fleet coding-standard migration).
+
+        This assertion used to read the other way, on the reasoning that
+        "treating a re-indented line as a move would let a reformat swallow a
+        genuine deletion". php-cs-fixer re-indents every controller from four
+        spaces to a tab, so the byte-exact rule emitted a finding for EVERY
+        attribute in the app: launchpad reported 25 removals against a tree
+        whose `NoCSRFRequired` count is 43 before and 43 after. gate-48 was red
+        on 8 of the 18 migrating apps over indentation alone.
+
+        What makes the reversal safe is MULTISET accounting, not optimism —
+        see `test_a_genuine_deletion_inside_a_full_reindent_still_reports`
+        immediately below, which is the arm that proves the gate was relaxed
+        and not disabled.
+        """
         diff = "\n".join([
             "+++ b/lib/Controller/X.php",
             "-    #[NoCSRFRequired]",
-            "+        #[NoCSRFRequired]",
+            "+\t#[NoCSRFRequired]",
+        ])
+        self.assertEqual(gate.removals(diff), [])
+
+    def test_a_genuine_deletion_inside_a_full_reindent_still_reports(self):
+        """THE POSITIVE CONTROL for whitespace-insensitive cancellation.
+
+        Three attributes re-indented, one of them genuinely deleted: four
+        removals, three additions. Multiset cancellation consumes three and
+        leaves exactly one finding. If this ever returns [] the relaxation has
+        been over-applied and the gate is fail-open on precisely the change
+        shape it was relaxed for.
+        """
+        diff = "\n".join([
+            "+++ b/lib/Controller/X.php",
+            "-    #[NoCSRFRequired]",
+            "-    #[NoCSRFRequired]",
+            "-    #[NoCSRFRequired]",
+            "-    #[NoCSRFRequired]",
+            "+\t#[NoCSRFRequired]",
+            "+\t#[NoCSRFRequired]",
+            "+\t#[NoCSRFRequired]",
+        ])
+        self.assertEqual(gate.removals(diff), ["-    #[NoCSRFRequired]"])
+
+    def test_a_reindented_docblock_tag_cancels_too(self):
+        """The docblock form re-indents as well: ` * @NoCSRFRequired` gains a
+        leading tab. Same mechanism, same cancellation."""
+        diff = "\n".join([
+            "+++ b/lib/Controller/X.php",
+            "-     * @NoCSRFRequired",
+            "+\t * @NoCSRFRequired",
+        ])
+        self.assertEqual(gate.removals(diff), [])
+
+    def test_reindentation_cannot_cancel_a_DIFFERENT_attribute_list(self):
+        """Normalisation is leading/trailing whitespace ONLY. Re-indenting
+        `#[NoAdminRequired, NoCSRFRequired]` must not absorb the deletion of a
+        standalone `#[NoCSRFRequired]` — they are different postures."""
+        diff = "\n".join([
+            "+++ b/lib/Controller/X.php",
+            "-    #[NoCSRFRequired]",
+            "+\t#[NoAdminRequired, NoCSRFRequired]",
+        ])
+        self.assertEqual(gate.removals(diff), ["-    #[NoCSRFRequired]"])
+
+    def test_a_reindented_move_ACROSS_files_is_still_a_removal(self):
+        """Whitespace insensitivity must not leak across the per-file
+        boundary — A genuinely lost the annotation."""
+        diff = "\n".join([
+            "+++ b/lib/Controller/A.php",
+            "-    #[NoCSRFRequired]",
+            "+++ b/lib/Controller/B.php",
+            "+\t#[NoCSRFRequired]",
         ])
         self.assertEqual(gate.removals(diff), ["-    #[NoCSRFRequired]"])
 
