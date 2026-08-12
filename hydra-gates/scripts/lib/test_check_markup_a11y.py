@@ -212,6 +212,107 @@ class TestSemanticControls(unittest.TestCase):
         self.assertEqual(scan("semantic-controls", src), [])
 
 
+class TestImgAltEmptyOnly(unittest.TestCase):
+    """gate-35. The defect was BLINDNESS, so the fire-cases come first."""
+
+    def _img(self, attrs: str) -> str:
+        return f"<template><div><img {attrs}></div></template>"
+
+    def test_the_four_camelcase_spellings_the_word_boundary_could_not_match(self):
+        # `\\b` is a WORD-character boundary and `U` is a word character, so the
+        # old `\\b(avatar|photo|thumbnail|picture)\\b` matched NONE of these.
+        for expr in ("user.avatarUrl", "user.thumbnailUrl",
+                     "user.photoUrl", "user.pictureUrl"):
+            with self.subTest(expr=expr):
+                self.assertEqual(len(scan("img-alt-empty-only",
+                                          self._img(f':src="{expr}" alt=""'))), 1)
+
+    def test_underscore_is_a_word_character_too(self):
+        self.assertEqual(len(scan("img-alt-empty-only",
+                                  self._img(':src="user.avatar_url" alt=""'))), 1)
+
+    def test_the_spellings_the_old_rule_already_caught_still_fire(self):
+        for expr in ("user.avatar", "user.photo", "user.thumbnail",
+                     "/img/headshot.png", "profilePicture"):
+            with self.subTest(expr=expr):
+                self.assertEqual(len(scan("img-alt-empty-only",
+                                          self._img(f':src="{expr}" alt=""'))), 1)
+
+    def test_single_quoted_alt_and_src(self):
+        self.assertEqual(len(scan("img-alt-empty-only",
+                                  self._img("src='/img/avatar.png' alt=''"))), 1)
+
+    # --- ANTI-WIDENING. Recall must not be bought with noise. ---------------
+    def test_a_noun_that_is_only_a_SUBSTRING_does_not_fire(self):
+        # The tempting repair — relax `\\b` to a substring match — lights all
+        # three of these up. Token EQUALITY after camel/underscore splitting
+        # keeps them out.
+        for expr in ("user.photographerBio", "gallery.pictures", "thumbnails"):
+            with self.subTest(expr=expr):
+                self.assertEqual(scan("img-alt-empty-only",
+                                      self._img(f':src="{expr}" alt=""')), [])
+
+    def test_a_real_alt_is_not_a_finding(self):
+        self.assertEqual(scan("img-alt-empty-only",
+                              self._img(':src="user.avatarUrl" alt="Photo of Ada"')), [])
+        self.assertEqual(scan("img-alt-empty-only",
+                              self._img(':src="user.avatarUrl" :alt="label"')), [])
+
+    def test_decorative_by_name_and_by_shape_stay_silent(self):
+        self.assertEqual(scan("img-alt-empty-only",
+                              self._img(':src="uploadIcon" alt=""')), [])
+        self.assertEqual(scan("img-alt-empty-only",
+                              self._img('src="/img/decoration.svg" alt=""')), [])
+
+    def test_prose_in_script_is_not_a_tag(self):
+        src = ('<template><div /></template>\n<script>\n'
+               '// <img :src="user.avatarUrl" alt=""> in a docblock\n</script>')
+        self.assertEqual(scan("img-alt-empty-only", src), [])
+
+
+class TestTabindexPositive(unittest.TestCase):
+    """gate-36. The defect was NOISE, so the silence-cases come first."""
+
+    def test_a_positive_tabindex_in_an_HTML_COMMENT_is_not_a_finding(self):
+        src = ('<template><div>\n'
+               '<!-- never write tabindex="5"; it breaks focus order -->\n'
+               '<button tabindex="0">ok</button>\n</div></template>')
+        self.assertEqual(scan("tabindex-positive", src), [])
+
+    def test_a_positive_tabindex_in_a_JS_COMMENT_is_not_a_finding(self):
+        src = ('<template><div /></template>\n<script>\n'
+               '// forbidden: tabindex="9"\nexport default {}\n</script>')
+        self.assertEqual(scan("tabindex-positive", src), [])
+
+    def test_zero_and_minus_one_and_bound_values_are_correct_code(self):
+        for attr in ('tabindex="0"', 'tabindex="-1"', ':tabindex="n"'):
+            with self.subTest(attr=attr):
+                self.assertEqual(
+                    scan("tabindex-positive", f"<template><b {attr}>x</b></template>"), [])
+
+    # --- the true positives the noise fix must not cost ---------------------
+    def test_a_real_positive_tabindex_still_fires(self):
+        self.assertEqual(
+            len(scan("tabindex-positive", '<template><b tabindex="5">x</b></template>')), 1)
+
+    def test_single_quotes_render_the_same_DOM(self):
+        self.assertEqual(
+            len(scan("tabindex-positive", "<template><b tabindex='12'>x</b></template>")), 1)
+
+    def test_a_tabindex_EMITTED_FROM_SCRIPT_still_fires(self):
+        # `markup_mask` would blank `<script>` wholesale and lose this. The mask
+        # here is comments-only for exactly that reason.
+        src = ('<template><div /></template>\n<script>\n'
+               'el.innerHTML = \'<button tabindex="4">x</button>\'\n</script>')
+        self.assertEqual(len(scan("tabindex-positive", src)), 1)
+
+    def test_a_js_file_keeps_both_behaviours(self):
+        fire = 'export const h = \'<b tabindex="3">x</b>\'\n'
+        self.assertEqual(len(scan("tabindex-positive", fire, "src/h.js")), 1)
+        quiet = '// tabindex="3" is forbidden\nexport const h = 1\n'
+        self.assertEqual(scan("tabindex-positive", quiet, "src/h.js"), [])
+
+
 class TestCli(unittest.TestCase):
     def test_unknown_rule_is_an_error_not_an_empty_answer(self):
         buf = io.StringIO()

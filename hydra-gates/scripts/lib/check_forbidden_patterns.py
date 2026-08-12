@@ -48,6 +48,30 @@ this change is already widening in the other direction. One direction at a time.
 never when preceded by `$`, `->`, `::` or a word character, so `$exit`,
 `$this->exit(` and `exit_code` are not findings.
 
+A DECLARATION IS NOT A CALL
+---------------------------
+`die` and `exit` are SEMI-RESERVED in PHP: they are illegal as a free function
+name and perfectly legal as a METHOD name, so this parses and ships::
+
+    private function exit(): void
+    {
+        $this->exitCode = 1;
+    }
+
+The construct pattern saw `exit` followed by `(` — the parameter list — and
+reported the DECLARATION as a call. Measured 2026-08-12 on a purpose-built
+fixture: three findings where two were real (`var_dump (`, `die;`) and the
+third was that method header. The call sites `$this->exit()` and `self::exit()`
+were already silent via the `->` / `::` lookbehinds, and `$exitCode` via
+`(?<![\w$])` — so the gate flagged the one place the name is definitionally not
+a call and stayed quiet everywhere it might have been one.
+
+The fix is a discriminator, not a relaxation: the offsets of the NAME group of
+every `function` header are computed and a construct match starting exactly
+there is skipped. Nothing else moves. `exit;` inside that method's body is
+still a finding, and so is `exit(0)` in a method that merely happens to be
+called `exitEarly()` — only the identifier in the header position is exempt.
+
 ANTI-WIDENING: `: never` EXEMPTS, AND IT IS A TYPE, NOT A COMMENT
 ------------------------------------------------------------------
 Adding `exit` produced exactly ONE new finding across fourteen fleet repos, and
@@ -150,6 +174,19 @@ def _never_spans(masked: str) -> list[tuple[int, int]]:
     return spans
 
 
+def _declared_name_offsets(masked: str) -> set[int]:
+    """Start offsets of the NAME identifier in every `function` header.
+
+    `die` and `exit` are semi-reserved: illegal as a free function name, legal
+    as a method name. `private function exit(): void` therefore presents to the
+    construct pattern as `exit` followed by `(`, and was reported as a call.
+    An offset set is used rather than a lookbehind because Python's `re`
+    requires lookbehinds to be fixed width, and `function`, `&` and the
+    whitespace between them are not.
+    """
+    return {m.start(1) for m in _FUNC_RX.finditer(masked) if m.group(1)}
+
+
 def scan_file(path: str) -> list[str]:
     try:
         src = read_text(path)
@@ -158,6 +195,7 @@ def scan_file(path: str) -> list[str]:
     masked = php_mask(src, blank_strings=True)
     lines = src.splitlines()
     never = _never_spans(masked)
+    declared = _declared_name_offsets(masked)
 
     def in_never(off: int) -> bool:
         return any(a <= off <= b for a, b in never)
@@ -167,6 +205,8 @@ def scan_file(path: str) -> list[str]:
         line = masked.count("\n", 0, m.start()) + 1
         hits.append((line, m.group(1)))
     for m in _CONSTRUCT_RX.finditer(masked):
+        if m.start() in declared:
+            continue  # `function exit(` — the header, not a call.
         if in_never(m.start()):
             continue
         line = masked.count("\n", 0, m.start()) + 1
