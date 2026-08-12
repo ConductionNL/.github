@@ -366,7 +366,59 @@ jobs:
             || { echo "::error::${_na} not-applicable + ${_unrun} unrun gates are counted, but only ${_named} said so on their own line. A gate is disappearing from the per-gate output while still being tallied."; exit 1; }
           echo "OK — exit 0, coverage stated, waivers stated, and ran=${_ran} + na=${_na} + unrun=${_unrun} = declared=${_decl}, each named."
 
-      - name: "Unresolvable base ref must exit 99 with no green"
+      # WHY THIS STEP NOW NAMES ITS SCOPE.
+      #
+      # Until ADR-020 was superseded, --scope-to-diff was the DEFAULT, so
+      # "unresolvable base" and "no scope at all" were the same condition and
+      # this step could leave the scope unstated. They are now two different
+      # conditions and they have two different correct answers, so the step
+      # that asserts the first must say which one it is testing.
+      #
+      # This is the diff-scoped half, and it is UNCHANGED: with
+      # --scope-to-diff, the base IS the scope, so an unresolvable base leaves
+      # nothing to inspect and refusing is the only honest verdict. Every
+      # assertion below is byte-for-byte the one that guarded this before the
+      # default moved; only the invocation names the mode it was always about.
+      # Verified against the fixture: exit 99, the "NOTHING WAS CHECKED" line,
+      # zero `[gate-N]` lines.
+      - name: "Unresolvable base ref, diff scope: must exit 99 with no green"
+        run: |
+          set -eu
+          cd /work/fixture
+          set +e
+          OUT="$(HYDRA_GATE_BASE_REF=origin/definitely-not-a-branch /work/consumer/vendor/bin/hydra-gates --app-dir /work/fixture --scope-to-diff 2>&1)"
+          RC=$?
+          set -e
+          printf '%s\n' "${OUT}"
+
+          echo "--- assertions ---"
+          [ "${RC}" -eq 99 ] \
+            || { echo "::error::expected exit 99 for an unresolvable base under --scope-to-diff, got ${RC}"; exit 1; }
+          printf '%s' "${OUT}" | grep -q "NOTHING WAS CHECKED" \
+            || { echo "::error::did not state that nothing was checked"; exit 1; }
+          printf '%s' "${OUT}" | grep -qiE "ALL .* (GATES )?(PASSED|GREEN)" \
+            && { echo "::error::an unresolvable base printed a green — this is the exact bug"; exit 1; }
+          printf '%s' "${OUT}" | grep -qE '^\[gate-[0-9]+\]' \
+            && { echo "::error::gate lines were emitted for a run that could not be scoped"; exit 1; }
+          echo "OK — exit 99, no green, no gate lines."
+
+      # THE FULL-SCOPE HALF — the new default, and the harder one to get right.
+      #
+      # Here the base is NOT the scope. The whole tracked tree is, and it is
+      # readable whatever the caller typed, so 59 gates have a real verdict and
+      # refusing would throw those away to punish a bad input. The five DELTA
+      # gates — 16, 29, 47, 48, 61 — are the ones that lose their subject.
+      #
+      # So the property this step defends is not "the run failed". It is: THE
+      # FIVE MUST NOT PASS, AND THE RUN MUST SAY THE BASE WAS UNUSABLE. A green
+      # here is legitimate and is a green over 59 gates, not over 64 — which is
+      # precisely the distinction the COVERAGE accounting exists to carry.
+      #
+      # Note the last assertion is the one with teeth: it fails if any of the
+      # five prints PASS. Without it, a future change that quietly restored a
+      # confident PASS-over-an-empty-diff for those gates would satisfy every
+      # other clause here.
+      - name: "Unresolvable base ref, full scope: the five delta gates must not pass"
         run: |
           set -eu
           cd /work/fixture
@@ -377,12 +429,17 @@ jobs:
           printf '%s\n' "${OUT}"
 
           echo "--- assertions ---"
-          [ "${RC}" -eq 99 ] \
-            || { echo "::error::expected exit 99 for an unresolvable base, got ${RC}"; exit 1; }
-          printf '%s' "${OUT}" | grep -q "NOTHING WAS CHECKED" \
-            || { echo "::error::did not state that nothing was checked"; exit 1; }
-          printf '%s' "${OUT}" | grep -qiE "ALL .* (GATES )?(PASSED|GREEN)" \
-            && { echo "::error::an unresolvable base printed a green — this is the exact bug"; exit 1; }
+          printf '%s' "${OUT}" | grep -q "does not resolve" \
+            || { echo "::error::the run did not say the named base was unusable — a typo'd base must never pass silently"; exit 1; }
           printf '%s' "${OUT}" | grep -qE '^\[gate-[0-9]+\]' \
-            && { echo "::error::gate lines were emitted for a run that could not be scoped"; exit 1; }
-          echo "OK — exit 99, no green, no gate lines."
+            || { echo "::error::no gate reported at all — full scope must still read the whole tree when the base is unusable"; exit 1; }
+          _bad=""
+          for g in 16 29 47 48 61; do
+            printf '%s\n' "${OUT}" | grep -qE "^\[gate-${g}\] [a-z0-9-]+: (NOT APPLICABLE|SKIPPED)" \
+              || _bad="${_bad} ${g}"
+            printf '%s\n' "${OUT}" | grep -qE "^\[gate-${g}\] [a-z0-9-]+: PASS" \
+              && { echo "::error::gate-${g} is a DELTA gate and PASSED with no usable base — it passed over an empty diff, which is the defect this whole contract exists to prevent"; exit 1; }
+          done
+          [ -z "${_bad}" ] \
+            || { echo "::error::delta gate(s)${_bad} did not report NOT APPLICABLE by name with no usable base"; exit 1; }
+          echo "OK — base reported unusable, the tree was still read, and gates 16/29/47/48/61 each declined by name."
