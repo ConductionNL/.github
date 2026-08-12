@@ -415,21 +415,36 @@ class CoveredRefTest(unittest.TestCase):
         self.assertIn("my-spec::foo-does-bar", refs)
 
     def test_both_forms_same_file(self):
+        # Both fixtures below carry a real `test(`. They used to be tag-only,
+        # which made them pass for a reason they were not testing: the ref
+        # survived because a tag owning NO declaration was credited (#358's
+        # sibling hole). This test is about the two annotation SPELLINGS, so
+        # the declaration is now present and the spellings are the only
+        # variable.
         _write(self.root, "tests/e2e/bar.spec.js",
-               "// @e2e my-spec::foo-does-bar\n// @e2e openspec/specs/my-spec/spec.md#foo-handles-error\n")
+               "// @e2e my-spec::foo-does-bar\n"
+               "test('short form', async ({ page }) => { await expect(page).toHaveTitle(/x/) })\n"
+               "// @e2e openspec/specs/my-spec/spec.md#foo-handles-error\n"
+               "test('long form', async ({ page }) => { await expect(page).toHaveTitle(/y/) })\n")
         refs = cec.collect_covered_refs(self.root)
         self.assertIn("my-spec::foo-does-bar", refs)
         self.assertIn("my-spec::foo-handles-error", refs)
 
     def test_subdirectory_e2e(self):
         _write(self.root, "tests/e2e/spec-coverage/deep.spec.ts",
-               "// @e2e my-spec::foo-does-bar\n")
+               "// @e2e my-spec::foo-does-bar\n"
+               "test('deep', async ({ page }) => { await expect(page).toHaveTitle(/x/) })\n")
         refs = cec.collect_covered_refs(self.root)
         self.assertIn("my-spec::foo-does-bar", refs)
 
     def test_non_spec_file_ignored(self):
+        # The body is real and the tag is a proper directive, so the FILENAME
+        # is the only thing that can keep this ref out. Without the body it
+        # would now be excluded twice over and would still pass with the file
+        # filter deleted.
         _write(self.root, "tests/e2e/helpers.ts",
-               "// @e2e my-spec::foo-does-bar\n")
+               "// @e2e my-spec::foo-does-bar\n"
+               "test('x', async ({ page }) => { await expect(page).toHaveTitle(/x/) })\n")
         refs = cec.collect_covered_refs(self.root)
         # helpers.ts is not *.spec.ts / *.test.ts → should not be scanned
         self.assertNotIn("my-spec::foo-does-bar", refs)
@@ -783,6 +798,103 @@ class GateModeTest(unittest.TestCase):
 # someone turned off; `test.skip(browserName === 'firefox')` is a real test
 # with a runtime guard, and it runs everywhere else. Both ways, in one class.
 # ---------------------------------------------------------------------------
+class ProseIsNotADirectiveTest(unittest.TestCase):
+    """`.github#358` — writing ABOUT an anchor must not cover it.
+
+    The honest arm and the counterfeit arm printed byte-identical verdicts, so
+    every assertion here comes in pairs: the refused position AND the accepted
+    position one character away from it. A suite with only the planted arm
+    would score "refuse everything" as a repair.
+    """
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    _RUNS = ("test('real', async ({ page }) => "
+             "{ await expect(page).toHaveTitle(/x/) })\n")
+
+    def _refs(self, body: str) -> set:
+        _write(self.root, "tests/e2e/foo.spec.ts", body)
+        return cec.collect_covered_refs(self.root)
+
+    # --- refused: the anchor is a MENTION --------------------------------
+    def test_a_todo_sentence_naming_an_anchor_is_not_coverage(self):
+        # Ruben's shape, verbatim.
+        self.assertEqual(self._refs(
+            "// TODO: the second scenario is still unwritten. "
+            "Its anchor is @e2e my-spec::foo-does-bar\n" + self._RUNS), set())
+
+    def test_a_docblock_sentence_naming_an_anchor_is_not_coverage(self):
+        self.assertEqual(self._refs(
+            "/**\n"
+            " * We removed the assertion that carried @e2e my-spec::foo-does-bar\n"
+            " * because the fixture was flaky.\n"
+            " */\n" + self._RUNS), set())
+
+    def test_an_anchor_inside_a_selector_string_is_not_coverage(self):
+        self.assertEqual(self._refs(
+            "test('real', async ({ page }) => {\n"
+            "  await page.click('[data-note=\"@e2e my-spec::foo-does-bar\"]')\n"
+            "})\n"), set())
+
+    def test_the_prose_finding_names_the_mechanism(self):
+        _write(self.root, "tests/e2e/foo.spec.ts",
+               "// see @e2e my-spec::foo-does-bar\n" + self._RUNS)
+        live, dead = cec.collect_ref_status(self.root)
+        self.assertEqual(live, set())
+        self.assertIn("PROSE", dead["my-spec::foo-does-bar"])
+        # It must NOT tell the author to unskip a test — there is no test to
+        # unskip, and that remedy is what sent people looking last time.
+        self.assertNotIn("unskip", dead["my-spec::foo-does-bar"])
+
+    # --- accepted: the anchor is a DIRECTIVE -----------------------------
+    def test_a_leading_line_comment_still_counts(self):
+        self.assertIn("my-spec::foo-does-bar", self._refs(
+            "// @e2e my-spec::foo-does-bar\n" + self._RUNS))
+
+    def test_a_jsdoc_star_leader_still_counts(self):
+        self.assertIn("my-spec::foo-does-bar", self._refs(
+            "/**\n * @e2e my-spec::foo-does-bar\n */\n" + self._RUNS))
+
+    def test_an_indented_bullet_leader_still_counts(self):
+        self.assertIn("my-spec::foo-does-bar", self._refs(
+            "//   - @e2e my-spec::foo-does-bar\n" + self._RUNS))
+
+    def test_a_tag_inside_the_argument_list_still_counts(self):
+        # The #244 position — nldesign writes every one of its tests this way.
+        self.assertIn("my-spec::foo-does-bar", self._refs(
+            "test(\n"
+            "    // @e2e my-spec::foo-does-bar\n"
+            "    'real',\n"
+            "    async ({ page }) => { await expect(page).toHaveTitle(/x/) },\n"
+            ")\n"))
+
+    def test_a_tag_inside_the_body_still_counts(self):
+        self.assertIn("my-spec::foo-does-bar", self._refs(
+            "test('real', async ({ page }) => {\n"
+            "  // @e2e my-spec::foo-does-bar\n"
+            "  await expect(page).toHaveTitle(/x/)\n"
+            "})\n"))
+
+    def test_an_anchor_in_the_test_title_counts(self):
+        # Playwright's own tag convention: the anchor is part of the NAME of a
+        # running thing. Documented since this module was written; zero fleet
+        # anchors use it, which is exactly why honouring it is free.
+        self.assertIn("my-spec::foo-does-bar", self._refs(
+            "test('renders the widget @e2e my-spec::foo-does-bar', "
+            "async ({ page }) => { await expect(page).toHaveTitle(/x/) })\n"))
+
+    def test_a_prose_mention_does_not_cancel_a_real_directive(self):
+        # One live reference is enough; the gate reports UNCOVERED, not
+        # "you also wrote about it".
+        self.assertIn("my-spec::foo-does-bar", self._refs(
+            "// historical note: @e2e my-spec::foo-does-bar used to live here\n"
+            "// @e2e my-spec::foo-does-bar\n" + self._RUNS))
+
+
 class SkippedTestIsNotCoverageTest(unittest.TestCase):
     def setUp(self):
         self.root = Path(tempfile.mkdtemp())
@@ -879,12 +991,33 @@ class SkippedTestIsNotCoverageTest(unittest.TestCase):
             "  await expect(page).toHaveTitle(/x/)\n"
             "})\n"))
 
-    def test_a_file_level_tag_with_no_enclosing_test_still_counts(self):
-        # This gate is fixing tests that were switched OFF. It must not
-        # invent a structural requirement it never had.
-        self.assertIn("my-spec::foo-does-bar", self._refs(
+    def test_a_tag_in_a_file_that_declares_no_test_is_not_coverage(self):
+        # REVERSED DELIBERATELY (#358). This used to assert the opposite, on
+        # the grounds that the gate "must not invent a structural requirement
+        # it never had". The requirement is not structural: a spec file with
+        # no `test(` in it runs nothing, so the tag proves nothing, and that
+        # is the one property this gate exists to measure.
+        #
+        # A FILE-HEADER tag does NOT land here and is unaffected: `owner()`
+        # binds it FORWARD to the first declaration in the file. The case
+        # below is a file with no declaration at all.
+        #
+        # Cost measured across the fleet's 16 e2e suites on 2026-08-12: 0 of
+        # 1,918 anchors have no owning declaration, so nothing regresses.
+        self.assertNotIn("my-spec::foo-does-bar", self._refs(
             "// @e2e my-spec::foo-does-bar\n"
             "import { test, expect } from '@playwright/test'\n"))
+
+    def test_a_file_header_tag_above_a_real_test_still_counts(self):
+        # The control for the test above: header binding SURVIVES. Only the
+        # no-declaration case changed.
+        self.assertIn("my-spec::foo-does-bar", self._refs(
+            "/**\n"
+            " * Suite docblock.\n"
+            " * @e2e my-spec::foo-does-bar\n"
+            " */\n"
+            "import { test, expect } from '@playwright/test'\n"
+            "test('real', async ({ page }) => { await expect(page).toHaveTitle(/x/) })\n"))
 
     def test_dead_refs_are_reported_with_a_reason(self):
         _write(self.root, "tests/e2e/foo.spec.ts",
