@@ -18,6 +18,33 @@ coverage; only the location differs. The driver counts these as covered, so:
 The driver reads this file by grepping `^\| *gate-[0-9]+` and extracting the number,
 identically to `UNCOVERED.md`.
 
+## 2026-08-12 — the reconciliation, and why it was needed
+
+Twenty-seven rows were added on 2026-08-12. Every one of those gates was ALREADY
+driven through the real wrapper by a suite in this package, and every one was
+simultaneously listed in `UNCOVERED.md` as `no-fixture-yet · Nothing blocks
+authoring this`. Two registries of proven-ness disagreed with the code, in the
+same direction — both understating coverage — and neither had been cross-checked
+against it. That mis-registration sent two agents to redo finished work.
+
+🔑 **The failure was a search over the wrong store.** Coverage was computed from
+`gate-acceptance/` bundles and from this file; the actual planted arms lived in
+`scripts/lib/test_gate_*.sh`. A sweep of the corpus returns absence for free when
+the evidence is somewhere else — which is the same shape as gate-15 being
+declared unfixturable because no corpus root had a `type:"dashboard"` page.
+
+**So the CLAIM in every row below is: a named suite plants a defect, drives the
+REAL wrapper, and asserts that gate FAILs — and asserts a clean/anti-widening arm
+PASSes.** Each row quotes the assertion that says so, because a suite name alone
+is a label and a quoted assertion is a testable claim. Every quoted line was
+observed in a run of that suite on 2026-08-12; none is inferred from reading the
+suite's source.
+
+⚠️ **Three gates were deliberately NOT moved here** — 12, 41 and 52 have a
+planted arm but no anti-widening arm anywhere, so "planted/clean" would be an
+overclaim. They stay in `UNCOVERED.md` under the `partial-elsewhere` category
+with the missing half named.
+
 | gate | name | suite | fixtures |
 |---|---|---|---|
 | gate-16 | spec-coverage | `test_gate16_spec_coverage_scope.sh` | `test-fixtures/spec-coverage-scope/app` — diff/full scope matrix over a real two-commit history, `.github#361` |
@@ -33,3 +60,30 @@ identically to `UNCOVERED.md`.
 | gate-33 | axe-core | `test_gates_23_33_never_green_over_nothing.sh` | `test-fixtures/gates-23-33/{planted,clean}` |
 | gate-61 | listener-work-placement | `test_gate_scope_matrix.sh` | `test-fixtures/scope-matrix/app` — push / full / diff matrix, `.github#347` |
 | gate-65 | coding-standard-adoption | `test_check_coding_standard_adoption.sh` | scaffolded in-suite — 15 planted single-defect probes (one rule each) plus a negative control that fails if a broadened rule starts matching the compliant scaffold, and a wiring assertion that the checker printed its terminal `checked N rule(s)` summary |
+| gate-1 | spdx-headers | `test_gate_1_11_honest_verdicts.sh` | scaffolded in-suite. Planted: *"gate-1 FAILs its planted true positive (PHP file with no SPDX header)"*. Clean: *"gate-1 PASSes the clean fixture (anti-widening control)"*, plus a residue arm — *"gate-1 returned to PASS after its plant was removed"* |
+| gate-3 | stub-scan | `test_gate_1_11_honest_verdicts.sh` | Planted: *"gate-3 FAILs its planted true positive (caller-identity parameter ignored)"* and *"ARM 5 control: gate-3 FAILS the empty run() body when python3 works"*. Clean + residue arms as gate-1. Second planted arm in `test_gate_a11y_helper_wiring.sh` (*"positive control: gate-3 FAILS on the fixture app"*); near-miss arms in `test_gate_3_bodiless_declaration.sh` (an interface declaration is not a stub) |
+| gate-5 | route-auth | `test_gate_route_auth.sh` | `test-fixtures/route-auth/{unguarded,guarded,apphost,apphost-unguarded,orphan-route,di-registered-generic,prose-exempt,auth-declared}` — planted: *"a routed, attribute-less write still FAILS gate-5 — FAIL — 2 routed methods"* and *"prose-exempt: a docblock naming an attribute is not an attribute → FAIL"*. Clean: *"guarded fixture: same routes with attributes PASS"*, *"apphost fixture: AppHost generics produce NO auth finding"* |
+| gate-8 | unsafe-auth-resolver | `test_gate_1_11_honest_verdicts.sh` | Planted: *"gate-8 FAILs its planted true positive (tab-indented catch(Throwable){return null})"*. Clean + residue arms as gate-1 |
+| gate-10 | initial-state | `test_gate_1_11_honest_verdicts.sh` | Planted: *"gate-10 FAILs its planted true positive (two-step getElementById -> .dataset read)"* plus the `js/`-only arm (*"gate-10 FAILs the js/-only frontend"*, *"gate-10 NAMES js/admin.js"*). Anti-widening: *"gate-10 leaves \*.min.js alone"* |
+| gate-11 | admin-router | `test_gate_1_11_honest_verdicts.sh` | Planted: *"gate-11 FAILs its planted true positive (doriath /settings -> AdminRoot in src/main.js)"* — the DEAD-GATE case, since fourteen of fifteen fleet apps build their router there. Clean + residue arms as gate-1 |
+| gate-13 | modal-isolation | `test_gate_13_multiline_dialog.sh` | scaffolded in-suite — planted: *"a multi-line-opened `<NcDialog>` in a parent component → FAIL"*, *"a multi-line-opened `<NcModal>` → FAIL"*, *"the single-line form is still caught → FAIL"*. Clean: *"`<NcDialogHeader>` / `<NcModalFooter>` are NOT dialogs → PASS"*, *"a commented-out dialog, plus a https:// URL → PASS"*, *"a dialog under src/dialogs/, used by import → PASS"* |
+| gate-14 | route-reachability | `test_gate_fq_route_names.sh` + `test_gate_route_auth.sh` | `test-fixtures/fq-route-names/{fq-bound,fq-unbound}` and `route-auth/{orphan-route,apphost-unguarded,di-registered-generic}` — planted: *"an UNBOUND fully-qualified route is still raised — FAIL — 2 unrouted methods"*, *"orphan-route: gate-14 DOES raise the unreachable route"* (both invariants: `controller-class-not-found` AND the missing-method shape). Clean: *"fq-bound: DI-bound fully-qualified routes are not reachability findings → PASS"* |
+| gate-17 | redundant-controller | `test_gate_or_objectservice_surface.sh` | scaffolded in-suite — planted: *"gate-17 FAILS on a CRUD-named pass-through written against the REAL ObjectService API"* + *"gate-17 NAMES fetchAll"*. Anti-widening: *"gate-17 does NOT flag the identically-bodied domain-named sibling"*. Wiring: the checker's terminal `# count=` marker is asserted |
+| gate-20 | or-objectservice-api | `test_gate_20_comment_masking.sh` + `test_gate_or_objectservice_surface.sh` | scaffolded in-suite — planted: *"a real `$objectService->findObject()` call → FAIL"*, *"a call under a #[NoAdminRequired] attribute is still found → FAIL"*, *"gate-20 FAILS on a fabricated ObjectService method (was PASS for the gate's entire life)"*. Clean: *"//, # and /\* \*/ commented-out calls → PASS"*, *"`$this->schemaMapper->createFromArray()` is a different class → PASS"* |
+| gate-34 | window-confirm | `test_gate_a11y_markup_scope.sh` | `_tmp/{bad,good,vue}` scaffolded in-suite — planted: *"all 12 accessibility gates caught their planted true positive in a PHP template"* (gate-34's subject: a `window.confirm` in an inline script), repeated with NO `src/` directory at all. Clean: *"a CLEAN PHP template raises no accessibility finding"* |
+| gate-37 | aria-hidden-focusable | `test_gate_a11y_markup_scope.sh` | same 12-gate planted/clean pair; gate-37's subject is `aria-hidden=true` on a focusable element. Second planted arm in `test_gate_a11y_helper_wiring.sh` |
+| gate-38 | skip-link | `test_gate_monitoring_and_skiplink.sh` | `test-fixtures/monitoring-skiplink/{stated,accidental}` — planted: *"accidental: a bespoke shell with no skip link is still reported — FAIL — 2 page roots"* + *"gate-38 names the root component"*. Clean: *"stated: a CnAppRoot shell counts as having NC's skip link → PASS"* + *"gate-38 log is empty"*. Also a MISSING and a CRASHING classifier arm, each asserting `SKIPPED (wiring)` rather than PASS |
+| gate-39 | button-name | `test_gate_a11y_markup_scope.sh` | same 12-gate planted/clean pair; subject: an icon-only button with no accessible name. Second planted arm in `test_gate_a11y_helper_wiring.sh` |
+| gate-40 | form-label-association | `test_gate_a11y_markup_scope.sh` | same 12-gate planted/clean pair; subject: an input with no associated label. Second planted arm in `test_gate_a11y_helper_wiring.sh` |
+| gate-42 | link-text-quality | `test_gate_a11y_markup_scope.sh` | same 12-gate planted/clean pair; subject: non-descriptive link text. Second planted arm in `test_gate_a11y_helper_wiring.sh` |
+| gate-43 | table-headers | `test_gate_a11y_markup_scope.sh` | same 12-gate planted/clean pair; subject: a table with no `th scope`. Second planted arm in `test_gate_a11y_helper_wiring.sh` |
+| gate-44 | autocomplete-attr | `test_gate_a11y_markup_scope.sh` | same 12-gate planted/clean pair; subject: a semantic input with no `autocomplete`. Second planted arm in `test_gate_a11y_helper_wiring.sh` |
+| gate-45 | prefers-reduced-motion | `test_gate_45_stylesheet_scope.sh` + `test_gate_45_to_55_acceptance.sh` + `test_gate_a11y_markup_scope.sh` | planted: *"a css/ stylesheet with motion and no guard → FAIL"*, *"a `<style>` block with unguarded motion is still a FAIL"*, *"gate-45 sees a `<style>` transition in a PHP template with no src/ → FAIL"*. Clean: *"gate-45 accepts a template that ships the fallback → PASS"*, and a universal-`*`-reset control (*"without the reset, that file is a finding"*) |
+| gate-46 | spec-anchor-existence | `test_gate_46_tests_scope.sh` | scaffolded in-suite — planted: *"a dangling #T14 anchor in tests/ → FAIL"* + *"the finding NAMES the test file"*, *"a target file that never existed, tagged in tests/ → FAIL"* classified as `target file not found`, *"a dangling anchor in lib/ is still a FAIL"*. Clean: *"a REAL #T02 anchor, resolved through the date-prefixed archive → PASS"* |
+| gate-50 | security-config-fail-mode | `test_gate_45_to_55_acceptance.sh` | thirteen scaffolded arms — planted: an unguarded read whose app id is a class constant, one whose id is a literal, a multi-line read with no guard, the opencatalogi#86 `$this->appName` shape, and an arrow closure's `=>`. Clean: a compound `if ($a === '' \|\| $b === '')` guard, a boolean-return guard, a PHPCS-formatted multi-line read, an on-line emptiness check, a variable app id, and the array-literal value position (demotion asserted by `wc -c` on the `.notes` sidecar, so "demoted" is distinguishable from "never looked") |
+| gate-53 | effective-manifest-crossref | `test_gate_45_to_55_acceptance.sh` | `test-fixtures/effective-manifest` driven through the wrapper — planted: *"gate-53 blocks the PR that removes the last reference to a registered component → FAIL"* + *"gate-53 NAMES the orphaned component"*. Clean: *"accepts removing the component and its registry entry together → PASS"*, *"leaves a PRE-EXISTING orphan advisory (WARN), not blocking → PASS"*. ⚠️ the suite PREFLIGHTS ajv and aborts rather than reporting a wiring fault as a gate defect |
+| gate-56 | register-handler-resolution | `test_gate_5661_empty_scope_is_not_a_pass.sh` | scaffolded in-suite over a real two-commit history — clean: *"gate-56 opened its in-scope subject and PASSed"*. Planted (a `guard` class that does not exist): *"gate-56 FAILs its planted true positive when the diff touches it"* |
+| gate-57 | orphaned-write-capability | `test_gate_5661_empty_scope_is_not_a_pass.sh` | same rig — clean arm, then a NEW write capability with no caller anywhere: *"gate-57 FAILs its planted true positive when the diff touches it"* |
+| gate-58 | e2e-networkidle | `test_gate_5661_empty_scope_is_not_a_pass.sh` | same rig — clean arm, then a `page.waitForLoadState('networkidle')`: *"gate-58 FAILs its planted true positive when the diff touches it"*. Second planted arm in `test_gate_a11y_helper_wiring.sh` |
+| gate-59 | unclosable-gate | `test_gate_5661_empty_scope_is_not_a_pass.sh` | same rig — clean arm, the diff-scoped planted arm, AND the arm that discriminates: *"gate-59 CATCHES the violation on an unscoped full-tree audit"*, the one mode this gate could not reach before `.github#276` |
+| gate-60 | icon-vocabulary | `test_gate_5661_empty_scope_is_not_a_pass.sh` | same rig — clean arm, then an MDI name that exists nowhere: *"gate-60 FAILs its planted true positive when the diff touches it"* |
