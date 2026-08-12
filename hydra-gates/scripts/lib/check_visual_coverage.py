@@ -82,6 +82,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from exclusion_reason import exclude_pattern, is_reason_bearing  # noqa: E402
 from source_scope import js_comment_mask  # noqa: E402
 
 GATE_NUM = 26
@@ -94,9 +95,11 @@ EXIT_EMPTY_SCOPE = 3
 
 _PAGE_DIRS = ("src/views/", "src/pages/")
 
-_VISUAL_EXCLUDE_RE = re.compile(
-    r"@visual\s+exclude\b[ \t]*(?P<reason>.*?)\s*$", re.MULTILINE
-)
+# What counts as a <reason> is decided by exclusion_reason.is_reason_bearing(),
+# shared with gates 16, 19 and 25 — all four graded it with plain truthiness, so
+# `@visual exclude .` was a reason (.github#400). MULTILINE stays here: this is
+# the only one of the four that searches whole-file text rather than one line.
+_VISUAL_EXCLUDE_RE = re.compile(exclude_pattern("visual"), re.MULTILINE)
 
 
 # ---------------------------------------------------------------------------
@@ -407,7 +410,9 @@ def _visual_exclude_status(vue_text: str) -> tuple[bool, str | None]:
     for close in ("-->", "*/"):
         if reason.endswith(close):
             reason = reason[: -len(close)].strip()
-    return (True, reason if reason else None)
+    # `reason if reason else None` was .github#400. The normalisation above is
+    # Vue-specific and stays local; only the VERDICT is shared.
+    return (True, reason if is_reason_bearing(reason) else None)
 
 
 def _e2e_corpus(app_dir: Path, visual_only: bool) -> str:

@@ -76,11 +76,20 @@ import sys
 from difflib import SequenceMatcher
 from pathlib import Path
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from exclusion_reason import exclude_pattern, is_reason_bearing  # noqa: E402
+
 SPEC_RE = re.compile(r"@spec\s+openspec/")
 # `@spec exclude <reason>` — intentional, reason-required non-coverage marker.
 # A bare `@spec exclude` (no reason) is NOT compliant — it would let a method
 # silently hide a gap, so it is flagged like a missing @spec.
-SPEC_EXCLUDE_RE = re.compile(r"@spec\s+exclude\b[ \t]*(?P<reason>.*?)\s*$")
+#
+# NEITHER IS `@spec exclude .` (.github#400). The marker used to be graded by
+# `if reason:` — plain truthiness — so any non-empty string counted, and a
+# single full stop was the whole difference between a blocked PR and a green
+# one. The rule now lives in exclusion_reason.is_reason_bearing(), shared with
+# gates 19, 25 and 26, which had the identical defect.
+SPEC_EXCLUDE_RE = re.compile(exclude_pattern("spec"))
 
 # ---- backend ---------------------------------------------------------------
 
@@ -440,8 +449,8 @@ def spec_tags_removed(base_ref: str, cwd: Path) -> set[str]:
 def _docblock_spec_status(lines: list[str], decl_idx: int) -> tuple[str, str | None]:
     """Classify the docblock immediately above ``decl_idx`` into one of:
       - ``("covered", None)``        — has ``@spec openspec/...``
-      - ``("excluded", reason)``     — has ``@spec exclude <reason>`` (reason non-empty)
-      - ``("exclude_noreason", None)`` — has a bare ``@spec exclude`` with no reason
+      - ``("excluded", reason)``     — has ``@spec exclude <reason>`` (reason-bearing)
+      - ``("exclude_noreason", None)`` — has ``@spec exclude`` with no usable reason
       - ``("none", None)``           — neither (an uncovered gap)
     """
     block = _docblock_block(lines, decl_idx)
@@ -451,7 +460,12 @@ def _docblock_spec_status(lines: list[str], decl_idx: int) -> tuple[str, str | N
         m = SPEC_EXCLUDE_RE.search(b)
         if m:
             reason = m.group("reason").strip().rstrip("*/").strip()
-            return ("excluded", reason) if reason else ("exclude_noreason", None)
+            # `if reason:` here was .github#400 — "." is a non-empty string, so
+            # it was truthy, so it was a reason. The normalisation above stays
+            # local (PHP docblocks close with `*/`); only the VERDICT is shared.
+            if is_reason_bearing(reason):
+                return ("excluded", reason)
+            return ("exclude_noreason", None)
     return ("none", None)
 
 
