@@ -25,8 +25,11 @@ Documented exception (matching the gate-16/19 ``exclude``-reason convention):
 a comment carrying ``@custom-widget-ratchet exclude <reason>`` inside the
 entry object — or on one of the three lines directly above it — removes that
 ADDED/MODIFIED entry from the head count, so a justified one-off can grow the
-total. A bare marker without a reason does not count. The ``_note`` is still
-required either way.
+total. A bare marker without a reason does not count, and neither does a
+punctuation-only one: the reason is graded by the shared
+``exclusion_reason.is_reason_bearing()`` (``.github#412``; before that this
+gate asked only for ``\\S+``, which a full stop satisfies — ``.github#400``
+under a different tag). The ``_note`` is still required either way.
 
 Usage:
     check_custom_widget_ratchet.py <src-file> [<src-file> ...]
@@ -80,6 +83,9 @@ import subprocess
 import sys
 from bisect import bisect_right
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from exclusion_reason import exclude_pattern, is_reason_bearing  # noqa: E402
+
 BUILTIN_WIDGET_KEYS = {
     "object-table",
     "card-grid",
@@ -110,7 +116,46 @@ _KIND_WIDGET_RE = re.compile(r"\bkind\s*:\s*(['\"])widget\1")
 
 # The <reason> must be on the same line as the marker — a bare `exclude`
 # followed by a newline (i.e. no reason) does not count.
-_EXCLUDE_RE = re.compile(r"@custom-widget-ratchet[ \t]+exclude[ \t]+\S+")
+#
+# `\S+` WAS NOT A REASON TEST (.github#412)
+# -----------------------------------------
+# It asked only "is there a non-whitespace character after the marker", which a
+# single full stop satisfies. That is `.github#400` under a different tag: the
+# four coverage gates asked the same question with `if reason:` and `.` walked
+# through all four. The reason is now CAPTURED and graded by the shared
+# `exclusion_reason.is_reason_bearing()`, so this tag and those four cannot
+# disagree about what a justification is.
+#
+# re.MULTILINE is load-bearing and preserves the same-line rule stated above:
+# `.` never matches a newline, so `(?P<reason>.*?)\s*$` cannot reach past the
+# marker's own line, and `$` needs MULTILINE to mean "end of THIS line" in a
+# multi-line registry-entry window. Without it the marker would only be
+# recognised at the very end of the window.
+_EXCLUDE_RE = re.compile(exclude_pattern("custom-widget-ratchet"), re.MULTILINE)
+
+# Comment closers that can sit on the marker's own line in a JS/TS/Vue registry
+# — the same normalisation gate-26 applies to Vue text, kept LOCAL here for the
+# reason `#411` recorded: normalisation is a property of the file type, only the
+# VERDICT is shared.
+_COMMENT_CLOSERS = ("-->", "*/")
+
+
+def _has_reason_bearing_exclude(window: str) -> bool:
+    """True when ``window`` carries a `@custom-widget-ratchet exclude` marker
+    WITH a usable reason.
+
+    First match wins, as in all seven exclusion call sites: a window whose first
+    marker is bare is not rescued by a better one further down.
+    """
+    m = _EXCLUDE_RE.search(window)
+    if not m:
+        return False
+    reason = m.group("reason").strip()
+    for close in _COMMENT_CLOSERS:
+        if reason.endswith(close):
+            reason = reason[: -len(close)].strip()
+    return is_reason_bearing(reason)
+
 
 # Registry key preceding the entry's `{`, comment-stripped tail match:
 #   registry['key'] =   |  registry["key"] =  |  'key':  |  "key":
@@ -278,7 +323,7 @@ def parse_entries(text):
         # The documented exception marker may sit inside the entry object or
         # on one of the three lines directly above it.
         ext_start = line_starts[max(0, line_of(open_pos) - 1 - 3)]
-        has_exclude = bool(_EXCLUDE_RE.search(text[ext_start:close_pos + 1]))
+        has_exclude = _has_reason_bearing_exclude(text[ext_start:close_pos + 1])
         entries.append(
             Entry(
                 key=key,

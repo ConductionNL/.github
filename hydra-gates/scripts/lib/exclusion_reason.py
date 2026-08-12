@@ -4,13 +4,25 @@
 
 WHY THIS FILE EXISTS (.github#400)
 ==================================
-Four gates let a change opt out of coverage by writing a reason next to the
+Seven gates let a change opt out of coverage by writing a reason next to the
 marker::
 
     @spec     exclude <reason>     gate-16  spec-coverage
     @e2e      exclude <reason>     gate-19  e2e-coverage      (scenario, requirement AND whole-spec)
     @contract exclude <reason>     gate-25  contract-coverage
     @visual   exclude <reason>     gate-26  visual-coverage
+
+    @spec     exclude <reason>     gate-17  redundant-controller       (.github#412)
+    @custom-widget-ratchet exclude <reason>
+                                   gate-52  custom-widget-ratchet      (.github#412)
+    @orphaned-write-capability exclude <reason>
+                                   gate-57  orphaned-write-capability  (.github#412)
+
+The first four were repaired by `#411`; the second three by `#412`, and the
+worst of those was gate-17: it reads the SAME `@spec exclude` tag as gate-16 but
+honoured a BARE marker with no reason at all, so an annotation gate-16 refused
+still silenced gate-17. Two gates disagreeing about whether one annotation is
+valid is worse than either being wrong on its own.
 
 All four captured the reason with the same regex and then asked the same
 question about it — ``if reason:`` — which is Python truthiness, i.e. "is this
@@ -90,15 +102,18 @@ _ALNUM_RE = re.compile(r"[^\W_]", re.UNICODE)
 # knowing before anyone "harmonises" it:
 #
 #   run-hydra-gates.sh gate-level opt-outs  `.{20,}`   20 chars
-#   check_orphaned_write_capability.py      `.{10,}`   10 chars
-#   these four gates, before .github#400    (any non-empty string)
+#   check_orphaned_write_capability.py      `.{10,}`   10 chars  (gate-57)
+#   the four #400 gates, before that fix    (any non-empty string)
+#   gate-17, before .github#412             (NO reason required at all)
+#   gate-52, before .github#412             (any non-whitespace character)
 #
 # A gate-level opt-out written in a PR body waives an ENTIRE gate, so a high bar
-# there is proportionate. These four markers are per-method and per-scenario and
+# there is proportionate. The per-marker tags are per-method and per-scenario and
 # are used ~11,600 times across the fleet; they are a different act. Raising
 # their bar from "any character" to 10 would be a POLICY change about how the
 # fleet writes exclusions, not a bug fix, and it does not belong in the repair
-# of #400. It is filed as a question for a human rather than decided here.
+# of #400 or #412. It is filed as a question for a human rather than decided
+# here — see the "threshold question" section of .github#412.
 #
 # So: 3, which is far enough below the data to have margin (the lowest reason
 # length a checker actually credits is 10), and low enough that it is plainly a
@@ -110,7 +125,7 @@ _ALNUM_RE = re.compile(r"[^\W_]", re.UNICODE)
 REASON_MIN_CHARS = 3
 
 
-def is_reason_bearing(reason: str | None) -> bool:
+def is_reason_bearing(reason: str | None, *, min_chars: int | None = None) -> bool:
     """Does ``reason`` count as a justification for an exclusion marker?
 
     ``reason`` is the text already normalised by the caller (each checker strips
@@ -119,29 +134,50 @@ def is_reason_bearing(reason: str | None) -> bool:
     normalisation stays with the caller and only the VERDICT is shared).
 
     Returns ``True`` only when the reason has at least one letter or digit and
-    is at least :data:`REASON_MIN_CHARS` characters long.
+    is at least ``min_chars`` characters long, defaulting to
+    :data:`REASON_MIN_CHARS`.
 
-    This replaces a bare ``if reason:`` truthiness test in four checkers, under
-    which every non-empty string — including ``.`` — was a reason (`#400`).
+    WHY ``min_chars`` IS A PARAMETER AND NOT A CONSTANT
+    ---------------------------------------------------
+    Because the package genuinely disagrees with itself about the floor (see the
+    table above) and that disagreement is NOT this module's to settle. gate-57
+    has demanded 10 characters since it was written; `#412` aligned it on the
+    ALPHABET rule — the half it was missing — while deliberately leaving its
+    floor where its author put it. Collapsing it to 3 would have been a silent
+    relaxation of a live bar, smuggled in beside a tightening; hard-coding 10 for
+    everyone would have been a silent fleet policy change in the other direction.
+
+    So the LETTER-OR-DIGIT rule is universal and shared, and the floor is stated
+    per tag at the call site where a reader can see which number applies. Passing
+    the floor explicitly also keeps every caller's choice greppable: the answer
+    to "what does gate-57 demand" is at gate-57, not inferred from a default.
+
+    This replaces a bare ``if reason:`` truthiness test in the four `#400`
+    checkers — under which every non-empty string, including ``.``, was a reason
+    — and, in `#412`, a no-reason-at-all test in gate-17, a bare ``\\S+`` in
+    gate-52 and an alphabet-free ``.{10,}`` in gate-57.
     """
+    floor = REASON_MIN_CHARS if min_chars is None else min_chars
     if not reason:
         return False
-    if len(reason) < REASON_MIN_CHARS:
+    if len(reason) < floor:
         return False
     return _ALNUM_RE.search(reason) is not None
 
 
-def why_rejected(reason: str | None) -> str:
+def why_rejected(reason: str | None, *, min_chars: int | None = None) -> str:
     """A short, human-facing explanation for use in a gate finding.
 
     Kept beside the predicate so the message cannot drift out of step with the
-    rule it describes.
+    rule it describes — including the per-tag floor, which the message must
+    quote correctly or it sends the author to pad to the wrong number.
     """
+    floor = REASON_MIN_CHARS if min_chars is None else min_chars
     if not reason:
         return "no reason given"
-    if len(reason) < REASON_MIN_CHARS:
+    if len(reason) < floor:
         return (
-            f"reason {reason!r} is shorter than {REASON_MIN_CHARS} characters — "
+            f"reason {reason!r} is shorter than {floor} characters — "
             f"too short to name anything"
         )
     if _ALNUM_RE.search(reason) is None:

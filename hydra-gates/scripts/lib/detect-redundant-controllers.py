@@ -40,15 +40,25 @@ written as the last line, prefixed with `# count=`, for easy parsing.
 
 Optional `--changed-files=<newline-separated-paths>` filters the scan to
 those paths only — used in PR-scoped runs (Phase G).
+
+Opt-out: a docblock `@spec exclude <reason>` on the method. The reason is
+REQUIRED and is graded by the shared `exclusion_reason.is_reason_bearing()`,
+the same predicate gate-16 spec-coverage applies to the same tag. Until
+`.github#412` this gate required no reason at all, so a marker gate-16 refused
+still silenced this one — see the note above SPEC_EXCLUDE_RE.
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import sys
 from pathlib import Path
 from typing import Iterable
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from exclusion_reason import exclude_pattern, is_reason_bearing  # noqa: E402
 
 # Methods on OpenRegister's ObjectService that are pure CRUD pass-throughs.
 # A method body that calls ONE of these and nothing else of substance is
@@ -189,7 +199,42 @@ CRUD_NAME_RE = re.compile(
 # ANY `$this->*Service->` call (incl. legitimate domain services like
 # `applicationService`, and the deliberate ObjectServiceMapperAdapter facade),
 # so this annotation is how authors declare a flagged pass-through is by design.
-SPEC_EXCLUDE_RE = re.compile(r"@spec\s+exclude\b")
+#
+# THE REASON IS PART OF THE MARKER, AND THIS GATE USED TO IGNORE IT (.github#412)
+# ------------------------------------------------------------------------------
+# The pattern here was `@spec\s+exclude\b`: no reason was captured and none was
+# required, so a BARE `@spec exclude` silenced this gate. That is worse than the
+# `#400` defect it sits next to, because this gate reads the SAME TAG as gate-16.
+# After `#411`, gate-16 refuses both a bare marker and `@spec exclude .` — while
+# this gate went on honouring both. An author blocked by one gate could waive the
+# other with the identical keystrokes, and the two gates' disagreement about the
+# validity of one annotation was invisible from either side.
+#
+# Both the pattern and the verdict now come from exclusion_reason, the same
+# module gate-16 uses, so the two CANNOT drift apart again. re.MULTILINE because
+# this is matched against a whole docblock, not line by line as gate-16 does it:
+# the reason must end at ITS OWN line's end, not at the end of the block.
+SPEC_EXCLUDE_RE = re.compile(exclude_pattern("spec"), re.MULTILINE)
+
+
+def _has_reason_bearing_spec_exclude(docblock: str) -> bool:
+    """True when ``docblock`` carries a `@spec exclude` marker WITH a reason.
+
+    First match wins, exactly as gate-16's `_docblock_spec_status` decides it —
+    a docblock whose first marker is bare is not rescued by a second, better one
+    further down. Two gates reading one tag must agree about which marker
+    speaks for the method.
+
+    The trailing-`*/` strip is gate-16's local normalisation for PHP docblocks
+    and is repeated here rather than shared, for the reason `#411` recorded:
+    normalisation differs legitimately per file type, and only the VERDICT is
+    common. Both callers read PHP, so both strip the same thing.
+    """
+    m = SPEC_EXCLUDE_RE.search(docblock)
+    if not m:
+        return False
+    reason = m.group("reason").strip().rstrip("*/").strip()
+    return is_reason_bearing(reason)
 
 
 def _split_methods(php_source: str):
@@ -407,9 +452,11 @@ def scan_files(
             # body shape, and must not be flagged.
             if not CRUD_NAME_RE.match(method_name):
                 continue
-            # Honour an explicit `@spec exclude` docblock — intentional
-            # facade/adapter plumbing the author has declared out of scope.
-            if SPEC_EXCLUDE_RE.search(_method_docblock(src_lines, line_no)):
+            # Honour an explicit `@spec exclude <reason>` docblock — intentional
+            # facade/adapter plumbing the author has declared out of scope. A
+            # marker with no usable reason is NOT honoured (.github#412): it
+            # would let this gate be waived by an annotation gate-16 refuses.
+            if _has_reason_bearing_spec_exclude(_method_docblock(src_lines, line_no)):
                 continue
             if _is_redundant_body(body):
                 findings.append(

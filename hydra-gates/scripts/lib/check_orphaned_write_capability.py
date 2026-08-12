@@ -54,9 +54,13 @@ Prints one finding per line:
 Always exits 0 — the calling gate (bash) counts the printed lines.
 
 Suppression: a docblock ``@orphaned-write-capability exclude <reason>``
-(reason >= 10 chars) immediately preceding the method declaration
-suppresses that one method. Mirrors the fleet's
-``@spec exclude <reason>`` / ``@e2e exclude <reason>`` convention.
+immediately preceding the method declaration suppresses that one method.
+Mirrors the fleet's ``@spec exclude <reason>`` / ``@e2e exclude <reason>``
+convention. The reason must be at least :data:`REASON_MIN_CHARS` characters —
+this tag's own, deliberately higher floor — AND carry a letter or digit, the
+rule shared with every other exclusion tag via
+``exclusion_reason.is_reason_bearing()``. Before ``.github#412`` only the
+length half existed, so ``..........`` was a reason here.
 """
 
 from __future__ import annotations
@@ -65,6 +69,9 @@ import os
 import re
 import subprocess
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from exclusion_reason import exclude_pattern, is_reason_bearing  # noqa: E402
 
 # Foundation repos: the abstractions every leaf app consumes (ADR-022,
 # apps-consume-or-abstractions). A PUBLIC method here is frequently invoked
@@ -269,8 +276,34 @@ _MCP_TOOL_ATTR_RE = re.compile(
 # directly above a method's attribute block — the previous method's `}`, a
 # property or `use` `;`, the class's opening `{` — ends in one of these.
 _ATTR_BOUNDARY_RE = re.compile(r"[{};]\s*$")
+# THIS TAG'S OWN FLOOR, KEPT DELIBERATELY (.github#412)
+# ------------------------------------------------------
+# Ten characters is what this gate's author chose and it has been live since the
+# gate was written. `#412` aligned this tag on the shared LETTER-OR-DIGIT rule —
+# the half it never had, under which `..........` was a reason — and left the
+# floor alone. Collapsing it to the shared default of 3 would have been a silent
+# RELAXATION of a live bar smuggled in beside a tightening; raising the other
+# tags to 10 would have been a silent fleet policy change in the other direction.
+# Both were measured to be free today, which is exactly why the choice belongs to
+# a human and not to this patch. See the threshold question in .github#412.
+REASON_MIN_CHARS = 10
+
+# `.{10,}` GRADED LENGTH AND NOTHING ELSE (.github#412)
+# -----------------------------------------------------
+# It is the inverse of `#400`'s hole: those four gates had no floor and no
+# alphabet rule; this one had a floor and no alphabet rule, so ten full stops
+# were a justification.
+#
+# A SECOND, UNREPORTED HOLE IN THE SAME PATTERN: the old separator between the
+# marker and the reason was `\s+`, and `\s` matches a NEWLINE. So a marker with
+# no reason at all on its own line silently borrowed the docblock CONTINUATION
+# LINE beneath it — `* Wired up in a later PR` — as its justification. That is
+# the shillinq continuation-line shape from `#400`, except reachable: nothing
+# here breaks on a first match. `exclude_pattern()` separates with `[ \t]*` and
+# terminates at `$`, so the reason must be on the marker's own line, and the
+# pattern is now the same one the other six exclusion tags use.
 _EXCLUDE_RE = re.compile(
-    r"@orphaned-write-capability\s+exclude\s+(?P<reason>.{10,})"
+    exclude_pattern("orphaned-write-capability"), re.MULTILINE
 )
 
 
@@ -340,7 +373,14 @@ def _preceding_docblock_has_exclude(lines: list[str], method_line_idx: int) -> b
             break
         i -= 1
     text = "\n".join(reversed(block))
-    return bool(_EXCLUDE_RE.search(text))
+    m = _EXCLUDE_RE.search(text)
+    if not m:
+        return False
+    # Trailing `*/` is PHP-docblock syntax, not part of the reason. Local, as
+    # `#411` established: normalisation belongs to the file type, the VERDICT is
+    # shared. First match wins, as at every other exclusion call site.
+    reason = m.group("reason").strip().rstrip("*/").strip()
+    return is_reason_bearing(reason, min_chars=REASON_MIN_CHARS)
 
 
 # ---------------------------------------------------------------------------
