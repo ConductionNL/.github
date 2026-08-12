@@ -36,7 +36,7 @@
 
     <!-- Surface warnings (e.g. SpecTagSniff) in the log without failing the build.
          The shared quality workflow ALSO maps phpcs exit 1 to success, so this is
-         belt and braces; do not add `--warning-severity=0` to the composer script,
+         belt and braces; do not add a `warning-severity=0` flag to the composer script,
          which suppresses the reporting as well and makes the warnings invisible. -->
     <config name="ignore_warnings_on_exit" value="1"/>
 
