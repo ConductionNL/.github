@@ -608,6 +608,30 @@ jobs:
     runs-on: ubuntu-latest
     name: "Nextcloud API check (app:check-code)"
     timeout-minutes: 20
+  # ── appinfo/info.xml, validated against the App Store's own schema ─────
+  #
+  # Nextcloud ships `lint-info-xml.yml` as a workflow template and every
+  # upstream app runs it. This fleet ran no equivalent: `quality.yml` did not
+  # reference appinfo/info.xml anywhere, so a malformed manifest was discovered
+  # at App Store upload time — after the release had been built, tagged and
+  # published to GitHub.
+  #
+  # That matters more now than it did last week. The release path reads
+  # info.xml for two things it cannot get wrong: the version the tag must match,
+  # and the Nextcloud version whose `occ` signs the package. A file that does
+  # not validate can still parse well enough for a grep to return something
+  # plausible — which is exactly how an unanchored min-version pattern resolved
+  # `8` from `<php min-version="8.3"/>` in 13 apps.
+  #
+  # The schema is fetched from nextcloud/appstore rather than vendored, because
+  # a vendored copy is a claim about what the App Store accepts that goes stale
+  # silently. If the fetch fails the job FAILS — a validator that cannot get its
+  # schema has validated nothing, and saying so is the whole point.
+  info-xml:
+    if: ${{ inputs.enable-php }}
+    runs-on: ubuntu-latest
+    name: "info.xml lint"
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -714,17 +738,65 @@ jobs:
         if: steps.lint.outcome == 'failure' && !inputs.reuse-blocking
         run: |
           echo "::warning::REUSE reported findings. Not blocking yet — set reuse-blocking: true once this app ships a REUSE.toml and a LICENSES/ directory."
+          sparse-checkout: appinfo/
+
+      - name: Is there an info.xml to lint?
+        id: detect
+        run: |
+          if [ -f appinfo/info.xml ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No appinfo/info.xml — this repo is not a Nextcloud app."
+          fi
+
+      - name: Install xmllint
+        if: steps.detect.outputs.run == 'true'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libxml2-utils
+
+      - name: Fetch the App Store schema
+        if: steps.detect.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          curl -sSfL -o info.xsd \
+            https://raw.githubusercontent.com/nextcloud/appstore/master/nextcloudappstore/api/v1/release/info.xsd
+          # A 200 that returned an error page is not a schema. Assert the shape
+          # before trusting a validation result produced with it.
+          head -1 info.xsd | grep -q '<?xml' || { echo "::error::The fetched info.xsd is not XML — validating against it would prove nothing."; exit 1; }
+          grep -q 'schema' info.xsd || { echo "::error::The fetched info.xsd contains no schema element."; exit 1; }
+
+      - name: Validate appinfo/info.xml
+        if: steps.detect.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          xmllint --noout --schema info.xsd appinfo/info.xml
+
+      # The two values the release path reads out of this file. Validity alone
+      # does not mean they are present, and their absence surfaces at release
+      # time — long after this PR merged.
+      - name: Assert the release-critical fields exist
+        if: steps.detect.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          grep -qoP '<version>[^<]+</version>' appinfo/info.xml \
+            || { echo "::error::appinfo/info.xml declares no <version>. The release tag has nothing to match against."; exit 1; }
+          grep -qoP '<nextcloud[^>]*min-version="[0-9]+"' appinfo/info.xml \
+            || { echo "::error::appinfo/info.xml declares no <nextcloud min-version>. The release cannot resolve which server to sign with."; exit 1; }
+          echo "version:     $(grep -oP '(?<=<version>)[^<]+' appinfo/info.xml | head -1)"
+          echo "nextcloud:   $(grep -oP '<nextcloud[^>]*' appinfo/info.xml | head -1)"
 
       - name: Record result
         if: always()
         run: |
           mkdir -p quality-results
           echo "${{ steps.lint.outcome }}" > quality-results/reuse.txt
+          echo "${{ job.status }}" > quality-results/info-xml.txt
       - name: Upload result
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: result-reuse
+          name: result-info-xml
           path: quality-results/
 
   # ── Group 2: Vue Quality ────────────────────────
