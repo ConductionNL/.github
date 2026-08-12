@@ -1,0 +1,62 @@
+{
+    "name": "planefx",
+    "menu": [
+        {
+            "id": "storeNav",
+            "label": "Store",
+            "icon": "StoreOutline",
+            "route": "storePage"
+        },
+        {
+            "id": "catalogNav",
+            "label": "Catalog",
+            "icon": "Bookshelf",
+            "route": "catalogPage"
+        },
+        {
+            "id": "templatesNav",
+            "label": "Templates",
+            "icon": "FileReplaceOutline",
+            "route": "templatePage"
+        },
+        {
+            "id": "settingsNav",
+            "label": "Appearance",
+            "section": "settings",
+            "icon": "CogOutline",
+            "route": "appearance"
+        }
+    ],
+    "pages": [
+        {
+            "id": "storePage",
+            "type": "index",
+            "component": "StorePage",
+            "config": {
+                "storeRegistry": true
+            }
+        },
+        {
+            "id": "catalogPage",
+            "type": "index",
+            "component": "CatalogPage",
+            "config": {
+                "schema": "publication"
+            }
+        },
+        {
+            "id": "templatePage",
+            "type": "index",
+            "component": "TemplatePage",
+            "config": {
+                "schema": "template"
+            }
+        },
+        {
+            "id": "appearance",
+            "type": "settings",
+            "title": "Appearance",
+            "component": "SettingsPage"
+        }
+    ]
+}

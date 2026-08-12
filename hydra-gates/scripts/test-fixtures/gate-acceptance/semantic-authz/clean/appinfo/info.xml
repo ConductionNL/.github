@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<id>semauthzfx</id>
+	<name>Semantic Authz Fixture</name>
+	<summary>Fixture app for gate-6 and gate-9 acceptance. Not a real app.</summary>
+	<description>Exists so the gate suite can drive a planted authorisation defect through the real wrapper.</description>
+	<version>1.0.0</version>
+	<licence>agpl</licence>
+	<author>Conduction</author>
+	<namespace>SemAuthzFx</namespace>
+	<category>tools</category>
+	<dependencies><nextcloud min-version="30" max-version="32"/></dependencies>
+</info>

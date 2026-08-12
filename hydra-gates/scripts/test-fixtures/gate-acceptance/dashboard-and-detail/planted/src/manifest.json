@@ -1,0 +1,67 @@
+{
+    "name": "dashfx",
+    "menu": [
+        {
+            "id": "homeNav",
+            "label": "Home",
+            "icon": "HomeOutline",
+            "route": "home"
+        },
+        {
+            "id": "thingsNav",
+            "label": "Things",
+            "icon": "FormatListBulletedSquare",
+            "route": "thingDetail"
+        }
+    ],
+    "pages": [
+        {
+            "id": "home",
+            "type": "dashboard",
+            "component": "Home",
+            "config": {
+                "widgets": [
+                    { "id": "kpis", "type": "custom" },
+                    { "id": "recent", "type": "custom" },
+                    { "id": "metrics", "type": "custom", "component": "MetricsPanel" }
+                ]
+            }
+        },
+        {
+            "id": "metrics",
+            "type": "custom",
+            "component": "MetricsPanel"
+        },
+        {
+            "id": "overview",
+            "type": "dashboard",
+            "component": "Overview"
+        },
+        {
+            "id": "thingDetail",
+            "type": "detail",
+            "component": "ThingDetail",
+            "widgets": [
+                { "id": "meta", "type": "custom" }
+            ],
+            "config": {
+                "widgets": [
+                    { "id": "meta", "type": "custom" }
+                ],
+                "layout": [
+                    { "widgetId": "meta", "x": 0, "y": 0, "w": 12, "h": 4 }
+                ]
+            }
+        },
+        {
+            "id": "caseDetail",
+            "type": "detail",
+            "component": "CaseDetail",
+            "config": {
+                "summaryAggregates": [
+                    { "label": "Open", "value": "count" }
+                ]
+            }
+        }
+    ]
+}

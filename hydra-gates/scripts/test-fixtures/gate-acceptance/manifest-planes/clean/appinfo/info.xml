@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<id>planefx</id>
+	<name>Manifest Planes Fixture</name>
+	<summary>Fixture app for gate-62 and gate-63 acceptance. Not a real app.</summary>
+	<description>Exists so the gate suite can drive an ADR-080 store-plane naming violation and an ADR-079 settings-surface violation through the real wrapper.</description>
+	<version>1.0.0</version>
+	<licence>agpl</licence>
+	<author>Conduction</author>
+	<namespace>PlaneFx</namespace>
+	<category>tools</category>
+	<dependencies><nextcloud min-version="30" max-version="32"/></dependencies>
+</info>
