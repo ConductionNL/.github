@@ -40,13 +40,32 @@
 # for apps following the standard Conduction NC app layout: lib/ + appinfo/
 # + optional src/ + tests/.
 #
+# SCOPE: FULL BY DEFAULT. ADR-020 IS SUPERSEDED — see
+# hydra-gates/ADR-020-SUPERSEDED.md for the decision and what it costs.
+#
+# The scope is TWO independent, named inputs, and both are printed every run:
+#
+#   FILE SCOPE   which files the STATE gates open. Defaults to the entire
+#                tracked tree. `--scope-to-diff` narrows it to the change.
+#   DELTA BASE   what the five DELTA gates (16, 29, 47, 48, 61) compare
+#                against. Resolved independently of the file scope, so a
+#                full-scope run on a PR still judges the change.
+#
 # Options:
-#   --scope-to-diff [BASE]   — Phase G: only scan files changed vs BASE
-#                              (default origin/development). Inherited debt
-#                              in unchanged files is ignored. Required for
-#                              reviewer/security post-flight enforcement;
-#                              optional for builder (build mode runs full).
-#   --base BRANCH            — override the diff base (default origin/development)
+#   --full                   — scan the whole tree. THIS IS THE DEFAULT; the
+#                              flag names it rather than switching to it.
+#   --scope-to-diff, --diff  — the old ADR-020 behaviour, now OPT-IN: judge only
+#                              the files this change touched. Inherited debt in
+#                              unchanged files is not judged.
+#   --base BRANCH            — the delta base. Also the file-scope base when
+#                              --scope-to-diff is given. NO DEFAULT: the old
+#                              hardcoded `origin/development` is the shared root
+#                              cause of .github#347 and #361 — a base nobody
+#                              supplied, silently diffing a branch against
+#                              itself, and printing PASS.
+#   $HYDRA_GATE_SCOPE        — `full` | `diff`, the env form of the two flags.
+#                              Anything else stops the run: a run whose scope
+#                              nobody can name is not evidence about anything.
 #
 # When the base resolves to the SAME COMMIT as HEAD — which is what every push
 # to a mainline branch looks like — the scope is taken from the push's own
@@ -200,8 +219,45 @@ else
     echo "[hydra-gates] Set HYDRA_GATES_PKG_SHA to make the comparison sound."
 fi
 
+# ---------------------------------------------------------------------------
+# THE SCOPE IS TWO INPUTS, NOT ONE, AND BOTH ARE NAMED AND PRINTED.
+#
+# `SCOPE_TO_DIFF` used to be the only scope control, and it decided two
+# unrelated things at once:
+#
+#   FILE SCOPE   which files the STATE gates open ("is the tree valid?")
+#   DELTA BASE   what the DELTA gates compare against ("did this change do X
+#                without Y?")
+#
+# Conflating them is why "I ran it with no base" was never a scope. On a full
+# run gate-19 swept the whole tree while gate-16 fell back to a hardcoded
+# `origin/development` and reported PASS over nothing (`.github#361`), and
+# gate-61 declined citing a diff the run had never computed (`.github#347`) —
+# the same package answering the same question two different ways.
+#
+# So they are separate now:
+#
+#   SCOPE_TO_DIFF=0  FULL SCOPE — the default. Every state gate reads the whole
+#                    tracked tree. This is the reversal of ADR-020; see
+#                    hydra-gates/ADR-020-SUPERSEDED.md for why, and for what it
+#                    costs.
+#   SCOPE_TO_DIFF=1  the old ADR-020 behaviour, now OPT-IN via --scope-to-diff.
+#   HAVE_DELTA_BASE  set independently of the above. A delta gate runs when
+#                    this is 1 and reports NOT APPLICABLE — never PASS — when
+#                    it is 0. A full-scope run on a PR still HAS a base, so
+#                    gates 16/29/47/48/61 keep working; a workflow_dispatch has
+#                    none, and they say so by name.
+#
+# `BASE_REF` starts EMPTY, deliberately. The old `origin/development` default
+# is the exact shape SHARED-LESSONS records twice: a base nobody supplied,
+# silently diffing a branch against itself, and printing PASS. If a base is
+# wanted it is stated — by --base, by $HYDRA_GATE_BASE_REF, or by the
+# auto-detection below — and the winner is printed.
 SCOPE_TO_DIFF=0
-BASE_REF="origin/development"
+BASE_REF=""
+# 1 once a usable base has been resolved AND its changed-file set computed.
+# Read by the DELTA gates (16, 29, 47, 48, 61) instead of SCOPE_TO_DIFF.
+HAVE_DELTA_BASE=0
 APP_DIR=""
 # Treat "a declared gate did not run" as a failure (exit 98). Off by default so
 # a Tier-0 app is not blocked by gates it has no surface for; on, the run
@@ -225,9 +281,29 @@ REQUIRE_FULL_COVERAGE="${HYDRA_GATE_REQUIRE_FULL_COVERAGE:-0}"
 # to guess "unverified" in both cases, which is why --require-full-coverage was
 # unusable in every repo in the fleet.
 AXE_ENABLED="${HYDRA_GATE_AXE_ENABLED:-0}"
+# THE SCOPE IS AN EXPLICIT, NAMED INPUT — never inferred from whether a base
+# happens to be set. `$HYDRA_GATE_SCOPE` is the env form of the flags below; an
+# unrecognised value is a hard stop rather than a silent fall-back to either
+# mode, because "which scope did that run use?" is the one question every
+# verdict in this file is an answer to.
+case "${HYDRA_GATE_SCOPE:-full}" in
+    full) SCOPE_TO_DIFF=0 ;;
+    diff) SCOPE_TO_DIFF=1 ;;
+    *)
+        echo "[hydra-gates] FATAL: \$HYDRA_GATE_SCOPE='${HYDRA_GATE_SCOPE}' is not 'full' or 'diff'." >&2
+        echo "[hydra-gates] Refusing to guess a scope. A run whose scope nobody can name is not" >&2
+        echo "[hydra-gates] evidence about anything. NOTHING WAS CHECKED." >&2
+        exit 99
+        ;;
+esac
+BASE_REF="${HYDRA_GATE_BASE_REF:-}"
 while [ $# -gt 0 ]; do
     case "$1" in
-        --scope-to-diff) SCOPE_TO_DIFF=1; shift ;;
+        --scope-to-diff|--diff) SCOPE_TO_DIFF=1; shift ;;
+        # Explicit and redundant, and kept because it is what every caller in
+        # the fleet already passes for an audit run. It now names the DEFAULT
+        # rather than switching to it.
+        --full) SCOPE_TO_DIFF=0; shift ;;
         --require-full-coverage) REQUIRE_FULL_COVERAGE=1; shift ;;
         --axe-enabled) AXE_ENABLED=1; shift ;;
         --base) BASE_REF="$2"; shift 2 ;;
@@ -236,7 +312,61 @@ while [ $# -gt 0 ]; do
     esac
 done
 APP_DIR="${APP_DIR:-$(pwd)}"
+# ---------------------------------------------------------------------------
+# ABSOLUTISE THE APP DIR *BEFORE* THE `cd`, AND NEVER LET A RELATIVE PATH REACH
+# A CHECKER (.github#374).
+#
+# This line used to be a bare `cd "${APP_DIR}"`, leaving ${APP_DIR} holding
+# whatever spelling the caller typed. Every gate that only ever works from the
+# CURRENT DIRECTORY is unaffected — but gate-17 hands `${APP_DIR}` to
+# detect-redundant-controllers.py as its scan root AFTER the `cd`, so a
+# relative path resolves a second time, against the app dir itself.
+#
+# Measured on a fixture holding exactly one ADR-022 pass-through wrapper, same
+# tree, same commit, only the path SPELLING changed:
+#
+#     bash run-hydra-gates.sh /abs/path/relapp   ->  [gate-17] FAIL — 1
+#     bash run-hydra-gates.sh relapp             ->  [gate-17] PASS
+#
+# The checker was pointed at `relapp/relapp`, found nothing, printed its
+# terminal `# count=0`, and the runner correctly read that as "clean". Every
+# layer behaved exactly as designed; the scan root was wrong before any of them
+# saw it.
+#
+# `bin/hydra-gates` already absolutises (bin/hydra-gates: `APP_DIR="$(cd …)"`),
+# so CI has never been exposed — but the invocation this file's own header
+# documents for humans (`./scripts/run-hydra-gates.sh [options] [app-dir]`) is,
+# and a gate that reports PASS because of how its caller spelled a path is the
+# same defect as a gate that reports PASS over an empty scope.
+#
+# Resolved ONCE, HERE, so it is impossible to reach a checker with a relative
+# path: everything below this line — including every `${APP_DIR}` a gate passes
+# on — is absolute by construction. `cd -P` resolves symlinks too, so the value
+# a checker receives is the directory it will actually read.
+_app_dir_abs="$(cd -P "${APP_DIR}" 2>/dev/null && pwd)"
+if [ -z "${_app_dir_abs}" ]; then
+    # Keep the caller's SPELLING in the message — that is the thing they typed
+    # and the thing they can fix. Overwriting APP_DIR first would print an
+    # empty path and blame nothing.
+    echo "[hydra-gates] ERROR: ${APP_DIR} not accessible" >&2
+    exit 99
+fi
+APP_DIR="${_app_dir_abs}"
 cd "${APP_DIR}" 2>/dev/null || { echo "[hydra-gates] ERROR: ${APP_DIR} not accessible" >&2; exit 99; }
+echo "[hydra-gates] App dir: ${APP_DIR} (absolute)"
+
+# ONE MACHINE-READABLE LINE FOR THE FILE SCOPE, EMITTED EXACTLY ONCE.
+#
+# Downstream must never infer the scope from prose, from whether a base was
+# printed, or from a gate's own wording. Every one of those has been wrong at
+# least once in this package's history.
+if [ "${SCOPE_TO_DIFF}" = "1" ]; then
+    echo "[hydra-gates] SCOPE-MODE: diff"
+    echo "[hydra-gates] File scope: the diff only (--scope-to-diff / HYDRA_GATE_SCOPE=diff). Inherited debt in untouched files is NOT judged."
+else
+    echo "[hydra-gates] SCOPE-MODE: full"
+    echo "[hydra-gates] File scope: the ENTIRE tracked tree — the default. A gate added or tightened after this code was written WILL surface its inherited debt here, and that is the point (hydra-gates/ADR-020-SUPERSEDED.md)."
+fi
 
 # When scope-to-diff is requested, derive the changed-files set once.
 # Non-diff branches that need the set: each gate below filters its
@@ -456,8 +586,67 @@ if [ "${SCOPE_TO_DIFF}" = "1" ]; then
     else
         echo "[hydra-gates] Scope: diff vs ${BASE_REF} — ${_cf_count} changed file(s)"
     fi
+    # A diff-scoped run that got this far has a usable base by construction —
+    # every path that could not produce one exited 99 above.
+    HAVE_DELTA_BASE=1
 else
     echo "[hydra-gates] Scope: full repo"
+    # ── A DELTA BASE FOR A FULL-SCOPE RUN ───────────────────────────────────
+    #
+    # Full FILE scope does not mean "no base". The five DELTA gates —
+    # 16 spec-coverage, 29 gitignore-then-commit, 47 security-change-has-tests,
+    # 48 csrf-cochange, 61 listener-work-placement — ask questions only a diff
+    # can answer, and switching the default to full scope would have silently
+    # retired all five on every PR in the fleet. They are the gates that
+    # protect the change in front of you, so losing them to gain inherited-debt
+    # coverage would be a straight downgrade.
+    #
+    # So: if the caller named a base, resolve it and hand it to those gates
+    # while every OTHER gate reads the whole tree.
+    #
+    # EVERY FAILURE HERE IS NON-FATAL, and that is the difference from the
+    # diff-scoped branch above. There, an unusable base means the run cannot be
+    # scoped and exit 99 is correct. Here, an unusable base costs five gates
+    # and nothing else — 59 of 64 still have a real verdict — so refusing would
+    # throw away a good answer to punish a bad input. The five say NOT
+    # APPLICABLE, by name, with the reason below quoted back at the reader.
+    if [ -n "${BASE_REF}" ]; then
+        _db_why=""
+        _db_head=$(git -c safe.directory='*' rev-parse --verify --quiet 'HEAD^{commit}' 2>/dev/null || true)
+        _db_base=$(git -c safe.directory='*' rev-parse --verify --quiet "${BASE_REF}^{commit}" 2>/dev/null || true)
+        if [ -z "${_db_base}" ]; then
+            _db_why="it does not resolve in this repository"
+        elif [ "${_db_base}" = "${_db_head}" ]; then
+            # The mainline-push shape. `bin/hydra-gates` re-scopes this to
+            # github.event.before before it ever reaches here, so seeing it
+            # means a direct runner invocation. Comparing HEAD with itself
+            # yields an empty diff and would make the delta gates report a
+            # confident PASS over nothing — the exact defect this file spends
+            # 200 lines guarding against on the other branch.
+            _db_why="it is the SAME COMMIT as HEAD (${_db_head}), so the diff would be empty by construction"
+        elif ! git -c safe.directory='*' merge-base "${BASE_REF}" HEAD > /dev/null 2>&1; then
+            _db_why="it shares NO history with HEAD — the shape of a shallow checkout (fetch-depth: 1)"
+        else
+            CHANGED_FILES=$(git -c safe.directory='*' diff --name-only \
+                --diff-filter=ACMR "${BASE_REF}...HEAD" 2>/dev/null) \
+                && HAVE_DELTA_BASE=1 || _db_why="git could not compute the diff against it"
+        fi
+        if [ "${HAVE_DELTA_BASE}" = "1" ]; then
+            _db_count=$(printf '%s' "${CHANGED_FILES}" | grep -c . 2>/dev/null || true)
+            echo "[hydra-gates] Delta base: ${BASE_REF} = $(git -c safe.directory='*' rev-parse --short "${BASE_REF}" 2>/dev/null) — ${_db_count:-0} changed file(s)."
+            echo "[hydra-gates] The DELTA gates (16, 29, 47, 48, 61) judge that change set. Every other gate reads the whole tree."
+        else
+            CHANGED_FILES=""
+            echo "[hydra-gates] Delta base: UNUSABLE — '${BASE_REF}' was named but ${_db_why}."
+            echo "[hydra-gates] Gates 16, 29, 47, 48 and 61 will report NOT APPLICABLE by name. They are"
+            echo "[hydra-gates] NOT counted as passing. Every other gate is unaffected and still reads the whole tree."
+            BASE_REF=""
+        fi
+    else
+        echo "[hydra-gates] Delta base: none — no --base and no \$HYDRA_GATE_BASE_REF."
+        echo "[hydra-gates] Gates 16, 29, 47, 48 and 61 ask what a CHANGE did and have no change to read."
+        echo "[hydra-gates] They will report NOT APPLICABLE by name, which is not a pass and does not count as one."
+    fi
 fi
 
 # Helper — return 0 if $1 (a file path) is in scope (i.e. either we're
@@ -1439,6 +1628,54 @@ _skip() {
             _EMITTED_GATES="${_EMITTED_GATES}$1 "
             ;;
     esac
+}
+
+# ---------------------------------------------------------------------------
+# _skip_empty_scope <n> <name> <subject-phrase>
+#
+# THE ONE HELPER FOR "THIS GATE OPENED NOTHING". Never PASS.
+#
+# WHY IT EXISTS (.github#374)
+# ---------------------------
+# Seventeen gates ended their file loop with a bare
+#
+#     if [ "${#_files[@]}" -eq 0 ]; then
+#         : # nothing in scope; the PASS below describes the diff.
+#     fi
+#     ...
+#     [ "${_fail}" -eq 0 ] && _pass N "name"
+#
+# so a gate that inspected ZERO files printed a verdict byte-identical to one
+# that read every file in the app and found every one of them clean. Measured
+# on a planted tree with every defect still on disk, docs-only diff:
+# gates 14, 17, 18, 21, 22, 34-44 and 52 all printed PASS.
+#
+# That is worse than hiding a finding. `NOT APPLICABLE` is EXCLUDED from the
+# verdict, but a `PASS` is COUNTED as an applicable gate that ran — so the
+# `COVERAGE: N of 64` line, the one line this whole programme relies on to tell
+# an honest green from a vacuous one, was overstated by up to seventeen.
+#
+# Full scope removes the empty set for most of these, but it does NOT retire
+# the defect: the fall-through is still there, and it would resurface the
+# moment anything narrows the scope again (`--scope-to-diff`, a repo that
+# genuinely ships no `src/`). So it is fixed at the fall-through, not merely
+# routed around, and `test_gate_empty_scope_never_passes.sh` asserts the
+# property across the package rather than by convention.
+#
+# Gates 26, 31 and 32 already modelled the right answer — a gate-level `na`
+# WITH A REASON — on the same input where the seventeen passed. This is that
+# answer, factored out so a new gate inherits it instead of copying the bug.
+#
+# The reason states BOTH halves a reader needs: what went uninspected, and
+# which of the two possible causes it was. Those are different situations and
+# only one of them is under the author's control.
+_skip_empty_scope() {
+    local _n="$1" _name="$2" _subject="$3"
+    if [ "${SCOPE_TO_DIFF}" = "1" ]; then
+        _skip "${_n}" "${_name}" na "no ${_subject} is in scope for this run: the run was NARROWED with --scope-to-diff and the diff against '${BASE_REF}' touches none (the ADR-020 rule, now opt-in — see hydra-gates/ADR-020-SUPERSEDED.md). NOTHING was inspected and nothing could be, so this is NOT a pass. Re-run at the default full scope to judge the whole tree."
+    else
+        _skip "${_n}" "${_name}" na "no ${_subject} exists in this repository. This run is FULL-SCOPE (the default — see hydra-gates/ADR-020-SUPERSEDED.md), so the whole tracked tree was enumerated and it contains no such file. NOTHING was inspected and nothing could be, so this is NOT a pass."
+    fi
 }
 
 # An abort before the summary (set -e / set -u, a helper blowing up, ...) used
@@ -2757,6 +2994,9 @@ fi
 if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
     _rr_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-route-reachability.log
     : > "${_rr_log}"
+    # One line per route this gate actually judged — see the note at the loop.
+    _rr_seen=${HYDRA_GATE_LOG_DIR}/hydra-gate-route-reachability.inspected
+    : > "${_rr_seen}"
 
     # Touching appinfo/routes.php puts every routed entry back in scope for
     # invariant 2 — see the scope note at that loop.
@@ -2788,6 +3028,15 @@ if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
     while IFS= read -r _ctrl_path; do
         [ -n "${_ctrl_path}" ] || continue
         _in_scope "${_ctrl_path}" || continue
+        # BOTH INVARIANTS COUNT TOWARD "THIS GATE OPENED SOMETHING" (.github#374).
+        #
+        # A first draft counted only invariant 2's route loop, and gate-14 then
+        # went NOT APPLICABLE on a full run over a fixture whose `routes.php`
+        # declares no route at all — while invariant 1 was busy finding a real
+        # unrouted controller method in it. The regression was caught by the
+        # before/after table, not by reasoning, which is the whole reason both
+        # arms are recorded here rather than at one convenient place.
+        echo "${_ctrl_path}" >> "${_rr_seen}"
 
         # Derive the controller route slug — strip lib/Controller/ prefix +
         # Controller.php suffix, lowercase the first character. Settings/
@@ -2810,6 +3059,32 @@ if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
         # opening `{`, and grep that buffer for any `): ...Response` return
         # type. Done in plain awk for portability (no pcregrep dependency).
         # Helper-prefixed names are excluded by the gate convention.
+        #
+        # ⚠️ THE BUFFER MUST END AT THE SIGNATURE LINE WHEN THAT LINE ALREADY
+        # OPENS THE BODY (K&R braces). Both stop conditions below are tested
+        # against `nxt` — the lines READ AHEAD — and never against `$0`, so
+        # under Allman the buffer stopped at the very next line (`{` alone) and
+        # under K&R it did not stop at all: it ran on through the body, the
+        # closing brace and the NEXT method's docblock until it hit that
+        # method's signature. The buffer then contained a `: SomeResponse` that
+        # belongs to a DIFFERENT method, and the gate reported the first one as
+        # an unrouted endpoint.
+        #
+        # That is not a corner case now. Nextcloud's coding standard is K&R,
+        # and the fleet is migrating to it: every `__construct` immediately
+        # followed by a Response-returning action becomes a phantom finding the
+        # moment an app reformats. MEASURED on openconnector#1229 —
+        # `lib/Controller/UiController.php method=__construct
+        # expected_route='ui#__construct' rule=missing-route`, where the
+        # inherited return type came from `makeSpaResponse(): TemplateResponse`
+        # eleven lines below. The SAME awk over the SAME file in Allman braces
+        # prints nothing. Brace style is not supposed to be an input to this
+        # gate, and while it was, the reformat looked like the defect.
+        #
+        # Reading nothing ahead is correct rather than merely quieter: if the
+        # signature line ends in `{`, the whole signature — parameters, return
+        # type and all — is ON that line, so there is nothing further to find.
+        # A K&R method that DOES return a Response still matches on `$0`.
         _methods=$(awk -v RESPONSE_RX='Response[ |\\{]' '
             /^[[:space:]]*public[[:space:]]+function[[:space:]]+[a-zA-Z_][a-zA-Z0-9_]*[[:space:]]*\(/ {
                 method = $0
@@ -2818,7 +3093,7 @@ if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
                 if (method ~ /^(helper|assert|validate|guard|ensure|prepare|format|render)/) next
                 buf = $0
                 n = 0
-                while (n < 12) {
+                while (n < 12 && $0 !~ /\{[[:space:]]*$/) {
                     if ((getline nxt) <= 0) break
                     buf = buf "\n" nxt
                     n++
@@ -2903,6 +3178,15 @@ if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
             [ "${_rr_routes_touched}" -eq 1 ] && _rr_scoped=1
             _in_scope "${_path}" && _rr_scoped=1
             [ "${_rr_scoped}" -eq 1 ] || continue
+            # COUNT WHAT WAS OPENED, VIA A FILE, NOT A VARIABLE (.github#374).
+            #
+            # This loop is fed by a PIPE (`{ … } | sort -u | while …`), so its
+            # body runs in a SUBSHELL: a counter incremented here is discarded
+            # the moment the loop ends, and the emptiness test below would read
+            # 0 on every run — turning the fix into a permanent skip. One line
+            # per inspected route, counted after the pipeline, is the shape
+            # that survives.
+            echo "${_ctrl}#${_method}" >> "${_rr_seen}"
             if [ ! -f "${_path}" ]; then
                 # UNTIL 2026-08-05 this `continue`d with the comment "gate-5
                 # already flags this". Gate-5 flagged it as a MISSING AUTH
@@ -2933,7 +3217,15 @@ if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
         done
 
     _rr_fail=$(wc -l < "${_rr_log}" 2>/dev/null || echo 0)
-    if [ "${_rr_fail}" -eq 0 ]; then
+    _rr_inspected=$(wc -l < "${_rr_seen}" 2>/dev/null || echo 0)
+    _rr_inspected="${_rr_inspected:-0}"
+    if [ "${_rr_inspected}" -eq 0 ]; then
+        # AN UNOPENED SCOPE IS NEVER A PASS (.github#374). Measured on a tree
+        # carrying a real unrouted method: full run FAIL — 1, docs-only diff
+        # PASS. The routes were all filtered out by `_in_scope` and the gate
+        # printed the same word as a complete cross-check. See _skip_empty_scope.
+        _skip_empty_scope 14 "route-reachability" "routed controller method (an entry in appinfo/routes.php whose target class is in scope)"
+    elif [ "${_rr_fail}" -eq 0 ]; then
         _pass 14 "route-reachability"
     else
         _fail 14 "route-reachability" "${_rr_fail} unrouted method(s) or wrong-target route(s) — see ${_rr_log}"
@@ -3076,15 +3368,23 @@ if [ -d lib ] || [ -d src ]; then
             _sc_ran=0
             _sc_why=$(head -3 "${_sc_err}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
             _skip 16 "spec-coverage" wiring "check_spec_coverage.py did not complete — it never printed its terminal '# count=' marker, so NO changed method was inspected and @spec traceability (ADR-003/ADR-020) is UNVERIFIED by this run. Checker output: ${_sc_why:-<empty>}. See ${_sc_err}."
-        elif [ "${SCOPE_TO_DIFF}" != "1" ]; then
-            # The checker RAN and finished — but on a full-repo run it had no
+        elif [ "${HAVE_DELTA_BASE}" != "1" ]; then
+            # `HAVE_DELTA_BASE`, NOT `SCOPE_TO_DIFF`. gate-16 is a DELTA gate:
+            # what it needs is a BASE, not a narrowed file list. Keying it on
+            # the file scope would have made it NOT APPLICABLE on every PR in
+            # the fleet the moment full scope became the default — silently
+            # retiring @spec enforcement to buy inherited-debt coverage it
+            # cannot use. With a base present it judges the change set exactly
+            # as before, while every state gate around it reads the whole tree.
+            #
+            # The checker RAN and finished — but with no base it had no
             # diff to scope to, so `# count=0` means "nothing was read", not
             # "nothing is wrong". Category MUST be one of na|structural|wiring:
             # `_skip` treats anything else as an internal-error FAIL, which is
             # exactly the false RED this change exists to prevent (my first
             # draft passed `scope` and would have done that fleet-wide).
             _sc_ran=0
-            _skip 16 "spec-coverage" na "full-repo run computed NO diff, and gate-16 is diff-scoped by design (ADR-020) — so NO changed method was inspected and @spec traceability is UNVERIFIED by this run. This is NOT a pass. Re-measure with an explicit base (HYDRA_GATE_BASE_REF=origin/beta) or run with --scope-to-diff."
+            _skip 16 "spec-coverage" na "this run has NO delta base, and gate-16 is a DELTA gate — it asks which methods THIS CHANGE added or modified without an @spec anchor, which a checkout cannot answer. NO changed method was inspected and @spec traceability is UNVERIFIED by this run. This is NOT a pass, and it is not counted as one. Give it a base to judge (--base <ref> or HYDRA_GATE_BASE_REF=origin/beta); the file scope is independent and every state gate still read the whole tree."
         fi
         sed -i '/^# count=[0-9]*$/d' "${_sc_log}" 2>/dev/null || true
         _sc_fail=$(wc -l < "${_sc_log}" 2>/dev/null || echo 0)
@@ -3156,10 +3456,30 @@ if [ "${SCOPE_TO_DIFF}" = "1" ] && [ -n "${CHANGED_FILES}" ]; then
     printf '%s\n' "${CHANGED_FILES}" > "${_redundant_scope_file}" 2>/dev/null \
         && _redundant_args+=("--changed-files-file=${_redundant_scope_file}")
 fi
+# IS THERE ANYTHING FOR THE CHECKER TO READ AT ALL? (.github#374)
+#
+# Computed here and USED BELOW, after the checker has run — never instead of
+# running it. Declining early would make `SKIPPED (wiring)` unreachable for
+# gate-17: nothing would execute, so nothing could crash, and a crashed checker
+# would be reported as not-applicable. That regression was caught once already
+# by test_gate_crashed_checker_is_not_a_finding.sh (#364's first draft), and
+# the repair is the same one Ruben made then — ALWAYS RUN THE CHECKER, EVALUATE
+# WIRING FIRST AND SCOPE SECOND.
+_redundant_empty_scope=0
+if [ "${SCOPE_TO_DIFF}" = "1" ] \
+    && ! printf '%s\n' "${CHANGED_FILES}" | grep -qE '^lib/.*\.php$'; then
+    _redundant_empty_scope=1
+fi
 _redundant_args+=("${APP_DIR}")
 if python3 "${SCRIPT_DIR_REDUNDANT}/lib/detect-redundant-controllers.py" \
         "${_redundant_args[@]}" > "${_redundant_log}" 2>&1; then
-    _pass 17 "redundant-controller"
+    # WIRING FIRST (it exited 0, so it ran), THEN SCOPE. `# count=0` over an
+    # empty scope is "nothing was read", not "nothing is wrong" (.github#374).
+    if [ "${_redundant_empty_scope}" -eq 1 ]; then
+        _skip_empty_scope 17 "redundant-controller" "PHP file under lib/ (ADR-022 pass-through wrappers live in lib/Controller and lib/Service)"
+    else
+        _pass 17 "redundant-controller"
+    fi
 elif ! grep -q '^# count=' "${_redundant_log}" 2>/dev/null; then
     # THE CHECKER DID NOT FINISH. Its terminal `# count=<n>` marker is absent,
     # so it never reached its own summary — E2BIG, a traceback, an OOM kill, a
@@ -3184,7 +3504,14 @@ elif grep -q '^# count=0$' "${_redundant_log}" 2>/dev/null; then
     # (349/349 tests pass, all 19 gates green per its own self-report)
     # but Rule 0b's re-run hit the script's zero-finding non-zero exit
     # and burned 40 turns + $1+ on a fix loop with no fixable code.
-    _pass 17 "redundant-controller"
+    #
+    # Same scope test as the exit-0 arm above: a `# count=0` produced over an
+    # empty scope is not a clean sheet (.github#374).
+    if [ "${_redundant_empty_scope}" -eq 1 ]; then
+        _skip_empty_scope 17 "redundant-controller" "PHP file under lib/ (ADR-022 pass-through wrappers live in lib/Controller and lib/Service)"
+    else
+        _pass 17 "redundant-controller"
+    fi
 else
     # `grep -c` prints the count (0 on no match); the old `|| echo 0`
     # appended a second "0" on the zero-match exit-1, so the failure
@@ -3309,6 +3636,17 @@ if [ "${_nd_is_engine}" = "0" ] && [ -d lib ]; then
 fi
 _nd_warn=$(wc -l < "${_nd_warn_log}" 2>/dev/null || echo 0)
 
+if [ "${_nd_ran}" -eq 1 ] && [ -z "${_nd_register_files}" ]; then
+    # AN UNOPENED SCOPE IS NEVER A PASS (.github#374).
+    #
+    # Half (a) — the only half that decides this verdict — runs solely when
+    # `_nd_register_files` is non-empty. With it empty the whole `if` above was
+    # skipped, `_nd_fail` stayed 0, and the gate printed PASS having opened no
+    # register file at all. The advisory half (b) is unaffected: it is pure
+    # bash, it still ran, and it still prints its WARNING line below.
+    _nd_ran=0
+    _skip_empty_scope 18 "notification-dialect" "register JSON under lib/Settings (*register*.json or register.d/*.json)"
+fi
 if [ "${_nd_ran}" -eq 1 ]; then
     if [ "${_nd_fail}" -eq 0 ]; then
         _pass 18 "notification-dialect"
@@ -3523,6 +3861,12 @@ if [ -d lib ]; then
     : > "${_or_log}.err"
     _or_hits=0
     _or_ran=1
+    # COUNT WHAT WAS OPENED (.github#374). `_or_hits` counts FINDINGS, so zero
+    # findings over zero files printed the same PASS as zero findings over
+    # every tracked PHP file in lib/. Found by sweeping the gate table rather
+    # than from the issue: gate-20 is NOT one of the sixteen #374 lists, and
+    # neither is gate-14 — the enumeration in that issue is a floor.
+    _or_inspected=0
     _or_broken=""
     _or_mask="${SCRIPT_DIR}/lib/source_scope.py"
     # Receiver-anchored: the call must be made ON something named
@@ -3534,6 +3878,7 @@ if [ -d lib ]; then
         [ -z "${_file}" ] && continue
         [ -f "${_file}" ] || continue
         _in_scope "${_file}" || continue
+        _or_inspected=$((_or_inspected + 1))
         # Comments blanked BEFORE the search (#294). Offsets and newlines are
         # preserved by php_mask, so grep's -n line numbers still address the
         # real file.
@@ -3574,6 +3919,9 @@ if [ -d lib ]; then
     done < <(_enum_tracked '\.php$' lib)
     if [ "${_or_ran}" -eq 0 ]; then
         _skip 20 "or-objectservice-api" wiring "the comment mask or grep did NOT complete on ${_or_broken} — no call site was judged from that file onward. Calls to methods that do not exist on OpenRegister's ObjectService are UNVERIFIED by this run. See ${_or_log}.err."
+    elif [ "${_or_inspected}" -eq 0 ]; then
+        # AN UNOPENED SCOPE IS NEVER A PASS (.github#374). See _skip_empty_scope.
+        _skip_empty_scope 20 "or-objectservice-api" "tracked PHP file under lib/"
     elif [ "${_or_hits}" -eq 0 ]; then
         _pass 20 "or-objectservice-api"
     else
@@ -3603,6 +3951,11 @@ fi
 _cm_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-conflict-markers.log
 : > "${_cm_log}"
 _cm_hits=0
+# COUNT WHAT WAS OPENED (.github#374). `_cm_hits` counts FINDINGS, and zero
+# findings over zero files printed the same PASS as zero findings over the
+# whole tree — measured on a fixture holding a real `<<<<<<<` marker:
+# full run FAIL — 1, docs-only diff PASS.
+_cm_inspected=0
 # Match git's exact marker shapes: `<<<<<<< ` / `======= ` (end of line OK) / `>>>>>>> `
 # at the start of a line. Length is exactly 7 chars of the marker glyph; the
 # trailing content for << / >> is a ref name, ======= can be bare.
@@ -3610,6 +3963,7 @@ while IFS= read -r _file; do
     [ -z "${_file}" ] && continue
     [ ! -f "${_file}" ] && continue
     _in_scope "${_file}" || continue
+    _cm_inspected=$((_cm_inspected + 1))
     # grep -l would short-circuit but we want a line count for the log.
     _matches=$(grep -nE '^(<{7}[[:space:]]|>{7}[[:space:]]|={7}$)' "${_file}" 2>/dev/null || true)
     [ -z "${_matches}" ] && continue
@@ -3621,7 +3975,10 @@ done < <(find lib appinfo src tests openspec l10n appinfo \
              -o -name '*.vue' -o -name '*.json' -o -name '*.md' \
              -o -name '*.yaml' -o -name '*.yml' -o -name '*.xml' \) \
              2>/dev/null)
-if [ "${_cm_hits}" -eq 0 ]; then
+if [ "${_cm_inspected}" -eq 0 ]; then
+    # AN UNOPENED SCOPE IS NEVER A PASS (.github#374). See _skip_empty_scope.
+    _skip_empty_scope 21 "conflict-markers" "source file under lib|appinfo|src|tests|openspec|l10n (php|js|ts|vue|json|md|yaml|yml|xml)"
+elif [ "${_cm_hits}" -eq 0 ]; then
     _pass 21 "conflict-markers"
 else
     _fail 21 "conflict-markers" "${_cm_hits} file(s) with unresolved conflict markers — see ${_cm_log}"
@@ -3679,11 +4036,17 @@ if [ -f src/manifest.json ]; then
     _mv_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-manifest-validation.log
     : > "${_mv_log}"
     _mv_validator="${SCRIPT_DIR}/lib/check_manifest.js"
-    # Diff-scope: when --scope-to-diff is set and src/manifest.json was NOT
-    # touched in this PR, the gate runs informationally (PASS without
-    # spending time on a clean manifest the PR didn't touch).
+    # AN UNOPENED SCOPE IS NEVER A PASS (.github#374).
+    #
+    # This arm used to be a bare `_pass 22`, with a comment calling it "runs
+    # informationally (PASS without spending time on a clean manifest the PR
+    # didn't touch)". There is no such thing as an informational PASS: the line
+    # printed is `[gate-22] manifest-validation: PASS`, byte-identical to a run
+    # that put the manifest through the canonical validator, and `bin/hydra-gates`
+    # counts it as an applicable gate that ran. Measured on a fixture whose
+    # manifest fails validation: full run FAIL, docs-only diff PASS.
     if [ "${SCOPE_TO_DIFF}" = "1" ] && ! _in_scope "src/manifest.json"; then
-        _pass 22 "manifest-validation"
+        _skip_empty_scope 22 "manifest-validation" "src/manifest.json"
     elif [ ! -f "${_mv_validator}" ]; then
         _fail 22 "manifest-validation" "vendored validator missing at ${_mv_validator} — gate misconfiguration, fail-closed"
     elif ! command -v node >/dev/null 2>&1; then
@@ -3967,8 +4330,27 @@ if [ -f scripts/check-integration-parity.sh ]; then
         # `⚠` header — never "missing"/"mismatch"/`^✗` — so this hard-failure
         # count excludes them by construction.
         _parity_hits=$(_count '^✗|missing|mismatch' "${_parity_log}")
-        [ "${_parity_hits}" -eq 0 ] && _parity_hits=1
-        _fail 24 "integration-parity" "${_parity_hits} parity violation(s) — see ${_parity_log}"
+        if [ "${_parity_hits}" -eq 0 ]; then
+            # DO NOT INVENT THE COUNT (.github#374, and the #330 family).
+            #
+            # This line was `[ "${_parity_hits}" -eq 0 ] && _parity_hits=1`, so
+            # a wrapper that exited non-zero having written nothing this runner
+            # can parse was reported as `FAIL — 1 parity violation(s)`: a
+            # fabricated number with a plausible message and nothing behind it.
+            # Same shape as gates 22, 25 and 28 (`.github#379`).
+            #
+            # ⚠️ THE VERDICT DELIBERATELY STAYS `FAIL`, and this is the whole
+            # judgement. `scripts/check-integration-parity.sh` is APP-OWNED and
+            # declares no terminal-marker contract, so unlike gates 17, 18, 52
+            # and 61 there is nothing here that can tell "it crashed" from "it
+            # found violations it phrased differently". Guessing `wiring` would
+            # turn a real parity failure into a skip — a green hole, and the
+            # strictly worse direction. So: fail closed, and stop asserting a
+            # number nobody measured.
+            _fail 24 "integration-parity" "the parity wrapper exited non-zero and printed no line this runner can count as a violation — the failure is real but its SIZE is unmeasured, so no count is claimed. Read ${_parity_log}."
+        else
+            _fail 24 "integration-parity" "${_parity_hits} parity violation(s) — see ${_parity_log}"
+        fi
     fi
 fi
 
@@ -4404,7 +4786,11 @@ _gi_new_count=0
 # misdescribes the diff, and folding it into "rules checked" would claim a
 # lookup that never happened. See .github#293.
 _gi_neg_count=0
-if [ "${SCOPE_TO_DIFF}" = "1" ] && [ -f .gitignore ]; then
+# `HAVE_DELTA_BASE`, NOT `SCOPE_TO_DIFF` — gate-29 is a DELTA gate. It reads the
+# `+` lines of the .gitignore diff, so what it needs is a BASE, not a narrowed
+# file list. Keyed on the file scope it would have gone NOT APPLICABLE on every
+# PR the moment full scope became the default.
+if [ "${HAVE_DELTA_BASE}" = "1" ] && [ -f .gitignore ]; then
     # Lines newly added to .gitignore in this PR (excluding blanks + comments)
     _new_ignores=$(git -c safe.directory='*' diff "${BASE_REF}...HEAD" -- .gitignore 2>/dev/null \
         | grep -E '^\+[^+]' | sed 's/^+//' | grep -vE '^\s*(#|$)' || true)
@@ -4484,8 +4870,8 @@ elif [ "${_gi_ran}" -eq 1 ] && [ "${_gi_neg_count}" -gt 0 ]; then
     # "adds no non-comment line" here (the branch below) would misdescribe the
     # diff, and PASS would claim a lookup that never happened.
     _skip 29 "gitignore-then-commit" na "the diff adds ${_gi_neg_count} .gitignore line(s) and every one is a NEGATION (\`!\`), which un-ignores rather than ignores. A tracked file behind a negation is the intended state, so there is no new ignore rule whose path could already be tracked. See .github#293."
-elif [ "${SCOPE_TO_DIFF}" != "1" ]; then
-    _skip 29 "gitignore-then-commit" na "this check is intrinsically diff-relative — it asks whether THIS change adds an ignore rule over files that are already tracked — and this run is not --scope-to-diff, so there is no set of newly-added rules to look up. Nothing was inspected and nothing could be. It runs on every PR."
+elif [ "${HAVE_DELTA_BASE}" != "1" ]; then
+    _skip 29 "gitignore-then-commit" na "this check is intrinsically diff-relative — it asks whether THIS change adds an ignore rule over files that are already tracked — and this run has NO delta base, so there is no set of newly-added rules to look up. Nothing was inspected and nothing could be, and no change to this repository could make a baseless run able to answer it. It runs on every PR, at any file scope."
 elif [ ! -f .gitignore ]; then
     _skip 29 "gitignore-then-commit" na "this repository has no .gitignore, so this diff cannot have added an ignore rule over already-tracked files."
 else
@@ -5114,7 +5500,9 @@ if _a11y_has_markup_dir; then
            -o -name '*.php' -o -name '*.html' -o -name '*.htm' \) 2>/dev/null \
         | grep -vE '(^|/)(node_modules|vendor|dist|build|coverage|phpmetrics|\.git)/' || true)
     if [ "${#_wc_files[@]}" -eq 0 ]; then
-        : # nothing in scope; the verdict below describes the diff.
+        # AN UNOPENED SCOPE IS NEVER A PASS (.github#374). See _skip_empty_scope.
+        _wc_ran=0
+        _skip_empty_scope 34 "window-confirm" "frontend source file (src|templates|appinfo/templates **/*.vue|js|ts|php|html)"
     elif [ ! -f "${_wc_helper}" ]; then
         _wc_ran=0
         _skip 34 "window-confirm" wiring "check_js_call_sites.py not found at ${_wc_helper} — ${#_wc_files[@]} file(s) were in scope and NONE were inspected; native browser dialogs are UNVERIFIED by this run."
@@ -5158,8 +5546,13 @@ fi
 if _a11y_has_markup_dir; then
     _iae_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-img-alt-empty-only.log
     : > "${_iae_log}"
+    # COUNT WHAT WAS OPENED (.github#374). This gate greps rather than calling
+    # a helper, so it had no file array to test for emptiness and fell through
+    # to `_pass 35` having read nothing.
+    _iae_inspected=0
     while IFS= read -r vue; do
         _in_scope "${vue}" || continue
+        _iae_inspected=$((_iae_inspected + 1))
         _flat=$(tr '\n' ' ' < "${vue}")
         echo "${_flat}" \
             | grep -oE '<img\b[^>]*>' 2>/dev/null \
@@ -5187,7 +5580,10 @@ if _a11y_has_markup_dir; then
             done
     done < <(_a11y_markup_files)
     _iae_fail=$(wc -l < "${_iae_log}" 2>/dev/null || echo 0)
-    if [ "${_iae_fail}" -eq 0 ]; then
+    if [ "${_iae_inspected}" -eq 0 ]; then
+        # AN UNOPENED SCOPE IS NEVER A PASS (.github#374). See _skip_empty_scope.
+        _skip_empty_scope 35 "img-alt-empty-only" "markup file (src|templates|appinfo/templates **/*.vue|php|html)"
+    elif [ "${_iae_fail}" -eq 0 ]; then
         _pass 35 "img-alt-empty-only"
     else
         _fail 35 "img-alt-empty-only" "${_iae_fail} <img alt=\"\"> on semantic-bound src — see ${_iae_log}"
@@ -5224,8 +5620,25 @@ if _a11y_has_markup_dir; then
         --include='*.vue' --include='*.js' --include='*.ts' \
         --include='*.php' --include='*.html' --include='*.htm' 2>/dev/null \
         | _filter_grep_by_scope >> "${_tp_log}" || true
+    # COUNT WHAT WAS OPENED (.github#374). `grep -r` gives no file list back,
+    # so emptiness is measured against the SAME corpus the grep walks — the
+    # identical directory set and --include list, not the shared
+    # `_a11y_markup_files` (which omits .js/.ts and would call this gate empty
+    # over a repo whose only frontend is JavaScript).
+    _tp_inspected=0
+    while IFS= read -r _f; do
+        [ -z "${_f}" ] && continue
+        _in_scope "${_f}" || continue
+        _tp_inspected=$((_tp_inspected + 1))
+    done < <(find src templates appinfo/templates -type f \
+        \( -name '*.vue' -o -name '*.js' -o -name '*.ts' \
+           -o -name '*.php' -o -name '*.html' -o -name '*.htm' \) 2>/dev/null \
+        | grep -vE '(^|/)(node_modules|vendor|dist|build|coverage|phpmetrics|\.git)/' || true)
     _tp_fail=$(wc -l < "${_tp_log}" 2>/dev/null || echo 0)
-    if [ "${_tp_fail}" -eq 0 ]; then
+    if [ "${_tp_inspected}" -eq 0 ]; then
+        # AN UNOPENED SCOPE IS NEVER A PASS (.github#374). See _skip_empty_scope.
+        _skip_empty_scope 36 "tabindex-positive" "frontend source file (src|templates|appinfo/templates **/*.vue|js|ts|php|html)"
+    elif [ "${_tp_fail}" -eq 0 ]; then
         _pass 36 "tabindex-positive"
     else
         _fail 36 "tabindex-positive" "${_tp_fail} positive tabindex value(s) — use \"0\" or \"-1\" — see ${_tp_log}"
@@ -5282,7 +5695,9 @@ if _a11y_has_markup_dir; then
         _ahf_files+=("${vue}")
     done < <(_a11y_markup_files)
     if [ "${#_ahf_files[@]}" -eq 0 ]; then
-        :   # nothing in scope; the PASS below describes the diff, as everywhere else.
+        # AN UNOPENED SCOPE IS NEVER A PASS (.github#374). See _skip_empty_scope.
+        _ahf_ran=0
+        _skip_empty_scope 37 "aria-hidden-focusable" "markup file (src|templates|appinfo/templates **/*.vue|php|html)"
     elif [ ! -f "${_ahf_helper}" ]; then
         # A MISSING HELPER MUST NOT REPORT PASS (#147).
         _ahf_ran=0
@@ -5405,9 +5820,18 @@ if [ -d src ] || [ -d templates ] || [ -d appinfo/templates ]; then
     # have reported PASS on nothing. One `--classify` call for the whole set
     # prints `<path>: page-root|fragment`, and a non-zero exit is a wiring
     # failure rather than an answer.
+    # HOW MANY SUBJECTS THIS GATE ACTUALLY OPENED (.github#374).
+    #
+    # gate-38 has two arms — Vue page roots and document-owning PHP templates —
+    # and neither counted. With both empty the gate fell through to `_pass 38`,
+    # which is why a docs-only diff over a tree carrying a planted skip-link
+    # defect printed the same word as a clean sweep. Incremented AFTER the
+    # `_in_scope` guard, so it counts files judged, not files enumerated.
+    _sl_inspected=0
     _sl_check() {
         local _f="$1"
         _in_scope "$_f" || return 0
+        _sl_inspected=$((_sl_inspected + 1))
         if grep -qE '<NcContent\b|<NcAppContent\b|<NcAppContentList\b' "$_f" 2>/dev/null; then return 0; fi
         # The shared app shell. `<CnAppRoot>` (@conduction/nextcloud-vue) IS an
         # <NcContent> — it renders one as its own root element and puts the
@@ -5463,7 +5887,10 @@ if [ -d src ] || [ -d templates ] || [ -d appinfo/templates ]; then
             _in_scope "$_f" && _sl_php+=("$_f")
         done < <(_a11y_markup_files)
         if [ "${#_sl_php[@]}" -eq 0 ]; then
-            :   # nothing in scope; the verdict below describes the diff, as everywhere else.
+            # No PHP template in scope. NOT a verdict on its own — the Vue arm
+            # above may still have judged something, so the decision is taken
+            # once, from `_sl_inspected`, below (.github#374).
+            :
         elif [ ! -f "${_sl_helper}" ]; then
             # A MISSING HELPER MUST NOT REPORT PASS (#147). Without the
             # classifier every template silently reads as a fragment, the
@@ -5487,6 +5914,11 @@ if [ -d src ] || [ -d templates ] || [ -d appinfo/templates ]; then
                 _sl_ran=0
                 _skip 38 "skip-link" wiring "php_template_scope.py exited ${_sl_rc} — ${#_sl_php[@]} PHP template(s) were in scope and NONE were classified; a document-owning template with no bypass mechanism (WCAG 2.4.1) is UNVERIFIED by this run. See ${_sl_cls_err}."
             else
+                # Every template handed to the classifier WAS inspected — a
+                # `fragment` verdict is a judgement, not a skip. Counting only
+                # page roots here would make an app whose 40 templates are all
+                # fragments look like a gate that opened nothing.
+                _sl_inspected=$((_sl_inspected + ${#_sl_php[@]}))
                 while IFS= read -r _line; do
                     case "${_line}" in
                         *": page-root") _sl_check "${_line%: page-root}" ;;
@@ -5494,6 +5926,12 @@ if [ -d src ] || [ -d templates ] || [ -d appinfo/templates ]; then
                 done <<< "${_sl_cls}"
             fi
         fi
+    fi
+    # AN UNOPENED SCOPE IS NEVER A PASS (.github#374). Taken once, over BOTH
+    # arms, so a gate that judged a Vue root but no template still reports.
+    if [ "${_sl_ran}" -eq 1 ] && [ "${_sl_inspected}" -eq 0 ]; then
+        _sl_ran=0
+        _skip_empty_scope 38 "skip-link" "app page root (src/App.vue, src/**/*Root.vue) or document-owning PHP template (templates|appinfo/templates **/*.php)"
     fi
     _sl_fail=$(wc -l < "${_sl_log}" 2>/dev/null || echo 0)
     if [ "${_sl_ran}" -eq 1 ]; then
@@ -5560,7 +5998,9 @@ if _a11y_has_markup_dir; then
         _bn_files+=("${vue}")
     done < <(_a11y_markup_files)
     if [ "${#_bn_files[@]}" -eq 0 ]; then
-        :   # nothing in scope; the PASS below describes the diff, as everywhere else.
+        # AN UNOPENED SCOPE IS NEVER A PASS (.github#374). See _skip_empty_scope.
+        _bn_ran=0
+        _skip_empty_scope 39 "button-name" "markup file (src|templates|appinfo/templates **/*.vue|php|html)"
     elif [ ! -f "${_bn_helper}" ]; then
         # A MISSING HELPER MUST NOT REPORT PASS (#147).
         _bn_ran=0
@@ -5633,15 +6073,32 @@ if _a11y_has_markup_dir; then
         _in_scope "${vue}" || continue
         _fl_files+=("${vue}")
     done < <(_a11y_markup_files)
-    # NOTE: an empty in-scope set is NOT declared `na` here. Every other gate
-    # in this family reports PASS over an empty diff scope — that is what
-    # ADR-020 diff scoping MEANS — and tests/test-hydra-gates-bin.sh asserts
-    # that none of gates 10/12/13/26/31..45 goes NOT APPLICABLE while src/
-    # exists. Making gate-40 alone answer differently would drift the
-    # applicability table away from the guards it mirrors, which is the one
-    # way that change could hide a live gate.
+    # THE NOTE THAT USED TO SIT HERE WAS FALSE ON BOTH OF ITS CLAIMS, AND THE
+    # SAME RUN REFUTED BOTH (.github#374).
+    #
+    # It said an empty in-scope set must NOT be declared `na` here, because
+    # (1) "every other gate in this family reports PASS over an empty diff
+    # scope" and (2) tests/test-hydra-gates-bin.sh "asserts that none of gates
+    # 10/12/13/26/31..45 goes NOT APPLICABLE while src/ exists".
+    #
+    #   (1) is false: gates 26, 31 and 32 already reported a gate-level `na`
+    #       WITH A REASON on exactly this input, and had done since #276.
+    #   (2) misreads the assertion it cites. That loop matches the
+    #       APPLICABILITY TABLE's own wording —
+    #       `NOT APPLICABLE — no src/(,| directory)` — and exists to catch the
+    #       table excusing a gate whose guard would have run it. A gate-level
+    #       `na` naming its OWN empty file set does not match that pattern and
+    #       passes the assertion unharmed. The very next assertion in that file
+    #       accepts `[gate-45] prefers-reduced-motion: NOT APPLICABLE — scope
+    #       was empty` as the CORRECT answer, from the same family.
+    #
+    # So the note argued for keeping the defect on the strength of a sibling
+    # that does not have it and a test that does not say what it was quoted as
+    # saying. Both are checked now rather than asserted.
     if [ "${#_fl_files[@]}" -eq 0 ]; then
-        : # nothing in scope; the PASS below describes the diff, as everywhere else.
+        # AN UNOPENED SCOPE IS NEVER A PASS (.github#374). See _skip_empty_scope.
+        _fl_ran=0
+        _skip_empty_scope 40 "form-label-association" "markup file (src|templates|appinfo/templates **/*.vue|php|html)"
     elif [ ! -f "${_fl_helper}" ]; then
         # A MISSING HELPER MUST NOT REPORT PASS (#147).
         _fl_ran=0
@@ -5741,7 +6198,9 @@ if [ -d templates ] || [ -d appinfo/templates ]; then
         _in_scope "$_f" && _hl_files+=("$_f")
     done < <(_a11y_markup_files)
     if [ "${#_hl_files[@]}" -eq 0 ]; then
-        : # nothing in scope; the verdict below describes the diff.
+        # AN UNOPENED SCOPE IS NEVER A PASS (.github#374). See _skip_empty_scope.
+        _hl_ran=0
+        _skip_empty_scope 41 "html-lang" "PHP template (templates|appinfo/templates **/*.php)"
     elif [ ! -f "${_hl_helper}" ]; then
         _hl_ran=0
         _skip 41 "html-lang" wiring "php_template_scope.py not found at ${_hl_helper} — ${#_hl_files[@]} PHP template(s) were in scope and NONE were inspected; a document without a declared language (WCAG 3.1.1) is UNVERIFIED by this run."
@@ -5807,7 +6266,9 @@ if _a11y_has_markup_dir; then
         _lq_files+=("${vue}")
     done < <(_a11y_markup_files)
     if [ "${#_lq_files[@]}" -eq 0 ]; then
-        :   # nothing in scope; the PASS below describes the diff, as everywhere else.
+        # AN UNOPENED SCOPE IS NEVER A PASS (.github#374). See _skip_empty_scope.
+        _lq_ran=0
+        _skip_empty_scope 42 "link-text-quality" "markup file (src|templates|appinfo/templates **/*.vue|php|html)"
     elif [ ! -f "${_lq_helper}" ]; then
         # A MISSING HELPER MUST NOT REPORT PASS (#147).
         _lq_ran=0
@@ -5884,7 +6345,9 @@ if _a11y_has_markup_dir; then
         _th_files+=("${vue}")
     done < <(_a11y_markup_files)
     if [ "${#_th_files[@]}" -eq 0 ]; then
-        :   # nothing in scope; the PASS below describes the diff, as everywhere else.
+        # AN UNOPENED SCOPE IS NEVER A PASS (.github#374). See _skip_empty_scope.
+        _th_ran=0
+        _skip_empty_scope 43 "table-headers" "markup file (src|templates|appinfo/templates **/*.vue|php|html)"
     elif [ ! -f "${_th_helper}" ]; then
         # A MISSING HELPER MUST NOT REPORT PASS (#147).
         _th_ran=0
@@ -5953,7 +6416,9 @@ if _a11y_has_markup_dir; then
         _ac_files+=("${vue}")
     done < <(_a11y_markup_files)
     if [ "${#_ac_files[@]}" -eq 0 ]; then
-        :   # nothing in scope; the PASS below describes the diff, as everywhere else.
+        # AN UNOPENED SCOPE IS NEVER A PASS (.github#374). See _skip_empty_scope.
+        _ac_ran=0
+        _skip_empty_scope 44 "autocomplete-attr" "markup file (src|templates|appinfo/templates **/*.vue|php|html)"
     elif [ ! -f "${_ac_helper}" ]; then
         # A MISSING HELPER MUST NOT REPORT PASS (#147).
         _ac_ran=0
@@ -6326,7 +6791,7 @@ _scht_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-security-change-has-tests.log
 : > "${_scht_log}"
 _scht_ran=1
 _scht_helper="${SCRIPT_DIR}/lib/check_security_cochange.py"
-if [ "${SCOPE_TO_DIFF}" != "1" ] || [ -z "${BASE_REF}" ]; then
+if [ "${HAVE_DELTA_BASE}" != "1" ]; then
     # NO DIFF, NO VERDICT — and NOT a PASS (#242/#240/#258/#268).
     #
     # This gate's whole subject is "what did this change touch, and did it also
@@ -6334,9 +6799,14 @@ if [ "${SCOPE_TO_DIFF}" != "1" ] || [ -z "${BASE_REF}" ]; then
     # `if` above was simply false and the gate fell through to `_pass 47`,
     # announcing a co-change verdict it had not formed. Every full-repo run in
     # the fleet — every builder iteration — printed that green.
+    #
+    # Keyed on `HAVE_DELTA_BASE`, not on the FILE scope: gate-47 is a DELTA
+    # gate and needs a base, not a narrowed file list. A full-scope PR run
+    # still has one, so this gate did not quietly retire when full scope
+    # became the default (.github#374).
     _scht_ran=0
-    _skip 47 "security-change-has-tests" na "this run is not diff-scoped (no --scope-to-diff / no base ref), so there is no change set to classify. This gate compares a PR's hunks against the tests it touched; on a whole-repository run there is no such pair, and no change in this repository could create one."
-elif [ "${SCOPE_TO_DIFF}" = "1" ] && [ -n "${BASE_REF}" ]; then
+    _skip 47 "security-change-has-tests" na "this run has NO delta base, so there is no change set to classify. This gate compares a change's hunks against the tests it touched; with no base there is no such pair, and no change in this repository could create one. Give it a base (--base <ref> or HYDRA_GATE_BASE_REF) and it runs at any file scope."
+elif [ "${HAVE_DELTA_BASE}" = "1" ]; then
     if [ ! -f "${_scht_helper}" ]; then
         # A MISSING HELPER MUST NOT REPORT PASS (#147).
         _scht_ran=0
@@ -6415,13 +6885,14 @@ fi
 _csrf_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-csrf-cochange.log
 : > "${_csrf_log}"
 _csrf_ran=1
-if [ "${SCOPE_TO_DIFF}" != "1" ] || [ -z "${BASE_REF}" ]; then
+if [ "${HAVE_DELTA_BASE}" != "1" ]; then
     # NO DIFF, NO VERDICT — and NOT a PASS (#242/#240/#258/#268). Identical
     # reasoning to gate-47 above: "was an attribute REMOVED" is a question only
     # a diff can answer, and a full-repo run printed PASS without asking it.
+    # Keyed on the delta base, not the file scope, for the same reason.
     _csrf_ran=0
-    _skip 48 "csrf-cochange" na "this run is not diff-scoped (no --scope-to-diff / no base ref), so there is no removal to detect. Whether a controller DROPPED @NoCSRFRequired is a property of a change set, not of a checkout, and no change in this repository could make a whole-repository run able to answer it."
-elif [ "${SCOPE_TO_DIFF}" = "1" ] && [ -n "${BASE_REF}" ]; then
+    _skip 48 "csrf-cochange" na "this run has NO delta base, so there is no removal to detect. Whether a controller DROPPED @NoCSRFRequired is a property of a CHANGE SET, not of a checkout, and no change in this repository could make a baseless run able to answer it. Give it a base (--base <ref> or HYDRA_GATE_BASE_REF) and it runs at any file scope."
+elif [ "${HAVE_DELTA_BASE}" = "1" ]; then
     # Find removed @NoCSRFRequired lines in changed PHP files.
     #
     # A REMOVED COMMENT IS NOT A REMOVED ATTRIBUTE (#191).
@@ -7078,9 +7549,29 @@ fi
 # reported so migrations can show the number shrinking).
 _cwr_counts=$(grep -m1 -o 'base=[0-9]* head=[0-9]* delta=[+-]*[0-9]*.*' "${_cwr_log}" 2>/dev/null || true)
 [ -n "${_cwr_counts}" ] && echo "[gate-52] custom-widget-ratchet: ${_cwr_counts}"
+# THE RATCHET HALF IS NOT ALWAYS COMPUTED, AND IT USED TO SAY SO NOWHERE
+# (.github#374). check_custom_widget_ratchet.py computes base-vs-head only when
+# it is given a base; without one it runs the JUSTIFICATION half alone and
+# prints no `base=/head=/delta=` line at all. The gate could then print PASS
+# while the mechanic it is NAMED after had not run. Not prefixed `[gate-` so no
+# `^\[gate-` consumer reads it as a verdict — same convention as gate-31's.
+if [ "${#_cwr_files[@]}" -gt 0 ] && [ "${_cwr_ran}" -eq 1 ] && [ -z "${_cwr_counts}" ]; then
+    echo "[hydra-gates] gate-52 custom-widget-ratchet: the RATCHET half was NOT computed — the helper printed no base/head/delta counts, which it does only when it has a base ref to compare against. The JUSTIFICATION half (every custom kind:\"widget\" entry needs a \`_note\`) did run over ${#_cwr_files[@]} file(s). A PASS below covers that half only."
+fi
 if [ "${#_cwr_files[@]}" -eq 0 ]; then
     # AN UNOPENED SCOPE IS NEVER A PASS (#242/#240/#258/#268).
     _skip 52 "custom-widget-ratchet" na "no src/**/*.{js,ts,vue} file(s) in this repo, so there is no component registry to hold a custom kind:\"widget\" entry and no ratchet to compute."
+elif [ "${SCOPE_TO_DIFF}" = "1" ] && ! printf '%s\n' "${CHANGED_FILES}" | grep -qE '^src/.*\.(js|ts|vue)$'; then
+    # AN UNOPENED SCOPE IS NEVER A PASS (.github#374).
+    #
+    # `_cwr_files` is deliberately NOT `_in_scope`-filtered — the ratchet count
+    # is app-wide — so on a narrowed run this array is non-empty even when the
+    # diff contains no frontend file at all. The helper then self-scopes its
+    # justification half to changed entries, finds none, prints `findings=0`,
+    # and the gate printed PASS having judged nothing. The array being full is
+    # what made this one invisible: every other gate in this class gave itself
+    # away with an empty file list.
+    _skip_empty_scope 52 "custom-widget-ratchet" "src/**/*.{js,ts,vue} file (a component registry declaring kind:\"widget\" entries)"
 elif [ "${_cwr_ran}" -eq 1 ]; then
     if [ "${_cwr_fail}" -eq 0 ]; then
         _pass 52 "custom-widget-ratchet"
@@ -7307,7 +7798,20 @@ if [ -f src/manifest.json ]; then
         # is prevention rather than a burn-down list nobody can close.
         # -------------------------------------------------------------------
         _em_orphaned=""
-        if [ "${SCOPE_TO_DIFF}" = "1" ] && [ -n "${BASE_REF}" ] && [ "${_em_warns}" -gt 0 ]; then
+        # THIS SUB-CHECK IS A DELTA HALF INSIDE A STATE GATE, AND ITS ABSENCE
+        # USED TO BE SILENT (.github#374).
+        #
+        # "Did THIS change remove the last manifest reference to a component"
+        # is unanswerable without a base, so with none it simply does not run —
+        # and gate-53 could still print PASS, saying nothing about the half
+        # that did not execute. Keyed on `HAVE_DELTA_BASE` (the file scope is
+        # irrelevant to it) and, when it cannot run over live WARNs, it says so
+        # on stdout. Not prefixed `[gate-` so no `^\[gate-` consumer reads it
+        # as a verdict.
+        if [ "${HAVE_DELTA_BASE}" != "1" ] && [ "${_em_warns}" -gt 0 ]; then
+            echo "[hydra-gates] gate-53 effective-manifest-crossref: the ORPHAN-PROMOTION half was NOT computed — it asks whether this CHANGE removed the last \"component\" reference to one of the ${_em_warns} registry export(s) below, and this run has no delta base. Those WARNs stay advisory. Give the run a base (--base <ref> or HYDRA_GATE_BASE_REF) to have them judged."
+        fi
+        if [ "${HAVE_DELTA_BASE}" = "1" ] && [ -n "${BASE_REF}" ] && [ "${_em_warns}" -gt 0 ]; then
             set +e
             _em_removed_refs=$(git diff -U0 "${BASE_REF}...HEAD" -- \
                 'src/manifest.json' 'src/manifest.d/*' 'src/menu-layout.json' 2>/dev/null \
@@ -7925,8 +8429,45 @@ if [ -d lib/AppInfo ]; then
     # unscoped, so it would have surfaced the whole backlog as blocking
     # findings on every build. The helper still fails CLOSED when the base
     # does not resolve, so an unscopable run is never reported as a clean one.
-    python3 "${SCRIPT_DIR}/lib/check_listener_placement.py" . --base "${BASE_REF}" > "${_lwp_log}" 2>&1
-    _lwp_rc=$?
+    #
+    # `--base` IS ONLY PASSED WHEN THERE IS ONE (.github#374). `BASE_REF` may
+    # now legitimately be empty — the runner no longer carries a hardcoded
+    # `origin/development`, which is the root cause `.github#347` and `#361`
+    # share. Handing the helper `--base ""` would OVERRIDE its own argparse
+    # default with an empty string, and what it does with that is the helper's
+    # business, not a verdict this runner should route on. With no base we go
+    # straight to rc 3, which is exactly the branch below that states the
+    # absence honestly and runs the advisory whole-tree sweep for the size.
+    if [ "${HAVE_DELTA_BASE}" = "1" ]; then
+        python3 "${SCRIPT_DIR}/lib/check_listener_placement.py" . --base "${BASE_REF}" > "${_lwp_log}" 2>&1
+        _lwp_rc=$?
+    else
+        # ALWAYS RUN THE CHECKER. EVALUATE WIRING FIRST, THEN SCOPE (#364).
+        #
+        # A first draft skipped the invocation entirely with no base and
+        # short-circuited to rc 3 — and `test_gate_crashed_checker_is_not_a_finding.sh`
+        # caught it immediately: with a python3 that cannot run, gate-61
+        # reported NOT APPLICABLE instead of SKIPPED (wiring). Nothing ran, so
+        # nothing could crash, and A CRASHED CHECKER READ AS AN EMPTY SCOPE —
+        # the exact regression `#364`'s first draft made in gate-16, caught by
+        # the exact same suite. Declining EARLIER silently retires a wiring
+        # invariant; that is the general shape, and this is the second instance.
+        #
+        # `--all` is the mode that needs no base. It is invoked here for ONE
+        # reason — to learn whether the checker can run at all — and its
+        # FINDINGS are deliberately discarded: sweeping the tree on a baseless
+        # run was tried before and reverted, because the builder runs that way
+        # and it surfaces the fleet's whole registration backlog on every build.
+        python3 "${SCRIPT_DIR}/lib/check_listener_placement.py" . --all > "${_lwp_log}" 2>&1
+        _lwp_rc=$?
+        # WIRING FIRST: did it reach its own terminal summary? If yes it ran,
+        # and the honest verdict is "there is no delta base", which is rc 3's
+        # branch below. If no, leave the real status alone so the wiring branch
+        # further down catches it and says what went unchecked.
+        if _helper_finished "${_lwp_log}" '^checked [0-9]+ (post-event )?registration\(s\)'; then
+            _lwp_rc=3
+        fi
+    fi
     set +e
     if [ "${_lwp_rc}" -eq 0 ]; then
         _pass 61 "listener-work-placement"
@@ -7961,30 +8502,50 @@ if [ -d lib/AppInfo ]; then
         # false-RED, and it stops the run claiming an exclusion nothing
         # performed. What was missing was the SIZE of what went unread, so an
         # advisory sweep supplies it: informational, never a verdict.
-        if [ "${SCOPE_TO_DIFF}" = "1" ]; then
-            _skip 61 "listener-work-placement" na "the diff against '${BASE_REF}' put every post-event registration out of scope, so NONE were inspected. Diff-scoped out under ADR-020 — the fleet's 149-registration backlog is a work-list, not a reason to block an unrelated PR. This gate runs on the next PR that touches a listener registration. See ${_lwp_log}."
+        # `HAVE_DELTA_BASE`, not `SCOPE_TO_DIFF`: what distinguishes these two
+        # branches is whether a diff was COMPUTED, never how the file scope was
+        # set. Reading the file scope here is precisely how `.github#347` got
+        # its false reason — a `NOT APPLICABLE` blaming a diff on a run that
+        # computed none.
+        # THE ADVISORY SWEEP RUNS IN **BOTH** BRANCHES (.github#374).
+        #
+        # It used to run only on the no-base branch, because `--full` was the
+        # only way to reach a state where the size of the unread backlog was
+        # interesting. Full file scope is now the DEFAULT, so "a base resolved
+        # and it excluded every registration" is the COMMON case — every PR in
+        # the fleet — and `0 of 1` and `0 of 45` were still typographically
+        # identical there. The whole point of the reversal is that inherited
+        # debt stops being invisible; leaving this gate's backlog unstated on
+        # the common path would have exempted it from exactly that.
+        #
+        # ADVISORY ONLY, in both branches. Its exit status is discarded on
+        # purpose: a sweep that finds inherited debt must not become this run's
+        # verdict, and a sweep that CRASHES must not either — the count is
+        # quoted only when the helper printed its own terminal summary line.
+        _lwp_all_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-listener-work-placement.advisory.log
+        python3 "${SCRIPT_DIR}/lib/check_listener_placement.py" . --all \
+            > "${_lwp_all_log}" 2>&1 || true
+        #
+        # THE SUMMARY IS RECOMPOSED, NOT QUOTED. The helper's own line ends
+        # "…, 0 out of scope: 1 failure(s)", and pasting that in would put
+        # the phrase "out of scope" back into a reason on a run that
+        # computed no scope — the exact sentence this fix removes, smuggled
+        # in as a quotation. The suite asserts against that phrase
+        # gate-agnostically and caught it here.
+        _lwp_backlog=""
+        if grep -qE '^checked [0-9]+ post-event registration' "${_lwp_all_log}" 2>/dev/null; then
+            _lwp_all_n=$(grep -oE '^checked [0-9]+ post-event registration' "${_lwp_all_log}" | tail -1 | grep -oE '[0-9]+' | head -1)
+            _lwp_all_f=$(grep -oE '[0-9]+ failure\(s\)' "${_lwp_all_log}" | tail -1 | grep -oE '[0-9]+' | head -1)
+            _lwp_backlog=" ADVISORY, and it decides nothing here: a whole-tree sweep of this same tree reaches ${_lwp_all_n:-an unreported number of} registration(s) carrying ${_lwp_all_f:-an unreported number of} finding(s), NONE of which this run judged — see ${_lwp_all_log}."
+        fi
+        if [ "${HAVE_DELTA_BASE}" = "1" ]; then
+            # A diff WAS computed, so naming it is a true statement, not the
+            # `.github#347` lie. The discriminator is `HAVE_DELTA_BASE`, and the
+            # base itself is printed by the preamble — so a reader can check the
+            # claim rather than having to trust it.
+            _skip 61 "listener-work-placement" na "the diff against '${BASE_REF}' put every post-event registration out of scope, so NONE were inspected. This gate is deliberately delta-scoped even at full file scope — the fleet's registration backlog is a work-list, not a reason to block an unrelated change. It runs on the next change that touches a listener registration.${_lwp_backlog} See ${_lwp_log}."
         else
-            # ADVISORY ONLY. Its exit status is discarded on purpose: a sweep
-            # that finds inherited debt must not become this run's verdict, and
-            # a sweep that CRASHES must not either — the count is quoted only
-            # when the helper printed its own terminal summary line.
-            _lwp_all_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-listener-work-placement.advisory.log
-            python3 "${SCRIPT_DIR}/lib/check_listener_placement.py" . --all \
-                > "${_lwp_all_log}" 2>&1 || true
-            #
-            # THE SUMMARY IS RECOMPOSED, NOT QUOTED. The helper's own line ends
-            # "…, 0 out of scope: 1 failure(s)", and pasting that in would put
-            # the phrase "out of scope" back into a reason on a run that
-            # computed no scope — the exact sentence this fix removes, smuggled
-            # in as a quotation. The suite asserts against that phrase
-            # gate-agnostically and caught it here.
-            _lwp_backlog=""
-            if grep -qE '^checked [0-9]+ post-event registration' "${_lwp_all_log}" 2>/dev/null; then
-                _lwp_all_n=$(grep -oE '^checked [0-9]+ post-event registration' "${_lwp_all_log}" | tail -1 | grep -oE '[0-9]+' | head -1)
-                _lwp_all_f=$(grep -oE '[0-9]+ failure\(s\)' "${_lwp_all_log}" | tail -1 | grep -oE '[0-9]+' | head -1)
-                _lwp_backlog=" ADVISORY, and it decides nothing here: a whole-tree sweep of this same tree reaches ${_lwp_all_n:-an unreported number of} registration(s) carrying ${_lwp_all_f:-an unreported number of} finding(s), NONE of which this run judged — see ${_lwp_all_log}."
-            fi
-            _skip 61 "listener-work-placement" na "this run computed NO diff (--full / unscoped), and gate-61 is diff-scoped by design (ADR-078/ADR-020, it is about NEW debt) — so NO post-event registration was inspected and ADR-078 work placement is UNVERIFIED by this run. This is NOT a clean bill of health, and NO diff excluded anything: there was no diff. Re-measure with an explicit base (HYDRA_GATE_BASE_REF=origin/beta) or run with --scope-to-diff.${_lwp_backlog} See ${_lwp_log}."
+            _skip 61 "listener-work-placement" na "this run computed NO diff (no delta base), and gate-61 is delta-scoped by design (ADR-078, it is about NEW debt) — so NO post-event registration was inspected and ADR-078 work placement is UNVERIFIED by this run. This is NOT a clean bill of health, and NO diff excluded anything: there was no diff. Re-measure with an explicit base (--base <ref> or HYDRA_GATE_BASE_REF=origin/beta).${_lwp_backlog} See ${_lwp_log}."
         fi
     elif [ "${_lwp_rc}" -eq 4 ]; then
         _skip 61 "listener-work-placement" na "this repo registers no post-object-event listener, so there is no work to place on or off the write path (ADR-078). See ${_lwp_log}."
@@ -7993,6 +8554,17 @@ if [ -d lib/AppInfo ]; then
         _lwp_why=$(head -3 "${_lwp_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
         _skip 61 "listener-work-placement" wiring "check_listener_placement.py exited ${_lwp_rc} without printing its terminal 'checked N ... registration(s)' summary, so NO post-object-event listener was judged and ADR-078 work placement is UNVERIFIED by this run. Checker output: ${_lwp_why:-<empty>}. See ${_lwp_log}."
     else
+        # THIS CLAMP IS GUARDED, AND THAT IS WHY IT STAYS (.github#374).
+        #
+        # A sweep for `[ "${_n}" -eq 0 ] && _n=1` flags this line alongside
+        # gate-24's, which WAS a crash-rendered-as-a-finding. This one is not:
+        # the `_helper_finished` branch immediately above has already proved the
+        # checker printed its terminal `checked N registration(s)` summary, so a
+        # crash can never reach here. Zero `^FAIL` lines with a non-zero exit is
+        # a FORMAT DRIFT between helper and runner, not a checker that died.
+        #
+        # Left alone deliberately, with the reason written down, so the next
+        # sweep does not re-flag it and does not "fix" it into a skip.
         _lwp_n=$(_count '^FAIL' "${_lwp_log}")
         [ "${_lwp_n}" -eq 0 ] && _lwp_n=1
         _fail 61 "listener-work-placement" "${_lwp_n} post-event listener(s) doing synchronous work with no deferral and no justification (ADR-078); see ${_lwp_log}"
@@ -8173,6 +8745,51 @@ if [ -d lib/AppInfo ]; then
     fi
 else
     _skip 64 "apphost-autoload-prelude" na "no lib/AppInfo/ — this repo has no Nextcloud composition root, so there is no register() in which an AppHost reference could resolve too early."
+fi
+
+# ---------------------------------------------------------------------------
+# Gate 65: coding-standard-adoption — the app must still be on the fleet's
+# shared standard, and must not have pinned itself away from it.
+#
+# WHY THIS EXISTS
+# ---------------
+# Centralising configuration does not stop it drifting. The 18 mutually
+# different psalm.xml files measured on 2026-08-12 were all copies of something
+# that had been shared once. What stops recurrence is a check that fails when an
+# app walks away from the centre — including by freezing itself against it.
+#
+# NOT DIFF-SCOPED, deliberately. The subject is the app's standing configuration,
+# not the lines a PR touched: an app that never touches phpcs.xml again must not
+# thereby become exempt from having one. Every rule is a whole-repo property that
+# is either true today or is not.
+#
+# The checker prints one `FAIL <rule>: <detail>` per violation and a terminal
+# `checked N rule(s)`. Its ABSENCE is treated as a wiring failure rather than a
+# pass — a crashed checker and a clean repo are otherwise the same silence.
+# ---------------------------------------------------------------------------
+_csa_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-coding-standard-adoption.log
+: > "${_csa_log}"
+if [ -f composer.json ] || [ -f phpcs.xml ]; then
+    set +e
+    python3 "${SCRIPT_DIR}/lib/check_coding_standard_adoption.py" . > "${_csa_log}" 2>&1
+    _csa_rc=$?
+    set +e
+    grep -E '^FAIL ' "${_csa_log}" || true
+    if ! _helper_finished "${_csa_log}" '^checked [0-9]+ rule\(s\)$'; then
+        # A CRASH IS NOT A FINDING (.github#330).
+        _csa_why=$(head -3 "${_csa_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+        _skip 65 "coding-standard-adoption" wiring "check_coding_standard_adoption.py exited ${_csa_rc} without printing its terminal 'checked N rule(s)' summary, so NO rule was evaluated and this repo's adoption of the shared standard is UNVERIFIED by this run. Checker output: ${_csa_why:-<empty>}. See ${_csa_log}."
+    elif [ "${_csa_rc}" -eq 0 ]; then
+        _pass 65 "coding-standard-adoption"
+    else
+        # Count comes off the checker's own FAIL lines, not off the exit code,
+        # so a future exit-code change cannot silently alter the number.
+        _csa_n=$(grep -cE '^FAIL ' "${_csa_log}" 2>/dev/null || true)
+        case "${_csa_n}" in ''|*[!0-9]*) _csa_n=1 ;; esac
+        _fail 65 "coding-standard-adoption" "${_csa_n} deviation(s) from the shared coding standard; see ${_csa_log}"
+    fi
+else
+    _skip 65 "coding-standard-adoption" na "no composer.json and no phpcs.xml — this repo ships no PHP for a coding standard to apply to."
 fi
 
 # ---------------------------------------------------------------------------

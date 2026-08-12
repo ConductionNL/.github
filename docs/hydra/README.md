@@ -69,6 +69,31 @@ Each repo has its own `docs/` directory, and that's not a duplication: **Hydra's
 
 Most developers only need `.github`. You only need the Hydra clone when you're working *on* the pipeline (skills, agents, container images) rather than *with* it (triggering it on your PR via labels).
 
+## The standard Hydra enforces
+
+Hydra's mechanical gates are only half the answer to "will this merge?". The
+other half is the coding standard the gates check against, and that standard is
+**Nextcloud's**:
+
+> Conduction code must pass Nextcloud's own checks unchanged. We may be stricter
+> than Nextcloud; we may not be different from it.
+
+Formatting is owned by php-cs-fixer via
+[`conduction/coding-standard`](https://github.com/ConductionNL/coding-standard),
+which *extends* `nextcloud/coding-standard` and can only add to it — enforced by
+that package's invariant test rather than by review. PHP_CodeSniffer keeps only
+the semantic rules (named parameters, `@spec`, banned debug functions, removed
+Nextcloud APIs), with every whitespace and brace sniff removed so the two tools
+cannot contradict each other.
+
+**gate-65 `coding-standard-adoption`** is what holds it in place. It fails an app
+that keeps a local ruleset, ships no `.editorconfig`, wires `cs:fix` to PHPCS,
+analyses against a `nextcloud/ocp` below its declared `min-version` — or **pins**
+the gates, the coding standard or the shared workflow instead of tracking the tip.
+
+The full comparison against Nextcloud's own app CI/CD, including what we do not
+yet run, is in [Way of Work → CI/CD and Code Standards](../WayOfWork/ci-cd.md).
+
 ## Where to learn more
 
 For a narrative introduction, the Academy's **[Hydra tutorial series](https://conduction.nl/academy/?series=hydra-tutorial)** walks through what Hydra is, the three pipelines, the quality gates, the skill catalogue, and how to start a real run — six short modules. Read it first if you're new to Hydra; come back here for the reference detail.

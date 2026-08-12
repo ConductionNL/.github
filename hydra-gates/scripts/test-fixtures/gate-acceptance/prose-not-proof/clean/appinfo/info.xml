@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<id>prosefixture</id>
+	<name>Prose Is Not Proof Fixture</name>
+	<summary>Fixture app for the prose-vs-directive acceptance bundle. Not a real app.</summary>
+	<description>Exists so gate-19 and gate-26 can be shown to distinguish an executing reference from a sentence about one.</description>
+	<version>1.0.0</version>
+	<licence>agpl</licence>
+	<author>Conduction</author>
+	<namespace>ProseFixture</namespace>
+	<category>tools</category>
+	<dependencies><nextcloud min-version="30" max-version="32"/></dependencies>
+</info>

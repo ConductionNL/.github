@@ -348,7 +348,24 @@ if _run "${_REPO}" --scope-to-diff --base "${_BASE}"; then
     # this repository, so "PASS" would have claimed a clean bill of health for
     # four endpoints whose attributes this run cannot see at all.
     _expect_gate 5 "NOT APPLICABLE" "AppHost app, dependency-only diff: gate-5 clean (the scholiq case)"
-    _expect_gate 14 PASS "AppHost app, dependency-only diff: gate-14 clean"
+    # ⚠️ RECLASSIFIED 2026-08-12 from PASS to NOT APPLICABLE (.github#374),
+    # for the SAME reason 6a reclassified gate-5 on 2026-08-08 — and this line
+    # is why that reclassification was only half done.
+    #
+    # gate-14 filters routes through `_in_scope` one route at a time and then
+    # asked `_rr_fail -eq 0`. On this diff every route is filtered out, so zero
+    # findings over zero inspected routes printed `PASS` — indistinguishable
+    # from a repo whose every route was cross-checked and found reachable. The
+    # comment 40 lines up already states the argument in full: *"a PASS here is
+    # scoping, not absence" is a fact the verdict PASS does not state and NOT
+    # APPLICABLE does.* It was applied to gate-5 and not to its neighbour.
+    #
+    # Measured on a fixture carrying a real unrouted controller method: full
+    # scope FAIL — 1, docs-only diff PASS. The controls that keep this honest
+    # are 6b and 6c above (unchanged) plus the four `_expect_gate 14 FAIL`
+    # assertions earlier in this file — gate-14 must still raise a genuinely
+    # unreachable route the moment one is in scope.
+    _expect_gate 14 "NOT APPLICABLE" "AppHost app, dependency-only diff: gate-14 reports NO finding (scoped out, not absent)"
 fi
 
 echo

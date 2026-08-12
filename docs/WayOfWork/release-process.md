@@ -98,7 +98,11 @@ The `appinfo/info.xml` in your repository is **never modified** by the release w
 | **Stable** | `main` | `nightly: false` | Production users, default install                       |
 | **Beta**   | `beta` | `nightly: true`  | Testers, early adopters (opt-in via App Store settings) |
 
-There are no development builds. The `development` branch is for integration only — developers test locally or install from the beta channel.
+In addition, 14 of the 18 core apps ship a `release-development.yml` that calls the shared beta
+release workflow with `channel: dev` on every push to `development`. The `dev` channel is a **GitHub
+prerelease only** — it shares the beta packaging path but never POSTs to
+`apps.nextcloud.com`, so it is not an App Store channel. It exists so work on `development` can
+be installed before it reaches beta. Developers otherwise test locally or install from beta.
 
 ## Automatic PR Sync
 
