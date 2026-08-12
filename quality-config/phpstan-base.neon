@@ -56,32 +56,51 @@ parameters:
     bootstrapFiles:
         - %currentWorkingDirectory%/phpstan-bootstrap.php
 
-    # ── WHY TWO OF THESE CARRY THE `(?)` OPTIONAL MARKER ─────────────────────
-    # PHPStan 2.x VALIDATES excludePaths and aborts the whole run when an entry
-    # names something that does not exist:
-    #   Path "/app/vendor-bin" is neither a directory, nor a file path, nor a
-    #   fnmatch pattern. If the excluded path can sometimes exist, append (?)
-    # PHPStan 1.x accepts the missing path silently, which is why this went
-    # unnoticed. Measured 2026-08-12 during the step-2b rollout: zaakafhandelapp
-    # is the only fleet app on PHPStan 2 (2.2.8; the other seventeen are on
-    # 1.12.33), it has neither `vendor-bin` nor `lib/Resources/template`, and
-    # including this file unchanged made `composer phpstan` exit before
-    # analysing a single file — the same failure shape as the v1.7.0 relative-path
-    # bug, from a different cause.
+    # ── ONLY PATHS THAT ALWAYS EXIST BELONG HERE ─────────────────────────────
+    # `vendor` is the only one: phpstan runs from `vendor/bin/`, so it is always
+    # there. A CONDITIONAL path in a shared base has no spelling that is safe on
+    # both PHPStan majors, and this file tried two of them:
     #
-    # `vendor` stays mandatory: phpstan is invoked from `vendor/bin/`, so it
-    # always exists. The other two are genuinely per-app.
+    #   plain `%cwd%/vendor-bin`        PHPStan 2.x VALIDATES excludePaths and
+    #                                   ABORTS when the entry does not exist
+    #                                   ("neither a directory, nor a file path,
+    #                                   nor a fnmatch pattern"). 1.x accepts it
+    #                                   silently, which is why v1.7.0 and v1.7.1
+    #                                   shipped it. zaakafhandelapp — the fleet's
+    #                                   only 2.x app (2.2.8; the other 17 are on
+    #                                   1.12.33) — analysed ZERO files.
     #
-    # The marker is stripped during resolution, so this changes no app's resolved
-    # value: verified on docudesk (PHPStan 1.12.33) with a planted
-    # `no-such-dir-control (?)`, which analysed cleanly and dumped as a plain
-    # `/app/no-such-dir-control`.
+    #   `%cwd%/vendor-bin (?)`          v1.7.2's attempted fix. WORSE on 2.x, not
+    #                                   better: NEON reads `… (?)` after a `%…%`
+    #                                   expansion as an ENTITY, so PHPStan 2 dies
+    #                                   with `FileExcluder::isAbsolutePath():
+    #                                   Argument #1 ($path) must be of type
+    #                                   string, Nette\DI\Definitions\Statement
+    #                                   given`.
+    #
+    #   `'%cwd%/vendor-bin (?)'`        Quoting stops the entity parse and 2.x is
+    #                                   happy — but 1.x then does NOT strip the
+    #                                   marker: `dump-parameters` resolves it to
+    #                                   the literal `"/app/vendor-bin (?)"`, a
+    #                                   path that matches nothing. Harmless where
+    #                                   the directory is absent, and SILENTLY
+    #                                   BREAKING where it is present — openbuild
+    #                                   ships 31 files under lib/Resources/template
+    #                                   and would have started analysing them.
+    #
+    # All three measured on 2026-08-13 against real apps, not fixtures. So the
+    # conditional paths move to the apps that actually have the directory, where
+    # they need no marker and work on both majors:
+    #
+    #   vendor-bin              openregister only
+    #   lib/Resources/template  portaliq, openbuild, hermiq
+    #
+    # Fifteen to seventeen apps were carrying an exclusion for a directory they do
+    # not have. An app that later grows one adds a plain path to its own
+    # phpstan.neon — `excludePaths` APPENDS to this list unless the app writes
+    # `excludePaths!`.
     excludePaths:
         - %currentWorkingDirectory%/vendor
-        - %currentWorkingDirectory%/vendor-bin (?)
-        # Apps that ship a verbatim template snapshot under lib/Resources/template/
-        # (openbuild). A no-op everywhere else.
-        - %currentWorkingDirectory%/lib/Resources/template (?)
 
     scanDirectories:
         - %currentWorkingDirectory%/vendor/nextcloud/ocp
