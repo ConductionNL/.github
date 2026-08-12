@@ -229,16 +229,25 @@ else
     _bad "THE DELIVERY CHANNEL CHANGED THE VERDICT. One tree, one base, full scope in both arms — the gates below answered differently depending on whether the base arrived as --base or in the environment. That is a second, unprinted source of scope (.github#416)."
     printf '   gate | --base            | $HYDRA_GATE_BASE_REF\n'
     printf '   -----+-------------------+---------------------\n'
-    # Join on the gate number so the reader gets the pair, not two lists.
+    # Join on the gate number so the reader gets the PAIR, not two lists.
+    #
+    # ⚠️ `join` and `comm` both require their inputs in the collating order they
+    # compare with, and `_verdict_set` sorts NUMERICALLY so the table reads 1, 2,
+    # …, 10 rather than 1, 10, 2. Feeding that straight in makes `join` skip
+    # pairs SILENTLY — it would drop differing gates out of the very message that
+    # is supposed to name them, which is worse than no diagnostic at all. So both
+    # are re-sorted lexically here, and only here; the equality test above is
+    # order-insensitive as long as both sides use one order, which they do.
     join -t'|' -j1 \
-        <(printf '%s\n' "${_set_arg}") \
-        <(printf '%s\n' "${_set_env}") 2>/dev/null \
+        <(printf '%s\n' "${_set_arg}" | LC_ALL=C sort -t'|' -k1,1) \
+        <(printf '%s\n' "${_set_env}" | LC_ALL=C sort -t'|' -k1,1) 2>/dev/null \
+        | LC_ALL=C sort -t'|' -k1,1n \
         | awk -F'|' '$2 != $3 { printf "   %4s | %-17s | %s\n", $1, $2, $3 }'
     # A gate present in one arm and absent from the other never reaches `join`,
     # and vanishing entirely is a WORSE symptom than answering differently.
     comm -3 \
-        <(printf '%s\n' "${_set_arg}" | cut -d'|' -f1) \
-        <(printf '%s\n' "${_set_env}" | cut -d'|' -f1) \
+        <(printf '%s\n' "${_set_arg}" | cut -d'|' -f1 | LC_ALL=C sort) \
+        <(printf '%s\n' "${_set_env}" | cut -d'|' -f1 | LC_ALL=C sort) \
         | tr -d '\t' | sed 's/^/   only one arm emitted a verdict for gate-/'
 fi
 
