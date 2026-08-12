@@ -2389,7 +2389,17 @@ fi
 #     ->forbiddenWords( is not a false guard)
 #   - TemplateResponse return type / instantiation — SPA page renderers
 #   - (delegated guards, see check_no_admin_idor.py: Pattern 1 same-class
-#     guard-helper; Pattern 2 OpenRegister ObjectService/*Mapper RBAC)
+#     guard-helper; Pattern 2 OpenRegister ObjectService/*Mapper RBAC;
+#     Pattern 6 session-identity hand-off; Pattern 7 in-body ownership
+#     comparison, including the deliberate 404 anti-oracle refusal)
+#
+# NOT a guard (.github#365): an AUTHENTICATION check. `if ($user === null)
+# { ... 401 ... }` asks whether anyone is logged in; this gate asks whether
+# THIS caller may touch THIS object. Under #[NoAdminRequired] the framework
+# has already answered the first question, so the clause cannot fail — and it
+# was clearing the gate in all eighteen fleet apps at once. Such a clause is
+# now ignored whatever status it answers with, because authentication-ness is
+# a property of the CONDITION, not of the status code.
 #
 # Exemptions (never IDOR vectors):
 #   - __construct — not a routed action endpoint
@@ -2483,7 +2493,7 @@ if [ "${_idor_ran}" -eq 1 ]; then
         # service layer — which is where reading naturally stops, because the
         # service is what the controller calls. Saying so here costs nothing
         # and is the difference between a triage and a wrong security report.
-        _fail 7 "no-admin-idor" "${_idor_fail} method(s) with NoAdminRequired + no guard — see ${_idor_log}. BEFORE treating any of these as real: the checker sees ONLY the controller method body. If the endpoint reaches storage through a service or mapper, check whether the guard is enforced THERE (e.g. an organisation/tenant filter applied in the query builder) — and note that a deliberate 404-style tenancy refusal IS a guard, chosen so a 403 cannot become an existence oracle for another tenant's ids."
+        _fail 7 "no-admin-idor" "${_idor_fail} method(s) with NoAdminRequired + no guard — see ${_idor_log}. BEFORE treating any of these as real: the checker sees ONLY the controller method body. If the endpoint reaches storage through a service or mapper, check whether the guard is enforced THERE (e.g. an organisation/tenant filter applied in the query builder) — and note that a deliberate 404-style tenancy refusal IS a guard, chosen so a 403 cannot become an existence oracle for another tenant's ids. AND BEFORE 'fixing' any of these: a 'no user -> 401' preamble is NOT the fix (.github#365). It answers whether anyone is logged in, which #[NoAdminRequired] has already settled; the gate ignores it whatever status it returns. The fix is to scope the object to the caller — compare ownership, pass the session identity into the query, or call the app's existing per-object predicate."
     fi
 fi
 
