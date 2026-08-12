@@ -1,0 +1,25 @@
+{
+  "components": {
+    "schemas": {
+      "party": {
+        "title": "Party",
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" }
+        }
+      },
+      "case": {
+        "title": "Case",
+        "type": "object",
+        "properties": {
+          "partyRef": {
+            "type": "string",
+            "format": "uuid",
+            "description": "relation to the party that owns this case",
+            "$ref": "party"
+          }
+        }
+      }
+    }
+  }
+}

@@ -4082,9 +4082,32 @@ if [ -f src/manifest.json ]; then
             0)  _pass 22 "manifest-validation" ;;
             3)  _fail 22 "manifest-validation" "SCHEMA VALIDATION DID NOT HAPPEN — Ajv is not resolvable, so the vendored validator could only run its AppHost structural lint. A weaker check reported as a pass is not a pass. Run \`npm ci\` (ajv is already in package-lock.json) or set NODE_PATH; see ${_mv_log}" ;;
             2)  _fail 22 "manifest-validation" "vendored canonical schema could not be loaded — gate misconfiguration; see ${_mv_log}" ;;
-            *)  _mv_fail=$(_count '^at ' "${_mv_log}")
-                [ "${_mv_fail}" -eq 0 ] && _mv_fail=1
-                _fail 22 "manifest-validation" "${_mv_fail} schema violation(s) in src/manifest.json — see ${_mv_log}${_mv_app_note}" ;;
+            *)  # A CRASH IS NOT A FINDING (.github#233/#245/#330). `node` exits
+                # 1 both for "the manifest has violations" and for "the
+                # validator threw", and the two are indistinguishable by the
+                # byte. What DOES separate them is that every path in
+                # check_manifest.js that reaches a verdict prints at least one
+                # `at <pointer>: <message>` line — the schema errors at
+                # report():221 and the not-valid-JSON diagnostic at :463 — while
+                # a process that died on import prints an indented node stack
+                # trace and no `^at ` line at all.
+                #
+                # The old code read that zero and CLAMPED IT TO ONE, so a dead
+                # validator was reported as `FAIL — 1 schema violation(s) in
+                # src/manifest.json`: a finding count nobody had measured,
+                # naming a file that was never opened. Measured 2026-08-12 on a
+                # fixture whose manifest validates clean — PASS with a working
+                # node, `FAIL — 1 schema violation(s)` with a node that exits 1.
+                #
+                # A count of zero is therefore evidence the checker did not
+                # report, never evidence of one violation.
+                _mv_fail=$(_count '^at ' "${_mv_log}")
+                if [ "${_mv_fail}" -eq 0 ]; then
+                    _mv_why=$(head -3 "${_mv_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+                    _skip 22 "manifest-validation" wiring "the vendored canonical validator (${_mv_validator}) exited ${_mv_rc} WITHOUT reporting a single \`at <pointer>: <message>\` diagnostic, so src/manifest.json was NOT schema-validated and NO violation was measured. That is a crashed validator, not a finding about the manifest — the manifest is UNVERIFIED by this run. Validator output: ${_mv_why:-<empty>}. See ${_mv_log}${_mv_app_note}"
+                else
+                    _fail 22 "manifest-validation" "${_mv_fail} schema violation(s) in src/manifest.json — see ${_mv_log}${_mv_app_note}"
+                fi ;;
         esac
     fi
 fi
@@ -4424,6 +4447,25 @@ if [ -f appinfo/routes.php ]; then
         elif [ "${_cc_fail}" -ge 2 ]; then
             _cc_ran=0
             _skip 25 "contract-coverage" wiring "check_contract_coverage.py exited ${_cc_fail} (error) — no endpoint verdict was produced; wire-contract coverage is UNVERIFIED by this run. See ${_cc_log}."
+        elif [ "${_cc_count}" = "an unreported number of" ]; then
+            # A CRASH IS NOT A FINDING (.github#233/#245/#330). EXIT_FAIL is 1
+            # and a python traceback also exits 1, so the byte cannot separate
+            # "I found uncovered endpoints" from "I died". The helper's own
+            # terminal line — `FAIL — N new public endpoint(s) without a
+            # contract test` — CAN: it is printed on the only path that reaches
+            # EXIT_FAIL, and a process that crashed never printed it.
+            #
+            # The old code took the missing count as a licence to say "an
+            # unreported number of new public endpoint(s) missing a contract
+            # test" and BLOCK on it — a red verdict about endpoints nobody had
+            # counted. Measured 2026-08-12 on a fixture with exactly one
+            # uncovered endpoint: `FAIL — 1` with a working python3,
+            # `FAIL — an unreported number of` with a python3 that exits 1.
+            #
+            # "An unreported number" was the tell. It is now the branch.
+            _cc_ran=0
+            _cc_why=$(head -3 "${_cc_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+            _skip 25 "contract-coverage" wiring "check_contract_coverage.py exited ${_cc_fail} WITHOUT printing its own \`FAIL — N new public endpoint(s)\` summary, so NO endpoint was judged and NO count was measured; wire-contract coverage of newly-exposed endpoints is UNVERIFIED by this run. Checker output: ${_cc_why:-<empty>}. See ${_cc_log}."
         else
             _fail 25 "contract-coverage" "${_cc_count} new public endpoint(s) missing a contract test — see ${_cc_log}"
         fi
@@ -4716,14 +4758,46 @@ if [ -n "${_composer_lic}" ] && [ -d lib ]; then
         _lt_ran=0
         _skip 28 "license-triangle" wiring "check_license_triangle.py not found at ${_lt_helper} — ${#_lt_files[@]} PHP file(s) were in scope and NONE had their licence declarations read; licence drift is UNVERIFIED by this run."
     else
-        # Findings to the log (stdout), the compared-file count back here
-        # (stderr). `2>&1 >>file |` duplicates the CURRENT stdout — the pipe —
-        # onto fd 2 BEFORE stdout is redirected to the log, so the two streams
-        # separate. The count keeps #172's PASS-only-if-something-was-compared
-        # rule intact now that the reading lives in a helper.
-        _lt_checked=$(python3 "${_lt_helper}" "${_composer_lic}" "${_lt_files[@]}" \
-            2>&1 >> "${_lt_log}" | sed -n 's/^declared_files=//p' | head -1)
+        # Findings to the log (stdout), the compared-file count to stderr.
+        #
+        # A CRASHED CHECKER MUST NOT BECOME A CLAIM ABOUT THE REPOSITORY
+        # (.github#233/#245/#330). This used to be a pipeline —
+        # `$(python3 … 2>&1 >>log | sed -n 's/^declared_files=//p')` — which
+        # threw away BOTH the helper's exit status (the pipeline's value is
+        # sed's) AND its traceback (consumed by sed and never written to disk).
+        # A helper that died left `_lt_checked` empty, the log empty, and the
+        # chain below fell through to its LAST branch:
+        #
+        #   SKIPPED (structural) — … N lib/**/*.php file(s) WERE in scope, but
+        #   not one carried an @license or SPDX-License-Identifier declaration
+        #
+        # Measured 2026-08-12 on a fixture where BOTH files carry
+        # `@license EUPL-1.2`: PASS with a working python3, that sentence with a
+        # python3 that exits 1. The gate stated a false fact about the source.
+        #
+        # The header five lines above this one was written to prevent exactly
+        # this — "the repository is fine; the gate is broken, and those must not
+        # wear the same words" — but it guards only a MISSING helper. A helper
+        # that is present and CRASHES walked straight past it. That gap is the
+        # bug, and it is closed here by reading the status the same way the
+        # missing-helper branch reads the file's existence.
+        _lt_err="${_lt_log}.err"
+        : > "${_lt_err}"
+        set +e
+        python3 "${_lt_helper}" "${_composer_lic}" "${_lt_files[@]}" \
+            2>"${_lt_err}" >> "${_lt_log}"
+        _lt_rc=$?
+        set +e
+        _lt_checked=$(sed -n 's/^declared_files=//p' "${_lt_err}" | head -1)
         [ -z "${_lt_checked}" ] && _lt_checked=0
+        # The status AND the marker, because either alone can lie: a helper can
+        # exit 0 having printed nothing (then nothing was compared), and a
+        # helper can print the marker and then die.
+        if [ "${_lt_rc}" -ne 0 ] || ! _helper_finished "${_lt_err}" '^declared_files=[0-9]+'; then
+            _lt_ran=0
+            _lt_why=$(head -3 "${_lt_err}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+            _skip 28 "license-triangle" wiring "check_license_triangle.py exited ${_lt_rc} without printing its own \`declared_files=N\` summary — ${#_lt_files[@]} lib/**/*.php file(s) were in scope and NONE had their licence declarations read, so nothing was compared against composer.json's license=${_composer_lic}; licence drift is UNVERIFIED by this run. This is the toolchain, NOT a statement about the files. Checker output: ${_lt_why:-<empty>}. See ${_lt_err}."
+        fi
     fi
 fi
 _lt_fail=$(wc -l < "${_lt_log}" 2>/dev/null || echo 0)
@@ -7066,8 +7140,38 @@ TRACKED = [
     'AppendOnlyException',
     'ArchivalImmutableException',
 ]
+# THE DOCBLOCK GROUP MUST BE ONE DOCBLOCK, NOT A SPAN (.github#343 family).
+#
+# This used to open `(/\*\*[\s\S]*?\*/)?\s*`. `[\s\S]*?` is lazy but it is not
+# bounded: it can expand THROUGH a `*/` and stop at a later one. re.finditer
+# returns the LEFTMOST match, and in a normal controller the leftmost `/**` is
+# the FILE-HEADER docblock — so for the first method in every file, group(1)
+# became the entire span from the file header down to that method's own
+# docblock, header text included.
+#
+# Consequence: `@throws \Throwable` written once at the top of a file silenced
+# the first method in it, invisibly and fleet-wide. Measured 2026-08-12,
+# one fixture, three arms:
+#
+#   destroy() with no @throws anywhere            FAIL — 1, names destroy()
+#   + `@throws \Throwable` in the FILE HEADER      PASS          <- the defect
+#   + a second unhandled purge()                   FAIL — 1, names purge() only
+#
+# The tell was in the finding itself: it reported `ThingController.php:2` for a
+# method declared on line 22 — the match started at the file header.
+#
+# `(?:(?!\*/)[\s\S])*` is the tempered form: it cannot cross a `*/`, so the
+# group is exactly ONE comment. The `\s*` that follows then has to reach the
+# declaration through whitespace alone, which `namespace …; use …; class X {`
+# is not — so a header tag can no longer bind forward to anything.
+#
+# NOT WIDENED HERE, deliberately: a docblock separated from its declaration by
+# a PHP attribute (`#[NoAdminRequired]`) did not bind before this change and
+# still does not, because `\s*` cannot cross a `#`. That is a separate
+# decision with its own direction (it would REMOVE findings) and it is not
+# smuggled in behind a fix that adds them.
 METHOD_RE = re.compile(
-    r'(/\*\*[\s\S]*?\*/)?\s*'                    # optional preceding docblock
+    r'(/\*\*(?:(?!\*/)[\s\S])*\*/)?\s*'          # optional ADJACENT docblock — exactly one
     r'(public|protected|private)\s+function\s+'
     r'(?P<name>\w+)\s*\([^)]*\)[^{]*\{',
     re.MULTILINE,
@@ -7984,6 +8088,34 @@ set +e
 [ -z "${_rd_fail}" ] && _rd_fail=0
 [ -z "${_rd_warn}" ] && _rd_warn=0
 [ "${_rd_warn}" -gt 0 ] && echo "[gate-54] relation-dialect: ${_rd_warn} WARN finding(s) (non-blocking) — see ${_rd_log}"
+# INHERITED vs INTRODUCED, stated rather than left to be guessed.
+#
+# Checks (a) and (c)-(f) are FILE-scoped by design and STAY blocking — a
+# structural defect in a register this PR edited is this PR's to fix, and
+# narrowing them to the touched lines would be making the gate green by
+# weakening it. But a one-line retitle inherits every finding in the file, and
+# until now the output said nothing about that: a FAIL over a defect the author
+# wrote and a FAIL over a defect they stood next to printed the same sentence.
+#
+# The checker now suffixes each finding with [INHERITED …] or [INTRODUCED …]
+# when a base is known, so the verdict can carry the split. It is a SUFFIX
+# precisely so the two counts below — which key off `^WARN:` — keep working.
+_rd_inh=0
+_rd_new=0
+if [ "${_rd_fail}" -gt 0 ]; then
+    _rd_inh=$(grep -v '^WARN:' "${_rd_log}" 2>/dev/null | grep -cF '[INHERITED' || true)
+    _rd_new=$(grep -v '^WARN:' "${_rd_log}" 2>/dev/null | grep -cF '[INTRODUCED' || true)
+    case "${_rd_inh}" in ''|*[!0-9]*) _rd_inh=0 ;; esac
+    case "${_rd_new}" in ''|*[!0-9]*) _rd_new=0 ;; esac
+fi
+_rd_split=""
+if [ $((_rd_inh + _rd_new)) -gt 0 ]; then
+    _rd_split=" (${_rd_new} INTRODUCED by this change, ${_rd_inh} INHERITED — already present at '${BASE_REF}' in a file this change touched; both block, per-finding labels are in the log)"
+elif [ "${_rd_fail}" -gt 0 ]; then
+    # No base was available, so no finding could be labelled. Say that, rather
+    # than let the absence of labels read as "all of these are yours".
+    _rd_split=" (this run knew no base, so NONE of these could be classified as introduced or inherited — re-measure with HYDRA_GATE_BASE_REF set to attribute them)"
+fi
 if [ "${#_rd_files[@]}" -eq 0 ]; then
     # AN UNOPENED SCOPE IS NEVER A PASS (#242/#240/#258/#268).
     _skip 54 "relation-dialect" na "scope was empty — 0 lib/Settings/*register*.json (or register.d/*.json) file(s) in this repo or this diff, so NO relation property was inspected; non-canonical relation dialects (ADR-062 rules 6/7/10) are UNVERIFIED by this run."
@@ -7991,7 +8123,7 @@ elif [ "${_rd_ran}" -eq 1 ]; then
     if [ "${_rd_fail}" -eq 0 ]; then
         _pass 54 "relation-dialect"
     else
-        _fail 54 "relation-dialect" "${_rd_fail} non-canonical relation dialect finding(s) — see ${_rd_log}"
+        _fail 54 "relation-dialect" "${_rd_fail} non-canonical relation dialect finding(s)${_rd_split} — see ${_rd_log}"
     fi
 fi
 
@@ -8544,6 +8676,38 @@ if [ -d lib/AppInfo ]; then
         fi
     fi
     set +e
+    # PROVENANCE: SAY WHICH BASE THIS GATE ACTUALLY JUDGED AGAINST (.github#347
+    # residual). `--base` above is passed UNCONDITIONALLY and deliberately (see
+    # the invocation comment), but on a `--full` run `bin/hydra-gates` does not
+    # forward one, so `${BASE_REF}` here is the RUNNER'S OWN DEFAULT — while the
+    # run's preamble two screens up has already printed
+    #
+    #     [hydra-gates] Base ref: n/a — --full requested, scanning the entire tree.
+    #
+    # `#371` fixed the empty-scope REASON. It did not fix this: when the head
+    # commit DOES touch a listener, that default resolves, the diff is real, and
+    # the gate returns a verdict — a FAIL, on a run whose own header says there
+    # was no base. Reproduced 2026-08-12 on one fixture, `--full` both times,
+    # only the head commit varying:
+    #
+    #     head touches the listener   FAIL — 1 post-event listener(s) …
+    #     head touches only docs      NOT APPLICABLE — this run computed NO diff
+    #
+    # Two different answers from one tree prove the verdict is diff-derived; the
+    # preamble denies the diff exists. Whichever way the full-scope-by-default
+    # decision goes, a verdict must not be readable as covering a scope it never
+    # had, so the gate now states its own base wherever it states a verdict.
+    _lwp_scope_note=""
+    if [ "${SCOPE_TO_DIFF}" != "1" ] \
+        && { [ "${_lwp_rc}" -eq 0 ] || [ "${_lwp_rc}" -eq 1 ]; }; then
+        # The preamble's own wording is deliberately NOT quoted here. Reproducing
+        # a line that other tooling greps for would plant a match for it inside a
+        # gate verdict — the same shape as a PR body echoed into the gates log,
+        # where a quoted failure became a finding in the artefact meant to
+        # disprove it. Say what this gate did; do not re-emit the run's banner.
+        _lwp_scope_note=" judged DIFF-SCOPED against delta base '${BASE_REF}' (gate-61 is always diff-scoped, ADR-078/ADR-020) even though the run itself reads the whole tree — so this covers ONLY the registrations that diff touched and is NOT a whole-tree result;"
+        echo "[gate-61] NOTE: this run reads the whole tree, but gate-61 is always diff-scoped and judged this tree against the delta base '${BASE_REF}' (named by --base or \$HYDRA_GATE_BASE_REF, or resolved from the remote's default branch). Read its verdict as a statement about that diff, not about the whole tree."
+    fi
     if [ "${_lwp_rc}" -eq 0 ]; then
         _pass 61 "listener-work-placement"
     elif [ "${_lwp_rc}" -eq 3 ]; then
@@ -8642,7 +8806,7 @@ if [ -d lib/AppInfo ]; then
         # sweep does not re-flag it and does not "fix" it into a skip.
         _lwp_n=$(_count '^FAIL' "${_lwp_log}")
         [ "${_lwp_n}" -eq 0 ] && _lwp_n=1
-        _fail 61 "listener-work-placement" "${_lwp_n} post-event listener(s) doing synchronous work with no deferral and no justification (ADR-078); see ${_lwp_log}"
+        _fail 61 "listener-work-placement" "${_lwp_n} post-event listener(s) doing synchronous work with no deferral and no justification (ADR-078),${_lwp_scope_note} see ${_lwp_log}"
     fi
 else
     _skip 61 "listener-work-placement" na "no lib/AppInfo/ — this repo has no Nextcloud composition root, so it registers no object-event listener."
