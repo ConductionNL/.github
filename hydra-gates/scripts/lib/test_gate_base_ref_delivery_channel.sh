@@ -167,7 +167,11 @@ _set_env="$(_verdict_set "${_out_env}")"
 # "the rig was misconfigured" and "the gates agree" are indistinguishable
 # downstream. So pin the inputs before grading the outputs.
 for _arm in arg env; do
-    eval "_o=\${_out_${_arm}}"
+    # Indirect expansion rather than `eval`: it assigns `_o` where ShellCheck
+    # can see it (an `eval` form trips SC2154, and this repo's wrapper fails on
+    # any finding, note severity included).
+    _ovar="_out_${_arm}"
+    _o="${!_ovar}"
     if printf '%s' "${_o}" | grep -qF 'SCOPE-MODE: full'; then
         _ok "arm ${_arm}: ran at FULL file scope"
     else
@@ -205,7 +209,11 @@ echo "== the subject must be REPORTED, in BOTH arms =="
 # APPLICABLE agree perfectly and prove nothing — that is the exact state
 # `#416` produced. Assert the finding, by name, on each side independently.
 for _arm in arg env; do
-    eval "_o=\${_out_${_arm}}"
+    # Indirect expansion rather than `eval`: it assigns `_o` where ShellCheck
+    # can see it (an `eval` form trips SC2154, and this repo's wrapper fails on
+    # any finding, note severity included).
+    _ovar="_out_${_arm}"
+    _o="${!_ovar}"
     _v="$(gf_verdict "${_o}" 19)"
     case "${_v}" in
         *FAIL*) _ok "arm ${_arm}: gate-19 FAILS — ${_v#*: }" ;;
@@ -227,7 +235,11 @@ if [ "${_set_arg}" = "${_set_env}" ]; then
     _ok "every gate returned the same verdict through both channels ($(printf '%s\n' "${_set_arg}" | grep -c . ) gate(s) compared)"
 else
     _bad "THE DELIVERY CHANNEL CHANGED THE VERDICT. One tree, one base, full scope in both arms — the gates below answered differently depending on whether the base arrived as --base or in the environment. That is a second, unprinted source of scope (.github#416)."
-    printf '   gate | --base            | $HYDRA_GATE_BASE_REF\n'
+    # The column header names the variable WITHOUT a leading `$`. With one, every
+    # spelling ShellCheck accepts is either SC2016 or an actual expansion, and
+    # this repo's wrapper fails the build on findings of any severity — so the
+    # sigil would cost a suppression directive to buy nothing a reader needs.
+    printf '   gate | --base            | env HYDRA_GATE_BASE_REF\n'
     printf '   -----+-------------------+---------------------\n'
     # Join on the gate number so the reader gets the PAIR, not two lists.
     #
