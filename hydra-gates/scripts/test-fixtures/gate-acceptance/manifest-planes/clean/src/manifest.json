@@ -1,5 +1,6 @@
 {
-    "name": "planefx",
+    "$schema": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
+    "version": "1.0.0",
     "menu": [
         {
             "id": "storeNav",
@@ -30,33 +31,36 @@
     "pages": [
         {
             "id": "storePage",
+            "route": "/store",
+            "title": "Store",
             "type": "index",
-            "component": "StorePage",
             "config": {
                 "storeRegistry": true
             }
         },
         {
             "id": "catalogPage",
+            "route": "/catalog",
+            "title": "Catalog",
             "type": "index",
-            "component": "CatalogPage",
             "config": {
                 "schema": "publication"
             }
         },
         {
             "id": "templatePage",
+            "route": "/templates",
+            "title": "Templates",
             "type": "index",
-            "component": "TemplatePage",
             "config": {
                 "schema": "template"
             }
         },
         {
             "id": "appearance",
-            "type": "settings",
+            "route": "/appearance",
             "title": "Appearance",
-            "component": "SettingsPage"
+            "type": "settings"
         }
     ]
 }

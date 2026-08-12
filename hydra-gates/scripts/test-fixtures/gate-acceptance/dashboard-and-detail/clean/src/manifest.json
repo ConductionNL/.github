@@ -1,5 +1,6 @@
 {
-    "name": "dashfx",
+    "$schema": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
+    "version": "1.0.0",
     "menu": [
         {
             "id": "homeNav",
@@ -17,6 +18,8 @@
     "pages": [
         {
             "id": "home",
+            "route": "/",
+            "title": "Home",
             "type": "dashboard",
             "component": "Home",
             "config": {
@@ -29,16 +32,23 @@
         },
         {
             "id": "metrics",
+            "route": "/metrics",
+            "title": "Metrics",
             "type": "custom",
-            "component": "MetricsPanel"
+            "component": "MetricsPanel",
+            "_note": "Custom because the metrics panel is embedded as a dashboard widget as well as being routable."
         },
         {
             "id": "overview",
+            "route": "/overview",
+            "title": "Overview",
             "type": "dashboard",
             "component": "Overview"
         },
         {
             "id": "thingDetail",
+            "route": "/things/:id",
+            "title": "Thing",
             "type": "detail",
             "component": "ThingDetail",
             "config": {
@@ -52,6 +62,8 @@
         },
         {
             "id": "caseDetail",
+            "route": "/cases/:id",
+            "title": "Case",
             "type": "detail",
             "component": "CaseDetail",
             "config": {
