@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<id>dashfx</id>
+	<name>Dashboard And Detail Fixture</name>
+	<summary>Fixture app for gate-15 and gate-55 acceptance. Not a real app.</summary>
+	<description>Exists so the gate suite can drive a nested dashboard and a shadowed detail-page render path through the real wrapper.</description>
+	<version>1.0.0</version>
+	<licence>agpl</licence>
+	<author>Conduction</author>
+	<namespace>DashFx</namespace>
+	<category>tools</category>
+	<dependencies><nextcloud min-version="30" max-version="32"/></dependencies>
+</info>

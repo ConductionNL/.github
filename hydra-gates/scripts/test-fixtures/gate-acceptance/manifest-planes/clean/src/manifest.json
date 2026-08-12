@@ -1,0 +1,66 @@
+{
+    "$schema": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
+    "version": "1.0.0",
+    "menu": [
+        {
+            "id": "storeNav",
+            "label": "Store",
+            "icon": "StoreOutline",
+            "route": "storePage"
+        },
+        {
+            "id": "catalogNav",
+            "label": "Catalog",
+            "icon": "Bookshelf",
+            "route": "catalogPage"
+        },
+        {
+            "id": "templatesNav",
+            "label": "Templates",
+            "icon": "FileReplaceOutline",
+            "route": "templatePage"
+        },
+        {
+            "id": "settingsNav",
+            "label": "Appearance",
+            "section": "settings",
+            "icon": "CogOutline",
+            "route": "appearance"
+        }
+    ],
+    "pages": [
+        {
+            "id": "storePage",
+            "route": "/store",
+            "title": "Store",
+            "type": "index",
+            "config": {
+                "storeRegistry": true
+            }
+        },
+        {
+            "id": "catalogPage",
+            "route": "/catalog",
+            "title": "Catalog",
+            "type": "index",
+            "config": {
+                "schema": "publication"
+            }
+        },
+        {
+            "id": "templatePage",
+            "route": "/templates",
+            "title": "Templates",
+            "type": "index",
+            "config": {
+                "schema": "template"
+            }
+        },
+        {
+            "id": "appearance",
+            "route": "/appearance",
+            "title": "Appearance",
+            "type": "settings"
+        }
+    ]
+}

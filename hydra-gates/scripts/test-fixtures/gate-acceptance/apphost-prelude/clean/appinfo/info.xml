@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<id>apphostfx</id>
+	<name>AppHost Prelude Fixture</name>
+	<summary>Fixture app for gate-64 acceptance. Not a real app.</summary>
+	<description>Exists so the gate suite can drive an ADR-040 AppHost adoption without the autoload prelude through the real wrapper. The id sorts BEFORE openregister on purpose: that is the half of the fleet where the defect is live rather than latent.</description>
+	<version>1.0.0</version>
+	<licence>agpl</licence>
+	<author>Conduction</author>
+	<namespace>AppHostFx</namespace>
+	<category>tools</category>
+	<dependencies><nextcloud min-version="30" max-version="32"/></dependencies>
+</info>
