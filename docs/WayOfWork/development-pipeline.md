@@ -28,14 +28,17 @@ All branches are protected. No direct pushes. Every change flows through a pull 
 
 ## Quality Gates
 
-Every PR triggers **four parallel quality gates** — all must pass before merge:
+Every PR triggers the shared quality pipeline — all applicable gates must pass before merge.
+The four groups below are the core of it; the full set is 18 job groups, including PHPUnit,
+Playwright, Newman, axe-core, SBOM and the Hydra gates. See
+[CI/CD and Code Standards](ci-cd.md#one-pipeline-eighteen-thin-callers) for the complete table.
 
 ### PHP Quality
 
 | Check           | Tool            |
 | --------------- | --------------- |
 | Syntax          | `php -l`        |
-| Code style      | PHPCS (PSR-12)  |
+| Code style      | PHPCS ([Conduction standard](ci-cd.md#formatting--the-important-one)) |
 | Static analysis | PHPStan + Psalm |
 | Mess detection  | PHPMD           |
 | Code metrics    | PHPMetrics      |
@@ -79,14 +82,19 @@ Version numbers are calculated from PR labels:
 
 ## Hydra — Agentic Development Pipeline
 
-:::info Coming soon
+:::info
 
-Conduction is developing **Hydra**, an agentic spec-driven development pipeline that builds applications from structured specifications with government-grade traceability, SBOM generation, and audit trails. This section will be updated when Hydra is publicly available.
+**Hydra** is Conduction's agentic spec-driven development pipeline: it builds applications from
+structured specifications with government-grade traceability, SBOM generation, and audit trails.
+Its mechanical quality gates run on every PR in all 18 core apps today (`enable-hydra-gates: true`)
+and are published as the open-source composer package
+[`conduction/hydra-gates`](https://github.com/ConductionNL/.github/tree/main/hydra-gates).
 
 :::
 
 ## Further Reading
 
+- [CI/CD and Code Standards](ci-cd.md) — what the pipeline runs, and where we diverge from Nextcloud's own app CI/CD
 - [Contributing guide](contributing.md) — PR checklist, commit conventions, DCO
 - [Release process](release-process.md) — full versioning and deployment details
 - [Spec-driven development](spec-driven-development.md) — how specs feed the pipeline

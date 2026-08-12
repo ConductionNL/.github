@@ -32,3 +32,4 @@ identically to `UNCOVERED.md`.
 | gate-32 | semantic-controls | `test_gates_23_33_never_green_over_nothing.sh` | `test-fixtures/gates-23-33/{planted,clean}` |
 | gate-33 | axe-core | `test_gates_23_33_never_green_over_nothing.sh` | `test-fixtures/gates-23-33/{planted,clean}` |
 | gate-61 | listener-work-placement | `test_gate_scope_matrix.sh` | `test-fixtures/scope-matrix/app` — push / full / diff matrix, `.github#347` |
+| gate-65 | coding-standard-adoption | `test_check_coding_standard_adoption.sh` | scaffolded in-suite — 15 planted single-defect probes (one rule each) plus a negative control that fails if a broadened rule starts matching the compliant scaffold, and a wiring assertion that the checker printed its terminal `checked N rule(s)` summary |

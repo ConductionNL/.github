@@ -126,7 +126,7 @@ for _f in routes-standard routes-standard-missing-update \
           psr4-namespaced-controller psr4-namespaced-controller-missing-method \
           delegated-registrar delegated-registrar-absent \
           monitoring-capitalised monitoring-per-object monitoring-per-object-only \
-          monitoring-none; do
+          monitoring-none knr-braces; do
     [ -d "${FIXTURES}/${_f}" ] || _bad "fixture ${FIXTURES}/${_f} does not exist — this suite would be green on nothing"
 done
 
@@ -296,6 +296,46 @@ if _run "${FIXTURES}/monitoring-none"; then
         "zero candidates: gate-30 states that no route name is monitoring-shaped"
     _expect_log "${_OUT}" "\[gate-30\].*declares no route whose name contains" \
         "zero candidates: the verdict line names the reason"
+fi
+
+# ---------------------------------------------------------------------------
+# 6. K&R BRACES — brace style must not be an input to gate-14
+#
+# Invariant 1 decides "does this method return a Response?" by buffering the
+# signature and up to twelve following lines and grepping the buffer for
+# `: …Response`. Both of its stop conditions were tested against the lines it
+# READ AHEAD and never against the signature line itself, so a K&R signature —
+# which opens the body on its own line — never stopped the buffer. It ran on
+# into the NEXT method's docblock and signature, and the first method
+# inherited the second one's return type.
+#
+# MEASURED on openconnector#1229, mid-migration to Nextcloud's coding standard:
+#
+#   lib/Controller/UiController.php method=__construct
+#     expected_route='ui#__construct' rule=missing-route
+#
+# — a constructor reported as an unrouted endpoint, with the `TemplateResponse`
+# it "returns" belonging to `makeSpaResponse()` eleven lines below. The same
+# awk over the same file in Allman braces printed nothing, so the reformat
+# looked like it had introduced a routing defect. Nextcloud's standard IS K&R
+# and the whole fleet is adopting it, which turns this into a finding every
+# migrated app receives on its first reformat.
+#
+# The anti-widening half is in the same fixture: `gadget#run` is K&R, returns
+# a JSONResponse and is routed nowhere, so it MUST still be reported. The fix
+# had to stop reading ahead past a completed signature, not stop looking at
+# K&R files.
+# ---------------------------------------------------------------------------
+if _run "${FIXTURES}/knr-braces"; then
+    _expect_gate 14 "FAIL" "knr-braces: the genuinely unrouted K&R method is still a finding"
+    _expect_log "${_RRLOG}" "GadgetController\.php method=run .*rule=missing-route" \
+        "knr-braces: gadget#run — K&R, Response-returning, routed nowhere — IS reported"
+    _expect_not_log "${_RRLOG}" "method=__construct" \
+        "knr-braces: ui#__construct is NOT reported — a constructor returns no Response and no route names one"
+    _expect_not_log "${_RRLOG}" "method=dashboard" \
+        "knr-braces: ui#dashboard is routed and resolves, so it is NOT reported"
+    _expect_lines "${_RRLOG}" 1 \
+        "knr-braces: exactly ONE finding — brace style changed nothing but the phantom"
 fi
 
 echo

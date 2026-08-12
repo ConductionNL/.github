@@ -92,6 +92,69 @@ on:
         required: false
         type: string
         default: "[]"
+      database-test-matrix:
+        description: "JSON array of databases to run PHPUnit against, e.g. '[\"pgsql\", \"mysql\", \"sqlite\"]'. Nextcloud runs its own suites on mariadb, mysql, oci and sqlite separately, because database-portability bugs are invisible on a single backend. DEFAULT IS EMPTY, which means 'use the single `database` input' — today's behaviour exactly, so this change is inert until an app opts in."
+        required: false
+        type: string
+        default: "[]"
+      enable-check-code:
+        # DEFAULT FLIPPED true -> false, because the command this job runs DOES
+        # NOT EXIST any more and the job therefore cannot pass in any repo here.
+        #
+        # `occ app:check-code` was removed from Nextcloud server after v20.
+        # Measured, extracting the registered App-namespace commands from
+        # `core/register_command.php` at each tag — same expression, same file,
+        # only the tag varying:
+        #
+        #   v20.0.0  Disable Enable GetPath Install ListApps Remove Update
+        #            + CheckCode                       <- the control: it CAN appear
+        #   v34.0.0  Disable Enable GetPath Install ListApps Remove Update
+        #                                              <- CheckCode is gone
+        #
+        # Corroborated independently: `core/Command/App/CheckCode.php` answers
+        # 200 at v20 and v21 and 404 at v25, v31, v32, v33 and v34, while
+        # `core/Command/App/ListApps.php` answers 200 at every one of those tags
+        # — so the 404s are a removal, not a bad path.
+        #
+        # Every app in this fleet declares <nextcloud min-version> of 31, 32 or
+        # 34, and this job fetches the server at the version the app DECLARES.
+        # So `occ` would be asked for a command roughly eleven majors dead. It
+        # would print no recognisable verdict, the job's own positive control
+        # would fire, and that control's `exit 1` is UNCONDITIONAL — it sits
+        # above the `check-code-blocking` branch and is not covered by it. The
+        # result would be a hard failure in every PHP repo in the fleet, on a
+        # check that can never pass.
+        #
+        # The positive control is doing its job here, exactly as designed: it
+        # refuses to report "no private API usage" from a run that inspected
+        # nothing. The job is what is wrong, not the control.
+        #
+        # LEFT WIRED, NOT DELETED, and still listed in the Quality Report's
+        # `needs:`. A skipped job's result is `skipped`, not `failure`, so this
+        # blocks nothing while it is off — and when someone rebuilds the check on
+        # something that exists (Psalm/PHPStan over the private surface, or
+        # nextcloud/app-api's linter), the wiring is already correct and one
+        # input turns it on. Deleting it would lose that and quietly re-open the
+        # gap #385 was written to close.
+        description: "Run `occ app:check-code` against the Nextcloud version the app declares in info.xml. OFF BY DEFAULT AND CURRENTLY UNUSABLE: `app:check-code` was removed from Nextcloud server after v20 (verified against core/register_command.php and core/Command/App/CheckCode.php from v20 through v34), and every app here declares min-version 31 or later, so the command cannot be found and the job's positive control fails the run. Do not set this true until the check is rebuilt on tooling that still exists."
+        required: false
+        type: boolean
+        default: false
+      check-code-blocking:
+        description: "Turn app:check-code findings into a build failure. OFF by default on purpose: every app in this fleet reaches into server internals somewhere, and a gate that is red on arrival is a gate nobody turns on. Flip it per app once the findings are worked down."
+        required: false
+        type: boolean
+        default: false
+      enable-reuse:
+        description: "Run the REUSE/SPDX linter, as Nextcloud does on every app. Broader than the PHPCS @license sniff, which only sees PHP docblocks."
+        required: false
+        type: boolean
+        default: true
+      reuse-blocking:
+        description: "Turn REUSE findings into a build failure. OFF by default — most fleet apps ship no REUSE.toml or LICENSES/ directory yet."
+        required: false
+        type: boolean
+        default: false
       enable-license-check:
         description: "Run dependency license compliance check (composer + npm)"
         required: false
@@ -557,6 +620,236 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: result-php-quality-${{ matrix.tool }}
+          path: quality-results/
+
+  # ── occ app:check-code — private and deprecated Nextcloud API usage ────
+  #
+  # Nextcloud's own tooling for "is this app using things it should not?".
+  # This fleet ran no equivalent. The closest we had was ONE hand-written PHPCS
+  # sniff covering ONE symbol (\OC::$server, removed in NC 34) — written by
+  # hand precisely because static analysis could not see the removal while
+  # nextcloud/ocp was pinned below the declared min-version.
+  #
+  # app:check-code is the general form of that sniff. It knows the whole private
+  # API surface of the server version it ships with, so it needs no per-symbol
+  # maintenance and it moves forward when Nextcloud does.
+  #
+  # WARN, NOT FAIL, and deliberately so. Every app in this fleet reaches into
+  # server internals somewhere — OCA\DAV, OC_App, Doctrine\DBAL are all
+  # ignored in phpstan-base.neon by name. Turning this red on day one would make
+  # it a gate nobody can turn on, which is how the E2E job in openregister ended
+  # up never having succeeded. It reports, the findings get worked down, and the
+  # `check-code-blocking` input flips it to a hard failure per app when that app
+  # is ready.
+  app-check-code:
+    if: ${{ inputs.enable-php && inputs.enable-check-code }}
+    runs-on: ubuntu-latest
+    name: "Nextcloud API check (app:check-code)"
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: ${{ inputs.app-name }}
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php-version }}
+          extensions: mbstring, intl, zip, gd, curl, xml, json, sqlite3, pdo_sqlite
+          coverage: none
+
+      # The server version the app DECLARES it supports, not a hardcoded one.
+      # Anchored to the <nextcloud> element: info.xml carries min-version on
+      # <php> too, and <php> comes first. Measured across 18 apps, an
+      # unanchored pattern returned 8 for thirteen of them and a plausible-but
+      # -wrong 28 for a fourteenth.
+      - name: Fetch the declared Nextcloud server
+        id: server
+        run: |
+          set -euo pipefail
+          NCVERSION=$(grep -oP '<nextcloud[^>]*min-version="\K[0-9]+' "${{ inputs.app-name }}/appinfo/info.xml" | head -1)
+          [ -n "${NCVERSION}" ] || { echo "::error::appinfo/info.xml declares no <nextcloud min-version>."; exit 1; }
+          echo "Declared min-version: ${NCVERSION}"
+          URL=$(curl -sS "https://updates.nextcloud.com/updater_server/latest?channel=stable&version=${NCVERSION}" | jq -r '.downloads.zip[0]')
+          if [ -z "$URL" ] || [ "$URL" = "null" ]; then
+            URL=$(curl -sS "https://updates.nextcloud.com/updater_server/latest?channel=beta&version=${NCVERSION}" | jq -r '.downloads.zip[0]')
+          fi
+          [ -n "$URL" ] && [ "$URL" != "null" ] || { echo "::error::No Nextcloud download for min-version ${NCVERSION}."; exit 1; }
+          curl -sSL "$URL" -o nextcloud.zip
+          unzip -q nextcloud.zip
+          test -f nextcloud/occ || { echo "::error::The archive has no nextcloud/occ."; exit 1; }
+
+      - name: app:check-code
+        id: check
+        run: |
+          set +e
+          cp -r "${{ inputs.app-name }}" "nextcloud/apps/${{ inputs.app-name }}"
+          php -d memory_limit=512M nextcloud/occ app:check-code "${{ inputs.app-name }}" > check-code.log 2>&1
+          RC=$?
+          set -e
+          cat check-code.log
+
+          # POSITIVE CONTROL. occ exits 0 on paths that inspect nothing — an app
+          # directory it cannot see, a command that bailed on the environment
+          # check. A silent exit 0 must not read as "no private API usage".
+          if ! grep -qiE 'App is compliant|[0-9]+ error|deprecated|private' check-code.log; then
+            echo "::error::app:check-code produced no recognisable verdict (exit ${RC}). It inspected nothing, so private-API usage is UNVERIFIED by this run."
+            exit 1
+          fi
+
+          if [ "$RC" -ne 0 ]; then
+            if [ "${{ inputs.check-code-blocking }}" = "true" ]; then
+              echo "::error::app:check-code reported findings and check-code-blocking is on."
+              exit "$RC"
+            fi
+            echo "::warning::app:check-code reported findings. Not blocking yet — set check-code-blocking: true once they are worked down."
+          fi
+          exit 0
+
+      - name: Record result
+        if: always()
+        run: |
+          mkdir -p quality-results
+          echo "${{ job.status }}" > quality-results/app-check-code.txt
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-app-check-code
+          path: quality-results/
+
+  # ── REUSE / SPDX compliance ────────────────────────────────────────────
+  #
+  # Nextcloud runs reuse.yml on every app. We had a PHPCS sniff that checks for
+  # @license and @copyright in PHP docblocks, which is a proxy for one file type
+  # and says nothing about images, JSON, YAML, or the LICENSES/ directory REUSE
+  # requires.
+  #
+  # It also closes a loop opened by the coding-standard migration: the SPDX
+  # `InvalidEndChar` exception in the shared PHPCS ruleset exists because a
+  # trailing full stop would turn a machine-parsed SPDX expression into an
+  # invalid one. That exception is only worth having if something actually
+  # parses those expressions. This is that something.
+  #
+  # Non-blocking by default for the same reason as app:check-code — 2 of the 4
+  # apps sampled ship a REUSE.toml at all.
+  reuse:
+    if: ${{ inputs.enable-reuse }}
+    runs-on: ubuntu-latest
+    name: "REUSE compliance"
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: REUSE lint
+        id: lint
+        continue-on-error: ${{ !inputs.reuse-blocking }}
+        uses: fsfe/reuse-action@v5
+
+      - name: Explain a non-blocking failure
+        if: steps.lint.outcome == 'failure' && !inputs.reuse-blocking
+        run: |
+          echo "::warning::REUSE reported findings. Not blocking yet — set reuse-blocking: true once this app ships a REUSE.toml and a LICENSES/ directory."
+
+      - name: Record result
+        if: always()
+        run: |
+          mkdir -p quality-results
+          echo "${{ steps.lint.outcome }}" > quality-results/reuse.txt
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-reuse
+          path: quality-results/
+
+  # ── appinfo/info.xml, validated against the App Store's own schema ─────
+  #
+  # Nextcloud ships `lint-info-xml.yml` as a workflow template and every
+  # upstream app runs it. This fleet ran no equivalent: `quality.yml` did not
+  # reference appinfo/info.xml anywhere, so a malformed manifest was discovered
+  # at App Store upload time — after the release had been built, tagged and
+  # published to GitHub.
+  #
+  # That matters more now than it did last week. The release path reads
+  # info.xml for two things it cannot get wrong: the version the tag must match,
+  # and the Nextcloud version whose `occ` signs the package. A file that does
+  # not validate can still parse well enough for a grep to return something
+  # plausible — which is exactly how an unanchored min-version pattern resolved
+  # `8` from `<php min-version="8.3"/>` in 13 apps.
+  #
+  # The schema is fetched from nextcloud/appstore rather than vendored, because
+  # a vendored copy is a claim about what the App Store accepts that goes stale
+  # silently. If the fetch fails the job FAILS — a validator that cannot get its
+  # schema has validated nothing, and saying so is the whole point.
+  info-xml:
+    if: ${{ inputs.enable-php }}
+    runs-on: ubuntu-latest
+    name: "info.xml lint"
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: appinfo/
+
+      - name: Is there an info.xml to lint?
+        id: detect
+        run: |
+          if [ -f appinfo/info.xml ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No appinfo/info.xml — this repo is not a Nextcloud app."
+          fi
+
+      - name: Install xmllint
+        if: steps.detect.outputs.run == 'true'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libxml2-utils
+
+      - name: Fetch the App Store schema
+        if: steps.detect.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          curl -sSfL -o info.xsd \
+            https://raw.githubusercontent.com/nextcloud/appstore/master/nextcloudappstore/api/v1/release/info.xsd
+          # A 200 that returned an error page is not a schema. Assert the shape
+          # before trusting a validation result produced with it.
+          head -1 info.xsd | grep -q '<?xml' || { echo "::error::The fetched info.xsd is not XML — validating against it would prove nothing."; exit 1; }
+          grep -q 'schema' info.xsd || { echo "::error::The fetched info.xsd contains no schema element."; exit 1; }
+
+      - name: Validate appinfo/info.xml
+        if: steps.detect.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          xmllint --noout --schema info.xsd appinfo/info.xml
+
+      # The two values the release path reads out of this file. Validity alone
+      # does not mean they are present, and their absence surfaces at release
+      # time — long after this PR merged.
+      - name: Assert the release-critical fields exist
+        if: steps.detect.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          grep -qoP '<version>[^<]+</version>' appinfo/info.xml \
+            || { echo "::error::appinfo/info.xml declares no <version>. The release tag has nothing to match against."; exit 1; }
+          grep -qoP '<nextcloud[^>]*min-version="[0-9]+"' appinfo/info.xml \
+            || { echo "::error::appinfo/info.xml declares no <nextcloud min-version>. The release cannot resolve which server to sign with."; exit 1; }
+          echo "version:     $(grep -oP '(?<=<version>)[^<]+' appinfo/info.xml | head -1)"
+          echo "nextcloud:   $(grep -oP '<nextcloud[^>]*' appinfo/info.xml | head -1)"
+
+      - name: Record result
+        if: always()
+        run: |
+          mkdir -p quality-results
+          echo "${{ job.status }}" > quality-results/info-xml.txt
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-info-xml
           path: quality-results/
 
   # ── Group 2: Vue Quality ────────────────────────
@@ -1633,7 +1926,7 @@ jobs:
     # Playwright job's frontend-build artifact check.
     if: ${{ inputs.enable-php && inputs.enable-phpunit && !cancelled() }}
     runs-on: ubuntu-latest
-    name: "PHPUnit (PHP ${{ matrix.php-version }}, NC ${{ matrix.nextcloud-ref }})"
+    name: "PHPUnit (PHP ${{ matrix.php-version }}, NC ${{ matrix.nextcloud-ref }}, ${{ matrix.database }})"
     needs: [security]
     # Observed across 337 SUCCESSFUL executions: median 1.7 min, p95 13.6 min,
     # max 18.9 min (shillinq, green). The spread is huge because each leg
@@ -1642,9 +1935,13 @@ jobs:
     # observed green run and still cuts a hang from 6 hours to 45 minutes.
     timeout-minutes: 45
 
+    # A service whose `image` evaluates to an empty string is not started, which
+    # is how one job definition serves several backends. Both are keyed off
+    # matrix.database rather than inputs.database so a multi-database matrix
+    # starts the right container per leg.
     services:
       postgres:
-        image: ${{ inputs.database == 'pgsql' && 'postgres:16' || '' }}
+        image: ${{ matrix.database == 'pgsql' && 'postgres:16' || '' }}
         env:
           POSTGRES_USER: nextcloud
           POSTGRES_PASSWORD: nextcloud
@@ -1656,11 +1953,34 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
+      mysql:
+        image: ${{ matrix.database == 'mysql' && 'mysql:8.4' || '' }}
+        env:
+          MYSQL_ROOT_PASSWORD: nextcloud
+          MYSQL_USER: nextcloud
+          MYSQL_PASSWORD: nextcloud
+          MYSQL_DATABASE: nextcloud
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -unextcloud -pnextcloud"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
 
     strategy:
       matrix:
         php-version: ${{ fromJSON(inputs.php-test-versions) }}
         nextcloud-ref: ${{ fromJSON(inputs.nextcloud-test-refs) }}
+        # An empty database-test-matrix collapses to the single `database`
+        # input, which is what every caller uses today — so the matrix keeps
+        # exactly its current dimensions until an app opts in. Routed through
+        # fromJSON on BOTH sides on purpose: a string comparison against '[]'
+        # accepts '[ ]' and '[""]' and then resolves to an empty matrix vector,
+        # and an empty vector does not skip a job — it DELETES it from the run,
+        # with no row, no annotation and no trace. Measured on this repo's
+        # self-test for frontend-checks: 19 jobs instead of 21.
+        database: ${{ join(fromJSON(inputs.database-test-matrix), ',') != '' && fromJSON(inputs.database-test-matrix) || fromJSON(format('["{0}"]', inputs.database)) }}
       fail-fast: false
 
     steps:
@@ -1707,29 +2027,64 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php-version }}
-          extensions: mbstring, intl, sqlite3, pgsql, pdo_pgsql, zip, gd, curl, xml, json
+          # pdo_mysql joins the list unconditionally: setup-php installs
+          # extensions per leg, and a leg that does not use MySQL pays only the
+          # install cost. Making it conditional would mean a mysql leg silently
+          # falling back to the else-branch of the install below and testing
+          # sqlite while its name said mysql.
+          extensions: mbstring, intl, sqlite3, pgsql, pdo_pgsql, mysqli, pdo_mysql, zip, gd, curl, xml, json
           coverage: xdebug
           tools: composer:v2
 
       - name: Install Nextcloud
         run: |
           cd server
-          if [ "${{ inputs.database }}" = "pgsql" ]; then
-            php occ maintenance:install \
-              --database pgsql \
-              --database-host 127.0.0.1 \
-              --database-port 5432 \
-              --database-name nextcloud \
-              --database-user nextcloud \
-              --database-pass nextcloud \
-              --admin-user admin \
-              --admin-pass admin
-          else
-            php occ maintenance:install \
-              --database ${{ inputs.database }} \
-              --admin-user admin \
-              --admin-pass admin
+          DB="${{ matrix.database }}"
+          case "$DB" in
+            pgsql)
+              php occ maintenance:install \
+                --database pgsql \
+                --database-host 127.0.0.1 \
+                --database-port 5432 \
+                --database-name nextcloud \
+                --database-user nextcloud \
+                --database-pass nextcloud \
+                --admin-user admin \
+                --admin-pass admin
+              ;;
+            mysql|mariadb)
+              php occ maintenance:install \
+                --database mysql \
+                --database-host 127.0.0.1 \
+                --database-port 3306 \
+                --database-name nextcloud \
+                --database-user nextcloud \
+                --database-pass nextcloud \
+                --admin-user admin \
+                --admin-pass admin
+              ;;
+            sqlite)
+              php occ maintenance:install \
+                --database sqlite \
+                --admin-user admin \
+                --admin-pass admin
+              ;;
+            *)
+              echo "::error::Unknown database '$DB'. Supported: pgsql, mysql, mariadb, sqlite."
+              exit 1
+              ;;
+          esac
+          # POSITIVE CONTROL. `maintenance:install` can exit 0 having fallen back
+          # to a different backend, and a suite that passes on sqlite while the
+          # leg is named mysql is worse than no leg at all. Assert the server is
+          # actually on the backend this leg claims.
+          ACTUAL=$(php occ config:system:get dbtype)
+          EXPECT="$DB"; [ "$DB" = "mariadb" ] && EXPECT="mysql"
+          if [ "$ACTUAL" != "$EXPECT" ]; then
+            echo "::error::This leg is named '$DB' but the server installed on '$ACTUAL'. The result would describe the wrong backend."
+            exit 1
           fi
+          echo "Installed on $ACTUAL, as declared."
           if [ '${{ inputs.additional-apps }}' != '[]' ]; then
             echo '${{ inputs.additional-apps }}' | jq -r '.[].app' | while read -r name; do
               echo "Enabling app: $name"
@@ -4577,7 +4932,47 @@ jobs:
     # been waved through yet. A gate that would not catch a failure is still a
     # dead gate, and `scripts/assert-quality-report-gates-every-leg.py` now
     # keeps the list complete.
-    needs: [php-quality, vue-quality, frontend-build, frontend-checks, frontend-tests, security, license, phpunit, newman, playwright, journeydoc-capture, baseline-protection, sbom, features-check, features-extract, hydra-gates]
+    #
+    # THE THREE NEXTCLOUD LEGS (#383, #385) ARE ON THIS LIST DELIBERATELY, and
+    # what that does per leg is not the same thing:
+    #
+    #   app-check-code  internally non-blocking by default. The step swallows a
+    #                   non-zero `occ` exit and warns unless `check-code-blocking`
+    #                   is set, so the job concludes `success` with findings and
+    #                   listing it changes nothing today. It becomes a real gate
+    #                   the moment an app flips its own input — which is the
+    #                   point: the wiring must already be there, or flipping the
+    #                   input would be a no-op nobody notices.
+    #   reuse           same shape, via `continue-on-error: ${{ !inputs.reuse-blocking }}`.
+    #   info-xml        HAS NO SUCH FLAG AND IS BLOCKING ON ARRIVAL. #383
+    #                   measured 5 pass / 13 fail before it merged. RE-MEASURED
+    #                   2026-08-12 14:20Z against every repo's live `development`
+    #                   tip, same App Store XSD: 6 PASS / 12 FAIL. Eleven of the
+    #                   twelve are xs:sequence element ORDER; the twelfth
+    #                   (zaakafhandelapp) is a <summary> over the schema's length
+    #                   cap. The one-app difference is not drift in the
+    #                   instrument — larpingapp's manifest was reordered by
+    #                   efa6aead at 11:28:48Z, and validating that one file at
+    #                   both refs gives FAIL then PASS.
+    #
+    #                   Live-confirmed against CI, not only locally: openregister
+    #                   run 31591669849 emitted `Element 'documentation': This
+    #                   element is not expected` — the same message, byte for
+    #                   byte, as the local validator.
+    #
+    #                   So listing it here turns 12 of 18 apps red until their
+    #                   manifests are reordered, and that is the authorised
+    #                   trade: the App Store rejects the same files at upload
+    #                   time, after the release has been built, tagged and
+    #                   published. TREAT THE 12 AS DECAYING — it is a count over
+    #                   files several agents edit daily, so re-measure before
+    #                   quoting it.
+    #
+    # The two remaining Nextcloud checks are NOT missing from this list. Multi
+    # database PHPUnit is a matrix dimension of `phpunit`, which is already
+    # here, and `occ integrity:sign-app` lives in release.yml, which has no
+    # Quality Report to gate.
+    needs: [php-quality, vue-quality, frontend-build, frontend-checks, frontend-tests, security, license, phpunit, newman, playwright, journeydoc-capture, baseline-protection, sbom, features-check, features-extract, hydra-gates, app-check-code, info-xml, reuse]
     if: always()
     # Observed across 266 executions: median 0.6 min — but 2% of runs sit at
     # ~30 min because the `Install PDF tools` apt-get step stalls on the Ubuntu
@@ -4728,6 +5123,31 @@ jobs:
             # npm: security + license in one row
             sec_npm=$(read_result "results/result-security-npm/npm.txt")
             echo "| npm | | | $(icon "$sec_npm") | $(license_info "npm") | |"
+
+            # The three Nextcloud legs. They are in `needs:` above, so their
+            # failure reds this job — but a leg the report never mentions is the
+            # exact silence the Hydra-gates row below exists to correct, and it
+            # would have been reintroduced the day these three landed.
+            #
+            # READ THESE THREE CELLS DIFFERENTLY, because the artefacts behind
+            # them hold different things:
+            #
+            #   REUSE           records `steps.lint.outcome` — the RAW step
+            #                   outcome, before `continue-on-error` rewrites it.
+            #                   So this cell goes ❌ on findings even while the
+            #                   job concludes success. That is the useful shape.
+            #   app:check-code  records `job.status`, and the step exits 0 on
+            #                   findings unless `check-code-blocking` is set. So
+            #                   ✅ here means "the run produced a recognisable
+            #                   verdict", NOT "no private API usage" — the
+            #                   findings are in that job's `::warning::` only.
+            #                   Worth narrowing to the step's own finding count;
+            #                   deliberately not done in this commit.
+            #   info.xml        records `job.status` and has no non-blocking
+            #                   flag, so its cell and its gate agree.
+            echo "| app:check-code | $(icon "$(read_result "results/result-app-check-code/app-check-code.txt")") | | | | |"
+            echo "| info.xml | $(icon "$(read_result "results/result-info-xml/info-xml.txt")") | | | | |"
+            echo "| REUSE | $(icon "$(read_result "results/result-reuse/reuse.txt")") | | | | |"
 
             # Test rows. `test_icon` rather than `icon`: see its definition —
             # an enabled-but-skipped test job is the absence of a verdict and
