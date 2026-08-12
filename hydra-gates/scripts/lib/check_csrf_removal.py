@@ -94,8 +94,38 @@ def removals(diff: str) -> list[str]:
     from one controller and added to another is a real change of posture for
     the first one; by multiset because a diff that removes a tag twice and
     restores it once has removed it once.
+
+    A RE-INDENTED LINE IS THE SAME LINE (the coding-standard migration).
+    ------------------------------------------------------------------
+    Cancellation used to compare RAW BYTES, on the stated reasoning that
+    "treating a re-indented line as a move would let a reformat swallow a
+    genuine deletion". Measured on the fleet-wide move to Nextcloud's coding
+    standard (`chore/nextcloud-coding-standard`, larpingapp#313 and 17
+    siblings), that reasoning cost more than it bought: php-cs-fixer re-indents
+    every controller from 4 spaces to a tab, so
+
+        -    #[NoCSRFRequired]
+        +\t#[NoCSRFRequired]
+
+    is emitted for EVERY attribute in the app. On launchpad the helper reported
+    25 "removals" against a tree whose `NoCSRFRequired` count is 43 before and
+    43 after — the annotation was never dropped, only moved one indent level.
+    gate-48 went red on 8 of the 18 migrating apps for that reason alone.
+
+    The fear behind byte-exactness does not survive MULTISET accounting, which
+    is what makes the relaxation safe: a re-indentation contributes exactly one
+    addition for each removal it causes, so the net count is unchanged and
+    nothing cancels that was not restored. Delete one annotation inside an
+    otherwise fully re-indented file and the removals outnumber the additions
+    by one, so exactly one finding survives — pinned by
+    `test_a_genuine_deletion_inside_a_full_reindent_still_reports`, which is
+    the positive control for this relaxation and fails if it is over-applied.
+
+    Only leading/trailing whitespace is normalised. The attribute list itself
+    is still compared verbatim, so `#[NoAdminRequired, NoCSRFRequired]` can
+    never cancel a removed `#[NoCSRFRequired]`.
     """
-    # {path: [raw content of each added line]} and the removals in file order.
+    # {path: [normalised content of each added line]}, removals in file order.
     added: dict[str | None, list[str]] = {}
     found: list[tuple[str | None, str]] = []
     path: str | None = None
@@ -106,7 +136,7 @@ def removals(diff: str) -> list[str]:
             path = header.group('path')
             continue
         if line.startswith('+'):
-            added.setdefault(path, []).append(line[1:])
+            added.setdefault(path, []).append(line[1:].strip())
             continue
         if not line.startswith('-') or DIFF_HEADER.match(line):
             continue
@@ -116,9 +146,10 @@ def removals(diff: str) -> list[str]:
     out: list[str] = []
     for file_path, line in found:
         pool = added.get(file_path)
-        if pool is not None and line[1:] in pool:
+        key = line[1:].strip()
+        if pool is not None and key in pool:
             # Consume the pairing so a second identical removal still reports.
-            pool.remove(line[1:])
+            pool.remove(key)
             continue
         out.append(line)
     return out
