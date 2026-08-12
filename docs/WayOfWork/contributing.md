@@ -111,7 +111,7 @@ Every PR triggers automated quality checks. **All must pass before merge.**
 | Check           | Tool                      |
 | --------------- | ------------------------- |
 | Syntax          | `php -l`                  |
-| Code style      | PHPCS (PSR-12)            |
+| Code style      | PHPCS ([Conduction standard](ci-cd.md#formatting--the-important-one)) |
 | Static analysis | PHPStan (level 5) + Psalm |
 | Mess detection  | PHPMD                     |
 
@@ -128,6 +128,10 @@ Every PR triggers automated quality checks. **All must pass before merge.**
 - Known vulnerability scan (npm audit + composer audit)
 
 **Run locally:**
+
+> **`cs:check` / `cs:fix` are PHPCS here, not php-cs-fixer.** They are the script
+> names `nextcloud/coding-standard` defines, and in this fleet they are aliases for
+> `phpcs` / `phpcbf`. See [CI/CD and Code Standards](ci-cd.md#formatting--the-important-one).
 
 ```bash
 # PHP
