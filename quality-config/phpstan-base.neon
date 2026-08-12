@@ -56,12 +56,32 @@ parameters:
     bootstrapFiles:
         - %currentWorkingDirectory%/phpstan-bootstrap.php
 
+    # ── WHY TWO OF THESE CARRY THE `(?)` OPTIONAL MARKER ─────────────────────
+    # PHPStan 2.x VALIDATES excludePaths and aborts the whole run when an entry
+    # names something that does not exist:
+    #   Path "/app/vendor-bin" is neither a directory, nor a file path, nor a
+    #   fnmatch pattern. If the excluded path can sometimes exist, append (?)
+    # PHPStan 1.x accepts the missing path silently, which is why this went
+    # unnoticed. Measured 2026-08-12 during the step-2b rollout: zaakafhandelapp
+    # is the only fleet app on PHPStan 2 (2.2.8; the other seventeen are on
+    # 1.12.33), it has neither `vendor-bin` nor `lib/Resources/template`, and
+    # including this file unchanged made `composer phpstan` exit before
+    # analysing a single file — the same failure shape as the v1.7.0 relative-path
+    # bug, from a different cause.
+    #
+    # `vendor` stays mandatory: phpstan is invoked from `vendor/bin/`, so it
+    # always exists. The other two are genuinely per-app.
+    #
+    # The marker is stripped during resolution, so this changes no app's resolved
+    # value: verified on docudesk (PHPStan 1.12.33) with a planted
+    # `no-such-dir-control (?)`, which analysed cleanly and dumped as a plain
+    # `/app/no-such-dir-control`.
     excludePaths:
         - %currentWorkingDirectory%/vendor
-        - %currentWorkingDirectory%/vendor-bin
+        - %currentWorkingDirectory%/vendor-bin (?)
         # Apps that ship a verbatim template snapshot under lib/Resources/template/
         # (openbuild). A no-op everywhere else.
-        - %currentWorkingDirectory%/lib/Resources/template
+        - %currentWorkingDirectory%/lib/Resources/template (?)
 
     scanDirectories:
         - %currentWorkingDirectory%/vendor/nextcloud/ocp
