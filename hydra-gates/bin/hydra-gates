@@ -19,13 +19,47 @@
 #      for helpers that are not there. We resolve the link chain to the real
 #      package root first.
 #
-#   2. AN EXPLICIT, STATED BASE REF (ADR-020).
-#      The gates are diff-scoped. A base ref that silently scopes to nothing
-#      reports zero failures, which is indistinguishable from clean. We resolve
-#      the base from an explicit precedence chain, PRINT which base won, and
+#   2. AN EXPLICIT, STATED BASE REF.
+#      A base ref that silently scopes to nothing reports zero failures, which
+#      is indistinguishable from clean. We resolve the base from an explicit
+#      precedence chain, PRINT which base won, and — on a diff-scoped run —
 #      refuse to run when none resolves. We never fall back to HEAD~1: on a
 #      squash-merged mainline HEAD~1 is the previous release, and on a fresh
 #      shallow clone it may not exist at all.
+#
+# ===========================================================================
+# THE SCOPE IS FULL BY DEFAULT. ADR-020 IS SUPERSEDED.
+# ===========================================================================
+#
+# Until now this wrapper defaulted to `--scope-to-diff` and `--full` was the
+# opt-in. That is reversed: the gates scan the ENTIRE tracked tree unless the
+# caller asks for a diff with `--scope-to-diff` / `--diff`.
+#
+# The reason, in Ruben's words: "if a gate changes or is added we want the next
+# push to beta to fail unless the old code is fixed to the new standard. This
+# will force developers to take updates to the gates along in their new
+# releases." Under diff scoping a tightened gate only ever judged code written
+# after it landed, so the fleet's inherited debt was permanently invisible and
+# permanently unowned.
+#
+# WHAT THIS COSTS, STATED HERE RATHER THAN DISCOVERED: the first
+# `development → beta` run after this lands surfaces the whole backlog at once.
+# The last fleet-wide wide-scope measurement was ~3,900 findings. See
+# hydra-gates/ADR-020-SUPERSEDED.md for the full record and the sequencing.
+#
+# THE BASE REF DOES NOT GO AWAY. Five gates ask what a CHANGE did — 16
+# spec-coverage, 29 gitignore-then-commit, 47 security-change-has-tests,
+# 48 csrf-cochange, 61 listener-work-placement — and a whole tree cannot answer
+# that. So this wrapper still resolves a base and still forwards it, on a full
+# run as well as a diff-scoped one, and the runner keys those five on whether a
+# base was resolved rather than on the file scope. A PR therefore keeps every
+# delta gate AND gains whole-tree state coverage; a workflow_dispatch has no
+# base and those five report NOT APPLICABLE, by name, which is not a pass.
+#
+# AND AN UNRESOLVABLE BASE IS NO LONGER FATAL AT FULL SCOPE. On a diff-scoped
+# run it still exits 99 — without a base there is no scope at all. On a full
+# run it costs five gates and nothing else, so refusing would throw away 59
+# real verdicts to punish one bad input.
 #
 #   3. A COVERAGE ASSERTION ON THE GREEN.
 #      The runner used to end with "ALL 63 GATES GREEN" whether or not 63 gates
@@ -57,9 +91,17 @@
 #   hydra-gates [--app-dir DIR] [--base REF] [--full] [--require-full-coverage]
 #
 #   --app-dir DIR             repo to scan (default: current directory)
-#   --base REF                diff base (default: see resolution order below)
-#   --full                    scan the whole repo instead of the diff. Reports
-#                             inherited debt; use for audits, not for gating.
+#   --base REF                the DELTA base — what the five delta gates compare
+#                             against, and the file scope too when
+#                             --scope-to-diff is given (default: see the
+#                             resolution order below)
+#   --full                    scan the whole repo. THIS IS NOW THE DEFAULT; the
+#                             flag is kept because every caller in the fleet
+#                             already passes it, and it now names the default
+#                             rather than switching to it.
+#   --scope-to-diff, --diff   the old ADR-020 behaviour, now OPT-IN: judge only
+#                             the files this change touched. Inherited debt in
+#                             untouched files is not judged.
 #   --require-full-coverage   treat "an APPLICABLE gate did not run" as a
 #                             failure. Gates that reported NOT APPLICABLE — their
 #                             subject matter is absent from this repo or this
@@ -129,7 +171,19 @@ fi
 # ---------------------------------------------------------------------------
 APP_DIR=""
 BASE_REF_ARG=""
-SCOPE_DIFF=1
+# FULL SCOPE BY DEFAULT — the reversal. `$HYDRA_GATE_SCOPE` is the env form and
+# an unrecognised value is a hard stop, because "which scope did that run use?"
+# is the question every verdict below is an answer to, and a run whose scope
+# nobody can name is not evidence about anything.
+case "${HYDRA_GATE_SCOPE:-full}" in
+    full) SCOPE_DIFF=0 ;;
+    diff) SCOPE_DIFF=1 ;;
+    *)
+        echo "[hydra-gates] FATAL: \$HYDRA_GATE_SCOPE='${HYDRA_GATE_SCOPE}' is not 'full' or 'diff'." >&2
+        echo "[hydra-gates] Refusing to guess a scope. NOTHING WAS CHECKED." >&2
+        exit 99
+        ;;
+esac
 REQUIRE_FULL_COVERAGE=0
 AXE_ENABLED="${HYDRA_GATE_AXE_ENABLED:-0}"
 
@@ -140,6 +194,7 @@ while [ $# -gt 0 ]; do
         --base) BASE_REF_ARG="${2:-}"; shift 2 ;;
         --base=*) BASE_REF_ARG="${1#--base=}"; shift ;;
         --full) SCOPE_DIFF=0; shift ;;
+        --scope-to-diff|--diff) SCOPE_DIFF=1; shift ;;
         --require-full-coverage) REQUIRE_FULL_COVERAGE=1; shift ;;
         --axe-enabled) AXE_ENABLED=1; shift ;;
         -h|--help) sed -n '3,70p' "${_self}" | sed 's/^# \{0,1\}//'; exit 0 ;;
@@ -308,16 +363,97 @@ if [ "${SCOPE_DIFF}" = "1" ]; then
         fi
     fi
 else
-    echo "[hydra-gates] Base ref: n/a — --full requested, scanning the entire tree."
-    echo "[hydra-gates] NOTE: a --full run reports inherited debt and is NOT the gating mode (ADR-020)."
+    # ── FULL FILE SCOPE (the default) — resolve a DELTA base anyway ─────────
+    #
+    # Full scope is about which files the STATE gates open. It says nothing
+    # about the five DELTA gates, which need a base and would otherwise have
+    # been silently retired on every PR in the fleet the moment this default
+    # flipped. So we resolve one with the SAME precedence chain as above and
+    # forward it; the runner keys those five on whether it arrived.
+    #
+    # EVERY FAILURE HERE IS NON-FATAL. That is the difference from the branch
+    # above. There, no base means no scope and exit 99 is the only honest
+    # answer. Here it costs five gates out of 64, so refusing would discard 59
+    # real verdicts to punish one bad input — and a run that reports nothing is
+    # worth less than a run that reports most things and names what it could
+    # not reach.
+    echo "[hydra-gates] File scope: FULL — the entire tracked tree (the default; ADR-020 is superseded)."
+    if command -v git > /dev/null 2>&1 && _git rev-parse --git-dir > /dev/null 2>&1; then
+        _db_source=""
+        if [ -n "${BASE_REF_ARG}" ]; then
+            if _resolves "${BASE_REF_ARG}"; then
+                BASE_REF="${BASE_REF_ARG}"; _db_source="--base"
+            else
+                echo "[hydra-gates] Delta base: '${BASE_REF_ARG}' was named with --base but does not resolve — ignoring it."
+            fi
+        elif [ -n "${HYDRA_GATE_BASE_REF:-}" ]; then
+            if _resolves "${HYDRA_GATE_BASE_REF}"; then
+                BASE_REF="${HYDRA_GATE_BASE_REF}"; _db_source="\$HYDRA_GATE_BASE_REF"
+            else
+                echo "[hydra-gates] Delta base: \$HYDRA_GATE_BASE_REF='${HYDRA_GATE_BASE_REF}' does not resolve — ignoring it."
+            fi
+        else
+            # Same chain as the diff branch, and @{upstream} is deliberately
+            # NOT in it for the reason spelled out there: a feature branch's
+            # tracking ref is itself, so the diff is empty exactly when CI runs.
+            _origin_head="$(_git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)"
+            for _cand in "${_origin_head}" origin/development origin/main origin/master; do
+                [ -n "${_cand}" ] || continue
+                if _resolves "${_cand}"; then
+                    BASE_REF="${_cand}"; _db_source="auto-detected"
+                    break
+                fi
+            done
+        fi
+
+        # A base that IS HEAD is the mainline-push shape, and it makes the
+        # delta gates' diff empty by construction — the same disguise the diff
+        # branch spends a screen of comment on. Re-scope to the push's own
+        # previous tip; if that cannot be resolved, drop the base rather than
+        # hand the delta gates a comparison of HEAD with itself.
+        if [ -n "${BASE_REF}" ] \
+            && [ "$(_git rev-parse "${BASE_REF}" 2>/dev/null)" = "$(_git rev-parse HEAD 2>/dev/null)" ]; then
+            # shellcheck source=scripts/lib/resolve-push-base.sh
+            # shellcheck disable=SC1091  # resolved at runtime from the package root
+            . "${PKG_ROOT}/scripts/lib/resolve-push-base.sh"
+            _head_sha="$(_git rev-parse HEAD 2>/dev/null)"
+            if _push_base="$(hydra_resolve_push_base "${APP_DIR}" "${_head_sha}")"; then
+                BASE_REF="${_push_base}"; _db_source="github.event.before (push)"
+            else
+                echo "[hydra-gates] Delta base: the resolved base IS HEAD and the push's previous tip could not be used either."
+                BASE_REF=""; _db_source=""
+            fi
+        fi
+
+        if [ -n "${BASE_REF}" ]; then
+            BASE_SOURCE="${_db_source}"
+            echo "[hydra-gates] Delta base: ${BASE_REF} (${BASE_SOURCE}) = $(_git rev-parse --short "${BASE_REF}" 2>/dev/null)"
+            echo "[hydra-gates] Gates 16, 29, 47, 48 and 61 judge that change set; every other gate reads the whole tree."
+        else
+            echo "[hydra-gates] Delta base: NONE. Gates 16, 29, 47, 48 and 61 will report NOT APPLICABLE by name."
+            echo "[hydra-gates] That is not a pass and is not counted as one. The other 59 gates are unaffected."
+        fi
+    else
+        echo "[hydra-gates] Delta base: NONE — git is unavailable or this is not a git repository."
+        echo "[hydra-gates] Gates 16, 29, 47, 48 and 61 will report NOT APPLICABLE by name."
+    fi
 fi
 
 # ---------------------------------------------------------------------------
 # 5. Run the gates. The runner owns the gate logic; we only capture.
 # ---------------------------------------------------------------------------
 set -- "${APP_DIR}"
+# The BASE and the FILE SCOPE are forwarded as two separate, named inputs. A
+# base is forwarded whenever one resolved — including on a full run, where the
+# five delta gates are the only things that read it. `--scope-to-diff` is
+# forwarded only when the caller asked for it.
+if [ -n "${BASE_REF}" ]; then
+    set -- --base "${BASE_REF}" "$@"
+fi
 if [ "${SCOPE_DIFF}" = "1" ]; then
-    set -- --scope-to-diff --base "${BASE_REF}" "$@"
+    set -- --scope-to-diff "$@"
+else
+    set -- --full "$@"
 fi
 # Forwarded, not re-derived. The runner is the only thing that reads gate-33's
 # report; this wrapper just has to stop swallowing the caller's declaration.

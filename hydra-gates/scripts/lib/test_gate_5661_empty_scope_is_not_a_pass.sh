@@ -252,11 +252,27 @@ for _g in ${_GATES}; do
     esac
 done
 
+# A REASON MUST NAME ITS SUBJECT *AND* BE SUBSTANTIVE. Both halves are needed:
+# the token list alone is satisfiable by a bare citation with no explanation,
+# and a length test alone is satisfiable by any sentence at all.
+#
+# `delta-scoped` joined the token list with the ADR-020 reversal
+# (hydra-gates/ADR-020-SUPERSEDED.md). gate-61 is delta-scoped BY POLICY rather
+# than by nature — `check_listener_placement.py --all` answers the same question
+# over a whole tree perfectly well, and the runner already runs it that way as
+# an advisory — so its reason can no longer honestly cite ADR-020 as the live
+# rule. It now names the policy instead, which is the more testable claim of
+# the two. The token list may be EXTENDED for a reason that got more precise;
+# it must never be relaxed to a wildcard.
 for _g in ${_GATES}; do
-    if grep -qE "^\[gate-${_g}\][^:]*: NOT APPLICABLE — .+(ADR-020|no lib/|no tests/e2e|no lib/AppInfo)" "${_scoped}"; then
-        _ok "gate-${_g} states WHY it was not applicable"
+    _reason_line="$(grep -E "^\[gate-${_g}\][^:]*: NOT APPLICABLE — " "${_scoped}" | head -1)"
+    _reason="${_reason_line#*NOT APPLICABLE — }"
+    if printf '%s' "${_reason_line}" \
+        | grep -qE "(ADR-020|delta-scoped|no lib/|no tests/e2e|no lib/AppInfo)" \
+        && [ "${#_reason}" -ge 40 ]; then
+        _ok "gate-${_g} states WHY it was not applicable (${#_reason} chars, names its subject)"
     else
-        _bad "gate-${_g}'s NOT APPLICABLE line carries no reason — a bare declaration is how a gate disappears quietly"
+        _bad "gate-${_g}'s NOT APPLICABLE line carries no substantive reason (${#_reason} chars) — a bare declaration is how a gate disappears quietly. Got: ${_reason_line:0:160}"
     fi
 done
 
