@@ -80,6 +80,10 @@ EXIT_TOOLING_MISSING = 5
 # raw SVG path. All three stay legal per ADR-077 rule 1.
 _URLISH = ('/', 'http://', 'https://', 'data:')
 
+# Sentinel in the label slot of a _menu_entries() tuple, marking a caption that
+# carries keys the renderer ignores. Not a label any manifest can produce.
+_CAPTION_DEAD_KEYS = '\x00caption-dead-keys'
+
 
 def _is_svg_path(value: str) -> bool:
     """Whether the value looks like a raw SVG path payload rather than a name."""
@@ -142,7 +146,8 @@ def _registered_icon_names(repo: str) -> tuple[set[str] | None, str | None]:
     if not os.path.isfile(main_js):
         return None, None
 
-    src_main = open(main_js, encoding='utf-8').read()
+    with open(main_js, encoding='utf-8') as fh:
+        src_main = fh.read()
     # Ignore comments so a `registerIcons()` mentioned in prose is not read as a call.
     code = '\n'.join(l for l in src_main.splitlines()
                      if not l.lstrip().startswith(('//', '*', '/*')))
@@ -158,7 +163,8 @@ def _registered_icon_names(repo: str) -> tuple[set[str] | None, str | None]:
     for f in (icons_js, main_js):
         if not os.path.isfile(f):
             continue
-        text = open(f, encoding='utf-8').read()
+        with open(f, encoding='utf-8') as fh:
+            text = fh.read()
         for m in re.finditer(r"import\s+(\w+)\s+from\s+'vue-material-design-icons/([\w-]+)\.vue'", text):
             names.add(m.group(1))
             names.add(m.group(2))
@@ -188,6 +194,53 @@ def _menu_entries(path: str):
     def walk(node, label_ctx, in_widget=False):
         if isinstance(node, dict):
             if node.get('type') == 'caption':
+                # THE CAPTION EXEMPTION, AND WHY IT IS THE CORRECT ONE.
+                #
+                # gate-60 and gate-62 DISAGREED about this node until
+                # 2026-08-12: gate-60 skipped it, gate-62 failed it twice (once
+                # for "names the STORE concept but renders X", once for "one
+                # glyph, two meanings"). Two gates in one package, opposite
+                # verdicts on the same three lines of JSON. Somebody had to
+                # decide, so it was decided against the RENDERER rather than by
+                # aligning whichever was easier to change.
+                #
+                # `CnAppNav.vue` renders a caption as
+                #
+                #     <NcAppNavigationCaption v-if="isCaption(item)"
+                #         :name="resolveLabel(item)"
+                #         :data-testid="`cn-nav-caption-${item.id}`" />
+                #
+                # — `:name` and a test id, and NOTHING ELSE. No `#icon` slot is
+                # passed, no `:to`, no children loop. Its own docblock states
+                # the contract: "Caption entries ignore `route`, `href`,
+                # `action`, `icon`, `count`, `children`, and `pinned`." The
+                # manifest schema says the same thing independently:
+                # "'caption' renders an NcAppNavigationCaption section divider —
+                # only label, id, order, and section are honoured."
+                #
+                # So a caption's `icon` DRAWS NOTHING. Every rule this gate
+                # enforces is a claim about a rendered glyph, and there is no
+                # glyph. Failing it — as gate-62 did — is an unclosable finding
+                # about dead metadata, and the "fix" it demands changes no
+                # pixel. gate-62 has been aligned to this decision, not the
+                # other way round. See check_store_and_settings_surface.py.
+                #
+                # The `return` (rather than `continue`) is deliberate and is
+                # part of the same decision: the renderer does not walk a
+                # caption's `children` either, so nothing under it is drawn.
+                #
+                # WHAT IS *NOT* EXEMPT: the keys themselves. Dead metadata on a
+                # caption is a mistake worth telling the author about — it
+                # usually means they expected an icon and got none — so it is
+                # reported as a WARN below, which does not fail the gate. An
+                # exemption that produces silence is how a gate's quiet gets
+                # believed; this one produces a sentence.
+                dead = sorted(k for k in ('icon', 'route', 'children', 'href',
+                                          'action', 'count', 'pinned')
+                              if node.get(k))
+                if dead:
+                    label = str(node.get('label') or node.get('id') or '?')
+                    yield (_CAPTION_DEAD_KEYS, ', '.join(dead), label, False)
                 return
             label = (node.get('title') or node.get('label') or node.get('name')
                      or node.get('id') or label_ctx)
@@ -209,27 +262,67 @@ def _menu_entries(path: str):
 
 # Label -> concept. Only unambiguous namings; an app's own domain wording is
 # never guessed at. Matched against the lowercased, stripped label.
+#
+# THIS MAP IS THE *SYNONYM* LAYER, NOT THE VOCABULARY.
+# ---------------------------------------------------
+# It holds the spellings that are NOT recoverable from a concept's own name:
+# Dutch synonyms, plurals, and abbreviations. The concept names themselves are
+# derived from semantic-icons.json by `_concept_labels()` below, so adding a
+# concept to the vocabulary makes it enforceable without editing this file.
+#
+# WHY THAT MATTERS (.github, 2026-08-12). Every value in this map is a **Tier
+# A** key, and the vocabulary ships **140 Tier B concepts**. So the
+# `warns.append(... Tier B — SHOULD)` branch below was UNREACHABLE CODE: no
+# label could ever resolve to a Tier B concept, and a green gate-60 said
+# nothing whatsoever about 140 of the 153 concepts it claims to govern.
+# Measured before the fix, with node_modules installed, across 14 fleet repos
+# and 417 manifests: **0 warnings, everywhere, always.** A planted
+# `{"label": "Invoice", "icon": "FileDocumentOutline"}` — an exact Tier B
+# concept name carrying the wrong glyph — produced nothing at all.
+#
+# Three TIER A concepts were unreachable too — `activity`, `admin`,
+# `tutorial` — and those are MUSTs, not SHOULDs.
 CONCEPT_LABELS = {
-    'dashboard': 'dashboard',
-    'documentation': 'documentation',
     'docs': 'documentation',
     'features & roadmap': 'features-roadmap',
     'features and roadmap': 'features-roadmap',
-    'settings': 'settings',
     'instellingen': 'settings',
     'configuratie': 'settings',
     'configuration': 'settings',
-    'search': 'search',
     'zoeken': 'search',
-    'store': 'store',
-    'about': 'about',
-    'notifications': 'notifications',
     'notificaties': 'notifications',
-    'audit trail': 'audit-trail',
     'audit log': 'audit-trail',
-    'my work': 'my-work',
     'mijn werk': 'my-work',
+    'beheer': 'admin',
+    'activiteit': 'activity',
 }
+
+
+def _concept_labels(all_concepts: dict) -> dict:
+    """Label -> concept, derived from the vocabulary plus the synonym map.
+
+    A concept's own NAME is an exact, unambiguous label for it — `Invoice`
+    means the `invoice` concept in any app, in the same way `Dashboard` means
+    `dashboard`. This is NOT the label-count heuristic ADR-077 rule 5 forbids:
+    nothing is inferred from how many entries share a glyph, and nothing is
+    matched as a substring. The comparison is equality against the concept's
+    own name, which is exactly the strength the hand-written map already had —
+    the map was simply missing 143 of the 153 concepts.
+
+    Hyphenated concepts (`audit-trail`, `bank-transaction`, `open-external`)
+    additionally accept the space-separated spelling, because that is how a
+    menu label is written.
+
+    The synonym map WINS on a collision, so `configuration` keeps resolving to
+    `settings` rather than being shadowed.
+    """
+    labels: dict[str, str] = {}
+    for concept in all_concepts:
+        labels[concept] = concept
+        if '-' in concept:
+            labels[concept.replace('-', ' ')] = concept
+    labels.update(CONCEPT_LABELS)
+    return labels
 
 
 def main() -> int:
@@ -244,6 +337,7 @@ def main() -> int:
     tier_a: dict = vocab['tierA']
     tier_b: dict = vocab['tierB']
     all_concepts = {**tier_a, **tier_b}
+    concept_labels = _concept_labels(all_concepts)
     canonical_icons = set(all_concepts.values())
     bridged = set(vocab['bridgedCssIcons'])
     content_block_icons = set((vocab.get('contentBlockIcons') or {}).get('names') or [])
@@ -262,10 +356,25 @@ def main() -> int:
     fails: list[str] = []
     warns: list[str] = []
     used_mdi: set[str] = set()
+    # Non-vocabulary icon names this run could not check for existence because
+    # vue-material-design-icons is not installed. EMPTY means the run is fully
+    # verified and the missing library changed no answer.
+    unverifiable: set[str] = set()
 
     for path in paths:
         rel = os.path.relpath(path, repo)
         for label, icon, entry_id, in_widget in _menu_entries(path):
+            if label == _CAPTION_DEAD_KEYS:
+                # Not a rendered icon — dead metadata on a section divider.
+                # WARN, never FAIL: there is no glyph to be wrong about, so
+                # this cannot block a PR, but it is not silent either.
+                warns.append(
+                    f'{rel}: caption entry "{entry_id}" declares {icon} — a '
+                    f'type:"caption" renders NcAppNavigationCaption, which '
+                    f'honours only label/id/order/section. These keys draw '
+                    f'nothing; drop them, or drop type:"caption" if the entry '
+                    f'was meant to be clickable.')
+                continue
             where = f'{rel}: {label or entry_id or "?"}'
             if not icon:
                 continue
@@ -308,12 +417,31 @@ def main() -> int:
                 continue
 
             # An MDI-style name from here on.
-            if available is not None and icon not in available and icon not in canonical_icons:
-                fails.append(
-                    f'{where}: icon "{icon}" does not exist in '
-                    f'vue-material-design-icons and is not a vocabulary icon — '
-                    f'it renders blank wherever it is not aliased locally.')
-                continue
+            if icon not in canonical_icons:
+                if available is None:
+                    # UNVERIFIABLE, AND ONLY THIS NAME IS.
+                    #
+                    # The existence rule used to be switched off wholesale the
+                    # moment node_modules was absent, and the whole RUN then
+                    # reported SKIPPED — including runs where every icon in the
+                    # app came straight out of the vocabulary and nothing
+                    # needed the library at all. That is why this gate "went
+                    # unrun" in apps whose manifests were in fact clean: one
+                    # missing `npm ci` erased a verdict the gate already had.
+                    #
+                    # A vocabulary icon needs no library to be verified. The
+                    # vocabulary is curated, and nextcloud-vue's own
+                    # tests/components/semanticIcons.spec.js asserts every name
+                    # in it resolves. So the library is needed for exactly one
+                    # question — "is this NON-vocabulary name real?" — and only
+                    # a manifest that asks that question is unverifiable.
+                    unverifiable.add(icon)
+                elif icon not in available:
+                    fails.append(
+                        f'{where}: icon "{icon}" does not exist in '
+                        f'vue-material-design-icons and is not a vocabulary icon — '
+                        f'it renders blank wherever it is not aliased locally.')
+                    continue
 
             used_mdi.add(icon)
 
@@ -344,15 +472,22 @@ def main() -> int:
             # Tier A glyphs to widgetIcons.js), after which this exemption can
             # go. Until then it is the difference between a gate that is strict
             # and one that is impossible.
-            concept = CONCEPT_LABELS.get(label.strip().lower())
+            concept = concept_labels.get(label.strip().lower())
             if concept and in_widget is True:
                 concept = None
 
             if concept:
                 expected = all_concepts.get(concept)
                 if expected and icon != expected:
-                    msg = (f'{where}: concept "{concept}" must use "{expected}", '
-                           f'found "{icon}"')
+                    # Name the ENTRY ID as well as the label. One manifest can
+                    # carry the same label at several ids, and without the id
+                    # the findings are byte-identical — 14 warnings collapsing
+                    # to 8 distinct strings in pipelinq, none of them telling
+                    # you WHICH entry to edit. A count you cannot act on is not
+                    # a finished measurement.
+                    ident = f' [id={entry_id}]' if entry_id else ''
+                    msg = (f'{where}{ident}: concept "{concept}" must use '
+                           f'"{expected}", found "{icon}"')
                     if concept in tier_a:
                         fails.append(msg + ' (ADR-077 Tier A — MUST).')
                     else:
@@ -382,10 +517,13 @@ def main() -> int:
                 f'manifests are NOT registered — they render with no icon at all, '
                 f'not a fallback: {shown}{more} (ADR-077 rule 3).')
 
-    if available is None:
-        # No silent caps: say what could not be checked.
-        print('NOTE: vue-material-design-icons is not installed — could not verify '
-              'that icon names exist upstream. Install dependencies for full coverage.')
+    if available is None and unverifiable:
+        # No silent caps: say what could not be checked, and NAME it. A NOTE
+        # that lists the actual names is auditable; "could not verify" is not.
+        print('NOTE: vue-material-design-icons is not installed and this app uses '
+              f'{len(unverifiable)} icon name(s) from OUTSIDE the ADR-077 vocabulary, '
+              'whose existence therefore could not be verified: '
+              f'{", ".join(sorted(unverifiable))}. Install dependencies for full coverage.')
         # ...and do not let the caller read that NOTE as a clean bill of health.
         #
         # This gate once reported 43 confident FAILs when node_modules was
@@ -407,11 +545,18 @@ def main() -> int:
           f'{len(warns)} warning(s)')
     if fails:
         return 1
-    if available is None:
+    if available is None and unverifiable:
         # Clean on every rule that COULD run, but the invented-name rule could
-        # not. The runner reports this as SKIPPED (wiring), which is visible to
-        # --require-full-coverage. Returning 0 here would claim the icon names
-        # were verified against the library when the library was not there.
+        # not be answered FOR THESE NAMES. The runner reports this as SKIPPED
+        # (wiring), which is visible to --require-full-coverage. Returning 0
+        # here would claim those names were verified against the library when
+        # the library was not there.
+        #
+        # Note the condition is `unverifiable`, not `available is None`: an app
+        # whose every icon comes from the vocabulary has nothing left to ask
+        # the library, so it gets a real PASS with no toolchain. That is not a
+        # loosening — it is the difference between "I could not check" and "I
+        # did not need to".
         return EXIT_TOOLING_MISSING
     return 0
 
