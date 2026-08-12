@@ -98,10 +98,48 @@ on:
         type: string
         default: "[]"
       enable-check-code:
-        description: "Run `occ app:check-code` against the Nextcloud version the app declares in info.xml. Nextcloud's own tool for private and deprecated API usage; the general form of the hand-written \\OC::$server sniff. Reports without blocking unless check-code-blocking is also set."
+        # DEFAULT FLIPPED true -> false, because the command this job runs DOES
+        # NOT EXIST any more and the job therefore cannot pass in any repo here.
+        #
+        # `occ app:check-code` was removed from Nextcloud server after v20.
+        # Measured, extracting the registered App-namespace commands from
+        # `core/register_command.php` at each tag — same expression, same file,
+        # only the tag varying:
+        #
+        #   v20.0.0  Disable Enable GetPath Install ListApps Remove Update
+        #            + CheckCode                       <- the control: it CAN appear
+        #   v34.0.0  Disable Enable GetPath Install ListApps Remove Update
+        #                                              <- CheckCode is gone
+        #
+        # Corroborated independently: `core/Command/App/CheckCode.php` answers
+        # 200 at v20 and v21 and 404 at v25, v31, v32, v33 and v34, while
+        # `core/Command/App/ListApps.php` answers 200 at every one of those tags
+        # — so the 404s are a removal, not a bad path.
+        #
+        # Every app in this fleet declares <nextcloud min-version> of 31, 32 or
+        # 34, and this job fetches the server at the version the app DECLARES.
+        # So `occ` would be asked for a command roughly eleven majors dead. It
+        # would print no recognisable verdict, the job's own positive control
+        # would fire, and that control's `exit 1` is UNCONDITIONAL — it sits
+        # above the `check-code-blocking` branch and is not covered by it. The
+        # result would be a hard failure in every PHP repo in the fleet, on a
+        # check that can never pass.
+        #
+        # The positive control is doing its job here, exactly as designed: it
+        # refuses to report "no private API usage" from a run that inspected
+        # nothing. The job is what is wrong, not the control.
+        #
+        # LEFT WIRED, NOT DELETED, and still listed in the Quality Report's
+        # `needs:`. A skipped job's result is `skipped`, not `failure`, so this
+        # blocks nothing while it is off — and when someone rebuilds the check on
+        # something that exists (Psalm/PHPStan over the private surface, or
+        # nextcloud/app-api's linter), the wiring is already correct and one
+        # input turns it on. Deleting it would lose that and quietly re-open the
+        # gap #385 was written to close.
+        description: "Run `occ app:check-code` against the Nextcloud version the app declares in info.xml. OFF BY DEFAULT AND CURRENTLY UNUSABLE: `app:check-code` was removed from Nextcloud server after v20 (verified against core/register_command.php and core/Command/App/CheckCode.php from v20 through v34), and every app here declares min-version 31 or later, so the command cannot be found and the job's positive control fails the run. Do not set this true until the check is rebuilt on tooling that still exists."
         required: false
         type: boolean
-        default: true
+        default: false
       check-code-blocking:
         description: "Turn app:check-code findings into a build failure. OFF by default on purpose: every app in this fleet reaches into server internals somewhere, and a gate that is red on arrival is a gate nobody turns on. Flip it per app once the findings are worked down."
         required: false
