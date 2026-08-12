@@ -3277,17 +3277,63 @@ if [ -f src/manifest.json ]; then
         sed -i '/^# count=[0-9]*$/d' "${_da_log}" 2>/dev/null || true
         # Filter to scope when --scope-to-diff is set — the helper reports
         # absolute paths, so strip the app-dir prefix before comparing.
+        #
+        # IT COMPUTED THE FINDING AND THREW IT AWAY (.github#396).
+        # ------------------------------------------------------
+        # This gate is POST-FILTER: the checker always runs over the WHOLE tree
+        # (it needs the manifest and the .vue tree to correlate a page with the
+        # component embedded in another page's widget slot), and the narrowing
+        # happens HERE, to its FINDINGS. So on a narrow scope the log went from
+        # one line to ZERO BYTES, `wc -l` read 0, and the gate printed the same
+        # word as a clean tree — while the defect sat on disk, measured, in a
+        # temp file this runner had just deleted.
+        #
+        # Reproduced 2026-08-12 on one tree, one package, only the scope input
+        # varying: full -> `FAIL — 1`, findings log 140 bytes; `--scope-to-diff
+        # --base <base>` with a README-only diff -> `PASS`, findings log 0
+        # BYTES. 🔑 The decisive instrument was the byte count, not the verdict.
+        #
+        # ⚠️ THE OBVIOUS FIX IS WRONG. "Pre-filter count non-zero => do not
+        # print PASS" also fires at PARTIAL scope — a PR touching one clean
+        # .vue drops 1 finding to 0 and the gate would go NOT APPLICABLE on
+        # most PRs in any affected repo, which retires it exactly where it is
+        # cheapest to run. The scoped verdict is CORRECT; what was missing is
+        # that it never said anything had been discarded.
+        #
+        # So this follows gates 53 and 61 instead: FILTER, then STATE THE
+        # DISCARDED COUNT as an advisory. The verdict is unchanged in every
+        # arm; a scoped green simply stops reading as "the manifest is clean".
+        #
+        # ⚠️ The advisory is STASHED, not printed here, and it is prefixed
+        # `NOTE:`. A `[gate-15] ...` line emitted BEFORE the verdict is read as
+        # the verdict by every "first match wins" parser in this package —
+        # that is `.github#401`, one gate over. Print after, and tag it so the
+        # shared parsers skip it even if someone reorders this again.
+        _da_dropped_note=""
         if [ "${SCOPE_TO_DIFF}" = "1" ]; then
             _da_tmp=$(mktemp)
+            # The discarded findings are WRITTEN OUT, not just counted. A count
+            # with no file behind it is the thing that has to be believed; a
+            # file can be read.
+            _da_dropped_log="${_da_log}.discarded"
+            : > "${_da_dropped_log}"
             while IFS= read -r _line; do
                 [ -z "${_line}" ] && continue
                 _f="${_line%%:*}"
                 # Convert absolute path back to repo-relative if it lives
                 # under the current pwd.
                 _rel="${_f#${APP_DIR}/}"
-                _in_scope "${_rel}" && echo "${_line}" >> "${_da_tmp}"
+                if _in_scope "${_rel}"; then
+                    echo "${_line}" >> "${_da_tmp}"
+                else
+                    echo "${_line}" >> "${_da_dropped_log}"
+                fi
             done < "${_da_log}"
             mv "${_da_tmp}" "${_da_log}"
+            _da_dropped=$(_count '.' "${_da_dropped_log}")
+            if [ "${_da_dropped}" -gt 0 ]; then
+                _da_dropped_note="[gate-15] NOTE: this run was NARROWED with --scope-to-diff, and the scope filter DISCARDED ${_da_dropped} nested-dashboard finding(s) that the checker had ALREADY COMPUTED over the whole tree — they sit in files the diff against '${BASE_REF}' does not touch. ADVISORY, and it decides nothing here: the verdict above is a statement about this diff, NOT a clean bill of health for src/manifest.json and the .vue tree. Re-run at the default full scope to judge them. See ${_da_dropped_log}."
+            fi
         fi
         _da_fail=$(wc -l < "${_da_log}" 2>/dev/null || echo 0)
     else
@@ -3300,6 +3346,8 @@ if [ -f src/manifest.json ]; then
         else
             _fail 15 "dashboard-antipattern" "${_da_fail} nested-dashboard pattern(s) — see ${_da_log}"
         fi
+        # AFTER the verdict, deliberately (.github#401).
+        [ -n "${_da_dropped_note:-}" ] && echo "${_da_dropped_note}"
     fi
 fi
 
@@ -4220,9 +4268,51 @@ if [ -d lib ]; then
         else
             # In BLOCK mode (post bake-in epoch) the script exits 1 on any
             # match. Count the per-rule lines in the log.
-            _or_abs_hits=$(_count '^\s+\[' "${_or_abs_log}")
-            [ "${_or_abs_hits}" -eq 0 ] && _or_abs_hits=1
-            _fail 23 "or-abstraction-anti-patterns" "${_or_abs_hits} OR-abstraction match(es) — see ${_or_abs_log}"
+            #
+            # A CRASH IS NOT A FINDING (.github#394) — the same repair gate-24
+            # got in `#378`, and gate-23 is the sibling that did not call the
+            # guard that already lives in this file.
+            #
+            # `[ "${_or_abs_hits}" -eq 0 ] && _or_abs_hits=1` clamped an
+            # UNREAD count to one, so a linter that died before opening a file
+            # was reported as `FAIL — 1 OR-abstraction match(es)`: a number
+            # nobody measured, naming an anti-pattern nobody found. Measured
+            # 2026-08-12 with the linter replaced by a stub that writes a
+            # traceback and exits 1, over a fixture whose lib/ holds exactly
+            # one inert service — `FAIL — 1`. Positive control on the SAME
+            # fixture with the real linter: `PASS`, log ending
+            # `or_abstraction_findings=0 ... mode=BLOCK`.
+            #
+            # ⚠️ Only the BLOCK branch could reach it: in WARN mode the linter
+            # exits 0 whatever it found, so a crash lands in the `if` above and
+            # is read there. BLOCK mode is what the acceptance driver forces
+            # (HYDRA_OR_GATE_BLOCK_AFTER_EPOCH=0), and it is what the fleet
+            # gets after the bake-in epoch.
+            #
+            # UNLIKE gate-24, this helper DOES declare a terminal-marker
+            # contract — `or_abstraction_findings=<n> app_id=<id> mode=<MODE>`
+            # is its last line, on every path that reaches a verdict, and the
+            # PASS branch above already reads it. So the two situations ARE
+            # separable here and the honest verdict for a crash is
+            # `SKIPPED (wiring)`, not a fabricated FAIL. (gate-24 had to stay
+            # FAIL precisely because its wrapper is app-owned and declares no
+            # such contract — see the note in its block.)
+            if ! _helper_finished "${_or_abs_log}" '^or_abstraction_findings=[0-9]+'; then
+                _or_abs_why=$(head -3 "${_or_abs_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+                _skip 23 "or-abstraction-anti-patterns" wiring "lint-or-abstraction-anti-patterns.sh (${_or_abs_script}) exited non-zero WITHOUT printing its terminal 'or_abstraction_findings=<n>' summary, so lib/ was NOT scanned and NO anti-pattern was measured. That is a crashed linter, not a finding about this repository — ADR-022 OR-abstraction duplication is UNVERIFIED by this run. Linter output: ${_or_abs_why:-<empty>}. See ${_or_abs_log}."
+            else
+                _or_abs_hits=$(_count '^\s+\[' "${_or_abs_log}")
+                if [ "${_or_abs_hits}" -eq 0 ]; then
+                    # It finished and said non-zero, but printed nothing this
+                    # runner can count: a FORMAT DRIFT between linter and
+                    # runner, not a dead linter. Fail closed — a real BLOCK
+                    # exit must not become a skip — but stop asserting a size
+                    # nobody measured. Same wording as gate-24's guarded clamp.
+                    _fail 23 "or-abstraction-anti-patterns" "the OR-abstraction linter reached its own summary and exited non-zero, but printed no per-rule line this runner can count — the failure is real, its SIZE is unmeasured, so no count is claimed. Read ${_or_abs_log}."
+                else
+                    _fail 23 "or-abstraction-anti-patterns" "${_or_abs_hits} OR-abstraction match(es) — see ${_or_abs_log}"
+                fi
+            fi
         fi
     else
         # A MISSING HELPER MUST NOT REPORT PASS (#147). This branch said
@@ -6996,7 +7086,41 @@ if [ "${HAVE_DELTA_BASE}" != "1" ]; then
     _scht_ran=0
     _skip 47 "security-change-has-tests" na "this run has NO delta base, so there is no change set to classify. This gate compares a change's hunks against the tests it touched; with no base there is no such pair, and no change in this repository could create one. Give it a base (--base <ref> or HYDRA_GATE_BASE_REF) and it runs at any file scope."
 elif [ "${HAVE_DELTA_BASE}" = "1" ]; then
-    if [ ! -f "${_scht_helper}" ]; then
+    # A DELTA WITH NO CANDIDATE FILE IN IT IS NOT A PASS (#242/#268, applied
+    # here for the ninth and tenth time — gates 46, 50, 55, 56, 58, 59, 60 and
+    # 62 already carry this remedy; 47 and 48 were the last two without it).
+    #
+    # ⚠️ THE PRECISE SHAPE MATTERS, and my first framing of it was wrong. A
+    # TRULY empty delta is UNREACHABLE through bin/hydra-gates: `--base
+    # <sha-of-HEAD>` is caught upstream and every delta gate says NOT
+    # APPLICABLE already. What IS reachable — and is the common case on a
+    # docs PR — is a delta with a real diff in it that contains ZERO
+    # INSPECTABLE FILES. Measured 2026-08-12, README-only head commit, a real
+    # base: gates 19, 29 and 61 said NOT APPLICABLE and named what had been
+    # excluded, while 16, 47 and 48 said PASS. 47 and 48 had opened no
+    # candidate file at all.
+    #
+    # THE PROBE IS DELIBERATELY WIDER THAN THE CHECKER'S OWN RULE. The helper
+    # classifies `^(lib/.*\.php|src/.*\.(vue|js|ts))$` plus four `^lib/` path
+    # patterns; this asks only "did the diff touch ANYTHING under lib/ or
+    # src/". That is a strict superset, so the gate can only ever decline when
+    # the checker provably had nothing to read — a narrower probe here would
+    # be `#242`'s remedy turned into a green hole, which is the direction that
+    # cannot be allowed to drift (cf. gate-45's guard vs its enumerator).
+    #
+    # The `...HEAD` / plain-base fallback mirrors the helper's own, so the two
+    # agree about what "the diff" is on a checkout with no merge base.
+    _scht_changed=$(git diff --name-only "${BASE_REF}...HEAD" 2>/dev/null || true)
+    [ -z "${_scht_changed}" ] && _scht_changed=$(git diff --name-only "${BASE_REF}" 2>/dev/null || true)
+    _scht_cand=$(printf '%s\n' "${_scht_changed}" | grep -cE '^(lib|src)/' 2>/dev/null || true)
+    _scht_cand="${_scht_cand%%$'\n'*}"
+    case "${_scht_cand}" in ''|*[!0-9]*) _scht_cand=0 ;; esac
+    if [ "${_scht_cand}" -eq 0 ]; then
+        _scht_ran=0
+        _scht_sec=""
+        _scht_has_test="1"
+        _skip 47 "security-change-has-tests" na "the diff against '${BASE_REF}' touches NO file under lib/ or src/, so there was not one candidate for this gate to classify — NO hunk was read and no security-touching change could have been found. This is NOT a clean bill of health and NOT a statement that the change is safe: it is a statement that this gate's subject matter is absent from this change set. It runs on the next change that touches application code."
+    elif [ ! -f "${_scht_helper}" ]; then
         # A MISSING HELPER MUST NOT REPORT PASS (#147).
         _scht_ran=0
         _skip 47 "security-change-has-tests" wiring "check_security_cochange.py not found at ${_scht_helper} — the diff was NOT classified; a security change shipping without a test co-change is UNVERIFIED by this run."
@@ -7099,7 +7223,26 @@ elif [ "${HAVE_DELTA_BASE}" = "1" ]; then
     # requires the token in a code position — `#[` at the start of the
     # content, or `@NoCSRFRequired` at docblock-tag position.
     _csrf_helper="${SCRIPT_DIR}/lib/check_csrf_removal.py"
-    if [ ! -f "${_csrf_helper}" ]; then
+    # A DELTA WITH NO CONTROLLER IN IT IS NOT A PASS (#242/#268) — the same
+    # repair as gate-47 immediately above, keyed on this gate's OWN subject
+    # matter. Everything this gate can ever read comes through the pathspec
+    # `lib/Controller/*.php` two screens down; when the diff touches none of
+    # those, `_csrf_removed` is empty for a reason that has nothing to do with
+    # CSRF and the gate printed PASS. Measured 2026-08-12 on a README-only
+    # head commit against a real base: PASS, over a diff in which not one
+    # controller line was read.
+    #
+    # The pathspec is the SAME STRING the gate itself uses, on purpose: this
+    # guard cannot drift away from the enumerator it defends without the two
+    # visibly disagreeing in one file.
+    _csrf_cand=$(git diff --name-only "${BASE_REF}...HEAD" -- 'lib/Controller/*.php' 2>/dev/null | grep -c . 2>/dev/null || true)
+    _csrf_cand="${_csrf_cand%%$'\n'*}"
+    case "${_csrf_cand}" in ''|*[!0-9]*) _csrf_cand=0 ;; esac
+    if [ "${_csrf_cand}" -eq 0 ]; then
+        _csrf_ran=0
+        _csrf_removed=""
+        _skip 48 "csrf-cochange" na "the diff against '${BASE_REF}' touches NO lib/Controller/*.php, so there was no controller for a #[NoCSRFRequired] to be dropped FROM — NOT ONE controller line was read by this run. A removal is a property of a change set, and this change set contains no candidate for one. This is NOT a clean bill of health for the app's CSRF posture; it runs on the next change that touches a controller."
+    elif [ ! -f "${_csrf_helper}" ]; then
         # A MISSING HELPER MUST NOT REPORT PASS (#147). Without it the gate
         # sees no removals at all and goes green on every diff.
         _csrf_ran=0
@@ -7183,10 +7326,29 @@ elif [ "${HAVE_DELTA_BASE}" = "1" ]; then
             if [ "${_csrf_callers_ran}" -eq 1 ] && [ -z "${_csrf_unprotected}" ]; then
                 # Stated, never silent: a green here is a claim about the
                 # callers, and the reader must be able to see which claim.
-                echo "[gate-48] no CSRF signal was ADDED by this diff, and none was needed:" \
-                    "every mutating call site under src/ already carries one" \
-                    "(requesttoken / OCS-APIRequest / getRequestToken / @nextcloud/axios)." \
-                    "Checked by scripts/lib/check_csrf_callers.py over the working tree."
+                #
+                # STASHED AND TAGGED, NOT PRINTED HERE (.github#401).
+                # --------------------------------------------------
+                # This `echo` used to run BEFORE `_pass 48`, so the gate's
+                # FIRST `[gate-48] ` line was the advisory. Both parsers in
+                # this package take the first match: `gf_verdict` filters only
+                # `NOTE|WARN|INFO:` (which this line did not carry) and the
+                # acceptance matrix's `_verdict` filters NOTHING. Measured
+                # 2026-08-12 on a one-commit diff that drops #[NoCSRFRequired]
+                # from a controller whose callers are all already protected —
+                # BOTH parsers returned this sentence, and the matrix driver's
+                # message for that is "gate-48 emitted NO verdict line at all
+                # — a gate that says nothing is not a pass". The first author
+                # of a gate-48 fixture would have filed a gate defect that
+                # does not exist.
+                #
+                # Two fixes, because either alone leaves the trap armed: this
+                # line now carries the `NOTE:` tag the shared parsers already
+                # know how to skip, AND it is printed AFTER the verdict. The
+                # parsers were hardened too — a verdict is now matched by its
+                # SHAPE rather than by excluding the advisory forms someone
+                # remembered to list.
+                _csrf_callers_note="[gate-48] NOTE: no CSRF signal was ADDED by this diff, and none was needed: every mutating call site under src/ already carries one (requesttoken / OCS-APIRequest / getRequestToken / @nextcloud/axios). Checked by scripts/lib/check_csrf_callers.py over the working tree."
             elif [ -z "${_csrf_optout}" ]; then
                 echo "@NoCSRFRequired removed but no frontend CSRF-signal added in diff:" >> "${_csrf_log}"
                 echo "${_csrf_removed}" >> "${_csrf_log}"
@@ -7210,6 +7372,8 @@ if [ "${_csrf_ran}" -eq 1 ]; then
     else
         _fail 48 "csrf-cochange" "@NoCSRFRequired dropped without frontend CSRF co-change — see ${_csrf_log}"
     fi
+    # AFTER the verdict, deliberately (.github#401) — see the stash site above.
+    [ -n "${_csrf_callers_note:-}" ] && echo "${_csrf_callers_note}"
 fi
 
 # ---------------------------------------------------------------------------

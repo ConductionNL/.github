@@ -87,6 +87,40 @@ gf_run_wrapper() {
 # A gate may print advisory lines that carry its own `[gate-N] ` prefix before
 # it prints its verdict — gate-61's provenance NOTE is the first. `head -1` used
 # to return whichever came first, so a NOTE silently DISPLACED the verdict and
-# every assertion here read "no FAIL" while the gate was failing correctly. Skip
-# the advisory forms; a verdict is `[gate-N] <name>: <VERDICT>`.
-gf_verdict() { printf '%s' "$1" | grep -E "^\[gate-$2\] " | grep -vE "^\[gate-[0-9]+\] (NOTE|WARN|INFO):" | head -1; }
+# every assertion here read "no FAIL" while the gate was failing correctly.
+#
+# MATCH THE VERDICT BY ITS SHAPE, NOT BY EXCLUDING THE ADVISORIES SOMEONE
+# REMEMBERED TO LIST (.github#401)
+# ----------------------------------------------------------------------
+# The `NOTE|WARN|INFO:` denylist below is exact and was still one advisory
+# short. gate-48 printed
+#
+#   [gate-48] no CSRF signal was ADDED by this diff, and none was needed: ...
+#
+# BEFORE its verdict, carrying none of those three tags, so this function
+# returned the advisory — and the acceptance matrix's own `_verdict`, which
+# filters nothing at all, did the same. The reader's message in that case is
+# "gate-48 emitted NO verdict line at all", i.e. a gate defect that does not
+# exist. Any "first line wins" parser is one advisory away from reporting
+# silence, and a denylist can only ever be repaired one entry at a time, after
+# the fact.
+#
+# So: match the four shapes `_pass` / `_fail` / `_skip` can actually emit —
+# `PASS`, `FAIL — …`, `NOT APPLICABLE — …`, `SKIPPED (na|structural|wiring) — …`
+# — all of which are `[gate-N] <name>: <VERDICT>`. An advisory cannot forge
+# that shape without literally claiming a verdict.
+#
+# The denylist survives as a FALLBACK, and only as one. If the emitters ever
+# grow a fifth verdict word this keeps returning what it returns today rather
+# than returning nothing — because "no verdict line" is itself a load-bearing
+# assertion in the suites, and a parser that silently starts producing it
+# would manufacture exactly the false gate defect this change removes.
+gf_verdict() {
+    local _v
+    _v=$(printf '%s' "$1" | grep -E "^\[gate-$2\] [^:]+: (PASS|FAIL|NOT APPLICABLE|SKIPPED)\b" | head -1)
+    if [ -n "${_v}" ]; then
+        printf '%s' "${_v}"
+        return 0
+    fi
+    printf '%s' "$1" | grep -E "^\[gate-$2\] " | grep -vE "^\[gate-[0-9]+\] (NOTE|WARN|INFO):" | head -1
+}
