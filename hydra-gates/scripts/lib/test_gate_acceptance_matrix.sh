@@ -124,7 +124,20 @@ _run() {  # <fixture-dir> [runner args...]
 }
 
 _verdict() {  # <gate-n> -> that gate's verdict line
-    printf '%s' "${_OUT}" | grep -E "^\[gate-$1\] " | head -1
+    # MATCH THE VERDICT BY ITS SHAPE (.github#401). This filtered NOTHING, so
+    # any advisory a gate printed before its verdict was returned INSTEAD of
+    # the verdict — and `_grade` then reports "gate-N emitted NO verdict line
+    # at all", which is a gate defect that does not exist. gate-48 is the
+    # measured case. Kept in step with `gf_verdict` in gate_fixture_support.sh;
+    # the denylist is the fallback so an unrecognised verdict word degrades to
+    # today's behaviour rather than to a false silence.
+    local _v
+    _v=$(printf '%s' "${_OUT}" | grep -E "^\[gate-$1\] [^:]+: (PASS|FAIL|NOT APPLICABLE|SKIPPED)\b" | head -1)
+    if [ -n "${_v}" ]; then
+        printf '%s' "${_v}"
+        return 0
+    fi
+    printf '%s' "${_OUT}" | grep -E "^\[gate-$1\] " | grep -vE "^\[gate-[0-9]+\] (NOTE|WARN|INFO):" | head -1
 }
 
 # _grade <gate-n> <wanted-status> <arm> <bundle>
