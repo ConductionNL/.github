@@ -336,6 +336,98 @@ The drift this replaces, measured across all 18 core apps on 2026-08-12:
 inheritance and ESLint flat config resolves plugins relative to the config file.
 Both are covered in the [`quality-config/` README](https://github.com/ConductionNL/.github/tree/main/quality-config#not-yet-centralised-and-why).
 
+## Package registry
+
+Shared configuration only stops drifting if every app pulls it the same way, so
+the distribution channel is part of the standard, not an implementation detail.
+
+| Package | Registry | Contains | Consumed by |
+| --- | --- | --- | --- |
+| [`conduction/coding-standard`](https://packagist.org/packages/conduction/coding-standard) | Packagist | php-cs-fixer config extending Nextcloud's | every app, `require-dev` |
+| [`conduction/hydra-gates`](https://packagist.org/packages/conduction/hydra-gates) | Packagist | the mechanical gates **and** `quality-config/` (PHPCS, PHPMD, PHPStan base, custom sniffs) | every app, `require-dev` |
+| [`@conduction/nextcloud-vue`](https://www.npmjs.com/package/@conduction/nextcloud-vue) | npm | shared Vue components **and** the ESLint / Stylelint config | every app, `dependencies` |
+
+Both composer packages are built from repositories that also do other things —
+`conduction/hydra-gates` is the root package of `ConductionNL/.github`, which also
+hosts this documentation site. One repository can publish exactly one composer
+package, which is why the coding standard needed a repository of its own.
+
+### Registration is not cosmetic
+
+Before registration, an app consuming `conduction/hydra-gates` needed this in its
+own `composer.json`:
+
+```jsonc
+"repositories": [
+    { "type": "vcs", "url": "https://github.com/ConductionNL/.github.git", "no-api": true }
+]
+```
+
+That block is a per-app file, and per-app files are what drift — it is the same
+failure mode the shared config exists to end. `no-api: true` also made composer
+clone the **entire** `.github` repository, docs site included, on every install.
+Registration deletes the block from all 18 apps.
+
+### Constraints float; they are not pinned
+
+Apps require `^1.0`, not an exact version. A pin is a silent expiry date: 22 repos
+once sat on gate package `v1.0.1` while 16 gates were dead fleet-wide and every one
+of them reported PASS. Hold a package still only for a stated reason, in that app,
+with the reason written next to the constraint.
+
+### Publishing, and how to tell it actually published
+
+Submitting a repository creates a push webhook on it automatically —
+`https://packagist.org/api/github`, `push` events. **That webhook on its own does
+not keep the package up to date.** Measured 2026-08-12 on
+`conduction/coding-standard`: a real push delivered `202 OK`, and ten minutes
+later Packagist's `dev-main` still pointed at the previous commit.
+
+The missing piece is the **Packagist GitHub App**, which was not installed on the
+`ConductionNL` organisation. Install it once, org-wide, at
+[github.com/apps/packagist](https://github.com/apps/packagist) — it is a browser
+flow by design, since GitHub Apps cannot be installed through the API, so there is
+no `gh` command for it and no way to script it.
+
+Until then, publishing is manual: click **Update** on the package page, or
+
+```bash
+curl -XPOST -H'content-type:application/json' \
+  "https://packagist.org/api/update-package?username=<user>&apiToken=<token>" \
+  -d '{"repository":{"url":"https://github.com/ConductionNL/<repo>"}}'
+```
+
+Either way, there is something to **verify**, and it is easy to get wrong in three
+separate ways:
+
+1. **A `ping` delivery is not a `push` delivery.** Packagist sends a ping on
+   install; it proves the endpoint answers a handshake and nothing more.
+2. **HTTP `202` is not "published".** 202 means *accepted for processing* —
+   Packagist queues the crawl — and a queued crawl it never runs still answers
+   202. A green delivery list is consistent with a package that has not moved,
+   which is exactly what was observed here.
+3. **`package.time` is the creation timestamp**, not the last update. It will not
+   change no matter how many times you publish.
+
+The only claim worth making is that the **source reference moved**:
+
+```bash
+curl -s https://packagist.org/packages/<vendor>/<pkg>.json \
+  | jq -r '.package.versions["dev-main"] | "\(.time)  \(.source.reference[0:8])"'
+```
+
+Compare that SHA to `git rev-parse HEAD`. If they differ, the queue has not caught
+up — or the hook is not working, and those two look identical for the first few
+minutes. Wait, then re-read; do not read the delivery log and call it done.
+
+### npm
+
+`@conduction/nextcloud-vue` was already published, so homing the frontend config
+there adds export paths to an existing package rather than creating a new one.
+Note its dist-tags: apps consume **`vue3`**, currently `2.2.0-vue3.x`. The `latest`
+tag is `1.0.0-beta.3`, an old Vue 2 build — installing without a tag or an explicit
+version gets the wrong library.
+
 ## Corrections to older pages
 
 - "**Code style — PHPCS (PSR-12)**", in
