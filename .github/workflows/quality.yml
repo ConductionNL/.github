@@ -98,10 +98,48 @@ on:
         type: string
         default: "[]"
       enable-check-code:
-        description: "Run `occ app:check-code` against the Nextcloud version the app declares in info.xml. Nextcloud's own tool for private and deprecated API usage; the general form of the hand-written \\OC::$server sniff. Reports without blocking unless check-code-blocking is also set."
+        # DEFAULT FLIPPED true -> false, because the command this job runs DOES
+        # NOT EXIST any more and the job therefore cannot pass in any repo here.
+        #
+        # `occ app:check-code` was removed from Nextcloud server after v20.
+        # Measured, extracting the registered App-namespace commands from
+        # `core/register_command.php` at each tag — same expression, same file,
+        # only the tag varying:
+        #
+        #   v20.0.0  Disable Enable GetPath Install ListApps Remove Update
+        #            + CheckCode                       <- the control: it CAN appear
+        #   v34.0.0  Disable Enable GetPath Install ListApps Remove Update
+        #                                              <- CheckCode is gone
+        #
+        # Corroborated independently: `core/Command/App/CheckCode.php` answers
+        # 200 at v20 and v21 and 404 at v25, v31, v32, v33 and v34, while
+        # `core/Command/App/ListApps.php` answers 200 at every one of those tags
+        # — so the 404s are a removal, not a bad path.
+        #
+        # Every app in this fleet declares <nextcloud min-version> of 31, 32 or
+        # 34, and this job fetches the server at the version the app DECLARES.
+        # So `occ` would be asked for a command roughly eleven majors dead. It
+        # would print no recognisable verdict, the job's own positive control
+        # would fire, and that control's `exit 1` is UNCONDITIONAL — it sits
+        # above the `check-code-blocking` branch and is not covered by it. The
+        # result would be a hard failure in every PHP repo in the fleet, on a
+        # check that can never pass.
+        #
+        # The positive control is doing its job here, exactly as designed: it
+        # refuses to report "no private API usage" from a run that inspected
+        # nothing. The job is what is wrong, not the control.
+        #
+        # LEFT WIRED, NOT DELETED, and still listed in the Quality Report's
+        # `needs:`. A skipped job's result is `skipped`, not `failure`, so this
+        # blocks nothing while it is off — and when someone rebuilds the check on
+        # something that exists (Psalm/PHPStan over the private surface, or
+        # nextcloud/app-api's linter), the wiring is already correct and one
+        # input turns it on. Deleting it would lose that and quietly re-open the
+        # gap #385 was written to close.
+        description: "Run `occ app:check-code` against the Nextcloud version the app declares in info.xml. OFF BY DEFAULT AND CURRENTLY UNUSABLE: `app:check-code` was removed from Nextcloud server after v20 (verified against core/register_command.php and core/Command/App/CheckCode.php from v20 through v34), and every app here declares min-version 31 or later, so the command cannot be found and the job's positive control fails the run. Do not set this true until the check is rebuilt on tooling that still exists."
         required: false
         type: boolean
-        default: true
+        default: false
       check-code-blocking:
         description: "Turn app:check-code findings into a build failure. OFF by default on purpose: every app in this fleet reaches into server internals somewhere, and a gate that is red on arrival is a gate nobody turns on. Flip it per app once the findings are worked down."
         required: false
@@ -608,30 +646,6 @@ jobs:
     runs-on: ubuntu-latest
     name: "Nextcloud API check (app:check-code)"
     timeout-minutes: 20
-  # ── appinfo/info.xml, validated against the App Store's own schema ─────
-  #
-  # Nextcloud ships `lint-info-xml.yml` as a workflow template and every
-  # upstream app runs it. This fleet ran no equivalent: `quality.yml` did not
-  # reference appinfo/info.xml anywhere, so a malformed manifest was discovered
-  # at App Store upload time — after the release had been built, tagged and
-  # published to GitHub.
-  #
-  # That matters more now than it did last week. The release path reads
-  # info.xml for two things it cannot get wrong: the version the tag must match,
-  # and the Nextcloud version whose `occ` signs the package. A file that does
-  # not validate can still parse well enough for a grep to return something
-  # plausible — which is exactly how an unanchored min-version pattern resolved
-  # `8` from `<php min-version="8.3"/>` in 13 apps.
-  #
-  # The schema is fetched from nextcloud/appstore rather than vendored, because
-  # a vendored copy is a claim about what the App Store accepts that goes stale
-  # silently. If the fetch fails the job FAILS — a validator that cannot get its
-  # schema has validated nothing, and saying so is the whole point.
-  info-xml:
-    if: ${{ inputs.enable-php }}
-    runs-on: ubuntu-latest
-    name: "info.xml lint"
-    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -738,6 +752,47 @@ jobs:
         if: steps.lint.outcome == 'failure' && !inputs.reuse-blocking
         run: |
           echo "::warning::REUSE reported findings. Not blocking yet — set reuse-blocking: true once this app ships a REUSE.toml and a LICENSES/ directory."
+
+      - name: Record result
+        if: always()
+        run: |
+          mkdir -p quality-results
+          echo "${{ steps.lint.outcome }}" > quality-results/reuse.txt
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-reuse
+          path: quality-results/
+
+  # ── appinfo/info.xml, validated against the App Store's own schema ─────
+  #
+  # Nextcloud ships `lint-info-xml.yml` as a workflow template and every
+  # upstream app runs it. This fleet ran no equivalent: `quality.yml` did not
+  # reference appinfo/info.xml anywhere, so a malformed manifest was discovered
+  # at App Store upload time — after the release had been built, tagged and
+  # published to GitHub.
+  #
+  # That matters more now than it did last week. The release path reads
+  # info.xml for two things it cannot get wrong: the version the tag must match,
+  # and the Nextcloud version whose `occ` signs the package. A file that does
+  # not validate can still parse well enough for a grep to return something
+  # plausible — which is exactly how an unanchored min-version pattern resolved
+  # `8` from `<php min-version="8.3"/>` in 13 apps.
+  #
+  # The schema is fetched from nextcloud/appstore rather than vendored, because
+  # a vendored copy is a claim about what the App Store accepts that goes stale
+  # silently. If the fetch fails the job FAILS — a validator that cannot get its
+  # schema has validated nothing, and saying so is the whole point.
+  info-xml:
+    if: ${{ inputs.enable-php }}
+    runs-on: ubuntu-latest
+    name: "info.xml lint"
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
           sparse-checkout: appinfo/
 
       - name: Is there an info.xml to lint?
@@ -789,13 +844,11 @@ jobs:
         if: always()
         run: |
           mkdir -p quality-results
-          echo "${{ steps.lint.outcome }}" > quality-results/reuse.txt
           echo "${{ job.status }}" > quality-results/info-xml.txt
       - name: Upload result
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: result-reuse
           name: result-info-xml
           path: quality-results/
 
@@ -4879,7 +4932,47 @@ jobs:
     # been waved through yet. A gate that would not catch a failure is still a
     # dead gate, and `scripts/assert-quality-report-gates-every-leg.py` now
     # keeps the list complete.
-    needs: [php-quality, vue-quality, frontend-build, frontend-checks, frontend-tests, security, license, phpunit, newman, playwright, journeydoc-capture, baseline-protection, sbom, features-check, features-extract, hydra-gates]
+    #
+    # THE THREE NEXTCLOUD LEGS (#383, #385) ARE ON THIS LIST DELIBERATELY, and
+    # what that does per leg is not the same thing:
+    #
+    #   app-check-code  internally non-blocking by default. The step swallows a
+    #                   non-zero `occ` exit and warns unless `check-code-blocking`
+    #                   is set, so the job concludes `success` with findings and
+    #                   listing it changes nothing today. It becomes a real gate
+    #                   the moment an app flips its own input — which is the
+    #                   point: the wiring must already be there, or flipping the
+    #                   input would be a no-op nobody notices.
+    #   reuse           same shape, via `continue-on-error: ${{ !inputs.reuse-blocking }}`.
+    #   info-xml        HAS NO SUCH FLAG AND IS BLOCKING ON ARRIVAL. #383
+    #                   measured 5 pass / 13 fail before it merged. RE-MEASURED
+    #                   2026-08-12 14:20Z against every repo's live `development`
+    #                   tip, same App Store XSD: 6 PASS / 12 FAIL. Eleven of the
+    #                   twelve are xs:sequence element ORDER; the twelfth
+    #                   (zaakafhandelapp) is a <summary> over the schema's length
+    #                   cap. The one-app difference is not drift in the
+    #                   instrument — larpingapp's manifest was reordered by
+    #                   efa6aead at 11:28:48Z, and validating that one file at
+    #                   both refs gives FAIL then PASS.
+    #
+    #                   Live-confirmed against CI, not only locally: openregister
+    #                   run 31591669849 emitted `Element 'documentation': This
+    #                   element is not expected` — the same message, byte for
+    #                   byte, as the local validator.
+    #
+    #                   So listing it here turns 12 of 18 apps red until their
+    #                   manifests are reordered, and that is the authorised
+    #                   trade: the App Store rejects the same files at upload
+    #                   time, after the release has been built, tagged and
+    #                   published. TREAT THE 12 AS DECAYING — it is a count over
+    #                   files several agents edit daily, so re-measure before
+    #                   quoting it.
+    #
+    # The two remaining Nextcloud checks are NOT missing from this list. Multi
+    # database PHPUnit is a matrix dimension of `phpunit`, which is already
+    # here, and `occ integrity:sign-app` lives in release.yml, which has no
+    # Quality Report to gate.
+    needs: [php-quality, vue-quality, frontend-build, frontend-checks, frontend-tests, security, license, phpunit, newman, playwright, journeydoc-capture, baseline-protection, sbom, features-check, features-extract, hydra-gates, app-check-code, info-xml, reuse]
     if: always()
     # Observed across 266 executions: median 0.6 min — but 2% of runs sit at
     # ~30 min because the `Install PDF tools` apt-get step stalls on the Ubuntu
@@ -5030,6 +5123,31 @@ jobs:
             # npm: security + license in one row
             sec_npm=$(read_result "results/result-security-npm/npm.txt")
             echo "| npm | | | $(icon "$sec_npm") | $(license_info "npm") | |"
+
+            # The three Nextcloud legs. They are in `needs:` above, so their
+            # failure reds this job — but a leg the report never mentions is the
+            # exact silence the Hydra-gates row below exists to correct, and it
+            # would have been reintroduced the day these three landed.
+            #
+            # READ THESE THREE CELLS DIFFERENTLY, because the artefacts behind
+            # them hold different things:
+            #
+            #   REUSE           records `steps.lint.outcome` — the RAW step
+            #                   outcome, before `continue-on-error` rewrites it.
+            #                   So this cell goes ❌ on findings even while the
+            #                   job concludes success. That is the useful shape.
+            #   app:check-code  records `job.status`, and the step exits 0 on
+            #                   findings unless `check-code-blocking` is set. So
+            #                   ✅ here means "the run produced a recognisable
+            #                   verdict", NOT "no private API usage" — the
+            #                   findings are in that job's `::warning::` only.
+            #                   Worth narrowing to the step's own finding count;
+            #                   deliberately not done in this commit.
+            #   info.xml        records `job.status` and has no non-blocking
+            #                   flag, so its cell and its gate agree.
+            echo "| app:check-code | $(icon "$(read_result "results/result-app-check-code/app-check-code.txt")") | | | | |"
+            echo "| info.xml | $(icon "$(read_result "results/result-info-xml/info-xml.txt")") | | | | |"
+            echo "| REUSE | $(icon "$(read_result "results/result-reuse/reuse.txt")") | | | | |"
 
             # Test rows. `test_icon` rather than `icon`: see its definition —
             # an enabled-but-skipped test job is the absence of a verdict and
