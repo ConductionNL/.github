@@ -4294,8 +4294,27 @@ if [ -f scripts/check-integration-parity.sh ]; then
         # `⚠` header — never "missing"/"mismatch"/`^✗` — so this hard-failure
         # count excludes them by construction.
         _parity_hits=$(_count '^✗|missing|mismatch' "${_parity_log}")
-        [ "${_parity_hits}" -eq 0 ] && _parity_hits=1
-        _fail 24 "integration-parity" "${_parity_hits} parity violation(s) — see ${_parity_log}"
+        if [ "${_parity_hits}" -eq 0 ]; then
+            # DO NOT INVENT THE COUNT (.github#374, and the #330 family).
+            #
+            # This line was `[ "${_parity_hits}" -eq 0 ] && _parity_hits=1`, so
+            # a wrapper that exited non-zero having written nothing this runner
+            # can parse was reported as `FAIL — 1 parity violation(s)`: a
+            # fabricated number with a plausible message and nothing behind it.
+            # Same shape as gates 22, 25 and 28 (`.github#379`).
+            #
+            # ⚠️ THE VERDICT DELIBERATELY STAYS `FAIL`, and this is the whole
+            # judgement. `scripts/check-integration-parity.sh` is APP-OWNED and
+            # declares no terminal-marker contract, so unlike gates 17, 18, 52
+            # and 61 there is nothing here that can tell "it crashed" from "it
+            # found violations it phrased differently". Guessing `wiring` would
+            # turn a real parity failure into a skip — a green hole, and the
+            # strictly worse direction. So: fail closed, and stop asserting a
+            # number nobody measured.
+            _fail 24 "integration-parity" "the parity wrapper exited non-zero and printed no line this runner can count as a violation — the failure is real but its SIZE is unmeasured, so no count is claimed. Read ${_parity_log}."
+        else
+            _fail 24 "integration-parity" "${_parity_hits} parity violation(s) — see ${_parity_log}"
+        fi
     fi
 fi
 
@@ -8387,8 +8406,31 @@ if [ -d lib/AppInfo ]; then
         python3 "${SCRIPT_DIR}/lib/check_listener_placement.py" . --base "${BASE_REF}" > "${_lwp_log}" 2>&1
         _lwp_rc=$?
     else
-        echo "no delta base for this run — the helper was not invoked with one" > "${_lwp_log}"
-        _lwp_rc=3
+        # ALWAYS RUN THE CHECKER. EVALUATE WIRING FIRST, THEN SCOPE (#364).
+        #
+        # A first draft skipped the invocation entirely with no base and
+        # short-circuited to rc 3 — and `test_gate_crashed_checker_is_not_a_finding.sh`
+        # caught it immediately: with a python3 that cannot run, gate-61
+        # reported NOT APPLICABLE instead of SKIPPED (wiring). Nothing ran, so
+        # nothing could crash, and A CRASHED CHECKER READ AS AN EMPTY SCOPE —
+        # the exact regression `#364`'s first draft made in gate-16, caught by
+        # the exact same suite. Declining EARLIER silently retires a wiring
+        # invariant; that is the general shape, and this is the second instance.
+        #
+        # `--all` is the mode that needs no base. It is invoked here for ONE
+        # reason — to learn whether the checker can run at all — and its
+        # FINDINGS are deliberately discarded: sweeping the tree on a baseless
+        # run was tried before and reverted, because the builder runs that way
+        # and it surfaces the fleet's whole registration backlog on every build.
+        python3 "${SCRIPT_DIR}/lib/check_listener_placement.py" . --all > "${_lwp_log}" 2>&1
+        _lwp_rc=$?
+        # WIRING FIRST: did it reach its own terminal summary? If yes it ran,
+        # and the honest verdict is "there is no delta base", which is rc 3's
+        # branch below. If no, leave the real status alone so the wiring branch
+        # further down catches it and says what went unchecked.
+        if _helper_finished "${_lwp_log}" '^checked [0-9]+ (post-event )?registration\(s\)'; then
+            _lwp_rc=3
+        fi
     fi
     set +e
     if [ "${_lwp_rc}" -eq 0 ]; then
@@ -8461,6 +8503,17 @@ if [ -d lib/AppInfo ]; then
         _lwp_why=$(head -3 "${_lwp_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
         _skip 61 "listener-work-placement" wiring "check_listener_placement.py exited ${_lwp_rc} without printing its terminal 'checked N ... registration(s)' summary, so NO post-object-event listener was judged and ADR-078 work placement is UNVERIFIED by this run. Checker output: ${_lwp_why:-<empty>}. See ${_lwp_log}."
     else
+        # THIS CLAMP IS GUARDED, AND THAT IS WHY IT STAYS (.github#374).
+        #
+        # A sweep for `[ "${_n}" -eq 0 ] && _n=1` flags this line alongside
+        # gate-24's, which WAS a crash-rendered-as-a-finding. This one is not:
+        # the `_helper_finished` branch immediately above has already proved the
+        # checker printed its terminal `checked N registration(s)` summary, so a
+        # crash can never reach here. Zero `^FAIL` lines with a non-zero exit is
+        # a FORMAT DRIFT between helper and runner, not a checker that died.
+        #
+        # Left alone deliberately, with the reason written down, so the next
+        # sweep does not re-flag it and does not "fix" it into a skip.
         _lwp_n=$(_count '^FAIL' "${_lwp_log}")
         [ "${_lwp_n}" -eq 0 ] && _lwp_n=1
         _fail 61 "listener-work-placement" "${_lwp_n} post-event listener(s) doing synchronous work with no deferral and no justification (ADR-078); see ${_lwp_log}"
