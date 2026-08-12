@@ -8471,30 +8471,45 @@ if [ -d lib/AppInfo ]; then
         # set. Reading the file scope here is precisely how `.github#347` got
         # its false reason — a `NOT APPLICABLE` blaming a diff on a run that
         # computed none.
+        # THE ADVISORY SWEEP RUNS IN **BOTH** BRANCHES (.github#374).
+        #
+        # It used to run only on the no-base branch, because `--full` was the
+        # only way to reach a state where the size of the unread backlog was
+        # interesting. Full file scope is now the DEFAULT, so "a base resolved
+        # and it excluded every registration" is the COMMON case — every PR in
+        # the fleet — and `0 of 1` and `0 of 45` were still typographically
+        # identical there. The whole point of the reversal is that inherited
+        # debt stops being invisible; leaving this gate's backlog unstated on
+        # the common path would have exempted it from exactly that.
+        #
+        # ADVISORY ONLY, in both branches. Its exit status is discarded on
+        # purpose: a sweep that finds inherited debt must not become this run's
+        # verdict, and a sweep that CRASHES must not either — the count is
+        # quoted only when the helper printed its own terminal summary line.
+        _lwp_all_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-listener-work-placement.advisory.log
+        python3 "${SCRIPT_DIR}/lib/check_listener_placement.py" . --all \
+            > "${_lwp_all_log}" 2>&1 || true
+        #
+        # THE SUMMARY IS RECOMPOSED, NOT QUOTED. The helper's own line ends
+        # "…, 0 out of scope: 1 failure(s)", and pasting that in would put
+        # the phrase "out of scope" back into a reason on a run that
+        # computed no scope — the exact sentence this fix removes, smuggled
+        # in as a quotation. The suite asserts against that phrase
+        # gate-agnostically and caught it here.
+        _lwp_backlog=""
+        if grep -qE '^checked [0-9]+ post-event registration' "${_lwp_all_log}" 2>/dev/null; then
+            _lwp_all_n=$(grep -oE '^checked [0-9]+ post-event registration' "${_lwp_all_log}" | tail -1 | grep -oE '[0-9]+' | head -1)
+            _lwp_all_f=$(grep -oE '[0-9]+ failure\(s\)' "${_lwp_all_log}" | tail -1 | grep -oE '[0-9]+' | head -1)
+            _lwp_backlog=" ADVISORY, and it decides nothing here: a whole-tree sweep of this same tree reaches ${_lwp_all_n:-an unreported number of} registration(s) carrying ${_lwp_all_f:-an unreported number of} finding(s), NONE of which this run judged — see ${_lwp_all_log}."
+        fi
         if [ "${HAVE_DELTA_BASE}" = "1" ]; then
-            _skip 61 "listener-work-placement" na "the diff against '${BASE_REF}' put every post-event registration out of scope, so NONE were inspected. This gate is deliberately delta-scoped even at full file scope — the fleet's 149-registration backlog is a work-list, not a reason to block an unrelated change. It runs on the next change that touches a listener registration. See ${_lwp_log}."
+            # A diff WAS computed, so naming it is a true statement, not the
+            # `.github#347` lie. The discriminator is `HAVE_DELTA_BASE`, and the
+            # base itself is printed by the preamble — so a reader can check the
+            # claim rather than having to trust it.
+            _skip 61 "listener-work-placement" na "the diff against '${BASE_REF}' put every post-event registration out of scope, so NONE were inspected. This gate is deliberately delta-scoped even at full file scope — the fleet's registration backlog is a work-list, not a reason to block an unrelated change. It runs on the next change that touches a listener registration.${_lwp_backlog} See ${_lwp_log}."
         else
-            # ADVISORY ONLY. Its exit status is discarded on purpose: a sweep
-            # that finds inherited debt must not become this run's verdict, and
-            # a sweep that CRASHES must not either — the count is quoted only
-            # when the helper printed its own terminal summary line.
-            _lwp_all_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-listener-work-placement.advisory.log
-            python3 "${SCRIPT_DIR}/lib/check_listener_placement.py" . --all \
-                > "${_lwp_all_log}" 2>&1 || true
-            #
-            # THE SUMMARY IS RECOMPOSED, NOT QUOTED. The helper's own line ends
-            # "…, 0 out of scope: 1 failure(s)", and pasting that in would put
-            # the phrase "out of scope" back into a reason on a run that
-            # computed no scope — the exact sentence this fix removes, smuggled
-            # in as a quotation. The suite asserts against that phrase
-            # gate-agnostically and caught it here.
-            _lwp_backlog=""
-            if grep -qE '^checked [0-9]+ post-event registration' "${_lwp_all_log}" 2>/dev/null; then
-                _lwp_all_n=$(grep -oE '^checked [0-9]+ post-event registration' "${_lwp_all_log}" | tail -1 | grep -oE '[0-9]+' | head -1)
-                _lwp_all_f=$(grep -oE '[0-9]+ failure\(s\)' "${_lwp_all_log}" | tail -1 | grep -oE '[0-9]+' | head -1)
-                _lwp_backlog=" ADVISORY, and it decides nothing here: a whole-tree sweep of this same tree reaches ${_lwp_all_n:-an unreported number of} registration(s) carrying ${_lwp_all_f:-an unreported number of} finding(s), NONE of which this run judged — see ${_lwp_all_log}."
-            fi
-            _skip 61 "listener-work-placement" na "this run computed NO diff (--full / unscoped), and gate-61 is diff-scoped by design (ADR-078/ADR-020, it is about NEW debt) — so NO post-event registration was inspected and ADR-078 work placement is UNVERIFIED by this run. This is NOT a clean bill of health, and NO diff excluded anything: there was no diff. Re-measure with an explicit base (HYDRA_GATE_BASE_REF=origin/beta) or run with --scope-to-diff.${_lwp_backlog} See ${_lwp_log}."
+            _skip 61 "listener-work-placement" na "this run computed NO diff (no delta base), and gate-61 is delta-scoped by design (ADR-078, it is about NEW debt) — so NO post-event registration was inspected and ADR-078 work placement is UNVERIFIED by this run. This is NOT a clean bill of health, and NO diff excluded anything: there was no diff. Re-measure with an explicit base (--base <ref> or HYDRA_GATE_BASE_REF=origin/beta).${_lwp_backlog} See ${_lwp_log}."
         fi
     elif [ "${_lwp_rc}" -eq 4 ]; then
         _skip 61 "listener-work-placement" na "this repo registers no post-object-event listener, so there is no work to place on or off the write path (ADR-078). See ${_lwp_log}."
