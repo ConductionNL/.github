@@ -248,8 +248,14 @@ _mk54() {  # <dir> <base-content> <head-content>
 
 _run54() {  # <dir> -> sets _o54
     local _d="$1"
-    local _l="${_tmp}/rd-logs-$(basename "${_d}")"; mkdir -p "${_l}"
-    _o54="${_tmp}/rd-$(basename "${_d}").txt"
+    local _name _l
+    # Declared and assigned separately: `local x=$(...)` takes `local`'s exit
+    # status, not the substitution's, so a failing basename would be invisible
+    # here (SC2155).
+    _name="$(basename "${_d}")"
+    _l="${_tmp}/rd-logs-${_name}"
+    mkdir -p "${_l}"
+    _o54="${_tmp}/rd-${_name}.txt"
     _log54="${_l}/hydra-gate-relation-dialect.log"
     ( cd "${_d}" || exit 1
       HYDRA_GATE_LOG_DIR="${_l}" bash "${_runner}" \
