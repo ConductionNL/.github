@@ -27,24 +27,44 @@
 # The fix is to align the pin with info.xml, per
 # https://docs.conduction.nl/WayOfWork/ci-cd/.
 
+# ── WHY EVERY PATH BELOW IS %currentWorkingDirectory%-PREFIXED ───────────────
+# PHPStan resolves a relative path against the directory of the config file that
+# DECLARES it, not against the app root. This file is consumed from
+#   vendor/conduction/hydra-gates/quality-config/phpstan-base.neon
+# so a bare `lib` here means `vendor/conduction/hydra-gates/quality-config/lib`.
+#
+# That is not a soft failure. Measured on larpingapp 2026-08-12 with hydra-gates
+# v1.7.0 and the stub in quality-config/stubs/phpstan.neon, `composer phpstan`
+# aborted before analysing anything:
+#   In FileFinder.php line 47:
+#     Path /app/vendor/conduction/hydra-gates/quality-config/vendor/nextcloud/ocp
+#     does not exist
+# — exit 1, zero files analysed. v1.7.0 shipped this file but no app had adopted
+# it yet, so nothing was red and the breakage was invisible.
+#
+# %currentWorkingDirectory% is the directory phpstan was INVOKED from, which for
+# every consumer is the app root (`composer phpstan` runs there). With the
+# prefix, `phpstan dump-parameters` on larpingapp resolved paths, excludePaths,
+# bootstrapFiles and scanDirectories to byte-identical values to the hand-rolled
+# per-app config it replaces, and the findings were unchanged.
 parameters:
     level: 5
 
     paths:
-        - lib
+        - %currentWorkingDirectory%/lib
 
     bootstrapFiles:
-        - phpstan-bootstrap.php
+        - %currentWorkingDirectory%/phpstan-bootstrap.php
 
     excludePaths:
-        - vendor
-        - vendor-bin
+        - %currentWorkingDirectory%/vendor
+        - %currentWorkingDirectory%/vendor-bin
         # Apps that ship a verbatim template snapshot under lib/Resources/template/
         # (openbuild). A no-op everywhere else.
-        - lib/Resources/template
+        - %currentWorkingDirectory%/lib/Resources/template
 
     scanDirectories:
-        - vendor/nextcloud/ocp
+        - %currentWorkingDirectory%/vendor/nextcloud/ocp
 
     reportUnmatchedIgnoredErrors: false
 
