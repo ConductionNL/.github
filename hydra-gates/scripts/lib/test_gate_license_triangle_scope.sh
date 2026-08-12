@@ -105,7 +105,17 @@ _mkrepo() {
         # So the fixture adopts it, mirroring the compliant scaffold in
         # test_check_coding_standard_adoption.sh.
         printf '{\n  "name": "conduction/fixture",\n  "license": "EUPL-1.2",\n  "require-dev": {\n    "conduction/coding-standard": "^1.0"\n  },\n  "scripts": {\n    "cs:check": "php-cs-fixer fix --dry-run --diff",\n    "cs:fix": "php-cs-fixer fix"\n  }\n}\n' > composer.json
-        printf '<?php\nrequire_once __DIR__ . %s/vendor/autoload.php%s;\n$config = new Conduction\\CodingStandard\\Config();\n$config->getFinder()->in(__DIR__ . %s/lib%s);\nreturn $config;\n' "'" "'" "'" "'" > .php-cs-fixer.dist.php
+        # Quoted heredoc, not printf: the body is PHP and contains `$config`,
+        # which printf-with-single-quotes makes ShellCheck read as a shell
+        # expansion that will not expand (SC2016). <<'PHP' says "verbatim" to
+        # the shell and to the reader at once.
+        cat > .php-cs-fixer.dist.php <<'PHP'
+<?php
+require_once __DIR__ . '/vendor/autoload.php';
+$config = new Conduction\CodingStandard\Config();
+$config->getFinder()->in(__DIR__ . '/lib');
+return $config;
+PHP
         printf 'root = true\n\n[*]\nindent_style = tab\n' > .editorconfig
         printf 'name: ci\non: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo base\n' > .github/workflows/ci.yml
         if [ "${_withlib}" = "yes" ]; then
