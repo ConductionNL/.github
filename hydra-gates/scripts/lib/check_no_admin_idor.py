@@ -11,7 +11,10 @@ Recognised guard patterns (body must contain at least one):
   - ``OCSForbiddenException`` thrown
   - ``isAdmin(`` check
   - ``->authorize*(`` / ``->require*(`` / ``->ensure*(`` service call
-  - ``#[PublicPage]`` or ``@PublicPage`` annotation on the same method
+  - ``#[PublicPage]`` / ``@PublicPage`` — but only when no caller-supplied
+    identifier reaches a lookup the caller can steer.  "May be called
+    without a session" is not "every object it can reach is public"; see
+    the Pattern 8 commentary.
   - ``Http::STATUS_UNAUTHORIZED`` or ``Http::STATUS_FORBIDDEN``
   - ``TemplateResponse`` return — SPA renderers; NC middleware already
     guarantees an authenticated session so there is no object access to gate
@@ -419,6 +422,12 @@ _GUARD_BODY_RE = re.compile(
     r"|TemplateResponse",
 )
 
+# The same set WITHOUT the ``TemplateResponse`` alternative, for `@PublicPage`
+# methods. See the note at its use in ``scan_file``.
+_PUBLIC_TEMPLATE_STRIPPED_RE = re.compile(
+    _GUARD_BODY_RE.pattern.replace(r"|TemplateResponse", ""),
+)
+
 # Patterns that indicate a CORS-headers-only body (exemption 3).
 _CORS_HEADER_RE = re.compile(r"Access-Control-Allow|applyCorsHeaders")
 # Patterns that indicate data access (disqualifies exemption 3).
@@ -498,7 +507,9 @@ _HELPER_GUARD_BODY_RE = re.compile(
     r"OCSForbiddenException"
     r"|NotPermittedException"
     r"|ForbiddenException"
-    r"|\bthrow\b"
+    r"|\bthrow\b[^;\n]{0,120}?"
+    r"(?:Forbidden|Unauthori[sz]ed|NotPermitted|NotAllowed|AccessDenied"
+    r"|Permission|NotAuthenticated|Authori[sz]ation|Tenan|Owner)"
     r"|isAdmin\s*\("
     r"|isCurrentUserAdmin\s*\("
     r"|->\s*(?:authorize|require|ensure|check|assert|guard)[A-Z][A-Za-z0-9_]*\s*\("
@@ -1111,8 +1122,35 @@ def _has_session_identity_handoff(body: str, params) -> bool:
 # authentication shape this same change just finished demoting.
 
 
-def _has_ownership_comparison_guard(cleaned: str, src: str, start: int, end: int) -> bool:
-    """True when the body compares a caller identity against object data and refuses."""
+# A consequent that DENIES, as opposed to one that merely returns.
+#
+# `_REFUSAL_RE` accepts any `return`, which is right inside a routed method —
+# there is nothing to return but the answer. It is WRONG inside a predicate
+# HELPER, where `return true` is a GRANT written in the same shape. The
+# package's own abuse control caught this: `canRenderAgent()` doing
+# `if ($agent->getOwner() === $userId) { return true; }` is a tokenless
+# predicate the fleet has decided must NOT clear the gate (`#353`/`#360`
+# coordinator note: "Modify"/"Render" are not auth tokens), and reading it as
+# an ownership guard silently reversed that decision.
+_DENIAL_CONSEQUENT_RE = re.compile(
+    r"\bthrow\b"
+    r"|return\s+null\b"
+    r"|return\s*;"
+    r"|return\s+(?:false|\[\s*\])\s*;"
+    r"|Http::STATUS_"
+    r"|(?:statusCode:\s*|,\s*)(?:401|403|404)\b"
+    r"|Response\s*\(",
+)
+
+
+def _has_ownership_comparison_guard(cleaned: str, src: str, start: int, end: int,
+                                    require_denial: bool = False) -> bool:
+    """True when the body compares a caller identity against object data and refuses.
+
+    *require_denial* tightens ``refuses`` from "any return" to an actual
+    denial — used when the body being read is a HELPER rather than a routed
+    method. See ``_DENIAL_CONSEQUENT_RE``.
+    """
     for m in re.finditer(r"\bif\s*\(", cleaned[start:end]):
         at = start + m.start()
         open_paren = cleaned.find("(", at)
@@ -1122,7 +1160,10 @@ def _has_ownership_comparison_guard(cleaned: str, src: str, start: int, end: int
         stop = _consequent_end(cleaned, close + 1)
         if stop == -1 or stop > end:
             continue
-        if not _REFUSAL_RE.search(cleaned[close + 1:stop]):
+        consequent = cleaned[close + 1:stop]
+        if not _REFUSAL_RE.search(consequent):
+            continue
+        if require_denial and not _DENIAL_CONSEQUENT_RE.search(consequent):
             continue
         cond = src[open_paren + 1:close]
         atoms: list = []
@@ -1637,6 +1678,570 @@ def _is_zero_input_read_only(params, body: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Pattern 8 — a `#[PublicPage]` handler must resolve a caller-supplied
+# identifier inside a DECLARED-PUBLIC SCOPE
+# ---------------------------------------------------------------------------
+#
+# THE SECOND BLINDING EXEMPTION, and the larger of the two.
+#
+# Until now this file skipped every `#[PublicPage]` method unconditionally,
+# commented "intentionally open to unauthenticated callers". That conflates
+# "may be called WITHOUT A SESSION" with "every object it can reach is
+# PUBLIC". The second does not follow from the first, and the exemption
+# carried no stated reason, so there was nothing to audit.
+#
+# It is not safe by construction. opencatalogi#856, merged as `963f832a`,
+# was exactly this shape: `GET /api/themes/{id}` was `@PublicPage` and its
+# `find()` carried no register and no schema, so it fell through to
+# OpenRegister's `findAcrossAllMagicTables()` path and served an anonymous
+# caller — no session at all — a municipal `zaak` status record out of an
+# unrelated register. That commit's own message records the second half of
+# the lesson: "`_rbac: true` was never sufficient on its own: OpenRegister
+# grants read by default on a schema that declares no authorization block".
+#
+# MEASURED, at package `57bcb2b`, on a nine-arm rig in one file/commit/run:
+# a byte-identical IDOR plant carrying `#[PublicPage]` — including an
+# UNAUTHENTICATED WRITE to an arbitrary `$id` — reported PASS.
+#
+# 🔑 AND THE EXEMPTION IS NOT WHERE THE BLINDING MOSTLY LIVES. Deleting it
+# and changing nothing else moves ONLY the arm that carries BOTH attributes.
+# A `#[PublicPage]`-only method never reaches the exemption at all: it is
+# dropped one branch earlier by the `_NO_ADMIN_RE` scope filter. Across the
+# fleet's `lib/Controller` trees that is 267 of 357 public methods — 75% —
+# invisible to any edit of the exemption. Hence this pattern widens the
+# SCOPE FILTER as well, and a `#[PublicPage]` method is now judged.
+#
+# THE PREDICATE, and why it is not the `#[NoAdminRequired]` one. There is no
+# "current user" to compare an owner against, so ownership guards do not
+# transfer. What a correct public endpoint does instead — measured on the
+# fix opencatalogi shipped, and on doriath's machine-credential endpoints —
+# is CONSTRAIN THE LOOKUP TO A SCOPE IT DECLARES PUBLIC rather than resolve
+# the caller's identifier globally. So:
+#
+#   in scope   a caller-supplied SCALAR value reaches a selection call
+#              (`array $data` is a payload, not a selector; a `$token` /
+#              `$secret` IS the authorisation — Nextcloud's own public-share
+#              convention — and neither is a selector).
+#
+#   cleared    every such value reaches at least one selection that is
+#              CONSTRAINED, by any of five measured spellings:
+#                a. an argument the caller did not supply and that carries a
+#                   value (`$themeConfig['register']`). A bare literal does
+#                   NOT constrain — `_rbac: true` is the counter-example the
+#                   opencatalogi fix names by name;
+#                b. a callee whose name declares publicness as a COMPLETE
+#                   CamelCase segment (`findPublished`), so that
+#                   `getPublicationById` is not read as one;
+#                c. a receiver already carrying the scope as STATE —
+#                   `$svc->setRegister(...); $svc->setSchema(...); $svc->find($id)`
+#                   is how OpenRegister's ObjectService is scoped fleet-wide;
+#                d. a CONTAINER RESOLUTION: this call's own result constrains
+#                   a later selection AND an unresolvable container is
+#                   refused. That is opencatalogi's own fix shape — resolve
+#                   the catalog, refuse if it does not exist, then look the
+#                   id up inside it;
+#                e. one resolved delegation hop — `publicationDownload($id)`
+#                   handing straight to `PublicationService::download()`,
+#                   which opens with `isObjectInCatalogScope($id) === false
+#                   -> 404`. Read out of the collaborator's own file, never
+#                   assumed from a name.
+#              plus a whole-body clear: a refusing `if` whose CONDITION tests
+#              a publication / visibility / enablement predicate. That is the
+#              dual of Pattern 7 — the decision was made just after the read
+#              rather than inside it.
+#
+# PER SELECTOR, NOT PER CALL. Once a value has been resolved inside a scope,
+# later uses of that same value are "verify in scope, then act" — the
+# commonest correct public shape in the fleet (opencatalogi's `attachments()`
+# proves the object is in the catalog, refuses 404 if not, and only then
+# fetches by id). Judging each call in isolation reports the second half of
+# a correct method.
+#
+# ⚠️ THE FAILURE MODE BEING REPAIRED HERE IS DISTRUST. gate-7's KNOWN defect
+# was false POSITIVES (`#353`, `#360`), which is exactly why the fleet came
+# to trust its silences. A public-page rule that lights up the apps getting
+# it right would restart that cycle, so clears a–e were each derived from a
+# shape that was READ in a fleet app, and the two-directional control is
+# `ThemesController::show` before and after `963f832a`: FLAGGED at
+# `f6e86ab`, SILENT at `963f832`, same file, same method, same checker.
+
+# A capability identifier: the value IS the authorisation, so substituting
+# another one is not an authorisation bypass but a guess at a secret. This is
+# Nextcloud's own public-share convention and doriath's link-share,
+# ephemeral-send and secret-request-fill routes.
+_PUBLIC_CAPABILITY_RE = re.compile(
+    r"(?:^|_)(?:token|secret|hash|signature|nonce|otp|key)s?$"
+    r"|[a-z](?:Token|Secret|Hash|Signature|Nonce|Otp|Key)s?$",
+)
+
+# Publicness declared as a COMPLETE CamelCase segment or snake word. The
+# segment requirement is the same device `_GUARD_HELPER_NAME_RE` uses, and it
+# is what stops `getPublicationById` — a plain object read — being mistaken
+# for a publicness constraint because its name happens to start with "public".
+_PUBLICNESS_SEGMENT_RE = re.compile(
+    r"(?:^|_)(?:public|published|publicly|publishable|anonymous|guest|visible"
+    r"|listable|unauthenticated)(?![a-z])"
+    r"|(?<=[a-z0-9])(?:Public|Published|Publicly|Publishable|Anonymous"
+    r"|Guest|Visible|Listable|Unauthenticated)(?![a-z])",
+)
+
+# The same, widened for the whole-body REFUSAL test only: a public endpoint
+# that refuses when the resource is not switched on for public consumption has
+# made the publication decision, whatever noun it uses for it.
+_PUBLICNESS_REFUSAL_RE = re.compile(
+    _PUBLICNESS_SEGMENT_RE.pattern
+    + r"|(?:^|_|(?<=[a-z0-9]))(?:Enabled|Disabled|Harvestable|Exposed|Listed)"
+      r"(?![a-z])"
+    + r"|(?:^|_)(?:enabled|disabled|harvestable|exposed|listed)(?![a-z])",
+)
+
+_PUBLIC_CALL_RE = re.compile(r"(?:->|::)\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(")
+
+# A call that RESOLVES an identifier: reads that select a record, and writes
+# that target one. A bare `create`/`submit` selects nothing, which is why a
+# public form submission — portaliq's entire reason for existing — is not in
+# scope here.
+_PUBLIC_SELECTION_RE = re.compile(
+    r"^(?:find|load|fetch|get|query|search|read|show|render|resolve|lookup"
+    r"|save|store|update|patch|delete|remove|destroy|revoke|publish|depublish"
+    r"|unpublish|download|serve|stream|attach|detach|assign|handle|process)",
+    re.IGNORECASE)
+
+# `array $data` is a request BODY, not a selector.
+_PUBLIC_PAYLOAD_TYPE_RE = re.compile(r"\b(?:array|object|iterable)\b")
+
+# A non-caller argument only CONSTRAINS if it carries a value.
+_PUBLIC_SUBSTANTIVE_RE = re.compile(r"\$[A-Za-z_]|::|->|\bself\b|\bstatic\b")
+
+_PUBLIC_RECEIVER_CALL_RE = re.compile(
+    r"(\$[A-Za-z_]\w*(?:\s*->\s*\w+)*?)\s*->\s*([A-Za-z_]\w*)\s*\(")
+_PUBLIC_SCOPE_SETTER_RE = re.compile(
+    r"^(?:set|with|scope|restrict|constrain|limit)[A-Z]")
+
+_PUBLIC_ASSIGN_RE = re.compile(
+    r"\$([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([^;\n]{1,400});")
+_PUBLIC_FOREACH_RE = re.compile(
+    r"foreach\s*\(([^)]{1,200}?)\s+as\s+"
+    r"(?:\$[A-Za-z_]\w*\s*=>\s*)?\$([A-Za-z_]\w*)\s*\)")
+_PUBLIC_THIS_PROP_CALL_TEMPLATE = (
+    r"\$this\s*->\s*%s\s*->\s*([A-Za-z_]\w*)\s*\(")
+
+
+def _public_declared_names(params, body: str) -> set:
+    """EVERY caller-supplied name, payload and capability ones included.
+
+    Used to disqualify an argument from CONSTRAINING: `save($id, $data)` is
+    not scoped by its own payload.
+    """
+    out = set(re.findall(r"\$([A-Za-z_][A-Za-z0-9_]*)", params or ""))
+    out |= set(_REQUEST_BOUND_ASSIGN_RE.findall(body))
+    return out
+
+
+def _public_tainted_names(params, body: str) -> set:
+    """Caller-supplied values that could SELECT an object.
+
+    Taint propagates through casts, concatenation and array indexing, but NOT
+    through a `->method()` call: the caller chose WHICH record, and the values
+    inside the record the server handed back are the server's. Every
+    laundering hop through a selection call is itself judged by this pattern,
+    so nothing is lost by stopping taint there.
+    """
+    tainted = set()
+    for chunk in _top_level_split(params or "", ","):
+        m = re.search(r"\$([A-Za-z_][A-Za-z0-9_]*)", chunk)
+        if m is None:
+            continue
+        if _PUBLIC_PAYLOAD_TYPE_RE.search(chunk[:m.start()]):
+            continue
+        if _PUBLIC_CAPABILITY_RE.search(m.group(1)):
+            continue
+        tainted.add(m.group(1))
+    for name in _REQUEST_BOUND_ASSIGN_RE.findall(body):
+        if not _PUBLIC_CAPABILITY_RE.search(name):
+            tainted.add(name)
+
+    for _ in range(4):  # bounded fixpoint
+        grew = False
+        for m in _PUBLIC_ASSIGN_RE.finditer(body):
+            name, rhs = m.group(1), m.group(2)
+            if name in tainted:
+                continue
+            if _PUBLIC_CALL_RE.search(rhs):
+                continue
+            if re.search(r"::\s*[A-Za-z_]\w*\s*\[", rhs):
+                # Read out of a CLASS CONSTANT — `self::RESOURCE_MAP[$resource]`.
+                # The caller picked the key; the VALUE is one the app wrote
+                # down, so it is not a caller-supplied selector.
+                continue
+            if any(re.search(r"\$" + re.escape(t) + r"\b", rhs) for t in tainted):
+                tainted.add(name)
+                grew = True
+        if not grew:
+            break
+    return tainted
+
+
+def _public_derivation(body: str) -> dict:
+    """``name -> names it was derived from`` (assignments and foreach binds)."""
+    out: dict = {}
+    for m in _PUBLIC_ASSIGN_RE.finditer(body):
+        out.setdefault(m.group(1), set()).update(
+            re.findall(r"\$([A-Za-z_][A-Za-z0-9_]*)", m.group(2)))
+    for m in _PUBLIC_FOREACH_RE.finditer(body):
+        out.setdefault(m.group(2), set()).update(
+            re.findall(r"\$([A-Za-z_][A-Za-z0-9_]*)", m.group(1)))
+    return out
+
+
+def _public_origins(name: str, deriv: dict, depth: int = 6) -> set:
+    """Transitive closure of what *name* was derived from."""
+    seen: set = set()
+    frontier = {name}
+    for _ in range(depth):
+        nxt: set = set()
+        for n in frontier:
+            for src in deriv.get(n, ()):  # noqa: SIM118
+                if src not in seen:
+                    seen.add(src)
+                    nxt.add(src)
+        if not nxt:
+            break
+        frontier = nxt
+    return seen
+
+
+def _public_refused_on(var: str, body: str) -> bool:
+    """True when a refusing ``if`` tests *var* — the container-resolution gate."""
+    for m in re.finditer(r"\bif\s*\(", body):
+        op = body.find("(", m.start())
+        cl = _matching_close(body, op)
+        if cl == -1:
+            continue
+        if not re.search(r"\$" + re.escape(var) + r"\b", body[op + 1:cl]):
+            continue
+        end = _consequent_end(body, cl + 1)
+        if end > cl and _REFUSAL_RE.search(body[cl:end]):
+            return True
+    return False
+
+
+def _public_refuses_on_publicness(body: str) -> bool:
+    """A refusing ``if`` whose CONDITION tests a publication predicate."""
+    for m in re.finditer(r"\bif\s*\(", body):
+        op = body.find("(", m.start())
+        cl = _matching_close(body, op)
+        if cl == -1:
+            continue
+        if not _PUBLICNESS_REFUSAL_RE.search(body[op + 1:cl]):
+            continue
+        end = _consequent_end(body, cl + 1)
+        if end > cl and _REFUSAL_RE.search(body[cl:end]):
+            return True
+    return False
+
+
+def _public_refuses_on_scope_predicate(body: str) -> bool:
+    """A refusing ``if`` whose CONDITION calls an authorisation/scope predicate.
+
+    opencatalogi's `PublicationService::download()` opens with
+
+        if ($this->isObjectInCatalogScope(objectId: $id) === false) {
+            return new JSONResponse(['error' => 'Not Found'], 404);
+        }
+
+    — a real per-object scope decision, deliberately answered 404 so a 403
+    cannot become an existence oracle for an anonymous caller. `_GUARD_BODY_RE`
+    cannot see it (no 401/403, no `authorize*`/`require*` prefix) and Pattern 7
+    cannot either (no identity to compare — there is no session here). Same
+    reasoning as Pattern 7 and as `#365` itself: recognise the DECISION by its
+    CONDITION, not by the status code it answers with.
+    """
+    for m in re.finditer(r"\bif\s*\(", body):
+        op = body.find("(", m.start())
+        cl = _matching_close(body, op)
+        if cl == -1:
+            continue
+        cond = body[op + 1:cl]
+        if "(" not in cond:
+            continue  # a predicate CALL, not a bare field comparison
+        if not _AUTHORISATION_TOKEN_RE.search(cond):
+            continue
+        end = _consequent_end(body, cl + 1)
+        if end > cl and _REFUSAL_RE.search(body[cl:end]):
+            return True
+    return False
+
+
+def _public_state_scoped_receivers(body: str, declared: set) -> dict:
+    """Receivers handed a scope as STATE before the lookup runs."""
+    out: dict = {}
+    for m in _PUBLIC_RECEIVER_CALL_RE.finditer(body):
+        recv, callee = m.group(1).strip(), m.group(2)
+        if not _PUBLIC_SCOPE_SETTER_RE.match(callee):
+            continue
+        op = body.find("(", m.start())
+        cl = _matching_close(body, op)
+        if cl == -1:
+            continue
+        args = _split_arguments(body[op + 1:cl])
+        if not args:
+            continue
+        if any(re.search(r"\$" + re.escape(d) + r"\b", a)
+               for a in args for d in declared):
+            continue  # a scope the CALLER chose is not a scope
+        if not any(_PUBLIC_SUBSTANTIVE_RE.search(a) for a in args):
+            continue
+        out.setdefault(recv, cl)
+    return out
+
+
+def _public_collaborator_files(cleaned: str, path: str) -> dict:
+    """``propertyName -> [class file]`` for this class's typed collaborators.
+
+    Same resolution rule as Pattern 4: PSR-4 basename, confirmed by an actual
+    ``class <Name>`` declaration. A type that does not resolve contributes
+    nothing, which is the fail-closed direction.
+    """
+    root = _app_root_for(path)
+    if root is None:
+        return {}
+    index = _class_index(root)
+    out: dict = {}
+    for type_name, prop in _PROPERTY_DECL_RE.findall(cleaned):
+        short = type_name.rsplit("\\", 1)[-1]
+        if short.lower() in _COLLABORATOR_SKIP_TYPES:
+            continue
+        decl_re = re.compile(_CLASS_DECL_TEMPLATE % re.escape(short))
+        for candidate in index.get(short, []):
+            if os.path.abspath(candidate) == os.path.abspath(path):
+                continue
+            try:
+                with open(candidate, encoding="utf-8") as fh:
+                    csrc = fh.read()
+            except OSError:
+                continue
+            if decl_re.search(_strip_strings_and_comments(csrc)):
+                out.setdefault(prop, []).append(candidate)
+    return out
+
+
+def _public_delegate_scopes(prop: str, method: str, files) -> bool:
+    """One resolved hop: does ``<prop>-><method>()`` scope its own lookups?
+
+    The callee's body is READ out of the collaborator's file and put through
+    the same predicate, with every one of its own parameters treated as
+    caller-supplied. No recursion: a second hop is not resolved, so an
+    unscoped delegate two frames down still reports.
+
+    ⚠️ POSITIVE EVIDENCE IS REQUIRED, and the first draft of this hop did not
+    demand it. "The callee has no unscoped selector" is VACUOUSLY TRUE of a
+    leaf data-access method — `ThemeService::find($id) { return $row; }` has
+    no selection call of its own — so the probe cleared every delegation to
+    the data layer, which is precisely the shape being hunted. Caught by the
+    rig: all three plants went silent. The callee must now SHOW a guard, a
+    declared-publicness refusal, or a lookup it scoped itself.
+    """
+    for class_file in files or ():
+        try:
+            with open(class_file, encoding="utf-8") as fh:
+                csrc = fh.read()
+        except OSError:
+            continue
+        ccleaned = _strip_strings_and_comments(csrc)
+        cguard = _blank_authentication_only_guards(ccleaned, csrc)
+        for (cname, _chead, csig, cbstart, cbend, _cline) in _find_method_bodies(csrc):
+            if cname != method:
+                continue
+            cparams = _parameter_list(ccleaned, csig)
+            cbody = cguard[cbstart:cbend]
+            if _GUARD_BODY_RE.search(csrc[csig:cbstart] + cbody):
+                return True
+            if _public_refuses_on_publicness(cbody):
+                return True
+            if _public_refuses_on_scope_predicate(cbody):
+                return True
+            selects, validated = _public_selection_scope(cbody, cparams, None)
+            if selects and not (selects - validated):
+                return True
+    return False
+
+
+def _public_unscoped_selectors(body: str, params, delegate_probe=None) -> list:
+    """Caller-supplied selectors that NEVER reach a scoped lookup.
+
+    Empty list = nothing to report: either the method takes no selector, no
+    selector reaches a selection call, or every one of them was resolved
+    inside a declared scope. *delegate_probe* is an optional
+    ``(prop, method) -> bool`` used for the one-hop collaborator clear.
+    """
+    if params is None:
+        return []
+    if _public_refuses_on_publicness(body):
+        return []
+    if _public_refuses_on_scope_predicate(body):
+        return []
+    selects, validated = _public_selection_scope(body, params, delegate_probe)
+    return sorted(selects - validated)
+
+
+def _public_selection_scope(body: str, params, delegate_probe=None):
+    """``(selectors that reach a lookup, those that reach a SCOPED one)``."""
+    if params is None:
+        return (set(), set())
+    tainted = _public_tainted_names(params, body)
+    if not tainted:
+        return (set(), set())
+
+    declared = _public_declared_names(params, body)
+    capability = {d for d in declared if _PUBLIC_CAPABILITY_RE.search(d)}
+    state_scoped = _public_state_scoped_receivers(body, declared)
+    deriv = _public_derivation(body)
+
+    # ALLOW-LIST VALIDATION. A caller value used as a subscript into a class
+    # constant, with a refusal when it does not resolve, can only ever name a
+    # member of a closed set the app wrote down. decidesk's `OriController`
+    # does exactly this — `self::RESOURCE_MAP[$resource] ?? null`, unknown =>
+    # 404 — and there is no object to steer afterwards.
+    for t in list(tainted):
+        for am in re.finditer(
+                r"\$([A-Za-z_]\w*)\s*=\s*[^;\n]{0,80}?"
+                r"(?:self|static|parent|[A-Za-z_]\w*)::[A-Za-z_]\w*\s*\[\s*\$"
+                + re.escape(t) + r"\b", body):
+            if _public_refused_on(am.group(1), body):
+                tainted.discard(t)
+                break
+
+    # Everything that constrains SOME selection, and everything those values
+    # were derived from. A call whose RESULT lands in here resolved a
+    # container rather than an object.
+    constraint_origins: set = set()
+    for m in _PUBLIC_CALL_RE.finditer(body):
+        if not _PUBLIC_SELECTION_RE.match(m.group(1)):
+            continue
+        op = body.find("(", m.start())
+        cl = _matching_close(body, op)
+        if cl == -1:
+            continue
+        for arg in _split_arguments(body[op + 1:cl]):
+            if any(re.search(r"\$" + re.escape(d) + r"\b", arg) for d in declared):
+                continue
+            for var in re.findall(r"\$([A-Za-z_][A-Za-z0-9_]*)", arg):
+                constraint_origins.add(var)
+                constraint_origins |= _public_origins(var, deriv)
+
+    selects: set = set()
+    validated: set = set()
+
+    # CAPABILITY VALIDATION. A caller value checked ALONGSIDE an unguessable
+    # capability, with a refusal on the result, has been authorised by the
+    # secret. shillinq's `lookupByToken` does
+    #
+    #     $result = $this->tokens->validate($appointmentId, $token);
+    #     if ($result['ok'] === false) { return ...; }
+    #     $appointment = $this->loadAppointment(appointmentId: $appointmentId);
+    #
+    # — the later load carries no token, but by then the pair has been proven.
+    if capability:
+        for m in _PUBLIC_CALL_RE.finditer(body):
+            op = body.find("(", m.start())
+            cl = _matching_close(body, op)
+            if cl == -1:
+                continue
+            args = _split_arguments(body[op + 1:cl])
+            if not any(re.search(r"\$" + re.escape(c) + r"\b", a)
+                       for a in args for c in capability):
+                continue
+            paired = {t for t in tainted
+                      if any(re.search(r"\$" + re.escape(t) + r"\b", a) for a in args)}
+            if not paired:
+                continue
+            lhs = re.search(r"\$([A-Za-z_]\w*)\s*=\s*[^;\n]{0,200}$", body[:m.start()])
+            if lhs is not None and _public_refused_on(lhs.group(1), body):
+                validated |= paired
+    for m in _PUBLIC_CALL_RE.finditer(body):
+        callee = m.group(1)
+        if not _PUBLIC_SELECTION_RE.match(callee):
+            continue
+        op = body.find("(", m.start())
+        cl = _matching_close(body, op)
+        if cl == -1:
+            continue
+        args = _split_arguments(body[op + 1:cl])
+        if not args:
+            continue
+        here = set()
+        for t in tainted:
+            if any(re.search(r"\$" + re.escape(t) + r"\b", a) for a in args):
+                here.add(t)
+        if not here:
+            continue
+        selects |= here
+
+        scoped = False
+        if _PUBLICNESS_SEGMENT_RE.search(callee):
+            scoped = True
+        # A CAPABILITY alongside the identifier constrains it: shillinq's
+        # `lookupByToken` resolves the appointment by an unguessable token and
+        # merely NARROWS with `appointmentId`. The secret is the scope.
+        if not scoped and any(
+                re.search(r"\$" + re.escape(c) + r"\b", a)
+                for a in args for c in capability):
+            scoped = True
+        if not scoped:
+            for arg in args:
+                if any(re.search(r"\$" + re.escape(d) + r"\b", arg)
+                       for d in declared):
+                    continue
+                if (_PUBLICNESS_SEGMENT_RE.search(arg)
+                        or _PUBLIC_SUBSTANTIVE_RE.search(arg)):
+                    scoped = True
+                    break
+        if not scoped:
+            before = body[:m.start()].rstrip()
+            for recv, setpos in state_scoped.items():
+                if setpos < m.start() and before.endswith(recv):
+                    scoped = True
+                    break
+        if not scoped:
+            lhs = re.search(
+                r"\$([A-Za-z_][A-Za-z0-9_]*)\s*=\s*[^;\n]{0,200}$",
+                body[:m.start()])
+            if (lhs is not None and lhs.group(1) in constraint_origins
+                    and _public_refused_on(lhs.group(1), body)):
+                scoped = True
+        if not scoped and delegate_probe is not None:
+            prop = re.search(
+                r"\$this\s*->\s*([A-Za-z_]\w*)\s*->\s*$", body[:m.start() + 2])
+            if prop is None:
+                prop = re.search(
+                    r"\$this\s*->\s*([A-Za-z_]\w*)\s*$", body[:m.start()])
+            if prop is not None and delegate_probe(prop.group(1), callee):
+                scoped = True
+        if scoped:
+            validated |= here
+
+    return (selects, validated)
+
+
+def _public_page_lookup_is_unscoped(cleaned: str, path: str, sig_start: int,
+                                    body: str) -> bool:
+    """Pattern 8 entry point — see the commentary above."""
+    params = _parameter_list(cleaned, sig_start)
+    if params is None:
+        return False  # unparsed signature judges nothing
+    files = None
+
+    def probe(prop, method):
+        nonlocal files
+        if files is None:
+            files = _public_collaborator_files(cleaned, path)
+        return _public_delegate_scopes(prop, method, files.get(prop))
+
+    return bool(_public_unscoped_selectors(body, params, probe))
+
+
+# ---------------------------------------------------------------------------
 # Exemption helpers
 # ---------------------------------------------------------------------------
 
@@ -1672,13 +2277,39 @@ def _collect_guard_helpers(cleaned: str, src: str, is_or_repo: bool) -> set:
     exactly as Pattern 2 intends — just one call-hop away.  Still OR-scoped,
     so leaf-app helpers are never assumed to guard.
     """
+    # 🔴 THE BODY TEST READS COMMENT-FREE TEXT, and it did not used to.
+    #
+    # `src` here is the AUTH-BLANKED SOURCE, which still contains every
+    # comment — so `_HELPER_GUARD_BODY_RE` was matching prose. MEASURED on
+    # hermiq `AgentWebhookController::loadOwnedAgent`, whose body contains no
+    # `throw` statement at all; the word appears only in a code comment
+    # explaining why the helper CATCHES one:
+    #
+    #     // caller invokes this helper OUTSIDE its own try block — so the throw
+    #     // would escape as a framework 500 …
+    #
+    # That comment made the helper guard-bearing, and Pattern 1 then cleared
+    # all four routed methods that call it. A gate that can be silenced by a
+    # sentence in a comment is not measuring the code. `_blank_…(cleaned,
+    # cleaned)` keeps the `#365` blanking while dropping comments and string
+    # literals, so an authentication-only helper still does not qualify.
+    guard_text = _blank_authentication_only_guards(cleaned, cleaned)
     helpers: set = set()
     for name, body_start, body_end in _all_method_spans(cleaned):
         if _GUARD_HELPER_NAME_RE.match(name):
             helpers.add(name)
             continue
-        body = src[body_start:body_end]
+        body = guard_text[body_start:body_end]
         if _HELPER_GUARD_BODY_RE.search(body):
+            helpers.add(name)
+            continue
+        # An OWNERSHIP COMPARISON is a guard wherever it is written, including
+        # in a helper that answers with `null` rather than a status code —
+        # hermiq's `loadOwnedAgent()` is exactly that, and it is the reason the
+        # narrowed `throw` alternative above costs no true clear. Same rule as
+        # Pattern 7: recognise the decision by its CONDITION.
+        if _has_ownership_comparison_guard(cleaned, src, body_start, body_end,
+                                           require_denial=True):
             helpers.add(name)
             continue
         if is_or_repo and _OR_RBAC_ACCESS_RE.search(body):
@@ -1775,8 +2406,14 @@ def scan_file(path: str) -> int:
         if _is_preflight_cors_method(name):
             continue
 
-        # Only methods carrying @NoAdminRequired / #[NoAdminRequired] are in scope.
-        if not _NO_ADMIN_RE.search(head):
+        # Methods carrying @NoAdminRequired / #[NoAdminRequired] are in scope,
+        # and so — since Pattern 8 — are @PublicPage ones. Before that, a
+        # PublicPage method with no NoAdminRequired was dropped HERE, one
+        # branch before the exemption that was blamed for the blindness: 267
+        # of the fleet's 357 public controller methods never reached it. See
+        # the Pattern 8 commentary.
+        is_public_page = bool(_PUBLIC_PAGE_ANNOTATION_RE.search(head))
+        if not _NO_ADMIN_RE.search(head) and not is_public_page:
             continue
 
         # ---- Exemption 3: CORS-headers-only body ------------------------
@@ -1784,9 +2421,17 @@ def scan_file(path: str) -> int:
         if _is_cors_only_body(body):
             continue
 
-        # @PublicPage on the *same* method satisfies the gate — the method
-        # is intentionally open to unauthenticated callers.
-        if _PUBLIC_PAGE_ANNOTATION_RE.search(head):
+        # ---- Exemption 3b: @PublicPage that resolves nothing global -------
+        # WAS: `@PublicPage` on the same method exempted it unconditionally,
+        # "intentionally open to unauthenticated callers". That is a claim
+        # about the CALLER, and the gate's question is about the OBJECT.
+        # A public page still exempts — but only once Pattern 8 has read the
+        # body and found that no caller-supplied identifier reaches a lookup
+        # it can steer. Everything else in this loop still applies, so a
+        # public method that carries a real guard, a resolved delegation or a
+        # reason-bearing exempt tag clears exactly as it would have.
+        if is_public_page and not _public_page_lookup_is_unscoped(
+                cleaned, path, sig_start, body):
             continue
 
         # ---- Exemption 4: reason-bearing explicit exempt tag -------------
@@ -1800,7 +2445,17 @@ def scan_file(path: str) -> int:
 
         # At least one authorisation guard must appear in the body OR the
         # function signature (e.g. TemplateResponse in the return type hint).
-        if _GUARD_BODY_RE.search(sig + body):
+        #
+        # ⚠️ The TemplateResponse alternative is withheld from a `@PublicPage`
+        # method. Its stated reason — "NC middleware already guarantees an
+        # authenticated session so there is no object access to gate" — is
+        # true under `@NoAdminRequired` and FALSE under `@PublicPage`, which
+        # is the annotation that turns the session guarantee off. A public
+        # renderer that resolves a caller-supplied id into its template
+        # parameters is the same exposure as a JSON one. An exemption's
+        # reason is a testable claim; this one does not survive the move.
+        if (_PUBLIC_TEMPLATE_STRIPPED_RE if is_public_page
+                else _GUARD_BODY_RE).search(sig + body):
             continue
 
         # ---- Pattern 7: in-body ownership comparison --------------------
@@ -1869,9 +2524,14 @@ def scan_file(path: str) -> int:
         # `filter_preexisting_methods.py` parses this line with
         # `rule=(?P<rule>.+)$`, so anything added after `rule=` becomes part of
         # the rule NAME and would silently break pre-existing filtering.
-        print(
-            f"{path}:{line_no} method={name} rule=no-auth-guard-in-body"
-        )
+        # A `@PublicPage` finding gets its OWN rule name. The remedy differs:
+        # there is no session identity to compare an owner against, so the
+        # fix is to constrain the lookup to a scope the endpoint declares
+        # public — not to add an ownership check. A distinct name also lets
+        # triage separate the two populations without re-reading every hit.
+        rule = ("publicpage-unscoped-object-lookup" if is_public_page
+                else "no-auth-guard-in-body")
+        print(f"{path}:{line_no} method={name} rule={rule}")
         violations += 1
 
     return violations

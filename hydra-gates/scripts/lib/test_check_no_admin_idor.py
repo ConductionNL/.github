@@ -2454,5 +2454,239 @@ class OwnershipComparisonGuardTest(unittest.TestCase):
         self.assertEqual(len(findings), 1)
 
 
+# ---------------------------------------------------------------------------
+# Pattern 8 — `#[PublicPage]` must resolve inside a declared-public scope
+# ---------------------------------------------------------------------------
+
+_PUBLIC_TPL = """\
+<?php
+class CatalogueController {
+%s
+}
+"""
+
+
+def _public(body: str, attrs: str = "    #[PublicPage]\n",
+            sig: str = "string $id", ret: str = "JSONResponse") -> str:
+    return _PUBLIC_TPL % (
+        attrs
+        + "    public function show(%s): %s\n    {\n%s    }\n" % (sig, ret, body)
+    )
+
+
+class PublicPageScopeTest(unittest.TestCase):
+    """`#[PublicPage]` says the CALLER may be anonymous. It says nothing about
+    which OBJECTS the endpoint may reach. Reproduced at package 57bcb2b: a
+    byte-identical IDOR plant carrying the annotation — including an
+    unauthenticated write to an arbitrary id — reported PASS."""
+
+    # -- fires -------------------------------------------------------------
+
+    def test_public_page_only_with_arbitrary_id_is_reported(self):
+        """opencatalogi#856's shape: no session, a caller-chosen id, a global
+        lookup. THE annotation must not exempt it."""
+        findings = _public("        return new JSONResponse($this->svc->find($id));\n")
+        out = _scan(findings)
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("rule=publicpage-unscoped-object-lookup", out[0])
+
+    def test_public_page_only_is_in_scope_at_all(self):
+        """🔑 The blinding is mostly NOT the exemption. A `#[PublicPage]`
+        method carrying no `#[NoAdminRequired]` was dropped one branch EARLIER,
+        by the scope filter — 267 of the fleet's 357 public controller methods.
+        Deleting the exemption alone would not have moved this test."""
+        out = _scan(_public(
+            "        return new JSONResponse($this->svc->find($id));\n"))
+        self.assertEqual(len(out), 1, out)
+
+    def test_public_page_unauthenticated_write_is_reported(self):
+        """A public WRITE to an arbitrary id. `array $data` is a payload, not a
+        selector, so the finding is about `$id` alone."""
+        out = _scan(_public(
+            "        return new JSONResponse($this->svc->update($id, $data));\n",
+            sig="string $id, array $data"))
+        self.assertEqual(len(out), 1, out)
+
+    def test_both_attributes_still_reported(self):
+        """The arm the documented exemption actually cleared."""
+        out = _scan(_public(
+            "        return new JSONResponse($this->svc->find($id));\n",
+            attrs="    #[NoAdminRequired]\n    #[PublicPage]\n"))
+        self.assertEqual(len(out), 1, out)
+
+    def test_template_response_does_not_clear_a_public_renderer(self):
+        """`TemplateResponse` clears a `@NoAdminRequired` method because NC
+        guarantees a session there. `@PublicPage` is the annotation that turns
+        that guarantee OFF, so the reason does not survive the move."""
+        out = _scan(_public(
+            "        $o = $this->svc->find($id);\n"
+            "        return new TemplateResponse('app', 'index', ['object' => $o]);\n",
+            ret="TemplateResponse"))
+        self.assertEqual(len(out), 1, out)
+
+    # -- stays silent ------------------------------------------------------
+
+    def test_public_page_with_no_identifier_is_not_reported(self):
+        """No caller-supplied value, nothing to steer."""
+        out = _scan(_public(
+            "        return new JSONResponse($this->svc->listPublished());\n",
+            sig=""))
+        self.assertEqual(out, [])
+
+    def test_public_page_scoped_to_a_configured_namespace_is_not_reported(self):
+        """The shape opencatalogi shipped in 963f832a — resolve the configured
+        register/schema, refuse if unconfigured, then look the id up inside."""
+        out = _scan(_public(
+            "        $scope = $this->themeConfiguration();\n"
+            "        if ($scope === null) {\n"
+            "            return new JSONResponse([], 503);\n"
+            "        }\n"
+            "        $o = $this->svc->find($id, $scope['register'], $scope['schema']);\n"
+            "        return new JSONResponse($o);\n"))
+        self.assertEqual(out, [])
+
+    def test_public_page_with_a_publicness_named_lookup_is_not_reported(self):
+        """`findPublished($id)` declares the constraint in the callee name."""
+        out = _scan(_public(
+            "        return new JSONResponse($this->svc->findPublished($id));\n"))
+        self.assertEqual(out, [])
+
+    def test_a_publication_named_lookup_is_NOT_a_publicness_constraint(self):
+        """Abuse control for the CamelCase-segment rule: `getPublicationById`
+        starts with the letters of `public` and is a plain object read. If the
+        token were matched as a substring, every `publication`-flavoured app in
+        the fleet would exempt itself by naming."""
+        out = _scan(_public(
+            "        return new JSONResponse($this->svc->getPublicationById($id));\n"))
+        self.assertEqual(len(out), 1, out)
+
+    def test_public_page_with_a_capability_identifier_is_not_reported(self):
+        """The identifier IS the authorisation — NC's public-share convention."""
+        out = _scan(_public(
+            "        return new JSONResponse($this->svc->find($shareToken));\n",
+            sig="string $shareToken"))
+        self.assertEqual(out, [])
+
+    def test_public_form_submission_is_not_reported(self):
+        """A payload-only public POST selects nothing. portaliq's entire public
+        forms surface is this shape and must not light up."""
+        out = _scan(_public(
+            "        return new JSONResponse($this->svc->create($data));\n",
+            sig="array $data"))
+        self.assertEqual(out, [])
+
+    def test_verify_in_scope_then_act_is_not_reported(self):
+        """Per SELECTOR, not per call. opencatalogi's `attachments()` proves the
+        object is in the catalog, refuses, and only then fetches by id — judging
+        each call alone reports the second half of a correct method."""
+        out = _scan(_public(
+            "        $cat = $this->catalogs->getBySlug($catalogSlug);\n"
+            "        if ($cat === null) {\n"
+            "            return new JSONResponse([], 404);\n"
+            "        }\n"
+            "        $o = $this->svc->findInCatalog($id, $cat['id']);\n"
+            "        if ($o === null) {\n"
+            "            return new JSONResponse([], 404);\n"
+            "        }\n"
+            "        return new JSONResponse($this->svc->attachments($id));\n",
+            sig="string $catalogSlug, string $id"))
+        self.assertEqual(out, [])
+
+    def test_state_scoped_receiver_is_not_reported(self):
+        """OpenRegister's ObjectService is scoped as STATE fleet-wide."""
+        out = _scan(_public(
+            "        $loc = $this->query->locate($id, $this->publishedRegisters());\n"
+            "        if ($loc === null) {\n"
+            "            return new JSONResponse([], 404);\n"
+            "        }\n"
+            "        $svc = $this->objectService();\n"
+            "        $svc->setRegister($loc['register']);\n"
+            "        $svc->setSchema($loc['schema']);\n"
+            "        return new JSONResponse($svc->find($id));\n"))
+        self.assertEqual(out, [])
+
+    def test_allow_listed_identifier_is_not_reported(self):
+        """decidesk's `OriController`: `self::RESOURCE_MAP[$resource] ?? null`
+        with a refusal on a miss can only ever name a member of a closed set."""
+        out = _scan(_public(
+            "        $schema = self::RESOURCE_MAP[$resource] ?? null;\n"
+            "        if ($schema === null) {\n"
+            "            return new JSONResponse([], 404);\n"
+            "        }\n"
+            "        return new JSONResponse($this->svc->findAll($schema, $resource));\n",
+            sig="string $resource"))
+        self.assertEqual(out, [])
+
+    def test_rbac_true_alone_does_not_scope(self):
+        """⚠️ The counter-example opencatalogi's own fix commit names: `_rbac:
+        true` was never sufficient, because OpenRegister grants read by default
+        on a schema declaring no authorization block. A bare literal argument
+        does not constrain."""
+        out = _scan(_public(
+            "        return new JSONResponse($this->svc->find($id, _rbac: true,"
+            " _multitenancy: false));\n"))
+        self.assertEqual(len(out), 1, out)
+
+
+class HelperGuardEvidenceTest(unittest.TestCase):
+    """A gate that can be silenced by a sentence in a comment is not measuring
+    the code."""
+
+    _OWNED = """\
+<?php
+class AgentController {
+    #[NoAdminRequired]
+    public function rotate(string $id): JSONResponse
+    {
+        $user = $this->userSession->getUser();
+        if ($user === null) {
+            return new JSONResponse([], Http::STATUS_UNAUTHORIZED);
+        }
+        $agent = $this->%s(agentId: $id);
+        if ($agent === null) {
+            return new JSONResponse([], Http::STATUS_NOT_FOUND);
+        }
+        return new JSONResponse($this->webhooks->rotate(agent: $agent));
+    }
+
+    private function %s(string $agentId): ?ObjectEntity
+    {
+%s    }
+}
+"""
+
+    _OWNERSHIP_BODY = (
+        "        $agent = $this->objectService->find(id: $agentId);\n"
+        "        if ($agent->getOwner() !== $this->userId) {\n"
+        "            return null;\n"
+        "        }\n"
+        "        return $agent;\n"
+    )
+
+    _COMMENT_ONLY_BODY = (
+        "        // The caller invokes this helper OUTSIDE its own try block, so\n"
+        "        // the throw would escape as a framework 500.\n"
+        "        return $this->objectService->find(id: $agentId);\n"
+    )
+
+    def test_a_comment_mentioning_throw_is_not_a_guard(self):
+        """MEASURED on hermiq `AgentWebhookController::loadOwnedAgent`: the body
+        contains no `throw` statement at all — the word appears only in a code
+        comment explaining why the helper CATCHES one — and that made the helper
+        guard-bearing, clearing all four routed methods that call it."""
+        src = self._OWNED % ("loadAgent", "loadAgent", self._COMMENT_ONLY_BODY)
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1, findings)
+        self.assertIn("method=rotate", findings[0])
+
+    def test_an_ownership_helper_answering_null_still_clears(self):
+        """…and the narrowing costs no true clear: a helper that compares
+        ownership and answers `null` — the deliberate anti-oracle choice — is
+        recognised by its CONDITION, which is how hermiq's real
+        `loadOwnedAgent()` keeps clearing its four callers."""
+        src = self._OWNED % ("loadAgent", "loadAgent", self._OWNERSHIP_BODY)
+        self.assertEqual(_scan(src), [])
+
+
 if __name__ == "__main__":
     unittest.main()
