@@ -98,6 +98,8 @@ import re
 import sys
 
 CENTRAL_RULESET = "quality-config/phpcs.xml"
+CENTRAL_PHPMD = "quality-config/phpmd.xml"
+CENTRAL_PHPSTAN = "quality-config/phpstan-base.neon"
 
 # Sniff families php-cs-fixer owns. A phpcs.xml that names one locally is
 # re-opening the jurisdiction conflict rule 5 describes. Matched against the
@@ -305,9 +307,16 @@ def check(root: str) -> tuple[list[str], int]:
             )
 
     # ── 8. stylelint glob ────────────────────────────────────────────────
+    # BOTH scripts, not just `stylelint`. Measured on launchpad: `stylelint` was
+    # correctly quoted while `stylelint:fix` was not, so the autofix covered a
+    # NARROWER set than the check — `npm run stylelint:fix` reports done and
+    # leaves violations the gate then flags. An earlier revision of this rule
+    # inspected only the check script and reported that app as clean.
     if package is not None:
-        sl = (package.get("scripts") or {}).get("stylelint")
-        if sl:
+        for script_name in ("stylelint", "stylelint:fix"):
+            sl = (package.get("scripts") or {}).get(script_name)
+            if not sl:
+                continue
             checked += 1
             # Everything after the binary name. An unquoted glob containing `**`
             # is expanded by the SHELL, and without globstar `src/**/` matches
@@ -319,12 +328,102 @@ def check(root: str) -> tuple[list[str], int]:
                 ):
                     fail(
                         "stylelint-glob-unquoted",
-                        f"the stylelint script passes an unquoted glob {token!r}. "
-                        "The shell expands it, and without globstar `src/**/` "
-                        "matches exactly one directory level — nested components "
-                        "are silently not linted. Quote it so stylelint expands it.",
+                        f"the '{script_name}' script passes an unquoted glob "
+                        f"{token!r}. The shell expands it, and without globstar "
+                        "`src/**/` matches exactly one directory level — nested "
+                        "components are silently not linted. Quote it so stylelint "
+                        "expands it.",
                     )
                     break
+
+    # ── 12 + 13. PHPMD comes from the package ────────────────────────────
+    # The same argument as rules 5/6, for the other analyser. 18 mutually
+    # different copies of one ruleset is what the fleet had; six of them differed
+    # in ways nobody had decided, and one carried a rule that was DEAD (launchpad
+    # set DevelopmentCodeFragment ignore-namespaces=false while every class in the
+    # repo is namespaced).
+    phpmd_raw = read(os.path.join(root, "phpmd.xml"))
+    if phpmd_raw is not None:
+        checked += 1
+        if CENTRAL_PHPMD not in strip_xml_comments(phpmd_raw):
+            fail(
+                "phpmd-not-centralised",
+                f"phpmd.xml does not reference {CENTRAL_PHPMD}. A deliberate "
+                "divergence is allowed and expected — declare it as "
+                '<rule ref="…central…"><exclude name="X"/></rule> plus a '
+                "re-declared X with this app's properties, so the deviation is "
+                "visible as a deviation instead of hiding inside a full copy.",
+            )
+
+    checked += 1
+    if os.path.isfile(os.path.join(root, "phpmd-unusedparams.xml")):
+        fail(
+            "local-phpmd-unusedparams",
+            "phpmd-unusedparams.xml exists locally. It comes from "
+            "vendor/conduction/hydra-gates/quality-config/. The `phpmd` script "
+            "runs two rulesets and keeps the worst exit code; point its second "
+            "leg at the vendored file and delete this copy.",
+        )
+
+    # ── 14. PHPStan includes the shared base ─────────────────────────────
+    phpstan_raw = read(os.path.join(root, "phpstan.neon")) or read(
+        os.path.join(root, "phpstan.neon.dist")
+    )
+    if phpstan_raw is not None:
+        checked += 1
+        body = re.sub(r"^\s*#.*$", "", phpstan_raw, flags=re.M)
+        if CENTRAL_PHPSTAN not in body:
+            fail(
+                "phpstan-not-centralised",
+                f"phpstan.neon does not include {CENTRAL_PHPSTAN}. Keep only this "
+                "app's own baseline include and ignores naming symbols no other "
+                "app has. NOTE: this requires conduction/hydra-gates >= v1.7.1 — "
+                "v1.7.0's base declared bare relative paths, and PHPStan resolves "
+                "those against the file that DECLARES them, so `paths: lib` became "
+                "vendor/…/quality-config/lib and the run aborted.",
+            )
+
+    # ── 15. no unreferenced prettier config ──────────────────────────────
+    # Nextcloud publishes @nextcloud/prettier-config and nextcloud/forms consumes
+    # it properly — prettier + eslint-config-prettier + a real `format` script. So
+    # prettier is not forbidden; an UNWIRED prettier config is.
+    #
+    # What the fleet had was neither: a hand-rolled .prettierrc setting 2-space
+    # indent and double quotes — the OPPOSITE of @nextcloud/prettier-config's
+    # useTabs/singleQuote — with no dependency, no script and no CI leg. Inert
+    # where it would help, active in editors, where every save produced code
+    # @nextcloud/eslint-config then rejected.
+    if package is not None:
+        deps = {}
+        deps.update(package.get("dependencies") or {})
+        deps.update(package.get("devDependencies") or {})
+        has_prettier = any(d == "prettier" or d.endswith("/prettier-config") for d in deps)
+        configs = [
+            f
+            for f in (
+                ".prettierrc",
+                ".prettierrc.json",
+                ".prettierrc.js",
+                ".prettierrc.cjs",
+                "prettier.config.js",
+                "prettier.config.cjs",
+            )
+            if os.path.isfile(os.path.join(root, f))
+        ]
+        if configs:
+            checked += 1
+            if not has_prettier:
+                fail(
+                    "prettier-config-without-prettier",
+                    f"{', '.join(configs)} exists but neither prettier nor a "
+                    "*/prettier-config package is a dependency, so nothing in CI "
+                    "ever runs it. It still applies in editors, which is the worst "
+                    "of both: contributors get their files reformatted into a state "
+                    "the linter rejects. Either delete it, or adopt it properly the "
+                    "way nextcloud/forms does — @nextcloud/prettier-config + "
+                    "prettier + eslint-config-prettier + a format script and a CI "
+                    "leg.",
+                )
 
     # ── 9. ocp major vs info.xml min-version ─────────────────────────────
     info = read(os.path.join(root, "appinfo", "info.xml"))
