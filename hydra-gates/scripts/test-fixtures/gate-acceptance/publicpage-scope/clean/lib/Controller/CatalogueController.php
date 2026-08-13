@@ -20,10 +20,12 @@
 namespace OCA\PublicPageFixture\Controller;
 
 use OCA\PublicPageFixture\Service\CatalogueService;
+use OCA\PublicPageFixture\Service\EnvelopeService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
+use OCP\AppFramework\Http\DataDisplayResponse;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IConfig;
 use OCP\IRequest;
@@ -34,6 +36,7 @@ class CatalogueController extends Controller {
 		string $appName,
 		IRequest $request,
 		private readonly CatalogueService $catalogue,
+		private readonly EnvelopeService $envelopes,
 		private readonly IConfig $config,
 	) {
 		parent::__construct($appName, $request);
@@ -78,6 +81,29 @@ class CatalogueController extends Controller {
 			return new JSONResponse([], Http::STATUS_NOT_FOUND);
 		}
 		return new JSONResponse($theme);
+	}
+
+	/**
+	 * The same raw-body handler, AUTHENTICATED — `ConductionNL/.github#413`.
+	 *
+	 * Byte-identical to the planted arm's `rawBodyDispatch()`: same signature,
+	 * same `php://input` read, same collaborator, same call. The only thing
+	 * that differs is that `EnvelopeService::dispatch()` in THIS arm verifies
+	 * the sender before it interprets the envelope.
+	 *
+	 * This arm is the one that stops `#413` being repaired by "flag every
+	 * `#[PublicPage]` method that reads the body". It is procest's
+	 * `StufController::zaken()` as it ships today, cleared by Pattern 4
+	 * reading `authenticateSender()` out of the collaborator's own file — no
+	 * new clear was invented for the raw-body family, and this pins that.
+	 */
+	#[PublicPage]
+	#[NoCSRFRequired]
+	public function rawBodyDispatch(): DataDisplayResponse {
+		return new DataDisplayResponse($this->envelopes->dispatch(
+			rawBody: file_get_contents('php://input'),
+			service: 'cases'
+		));
 	}
 
 	/**
