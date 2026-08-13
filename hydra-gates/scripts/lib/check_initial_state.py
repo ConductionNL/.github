@@ -84,11 +84,21 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 try:
-    from source_scope import js_comment_mask, read_text, script_mask
+    from source_scope import (
+        js_code_mask,
+        js_comment_mask,
+        js_exec_mask,
+        read_text,
+        script_mask,
+        starts_in_code,
+    )
 except Exception:  # pragma: no cover
+    js_code_mask = None
     js_comment_mask = None
+    js_exec_mask = None
     read_text = None
     script_mask = None
+    starts_in_code = None
 
 # A DOM lookup that yields a server-rendered element.
 _LOOKUP = r"(?:document|window\.document)\s*\.\s*(?:getElementById|querySelector)\s*\("
@@ -156,34 +166,57 @@ def scan_file(path: str) -> list[str]:
         src = read_text(path)
     except OSError:
         return []
+    # TWO MASKS, ONE COORDINATE SYSTEM (#424).
+    #
+    # `masked` keeps string CONTENTS, because the attribute name in
+    # `getAttribute('data-version')` is the evidence and the
+    # `data-requesttoken` exemption is read out of the same literal. That is
+    # why blanking is not the fix here — and why, until #424, this counted:
+    #
+    #     const doc = "document.getElementById('fx-settings').dataset.version"
+    #
+    # as a DOM read. `anchor` is the same text with string contents blanked,
+    # so `starts_in_code` can say whether the EXPRESSION is code. Every
+    # pattern below begins on a word character or `.`, which is the condition
+    # that predicate is exact for.
     if path.endswith(".vue") and script_mask is not None:
         masked = script_mask(src, path)
+        anchor = js_exec_mask(src, path)
     else:
         masked = js_comment_mask(src)
+        anchor = js_code_mask(src)
     lines = src.splitlines()
 
-    written = {m.group(1) for m in _DATASET_WRITE_RX.finditer(masked)}
+    def code_hits(rx, text=None):
+        for m in rx.finditer(text if text is not None else masked):
+            if starts_in_code(anchor, masked, m.start()):
+                yield m
+
+    written = {m.group(1) for m in code_hits(_DATASET_WRITE_RX)}
 
     hits: set[int] = set()
-    for m in _ONE_STEP_RX.finditer(masked):
+    for m in code_hits(_ONE_STEP_RX):
         if _excluded(m, written):
             continue
         hits.add(masked.count("\n", 0, m.start()) + 1)
 
     # Two-step: a name bound to a DOM lookup, then read for server data.
     # Names that are also parameters somewhere are ambiguous — see _PARAM_RX.
-    ambiguous = _ambiguous_names(masked)
-    names = {m.group(1) for m in _ASSIGN_RX.finditer(masked)} - ambiguous
-    this_names = {m.group(1) for m in _THIS_ASSIGN_RX.finditer(masked)} - ambiguous
+    # The ambiguity scan runs on the ANCHOR: a parameter written inside a
+    # string is not a parameter, and letting prose add names there would
+    # silently suppress real findings.
+    ambiguous = _ambiguous_names(anchor)
+    names = {m.group(1) for m in code_hits(_ASSIGN_RX)} - ambiguous
+    this_names = {m.group(1) for m in code_hits(_THIS_ASSIGN_RX)} - ambiguous
     for name in names:
         rx = re.compile(r"(?<![\w.])" + re.escape(name) + r"\s*[!?]?" + _READ)
-        for m in rx.finditer(masked):
+        for m in code_hits(rx):
             if _excluded(m, written):
                 continue
             hits.add(masked.count("\n", 0, m.start()) + 1)
     for name in this_names:
         rx = re.compile(r"this\s*\.\s*" + re.escape(name) + r"\s*[!?]?" + _READ)
-        for m in rx.finditer(masked):
+        for m in code_hits(rx):
             if _excluded(m, written):
                 continue
             hits.add(masked.count("\n", 0, m.start()) + 1)
@@ -196,7 +229,7 @@ def scan_file(path: str) -> list[str]:
 
 
 def main(argv: list[str]) -> int:
-    if read_text is None or js_comment_mask is None:
+    if read_text is None or js_comment_mask is None or starts_in_code is None:
         print(
             "check_initial_state: source_scope.py could not be imported; "
             "NOTHING was inspected",

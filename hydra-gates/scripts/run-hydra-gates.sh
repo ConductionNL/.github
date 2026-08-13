@@ -1407,10 +1407,46 @@ _ctrl_path_from_name() {
 # than the run alone matters for a multi-line attribute
 # (`#[AuthorizedAdminSetting(\n  Application::APP_ID\n)]`), whose middle lines
 # are ordinary code and would otherwise cut the run short.
+#
+# ⚠️ AND THE UNION WAS NOT ENOUGH: A COMMENT COULD STILL SPEND THE BUDGET
+# (#415/#423). The union only rescues a multi-line attribute while the
+# 20-line SLICE still reaches it, so the explanation between the attribute
+# and the declaration is charged against the attribute's visibility.
+# Measured on two fixtures differing in NOTHING but the length of an
+# ordinary docblock, both carrying a real
+# `#[AuthorizedAdminSetting(\n Application::APP_ID\n)]` above it:
+#
+#     2 doc lines  -> [gate-5] route-auth: PASS
+#    30 doc lines  -> [gate-5] route-auth: FAIL — 1 routed method(s)
+#                       missing auth attribute
+#
+# The attribute is there in both. The run breaks at the `)]` line — which
+# matches none of the five patterns above — so `run` stops BELOW the
+# attribute, and past twenty lines of prose the slice no longer reaches it
+# either. An author who documents the endpoint goes red; the same author who
+# deletes the paragraph goes green having changed nothing about its auth.
+# That is the corrosive direction: it teaches people to delete the
+# explanation, and this is a SECURITY gate whose findings a human has to be
+# able to check.
+#
+# So the walk now STEPS OVER a multi-line attribute by structure rather than
+# by distance — the same repair `check_contract_coverage` documents at its
+# L208 ("WHY THIS IS NOT A LINE WINDOW"). On a line that closes a bracket,
+# it scans up for the `#[` that opens it, requiring the brackets between to
+# BALANCE, and resumes the run from there. It cannot run away: the scan is
+# bounded, it must find a real `#[` at line start, and the previous-member
+# clamp below still cuts the window at the last `}` — so a short guarded
+# method still cannot donate its attribute to the next one.
 # ---------------------------------------------------------------------------
 _head_block() {
     local _file="$1" _def="$2"
     awk -v D="${_def}" '
+        # Net bracket depth of one line: `[` opens, `]` closes.
+        function _brk(s,   t, o, c) {
+            t = s; o = gsub(/\[/, "", t)
+            t = s; c = gsub(/\]/, "", t)
+            return o - c
+        }
         NR <= D { line[NR] = $0 }
         NR > D  { exit }
         END {
@@ -1423,6 +1459,21 @@ _head_block() {
                 if (l ~ /^[[:space:]]*\*/)             { run = i; continue }
                 if (l ~ /^[[:space:]]*\/\//)           { run = i; continue }
                 if (l ~ /^[[:space:]]*#\[/)            { run = i; continue }
+                # A line that closes more brackets than it opens may be the
+                # tail of a multi-line attribute. Walk up while the brackets
+                # stay unbalanced; if the line that balances them opens an
+                # attribute, the whole span belongs to this declaration.
+                if (_brk(l) < 0) {
+                    bal = 0
+                    for (j = i; j >= 1 && i - j <= 40; j--) {
+                        bal += _brk(line[j])
+                        if (bal == 0) {
+                            if (line[j] ~ /^[[:space:]]*#\[/) { run = j; i = j }
+                            break
+                        }
+                    }
+                    if (run == i) { continue }
+                }
                 break
             }
             slice = (D > 20) ? D - 20 : 1
@@ -1998,7 +2049,38 @@ while IFS= read -r f; do
             # so <2 means body never references it.
             _count=$(echo "${_body}" | grep -cF "${_param}")
             if [ "${_count}" -lt 2 ]; then
-                echo "${f}:${_line_no} method=${_method} rule=caller-identity-ignored param=${_param}" >> "${_stub_log}"
+                # A CONTRACT-IMPOSED PARAMETER THE AUTHOR MARKED UNUSED IS NOT A
+                # STUB (.github#339).
+                #
+                # An unused caller identity is a defect when the author chose the
+                # signature and forgot the check (decidesk#45). It is NOT a defect
+                # when a supertype chose the signature and this implementor has no
+                # business consulting the caller — a strategy/guard/handler
+                # interface that passes the caller to implementors that do not all
+                # need it is a normal shape. Measured on procest: all 3 findings
+                # implement GuardEvaluatorInterface::evaluate(..., string $userId),
+                # which RoleGuard and MandaatGuard genuinely use. Deleting the
+                # parameter breaks the interface and every call site; referencing
+                # it pointlessly is dead code written to satisfy a stub detector.
+                # Neither is a fix, so the finding had no closing action.
+                #
+                # The helper exempts ONLY when BOTH hold: a supertype resolvable
+                # in this repo declares the same method with the same parameter
+                # (mechanical — an invented method cannot acquire one from a
+                # docblock), AND the method docblock's @param line for THAT
+                # parameter carries an explicit unused marker. Either alone still
+                # reports. Fail-closed: a missing helper, an unreadable file or an
+                # unresolvable supertype all leave the finding standing.
+                _ci_exempt=1
+                _ci_helper="${SCRIPT_DIR}/lib/check_caller_identity_exempt.py"
+                if [ -f "${_ci_helper}" ]; then
+                    python3 "${_ci_helper}" --root . --file "$f" --line "${_line_no}" \
+                        --method "${_method}" --param "${_param}" 2>>"${HYDRA_GATE_LOG_DIR}/hydra-gate-stub-scan.err"
+                    _ci_exempt=$?
+                fi
+                if [ "${_ci_exempt}" -ne 0 ]; then
+                    echo "${f}:${_line_no} method=${_method} rule=caller-identity-ignored param=${_param}" >> "${_stub_log}"
+                fi
             fi
         done
 done < <(_enum_tracked '\.php$' lib/Service lib/Controller)
@@ -2980,20 +3062,36 @@ if [ -d src ]; then
         # kept and the status is read, so a broken interpreter reports `wiring`
         # rather than leaving an empty log this gate would call clean.
         set +e
-        python3 - "${vue}" <<'PYMI' >> "${_mi_log}" 2>>"${_mi_log}.err"
+        python3 - "${SCRIPT_DIR}/lib" "${vue}" <<'PYMI' >> "${_mi_log}" 2>>"${_mi_log}.err"
 import re, sys
-fname = sys.argv[1]
+sys.path.insert(0, sys.argv[1])
+from source_scope import vue_markup_mask     # a missing lib is a CRASH, not a pass
+fname = sys.argv[2]
 try:
     src = open(fname, encoding='utf-8', errors='replace').read()
 except Exception:
     sys.exit(0)
 
-# HTML comments in the template, block and line comments in <script>.
-# `(?<![:\w])` keeps the `//` of a `https://` URL from blanking the rest of
-# the line — the same trap gate-45 hit on `url(https://…)`.
-src = re.sub(r'<!--.*?-->', lambda m: re.sub(r'[^\n]', ' ', m.group(0)), src, flags=re.DOTALL)
-src = re.sub(r'/\*.*?\*/', lambda m: re.sub(r'[^\n]', ' ', m.group(0)), src, flags=re.DOTALL)
-src = re.sub(r'(?<![:\w])//[^\n]*', lambda m: ' ' * len(m.group(0)), src)
+# THE SCOPE IS THE RENDERED TEMPLATE (#424).
+#
+# This block used to blank three comment classes with its own re.sub calls and
+# then search the WHOLE FILE. Two things were wrong with that:
+#
+#   * a fourth private comment dialect, drifting from source_scope — and its
+#     `<!--.*?-->` carried the delimiter hole #424 group 2 is about, so
+#     `{{ '<!--' }}` … `{{ '-->' }}` blanked the template between them.
+#   * no string awareness at all, so
+#         const help = 'use <NcDialog> for confirmations'
+#     in <script> reported `1 file(s) with inline modal/dialog`. The gate that
+#     asks you to extract a modal was closable — and openable — by prose.
+#
+# `vue_markup_mask` answers exactly the question this rule asks: what does the
+# SFC RENDER? <script> and <style> are blanked whole, so a string or a JSDoc
+# there is out of scope by construction rather than by a third regex; HTML
+# comments inside the template go with them. This does not weaken the rule:
+# an INLINE modal is by definition written in the template, so no real finding
+# lives in the regions now excluded.
+src = vue_markup_mask(src)
 
 # The delimiter set, PLUS end-of-line and any other whitespace. A lookahead
 # rather than a consuming class so the boundary is asserted without being
@@ -4459,7 +4557,49 @@ _parity_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-integration-parity.log
 # any leaves at all.
 _parity_has_php=0
 _parity_has_js=0
-if [ -d lib ] && grep -rqE 'new[[:space:]]+LeafDescriptor[[:space:]]*\(' lib/ --include='*.php' 2>/dev/null; then
+# A COMMENT MUST NOT MANUFACTURE A CLASSIFICATION (#415/#423).
+#
+# Both probes below were raw `grep -r`, and their answer decides whether an
+# absent wrapper is reported as `na` (no subject matter, not counted) or as
+# `structural` (a real gap, counted against coverage). Two comments —
+#
+#     // TODO: one day we could do `new LeafDescriptor(...)` here
+#     // We used to call registerIntegration({...}); removed in 2.4
+#
+# flipped `NOT APPLICABLE` to `SKIPPED (structural)`, and the run's
+# `--require-full-coverage` exit went 5 -> 6 on the same tree. Not a red
+# gate; a fabricated gap, in the arithmetic that decides whether the fleet's
+# coverage is believed.
+#
+# `_parity_code` finds candidates with grep (fast, and it opens the whole
+# tree) and then re-asks the question on the file's CODE. The masks are the
+# shared, offset-preserving ones. A file type with no mask is judged RAW —
+# which is the pre-#423 behaviour and errs towards `structural`, the
+# stricter side — and `.vue` is deliberately in that set: masking an SFC
+# routes through the `<!-- … -->` handling #424 is repairing, and a hole
+# there would let a comment REMOVE a real registration from the count. Same
+# for a mask that fails to run: the raw answer stands.
+_parity_code() {  # <file> — the file's code, or its raw text if unmaskable
+    case "$1" in
+        *.php) python3 "${SCRIPT_DIR}/lib/source_scope.py" --mask php "$1" 2>/dev/null || cat "$1" ;;
+        *.js|*.ts|*.mjs|*.cjs|*.jsx|*.tsx)
+               python3 "${SCRIPT_DIR}/lib/source_scope.py" --mask js-comments "$1" 2>/dev/null || cat "$1" ;;
+        *)     cat "$1" ;;
+    esac
+}
+_parity_probe() {  # <dir> <extended-regex> <find-args...> — 0 when a CODE line matches
+    local _dir="$1" _rx="$2"; shift 2
+    local _cand
+    while IFS= read -r _cand; do
+        [ -z "${_cand}" ] && continue
+        [ -f "${_cand}" ] || continue
+        if _parity_code "${_cand}" | grep -qE "${_rx}" 2>/dev/null; then
+            return 0
+        fi
+    done < <(grep -rlE "${_rx}" "${_dir}" "$@" 2>/dev/null)
+    return 1
+}
+if [ -d lib ] && _parity_probe lib/ 'new[[:space:]]+LeafDescriptor[[:space:]]*\(' --include='*.php'; then
     _parity_has_php=1
 fi
 # THE JS PROBE MUST MATCH BOTH SUPPORTED REGISTRATION APIs, NOT ONE.
@@ -4489,7 +4629,7 @@ fi
 #
 # `integrations\.register` cannot collide with `unregister(` (the qualifier is
 # part of the match) nor with `registerIntegrationIcons(` (the `\(` anchors it).
-if [ -d src ] && grep -rqE '\b(registerIntegration|integrations\.register)[[:space:]]*\(' src/ 2>/dev/null; then
+if [ -d src ] && _parity_probe src/ '\b(registerIntegration|integrations\.register)[[:space:]]*\('; then
     _parity_has_js=1
 fi
 if [ ! -f scripts/check-integration-parity.sh ]; then
@@ -6853,6 +6993,48 @@ if _a11y_has_style_dir; then
     #
     # Fails CLOSED: any error leaves the flag at 0, i.e. more findings, never
     # fewer. A crashed pre-pass must not manufacture a global exemption.
+    #
+    # A COMMENTED-OUT RESET IS NOT A RESET (.github#421) — AND THIS IS THE
+    # WORST PLACE IN THE PACKAGE TO GET THAT WRONG.
+    #
+    # The per-file checker below already masks comments before it looks for
+    # motion or for a guard (`_mask_comments`, #294). This pre-pass did not:
+    # it grepped `UNIVERSAL` over raw file text. So the two halves of one gate
+    # disagreed about what a comment is, and the careless half ran first.
+    #
+    # The consequence is not one missed finding. The flag it sets makes the
+    # per-file checker `sys.exit(0)` on EVERY file in the repository, so ONE
+    # comment in ONE stylesheet anywhere in the tree silenced gate-45 for the
+    # whole app — and the comment that did it is the one an author writes
+    # while acknowledging the debt:
+    #
+    #     /* TODO(a11y): we still need
+    #          @media (prefers-reduced-motion: reduce) { *, *::before … }
+    #        Not done yet — tracked in #999. */
+    #
+    # Measured 2026-08-13, one fixture, one variable — a css/motion.css with
+    # two real unguarded motion declarations, plus a css/reset.css whose only
+    # universal reset is inside that comment:
+    #
+    #   comment present            PASS                          <- the defect
+    #   the same tree, comment deleted
+    #                              FAIL — 1 stylesheet with motion
+    #   a REAL universal reset in reset.css
+    #                              PASS   <- the positive control: the pre-pass
+    #                                        does set the flag on real CSS, so
+    #                                        the arm above means something
+    #
+    # ⚠️ THE MASK MUST EAT COMMENTS, NOT CSS. A mask that swallowed a rule
+    # would turn this gate from "silenceable" into "always red" — the fix
+    # over-applied — which is why the third arm is pinned in
+    # test_gate_45_stylesheet_scope.sh alongside the first two.
+    #
+    # Character for character the same masking as `_mask_comments` in the
+    # PYRM heredoc below, including the `(?<!:)` that keeps the `//` of a
+    # `url(https://…)` out of the SCSS arm. The two copies are pinned
+    # together by the drift arm in test_gate_45_stylesheet_scope.sh: they are
+    # separate `python3` invocations and cannot share a function, so the test
+    # is what stops them diverging again.
     _rm_global=0
     if [ -n "$(_a11y_style_files)" ]; then
         _rm_global=$(_a11y_style_files | python3 -c '
@@ -6860,16 +7042,24 @@ import re, sys
 UNIVERSAL = re.compile(
     r"@media[^{]*prefers-reduced-motion[^{]*\{(?:[^{}]|\{[^{}]*\})*?(?<![\w.#\[-])\*",
     re.IGNORECASE | re.DOTALL)
+
+def _mask_comments(text, scss):
+    text = re.sub(r"/\*.*?\*/", lambda m: re.sub(r"[^\n]", " ", m.group(0)), text, flags=re.DOTALL)
+    if scss:
+        text = re.sub(r"(?<!:)//[^\n]*", lambda m: " " * len(m.group(0)), text)
+    return text
+
 for line in sys.stdin:
     p = line.strip()
     if not p:
         continue
     try:
-        if UNIVERSAL.search(open(p, encoding="utf-8", errors="replace").read()):
-            print(1)
-            break
+        raw = open(p, encoding="utf-8", errors="replace").read()
     except Exception:
         continue
+    if UNIVERSAL.search(_mask_comments(raw, not p.lower().endswith(".css"))):
+        print(1)
+        break
 else:
     print(0)
 ' 2>>"${_rm_log}.err" || echo 0)
@@ -7364,9 +7554,37 @@ except ImportError:
 base = sys.argv[1]
 SIGNAL = re.compile(r'OCS-APIRequest|requesttoken|@nextcloud/axios|getRequestToken',
                     re.IGNORECASE)
+# `:(glob)` IS LOAD-BEARING — WITHOUT IT `src/**/*.js` CANNOT SEE `src/thing.js`
+# (.github#428).
+#
+# In a PLAIN git pathspec there is no `**` operator: it is two ordinary `*`s,
+# and a plain `*` MATCHES `/`. So `src/**/*.js` reads as "src/, then anything,
+# then /, then anything, then .js" — it REQUIRES at least one directory below
+# src/, and every file sitting at `src/foo.js` was invisible to this scan.
+#
+# Reproduced 2026-08-13, one repo, one commit dropping #[NoCSRFRequired], one
+# JS file, nothing varying but its path:
+#
+#   git diff --name-only HEAD~1...HEAD
+#     lib/Controller/ThingController.php
+#     src/thing.js
+#   git diff --name-only HEAD~1...HEAD -- 'src/**/*.js'            -> (empty)
+#   git diff --name-only HEAD~1...HEAD -- ':(glob)src/**/*.js'     -> src/thing.js
+#
+# With `:(glob)` magic, `**` means "zero or more directory components" and a
+# single `*` no longer crosses `/`, so the glob matches `src/thing.js` AND
+# `src/sub/thing.js` AND `src/a/b/c.js`. It is a strict superset of the old
+# spelling: nothing that matched before stops matching.
+#
+# DIRECTION: this can only ADD signals, i.e. it can only move a run from the
+# conservative caller-state branch to the "a signal was added" branch. It was
+# never letting a CSRF removal through — a missed signal made the count 0,
+# which routes to check_csrf_callers.py — but it made the count a FLOOR rather
+# than a count, and the NOTE this gate prints about the frontend diff could be
+# wrong about what it had read.
 out = subprocess.run(
     ['git', 'diff', '-U0', f'{base}...HEAD', '--',
-     'src/**/*.vue', 'src/**/*.js', 'src/**/*.ts'],
+     ':(glob)src/**/*.vue', ':(glob)src/**/*.js', ':(glob)src/**/*.ts'],
     capture_output=True, text=True, check=False).stdout
 added, path = {}, None
 hunk = re.compile(r'^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@')
@@ -7803,10 +8021,12 @@ _scfm_rc=0
 if [ "${#_scfm_files[@]}" -gt 0 ]; then
     # A CRASHED CHECKER MUST NOT REPORT PASS (#147 / #249 / #262).
     set +e
-    python3 - "${_scfm_log}" "${_scfm_files[@]}" 2>>"${_scfm_log}.err" << 'PY'
+    python3 - "${SCRIPT_DIR}/lib" "${_scfm_log}" "${_scfm_files[@]}" 2>>"${_scfm_log}.err" << 'PY'
 import re, sys
-log_path = sys.argv[1]
-files = sys.argv[2:]
+sys.path.insert(0, sys.argv[1])
+from source_scope import php_mask           # a missing lib is a CRASH, not a pass
+log_path = sys.argv[2]
+files = sys.argv[3:]
 SEC_KEY = re.compile(
     # FIRST ARGUMENT: THE APP ID, IN ANY FORM.
     #
@@ -7960,49 +8180,116 @@ _ARRAY_VALUE = re.compile(
 # a line number.
 #
 # STRING-SAFE, not a naive split: `'https://x'` must not truncate the line,
-# and `#[PublicPage]` is a PHP 8 attribute, not a comment. Quote state is
-# reset per line, so an unterminated literal (a heredoc body) can corrupt at
-# most its own line rather than the rest of the file.
-def _strip_php_comments(raw_lines):
-    out, in_block = [], False
-    for line in raw_lines:
-        buf, i, n, quote = [], 0, len(line), None
+# and `#[PublicPage]` is a PHP 8 attribute, not a comment.
+#
+# THE FOURTH DIALECT IS GONE (#424, over #420 and #429). Every property this
+# block needs is `source_scope.php_mask`'s contract, and #420 shipped a
+# hand-rolled `_strip_php_comments` beside it anyway — a fourth definition of
+# "where does a PHP comment start" next to `php_mask`,
+# `check_apphost_autoload_prelude.strip_comments` and
+# `check_no_admin_idor._strip_strings_and_comments`. Four copies of one rule
+# is four chances to drift, and every gate in this package that drifted did so
+# in BOTH directions at once.
+#
+# #429 then grew that private copy rather than the library: it added HEREDOC
+# handling and a `for_structure=True` mode for the brace walk below. Both were
+# right and neither belonged here, so both moved INTO `php_mask`:
+#
+#   php_mask(src)                      guard-search text — comments blanked,
+#                                      string and heredoc CONTENTS kept.
+#   php_mask(src, blank_strings=True)  structural text — contents blanked too,
+#                                      which is what `_method_spans` walks.
+#
+# Deleting the private copy without moving its heredoc handling first would
+# have been a silent capability loss dressed as a cleanup, which is the shape
+# this whole programme exists to stop.
+#
+# `for_structure=True`'s successor is `php_mask(..., blank_strings=True)`. It
+# keeps the quotes and the line count, and that copy is only ever brace-walked
+# (see _method_spans), never searched for a guard, so no guard vocabulary
+# changes meaning: `$fmt = '{';` and a `<<<SQL … {$x} … SQL;` body must not
+# mis-balance a walk, but `throw new` inside a heredoc must not stop being
+# whatever it already was to the window search.
+# THE WINDOW MUST NOT CROSS INTO THE NEXT METHOD (#429).
+#
+# The window is "eleven lines of code following the read", counted over the
+# FILE, with no notion of where the method ends. A guard belonging to a
+# DIFFERENT method therefore cleared an unguarded read in the method above it.
+#
+# Reproduced 2026-08-13 on c26f9a3, one file, one variable — an unguarded
+# `api_token` read in `readToken()` with an ordinary guarded read in the next
+# method five code lines below:
+#
+#   both methods present   PASS                                <- the defect
+#   delete readRegister()
+#   and nothing else       FAIL — 1, naming api_token at :6    <- the control
+#
+# #420 changed the window's BUDGET (comments no longer spend it) but not its
+# EXTENT, so that fix moved this defect closer rather than away: blanking
+# comments means real code lines from the next method arrive inside the
+# window sooner.
+#
+# It is also order-dependent in a way nobody can see while reading — moving a
+# method, or adding one below, changes the verdict for a method whose body did
+# not change.
+#
+# `_method_spans` is the brace walk gate-49's checker already runs over masked
+# text, kept local here so gate-50 gains no new import and no new wiring
+# failure mode. It walks the `for_structure` copy for the reason gate-49 gives:
+# a `{` inside a comment or a string does not mis-balance a walk loudly, it
+# silently attributes the wrong span of code to the method.
+#
+# FAILS IN THE LOOSE DIRECTION. If the walk never balances (an unterminated
+# body, a heredoc shape this stripper does not know) the span runs to EOF and
+# the window is exactly what it was before this change — a false NEGATIVE at
+# worst, never a finding at a line where no guard could be written.
+_METHOD_DECL = re.compile(r'\bfunction\s+(?P<name>\w+)\s*\(')
+
+
+def _method_spans(text):
+    """[(start_line, end_line, name)] for every NAMED function in *text*.
+
+    Anonymous closures (`function ($x) {`) and arrow functions are deliberately
+    not boundaries: they are written INSIDE a method, and treating one as a new
+    method would clip a window in the middle of the body it belongs to.
+    """
+    spans, n = [], len(text)
+    for m in _METHOD_DECL.finditer(text):
+        p = text.find('(', m.start())
+        if p < 0:
+            continue
+        depth, i = 0, p
         while i < n:
-            c = line[i]
-            if in_block:
-                if c == '*' and i + 1 < n and line[i + 1] == '/':
-                    in_block = False
-                    i += 2
-                    continue
-                i += 1
-                continue
-            if quote is not None:
-                buf.append(c)
-                if c == '\\' and i + 1 < n:
-                    buf.append(line[i + 1])
-                    i += 2
-                    continue
-                if c == quote:
-                    quote = None
-                i += 1
-                continue
-            if c in ('"', "'"):
-                quote = c
-                buf.append(c)
-                i += 1
-                continue
-            if c == '/' and i + 1 < n and line[i + 1] == '/':
-                break
-            if c == '/' and i + 1 < n and line[i + 1] == '*':
-                in_block = True
-                i += 2
-                continue
-            if c == '#' and not (i + 1 < n and line[i + 1] == '['):
-                break
-            buf.append(c)
+            if text[i] == '(':
+                depth += 1
+            elif text[i] == ')':
+                depth -= 1
+                if depth == 0:
+                    break
             i += 1
-        out.append(''.join(buf).rstrip('\n'))
-    return out
+        if i >= n:
+            continue
+        j = i + 1
+        while j < n and text[j] not in '{;':
+            j += 1
+        start_line = text[:m.start()].count('\n') + 1
+        if j >= n or text[j] == ';':
+            # An abstract/interface declaration has no body; its span is the
+            # declaration itself, so nothing is ever clipped INTO it.
+            spans.append((start_line, text[:min(j, n - 1)].count('\n') + 1, m.group('name')))
+            continue
+        depth, k = 0, j
+        while k < n:
+            if text[k] == '{':
+                depth += 1
+            elif text[k] == '}':
+                depth -= 1
+                if depth == 0:
+                    break
+            k += 1
+        end_line = text[:k].count('\n') + 1 if k < n else text.count('\n') + 1
+        spans.append((start_line, end_line, m.group('name')))
+    return spans
 
 
 notes_path = log_path + '.notes'
@@ -8013,8 +8300,12 @@ for fp in files:
             lines = f.readlines()
     except OSError:
         continue
-    code_lines = _strip_php_comments(lines)
     src = ''.join(lines)
+    # Offsets and line count survive both masks, so `code_lines[n - 1]` is
+    # still line n of the file — which is what the window below indexes with,
+    # and what `_method_spans` reports its boundaries in.
+    code_lines = php_mask(src).split('\n')
+    _spans = _method_spans(php_mask(src, blank_strings=True))
     for m in SEC_KEY.finditer(src):
         # Find the line number of the match
         lineno = src[:m.start()].count('\n') + 1
@@ -8066,8 +8357,21 @@ for fp in files:
         # Blank and comment-only lines no longer spend it, and the text
         # searched below is comment-stripped, so a comment can neither push a
         # guard out of range nor stand in for one.
+        #
+        # …AND THE EXTENT IS THE ENCLOSING METHOD, NOT THE FILE (#429).
+        # A guard in the NEXT method is not this read's guard. The innermost
+        # span containing the read wins, so a named function nested inside
+        # another clips to itself rather than to its host. A read that belongs
+        # to no span (a property initialiser, or a walk that never balanced)
+        # keeps the pre-#429 extent — the loose direction.
+        _limit, _encl = len(code_lines), None
+        for _s, _e, _nm in _spans:
+            if _s <= lineno <= _e and (_encl is None or _s > _encl[0]):
+                _encl = (_s, _e, _nm)
+        if _encl is not None:
+            _limit = min(_limit, _encl[1])
         _budget, _win, _i = 11, [], _end_line - 1
-        while _i < len(code_lines) and _budget > 0:
+        while _i < _limit and _budget > 0:
             _win.append(code_lines[_i])
             if code_lines[_i].strip():
                 _budget -= 1
@@ -8123,7 +8427,11 @@ for fp in files:
                             f"consumer of the assembled array.\n")
                 continue
             with open(log_path, 'a', encoding='utf-8') as g:
-                g.write(f"{fp}:{lineno}: security-relevant config read of \"{m.group('key')}\" has no fail-mode guard within 10 lines\n")
+                # NAME THE METHOD THE WINDOW WAS CLIPPED TO (#429). Without it
+                # the reader cannot tell "unguarded" from "the guard is just
+                # out of range", which is the question the clip decides.
+                _where = f" inside {_encl[2]}()" if _encl is not None else ""
+                g.write(f"{fp}:{lineno}: security-relevant config read of \"{m.group('key')}\" has no fail-mode guard within 10 lines{_where}\n")
 PY
     _scfm_rc=$?
 fi

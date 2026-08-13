@@ -197,6 +197,103 @@ class LicenceIdentifiersAsTestData(unittest.TestCase):
                          ["license-triangle-drift"])
 
 
+class ASentenceThatBeginsWithTheTagIsNotADeclaration(unittest.TestCase):
+    """#415/#423 — the anchor knew what may PRECEDE the tag, not what follows.
+
+    So a docblock line explaining a licence the file does NOT use scored as a
+    second declaration, and one clean header produced both
+    `license-internal-conflict` and `license-triangle-drift`.
+
+    T1, T5 and T6 are CONTROLS and pass both before and after. T5 is the one
+    that matters: the fleet's own header is `@license EUPL-1.2 <url>`, 2,724
+    files of it, so "nothing may follow the identifier" would have been a fix
+    that silenced the gate on its main subject.
+    """
+
+    HEADER = "<?php\n/**\n * Thing service.\n *\n * @license EUPL-1.2\n%s */\nclass Thing {}\n"
+
+    def test_T1_control_a_real_second_licence_is_still_a_conflict(self):
+        rules = _rules(_scan(self.HEADER % " * @license MIT\n"))
+        self.assertIn("license-internal-conflict", rules)
+        self.assertIn("license-triangle-drift", rules)
+
+    def test_T2_a_sentence_beginning_with_the_tag_is_not_a_declaration(self):
+        body = self.HEADER % (
+            " * @license MIT was never used here — see the note above.\n")
+        self.assertEqual(_scan(body), [])
+
+    def test_T3_the_prose_line_alone_declares_nothing(self):
+        self.assertEqual(
+            clt.declarations(
+                "<?php\n// @license Apache-2.0 was considered and rejected.\n"),
+            [],
+        )
+
+    def test_T4_mid_sentence_mentions_were_already_clean(self):
+        # A CONTROL for the anchor that already existed — it passes both ways
+        # and is here so a later widening of the tail rule cannot be mistaken
+        # for this one working.
+        self.assertEqual(
+            _scan(self.HEADER % (
+                " * We were asked whether the @license MIT applies. It does not.\n")),
+            [],
+        )
+
+    def test_T5_control_the_fleet_header_carries_a_url_and_still_declares(self):
+        body = (
+            "<?php\n/**\n"
+            " * @license EUPL-1.2 https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12\n"
+            " */\nclass Thing {}\n"
+        )
+        self.assertEqual(clt.declarations(body), ["EUPL-1.2"])
+        self.assertEqual(_scan(body), [])
+        self.assertEqual(clt.declared_file_count.__name__, "declared_file_count")
+
+    def test_T6_control_a_drifted_header_with_a_url_still_drifts(self):
+        body = (
+            "<?php\n/**\n"
+            " * @license MIT https://opensource.org/licenses/MIT\n"
+            " */\nclass Thing {}\n"
+        )
+        self.assertEqual(_rules(_scan(body)), ["license-triangle-drift"])
+
+    def test_T7_control_a_trailing_comment_terminator_still_declares(self):
+        self.assertEqual(
+            clt.declarations("<?php\n/** @license EUPL-1.2 */\n"), ["EUPL-1.2"])
+
+    def test_T9_the_tail_rule_is_linear_not_exponential(self):
+        """The first cut of the tail rule was a ReDoS (CodeQL py/redos, HIGH).
+
+        `\\S+` inside a starred alternation is ambiguous with itself, so a
+        repeated URL followed by one byte that cannot match had exponentially
+        many splits to try. Measured on the old pattern: n=24 -> 6.7s,
+        n=26 -> 26.2s, n=28 -> over 60s, on a 254-CHARACTER line. gate-28
+        reads every tracked lib/**/*.php, so that is CI hanging on a header.
+
+        The bound is 5s against a true cost of ~0.00003s — three orders of
+        magnitude of headroom, so this is a shape assertion and not a
+        benchmark that a loaded runner can flake.
+        """
+        import time
+
+        subject = "https://a" * 60 + " \x01"
+        start = time.monotonic()
+        self.assertFalse(clt._decl_tail_ok(subject))
+        self.assertLess(time.monotonic() - start, 5.0)
+
+    def test_T8_control_a_url_first_header_keeps_its_malfunction_report(self):
+        # 11 files in the fleet write `@license <url> GNU AGPL v3 or later`.
+        # Their identifier is path-shaped, so `_looks_like_a_path` reports a
+        # PARSER MALFUNCTION — a diagnostic this change must not silence, and
+        # the reason the tail rule is skipped for path-shaped values.
+        body = (
+            "<?php\n/**\n"
+            " * @license https://www.gnu.org/licenses/agpl-3.0.html GNU AGPL v3 or later\n"
+            " */\nclass Thing {}\n"
+        )
+        self.assertIn("license-value-is-a-path", _rules(_scan(body)))
+
+
 class GateIsNotBlind(unittest.TestCase):
     """A direct floor. If `declarations()` ever returns nothing — a regex
     that stops matching, a read that silently fails — every `assertEqual([])`

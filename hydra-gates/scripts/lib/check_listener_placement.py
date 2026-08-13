@@ -81,6 +81,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from source_scope import php_mask  # noqa: E402
+
 GATE_NUM = 61
 
 # The three POST events. A listener on one of these cannot influence the write,
@@ -293,9 +296,28 @@ def parse_registrations(path: Path) -> list[dict]:
     Each entry: {'event', 'listener', 'start_line', 'end_line'}.
     """
     try:
-        text = path.read_text(encoding='utf-8', errors='replace')
+        raw = path.read_text(encoding='utf-8', errors='replace')
     except OSError:
         return []
+
+    # A COMMENT MUST NOT MANUFACTURE A FINDING (#415/#423).
+    #
+    # This function read the RAW file, so a registration that exists ONLY as
+    # a commented-out line was parsed as a live one:
+    #
+    #     // Removed 2026-08: SyncListener did its HTTP work inline, so the
+    #     // listener and its registration both went:
+    #     // $context->registerEventListener(ObjectCreatedEvent::class,
+    #     //                                 SyncListener::class);
+    #
+    # produced `FAIL … ObjectCreatedEvent -> SyncListener — no class file
+    # found under lib/`. Nothing is wired; the listener was DELETED, and the
+    # gate reported the deletion as a broken registration. The author's
+    # cheapest fix is to delete the explanation of the deletion.
+    #
+    # `_strip_comments` is offset-preserving, so `text.count('\\n', 0, …)`
+    # below still yields the line number the finding reports.
+    text = _strip_comments(raw)
 
     # Post events named anywhere in the file — used to attribute a registration
     # whose event argument is a variable (see the foreach case below).
@@ -470,11 +492,28 @@ def classify_annotation(block: list[str]) -> tuple[str, str | None]:
 
 
 def _strip_comments(text: str) -> str:
-    """Blank out comments so a signal named only in prose is not a finding."""
-    text = re.sub(r'/\*.*?\*/', '', text, flags=re.DOTALL)
-    text = re.sub(r'(?m)//.*$', '', text)
-    text = re.sub(r'(?m)^\s*#(?!\[).*$', '', text)
-    return text
+    """Blank out comments so a signal named only in prose is not a finding.
+
+    Delegates to ``source_scope.php_mask`` (#415/#423) instead of the three
+    regexes that used to live here. Three concrete differences, each of which
+    was a defect:
+
+      * it is OFFSET-PRESERVING — comments are blanked, not deleted — so the
+        result can be searched interchangeably with the raw text and a line
+        number computed on it still names the right line. The old version
+        shortened the string, which is why it could not be used by
+        :func:`parse_registrations`, which needs line numbers;
+      * it is STRING-AWARE, so a `//` inside `'https://example.org/hook'`
+        does not truncate the line and delete the very call the gate is
+        looking for;
+      * it knows a TRAILING `#` opens a comment (the old `^\\s*#` only saw
+        one at the start of a line) and that `#[` opens a PHP 8 attribute.
+
+    String CONTENTS are kept (``blank_strings`` at its default): the URL in
+    an inline `->post('https://…')` and the class name in a `class_exists()`
+    are evidence about code, and blanking them would delete it.
+    """
+    return php_mask(text)
 
 
 def scan_body(text: str) -> list[tuple[str, str]]:
