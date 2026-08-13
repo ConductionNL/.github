@@ -92,6 +92,31 @@ class LedgerController extends Controller {
 	}
 
 	/**
+	 * ARM 4 — THE ABUSE CONTROL FOR `ConductionNL/.github#414`.
+	 *
+	 * `#414` normalises a leading `(string)` cast away before an expression is
+	 * classified as the caller's identity, so that the clean arm's
+	 * `handoffCastIdentity()` stops being a false positive. This method is the
+	 * shape that normalisation must NOT clear: the cast sits on a value the
+	 * CALLER chose, whose name merely happens to contain "uid".
+	 *
+	 * Without it, "strip the cast, then classify" would route `(string)$targetUid`
+	 * past the declared-parameter veto — `_IDENTITY_TOKEN_RE` matches "uid" —
+	 * and every endpoint that takes someone else's user id as a parameter would
+	 * go silent. That is a false NEGATIVE on a security gate, which leaves no
+	 * log to notice.
+	 *
+	 * No session value reaches the lookup here. It must report in both
+	 * directions, before and after `#414`.
+	 */
+	#[NoAdminRequired]
+	public function castCallerValue(string $entryId, string $targetUid): JSONResponse {
+		return new JSONResponse(
+			$this->ledger->findOwned(entryId: $entryId, userId: (string)$targetUid)
+		);
+	}
+
+	/**
 	 * NOT planted — a real per-object ownership check. Keeps the planted arm
 	 * from being uniformly guilty.
 	 */

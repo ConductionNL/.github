@@ -114,6 +114,58 @@ class LedgerController extends Controller {
 		return new JSONResponse($this->ledger->findOwned(entryId: $entryId, userId: $userId));
 	}
 
+	/**
+	 * Shape 5 — THE SAME HAND-OFF, SPELLED WITH A CAST
+	 * (`ConductionNL/.github#414`).
+	 *
+	 * `handoff()` above and this method are the same guard. The only
+	 * difference is `(string)` on the identity, and until `#414` that one
+	 * token moved the verdict: Pattern 6's identity recogniser rejects "any
+	 * call with arguments" with `\(\s*[^)\s]`, and a cast is written with
+	 * exactly those bytes.
+	 *
+	 * IT BELONGS IN THE CLEAN ARM BECAUSE IT WAS A FALSE POSITIVE WHOSE
+	 * RECOMMENDED REPAIR WAS WRONG. gate-7's FAIL text says "scope the object
+	 * to the caller"; the object already was. Following the guidance means
+	 * adding a redundant guard to an endpoint that already had one — and then
+	 * believing the gate about it.
+	 *
+	 * The cast is not an odd spelling either: `IUser::getUID()` carries no PHP
+	 * return type, only `@return string`, so Psalm and PHPStan actively
+	 * encourage writing it. The gate and the analysers pulled in opposite
+	 * directions on the same line.
+	 */
+	#[NoAdminRequired]
+	public function handoffCastIdentity(string $entryId): JSONResponse {
+		$user = $this->userSession->getUser();
+		if ($user === null) {
+			return new JSONResponse(['error' => 'Unauthorized'], Http::STATUS_UNAUTHORIZED);
+		}
+		return new JSONResponse(
+			$this->ledger->findOwned(entryId: $entryId, userId: (string)$user->getUID())
+		);
+	}
+
+	/**
+	 * Shape 6 — the same cast, hoisted into a LOCAL.
+	 *
+	 * This arm exists because it was the one whose failure was not predicted.
+	 * "Hoist it into a variable" is the obvious workaround for shape 5, and it
+	 * did not work: the cast defeated the recogniser through the local trace
+	 * too, because `_session_identity_names()` classifies the assignment's
+	 * right-hand side with the same predicate. A fix that normalises only the
+	 * argument position passes shape 5 and still fails here.
+	 */
+	#[NoAdminRequired]
+	public function handoffCastLocal(string $entryId): JSONResponse {
+		$user = $this->userSession->getUser();
+		if ($user === null) {
+			return new JSONResponse(['error' => 'Unauthorized'], Http::STATUS_UNAUTHORIZED);
+		}
+		$uid = (string)$user->getUID();
+		return new JSONResponse($this->ledger->findOwned(entryId: $entryId, userId: $uid));
+	}
+
 	private function sessionUserId(): ?string {
 		$user = $this->userSession->getUser();
 		if ($user === null) {

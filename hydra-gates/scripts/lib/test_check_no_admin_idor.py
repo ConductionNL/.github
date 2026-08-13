@@ -2628,6 +2628,95 @@ class PublicPageScopeTest(unittest.TestCase):
         self.assertEqual(len(out), 1, out)
 
 
+def _cast_arm(body: str, sig: str = "string $appId") -> str:
+    """One `#[NoAdminRequired]` method whose body is given verbatim.
+
+    Unlike `_method()` above, nothing is appended: every `#414` arm differs
+    from its neighbours by ONE TOKEN, so the body has to be the whole variable.
+    """
+    return (
+        "<?php\nclass AppOverrideController {\n"
+        "    #[NoAdminRequired]\n"
+        "    public function getUser(%s): JSONResponse\n    {\n" % sig
+        + body + "    }\n}\n"
+    )
+
+
+class CastOnSessionIdentityTest(unittest.TestCase):
+    """`ConductionNL/.github#414` — a `(string)` cast blinded Pattern 6.
+
+    Control 2 of `_is_identity_expression` rejects "any call with arguments"
+    with `\\(\\s*[^)\\s]`, and a cast is written with exactly those bytes. So
+    the GUARD was unchanged and only its SPELLING moved the verdict — a false
+    positive whose recommended repair (add a guard) was wrong, on an endpoint
+    that already had one.
+    """
+
+    _CAST_ARG = (
+        "        $user = $this->userSession->getUser();\n"
+        "        return new JSONResponse($this->svc->getUserDelta("
+        "appId: $appId, uid: (string)$user->getUID()));\n"
+    )
+    _PLAIN_ARG = (
+        "        $user = $this->userSession->getUser();\n"
+        "        return new JSONResponse($this->svc->getUserDelta("
+        "appId: $appId, uid: $user->getUID()));\n"
+    )
+    _CAST_LOCAL = (
+        "        $user = $this->userSession->getUser();\n"
+        "        $uid = (string)$user->getUID();\n"
+        "        return new JSONResponse($this->svc->getUserDelta("
+        "appId: $appId, uid: $uid));\n"
+    )
+
+    def test_cast_on_the_identity_argument_still_clears(self):
+        """Arm A — the SHIPPED openbuild spelling. FAIL before `#414`."""
+        self.assertEqual(_scan(_cast_arm(self._CAST_ARG)), [])
+
+    def test_uncast_arm_is_the_control(self):
+        """Arm B. It passed before `#414` and after — it is what made the
+        one-token difference visible in the first place."""
+        self.assertEqual(_scan(_cast_arm(self._PLAIN_ARG)), [])
+
+    def test_cast_through_a_local_clears_too(self):
+        """Arm C, the one whose failure was NOT predicted: hoisting into a
+        variable is the obvious workaround and it did not work, because the
+        assignment's right-hand side is classified by the same predicate. A fix
+        that normalises only the argument position leaves this one red."""
+        self.assertEqual(_scan(_cast_arm(self._CAST_LOCAL)), [])
+
+    def test_cast_on_a_caller_supplied_value_is_still_reported(self):
+        """🔑 THE ABUSE CONTROL. Stripping the cast must not route a value the
+        CALLER chose past the declared-parameter veto just because its name
+        contains "uid". This must stay a finding, or `#414` would have turned a
+        false positive into a false NEGATIVE — the direction that leaves no log
+        to notice."""
+        out = _scan(_cast_arm(
+            "        return new JSONResponse($this->svc->getUserDelta("
+            "appId: $appId, uid: (string)$targetUid));\n",
+            sig="string $appId, string $targetUid"))
+        self.assertEqual(len(out), 1, out)
+
+    def test_cast_does_not_make_object_data_an_identity(self):
+        """The subscript control survives the strip: `(string)$row['ownerId']`
+        is the server's data about an object the caller named, not the caller."""
+        self.assertFalse(
+            cni._is_identity_expression("(string)$row['ownerId']"))
+
+    def test_cast_does_not_make_a_predicate_call_an_identity(self):
+        """And so does the argument control: after the cast is removed there is
+        still a real argument list."""
+        self.assertFalse(
+            cni._is_identity_expression("(string)canAccess($id, $uid)"))
+
+    def test_array_and_object_casts_are_not_stripped(self):
+        """`(array)` / `(object)` would launder a payload into an identity, so
+        they are deliberately absent from the cast list."""
+        self.assertEqual(
+            cni._strip_leading_scalar_casts("(array)$user->getUID()"),
+            "(array)$user->getUID()")
+
+
 class HelperGuardEvidenceTest(unittest.TestCase):
     """A gate that can be silenced by a sentence in a comment is not measuring
     the code."""
