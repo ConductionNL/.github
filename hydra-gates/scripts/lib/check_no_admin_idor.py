@@ -164,17 +164,33 @@ _ANY_FUNC_RE = re.compile(
 )
 
 
-def _strip_strings_and_comments(src: str) -> str:
+def _strip_strings_and_comments(src: str, *, keep_strings: bool = False) -> str:
     """Replace string literals and comments with same-length whitespace.
 
     Preserves byte offsets so brace positions in the cleaned string match
     those in the original source.
+
+    With *keep_strings*, string literals and heredocs survive and ONLY the
+    comments go. That is the text guard detection runs against — see
+    ``_guard_source``. The two callers want opposite things and both are
+    right: brace/paren structure must not be confused by a `{` inside a
+    string, while guard EVIDENCE is sometimes an argument that is a string.
     """
     out: list[str] = []
     i = 0
     n = len(src)
     while i < n:
         c = src[i]
+        # `#` comment — but `#[` opens a PHP 8 ATTRIBUTE, and `#[NoAdminRequired]`
+        # is the single token this entire gate is triggered by. Blanking it
+        # would not widen the gate, it would switch it off.
+        if c == "#" and not (i + 1 < n and src[i + 1] == "["):
+            j = src.find("\n", i)
+            if j == -1:
+                j = n
+            out.append(" " * (j - i))
+            i = j
+            continue
         # Single-line comment // …
         if c == "/" and i + 1 < n and src[i + 1] == "/":
             j = src.find("\n", i)
@@ -202,7 +218,7 @@ def _strip_strings_and_comments(src: str) -> str:
                 tail = src[i + m.end():]
                 em = end_pat.search(tail)
                 stop = i + m.end() + (em.end() if em else len(tail))
-                out.append(" " * (stop - i))
+                out.append(src[i:stop] if keep_strings else " " * (stop - i))
                 i = stop
                 continue
         # Single / double quoted string
@@ -217,7 +233,7 @@ def _strip_strings_and_comments(src: str) -> str:
                     j += 1
                     break
                 j += 1
-            out.append(" " * (j - i))
+            out.append(src[i:j] if keep_strings else " " * (j - i))
             i = j
             continue
         out.append(c)
@@ -907,11 +923,43 @@ def _authentication_only_guard_spans(cleaned: str, src: str) -> list:
 
 
 def _blank_authentication_only_guards(cleaned: str, src: str) -> str:
-    """*src* with every authentication-only guard clause blanked out.
+    """*src* with every COMMENT and every authentication-only guard blanked out.
 
     Length-preserving and newline-preserving, so every offset, span and line
     number computed elsewhere in this module stays valid.
+
+    A TODO NAMING THE GUARD IS NOT THE GUARD (#415).
+    ------------------------------------------------
+    The returned text is `gsrc`, and every guard lookup in `scan_file` runs
+    against it. It used to be the RAW source with only the authentication
+    spans removed, so prose in a method body answered "is this endpoint
+    guarded?". Measured through the runner, one fixture, ONE ADDED LINE:
+
+        #[NoAdminRequired] index(int $id) { return $this->service->find($id); }
+          -> FAIL — 1 method(s) with NoAdminRequired + no guard   (correct)
+
+        the same method with
+          `// TODO: throw new OCSForbiddenException when the caller does not
+           own $id.`
+        inserted above the return
+          -> PASS                                                <- the defect
+
+    **This is gate-50's defect in the gate that found 167 real IDORs**, and
+    the sentence that switches it off is the one an author writes while
+    acknowledging the hole. gate-7's known failure mode has always been false
+    POSITIVES, which is exactly why its silences get believed — so a false
+    negative here is the most expensive kind in this package.
+
+    STRING LITERALS ARE KEPT, deliberately, and this is the narrow reading on
+    purpose. A guard's evidence is frequently an argument that IS a string —
+    a scope name, a permission key, a route slug — and blanking literals in a
+    2,800-line checker whose known failure mode is over-reporting would trade
+    a measured false negative for an unmeasured wave of false positives on a
+    gate the fleet already learned to distrust. A guard named only inside a
+    string literal is a separate finding with its own direction; it is not
+    smuggled in behind this one.
     """
+    src = _strip_strings_and_comments(src, keep_strings=True)
     spans = _authentication_only_guard_spans(cleaned, src)
     if not spans:
         return src

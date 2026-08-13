@@ -58,6 +58,9 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from source_scope import script_mask  # noqa: E402
+
 SRC_SUFFIXES = ('.vue', '.js', '.ts', '.mjs', '.cjs')
 SKIP_DIRS = {'node_modules', 'dist', 'build', 'vendor', '.git', 'coverage'}
 
@@ -120,6 +123,40 @@ def unprotected_call_sites(app_dir: str) -> list[str]:
             except OSError:
                 continue
             rel = os.path.relpath(path, app_dir)
+
+            # A COMMENT IS NOT A CSRF TOKEN (#415).
+            # ------------------------------------
+            # Every question below used to be asked of the RAW file, and this
+            # helper's whole job is to make an AFFIRMATIVE claim — "every
+            # mutating call site under src/ already carries a signal" — which
+            # the runner then prints as a NOTE and passes on. So prose here
+            # does not merely hide a finding; it manufactures a green with a
+            # sentence attached saying the code is safe.
+            #
+            # Measured on this helper, one fixture, one variable:
+            #
+            #   fetch(url, { method: 'DELETE', headers: {} })
+            #     -> reported UNPROTECTED, gate-48 FAIL          (correct)
+            #   the same call with
+            #     `// TODO: add the requesttoken header here. Not done yet.`
+            #     INSIDE the init object
+            #     -> reported protected, gate-48 PASS + the NOTE <- the defect
+            #
+            # `NEXTCLOUD_AXIOS_IMPORT` was read the same way, so a
+            # COMMENTED-OUT import silenced every axios.post in the file at
+            # once — one dead line, whole-file amnesty.
+            #
+            # STRING CONTENTS ARE KEPT, deliberately. `script_mask` blanks
+            # comments and leaves literals intact, and that is required
+            # rather than incidental: `'OCS-APIRequest': 'true'` is a header
+            # name that IS a string, and `method: 'DELETE'` is how a mutating
+            # call is recognised at all. Blanking literals here would delete
+            # the evidence in both directions at once — the classic
+            # over-applied fix that turns a repaired gate into a dead one.
+            #
+            # Offsets are preserved by the mask, so the reported line numbers
+            # still address the original file.
+            text = script_mask(text, path)
             uses_nc_axios = bool(NEXTCLOUD_AXIOS_IMPORT.search(text))
 
             # 1. axios.<verb>(...) — protected iff the file imports @nextcloud/axios.

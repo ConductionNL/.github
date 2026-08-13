@@ -7322,8 +7322,79 @@ elif [ "${HAVE_DELTA_BASE}" = "1" ]; then
         # i.e. "no frontend co-change at all" was read as "co-change found" and
         # the gate PASSED. A CSRF-protection removal with no frontend counterpart
         # is precisely what this gate exists to stop, so the bug was fail-OPEN.
-        _csrf_fe_signals=$(git diff "${BASE_REF}...HEAD" -- 'src/**/*.vue' 'src/**/*.js' 'src/**/*.ts' 2>/dev/null \
-            | grep -cE '^\+.*(OCS-APIRequest|requesttoken|@nextcloud/axios|getRequestToken)' 2>/dev/null || true)
+        # THE SIGNAL MUST BE ON A LINE THAT EXECUTES (#415).
+        # ---------------------------------------------------
+        # This was `grep -cE '^\+.*(…)'` over the raw diff, and this file's own
+        # note twenty lines down already named the hole: "the cheapest way to
+        # green would have been a cosmetic edit under src/ containing the word
+        # `requesttoken`: exactly the prose-satisfaction #191 warns against."
+        # It was written as a hypothetical. It was not one — measured, one
+        # fixture, one variable:
+        #
+        #   a diff dropping #[NoCSRFRequired], no frontend change
+        #     -> FAIL — @NoCSRFRequired dropped without frontend co-change
+        #   the same diff, plus ONE added line under src/ reading
+        #     `// TODO: this call still needs a requesttoken header. Not done yet.`
+        #     -> PASS                                            <- the defect
+        #
+        # A CSRF protection was removed and the gate was satisfied by a comment
+        # saying the replacement protection had NOT been added. Worse than a
+        # missed finding: the short-circuit below means the caller-state check
+        # — the mitigation built for exactly this — never runs at all once the
+        # count is non-zero. One comment skips the guard and the guard's backup.
+        #
+        # So the count is taken over the SCRIPT SCOPE of each changed file at
+        # HEAD (comments blanked, string literals kept — `requesttoken` and
+        # `'OCS-APIRequest'` are header names that ARE strings), restricted to
+        # the line numbers this diff actually added. Same question, asked of
+        # code.
+        #
+        # ⚠️ A CRASH HERE MUST NOT BE READ AS ZERO. Zero routes to the
+        # caller-state branch, which is the CONSERVATIVE direction — it can
+        # only add findings, never remove them — so a failure to compute falls
+        # back to 0 deliberately rather than to "signal found".
+        _csrf_fe_signals=$(PYTHONPATH="${_gate_helper_dir}${PYTHONPATH:+:${PYTHONPATH}}" \
+            python3 - "${BASE_REF}" 2>/dev/null <<'PYCSRF' || true
+import re, subprocess, sys
+try:
+    from source_scope import script_mask
+except ImportError:
+    print(0)
+    raise SystemExit(0)
+base = sys.argv[1]
+SIGNAL = re.compile(r'OCS-APIRequest|requesttoken|@nextcloud/axios|getRequestToken',
+                    re.IGNORECASE)
+out = subprocess.run(
+    ['git', 'diff', '-U0', f'{base}...HEAD', '--',
+     'src/**/*.vue', 'src/**/*.js', 'src/**/*.ts'],
+    capture_output=True, text=True, check=False).stdout
+added, path = {}, None
+hunk = re.compile(r'^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@')
+for line in out.splitlines():
+    if line.startswith('+++ b/'):
+        path = line[6:]
+        added.setdefault(path, set())
+    elif line.startswith('+++ /dev/null'):
+        path = None
+    elif line.startswith('@@') and path is not None:
+        m = hunk.match(line)
+        if m:
+            start = int(m.group(1))
+            count = int(m.group(2)) if m.group(2) is not None else 1
+            added[path].update(range(start, start + count))
+count = 0
+for rel, lines in added.items():
+    try:
+        with open(rel, encoding='utf-8', errors='replace') as fh:
+            masked = script_mask(fh.read(), rel).splitlines()
+    except OSError:
+        continue
+    for n in sorted(lines):
+        if 1 <= n <= len(masked) and SIGNAL.search(masked[n - 1]):
+            count += 1
+print(count)
+PYCSRF
+)
         _csrf_fe_signals="${_csrf_fe_signals%%$'\n'*}"
         case "${_csrf_fe_signals}" in ''|*[!0-9]*) _csrf_fe_signals=0 ;; esac
         if [ "${_csrf_fe_signals}" -eq 0 ]; then
@@ -7456,10 +7527,75 @@ if [ "${#_cxt_files[@]}" -gt 0 ]; then
     # of this inline python was never read, so a broken interpreter left an
     # empty log and the gate called every controller clean.
     set +e
+    # PYTHONPATH so the heredoc can import the SHARED mask (lib/source_scope.py)
+    # rather than growing a private copy of it — see the note below the argv
+    # block. `_gate_helper_dir` is the same absolute lib/ that gate-5 already
+    # resolves `source_scope.py` from, so this adds no new packaging assumption.
+    PYTHONPATH="${_gate_helper_dir}${PYTHONPATH:+:${PYTHONPATH}}" \
     python3 - "${_cxt_log}" "${_cxt_files[@]}" 2>>"${_cxt_log}.err" << 'PY'
 import re, sys, os
 log_path = sys.argv[1]
 files = sys.argv[2:]
+
+# A COMMENT MUST NEITHER SATISFY THIS GATE NOR MANUFACTURE A FINDING (#415).
+#
+# This gate asked two questions of the RAW method body — "is there a catch of
+# a tracked exception?" and "does this method call a risky service method?" —
+# and prose is made of the same bytes as code, so a comment answered both.
+# Measured on this gate directly, three fixtures, one variable:
+#
+#   POSITIVE CONTROL  destroy() calling $this->objectService->deleteObject()
+#                     with no try/catch and no @throws
+#                       -> FAIL — 1 controller method(s)          (correct)
+#
+#   FALSE NEGATIVE    the SAME method, with a TODO above the call reading
+#                     "we should catch (DoesNotExistException $e) here and
+#                     translate it to a 404 JSONResponse. Not done yet."
+#                       -> PASS                                   <- the defect
+#                     A comment STATING THE DEBT satisfied the gate that
+#                     exists to collect it. Identical to the shape gate 19 was
+#                     fixed for and gate 50 was fixed for in #415; it was
+#                     never looked for here.
+#
+#   FALSE POSITIVE    index() which calls nothing riskier than
+#                     $this->renderer->toArray(), carrying a comment saying
+#                     "this endpoint used to call
+#                     $this->objectService->deleteObject($id) directly. It no
+#                     longer does."
+#                       -> FAIL — 1 ... names index()             <- the defect
+#                     The removal note scored as the removed call. The better
+#                     the documentation, the redder the repo (#230's shape).
+#
+# Both close by anchoring the body questions on `source_scope.php_mask`, which
+# blanks comments AND string contents while PRESERVING OFFSETS, so a line
+# number computed on the mask still names the right line of the original.
+# `blank_strings=True` is deliberate: neither `catch (` nor `$this->x->y(` is
+# ever legitimately spelled inside a string literal, so an error message that
+# quotes one cannot answer either question.
+#
+# THE DOCBLOCK IS STILL READ FROM THE ORIGINAL TEXT. `@throws` lives in a
+# comment BY DESIGN — it is the author's declaration, not incidental prose —
+# and masking it would delete the only intentional suppression this gate has,
+# turning a false-negative fix into a fleet of false positives. Two questions,
+# two sources, one coordinate system: the mask answers "is this position
+# code?", the original answers "what does the author declare?".
+#
+# NOT A PRIVATE COPY, deliberately. `php_mask` already exists in
+# lib/source_scope.py and already knows that `#[` opens a PHP 8 ATTRIBUTE
+# rather than a comment and that `//` inside `'https://x'` opens nothing.
+# A fourth hand-rolled stripper is how N copies drift.
+try:
+    from source_scope import php_mask
+except ImportError as exc:                       # pragma: no cover - wiring
+    # FAIL CLOSED AND LOUD. Falling back to the raw text would silently
+    # restore the exact defect this import removes, and the gate would print
+    # PASS while doing it. A non-zero exit makes the wrapper say SKIPPED
+    # (wiring) instead, which is a verdict about the run rather than the code.
+    sys.stderr.write(
+        "controller-exception-translation: cannot import source_scope "
+        f"({exc}); refusing to grade raw text.\n"
+    )
+    sys.exit(3)
 # Documented-throw shapes we track — these are known-not-auto-translated by NC's dispatcher.
 TRACKED = [
     'DoesNotExistException',
@@ -7508,14 +7644,32 @@ METHOD_RE = re.compile(
     r'(?P<name>\w+)\s*\([^)]*\)[^{]*\{',
     re.MULTILINE,
 )
-def _method_bodies(src):
+def _method_bodies(src, masked):
+    """Declarations and docblocks from *src*; BODIES from *masked*.
+
+    `masked` is `php_mask(src)` and is the same length, so every offset means
+    the same thing in both. The declaration is matched on the original because
+    `m.group(1)` must be the real docblock text — see the `@throws` note above.
+
+    THE BRACE WALK RUNS ON THE MASK. A `{` or `}` inside a comment or a string
+    (`// close the block with }` / `$fmt = '{';`) mis-balances a walk over raw
+    text, and a mis-balanced walk does not report an error — it silently
+    attributes the wrong span of code to the method, which is a finding about
+    lines the method does not contain.
+    """
     out = []
     for m in METHOD_RE.finditer(src):
         start = m.end() - 1  # position of the `{`
+        # A DECLARATION FOUND INSIDE A COMMENT IS NOT A METHOD. If the brace
+        # the regex landed on is blank in the mask, the whole match was prose
+        # — a docblock saying `public function destroy(...) {` describes a
+        # method, it does not declare one.
+        if start >= len(masked) or masked[start] != '{':
+            continue
         depth = 0
         p = start
-        while p < len(src):
-            c = src[p]
+        while p < len(masked):
+            c = masked[p]
             if c == '{':
                 depth += 1
             elif c == '}':
@@ -7524,7 +7678,7 @@ def _method_bodies(src):
                     out.append({
                         'name': m.group('name'),
                         'docblock': m.group(1) or '',
-                        'body': src[start+1:p],
+                        'body': masked[start+1:p],
                         'start_line': src[:m.start()].count('\n') + 1,
                     })
                     break
@@ -7536,7 +7690,9 @@ for fp in files:
             src = f.read()
     except OSError:
         continue
-    methods = _method_bodies(src)
+    # Comments and string CONTENTS blanked, offsets and line count preserved.
+    masked_src = php_mask(src, blank_strings=True)
+    methods = _method_bodies(src, masked_src)
     for m in methods:
         body = m['body']
         # Find calls of shape $this->prop->method(...) which is a proxy for "calls a service"
