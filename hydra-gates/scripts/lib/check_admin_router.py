@@ -79,10 +79,21 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 try:
-    from source_scope import js_comment_mask, read_text
+    from source_scope import (
+        js_code_mask,
+        js_comment_mask,
+        js_exec_mask,
+        read_text,
+        script_mask,
+        starts_in_code,
+    )
 except Exception:  # pragma: no cover - wiring failure is the caller's problem
+    js_code_mask = None
     js_comment_mask = None
+    js_exec_mask = None
     read_text = None
+    script_mask = None
+    starts_in_code = None
 
 
 # An import whose SPECIFIER names an admin component or the settings view dir.
@@ -99,18 +110,22 @@ _RENDERS_RX = re.compile(r"\bcomponents?\s*:")
 _LEAVES_RX = re.compile(r"\b(?:redirect|beforeEnter)\s*:")
 
 
-def _enclosing_object(masked: str, idx: int) -> str:
-    """Return the balanced `{...}` route object containing offset *idx*.
+def _enclosing_object(anchor: str, idx: int) -> tuple[int, int]:
+    """Span of the balanced `{...}` route object containing offset *idx*.
 
     Walks back to the nearest unmatched `{`, then forward to its partner. Falls
     back to the line itself when the braces do not balance — a malformed router
     must not make the gate throw, and a single line is the conservative scope
     (it can only ever UNDER-report, never invent a finding).
+
+    Walks the ANCHOR (#424), where string contents are blank, so a `{` or `}`
+    written inside a literal is not a block delimiter. Returns a SPAN rather
+    than text because the caller reads the object out of the other mask.
     """
     depth = 0
     start = -1
     for i in range(idx, -1, -1):
-        ch = masked[i]
+        ch = anchor[i]
         if ch == "}":
             depth += 1
         elif ch == "{":
@@ -119,18 +134,20 @@ def _enclosing_object(masked: str, idx: int) -> str:
                 break
             depth -= 1
     if start < 0:
-        return masked[masked.rfind("\n", 0, idx) + 1 : masked.find("\n", idx)]
+        a = anchor.rfind("\n", 0, idx) + 1
+        b = anchor.find("\n", idx)
+        return (a, len(anchor) if b < 0 else b)
 
     depth = 0
-    for j in range(start, len(masked)):
-        ch = masked[j]
+    for j in range(start, len(anchor)):
+        ch = anchor[j]
         if ch == "{":
             depth += 1
         elif ch == "}":
             depth -= 1
             if depth == 0:
-                return masked[start : j + 1]
-    return masked[start:]
+                return (start, j + 1)
+    return (start, len(anchor))
 
 
 def scan_file(path: str) -> list[str]:
@@ -138,10 +155,27 @@ def scan_file(path: str) -> list[str]:
         src = read_text(path)
     except OSError:
         return []
+    # TWO MASKS, ONE COORDINATE SYSTEM (#424). Both rules read their evidence
+    # out of a string literal — `'/settings'` and the import SPECIFIER — so
+    # `masked` keeps string contents. But `from` and `path:` are code, and
+    # reading both questions out of one text made this count:
+    #
+    #     const t = "routes.push({path:'/settings', component: AdminRoot})"
+    #
+    # as a live admin route. `anchor` is the same text with string contents
+    # blanked; `starts_in_code` asks of the match start, which for both
+    # patterns is a word character.
     masked = js_comment_mask(src)
+    if path.endswith(".vue") and script_mask is not None:
+        masked = script_mask(src, path)
+        anchor = js_exec_mask(src, path)
+    else:
+        anchor = js_code_mask(src)
 
     out: list[str] = []
     for m in _IMPORT_RX.finditer(masked):
+        if not starts_in_code(anchor, masked, m.start()):
+            continue
         line = masked.count("\n", 0, m.start()) + 1
         out.append(
             f"{path}:{line}: rule=admin-component-imported-into-router "
@@ -149,8 +183,11 @@ def scan_file(path: str) -> list[str]:
         )
 
     for m in _PATH_RX.finditer(masked):
+        if not starts_in_code(anchor, masked, m.start()):
+            continue
         line = masked.count("\n", 0, m.start()) + 1
-        obj = _enclosing_object(masked, m.start())
+        a, b = _enclosing_object(anchor, m.start())
+        obj = masked[a:b]
         # Anti-widening: only an IN-APP RENDER is the defect. A route that
         # redirects or hands off to the server-authorized settings framework is
         # the remediation, not the bug (ADR-079 / openconnector).
@@ -167,7 +204,7 @@ def scan_file(path: str) -> list[str]:
 
 
 def main(argv: list[str]) -> int:
-    if js_comment_mask is None or read_text is None:
+    if js_comment_mask is None or read_text is None or starts_in_code is None:
         print(
             "check_admin_router: source_scope.py could not be imported; "
             "NOTHING was inspected",

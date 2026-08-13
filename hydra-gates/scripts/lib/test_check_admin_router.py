@@ -113,6 +113,43 @@ routes.push({ path: '/:pathMatch(.*)*', redirect: '/' })
 f = run(CLEAN)
 check("a manifest-driven router is clean", f == [], repr(f))
 
+# --- #424: a STRING LITERAL is not a route -----------------------------------
+# Both rules read their evidence out of a literal ('/settings', the import
+# specifier), so the mask cannot blank string contents — which is exactly how
+# a quoted sentence became a live admin route. Mutation-checked by dropping
+# the `starts_in_code` guard in scan_file.
+f = run('const t = "routes.push({path:\'/settings\', component: AdminRoot})"\n')
+check("EVIDENCE: a route quoted inside a string is not a route", len(f) == 0, repr(f))
+
+f = run('const t = "import AdminRoot from \'./views/settings/AdminRoot.vue\'"\n')
+check("EVIDENCE: an import quoted inside a string is not an import",
+      len(f) == 0, repr(f))
+
+f = run(
+    'const t = "routes.push({path:\'/settings\', component: AdminRoot})"\n'
+    "const routes = [{ path: '/settings', component: AdminRoot }]\n"
+)
+check("CONTROL: the real route SURVIVES beside that prose",
+      any(":2:" in line for line in f), repr(f))
+check("EVIDENCE: and it is the ONLY finding — the prose line is gone",
+      len(f) == 1, repr(f))
+
+f = run(
+    "const routes = [{ path: '/settings', redirect: '/x' }]\n"
+)
+check("CONTROL: the anti-widening redirect exemption still holds",
+      len(f) == 0, repr(f))
+
+# A `}` inside a literal is not a block delimiter, so it must not truncate the
+# route object the anti-widening guard is read out of. Separate mutation:
+# point `_enclosing_object` back at the string-preserving mask and this goes
+# red while the arms above stay green.
+f = run(
+    "const routes = [{ path: '/settings', title: 'a } b', component: AdminRoot }]\n"
+)
+check("EVIDENCE (brace walk): a `}` inside a literal does not truncate the object",
+      len(f) == 1, repr(f))
+
 # --- MUTATION CHECK: the anti-widening guard must be load-bearing -----------
 # If `_LEAVES_RX` stopped exempting hand-offs, the openconnector fixture would
 # be reported. Assert the guard is present in the source BEFORE claiming the

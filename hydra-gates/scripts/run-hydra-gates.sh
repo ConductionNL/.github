@@ -3062,20 +3062,36 @@ if [ -d src ]; then
         # kept and the status is read, so a broken interpreter reports `wiring`
         # rather than leaving an empty log this gate would call clean.
         set +e
-        python3 - "${vue}" <<'PYMI' >> "${_mi_log}" 2>>"${_mi_log}.err"
+        python3 - "${SCRIPT_DIR}/lib" "${vue}" <<'PYMI' >> "${_mi_log}" 2>>"${_mi_log}.err"
 import re, sys
-fname = sys.argv[1]
+sys.path.insert(0, sys.argv[1])
+from source_scope import vue_markup_mask     # a missing lib is a CRASH, not a pass
+fname = sys.argv[2]
 try:
     src = open(fname, encoding='utf-8', errors='replace').read()
 except Exception:
     sys.exit(0)
 
-# HTML comments in the template, block and line comments in <script>.
-# `(?<![:\w])` keeps the `//` of a `https://` URL from blanking the rest of
-# the line — the same trap gate-45 hit on `url(https://…)`.
-src = re.sub(r'<!--.*?-->', lambda m: re.sub(r'[^\n]', ' ', m.group(0)), src, flags=re.DOTALL)
-src = re.sub(r'/\*.*?\*/', lambda m: re.sub(r'[^\n]', ' ', m.group(0)), src, flags=re.DOTALL)
-src = re.sub(r'(?<![:\w])//[^\n]*', lambda m: ' ' * len(m.group(0)), src)
+# THE SCOPE IS THE RENDERED TEMPLATE (#424).
+#
+# This block used to blank three comment classes with its own re.sub calls and
+# then search the WHOLE FILE. Two things were wrong with that:
+#
+#   * a fourth private comment dialect, drifting from source_scope — and its
+#     `<!--.*?-->` carried the delimiter hole #424 group 2 is about, so
+#     `{{ '<!--' }}` … `{{ '-->' }}` blanked the template between them.
+#   * no string awareness at all, so
+#         const help = 'use <NcDialog> for confirmations'
+#     in <script> reported `1 file(s) with inline modal/dialog`. The gate that
+#     asks you to extract a modal was closable — and openable — by prose.
+#
+# `vue_markup_mask` answers exactly the question this rule asks: what does the
+# SFC RENDER? <script> and <style> are blanked whole, so a string or a JSDoc
+# there is out of scope by construction rather than by a third regex; HTML
+# comments inside the template go with them. This does not weaken the rule:
+# an INLINE modal is by definition written in the template, so no real finding
+# lives in the regions now excluded.
+src = vue_markup_mask(src)
 
 # The delimiter set, PLUS end-of-line and any other whitespace. A lookahead
 # rather than a consuming class so the boundary is asserted without being
@@ -8005,10 +8021,12 @@ _scfm_rc=0
 if [ "${#_scfm_files[@]}" -gt 0 ]; then
     # A CRASHED CHECKER MUST NOT REPORT PASS (#147 / #249 / #262).
     set +e
-    python3 - "${_scfm_log}" "${_scfm_files[@]}" 2>>"${_scfm_log}.err" << 'PY'
+    python3 - "${SCRIPT_DIR}/lib" "${_scfm_log}" "${_scfm_files[@]}" 2>>"${_scfm_log}.err" << 'PY'
 import re, sys
-log_path = sys.argv[1]
-files = sys.argv[2:]
+sys.path.insert(0, sys.argv[1])
+from source_scope import php_mask           # a missing lib is a CRASH, not a pass
+log_path = sys.argv[2]
+files = sys.argv[3:]
 SEC_KEY = re.compile(
     # FIRST ARGUMENT: THE APP ID, IN ANY FORM.
     #
@@ -8162,75 +8180,36 @@ _ARRAY_VALUE = re.compile(
 # a line number.
 #
 # STRING-SAFE, not a naive split: `'https://x'` must not truncate the line,
-# and `#[PublicPage]` is a PHP 8 attribute, not a comment. Quote state is
-# reset per line, so an unterminated literal (a heredoc body) can corrupt at
-# most its own line rather than the rest of the file.
+# and `#[PublicPage]` is a PHP 8 attribute, not a comment.
 #
-# `for_structure=True` additionally blanks string CONTENTS and heredoc bodies,
-# keeping the quotes and the line count. That copy is only ever brace-walked
+# THE FOURTH DIALECT IS GONE (#424, over #420 and #429). Every property this
+# block needs is `source_scope.php_mask`'s contract, and #420 shipped a
+# hand-rolled `_strip_php_comments` beside it anyway — a fourth definition of
+# "where does a PHP comment start" next to `php_mask`,
+# `check_apphost_autoload_prelude.strip_comments` and
+# `check_no_admin_idor._strip_strings_and_comments`. Four copies of one rule
+# is four chances to drift, and every gate in this package that drifted did so
+# in BOTH directions at once.
+#
+# #429 then grew that private copy rather than the library: it added HEREDOC
+# handling and a `for_structure=True` mode for the brace walk below. Both were
+# right and neither belonged here, so both moved INTO `php_mask`:
+#
+#   php_mask(src)                      guard-search text — comments blanked,
+#                                      string and heredoc CONTENTS kept.
+#   php_mask(src, blank_strings=True)  structural text — contents blanked too,
+#                                      which is what `_method_spans` walks.
+#
+# Deleting the private copy without moving its heredoc handling first would
+# have been a silent capability loss dressed as a cleanup, which is the shape
+# this whole programme exists to stop.
+#
+# `for_structure=True`'s successor is `php_mask(..., blank_strings=True)`. It
+# keeps the quotes and the line count, and that copy is only ever brace-walked
 # (see _method_spans), never searched for a guard, so no guard vocabulary
 # changes meaning: `$fmt = '{';` and a `<<<SQL … {$x} … SQL;` body must not
 # mis-balance a walk, but `throw new` inside a heredoc must not stop being
 # whatever it already was to the window search.
-def _strip_php_comments(raw_lines, for_structure=False):
-    out, in_block, heredoc = [], False, None
-    for line in raw_lines:
-        if heredoc is not None:
-            # The closing identifier must be the first non-space token on its
-            # own line (PHP 7.3+ allows indentation). Everything up to and
-            # including it is blanked in the structural copy.
-            _m = re.match(r'\s*' + re.escape(heredoc) + r'\b', line)
-            out.append('')
-            if _m:
-                heredoc = None
-            continue
-        buf, i, n, quote = [], 0, len(line), None
-        while i < n:
-            c = line[i]
-            if in_block:
-                if c == '*' and i + 1 < n and line[i + 1] == '/':
-                    in_block = False
-                    i += 2
-                    continue
-                i += 1
-                continue
-            if quote is not None:
-                if c == '\\' and i + 1 < n:
-                    buf.append('  ' if for_structure else line[i:i + 2])
-                    i += 2
-                    continue
-                if c == quote:
-                    buf.append(c)
-                    quote = None
-                    i += 1
-                    continue
-                buf.append(' ' if for_structure else c)
-                i += 1
-                continue
-            if c in ('"', "'"):
-                quote = c
-                buf.append(c)
-                i += 1
-                continue
-            if c == '/' and i + 1 < n and line[i + 1] == '/':
-                break
-            if c == '/' and i + 1 < n and line[i + 1] == '*':
-                in_block = True
-                i += 2
-                continue
-            if c == '#' and not (i + 1 < n and line[i + 1] == '['):
-                break
-            if for_structure and c == '<' and line[i:i + 3] == '<<<':
-                _h = re.match(r"<<<[ \t]*(['\"]?)(\w+)\1", line[i:])
-                if _h:
-                    heredoc = _h.group(2)
-                    break
-            buf.append(c)
-            i += 1
-        out.append(''.join(buf).rstrip('\n'))
-    return out
-
-
 # THE WINDOW MUST NOT CROSS INTO THE NEXT METHOD (#429).
 #
 # The window is "eleven lines of code following the read", counted over the
@@ -8321,9 +8300,12 @@ for fp in files:
             lines = f.readlines()
     except OSError:
         continue
-    code_lines = _strip_php_comments(lines)
-    _spans = _method_spans('\n'.join(_strip_php_comments(lines, for_structure=True)))
     src = ''.join(lines)
+    # Offsets and line count survive both masks, so `code_lines[n - 1]` is
+    # still line n of the file — which is what the window below indexes with,
+    # and what `_method_spans` reports its boundaries in.
+    code_lines = php_mask(src).split('\n')
+    _spans = _method_spans(php_mask(src, blank_strings=True))
     for m in SEC_KEY.finditer(src):
         # Find the line number of the match
         lineno = src[:m.start()].count('\n') + 1

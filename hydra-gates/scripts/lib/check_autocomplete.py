@@ -47,10 +47,17 @@ Usage:
 """
 from __future__ import annotations
 
+import os
 import re
 import sys
 
-COMMENT = re.compile(r'<!--.*?-->', re.DOTALL)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from source_scope import mask_html_comments  # noqa: E402
+
+# Comment scope comes from the shared library (#424). The private
+# `<!--.*?-->` this replaces called four characters a comment opener wherever
+# they appeared, so `{{ '<!--' }}` … `{{ '-->' }}` blanked every element
+# between them and the gate went green over live markup.
 BLOCK = re.compile(r'<(script|style)\b[^>]*>.*?</\1\s*>', re.DOTALL | re.IGNORECASE)
 
 # Quote-aware attribute run: whole quoted values are consumed, so a `>` inside
@@ -145,7 +152,7 @@ def _is_semantic(value: str) -> bool:
 
 
 def scan_source(fname: str, src: str) -> list[str]:
-    txt = BLOCK.sub(' ', COMMENT.sub(' ', src)).replace('\n', ' ')
+    txt = BLOCK.sub(' ', mask_html_comments(src)).replace('\n', ' ')
     findings: list[str] = []
     for m in INPUT.finditer(txt):
         attrs = m.group(1) or ''

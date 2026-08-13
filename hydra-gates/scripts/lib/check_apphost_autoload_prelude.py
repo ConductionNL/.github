@@ -87,6 +87,9 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from source_scope import php_mask  # noqa: E402
+
 # The prelude: registerAutoloading(...) whose arguments name 'openregister'.
 # Tolerant of named arguments (app: 'openregister') and of `OC_App::` /
 # `\OC_App::` / an imported alias, because all three appear in this fleet.
@@ -110,6 +113,34 @@ APPID_CONST = re.compile(
 # loadApp('openregister') is a WRONG fix, not a prelude — it boots OpenRegister
 # before its own register() has run. Named so the reader is told why.
 LOAD_APP = re.compile(r"""loadApp\s*\(\s*['"]openregister['"]\s*\)""")
+# The same call with its argument left unread, for matching against the
+# CALL-SITE anchor where string contents are blank. See has_load_app().
+#
+# ⚠️ NO `([^)]*)` HERE. That shape scans to end of file on every miss, and a
+# file with many unclosed `loadApp(` misses once each — quadratic. Measured on
+# `"loadApp( " * N`: 2.0 / 22.3 / 198 ms at N = 200 / 600 / 1800, a 9× input
+# taking 98× the time. `_args_at` below walks the parentheses once instead.
+LOAD_APP_OPEN = re.compile(r"loadApp\s*\(")
+PRELUDE_OPEN = re.compile(r"registerAutoloading\s*\(")
+
+
+def _paren_map(text: str) -> dict:
+    """{index of `(` -> index of its matching `)`} for the whole text, in ONE
+    pass.
+
+    A per-call-site walk is O(len(text)) EACH, and a file with many unbalanced
+    `(` pays it once per site — quadratic, and the reason this is a table
+    rather than a loop. Unmatched openers are simply absent from the map,
+    which is the "no answer" the callers already handle.
+    """
+    out: dict = {}
+    stack: list = []
+    for i, c in enumerate(text):
+        if c == "(":
+            stack.append(i)
+        elif c == ")" and stack:
+            out[stack.pop()] = i
+    return out
 
 # Rule 1 — any reference to the AppHost Bootstrap entry point. Covers
 # `use OCA\OpenRegister\AppHost\Bootstrap;`, `\OCA\OpenRegister\AppHost\Bootstrap::`
@@ -205,7 +236,7 @@ def _sources(app_dir: str) -> dict[str, str]:
 
 
 def strip_comments(text: str) -> str:
-    """PHP source with comments removed, string literals preserved.
+    """PHP source with comments blanked, string literals preserved.
 
     EVERY pattern below is evidence about CODE. Scanning raw source made
     comments count as source, in both directions:
@@ -218,73 +249,98 @@ def strip_comments(text: str) -> str:
         counted as a prelude that no longer runs — a false GREEN, the more
         dangerous direction.
 
-    Newlines are preserved so any line-based reporting stays aligned.
+    THE FOURTH DIALECT IS GONE (#424). This was a hand-written state machine —
+    #184's original, and the model `source_scope.php_mask` was generalised
+    FROM. Keeping both meant two definitions of "where does a PHP comment
+    start" that could drift, and gate-50 in run-hydra-gates.sh had since added
+    a third. They are now one, and this function is the name gate-64's own
+    tests use for it.
+
+    The one behavioural change is that comments are now BLANKED rather than
+    deleted, so offsets survive — which is what lets `code_and_anchor()` below
+    hand the same coordinates to two masks.
 
     `#[` opens a PHP 8 attribute, not a comment; treating it as one would
     swallow the rest of the line, including `#[NoAdminRequired]`.
     """
-    out: list[str] = []
-    i, n = 0, len(text)
-    state: str | None = None
-    while i < n:
-        c = text[i]
-        nxt = text[i + 1] if i + 1 < n else ""
-        if state is None:
-            if c == "'":
-                state, _ = "sq", out.append(c)
-                i += 1
-            elif c == '"':
-                state, _ = "dq", out.append(c)
-                i += 1
-            elif c == "/" and nxt == "/":
-                state, i = "line", i + 2
-            elif c == "#" and nxt != "[":
-                state, i = "line", i + 1
-            elif c == "/" and nxt == "*":
-                state, i = "block", i + 2
-            else:
-                out.append(c)
-                i += 1
-        elif state in ("sq", "dq"):
-            quote = "'" if state == "sq" else '"'
-            if c == "\\" and i + 1 < n:
-                out.append(c)
-                out.append(text[i + 1])
-                i += 2
-                continue
-            out.append(c)
-            if c == quote:
-                state = None
-            i += 1
-        elif state == "line":
-            if c == "\n":
-                out.append(c)
-                state = None
-            i += 1
-        else:  # block
-            if c == "*" and nxt == "/":
-                state, i = None, i + 2
-            else:
-                if c == "\n":
-                    out.append(c)
-                i += 1
-    return "".join(out)
+    return php_mask(text)
 
 
-def has_prelude(text: str) -> bool:
+def code_and_anchor(text: str) -> tuple[str, str]:
+    """(evidence text, call-site text) — same length, same offsets.
+
+    #424. This gate's evidence is genuinely a string literal much of the time:
+    the app id in `registerAutoloading('openregister', $p)`, the FQCN in
+    `class_exists('OCA\\OpenRegister\\AppHost\\X')`. So the mask cannot blank
+    string contents. But the CALL is never a string, and reading both out of
+    one text let a sentence close the gate:
+
+        $hint = "we call \\OC_App::registerAutoloading('openregister', $p) here";
+
+    satisfied `has_prelude()` and gate-64 reported OK for an app with no
+    prelude at all — a false NEGATIVE on the ADR-040 rule, produced by a
+    developer documenting what the code was supposed to do.
+
+    So the call site is located in the ANCHOR (string contents blanked) and
+    the argument text is read out of the CODE at the same offsets. Same
+    contract as `source_scope.js_exec_mask`: two questions, two sources, one
+    coordinate system.
+    """
+    return php_mask(text), php_mask(text, blank_strings=True)
+
+
+def has_prelude(text: str, anchor: str | None = None) -> bool:
     """True when text registers OpenRegister's autoloader.
 
     Accepts the app id as a quoted literal OR as a constant defined in the
     same composition root to that literal — both are the same prelude.
+
+    *anchor* is the same text with string CONTENTS blanked (see
+    `code_and_anchor`). The CALL is looked for there, so a sentence quoting
+    the prelude is not the prelude; the ARGUMENTS are read out of *text* at
+    the same offsets, because the app id really is a string literal. When it
+    is omitted the two collapse to one and the pre-#424 behaviour returns —
+    which is what the mutant in the suite uses.
     """
-    const_names = set(APPID_CONST.findall(text))
-    for m in PRELUDE.finditer(text):
-        args = m.group(1)
+    if anchor is None:
+        anchor = text
+    # A `const` written inside a string is not a declaration either: the
+    # keyword surviving the anchor is the proof that this one is code.
+    const_names = {
+        m.group(1)
+        for m in APPID_CONST.finditer(text)
+        if anchor.startswith("const", m.start())
+    }
+    parens = _paren_map(anchor)
+    for m in PRELUDE_OPEN.finditer(anchor):
+        close = parens.get(m.end() - 1)
+        if close is None:
+            continue
+        args = text[m.end():close]
         if OPENREGISTER_LITERAL.search(args):
             return True
         for name in const_names:
             if re.search(r"\b" + re.escape(name) + r"\b", args):
                 return True
+    return False
+
+
+def has_load_app(text: str, anchor: str | None = None) -> bool:
+    """True when text calls `IAppManager::loadApp('openregister')`.
+
+    The WRONG fix, reported alongside the finding. Same split as
+    `has_prelude`: the call from *anchor*, the app id from *text*. Without it
+    a comment-shaped sentence in a STRING — `$why = "we do not call
+    loadApp('openregister')"` — added a second, unclosable finding line to
+    every app that already had one.
+    """
+    if anchor is None:
+        anchor = text
+    parens = _paren_map(anchor)
+    for m in LOAD_APP_OPEN.finditer(anchor):
+        close = parens.get(m.end() - 1)
+        if close is not None and OPENREGISTER_LITERAL.search(text[m.end():close]):
+            return True
     return False
 
 
@@ -492,18 +548,22 @@ def scan_app(app_dir: str) -> list[tuple[str, str]]:
     # source. The SUPPRESSION is the one exception — it is authored AS a
     # comment — so it keeps reading the raw text.
     raw_blob = "\n".join(sources.values())
-    code = {path: strip_comments(text) for path, text in sources.items()}
+    masks = {path: code_and_anchor(text) for path, text in sources.items()}
+    code = {path: pair[0] for path, pair in masks.items()}
+    anchors = {path: pair[1] for path, pair in masks.items()}
 
     # OpenRegister owns AppHost — exempt by namespace, not by directory name,
     # so a checkout under any directory name is still recognised.
-    if any(OWN_NAMESPACE.search(text) for text in code.values()):
+    if any(OWN_NAMESPACE.search(text) for text in anchors.values()):
         return []
 
+    # Joined with the SAME separator so the two blobs stay offset-aligned.
     blob = "\n".join(code.values())
+    anchor_blob = "\n".join(anchors.values())
 
     # The prelude may legitimately live in a sibling composition-root file that
     # register() calls, so look for it across the whole of lib/AppInfo/.
-    if has_prelude(blob):
+    if has_prelude(blob, anchor_blob):
         return []
 
     if suppression_reason(raw_blob):
@@ -526,7 +586,7 @@ def scan_app(app_dir: str) -> list[tuple[str, str]]:
                 (path, "calls class_exists() on an OCA\\OpenRegister\\AppHost\\ class")
             )
 
-    if findings and LOAD_APP.search(blob):
+    if findings and has_load_app(blob, anchor_blob):
         findings.append(
             (
                 os.path.join(app_dir, "lib", "AppInfo"),
@@ -548,10 +608,12 @@ def scan_notes(app_dir: str) -> list[tuple[str, list[str]]]:
     sources = _sources(app_dir)
     if not sources:
         return []
-    code = {path: strip_comments(text) for path, text in sources.items()}
-    if any(OWN_NAMESPACE.search(text) for text in code.values()):
+    masks = {path: code_and_anchor(text) for path, text in sources.items()}
+    code = {path: pair[0] for path, pair in masks.items()}
+    if any(OWN_NAMESPACE.search(text) for _, text in masks.values()):
         return []
-    if has_prelude("\n".join(code.values())):
+    if has_prelude("\n".join(code.values()),
+                   "\n".join(pair[1] for pair in masks.values())):
         return []
     if suppression_reason("\n".join(sources.values())):
         return []

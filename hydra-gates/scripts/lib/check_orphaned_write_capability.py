@@ -72,6 +72,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from exclusion_reason import exclude_pattern, is_reason_bearing  # noqa: E402
+from source_scope import mask_html_comments  # noqa: E402
 
 # Foundation repos: the abstractions every leaf app consumes (ADR-022,
 # apps-consume-or-abstractions). A PUBLIC method here is frequently invoked
@@ -645,7 +646,12 @@ def _build_job_class_seam(app_root: str) -> set[str]:
             # `<!-- <job>…</job> -->` is a job that is NOT scheduled. Same
             # false-GREEN shape as the listener seam above: this exempts the
             # whole class. XML comments, not PHP ones, so a separate strip.
-            text = re.sub(r"<!--.*?-->", " ", fh.read(), flags=re.DOTALL)
+            # #424: the private `<!--.*?-->` this replaces called four
+            # characters a comment opener wherever they appeared, including
+            # inside an attribute value — `<job name="<!--">` blanked every
+            # <job> after it, which is the false GREEN this seam exists to
+            # prevent.
+            text = mask_html_comments(fh.read())
     except OSError:
         return seam
     for m in re.finditer(r"<job>\s*([A-Za-z0-9_\\]+)\s*</job>", text):
