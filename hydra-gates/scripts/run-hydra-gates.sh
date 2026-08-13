@@ -6853,6 +6853,48 @@ if _a11y_has_style_dir; then
     #
     # Fails CLOSED: any error leaves the flag at 0, i.e. more findings, never
     # fewer. A crashed pre-pass must not manufacture a global exemption.
+    #
+    # A COMMENTED-OUT RESET IS NOT A RESET (.github#421) — AND THIS IS THE
+    # WORST PLACE IN THE PACKAGE TO GET THAT WRONG.
+    #
+    # The per-file checker below already masks comments before it looks for
+    # motion or for a guard (`_mask_comments`, #294). This pre-pass did not:
+    # it grepped `UNIVERSAL` over raw file text. So the two halves of one gate
+    # disagreed about what a comment is, and the careless half ran first.
+    #
+    # The consequence is not one missed finding. The flag it sets makes the
+    # per-file checker `sys.exit(0)` on EVERY file in the repository, so ONE
+    # comment in ONE stylesheet anywhere in the tree silenced gate-45 for the
+    # whole app — and the comment that did it is the one an author writes
+    # while acknowledging the debt:
+    #
+    #     /* TODO(a11y): we still need
+    #          @media (prefers-reduced-motion: reduce) { *, *::before … }
+    #        Not done yet — tracked in #999. */
+    #
+    # Measured 2026-08-13, one fixture, one variable — a css/motion.css with
+    # two real unguarded motion declarations, plus a css/reset.css whose only
+    # universal reset is inside that comment:
+    #
+    #   comment present            PASS                          <- the defect
+    #   the same tree, comment deleted
+    #                              FAIL — 1 stylesheet with motion
+    #   a REAL universal reset in reset.css
+    #                              PASS   <- the positive control: the pre-pass
+    #                                        does set the flag on real CSS, so
+    #                                        the arm above means something
+    #
+    # ⚠️ THE MASK MUST EAT COMMENTS, NOT CSS. A mask that swallowed a rule
+    # would turn this gate from "silenceable" into "always red" — the fix
+    # over-applied — which is why the third arm is pinned in
+    # test_gate_45_stylesheet_scope.sh alongside the first two.
+    #
+    # Character for character the same masking as `_mask_comments` in the
+    # PYRM heredoc below, including the `(?<!:)` that keeps the `//` of a
+    # `url(https://…)` out of the SCSS arm. The two copies are pinned
+    # together by the drift arm in test_gate_45_stylesheet_scope.sh: they are
+    # separate `python3` invocations and cannot share a function, so the test
+    # is what stops them diverging again.
     _rm_global=0
     if [ -n "$(_a11y_style_files)" ]; then
         _rm_global=$(_a11y_style_files | python3 -c '
@@ -6860,16 +6902,24 @@ import re, sys
 UNIVERSAL = re.compile(
     r"@media[^{]*prefers-reduced-motion[^{]*\{(?:[^{}]|\{[^{}]*\})*?(?<![\w.#\[-])\*",
     re.IGNORECASE | re.DOTALL)
+
+def _mask_comments(text, scss):
+    text = re.sub(r"/\*.*?\*/", lambda m: re.sub(r"[^\n]", " ", m.group(0)), text, flags=re.DOTALL)
+    if scss:
+        text = re.sub(r"(?<!:)//[^\n]*", lambda m: " " * len(m.group(0)), text)
+    return text
+
 for line in sys.stdin:
     p = line.strip()
     if not p:
         continue
     try:
-        if UNIVERSAL.search(open(p, encoding="utf-8", errors="replace").read()):
-            print(1)
-            break
+        raw = open(p, encoding="utf-8", errors="replace").read()
     except Exception:
         continue
+    if UNIVERSAL.search(_mask_comments(raw, not p.lower().endswith(".css"))):
+        print(1)
+        break
 else:
     print(0)
 ' 2>>"${_rm_log}.err" || echo 0)
