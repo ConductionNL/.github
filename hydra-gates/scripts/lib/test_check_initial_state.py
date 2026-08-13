@@ -94,6 +94,36 @@ check(
     repr(f),
 )
 
+# --- #424: a STRING LITERAL is not an expression -----------------------------
+# The comment axis was closed when this gate moved onto js_comment_mask, and
+# the literal axis was not. Mutation-checked by dropping the `starts_in_code`
+# guard in scan_file: the first two arms go red, the rest are CONTROLS — the
+# attribute name really does live inside a literal, and a fix that blanked
+# string contents would delete the evidence and kill the gate.
+f = run('const doc = "document.getElementById(\'fx-settings\').dataset.version"\n')
+check("EVIDENCE: a DOM read quoted inside a string is not a DOM read",
+      len(f) == 0, repr(f))
+
+f = run('const doc = "el.getAttribute(\'data-version\') is what we replaced"\n'
+        "const el = document.getElementById('fx-settings')\n")
+check("EVIDENCE: a two-step read quoted inside a string is not one",
+      len(f) == 0, repr(f))
+
+f = run('const doc = "document.getElementById(\'fx\').dataset.version"\n'
+        "export const v = document.getElementById('fx').dataset.version\n")
+check("CONTROL: the real read SURVIVES beside that prose",
+      any(":2:" in line for line in f), repr(f))
+check("EVIDENCE: and it is the ONLY finding — the prose line is gone",
+      len(f) == 1, repr(f))
+
+f = run("export const v = document.getElementById('d').getAttribute('data-version')\n")
+check("CONTROL: the attribute name is still read OUT of its literal",
+      len(f) == 1, repr(f))
+
+f = run("export const v = document.getElementById('d').getAttribute('data-requesttoken')\n")
+check("CONTROL: the data-requesttoken exemption still reads that literal",
+      len(f) == 0, repr(f))
+
 # --- MUTATION CHECK ---------------------------------------------------------
 _SRC = open(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "check_initial_state.py")

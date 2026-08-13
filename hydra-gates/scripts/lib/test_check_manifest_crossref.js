@@ -304,6 +304,18 @@ function parseReport(stdout) {
 			"a double-quoted hyphenated key resolves too — \"agent-skills\"")
 		assert(!msgs.includes("'LegacyOnlyPanel'"),
 			'a component registered ONLY in src/customComponents.js resolves — the second source (9 false FAILs on softwarecatalog)')
+		// #424. `glob: '/*.vue'` opened a block comment in the private
+		// stripper, and everything up to the next real `*/` was deleted from
+		// the registry. Measured on THIS fixture by swapping js_scope back to
+		// the two-line regex: `AfterGlob` disappeared and the error count
+		// below went 1 -> 2.
+		//   CONTROL  — the entry carrying the glob is BEFORE the phantom
+		//              opener, so it resolved either way.
+		assert(!msgs.includes("'GlobPage'"),
+			"a registry entry carrying `glob: '/*.vue'` still resolves (#424)")
+		//   EVIDENCE — the entry after it did not.
+		assert(!msgs.includes("'AfterGlob'"),
+			'the entry AFTER that glob is not swallowed by a comment that never opened (#424)')
 		assert(errs.length === 1 && errs[0].message.includes("'NotAnywherePanel'"),
 			`THE CONTROL: a component in NEITHER file still FAILS (got ${errs.length} error(s))`)
 		assert(check.status === 1,

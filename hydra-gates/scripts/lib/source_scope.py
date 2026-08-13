@@ -786,6 +786,36 @@ def iter_open_tags(masked: str, names: set[str] | None = None):
         yield Tag(name, m.group(3) or "", m.start(), m.end(), m.group(0), line)
 
 
+# ---------------------------------------------------------------------------
+# Anchoring: "is this position CODE, or the inside of a string literal?"
+# ---------------------------------------------------------------------------
+
+def starts_in_code(anchor: str, evidence: str, i: int) -> bool:
+    """True when offset *i* is code rather than the CONTENTS of a literal.
+
+    #424. Several gates need both halves at once: `getAttribute('data-x')`
+    and `path: '/settings'` are evidence that lives INSIDE a string, so their
+    mask cannot blank string contents — but the surrounding expression is
+    code, and reading both questions out of one text made a sentence count:
+
+        const doc = "document.getElementById('fx-settings').dataset.version"
+
+    So the caller runs its pattern over *evidence* (contents intact) and asks
+    this of the match start, with *anchor* being the SAME text masked with
+    `blank_strings=True`. Both masks preserve offsets, and blanking only ever
+    turns a character into a space, so a non-space character that survived the
+    anchor is code.
+
+    ⚠️ ONLY VALID FOR A NON-SPACE POSITION. A space inside a literal is a
+    space in both masks, so this would call it code. Every caller anchors on a
+    pattern that begins with a word character or `.`, which is why the
+    predicate is stated as *starts*_in_code rather than `is_code`.
+    """
+    if i < 0 or i >= len(anchor) or i >= len(evidence):
+        return False
+    return anchor[i] == evidence[i]
+
+
 def read_text(path: str) -> str:
     with open(path, encoding="utf-8", errors="replace") as handle:
         return handle.read()

@@ -240,15 +240,20 @@ const REGISTRY_KINDS_REQUIRING_A_POSITION = new Set(['section', 'page', 'widget'
 // in the fleet — the widening that would make this check useless on arrival.
 const LIB_COMPONENT = /^Cn[A-Z]\w*$/
 
-// Strip line and block comments so a commented-out entry is NOT counted as a
+// Blank line and block comments so a commented-out entry is NOT counted as a
 // registration. A commented-out prelude counting as a prelude was a real
 // false-GREEN in gate-64; the same mistake here would let a deleted component
 // vouch for a manifest reference that resolves to nothing at runtime.
-function stripJsComments(src) {
-	return src
-		.replace(/\/\*[\s\S]*?\*\//g, ' ')
-		.replace(/(^|[^:])\/\/[^\n]*/g, '$1 ')
-}
+//
+// THE PRIVATE TWO-LINE REGEX IS GONE (#424). It was not string-aware, so the
+// `/*` inside `glob: '/*.vue'` opened a block comment that ran to the next
+// real `*/` — swallowing whole registry entries, and (when the swallowed span
+// was brace-unbalanced) making `parsed: false` skip the cross-reference check
+// altogether. See scripts/lib/js_scope.js for the measured shapes; it is the
+// node port of `source_scope.js_comment_mask` and is asserted byte-identical
+// to it. String CONTENTS survive, because the quoted registry key and
+// `kind: 'page'` are this parser's evidence.
+const { jsCommentMask } = require('./js_scope.js')
 
 // Top-level keys of the `export default { … }` object, with their `kind`.
 // Brace-depth tracking keeps nested object keys (`component:`, `props:`) out.
@@ -260,7 +265,7 @@ function parseRegistry(appDir, rel) {
 	} catch (e) {
 		return null // absent — nothing to add from this source
 	}
-	const src = stripJsComments(raw)
+	const src = jsCommentMask(raw)
 	const start = src.search(/export\s+default\s*\{/)
 	if (start === -1) return { file, entries: new Map(), parsed: false }
 
