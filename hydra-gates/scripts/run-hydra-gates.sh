@@ -1407,10 +1407,46 @@ _ctrl_path_from_name() {
 # than the run alone matters for a multi-line attribute
 # (`#[AuthorizedAdminSetting(\n  Application::APP_ID\n)]`), whose middle lines
 # are ordinary code and would otherwise cut the run short.
+#
+# ⚠️ AND THE UNION WAS NOT ENOUGH: A COMMENT COULD STILL SPEND THE BUDGET
+# (#415/#423). The union only rescues a multi-line attribute while the
+# 20-line SLICE still reaches it, so the explanation between the attribute
+# and the declaration is charged against the attribute's visibility.
+# Measured on two fixtures differing in NOTHING but the length of an
+# ordinary docblock, both carrying a real
+# `#[AuthorizedAdminSetting(\n Application::APP_ID\n)]` above it:
+#
+#     2 doc lines  -> [gate-5] route-auth: PASS
+#    30 doc lines  -> [gate-5] route-auth: FAIL — 1 routed method(s)
+#                       missing auth attribute
+#
+# The attribute is there in both. The run breaks at the `)]` line — which
+# matches none of the five patterns above — so `run` stops BELOW the
+# attribute, and past twenty lines of prose the slice no longer reaches it
+# either. An author who documents the endpoint goes red; the same author who
+# deletes the paragraph goes green having changed nothing about its auth.
+# That is the corrosive direction: it teaches people to delete the
+# explanation, and this is a SECURITY gate whose findings a human has to be
+# able to check.
+#
+# So the walk now STEPS OVER a multi-line attribute by structure rather than
+# by distance — the same repair `check_contract_coverage` documents at its
+# L208 ("WHY THIS IS NOT A LINE WINDOW"). On a line that closes a bracket,
+# it scans up for the `#[` that opens it, requiring the brackets between to
+# BALANCE, and resumes the run from there. It cannot run away: the scan is
+# bounded, it must find a real `#[` at line start, and the previous-member
+# clamp below still cuts the window at the last `}` — so a short guarded
+# method still cannot donate its attribute to the next one.
 # ---------------------------------------------------------------------------
 _head_block() {
     local _file="$1" _def="$2"
     awk -v D="${_def}" '
+        # Net bracket depth of one line: `[` opens, `]` closes.
+        function _brk(s,   t, o, c) {
+            t = s; o = gsub(/\[/, "", t)
+            t = s; c = gsub(/\]/, "", t)
+            return o - c
+        }
         NR <= D { line[NR] = $0 }
         NR > D  { exit }
         END {
@@ -1423,6 +1459,21 @@ _head_block() {
                 if (l ~ /^[[:space:]]*\*/)             { run = i; continue }
                 if (l ~ /^[[:space:]]*\/\//)           { run = i; continue }
                 if (l ~ /^[[:space:]]*#\[/)            { run = i; continue }
+                # A line that closes more brackets than it opens may be the
+                # tail of a multi-line attribute. Walk up while the brackets
+                # stay unbalanced; if the line that balances them opens an
+                # attribute, the whole span belongs to this declaration.
+                if (_brk(l) < 0) {
+                    bal = 0
+                    for (j = i; j >= 1 && i - j <= 40; j--) {
+                        bal += _brk(line[j])
+                        if (bal == 0) {
+                            if (line[j] ~ /^[[:space:]]*#\[/) { run = j; i = j }
+                            break
+                        }
+                    }
+                    if (run == i) { continue }
+                }
                 break
             }
             slice = (D > 20) ? D - 20 : 1
@@ -4459,7 +4510,49 @@ _parity_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-integration-parity.log
 # any leaves at all.
 _parity_has_php=0
 _parity_has_js=0
-if [ -d lib ] && grep -rqE 'new[[:space:]]+LeafDescriptor[[:space:]]*\(' lib/ --include='*.php' 2>/dev/null; then
+# A COMMENT MUST NOT MANUFACTURE A CLASSIFICATION (#415/#423).
+#
+# Both probes below were raw `grep -r`, and their answer decides whether an
+# absent wrapper is reported as `na` (no subject matter, not counted) or as
+# `structural` (a real gap, counted against coverage). Two comments —
+#
+#     // TODO: one day we could do `new LeafDescriptor(...)` here
+#     // We used to call registerIntegration({...}); removed in 2.4
+#
+# flipped `NOT APPLICABLE` to `SKIPPED (structural)`, and the run's
+# `--require-full-coverage` exit went 5 -> 6 on the same tree. Not a red
+# gate; a fabricated gap, in the arithmetic that decides whether the fleet's
+# coverage is believed.
+#
+# `_parity_code` finds candidates with grep (fast, and it opens the whole
+# tree) and then re-asks the question on the file's CODE. The masks are the
+# shared, offset-preserving ones. A file type with no mask is judged RAW —
+# which is the pre-#423 behaviour and errs towards `structural`, the
+# stricter side — and `.vue` is deliberately in that set: masking an SFC
+# routes through the `<!-- … -->` handling #424 is repairing, and a hole
+# there would let a comment REMOVE a real registration from the count. Same
+# for a mask that fails to run: the raw answer stands.
+_parity_code() {  # <file> — the file's code, or its raw text if unmaskable
+    case "$1" in
+        *.php) python3 "${SCRIPT_DIR}/lib/source_scope.py" --mask php "$1" 2>/dev/null || cat "$1" ;;
+        *.js|*.ts|*.mjs|*.cjs|*.jsx|*.tsx)
+               python3 "${SCRIPT_DIR}/lib/source_scope.py" --mask js-comments "$1" 2>/dev/null || cat "$1" ;;
+        *)     cat "$1" ;;
+    esac
+}
+_parity_probe() {  # <dir> <extended-regex> <find-args...> — 0 when a CODE line matches
+    local _dir="$1" _rx="$2"; shift 2
+    local _cand
+    while IFS= read -r _cand; do
+        [ -z "${_cand}" ] && continue
+        [ -f "${_cand}" ] || continue
+        if _parity_code "${_cand}" | grep -qE "${_rx}" 2>/dev/null; then
+            return 0
+        fi
+    done < <(grep -rlE "${_rx}" "${_dir}" "$@" 2>/dev/null)
+    return 1
+}
+if [ -d lib ] && _parity_probe lib/ 'new[[:space:]]+LeafDescriptor[[:space:]]*\(' --include='*.php'; then
     _parity_has_php=1
 fi
 # THE JS PROBE MUST MATCH BOTH SUPPORTED REGISTRATION APIs, NOT ONE.
@@ -4489,7 +4582,7 @@ fi
 #
 # `integrations\.register` cannot collide with `unregister(` (the qualifier is
 # part of the match) nor with `registerIntegrationIcons(` (the `\(` anchors it).
-if [ -d src ] && grep -rqE '\b(registerIntegration|integrations\.register)[[:space:]]*\(' src/ 2>/dev/null; then
+if [ -d src ] && _parity_probe src/ '\b(registerIntegration|integrations\.register)[[:space:]]*\('; then
     _parity_has_js=1
 fi
 if [ ! -f scripts/check-integration-parity.sh ]; then
