@@ -2830,5 +2830,110 @@ class ThingController extends Controller {
         self.assertIn("method=show", findings[0])
 
 
+class CommentIsNotAGuardTest(unittest.TestCase):
+    """A TODO naming the guard is not the guard (#415).
+
+    `gsrc` — the text every guard lookup in `scan_file` runs against — was the
+    RAW source with only authentication-only spans removed. So a sentence in a
+    method body answered "is this endpoint guarded?". Measured through the
+    runner, one fixture, ONE ADDED LINE: a real unguarded `#[NoAdminRequired]`
+    endpoint went FAIL -> PASS on the strength of
+    `// TODO: throw new OCSForbiddenException when the caller does not own $id.`
+
+    **This gate's known failure mode has always been false POSITIVES**, which
+    is precisely why its silences get believed, and why a false negative here
+    costs more than in any other gate in the package. The arm below is the
+    cheap, permanent version of that measurement.
+    """
+
+    _UNGUARDED = """<?php
+namespace OCA\\Fx\\Controller;
+class ItemController {
+    #[NoAdminRequired]
+    public function index(int $id) {
+%s        return $this->service->find($id);
+    }
+}
+"""
+
+    def test_positive_control_an_unguarded_endpoint_is_a_finding(self):
+        """First, and not decoration: every arm below is worthless if this
+        one ever goes green."""
+        findings = _scan(self._UNGUARDED % "")
+        self.assertEqual(len(findings), 1, findings)
+        self.assertIn("method=index", findings[0])
+
+    def test_a_todo_naming_the_missing_guard_is_not_a_guard(self):
+        findings = _scan(self._UNGUARDED % (
+            "        // TODO: throw new OCSForbiddenException when the caller "
+            "does not own $id.\n"))
+        self.assertEqual(len(findings), 1, findings)
+
+    def test_a_docblock_describing_the_absent_guard_is_not_a_guard(self):
+        """The block-comment spelling of the same sentence. `//` and `/* */`
+        are two code paths in the stripper and a fix to one is not a fix to
+        the other."""
+        findings = _scan(self._UNGUARDED % (
+            "        /* Once #999 lands we throw new OCSForbiddenException here\n"
+            "           unless the caller owns $id. Not done yet. */\n"))
+        self.assertEqual(len(findings), 1, findings)
+
+    def test_a_hash_comment_is_a_comment_too(self):
+        """`#` opens a PHP comment. It was not handled at all, so the whole
+        repair was one alternative spelling away from being bypassed."""
+        findings = _scan(self._UNGUARDED % (
+            "        # TODO: throw new OCSForbiddenException unless $id is owned "
+            "by the caller.\n"))
+        self.assertEqual(len(findings), 1, findings)
+
+    def test_the_attribute_survives_the_comment_stripper(self):
+        """`#[NoAdminRequired]` is an ATTRIBUTE, not a `#` comment, and it is
+        the single token that makes this gate look at a method at all.
+        Blanking it would not widen the gate — it would switch it off, and the
+        symptom would be a silent PASS on every controller in the fleet."""
+        cleaned = cni._strip_strings_and_comments(
+            "#[NoAdminRequired]\npublic function index() {}\n", keep_strings=True)
+        self.assertIn("#[NoAdminRequired]", cleaned)
+
+    def test_a_real_ownership_guard_still_passes(self):
+        """The anti-widening pair. A stripper that ate code rather than
+        comments passes every arm above and fails this one."""
+        findings = _scan("""<?php
+namespace OCA\\Fx\\Controller;
+class ItemController {
+    #[NoAdminRequired]
+    public function index(int $id) {
+        $thing = $this->service->find($id);
+        if ($thing->getOwner() !== $this->userSession->getUser()->getUID()) {
+            throw new OCSForbiddenException();
+        }
+        return $thing;
+    }
+}
+""")
+        self.assertEqual(findings, [])
+
+    def test_a_guard_whose_argument_is_a_string_still_passes(self):
+        """String literals are deliberately KEPT by `keep_strings=True`. A
+        guard's evidence is often an argument that IS a string — a scope name,
+        a permission key — and blanking literals in a 2,800-line checker whose
+        known failure mode is over-reporting would trade a measured false
+        negative for an unmeasured wave of false positives."""
+        findings = _scan("""<?php
+namespace OCA\\Fx\\Controller;
+class ItemController {
+    #[NoAdminRequired]
+    public function index(int $id) {
+        $thing = $this->service->find($id);
+        if ($thing->getOwner() !== $this->userSession->getUser()->getUID()) {
+            throw new OCSForbiddenException('thing.read denied for this owner');
+        }
+        return $thing;
+    }
+}
+""")
+        self.assertEqual(findings, [])
+
+
 if __name__ == "__main__":
     unittest.main()

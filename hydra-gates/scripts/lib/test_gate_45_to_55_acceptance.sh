@@ -912,6 +912,92 @@ _outG5="${_tmp}/g5.txt"
 _run "${_appG}" "${_outG5}"
 _expect "${_outG5}" 49 "FAIL" "a { inside a string literal does not derail the body walk"
 
+# ===========================================================================
+# FAMILY H — gate-48: a comment is not a CSRF token (#415).
+#
+# This file already predicted the defect and filed it as a hypothetical. The
+# runner's own note above `_csrf_callers_helper` reads:
+#
+#     "the cheapest way to green would have been a cosmetic edit under src/
+#      containing the word `requesttoken`: exactly the prose-satisfaction
+#      #191 warns against."
+#
+# It was not a hypothetical. And it is worse than one missed finding: the
+# signal count SHORT-CIRCUITS the caller-state check built as the mitigation
+# for this exact shape, so one comment skips the guard AND its backup.
+#
+# ⚠️ THE FIXTURE FILE MUST NOT SIT DIRECTLY IN src/. The gate's pathspec is
+# `src/**/*.vue`, and a plain git pathspec's `*` matches `/` too — so the
+# glob requires a SECOND slash and `src/Del.vue` is invisible to it. The
+# first cut of this family put the file there, and both arms printed FAIL:
+# the "before" and "after" agreed, for the reason that neither had measured
+# anything. A component directory is also what real apps ship.
+# ===========================================================================
+_appH="${_tmp}/appH"
+mkdir -p "${_appH}/lib/Controller" "${_appH}/src/components"
+
+cat > "${_appH}/lib/Controller/ThingController.php" <<'PHP'
+<?php
+namespace OCA\Fx\Controller;
+class ThingController
+{
+    /**
+     * @NoCSRFRequired
+     */
+    public function create() { return 1; }
+}
+PHP
+# An UNPROTECTED mutating caller, so the caller-state branch has something to
+# find. Without this the fixture passes for a legitimate reason and the arm
+# below cannot tell a repaired gate from a satisfied one.
+cat > "${_appH}/src/components/Del.vue" <<'VUE'
+<script>
+export default { methods: { async del(id) {
+  await fetch(`/api/things/${id}`, { method: 'DELETE', headers: {} })
+} } }
+</script>
+VUE
+git -C "${_appH}" init -q . 2>/dev/null
+_commit "${_appH}" "a controller with @NoCSRFRequired and an unprotected caller"
+_baseH="$(git -C "${_appH}" rev-parse HEAD)"
+
+# H1 — THE FALSE NEGATIVE. Drop the annotation; the ONLY frontend change is a
+# comment saying the token has NOT been added.
+cat > "${_appH}/lib/Controller/ThingController.php" <<'PHP'
+<?php
+namespace OCA\Fx\Controller;
+class ThingController
+{
+    public function create() { return 1; }
+}
+PHP
+cat > "${_appH}/src/components/Del.vue" <<'VUE'
+<script>
+export default { methods: { async del(id) {
+  // TODO: this call still needs a requesttoken header. Not done yet.
+  await fetch(`/api/things/${id}`, { method: 'DELETE', headers: {} })
+} } }
+</script>
+VUE
+_commit "${_appH}" "drop @NoCSRFRequired; add only a TODO naming the missing header"
+_outH1="${_tmp}/h1.txt"
+_run "${_appH}" "${_outH1}" --scope-to-diff --base "${_baseH}"
+_expect "${_outH1}" 48 "FAIL" "a comment naming the missing token is not a CSRF co-change"
+
+# H2 — THE ANTI-WIDENING PAIR. The same removal, with a REAL header added.
+# A fix that counted no added line at all would close H1 and fail here.
+cat > "${_appH}/src/components/Del.vue" <<'VUE'
+<script>
+export default { methods: { async del(id) {
+  await fetch(`/api/things/${id}`, { method: 'DELETE', headers: { requesttoken: OC.requestToken } })
+} } }
+</script>
+VUE
+_commit "${_appH}" "the same removal, with a real requesttoken header added"
+_outH2="${_tmp}/h2.txt"
+_run "${_appH}" "${_outH2}" --scope-to-diff --base "${_baseH}"
+_expect "${_outH2}" 48 "PASS" "a real added requesttoken header is still a co-change signal"
+
 echo ""
 if [ "${_failures}" -eq 0 ]; then
     echo "test_gate_45_to_55_acceptance.sh: ALL GREEN"

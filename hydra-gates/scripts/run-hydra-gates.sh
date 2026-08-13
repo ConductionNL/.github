@@ -7322,8 +7322,79 @@ elif [ "${HAVE_DELTA_BASE}" = "1" ]; then
         # i.e. "no frontend co-change at all" was read as "co-change found" and
         # the gate PASSED. A CSRF-protection removal with no frontend counterpart
         # is precisely what this gate exists to stop, so the bug was fail-OPEN.
-        _csrf_fe_signals=$(git diff "${BASE_REF}...HEAD" -- 'src/**/*.vue' 'src/**/*.js' 'src/**/*.ts' 2>/dev/null \
-            | grep -cE '^\+.*(OCS-APIRequest|requesttoken|@nextcloud/axios|getRequestToken)' 2>/dev/null || true)
+        # THE SIGNAL MUST BE ON A LINE THAT EXECUTES (#415).
+        # ---------------------------------------------------
+        # This was `grep -cE '^\+.*(…)'` over the raw diff, and this file's own
+        # note twenty lines down already named the hole: "the cheapest way to
+        # green would have been a cosmetic edit under src/ containing the word
+        # `requesttoken`: exactly the prose-satisfaction #191 warns against."
+        # It was written as a hypothetical. It was not one — measured, one
+        # fixture, one variable:
+        #
+        #   a diff dropping #[NoCSRFRequired], no frontend change
+        #     -> FAIL — @NoCSRFRequired dropped without frontend co-change
+        #   the same diff, plus ONE added line under src/ reading
+        #     `// TODO: this call still needs a requesttoken header. Not done yet.`
+        #     -> PASS                                            <- the defect
+        #
+        # A CSRF protection was removed and the gate was satisfied by a comment
+        # saying the replacement protection had NOT been added. Worse than a
+        # missed finding: the short-circuit below means the caller-state check
+        # — the mitigation built for exactly this — never runs at all once the
+        # count is non-zero. One comment skips the guard and the guard's backup.
+        #
+        # So the count is taken over the SCRIPT SCOPE of each changed file at
+        # HEAD (comments blanked, string literals kept — `requesttoken` and
+        # `'OCS-APIRequest'` are header names that ARE strings), restricted to
+        # the line numbers this diff actually added. Same question, asked of
+        # code.
+        #
+        # ⚠️ A CRASH HERE MUST NOT BE READ AS ZERO. Zero routes to the
+        # caller-state branch, which is the CONSERVATIVE direction — it can
+        # only add findings, never remove them — so a failure to compute falls
+        # back to 0 deliberately rather than to "signal found".
+        _csrf_fe_signals=$(PYTHONPATH="${_gate_helper_dir}${PYTHONPATH:+:${PYTHONPATH}}" \
+            python3 - "${BASE_REF}" 2>/dev/null <<'PYCSRF' || true
+import os, re, subprocess, sys
+try:
+    from source_scope import script_mask
+except ImportError:
+    print(0)
+    raise SystemExit(0)
+base = sys.argv[1]
+SIGNAL = re.compile(r'OCS-APIRequest|requesttoken|@nextcloud/axios|getRequestToken',
+                    re.IGNORECASE)
+out = subprocess.run(
+    ['git', 'diff', '-U0', f'{base}...HEAD', '--',
+     'src/**/*.vue', 'src/**/*.js', 'src/**/*.ts'],
+    capture_output=True, text=True, check=False).stdout
+added, path = {}, None
+hunk = re.compile(r'^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@')
+for line in out.splitlines():
+    if line.startswith('+++ b/'):
+        path = line[6:]
+        added.setdefault(path, set())
+    elif line.startswith('+++ /dev/null'):
+        path = None
+    elif line.startswith('@@') and path is not None:
+        m = hunk.match(line)
+        if m:
+            start = int(m.group(1))
+            count = int(m.group(2)) if m.group(2) is not None else 1
+            added[path].update(range(start, start + count))
+count = 0
+for rel, lines in added.items():
+    try:
+        with open(rel, encoding='utf-8', errors='replace') as fh:
+            masked = script_mask(fh.read(), rel).splitlines()
+    except OSError:
+        continue
+    for n in sorted(lines):
+        if 1 <= n <= len(masked) and SIGNAL.search(masked[n - 1]):
+            count += 1
+print(count)
+PYCSRF
+)
         _csrf_fe_signals="${_csrf_fe_signals%%$'\n'*}"
         case "${_csrf_fe_signals}" in ''|*[!0-9]*) _csrf_fe_signals=0 ;; esac
         if [ "${_csrf_fe_signals}" -eq 0 ]; then
