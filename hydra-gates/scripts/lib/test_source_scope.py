@@ -577,6 +577,42 @@ class TestHtmlCommentDelimiterScope(unittest.TestCase):
         self.assertIn("window.confirm", ss.script_mask(src, "f.vue"))
 
 
+class TestStartsInCode(unittest.TestCase):
+    """The anchoring predicate gates 10 and 11 read (#424)."""
+
+    JS = "const doc = \"document.getElementById('x').dataset.v\"\n" \
+         "const v = document.getElementById('x').dataset.v\n"
+
+    def setUp(self):
+        self.anchor = ss.js_code_mask(self.JS)
+        self.evidence = ss.js_comment_mask(self.JS)
+
+    def test_the_two_masks_stay_aligned(self):
+        self.assertEqual(len(self.anchor), len(self.evidence))
+
+    def test_a_token_inside_a_literal_is_not_code(self):
+        i = self.JS.index("document")           # the one in quotes
+        self.assertFalse(ss.starts_in_code(self.anchor, self.evidence, i))
+
+    def test_the_same_token_outside_a_literal_is_code(self):
+        i = self.JS.index("document", self.JS.index("\n"))
+        self.assertTrue(ss.starts_in_code(self.anchor, self.evidence, i))
+
+    def test_php_masks_align_too(self):
+        src = "<?php\n$doc = 'return null;';\nreturn null;\n"
+        a = ss.php_mask(src, blank_strings=True)
+        e = ss.php_mask(src)
+        self.assertEqual(len(a), len(e))
+        self.assertFalse(ss.starts_in_code(a, e, src.index("return")))
+        self.assertTrue(ss.starts_in_code(a, e, src.rindex("return")))
+
+    def test_an_out_of_range_offset_is_not_code(self):
+        """It must not raise: a caller with a stale offset gets a False, and
+        False can only ever UNDER-report."""
+        self.assertFalse(ss.starts_in_code("a", "a", 99))
+        self.assertFalse(ss.starts_in_code("a", "a", -1))
+
+
 class TestCli(unittest.TestCase):
     """The bash gates call this module as a process; a broken CLI is a dead
     gate, so it is exercised the way they call it."""
