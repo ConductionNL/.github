@@ -7355,7 +7355,7 @@ elif [ "${HAVE_DELTA_BASE}" = "1" ]; then
         # back to 0 deliberately rather than to "signal found".
         _csrf_fe_signals=$(PYTHONPATH="${_gate_helper_dir}${PYTHONPATH:+:${PYTHONPATH}}" \
             python3 - "${BASE_REF}" 2>/dev/null <<'PYCSRF' || true
-import os, re, subprocess, sys
+import re, subprocess, sys
 try:
     from source_scope import script_mask
 except ImportError:
