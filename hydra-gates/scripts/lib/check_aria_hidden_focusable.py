@@ -52,8 +52,12 @@ Usage:
 """
 from __future__ import annotations
 
+import os
 import re
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from source_scope import mask_html_comments  # noqa: E402
 
 # Opening tags, quote-aware so a `>` inside an attribute value does not end
 # the tag early (`:title="a > b"`). The old grep used `[^>]*` and did.
@@ -61,7 +65,10 @@ TAG = re.compile(
     r'<([a-zA-Z][a-zA-Z0-9-]*)((?:"[^"]*"|\'[^\']*\'|[^>"\'])*?)/?>',
     re.DOTALL,
 )
-COMMENT = re.compile(r'<!--.*?-->', re.DOTALL)
+# Comment scope comes from the shared library (#424). The private
+# `<!--.*?-->` this replaces called four characters a comment opener wherever
+# they appeared, so `{{ '<!--' }}` … `{{ '-->' }}` blanked every element
+# between them and the gate went green over live markup.
 BLOCK = re.compile(r'<(script|style)\b[^>]*>.*?</\1\s*>', re.DOTALL | re.IGNORECASE)
 
 # `aria-hidden` truthy, literal or bound: aria-hidden="true", :aria-hidden="true".
@@ -113,7 +120,7 @@ def is_focusable(name: str, attrs: str) -> bool:
 
 
 def scan_source(fname: str, src: str) -> list[str]:
-    body = BLOCK.sub(' ', COMMENT.sub(' ', src))
+    body = BLOCK.sub(' ', mask_html_comments(src))
     findings: list[str] = []
     for m in TAG.finditer(body):
         name, attrs = m.group(1), m.group(2) or ''

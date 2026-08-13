@@ -22,4 +22,12 @@ export default {
 	'agent-form': { kind: 'page', component: AgentForm },
 	"agent-skills": { kind: 'section', component: AgentSkills },
 	PlainSection: { kind: 'section', component: PlainSection },
+	// 3. A `/*` INSIDE A STRING (#424). The private two-line comment stripper
+	//    was not string-aware, so the `/*` of this glob opened a block comment
+	//    that ran to the `*/` two lines below — deleting `AfterGlob` from the
+	//    registry and reporting the manifest page that references it as
+	//    unresolved. No correct change closes that finding except removing the
+	//    glob, which is the "finding no correct change can close" shape.
+	GlobPage: { kind: 'page', component: PlainSection, glob: '/*.vue' },
+	AfterGlob: { /* the admin page */ kind: 'page', component: PlainSection },
 }

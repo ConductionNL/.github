@@ -36,13 +36,61 @@ from __future__ import annotations
 import json
 import sys
 
-# Tokens that may appear anywhere inside a rule's JSON (keys or string values).
-_SUBSTRING_TOKENS = (
+# WHERE EACH TOKEN CAN ACTUALLY LIVE (#424).
+#
+# These four were matched against `json.dumps(rule)` — one flat haystack in
+# which a KEY, a machine value and a sentence of human documentation are the
+# same bytes. So a rule whose own `description` WARNED AGAINST the legacy
+# dialect was reported as the legacy dialect:
+#
+#   "description": "Canonical dialect. Do NOT use the legacy lifecycleEnter
+#                   trigger or alsoDispatchLifecycle; removed in ADR-031."
+#     -> rule=onIntakeClosed token=lifecycleEnter
+#        rule=onIntakeClosed token=alsoDispatchLifecycle
+#
+# The better the register is documented, the redder the repo — the exact shape
+# recorded for gate-58 in source_scope's header, in a file format where the
+# fix is not a mask but reading the STRUCTURE instead of its serialisation.
+#
+# Three of the four are KEY names in the dialect (`trigger.lifecycleEnter`,
+# rule-level `alsoDispatchLifecycle` / `idempotencyKey`); `@self.` is a
+# recipient VALUE. Nothing that was a key-hit or a machine-value hit before is
+# lost — only the prose axis is.
+_KEY_TOKENS = (
     "lifecycleEnter",
     "alsoDispatchLifecycle",
     "idempotencyKey",
+)
+_VALUE_TOKENS = (
     "@self.",
 )
+# Fields whose contents are human text, per ADR-031: `subject` is the
+# per-locale message map the CANONICAL dialect requires, and the rest are
+# documentation. Prose about the dialect is not the dialect.
+_PROSE_FIELDS = frozenset({
+    "description", "title", "subject", "comment", "$comment",
+})
+
+
+def _keys_and_values(node, in_prose=False, keys=None, values=None):
+    """Every KEY name and every machine string VALUE reachable from *node*.
+
+    Anything under a prose field is neither: its keys are locale codes and its
+    values are sentences.
+    """
+    if keys is None:
+        keys, values = [], []
+    if isinstance(node, dict):
+        for key, val in node.items():
+            if not in_prose:
+                keys.append(key)
+            _keys_and_values(val, in_prose or key in _PROSE_FIELDS, keys, values)
+    elif isinstance(node, list):
+        for item in node:
+            _keys_and_values(item, in_prose, keys, values)
+    elif isinstance(node, str) and not in_prose:
+        values.append(node)
+    return keys, values
 
 
 def _iter_notification_blocks(data):
@@ -85,10 +133,14 @@ def _scan_rule(rule_key, rule):
     trig = rule.get("trigger")
     if isinstance(trig, dict) and "calculated" in trig:
         findings.append("trigger.calculated")
-    # Substring tokens anywhere in the serialised rule.
-    blob = json.dumps(rule)
-    for tok in _SUBSTRING_TOKENS:
-        if tok in blob:
+    # Structural tokens — see _KEY_TOKENS / _VALUE_TOKENS for why this is not
+    # a substring search over `json.dumps(rule)` any more.
+    keys, values = _keys_and_values(rule)
+    for tok in _KEY_TOKENS:
+        if any(tok in key for key in keys):
+            findings.append(tok)
+    for tok in _VALUE_TOKENS:
+        if any(tok in val for val in values) or any(tok in key for key in keys):
             findings.append(tok)
     return findings
 

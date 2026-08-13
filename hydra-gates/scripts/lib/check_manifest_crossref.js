@@ -240,15 +240,20 @@ const REGISTRY_KINDS_REQUIRING_A_POSITION = new Set(['section', 'page', 'widget'
 // in the fleet — the widening that would make this check useless on arrival.
 const LIB_COMPONENT = /^Cn[A-Z]\w*$/
 
-// Strip line and block comments so a commented-out entry is NOT counted as a
+// Blank line and block comments so a commented-out entry is NOT counted as a
 // registration. A commented-out prelude counting as a prelude was a real
 // false-GREEN in gate-64; the same mistake here would let a deleted component
 // vouch for a manifest reference that resolves to nothing at runtime.
-function stripJsComments(src) {
-	return src
-		.replace(/\/\*[\s\S]*?\*\//g, ' ')
-		.replace(/(^|[^:])\/\/[^\n]*/g, '$1 ')
-}
+//
+// THE PRIVATE TWO-LINE REGEX IS GONE (#424). It was not string-aware, so the
+// `/*` inside `glob: '/*.vue'` opened a block comment that ran to the next
+// real `*/` — swallowing whole registry entries, and (when the swallowed span
+// was brace-unbalanced) making `parsed: false` skip the cross-reference check
+// altogether. See scripts/lib/js_scope.js for the measured shapes; it is the
+// node port of `source_scope.js_comment_mask` and is asserted byte-identical
+// to it. String CONTENTS survive, because the quoted registry key and
+// `kind: 'page'` are this parser's evidence.
+const { jsCommentMask } = require('./js_scope.js')
 
 // Top-level keys of the `export default { … }` object, with their `kind`.
 // Brace-depth tracking keeps nested object keys (`component:`, `props:`) out.
@@ -260,7 +265,7 @@ function parseRegistry(appDir, rel) {
 	} catch (e) {
 		return null // absent — nothing to add from this source
 	}
-	const src = stripJsComments(raw)
+	const src = jsCommentMask(raw)
 	const start = src.search(/export\s+default\s*\{/)
 	if (start === -1) return { file, entries: new Map(), parsed: false }
 
@@ -541,8 +546,33 @@ function main() {
 				}
 				return null
 			}
+			// COMPARE PAGE IDENTITY, NOT THE ROUTE SPELLING (.github#340).
+			//
+			// A `menu[].route` may hold EITHER a pages[].id or a pages[].route —
+			// check (a) above accepts both and every app uses both spellings.
+			// This invariant used to compare the raw strings, so two menu
+			// entries reaching the SAME page by different spellings did not
+			// count as reaching each other. Retiring one of them is precisely
+			// the "duplicate navigation entry whose page is still reachable"
+			// that ADR-044 §5 sanctions, and it was reported as an orphan.
+			//
+			// Measured on a two-entry manifest (`route: "ItemsPage"` and
+			// `route: "/items"`, one page `{id: ItemsPage, route: /items}`):
+			// removing the path-spelled entry FAILED removals-invariant.
+			//
+			// Resolve both sides to the page id before comparing. A reference
+			// that resolves to no page is left as-is: check (a) already fails
+			// it, and collapsing unresolvable references onto one another here
+			// would let two broken entries vouch for each other.
+			const pageIdByRoute = new Map()
+			for (const p of pages) {
+				if (!p || typeof p.route !== 'string' || typeof p.id !== 'string') continue
+				if (!pageIdByRoute.has(p.route)) pageIdByRoute.set(p.route, p.id)
+			}
+			const pageKey = (ref) => (pageIds.has(ref) ? ref : (pageIdByRoute.get(ref) || ref))
 			const effectiveRoutes = []
 			collectMenuRoutes(manifest.menu, '/menu', effectiveRoutes)
+			const effectiveKeys = new Set(effectiveRoutes.map((m) => pageKey(m.route)))
 			removals.forEach((id, i) => {
 				const entry = findEntry(preRemoval, id)
 				if (!entry) {
@@ -550,7 +580,7 @@ function main() {
 					return
 				}
 				if (typeof entry.route !== 'string' || entry.route === '') return // nothing routable retired
-				if (!effectiveRoutes.some((m) => m.route === entry.route)) {
+				if (!effectiveKeys.has(pageKey(entry.route))) {
 					fail('removals-invariant', `/menu-layout/removals/${i}`, `removal '${id}' orphans route '${entry.route}' — no surviving menu entry reaches it (ADR-044 no-functionality-loss)`)
 				}
 			})

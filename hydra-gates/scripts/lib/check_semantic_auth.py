@@ -40,8 +40,12 @@ Exits 0 always; the bash gate counts the printed lines.
 """
 from __future__ import annotations
 
+import os
 import re
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from source_scope import php_mask  # noqa: E402
 
 
 _METHOD_RE = re.compile(
@@ -625,12 +629,42 @@ def scan_file(path: str) -> int:
     except OSError:
         return 0
     violations = 0
+    # A COMMENT MUST NOT MANUFACTURE A FINDING (#415/#423).
+    #
+    # Every body question below is a question about CODE, and the bodies were
+    # sliced from the RAW source. A method whose only mention of a guard is a
+    # note about the guard that was REMOVED —
+    #
+    #     // We used to $this->requireAdmin(); here. Now anyone may read.
+    #
+    # — reported `no-admin-required-annotation-with-admin-body`, i.e. the gate
+    # named a contradiction that the code does not contain, and the author's
+    # cheapest fix is to delete the sentence explaining the change. That is
+    # the corrosive direction: it trains explanations out of the codebase and
+    # leaves the gate with nothing a human can check.
+    #
+    # `php_mask` (offset-preserving, `#[` opens an ATTRIBUTE and not a
+    # comment, `//` inside `'https://x'` opens nothing) rather than this
+    # file's local `_strip_comments`, which does not know `#` opens a PHP
+    # comment at all — the hash form reproduced identically.
+    #
+    # STRINGS ARE KEPT (`blank_strings` left at its default). The self-auth
+    # idioms this gate must still see live inside literals by nature —
+    # `'Bearer '`, `'HTTP_AUTHORIZATION'`, the header name passed to
+    # getHeader() — and `_strip_comments`' own docstring records that
+    # blanking them turns correct code into findings. The string-literal
+    # axis is #424's, deliberately not smuggled in here.
+    #
+    # The HEAD is still read from the ORIGINAL text: `@NoAdminRequired` and
+    # `@PublicPage` are docblock annotations, so they live in a comment BY
+    # DESIGN and masking the head would switch the whole gate off.
+    code = php_mask(src)
     # Computed once per file, not per method: the unsourced-denial rule needs
     # the bodies of the private helpers a public action delegates to.
     all_bodies = _all_method_bodies(src)
     for name, head_start, body_start, body_end, line_no in _find_method_bodies(src):
         head = src[head_start:body_start]
-        body = src[body_start:body_end]
+        body = code[body_start:body_end]
         if _NO_ADMIN_HEAD_RE.search(head):
             if _ADMIN_GATE_BODY_RE.search(body) or _has_admin_if_with_throw(body):
                 print(
