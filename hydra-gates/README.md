@@ -222,14 +222,30 @@ checkout. With a base they run at any file scope; with none they report
 A delta gate also has to decide what *counts* as a change, and a plain `git diff`
 answers "a line moved". gate-16 therefore compares each changed file against its
 own base version with layout normalised away on both sides: brace style (K&R vs
-Allman), indentation and intra-line spacing, a PHP trailing comma, two spellings
-of one string, and a PHP statement re-wrapped across lines. Adopting
+Allman), indentation and intra-line spacing, a trailing comma, two spellings of
+one string, and a statement re-wrapped across lines. Adopting
 `nextcloud/coding-standard` consequently reports nothing, while a changed value,
 a new parameter or an edited string still reports (`.github#395` — measured
 1071 → 0 findings across the fleet's seven adoption PRs, with a positive control
 per rule). The narrowing intersects git's own answer, so it can only ever shrink
 the scope. `git diff -w` does **not** express this: a brace is a token that moved
 lines, not whitespace that changed width.
+
+`.github#435` extended the same normalisation to **JS / TS / Vue**, for
+`@nextcloud/prettier-config`, and added the one rule prettier makes unavoidable:
+it re-prints parentheses from its own precedence table, in both directions
+(`return (…)` appears, `(a && b) ? c : d` loses its pair). A parenthesis is
+dropped only when the expression inside binds **strictly tighter** than both
+neighbours, so associativity never enters the argument and `(a || b) && c` keeps
+its pair. Four JS-specific hazards are **refused** rather than reasoned about,
+each with its own control: an array **elision** (`[a, , b]` is three elements),
+an **ASI**-sensitive line break (`return` + `x` is not `return x`), a re-wrap
+across a **`//`** (which uncomments what followed, or comments out what follows),
+and a line break inside a **template literal** (a character of the string).
+Measured on the fleet's prettier PRs: pipelinq#820 **468 → 11**, shillinq#545
+**197 → 1**, scholiq#329 **125 → 2**, openregister#2466 **29 → 1**, with
+`development` at PASS throughout and the PHP path byte-identical over 3,054 real
+file pairs.
 
 To get the old behaviour explicitly:
 
