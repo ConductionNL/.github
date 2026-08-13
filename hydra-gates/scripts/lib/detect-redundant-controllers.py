@@ -59,6 +59,7 @@ from typing import Iterable
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from exclusion_reason import exclude_pattern, is_reason_bearing  # noqa: E402
+from source_scope import php_mask  # noqa: E402
 
 # Methods on OpenRegister's ObjectService that are pure CRUD pass-throughs.
 # A method body that calls ONE of these and nothing else of substance is
@@ -108,6 +109,29 @@ OBJECT_SERVICE_CRUD = (
 
 # Calls / constructs that are considered "wrapper noise" — present in any
 # controller body but do not constitute domain logic.
+#
+# ⚠️ THE FOUR COMMENT ROWS BELOW ARE NOW BELT-AND-BRACES, NOT THE MECHANISM
+# (#422). They recognise a comment by its LINE PREFIX, which covers the three
+# ways a comment line can BEGIN and misses the one way it can continue: an
+# UNPREFIXED interior line of a `/* … */` block. Such a line survived as
+# "significant code", and a one-call pass-through with an explanatory block
+# comment in it therefore read as a method with domain logic:
+#
+#     public function index() {
+#         /*
+#         TODO: this should also apply the tenant filter before delegating.
+#         */
+#         return $this->objectService->findAll('thing');
+#     }
+#
+#     raw body       2 significant lines -> not a pass-through -> PASS
+#     masked body    1 significant line  -> pass-through        -> FAIL
+#
+# Measured on this checker, one fixture, one variable: `# count=1` -> `# count=0`.
+# The body is now comment-masked by `scan_files` before it gets here, so these
+# rows only have to survive; they are kept because they also match the empty
+# residue a masked comment leaves and because a future caller passing raw text
+# should not silently lose them.
 WRAPPER_NOISE_PATTERNS = (
     re.compile(r"^\s*$"),                                             # blank lines
     re.compile(r"^\s*//"),                                            # // comments
@@ -171,8 +195,22 @@ OBJECT_SERVICE_CALL_RE = re.compile(
 
 # Method header — captures the method name. Must match `public function NAME(`
 # with optional return type after the closing paren.
+#
+# ⚠️ `^[ \t]*`, NOT `^\s*`. In MULTILINE mode `^` matches at every line start
+# and `\s` matches `\n`, so `^\s*public` could begin the match at the start of
+# any run of BLANK LINES above the declaration — and `header_match.start()` is
+# what the line number is computed from. A method preceded by one blank line
+# was reported at the blank line, one line early (measured on this checker
+# before this change: true line 4, reported 3). Nothing depended on it until
+# the body was comment-masked, at which point a blanked DOCBLOCK became a run
+# of blank lines and the header slid up to the docblock's first line — where
+# `_method_docblock` then walked up from the wrong place, found no `*/`, and a
+# reason-bearing `@spec exclude` silently stopped exempting. That is the fix
+# over-applied: closing a false negative by breaking an escape hatch. Anchoring
+# to horizontal whitespace makes the reported line the DECLARATION's line
+# whatever sits above it, masked or not.
 METHOD_HEADER_RE = re.compile(
-    r"^\s*public\s+function\s+(?P<name>\w+)\s*\(",
+    r"^[ \t]*public\s+function\s+(?P<name>\w+)\s*\(",
     flags=re.MULTILINE,
 )
 
@@ -444,8 +482,22 @@ def scan_files(
             source = abs_path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
+        # TWO TEXTS, ONE COORDINATE SYSTEM. `php_mask` is length- and
+        # newline-preserving, so `line_no` computed on the mask names the same
+        # line of the original — which is what lets the docblock below be read
+        # from `src_lines` (the ORIGINAL). That split is deliberate and is the
+        # same one gate-49 makes: `@spec exclude` lives in a comment BY DESIGN
+        # and masking it would trade this false negative for a fleet of false
+        # positives, while the BODY question must never see prose at all.
+        #
+        # String contents are kept (`blank_strings` default). A pass-through's
+        # own evidence is often an argument that IS a string —
+        # `findAll('thing')` — and the noise/rescue rows are matched per LINE,
+        # so blanking a literal could empty a line that carries a real call.
+        # The string axis of this gate is #424's.
+        masked = php_mask(source)
         src_lines = source.splitlines()
-        for method_name, line_no, body in _split_methods(source):
+        for method_name, line_no, body in _split_methods(masked):
             # Only check methods whose name fits a CRUD shape — methods
             # named after a domain action (publishX, transitionY,
             # generateZ) are presumed to be domain logic regardless of
