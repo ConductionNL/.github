@@ -445,6 +445,86 @@ export default {
 """
 
 
+class ATrailingCommentIsACommentToo(unittest.TestCase):
+    """#415/#423 — `_COMMENT_LINE_RE` is a ``match``, so it only ever saw a
+    line that STARTS with a comment.
+
+    The module's own docstring promises the opposite — *"Prose that merely
+    mentions IUserSession is not — it is a sentence"* — and the annotation arm
+    implements it, but a sentence written AFTER code on the same line was
+    still read as code. And `<!--` was not in the vocabulary at all, while
+    `src/**/*.vue` has always been a candidate path.
+
+    C1, C4, C5, C6, C7 are CONTROLS: they pass before and after. They are
+    deliberately called with ONE argument — none of them contains a comment,
+    so the path cannot matter, and calling them the old way keeps them
+    runnable against the pre-fix helper. A control that raises TypeError on
+    the reverted code is not a control, it is a signature check.
+    """
+
+    def test_C1_control_a_real_IUserSession_declaration_still_counts(self):
+        self.assertTrue(csc.line_is_security_relevant(
+            "    private IUserSession $userSession;"))
+
+    def test_C2_a_trailing_comment_naming_the_token_is_a_sentence(self):
+        self.assertFalse(csc.line_is_security_relevant(
+            "        return $this->render();   // resolved via IUserSession elsewhere",
+            "lib/Controller/A.php"))
+
+    def test_C3_an_html_comment_in_an_sfc_is_a_comment(self):
+        # One argument on purpose: this half is `_COMMENT_LINE_RE` gaining
+        # `<!--`, nothing to do with the path, so the arm FLIPS on the
+        # reverted helper rather than raising TypeError at it.
+        self.assertFalse(csc.line_is_security_relevant(
+            "    <!-- IUserSession is resolved server-side, see ADR-005 -->"))
+
+    def test_C4_control_a_string_literal_still_counts_it_is_424(self):
+        # NOT a fix. `requesttoken` arrives as a header KEY and DI ids arrive
+        # as strings, so blanking literals would delete real evidence. This
+        # arm records the remaining false positive rather than hiding it, and
+        # goes red if anyone closes it by blanking string contents.
+        self.assertTrue(csc.line_is_security_relevant(
+            "        $id = 'IUserSession';"))
+
+    def test_C5_control_a_requesttoken_header_key_still_counts(self):
+        self.assertTrue(csc.line_is_security_relevant(
+            "    headers: { requesttoken: OC.requestToken },"))
+
+    def test_C6_control_the_annotation_arm_is_untouched(self):
+        for line in ("    #[NoAdminRequired]",
+                     "     * @PublicPage",
+                     "    #[\\OCP\\AppFramework\\Http\\Attribute\\NoCSRFRequired]"):
+            with self.subTest(line=line):
+                self.assertTrue(
+                    csc.line_is_security_relevant(line))
+
+    def test_C7_control_an_unknown_extension_is_judged_unmasked(self):
+        # The default keeps every existing caller's behaviour, which is what
+        # lets the 23 pre-existing assertions in this suite stand unchanged.
+        self.assertTrue(csc.line_is_security_relevant(
+            "        return $x; // IUserSession"))
+
+    def test_C8_the_path_is_actually_passed_by_the_scanner(self):
+        # An unapplied change looks exactly like a passing test.
+        import inspect
+        self.assertIn("line_is_security_relevant(line, f)",
+                      inspect.getsource(csc.scan))
+
+    def test_C9_end_to_end_a_reworded_trailing_comment_is_not_a_change(self):
+        repo = _Repo()
+        self.addCleanup(repo.close)
+        repo.write("lib/Controller/A.php",
+                   "<?php\nclass A {\n"
+                   "    public function index() { return 1; } // uses IUserSession\n}\n")
+        base = repo.commit("baseline")
+        repo.write("lib/Controller/A.php",
+                   "<?php\nclass A {\n"
+                   "    public function index() { return 1; } // resolved via IUserSession elsewhere\n}\n")
+        repo.commit("reword the comment")
+        security, _ = csc.scan(base, str(repo.root))
+        self.assertEqual(security, [])
+
+
 class RenamesAreNotContentChanges(unittest.TestCase):
     """A pathspec is applied BEFORE rename detection.
 

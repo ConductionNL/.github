@@ -59,6 +59,9 @@ import re
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from source_scope import js_comment_mask, php_mask  # noqa: E402
+
 # Security code identified by LOCATION. Any change to such a file qualifies —
 # there is no "incidental" edit to lib/Service/Auth/TokenVerifier.php.
 _PATH_PATTERNS = (
@@ -139,7 +142,51 @@ _TEST_PATH_RE = re.compile(
 _CANDIDATE_RE = re.compile(r"^(lib/.*\.php|src/.*\.(vue|js|ts))$")
 
 # Comment shapes, per line, after leading whitespace.
-_COMMENT_LINE_RE = re.compile(r"^\s*(?:\*|//|/\*|\#(?!\[))")
+#
+# `<!--` was missing from this vocabulary entirely while `src/**/*.vue` has
+# always been a candidate path (#415/#423), so
+#
+#     <!-- IUserSession is resolved server-side, see ADR-005 -->
+#
+# was read as a security-relevant change and demanded a test co-change.
+_COMMENT_LINE_RE = re.compile(r"^\s*(?:\*|//|/\*|<!--|\#(?!\[))")
+
+# A TRAILING COMMENT IS A COMMENT TOO (#415/#423).
+#
+# The test above is `match`, i.e. it only ever recognised a line that STARTS
+# with a comment. The module's own docstring promises the opposite —
+# *"Prose that merely mentions `IUserSession` is not — it is a sentence"* —
+# and the annotation arm implements it, but a sentence written after code on
+# the same line was still read as code:
+#
+#     return $this->render();   // resolved via IUserSession elsewhere
+#
+# One reworded end-of-line comment therefore turned gate-47 red and demanded
+# a test for a change containing none. That is #191's shape one level up: the
+# cheapest way to clear the finding is to reword the prose again, so the gate
+# manufactures the appearance of a security review.
+#
+# Masked with the shared, offset-preserving strippers, dispatched on the
+# file's own extension. STRING CONTENTS ARE KEPT (`js_comment_mask`, and
+# `php_mask`'s default): `requesttoken` reaches this gate as the KEY of a
+# header object and `'IUserSession'` as a DI id, so blanking literals would
+# delete real evidence — the axis tracked as #424.
+#
+# ⚠️ A `<!--` appearing MID-LINE in an SFC template is not handled here: that
+# needs `source_scope.markup_mask`, whose delimiter handling is under repair
+# in #424. Line-START is what the fixture in #423 shows and what is closed.
+_LINE_MASKERS = {
+    ".php": php_mask,
+    ".js": js_comment_mask,
+    ".ts": js_comment_mask,
+    ".vue": js_comment_mask,
+}
+
+
+def _line_code(line: str, path: str) -> str:
+    """*line* with any trailing comment blanked, same length."""
+    masker = _LINE_MASKERS.get(os.path.splitext(path)[1].lower())
+    return masker(line) if masker else line
 
 
 def is_test_path(path: str) -> bool:
@@ -150,7 +197,7 @@ def is_security_path(path: str) -> bool:
     return any(p.match(path) for p in _PATH_PATTERNS)
 
 
-def line_is_security_relevant(line: str) -> bool:
+def line_is_security_relevant(line: str, path: str = "") -> bool:
     """Is this ONE changed line a security change?
 
     A comment line qualifies only via ``_ANNOTATION_RE``, and only when the
@@ -162,12 +209,17 @@ def line_is_security_relevant(line: str) -> bool:
     ``match`` rather than ``search``: ``_ANNOTATION_RE`` is anchored with
     ``^`` on both branches, so the two are equivalent here, but ``match``
     states the intent — position is the whole point of this regex.
+
+    *path* names the file the line came from, so the trailing-comment mask
+    can be chosen by extension (see ``_LINE_MASKERS``). It defaults to empty,
+    in which case the line is judged unmasked — the pre-#423 behaviour, and
+    the reason no caller is obliged to know about it.
     """
     if _ANNOTATION_RE.match(line):
         return True
     if _COMMENT_LINE_RE.match(line):
         return False
-    return bool(_CODE_TOKEN_RE.search(line))
+    return bool(_CODE_TOKEN_RE.search(_line_code(line, path)))
 
 
 def changed_lines(base_ref: str, path: str, cwd: str,
@@ -276,7 +328,7 @@ def scan(base_ref: str, cwd: str = ".") -> tuple[list[str], bool]:
         if not _CANDIDATE_RE.match(f):
             continue
         for line in changed_lines(base_ref, f, cwd, renames.get(f)):
-            if line_is_security_relevant(line):
+            if line_is_security_relevant(line, f):
                 security.append(f)
                 break
     return security, has_test

@@ -67,9 +67,92 @@ import sys
 DECL = re.compile(
     r'^[\s]*(?:/\*+|\*+/?|//+|#+|<!--)?[\s]*'
     r'(?:@license|SPDX-License-Identifier:)[\s]+'
-    r'([^\s*\'"`;,)\]]+)',
+    r'([^\s*\'"`;,)\]]+)'
+    r'(?P<rest>[^\n]*)',
     re.MULTILINE,
 )
+
+# A SENTENCE THAT BEGINS WITH THE TAG IS NOT A SECOND DECLARATION (#415/#423).
+#
+# The anchor above was already right about position — a quote before the tag
+# means test data, not a claim — but it said nothing about what FOLLOWS the
+# identifier. So a docblock line explaining a licence the file does NOT use:
+#
+#     * @license EUPL-1.2
+#     * @license MIT was never used here — see the note above.
+#
+# read as a file declaring two licences, and produced BOTH
+# `license-internal-conflict` and `license-triangle-drift`. The note about
+# the licence that was ruled out scored as the licence.
+#
+# THE REMAINDER MAY NOT BE EMPTY, because the fleet's own header is not.
+# Measured over every tracked `lib/**/*.php` in openregister, opencatalogi,
+# procest, docudesk, larpingapp and softwarecatalog — 2,394 files, every
+# distinct declaration form:
+#
+#     2724  @license EUPL-1.2 https://joinup.ec.europa.eu/…/eupl-text-eupl-12
+#     2095  @license EUPL-1.2   (and `SPDX-License-Identifier: EUPL-1.2`)
+#       11  @license https://www.gnu.org/licenses/agpl-3.0.html GNU AGPL v3 or later
+#        8  @license AGPL-3.0-or-later https://www.gnu.org/licenses/agpl-3.0.en.html
+#
+# A rule of "nothing may follow the identifier" would have deleted the FIRST
+# and most common form — 2,724 real declarations, in the fleet's own house
+# style — and the gate would have gone quiet on exactly the files it exists
+# to compare. So the remainder is allowed to be a URL, a comment terminator
+# or trailing punctuation, and nothing else: those are what a header carries
+# and prose is what it does not.
+#
+# The URL-FIRST form (11 files) is deliberately left alone: its identifier is
+# a URL, `_looks_like_a_path` already reports it as a parser malfunction, and
+# that diagnostic is not this change's to silence. The rule below therefore
+# only applies to a value that is not itself path-shaped.
+# ⚠️ THIS WAS A REGEX AND THE REGEX WAS A ReDoS (CodeQL `py/redos`, HIGH).
+# The first cut read
+#
+#     ^(?:\s|https?://\S+|\*/|--!?>|[.,;:)\]]|\(\s*\)|\s*\Z)*$
+#
+# `\S+` inside a STARRED alternation is ambiguous with itself: `https://ab`
+# can be consumed by one iteration or by several, so a subject that never
+# reaches `$` has exponentially many splits to try.
+#
+# MEASURED, because the alert's own witness string did NOT reproduce here.
+# CodeQL named `'http://' + '!http://' * n`; in CPython that is 0.000s even
+# at n=32,000, because `\s*\Z` can match empty and the engine's empty-repeat
+# guard cuts the search short. The alert is still right — the ambiguity is
+# real — it just names the wrong subject. The one that fires is a repeated
+# URL with one trailing byte that cannot match:
+#
+#     'https://a' * n + ' \x01'      OLD          NEW
+#       n=18  len=164                 0.0949s      0.0000s
+#       n=22  len=200                 1.5284s      0.0000s
+#       n=24  len=218                 6.6797s      0.0000s
+#       n=26  len=236                26.1822s      0.0000s
+#       n=28  len=254                  >60s        0.0000s
+#
+# Every +2 multiplies the old time by ~4. A 254-character line — shorter
+# than plenty of real headers — hangs the gate, and gate-28 runs over every
+# tracked lib/**/*.php in the repo.
+#
+# Rewritten as a linear scan rather than tightened, so the ambiguity cannot
+# exist rather than being harder to reach: split the remainder on whitespace
+# and ask of each token whether a header could carry it. No quantifier, no
+# backtracking. Flat on the adversarial input above, and still flat at
+# 256 KB (0.0103s, linear in length).
+def _decl_tail_ok(rest: str) -> bool:
+    """Is what follows the identifier header FURNITURE rather than prose?
+
+    A header carries the identifier and at most a URL, a comment terminator
+    and punctuation. A sentence carries words. See the measurement above the
+    caller for why "nothing may follow" was not an option.
+    """
+    for token in rest.split():
+        token = _TRAILING_COMMENT.sub('', token).strip('.,;:()[]')
+        if not token:
+            continue
+        if token.startswith(('http://', 'https://')):
+            continue
+        return False
+    return True
 # `/` is deliberately ALLOWED in the captured value. Excluding it (to stop
 # `@license EUPL-1.2*/` capturing the comment terminator) also truncated a
 # path-shaped value to its first segment, so `lib/Service/Thing.php` arrived
@@ -99,6 +182,12 @@ def declarations(src: str) -> list[str]:
     for m in DECL.finditer(src):
         v = _TRAILING_COMMENT.sub('', m.group(1).strip()).strip().rstrip('.,;')
         if not v or v in seen:
+            continue
+        # See _decl_tail_ok: a header carries an identifier and at most a URL;
+        # prose after the identifier means the line is a SENTENCE about a
+        # licence, not a declaration of one. Path-shaped values keep their
+        # existing "parser malfunction" report regardless of what follows.
+        if not _looks_like_a_path(v) and not _decl_tail_ok(m.group('rest')):
             continue
         seen.append(v)
     return seen

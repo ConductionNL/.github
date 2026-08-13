@@ -113,6 +113,58 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from source_scope import js_comment_mask, php_mask  # noqa: E402
+
+# A COMMENT MUST NOT MANUFACTURE A FINDING (#415/#423).
+#
+# The comment test used to be `stripped.startswith(("//", "*", "/*", "#"))`
+# applied per LINE, which only recognises a comment-OPENING line. One clean
+# fixture produced THREE findings:
+#
+#   * an interior line of an unindented `/* … */` block, describing the
+#     phantom call that was REMOVED;
+#   * a TRAILING `// never do $reg->getLeaf($id) here`;
+#   * a string literal warning against the same call.
+#
+# The first two are closed here by masking the file with the shared,
+# offset-preserving strippers before any rule runs. Line numbering survives
+# because the masks blank text without removing lines, and every finding
+# reports a line number.
+#
+# STRINGS ARE KEPT ON PURPOSE (`blank_strings` left at its default). Rule B
+# is `->call('<fleetAppId>', …)` — the evidence IS a string literal, and the
+# rule's own docstring records that requiring a quoted app id is what makes
+# it zero-false-positive. Blanking literals to close the third finding would
+# delete Rule B entirely: a false positive traded for a false negative in
+# the gate that exists because a phantom call only ever dies at runtime.
+# The literal axis is tracked as #424, not smuggled in here.
+#
+# ⚠️ `.vue` IS DELIBERATELY NOT MASKED. The mask for an SFC is
+# `source_scope.script_mask`, which routes through the `<!-- … -->` handling
+# that #424 is currently repairing (a `<!--` inside a string literal blanks
+# live code, i.e. it can silence the gate). Adopting it today would inherit
+# that hole into a gate whose findings are runtime fatals. The `.vue`
+# false positive therefore STANDS, and is blocked on #424 — stated rather
+# than papered over, because a partially-masked checker looks exactly like a
+# fully-masked one from the outside.
+_MASKERS = {
+    ".php": php_mask,
+    ".js": js_comment_mask,
+    ".ts": js_comment_mask,
+    ".mjs": js_comment_mask,
+    ".cjs": js_comment_mask,
+    ".jsx": js_comment_mask,
+    ".tsx": js_comment_mask,
+}
+
+
+def _code_text(path: str, text: str) -> str:
+    """*text* with comments blanked, offsets and line numbers preserved."""
+    masker = _MASKERS.get(os.path.splitext(path)[1].lower())
+    return masker(text) if masker else text
+
+
 # Known fleet app ids. A ->call('<id>', ...) with one of these as the
 # first string-literal argument is a phantom cross-app RPC (Rule B).
 FLEET_APP_IDS = {
@@ -249,14 +301,15 @@ def scan_file(path: str) -> int:
     except OSError:
         return 0
 
-    lines = text.split("\n")
+    lines = _code_text(path, text).split("\n")
     violations = 0
 
     for idx, line in enumerate(lines, start=1):
-        # Skip obvious comment-only lines (PHP // / * / # and JS //) so a
-        # documented example or a forbidden-pattern note never trips the
-        # gate. We keep it simple: a line whose first non-space char starts
-        # a comment is ignored for the literal-call rules.
+        # Retained for the file types `_code_text` does not mask (`.vue`,
+        # blocked on #424): a line whose first non-space char opens a comment
+        # is ignored for the literal-call rules. On a masked file every
+        # comment line is already blank, so this costs nothing and the two
+        # never disagree.
         stripped = line.lstrip()
         is_comment = (
             stripped.startswith("//")
@@ -376,7 +429,7 @@ def check_against_or_contract(path: str, contract: dict) -> None:
 
     try:
         with open(path, "r", encoding="utf-8", errors="replace") as fh:
-            lines = fh.read().split("\n")
+            lines = _code_text(path, fh.read()).split("\n")
     except OSError:
         return
 

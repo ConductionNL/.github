@@ -826,5 +826,101 @@ class AdminEscalationBranchIsNotAnAdminRequirement(unittest.TestCase):
         self.assertIn("_unconditional_part(body[body_start:i])", src)
 
 
+class ACommentDoesNotManufactureAFinding(unittest.TestCase):
+    """#415/#423 — the body questions were asked of the RAW method body.
+
+    A note about the guard that was REMOVED scored as the guard, so the gate
+    reported a contradiction the code does not contain and the author's
+    cheapest fix was to delete the sentence explaining the change. That is
+    the direction that trains explanations out of a codebase.
+
+    P1 is the POSITIVE CONTROL and passes both before and after: it exists so
+    the two negatives below cannot be had by switching the rule off.
+    """
+
+    def test_P1_control_a_real_requireAdmin_call_still_fires(self):
+        php = CLASS % """
+    #[NoAdminRequired]
+    public function purge(): JSONResponse
+    {
+        $this->requireAdmin();
+        return new JSONResponse([]);
+    }
+"""
+        self.assertEqual(
+            _rules(_scan(php)), ["no-admin-required-annotation-with-admin-body"]
+        )
+
+    def test_P2_a_note_about_the_removed_guard_is_not_an_admin_body(self):
+        php = CLASS % """
+    #[NoAdminRequired]
+    public function index(): JSONResponse
+    {
+        // We used to $this->requireAdmin(); here. Now anyone may read.
+        return new JSONResponse($this->service->all());
+    }
+"""
+        self.assertEqual(_rules(_scan(php)), [])
+
+    def test_P3_a_hash_comment_is_a_comment_too(self):
+        # This file's local _strip_comments does not know `#` opens a PHP
+        # comment, which is why the body now goes through source_scope's
+        # php_mask instead. Reproduced identically before the fix.
+        php = CLASS % """
+    #[NoAdminRequired]
+    public function index(): JSONResponse
+    {
+        # Historically this called $this->requireAdmin(); it no longer does.
+        return new JSONResponse([]);
+    }
+"""
+        self.assertEqual(_rules(_scan(php)), [])
+
+    def test_P4_a_docblock_naming_the_removed_isAdmin_denial_is_not_one(self):
+        php = CLASS % """
+    /**
+     * List things.
+     *
+     * Until 2.3 this read:
+     *   if (!$this->groupManager->isAdmin($this->userId)) {
+     *       throw new OCSForbiddenException();
+     *   }
+     * Removed when the register grew its own per-object ACL.
+     */
+    #[NoAdminRequired]
+    public function index(): JSONResponse
+    {
+        return new JSONResponse($this->service->all());
+    }
+"""
+        self.assertEqual(_rules(_scan(php)), [])
+
+    def test_P5_control_the_head_is_still_read_from_the_original_text(self):
+        # `@NoAdminRequired` lives in a docblock BY DESIGN. If the mask were
+        # applied to the head as well, this whole gate would go silent — so
+        # this arm is the anti-over-application control and must FAIL the
+        # method, not exempt it.
+        php = CLASS % """
+    /**
+     * @NoAdminRequired
+     */
+    public function purge(): JSONResponse
+    {
+        $this->requireAdmin();
+        return new JSONResponse([]);
+    }
+"""
+        self.assertEqual(
+            _rules(_scan(php)), ["no-admin-required-annotation-with-admin-body"]
+        )
+
+    def test_P6_the_mask_is_actually_wired_into_the_body_slice(self):
+        # An unapplied change looks exactly like a passing test.
+        src = Path(csa.__file__).read_text(encoding="utf-8")
+        self.assertIn("code = php_mask(src)", src)
+        self.assertIn("body = code[body_start:body_end]", src)
+        self.assertIn("head = src[head_start:body_start]", src)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
