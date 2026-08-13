@@ -1076,6 +1076,107 @@ _run "${_appH}" "${_outH2}" --scope-to-diff --base "${_baseH}"
 _expect "${_outH2}" 48 "PASS" "a real added requesttoken header is still a co-change signal"
 
 # ===========================================================================
+# FAMILY I — gate-48: `src/**/*.js` CANNOT SEE `src/thing.js` (#428).
+#
+# FAMILY H's own header warns about this and works AROUND it ("the fixture
+# file must not sit directly in src/"). The workaround was correct and the
+# blind spot was left in the gate. This family removes it.
+#
+# In a PLAIN git pathspec there is no `**` operator — it is two ordinary
+# `*`s, and a plain `*` matches `/`. `src/**/*.js` therefore REQUIRES a
+# second slash, and every file at `src/foo.js` was invisible to the signal
+# scan. Reproduced 2026-08-13 on c26f9a3:
+#
+#   git diff --name-only HEAD~1...HEAD -- 'src/**/*.js'          -> (empty)
+#   git diff --name-only HEAD~1...HEAD -- ':(glob)src/**/*.js'   -> src/thing.js
+#
+# DIRECTION. A missed signal makes the count 0, which routes to the
+# caller-state check — the conservative branch. So this was never letting a
+# CSRF removal through; it made the count a FLOOR rather than a count, and
+# the NOTE gate-48 prints about the frontend diff could be wrong about what
+# it had read. Fixing it therefore REMOVES a finding in I1, and the arm is
+# built so that the removal is unambiguous: the diff really does add a real
+# `requesttoken` header, which is exactly the co-change this gate asks for.
+#
+# I1 is the evidence arm (FAIL on origin/main, PASS here).
+# I2 and I3 are CONTROLS: they hold the same verdict before and after.
+# ===========================================================================
+_appI="${_tmp}/appI"
+mkdir -p "${_appI}/lib/Controller" "${_appI}/src/components" "${_appI}/src/sub"
+
+cat > "${_appI}/lib/Controller/ThingController.php" <<'PHP'
+<?php
+namespace OCA\Fx\Controller;
+class ThingController
+{
+    /**
+     * @NoCSRFRequired
+     */
+    public function create() { return 1; }
+}
+PHP
+# The same unprotected mutating caller FAMILY H uses, and for the same reason:
+# without it the fallback branch has nothing to find and every arm below
+# passes for a legitimate reason, which cannot distinguish a repaired gate
+# from a satisfied one.
+cat > "${_appI}/src/components/Del.vue" <<'VUE'
+<script>
+export default { methods: { async del(id) {
+  await fetch(`/api/things/${id}`, { method: 'DELETE', headers: {} })
+} } }
+</script>
+VUE
+printf '// placeholder\n' > "${_appI}/src/thing.js"
+printf '// placeholder\n' > "${_appI}/src/sub/thing.js"
+git -C "${_appI}" init -q . 2>/dev/null
+_commit "${_appI}" "a controller with @NoCSRFRequired and an unprotected caller"
+_baseI="$(git -C "${_appI}" rev-parse HEAD)"
+
+cat > "${_appI}/lib/Controller/ThingController.php" <<'PHP'
+<?php
+namespace OCA\Fx\Controller;
+class ThingController
+{
+    public function create() { return 1; }
+}
+PHP
+
+# I1 — THE DEFECT. The added signal sits DIRECTLY under src/.
+cat > "${_appI}/src/thing.js" <<'JS'
+import axios from '@nextcloud/axios'
+export const create = (b) => axios.post('/api/things', b, { headers: { requesttoken: OC.requestToken } })
+JS
+_commit "${_appI}" "drop @NoCSRFRequired; add a real requesttoken in src/thing.js"
+_outI1="${_tmp}/i1.txt"
+_run "${_appI}" "${_outI1}" --scope-to-diff --base "${_baseI}"
+_expect "${_outI1}" 48 "PASS" "a CSRF signal added DIRECTLY under src/ is seen (src/thing.js)"
+
+# I2 — CONTROL. The identical signal one directory down. This is the arm the
+# old pathspec could already see, so it holds its verdict across the fix; it
+# is here so that a fix which handled ONLY the top level would be visible.
+git -C "${_appI}" checkout -q "${_baseI}" -- src/thing.js
+cat > "${_appI}/src/sub/thing.js" <<'JS'
+import axios from '@nextcloud/axios'
+export const create = (b) => axios.post('/api/things', b, { headers: { requesttoken: OC.requestToken } })
+JS
+_commit "${_appI}" "the same signal, one directory down"
+_outI2="${_tmp}/i2.txt"
+_run "${_appI}" "${_outI2}" --scope-to-diff --base "${_baseI}"
+_expect "${_outI2}" 48 "PASS" "control: the same signal in src/sub/thing.js is still seen"
+
+# I3 — ANTI-WIDENING CONTROL. A top-level src/ file that is touched but adds
+# NO signal must not satisfy the gate. Without this arm, "make the top level
+# visible" is indistinguishable from "count any top-level edit".
+git -C "${_appI}" checkout -q "${_baseI}" -- src/sub/thing.js
+cat > "${_appI}/src/thing.js" <<'JS'
+// TODO: this call still needs a requesttoken header. Not done yet.
+export const create = (b) => fetch('/api/things', { method: 'POST', body: b, headers: {} })
+JS
+_commit "${_appI}" "drop @NoCSRFRequired; a top-level src/ edit with no signal"
+_outI3="${_tmp}/i3.txt"
+_run "${_appI}" "${_outI3}" --scope-to-diff --base "${_baseI}"
+_expect "${_outI3}" 48 "FAIL" "anti-widening: a top-level src/ edit carrying NO signal is not a co-change"
+
 # FAMILY J — gate-50: THE GUARD WINDOW MUST NOT CROSS A METHOD BOUNDARY (#429).
 #
 # The window was "eleven lines of code following the read", counted over the

@@ -1998,7 +1998,38 @@ while IFS= read -r f; do
             # so <2 means body never references it.
             _count=$(echo "${_body}" | grep -cF "${_param}")
             if [ "${_count}" -lt 2 ]; then
-                echo "${f}:${_line_no} method=${_method} rule=caller-identity-ignored param=${_param}" >> "${_stub_log}"
+                # A CONTRACT-IMPOSED PARAMETER THE AUTHOR MARKED UNUSED IS NOT A
+                # STUB (.github#339).
+                #
+                # An unused caller identity is a defect when the author chose the
+                # signature and forgot the check (decidesk#45). It is NOT a defect
+                # when a supertype chose the signature and this implementor has no
+                # business consulting the caller — a strategy/guard/handler
+                # interface that passes the caller to implementors that do not all
+                # need it is a normal shape. Measured on procest: all 3 findings
+                # implement GuardEvaluatorInterface::evaluate(..., string $userId),
+                # which RoleGuard and MandaatGuard genuinely use. Deleting the
+                # parameter breaks the interface and every call site; referencing
+                # it pointlessly is dead code written to satisfy a stub detector.
+                # Neither is a fix, so the finding had no closing action.
+                #
+                # The helper exempts ONLY when BOTH hold: a supertype resolvable
+                # in this repo declares the same method with the same parameter
+                # (mechanical — an invented method cannot acquire one from a
+                # docblock), AND the method docblock's @param line for THAT
+                # parameter carries an explicit unused marker. Either alone still
+                # reports. Fail-closed: a missing helper, an unreadable file or an
+                # unresolvable supertype all leave the finding standing.
+                _ci_exempt=1
+                _ci_helper="${SCRIPT_DIR}/lib/check_caller_identity_exempt.py"
+                if [ -f "${_ci_helper}" ]; then
+                    python3 "${_ci_helper}" --root . --file "$f" --line "${_line_no}" \
+                        --method "${_method}" --param "${_param}" 2>>"${HYDRA_GATE_LOG_DIR}/hydra-gate-stub-scan.err"
+                    _ci_exempt=$?
+                fi
+                if [ "${_ci_exempt}" -ne 0 ]; then
+                    echo "${f}:${_line_no} method=${_method} rule=caller-identity-ignored param=${_param}" >> "${_stub_log}"
+                fi
             fi
         done
 done < <(_enum_tracked '\.php$' lib/Service lib/Controller)
@@ -6853,6 +6884,48 @@ if _a11y_has_style_dir; then
     #
     # Fails CLOSED: any error leaves the flag at 0, i.e. more findings, never
     # fewer. A crashed pre-pass must not manufacture a global exemption.
+    #
+    # A COMMENTED-OUT RESET IS NOT A RESET (.github#421) — AND THIS IS THE
+    # WORST PLACE IN THE PACKAGE TO GET THAT WRONG.
+    #
+    # The per-file checker below already masks comments before it looks for
+    # motion or for a guard (`_mask_comments`, #294). This pre-pass did not:
+    # it grepped `UNIVERSAL` over raw file text. So the two halves of one gate
+    # disagreed about what a comment is, and the careless half ran first.
+    #
+    # The consequence is not one missed finding. The flag it sets makes the
+    # per-file checker `sys.exit(0)` on EVERY file in the repository, so ONE
+    # comment in ONE stylesheet anywhere in the tree silenced gate-45 for the
+    # whole app — and the comment that did it is the one an author writes
+    # while acknowledging the debt:
+    #
+    #     /* TODO(a11y): we still need
+    #          @media (prefers-reduced-motion: reduce) { *, *::before … }
+    #        Not done yet — tracked in #999. */
+    #
+    # Measured 2026-08-13, one fixture, one variable — a css/motion.css with
+    # two real unguarded motion declarations, plus a css/reset.css whose only
+    # universal reset is inside that comment:
+    #
+    #   comment present            PASS                          <- the defect
+    #   the same tree, comment deleted
+    #                              FAIL — 1 stylesheet with motion
+    #   a REAL universal reset in reset.css
+    #                              PASS   <- the positive control: the pre-pass
+    #                                        does set the flag on real CSS, so
+    #                                        the arm above means something
+    #
+    # ⚠️ THE MASK MUST EAT COMMENTS, NOT CSS. A mask that swallowed a rule
+    # would turn this gate from "silenceable" into "always red" — the fix
+    # over-applied — which is why the third arm is pinned in
+    # test_gate_45_stylesheet_scope.sh alongside the first two.
+    #
+    # Character for character the same masking as `_mask_comments` in the
+    # PYRM heredoc below, including the `(?<!:)` that keeps the `//` of a
+    # `url(https://…)` out of the SCSS arm. The two copies are pinned
+    # together by the drift arm in test_gate_45_stylesheet_scope.sh: they are
+    # separate `python3` invocations and cannot share a function, so the test
+    # is what stops them diverging again.
     _rm_global=0
     if [ -n "$(_a11y_style_files)" ]; then
         _rm_global=$(_a11y_style_files | python3 -c '
@@ -6860,16 +6933,24 @@ import re, sys
 UNIVERSAL = re.compile(
     r"@media[^{]*prefers-reduced-motion[^{]*\{(?:[^{}]|\{[^{}]*\})*?(?<![\w.#\[-])\*",
     re.IGNORECASE | re.DOTALL)
+
+def _mask_comments(text, scss):
+    text = re.sub(r"/\*.*?\*/", lambda m: re.sub(r"[^\n]", " ", m.group(0)), text, flags=re.DOTALL)
+    if scss:
+        text = re.sub(r"(?<!:)//[^\n]*", lambda m: " " * len(m.group(0)), text)
+    return text
+
 for line in sys.stdin:
     p = line.strip()
     if not p:
         continue
     try:
-        if UNIVERSAL.search(open(p, encoding="utf-8", errors="replace").read()):
-            print(1)
-            break
+        raw = open(p, encoding="utf-8", errors="replace").read()
     except Exception:
         continue
+    if UNIVERSAL.search(_mask_comments(raw, not p.lower().endswith(".css"))):
+        print(1)
+        break
 else:
     print(0)
 ' 2>>"${_rm_log}.err" || echo 0)
@@ -7364,9 +7445,37 @@ except ImportError:
 base = sys.argv[1]
 SIGNAL = re.compile(r'OCS-APIRequest|requesttoken|@nextcloud/axios|getRequestToken',
                     re.IGNORECASE)
+# `:(glob)` IS LOAD-BEARING — WITHOUT IT `src/**/*.js` CANNOT SEE `src/thing.js`
+# (.github#428).
+#
+# In a PLAIN git pathspec there is no `**` operator: it is two ordinary `*`s,
+# and a plain `*` MATCHES `/`. So `src/**/*.js` reads as "src/, then anything,
+# then /, then anything, then .js" — it REQUIRES at least one directory below
+# src/, and every file sitting at `src/foo.js` was invisible to this scan.
+#
+# Reproduced 2026-08-13, one repo, one commit dropping #[NoCSRFRequired], one
+# JS file, nothing varying but its path:
+#
+#   git diff --name-only HEAD~1...HEAD
+#     lib/Controller/ThingController.php
+#     src/thing.js
+#   git diff --name-only HEAD~1...HEAD -- 'src/**/*.js'            -> (empty)
+#   git diff --name-only HEAD~1...HEAD -- ':(glob)src/**/*.js'     -> src/thing.js
+#
+# With `:(glob)` magic, `**` means "zero or more directory components" and a
+# single `*` no longer crosses `/`, so the glob matches `src/thing.js` AND
+# `src/sub/thing.js` AND `src/a/b/c.js`. It is a strict superset of the old
+# spelling: nothing that matched before stops matching.
+#
+# DIRECTION: this can only ADD signals, i.e. it can only move a run from the
+# conservative caller-state branch to the "a signal was added" branch. It was
+# never letting a CSRF removal through — a missed signal made the count 0,
+# which routes to check_csrf_callers.py — but it made the count a FLOOR rather
+# than a count, and the NOTE this gate prints about the frontend diff could be
+# wrong about what it had read.
 out = subprocess.run(
     ['git', 'diff', '-U0', f'{base}...HEAD', '--',
-     'src/**/*.vue', 'src/**/*.js', 'src/**/*.ts'],
+     ':(glob)src/**/*.vue', ':(glob)src/**/*.js', ':(glob)src/**/*.ts'],
     capture_output=True, text=True, check=False).stdout
 added, path = {}, None
 hunk = re.compile(r'^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@')
