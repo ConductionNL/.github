@@ -79,7 +79,82 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from exclusion_reason import exclude_pattern, is_reason_bearing  # noqa: E402
 
-SPEC_RE = re.compile(r"@spec\s+openspec/")
+# `@spec openspec/…` AT TAG POSITION, NOT ANYWHERE ON THE LINE (#422).
+#
+# This was an unanchored substring, so a docblock line that MENTIONED the tag
+# carried it. Measured on this checker, one fixture, one line:
+#
+#     an untagged public method                        -> uncovered (a finding)
+#     + a docblock reading
+#       "* TODO: nobody has written @spec
+#        openspec/specs/thing/spec.md for this yet"    -> covered   <- the defect
+#
+# This one is borderline and the borderline is worth stating: `@spec` is a
+# docblock marker, so unlike every other gate in #422 the evidence legitimately
+# LIVES in a comment and a comment mask would delete it. What was missing is
+# not comment-awareness, it is POSITION — the same anchoring gates 47 and 48
+# were given, and that gate 46 still lacks. The tag has to OPEN its line's
+# content; a sentence that quotes it does not.
+#
+# THE LEAD CLASS IS MEASURED, NOT GUESSED. It must pass every spelling the
+# fleet actually uses, and `[ \t>*#-]` — the `standalone` lead
+# `exclusion_reason.exclude_pattern` uses for markdown — is NOT enough here,
+# because PHP and JS docblocks are opened with slashes:
+#
+#     ` * @spec openspec/…`      3,726 in procest      (covered by the md lead)
+#     `/** @spec openspec/…`       626 in procest,
+#                                  638 in opencatalogi (needs `/`)
+#
+# So `/` is in the class, for the SINGLE-LINE DOCBLOCK form. The fleet also
+# carries 109 `// @spec openspec/…` lines (openregister 56, procest 43,
+# softwarecatalog 10) and those are unaffected either way: `_docblock_block`
+# skips `//` lines when looking for the block above a declaration, so a
+# line-comment tag has never satisfied this gate. Measured, not assumed — the
+# expectation going in was the opposite, and arm 5 of the suite records it.
+#
+# Swept over lib/ + src/ of procest, opencatalogi,
+# openregister, softwarecatalog, docudesk and larpingapp — 15,972 occurrences —
+# exactly TWO stop counting, and both are prose about a tag rather than a tag:
+#
+#     `// Per @spec openspec/specs/tenant-isolation-audit/spec.md ("the system MUST…`
+#     `NOTE: this used to read ``@spec openspec/changes/dso-…/tasks.md#T07``.`
+#
+# The second is this defect in the wild: a note about a tag that was REMOVED,
+# reading as the tag.
+#
+# ⚠️ AND THE START ANCHOR ALONE WAS NOT THE ANSWER — MEASURING SAID SO.
+# The first cut of this was `^[ \t>*#/-]*@spec\s+openspec/` and nothing else.
+# Swept exhaustively over every in-scope method in the six repos (46,187
+# judgements, diff scope bypassed so every line counts as changed) it produced
+# FIVE new findings, all in decidesk's VotingRoundPanel.vue, all of this shape:
+#
+#     /** Rule enum option lists for the open-round dialog. @spec openspec/specs/voting-system/spec.md */
+#     voteThresholdOptions() {
+#
+# That is a REAL, deliberate tag in the ordinary PHPDoc order — description
+# first, tag after — and the only way to close the finding would have been to
+# reflow correct documentation. A gate that reddens documented code teaches
+# authors to stop documenting it, which is the FALSE-POSITIVE half of this same
+# class and the half the survey calls the corrosive one. So the second
+# alternative admits a tag that FOLLOWS A COMPLETED SENTENCE, which is what
+# the real form is and what none of the prose forms are:
+#
+#     ` * TODO: nobody has written @spec openspec/…`     rejected (no terminator)
+#     ` * NOTE: this used to read @spec openspec/…`      rejected (no terminator)
+#     ` * TODO: still owed: @spec openspec/…`            rejected (`:` is not one)
+#     `/** … open-round dialog. @spec openspec/…  */`    accepted
+#
+# Measured again with this pattern: ZERO new findings in all six repos.
+#
+# The residual hole is stated rather than hidden: a debt sentence that ENDS in
+# a full stop immediately before the tag — "not written yet. @spec openspec/x"
+# — still counts. Closing that needs the tag's OWNERSHIP of the line, which is
+# the same question gate-46 has open, and it is not worth 5 false positives
+# here.
+SPEC_RE = re.compile(
+    r"(?:^[ \t>*#/-]*@spec\s+openspec/)"
+    r"|(?:[.!?)]\s+@spec\s+openspec/)"
+)
 # `@spec exclude <reason>` — intentional, reason-required non-coverage marker.
 # A bare `@spec exclude` (no reason) is NOT compliant — it would let a method
 # silently hide a gap, so it is flagged like a missing @spec.

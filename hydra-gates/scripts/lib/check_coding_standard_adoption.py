@@ -97,6 +97,9 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from source_scope import php_mask  # noqa: E402
+
 CENTRAL_RULESET = "quality-config/phpcs.xml"
 CENTRAL_PHPMD = "quality-config/phpmd.xml"
 CENTRAL_PHPSTAN = "quality-config/phpstan-base.neon"
@@ -172,6 +175,32 @@ def check(root: str) -> tuple[list[str], int]:
             "coding standard, so nothing can be said about whether it passes it.",
         )
     else:
+        # A COMMENT SAYING YOU STILL OWE THE LINE IS NOT THE LINE (#422).
+        #
+        # The XML paths in this module are protected by strip_xml_comments()
+        # for exactly this reason, and its docstring says so: "a commented-out
+        # rule is not a rule". `.php-cs-fixer.dist.php` was the one config read
+        # RAW. Measured on this checker, one fixture, two lines added:
+        #
+        #     a fixer config with neither the autoloader nor the shared Config
+        #       -> FAIL — fixer-config-missing-autoloader          (correct)
+        #     + "// TODO: we still need to require __DIR__ . '/vendor/autoload.php'
+        #        // here and switch to Conduction\CodingStandard\Config.
+        #        // Not done yet."
+        #       -> PASS on both rules                              <- the defect
+        #
+        # The rule it silenced exists PRECISELY because a php-cs-fixer fatal
+        # reads exactly like a clean tree: with no autoloader the run dies with
+        # "Class not found", and `--format=json` reports that as ZERO FILES
+        # NEEDING CHANGES. So the comment bought a green on the check whose job
+        # is to stop a green being bought.
+        #
+        # ⚠️ STRING CONTENTS ARE KEPT (`php_mask` default), and here that is
+        # not a preference — the evidence IS a string. The autoloader is
+        # required as `require __DIR__ . '/vendor/autoload.php'`, and blanking
+        # literals would delete the path the regex matches on, failing every
+        # correctly-configured repo in the fleet.
+        fixer = php_mask(fixer)
         if "Conduction\\CodingStandard\\Config" not in fixer and "CodingStandard\\Config" not in fixer:
             fail(
                 "wrong-fixer-config",
