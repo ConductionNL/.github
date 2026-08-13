@@ -227,6 +227,49 @@ jobs:
         with:
           filename: scripts/fixtures/nextcloud-matrix/info-32-33.xml
 
+      # ── WHAT THIS JOB DOES NOT COVER, AND HOW TO MEASURE IT ───────────────
+      #
+      # This job proves the derived VALUE tracks info.xml. It does not prove
+      # that value still EXPANDS INTO LEGS, and those are different claims: a
+      # matrix that collapses to one leg is present, green, and missing five
+      # sixths of its coverage with no row to show for it.
+      #
+      # `quality-selftest.yml` cannot measure it either. It disables every leg,
+      # and a matrix job whose `if:` is false DOES NOT EXPAND — measured on run
+      # 31692599960, where the skipped PHPUnit job renders as one row still
+      # carrying the literal `${{ matrix.nextcloud-ref }}` in its name.
+      # Counting there would report "1 PHPUnit job" whether the matrix worked
+      # or not.
+      #
+      # MEASURED ONCE, ON REAL ACTIONS, and reproducible on demand: push a
+      # `fixture/**` branch carrying a workflow that calls ./.github/workflows/
+      # quality.yml twice with `enable-phpunit: true`, pointing
+      # `nextcloud-info-path` at each fixture above. Run 31734347530:
+      #
+      #   info-32-34.xml -> 6 legs  PHPUnit (PHP 8.3|8.4, NC stable32|33|34, pgsql)
+      #   info-32-33.xml -> 4 legs  PHPUnit (PHP 8.3|8.4, NC stable32|33,    pgsql)
+      #
+      # The legs themselves fail — .github has no PHPUnit suite — which is not
+      # the measurement. The job list is.
+      #
+      # ⚠️ TWO THINGS THAT WORKFLOW MUST DO, BOTH LEARNED BY GETTING THEM WRONG:
+      #
+      #   1. SERIALISE the two calls with `needs:` + `!cancelled()`. quality.yml
+      #      declares `concurrency: quality-${{ github.ref }}` with
+      #      cancel-in-progress, so two calls on one ref share the group and the
+      #      second cancels the first. Measured on run 31734110346: every job
+      #      under the control came back `cancelled` with its PHPUnit row
+      #      unexpanded — the control measured nothing while looking like it ran.
+      #
+      #   2. DO NOT MERGE IT. It was in this PR and was withdrawn. quality.yml
+      #      requires `contents: write` + `actions: write` at run-creation time
+      #      (see quality-selftest.yml), so a `fixture/**` caller hands
+      #      quality.yml's ~12 `actions/cache` steps an entry point reachable
+      #      from a non-default branch. CodeQL scored that as 12 NEW HIGH
+      #      alerts, `actions/cache-poisoning/poisonable-step` — against 0 on
+      #      main, so it was this workflow and not a pre-existing pattern. A
+      #      poisoned cache in a repo 23 others consume at @main is not worth a
+      #      permanent leg counter. Push it, read the job list, delete it.
       - name: Assert the derived matrix is a function of info.xml
         env:
           FULL: ${{ steps.full.outputs.branches }}

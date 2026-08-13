@@ -70,9 +70,10 @@ jobs:
       # This is resolution + derivation only. It is NOT the leg count: a matrix
       # job whose `if:` is false does not expand — measured on run 31692599960,
       # where the skipped PHPUnit job renders as a single row still carrying the
-      # literal `${{ matrix.nextcloud-ref }}` in its name. The leg count is
-      # measured by `nextcloud-matrix-fixture.yml` on a `fixture/**` branch,
-      # where PHPUnit is genuinely enabled and the legs genuinely materialise.
+      # literal `${{ matrix.nextcloud-ref }}` in its name. The leg count was
+      # measured separately, on run 31734347530, and the recipe for repeating it
+      # (plus the reason it is not a permanent workflow here) is in
+      # `quality-resolve-probe.yml`, on the `matrix-derivation` job.
       nextcloud-info-path: scripts/fixtures/nextcloud-matrix/info-32-34.xml
       enable-php: false
       enable-npm: false
