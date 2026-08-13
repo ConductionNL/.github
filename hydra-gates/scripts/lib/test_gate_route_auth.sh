@@ -146,6 +146,43 @@ if _run "${FIXTURES}/guarded"; then
 fi
 
 # ---------------------------------------------------------------------------
+# 2b. A COMMENT MUST NOT SPEND THE WINDOW (.github#415/#423).
+#
+# `_head_block` took the union of {the contiguous annotation run, a 20-line
+# slice}. For a MULTI-LINE attribute the run breaks at the `)]` line, so the
+# slice was the only thing reaching the `#[` — and an ordinary docblock
+# between the attribute and the declaration spends that slice.
+#
+# Measured on two fixtures differing in NOTHING but the length of the
+# docblock, both carrying a real `#[AuthorizedAdminSetting(\n …\n)]`:
+#
+#     2 doc lines  -> PASS          30 doc lines -> FAIL — 1 routed method(s)
+#
+# so the author who documents the endpoint goes red and the author who
+# deletes the paragraph goes green, having changed nothing about its auth.
+#
+# The pair below is the whole point: stepping over the attribute by STRUCTURE
+# must not let the NEXT method borrow it. `multiline-attribute-borrow` is the
+# same file plus one unguarded routed method, and it must still fail naming
+# `open` — if the step-over ever runs past the previous member's close, this
+# arm goes green and the suite goes red.
+# ---------------------------------------------------------------------------
+if _run "${FIXTURES}/multiline-attribute"; then
+    _expect_gate 5 PASS \
+        "multiline-attribute fixture: a 29-line docblock does not hide a three-line attribute"
+fi
+
+if _run "${FIXTURES}/multiline-attribute-borrow"; then
+    _expect_gate 5 FAIL \
+        "multiline-attribute-borrow fixture: the method BELOW the attribute may not borrow it"
+    _expect_out 'gate-5\] route-auth: FAIL — 1 routed method' \
+        "multiline-attribute-borrow fixture: exactly ONE finding (save is genuinely guarded)"
+    _RALOG="$(cat "${_LOGDIR}/hydra-gate-route-auth.log" 2>/dev/null || true)"
+    _expect_log "${_RALOG}" 'SettingsController.php:[0-9]+ method=open' \
+        "multiline-attribute-borrow fixture: the finding names open, not save"
+fi
+
+# ---------------------------------------------------------------------------
 # 3. DEFECT (a). scholiq's shape: AppHost generics produce NO finding, and the
 #    fact that they were not judged is STATED rather than silently dropped.
 # ---------------------------------------------------------------------------

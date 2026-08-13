@@ -415,7 +415,42 @@ if [ "${IS_OR}" -eq 0 ]; then
         case "${_cap_kind}" in
             path) _cap_matches="$(find "${SEARCH_ROOT}" -type f -path "${_cap_pattern}" 2>/dev/null || true)" ;;
             name) _cap_matches="$(find "${SEARCH_ROOT}" -type f -iname "${_cap_pattern}" 2>/dev/null || true)" ;;
-            grep) _cap_matches="$(grep -rln --include='*.php' -e "${_cap_pattern}" "${SEARCH_ROOT}" 2>/dev/null || true)" ;;
+            grep)
+                # A COMMENT MUST NOT MANUFACTURE A FINDING (#415/#423).
+                #
+                # This row is the only `grep`-kind rule in the table, and it
+                # ran over the RAW file. A docblock reading
+                #
+                #     We deliberately do NOT set a Postgres search_path here
+                #     — tenant isolation is OpenRegister's job (ADR-022).
+                #
+                # produced `[or-capability:tenant-boundary]` against a file
+                # that does exactly what the ADR asks. The cheapest fix
+                # available to the author is to delete the paragraph that
+                # records the decision.
+                #
+                # The PDOK rule in this same file has routed through
+                # `_code_lines` since it was written; the capability rows
+                # never got it. `grep -rln` is kept as the CANDIDATE finder
+                # (it is fast and it opens the whole tree), and each
+                # candidate is then re-asked on its code lines only.
+                #
+                # ⚠️ `_code_lines` strips WHOLE-LINE comments only — its own
+                # docstring says trailing comments are left in place because
+                # keeping them "can only cause the gate to fire, never to
+                # stay silent". So a trailing `// no search_path here` still
+                # produces a finding. Narrowing that is a change to a helper
+                # the PDOK rule shares, and it is not made here.
+                _cap_raw="$(grep -rln --include='*.php' -e "${_cap_pattern}" "${SEARCH_ROOT}" 2>/dev/null || true)"
+                _cap_matches=""
+                while IFS= read -r _cap_cand; do
+                    [ -z "${_cap_cand}" ] && continue
+                    if _code_lines "${_cap_cand}" | grep -q -e "${_cap_pattern}"; then
+                        _cap_matches="${_cap_matches}${_cap_cand}"$'\n'
+                    fi
+                done <<< "${_cap_raw}"
+                _cap_matches="$(printf '%s' "${_cap_matches}")"
+                ;;
             *)    _cap_matches="" ;;
         esac
         [ -z "${_cap_matches}" ] && continue
