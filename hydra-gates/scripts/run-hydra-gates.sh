@@ -330,9 +330,11 @@ BASE_REF="${HYDRA_GATE_BASE_REF:-}"
 # tree, one base, `SCOPE-MODE: full` in both arms, only the delivery channel
 # different: gates 19/25/26 reported `NOT APPLICABLE` when the base arrived
 # through the environment and `FAIL — 396` / `PASS` / `FAIL — 6` when the same
-# base arrived through `--base`. The preamble printed four lines above says
-# "every other gate reads the whole tree"; those three did not, and no reader
-# could tell.
+# base arrived through `--base`. And the run's own preamble — the line this
+# file prints once the base resolves, "The DELTA gates (16, 29, 47, 48, 61)
+# judge that change set. Every other gate reads the whole tree." — was FALSE in
+# the first arm, identically worded in both, with nothing in the log letting a
+# reader tell which one they were holding.
 #
 # Unsetting it here rather than patching the seven `else` branches is
 # deliberate. A per-gate `env -u` is a fix each of the seven has to remember,
