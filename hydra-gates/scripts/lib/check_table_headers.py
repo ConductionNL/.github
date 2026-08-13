@@ -66,10 +66,17 @@ Usage:
 """
 from __future__ import annotations
 
+import os
 import re
 import sys
 
-COMMENT = re.compile(r'<!--.*?-->', re.DOTALL)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from source_scope import mask_html_comments  # noqa: E402
+
+# Comment scope comes from the shared library (#424). The private
+# `<!--.*?-->` this replaces called four characters a comment opener wherever
+# they appeared, so `{{ '<!--' }}` … `{{ '-->' }}` blanked every element
+# between them and the gate went green over live markup.
 BLOCK = re.compile(r'<(script|style)\b[^>]*>.*?</\1\s*>', re.DOTALL | re.IGNORECASE)
 
 TABLE = re.compile(r'<table\b([^>]*)>(.*?)</table\s*>', re.IGNORECASE | re.DOTALL)
@@ -122,7 +129,7 @@ def _headers(inner: str) -> list[tuple[str, str | None, bool]]:
 
 
 def scan_source(fname: str, src: str) -> list[str]:
-    body = BLOCK.sub(' ', COMMENT.sub(' ', src))
+    body = BLOCK.sub(' ', mask_html_comments(src))
     findings: list[str] = []
     for m in TABLE.finditer(body):
         inner = m.group(2) or ''

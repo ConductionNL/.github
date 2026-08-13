@@ -81,20 +81,40 @@ CONST_DEF = re.compile(
 CONST_REF = re.compile(r"""(?:self|static|parent|[A-Za-z_][A-Za-z0-9_\\]*)\s*::\s*([A-Z][A-Z0-9_]*)\b""")
 
 
-def call_args(src: str, fname: str):
-    """Yield the argument text of every `fname(...)` call in src."""
-    for m in re.finditer(re.escape(fname) + r'\s*\(', src):
+def call_args(blob: str, anchor: str, fname: str):
+    """Yield the argument text of every `fname(...)` CALL SITE.
+
+    TWO SOURCES, ONE COORDINATE SYSTEM (#424)
+    -----------------------------------------
+    This gate's evidence IS a string literal — the config key — so the mask
+    cannot blank string contents. But the CALL is not a string, and scanning
+    the same text for both questions meant a sentence closed the gate:
+
+        $hint = "call setValueString('fixapp','configuration_version','3') next";
+
+    read as a write of `configuration_version`. A gate whose entire subject is
+    "this guard never closes" was closed by a comment saying someone would
+    close it later — the same shape as the commented-out setter this gate
+    already masks for, one quote character away.
+
+    So: the call site is located in *anchor* (`php_mask(..., blank_strings=
+    True)`, where that sentence is blank and its parentheses cannot be walked)
+    and the argument text is read from *blob* (string contents intact) at the
+    SAME offsets, which both masks preserve. This is the anchoring contract
+    `source_scope.js_exec_mask` documents.
+    """
+    for m in re.finditer(re.escape(fname) + r'\s*\(', anchor):
         depth = 0
         i = m.end() - 1
-        while i < len(src):
-            if src[i] == '(':
+        while i < len(anchor):
+            if anchor[i] == '(':
                 depth += 1
-            elif src[i] == ')':
+            elif anchor[i] == ')':
                 depth -= 1
                 if depth == 0:
                     break
             i += 1
-        yield src[m.end():i]
+        yield blob[m.end():i]
 
 
 def suppressed(src: str, key: str) -> bool:
@@ -172,15 +192,25 @@ def scan_app(app_dir: str):
     # The SUPPRESSION is the one thing that must keep reading raw text — it is
     # authored as a comment, which is exactly what this mask removes.
     blob = php_mask(raw)
+    # The CALL-SITE scope: same text, same offsets, string CONTENTS blanked.
+    # See call_args() for why there have to be two of these.
+    anchor = php_mask(raw, blank_strings=True)
 
-    constants = dict(CONST_DEF.findall(blob))
+    # A `const` written inside a string is not a declaration either, and the
+    # `const` keyword surviving in the anchor is the cheap proof that this one
+    # is real code.
+    constants = {
+        m.group(1): m.group(2)
+        for m in CONST_DEF.finditer(blob)
+        if anchor.startswith('const', m.start())
+    }
 
     read, written = set(), set()
     for fname in GETTERS:
-        for arg in call_args(blob, fname):
+        for arg in call_args(blob, anchor, fname):
             read |= keys_in(arg, constants)
     for fname in SETTERS:
-        for arg in call_args(blob, fname):
+        for arg in call_args(blob, anchor, fname):
             written |= keys_in(arg, constants)
 
     out = []

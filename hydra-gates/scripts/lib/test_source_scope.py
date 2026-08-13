@@ -460,6 +460,123 @@ class TestSharedWithGate19(unittest.TestCase):
         self.assertGreater(seen, 0, "no .js sources found — this test measured nothing")
 
 
+class TestHtmlCommentDelimiterScope(unittest.TestCase):
+    """#424 group 2 — `<!--` is only a comment opener where it can BE one.
+
+    Every relaxation below is paired with the true positive it must not
+    swallow, and the whole class is mutation-checked against the regex it
+    replaces: `_HTML_COMMENT` is still in the module, and
+    `test_the_old_regex_still_fails_this` asserts it disagrees. Flip
+    `html_comment_spans` back to the regex and five arms below go red.
+
+    WHICH ARM IS EVIDENCE AND WHICH IS A CONTROL, measured by running this
+    class against `html_comment_spans = _HTML_COMMENT.finditer`:
+
+      EVIDENCE (red under the mutation, green after the fix)
+        test_interpolated_delimiter_does_not_blank_the_markup_between
+        test_delimiter_in_a_quoted_attribute_value_opens_nothing
+        test_a_string_in_a_script_body_is_script_data_not_a_comment_opener
+        test_script_mask_keeps_a_call_between_two_delimiter_strings
+        test_an_unterminated_comment_still_runs_to_end_of_file
+
+      CONTROL (green BOTH ways — they prove the fix did not over-relax, and
+      they are not evidence that it did anything)
+        test_a_real_comment_is_still_blanked
+        test_a_real_comment_after_an_interpolation_is_still_blanked
+        test_a_real_comment_after_a_tag_with_a_quoted_gt_is_still_blanked
+        test_quotes_in_a_TEXT_node_do_not_protect_the_opener
+        test_a_js_comment_in_that_script_body_is_still_blanked
+        test_an_unterminated_interpolation_does_not_swallow_the_file
+        test_an_unterminated_quote_does_not_swallow_the_file
+        test_offsets_survive_the_scanner
+    """
+
+    # The exact shape measured on main, from the issue.
+    HOLE = (
+        "<p>{{ '<!--' }}</p>\n"
+        '<img alt="" src="/a/avatarUrl.png">\n'
+        "<p>{{ '-->' }}</p>"
+    )
+
+    def test_interpolated_delimiter_does_not_blank_the_markup_between(self):
+        out = ss.markup_mask(self.HOLE, "f.html")
+        self.assertIn('<img alt="" src="/a/avatarUrl.png">', out)
+
+    def test_the_old_regex_still_fails_this(self):
+        """The MUTATION CONTROL. If this ever passes, the arm above is inert."""
+        old = ss._HTML_COMMENT.sub("", self.HOLE)
+        self.assertNotIn("<img", old)
+
+    def test_delimiter_in_a_quoted_attribute_value_opens_nothing(self):
+        src = '<img alt="<!--" src="/a/avatarUrl.png">\n<img alt="" src="/b/-->.png">'
+        out = ss.markup_mask(src, "f.html")
+        self.assertEqual(out, src)
+
+    def test_a_real_comment_is_still_blanked(self):
+        """The paired true positive: relaxing the opener must not stop the
+        gate seeing a commented-out element as commented out."""
+        src = '<!-- <img src="/a/old.png"> -->\n<p>x</p>\n'
+        out = ss.markup_mask(src, "f.html")
+        self.assertNotIn("<img", out)
+        self.assertIn("<p>x</p>", out)
+
+    def test_a_real_comment_after_an_interpolation_is_still_blanked(self):
+        src = '<p>{{ label }}</p>\n<!-- <img src="/a/old.png"> -->\n'
+        self.assertNotIn("<img", ss.markup_mask(src, "f.html"))
+
+    def test_a_real_comment_after_a_tag_with_a_quoted_gt_is_still_blanked(self):
+        src = ('<NcSelect :reduce="option => option.value" />\n'
+               '<!-- <img src="/a/old.png"> -->\n')
+        self.assertNotIn("<img", ss.markup_mask(src, "f.html"))
+
+    def test_quotes_in_a_TEXT_node_do_not_protect_the_opener(self):
+        """A browser has no string literals in text: this really is a comment,
+        and pretending otherwise would be the over-relaxed direction."""
+        src = "<p>'<!--' <img src=\"/a/x.png\"> '-->'</p>"
+        self.assertNotIn("<img", ss.markup_mask(src, "f.html"))
+
+    def test_a_string_in_a_script_body_is_script_data_not_a_comment_opener(self):
+        # The two delimiter strings sit in DIFFERENT script bodies with live
+        # markup between them, so the old regex really does blank the <img>.
+        src = ('<script>\nconst OPEN = "<!--"\n</script>\n'
+               '<img alt="" src="/a/avatarUrl.png">\n'
+               '<script>\nconst CLOSE = "-->"\n</script>\n')
+        self.assertIn('<img alt="" src="/a/avatarUrl.png">',
+                      ss.html_markup_mask(src))
+
+    def test_a_js_comment_in_that_script_body_is_still_blanked(self):
+        """Paired: the script body is handed to the tokeniser that knows JS."""
+        src = '<script>\n// <img src="/a/old.png">\n</script>\n'
+        self.assertNotIn("<img", ss.html_markup_mask(src))
+
+    def test_an_unterminated_interpolation_does_not_swallow_the_file(self):
+        src = '<p>{{ oops</p>\n<!-- <img src="/a/old.png"> -->\n<p>y</p>\n'
+        out = ss.markup_mask(src, "f.html")
+        self.assertNotIn("<img", out)      # the real comment still went
+        self.assertIn("<p>y</p>", out)     # and nothing after it was eaten
+
+    def test_an_unterminated_quote_does_not_swallow_the_file(self):
+        src = '<p title="oops>\n<!-- <img src="/a/old.png"> -->\n<p>y</p>\n'
+        self.assertIn("<p>y</p>", ss.markup_mask(src, "f.html"))
+
+    def test_an_unterminated_comment_still_runs_to_end_of_file(self):
+        src = '<p>a</p>\n<!-- <img src="/a/old.png">\n'
+        self.assertNotIn("<img", ss.markup_mask(src, "f.html"))
+
+    def test_offsets_survive_the_scanner(self):
+        for src in (self.HOLE, '<!-- c -->\n<p>x</p>\n', '<script>"<!--"</script>\n'):
+            out = ss.mask_html_comments(src)
+            self.assertEqual(len(out), len(src))
+            self.assertEqual(out.count("\n"), src.count("\n"))
+
+    def test_script_mask_keeps_a_call_between_two_delimiter_strings(self):
+        """gate-34/58 read `script_mask`; the same hole was armed there."""
+        src = ("<template>\n  <p>{{ '<!--' }}</p>\n"
+               "  <button @click=\"window.confirm('sure?')\">go</button>\n"
+               "  <p>{{ '-->' }}</p>\n</template>\n")
+        self.assertIn("window.confirm", ss.script_mask(src, "f.vue"))
+
+
 class TestCli(unittest.TestCase):
     """The bash gates call this module as a process; a broken CLI is a dead
     gate, so it is exercised the way they call it."""
