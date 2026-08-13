@@ -19,9 +19,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from source_scope import php_mask  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # AN EXIT CODE IS A STATUS (.github#240 / #242)
@@ -245,8 +249,27 @@ def check_store(root: Path, manifests, findings, changed: set[str] | None = None
                 text = php.read_text(encoding="utf-8", errors="ignore")
             except OSError:
                 continue
-            if "/apps/openregister/api/objects/" in text and (
-                "IClientService" in text or "newClient()" in text
+            # A COMMENT MUST NOT MANUFACTURE A FINDING (#415/#423).
+            #
+            # This was a substring test over the RAW file, so the docblock
+            #
+            #     We deliberately do NOT hit /apps/openregister/api/objects/
+            #     with an IClientService here — GenericStoreService owns
+            #     store discovery (ADR-080 D2/D3).
+            #
+            # produced a finding IDENTICAL to the real violation's, naming a
+            # file that does exactly what the gate wants. The author's
+            # cheapest fix is to delete the paragraph recording the decision
+            # — which is the same shape gate-64 was already repaired for
+            # (doriath's `loadApp`), one gate over.
+            #
+            # STRING CONTENTS ARE KEPT (`blank_strings` at its default): the
+            # URL this rule exists to find is a string literal in every real
+            # violation, so blanking literals would delete the evidence and
+            # turn the false positive into a false negative.
+            code = php_mask(text)
+            if "/apps/openregister/api/objects/" in code and (
+                "IClientService" in code or "newClient()" in code
             ):
                 findings.append(
                     f"FAIL {php.relative_to(root)}: builds and fetches an OpenRegister objects-API URL "
