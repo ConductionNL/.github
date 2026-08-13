@@ -539,6 +539,83 @@ _outC13="${_tmp}/c13.txt"
 _run "${_appC}" "${_outC13}"
 _expect "${_outC13}" 50 "FAIL" "does not mistake an arrow closure's => for an array key"
 
+# C14 / C15 — A COMMENT MUST NEITHER CONSUME THE WINDOW NOR SATISFY IT (#415).
+#
+# One cause, two failures pointing opposite ways, so both arms are needed: a
+# fix for either one alone can be had by moving the window boundary, and that
+# makes the other worse.
+#
+# C14 (was a FALSE POSITIVE): a textbook guard, reported unsafe because twelve
+# lines of ordinary explanation sat between it and the call. 8 of gate-50's 16
+# opencatalogi findings were this shape. The gate penalised the DOCUMENTED fix
+# and passed the undocumented one — an author who deletes the comment goes
+# green having changed nothing about the code's safety.
+_write_service '    public function listing(): array
+    {
+        $reg = $this->config->getValueString(Application::APP_ID, '"'"'listing_register'"'"', '"'"''"'"');
+        // We deliberately do not fail hard on a missing register: it is
+        // optional in single-tenant installs, the directory sync job re-runs
+        // nightly, and a missing value therefore self-heals within a day.
+        // See ADR-012 for the full rationale, and the migration plan that
+        // removes this branch entirely once the 3.x provisioning path has
+        // landed in every deployment we currently support. Until then the
+        // empty case must return an empty listing rather than raise, because
+        // the public directory endpoint is unauthenticated and a raise there
+        // is an information leak of its own. Twelve lines is not an unusual
+        // amount of explanation for a decision with that many moving parts,
+        // and none of it changes what the code below does.
+        //
+        // The actual guard follows.
+        if ($reg === '"'"''"'"') {
+            return [];
+        }
+
+        return $this->load($reg);
+    }'
+_commit "${_appC}" "a guarded read with a long comment between read and guard"
+_outC14="${_tmp}/c14.txt"
+_run "${_appC}" "${_outC14}"
+_expect "${_outC14}" 50 "PASS" "a comment between the read and its guard does not consume the window"
+
+# C15 (was a FALSE NEGATIVE, and the more serious half): an unguarded read of
+# an api_token reported CLEAN because the TODO above it happened to contain
+# the words the guard regex looks for. A comment STATING THE DEBT satisfied
+# the gate that exists to collect it — the same defect gate 19 was fixed for,
+# never looked for here. Note the fixture's comment contains BOTH a `throw
+# new` and a `=== ''`, so it exercises two of the six guard arms at once.
+_write_service '    public function push(): void
+    {
+        $tok = $this->config->getValueString(Application::APP_ID, '"'"'api_token'"'"', '"'"''"'"');
+        // TODO: we should throw new RuntimeException here when this is empty,
+        // and compare $tok === '"'"''"'"' before use. Not done yet.
+        $this->client->post($tok);
+    }'
+_commit "${_appC}" "an unguarded read whose TODO names the missing guard"
+_outC15="${_tmp}/c15.txt"
+_run "${_appC}" "${_outC15}"
+_expect "${_outC15}" 50 "FAIL" "a comment naming the missing guard does not satisfy the gate"
+
+# C16 — the string-safety control for C14/C15. Comment stripping must not be a
+# naive split: `'https://x'` is a URL inside a string literal, not a comment,
+# and `#[PublicPage]` is a PHP 8 attribute. If either is mis-stripped the
+# guard on the following line is destroyed and this arm fails, which is how a
+# stripper bug shows up as a finding rather than as silence.
+_write_service '    #[PublicPage]
+    public function docs(): string
+    {
+        $url = '"'"'https://example.org//docs#anchor'"'"';
+        $reg = $this->config->getValueString(Application::APP_ID, '"'"'listing_register'"'"', '"'"''"'"');
+        if ($reg === '"'"''"'"') {
+            return $url;
+        }
+
+        return $this->load($reg);
+    }'
+_commit "${_appC}" "a guarded read alongside a URL literal and an attribute"
+_outC16="${_tmp}/c16.txt"
+_run "${_appC}" "${_outC16}"
+_expect "${_outC16}" 50 "PASS" "a // inside a string literal and a #[Attribute] are not comments"
+
 # ===========================================================================
 # FAMILY D — gate-53 must block the PR that CREATES larpingapp#286.
 #

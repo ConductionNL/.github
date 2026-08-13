@@ -7774,6 +7774,79 @@ _ARRAY_VALUE = re.compile(
     r"(?:['\"][^'\"]*['\"]|\w+)\s*=>\s*"
     r"(?:[\w\$]+(?:\s*(?:->|::)\s*[\w\$]+)*\s*(?:->|::)\s*)?$"
 )
+# A COMMENT MUST NEITHER CONSUME THE WINDOW NOR SATISFY IT (#415).
+#
+# The window was raw file text, so comment lines did BOTH — and the two
+# failures point in opposite directions from one cause. Measured on this
+# checker directly, four fixtures, one variable:
+#
+#   FALSE POSITIVE   A textbook guard — `if ($reg === '') { return []; }` —
+#                    reported as an unsafe read because twelve lines of
+#                    ordinary explanation sat between it and the call. 8 of
+#                    gate-50's 16 opencatalogi findings were this. The gate
+#                    penalised the DOCUMENTED fix and passed the undocumented
+#                    one: an author who deletes the comment goes green having
+#                    changed nothing about the code's safety.
+#
+#   FALSE NEGATIVE   An unguarded read of an `api_token` reported CLEAN
+#                    because the TODO above it said "we should throw new
+#                    RuntimeException here when empty, and compare $tok === ''
+#                    before use. Not done yet." A comment stating the debt
+#                    satisfied the gate that exists to collect it. This is the
+#                    same defect as the one gate 19 was fixed for; it was
+#                    never looked for here.
+#
+# Both are closed by stripping comment TEXT before the window is built, so
+# comments occupy no budget and offer no evidence. Line numbering is
+# preserved (text is blanked, lines are not removed) because findings report
+# a line number.
+#
+# STRING-SAFE, not a naive split: `'https://x'` must not truncate the line,
+# and `#[PublicPage]` is a PHP 8 attribute, not a comment. Quote state is
+# reset per line, so an unterminated literal (a heredoc body) can corrupt at
+# most its own line rather than the rest of the file.
+def _strip_php_comments(raw_lines):
+    out, in_block = [], False
+    for line in raw_lines:
+        buf, i, n, quote = [], 0, len(line), None
+        while i < n:
+            c = line[i]
+            if in_block:
+                if c == '*' and i + 1 < n and line[i + 1] == '/':
+                    in_block = False
+                    i += 2
+                    continue
+                i += 1
+                continue
+            if quote is not None:
+                buf.append(c)
+                if c == '\\' and i + 1 < n:
+                    buf.append(line[i + 1])
+                    i += 2
+                    continue
+                if c == quote:
+                    quote = None
+                i += 1
+                continue
+            if c in ('"', "'"):
+                quote = c
+                buf.append(c)
+                i += 1
+                continue
+            if c == '/' and i + 1 < n and line[i + 1] == '/':
+                break
+            if c == '/' and i + 1 < n and line[i + 1] == '*':
+                in_block = True
+                i += 2
+                continue
+            if c == '#' and not (i + 1 < n and line[i + 1] == '['):
+                break
+            buf.append(c)
+            i += 1
+        out.append(''.join(buf).rstrip('\n'))
+    return out
+
+
 notes_path = log_path + '.notes'
 open(notes_path, 'w', encoding='utf-8').close()
 for fp in files:
@@ -7782,6 +7855,7 @@ for fp in files:
             lines = f.readlines()
     except OSError:
         continue
+    code_lines = _strip_php_comments(lines)
     src = ''.join(lines)
     for m in SEC_KEY.finditer(src):
         # Find the line number of the match
@@ -7829,7 +7903,18 @@ for fp in files:
         _end_line = src[:_p].count('\n') + 1 if _p < len(src) else lineno
         # `_end_line - 1` is the 0-based index of the call's closing line, so
         # the window INCLUDES the rest of that line (the same-line case).
-        window = ''.join(lines[_end_line-1:_end_line+10])
+        #
+        # THE BUDGET IS ELEVEN LINES OF CODE, NOT ELEVEN LINES OF FILE (#415).
+        # Blank and comment-only lines no longer spend it, and the text
+        # searched below is comment-stripped, so a comment can neither push a
+        # guard out of range nor stand in for one.
+        _budget, _win, _i = 11, [], _end_line - 1
+        while _i < len(code_lines) and _budget > 0:
+            _win.append(code_lines[_i])
+            if code_lines[_i].strip():
+                _budget -= 1
+            _i += 1
+        window = '\n'.join(_win)
         # Look for fail-mode signals
         #
         # THE EMPTY-COMPARE ARM MUST SURVIVE A COMPOUND CONDITION.
