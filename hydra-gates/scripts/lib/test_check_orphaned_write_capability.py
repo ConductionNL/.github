@@ -1273,5 +1273,135 @@ class WriteVerbVocabularyTest(unittest.TestCase):
             self.assertFalse(owc._is_write_method(name), name)
 
 
+# ---------------------------------------------------------------------------
+# The caller index is CODE, and a comment cannot make a method bodiless
+# (#415 class, #422).
+#
+# Reverted against origin/main, arms 2, 3, 4 and 5 FLIP (no finding ->
+# finding). Arms 1, 6, 7 and 8 pass either way and are CONTROLS.
+#
+# ⚠️ THIS MODULE ALREADY KNEW. `_blank_php_comments` was written FOR THIS FILE
+# and its docstring states the class in as many words — it was applied to the
+# four seams and never to the caller index, which is the gate's primary
+# evidence. A partially-masked checker looks exactly like a fully-masked one
+# from outside.
+# ---------------------------------------------------------------------------
+_ORPHAN_SERVICE = (
+    "<?php\nnamespace OCA\\Fixture\\Service;\n\n"
+    "class InvoiceService {\n"
+    "    public function postInvoice(string $id): bool\n"
+    "    {\n"
+    "        $this->ledger[$id] = true;\n"
+    "        return true;\n"
+    "    }\n"
+    "}\n"
+)
+
+
+def _controller(body: str) -> str:
+    return (
+        "<?php\nnamespace OCA\\Fixture\\Controller;\n\n"
+        "class InvoiceController {\n"
+        f"{body}"
+        "    public function show(string $id)\n"
+        "    {\n"
+        "        return $this->renderer->toArray($id);\n"
+        "    }\n"
+        "}\n"
+    )
+
+
+class CommentIsNotACaller(unittest.TestCase):
+    def _run(self, service_src: str, controller_body: str) -> list[str]:
+        with _AppFixture() as root:
+            svc = os.path.join(root, "lib", "Service", "InvoiceService.php")
+            ctl = os.path.join(root, "lib", "Controller", "InvoiceController.php")
+            for full, src in ((svc, service_src), (ctl, _controller(controller_body))):
+                os.makedirs(os.path.dirname(full), exist_ok=True)
+                with open(full, "w", encoding="utf-8") as fh:
+                    fh.write(src)
+            return _run_main(svc)
+
+    def test_1_positive_control_no_caller_anywhere(self):
+        """CONTROL. Without this firing, arms 2-4 measure nothing."""
+        out = self._run(_ORPHAN_SERVICE, "")
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("method=postInvoice", out[0])
+
+    def test_2_a_docblock_todo_naming_the_call_is_not_a_caller(self):
+        out = self._run(_ORPHAN_SERVICE,
+                        "    /**\n"
+                        "     * TODO: we should call $this->fooService->postInvoice($id)\n"
+                        "     * here once the ledger migration lands. Not done yet.\n"
+                        "     */\n")
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("method=postInvoice", out[0])
+
+    def test_3_a_line_comment_naming_the_call_is_not_a_caller(self):
+        out = self._run(_ORPHAN_SERVICE,
+                        "    // $this->fooService->postInvoice($id);  // disabled 2026-08\n")
+        self.assertEqual(len(out), 1, out)
+
+    def test_4_a_hash_comment_naming_the_call_is_not_a_caller(self):
+        out = self._run(_ORPHAN_SERVICE,
+                        "    # $this->fooService->postInvoice($id);\n")
+        self.assertEqual(len(out), 1, out)
+
+    def test_5_a_block_comment_in_the_signature_cannot_make_it_bodiless(self):
+        """The quietest of the four. `_declaration_has_body` stripped `//` and
+        quotes but not `/* */`, so a `;` in a signature note terminated the
+        signature, the method classified as an abstract DECLARATION, and it was
+        never looked at — not reported as passing, simply never judged."""
+        out = self._run(
+            "<?php\nnamespace OCA\\Fixture\\Service;\n\n"
+            "class InvoiceService {\n"
+            "    public function postInvoice(string $id) /* returns true; never throws */\n"
+            "    {\n"
+            "        $this->ledger[$id] = true;\n"
+            "        return true;\n"
+            "    }\n"
+            "}\n",
+            "",
+        )
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("method=postInvoice", out[0])
+
+    def test_6_a_real_caller_still_suppresses(self):
+        """CONTROL (anti-widening). Passes before and after."""
+        out = self._run(_ORPHAN_SERVICE,
+                        "    public function store(string $id): void\n"
+                        "    {\n"
+                        "        $this->fooService->postInvoice($id);\n"
+                        "    }\n")
+        self.assertEqual(out, [])
+
+    def test_7_a_genuinely_bodiless_declaration_is_still_skipped(self):
+        """CONTROL (anti-widening). hydra#106 FP class 3 must stay closed: an
+        abstract declaration has no body, so there is nothing that can be dead
+        and there is no fix its author could make."""
+        with _AppFixture() as root:
+            full = os.path.join(root, "lib", "Service", "AbstractInvoice.php")
+            os.makedirs(os.path.dirname(full), exist_ok=True)
+            with open(full, "w", encoding="utf-8") as fh:
+                fh.write(
+                    "<?php\nnamespace OCA\\Fixture\\Service;\n\n"
+                    "abstract class AbstractInvoice {\n"
+                    "    abstract public function postLedger(string $id): bool;\n"
+                    "}\n"
+                )
+            self.assertEqual(_run_main(full), [])
+
+    def test_8_a_caller_inside_a_STRING_still_suppresses(self):
+        """CONTROL, and it states a deliberate limit rather than an oversight.
+
+        String contents are KEPT. This index's fail-safe direction is to
+        SUPPRESS: the gate accuses live code of being dead, and a verdict acted
+        on deletes working code. Blanking literals would push it the other way,
+        so the string axis is left to #424 rather than taken here."""
+        out = self._run(_ORPHAN_SERVICE,
+                        "    public const HINT = 'call $this->x->postInvoice($id) first';\n")
+        self.assertEqual(out, [])
+
+
 if __name__ == "__main__":
     unittest.main()

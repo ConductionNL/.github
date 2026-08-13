@@ -85,6 +85,9 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from source_scope import php_mask, script_mask  # noqa: E402
+
 
 # ---------------------------------------------------------------------------
 # Verb tiers (the candidate filter — unchanged from the original gate).
@@ -277,6 +280,42 @@ def _is_access_control(name: str, head: str, params: str, body: str) -> bool:
 # (a public helper called from another method in the same class is legit).
 # ---------------------------------------------------------------------------
 def _build_caller_corpus() -> str:
+    """The CODE of lib/ + src/, comments blanked — never the raw bytes.
+
+    A TODO NAMING THE CALL IS NOT THE CALL (#415 / #422).
+    -----------------------------------------------------
+    This corpus is the entire evidence base for "is this guard ever invoked",
+    and it used to be the raw text of every file. The question is then answered
+    by ``->requiresChairAuthorization\\s*\\(`` appearing ANYWHERE in it, and
+    prose is made of the same bytes. Measured on this checker, one fixture, one
+    variable:
+
+        an unreferenced requiresChairAuthorization()   FAIL — defined-but-never-called
+        + one caller-file line reading                 PASS               <- the defect
+          "// TODO: we should call
+           $this->authz->requiresChairAuthorization($uid)
+           here before advancing. Not done yet."
+
+    This gate's whole framing is "an unwired guard is identical to no guard",
+    so the sentence admitting the guard is not wired is the sentence that
+    reports it wired. gate-7's ``#[NoAdminRequired]`` defect, one gate over.
+
+    STRING CONTENTS STAY. ``->name(`` is PHP call syntax and is not evidence
+    inside a literal — but the ROUTE TABLE is a caller this corpus cannot
+    contain, and it is matched separately by :func:`_build_route_corpus`,
+    which reads ``appinfo/routes.php`` UNMASKED because ``'liveTile#validate'``
+    IS a string and is the only form the router has. Blanking literals here
+    would not touch that; it is left alone because the fail-safe direction for
+    a gate that accuses live code of being dead is to keep more callers, not
+    fewer. The string axis is #424's, and it is reported rather than smuggled
+    in behind this one.
+
+    ``.vue``/``.js``/``.ts`` go through ``script_mask``, which blanks HTML and
+    JS comments. Note that no legitimate ``->method(`` PHP call site can exist
+    in a ``.vue`` at all, so both directions there are inert: over-blanking
+    cannot remove a real caller, and under-blanking is exactly the hole being
+    closed.
+    """
     chunks: list[str] = []
     roots = (
         (Path("lib"), (".php",)),
@@ -289,9 +328,13 @@ def _build_caller_corpus() -> str:
             if not path.is_file() or path.suffix not in exts:
                 continue
             try:
-                chunks.append(path.read_text(encoding="utf-8", errors="ignore"))
+                text = path.read_text(encoding="utf-8", errors="ignore")
             except OSError:
                 continue
+            if path.suffix == ".php":
+                chunks.append(php_mask(text))
+            else:
+                chunks.append(script_mask(text, str(path)))
     return "\n".join(chunks)
 
 

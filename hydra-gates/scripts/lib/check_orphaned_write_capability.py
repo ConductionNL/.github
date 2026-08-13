@@ -72,6 +72,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from exclusion_reason import exclude_pattern, is_reason_bearing  # noqa: E402
+from source_scope import php_mask  # noqa: E402
 from source_scope import mask_html_comments  # noqa: E402
 
 # Foundation repos: the abstractions every leaf app consumes (ADR-022,
@@ -340,7 +341,23 @@ def _declaration_has_body(lines: list[str], method_line_idx: int) -> bool:
 
     An abstract method inside an abstract class has no body, so there is
     nothing that can be dead. Scans forward across a multi-line signature
-    for whichever of `{` / `;` appears first (hydra#106, FP class 3)."""
+    for whichever of `{` / `;` appears first (hydra#106, FP class 3).
+
+    *lines* MUST BE COMMENT-BLANKED (#422). The local `//` strip below handles
+    exactly one comment syntax, and a `;` inside any other one is read as the
+    signature's terminator — so the method is classified as an abstract
+    DECLARATION and skipped entirely, findings and all:
+
+        public function postInvoice(string $id) /* returns true; never throws */ {
+
+        raw lines      the `;` in the note terminates the signature -> SKIPPED
+        blanked lines  the `{` terminates it                        -> judged
+
+    A comment cannot make a method bodiless, and this is the quietest possible
+    false negative: the method is not reported as passing, it is never looked
+    at. The caller passes the same ``blanked_lines`` the MCP-attribute seam
+    already uses; the two local `re.sub`s stay as a belt-and-braces for any
+    future caller that passes raw lines."""
     for line in lines[method_line_idx : method_line_idx + 12]:
         code = re.sub(r"//.*$", "", line)
         # Drop quoted literals so a `;` or `{` inside a default string value
@@ -465,43 +482,18 @@ def _blank_php_comments(text: str) -> str:
     ``#`` opens a line comment in PHP, but ``#[`` opens an ATTRIBUTE. Blanking
     attributes would delete the very thing being looked for, so the two are
     distinguished.
+
+    THIS IS NOW THE SHARED MASK, NOT A LOCAL DIALECT (#422). The body used to
+    be a hand-rolled state machine — the FIFTH copy of this logic in the
+    package — and it agreed with ``source_scope.php_mask`` clause for clause:
+    strings skipped, ``#[`` excluded, ``/* */`` and ``//`` blanked, length and
+    newlines preserved. Two copies that are equal are a maintenance cost; two
+    copies that MIGHT diverge are a defect, and this module has already been
+    bitten once by applying its mask on some read paths and not others (see
+    :func:`_build_caller_index`). The name and the docstring stay because the
+    call sites and the REASON are this module's; only the implementation moves.
     """
-    out = list(text)
-    i = 0
-    n = len(text)
-    while i < n:
-        ch = text[i]
-        if ch in ("'", '"'):
-            quote = ch
-            i += 1
-            while i < n:
-                if text[i] == "\\":
-                    i += 2
-                    continue
-                if text[i] == quote:
-                    i += 1
-                    break
-                i += 1
-            continue
-        if ch == "/" and i + 1 < n and text[i + 1] == "*":
-            j = text.find("*/", i + 2)
-            j = n if j == -1 else j + 2
-            for k in range(i, j):
-                if out[k] != "\n":
-                    out[k] = " "
-            i = j
-            continue
-        if (ch == "/" and i + 1 < n and text[i + 1] == "/") or (
-            ch == "#" and not (i + 1 < n and text[i + 1] == "[")
-        ):
-            j = text.find("\n", i)
-            j = n if j == -1 else j
-            for k in range(i, j):
-                out[k] = " "
-            i = j
-            continue
-        i += 1
-    return "".join(out)
+    return php_mask(text)
 
 
 def _build_mcp_attribute_seam(app_root: str) -> set[str]:
@@ -808,14 +800,40 @@ def _build_caller_index(app_root: str, extra_roots: list[str] | None = None) -> 
     reported dead. The index is keyed on method NAME only (not FQCN), which
     is deliberately over-permissive: a name collision inflates the caller
     count and SUPPRESSES a finding. That is the fail-safe direction — this
-    gate must never manufacture a "dead" verdict for live code."""
+    gate must never manufacture a "dead" verdict for live code.
+
+    A TODO NAMING THE CALL IS NOT THE CALL (#415 / #422).
+    -----------------------------------------------------
+    This index used to be built from each file's RAW bytes, so a comment
+    counted as a caller. Measured on this checker, one fixture, one variable:
+
+        an uncalled InvoiceService::postInvoice()   FAIL — orphaned-write-capability
+        + a docblock in the controller reading      PASS               <- the defect
+          "* TODO: we should call
+           $this->fooService->postInvoice($id) here
+           once the ledger migration lands.
+           Not done yet."
+
+    ⚠️ THIS MODULE ALREADY KNEW. ``_blank_php_comments`` was written for the
+    SEAMS in this same file, and its docstring states this exact class — "a
+    checker that greps text misses every constant AND matches every comment" —
+    yet the caller index, which is the gate's primary evidence, went on reading
+    raw. **Knowing about the class is not the same as having applied the fix on
+    every read path**, and a partially-masked checker looks exactly like a
+    fully-masked one from the outside.
+
+    STRING CONTENTS SURVIVE (``php_mask`` default). The index is deliberately
+    over-permissive because its fail-safe direction is to SUPPRESS a finding:
+    this gate accuses live code of being dead, and a false accusation acted on
+    deletes working code. Blanking literals would remove callers, i.e. push the
+    gate the wrong way; that axis is #424's and is reported, not smuggled in."""
     counts: dict[str, int] = {}
     call_re = re.compile(r"->([A-Za-z_][A-Za-z0-9_]*)\s*\(")
     for root in [app_root, *(extra_roots or [])]:
         for fp in _enumerate_lib_php(root, include_untracked=True):
             try:
                 with open(fp, encoding="utf-8", errors="replace") as fh:
-                    text = fh.read()
+                    text = _blank_php_comments(fh.read())
             except OSError:
                 continue
             for m in call_re.finditer(text):
@@ -856,7 +874,7 @@ def scan_file(file_path: str, app_root: str, seams, caller_counts, findings: lis
         name = m.group("name")
         if not _is_write_method(name):
             continue
-        if not _declaration_has_body(lines, idx):
+        if not _declaration_has_body(blanked_lines, idx):
             # Abstract declaration inside an abstract class — no body.
             continue
         if _preceding_docblock_has_exclude(lines, idx):
