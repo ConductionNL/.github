@@ -1075,6 +1075,203 @@ _outH2="${_tmp}/h2.txt"
 _run "${_appH}" "${_outH2}" --scope-to-diff --base "${_baseH}"
 _expect "${_outH2}" 48 "PASS" "a real added requesttoken header is still a co-change signal"
 
+# ===========================================================================
+# FAMILY J — gate-50: THE GUARD WINDOW MUST NOT CROSS A METHOD BOUNDARY (#429).
+#
+# The window was "eleven lines of code following the read", counted over the
+# FILE, with no notion of where the method ends. A guard belonging to a
+# DIFFERENT method therefore cleared an unguarded read in the method above it.
+#
+# Measured 2026-08-13 on c26f9a3, one file, one variable:
+#   both methods present                 PASS                   <- the defect
+#   delete the next method, nothing else FAIL — 1, naming api_token
+#
+# #420 changed the window's BUDGET (comments no longer spend it) but not its
+# EXTENT, so that fix moved this defect closer rather than away.
+#
+# J1 is the evidence arm (PASS on origin/main, FAIL here). J2–J5 hold their
+# verdict in BOTH arms and are CONTROLS:
+#   J2  the issue's own positive control — the unguarded read on its own
+#   J3  a guard genuinely in the SAME method, inside budget, must still PASS,
+#       or the clip is a new false-positive engine
+#   J4  the SAME method, one code line OUTSIDE budget, must still FAIL — the
+#       clip must not have quietly shrunk the budget it clips
+#   J5  a `}` inside a string literal AND inside a heredoc body must not
+#       truncate the method span. Load-bearing: walking the un-blanked text
+#       computes readToken() as ending on its second line, which clips the
+#       real guard out and invents a finding. (Measured directly on the
+#       helper: spans (4,6) un-blanked vs (4,15) blanked.)
+# ===========================================================================
+_appJ="${_tmp}/appJ"
+mkdir -p "${_appJ}/lib/Controller"
+git -C "${_appJ}" init -q . 2>/dev/null
+
+_write_j() {  # _write_j <heredoc-on-stdin> — writes lib/Controller/JController.php
+    cat > "${_appJ}/lib/Controller/JController.php"
+}
+
+# J1 — THE DEFECT. The guard five code lines below belongs to another method.
+_write_j <<'PHP'
+<?php
+namespace OCA\Fx\Controller;
+class JController
+{
+    // UNGUARDED: this read has no fail-mode handling of its own.
+    public function readToken()
+    {
+        $tok = $this->config->getValueString($this->appName, 'api_token', '');
+        return $this->render($tok);
+    }
+
+    // A DIFFERENT METHOD. Its guard is 5 code lines below the read above.
+    public function readRegister()
+    {
+        $reg = $this->config->getValueString($this->appName, 'register_key', '');
+        if ($reg === '') {
+            return $this->render('');
+        }
+        return $this->lookup($reg);
+    }
+}
+PHP
+_commit "${_appJ}" "an unguarded read whose only guard lives in the next method"
+_g50j="${_tmp}/g50j"
+mkdir -p "${_g50j}"
+_outJ1="${_tmp}/j1.txt"
+(
+    cd "${_appJ}" || exit 1
+    HYDRA_GATE_LOG_DIR="${_g50j}" bash "${_runner}" . > "${_outJ1}" 2>&1
+)
+_expect "${_outJ1}" 50 "FAIL" "a guard in the NEXT method does not clear a read in this one"
+if grep -q 'readToken()' "${_g50j}/hydra-gate-security-config-fail-mode.log" 2>/dev/null \
+   && grep -q 'api_token' "${_g50j}/hydra-gate-security-config-fail-mode.log" 2>/dev/null; then
+    _ok "gate-50 NAMES the method the window was clipped to (readToken)"
+else
+    _bad "gate-50 finding does not name readToken(): $(cat "${_g50j}/hydra-gate-security-config-fail-mode.log" 2>/dev/null | head -2)"
+fi
+
+# J2 — CONTROL. The issue's positive control: delete readRegister() and
+# nothing else. FAILs before and after.
+_write_j <<'PHP'
+<?php
+namespace OCA\Fx\Controller;
+class JController
+{
+    // UNGUARDED: this read has no fail-mode handling of its own.
+    public function readToken()
+    {
+        $tok = $this->config->getValueString($this->appName, 'api_token', '');
+        return $this->render($tok);
+    }
+}
+PHP
+_commit "${_appJ}" "control: the unrelated next method deleted"
+_outJ2="${_tmp}/j2.txt"
+_run "${_appJ}" "${_outJ2}"
+_expect "${_outJ2}" 50 "FAIL" "control: the same read alone is still a finding"
+
+# J3 — CONTROL, ANTI-FALSE-POSITIVE. The guard is genuinely in this method,
+# nine code lines of filler below the read (the 11th code line of the window).
+_write_j <<'PHP'
+<?php
+namespace OCA\Fx\Controller;
+class JController
+{
+    public function readToken()
+    {
+        $tok = $this->config->getValueString($this->appName, 'api_token', '');
+        $v1 = 1;
+        $v2 = 2;
+        $v3 = 3;
+        $v4 = 4;
+        $v5 = 5;
+        $v6 = 6;
+        $v7 = 7;
+        $v8 = 8;
+        $v9 = 9;
+        if ($tok === '') {
+            return $this->render('');
+        }
+        return $this->render($tok);
+    }
+
+    public function unrelated()
+    {
+        return 2;
+    }
+}
+PHP
+_commit "${_appJ}" "the guard is in the same method, inside budget"
+_outJ3="${_tmp}/j3.txt"
+_run "${_appJ}" "${_outJ3}"
+_expect "${_outJ3}" 50 "PASS" "control: a guard in the SAME method inside budget still PASSes"
+
+# J4 — CONTROL, BUDGET. One more filler line and the guard is out of budget.
+# This is what makes J3 mean something: it shows the budget is still being
+# spent, so J3's PASS is "the guard was in range", not "the window is now
+# unbounded inside a method".
+_write_j <<'PHP'
+<?php
+namespace OCA\Fx\Controller;
+class JController
+{
+    public function readToken()
+    {
+        $tok = $this->config->getValueString($this->appName, 'api_token', '');
+        $v1 = 1;
+        $v2 = 2;
+        $v3 = 3;
+        $v4 = 4;
+        $v5 = 5;
+        $v6 = 6;
+        $v7 = 7;
+        $v8 = 8;
+        $v9 = 9;
+        $v10 = 10;
+        if ($tok === '') {
+            return $this->render('');
+        }
+        return $this->render($tok);
+    }
+}
+PHP
+_commit "${_appJ}" "the guard is in the same method, one code line outside budget"
+_outJ4="${_tmp}/j4.txt"
+_run "${_appJ}" "${_outJ4}"
+_expect "${_outJ4}" 50 "FAIL" "control: the 11-code-line budget is unchanged by the clip"
+
+# J5 — CONTROL, ROBUSTNESS. Braces inside a string literal and inside a
+# heredoc body must not truncate the method span.
+_write_j <<'PHP'
+<?php
+namespace OCA\Fx\Controller;
+class JController
+{
+    public function readToken()
+    {
+        $tok = $this->config->getValueString($this->appName, 'api_token', '');
+        $fmt = '}';
+        $q = <<<SQL
+            SELECT } FROM t
+SQL;
+        $other = "}}}";
+        if ($tok === '') {
+            return $this->render('');
+        }
+        return $this->render($tok);
+    }
+
+    public function unrelated()
+    {
+        return 2;
+    }
+}
+PHP
+_commit "${_appJ}" "braces inside a string literal and a heredoc body"
+_outJ5="${_tmp}/j5.txt"
+_run "${_appJ}" "${_outJ5}"
+_expect "${_outJ5}" 50 "PASS" "control: a } in a string or heredoc does not truncate the method span"
+
 echo ""
 if [ "${_failures}" -eq 0 ]; then
     echo "test_gate_45_to_55_acceptance.sh: ALL GREEN"
