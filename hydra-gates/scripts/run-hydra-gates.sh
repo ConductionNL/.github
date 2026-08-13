@@ -1375,6 +1375,64 @@ _ctrl_path_from_name() {
 }
 
 # ---------------------------------------------------------------------------
+# _php_code_copy <php-file> — path to a COMMENT-MASKED copy of <php-file>,
+# cached per path. Echoes nothing and returns 1 when the mask is unavailable,
+# so a caller can decline to judge rather than silently grade raw text.
+#
+# WHY (#415 / #422). A gate that answers a question about CODE by grepping the
+# bytes of a FILE answers it about PROSE too, and this runner asked several
+# such questions of raw files. The masked copy is length- and
+# newline-preserving (source_scope.php_mask), so every line number, `sed -n
+# "${n}p"` and awk `NR` computed on it names the same line of the original —
+# which is what lets a gate anchor on the mask and still read a suppression
+# marker out of the ORIGINAL text at that line.
+#
+# STRING CONTENTS SURVIVE, deliberately and per caller: `php_mask` keeps them
+# by default, and the two callers below both need them. A route name IS a
+# string (`'thing#index'`), and `"user $uid not found"` IS a use of $uid —
+# PHP interpolates it. Blanking literals here would not close a false
+# negative, it would manufacture false positives on correct code.
+#
+# NOT A SECOND COPY OF gate-5's `_ra_masked_copy`: that one predates this and
+# is scoped to gate-5's own cache directory and its own wiring guard. This is
+# the shared form; folding gate-5 into it means re-proving gate-5's suite and
+# belongs in its own change.
+# ---------------------------------------------------------------------------
+_HYDRA_MASK_HELPER="${SCRIPT_DIR}/lib/source_scope.py"
+_HYDRA_MASK_DIR="${HYDRA_GATE_LOG_DIR}/php-code-copies"
+
+# POSITIVE CONTROL ON THE MASK ITSELF, once per run. A helper that is missing,
+# or that silently echoes its input back, would put every caller straight into
+# the false negative it is here to close — and a false negative leaves no log
+# to notice. So the mask is asked a question with a known answer before it is
+# trusted: of these two lines, exactly ONE must survive.
+_HYDRA_MASK_OK=1
+if [ ! -f "${_HYDRA_MASK_HELPER}" ]; then
+    _HYDRA_MASK_OK=0
+else
+    _hydra_mask_probe=$(printf '// $uid\n$uid\n' \
+        | python3 "${_HYDRA_MASK_HELPER}" --mask php - 2>/dev/null \
+        | grep -c 'uid')
+    [ "${_hydra_mask_probe}" = "1" ] || _HYDRA_MASK_OK=0
+fi
+
+_php_code_copy() {
+    local _src="$1" _dst
+    [ "${_HYDRA_MASK_OK}" -eq 1 ] || return 1
+    [ -f "${_src}" ] || return 1
+    mkdir -p "${_HYDRA_MASK_DIR}" 2>/dev/null || return 1
+    _dst="${_HYDRA_MASK_DIR}/$(printf '%s' "${_src}" | tr '/' '_')"
+    if [ ! -f "${_dst}" ]; then
+        if ! python3 "${_HYDRA_MASK_HELPER}" --mask php "${_src}" > "${_dst}.tmp" 2>/dev/null; then
+            rm -f "${_dst}.tmp"
+            return 1
+        fi
+        mv "${_dst}.tmp" "${_dst}"
+    fi
+    printf '%s' "${_dst}"
+}
+
+# ---------------------------------------------------------------------------
 # _head_block <php-file> <declaration-line> — the annotation region that
 # belongs to the method declared on <declaration-line>, as text.
 #
@@ -1998,12 +2056,50 @@ fi
 # service/controller that declares a caller-identity parameter
 # ($uid / $callerUid / $userId / $caller) but never references it in
 # its body is an unfinished stub and fails gate-3. See ADR-021.
+#
+# A TODO NAMING THE PARAMETER IS NOT A USE OF IT (#415 / #422).
+# -----------------------------------------------------------
+# The reference count below was `grep -cF "$param"` over the RAW body, so a
+# comment counted as a reference. Measured through this gate, one fixture, ONE
+# ADDED LINE:
+#
+#   public function authorize(string $uid, string $id): bool {
+#       $this->log('checked');
+#       return true;
+#   }                       -> FAIL — rule=caller-identity-ignored   (correct)
+#
+#   the same method with
+#     `// TODO: verify $uid actually owns this object before returning true.`
+#                           -> PASS                                 <- the defect
+#
+# That is the sentence a diligent author writes while acknowledging the stub,
+# and this gate exists BECAUSE the builder's fix-mode wrote exactly such stubs
+# (decidesk#45): methods that accept a caller identity and ignore it, which
+# gate-7 also passed. A stub that documents what it does not do is still a
+# stub.
+#
+# The `;` vs `{` terminator test above has the same exposure and the same
+# repair — a `/* … ; … */` in a signature made a real method read as an
+# abstract DECLARATION and be skipped entirely (gate-57 carried that defect
+# verbatim, #422). Both now read the masked copy.
+#
+# ⚠️ STRING CONTENTS SURVIVE, AND HERE THAT IS THE WHOLE POINT. In PHP,
+# `"user $uid not found"` INTERPOLATES $uid — it is a genuine reference, and
+# `throw new NotFoundException("no such user: $uid")` is a perfectly good use
+# of a caller identity. Blanking literals would report those methods as stubs.
+# The single-quoted `'$uid'` that is NOT a use stays a residual false negative
+# and is #424's; it is the fail-safe direction for a gate that accuses a
+# method of being unfinished.
 while IFS= read -r f; do
     [ -f "$f" ] || continue
     _in_scope "$f" || continue
-    grep -nE '^\s*public\s+function\s+\w+\s*\([^)]*\$(uid|callerUid|userId|caller)\b' "$f" \
+    # Anchor on CODE. A file whose mask cannot be produced is not judged by
+    # this arm — reading the raw text instead is the behaviour being removed.
+    _stub_code=$(_php_code_copy "$f") || continue
+    [ -n "${_stub_code}" ] || continue
+    grep -nE '^\s*public\s+function\s+\w+\s*\([^)]*\$(uid|callerUid|userId|caller)\b' "${_stub_code}" \
         | while IFS=: read -r _line_no _; do
-            _sig=$(sed -n "${_line_no}p" "$f")
+            _sig=$(sed -n "${_line_no}p" "${_stub_code}")
             _method=$(echo "$_sig" | grep -oE 'function\s+\w+' | awk '{print $2}')
             _param=$(echo "$_sig" | grep -oE '\$(uid|callerUid|userId|caller)\b' | head -1)
             [ -z "$_method" ] || [ -z "$_param" ] && continue
@@ -2036,10 +2132,10 @@ while IFS= read -r f; do
             #
             # Decide it on the SIGNATURE's terminator, which is the property that
             # actually distinguishes the two: `;` = declaration, `{` = body.
-            _sig_region=$(awk -v start="${_line_no}" 'NR >= start { printf "%s", $0; if (/[;{]/) exit }' "$f")
+            _sig_region=$(awk -v start="${_line_no}" 'NR >= start { printf "%s", $0; if (/[;{]/) exit }' "${_stub_code}")
             _sig_term=$(printf '%s' "${_sig_region}" | grep -oE '[;{]' | head -1)
             [ "${_sig_term}" = ";" ] && continue
-            _body=$(awk -v start="${_line_no}" 'NR >= start { print; if (NR > start && /^    \}/) exit }' "$f")
+            _body=$(awk -v start="${_line_no}" 'NR >= start { print; if (NR > start && /^    \}/) exit }' "${_stub_code}")
             _body_lines=$(echo "${_body}" | wc -l)
             # A legitimate ≥3-line method that accepts a caller-identity
             # param and never references it is a stub. Skip very short
@@ -2084,6 +2180,14 @@ while IFS= read -r f; do
             fi
         done
 done < <(_enum_tracked '\.php$' lib/Service lib/Controller)
+# AN ARM THAT SILENTLY DID NOT RUN IS NOT A PASS. The caller-identity arm above
+# `continue`s on every file whose comment mask cannot be produced, so without
+# this the gate would print PASS with one of its four arms switched off and no
+# log to notice — the shape this package keeps finding (#147, #245, #374).
+if [ "${_stub_ran}" -eq 1 ] && [ "${_stub_scope}" -gt 0 ] && [ "${_HYDRA_MASK_OK}" -eq 0 ]; then
+    _stub_ran=0
+    _skip 3 "stub-scan" wiring "source_scope.py at ${_HYDRA_MASK_HELPER} could not blank a PHP comment (positive control failed) — ${_stub_scope} file(s) were in scope and the caller-identity arm judged NONE of them. Without the mask a TODO naming \$uid counts as a use of \$uid (#422), so the run declines rather than reporting a pass over an arm that did not execute."
+fi
 if [ "${_stub_ran}" -eq 1 ] && [ "${_stub_scope}" -eq 0 ]; then
     _stub_ran=0
     _skip 3 "stub-scan" na "scope was empty — 0 tracked .php/.vue file(s) under lib/ or src/ in this diff, so NOTHING was inspected; stub code (unfinished run() bodies, 'In a complete implementation' markers, ignored caller-identity parameters) is UNVERIFIED by this run."
@@ -3154,6 +3258,49 @@ if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
     _rr_routes_touched=0
     _in_scope "appinfo/routes.php" && _rr_routes_touched=1
 
+    # A ROUTE WRITTEN ONLY IN A COMMENT IS NOT A ROUTE (#415 / #422).
+    # ---------------------------------------------------------------
+    # Invariant 1 asks "does a route entry for this method exist?" and answered
+    # it with `grep -qF "'thing#index'"` over the RAW routes.php. The in-code
+    # note at that grep says false positives from comments are "vanishingly
+    # rare" — it anticipated the FALSE POSITIVE and missed the false NEGATIVE,
+    # which is the direction that ships a 404. Measured through this gate, one
+    # fixture, ONE ADDED LINE:
+    #
+    #   ThingController::orphanReport(): JSONResponse, no route entry
+    #     -> FAIL — rule=missing-route                              (correct)
+    #   the same tree with routes.php gaining
+    #     `// TODO: wire up 'thing#orphanReport' once the export lands.`
+    #     -> PASS                                                   <- the defect
+    #
+    # The endpoint 404s at runtime and the gate reports it reachable, on the
+    # strength of the line saying it is not wired up yet.
+    #
+    # ⚠️ STRING CONTENTS SURVIVE, and here they ARE the evidence: a route name
+    # is the literal `'thing#index'` and nothing else. `php_mask` keeps them by
+    # default. This is the gate where blanking literals would not widen the
+    # gate, it would delete every route in the file.
+    #
+    # The masked copy also feeds the auto-resource scan below — a commented-out
+    # `'resources' => [...]` block otherwise exempts a live controller's whole
+    # CRUD quintet from invariant 1, same direction, same cause.
+    #
+    # Invariant 2 still reads the raw file. Its exposure is the OPPOSITE
+    # direction (a commented-out route name manufacturing a phantom route) and
+    # belongs with the false-positive half, #423 — changing both here would put
+    # two independent verdict changes behind one measurement.
+    #
+    # A MASK THAT CANNOT BE PRODUCED IS NOT A LICENCE TO GRADE RAW TEXT. If the
+    # helper is missing or fails its positive control, this gate declines
+    # rather than falling back — a silent fallback is exactly the false
+    # negative being closed, and it would leave no log to notice. Same
+    # decision, and the same wording, as gate-5's (#147, #245).
+    _rr_routes_src=""
+    _rr_routes_code=$(_php_code_copy appinfo/routes.php) && _rr_routes_src="${_rr_routes_code}"
+    if [ -z "${_rr_routes_src}" ]; then
+        _skip 14 "route-reachability" wiring "source_scope.py at ${_HYDRA_MASK_HELPER} could not blank a PHP comment (positive control failed) — appinfo/routes.php was NOT masked, so NO route was judged. Without it a route written only in a comment satisfies invariant 1 and the endpoint 404s at runtime (#422), so the run declines rather than reporting a pass it cannot support."
+    else
+
     # Resource auto-routes (entries inside the top-level `'resources' => [...]`
     # block) generate index/show/create/update/destroy on the named
     # controller; methods on those auto-routes are excluded from invariant 1.
@@ -3167,7 +3314,7 @@ if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
             match($0, /[A-Za-z][A-Za-z0-9_]*/); key=substr($0, RSTART, RLENGTH)
             print tolower(substr(key,1,1)) substr(key,2)
         }
-    ' appinfo/routes.php | sort -u)
+    ' "${_rr_routes_src}" | sort -u)
 
     # ---- Invariant 1: every Response-returning controller method has a route
     # Iterate Controller files. For each public method whose return type is
@@ -3271,7 +3418,7 @@ if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
             # those apps this grep was asking the wrong file and answering "no"
             # every time, which is why five apps were told their working
             # `dashboard#page` / `settings#index` endpoints 404.
-            if ! grep -qF "'${_ctrl_slug}#${_m}'" appinfo/routes.php \
+            if ! grep -qF "'${_ctrl_slug}#${_m}'" "${_rr_routes_src}" \
                 && ! _apphost_supplies_route "${_ctrl_slug}#${_m}"; then
                 echo "${_ctrl_path} method=${_m} expected_route='${_ctrl_slug}#${_m}' rule=missing-route" >> "${_rr_log}"
             fi
@@ -3381,6 +3528,7 @@ if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
     else
         _fail 14 "route-reachability" "${_rr_fail} unrouted method(s) or wrong-target route(s) — see ${_rr_log}"
     fi
+    fi  # mask available
 fi
 
 # ---------------------------------------------------------------------------
