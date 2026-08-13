@@ -66,6 +66,9 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from source_scope import js_comment_mask  # noqa: E402
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 VOCAB_PATH = os.path.join(HERE, '..', 'schemas', 'semantic-icons.json')
 
@@ -129,6 +132,47 @@ def _manifest_paths(repo: str) -> list[str]:
     return paths
 
 
+def _js_code(text: str) -> str:
+    """*text* with JS comments blanked and STRING LITERALS KEPT.
+
+    A COMMENTED-OUT IMPORT VOUCHES FOR AN ICON THAT RENDERS BLANK (#422).
+    --------------------------------------------------------------------
+    `_registered_icon_names` used to extract names from the RAW bytes of
+    `src/icons.js` and `src/main.js`, so a commented-out import registered an
+    icon. Measured on this checker, one fixture, one variable:
+
+        manifest uses ViewDashboardOutline,       FAIL — 1 icon name(s) used by
+        icons.js registers only Cog                      the manifests are NOT
+                                                         registered
+        + icons.js gains the two lines            PASS               <- the defect
+          "// TODO: the dashboard nav row still
+          //  needs this — not wired up yet.
+          // import ViewDashboardOutline from
+          //  'vue-material-design-icons/ViewDashboardOutline.vue'"
+
+    This gate exists for exactly one failure: `CnAppNav` resolves an MDI icon
+    only through the registry `registerIcons()` populates, WITH NO FALLBACK, so
+    an unregistered name renders nothing at all — no glyph, no console error.
+    The comment saying the import is "not wired up yet" was the whole evidence
+    that it was.
+
+    ⚠️ `js_comment_mask`, NOT `js_mask(blank_strings=True)`. THE EVIDENCE HERE
+    IS A STRING: the module specifier
+    `'vue-material-design-icons/ViewDashboardOutline.vue'` is the only place
+    the icon name appears in an import, so blanking literals would delete every
+    registration and report every icon in the fleet unregistered. This is the
+    gate where the mask that closes the false negative would, one keyword
+    argument further, close the gate itself.
+
+    The two `registerIcons(` probes above had a line-prefix filter
+    (`startswith(('//', '*', '/*'))`) which recognises the three ways a comment
+    line can BEGIN and misses every way it can continue — a trailing comment,
+    and any unprefixed interior line of a block. Both now go through the same
+    tokeniser.
+    """
+    return js_comment_mask(text)
+
+
 def _registered_icon_names(repo: str) -> tuple[set[str] | None, str | None]:
     """(names the app registers, problem) from src/icons.js + src/main.js.
 
@@ -148,9 +192,11 @@ def _registered_icon_names(repo: str) -> tuple[set[str] | None, str | None]:
 
     with open(main_js, encoding='utf-8') as fh:
         src_main = fh.read()
-    # Ignore comments so a `registerIcons()` mentioned in prose is not read as a call.
-    code = '\n'.join(l for l in src_main.splitlines()
-                     if not l.lstrip().startswith(('//', '*', '/*')))
+    # Ignore comments so a `registerIcons()` mentioned in prose is not read as
+    # a call. THE LINE-PREFIX FILTER THIS REPLACES ONLY KNEW HOW A COMMENT
+    # BEGINS — see `_js_code` — so a trailing comment and every interior line
+    # of a `/* … */` block sailed through it.
+    code = _js_code(src_main)
 
     calls = re.findall(r'registerIcons\(([^)]*)\)', code)
     if not calls:
@@ -164,7 +210,7 @@ def _registered_icon_names(repo: str) -> tuple[set[str] | None, str | None]:
         if not os.path.isfile(f):
             continue
         with open(f, encoding='utf-8') as fh:
-            text = fh.read()
+            text = _js_code(fh.read())
         for m in re.finditer(r"import\s+(\w+)\s+from\s+'vue-material-design-icons/([\w-]+)\.vue'", text):
             names.add(m.group(1))
             names.add(m.group(2))

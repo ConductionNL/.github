@@ -904,5 +904,129 @@ class ReportService {
         self.assertEqual(rc, 0)
 
 
+class TagPositionTest(unittest.TestCase):
+    """A SENTENCE ABOUT THE TAG IS NOT THE TAG (#415 class, #422).
+
+    ``SPEC_RE`` was an unanchored substring, so any docblock line MENTIONING
+    ``@spec openspec/…`` marked the method covered — including the sentence
+    stating that nobody has written one. That is the gate that exists to
+    COLLECT the gap being closed by a note describing it.
+
+    This one is the borderline case in #422 and the borderline is worth
+    stating: ``@spec`` is a docblock marker, so unlike every other gate in that
+    issue the evidence legitimately LIVES in a comment and a comment mask would
+    delete it. What was missing is POSITION — the anchoring gates 47 and 48
+    already have.
+
+    Reverted against origin/main, arms 1 and 2 FLIP. Arms 3-8 pass either way
+    and are CONTROLS: they are every spelling the fleet actually uses, and the
+    pattern was measured against them exhaustively — 46,187 method judgements
+    across the six repos, diff scope bypassed — until it produced ZERO new
+    findings. Arm 8 is the one that made the first cut wrong.
+    """
+
+    def _findings(self, text: str) -> list[str]:
+        findings: list[str] = []
+        csc.check_php_file("lib/Service/FooService.php", text, _all_lines(text), findings)
+        return findings
+
+    def _method(self, docblock: str) -> str:
+        return ("<?php\nclass FooService {\n"
+                f"{docblock}"
+                "    public function doThing(string $id): string\n"
+                "    {\n"
+                "        return $id;\n"
+                "    }\n"
+                "}\n")
+
+    def test_1_a_todo_saying_nobody_wrote_the_tag_is_not_the_tag(self):
+        out = self._findings(self._method(
+            "    /**\n"
+            "     * Do a thing.\n"
+            "     *\n"
+            "     * TODO: nobody has written @spec openspec/specs/thing/spec.md\n"
+            "     * for this yet.\n"
+            "     */\n"))
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("missing @spec", out[0])
+
+    def test_2_a_note_about_a_REMOVED_tag_is_not_the_tag(self):
+        """Found in the fleet while measuring the lead class: openregister
+        carries `NOTE: this used to read @spec openspec/changes/…`. A note
+        recording that the tag was taken away read as the tag."""
+        out = self._findings(self._method(
+            "    /**\n"
+            "     * NOTE: this used to read @spec openspec/changes/dso/tasks.md#T07,\n"
+            "     * which was archived.\n"
+            "     */\n"))
+        self.assertEqual(len(out), 1, out)
+
+    def test_3_CONTROL_the_docblock_continuation_form(self):
+        """` * @spec …` — 3,726 occurrences in procest alone."""
+        self.assertEqual(self._findings(self._method(
+            "    /**\n"
+            "     * @spec openspec/specs/thing/spec.md\n"
+            "     */\n")), [])
+
+    def test_4_CONTROL_the_single_line_docblock_form(self):
+        """`/** @spec … */` — 670 in procest, 638 in opencatalogi. The lead
+        class must admit SLASHES, which the package's markdown `standalone`
+        lead (`^[ \\t>*#-]`) does not: an agent reusing that lead here would
+        uncover 1,308 correctly-tagged methods in two repos."""
+        self.assertEqual(self._findings(self._method(
+            "    /** @spec openspec/specs/thing/spec.md */\n")), [])
+
+    def test_5_CONTROL_a_line_comment_tag_never_counted_and_still_does_not(self):
+        """CONTROL, and it corrects a wrong prediction rather than hiding it.
+
+        The fleet carries 109 `// @spec openspec/…` lines (openregister 56,
+        procest 43, softwarecatalog 10) and I expected the anchor to have to
+        admit them. It does not: `_docblock_block` SKIPS `//` lines when
+        looking for the block above a declaration, so a line-comment tag has
+        never satisfied this gate — before this change or after. Asserted so
+        the next reader does not re-derive the wrong expectation from the
+        lead class, which admits `/` for the `/** … */` form only."""
+        self.assertEqual(len(self._findings(self._method(
+            "    // @spec openspec/specs/thing/spec.md\n"))), 1)
+
+    def test_6_CONTROL_a_reason_bearing_exclude_still_excludes(self):
+        self.assertEqual(self._findings(self._method(
+            "    /**\n"
+            "     * @spec exclude thin DI wiring with no standalone contract\n"
+            "     */\n")), [])
+
+    def test_8_CONTROL_description_then_tag_in_a_one_line_docblock(self):
+        """CONTROL, AND THE ARM THAT CAUGHT THE FIRST CUT BEING WRONG.
+
+        `/** Description. @spec … */` is the ordinary PHPDoc order — the
+        description comes first and the tags follow — and a start-anchor alone
+        rejected it. Measured: FIVE real, deliberately tagged methods in
+        decidesk's VotingRoundPanel.vue went red, and the only way to close
+        them would have been to reflow correct documentation. A gate that
+        reddens documented code teaches authors to stop documenting it."""
+        self.assertEqual(self._findings(self._method(
+            "    /** Rule enum option lists for the dialog."
+            " @spec openspec/specs/voting-system/spec.md */\n")), [])
+
+    def test_9_a_debt_sentence_with_no_terminator_is_still_not_a_tag(self):
+        """The discriminator between arm 8 and arm 1 is a COMPLETED SENTENCE
+        before the tag, so this states what the second alternative does NOT
+        admit: a colon is not a sentence terminator."""
+        out = self._findings(self._method(
+            "    /**\n"
+            "     * TODO: still owed: @spec openspec/specs/thing/spec.md\n"
+            "     */\n"))
+        self.assertEqual(len(out), 1, out)
+
+    def test_7_CONTROL_a_tag_plus_trailing_prose_on_the_same_line(self):
+        """The tag OPENS the line's content; what follows it does not matter.
+        Anchoring the START is the whole change — anchoring the end too would
+        break every `@spec path (see also …)` in the fleet."""
+        self.assertEqual(self._findings(self._method(
+            "    /**\n"
+            "     * @spec openspec/specs/thing/spec.md (see also the ADR)\n"
+            "     */\n")), [])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -308,5 +308,99 @@ class RegressionGuards(_TmpCase):
         self.assertIn("ContentBlocks", out)
 
 
+class ACommentedOutImportRegistersNothing(_TmpCase):
+    """A COMMENTED-OUT IMPORT VOUCHED FOR AN ICON THAT RENDERS BLANK (#422).
+
+    `_registered_icon_names` read the RAW bytes of `src/icons.js` and
+    `src/main.js`, so prose registered icons. This is the gate whose entire
+    reason for existing is that `CnAppNav` resolves an MDI name only through
+    the registry, with NO fallback — an unregistered name renders nothing at
+    all, no glyph and no console error. The comment saying an import is "not
+    wired up yet" was the whole evidence that it was.
+
+    Reverted against origin/main, arms 2 and 3 FLIP (finding -> no finding).
+    Arms 1, 4 and 5 pass either way and are CONTROLS — 4 and 5 are the
+    anti-widening pair, and they are the reason this gate uses
+    `js_comment_mask` and NOT `js_mask(blank_strings=True)`.
+    """
+
+    def _repo(self, icons_js: str, main_js: str | None = None) -> Path:
+        root = _app(self.tmp,
+                    [{"id": "x", "label": "Dashboard", "icon": "ViewDashboardOutline"}],
+                    registered=[])
+        (root / "src" / "icons.js").write_text(icons_js, encoding="utf-8")
+        if main_js is not None:
+            (root / "src" / "main.js").write_text(main_js, encoding="utf-8")
+        return root
+
+    def test_1_positive_control_an_unregistered_name_is_a_finding(self):
+        """CONTROL. Without this firing, arms 2-3 measure nothing."""
+        rc, out = _run(self._repo(
+            "import Cog from 'vue-material-design-icons/Cog.vue'\n"
+            "export default { Cog }\n"))
+        self.assertEqual(rc, 1)
+        self.assertIn("NOT registered", out)
+        self.assertIn("ViewDashboardOutline", out)
+
+    def test_2_a_commented_out_import_does_not_register(self):
+        rc, out = _run(self._repo(
+            "import Cog from 'vue-material-design-icons/Cog.vue'\n"
+            "// TODO: the dashboard nav row still needs this — not wired up yet.\n"
+            "// import ViewDashboardOutline from "
+            "'vue-material-design-icons/ViewDashboardOutline.vue'\n"
+            "export default { Cog }\n"))
+        self.assertEqual(rc, 1)
+        self.assertIn("NOT registered", out)
+
+    def test_3_registerIcons_named_only_in_a_block_comment_is_not_a_call(self):
+        """The `registerIcons(` probe had a line-PREFIX filter, which knows the
+        three ways a comment line can begin and misses every way it can
+        continue. An unprefixed interior line of a `/* */` block read as the
+        bootstrap call, and an app that registers NOTHING passed rule 3."""
+        rc, out = _run(self._repo(
+            "import Cog from 'vue-material-design-icons/Cog.vue'\n"
+            "export default { Cog }\n",
+            main_js=(
+                "import icons from './icons.js'\n"
+                "/*\n"
+                "Historical: we used to call registerIcons(icons) from a plugin.\n"
+                "*/\n"),
+        ))
+        self.assertEqual(rc, 1)
+        self.assertIn("never calls registerIcons()", out)
+
+    def test_4_a_real_import_still_registers(self):
+        """CONTROL (anti-widening). THE EVIDENCE IS A STRING: the icon name
+        lives in the module specifier
+        `'vue-material-design-icons/ViewDashboardOutline.vue'`. Under
+        `js_mask(blank_strings=True)` this arm goes red and every icon in the
+        fleet reports unregistered — the mask that closes the false negative
+        would, one keyword argument further, close the gate."""
+        rc, out = _run(self._repo(
+            "import Cog from 'vue-material-design-icons/Cog.vue'\n"
+            "import ViewDashboardOutline from "
+            "'vue-material-design-icons/ViewDashboardOutline.vue'\n"
+            "export default { Cog, ViewDashboardOutline }\n"))
+        self.assertEqual(rc, 0, out)
+        self.assertNotIn("NOT registered", out)
+
+    def test_5_a_real_registerIcons_call_is_still_a_call(self):
+        """CONTROL (anti-widening), with the call sitting BELOW a block comment
+        so the mask has to end where the comment ends."""
+        rc, out = _run(self._repo(
+            "import Cog from 'vue-material-design-icons/Cog.vue'\n"
+            "import ViewDashboardOutline from "
+            "'vue-material-design-icons/ViewDashboardOutline.vue'\n"
+            "export default { Cog, ViewDashboardOutline }\n",
+            main_js=(
+                "import icons from './icons.js'\n"
+                "/*\n"
+                "Registers every MDI glyph the manifests name.\n"
+                "*/\n"
+                "registerIcons(icons)\n"),
+        ))
+        self.assertEqual(rc, 0, out)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
