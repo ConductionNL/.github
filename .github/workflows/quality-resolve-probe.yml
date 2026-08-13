@@ -194,6 +194,104 @@ jobs:
       - name: "Exercise every 'Seed test data' step in quality.yml"
         run: python3 scripts/assert-seed-step-fails-loudly.py .github/workflows/quality.yml
 
+  matrix-derivation:
+    name: "The test matrix tracks info.xml"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # THE POSITIVE CONTROL IS THE WHOLE POINT OF THIS JOB.
+      #
+      # quality.yml derives the PHPUnit server matrix from appinfo/info.xml. The
+      # obvious way to check that is to assert the derived value equals what the
+      # 18 core apps hand-declare — and every one of them declares NC 32-34, so
+      # an action that returned ["stable32","stable33","stable34"] unconditionally
+      # would satisfy that assertion forever, on every app, while measuring
+      # nothing. A value that matches is not evidence until you have shown it can
+      # differ.
+      #
+      # So both fixtures are derived here and the two results are required to be
+      # DIFFERENT in the specific way info.xml says they should be: the only
+      # byte that differs between the two manifests is `max-version`, and
+      # stable34 must be present in one and absent from the other.
+      - name: Derive from a manifest declaring NC 32-34
+        id: full
+        uses: icewind1991/nextcloud-version-matrix@8a7bac6300b2f0f3100088b297995a229558ddba # v1.3.2
+        with:
+          filename: scripts/fixtures/nextcloud-matrix/info-32-34.xml
+
+      - name: Derive from a manifest declaring NC 32-33 (positive control)
+        id: narrow
+        uses: icewind1991/nextcloud-version-matrix@8a7bac6300b2f0f3100088b297995a229558ddba # v1.3.2
+        with:
+          filename: scripts/fixtures/nextcloud-matrix/info-32-33.xml
+
+      - name: Assert the derived matrix is a function of info.xml
+        env:
+          FULL: ${{ steps.full.outputs.branches }}
+          FULL_MAX: ${{ steps.full.outputs.branches-max }}
+          NARROW: ${{ steps.narrow.outputs.branches }}
+          NARROW_MAX: ${{ steps.narrow.outputs.branches-max }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, sys
+
+          full   = json.loads(os.environ["FULL"])
+          narrow = json.loads(os.environ["NARROW"])
+          fmax   = os.environ["FULL_MAX"]
+          nmax   = os.environ["NARROW_MAX"]
+
+          print(f"32-34 -> branches={full} branches-max={fmax}")
+          print(f"32-33 -> branches={narrow} branches-max={nmax}")
+
+          bad = []
+
+          if set(full) != {"stable32", "stable33", "stable34"}:
+              bad.append(f"a manifest declaring NC 32-34 derived {full}, not stable32/33/34.")
+          if set(narrow) != {"stable32", "stable33"}:
+              bad.append(f"a manifest declaring NC 32-33 derived {narrow}, not stable32/33.")
+
+          # THE CONTROL. If these are equal the action is not reading the file.
+          if set(full) == set(narrow):
+              bad.append(
+                  "both manifests derived the SAME set. The only difference "
+                  "between them is max-version, so the matrix is not a function "
+                  "of info.xml — it is a constant, and every 'the derived value "
+                  "matches what the app declares' assertion in this repo is "
+                  "vacuous."
+              )
+          if "stable34" not in full:
+              bad.append("stable34 is missing from the 32-34 derivation.")
+          if "stable34" in narrow:
+              bad.append("stable34 survived a manifest that declares max-version=33.")
+
+          # `branches` IS OLDEST-FIRST — verified against the action's source,
+          # where range(min,max) is reversed for the branched-off check and
+          # reversed back. quality.yml must therefore never read entry [0] as
+          # "the newest server": that is how newman, playwright, journeydoc and
+          # the coverage guard would silently move onto stable32. This asserts
+          # the ordering that makes `branches-max` necessary, so a future
+          # release that flipped it would surface here rather than as four jobs
+          # quietly testing the wrong server.
+          if full[0] != "stable32" or full[-1] != "stable34":
+              bad.append(
+                  f"`branches` is no longer oldest-first ({full}). quality.yml "
+                  f"relies on `branches-max` precisely because it is; re-read "
+                  f"the single-server wiring before changing anything."
+              )
+          if fmax != "stable34" or nmax != "stable33":
+              bad.append(
+                  f"`branches-max` did not track max-version ({fmax!r}, {nmax!r})."
+              )
+
+          for problem in bad:
+              print(f"::error::{problem}")
+          sys.exit(1 if bad else 0)
+          PY
+          echo "OK — the matrix is derived from info.xml, and it changes when info.xml does."
+
   probe:
     name: "quality.yml resolves (job count > 0)"
     runs-on: ubuntu-latest
@@ -271,7 +369,7 @@ jobs:
   guard:
     name: "Shared-workflow guard"
     runs-on: ubuntu-latest
-    needs: [static-limits, seed-semantics, gate-completeness, probe]
+    needs: [static-limits, seed-semantics, gate-completeness, matrix-derivation, probe]
     if: ${{ !cancelled() }}
     steps:
       - name: Assert both guards reached a verdict
@@ -279,13 +377,14 @@ jobs:
           STATIC: ${{ needs.static-limits.result }}
           SEED: ${{ needs.seed-semantics.result }}
           LEGS: ${{ needs.gate-completeness.result }}
+          MATRIX: ${{ needs.matrix-derivation.result }}
           PROBE: ${{ needs.probe.result }}
         run: |
           set -eu
-          echo "static-limits=${STATIC} seed-semantics=${SEED} gate-completeness=${LEGS} probe=${PROBE}"
+          echo "static-limits=${STATIC} seed-semantics=${SEED} gate-completeness=${LEGS} matrix-derivation=${MATRIX} probe=${PROBE}"
           # `skipped` is failed here on purpose. A guard that did not run is
           # not a guard that passed.
-          for pair in "static-limits:${STATIC}" "seed-semantics:${SEED}" "gate-completeness:${LEGS}" "probe:${PROBE}"; do
+          for pair in "static-limits:${STATIC}" "seed-semantics:${SEED}" "gate-completeness:${LEGS}" "matrix-derivation:${MATRIX}" "probe:${PROBE}"; do
             name="${pair%%:*}"; result="${pair##*:}"
             [ "${result}" = "success" ] || {
               echo "::error::${name} did not succeed (result=${result}). A guard that \

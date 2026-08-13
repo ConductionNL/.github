@@ -57,6 +57,23 @@ jobs:
     uses: ./.github/workflows/quality.yml
     with:
       app-name: github-selftest
+      # DERIVATION, EXERCISED IN THE REPO THAT SHIPS IT.
+      #
+      # .github is not a Nextcloud app, so at the default path there is no
+      # manifest and the `nextcloud-matrix` job would take its no-manifest
+      # fallback on every run — meaning the derivation this workflow exists to
+      # distribute would never once execute here. Pointing it at a fixture that
+      # declares exactly what the 18 core apps declare (NC 32-34) makes every
+      # PR to main run the real path, print the real range, and fail if the
+      # action's contract moves.
+      #
+      # This is resolution + derivation only. It is NOT the leg count: a matrix
+      # job whose `if:` is false does not expand — measured on run 31692599960,
+      # where the skipped PHPUnit job renders as a single row still carrying the
+      # literal `${{ matrix.nextcloud-ref }}` in its name. The leg count is
+      # measured by `nextcloud-matrix-fixture.yml` on a `fixture/**` branch,
+      # where PHPUnit is genuinely enabled and the legs genuinely materialise.
+      nextcloud-info-path: scripts/fixtures/nextcloud-matrix/info-32-34.xml
       enable-php: false
       enable-npm: false
       enable-frontend: false

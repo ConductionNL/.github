@@ -252,26 +252,106 @@ else
     ok "accepts a deliberate divergence declared as exclude + re-declare"
 fi
 
-probe matrix-absent            test-matrix-not-declared \
-                               "sed -i '/nextcloud-test-refs/d' .github/workflows/code-quality.yml"
+# ── RULE 11 HAS THREE STATES, AND ALL THREE ARE ASSERTED ──────────────────
+#
+# The shared quality.yml derives the server range from appinfo/info.xml. That
+# retired `test-matrix-not-declared`, which used to fire on an app passing no
+# `nextcloud-test-refs` — the state that is now the CORRECT one. What replaced
+# it is a three-way split, and the danger in a three-way split is that two of
+# the arms are indistinguishable to a checker that only greps for the input:
+#
+#   1. DERIVES   no override, calls the shared workflow  -> clean
+#   2. DECLARES  an override that agrees with info.xml   -> clean
+#              ... and one that does not                 -> the two probes below
+#   3. NEITHER   no override, does NOT call the shared workflow -> FAIL
+#
+# 1 and 3 differ only in a `uses:` line. Asserting 1 without 3 would pass on a
+# checker that had simply stopped looking, which is how the rule this replaces
+# managed to be wrong about every app in the fleet at once.
+
+# ── STATE 1: DERIVES ──────────────────────────────────────────────────────
+D="$WORK/matrixderived"
+rm -rf "$D"; scaffold "$D"
+sed -i '/nextcloud-test-refs/d' "$D/.github/workflows/code-quality.yml"
+# NOTE: capture first, then grep. `set -o pipefail` is on and the checker exits
+# with its VIOLATION COUNT, so `run "$D" | grep -q` returns non-zero on a
+# SUCCESSFUL match whenever the fixture is dirty.
+out="$(run "$D")"; rc=$?
+if [ "$rc" -eq 0 ]; then
+    ok "an app that DERIVES its matrix (no override, shared workflow) is clean"
+else
+    no "deriving the matrix was reported as a defect — the state this change makes correct" "$out"
+fi
+
+# ── STATE 2: DECLARES, AND AGREES ─────────────────────────────────────────
+# The scaffold ships an override that matches info.xml exactly. The global
+# negative control already covers it, but state 2 is named here so all three
+# arms of the split are visible in the output rather than inferred.
+D="$WORK/matrixdeclared"
+rm -rf "$D"; scaffold "$D"
+out="$(run "$D")"
+if printf '%s' "$out" | grep -q 'FAIL test-matrix-'; then
+    no "a hand-declared matrix that AGREES with info.xml was reported" "$out"
+else
+    ok "an app that hand-declares a matrix agreeing with info.xml is clean"
+fi
+
+# ── STATE 3: NEITHER ──────────────────────────────────────────────────────
+# No override, and the workflow does not call the shared quality.yml, so
+# nothing derives a range from this manifest.
+D="$WORK/matrixneither"
+rm -rf "$D"; scaffold "$D"
+sed -i '/nextcloud-test-refs/d' "$D/.github/workflows/code-quality.yml"
+sed -i 's|uses: ConductionNL/.github/.github/workflows/quality.yml@main|uses: ./.github/workflows/local-quality.yml|' \
+    "$D/.github/workflows/code-quality.yml"
+out="$(run "$D")"
+if printf '%s' "$out" | grep -q 'FAIL test-matrix-neither-derived-nor-declared:'; then
+    ok "an app that neither derives nor declares is still a finding"
+else
+    no "no matrix, no shared workflow, and no finding — the declared range is connected to nothing" "$out"
+fi
+
+# ── A COMMENTED-OUT `uses:` DOES NOT DERIVE ANYTHING ──────────────────────
+# States 1 and 3 differ by one line, so the rule that tells them apart is a
+# grep for that line — and gate-64's defect is that a grep matches its string
+# inside a comment. Without this arm, commenting out the call to the shared
+# workflow would silently convert a FAIL into a PASS.
+D="$WORK/matrixusescommented"
+rm -rf "$D"; scaffold "$D"
+sed -i '/nextcloud-test-refs/d' "$D/.github/workflows/code-quality.yml"
+sed -i 's|    uses: ConductionNL/.github/.github/workflows/quality.yml@main|    # uses: ConductionNL/.github/.github/workflows/quality.yml@main|' \
+    "$D/.github/workflows/code-quality.yml"
+out="$(run "$D")"
+if printf '%s' "$out" | grep -q 'FAIL test-matrix-neither-derived-nor-declared:'; then
+    ok "a commented-out call to the shared workflow does not count as deriving"
+else
+    no "a COMMENTED-OUT shared-workflow call was accepted as deriving the matrix" "$out"
+fi
+
 probe matrix-misses-floor      test-matrix-misses-declared-versions \
                                "sed -i 's|\\[\\\"stable34\\\", \\\"stable32\\\", \\\"stable33\\\"\\]|[\\\"stable34\\\"]|' .github/workflows/code-quality.yml"
 probe matrix-outside-range     test-matrix-tests-unsupported-version \
                                "sed -i 's|\\[\\\"stable34\\\", \\\"stable32\\\", \\\"stable33\\\"\\]|[\\\"stable31\\\", \\\"stable32\\\", \\\"stable33\\\", \\\"stable34\\\"]|' .github/workflows/code-quality.yml"
 
 # ── A COMMENTED-OUT MATRIX IS NOT A MATRIX ────────────────────────────────
-# The rule must not accept a declaration that only exists inside a comment.
+# The rule must not read a declaration that only exists inside a comment. The
+# consequence of getting this wrong INVERTED when the matrix became derived:
+# it used to turn a FAIL into a PASS, and now it turns a PASS into a FAIL —
+# grading a repo that derives correctly against a range somebody left in a
+# comment. The wrong direction for a check to be wrong in is whichever one is
+# in front of you, so it is asserted with a comment whose contents would be a
+# finding if they were read: stable28-30 against a manifest declaring 32-34.
 D="$WORK/matrixcommented"
 rm -rf "$D"; scaffold "$D"
-sed -i "s|      nextcloud-test-refs: .*|      # nextcloud-test-refs: '[\"stable34\", \"stable32\", \"stable33\"]'|" "$D/.github/workflows/code-quality.yml"
+sed -i "s|      nextcloud-test-refs: .*|      # nextcloud-test-refs: '[\"stable28\", \"stable29\", \"stable30\"]'|" "$D/.github/workflows/code-quality.yml"
 # NOTE: capture first, then grep. `set -o pipefail` is on, and the checker exits
 # with its VIOLATION COUNT — so `run | grep -q` returns non-zero on a successful
 # match whenever the fixture is dirty, which is every positive control here.
 out="$(run "$D")"
-if printf '%s' "$out" | grep -q 'FAIL test-matrix-not-declared:'; then
-    ok "a commented-out nextcloud-test-refs does not count as declared"
+if printf '%s' "$out" | grep -q 'FAIL test-matrix-'; then
+    no "a COMMENTED-OUT matrix was graded as this app's declared matrix" "$out"
 else
-    no "a COMMENTED-OUT matrix was accepted as the declared matrix" "$out"
+    ok "a commented-out nextcloud-test-refs is not read as a declaration"
 fi
 
 # ── info.xml's RANGE MUST COME FROM THE ELEMENT, NOT A COMMENT ────────────
