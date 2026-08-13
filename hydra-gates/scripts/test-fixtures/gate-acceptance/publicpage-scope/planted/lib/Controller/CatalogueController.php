@@ -19,10 +19,12 @@
 namespace OCA\PublicPageFixture\Controller;
 
 use OCA\PublicPageFixture\Service\CatalogueService;
+use OCA\PublicPageFixture\Service\EnvelopeService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
+use OCP\AppFramework\Http\DataDisplayResponse;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IRequest;
 
@@ -32,6 +34,7 @@ class CatalogueController extends Controller {
 		string $appName,
 		IRequest $request,
 		private readonly CatalogueService $catalogue,
+		private readonly EnvelopeService $envelopes,
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -71,5 +74,34 @@ class CatalogueController extends Controller {
 			return new JSONResponse([], Http::STATUS_NOT_FOUND);
 		}
 		return new JSONResponse($theme);
+	}
+
+	/**
+	 * THE SECOND PLANT — `ConductionNL/.github#413`. The selector never
+	 * appears in the signature.
+	 *
+	 * This method takes NO PARAMETERS. Everything the caller chose — the
+	 * operation as well as its subject — arrives inside the request body and
+	 * is handed straight to a collaborator that acts on both. That makes it
+	 * strictly more powerful than `arbitraryId()` above, and until `#413` it
+	 * was invisible to a gate that decides scope from the parameter list.
+	 *
+	 * MEASURED as three arms in one file: `arbitraryId(string $id)` reported,
+	 * this body reported NOTHING, and the WSSE-verified twin reported nothing
+	 * either — the middle arm being the defect.
+	 *
+	 * ⚠️ NOTE FOR WHOEVER TOUCHES THIS: what makes it a plant is that
+	 * `EnvelopeService::dispatch()` in THIS arm authenticates nobody. Adding a
+	 * guard there — or a refusing `if` here — clears it and this half of the
+	 * fixture silently stops proving anything. The clean arm is where the
+	 * guard belongs.
+	 */
+	#[PublicPage]
+	#[NoCSRFRequired]
+	public function rawBodyDispatch(): DataDisplayResponse {
+		return new DataDisplayResponse($this->envelopes->dispatch(
+			rawBody: file_get_contents('php://input'),
+			service: 'cases'
+		));
 	}
 }

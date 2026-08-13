@@ -2628,6 +2628,134 @@ class PublicPageScopeTest(unittest.TestCase):
         self.assertEqual(len(out), 1, out)
 
 
+class PublicPageRawBodyTest(unittest.TestCase):
+    """Pattern 8b — `ConductionNL/.github#413`.
+
+    Pattern 8 decides scope from the PARAMETER LIST, so a SOAP / webhook
+    handler whose selector arrives in the request body was structurally
+    invisible to it. Measured on procest's `StufController::{zaken,personen}`:
+    `#[PublicPage]` + `#[NoCSRFRequired]`, no authentication of any kind, and
+    gate-7 reported ZERO findings on that app's 79 public methods.
+    """
+
+    def test_raw_body_handed_to_a_collaborator_is_reported(self):
+        """The shipped shape: no parameters, `php://input`, one hop."""
+        out = _scan(_public(
+            "        return new DataDisplayResponse($this->dispatcher->dispatch(\n"
+            "            rawBody: file_get_contents('php://input'),\n"
+            "            service: 'zaken'\n"
+            "        ));\n",
+            sig="", ret="DataDisplayResponse"))
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("rule=publicpage-unscoped-object-lookup", out[0])
+
+    def test_request_get_content_is_the_same_read(self):
+        """`IRequest::getContent()` is the other spelling of the same source."""
+        out = _scan(_public(
+            "        $raw = $this->request->getContent();\n"
+            "        return new JSONResponse($this->dispatcher->dispatch($raw));\n",
+            sig=""))
+        self.assertEqual(len(out), 1, out)
+
+    def test_raw_body_reaches_the_call_through_a_decoder(self):
+        """A plain FUNCTION call does not launder the caller's bytes.
+        `json_decode` is not a `->` hop, so taint survives it — this is
+        openregister's `GraphQLController::execute()` shape."""
+        out = _scan(_public(
+            "        $body = file_get_contents('php://input');\n"
+            "        $data = json_decode($body, true);\n"
+            "        $query = $data['query'];\n"
+            "        return new JSONResponse($this->svc->run($query));\n",
+            sig=""))
+        self.assertEqual(len(out), 1, out)
+
+    def test_raw_body_only_logged_is_not_in_scope(self):
+        """PSR-3 diagnostics return void and resolve nothing — the same
+        exclusion Pattern 6 already makes."""
+        out = _scan(_public(
+            "        $raw = file_get_contents('php://input');\n"
+            "        $this->logger->warning('inbound', ['body' => $raw]);\n"
+            "        return new JSONResponse(['status' => 'ok']);\n",
+            sig=""))
+        self.assertEqual(out, [], out)
+
+    def test_a_public_page_without_a_raw_body_read_is_untouched(self):
+        """The abuse control on the widening itself: `#[PublicPage]` plus a
+        parameterless body that reads nothing must stay silent, or the repair
+        would be 'flag every public method'."""
+        out = _scan(_public(
+            "        return new JSONResponse($this->svc->listPublished());\n",
+            sig=""))
+        self.assertEqual(out, [], out)
+
+    def test_raw_body_with_a_refusing_signature_check_clears(self):
+        """NO NEW CLEAR WAS INVENTED. `checkSignature()` is recognised by the
+        SAME `_GUARD_HELPER_NAME_RE` Pattern 1 has always used — procest's
+        `DSOIntakeController::intake()`."""
+        src = _PUBLIC_TPL % (
+            "    #[PublicPage]\n"
+            "    public function intake(): JSONResponse\n    {\n"
+            "        $raw = (string)file_get_contents('php://input');\n"
+            "        if ($this->checkSignature(body: $raw) === false) {\n"
+            "            return new JSONResponse(['message' => 'bad signature'], 400);\n"
+            "        }\n"
+            "        return new JSONResponse($this->svc->process($raw));\n"
+            "    }\n"
+            "    private function checkSignature(string $body): bool\n    {\n"
+            "        return $body !== '';\n"
+            "    }\n")
+        self.assertEqual(_scan(src), [])
+
+    def test_forwarded_signature_variable_clears(self):
+        """pipelinq's `BrpController::mutationWebhook()`: the HMAC is verified
+        one hop down, and what the controller shows is the credential
+        travelling with the bytes it authenticates. Same rule Pattern 8 already
+        applies to a `$token` on a scalar lookup."""
+        out = _scan(_public(
+            "        $rawBody = (string)file_get_contents('php://input');\n"
+            "        $signature = (string)$this->request->getHeader('X-Signature');\n"
+            "        return new JSONResponse($this->listener->handle($rawBody, $signature));\n",
+            sig=""))
+        self.assertEqual(out, [], out)
+
+    def test_forwarded_signature_named_argument_clears(self):
+        """The same idiom spelled with a NAMED ARGUMENT — pipelinq's
+        `CtiController::webhook()`, where the variable is `$signatureArg` and
+        only the label says `signature:`. Reading one spelling and not the
+        other would report one of these two apps and clear the other."""
+        out = _scan(_public(
+            "        $rawBody = (string)file_get_contents('php://input');\n"
+            "        $sig = (string)$this->request->getHeader('X-Sig');\n"
+            "        return new JSONResponse($this->svc->handleWebhook("
+            "rawBody: $rawBody, signature: $sig));\n",
+            sig=""))
+        self.assertEqual(out, [], out)
+
+    def test_no_credential_alongside_the_body_is_still_reported(self):
+        """🔑 THE ABUSE CONTROL ON THAT CLEAR. procest's StUF routes forward
+        the envelope and nothing else — the WSSE token is INSIDE the XML, so
+        there is no credential in the argument list — and they were the two
+        real exposures `#413` was filed for. Byte-identical to the arms above
+        apart from the missing signature argument."""
+        out = _scan(_public(
+            "        $rawBody = (string)file_get_contents('php://input');\n"
+            "        return new JSONResponse($this->listener->handle($rawBody, 'zaken'));\n",
+            sig=""))
+        self.assertEqual(len(out), 1, out)
+
+    def test_raw_body_with_an_inline_401_clears(self):
+        """procest's `DwangsomPaymentCallbackController::callback()`: the
+        signature check IS the auth and it answers 401 in the body."""
+        out = _scan(_public(
+            "        $raw = (string)file_get_contents('php://input');\n"
+            "        if ($this->signer->validateSignature(rawBody: $raw) === false) {\n"
+            "            return new JSONResponse(['message' => 'invalid'], 401);\n"
+            "        }\n"
+            "        return new JSONResponse($this->svc->handleCallback($raw));\n",
+            sig=""))
+        self.assertEqual(out, [], out)
+
+
 class HelperGuardEvidenceTest(unittest.TestCase):
     """A gate that can be silenced by a sentence in a comment is not measuring
     the code."""

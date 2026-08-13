@@ -1877,11 +1877,22 @@ _OR_RBAC_ACCESS_RE = re.compile(
 # Anything that pulls caller-controlled input in through the request object.
 # Presence of ANY of these disqualifies the pattern: the method then has an
 # attacker-influenceable value, which is exactly what IDOR manipulates.
+#
+# ⚠️ `IRequest::getContent()` WAS MISSING, and it is the same read as
+# `php://input` — which this list has always carried (`#413`). Without it, a
+# parameterless `#[PublicPage]` handler that reads its envelope with
+# `$this->request->getContent()` was cleared by Pattern 3b as a "zero-input
+# READ", one branch AFTER Pattern 8b had correctly put it in scope. Two clauses
+# disagreeing about whether the same line is caller input is how a widening
+# quietly buys nothing. The alternative is anchored on the REQUEST receiver so
+# that `$file->getContent()` and `$response->getContent()` — neither of which
+# is caller input — are untouched.
 _REQUEST_INPUT_RE = re.compile(
     r"->\s*getParams?\s*\("
     r"|->\s*getQueryParam"
     r"|->\s*getUploadedFile\s*\("
     r"|->\s*getBody\s*\("
+    r"|(?:\$this\s*->\s*request|\$request)\s*->\s*getContent\s*\("
     r"|\$_(?:GET|POST|REQUEST|COOKIE|FILES)\b"
     r"|php://input"
 )
@@ -2552,6 +2563,176 @@ def _public_selection_scope(body: str, params, delegate_probe=None):
     return (selects, validated)
 
 
+# ---------------------------------------------------------------------------
+# Pattern 8b — the RAW REQUEST BODY (`ConductionNL/.github#413`)
+# ---------------------------------------------------------------------------
+#
+# 🔴 PATTERN 8 IS KEYED ON THE METHOD SIGNATURE, SO A SOAP ENDPOINT IS
+# STRUCTURALLY INVISIBLE TO IT.
+#
+# Everything above decides scope by asking whether a caller-supplied SCALAR
+# reaches a selection call, and every source of such a scalar it knows about is
+# either a declared parameter or a `->getParam()`-family read. That is right for
+# REST and it has no opinion at all about the shape where the method takes NO
+# PARAMETERS and the selector arrives inside the request body.
+#
+# MEASURED, three arms in one file varying only the selector's SOURCE:
+#
+#     armVisible(string $id)  -> $this->dispatcher->find($id)        1 finding
+#     armRawBody()            -> $this->dispatcher->dispatch(
+#                                    rawBody: file_get_contents('php://input'))
+#                                                                    0 findings
+#     armRawBodyVerified()    -> ->dispatchVerified(rawBody: …)      0 findings
+#
+# The middle arm is the defect: the same delegate, the same unscoped
+# resolution, and the gate cannot see it. The live instance is procest's
+# `StufController::zaken()` / `::personen()` — `#[PublicPage]` +
+# `#[NoCSRFRequired]`, reaching a responder that dispatches `zakLk01` (case
+# create/update), `zakLv01` (case query), `npsLv01` (PERSON QUERY BY BSN) and
+# `edcLk01` (document create/update) with no authentication of any kind.
+# gate-7 reported ZERO findings on that app's 79 public methods.
+#
+# 🔑 THE SILENCE WAS RIGHT 77 TIMES AND WRONG TWICE, which is precisely the
+# ratio that makes a silence persuasive — the failure mode Pattern 8's own
+# commentary warns about, one level up.
+#
+# THE PREDICATE.
+#
+#   in scope   a `#[PublicPage]` method reads the RAW REQUEST BODY and hands a
+#              value derived from it to a `->` / `::` method call. The raw body
+#              is not `array $data`: a payload is bound by the route to one
+#              resource, whereas an envelope handed to a collaborator names its
+#              own OPERATION as well as its subject, so the caller chose both.
+#              A raw body that is only decoded, measured or logged reaches no
+#              collaborator and is not in scope — PSR-3 diagnostics are
+#              excluded by the same receiver/level test Pattern 6 uses.
+#
+#   cleared    NOTHING NEW. This clause widens the SCOPE ONLY; every clear that
+#              already exists then applies unchanged — the whole-body publicness
+#              and scope-predicate refusals here, and after this returns, the
+#              401/403 body guard, Pattern 7's ownership comparison, Pattern 1's
+#              same-class guard helper and Pattern 4's RESOLVED collaborator
+#              guard in scan_file. That is deliberate: inventing a second
+#              vocabulary for "this webhook authenticated its sender" is how a
+#              gate acquires a clear nobody can audit. All five fleet apps that
+#              get this right are cleared by machinery that was already here —
+#              `checkSignature()` and `verifyWsse()` by Pattern 1/4's name
+#              rules, `validateSignature()` by the inline 401 it answers with,
+#              and procest's repaired `dispatch()` by Pattern 4 reading
+#              `authenticateSender()`'s `STATUS_UNAUTHORIZED` out of the
+#              collaborator's own file.
+
+_PUBLIC_RAW_BODY_RE = re.compile(
+    r"php://input"
+    r"|(?:\$this\s*->\s*request|\$request)\s*->\s*getContent\s*\(",
+)
+
+
+def _public_raw_body_names(body: str) -> set:
+    """Locals carrying a value derived from the raw request body.
+
+    Propagation stops at a `->method()` call for the same reason
+    `_public_tainted_names` stops there — past that hop the value is the
+    server's answer, and that hop is itself judged. Plain FUNCTION calls
+    (`json_decode`, `simplexml_load_string`, `trim`) are not method calls and
+    do propagate: decoding a body does not make it the server's.
+    """
+    names: set = set()
+    for _ in range(4):  # bounded fixpoint
+        grew = False
+        for m in _PUBLIC_ASSIGN_RE.finditer(body):
+            name, rhs = m.group(1), m.group(2)
+            if name in names:
+                continue
+            if _PUBLIC_RAW_BODY_RE.search(rhs):
+                names.add(name)
+                grew = True
+                continue
+            if _PUBLIC_CALL_RE.search(rhs):
+                continue
+            if any(re.search(r"\$" + re.escape(t) + r"\b", rhs) for t in names):
+                names.add(name)
+                grew = True
+        if not grew:
+            break
+    return names
+
+
+def _public_argument_is_capability(arg: str) -> bool:
+    """True when *arg* carries an unguessable credential.
+
+    Both spellings count, because both were MEASURED. `handle($rawBody,
+    $signature)` names it in the VARIABLE (pipelinq's
+    `BrpController::mutationWebhook`) and `handleWebhook(rawBody: $rawBody,
+    signature: $signatureArg)` names it in the NAMED-ARGUMENT LABEL
+    (`CtiController::webhook`) — the same idiom, and reading only one of them
+    would report one of those two while clearing the other.
+    """
+    named = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(?!:)", arg)
+    if named is not None and _PUBLIC_CAPABILITY_RE.search(named.group(1)):
+        return True
+    return any(_PUBLIC_CAPABILITY_RE.search(v)
+               for v in re.findall(r"\$([A-Za-z_][A-Za-z0-9_]*)", arg))
+
+
+def _public_raw_body_reaches_collaborator(body: str) -> bool:
+    """True when the raw body — or a value derived from it — is handed on
+    WITHOUT the sender's credential travelling with it.
+
+    ⚠️ THE CREDENTIAL CLEAR IS NOT A NEW IDEA, it is Pattern 8's own. The
+    scalar-selector half already holds that "a `$token` / `$secret` IS the
+    authorisation — Nextcloud's own public-share convention", and clears a
+    lookup that carries one. A webhook signature is the same object: an
+    unguessable value the caller cannot forge, collected from the request and
+    handed to the verifier alongside the bytes it authenticates.
+
+    MEASURED before this clear existed: the widening produced exactly two new
+    findings across the eighteen core apps, and BOTH were this shape —
+    pipelinq's BRP and CTI webhooks, each reading an `X-…-Signature` header and
+    forwarding it. Neither was reachable by the existing clears (the CTI one
+    refuses on `$result['valid'] === false`, a bare field comparison that
+    `_public_refuses_on_scope_predicate` deliberately does not read), so both
+    would have been false positives whose only remedy was an exempt tag.
+
+    The residual risk is stated rather than hidden: an app that collects a
+    signature and never verifies it clears here. That is precisely the risk
+    Pattern 8 already accepts for `$token`, and it is a smaller one than the
+    raw-body blindness this pattern exists to close.
+    """
+    names = _public_raw_body_names(body)
+    for m in _PUBLIC_CALL_RE.finditer(body):
+        op = body.find("(", m.start())
+        cl = _matching_close(body, op)
+        if cl == -1:
+            continue
+        args = _split_arguments(body[op + 1:cl])
+        if not args:
+            continue
+        carries = any(_PUBLIC_RAW_BODY_RE.search(a) for a in args) or any(
+            re.search(r"\$" + re.escape(n) + r"\b", a) for a in args for n in names)
+        if not carries:
+            continue
+        receiver = body[max(0, m.start() - 60):m.start()]
+        if (_PSR3_LOG_RECEIVER_RE.search(receiver)
+                and m.group(1).lower() in _PSR3_LOG_LEVELS):
+            continue  # diagnostics: returns void, resolves nothing
+        if any(_public_argument_is_capability(a) for a in args):
+            continue  # the sender's proof travels with the envelope
+        return True
+    return False
+
+
+def _public_raw_body_is_unjudged(body: str) -> bool:
+    """Pattern 8b entry point — see the commentary above."""
+    if not _PUBLIC_RAW_BODY_RE.search(body):
+        return False
+    if _public_refuses_on_publicness(body):
+        return False
+    if _public_refuses_on_scope_predicate(body):
+        return False
+    return _public_raw_body_reaches_collaborator(body)
+
+
 def _public_page_lookup_is_unscoped(cleaned: str, path: str, sig_start: int,
                                     body: str) -> bool:
     """Pattern 8 entry point — see the commentary above."""
@@ -2566,7 +2747,10 @@ def _public_page_lookup_is_unscoped(cleaned: str, path: str, sig_start: int,
             files = _public_collaborator_files(cleaned, path)
         return _public_delegate_scopes(prop, method, files.get(prop))
 
-    return bool(_public_unscoped_selectors(body, params, probe))
+    if _public_unscoped_selectors(body, params, probe):
+        return True
+    # `#413`: the selector that never appears in a signature.
+    return _public_raw_body_is_unjudged(body)
 
 
 # ---------------------------------------------------------------------------
