@@ -82,8 +82,26 @@ jobs:
       enable-features-extract: false
 
   # THE POSITIVE CONTROL. One attribute different in one file; two fewer legs.
+  #
+  # SERIALISED, AND THAT IS NOT AN OPTIMISATION. quality.yml declares
+  # `concurrency: quality-${{ github.ref }}` with `cancel-in-progress: true`, so
+  # two calls to it on the same ref land in the SAME concurrency group and the
+  # second cancels the first. Measured on run 31734110346, where these two jobs
+  # ran in parallel: every job under `4 legs` came back `cancelled`, and its
+  # PHPUnit row still carried the literal `${{ matrix.nextcloud-ref }}` in its
+  # name — the matrix never expanded, so the control measured nothing while
+  # looking like it had run. `needs:` means the first call has completed before
+  # the second is created, so the group is free.
+  #
+  # `!cancelled()` because the first call FAILS by design (its legs have no
+  # PHPUnit suite to run). Without it the implicit success() over `needs:` would
+  # delete this job, and a deleted control is indistinguishable from a passing
+  # one — the same defect this repo's own producer-deletes-a-verdict lint exists
+  # to prevent inside quality.yml.
   legs-32-33:
     name: "4 legs (positive control)"
+    needs: [legs-32-34]
+    if: ${{ !cancelled() }}
     uses: ./.github/workflows/quality.yml
     with:
       app-name: nextcloud-matrix-fixture
