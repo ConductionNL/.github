@@ -1998,7 +1998,38 @@ while IFS= read -r f; do
             # so <2 means body never references it.
             _count=$(echo "${_body}" | grep -cF "${_param}")
             if [ "${_count}" -lt 2 ]; then
-                echo "${f}:${_line_no} method=${_method} rule=caller-identity-ignored param=${_param}" >> "${_stub_log}"
+                # A CONTRACT-IMPOSED PARAMETER THE AUTHOR MARKED UNUSED IS NOT A
+                # STUB (.github#339).
+                #
+                # An unused caller identity is a defect when the author chose the
+                # signature and forgot the check (decidesk#45). It is NOT a defect
+                # when a supertype chose the signature and this implementor has no
+                # business consulting the caller — a strategy/guard/handler
+                # interface that passes the caller to implementors that do not all
+                # need it is a normal shape. Measured on procest: all 3 findings
+                # implement GuardEvaluatorInterface::evaluate(..., string $userId),
+                # which RoleGuard and MandaatGuard genuinely use. Deleting the
+                # parameter breaks the interface and every call site; referencing
+                # it pointlessly is dead code written to satisfy a stub detector.
+                # Neither is a fix, so the finding had no closing action.
+                #
+                # The helper exempts ONLY when BOTH hold: a supertype resolvable
+                # in this repo declares the same method with the same parameter
+                # (mechanical — an invented method cannot acquire one from a
+                # docblock), AND the method docblock's @param line for THAT
+                # parameter carries an explicit unused marker. Either alone still
+                # reports. Fail-closed: a missing helper, an unreadable file or an
+                # unresolvable supertype all leave the finding standing.
+                _ci_exempt=1
+                _ci_helper="${SCRIPT_DIR}/lib/check_caller_identity_exempt.py"
+                if [ -f "${_ci_helper}" ]; then
+                    python3 "${_ci_helper}" --root . --file "$f" --line "${_line_no}" \
+                        --method "${_method}" --param "${_param}" 2>>"${HYDRA_GATE_LOG_DIR}/hydra-gate-stub-scan.err"
+                    _ci_exempt=$?
+                fi
+                if [ "${_ci_exempt}" -ne 0 ]; then
+                    echo "${f}:${_line_no} method=${_method} rule=caller-identity-ignored param=${_param}" >> "${_stub_log}"
+                fi
             fi
         done
 done < <(_enum_tracked '\.php$' lib/Service lib/Controller)
