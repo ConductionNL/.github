@@ -58,6 +58,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from exclusion_reason import exclude_pattern, is_reason_bearing  # noqa: E402
+from source_scope import php_mask  # noqa: E402
 
 GATE_NUM = 25
 
@@ -364,29 +365,132 @@ def scan_new_endpoints(
 # ---------------------------------------------------------------------------
 
 
+# The fields of a Postman collection that DECLARE A REQUEST, as opposed to the
+# fields that describe one in prose. `description` is deliberately absent, and
+# it is the whole point of this list — see `_newman_paths`.
+_NEWMAN_EVIDENCE_KEYS = ("raw", "path", "host", "name", "url", "method")
+
+
+def _newman_evidence(node, out: list[str]) -> None:
+    """Collect request-declaring strings from a parsed Postman collection.
+
+    Walks the whole tree (folders nest arbitrarily) and keeps only values that
+    hang off a declaring key. A `url` may be a bare string or an object with
+    `raw` / `host` / `path`; both shapes are handled by recursing rather than
+    by knowing the schema version.
+    """
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key in _NEWMAN_EVIDENCE_KEYS:
+                if isinstance(value, str):
+                    out.append(value)
+                else:
+                    _newman_evidence(value, out)
+            elif isinstance(value, (dict, list)):
+                _newman_evidence(value, out)
+    elif isinstance(node, list):
+        for item in node:
+            if isinstance(item, str):
+                out.append(item)
+            else:
+                _newman_evidence(item, out)
+
+
 def _newman_paths(app_dir: Path) -> str:
-    """Concatenated text of every Newman/Postman collection under tests/integration."""
+    """The request-declaring strings of every Postman collection under tests/integration.
+
+    A COLLECTION'S PROSE IS NOT A REQUEST — THE JSON DIALECT OF #415.
+    ------------------------------------------------------------------
+    This used to be the raw text of the collection FILE, and `is_covered` then
+    asked whether the endpoint's path appears anywhere in it. A Postman
+    `description` is prose stored in a JSON string, which is a comment wearing
+    a different syntax — so it answered too. Measured on this checker, one
+    fixture, one variable:
+
+        no collection at all              FAIL — 1 new public endpoint
+        + a collection with ZERO items    PASS — 1 endpoint, all covered
+          whose description reads
+          "NOTE: we do NOT yet cover
+           /api/things — the DELETE
+           endpoint is untested."
+
+    A collection that contains no requests at all, and SAYS SO, reported the
+    endpoint covered. Same shape as the PHPUnit TODO above and as gate 19's
+    original defect: the sentence admitting the debt is the sentence that
+    discharges it.
+
+    So the haystack is now built from the fields that DECLARE a request
+    (`raw` / `path` / `host` / `url` / `name` / `method`) rather than from the
+    file's bytes. Unlike the PHP side this cannot use a comment mask — JSON
+    has no comments and the evidence genuinely IS a string. The discriminator
+    here is WHICH string, not whether it is one.
+
+    ⚠️ A collection that does not parse falls back to the raw bytes rather
+    than to "not covered". Silently converting a malformed fixture into
+    findings would be this change inventing failures in repos it was never
+    measured against; the honest failure mode for an unreadable input is the
+    behaviour that was there before it.
+    """
     buf: list[str] = []
     root = app_dir / "tests" / "integration"
     if not root.is_dir():
         return ""
     for p in root.rglob("*.postman_collection.json"):
         try:
-            buf.append(p.read_text(encoding="utf-8"))
+            raw = p.read_text(encoding="utf-8")
         except OSError:
             continue
+        try:
+            parsed = json.loads(raw)
+        except (ValueError, RecursionError):
+            buf.append(raw)
+            continue
+        found: list[str] = []
+        _newman_evidence(parsed, found)
+        buf.extend(found)
     return "\n".join(buf)
 
 
 def _phpunit_text(app_dir: Path) -> str:
-    """Concatenated text of every *Test.php under tests/."""
+    """Concatenated CODE of every *Test.php under tests/ — comments blanked.
+
+    A COMMENT SAYING YOU STILL OWE THE TEST MUST NOT BE THE TEST (#415).
+    -------------------------------------------------------------------
+    This used to be the raw text of every test file, and ``is_covered`` then
+    asked whether ``->destroy(`` appears anywhere in it. Prose is made of the
+    same bytes as code, so it did not have to be a call. Measured on this
+    checker directly, one fixture, one variable:
+
+        no tests at all                       FAIL — 1 new public endpoint
+        + a test file whose ONLY mention of   PASS — 1 endpoint, all covered
+          the method is
+          "// TODO: we still owe a contract
+           test that calls
+           $this->controller->destroy($id)
+           ... Not written yet."
+
+    **That is gate 19's defect, verbatim, in the gate written as gate 19's
+    API-layer companion.** A comment stating the debt satisfied the gate that
+    exists to collect it, and the sentence that switched the gate off is the
+    sentence a diligent author writes. The more honest the TODO, the more
+    coverage it fabricates.
+
+    STRING CONTENTS GO TOO. ``->destroy(`` is a call; it is never legitimately
+    spelled inside a string literal, so an error message or a fixture payload
+    that quotes one is not evidence either. The delimiters survive, so nothing
+    that depends on "is this a string" is disturbed.
+
+    The Newman side is deliberately NOT masked here — it is JSON, where the
+    evidence genuinely IS a string (a request ``name``/``raw`` url). Its own
+    prose problem is real and separate; see the note on ``_newman_paths``.
+    """
     buf: list[str] = []
     root = app_dir / "tests"
     if not root.is_dir():
         return ""
     for p in root.rglob("*Test.php"):
         try:
-            buf.append(p.read_text(encoding="utf-8"))
+            buf.append(php_mask(p.read_text(encoding="utf-8"), blank_strings=True))
         except OSError:
             continue
     return "\n".join(buf)
