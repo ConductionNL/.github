@@ -106,9 +106,53 @@ DECL = re.compile(
 # a URL, `_looks_like_a_path` already reports it as a parser malfunction, and
 # that diagnostic is not this change's to silence. The rule below therefore
 # only applies to a value that is not itself path-shaped.
-_DECL_TAIL_OK = re.compile(
-    r'^(?:\s|https?://\S+|\*/|--!?>|[.,;:)\]]|\(\s*\)|\s*\Z)*$'
-)
+# ⚠️ THIS WAS A REGEX AND THE REGEX WAS A ReDoS (CodeQL `py/redos`, HIGH).
+# The first cut read
+#
+#     ^(?:\s|https?://\S+|\*/|--!?>|[.,;:)\]]|\(\s*\)|\s*\Z)*$
+#
+# `\S+` inside a STARRED alternation is ambiguous with itself: `https://ab`
+# can be consumed by one iteration or by several, so a subject that never
+# reaches `$` has exponentially many splits to try.
+#
+# MEASURED, because the alert's own witness string did NOT reproduce here.
+# CodeQL named `'http://' + '!http://' * n`; in CPython that is 0.000s even
+# at n=32,000, because `\s*\Z` can match empty and the engine's empty-repeat
+# guard cuts the search short. The alert is still right — the ambiguity is
+# real — it just names the wrong subject. The one that fires is a repeated
+# URL with one trailing byte that cannot match:
+#
+#     'https://a' * n + ' \x01'      OLD          NEW
+#       n=18  len=164                 0.0949s      0.0000s
+#       n=22  len=200                 1.5284s      0.0000s
+#       n=24  len=218                 6.6797s      0.0000s
+#       n=26  len=236                26.1822s      0.0000s
+#       n=28  len=254                  >60s        0.0000s
+#
+# Every +2 multiplies the old time by ~4. A 254-character line — shorter
+# than plenty of real headers — hangs the gate, and gate-28 runs over every
+# tracked lib/**/*.php in the repo.
+#
+# Rewritten as a linear scan rather than tightened, so the ambiguity cannot
+# exist rather than being harder to reach: split the remainder on whitespace
+# and ask of each token whether a header could carry it. No quantifier, no
+# backtracking. Flat on the adversarial input above, and still flat at
+# 256 KB (0.0103s, linear in length).
+def _decl_tail_ok(rest: str) -> bool:
+    """Is what follows the identifier header FURNITURE rather than prose?
+
+    A header carries the identifier and at most a URL, a comment terminator
+    and punctuation. A sentence carries words. See the measurement above the
+    caller for why "nothing may follow" was not an option.
+    """
+    for token in rest.split():
+        token = _TRAILING_COMMENT.sub('', token).strip('.,;:()[]')
+        if not token:
+            continue
+        if token.startswith(('http://', 'https://')):
+            continue
+        return False
+    return True
 # `/` is deliberately ALLOWED in the captured value. Excluding it (to stop
 # `@license EUPL-1.2*/` capturing the comment terminator) also truncated a
 # path-shaped value to its first segment, so `lib/Service/Thing.php` arrived
@@ -139,11 +183,11 @@ def declarations(src: str) -> list[str]:
         v = _TRAILING_COMMENT.sub('', m.group(1).strip()).strip().rstrip('.,;')
         if not v or v in seen:
             continue
-        # See _DECL_TAIL_OK: a header carries an identifier and at most a URL;
+        # See _decl_tail_ok: a header carries an identifier and at most a URL;
         # prose after the identifier means the line is a SENTENCE about a
         # licence, not a declaration of one. Path-shaped values keep their
         # existing "parser malfunction" report regardless of what follows.
-        if not _looks_like_a_path(v) and not _DECL_TAIL_OK.match(m.group('rest')):
+        if not _looks_like_a_path(v) and not _decl_tail_ok(m.group('rest')):
             continue
         seen.append(v)
     return seen

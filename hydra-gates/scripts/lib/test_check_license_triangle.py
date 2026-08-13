@@ -261,6 +261,26 @@ class ASentenceThatBeginsWithTheTagIsNotADeclaration(unittest.TestCase):
         self.assertEqual(
             clt.declarations("<?php\n/** @license EUPL-1.2 */\n"), ["EUPL-1.2"])
 
+    def test_T9_the_tail_rule_is_linear_not_exponential(self):
+        """The first cut of the tail rule was a ReDoS (CodeQL py/redos, HIGH).
+
+        `\\S+` inside a starred alternation is ambiguous with itself, so a
+        repeated URL followed by one byte that cannot match had exponentially
+        many splits to try. Measured on the old pattern: n=24 -> 6.7s,
+        n=26 -> 26.2s, n=28 -> over 60s, on a 254-CHARACTER line. gate-28
+        reads every tracked lib/**/*.php, so that is CI hanging on a header.
+
+        The bound is 5s against a true cost of ~0.00003s — three orders of
+        magnitude of headroom, so this is a shape assertion and not a
+        benchmark that a loaded runner can flake.
+        """
+        import time
+
+        subject = "https://a" * 60 + " \x01"
+        start = time.monotonic()
+        self.assertFalse(clt._decl_tail_ok(subject))
+        self.assertLess(time.monotonic() - start, 5.0)
+
     def test_T8_control_a_url_first_header_keeps_its_malfunction_report(self):
         # 11 files in the fleet write `@license <url> GNU AGPL v3 or later`.
         # Their identifier is path-shaped, so `_looks_like_a_path` reports a

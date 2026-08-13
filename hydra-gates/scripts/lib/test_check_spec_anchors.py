@@ -720,6 +720,23 @@ class ATagMustBeAtTagPosition(unittest.TestCase):
                     "export default {}\n")
         self.assertEqual(len(out), 1, out)
 
+    def test_A8_the_anchor_is_linear_in_the_line_length(self):
+        """Written the obvious way the anchor was QUADRATIC.
+
+        `[^\\S\\n]*(?:lead-in)?[^\\S\\n]*` puts two whitespace runs next to
+        each other whenever the lead-in matches empty, and a line of N spaces
+        that never reaches the tag costs O(N²) — 64,000 spaces took over 20s
+        before each optional group was made to swallow its own trailing
+        whitespace. Same family as the ReDoS CodeQL raised on gate-28's tail
+        rule in this change; found by sweeping rather than by waiting for the
+        alert. Bound is 5s against a true cost of ~0.007s.
+        """
+        import time
+
+        start = time.monotonic()
+        self.assertIsNone(csa.TAG.match(" " * 64000 + "x"))
+        self.assertLess(time.monotonic() - start, 5.0)
+
     def test_A7_control_a_markdown_task_item_tag_is_still_read(self):
         # openspec/**/tasks.md writes its tags as list items, and `.md` is in
         # this gate's scope. Anchoring must not drop the list marker forms.

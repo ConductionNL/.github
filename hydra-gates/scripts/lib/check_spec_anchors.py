@@ -87,8 +87,17 @@ import sys
 #
 # What is excluded is the tag appearing PART-WAY THROUGH a line, which is
 # the only shape prose and string literals take.
+#
+# ⚠️ EACH OPTIONAL GROUP SWALLOWS ITS OWN TRAILING WHITESPACE, and that is
+# not a style choice. Written the obvious way —
+# `[^\S\n]*(?:lead-in)?[^\S\n]*` — the two whitespace runs are adjacent
+# whenever the lead-in matches empty, and a line of N spaces that never
+# reaches `@spec` costs O(N²): 64,000 spaces took >20s on this machine while
+# the shape below is 0.0000s. Same family as the `py/redos` CodeQL raised on
+# gate-28's tail rule in this change; found by sweeping the other regexes it
+# adds rather than by waiting for the alert.
 TAG = re.compile(
-    r'^[^\S\n]*(?:\*+/?|//+|\#(?!\[)|/\*+|<!--|[-+]|\d+\.)?[^\S\n]*'
+    r'^[^\S\n]*(?:(?:\*+/?|//+|\#(?!\[)|/\*+|<!--|[-+]|\d+\.)[^\S\n]*)?'
     r'(?:\[[ xX~\-]\][^\S\n]*)?'
     r'@spec\s+(openspec/[^\s`\'"]+)',
     re.MULTILINE,
