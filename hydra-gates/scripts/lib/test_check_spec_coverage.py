@@ -305,11 +305,15 @@ class NormalisationTest(unittest.TestCase):
         self.assertIn(4, self._changed(base, head),
                       "an ADDED parameter is not a trailing comma")
 
-    def test_trailing_comma_is_not_normalised_in_javascript(self):
-        # `[1, 2,]` and `[1, 2,,]` differ in JS (elision), so the rule is PHP-only.
+    def test_trailing_comma_is_normalised_in_javascript_too(self):
+        # `.github#435` REVERSED the PHP-only scope of this rule, and the
+        # reversal is the whole reason the assertion changed rather than moved:
+        # `[1, 2]` and `[1, 2,]` are both two-element arrays, in every engine
+        # since ES5. The hazard #395 named is a HOLE, and the control for it is
+        # the next test, not this one.
         base = "const a = [1, 2]\n"
         head = "const a = [1, 2,]\n"
-        self.assertEqual(self._changed(base, head, is_php=False), {1})
+        self.assertEqual(self._changed(base, head, is_php=False), set())
 
     # --- quote style -------------------------------------------------------
     def test_quote_style_alone_is_not_a_change(self):
@@ -364,8 +368,11 @@ class NormalisationTest(unittest.TestCase):
         self.assertTrue(self._changed(base, head),
                         "uncommenting a statement is not a re-wrap")
 
-    def test_rewrap_is_not_applied_to_javascript(self):
-        # ASI: `return` on its own line returns undefined.
+    def test_rewrap_across_an_asi_boundary_is_still_a_change_in_javascript(self):
+        # ASI: `return` on its own line returns undefined. `.github#435` gave JS
+        # the re-wrap rule but NOT across a restricted production, so this
+        # assertion is unchanged from #395 — it is now the control for the
+        # guard rather than for the absence of the rule.
         base = "    return buildThing(a)\n"
         head = "    return\n    buildThing(a)\n"
         self.assertTrue(self._changed(base, head, is_php=False),
@@ -394,6 +401,251 @@ class NormalisationTest(unittest.TestCase):
         # brace is never what puts a method in scope.)
         self.assertTrue({2, 3} <= changed, changed)
         self.assertEqual(len(changed), 3, changed)
+
+
+class JsNormalisationTest(unittest.TestCase):
+    """`.github#435` — the JS/TS/Vue half of #395's normalisation.
+
+    Same contract as `NormalisationTest`: every rule ships with the change it
+    must STILL see. A rule with only an A-arm is indistinguishable from having
+    switched the frontend half of gate-16 off, which is the exact failure this
+    gate exists to prevent — so the B-arms outnumber the A-arms here.
+
+    MEASURED: pipelinq#820 (`feat/nextcloud-prettier`, 324 files) went from 468
+    findings to 11 with no change to what `development` reports.
+    """
+
+    def _changed(self, base: str, head: str) -> set[int]:
+        return csc._substantively_changed_lines(base, head, is_php=False)
+
+    def _same(self, base: str, head: str) -> bool:
+        return csc._js_canonical(base) == csc._js_canonical(head)
+
+    # --- brace placement ---------------------------------------------------
+    def test_a_mustache_split_over_lines_is_not_a_change(self):
+        # The reason JS keeps its trailing `{`: stripping one leaves `{{` as `{`
+        # and the halves stop matching their own single-line base.
+        base = "      <span>{{ item.title }}</span>\n"
+        head = "\t\t\t<span>{{\n\t\t\t\titem.title\n\t\t\t}}</span>\n"
+        self.assertEqual(self._changed(base, head), set())
+
+    def test_a_changed_expression_in_a_split_mustache_is_still_reported(self):
+        base = "      <span>{{ item.title }}</span>\n"
+        head = "\t\t\t<span>{{\n\t\t\t\titem.subtitle\n\t\t\t}}</span>\n"
+        self.assertTrue(self._changed(base, head))
+
+    def test_a_multiline_import_is_not_a_change(self):
+        base = "import { CnAppRoot, CnObjectSidebar } from '@conduction/nextcloud-vue'\n"
+        head = ("import {\n\tCnAppRoot,\n\tCnObjectSidebar,\n"
+                "} from '@conduction/nextcloud-vue'\n")
+        self.assertEqual(self._changed(base, head), set())
+
+    def test_an_added_import_specifier_is_still_reported(self):
+        base = "import { CnAppRoot, CnObjectSidebar } from '@conduction/nextcloud-vue'\n"
+        head = ("import {\n\tCnAppRoot,\n\tCnObjectSidebar,\n\tbuiltinIntegrations,\n"
+                "} from '@conduction/nextcloud-vue'\n")
+        self.assertTrue(self._changed(base, head))
+
+    # --- trailing comma / elision ------------------------------------------
+    def test_an_elision_is_not_a_trailing_comma(self):
+        # THE hazard #395 named. `[a, , b]` has three entries; `[a, b]` has two.
+        base = "const a = [x, y]\n"
+        head = "const a = [x, , y]\n"
+        self.assertEqual(self._changed(base, head), {1})
+
+    def test_an_elision_survives_a_rewrap(self):
+        base = "const a = [x, , y]\n"
+        head = "const a = [\n\tx,\n\t,\n\ty,\n]\n"
+        self.assertTrue(self._changed(base, head),
+                        "a hole must never be normalised away as punctuation")
+
+    def test_a_broken_argument_list_with_a_trailing_comma_is_not_a_change(self):
+        base = "\t\tawait axios.put(generateUrl('/apps/x/y'), delta)\n"
+        head = "\t\tawait axios.put(\n\t\t\tgenerateUrl('/apps/x/y'),\n\t\t\tdelta,\n\t\t)\n"
+        self.assertEqual(self._changed(base, head), set())
+
+    def test_an_added_argument_through_the_trailing_comma_is_still_reported(self):
+        base = "\t\tawait axios.put(generateUrl('/apps/x/y'), delta)\n"
+        head = ("\t\tawait axios.put(\n\t\t\tgenerateUrl('/apps/x/y'),\n"
+                "\t\t\tdelta,\n\t\t\t{ force: true },\n\t\t)\n")
+        self.assertTrue(self._changed(base, head))
+
+    # --- ASI ---------------------------------------------------------------
+    def test_a_join_across_a_restricted_production_is_still_a_change(self):
+        for word in ("return", "throw", "break", "continue", "yield"):
+            with self.subTest(word=word):
+                base = f"\t{word}\n\tvalue\n"
+                head = f"\t{word} value\n"
+                self.assertTrue(self._changed(base, head),
+                                f"a line break after `{word}` ends the statement")
+
+    def test_a_break_before_an_increment_is_still_a_change(self):
+        base = "\tcount\n\t++other\n"
+        head = "\tcount ++other\n"
+        self.assertTrue(self._changed(base, head))
+
+    # --- line comments -----------------------------------------------------
+    def test_a_rewrap_that_uncomments_code_is_still_a_change(self):
+        base = "\t// fixme flag = true\n"
+        head = "\t// fixme\n\tflag = true\n"
+        self.assertTrue(self._changed(base, head),
+                        "inserting a break after `//` uncomments what followed")
+
+    def test_a_rewrap_that_comments_out_code_is_still_a_change(self):
+        base = "\tconst a = 1 // note\n\tconst b = 2\n"
+        head = "\tconst a = 1 // note const b = 2\n"
+        self.assertTrue(self._changed(base, head),
+                        "joining onto a `//` line comments out what follows")
+
+    # --- template literals -------------------------------------------------
+    def test_a_line_local_template_literal_does_not_block_the_rewrap(self):
+        base = "\t\tconst u = generateUrl(`/apps/x/${id}/${action}`)\n"
+        head = "\t\tconst u = generateUrl(\n\t\t\t`/apps/x/${id}/${action}`,\n\t\t)\n"
+        self.assertEqual(self._changed(base, head), set())
+
+    def test_whitespace_inside_a_template_literal_is_still_a_change(self):
+        base = "\t\tconst m = `not installed. `\n"
+        head = "\t\tconst m = `not installed.`\n"
+        self.assertEqual(self._changed(base, head), {1},
+                         "a template literal's text is text a user reads")
+
+    def test_a_changed_interpolation_is_still_reported(self):
+        base = "\t\tconst u = generateUrl(`/apps/x/${id}`)\n"
+        head = "\t\tconst u = generateUrl(\n\t\t\t`/apps/x/${otherId}`,\n\t\t)\n"
+        self.assertTrue(self._changed(base, head))
+
+    def test_a_break_inside_a_template_literal_is_still_a_change(self):
+        # A newline inside a template literal is a CHARACTER of the string.
+        base = "\t\tconst m = `alpha beta`\n"
+        head = "\t\tconst m = `alpha\nbeta`\n"
+        self.assertTrue(self._changed(base, head))
+
+    # --- redundant parentheses ---------------------------------------------
+    def test_a_return_wrapped_in_parentheses_is_not_a_change(self):
+        base = "\t\t\treturn this.a !== this.b\n\t\t\t\t|| this.c !== this.d\n"
+        head = "\t\t\treturn (\n\t\t\t\tthis.a !== this.b\n\t\t\t\t|| this.c !== this.d\n\t\t\t)\n"
+        self.assertEqual(self._changed(base, head), set())
+
+    def test_a_changed_operand_inside_a_parenthesised_return_is_still_reported(self):
+        base = "\t\t\treturn this.a !== this.b\n\t\t\t\t|| this.c !== this.d\n"
+        head = "\t\t\treturn (\n\t\t\t\tthis.a !== this.b\n\t\t\t\t|| this.c !== this.e\n\t\t\t)\n"
+        self.assertTrue(self._changed(base, head))
+
+    def test_a_precedence_changing_paren_edit_is_still_a_change(self):
+        """THE control for the whole paren canonicaliser.
+
+        Each pair is the same characters apart from one parenthesis, and each
+        pair means two different things. If any of these ever equate, gate-16
+        has stopped reporting a real operator-precedence bug.
+        """
+        pairs = [
+            ("(a || b) && c", "a || b && c"),
+            ("(a + b) * c", "a + b * c"),
+            ("a - (b - c)", "a - b - c"),
+            ("a + (b + c)", "a + b + c"),
+            ("f((a, b))", "f(a, b)"),
+            ("x = (a, b)", "x = a, b"),
+            ("(a ? b : c) ? d : e", "a ? b : c ? d : e"),
+            ("!(a && b)", "!a && b"),
+            ("(a || b).c", "a || b.c"),
+            ("(f || g)(x)", "f || g(x)"),
+            ("(a || b)[0]", "a || b[0]"),
+            ("(await x) ** 2", "await x ** 2"),
+            ("typeof (a + b)", "typeof a + b"),
+            ("new (a.b)()", "new a.b()"),
+            ("('k' in ctx) + 1", "'k' in ctx + 1"),
+            ("(a = 1) || b", "a = 1 || b"),
+            ("(a, b) => y", "a, b => y"),
+            ("({ a: 1 })", "{ a: 1 }"),
+            ("/(a)/.test(s)", "/a/.test(s)"),
+            ("(a || b) as string", "a || b as string"),
+        ]
+        for tighter, looser in pairs:
+            with self.subTest(pair=tighter):
+                self.assertFalse(self._same(tighter, looser),
+                                 f"{tighter!r} and {looser!r} are different programs")
+
+    def test_a_redundant_paren_prettier_reprints_is_not_a_change(self):
+        """…and the other half: the ones that ARE the same program."""
+        pairs = [
+            ("return (a || b)", "return a || b"),
+            ("x = (a && b) ? c : d", "x = a && b ? c : d"),
+            ("map[s] || (s || '-')", "map[s] || s || '-'"),
+            ("x = (await f()) || {}", "x = await f() || {}"),
+            ("a ? b : (c ? d : e)", "a ? b : c ? d : e"),
+            ("x ? (a) : b", "x ? a : b"),
+            ("(x) => y", "x => y"),
+            ("('k' in ctx) && q", "'k' in ctx && q"),
+            ("for (const c of (x || [])) {", "for (const c of x || []) {"),
+            ("((a - b) ** 2) / c", "(a - b) ** 2 / c"),
+            ("return ({ a: 1 }[k] || 'z')", "return { a: 1 }[k] || 'z'"),
+            ("value: `${(this.d?.rate || 0)}%`", "value: `${this.d?.rate || 0}%`"),
+        ]
+        for wrapped, bare in pairs:
+            with self.subTest(pair=wrapped):
+                self.assertTrue(self._same(wrapped, bare),
+                                f"{wrapped!r} and {bare!r} are one program")
+
+    def test_a_member_named_like_a_keyword_is_a_call_not_an_operator(self):
+        # `axios.delete(url)` is a call. Reading its `delete` as the unary
+        # operator hands the parentheses a binding power of 14 and welds
+        # `axios.deleteurl`. Found on pipelinq's forecastApi.js.
+        base = "\t\tconst r = await axios.delete(generateUrl(base + '/x/' + id))\n"
+        head = "\t\tconst r = await axios.delete(\n\t\t\tgenerateUrl(base + '/x/' + id),\n\t\t)\n"
+        self.assertEqual(self._changed(base, head), set())
+        self.assertFalse(self._same("axios.delete(url)", "axios.deleteurl"))
+
+    # --- the ordinary changes, through every rule above --------------------
+    def test_a_renamed_method_is_still_reported(self):
+        base = "\t\tfetchThings () {\n\t\t\treturn this.load()\n\t\t},\n"
+        head = "\t\tfetchItems() {\n\t\t\treturn this.load()\n\t\t},\n"
+        self.assertIn(1, self._changed(base, head))
+
+    def test_an_added_parameter_is_still_reported(self):
+        base = "\t\tsave (id) {\n\t\t\treturn this.put(id)\n\t\t},\n"
+        head = "\t\tsave(id, force) {\n\t\t\treturn this.put(id)\n\t\t},\n"
+        self.assertIn(1, self._changed(base, head))
+
+    def test_a_changed_value_in_a_rewrapped_expression_is_still_reported(self):
+        base = "\t\tconst total = a * 2 + b\n"
+        head = "\t\tconst total =\n\t\t\ta * 3\n\t\t\t+ b\n"
+        self.assertTrue(self._changed(base, head))
+
+    def test_a_changed_string_content_is_still_reported(self):
+        base = "\t\tshowError(t('app', 'Could not reveal address.'))\n"
+        head = "\t\tshowError(\n\t\t\tt('app', 'Could not reveal the address.'),\n\t\t)\n"
+        self.assertTrue(self._changed(base, head),
+                        "re-quoting and re-wrapping must not carry a CONTENT edit through")
+
+    def test_quote_style_alone_is_not_a_change_in_javascript(self):
+        base = '\t\tconst m = "PDF extraction failed"\n'
+        head = "\t\tconst m = 'PDF extraction failed'\n"
+        self.assertEqual(self._changed(base, head), set())
+
+    def test_an_added_method_is_entirely_in_scope_in_javascript(self):
+        base = "export default {\n\tmethods: {\n\t},\n}\n"
+        head = ("export default {\n\tmethods: {\n\t\tsave() {\n\t\t\treturn 1\n"
+                "\t\t},\n\t},\n}\n")
+        changed = self._changed(base, head)
+        self.assertTrue({3, 4} <= changed, changed)
+
+    def test_a_semicolon_to_newline_split_is_still_a_change(self):
+        # prettier's `semi: false` turns `a; b` into two lines. Equating them
+        # needs the same ASI argument the guard above refuses to make, so this
+        # is REFUSED — measured cost, 3 findings on pipelinq#820.
+        base = "\t\trun(i) { const a = load(); a.splice(i, 1); emit(a) },\n"
+        head = "\t\trun(i) {\n\t\t\tconst a = load()\n\t\t\ta.splice(i, 1)\n\t\t\temit(a)\n\t\t},\n"
+        self.assertTrue(self._changed(base, head))
+
+    # --- the narrowing can only ever narrow --------------------------------
+    def test_the_narrowing_is_an_intersection_with_git(self):
+        """`_drop_cosmetic_only` may only REMOVE lines from git's answer."""
+        base = "const a = [1, 2]\n"
+        head = "const a = [\n\t1,\n\t2,\n]\n"
+        changed = csc._substantively_changed_lines(base, head, is_php=False)
+        git_says = {1, 2, 3, 4}
+        self.assertTrue(changed <= git_says | set(),
+                        "normalisation returned a line git never called added")
 
 
 class DiffScopeFullRunTest(unittest.TestCase):
@@ -650,6 +902,130 @@ class ReportService {
         out, rc = self._gate(base)
         self.assertEqual(out, "# count=0\n", f"expected a clean run, got: {out}")
         self.assertEqual(rc, 0)
+
+
+class TagPositionTest(unittest.TestCase):
+    """A SENTENCE ABOUT THE TAG IS NOT THE TAG (#415 class, #422).
+
+    ``SPEC_RE`` was an unanchored substring, so any docblock line MENTIONING
+    ``@spec openspec/…`` marked the method covered — including the sentence
+    stating that nobody has written one. That is the gate that exists to
+    COLLECT the gap being closed by a note describing it.
+
+    This one is the borderline case in #422 and the borderline is worth
+    stating: ``@spec`` is a docblock marker, so unlike every other gate in that
+    issue the evidence legitimately LIVES in a comment and a comment mask would
+    delete it. What was missing is POSITION — the anchoring gates 47 and 48
+    already have.
+
+    Reverted against origin/main, arms 1 and 2 FLIP. Arms 3-8 pass either way
+    and are CONTROLS: they are every spelling the fleet actually uses, and the
+    pattern was measured against them exhaustively — 46,187 method judgements
+    across the six repos, diff scope bypassed — until it produced ZERO new
+    findings. Arm 8 is the one that made the first cut wrong.
+    """
+
+    def _findings(self, text: str) -> list[str]:
+        findings: list[str] = []
+        csc.check_php_file("lib/Service/FooService.php", text, _all_lines(text), findings)
+        return findings
+
+    def _method(self, docblock: str) -> str:
+        return ("<?php\nclass FooService {\n"
+                f"{docblock}"
+                "    public function doThing(string $id): string\n"
+                "    {\n"
+                "        return $id;\n"
+                "    }\n"
+                "}\n")
+
+    def test_1_a_todo_saying_nobody_wrote_the_tag_is_not_the_tag(self):
+        out = self._findings(self._method(
+            "    /**\n"
+            "     * Do a thing.\n"
+            "     *\n"
+            "     * TODO: nobody has written @spec openspec/specs/thing/spec.md\n"
+            "     * for this yet.\n"
+            "     */\n"))
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("missing @spec", out[0])
+
+    def test_2_a_note_about_a_REMOVED_tag_is_not_the_tag(self):
+        """Found in the fleet while measuring the lead class: openregister
+        carries `NOTE: this used to read @spec openspec/changes/…`. A note
+        recording that the tag was taken away read as the tag."""
+        out = self._findings(self._method(
+            "    /**\n"
+            "     * NOTE: this used to read @spec openspec/changes/dso/tasks.md#T07,\n"
+            "     * which was archived.\n"
+            "     */\n"))
+        self.assertEqual(len(out), 1, out)
+
+    def test_3_CONTROL_the_docblock_continuation_form(self):
+        """` * @spec …` — 3,726 occurrences in procest alone."""
+        self.assertEqual(self._findings(self._method(
+            "    /**\n"
+            "     * @spec openspec/specs/thing/spec.md\n"
+            "     */\n")), [])
+
+    def test_4_CONTROL_the_single_line_docblock_form(self):
+        """`/** @spec … */` — 670 in procest, 638 in opencatalogi. The lead
+        class must admit SLASHES, which the package's markdown `standalone`
+        lead (`^[ \\t>*#-]`) does not: an agent reusing that lead here would
+        uncover 1,308 correctly-tagged methods in two repos."""
+        self.assertEqual(self._findings(self._method(
+            "    /** @spec openspec/specs/thing/spec.md */\n")), [])
+
+    def test_5_CONTROL_a_line_comment_tag_never_counted_and_still_does_not(self):
+        """CONTROL, and it corrects a wrong prediction rather than hiding it.
+
+        The fleet carries 109 `// @spec openspec/…` lines (openregister 56,
+        procest 43, softwarecatalog 10) and I expected the anchor to have to
+        admit them. It does not: `_docblock_block` SKIPS `//` lines when
+        looking for the block above a declaration, so a line-comment tag has
+        never satisfied this gate — before this change or after. Asserted so
+        the next reader does not re-derive the wrong expectation from the
+        lead class, which admits `/` for the `/** … */` form only."""
+        self.assertEqual(len(self._findings(self._method(
+            "    // @spec openspec/specs/thing/spec.md\n"))), 1)
+
+    def test_6_CONTROL_a_reason_bearing_exclude_still_excludes(self):
+        self.assertEqual(self._findings(self._method(
+            "    /**\n"
+            "     * @spec exclude thin DI wiring with no standalone contract\n"
+            "     */\n")), [])
+
+    def test_8_CONTROL_description_then_tag_in_a_one_line_docblock(self):
+        """CONTROL, AND THE ARM THAT CAUGHT THE FIRST CUT BEING WRONG.
+
+        `/** Description. @spec … */` is the ordinary PHPDoc order — the
+        description comes first and the tags follow — and a start-anchor alone
+        rejected it. Measured: FIVE real, deliberately tagged methods in
+        decidesk's VotingRoundPanel.vue went red, and the only way to close
+        them would have been to reflow correct documentation. A gate that
+        reddens documented code teaches authors to stop documenting it."""
+        self.assertEqual(self._findings(self._method(
+            "    /** Rule enum option lists for the dialog."
+            " @spec openspec/specs/voting-system/spec.md */\n")), [])
+
+    def test_9_a_debt_sentence_with_no_terminator_is_still_not_a_tag(self):
+        """The discriminator between arm 8 and arm 1 is a COMPLETED SENTENCE
+        before the tag, so this states what the second alternative does NOT
+        admit: a colon is not a sentence terminator."""
+        out = self._findings(self._method(
+            "    /**\n"
+            "     * TODO: still owed: @spec openspec/specs/thing/spec.md\n"
+            "     */\n"))
+        self.assertEqual(len(out), 1, out)
+
+    def test_7_CONTROL_a_tag_plus_trailing_prose_on_the_same_line(self):
+        """The tag OPENS the line's content; what follows it does not matter.
+        Anchoring the START is the whole change — anchoring the end too would
+        break every `@spec path (see also …)` in the fleet."""
+        self.assertEqual(self._findings(self._method(
+            "    /**\n"
+            "     * @spec openspec/specs/thing/spec.md (see also the ADR)\n"
+            "     */\n")), [])
 
 
 if __name__ == "__main__":

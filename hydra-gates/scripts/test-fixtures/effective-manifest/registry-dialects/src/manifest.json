@@ -4,7 +4,9 @@
 	"menu": [
 		{ "id": "af", "label": "Agent form", "icon": "Robot", "route": "AgentForm" },
 		{ "id": "lop", "label": "Legacy", "icon": "History", "route": "LegacyPage" },
-		{ "id": "nap", "label": "Broken", "icon": "Alert", "route": "BrokenPage" }
+		{ "id": "nap", "label": "Broken", "icon": "Alert", "route": "BrokenPage" },
+		{ "id": "gp", "label": "Glob", "icon": "Star", "route": "GlobPage" },
+		{ "id": "ag", "label": "After glob", "icon": "Star", "route": "AfterGlobPage" }
 	],
 	"pages": [
 		{
@@ -48,6 +50,24 @@
 			"title": "Broken",
 			"component": "NotAnywherePanel",
 			"_note": "Registered in NEITHER file — must still FAIL.",
+			"config": {}
+		},
+		{
+			"id": "GlobPage",
+			"route": "GlobPage",
+			"type": "custom",
+			"title": "Glob",
+			"component": "GlobPage",
+			"_note": "Its registry entry carries glob: '/*.vue' — see #424.",
+			"config": {}
+		},
+		{
+			"id": "AfterGlobPage",
+			"route": "AfterGlobPage",
+			"type": "custom",
+			"title": "After glob",
+			"component": "AfterGlob",
+			"_note": "Registered AFTER the glob; the non-string-aware stripper deleted it.",
 			"config": {}
 		}
 	]

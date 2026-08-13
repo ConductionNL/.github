@@ -305,6 +305,97 @@ class Application {
         )
 
 
+class StringLiteralsAreNotCodeTest(GateCase):
+    """#424 — a SENTENCE quoting the prelude is not the prelude.
+
+    The comment axis below was closed in #184 and the literal axis was not, so
+    the same false GREEN survived one quote character away — and this is the
+    dangerous direction: a developer documenting what the code is SUPPOSED to
+    do switched the ADR-040 rule off.
+
+    Mutation-checked by calling `has_prelude`/`has_load_app` with no anchor —
+    the pre-#424 behaviour:
+
+      EVIDENCE (red under the mutation)
+        test_a_prelude_quoted_inside_a_string_is_not_a_prelude
+        test_a_const_declared_inside_a_string_does_not_supply_the_app_id
+        test_a_quoted_loadApp_does_not_add_the_wrong_fix_line
+
+      CONTROL (green both ways — the app id and the FQCN really ARE string
+      literals, and a fix that blanked them would break the gate the other way)
+        test_the_real_prelude_still_closes_the_gate
+        test_the_real_const_prelude_still_closes_the_gate
+    """
+
+    BODY = """<?php
+namespace OCA\\Leaf\\AppInfo;
+use OCA\\OpenRegister\\AppHost\\Bootstrap;
+class Application {
+    public function register($context): void {
+%s
+        if (class_exists(Bootstrap::class) === true) {
+            Bootstrap::register($context, 'leaf', []);
+        }
+    }
+}
+"""
+
+    def test_a_prelude_quoted_inside_a_string_is_not_a_prelude(self):
+        """EVIDENCE. Measured green (rc=0) on main — the gate reported OK for
+        an app with no prelude at all."""
+        self.app("Application.php", self.BODY % (
+            '        $hint = "we call '
+            "\\\\OC_App::registerAutoloading('openregister', $p) before this\";"
+        ))
+        self.assertEqual(
+            _run(self.dir)[0], 1,
+            "a prelude that does not RUN is not a prelude, in quotes as in comments",
+        )
+
+    def test_the_real_prelude_still_closes_the_gate(self):
+        """CONTROL. The app id IS a string literal — the fix must read it."""
+        self.app("Application.php", self.BODY % (
+            "        \\OC_App::registerAutoloading('openregister', $p);"
+        ))
+        self.assertEqual(_run(self.dir)[0], 0)
+
+    def test_a_const_declared_inside_a_string_does_not_supply_the_app_id(self):
+        self.app("Application.php", self.BODY % (
+            '        $doc = "private const OR = \'openregister\';";\n'
+            "        \\OC_App::registerAutoloading(self::OR, $p);"
+        ))
+        self.assertEqual(
+            _run(self.dir)[0], 1,
+            "a constant declared in prose does not resolve",
+        )
+
+    def test_the_real_const_prelude_still_closes_the_gate(self):
+        """CONTROL for the arm above — the #276 constant form must survive."""
+        self.app("Application.php", """<?php
+namespace OCA\\Leaf\\AppInfo;
+use OCA\\OpenRegister\\AppHost\\Bootstrap;
+class Application {
+    private const OPENREGISTER_APP_ID = 'openregister';
+    public function register($context): void {
+        \\OC_App::registerAutoloading(self::OPENREGISTER_APP_ID, $p);
+        if (class_exists(Bootstrap::class) === true) {
+            Bootstrap::register($context, 'leaf', []);
+        }
+    }
+}
+""")
+        self.assertEqual(_run(self.dir)[0], 0)
+
+    def test_a_quoted_loadApp_does_not_add_the_wrong_fix_line(self):
+        self.app("Application.php", self.BODY % (
+            '        $why = "we do not call loadApp(\'openregister\') here";'
+        ))
+        rc, out = _run(self.dir)
+        self.assertEqual(rc, 1)
+        self.assertNotIn("bootApp()", out,
+                         "a sentence about loadApp is not a call to it")
+
+
 class CommentsAreNotCodeTest(GateCase):
     """Every rule is evidence about code, so comments must not feed it."""
 

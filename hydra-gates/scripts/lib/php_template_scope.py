@@ -57,15 +57,24 @@ Usage:
 """
 from __future__ import annotations
 
+import os
 import re
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from source_scope import mask_html_comments  # noqa: E402
 
 # `<?php … ?>` and the short echo form `<?= … ?>`. An unterminated opener runs
 # to end of file, which is the language's own rule and the common shape of a
 # template whose PHP header is followed by nothing but more PHP.
 PHP_BLOCK = re.compile(r'<\?(?:php\b|=)?.*?(?:\?>|\Z)', re.DOTALL | re.IGNORECASE)
-HTML_COMMENT = re.compile(r'<!--.*?-->', re.DOTALL)
-
+# Comment scope comes from the shared library (#424). This module kept a
+# private `<!--.*?-->` on purpose — gate-38's wiring guard is written against
+# it — but the private copy carried the delimiter hole: `<!--` inside a quoted
+# attribute value was a comment opener, so `<html lang="en" title="<!--">`
+# could blank the rest of the document. Only the COMMENT definition is shared;
+# the PHP-block rule and the classification stay local, which is what gate-38
+# is written against.
 DOCUMENT_TAG = re.compile(r'<(?:html|body)\b', re.IGNORECASE)
 # The opening `<html>` element and its attribute text. Quote-aware, so a `>`
 # inside an attribute value does not end the tag — the `[^>]*` shape it
@@ -83,7 +92,7 @@ def emitted_markup(src: str) -> str:
     inside an HTML comment really does close the block in PHP, and pretending
     otherwise would swallow markup that does ship.
     """
-    return HTML_COMMENT.sub(' ', PHP_BLOCK.sub(' ', src))
+    return mask_html_comments(PHP_BLOCK.sub(' ', src))
 
 
 def owns_document(src: str) -> bool:

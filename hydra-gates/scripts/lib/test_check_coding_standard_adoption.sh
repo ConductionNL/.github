@@ -377,6 +377,74 @@ else
     ok "treats nextcloud/ocp:dev-master as tracking the tip, not as stale"
 fi
 
+# ── a comment is not a config line (#415 class, #422) ─────────────────────
+#
+# `.php-cs-fixer.dist.php` was the one config in this module read RAW — the XML
+# paths have been protected by strip_xml_comments() from the start, and its
+# docstring already says why ("a commented-out rule is not a rule").
+#
+# Reverted against origin/main, the two FN arms below FLIP; the two
+# anti-widening arms pass either way and are CONTROLS.
+#
+# The rule this silenced exists PRECISELY because a php-cs-fixer fatal reads
+# exactly like a clean tree: with no autoloader the run dies "Class not found",
+# and --format=json reports that as ZERO FILES NEEDING CHANGES. So the comment
+# bought a green on the check whose job is to stop a green being bought.
+
+rm -rf "$D"; scaffold "$D"
+cat > "$D/.php-cs-fixer.dist.php" <<'PHP'
+<?php
+// TODO: we still need to require __DIR__ . '/vendor/autoload.php' here and
+// switch to Conduction\CodingStandard\Config. Not done yet.
+$config = new PhpCsFixer\Config();
+return $config;
+PHP
+_out="$(run "$D")"
+if printf '%s' "$_out" | grep -q 'FAIL fixer-config-missing-autoloader:' \
+   && printf '%s' "$_out" | grep -q 'FAIL wrong-fixer-config:'; then
+    ok "a TODO naming the autoloader and the shared Config satisfies neither rule"
+else
+    no "a TODO naming the missing lines silenced the fixer rules" "$_out"
+fi
+
+rm -rf "$D"; scaffold "$D"
+cat > "$D/.php-cs-fixer.dist.php" <<'PHP'
+<?php
+/*
+Historical: this file used to require __DIR__ . '/vendor/autoload.php'
+and instantiate Conduction\CodingStandard\Config. It no longer does.
+*/
+return new PhpCsFixer\Config();
+PHP
+_out="$(run "$D")"
+if printf '%s' "$_out" | grep -q 'FAIL fixer-config-missing-autoloader:'; then
+    ok "a block comment describing what was REMOVED does not stand in for it"
+else
+    no "a removal note satisfied the autoloader rule" "$_out"
+fi
+
+# CONTROL (anti-widening), and the reason string contents are KEPT: the
+# autoloader is required as `require __DIR__ . '/vendor/autoload.php'`, so the
+# evidence IS a string literal. Under blank_strings=True this arm goes red and
+# every correctly-configured repo in the fleet reports missing-autoloader.
+rm -rf "$D"; scaffold "$D"
+cat > "$D/.php-cs-fixer.dist.php" <<'PHP'
+<?php
+/*
+Nextcloud's coding standard, via the shared Conduction config.
+*/
+require_once __DIR__ . '/vendor/autoload.php';
+$config = new Conduction\CodingStandard\Config();
+$config->getFinder()->in(__DIR__ . '/lib');
+return $config;
+PHP
+_out="$(run "$D")"
+if printf '%s' "$_out" | grep -qE 'FAIL (fixer-config-missing-autoloader|wrong-fixer-config):'; then
+    no "a real config below a block comment was reported as missing its lines" "$_out"
+else
+    ok "a real require of a STRING path, below a block comment, still counts"
+fi
+
 # ── a crash must not read as clean ────────────────────────────────────────
 if python3 "$CHECKER" "$WORK/does-not-exist" >/dev/null 2>&1; then
     no "a missing app root exited 0 — an unrunnable checker read as a clean repo"

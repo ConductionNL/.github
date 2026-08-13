@@ -32,8 +32,25 @@ Measured 2026-08-08 on a tab-indented file:
 
 Braces are the language's own block delimiter, so this walks them, over a
 comment-masked copy (#184) so a docblock DESCRIBING the anti-pattern — as the
-fixed decidesk code now does — is not itself a finding. String contents are
-kept: they are evidence about code, and blanking them would delete it.
+fixed decidesk code now does — is not itself a finding.
+
+STRING CONTENTS ARE BLANKED TOO (#424)
+--------------------------------------
+The mask ran with `blank_strings=False`, so the docblock case was fixed and the
+STRING LITERAL case was not. Measured on main:
+
+    public function getAuthorizationService(): ?IAuth {
+        $doc = 'catch (\\Throwable $e) { return null; }';   // <- prose, in quotes
+        try { return $this->container->get(IAuth::class); }
+        catch (\\Throwable $e) { throw new ServiceUnavailable(...); }
+    }
+      -> FAIL — 1 fail-open pattern(s), on a resolver that correctly RETHROWS.
+
+Nothing this gate matches is ever a string: `function <name>(`, `catch
+(\\Throwable`, `return null;` and the braces are all syntax. So there is no
+evidence to lose — and blanking string contents also repairs the BRACE WALKER,
+which previously counted a `{` or `}` written inside a literal as a real block
+delimiter.
 
 WHAT IS DELIBERATELY UNCHANGED
 ------------------------------
@@ -98,7 +115,7 @@ def scan_file(path: str) -> list[str]:
         src = read_text(path)
     except OSError:
         return []
-    masked = php_mask(src)
+    masked = php_mask(src, blank_strings=True)
 
     out: list[str] = []
     for m in _METHOD_RX.finditer(masked):

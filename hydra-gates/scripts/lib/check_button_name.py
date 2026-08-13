@@ -49,10 +49,17 @@ Usage:
 """
 from __future__ import annotations
 
+import os
 import re
 import sys
 
-COMMENT = re.compile(r'<!--.*?-->', re.DOTALL)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from source_scope import mask_html_comments  # noqa: E402
+
+# Comment scope comes from the shared library (#424). The private
+# `<!--.*?-->` this replaces called four characters a comment opener wherever
+# they appeared, so `{{ '<!--' }}` … `{{ '-->' }}` blanked every element
+# between them and the gate went green over live markup.
 BLOCK = re.compile(r'<(script|style)\b[^>]*>.*?</\1\s*>', re.DOTALL | re.IGNORECASE)
 
 # THE FIX. The optional bound prefix applies to EVERY name attribute, not just
@@ -89,7 +96,7 @@ def _named(attrs: str, body: str) -> bool:
 
 
 def scan_source(fname: str, src: str) -> list[str]:
-    body_src = BLOCK.sub(' ', COMMENT.sub(' ', src))
+    body_src = BLOCK.sub(' ', mask_html_comments(src))
     findings: list[str] = []
     for pat in BUTTONS:
         for m in pat.finditer(body_src):
