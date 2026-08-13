@@ -8072,9 +8072,25 @@ _ARRAY_VALUE = re.compile(
 # and `#[PublicPage]` is a PHP 8 attribute, not a comment. Quote state is
 # reset per line, so an unterminated literal (a heredoc body) can corrupt at
 # most its own line rather than the rest of the file.
-def _strip_php_comments(raw_lines):
-    out, in_block = [], False
+#
+# `for_structure=True` additionally blanks string CONTENTS and heredoc bodies,
+# keeping the quotes and the line count. That copy is only ever brace-walked
+# (see _method_spans), never searched for a guard, so no guard vocabulary
+# changes meaning: `$fmt = '{';` and a `<<<SQL … {$x} … SQL;` body must not
+# mis-balance a walk, but `throw new` inside a heredoc must not stop being
+# whatever it already was to the window search.
+def _strip_php_comments(raw_lines, for_structure=False):
+    out, in_block, heredoc = [], False, None
     for line in raw_lines:
+        if heredoc is not None:
+            # The closing identifier must be the first non-space token on its
+            # own line (PHP 7.3+ allows indentation). Everything up to and
+            # including it is blanked in the structural copy.
+            _m = re.match(r'\s*' + re.escape(heredoc) + r'\b', line)
+            out.append('')
+            if _m:
+                heredoc = None
+            continue
         buf, i, n, quote = [], 0, len(line), None
         while i < n:
             c = line[i]
@@ -8086,13 +8102,16 @@ def _strip_php_comments(raw_lines):
                 i += 1
                 continue
             if quote is not None:
-                buf.append(c)
                 if c == '\\' and i + 1 < n:
-                    buf.append(line[i + 1])
+                    buf.append('  ' if for_structure else line[i:i + 2])
                     i += 2
                     continue
                 if c == quote:
+                    buf.append(c)
                     quote = None
+                    i += 1
+                    continue
+                buf.append(' ' if for_structure else c)
                 i += 1
                 continue
             if c in ('"', "'"):
@@ -8108,10 +8127,97 @@ def _strip_php_comments(raw_lines):
                 continue
             if c == '#' and not (i + 1 < n and line[i + 1] == '['):
                 break
+            if for_structure and c == '<' and line[i:i + 3] == '<<<':
+                _h = re.match(r"<<<[ \t]*(['\"]?)(\w+)\1", line[i:])
+                if _h:
+                    heredoc = _h.group(2)
+                    break
             buf.append(c)
             i += 1
         out.append(''.join(buf).rstrip('\n'))
     return out
+
+
+# THE WINDOW MUST NOT CROSS INTO THE NEXT METHOD (#429).
+#
+# The window is "eleven lines of code following the read", counted over the
+# FILE, with no notion of where the method ends. A guard belonging to a
+# DIFFERENT method therefore cleared an unguarded read in the method above it.
+#
+# Reproduced 2026-08-13 on c26f9a3, one file, one variable — an unguarded
+# `api_token` read in `readToken()` with an ordinary guarded read in the next
+# method five code lines below:
+#
+#   both methods present   PASS                                <- the defect
+#   delete readRegister()
+#   and nothing else       FAIL — 1, naming api_token at :6    <- the control
+#
+# #420 changed the window's BUDGET (comments no longer spend it) but not its
+# EXTENT, so that fix moved this defect closer rather than away: blanking
+# comments means real code lines from the next method arrive inside the
+# window sooner.
+#
+# It is also order-dependent in a way nobody can see while reading — moving a
+# method, or adding one below, changes the verdict for a method whose body did
+# not change.
+#
+# `_method_spans` is the brace walk gate-49's checker already runs over masked
+# text, kept local here so gate-50 gains no new import and no new wiring
+# failure mode. It walks the `for_structure` copy for the reason gate-49 gives:
+# a `{` inside a comment or a string does not mis-balance a walk loudly, it
+# silently attributes the wrong span of code to the method.
+#
+# FAILS IN THE LOOSE DIRECTION. If the walk never balances (an unterminated
+# body, a heredoc shape this stripper does not know) the span runs to EOF and
+# the window is exactly what it was before this change — a false NEGATIVE at
+# worst, never a finding at a line where no guard could be written.
+_METHOD_DECL = re.compile(r'\bfunction\s+(?P<name>\w+)\s*\(')
+
+
+def _method_spans(text):
+    """[(start_line, end_line, name)] for every NAMED function in *text*.
+
+    Anonymous closures (`function ($x) {`) and arrow functions are deliberately
+    not boundaries: they are written INSIDE a method, and treating one as a new
+    method would clip a window in the middle of the body it belongs to.
+    """
+    spans, n = [], len(text)
+    for m in _METHOD_DECL.finditer(text):
+        p = text.find('(', m.start())
+        if p < 0:
+            continue
+        depth, i = 0, p
+        while i < n:
+            if text[i] == '(':
+                depth += 1
+            elif text[i] == ')':
+                depth -= 1
+                if depth == 0:
+                    break
+            i += 1
+        if i >= n:
+            continue
+        j = i + 1
+        while j < n and text[j] not in '{;':
+            j += 1
+        start_line = text[:m.start()].count('\n') + 1
+        if j >= n or text[j] == ';':
+            # An abstract/interface declaration has no body; its span is the
+            # declaration itself, so nothing is ever clipped INTO it.
+            spans.append((start_line, text[:min(j, n - 1)].count('\n') + 1, m.group('name')))
+            continue
+        depth, k = 0, j
+        while k < n:
+            if text[k] == '{':
+                depth += 1
+            elif text[k] == '}':
+                depth -= 1
+                if depth == 0:
+                    break
+            k += 1
+        end_line = text[:k].count('\n') + 1 if k < n else text.count('\n') + 1
+        spans.append((start_line, end_line, m.group('name')))
+    return spans
 
 
 notes_path = log_path + '.notes'
@@ -8123,6 +8229,7 @@ for fp in files:
     except OSError:
         continue
     code_lines = _strip_php_comments(lines)
+    _spans = _method_spans('\n'.join(_strip_php_comments(lines, for_structure=True)))
     src = ''.join(lines)
     for m in SEC_KEY.finditer(src):
         # Find the line number of the match
@@ -8175,8 +8282,21 @@ for fp in files:
         # Blank and comment-only lines no longer spend it, and the text
         # searched below is comment-stripped, so a comment can neither push a
         # guard out of range nor stand in for one.
+        #
+        # …AND THE EXTENT IS THE ENCLOSING METHOD, NOT THE FILE (#429).
+        # A guard in the NEXT method is not this read's guard. The innermost
+        # span containing the read wins, so a named function nested inside
+        # another clips to itself rather than to its host. A read that belongs
+        # to no span (a property initialiser, or a walk that never balanced)
+        # keeps the pre-#429 extent — the loose direction.
+        _limit, _encl = len(code_lines), None
+        for _s, _e, _nm in _spans:
+            if _s <= lineno <= _e and (_encl is None or _s > _encl[0]):
+                _encl = (_s, _e, _nm)
+        if _encl is not None:
+            _limit = min(_limit, _encl[1])
         _budget, _win, _i = 11, [], _end_line - 1
-        while _i < len(code_lines) and _budget > 0:
+        while _i < _limit and _budget > 0:
             _win.append(code_lines[_i])
             if code_lines[_i].strip():
                 _budget -= 1
@@ -8232,7 +8352,11 @@ for fp in files:
                             f"consumer of the assembled array.\n")
                 continue
             with open(log_path, 'a', encoding='utf-8') as g:
-                g.write(f"{fp}:{lineno}: security-relevant config read of \"{m.group('key')}\" has no fail-mode guard within 10 lines\n")
+                # NAME THE METHOD THE WINDOW WAS CLIPPED TO (#429). Without it
+                # the reader cannot tell "unguarded" from "the guard is just
+                # out of range", which is the question the clip decides.
+                _where = f" inside {_encl[2]}()" if _encl is not None else ""
+                g.write(f"{fp}:{lineno}: security-relevant config read of \"{m.group('key')}\" has no fail-mode guard within 10 lines{_where}\n")
 PY
     _scfm_rc=$?
 fi
