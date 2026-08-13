@@ -150,5 +150,111 @@ class TestCli(unittest.TestCase):
         self.assertEqual(gate.main(["check_csrf_callers.py", "a", "b"]), 2)
 
 
+class TestACommentIsNotACsrfToken(unittest.TestCase):
+    """A comment is not a token (#415).
+
+    THIS HELPER MAKES AN AFFIRMATIVE CLAIM, which is why prose here is worse
+    than elsewhere in the class. When it returns nothing the runner prints
+
+        [gate-48] NOTE: no CSRF signal was ADDED by this diff, and none was
+        needed: every mutating call site under src/ already carries one …
+
+    and passes. So a comment did not merely hide a finding — it manufactured
+    a green WITH A SENTENCE ATTACHED SAYING THE CODE IS SAFE.
+
+    Every arm below is paired with the real mechanism it must not swallow,
+    because `script_mask` keeps string literals ON PURPOSE: `'OCS-APIRequest'`
+    is a header name that IS a string, and `method: 'DELETE'` is how a
+    mutating call is recognised at all. A mask that blanked literals would
+    pass every closure arm here and turn the gate off completely.
+    """
+
+    _UNPROTECTED = """<script>
+export default { methods: { async del(id) {
+%s  await fetch(`/api/things/${id}`, { method: 'DELETE',%s headers: {} })
+} } }
+</script>
+"""
+
+    def test_positive_control_an_unprotected_fetch_is_reported(self):
+        root = app_with({'src/components/Del.vue': self._UNPROTECTED % ('', '')})
+        found = gate.unprotected_call_sites(root)
+        self.assertEqual(len(found), 1, found)
+        self.assertIn('fetch()', found[0])
+
+    def test_a_todo_above_the_call_is_not_the_header(self):
+        """CONTROL, not evidence — it passes with the mask and without it.
+
+        The comment sits ABOVE the call, outside the paren-balanced span
+        `CSRF_SIGNAL` is searched against, so it never reached the question.
+        Kept because it pins the boundary: the arm below is the same sentence
+        moved three characters into the span, and that one flips."""
+        root = app_with({'src/components/Del.vue': self._UNPROTECTED % (
+            '  // TODO: add the requesttoken header here. Not done yet.\n', '')})
+        found = gate.unprotected_call_sites(root)
+        self.assertEqual(len(found), 1, found)
+
+    def test_a_todo_inside_the_init_object_is_not_the_header(self):
+        """EVIDENCE — flips when the mask is removed.
+
+        The comment sits INSIDE the paren-balanced call text, which is the
+        span `CSRF_SIGNAL` is actually searched against. Without the mask this
+        call is reported protected and the runner prints the NOTE."""
+        root = app_with({'src/components/Del.vue': self._UNPROTECTED % (
+            '', '\n    // TODO: requesttoken goes here once #999 lands.')})
+        found = gate.unprotected_call_sites(root)
+        self.assertEqual(len(found), 1, found)
+
+    def test_a_real_header_is_still_protection(self):
+        """The pair. `requesttoken` as an object key and `'OCS-APIRequest'` as
+        a string value must both survive the mask."""
+        root = app_with({'src/components/Del.vue': """<script>
+export default { methods: { async del(id) {
+  await fetch(`/api/things/${id}`, { method: 'DELETE',
+    headers: { requesttoken: OC.requestToken, 'OCS-APIRequest': 'true' } })
+} } }
+</script>
+"""})
+        self.assertEqual(gate.unprotected_call_sites(root), [])
+
+    def test_a_commented_out_nextcloud_axios_import_grants_no_amnesty(self):
+        """EVIDENCE — flips when the mask is removed.
+
+        `NEXTCLOUD_AXIOS_IMPORT` was read raw too, and it is a WHOLE-FILE
+        switch: one dead import line silenced every axios.post in the file at
+        once."""
+        root = app_with({'src/components/Ax.vue': """<script>
+// import axios from '@nextcloud/axios'
+import axios from 'axios'
+export default { methods: { async save(d) { await axios.post('/api/things', d) } } }
+</script>
+"""})
+        found = gate.unprotected_call_sites(root)
+        self.assertEqual(len(found), 1, found)
+        self.assertIn('axios.post()', found[0])
+
+    def test_a_real_nextcloud_axios_import_still_protects_the_file(self):
+        """The pair for the arm above."""
+        root = app_with({'src/components/Ax.vue': """<script>
+import axios from '@nextcloud/axios'
+export default { methods: { async save(d) { await axios.post('/api/things', d) } } }
+</script>
+"""})
+        self.assertEqual(gate.unprotected_call_sites(root), [])
+
+    def test_the_reported_line_number_still_addresses_the_original_file(self):
+        """The mask is length-preserving, so masking must not shift the line a
+        finding names. A finding that points at the wrong line is how a real
+        one gets dismissed as noise."""
+        root = app_with({'src/components/Del.vue': (
+            "<script>\n// filler\n// filler\n// filler\n"
+            "export default { methods: { async del(id) {\n"
+            "  await fetch(`/api/x`, { method: 'DELETE', headers: {} })\n"
+            "} } }\n</script>\n")})
+        found = gate.unprotected_call_sites(root)
+        self.assertEqual(len(found), 1, found)
+        self.assertIn(':6', found[0])
+
+
 if __name__ == "__main__":
     unittest.main()

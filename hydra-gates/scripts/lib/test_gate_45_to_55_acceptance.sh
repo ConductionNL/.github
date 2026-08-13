@@ -539,6 +539,83 @@ _outC13="${_tmp}/c13.txt"
 _run "${_appC}" "${_outC13}"
 _expect "${_outC13}" 50 "FAIL" "does not mistake an arrow closure's => for an array key"
 
+# C14 / C15 — A COMMENT MUST NEITHER CONSUME THE WINDOW NOR SATISFY IT (#415).
+#
+# One cause, two failures pointing opposite ways, so both arms are needed: a
+# fix for either one alone can be had by moving the window boundary, and that
+# makes the other worse.
+#
+# C14 (was a FALSE POSITIVE): a textbook guard, reported unsafe because twelve
+# lines of ordinary explanation sat between it and the call. 8 of gate-50's 16
+# opencatalogi findings were this shape. The gate penalised the DOCUMENTED fix
+# and passed the undocumented one — an author who deletes the comment goes
+# green having changed nothing about the code's safety.
+_write_service '    public function listing(): array
+    {
+        $reg = $this->config->getValueString(Application::APP_ID, '"'"'listing_register'"'"', '"'"''"'"');
+        // We deliberately do not fail hard on a missing register: it is
+        // optional in single-tenant installs, the directory sync job re-runs
+        // nightly, and a missing value therefore self-heals within a day.
+        // See ADR-012 for the full rationale, and the migration plan that
+        // removes this branch entirely once the 3.x provisioning path has
+        // landed in every deployment we currently support. Until then the
+        // empty case must return an empty listing rather than raise, because
+        // the public directory endpoint is unauthenticated and a raise there
+        // is an information leak of its own. Twelve lines is not an unusual
+        // amount of explanation for a decision with that many moving parts,
+        // and none of it changes what the code below does.
+        //
+        // The actual guard follows.
+        if ($reg === '"'"''"'"') {
+            return [];
+        }
+
+        return $this->load($reg);
+    }'
+_commit "${_appC}" "a guarded read with a long comment between read and guard"
+_outC14="${_tmp}/c14.txt"
+_run "${_appC}" "${_outC14}"
+_expect "${_outC14}" 50 "PASS" "a comment between the read and its guard does not consume the window"
+
+# C15 (was a FALSE NEGATIVE, and the more serious half): an unguarded read of
+# an api_token reported CLEAN because the TODO above it happened to contain
+# the words the guard regex looks for. A comment STATING THE DEBT satisfied
+# the gate that exists to collect it — the same defect gate 19 was fixed for,
+# never looked for here. Note the fixture's comment contains BOTH a `throw
+# new` and a `=== ''`, so it exercises two of the six guard arms at once.
+_write_service '    public function push(): void
+    {
+        $tok = $this->config->getValueString(Application::APP_ID, '"'"'api_token'"'"', '"'"''"'"');
+        // TODO: we should throw new RuntimeException here when this is empty,
+        // and compare $tok === '"'"''"'"' before use. Not done yet.
+        $this->client->post($tok);
+    }'
+_commit "${_appC}" "an unguarded read whose TODO names the missing guard"
+_outC15="${_tmp}/c15.txt"
+_run "${_appC}" "${_outC15}"
+_expect "${_outC15}" 50 "FAIL" "a comment naming the missing guard does not satisfy the gate"
+
+# C16 — the string-safety control for C14/C15. Comment stripping must not be a
+# naive split: `'https://x'` is a URL inside a string literal, not a comment,
+# and `#[PublicPage]` is a PHP 8 attribute. If either is mis-stripped the
+# guard on the following line is destroyed and this arm fails, which is how a
+# stripper bug shows up as a finding rather than as silence.
+_write_service '    #[PublicPage]
+    public function docs(): string
+    {
+        $url = '"'"'https://example.org//docs#anchor'"'"';
+        $reg = $this->config->getValueString(Application::APP_ID, '"'"'listing_register'"'"', '"'"''"'"');
+        if ($reg === '"'"''"'"') {
+            return $url;
+        }
+
+        return $this->load($reg);
+    }'
+_commit "${_appC}" "a guarded read alongside a URL literal and an attribute"
+_outC16="${_tmp}/c16.txt"
+_run "${_appC}" "${_outC16}"
+_expect "${_outC16}" 50 "PASS" "a // inside a string literal and a #[Attribute] are not comments"
+
 # ===========================================================================
 # FAMILY D — gate-53 must block the PR that CREATES larpingapp#286.
 #
@@ -797,6 +874,206 @@ if grep -qE "^\[gate-46\][^:]*: SKIPPED \(wiring\)" "${_outF2}"; then
 else
     _bad "gate-46 on a dead interpreter → $(grep -E '^\[gate-46\]' "${_outF2}" | head -1)"
 fi
+
+# ===========================================================================
+# FAMILY G — gate-49, the SAME defect family C caught in gate-50 (#415).
+#
+# gate-50's window was raw file text. gate-49's method BODY was raw file text.
+# Different mechanism, one cause: prose is made of the same bytes as code, so
+# a comment answered both of gate-49's questions — "is there a catch of a
+# tracked exception?" and "does this method call a risky service method?".
+#
+# Four arms, because a fix for either direction alone is available by
+# loosening or tightening the regex, and each of those makes the other worse.
+# G1 is the POSITIVE CONTROL and it is not decoration: it is the arm that
+# proves the other three are measuring a live gate rather than a silent one.
+# ===========================================================================
+_appG="${_tmp}/appG"
+mkdir -p "${_appG}/lib/Controller"
+
+_write_controller() {  # _write_controller <body>
+    cat > "${_appG}/lib/Controller/ThingController.php" <<PHP
+<?php
+namespace OCA\\Fx\\Controller;
+class ThingController
+{
+$1
+}
+PHP
+}
+
+# G1 — POSITIVE CONTROL. An unhandled call to a known-throwy service method.
+# If this arm ever prints PASS, every arm below it is measuring nothing and
+# their greens are green over a dead gate.
+_write_controller '    public function destroy(int $id)
+    {
+        return $this->objectService->deleteObject($id);
+    }'
+git -C "${_appG}" init -q . 2>/dev/null
+_commit "${_appG}" "an unhandled call to a throwy service method"
+_outG1="${_tmp}/g1.txt"
+_run "${_appG}" "${_outG1}"
+_expect "${_outG1}" 49 "FAIL" "POSITIVE CONTROL — an unhandled throwy service call is a finding"
+
+# G2 — THE FALSE NEGATIVE, and the serious half. The identical unhandled call,
+# with a TODO above it naming the catch that is missing. The gate matched
+# `catch\s*\(\s*…DoesNotExistException` against the raw body and accepted the
+# comment as the handler. A comment STATING THE DEBT satisfied the gate that
+# exists to collect it — the shape gate 19 was fixed for, and gate 50 in #415.
+_write_controller '    public function destroy(int $id)
+    {
+        // TODO: we should catch (DoesNotExistException $e) here and translate
+        // it to a 404 JSONResponse. Not done yet — tracked separately.
+        return $this->objectService->deleteObject($id);
+    }'
+_commit "${_appG}" "the same unhandled call, with a TODO naming the missing catch"
+_outG2="${_tmp}/g2.txt"
+_run "${_appG}" "${_outG2}"
+_expect "${_outG2}" 49 "FAIL" "a comment naming the missing catch does not satisfy the gate"
+
+# G3 — THE FALSE POSITIVE, and the one that erodes the gate. A method that
+# calls nothing riskier than a renderer, carrying a note about the call it no
+# longer makes. `$this->objectService->deleteObject(` was collected from the
+# comment, so the REMOVAL NOTE scored as the removed call: the better the
+# documentation, the redder the repo (#230's shape, one gate over).
+_write_controller '    public function index()
+    {
+        // This endpoint used to call $this->objectService->deleteObject($id)
+        // directly. It no longer does; deletion moved to destroy().
+        return $this->renderer->toArray();
+    }'
+_commit "${_appG}" "a method whose comment describes a call it does not make"
+_outG3="${_tmp}/g3.txt"
+_run "${_appG}" "${_outG3}"
+_expect "${_outG3}" 49 "PASS" "a comment describing a removed call is not that call"
+
+# G4 — THE ANTI-WIDENING PAIR, and the reason the mask keeps the docblock.
+# `@throws` lives in a comment BY DESIGN: it is the author's declaration, not
+# incidental prose. A fix that masked the docblock along with everything else
+# would close G2 and turn every intentionally-propagating method in the fleet
+# into a finding — trading a false negative for a fleet of false positives.
+# Both suppressions must survive.
+_write_controller '    /**
+     * @throws \\OCP\\AppFramework\\Db\\DoesNotExistException
+     */
+    public function destroy(int $id)
+    {
+        return $this->objectService->deleteObject($id);
+    }
+
+    public function purge(int $id)
+    {
+        try {
+            return $this->objectService->deleteObject($id);
+        } catch (\\OCP\\AppFramework\\Db\\DoesNotExistException $e) {
+            return 404;
+        }
+    }'
+_commit "${_appG}" "a real @throws and a real try/catch"
+_outG4="${_tmp}/g4.txt"
+_run "${_appG}" "${_outG4}"
+_expect "${_outG4}" 49 "PASS" "a real @throws docblock and a real catch still suppress"
+
+# G5 — the brace-walk control. The body span is now measured on the mask, so a
+# `{` inside a string literal cannot mis-balance the walk and hand the method
+# a span of code it does not contain. The call here is genuinely unhandled, so
+# the arm asserts the finding SURVIVES the mask rather than being eaten by it
+# — a stripper that swallows code shows up here as a PASS.
+_write_controller '    public function destroy(int $id)
+    {
+        $fmt = '"'"'{ unbalanced'"'"';
+        return $this->objectService->deleteObject($id);
+    }'
+_commit "${_appG}" "an unhandled call below a brace inside a string literal"
+_outG5="${_tmp}/g5.txt"
+_run "${_appG}" "${_outG5}"
+_expect "${_outG5}" 49 "FAIL" "a { inside a string literal does not derail the body walk"
+
+# ===========================================================================
+# FAMILY H — gate-48: a comment is not a CSRF token (#415).
+#
+# This file already predicted the defect and filed it as a hypothetical. The
+# runner's own note above `_csrf_callers_helper` reads:
+#
+#     "the cheapest way to green would have been a cosmetic edit under src/
+#      containing the word `requesttoken`: exactly the prose-satisfaction
+#      #191 warns against."
+#
+# It was not a hypothetical. And it is worse than one missed finding: the
+# signal count SHORT-CIRCUITS the caller-state check built as the mitigation
+# for this exact shape, so one comment skips the guard AND its backup.
+#
+# ⚠️ THE FIXTURE FILE MUST NOT SIT DIRECTLY IN src/. The gate's pathspec is
+# `src/**/*.vue`, and a plain git pathspec's `*` matches `/` too — so the
+# glob requires a SECOND slash and `src/Del.vue` is invisible to it. The
+# first cut of this family put the file there, and both arms printed FAIL:
+# the "before" and "after" agreed, for the reason that neither had measured
+# anything. A component directory is also what real apps ship.
+# ===========================================================================
+_appH="${_tmp}/appH"
+mkdir -p "${_appH}/lib/Controller" "${_appH}/src/components"
+
+cat > "${_appH}/lib/Controller/ThingController.php" <<'PHP'
+<?php
+namespace OCA\Fx\Controller;
+class ThingController
+{
+    /**
+     * @NoCSRFRequired
+     */
+    public function create() { return 1; }
+}
+PHP
+# An UNPROTECTED mutating caller, so the caller-state branch has something to
+# find. Without this the fixture passes for a legitimate reason and the arm
+# below cannot tell a repaired gate from a satisfied one.
+cat > "${_appH}/src/components/Del.vue" <<'VUE'
+<script>
+export default { methods: { async del(id) {
+  await fetch(`/api/things/${id}`, { method: 'DELETE', headers: {} })
+} } }
+</script>
+VUE
+git -C "${_appH}" init -q . 2>/dev/null
+_commit "${_appH}" "a controller with @NoCSRFRequired and an unprotected caller"
+_baseH="$(git -C "${_appH}" rev-parse HEAD)"
+
+# H1 — THE FALSE NEGATIVE. Drop the annotation; the ONLY frontend change is a
+# comment saying the token has NOT been added.
+cat > "${_appH}/lib/Controller/ThingController.php" <<'PHP'
+<?php
+namespace OCA\Fx\Controller;
+class ThingController
+{
+    public function create() { return 1; }
+}
+PHP
+cat > "${_appH}/src/components/Del.vue" <<'VUE'
+<script>
+export default { methods: { async del(id) {
+  // TODO: this call still needs a requesttoken header. Not done yet.
+  await fetch(`/api/things/${id}`, { method: 'DELETE', headers: {} })
+} } }
+</script>
+VUE
+_commit "${_appH}" "drop @NoCSRFRequired; add only a TODO naming the missing header"
+_outH1="${_tmp}/h1.txt"
+_run "${_appH}" "${_outH1}" --scope-to-diff --base "${_baseH}"
+_expect "${_outH1}" 48 "FAIL" "a comment naming the missing token is not a CSRF co-change"
+
+# H2 — THE ANTI-WIDENING PAIR. The same removal, with a REAL header added.
+# A fix that counted no added line at all would close H1 and fail here.
+cat > "${_appH}/src/components/Del.vue" <<'VUE'
+<script>
+export default { methods: { async del(id) {
+  await fetch(`/api/things/${id}`, { method: 'DELETE', headers: { requesttoken: OC.requestToken } })
+} } }
+</script>
+VUE
+_commit "${_appH}" "the same removal, with a real requesttoken header added"
+_outH2="${_tmp}/h2.txt"
+_run "${_appH}" "${_outH2}" --scope-to-diff --base "${_baseH}"
+_expect "${_outH2}" 48 "PASS" "a real added requesttoken header is still a co-change signal"
 
 echo ""
 if [ "${_failures}" -eq 0 ]; then
