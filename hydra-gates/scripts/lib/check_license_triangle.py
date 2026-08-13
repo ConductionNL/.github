@@ -67,8 +67,47 @@ import sys
 DECL = re.compile(
     r'^[\s]*(?:/\*+|\*+/?|//+|#+|<!--)?[\s]*'
     r'(?:@license|SPDX-License-Identifier:)[\s]+'
-    r'([^\s*\'"`;,)\]]+)',
+    r'([^\s*\'"`;,)\]]+)'
+    r'(?P<rest>[^\n]*)',
     re.MULTILINE,
+)
+
+# A SENTENCE THAT BEGINS WITH THE TAG IS NOT A SECOND DECLARATION (#415/#423).
+#
+# The anchor above was already right about position — a quote before the tag
+# means test data, not a claim — but it said nothing about what FOLLOWS the
+# identifier. So a docblock line explaining a licence the file does NOT use:
+#
+#     * @license EUPL-1.2
+#     * @license MIT was never used here — see the note above.
+#
+# read as a file declaring two licences, and produced BOTH
+# `license-internal-conflict` and `license-triangle-drift`. The note about
+# the licence that was ruled out scored as the licence.
+#
+# THE REMAINDER MAY NOT BE EMPTY, because the fleet's own header is not.
+# Measured over every tracked `lib/**/*.php` in openregister, opencatalogi,
+# procest, docudesk, larpingapp and softwarecatalog — 2,394 files, every
+# distinct declaration form:
+#
+#     2724  @license EUPL-1.2 https://joinup.ec.europa.eu/…/eupl-text-eupl-12
+#     2095  @license EUPL-1.2   (and `SPDX-License-Identifier: EUPL-1.2`)
+#       11  @license https://www.gnu.org/licenses/agpl-3.0.html GNU AGPL v3 or later
+#        8  @license AGPL-3.0-or-later https://www.gnu.org/licenses/agpl-3.0.en.html
+#
+# A rule of "nothing may follow the identifier" would have deleted the FIRST
+# and most common form — 2,724 real declarations, in the fleet's own house
+# style — and the gate would have gone quiet on exactly the files it exists
+# to compare. So the remainder is allowed to be a URL, a comment terminator
+# or trailing punctuation, and nothing else: those are what a header carries
+# and prose is what it does not.
+#
+# The URL-FIRST form (11 files) is deliberately left alone: its identifier is
+# a URL, `_looks_like_a_path` already reports it as a parser malfunction, and
+# that diagnostic is not this change's to silence. The rule below therefore
+# only applies to a value that is not itself path-shaped.
+_DECL_TAIL_OK = re.compile(
+    r'^(?:\s|https?://\S+|\*/|--!?>|[.,;:)\]]|\(\s*\)|\s*\Z)*$'
 )
 # `/` is deliberately ALLOWED in the captured value. Excluding it (to stop
 # `@license EUPL-1.2*/` capturing the comment terminator) also truncated a
@@ -99,6 +138,12 @@ def declarations(src: str) -> list[str]:
     for m in DECL.finditer(src):
         v = _TRAILING_COMMENT.sub('', m.group(1).strip()).strip().rstrip('.,;')
         if not v or v in seen:
+            continue
+        # See _DECL_TAIL_OK: a header carries an identifier and at most a URL;
+        # prose after the identifier means the line is a SENTENCE about a
+        # licence, not a declaration of one. Path-shaped values keep their
+        # existing "parser malfunction" report regardless of what follows.
+        if not _looks_like_a_path(v) and not _DECL_TAIL_OK.match(m.group('rest')):
             continue
         seen.append(v)
     return seen

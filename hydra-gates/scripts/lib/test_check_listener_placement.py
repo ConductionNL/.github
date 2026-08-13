@@ -610,5 +610,96 @@ class PreEventTest(unittest.TestCase):
         )
 
 
+class ACommentDoesNotManufactureAFinding(unittest.TestCase):
+    """#415/#423 — `parse_registrations` read the RAW Application.php.
+
+    A registration that exists only as a commented-out line was parsed as a
+    live one, so the note explaining that a listener had been DELETED became
+    `FAIL … no class file found under lib/`. Nothing is wired. The cheapest
+    fix available to the author is to delete the explanation.
+
+    L1 and L5 are CONTROLS: they pass before and after, and exist so the
+    negatives below cannot be had by making the parser see nothing.
+    """
+
+    def _parse(self, php: str) -> list[tuple[str, str]]:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write(Path(tmp), 'lib/AppInfo/Application.php', php)
+            return [(r['event'], r['listener']) for r in clp.parse_registrations(path)]
+
+    def test_L1_control_a_live_registration_is_still_parsed(self):
+        self.assertEqual(
+            self._parse(
+                '<?php\n'
+                '$context->registerEventListener(ObjectCreatedEvent::class, FooListener::class);\n'
+            ),
+            [('ObjectCreatedEvent', 'FooListener')],
+        )
+
+    def test_L2_a_commented_out_registration_is_not_a_registration(self):
+        self.assertEqual(
+            self._parse(
+                '<?php\n'
+                '// Removed 2026-08: SyncListener did its HTTP work inline, so the\n'
+                '// listener and its registration both went:\n'
+                '// $context->registerEventListener(ObjectCreatedEvent::class, SyncListener::class);\n'
+                '$context->registerEventListener(SomeOtherEvent::class, OtherListener::class);\n'
+            ),
+            # The LIVE registration below the comment is still parsed — this
+            # arm asserts the ghost is gone, not that the parser went blind.
+            [('SomeOtherEvent', 'OtherListener')],
+        )
+
+    def test_L3_a_block_comment_example_is_not_a_registration(self):
+        self.assertEqual(
+            self._parse(
+                '<?php\n'
+                '/**\n'
+                ' * Listeners are registered here, e.g.\n'
+                ' *   $context->registerEventListener(ObjectUpdatedEvent::class, FooListener::class);\n'
+                ' */\n'
+            ),
+            [],
+        )
+
+    def test_L4_the_line_number_still_names_the_live_registration(self):
+        # The mask BLANKS, it does not delete: a finding reports a line
+        # number, and a stripper that removed the comment lines would shift
+        # every registration below it onto the wrong line.
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write(
+                Path(tmp), 'lib/AppInfo/Application.php',
+                '<?php\n'
+                '// $context->registerEventListener(ObjectCreatedEvent::class, Ghost::class);\n'
+                '// two lines of prose\n'
+                '$context->registerEventListener(ObjectCreatedEvent::class, FooListener::class);\n'
+            )
+            found = clp.parse_registrations(path)
+            self.assertEqual([r['start_line'] for r in found], [4])
+
+    def test_L5_control_a_url_in_a_string_does_not_truncate_the_line(self):
+        # The old stripper was three regexes and not string-aware; `//` in a
+        # URL cut the rest of the line. This is the anti-over-application
+        # control: the registration on the same line must survive.
+        self.assertEqual(
+            self._parse(
+                '<?php\n'
+                "$this->url = 'https://example.org/hook'; "
+                '$context->registerEventListener(ObjectCreatedEvent::class, FooListener::class);\n'
+            ),
+            [('ObjectCreatedEvent', 'FooListener')],
+        )
+
+    def test_L6_control_an_inline_http_call_is_still_seen_in_a_body(self):
+        # scan_body routes through the same helper. Its evidence — the URL —
+        # is a string literal, so this arm goes red if anyone closes the
+        # remaining literal axis (#424) by blanking string contents here.
+        self.assertTrue(clp.scan_body(
+            'public function handle($e): void {\n'
+            "    $this->clients->newClient()->post('https://example.org/hook', []);\n"
+            '}\n'
+        ))
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

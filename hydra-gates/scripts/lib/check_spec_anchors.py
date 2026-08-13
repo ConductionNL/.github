@@ -62,7 +62,37 @@ import re
 import sys
 
 # Match `@spec openspec/...` but NOT `@spec exclude ...`
-TAG = re.compile(r'@spec\s+(openspec/[^\s`\'"]+)')
+#
+# POSITION-ANCHORED (#415/#423). Gates 47 and 48 were given exactly this
+# treatment for exactly this reason; gate-46 never was, and it is the gate
+# with no false-NEGATIVE direction at all — every defect it can have is a
+# finding it manufactures.
+#
+#   const spec = '@spec openspec/specs/imaginary/spec.md'     -> FAIL
+#   // See @spec openspec/specs/gone/spec.md#missing for why. -> FAIL
+#
+# Neither is an annotation. The first is a string literal (test data, or the
+# name of a tag being discussed); the second is a sentence. Both reported a
+# dangling spec reference against code that annotates nothing, and the
+# author's cheapest fix is to delete the sentence — on a gate whose whole
+# job is to keep references honest.
+#
+# THE RULE, borrowed verbatim in shape from `check_security_cochange.
+# _ANNOTATION_RE`: an optional comment lead-in (`*`, `//`, `#`, `/*`,
+# `<!--`) and then the tag AT THE START of the content. That is the only
+# position a docblock parser accepts a tag in, and it is not a position
+# prose reaches. The lead-in is permissive on purpose — `// @spec …` is
+# still a declaration-shaped line — and markdown's list markers are included
+# because `openspec/**/tasks.md` writes its tags as list items.
+#
+# What is excluded is the tag appearing PART-WAY THROUGH a line, which is
+# the only shape prose and string literals take.
+TAG = re.compile(
+    r'^[^\S\n]*(?:\*+/?|//+|\#(?!\[)|/\*+|<!--|[-+]|\d+\.)?[^\S\n]*'
+    r'(?:\[[ xX~\-]\][^\S\n]*)?'
+    r'@spec\s+(openspec/[^\s`\'"]+)',
+    re.MULTILINE,
+)
 DATE = re.compile(r'\b\d{4}-\d{2}-\d{2}\b')
 HEADING = re.compile(r'^\s*#{1,6}\s+(.+?)\s*$')
 
