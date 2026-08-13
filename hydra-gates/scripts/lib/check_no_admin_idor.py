@@ -744,6 +744,44 @@ def _top_level_split(text: str, sep: str) -> list:
     return [p.strip() for p in parts]
 
 
+# A LEADING SCALAR CAST, stripped before the expression is classified
+# (`ConductionNL/.github#414`).
+#
+# 🔴 THE SPELLING MOVED THE VERDICT, AND THE GUARD DID NOT. Control 2 below
+# rejects "any call with arguments" with `\(\s*[^)\s]` — and a cast is written
+# with exactly those bytes, so `(string)$user->getUID()` read as a call taking
+# an argument and stopped being an identity. Measured on openbuild's
+# `AppOverrideController::getUser()`, a method whose uid is never a request
+# parameter, on one file with one token varying:
+#
+#     uid: (string)$user->getUID()          FAIL
+#     uid: $user->getUID()                  PASS
+#     $uid = (string)$user->getUID(); …     FAIL   <- through a local, too
+#     appId: (string)$appId, uid: $user…    PASS   <- an unrelated cast is fine
+#
+# That is a FALSE POSITIVE WHOSE RECOMMENDED REPAIR IS WRONG: gate-7's FAIL
+# text says "scope the object to the caller", and the object already was. And
+# the cast is not a quirk — `IUser::getUID()` carries no PHP return type, only
+# `@return string`, so Psalm/PHPStan actively encourage writing it.
+#
+# ⚠️ WHAT IS *NOT* STRIPPED, and why the list is short. `(array)` and
+# `(object)` would launder a payload into an identity, so they are absent. The
+# two surviving controls do the rest of the work AFTER the strip, which is what
+# keeps this from widening anything: `(string)canAccess($id, $uid)` still has a
+# real argument list and `(string)$account['ownerId']` still has a subscript,
+# so both stay non-identities.
+_LEADING_SCALAR_CAST_RE = re.compile(r"^\(\s*(?:string|int|integer)\s*\)\s*")
+
+
+def _strip_leading_scalar_casts(expr: str) -> str:
+    """Remove leading ``(string)`` / ``(int)`` casts — see `#414` above."""
+    while True:
+        stripped = _LEADING_SCALAR_CAST_RE.sub("", expr, count=1)
+        if stripped == expr:
+            return expr
+        expr = stripped
+
+
 def _is_identity_expression(expr: str, context: str = "") -> bool:
     """True when *expr* reads as "the caller's identity" and nothing else.
 
@@ -751,8 +789,11 @@ def _is_identity_expression(expr: str, context: str = "") -> bool:
     ARGUMENTS and no array subscript, so a guard call (``canAccess($id, $uid)``)
     and object data (``$account['ownerId']``) can never be read as an identity
     however their names are spelled.
+
+    A leading scalar cast is normalised away first (`#414`) — it is a SPELLING
+    of the same expression, and control 2 could not tell it from a call.
     """
-    expr = expr.strip()
+    expr = _strip_leading_scalar_casts(expr.strip())
     if expr == "":
         return False
     if expr[0] in ("'", '"'):
@@ -1075,6 +1116,15 @@ def _argument_is_session_identity(arg: str, declared: set, session: set) -> bool
     named = re.match(r"^[A-Za-z_][A-Za-z0-9_]*\s*:\s*(?!:)(.*)$", arg, re.S)
     if named is not None:
         arg = named.group(1).strip()
+    # `#414`: normalise the cast HERE TOO, and before the bare-variable test —
+    # not only inside `_is_identity_expression`. `(string)$otherUid` must still
+    # reach the `in declared` branch below and be refused as caller-supplied;
+    # stripping the cast only in `_is_identity_expression` would have routed it
+    # past that check and let a caller-chosen parameter whose NAME happens to
+    # contain "uid" pass for a session identity. That is the direction this
+    # gate must never move in, so the strip is applied where the declared-name
+    # veto can still see it.
+    arg = _strip_leading_scalar_casts(arg)
     m = re.fullmatch(r"\$([A-Za-z_][A-Za-z0-9_]*)", arg)
     if m is not None:
         if m.group(1) in session:

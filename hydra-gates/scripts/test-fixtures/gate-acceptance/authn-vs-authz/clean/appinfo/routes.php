@@ -10,5 +10,7 @@ return [
 		['name' => 'ledger#tenancy404',     'url' => '/api/entries/{entryId}/tenancy',      'verb' => 'GET'],
 		['name' => 'ledger#collaborator',   'url' => '/api/entries/{entryId}/collaborator', 'verb' => 'GET'],
 		['name' => 'ledger#handoff',        'url' => '/api/entries/{entryId}/handoff',      'verb' => 'GET'],
+		['name' => 'ledger#handoffCastIdentity', 'url' => '/api/entries/{entryId}/cast',   'verb' => 'GET'],
+		['name' => 'ledger#handoffCastLocal',    'url' => '/api/entries/{entryId}/castlocal', 'verb' => 'GET'],
 	],
 ];
