@@ -798,6 +798,120 @@ else
     _bad "gate-46 on a dead interpreter → $(grep -E '^\[gate-46\]' "${_outF2}" | head -1)"
 fi
 
+# ===========================================================================
+# FAMILY G — gate-49, the SAME defect family C caught in gate-50 (#415).
+#
+# gate-50's window was raw file text. gate-49's method BODY was raw file text.
+# Different mechanism, one cause: prose is made of the same bytes as code, so
+# a comment answered both of gate-49's questions — "is there a catch of a
+# tracked exception?" and "does this method call a risky service method?".
+#
+# Four arms, because a fix for either direction alone is available by
+# loosening or tightening the regex, and each of those makes the other worse.
+# G1 is the POSITIVE CONTROL and it is not decoration: it is the arm that
+# proves the other three are measuring a live gate rather than a silent one.
+# ===========================================================================
+_appG="${_tmp}/appG"
+mkdir -p "${_appG}/lib/Controller"
+
+_write_controller() {  # _write_controller <body>
+    cat > "${_appG}/lib/Controller/ThingController.php" <<PHP
+<?php
+namespace OCA\\Fx\\Controller;
+class ThingController
+{
+$1
+}
+PHP
+}
+
+# G1 — POSITIVE CONTROL. An unhandled call to a known-throwy service method.
+# If this arm ever prints PASS, every arm below it is measuring nothing and
+# their greens are green over a dead gate.
+_write_controller '    public function destroy(int $id)
+    {
+        return $this->objectService->deleteObject($id);
+    }'
+git -C "${_appG}" init -q . 2>/dev/null
+_commit "${_appG}" "an unhandled call to a throwy service method"
+_outG1="${_tmp}/g1.txt"
+_run "${_appG}" "${_outG1}"
+_expect "${_outG1}" 49 "FAIL" "POSITIVE CONTROL — an unhandled throwy service call is a finding"
+
+# G2 — THE FALSE NEGATIVE, and the serious half. The identical unhandled call,
+# with a TODO above it naming the catch that is missing. The gate matched
+# `catch\s*\(\s*…DoesNotExistException` against the raw body and accepted the
+# comment as the handler. A comment STATING THE DEBT satisfied the gate that
+# exists to collect it — the shape gate 19 was fixed for, and gate 50 in #415.
+_write_controller '    public function destroy(int $id)
+    {
+        // TODO: we should catch (DoesNotExistException $e) here and translate
+        // it to a 404 JSONResponse. Not done yet — tracked separately.
+        return $this->objectService->deleteObject($id);
+    }'
+_commit "${_appG}" "the same unhandled call, with a TODO naming the missing catch"
+_outG2="${_tmp}/g2.txt"
+_run "${_appG}" "${_outG2}"
+_expect "${_outG2}" 49 "FAIL" "a comment naming the missing catch does not satisfy the gate"
+
+# G3 — THE FALSE POSITIVE, and the one that erodes the gate. A method that
+# calls nothing riskier than a renderer, carrying a note about the call it no
+# longer makes. `$this->objectService->deleteObject(` was collected from the
+# comment, so the REMOVAL NOTE scored as the removed call: the better the
+# documentation, the redder the repo (#230's shape, one gate over).
+_write_controller '    public function index()
+    {
+        // This endpoint used to call $this->objectService->deleteObject($id)
+        // directly. It no longer does; deletion moved to destroy().
+        return $this->renderer->toArray();
+    }'
+_commit "${_appG}" "a method whose comment describes a call it does not make"
+_outG3="${_tmp}/g3.txt"
+_run "${_appG}" "${_outG3}"
+_expect "${_outG3}" 49 "PASS" "a comment describing a removed call is not that call"
+
+# G4 — THE ANTI-WIDENING PAIR, and the reason the mask keeps the docblock.
+# `@throws` lives in a comment BY DESIGN: it is the author's declaration, not
+# incidental prose. A fix that masked the docblock along with everything else
+# would close G2 and turn every intentionally-propagating method in the fleet
+# into a finding — trading a false negative for a fleet of false positives.
+# Both suppressions must survive.
+_write_controller '    /**
+     * @throws \\OCP\\AppFramework\\Db\\DoesNotExistException
+     */
+    public function destroy(int $id)
+    {
+        return $this->objectService->deleteObject($id);
+    }
+
+    public function purge(int $id)
+    {
+        try {
+            return $this->objectService->deleteObject($id);
+        } catch (\\OCP\\AppFramework\\Db\\DoesNotExistException $e) {
+            return 404;
+        }
+    }'
+_commit "${_appG}" "a real @throws and a real try/catch"
+_outG4="${_tmp}/g4.txt"
+_run "${_appG}" "${_outG4}"
+_expect "${_outG4}" 49 "PASS" "a real @throws docblock and a real catch still suppress"
+
+# G5 — the brace-walk control. The body span is now measured on the mask, so a
+# `{` inside a string literal cannot mis-balance the walk and hand the method
+# a span of code it does not contain. The call here is genuinely unhandled, so
+# the arm asserts the finding SURVIVES the mask rather than being eaten by it
+# — a stripper that swallows code shows up here as a PASS.
+_write_controller '    public function destroy(int $id)
+    {
+        $fmt = '"'"'{ unbalanced'"'"';
+        return $this->objectService->deleteObject($id);
+    }'
+_commit "${_appG}" "an unhandled call below a brace inside a string literal"
+_outG5="${_tmp}/g5.txt"
+_run "${_appG}" "${_outG5}"
+_expect "${_outG5}" 49 "FAIL" "a { inside a string literal does not derail the body walk"
+
 echo ""
 if [ "${_failures}" -eq 0 ]; then
     echo "test_gate_45_to_55_acceptance.sh: ALL GREEN"
