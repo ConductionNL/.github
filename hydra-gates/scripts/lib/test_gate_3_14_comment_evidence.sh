@@ -260,6 +260,59 @@ if _run; then
 fi
 
 # ---------------------------------------------------------------------------
+# 6b. CONTROL — #434's EXEMPTION STILL READS THE ORIGINAL TEXT.
+#
+#     #434 (.github#339) exempts a contract-imposed unused parameter when a
+#     supertype declares the same signature AND the docblock's `@param` line
+#     for that parameter carries an explicit unused marker. That marker LIVES
+#     IN A COMMENT BY DESIGN — the exact region this change blanks.
+#
+#     The two reads are deliberately split, and only `php_mask` being line- and
+#     offset-preserving makes the split legal:
+#
+#       the body question   -> the MASK      ("is $uid referenced in code?")
+#       the exemption       -> the ORIGINAL  (`--file "$f" --line "${_line_no}"`)
+#
+#     Point the second one at the mask and the marker vanishes, the exemption
+#     silently stops working, and procest's three GuardEvaluatorInterface
+#     implementors go red with no closing action available — delete the
+#     parameter and the interface breaks, reference it pointlessly and that is
+#     dead code written to satisfy a stub detector. That is gate-17's `@spec
+#     exclude` trap in this PR's other gate, and it is why this arm exists
+#     rather than a sentence in a commit message.
+# ---------------------------------------------------------------------------
+_scaffold
+cat > "${APP}/lib/Service/GuardEvaluatorInterface.php" <<'PHP'
+<?php
+namespace OCA\Fixture\Service;
+
+interface GuardEvaluatorInterface {
+	public function authorize(string $uid, string $objectId): bool;
+}
+PHP
+cat > "${APP}/lib/Service/AuthzService.php" <<'PHP'
+<?php
+namespace OCA\Fixture\Service;
+
+class AuthzService implements GuardEvaluatorInterface {
+	/**
+	 * Always allows: this guard does not consult the caller.
+	 *
+	 * @param string $uid      Current user UID (unused by this implementor).
+	 * @param string $objectId The object under evaluation.
+	 */
+	public function authorize(string $uid, string $objectId): bool {
+		$this->logger->info('authorize called');
+		return true;
+	}
+}
+PHP
+_commit
+if _run; then
+    _expect_gate 3 PASS "CONTROL 6b: a contract-imposed param marked unused is still exempt with the mask in place (#434 + #422)"
+fi
+
+# ---------------------------------------------------------------------------
 # 7. A MASK THAT CANNOT BE PRODUCED IS NOT A LICENCE TO GRADE RAW TEXT.
 #
 #    Both gates now depend on source_scope.py. A silent fallback to the raw
