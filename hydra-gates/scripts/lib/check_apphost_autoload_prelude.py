@@ -115,7 +115,32 @@ APPID_CONST = re.compile(
 LOAD_APP = re.compile(r"""loadApp\s*\(\s*['"]openregister['"]\s*\)""")
 # The same call with its argument left unread, for matching against the
 # CALL-SITE anchor where string contents are blank. See has_load_app().
-LOAD_APP_CALL = re.compile(r"loadApp\s*\(([^)]*)\)", re.S)
+#
+# ⚠️ NO `([^)]*)` HERE. That shape scans to end of file on every miss, and a
+# file with many unclosed `loadApp(` misses once each — quadratic. Measured on
+# `"loadApp( " * N`: 2.0 / 22.3 / 198 ms at N = 200 / 600 / 1800, a 9× input
+# taking 98× the time. `_args_at` below walks the parentheses once instead.
+LOAD_APP_OPEN = re.compile(r"loadApp\s*\(")
+PRELUDE_OPEN = re.compile(r"registerAutoloading\s*\(")
+
+
+def _paren_map(text: str) -> dict:
+    """{index of `(` -> index of its matching `)`} for the whole text, in ONE
+    pass.
+
+    A per-call-site walk is O(len(text)) EACH, and a file with many unbalanced
+    `(` pays it once per site — quadratic, and the reason this is a table
+    rather than a loop. Unmatched openers are simply absent from the map,
+    which is the "no answer" the callers already handle.
+    """
+    out: dict = {}
+    stack: list = []
+    for i, c in enumerate(text):
+        if c == "(":
+            stack.append(i)
+        elif c == ")" and stack:
+            out[stack.pop()] = i
+    return out
 
 # Rule 1 — any reference to the AppHost Bootstrap entry point. Covers
 # `use OCA\OpenRegister\AppHost\Bootstrap;`, `\OCA\OpenRegister\AppHost\Bootstrap::`
@@ -286,8 +311,12 @@ def has_prelude(text: str, anchor: str | None = None) -> bool:
         for m in APPID_CONST.finditer(text)
         if anchor.startswith("const", m.start())
     }
-    for m in PRELUDE.finditer(anchor):
-        args = text[m.start(1):m.end(1)]
+    parens = _paren_map(anchor)
+    for m in PRELUDE_OPEN.finditer(anchor):
+        close = parens.get(m.end() - 1)
+        if close is None:
+            continue
+        args = text[m.end():close]
         if OPENREGISTER_LITERAL.search(args):
             return True
         for name in const_names:
@@ -307,8 +336,10 @@ def has_load_app(text: str, anchor: str | None = None) -> bool:
     """
     if anchor is None:
         anchor = text
-    for m in LOAD_APP_CALL.finditer(anchor):
-        if OPENREGISTER_LITERAL.search(text[m.start(1):m.end(1)]):
+    parens = _paren_map(anchor)
+    for m in LOAD_APP_OPEN.finditer(anchor):
+        close = parens.get(m.end() - 1)
+        if close is not None and OPENREGISTER_LITERAL.search(text[m.end():close]):
             return True
     return False
 

@@ -577,6 +577,76 @@ class TestHtmlCommentDelimiterScope(unittest.TestCase):
         self.assertIn("window.confirm", ss.script_mask(src, "f.vue"))
 
 
+class TestPhpHeredoc(unittest.TestCase):
+    """#424 adopting #429 — a heredoc body is a string, not code.
+
+    gate-50's private stripper grew this handling in #429 and gate-50 now calls
+    `php_mask` instead, so the capability had to move here first. These arms
+    are what make that a move rather than a loss.
+
+    Mutation-checked: delete the `<<<` branch from `php_mask` and the first
+    four go red. `test_a_heredoc_body_survives_the_default_mask` is the CONTROL
+    — the body is evidence in the default mode and must not be blanked.
+    """
+
+    SRC = (
+        "<?php\n"
+        "$sql = <<<SQL\n"
+        "  SELECT * FROM t -- keep\n"
+        "  // not a comment\n"
+        "  it's fine { unbalanced\n"
+        "SQL;\n"
+        "// this IS a comment\n"
+        "return null;\n"
+    )
+
+    def test_a_slash_slash_inside_a_heredoc_is_not_a_comment(self):
+        self.assertIn("// not a comment", ss.php_mask(self.SRC))
+
+    def test_an_apostrophe_inside_a_heredoc_opens_no_string(self):
+        """Without heredoc awareness the `'` in `it's` opens a literal that
+        runs to the next stray quote, and everything between stops being
+        parsed — the swallow this module keeps finding new spellings of."""
+        self.assertNotIn("this IS a comment", ss.php_mask(self.SRC))
+
+    def test_the_real_comment_after_the_heredoc_is_still_blanked(self):
+        masked = ss.php_mask(self.SRC)
+        self.assertIn("return null;", masked)
+        self.assertNotIn("this IS a comment", masked)
+
+    def test_the_structural_copy_blanks_the_body_and_balances_braces(self):
+        blob = ss.php_mask(self.SRC, blank_strings=True)
+        self.assertNotIn("unbalanced", blob)
+        self.assertEqual(blob.count("{"), blob.count("}"))
+
+    def test_a_heredoc_body_survives_the_default_mask(self):
+        """CONTROL: default mode keeps string contents, heredocs included."""
+        self.assertIn("SELECT * FROM t", ss.php_mask(self.SRC))
+
+    def test_nowdoc_and_quoted_labels_are_recognised(self):
+        for opener in ("<<<'SQL'", '<<<"SQL"', "<<<SQL"):
+            src = f"<?php\n$x = {opener}\n  it's {{ here\nSQL;\n// c\n"
+            self.assertNotIn("c", ss.php_mask(src).split("\n")[-2], opener)
+
+    def test_an_indented_closing_label_closes_it(self):
+        src = "<?php\n$x = <<<SQL\n  body\n    SQL;\n// c\n$y = 1;\n"
+        masked = ss.php_mask(src)
+        self.assertIn("$y = 1;", masked)
+        self.assertNotIn("// c", masked)
+
+    def test_an_unterminated_heredoc_runs_to_end_of_file(self):
+        """The language's own rule, and the safe direction: it cannot leak
+        heredoc text back into code scope."""
+        src = "<?php\n$x = <<<SQL\nbody\n"
+        self.assertEqual(len(ss.php_mask(src)), len(src))
+
+    def test_offsets_survive_in_both_modes(self):
+        for kw in ({}, {"blank_strings": True}):
+            out = ss.php_mask(self.SRC, **kw)
+            self.assertEqual(len(out), len(self.SRC))
+            self.assertEqual(out.count("\n"), self.SRC.count("\n"))
+
+
 class TestStartsInCode(unittest.TestCase):
     """The anchoring predicate gates 10 and 11 read (#424)."""
 

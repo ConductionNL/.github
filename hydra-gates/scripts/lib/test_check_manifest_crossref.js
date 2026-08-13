@@ -178,6 +178,62 @@ function parseReport(stdout) {
 	fs.rmSync(path.dirname(tmp), { recursive: true, force: true })
 }
 
+// --- removals-invariant compares PAGE IDENTITY, not route spelling (#340) ----
+//
+// `menu[].route` may hold EITHER a pages[].id or a pages[].route — check (a)
+// accepts both. Until 2026-08-13 this invariant compared the raw strings, so
+// two menu entries reaching the SAME page by different spellings did not count
+// as reaching each other, and retiring one of them — exactly the "duplicate
+// navigation entry whose page is still reachable" ADR-044 §5 sanctions — was
+// reported as an orphaned route.
+//
+// Both arms run off ONE fixture pair that differs only in whether a second
+// menu entry survives. Arm B is the control: if the normalisation were written
+// as "any removal whose page exists is fine", arm B would fall silent too.
+{
+	const mkApp = (menu) => {
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gate30-idroute-'))
+		fs.mkdirSync(path.join(dir, 'src'), { recursive: true })
+		fs.writeFileSync(path.join(dir, 'src', 'manifest.json'), JSON.stringify({
+			manifestVersion: '2.0',
+			app: { id: 'demo', name: 'Demo' },
+			menu,
+			pages: [{
+				id: 'ItemsPage', route: '/items', type: 'index', title: 'Items',
+				config: { register: 'demo', schema: 'item' },
+			}],
+		}))
+		fs.writeFileSync(path.join(dir, 'src', 'menu-layout.json'), JSON.stringify({
+			relocations: {}, removals: ['items-by-path'], settingsSection: [],
+		}))
+		return dir
+	}
+	const orphans = (dir) => {
+		const rep = parseReport(run([CHECKER, '--app-dir', dir]).stdout)
+		return rep.findings.filter((f) => f.check === 'removals-invariant' && f.severity === 'error')
+	}
+
+	// ARM A — the duplicate survives, spelled as the page ID. Reachable.
+	const dup = mkApp([
+		{ id: 'items-by-id', label: 'Items', route: 'ItemsPage' },
+		{ id: 'items-by-path', label: 'Items again', route: '/items' },
+	])
+	assert(orphans(dup).length === 0,
+		'removals-invariant: an id-spelled survivor covers a path-spelled removal (#340)')
+
+	// ARM B — CONTROL. Same removal, but nothing else reaches the page. The
+	// route is genuinely orphaned and MUST still be reported.
+	const solo = mkApp([
+		{ id: 'items-by-path', label: 'Items', route: '/items' },
+	])
+	const soloFindings = orphans(solo)
+	assert(soloFindings.length === 1 && soloFindings[0].message.includes("'items-by-path'"),
+		`removals-invariant CONTROL: the sole entry's removal is STILL an orphan (got ${soloFindings.length})`)
+
+	fs.rmSync(dup, { recursive: true, force: true })
+	fs.rmSync(solo, { recursive: true, force: true })
+}
+
 // --- structural stage on the ASSEMBLED broken manifest (Ajv path) ---------------
 // The fragment-introduced `layout[]` page property is invisible to the base
 // gate-22 run and to the crossref checker; it must fail check_manifest.js on

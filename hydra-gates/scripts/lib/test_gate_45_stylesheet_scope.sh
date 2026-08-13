@@ -222,6 +222,104 @@ export default { name: 'Motion' }
 VUE
 _assert "a <style> block with unguarded motion is still a FAIL" "FAIL" "$(_run45 "${_app}")"
 
+# ---------------------------------------------------------------------------
+# ARM 9 — THE GLOBAL PRE-PASS MUST MASK COMMENTS TOO (.github#421).
+#
+# ARM 6 above gave this gate a repo-wide exemption, and the pre-pass that
+# computes it grepped RAW file text. The per-file checker masks comments
+# (ARM 3/5); the pre-pass did not. So the two halves of one gate disagreed
+# about what a comment is, and the careless half ran FIRST.
+#
+# That is not one missed finding. The flag makes the per-file checker exit 0
+# on EVERY file in the repository, so one comment in one stylesheet anywhere
+# in the tree silenced gate-45 for the whole app — and the comment that did
+# it is the one an author writes while acknowledging the debt.
+#
+# Measured 2026-08-13 on c26f9a3, one fixture, one variable:
+#   comment present          PASS   <- the defect (9a below)
+#   comment deleted          FAIL          (9b, CONTROL — passes both before
+#                                           and after the fix, by design)
+#   a REAL universal reset   PASS          (9c, ANTI-WIDENING CONTROL — also
+#                                           passes before and after; it is
+#                                           what makes 9a mean something,
+#                                           because it shows the pre-pass CAN
+#                                           set the flag on real CSS)
+#
+# 9d is the DRIFT arm: the pre-pass and the per-file `_mask_comments` are two
+# separate `python3` invocations and cannot share a function, so this is the
+# only thing stopping them diverging again. It pins the `(?<!:)` that keeps
+# the `//` of a `url(https://…)` out of the SCSS arm — written on ONE line so
+# that eating it would take the `@media` with it.
+# ---------------------------------------------------------------------------
+_g9_motion() {  # _g9_motion <appdir> — the canary: unguarded motion in css/
+    cat > "$1/css/motion.css" <<'CSS'
+.spinner { animation: spin 1s linear infinite; }
+.btn { transition: background-color 0.3s ease; }
+CSS
+}
+
+# 9a — the defect. A /* */ comment that MENTIONS the reset is not the reset.
+_app="${_tmp}/a9a"
+_mkapp "${_app}"
+_g9_motion "${_app}"
+cat > "${_app}/css/reset.css" <<'CSS'
+/* TODO(a11y): we still need
+     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none; } }
+   Not done yet — tracked in #999. */
+.page { color: black; }
+CSS
+_assert "a COMMENTED-OUT universal reset does NOT globally guard the repo → FAIL" \
+    "FAIL" "$(_run45 "${_app}")"
+
+# 9b — CONTROL. Same tree, comment deleted. Passed before the fix too.
+_app="${_tmp}/a9b"
+_mkapp "${_app}"
+_g9_motion "${_app}"
+cat > "${_app}/css/reset.css" <<'CSS'
+.page { color: black; }
+CSS
+_assert "control: the same tree with no comment at all → FAIL" \
+    "FAIL" "$(_run45 "${_app}")"
+
+# 9c — ANTI-WIDENING CONTROL. A mask that ate CSS rather than comments would
+# turn this gate from silenceable into always-red. Passed before the fix too.
+_app="${_tmp}/a9c"
+_mkapp "${_app}"
+_g9_motion "${_app}"
+cat > "${_app}/css/reset.css" <<'CSS'
+/* The app-wide reduced-motion reset. */
+@media (prefers-reduced-motion: reduce) {
+	*, *::before, *::after {
+		animation-duration: 0.01ms !important;
+		transition-duration: 0.01ms !important;
+	}
+}
+CSS
+_assert "anti-widening: a REAL universal reset (with a comment above it) still guards → PASS" \
+    "PASS" "$(_run45 "${_app}")"
+
+# 9d — DRIFT. SCSS `//`, both directions, in the pre-pass this time.
+_app="${_tmp}/a9d1"
+_mkapp "${_app}"
+_g9_motion "${_app}"
+mkdir -p "${_app}/src/styles"
+cat > "${_app}/src/styles/reset.scss" <<'SCSS'
+// @media (prefers-reduced-motion: reduce) { *, *::before { animation: none !important; } }
+.page { color: black; }
+SCSS
+_assert "a // -commented reset in SCSS does NOT globally guard → FAIL" \
+    "FAIL" "$(_run45 "${_app}")"
+
+_app="${_tmp}/a9d2"
+_mkapp "${_app}"
+_g9_motion "${_app}"
+mkdir -p "${_app}/src/styles"
+cat > "${_app}/src/styles/reset.scss" <<'SCSS'
+.y { background: url(https://example.test/y.png); } @media (prefers-reduced-motion: reduce) { *, *::before { animation: none !important; } }
+SCSS
+_assert "the // of a url(https://…) does not eat the reset beside it → PASS" \
+    "PASS" "$(_run45 "${_app}")"
+
 echo ""
 if [ "${_failures}" -eq 0 ]; then
     echo "test_gate_45_stylesheet_scope.sh: ALL GREEN"

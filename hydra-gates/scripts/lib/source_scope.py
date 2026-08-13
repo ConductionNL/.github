@@ -316,8 +316,24 @@ def js_comment_mask(text: str) -> str:
 # PHP
 # ---------------------------------------------------------------------------
 
+# `<<<IDENT`, `<<<'IDENT'` (nowdoc) and `<<<"IDENT"` (heredoc). PHP 7.3+ lets
+# the closing identifier be indented, and it must be the first token on its
+# own line. See php_mask for why this module has to know about it at all.
+_HEREDOC_OPEN = re.compile(r"""<<<[ \t]*(['"]?)(\w+)\1[ \t]*\r?\n""")
+
+
 def php_mask(text: str, *, blank_strings: bool = False) -> str:
     """A same-length copy of *text* with PHP comments blanked.
+
+    HEREDOCS ARE STRINGS, AND THIS HAD TO LEARN THAT (#424, adopting #429).
+    A `<<<SQL … SQL;` body is a string literal spelled without quotes. Left
+    unrecognised it is parsed as CODE, so a `//` or `#` inside it blanks the
+    rest of that line, an apostrophe in an English sentence opens a string
+    literal that runs until the next stray quote, and a `{` mis-balances any
+    brace walk built on the mask. gate-50's private copy (#429) grew heredoc
+    handling for exactly that last reason; deleting that copy without moving
+    the capability first would have been a capability loss dressed as a
+    cleanup, so it moved here where all five php_mask gates get it.
 
     `#[` opens a PHP 8 ATTRIBUTE, not a comment. Treating it as one would
     swallow the rest of the line — including `#[NoAdminRequired]`, which is
@@ -341,6 +357,18 @@ def php_mask(text: str, *, blank_strings: bool = False) -> str:
     while i < n:
         c = text[i]
         nxt = text[i + 1] if i + 1 < n else ""
+        if c == "<" and text.startswith("<<<", i):
+            m = _HEREDOC_OPEN.match(text, i)
+            if m:
+                label = m.group(2)
+                body = m.end()
+                close = re.compile(r"^[ \t]*" + re.escape(label) + r"\b", re.M)
+                cm = close.search(text, body)
+                end = cm.end() if cm else n
+                if blank_strings:
+                    blank(body, cm.start() if cm else n)
+                i = end
+                continue
         if c == "'" or c == '"':
             quote = c
             j = i + 1
@@ -467,6 +495,14 @@ def _skip_tag(text: str, i: int) -> int:
 
     Quoted attribute values are walked whole, so a `>` — or a `<!--` — inside
     one neither ends the tag nor opens anything.
+
+    ⚠️ LINEAR, AND IT WAS NOT. An unquoted `<` ABORTS the scan, because a tag
+    cannot contain one: `<a b="` repeated is not a tag, and without this the
+    scan from every `<` ran to end of file and the caller advanced by one
+    character, which is O(n²). Measured before the abort, on `'<a b="' * N`:
+    12.6 ms / 134 ms / 1190 ms at N = 200 / 600 / 1800 — a 9× input taking 94×
+    the time. A gate that takes hours on a 1 MB file is a gate that did not
+    run, which is the failure mode this package keeps finding new spellings of.
     """
     n = len(text)
     if i + 1 >= n:
@@ -478,15 +514,15 @@ def _skip_tag(text: str, i: int) -> int:
     while j < n:
         ch = text[j]
         if ch in "\"'":
-            k = j + 1
-            while k < n and text[k] != ch:
-                k += 1
-            if k >= n:
+            k = text.find(ch, j + 1)
+            if k < 0:
                 return -1           # unterminated value: this was not a tag
             j = k + 1
             continue
         if ch == ">":
             return j + 1
+        if ch == "<":
+            return -1               # a tag cannot contain an unquoted `<`
         j += 1
     return -1                       # no `>` before EOF: this was not a tag
 
@@ -508,6 +544,12 @@ def html_comment_spans(text: str) -> list[tuple[int, int]]:
     spans: list[tuple[int, int]] = []
     n = len(text)
     i = 0
+    # `text.find("}}", i)` scans to EOF every time it misses, and a file full
+    # of unclosed `{{` misses once per interpolation — quadratic. If there is
+    # no `}}` at or after i there is none at or after any j > i either, so one
+    # miss settles the question for the whole remainder. Measured before this
+    # flag, on `"{{ " * N`: 0.16 / 0.60 / 3.47 ms at N = 200 / 600 / 1800.
+    interpolation_possible = True
     while i < n:
         c = text[i]
         if c == "<":
@@ -528,9 +570,10 @@ def html_comment_spans(text: str) -> list[tuple[int, int]]:
                 continue
             i = j
             continue
-        if c == "{" and text.startswith("{{", i):
+        if c == "{" and interpolation_possible and text.startswith("{{", i):
             j = text.find("}}", i + 2)
             if j < 0:
+                interpolation_possible = False
                 i += 2              # never closed: it was not an interpolation
                 continue
             i = j + 2

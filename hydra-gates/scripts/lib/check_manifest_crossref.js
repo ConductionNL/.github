@@ -546,8 +546,33 @@ function main() {
 				}
 				return null
 			}
+			// COMPARE PAGE IDENTITY, NOT THE ROUTE SPELLING (.github#340).
+			//
+			// A `menu[].route` may hold EITHER a pages[].id or a pages[].route —
+			// check (a) above accepts both and every app uses both spellings.
+			// This invariant used to compare the raw strings, so two menu
+			// entries reaching the SAME page by different spellings did not
+			// count as reaching each other. Retiring one of them is precisely
+			// the "duplicate navigation entry whose page is still reachable"
+			// that ADR-044 §5 sanctions, and it was reported as an orphan.
+			//
+			// Measured on a two-entry manifest (`route: "ItemsPage"` and
+			// `route: "/items"`, one page `{id: ItemsPage, route: /items}`):
+			// removing the path-spelled entry FAILED removals-invariant.
+			//
+			// Resolve both sides to the page id before comparing. A reference
+			// that resolves to no page is left as-is: check (a) already fails
+			// it, and collapsing unresolvable references onto one another here
+			// would let two broken entries vouch for each other.
+			const pageIdByRoute = new Map()
+			for (const p of pages) {
+				if (!p || typeof p.route !== 'string' || typeof p.id !== 'string') continue
+				if (!pageIdByRoute.has(p.route)) pageIdByRoute.set(p.route, p.id)
+			}
+			const pageKey = (ref) => (pageIds.has(ref) ? ref : (pageIdByRoute.get(ref) || ref))
 			const effectiveRoutes = []
 			collectMenuRoutes(manifest.menu, '/menu', effectiveRoutes)
+			const effectiveKeys = new Set(effectiveRoutes.map((m) => pageKey(m.route)))
 			removals.forEach((id, i) => {
 				const entry = findEntry(preRemoval, id)
 				if (!entry) {
@@ -555,7 +580,7 @@ function main() {
 					return
 				}
 				if (typeof entry.route !== 'string' || entry.route === '') return // nothing routable retired
-				if (!effectiveRoutes.some((m) => m.route === entry.route)) {
+				if (!effectiveKeys.has(pageKey(entry.route))) {
 					fail('removals-invariant', `/menu-layout/removals/${i}`, `removal '${id}' orphans route '${entry.route}' — no surviving menu entry reaches it (ADR-044 no-functionality-loss)`)
 				}
 			})
