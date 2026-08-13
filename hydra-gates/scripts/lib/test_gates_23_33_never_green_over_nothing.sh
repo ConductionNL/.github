@@ -262,6 +262,55 @@ rm -rf "${_DIRECT}"
 
 # ===========================================================================
 echo
+echo "== gate-24: a COMMENT is not a registration (.github#415/#423) =="
+# ===========================================================================
+# The two probes that decide `na` vs `structural` were raw greps, so
+#
+#     // TODO: one day we could do `new LeafDescriptor(...)` here
+#     // We used to call registerIntegration({...}); removed in 2.4
+#
+# made the gate claim the repo has a server↔JS pair nobody correlated. Not a
+# red gate — a FABRICATED GAP, in the arithmetic that decides whether the
+# run's coverage is believed. Measured on this fixture: the COVERAGE line went
+# from "17 of 18 applicable gates ran" to "17 of 17".
+#
+# The paired arm is the one that matters, and it is the arm above plus this
+# one: a real `new LeafDescriptor(` and a real `registerIntegration(` must
+# STILL be structural. A mask that over-blanked would make every repo `na`,
+# which is the same gate switched off from the other side.
+_CMT="$(mktemp -d "${TMPDIR:-/tmp}/hydra-gate-24-comment.XXXXXXXX")"
+cp -r "${FIXTURES}/clean/." "${_CMT}/"
+mkdir -p "${_CMT}/lib/Service" "${_CMT}/src"
+cat > "${_CMT}/lib/Service/LeafNotes.php" <<'PHPEOF'
+<?php
+namespace OCA\Fixture\Service;
+
+class LeafNotes
+{
+    public function run(): void
+    {
+        // TODO: one day we could do `new LeafDescriptor(...)` here so the
+        // files integration can render our objects. Not done yet.
+    }
+}
+PHPEOF
+cat > "${_CMT}/src/integration-notes.js" <<'JSEOF'
+// We used to call registerIntegration({ id: 'fixture-thing' }); it was
+// removed in 2.4 when the leaf moved into openregister.
+export default {}
+JSEOF
+if [ ! -f "${_CMT}/lib/Service/LeafNotes.php" ]; then
+    _bad "the comment-only overlay did not land — the gate-24 comment arm would be vacuous"
+elif _run "${_CMT}"; then
+    _expect 24 "NOT APPLICABLE" \
+        "gate-24: a leaf named only in two comments is not a leaf"
+    _expect 24 "registers no integration leaves at all" \
+        "gate-24 says WHY it is na"
+fi
+rm -rf "${_CMT}"
+
+# ===========================================================================
+echo
 echo "== gate-23 in WARN mode: a finding must still be VISIBLE =="
 # ===========================================================================
 # Before the bake-in epoch the linter exits 0 whatever it found, so the gate
