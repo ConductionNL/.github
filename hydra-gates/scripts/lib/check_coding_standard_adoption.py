@@ -66,8 +66,8 @@ preference:
      and is correct. An exact version, a `dev-<branch>` constraint, or a
      `hydra-gates-ref` that is not `main`, is.
  11. A TEST MATRIX THAT DISAGREES WITH info.xml — the range in info.xml is a
-     promise to the App Store, and `nextcloud-test-refs` is the only thing that
-     can redeem it. This fleet broke that promise in BOTH directions inside one
+     promise to the App Store, and the test matrix is the only thing that can
+     redeem it. This fleet broke that promise in BOTH directions inside one
      programme: first 18 apps declared 32-34 and tested 31/32, so nothing ran on
      the version being adopted; then the migration that fixed it REPLACED the
      list with `'["stable34"]'` instead of extending it, and 16 apps stopped
@@ -79,6 +79,25 @@ preference:
      failed with only a ::warning::, the run continued with no data layer, and
      every /apps/openregister/... call returned Nextcloud's HTML 404 page. That
      leg's red said nothing and its green said less.
+
+     THE SHAPE OF THIS RULE CHANGED WHEN THE MATRIX BECAME DERIVED. The shared
+     workflow now reads appinfo/info.xml itself (`nextcloud-matrix` job, via
+     icewind1991/nextcloud-version-matrix), so an app that passes NO
+     `nextcloud-test-refs` cannot disagree with its own manifest — there is only
+     one list. That state used to be reported as `test-matrix-not-declared` on
+     the reasoning that "a default cannot know this app's declared range". The
+     reasoning is obsolete: a derived matrix is not a default, and it is
+     strictly better than a declared one. So:
+
+       derives      calls the shared quality.yml and passes no override. PASS.
+                    This is the state every app should be in.
+       declares     passes `nextcloud-test-refs`. The array must still cover the
+                    declared range and nothing outside it — an override is a
+                    decision somebody has to defend, not a place a value can rot.
+       neither      declares no matrix AND does not call the shared workflow, so
+                    nothing derives one. FAIL. This is the state the old rule
+                    was really aiming at, and the only one it could not tell
+                    apart from "derives".
 
 USAGE
     check_coding_standard_adoption.py <app-root>
@@ -554,8 +573,8 @@ def check(root: str) -> tuple[list[str], int]:
 
         # ── 11. the tested matrix covers the declared range ──────────────
         # An app's appinfo/info.xml is a PROMISE to the App Store: these server
-        # majors work. `nextcloud-test-refs` is the only thing that can redeem
-        # it. When they disagree, the promise is the part users act on and the
+        # majors work. The test matrix is the only thing that can redeem it.
+        # When they disagree, the promise is the part users act on and the
         # matrix is the part that would have caught it being wrong.
         #
         # This fleet has now made that mistake in BOTH directions inside one
@@ -572,6 +591,17 @@ def check(root: str) -> tuple[list[str], int]:
         # only a ::warning::, the run continued with no data layer, and every
         # /apps/openregister/... call returned Nextcloud's HTML 404 page. That
         # leg's red said nothing, and its green said less.
+        #
+        # THE PREFERRED STATE IS NOW "NO MATRIX HERE AT ALL". The shared
+        # quality.yml derives the range from appinfo/info.xml, so an app that
+        # passes no override has one list, not two, and the disagreement this
+        # rule detects becomes unrepresentable rather than merely detected.
+        # Absence of `nextcloud-test-refs` therefore PASSES — but only for an
+        # app that actually calls the shared workflow. An app with a
+        # hand-rolled code-quality.yml and no matrix declaration derives
+        # nothing, and that is the state this rule still has to catch. The two
+        # look identical if you only grep for the input, which is exactly why
+        # the old rule failed both.
         if info is not None:
             info_body = strip_xml_comments(info)
             lo = re.search(r'<nextcloud[^>]*\bmin-version="(\d+)"', info_body)
@@ -579,17 +609,38 @@ def check(root: str) -> tuple[list[str], int]:
             if lo and hi:
                 checked += 1
                 declared = set(range(int(lo.group(1)), int(hi.group(1)) + 1))
+                # `body` already has whole-line comments stripped, so a
+                # commented-out `uses:` is not a call and a commented-out
+                # declaration is not a declaration — the gate-64 defect, in
+                # both directions.
+                derives = re.search(
+                    r"uses:\s*ConductionNL/\.github/\.github/workflows/quality\.yml@\S+",
+                    body,
+                )
                 rm = re.search(
                     r"^\s*nextcloud-test-refs:\s*'(\[[^']*\])'", body, re.M
                 )
-                if rm is None:
+                if rm is None and derives:
+                    # DERIVED. The matrix comes from the file this rule reads,
+                    # so there is nothing left for the two halves to disagree
+                    # about. Nothing to report — and deliberately no "consider
+                    # deriving" nudge in the other branch either, because a gate
+                    # that fires on a compliant repo is a gate that gets
+                    # switched off.
+                    pass
+                elif rm is None:
                     fail(
-                        "test-matrix-not-declared",
+                        "test-matrix-neither-derived-nor-declared",
                         f"appinfo/info.xml declares NC "
-                        f"{lo.group(1)}-{hi.group(1)} but code-quality.yml passes "
-                        "no nextcloud-test-refs, so the matrix is whatever the "
-                        "shared workflow currently defaults to. A default cannot "
-                        "know this app's declared range; state the range here.",
+                        f"{lo.group(1)}-{hi.group(1)}, but code-quality.yml "
+                        "neither passes nextcloud-test-refs nor calls "
+                        "ConductionNL/.github/.github/workflows/quality.yml, "
+                        "which is what derives the range from this manifest. So "
+                        "nothing connects the declared range to any test run: "
+                        "the versions promised to the App Store are exercised by "
+                        "whatever this repo's own workflow happens to name. "
+                        "Call the shared workflow — deriving is the supported "
+                        "configuration — or state the range explicitly here.",
                     )
                 else:
                     try:
@@ -617,8 +668,12 @@ def check(root: str) -> tuple[list[str], int]:
                             + ", ".join(f"stable{v}" for v in missing)
                             + f". The matrix is {refs!r}. Those majors are "
                             "advertised to the App Store and exercised by "
-                            "nothing — not known-broken, unmeasured. Either add "
-                            "the legs or narrow what info.xml claims.",
+                            "nothing — not known-broken, unmeasured. The fix "
+                            "with no next time in it is to DELETE the "
+                            "nextcloud-test-refs line: the shared workflow then "
+                            "derives the range from this same manifest and the "
+                            "two cannot drift apart again. Otherwise add the "
+                            "legs, or narrow what info.xml claims.",
                         )
                     if outside:
                         fail(
@@ -628,7 +683,10 @@ def check(root: str) -> tuple[list[str], int]:
                             + f", outside the declared range {lo.group(1)}-"
                             f"{hi.group(1)}. A leg on a version the app does not "
                             "support cannot pass for the right reason, and this "
-                            "fleet has had one pass for the wrong one.",
+                            "fleet has had one pass for the wrong one. Deleting "
+                            "the nextcloud-test-refs line makes the shared "
+                            "workflow derive the range from this manifest, which "
+                            "removes the possibility rather than this instance.",
                         )
 
     return fails, checked

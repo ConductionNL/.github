@@ -18,25 +18,69 @@ on:
         type: string
         default: '["8.3", "8.4"]'
       nextcloud-test-refs:
-        # A caller SHOULD pass the whole range its own appinfo/info.xml declares.
-        # This default exists for callers that do not, and it has to be a
-        # configuration that can actually exist.
+        # ── AN OVERRIDE NOW, NOT THE SOURCE OF TRUTH ──────────────────────
         #
-        # It was '["stable31", "stable32"]', which no longer could. Every app in
-        # the fleet installs openregister as a fixture dependency, openregister
-        # declares min-version="32", and `occ app:enable openregister` on NC31
-        # fails with only a ::warning:: — so the run continued with no data layer
-        # and every /apps/openregister/... call returned Nextcloud's HTML 404
-        # page. A stable31 leg's red said nothing, and its green said less.
+        # The matrix is DERIVED from the app's own appinfo/info.xml by the
+        # `nextcloud-matrix` job below. Leave this unset — the default — and the
+        # tested range cannot disagree with the declared one, because there is
+        # only one place the range is written down.
         #
-        # The order is load-bearing, not cosmetic. `fromJSON(...)[0]` is read
-        # below as THE single server for newman, playwright, journeydoc-capture
-        # and the coverage guard, so entry 0 must be a version the fixture can
-        # load — and is the one version those jobs actually exercise.
-        description: "JSON array of Nextcloud server branches for the PHPUnit matrix. Entry [0] is also THE single server used by newman, playwright, journeydoc-capture and the coverage guard, so it must be a version the app and its fixture dependencies can install. Pass every major inside the range your appinfo/info.xml declares."
+        # WHY THAT CHANGED. This value used to be hand-maintained per app, and
+        # the fleet broke the info.xml <-> matrix agreement in BOTH directions
+        # inside a single programme:
+        #
+        #   * every app declared NC 32-34 and tested stable31/stable32, so the
+        #     version being adopted was exercised by nothing. And stable31 was
+        #     worse than useless: openregister declares min-version="32", so
+        #     `occ app:enable openregister` failed with only a ::warning::, the
+        #     run continued with NO data layer, and every /apps/openregister/...
+        #     call returned Nextcloud's HTML 404 page. That leg's red said
+        #     nothing and its green said less.
+        #   * the migration that fixed it REPLACED the list with '["stable34"]'
+        #     instead of extending it, and 16 apps stopped testing their own
+        #     declared floor.
+        #
+        # Both were detectable. Neither was detected, because the two halves
+        # were two files that could be edited independently. Derivation removes
+        # the second half.
+        #
+        # WHEN TO SET IT ANYWAY. A repo whose tested range must deliberately
+        # differ from its declared range — petstore declares NC 28-34 and has no
+        # intention of running seven server legs — passes an explicit array here
+        # and keeps exactly today's behaviour. gate-65 rule 11 then requires
+        # that array to agree with info.xml, so an override is a decision
+        # somebody has to defend, not a place a value can quietly rot.
+        #
+        # The ORDER of an override is no longer load-bearing. It used to be:
+        # `fromJSON(...)[0]` was read as THE single server for newman,
+        # playwright, journeydoc-capture and the coverage guard. Those six reads
+        # are now `needs.nextcloud-matrix.outputs.single-server`, which is the
+        # NUMERICALLY HIGHEST stable branch in the resolved set, whichever way
+        # round it is written. A positional convention is how a defect like this
+        # survives: it is invisible in a diff and it is not checkable.
+        description: "OVERRIDE for the Nextcloud server branches used by the PHPUnit matrix, as a JSON array. LEAVE UNSET (default) to derive the range from appinfo/info.xml, which is the supported configuration — a derived matrix cannot disagree with the declared range. Set it only when the tested range must deliberately differ from the declared one; gate-65 rule 11 then requires the two to agree."
         required: false
         type: string
-        default: '["stable34", "stable32", "stable33"]'
+        default: ""
+      nextcloud-info-path:
+        # The manifest the matrix is derived from. Two reasons this is an input
+        # rather than a hard-coded 'appinfo/info.xml':
+        #
+        #   1. It is how THIS repository proves its own derivation. .github is
+        #      not a Nextcloud app and has no appinfo/info.xml, so without a
+        #      path input `quality-selftest.yml` could only ever exercise the
+        #      no-manifest fallback — and a derivation that is never executed in
+        #      the repo that ships it is a derivation nobody has measured. The
+        #      selftest points this at a fixture declaring 32-34, and a second
+        #      caller points it at one declaring 32-33; the two runs differing
+        #      is the positive control that the matrix TRACKS info.xml rather
+        #      than returning a constant.
+        #   2. Repos whose app manifest is not at the default path. Same shape
+        #      as `frontend-path`.
+        description: "Path to the appinfo/info.xml the Nextcloud test matrix is derived from. Default: appinfo/info.xml. A repo with no manifest at this path derives nothing and falls back to the shared default range."
+        required: false
+        type: string
+        default: "appinfo/info.xml"
       enable-php:
         description: "Master switch for the PHP toolchain (php-quality, PHPUnit, composer security/license legs, SBOM). Set false for JS-only repos without composer.json."
         required: false
@@ -1868,6 +1912,7 @@ jobs:
   # ╔══════════════════════════════════════════════╗
   # ║  STAGE 2 — Tests                              ║
   # ║                                               ║
+  # ║  • Nextcloud test matrix (derived)            ║
   # ║  • PHPUnit matrix (PHP × Nextcloud versions)  ║
   # ║  • Integration tests (Newman)                 ║
   # ║  • E2E browser tests (Playwright)             ║
@@ -1878,6 +1923,235 @@ jobs:
   # ║  finding must not silently delete the test    ║
   # ║  signal. Newman still does; see its `if:`.    ║
   # ╚══════════════════════════════════════════════╝
+
+  # WHICH NEXTCLOUD VERSIONS THIS APP IS TESTED ON, AND WHERE THAT COMES FROM.
+  #
+  # `appinfo/info.xml` is a promise to the App Store: these server majors work.
+  # The test matrix is the only thing that can redeem that promise, and for as
+  # long as the two were separate hand-maintained lists they disagreed — first
+  # in one direction, then, after the migration that "fixed" it, in the other.
+  # See the note on the `nextcloud-test-refs` input for the two incidents.
+  #
+  # This job derives the range from the manifest, so the disagreement has
+  # nowhere left to live. Nextcloud's own app CI does the same thing with the
+  # same action, which is the point: we may be stricter than Nextcloud, we may
+  # not be different from it.
+  #
+  # THREE OUTPUTS, AND WHY `single-server` IS ONE OF THEM.
+  #
+  #   branches       the whole set — the PHPUnit matrix dimension.
+  #   single-server  THE one server that newman, playwright, journeydoc-capture
+  #                  and the coverage guard run against.
+  #   source         derived | override | fallback. Printed on every run, so
+  #                  "where did this range come from" is never a question you
+  #                  have to answer by reading three files.
+  #
+  # Those four jobs used to read `fromJSON(inputs.nextcloud-test-refs)[0]`, and
+  # the fleet's convention of writing the newest version first is what made that
+  # correct. The action's `branches` output is OLDEST-FIRST — measured in its
+  # source, where `range(min,max)` is reversed for the branched-off check and
+  # reversed back again, so `["stable32","stable33","stable34"]` is what comes
+  # out. Consuming it positionally would have moved every one of those jobs onto
+  # stable32 silently, and stable34 at that position is not incidental: it is
+  # what surfaced eight dead NC32/33-only selectors on portaliq. stable34 is the
+  # least-exercised version, which is exactly why the single-server jobs belong
+  # on it.
+  #
+  # The fix is NOT to reverse the array. It is to stop reading a meaning off a
+  # position: `single-server` is the numerically highest stable branch in the
+  # resolved set, computed and printed, and for the derived path it is the
+  # action's own `branches-max` output rather than anything this file infers.
+  nextcloud-matrix:
+    runs-on: ubuntu-latest
+    name: "Nextcloud test matrix"
+    # No `if:` and no `needs:`. Every consumer below is a different combination
+    # of enable-flags, so gating this on any one of them would delete the matrix
+    # for the others; and a job with `needs:` but no status function is deletable
+    # by its producer (see scripts/assert-no-producer-deletes-a-verdict.py).
+    # Observed cost is a checkout of one file plus ~15s of API calls.
+    timeout-minutes: 10
+    outputs:
+      branches: ${{ steps.resolve.outputs.branches }}
+      single-server: ${{ steps.resolve.outputs.single-server }}
+      source: ${{ steps.resolve.outputs.source }}
+    steps:
+      - name: Checkout the app manifest
+        uses: actions/checkout@v4
+        with:
+          # Non-cone mode: the pattern is a FILE, and cone mode only accepts
+          # directory prefixes — in cone mode `appinfo/info.xml` checks out
+          # nothing and the detect step below would report "not a Nextcloud
+          # app" for every caller in the fleet.
+          sparse-checkout: ${{ inputs.nextcloud-info-path }}
+          sparse-checkout-cone-mode: false
+
+      - name: Is there a manifest to derive from?
+        id: detect
+        env:
+          INFO_PATH: ${{ inputs.nextcloud-info-path }}
+        run: |
+          set -eu
+          if [ -f "$INFO_PATH" ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "Deriving from ${INFO_PATH}:"
+            grep -o '<nextcloud[^>]*>' "$INFO_PATH" || \
+              echo "::warning::${INFO_PATH} declares no <nextcloud> element — derivation will fail."
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "No ${INFO_PATH} — this repo has no app manifest to derive from."
+          fi
+
+      # PINNED BY COMMIT SHA, not by tag. `8a7bac6` IS v1.3.2, the newest
+      # release; the tag is recorded in the comment so a human can read what the
+      # SHA means, and the SHA is what the runner resolves so a moved tag cannot
+      # change what executes here. That is a supply-chain decision, not a style
+      # one: this workflow is consumed at @main by 23 repositories, so a
+      # third-party action running here runs in all of them, unreviewed, at
+      # whatever content the tag points to on the day.
+      #
+      # v1.3.2 is deliberately not the action's tip. The tip carries an
+      # unreleased ES-module/node24 rewrite; the tagged release is node20 and
+      # `dist/index.js`. We take releases, not commits-since-a-release.
+      #
+      # Runs even when an override is set, and that is on purpose: the derived
+      # value is what the resolve step below compares the override against, so a
+      # hand-declared matrix that has drifted away from info.xml is reported in
+      # the run rather than only by the static gate.
+      - name: Derive the range from the manifest
+        id: derive
+        if: ${{ steps.detect.outputs.found == 'true' }}
+        uses: icewind1991/nextcloud-version-matrix@8a7bac6300b2f0f3100088b297995a229558ddba # v1.3.2
+        with:
+          filename: ${{ inputs.nextcloud-info-path }}
+
+      # `!cancelled()` because the step above can FAIL — a manifest with no
+      # max-version makes the action throw — and this step still has to publish
+      # a syntactically valid array. An empty `branches` output is not a
+      # skipped PHPUnit job, it is a matrix that cannot be evaluated, and a job
+      # deleted at expansion time renders no verdict at all.
+      - name: Resolve the matrix
+        id: resolve
+        if: ${{ !cancelled() }}
+        env:
+          INFO_PATH: ${{ inputs.nextcloud-info-path }}
+          OVERRIDE: ${{ inputs.nextcloud-test-refs }}
+          DERIVED: ${{ steps.derive.outputs.branches }}
+          DERIVED_MAX: ${{ steps.derive.outputs.branches-max }}
+          FOUND: ${{ steps.detect.outputs.found }}
+          # The pre-derivation shared default, kept for exactly one case: a repo
+          # with no app manifest at all (nextcloud-vue is the live example).
+          # It is NOT a soft landing for a failed derivation — that path sets
+          # `hard` below and the job goes red.
+          FALLBACK: '["stable32", "stable33", "stable34"]'
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, re, sys
+
+          out_path = os.environ["GITHUB_OUTPUT"]
+          summary  = os.environ.get("GITHUB_STEP_SUMMARY", os.devnull)
+          override = os.environ["OVERRIDE"].strip()
+          derived  = os.environ["DERIVED"].strip()
+          dmax     = os.environ["DERIVED_MAX"].strip()
+          found    = os.environ["FOUND"].strip()
+          fallback = os.environ["FALLBACK"].strip()
+
+          hard = []
+
+          def parse(raw, what):
+              try:
+                  value = json.loads(raw)
+              except json.JSONDecodeError as exc:
+                  hard.append(f"{what} is not valid JSON ({exc}): {raw!r}")
+                  return None
+              if not isinstance(value, list) or not value:
+                  hard.append(f"{what} is not a non-empty JSON array: {raw!r}")
+                  return None
+              if not all(isinstance(v, str) and v for v in value):
+                  hard.append(f"{what} contains a non-string entry: {value!r}")
+                  return None
+              return value
+
+          derived_refs = parse(derived, "the derived branch list") if derived else None
+
+          if override:
+              refs = parse(override, "nextcloud-test-refs") or parse(fallback, "the fallback range")
+              source = "override"
+          elif derived_refs is not None:
+              refs = derived_refs
+              source = "derived"
+          else:
+              refs = parse(fallback, "the fallback range")
+              source = "fallback"
+              if found == "true":
+                  hard.append(
+                      "a manifest was found but no range could be derived from it. "
+                      "The matrix below is the SHARED FALLBACK, not this app's "
+                      "declared range, so these legs prove nothing about the "
+                      "versions appinfo/info.xml promises."
+                  )
+
+          refs = refs or json.loads(fallback)
+
+          def stable_no(ref):
+              m = re.fullmatch(r"stable(\d+)", ref)
+              return int(m.group(1)) if m else None
+
+          if source == "derived" and dmax:
+              # The action's OWN maximum, not one inferred from a position in
+              # its output. See the block comment above this job.
+              single = dmax
+          else:
+              numbered = [(stable_no(r), r) for r in refs if stable_no(r) is not None]
+              single = max(numbered)[1] if numbered else refs[0]
+
+          lines = []
+          # An override that disagrees with the manifest is a WARNING here and a
+          # FAILURE in gate-65 rule 11. Warning rather than error on purpose:
+          # this file is consumed unpinned by 23 repositories, and turning three
+          # of them red the moment it merges is a flag day. The gate is where
+          # the disagreement is enforced, per app, on that app's own schedule.
+          if source == "override" and derived_refs is not None:
+              if set(refs) != set(derived_refs):
+                  lines.append(
+                      f"::warning::nextcloud-test-refs is set to {refs} but "
+                      f"{os.environ.get('INFO_PATH', 'appinfo/info.xml')} derives "
+                      f"{derived_refs}. The tested range and the declared range "
+                      f"disagree; gate-65 rule 11 reports this per app. Remove the "
+                      f"override to derive, or correct the manifest."
+                  )
+              else:
+                  lines.append(
+                      "The override matches the derived range exactly — it can be "
+                      "removed, and the matrix will keep the same shape."
+                  )
+
+          for problem in hard:
+              lines.append(f"::error::{problem}")
+
+          for line in lines:
+              print(line)
+
+          print(f"source        = {source}")
+          print(f"branches      = {json.dumps(refs)}")
+          print(f"single-server = {single}")
+
+          # WRITTEN BEFORE ANY NON-ZERO EXIT. A failed resolve must still hand
+          # downstream a usable array: a job that cannot expand its matrix is
+          # DELETED, and a deleted job is not a red one.
+          with open(out_path, "a", encoding="utf-8") as fh:
+              fh.write(f"branches={json.dumps(refs)}\n")
+              fh.write(f"single-server={single}\n")
+              fh.write(f"source={source}\n")
+
+          with open(summary, "a", encoding="utf-8") as fh:
+              fh.write("### Nextcloud test matrix\n\n")
+              fh.write(f"- source: `{source}`\n")
+              fh.write(f"- PHPUnit server legs: `{json.dumps(refs)}`\n")
+              fh.write(f"- single server (newman / playwright / journeydoc / coverage guard): `{single}`\n")
+
+          sys.exit(1 if hard else 0)
+          PY
 
   phpunit:
     # NOT gated on php-quality — deliberately. `php-quality` is a matrix job, so
@@ -1942,7 +2216,12 @@ jobs:
     if: ${{ inputs.enable-php && inputs.enable-phpunit && !cancelled() }}
     runs-on: ubuntu-latest
     name: "PHPUnit (PHP ${{ matrix.php-version }}, NC ${{ matrix.nextcloud-ref }}, ${{ matrix.database }})"
-    needs: [security]
+    # `nextcloud-matrix` is a REAL edge, unlike `security`: this job's matrix
+    # dimension and its coverage-guard steps both read that job's outputs.
+    # `!cancelled()` in the `if:` above still suppresses the implicit success(),
+    # so a failed resolve does not delete these legs — the resolve step publishes
+    # a valid array before it exits non-zero, precisely so this stays true.
+    needs: [security, nextcloud-matrix]
     # Observed across 337 SUCCESSFUL executions: median 1.7 min, p95 13.6 min,
     # max 18.9 min (shillinq, green). The spread is huge because each leg
     # installs a full Nextcloud server before the suite runs, so a tight bound
@@ -1986,7 +2265,11 @@ jobs:
     strategy:
       matrix:
         php-version: ${{ fromJSON(inputs.php-test-versions) }}
-        nextcloud-ref: ${{ fromJSON(inputs.nextcloud-test-refs) }}
+        # DERIVED from appinfo/info.xml by the `nextcloud-matrix` job, not read
+        # from an input any more. The `needs:` edge below is what makes this
+        # expression resolvable; without it the matrix evaluates to nothing and
+        # the job is DELETED rather than failed.
+        nextcloud-ref: ${{ fromJSON(needs.nextcloud-matrix.outputs.branches) }}
         # An empty database-test-matrix collapses to the single `database`
         # input, which is what every caller uses today — so the matrix keeps
         # exactly its current dimensions until an app opts in. Routed through
@@ -2196,7 +2479,7 @@ jobs:
       # this step and the guard, because a base measured as 0% would set the
       # floor to zero and pass every possible drop.
       - name: Measure merge-base coverage
-        if: ${{ inputs.enable-coverage-guard && github.event_name == 'pull_request' && matrix.php-version == inputs.php-version && matrix.nextcloud-ref == fromJSON(inputs.nextcloud-test-refs)[0] }}
+        if: ${{ inputs.enable-coverage-guard && github.event_name == 'pull_request' && matrix.php-version == inputs.php-version && matrix.nextcloud-ref == needs.nextcloud-matrix.outputs.single-server }}
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
@@ -2223,7 +2506,7 @@ jobs:
       # sets enable-coverage-guard was updated before this workflow changed, so
       # this should never fire; if it does, the repository is the thing to fix.
       - name: Guard coverage baseline
-        if: inputs.enable-coverage-guard && matrix.php-version == inputs.php-version && matrix.nextcloud-ref == fromJSON(inputs.nextcloud-test-refs)[0]
+        if: inputs.enable-coverage-guard && matrix.php-version == inputs.php-version && matrix.nextcloud-ref == needs.nextcloud-matrix.outputs.single-server
         run: |
           set -euo pipefail
           cd "server/apps/${{ inputs.app-name }}"
@@ -2236,7 +2519,7 @@ jobs:
           php scripts/coverage-guard.php coverage/clover.xml --against="$RUNNER_TEMP/base-clover.xml"
 
       - name: Upload coverage artifact
-        if: always() && matrix.php-version == inputs.php-version && matrix.nextcloud-ref == fromJSON(inputs.nextcloud-test-refs)[0]
+        if: always() && matrix.php-version == inputs.php-version && matrix.nextcloud-ref == needs.nextcloud-matrix.outputs.single-server
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
@@ -2288,7 +2571,8 @@ jobs:
     if: ${{ inputs.enable-newman && !cancelled() }}
     runs-on: ubuntu-latest
     name: "Integration Tests (Newman)"
-    needs: [security]
+    # `nextcloud-matrix` supplies the server this job checks out. Real edge.
+    needs: [security, nextcloud-matrix]
     # Observed across 39 executions: median 1.9 min, max 7.5 min (launchpad).
     # Also installs a full Nextcloud server first, so 30 min — 4x the worst run.
     timeout-minutes: 30
@@ -2313,7 +2597,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: nextcloud/server
-          ref: ${{ fromJSON(inputs.nextcloud-test-refs)[0] }}
+          # THE single server for this job — the numerically highest stable
+          # branch in the resolved set, published by the `nextcloud-matrix` job.
+          # It used to be entry [0] of a hand-written array, and the action this
+          # now derives from returns its branches OLDEST-FIRST, so reading a
+          # position would silently have moved this job onto the oldest
+          # supported server. See the comment on `nextcloud-matrix`.
+          ref: ${{ needs.nextcloud-matrix.outputs.single-server }}
           path: server
 
       - name: Checkout server submodules
@@ -2654,7 +2944,9 @@ jobs:
     # artifact. It is still not a gate — `!cancelled()` above suppresses the
     # implicit `success()`, so a failed or skipped frontend-build still lets this
     # job run and simply rebuild the bundle itself.
-    needs: [security, frontend-build]
+    #
+    # `nextcloud-matrix` supplies the server this job checks out. Real edge.
+    needs: [security, frontend-build, nextcloud-matrix]
     # No job in this file declared a timeout, so a hung suite ran to GitHub's
     # 6-hour default. Observed durations once the suite is healthy: 4-10 min
     # (planix 0.8, doriath 4.2, zaakafhandelapp 5.3, softwarecatalog 6.1,
@@ -2684,7 +2976,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: nextcloud/server
-          ref: ${{ fromJSON(inputs.nextcloud-test-refs)[0] }}
+          # THE single server for this job — the numerically highest stable
+          # branch in the resolved set, published by the `nextcloud-matrix` job.
+          # It used to be entry [0] of a hand-written array, and the action this
+          # now derives from returns its branches OLDEST-FIRST, so reading a
+          # position would silently have moved this job onto the oldest
+          # supported server. See the comment on `nextcloud-matrix`.
+          ref: ${{ needs.nextcloud-matrix.outputs.single-server }}
           path: server
 
       - name: Checkout server submodules
@@ -3757,7 +4055,8 @@ jobs:
     if: ${{ inputs.enable-journeydoc-capture && !cancelled() }}
     runs-on: ubuntu-latest
     name: "Journeydoc Capture (screenshots)"
-    needs: [security]
+    # `nextcloud-matrix` supplies the server this job checks out. Real edge.
+    needs: [security, nextcloud-matrix]
     # UNMEASURED: no caller in the fleet currently sets
     # `enable-journeydoc-capture: true`, so this job has never executed (312
     # skipped records, 0 executions, across 15 repos). Its step list is a
@@ -3790,7 +4089,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: nextcloud/server
-          ref: ${{ fromJSON(inputs.nextcloud-test-refs)[0] }}
+          # THE single server for this job — the numerically highest stable
+          # branch in the resolved set, published by the `nextcloud-matrix` job.
+          # It used to be entry [0] of a hand-written array, and the action this
+          # now derives from returns its branches OLDEST-FIRST, so reading a
+          # position would silently have moved this job onto the oldest
+          # supported server. See the comment on `nextcloud-matrix`.
+          ref: ${{ needs.nextcloud-matrix.outputs.single-server }}
           path: server
 
       - name: Checkout server submodules
@@ -4987,7 +5292,16 @@ jobs:
     # database PHPUnit is a matrix dimension of `phpunit`, which is already
     # here, and `occ integrity:sign-app` lives in release.yml, which has no
     # Quality Report to gate.
-    needs: [php-quality, vue-quality, frontend-build, frontend-checks, frontend-tests, security, license, phpunit, newman, playwright, journeydoc-capture, baseline-protection, sbom, features-check, features-extract, hydra-gates, app-check-code, info-xml, reuse]
+    #
+    # `nextcloud-matrix` IS ON THIS LIST, and it is the one entry whose failure
+    # does not describe the app's code. It fails when the range the app promises
+    # the App Store cannot be turned into a set of servers to test on — a
+    # malformed <nextcloud> element, or a derivation that produced nothing. The
+    # legs still run, on the shared fallback range, and they still go green,
+    # which is exactly why this has to be gated separately: a green PHPUnit
+    # matrix measured on versions the app never claimed is the failure this
+    # whole change exists to remove, and it looks identical to a pass.
+    needs: [php-quality, vue-quality, frontend-build, frontend-checks, frontend-tests, security, license, nextcloud-matrix, phpunit, newman, playwright, journeydoc-capture, baseline-protection, sbom, features-check, features-extract, hydra-gates, app-check-code, info-xml, reuse]
     if: always()
     # Observed across 266 executions: median 0.6 min — but 2% of runs sit at
     # ~30 min because the `Install PDF tools` apt-get step stalls on the Ubuntu
