@@ -83,11 +83,10 @@ EXIT_NOT_APPLICABLE = 4   # subject matter absent entirely   -> runner _skip na
 _ROUTE_NAME_RE = re.compile(
     r"'name'\s*=>\s*'([A-Za-z][A-Za-z0-9_\\]*#[A-Za-z0-9_]+)'"
 )
-# A full route entry — name + url, used to recover the URL path for a route.
-_ROUTE_ENTRY_RE = re.compile(
-    r"\[(?P<body>[^\[\]]*?'name'\s*=>\s*'(?P<name>[A-Za-z][A-Za-z0-9_\\]*#[A-Za-z0-9_]+)'[^\[\]]*?)\]",
-    re.DOTALL,
-)
+# The route entry's own `'url'` key. The ENTRY is no longer matched by a
+# regex — see `_entry_span` / `parse_routes`: a bracket-pair pattern that
+# forbids nested brackets cannot read `'requirements' => [...]`, and every
+# route that declares one lost its url.
 _ROUTE_URL_RE = re.compile(r"'url'\s*=>\s*'([^']+)'")
 
 # public function foo( — capture name. Only public methods can be endpoints.
@@ -171,26 +170,153 @@ def _slug_for_controller(rel_path: str) -> str:
     return short[:1].lower() + short[1:]
 
 
-def parse_routes(routes_path: Path) -> dict[str, str]:
-    """Return {route-name: url-path} for every entry in appinfo/routes.php.
+def _entry_span(struct: str, at: int) -> tuple[int, int] | None:
+    """The innermost balanced ``[ … ]`` containing offset *at* in *struct*.
 
-    route-name is the ``'controller#method'`` slug; url-path is the route's
-    ``'url'`` value (or ``""`` when the entry is a resource/implicit route).
+    *struct* must be PHP with string CONTENTS blanked and offsets preserved
+    (``php_mask(..., blank_strings=True)``), because a route file is full of
+    brackets that are data rather than structure —
+    ``'requirements' => ['uuid' => '[A-Za-z0-9\\-]+']`` has two of them inside
+    one string literal, and a walk over raw text counts those.
+
+    Returns ``(open, close)`` offsets, or None when the walk cannot balance —
+    in which case the caller keeps the old, url-less answer rather than
+    guessing a span.
+    """
+    depth = 0
+    open_at = -1
+    i = at - 1
+    while i >= 0:
+        c = struct[i]
+        if c == "]":
+            depth += 1
+        elif c == "[":
+            if depth == 0:
+                open_at = i
+                break
+            depth -= 1
+        i -= 1
+    if open_at == -1:
+        return None
+    depth = 0
+    j = open_at
+    n = len(struct)
+    while j < n:
+        c = struct[j]
+        if c == "[":
+            depth += 1
+        elif c == "]":
+            depth -= 1
+            if depth == 0:
+                return (open_at, j)
+        j += 1
+    return None
+
+
+def _top_level_only(text: str, struct: str, start: int, end: int) -> str:
+    """``text[start:end]`` with every NESTED ``[ … ]`` blanked out.
+
+    So ``'url'`` is read from the entry's own keys and never from a nested
+    array — ``'requirements' => ['url' => '.+']`` is a parameter constraint on
+    a route whose path is ``/{url}``, not the route's path.
+    """
+    out = []
+    depth = 0
+    for i in range(start, min(end, len(text), len(struct))):
+        c = struct[i]
+        if c == "[":
+            depth += 1
+            out.append(" ")
+            continue
+        if c == "]":
+            depth = max(0, depth - 1)
+            out.append(" ")
+            continue
+        out.append(text[i] if depth == 0 else " ")
+    return "".join(out)
+
+
+def parse_route_urls(routes_path: Path) -> dict[str, list[str]]:
+    """Return {route-name: [every url it is registered under]}.
+
+    route-name is the ``'controller#method'`` slug; the list is empty for a
+    resource/implicit route that declares no ``'url'``.
+
+    ONE METHOD, SEVERAL PATHS — AND ANY OF THEM IS THE ENDPOINT (#430).
+    -------------------------------------------------------------------
+    This returned ONE url per name and the last entry overwrote the earlier
+    ones, which is not a property of the route table: registering a method
+    under several paths is ordinary Nextcloud, and a `'postfix'` entry exists
+    precisely so it can be done under the same name. Measured across the
+    eighteen core apps, **six of them** do it with differing urls — 13 names
+    in zaakafhandelapp, 9 in opencatalogi, 4 in docudesk, 2 each in
+    openregister and softwarecatalog, 1 in openconnector::
+
+        ['name' => 'resultaten#pages', 'url' => '/resultaten', 'verb' => 'GET'],
+        ['name' => 'resultaten#pages', 'postfix' => 'details',
+         'url' => '/resultaten/{id}', 'verb' => 'GET'],
+
+    Keeping one of the two makes the coverage question depend on which entry
+    the parser happened to keep, and a contract test for the other path
+    answers nothing. `is_covered` now asks about all of them; `ep["url"]` —
+    what the finding line prints — stays the first, so the message is stable.
+
+    A NESTED ARRAY IS NOT A MISSING URL (#430).
+    -------------------------------------------
+    ``_ROUTE_ENTRY_RE`` matched a route entry as ``\\[[^\\[\\]]*?\\]`` — a
+    bracket pair with NO brackets inside it. Every route that declares
+    ``'requirements' => [...]`` therefore failed the entry match and fell
+    through to the name-only sweep below, which records the route with an
+    EMPTY url. The url was in the file, on the line above, in plain sight.
+
+    Measured 2026-08-13 across the eighteen core apps: **9 endpoints** reached
+    ``is_covered`` with ``url=""``. An empty url makes the url arm
+    unsatisfiable by construction, so those nine could only ever be covered by
+    the request-name arm or by PHPUnit — and when the request-name arm broke
+    (see ``is_covered``) they became findings that no correct Postman request
+    could close. That is the unclosable shape gate-59 forbids, and it was
+    created by a regex that could not read a two-key array. Examples, all from
+    launchpad ``appinfo/routes.php``::
+
+        ['name' => 'page#deepLink', 'url' => '/{deepLink}', 'verb' => 'GET',
+         'requirements' => ['deepLink' => '(?!api(?:/|$)).+']],
+
+    The entry is now recovered by BALANCING brackets from the name's own
+    offset, over a string-masked copy so that bracket characters inside a
+    requirement regex are not counted as structure. The name-only sweep is
+    kept as the fallback it always was: an entry whose brackets do not balance
+    still yields ``""`` rather than a guess.
     """
     try:
         text = routes_path.read_text(encoding="utf-8")
     except OSError:
         return {}
-    routes: dict[str, str] = {}
-    for m in _ROUTE_ENTRY_RE.finditer(text):
-        name = m.group("name")
-        url_m = _ROUTE_URL_RE.search(m.group("body"))
-        routes[name] = url_m.group(1) if url_m else ""
-    # Catch any names the entry regex missed (multi-line entries with nested
-    # brackets) — record them with an empty url.
+    routes: dict[str, list[str]] = {}
+    try:
+        struct = php_mask(text, blank_strings=True)
+    except Exception:                                # pragma: no cover - wiring
+        struct = text
+    if len(struct) != len(text):                     # pragma: no cover - wiring
+        struct = text
     for m in _ROUTE_NAME_RE.finditer(text):
-        routes.setdefault(m.group(1), "")
+        name = m.group(1)
+        span = _entry_span(struct, m.start())
+        url = ""
+        if span is not None:
+            url_m = _ROUTE_URL_RE.search(
+                _top_level_only(text, struct, span[0] + 1, span[1]))
+            if url_m is not None:
+                url = url_m.group(1)
+        routes.setdefault(name, [])
+        if url and url not in routes[name]:
+            routes[name].append(url)
     return routes
+
+
+def parse_routes(routes_path: Path) -> dict[str, str]:
+    """{route-name: first registered url} — see ``parse_route_urls``."""
+    return {k: (v[0] if v else "")
+            for k, v in parse_route_urls(routes_path).items()}
 
 
 # ---------------------------------------------------------------------------
@@ -315,7 +441,7 @@ def _contract_status(lines: list[str], decl_idx: int) -> tuple[str, str | None]:
 
 
 def scan_new_endpoints(
-    app_dir: Path, changed: dict[str, set[int]], routes: dict[str, str]
+    app_dir: Path, changed: dict[str, set[int]], routes: dict[str, list[str]]
 ) -> list[dict]:
     """Return new public endpoints ADDED in the diff that are registered routes.
 
@@ -352,7 +478,8 @@ def scan_new_endpoints(
                     "ref": ref,
                     "controller_path": rel,
                     "method": method,
-                    "url": routes.get(ref, ""),
+                    "url": (routes.get(ref) or [""])[0],
+                    "urls": list(routes.get(ref) or []),
                     "contract_status": status,
                     "reason": reason,
                 }
@@ -370,30 +497,65 @@ def scan_new_endpoints(
 # it is the whole point of this list — see `_newman_paths`.
 _NEWMAN_EVIDENCE_KEYS = ("raw", "path", "host", "name", "url", "method")
 
+# Of those, the ones that can carry a request's PATH. `name` is deliberately
+# absent: a request called "delete /api/things" is evidence that someone
+# NAMED a request, and the name arm below judges that separately, by the
+# controller method it claims to exercise. Folding it in here would let a
+# request name assert a url it does not send to.
+_NEWMAN_URL_FIELDS = ("raw", "path", "host", "url", "item")
 
-def _newman_evidence(node, out: list[str]) -> None:
+
+def _tag(field: str, value: str) -> str:
+    """One evidence line: ``<field>:<value>``, newlines flattened.
+
+    THE FIELD TRAVELS WITH THE VALUE (#430). ``_newman_paths`` returns a
+    newline-joined list of extracted VALUES, and the caller then has to ask
+    "which kind of string was this?". Before this tag it could not: the
+    request-name arm in ``is_covered`` was still matching the JSON key syntax
+    ``"name"\\s*:\\s*"`` that the extraction had just removed, so it matched
+    nothing the collection declared. See the long note in ``is_covered``.
+
+    Newlines are flattened because the tag prefixes only the FIRST line of a
+    value, and a multi-line value (a `body.raw` JSON payload) would otherwise
+    contribute untagged lines that a ``^name:`` anchor could land on by
+    accident. One value, one line, one field.
+    """
+    return field + ":" + " ".join(value.split())
+
+
+def _newman_evidence(node, out: list[str], field: str = "item") -> None:
     """Collect request-declaring strings from a parsed Postman collection.
 
     Walks the whole tree (folders nest arbitrarily) and keeps only values that
-    hang off a declaring key. A `url` may be a bare string or an object with
-    `raw` / `host` / `path`; both shapes are handled by recursing rather than
-    by knowing the schema version.
+    hang off a declaring key, each TAGGED with the key it hung off. A `url`
+    may be a bare string or an object with `raw` / `host` / `path`; both
+    shapes are handled by recursing rather than by knowing the schema version.
+
+    A `path` list is emitted BOTH as its segments and as the joined path. The
+    join is what makes a v2.1 collection that writes no `raw` still answer a
+    path question — its url exists only as `["api", "things", "7"]`, and no
+    per-segment line can match a multi-segment route.
     """
     if isinstance(node, dict):
         for key, value in node.items():
             if key in _NEWMAN_EVIDENCE_KEYS:
                 if isinstance(value, str):
-                    out.append(value)
+                    out.append(_tag(key, value))
+                elif (key == "path" and isinstance(value, list)
+                        and all(isinstance(x, str) for x in value)):
+                    out.append(_tag("path", "/" + "/".join(value)))
+                    for seg in value:
+                        out.append(_tag("path", seg))
                 else:
-                    _newman_evidence(value, out)
+                    _newman_evidence(value, out, key)
             elif isinstance(value, (dict, list)):
-                _newman_evidence(value, out)
+                _newman_evidence(value, out, "item")
     elif isinstance(node, list):
         for item in node:
             if isinstance(item, str):
-                out.append(item)
+                out.append(_tag(field, item))
             else:
-                _newman_evidence(item, out)
+                _newman_evidence(item, out, field)
 
 
 def _newman_paths(app_dir: Path) -> str:
@@ -425,6 +587,13 @@ def _newman_paths(app_dir: Path) -> str:
     has no comments and the evidence genuinely IS a string. The discriminator
     here is WHICH string, not whether it is one.
 
+    AND THE ANSWER TO "WHICH" HAS TO SURVIVE THE EXTRACTION (#430). Each line
+    is ``<field>:<value>`` — see ``_tag``. The extraction above removed the
+    JSON, and ``is_covered``'s request-name arm was still written against JSON
+    key syntax, so the discriminator this docstring claims was not being
+    applied: the name arm matched nothing at all. The tag is what lets that
+    arm ask its question of names and the url arm ask its question of urls.
+
     ⚠️ A collection that does not parse falls back to the raw bytes rather
     than to "not covered". Silently converting a malformed fixture into
     findings would be this change inventing failures in repos it was never
@@ -443,7 +612,11 @@ def _newman_paths(app_dir: Path) -> str:
         try:
             parsed = json.loads(raw)
         except (ValueError, RecursionError):
-            buf.append(raw)
+            # The pre-extraction behaviour, tagged so the url arm can still
+            # read it. An untagged blob would be invisible to BOTH arms, which
+            # would turn "unreadable fixture" into findings — the opposite of
+            # what this fallback is for.
+            buf.extend(_tag("raw", line) for line in raw.splitlines())
             continue
         found: list[str] = []
         _newman_evidence(parsed, found)
@@ -496,28 +669,210 @@ def _phpunit_text(app_dir: Path) -> str:
     return "\n".join(buf)
 
 
-def _url_signature(url: str) -> str:
-    """Reduce a route url to a stable, placeholder-free path fragment for
-    substring matching in Newman collections. ``/api/foo/{id}`` -> ``/api/foo``."""
-    if not url:
+# One url path segment as a collection can spell it: a literal, Postman's
+# `{{var}}`, an Express-style `:id`, or a concrete fixture value. It may not
+# contain a `/`, a quote or whitespace — those end the segment.
+_URL_SEGMENT = r"[^/\"'\s]+"
+# A Nextcloud route placeholder: `{id}`, `{register}`, … Matched non-greedily
+# so `_{type}` yields the literal `_` and one wildcard, not one wildcard.
+_PLACEHOLDER_RE = re.compile(r"\{[^{}/]*\}")
+
+
+_APP_ID_RE = re.compile(r"<id>\s*([A-Za-z0-9_-]+)\s*</id>")
+# `scheme://authority` — never part of a path, and stripping it is what lets
+# an absolute url anchor at the start of its own path.
+_AUTHORITY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://[^/\s\"']*")
+
+
+def _app_id(app_dir: Path) -> str:
+    """The app's own id from appinfo/info.xml — the segment a collection url
+    puts after ``/apps/``. Empty when it cannot be read; see
+    ``_route_url_pattern`` for what that costs (one of four left anchors)."""
+    try:
+        m = _APP_ID_RE.search(
+            (app_dir / "appinfo" / "info.xml").read_text(encoding="utf-8"))
+    except OSError:
         return ""
-    u = url.split("?")[0]
-    # Drop trailing {placeholder} segments and any segment containing one.
-    parts = [seg for seg in u.split("/") if seg and "{" not in seg]
-    return "/".join(parts)
+    return m.group(1) if m else ""
 
 
-def is_covered(ep: dict, newman: str, phpunit: str) -> bool:
-    """True if the endpoint is covered by Newman OR PHPUnit OR a @contract ref."""
+def _route_url_pattern(url: str, app_id: str = ""):
+    """A regex matching this route's path in a collection url — or None.
+
+    A PLACEHOLDER IS A WILDCARD, NOT A DELETION (#430).
+    ---------------------------------------------------
+    This was ``_url_signature``: drop every segment containing a ``{`` and
+    join the survivors::
+
+        /api/pos-transactions/{id}/confirm  ->  "api/pos-transactions/confirm"
+
+    That string is not a path. It cannot occur in any correctly-written
+    collection url for that route, because a correct url has an id between
+    those two segments — so ``sig in newman`` was unsatisfiable for every
+    route with a MEDIAL placeholder. Measured 2026-08-13 across the eighteen
+    core apps: **16 endpoints reported "missing a contract test" while the
+    app's own collection contained a request for exactly that route**, e.g.
+    docudesk ``api/templates/{id}/versions`` against
+    ``{{baseUrl}}/index.php/apps/docudesk/api/templates/{{templateId}}/versions``.
+    No correct app change could close them — the only moves were a duplicate
+    PHPUnit test or a false ``@contract exclude`` on an endpoint that IS
+    tested, which is the unclosable shape gate-59 forbids.
+
+    The concatenation also silently paired routes that share their literal
+    segments: ``/api/things/{id}`` and ``/api/{kind}/things`` both reduce to
+    ``api/things``.
+
+    WHY A REGEX AND NOT "TRUNCATE AT THE FIRST PLACEHOLDER".
+    Truncating ``/api/pos-transactions/{id}/confirm`` to
+    ``/api/pos-transactions`` would match, but it would ALSO match
+    ``…/{id}/cancel``, ``…/{id}/park`` and ``…/{id}/settle`` — five distinct
+    endpoints covered by one request to any of them, in a gate whose entire
+    subject is per-endpoint coverage. Keeping every literal segment and
+    wildcarding only the placeholders is what separates them; verified by the
+    ``sibling_operation`` arms in test_check_contract_coverage.py, where a
+    request to ``…/{id}/confirm`` covers ``confirm`` and leaves ``cancel``
+    reported.
+
+    ``{{var}}``, ``:id`` and a literal fixture value all satisfy a wildcard
+    segment, so this reads every dialect a Postman collection writes.
+
+    EVERY PLACEHOLDER IS REQUIRED, INCLUDING A TRAILING ONE — AND THAT IS A
+    TIGHTENING, MEASURED BEFORE IT WAS KEPT.
+    ``_url_signature`` dropped trailing placeholders too, so a request to
+    ``/api/things`` used to count as evidence for ``/api/things/{id}``. The
+    first draft of this repair preserved that leniency, and it was measured to
+    be unshippable ALONGSIDE the `parse_routes` repair below: eight
+    openregister endpoints whose url had never been parsed (`ui#objectDetail`,
+    `linkedEntity#addObjectLink`, …) acquired one, and the lenient pattern
+    then let `/registers/{id}` be answered by a request to `/api/registers`.
+    A parser repair that CONVERTS FINDINGS INTO SILENCE is the wrong trade
+    whichever way the count moves, so the leniency goes with it.
+
+    A ROUTE ENDS WHERE THE URL ENDS. The right edge is end-of-value, a quote,
+    whitespace or a `?`. It is deliberately NOT "any segment boundary": with
+    `/` allowed there, `/registers/{id}` is satisfied by
+    `…/api/registers/{{id}}/import`, i.e. by a request to a DIFFERENT
+    endpoint that merely has this route as a prefix.
+
+    THE LEFT EDGE IS ANCHORED ON THE APP BASE, AND IT HAS TO BE.
+    A route path starts at the app root, so ``/registers/{id}`` is a
+    DIFFERENT endpoint from ``/api/registers/{id}`` — but with the left edge
+    free, the second contains the first and answers for it. That is not
+    hypothetical: it is the exact cost of the `parse_routes` repair below.
+    Measured, one variable, on openregister — four SPA page routes
+    (`ui#objectDetail`, `ui#registersDetails`, `ui#schemasDetails`,
+    `ui#applicationDetails`) acquired a parsed url for the first time and
+    were immediately answered by API requests to `…/api/objects/…`,
+    `…/api/registers/…`. Four real findings would have been converted into
+    silence by a repair whose whole subject is findings that could not be
+    closed.
+
+    So the match must begin where the app's own path begins. Every spelling
+    the fleet's collections actually use is accepted, and each was read off
+    the collections rather than imagined:
+
+        {{base_url}}/index.php/apps/openregister/api/…   after `/apps/<id>`
+        {{baseUrl}}/{{app}}/api/drc/…                    after a `}`
+        "/api/things/7"                                  after a quote
+        /api/things/7                                    at the value start
+
+    ``<id>`` is the app id from ``appinfo/info.xml``. When it cannot be read
+    the app-base branch is simply absent — the other three still apply, and
+    the pattern is then no looser than the ones this repair replaces.
+
+    A PLACEHOLDER IS A PART OF A SEGMENT, NOT ALWAYS THE WHOLE OF IT.
+    OpenRegister writes `/api/objects/{uuid}/_{type}`, where the literal `_`
+    is what distinguishes a link sub-resource from an object's schema id.
+    Wildcarding the whole segment lets `/api/objects/{{reg}}/{{schema}}`
+    answer it, which is a different endpoint. Only the braces become wild.
+    """
+    if not url:
+        return None
+    segs = [s for s in url.split("?")[0].split("/") if s]
+    if not segs:
+        return None
+    if all(_PLACEHOLDER_RE.sub("", s) == "" for s in segs):
+        # A route that is nothing but placeholders (`/{deepLink}`) has no
+        # literal to match on. Any url would satisfy it, which is not
+        # evidence about this endpoint — leave it to the name / PHPUnit arms
+        # rather than accept the first url in the collection.
+        return None
+
+    def _seg(seg: str) -> str:
+        out, last = [], 0
+        for m in _PLACEHOLDER_RE.finditer(seg):
+            out.append(re.escape(seg[last:m.start()]))
+            out.append(_URL_SEGMENT)
+            last = m.end()
+        out.append(re.escape(seg[last:]))
+        return "".join(out)
+
+    # Led by `/` so `/api/things` cannot be satisfied by `/xapi/things`, and
+    # by the app base so `/registers/{id}` cannot be satisfied by
+    # `/api/registers/7`.
+    left = r"(?:^|(?<=[}\"'\s])"
+    if app_id:
+        left += r"|(?<=/apps/" + re.escape(app_id) + r")"
+    left += r")"
+    body = "/" + "/".join(_seg(s) for s in segs)
+    return re.compile(left + body + r"(?=[\"'\s?]|$)")
+
+
+def is_covered(ep: dict, newman: str, phpunit: str, app_id: str = "") -> bool:
+    """True if the endpoint is covered by Newman OR PHPUnit OR a @contract ref.
+
+    THE NAME ARM WAS MATCHING A SYNTAX THAT NO LONGER EXISTS (#430).
+    ----------------------------------------------------------------
+    It read::
+
+        re.search(rf'"name"\\s*:\\s*"[^"]*\\b{method}\\b', newman)
+
+    i.e. JSON key syntax — against a haystack that ``_newman_paths`` had just
+    rebuilt out of extracted VALUES, with the JSON removed. The arm therefore
+    matched nothing a collection declares; where it still fired at all it was
+    on incidental JSON inside a captured request BODY.
+
+    That is not a small arm. Measured 2026-08-13 across the eighteen core
+    apps, at package ``fa555a2`` vs ``a316aa5`` on identical trees: **36 of
+    the 41 endpoints that newly became findings had been covered by this arm
+    and by nothing else.** Nine apps went from PASS to FAIL on it.
+
+    Both arms now ask their question of the field that answers it: the url arm
+    of the url-bearing fields, the name arm of ``name:`` lines only. A request
+    NAMED after the controller method is the collection's own claim to
+    exercise it — which is what the arm always meant, and what it stopped
+    being able to see.
+    """
     if ep["contract_status"] in ("ref", "excluded"):
         return True
     method = ep["method"]
-    sig = _url_signature(ep["url"])
-    # Newman: URL path fragment present, or the method name appears as a request name.
     if newman:
-        if sig and sig in newman:
-            return True
-        if re.search(rf'"name"\s*:\s*"[^"]*\b{re.escape(method)}\b', newman):
+        # EVERY url the method is registered under, not just the first: a
+        # `'postfix'` entry registers the same name under a second path, and a
+        # contract test for either is a contract test for the endpoint.
+        patterns = [p for p in (_route_url_pattern(u, app_id)
+                                for u in (ep.get("urls") or [ep["url"]]))
+                    if p is not None]
+        if patterns:
+            for line in newman.splitlines():
+                field, _, value = line.partition(":")
+                if field not in _NEWMAN_URL_FIELDS:
+                    continue
+                # `https://host` is not part of the path, and dropping it is
+                # what lets a v2.0 absolute url (`https://x/api/things/7`)
+                # anchor at the start of its own path rather than after a
+                # host that looks like a path segment.
+                value = _AUTHORITY_RE.sub("", value)
+                if any(p.search(value) for p in patterns):
+                    return True
+        # A request NAMED after the controller method. Anchored to `name:` so
+        # a url or a payload that happens to contain the word cannot answer a
+        # question about what somebody called a request.
+        # Case-SENSITIVE, exactly as the arm was before it broke. Folding case
+        # here would widen coverage — i.e. remove findings — and this change
+        # is a repair of an arm that stopped firing, not a relaxation of what
+        # it accepts.
+        if re.search(rf"^name:.*\b{re.escape(method)}\b", newman, re.MULTILINE):
             return True
     # PHPUnit: method call or a clear textual reference to the controller method.
     if phpunit:
@@ -535,7 +890,7 @@ def _collect(app_dir: Path, base_ref: str) -> list[dict]:
     routes_path = app_dir / "appinfo" / "routes.php"
     if not routes_path.is_file():
         return []
-    routes = parse_routes(routes_path)
+    routes = parse_route_urls(routes_path)
     changed = changed_lines(base_ref, app_dir)
     return scan_new_endpoints(app_dir, changed, routes)
 
@@ -550,7 +905,7 @@ def _collect_from(app_dir: Path, changed: dict[str, set[int]]) -> list[dict]:
     routes_path = app_dir / "appinfo" / "routes.php"
     if not routes_path.is_file():
         return []
-    return scan_new_endpoints(app_dir, changed, parse_routes(routes_path))
+    return scan_new_endpoints(app_dir, changed, parse_route_urls(routes_path))
 
 
 def _all_controller_lines(app_dir: Path) -> dict[str, set[int]]:
@@ -644,12 +999,13 @@ def run_gate(app_dir: Path) -> int:
         return EXIT_PASS
     newman = _newman_paths(app_dir)
     phpunit = _phpunit_text(app_dir)
+    app_id = _app_id(app_dir)
     findings: list[str] = []
     for ep in endpoints:
         if ep["contract_status"] == "exclude_noreason":
             findings.append(f"{ep['ref']} — @contract exclude without reason (reason required)")
             continue
-        if not is_covered(ep, newman, phpunit):
+        if not is_covered(ep, newman, phpunit, app_id):
             findings.append(
                 f"{ep['ref']} — new public endpoint (url={ep['url'] or '?'}) "
                 f"missing Newman/PHPUnit contract test or @contract exclude"
@@ -678,13 +1034,14 @@ def run_report(app_dir: Path) -> int:
     endpoints = _collect(app_dir, base_ref)
     newman = _newman_paths(app_dir)
     phpunit = _phpunit_text(app_dir)
+    app_id = _app_id(app_dir)
     covered = uncovered = excluded = 0
     rows = []
     for ep in endpoints:
         if ep["contract_status"] in ("ref", "excluded"):
             excluded += 1
             state = "excluded"
-        elif is_covered(ep, newman, phpunit):
+        elif is_covered(ep, newman, phpunit, app_id):
             covered += 1
             state = "covered"
         else:
