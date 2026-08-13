@@ -7364,9 +7364,37 @@ except ImportError:
 base = sys.argv[1]
 SIGNAL = re.compile(r'OCS-APIRequest|requesttoken|@nextcloud/axios|getRequestToken',
                     re.IGNORECASE)
+# `:(glob)` IS LOAD-BEARING — WITHOUT IT `src/**/*.js` CANNOT SEE `src/thing.js`
+# (.github#428).
+#
+# In a PLAIN git pathspec there is no `**` operator: it is two ordinary `*`s,
+# and a plain `*` MATCHES `/`. So `src/**/*.js` reads as "src/, then anything,
+# then /, then anything, then .js" — it REQUIRES at least one directory below
+# src/, and every file sitting at `src/foo.js` was invisible to this scan.
+#
+# Reproduced 2026-08-13, one repo, one commit dropping #[NoCSRFRequired], one
+# JS file, nothing varying but its path:
+#
+#   git diff --name-only HEAD~1...HEAD
+#     lib/Controller/ThingController.php
+#     src/thing.js
+#   git diff --name-only HEAD~1...HEAD -- 'src/**/*.js'            -> (empty)
+#   git diff --name-only HEAD~1...HEAD -- ':(glob)src/**/*.js'     -> src/thing.js
+#
+# With `:(glob)` magic, `**` means "zero or more directory components" and a
+# single `*` no longer crosses `/`, so the glob matches `src/thing.js` AND
+# `src/sub/thing.js` AND `src/a/b/c.js`. It is a strict superset of the old
+# spelling: nothing that matched before stops matching.
+#
+# DIRECTION: this can only ADD signals, i.e. it can only move a run from the
+# conservative caller-state branch to the "a signal was added" branch. It was
+# never letting a CSRF removal through — a missed signal made the count 0,
+# which routes to check_csrf_callers.py — but it made the count a FLOOR rather
+# than a count, and the NOTE this gate prints about the frontend diff could be
+# wrong about what it had read.
 out = subprocess.run(
     ['git', 'diff', '-U0', f'{base}...HEAD', '--',
-     'src/**/*.vue', 'src/**/*.js', 'src/**/*.ts'],
+     ':(glob)src/**/*.vue', ':(glob)src/**/*.js', ':(glob)src/**/*.ts'],
     capture_output=True, text=True, check=False).stdout
 added, path = {}, None
 hunk = re.compile(r'^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@')
