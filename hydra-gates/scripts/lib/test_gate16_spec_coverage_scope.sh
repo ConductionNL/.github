@@ -390,6 +390,101 @@ else
     _ok "gate-16 does NOT name buildRowLabel — the reformatted-but-unchanged method beside it stays out of scope"
 fi
 
+# ===========================================================================
+echo
+echo "== arm 5 — a PRETTIER reformat is not a set of changed methods either =="
+# ===========================================================================
+#
+# `.github#435`. #395 normalised PHP and deliberately left JS/TS/Vue alone,
+# because a JS trailing comma can be an array ELISION, a JS re-wrap can cross an
+# ASI boundary, and a re-wrap across a `//` uncomments what followed. Those
+# hazards are real; they are the SPECIFICATION for the JS rules, not a reason to
+# have none. MEASURED on ConductionNL/pipelinq#820 (`feat/nextcloud-prettier`,
+# 324 files, the same gate package on both sides): `development` PASS, the
+# reformat 468 findings before and 11 after.
+#
+# Same shape as arm 4, and for the same reason: 5a alone would be passed by a
+# normalisation that had simply switched the frontend half of gate-16 off.
+#
+#   5a  reformat ONLY              -> gate-16 must report NOTHING
+#   5b  reformat + ONE character   -> gate-16 must still report THAT method, and
+#                                     must not report the three beside it
+gf_build_repo "${WORK}/prettier" "${SRC}"
+gf_commit_all "${WORK}/prettier" "base: app before the prettier reformat"
+gf_mark_base  "${WORK}/prettier"
+cp "${SRC}/src/views/ReflowedView.vue.prettier" \
+   "${WORK}/prettier/src/views/ReflowedView.vue"
+rm -f "${WORK}/prettier/src/views/ReflowedView.vue.prettier" \
+      "${WORK}/prettier/src/views/ReflowedView.vue.prettier-changed"
+gf_commit_paths "${WORK}/prettier" "style: adopt @nextcloud/prettier-config" \
+    src/views/ReflowedView.vue
+
+# PRE-CONDITION 1 — the reformat has to BE a diff.
+_churn5="$(cd "${WORK}/prettier" && git diff --numstat "$(git rev-parse refs/remotes/origin/development)"...HEAD -- src/views/ReflowedView.vue)"
+_churn5_added="$(printf '%s' "${_churn5}" | awk '{print $1}')"
+if [ "${_churn5_added:-0}" -ge 10 ]; then
+    _ok "pre-condition: the prettier reformat rewrites ${_churn5_added} lines of ReflowedView.vue — 5a is judging a real diff"
+else
+    _bad "pre-condition: the prettier reformat produced ${_churn5_added:-0} added line(s). The two fixture variants must differ, or arm 5a is vacuous."
+fi
+
+# PRE-CONDITION 2 — the methods must be findable subject matter.
+_pc5="$(cd "${WORK}/prettier" && python3 "${CHECKER}" . --mode report 2>&1)"
+if printf '%s' "${_pc5}" | grep -qF 'ReflowedView.vue::totalWeights'; then
+    _ok "pre-condition: report mode names ReflowedView::totalWeights as untagged — it IS in scope and IS uncovered"
+else
+    _bad "pre-condition: report mode does not name ReflowedView::totalWeights, so arms 5a/5b are not measuring an in-scope untagged frontend method at all"
+fi
+
+_out5="$(gf_run_wrapper "${WORK}/prettier" "${WORK}/log-prettier")"
+_v5="$(gf_verdict "${_out5}" 16)"
+case "${_v5}" in
+    *PASS*) _ok "gate-16 PASSES on a prettier-only reformat — a re-wrap, a trailing comma and a reprinted parenthesis are not changed methods (#435)" ;;
+    *FAIL*) _bad ".github#435 is LIVE: gate-16 reports changed methods on a diff whose only content is prettier's line breaks, trailing commas, arrow parentheses and mustache wrapping. Got: ${_v5:0:160}" ;;
+    "")     _bad "gate-16 emitted no verdict at all on the prettier arm" ;;
+    *)      _bad "gate-16 gave an unrecognised verdict on the prettier arm: ${_v5:0:160}" ;;
+esac
+if grep -qF 'ReflowedView.vue' "${WORK}/log-prettier/hydra-gate-spec-coverage.log" 2>/dev/null; then
+    _bad "gate-16 named ReflowedView.vue on a formatting-only diff — even without a FAIL that is #435 still in the log, and it is what a reviewer is asked to act on"
+else
+    _ok "gate-16 writes no finding for the prettier-reformatted Vue file"
+fi
+
+# --- 5b — the same reformat with ONE character changed ---------------------
+# `.prettier` and `.prettier-changed` differ in exactly one byte: the `+` of
+# `carry + w` is a `-`. If 5b goes quiet, the JS normalisation has become a
+# false-negative machine and gate-16 has stopped watching every `.vue` file in
+# the fleet — strictly worse than the 468 false positives it replaced.
+gf_build_repo "${WORK}/prettier-plus" "${SRC}"
+gf_commit_all "${WORK}/prettier-plus" "base: app before the prettier reformat"
+gf_mark_base  "${WORK}/prettier-plus"
+cp "${SRC}/src/views/ReflowedView.vue.prettier-changed" \
+   "${WORK}/prettier-plus/src/views/ReflowedView.vue"
+rm -f "${WORK}/prettier-plus/src/views/ReflowedView.vue.prettier" \
+      "${WORK}/prettier-plus/src/views/ReflowedView.vue.prettier-changed"
+gf_commit_paths "${WORK}/prettier-plus" "style: adopt prettier, and flip one operator" \
+    src/views/ReflowedView.vue
+
+_out5b="$(gf_run_wrapper "${WORK}/prettier-plus" "${WORK}/log-prettier-plus")"
+_v5b="$(gf_verdict "${_out5b}" 16)"
+case "${_v5b}" in
+    *FAIL*) _ok "gate-16 still FAILS when a Vue method's BODY changed inside the reformat — ${_v5b:0:90}" ;;
+    *)      _bad "gate-16 did NOT report a Vue method whose operator changed, because the change arrived inside a prettier-reformatted file. Got: ${_v5b:0:160}" ;;
+esac
+_log5b="${WORK}/log-prettier-plus/hydra-gate-spec-coverage.log"
+if grep -qF 'ReflowedView.vue::totalWeights' "${_log5b}" 2>/dev/null; then
+    _ok "gate-16 NAMES totalWeights — the Vue method whose body actually changed"
+else
+    _bad "gate-16 failed without naming totalWeights; a verdict with no evidence cannot be acted on"
+fi
+for _neighbour in buildLabel mayEdit persistRow; do
+    if grep -qF "::${_neighbour}" "${_log5b}" 2>/dev/null; then
+        _bad "gate-16 also named ${_neighbour}, which carries the SAME reformat and no change. One real change is re-opening the whole file — #395 at file granularity, arriving through the JS path."
+    else
+        _ok "gate-16 does NOT name ${_neighbour} — the reformatted-but-unchanged method beside it stays out of scope"
+    fi
+done
+
 echo
 echo "== summary =="
 echo "   passed: ${_pass_n}"

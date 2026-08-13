@@ -53,8 +53,12 @@ Usage:
 """
 from __future__ import annotations
 
+import os
 import re
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from source_scope import mask_html_comments  # noqa: E402
 
 # Native controls that need a name. `select` is deliberately absent: it is
 # gate-12 (nc-input-labels)' subject, and widening this gate's remit while
@@ -128,7 +132,10 @@ TAG = re.compile(
     r'<(/?)([A-Za-z][A-Za-z0-9._:-]*)((?:"[^"]*"|\'[^\']*\'|[^>"\'])*?)(/?)>',
     re.DOTALL,
 )
-COMMENT = re.compile(r'<!--.*?-->', re.DOTALL)
+# Comment scope comes from the shared library (#424). The private
+# `<!--.*?-->` this replaces called four characters a comment opener wherever
+# they appeared, so `{{ '<!--' }}` … `{{ '-->' }}` blanked every element
+# between them and the gate went green over live markup.
 BLOCK = re.compile(r'<(script|style)\b[^>]*>.*?</\1\s*>', re.DOTALL | re.IGNORECASE)
 TEMPLATE = re.compile(r'<template\b[^>]*>(.*)</template\s*>', re.DOTALL | re.IGNORECASE)
 
@@ -160,7 +167,7 @@ def _strip_noise(src: str) -> str:
     Order matters: comments first, because a commented-out `</script>`
     would otherwise end the block early.
     """
-    body = COMMENT.sub(' ', src)
+    body = mask_html_comments(src)
     m = TEMPLATE.search(body)
     if m:
         body = m.group(1)

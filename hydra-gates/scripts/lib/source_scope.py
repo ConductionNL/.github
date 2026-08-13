@@ -316,8 +316,24 @@ def js_comment_mask(text: str) -> str:
 # PHP
 # ---------------------------------------------------------------------------
 
+# `<<<IDENT`, `<<<'IDENT'` (nowdoc) and `<<<"IDENT"` (heredoc). PHP 7.3+ lets
+# the closing identifier be indented, and it must be the first token on its
+# own line. See php_mask for why this module has to know about it at all.
+_HEREDOC_OPEN = re.compile(r"""<<<[ \t]*(['"]?)(\w+)\1[ \t]*\r?\n""")
+
+
 def php_mask(text: str, *, blank_strings: bool = False) -> str:
     """A same-length copy of *text* with PHP comments blanked.
+
+    HEREDOCS ARE STRINGS, AND THIS HAD TO LEARN THAT (#424, adopting #429).
+    A `<<<SQL … SQL;` body is a string literal spelled without quotes. Left
+    unrecognised it is parsed as CODE, so a `//` or `#` inside it blanks the
+    rest of that line, an apostrophe in an English sentence opens a string
+    literal that runs until the next stray quote, and a `{` mis-balances any
+    brace walk built on the mask. gate-50's private copy (#429) grew heredoc
+    handling for exactly that last reason; deleting that copy without moving
+    the capability first would have been a capability loss dressed as a
+    cleanup, so it moved here where all five php_mask gates get it.
 
     `#[` opens a PHP 8 ATTRIBUTE, not a comment. Treating it as one would
     swallow the rest of the line — including `#[NoAdminRequired]`, which is
@@ -341,6 +357,18 @@ def php_mask(text: str, *, blank_strings: bool = False) -> str:
     while i < n:
         c = text[i]
         nxt = text[i + 1] if i + 1 < n else ""
+        if c == "<" and text.startswith("<<<", i):
+            m = _HEREDOC_OPEN.match(text, i)
+            if m:
+                label = m.group(2)
+                body = m.end()
+                close = re.compile(r"^[ \t]*" + re.escape(label) + r"\b", re.M)
+                cm = close.search(text, body)
+                end = cm.end() if cm else n
+                if blank_strings:
+                    blank(body, cm.start() if cm else n)
+                i = end
+                continue
         if c == "'" or c == '"':
             quote = c
             j = i + 1
@@ -385,6 +413,9 @@ def php_mask(text: str, *, blank_strings: bool = False) -> str:
 # ---------------------------------------------------------------------------
 
 _HTML_COMMENT = re.compile(r'<!--.*?-->', re.DOTALL)
+# ⚠️ THE REGEX ABOVE IS KEPT ONLY AS THE MUTATION CONTROL for the scanner
+# below (test_source_scope.TestHtmlCommentDelimiterScope). Nothing in this
+# module masks with it any more — see `html_comment_spans`.
 # `<?php … ?>` and the short echo form. An unterminated opener runs to end of
 # file, which is the language's own rule. Same pattern php_template_scope.py
 # uses (#247); the two agree deliberately.
@@ -412,6 +443,157 @@ def _blank_span(buf: list[str], a: int, b: int) -> None:
     for k in range(max(a, 0), min(b, len(buf))):
         if buf[k] != "\n":
             buf[k] = " "
+
+
+# ---------------------------------------------------------------------------
+# WHERE AN HTML COMMENT REALLY STARTS  (#424)
+# ---------------------------------------------------------------------------
+# `_HTML_COMMENT` — `<!--.*?-->` — reads FOUR CHARACTERS and calls them a
+# comment opener wherever they appear. Two places in a template they are not
+# one, and both ship in this fleet:
+#
+#   1. inside a quoted ATTRIBUTE VALUE.  Per the HTML tokeniser, once an
+#      attribute value is open the only thing that ends it is its own quote;
+#      `<img alt="<!--">` contains no comment.
+#   2. inside a Vue `{{ … }}` INTERPOLATION. Vue's tokeniser enters
+#      interpolation state at `{{` and leaves it only at `}}`; the contents
+#      are a JS expression, so `{{ '<!--' }}` is a string literal.
+#
+# Measured on main before this change, and the reason this is one bug rather
+# than sixteen (#424 group 2):
+#
+#   markup_mask("<p>{{ '<!--' }}</p>\n<img alt=\"\" src=\"/a/avatar.png\">\n"
+#               "<p>{{ '-->' }}</p>")
+#     -> "<p>{{ '            \n                                   \n     ' }}</p>"
+#
+# The `<img alt="">` between the two interpolations is blanked and the gate
+# goes green over live markup. A mask that OVER-blanks is a gate that reports
+# nothing, which is the failure mode this whole module exists to remove — the
+# same trap already recorded above for `<template>` nesting.
+#
+# The fix is a scanner rather than a richer regex, because "am I inside an
+# attribute value" is a state, and a regex that tried to carry it would be the
+# `[^>]*` bug of #236 in a new costume.
+#
+# DELIBERATE NON-CHANGES, so the next reader does not think they are holes:
+#   * `<!--` in a TEXT NODE opens a comment even between quotes. Quotes carry
+#     no meaning in text; `<p>'<!--'</p>` really is a comment to a browser.
+#   * `<script>`/`<style>` bodies are RAW TEXT: their content is script data,
+#     not markup, so `const OPEN = '<!--'` opens nothing. Both callers that
+#     see a script body (`html_markup_mask`, `script_mask`) run
+#     `js_comment_mask` over it afterwards, so a real JS comment there is
+#     still blanked — by the tokeniser that knows JS, not by this one.
+#   * an UNTERMINATED `{{`, quote or tag falls back to "this was ordinary
+#     text" instead of swallowing the rest of the file. Swallowing is the
+#     over-blank direction, and over-blanking is the failure mode.
+
+_RAW_TEXT_ELEMENTS = ("script", "style")
+
+
+def _skip_tag(text: str, i: int) -> int:
+    """Index just past the tag whose `<` is at *i*, or -1 if it is not a tag.
+
+    Quoted attribute values are walked whole, so a `>` — or a `<!--` — inside
+    one neither ends the tag nor opens anything.
+
+    ⚠️ LINEAR, AND IT WAS NOT. An unquoted `<` ABORTS the scan, because a tag
+    cannot contain one: `<a b="` repeated is not a tag, and without this the
+    scan from every `<` ran to end of file and the caller advanced by one
+    character, which is O(n²). Measured before the abort, on `'<a b="' * N`:
+    12.6 ms / 134 ms / 1190 ms at N = 200 / 600 / 1800 — a 9× input taking 94×
+    the time. A gate that takes hours on a 1 MB file is a gate that did not
+    run, which is the failure mode this package keeps finding new spellings of.
+    """
+    n = len(text)
+    if i + 1 >= n:
+        return -1
+    c = text[i + 1]
+    if not (c.isalpha() or c in "/!?"):
+        return -1
+    j = i + 1
+    while j < n:
+        ch = text[j]
+        if ch in "\"'":
+            k = text.find(ch, j + 1)
+            if k < 0:
+                return -1           # unterminated value: this was not a tag
+            j = k + 1
+            continue
+        if ch == ">":
+            return j + 1
+        if ch == "<":
+            return -1               # a tag cannot contain an unquoted `<`
+        j += 1
+    return -1                       # no `>` before EOF: this was not a tag
+
+
+def _raw_text_element_at(text: str, i: int) -> str:
+    """The raw-text element name opened by the tag at *i*, or ""."""
+    for name in _RAW_TEXT_ELEMENTS:
+        end = i + 1 + len(name)
+        if text[i + 1:end].lower() == name and (end >= len(text) or not (text[end].isalnum() or text[end] in "-_:")):
+            return name
+    return ""
+
+
+def html_comment_spans(text: str) -> list[tuple[int, int]]:
+    """(start, end) of every real HTML comment in *text*.
+
+    An unterminated `<!--` runs to end of file, which is what a browser does.
+    """
+    spans: list[tuple[int, int]] = []
+    n = len(text)
+    i = 0
+    # `text.find("}}", i)` scans to EOF every time it misses, and a file full
+    # of unclosed `{{` misses once per interpolation — quadratic. If there is
+    # no `}}` at or after i there is none at or after any j > i either, so one
+    # miss settles the question for the whole remainder. Measured before this
+    # flag, on `"{{ " * N`: 0.16 / 0.60 / 3.47 ms at N = 200 / 600 / 1800.
+    interpolation_possible = True
+    while i < n:
+        c = text[i]
+        if c == "<":
+            if text.startswith("<!--", i):
+                j = text.find("-->", i + 4)
+                j = n if j < 0 else j + 3
+                spans.append((i, j))
+                i = j
+                continue
+            j = _skip_tag(text, i)
+            if j < 0:
+                i += 1
+                continue
+            raw = _raw_text_element_at(text, i)
+            if raw:
+                m = re.compile(r'</' + raw + r'(?:\s[^>]*)?>', re.IGNORECASE).search(text, j)
+                i = m.end() if m else n
+                continue
+            i = j
+            continue
+        if c == "{" and interpolation_possible and text.startswith("{{", i):
+            j = text.find("}}", i + 2)
+            if j < 0:
+                interpolation_possible = False
+                i += 2              # never closed: it was not an interpolation
+                continue
+            i = j + 2
+            continue
+        i += 1
+    return spans
+
+
+def mask_html_comments(text: str) -> str:
+    """A same-length copy of *text* with every HTML comment blanked.
+
+    The one definition of "this is a comment" for this package. Seven checkers
+    carried a private `<!--.*?-->` before #424 — six a11y gates plus
+    `php_template_scope` — and every one of them had the delimiter hole
+    documented above. Offsets and newlines survive, as everywhere else here.
+    """
+    buf = list(text)
+    for a, b in html_comment_spans(text):
+        _blank_span(buf, a, b)
+    return "".join(buf)
 
 
 def _top_level_template_spans(text: str) -> list[tuple[int, int]]:
@@ -478,10 +660,7 @@ def vue_markup_mask(text: str) -> str:
     masked = "".join(buf)
     # HTML comments last, over the kept regions only (they are all that is
     # left to comment).
-    out = list(masked)
-    for m in _HTML_COMMENT.finditer(masked):
-        _blank_span(out, m.start(), m.end())
-    return "".join(out)
+    return mask_html_comments(masked)
 
 
 def php_markup_mask(text: str) -> str:
@@ -500,20 +679,12 @@ def php_markup_mask(text: str) -> str:
     buf = list(text)
     for m in _PHP_BLOCK.finditer(text):
         _blank_span(buf, m.start(), m.end())
-    masked = "".join(buf)
-    out = list(masked)
-    for m in _HTML_COMMENT.finditer(masked):
-        _blank_span(out, m.start(), m.end())
-    result = "".join(out)
-    return _mask_script_bodies(result)
+    return _mask_script_bodies(mask_html_comments("".join(buf)))
 
 
 def html_markup_mask(text: str) -> str:
     """HTML comments blanked; `<script>` bodies comment-masked."""
-    buf = list(text)
-    for m in _HTML_COMMENT.finditer(text):
-        _blank_span(buf, m.start(), m.end())
-    return _mask_script_bodies("".join(buf))
+    return _mask_script_bodies(mask_html_comments(text))
 
 
 def _mask_script_bodies(text: str) -> str:
@@ -594,10 +765,7 @@ def script_mask(text: str, path: str = "") -> str:
         # Blank HTML comments across the whole file, then comment-mask every
         # <script> and <style> body. What remains is template markup (whose
         # attribute values are live JS) plus script code.
-        buf = list(text)
-        for m in _HTML_COMMENT.finditer(text):
-            _blank_span(buf, m.start(), m.end())
-        step = "".join(buf)
+        step = mask_html_comments(text)
         out = list(_mask_script_bodies(step))
         for m in _STYLE_BLOCK.finditer(step):
             _blank_span(out, m.start(2), m.end(2))
@@ -607,11 +775,7 @@ def script_mask(text: str, path: str = "") -> str:
     if ext == ".php":
         for m in _PHP_BLOCK.finditer(text):
             _blank_span(buf, m.start(), m.end())
-    step = "".join(buf)
-    out = list(step)
-    for m in _HTML_COMMENT.finditer(step):
-        _blank_span(out, m.start(), m.end())
-    return _mask_script_bodies("".join(out))
+    return _mask_script_bodies(mask_html_comments("".join(buf)))
 
 
 # ---------------------------------------------------------------------------
@@ -663,6 +827,36 @@ def iter_open_tags(masked: str, names: set[str] | None = None):
             continue
         line = masked.count("\n", 0, m.start()) + 1
         yield Tag(name, m.group(3) or "", m.start(), m.end(), m.group(0), line)
+
+
+# ---------------------------------------------------------------------------
+# Anchoring: "is this position CODE, or the inside of a string literal?"
+# ---------------------------------------------------------------------------
+
+def starts_in_code(anchor: str, evidence: str, i: int) -> bool:
+    """True when offset *i* is code rather than the CONTENTS of a literal.
+
+    #424. Several gates need both halves at once: `getAttribute('data-x')`
+    and `path: '/settings'` are evidence that lives INSIDE a string, so their
+    mask cannot blank string contents — but the surrounding expression is
+    code, and reading both questions out of one text made a sentence count:
+
+        const doc = "document.getElementById('fx-settings').dataset.version"
+
+    So the caller runs its pattern over *evidence* (contents intact) and asks
+    this of the match start, with *anchor* being the SAME text masked with
+    `blank_strings=True`. Both masks preserve offsets, and blanking only ever
+    turns a character into a space, so a non-space character that survived the
+    anchor is code.
+
+    ⚠️ ONLY VALID FOR A NON-SPACE POSITION. A space inside a literal is a
+    space in both masks, so this would call it code. Every caller anchors on a
+    pattern that begins with a word character or `.`, which is why the
+    predicate is stated as *starts*_in_code rather than `is_code`.
+    """
+    if i < 0 or i >= len(anchor) or i >= len(evidence):
+        return False
+    return anchor[i] == evidence[i]
 
 
 def read_text(path: str) -> str:
