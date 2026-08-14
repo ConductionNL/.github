@@ -127,10 +127,23 @@ on:
         type: boolean
         default: true
       node-version:
+        # Node 22, because @nextcloud/eslint-config@9 CANNOT run on Node 20:
+        # it declares `engines.node: ^22.14 || ^24 || >=26` and imports
+        # `findPackageJSON` from `node:module`, an API that first exists in
+        # 22.14. On Node 20 the eslint job dies before linting a single file
+        # with `SyntaxError: The requested module 'node:module' does not
+        # provide an export named 'findPackageJSON'` — and npm reports the
+        # mismatch only as an EBADENGINE warning it then continues past, so
+        # the crash is the only signal.
+        #
+        # Node 22 is also what Nextcloud's own apps target, so this keeps the
+        # fleet matching the upstream toolchain rather than moving ahead of it.
+        # Apps still on eslint 8 run fine on 22; nothing pins Node 20 except
+        # `engines` fields, which npm only warns about.
         description: "Node.js version for all frontend/npm steps"
         required: false
         type: string
-        default: "20"
+        default: "22"
       frontend-path:
         description: "Directory containing package.json + package-lock.json for all npm-side jobs (Vue Quality, Frontend Checks, npm security/license legs). Default: repo root. Use for repos where the frontend lives in a subdirectory (e.g. 'pwa')."
         required: false
