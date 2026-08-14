@@ -10096,6 +10096,45 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Gate 66 — openregister-dependency-shape (ADR-083)
+# ---------------------------------------------------------------------------
+#
+# Three checks in one helper: a container lookup of OpenRegister anywhere under
+# lib/; an OpenRegister type in a class header (fatal at autoload, so it takes
+# down the very route that would explain the problem); and a default route that
+# transitively constructs an OpenRegister-dependent class.
+#
+# NOT diff-scoped. The shape of a dependency is a property of the tree, not of
+# a diff: a PR that touches one service cannot be judged on whether the app's
+# START SCREEN still boots without OpenRegister. Scoping this to the diff would
+# make rule 3 unanswerable on every PR that does not happen to edit the page
+# controller — which is nearly all of them.
+_ords_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-openregister-dependency-shape.log
+: > "${_ords_log}"
+set +e
+python3 "${SCRIPT_DIR}/lib/check_openregister_dependency_shape.py" . > "${_ords_log}" 2>&1
+_ords_rc=$?
+set +e
+# EVERY run of this helper ends by stating how many files it read. A run that
+# stops before that line CRASHED; it did not find a clean tree. Checking the
+# exit code alone is how a dead checker reports as a pass.
+if ! grep -qE '^checked [0-9]+ file\(s\)$' "${_ords_log}" 2>/dev/null; then
+    _fail 66 "openregister-dependency-shape" "the checker did not print its terminal 'checked N file(s)' line, so it did NOT complete — this is a crash, not a clean tree. See ${_ords_log}"
+elif [ "${_ords_rc}" -eq 0 ]; then
+    _pass 66 "openregister-dependency-shape"
+elif [ "${_ords_rc}" -eq 3 ]; then
+    _skip 66 "openregister-dependency-shape" na "no lib/ PHP tree — this repo has no Nextcloud app for ADR-083 to apply to."
+elif [ "${_ords_rc}" -eq 4 ]; then
+    _skip 66 "openregister-dependency-shape" na "this app references OpenRegister nowhere under lib/, so it holds no OpenRegister dependency to shape. NOT a pass — nothing was judged."
+else
+    # Count from the checker's own FAIL lines so a future exit-code change
+    # cannot silently alter the number.
+    _ords_n=$(grep -cE '^FAIL ' "${_ords_log}" 2>/dev/null || true)
+    case "${_ords_n}" in ''|*[!0-9]*) _ords_n=1 ;; esac
+    _fail 66 "openregister-dependency-shape" "${_ords_n} ADR-083 violation(s) — a container lookup, an OpenRegister class header, or a default route that cannot boot without OpenRegister; see ${_ords_log}"
+fi
+
+# ---------------------------------------------------------------------------
 # Summary + COVERAGE ACCOUNTING
 #
 # The banner used to read "ALL 63 GATES GREEN" whenever the failure count was
