@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<id>petfixture</id>
+	<name>Public Endpoint Throttling Fixture</name>
+	<summary>Fixture app for ADR-082 / gate-82. Not a real app.</summary>
+	<description>Exists so the acceptance matrix can prove gate-82 fails on a public endpoint that carries no volume ceiling, in BOTH forms the marker can take.</description>
+	<version>1.0.0</version>
+	<licence>agpl</licence>
+	<author>Conduction</author>
+	<namespace>PetFixture</namespace>
+	<category>tools</category>
+	<dependencies><nextcloud min-version="32" max-version="34"/></dependencies>
+</info>
