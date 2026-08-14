@@ -136,16 +136,58 @@ def _rel(root: str, path: str) -> str:
 # Check: lookup
 # ---------------------------------------------------------------------------
 
+# Availability established before the reach: `isInstalled('openregister')`, or a
+# local predicate that wraps it. A lookup behind one of these is the CORRECT
+# shape for an optional capability path, not a violation — see _check_lookup.
+_AVAILABILITY_RE = re.compile(
+    r"isInstalled\s*\(\s*['\"]openregister['\"]\s*\)"
+    r"|isEnabledForUser\s*\(\s*['\"]openregister['\"]"
+    r"|isOpenRegisterAvailable\s*\("
+    r"|openRegisterAvailable"
+)
+
+
 def _check_lookup(root: str, files: list[str]) -> list[str]:
+    """Report container lookups that are NOT behind an availability check.
+
+    🔑 A GUARDED LOOKUP IS THE CORRECT SHAPE, AND CONVERTING IT IS A REGRESSION.
+
+    Measured 2026-08-14 on portaliq, which is what stopped a fleet-wide script
+    from running over 1,263 call sites:
+
+        if ($this->isOpenRegisterAvailable() === false) {
+            return ['success' => false,
+                    'message' => 'OpenRegister is not installed or enabled.'];
+        }
+        try { $cfg = $this->container->get('OCA\\OpenRegister\\Service\\ConfigurationService'); }
+
+    Injecting that dependency would make the whole service unconstructable on an
+    instance without OpenRegister, turning a clean message into a 500 — the
+    exact failure ADR-083 rule 3 exists to prevent. The app was already right.
+
+    So rule 1 governs UNCONDITIONAL dependencies. Where a class reaches for
+    OpenRegister only after establishing it is there, deferring construction is
+    the point, and the lookup stays.
+
+    Fleet split at the time of writing: 106 guarded, 1000 unguarded.
+    """
     findings = []
     for path in files:
         src = _strip_comments(_read(path))
+        # File-scoped on purpose. A class that establishes availability anywhere
+        # is running the optional-capability pattern, and per-method scoping
+        # would flag the helper that does the reaching while clearing the caller
+        # that does the checking.
+        if _AVAILABILITY_RE.search(src):
+            continue
         for m in _LOOKUP_RE.finditer(src):
             findings.append(
-                "FAIL %s:%d container lookup of OpenRegister — inject the "
-                "dependency as a typed constructor property instead (ADR-083 "
-                "rule 1). The class it needs is declared nowhere a reader or a "
-                "gate can see it." % (_rel(root, path), _line_of(src, m.start()))
+                "FAIL %s:%d unguarded container lookup of OpenRegister — inject "
+                "the dependency as a typed constructor property (ADR-083 rule 1), "
+                "or, if this path is optional, establish availability first with "
+                "isInstalled('openregister') and keep the lookup. As written the "
+                "dependency is declared nowhere a reader or a gate can see it."
+                % (_rel(root, path), _line_of(src, m.start()))
             )
     return findings
 
