@@ -10135,6 +10135,55 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# gate-82 — ADR-082: a publicly reachable method carries a volume ceiling
+#
+# THERE ARE TWO WAYS TO DECLARE A PUBLIC PAGE, AND KNOWING ONE OF THEM MEANS
+# REPORTING ZERO FOR THE OTHER.
+#
+#     #[PublicPage]      the attribute form
+#     @PublicPage        the legacy annotation, still honoured by the server
+#
+# Measured 2026-08-14. The sweep that closed ADR-082 line-anchored the ATTRIBUTE
+# form and excluded docblock matches — a correction made for a good reason,
+# because an earlier count had matched the attribute name where it appeared in
+# docblock prose. That fix was right about mentions and wrong about the
+# annotation, which is not a mention of anything. Proven live twice against the
+# running server: openregister GraphQLController::execute and opencatalogi
+# CatalogiController::index are public by annotation ONLY and each answer 200
+# to an unauthenticated caller.
+#
+# The sweep reported the fleet fully throttled. Counting both forms: 361 public
+# methods, 161 throttled, 200 UNTHROTTLED — 199 in the invisible form. This gate
+# exists so that number cannot come back unseen.
+#
+# NOT diff-scoped, for the same reason as gate-66: whether an endpoint is
+# reachable without a ceiling is a property of the tree. A PR that never touches
+# a controller would otherwise be judged clean while the app carries the gap.
+_pet_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-public-endpoint-throttling.log
+: > "${_pet_log}"
+set +e
+python3 "${SCRIPT_DIR}/lib/check_public_endpoint_throttling.py" . > "${_pet_log}" 2>&1
+_pet_rc=$?
+set +e
+# Same terminal-line contract as gate-66. The checker written for this gate
+# CRASHED at import on its first outing (a `list[str]` annotation under an older
+# Python) and printed nothing — and nothing read as a clean tree. The exit code
+# alone would not have caught it.
+if ! grep -qE '^checked [0-9]+ file\(s\)$' "${_pet_log}" 2>/dev/null; then
+    _fail 82 "public-endpoint-throttling" "the checker did not print its terminal 'checked N file(s)' line, so it did NOT inspect the tree; see ${_pet_log}"
+elif [ "${_pet_rc}" -eq 0 ]; then
+    _pass 82 "public-endpoint-throttling"
+elif [ "${_pet_rc}" -eq 3 ]; then
+    _skip 82 "public-endpoint-throttling" na "no lib/ PHP tree — this repo has no Nextcloud app for ADR-082 to apply to."
+elif [ "${_pet_rc}" -eq 4 ]; then
+    _skip 82 "public-endpoint-throttling" na "this app declares no #[PublicPage] or @PublicPage method under lib/, so it exposes no public endpoint to throttle. NOT a pass — nothing was judged."
+else
+    _pet_n=$(grep -cE '^FAIL ' "${_pet_log}" 2>/dev/null || true)
+    case "${_pet_n}" in ''|*[!0-9]*) _pet_n=1 ;; esac
+    _fail 82 "public-endpoint-throttling" "${_pet_n} public endpoint(s) with no volume ceiling — add #[AnonRateLimit(limit: N, period: 60)] per ADR-082; see ${_pet_log}"
+fi
+
+# ---------------------------------------------------------------------------
 # Summary + COVERAGE ACCOUNTING
 #
 # The banner used to read "ALL 63 GATES GREEN" whenever the failure count was
