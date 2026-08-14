@@ -94,6 +94,11 @@ _HEADER_RE = re.compile(
 # an import, a container lookup, or a type reference.
 _OR_MENTION_RE = re.compile(r"\\?" + _OR_CLASS)
 
+# `namespace OCA\OpenRegister…` — the file DECLARES itself part of OpenRegister
+# rather than depending on it. Used to recognise the OpenRegister app itself,
+# where every _OR_MENTION_RE hit is a self-reference and means nothing.
+_OR_NAMESPACE_RE = re.compile(r"(?m)^\s*namespace\s+OCA\\OpenRegister\b")
+
 # Constructor-promoted and declared typed properties: `private readonly Foo $bar`
 _PROP_TYPE_RE = re.compile(
     r"(?:private|protected|public)\s+(?:readonly\s+)?"
@@ -287,6 +292,23 @@ def main(argv: list[str]) -> int:
         print("lib/ contains no PHP files, so nothing was inspected.")
         print("checked 0 file(s)")
         return 3
+
+    # ADR-083 governs how an app depends on OpenRegister. OpenRegister is not
+    # such an app, and inside it EVERY file is in the OCA\OpenRegister
+    # namespace — so "references OpenRegister" is true of the whole tree and
+    # says nothing. Measured 2026-08-14 before this guard: rule 3 reported
+    # openregister's own DashboardController twice, purely for naming its own
+    # namespace, while the finding text talked about an app that cannot boot
+    # without a dependency it *is*.
+    #
+    # Same boundary gate-7 draws between its Pattern 2 and Pattern 2b, and it
+    # is a SKIP rather than a pass: nothing here was judged.
+    if any(_OR_NAMESPACE_RE.search(_strip_comments(_read(f))) for f in files):
+        print("this IS the OpenRegister app (files declare namespace "
+              "OCA\\OpenRegister), so ADR-083 — which governs how OTHER apps "
+              "depend on it — has no subject matter here.")
+        print("checked %d file(s)" % len(files))
+        return 4
 
     # An app that never mentions OpenRegister has no dependency to shape.
     # Reported as its own code so it can never read as a pass.
