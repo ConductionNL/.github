@@ -1759,9 +1759,14 @@ def _collaborator_guard_methods(class_file: str) -> set:
     # _rbac: true)`. Without this the same delegation clears from a private
     # helper but not from a collaborator, which is an arbitrary distinction.
     #
-    # Gated on the collaborator's OWN file importing OpenRegister's
-    # ObjectService, so a same-named local class contributes nothing.
-    if _OR_IMPORT_RE.search(cleaned):
+    # Gated on the collaborator's OWN file naming OpenRegister's ObjectService.
+    #
+    # Read from COMMENT-FREE SOURCE WITH STRINGS KEPT. `cleaned` blanks string
+    # literals, so the container form vanished from it and every
+    # container-resolved file was silently missed. Raw `src` would fix that and
+    # introduce a worse bug: a class merely NAMED in a docblock would qualify
+    # the file — a security gate switched off by prose.
+    if _OR_IMPORT_RE.search(_strip_strings_and_comments(src, keep_strings=True)):
         result = result | _or_delegating_methods(cleaned, gsrc)
     _COLLABORATOR_GUARD_CACHE[class_file] = result
     return result
@@ -1935,15 +1940,34 @@ _OR_NAMESPACE_RE = re.compile(r"\bnamespace\s+OCA\\OpenRegister\b")
 # And it is withdrawn when the call turns RBAC OFF: ``_rbac: false`` is the
 # app saying, in code, that OR is not authorising this fetch — at which point
 # the delegation the clear rests on does not exist.
+#
+# Two ways a file can name OpenRegister's ObjectService, and both count:
+#
+#   use OCA\OpenRegister\Service\ObjectService;              — the import
+#   $this->container->get('OCA\OpenRegister\Service\ObjectService')
+#
+# The second is not a stylistic variant. A leaf app cannot hard-depend on a
+# class from an app that may not be installed, so resolving it lazily out of
+# the container is the CORRECT shape — and it is the majority shape: measured
+# on pipelinq 2026-08-14, 75 of 160 service files resolve it that way against
+# 11 that import it. Recognising only the import declared those 75 unguarded,
+# which is how this gate reported 50 findings against an app that delegates.
 _OR_IMPORT_RE = re.compile(
     r"\buse\s+OCA\\OpenRegister\\[A-Za-z0-9_\\]*ObjectService\b"
+    r"|(?:'|\")OCA\\{1,2}OpenRegister\\{1,2}Service\\{1,2}ObjectService(?:'|\")"
 )
 
 # The OR facade only. Note the absence of a ``*Mapper`` alternative: that is
 # the whole point of this pattern versus Pattern 2.
+#
+# `getObjectService()` is the accessor wrapping the container lookup, so the
+# call site reads `$this->getObjectService()->findAll(...)`. Matching only a
+# property would miss every container-resolved app. Safe because the file must
+# ALSO name OpenRegister's ObjectService (see _OR_IMPORT_RE).
 _OR_FACADE_CALL_RE = re.compile(
     r"->\s*objectService\s*->"
     r"|\$objectService\s*->"
+    r"|->\s*getObjectService\s*\(\s*\)\s*->"
 )
 
 # ``_rbac: false`` (or ``_rbac : FALSE``) anywhere in the call — the app has
@@ -3060,9 +3084,13 @@ def scan_file(path: str) -> int:
     # reported, so findings name real lines.
     gsrc = _blank_authentication_only_guards(cleaned, src)
     is_or_repo = bool(_OR_NAMESPACE_RE.search(cleaned))
-    # Pattern 2b context: does this leaf-app file actually import OpenRegister's
-    # ObjectService? A local class of the same name must clear nothing.
-    imports_or_object_service = bool(_OR_IMPORT_RE.search(cleaned))
+    # Pattern 2b context: does this leaf-app file name OpenRegister's
+    # ObjectService? Comment-free source with strings KEPT — the container form
+    # is a string literal (absent from `cleaned`), and a docblock mention must
+    # not qualify a file.
+    imports_or_object_service = bool(
+        _OR_IMPORT_RE.search(_strip_strings_and_comments(src, keep_strings=True))
+    )
     guard_helpers = _collect_guard_helpers(
         cleaned, gsrc, is_or_repo,
         leaf_or_delegation=(imports_or_object_service and not is_or_repo),
