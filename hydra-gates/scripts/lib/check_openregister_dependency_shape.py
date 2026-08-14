@@ -165,6 +165,33 @@ _AVAILABILITY_RE = re.compile(
 )
 
 
+_CATCH_RE = re.compile(r"\}\s*catch\s*\([^)]*\)\s*\{", re.S)
+
+
+def _catch_degrades(src: str, pos: int) -> bool:
+    """True when the catch following the lookup at *pos* degrades rather than rethrows.
+
+    Degrading — returning a default, logging and carrying on — makes the reach
+    optional, which is rule 1's exception. Rethrowing makes it unconditional,
+    which is rule 1 proper, so those still report.
+
+    The 900-character window keeps this to the try the lookup actually sits in;
+    without it the next unrelated catch anywhere below would clear the finding.
+    """
+    m = _CATCH_RE.search(src, pos)
+    if m is None or (m.start() - pos) > 900:
+        return False
+    depth, i = 1, m.end()
+    while i < len(src) and depth:
+        if src[i] == "{":
+            depth += 1
+        elif src[i] == "}":
+            depth -= 1
+        i += 1
+    body = src[m.end(): i - 1]
+    return "throw" not in body
+
+
 def _check_lookup(root: str, files: list[str]) -> list[str]:
     """Report container lookups that are NOT behind an availability check.
 
@@ -199,6 +226,21 @@ def _check_lookup(root: str, files: list[str]) -> list[str]:
         if _AVAILABILITY_RE.search(src):
             continue
         for m in _LOOKUP_RE.finditer(src):
+            # A lookup whose catch DEGRADES is the optional-capability path,
+            # same as an isInstalled() guard — it just answers the question by
+            # trying rather than by asking. launchpad documents its own:
+            #
+            #   // Retrieve ObjectService lazily — OpenRegister may not be
+            #   // enabled on every instance. Returning an empty manifest (not
+            #   // an error) lets the frontend render its "no dashboards yet"
+            #   // CTA without a red alert.
+            #
+            # A catch that RETHROWS is not that: it is an unconditional
+            # dependency dressed as a guarded one, and it still reports.
+            # Measured 2026-08-14 over the then-remaining 883: 442 degrading,
+            # 86 rethrowing, 351 with no try at all.
+            if _catch_degrades(src, m.end()):
+                continue
             findings.append(
                 "FAIL %s:%d unguarded container lookup of OpenRegister — inject "
                 "the dependency as a typed constructor property (ADR-083 rule 1), "
