@@ -198,6 +198,43 @@ class AccountService {
         self.assertEqual(rc, 1, out)
         self.assertIn("unguarded container lookup", out)
 
+    def test_composition_root_is_exempt(self):
+        """lib/AppInfo/Application.php IS the wiring layer, so rule 1 is silent there.
+
+        Its registration closures take the container as a PARAMETER — that is
+        not a service reaching around its own constructor. 16 of 435 findings
+        sat here, including all four of opencatalogi's.
+        """
+        src = """\
+<?php
+namespace OCA\\Opencatalogi\\AppInfo;
+class Application {
+    public function register($context): void {
+        $context->registerService('X', function ($c) {
+            return new Thing(
+                manifestLoader: $c->get('OCA\\OpenRegister\\AppHost\\Observability\\ManifestLoader')
+            );
+        });
+    }
+}
+"""
+        rc, out = _run(_app({"AppInfo/Application.php": src}), "lookup")
+        self.assertEqual(rc, 0, out)
+
+    def test_a_service_named_Application_elsewhere_is_not_exempt(self):
+        """Abuse control: the exemption is the PATH, not the class name."""
+        src = """\
+<?php
+namespace OCA\\Demo\\Service;
+class Application {
+    public function run(): array {
+        return $this->container->get('OCA\\OpenRegister\\Service\\ObjectService')->findAll();
+    }
+}
+"""
+        rc, out = _run(_app({"Service/Application.php": src}), "lookup")
+        self.assertEqual(rc, 1, out)
+
     def test_unguarded_lookup_in_the_same_shape_is_still_reported(self):
         """Abuse control: drop the availability check and the finding returns.
 
