@@ -925,6 +925,92 @@ class RulesController {
         self.assertEqual(len(findings), 1)
         self.assertIn("evaluate", findings[0])
 
+    def test_leaf_app_delegating_to_openregister_via_collaborator_cleared(self):
+        """Pattern 2b reaches one class out, as Pattern 4 does for other guards.
+
+        openbuild's `RulesController::evaluate` never touches the facade
+        itself — it calls `RuleEngineService::evaluate`, which resolves via
+        `searchObjectsBySlug(..., _rbac: true)`. Clearing that from a private
+        helper but not from an injected service would be an arbitrary
+        distinction, since both are the same delegation.
+
+        Uses `_scan_app` because collaborator resolution reads the
+        collaborator's own source off disk; an unresolvable type clears nothing.
+        """
+        engine = """\
+<?php
+namespace OCA\\OpenBuild\\Service;
+
+use OCA\\OpenRegister\\Service\\ObjectService;
+
+class RuleEngineService {
+    public function evaluate(string $slug): array
+    {
+        return $this->objectService->searchObjectsBySlug(
+            'openbuild', 'rule-set', ['slug' => $slug], _rbac: true
+        );
+    }
+}
+"""
+        controller = """\
+<?php
+namespace OCA\\OpenBuild\\Controller;
+
+use OCA\\OpenBuild\\Service\\RuleEngineService;
+
+class TestController {
+    public function __construct(
+        private readonly RuleEngineService $ruleEngine,
+    ) {}
+
+    /**
+     * @NoAdminRequired
+     */
+    public function evaluate(string $ruleSetSlug): JSONResponse
+    {
+        return new JSONResponse($this->ruleEngine->evaluate(slug: $ruleSetSlug));
+    }
+}
+"""
+        self.assertEqual(_scan_app(controller, {"RuleEngineService": engine}), [])
+
+    def test_collaborator_without_or_import_does_not_clear(self):
+        """Abuse control: an identical shape whose service does NOT reach OR still flags."""
+        engine = """\
+<?php
+namespace OCA\\OpenBuild\\Service;
+
+class RuleEngineService {
+    public function evaluate(string $slug): array
+    {
+        return $this->ruleSetMapper->findBySlug($slug);
+    }
+}
+"""
+        controller = """\
+<?php
+namespace OCA\\OpenBuild\\Controller;
+
+use OCA\\OpenBuild\\Service\\RuleEngineService;
+
+class TestController {
+    public function __construct(
+        private readonly RuleEngineService $ruleEngine,
+    ) {}
+
+    /**
+     * @NoAdminRequired
+     */
+    public function evaluate(string $ruleSetSlug): JSONResponse
+    {
+        return new JSONResponse($this->ruleEngine->evaluate(slug: $ruleSetSlug));
+    }
+}
+"""
+        findings = _scan_app(controller, {"RuleEngineService": engine})
+        self.assertEqual(len(findings), 1)
+        self.assertIn("evaluate", findings[0])
+
     def test_leaf_app_own_mapper_still_flags_even_with_or_import(self):
         """A leaf app's OWN mapper is its own storage and delegates no authorisation.
 

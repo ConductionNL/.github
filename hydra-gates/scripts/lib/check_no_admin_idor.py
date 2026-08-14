@@ -1699,6 +1699,41 @@ def _strict_guard_methods(cleaned: str, src: str) -> set:
     return known
 
 
+def _or_delegating_methods(cleaned: str, guard_text: str) -> set:
+    """Methods in this file that resolve their objects through OpenRegister.
+
+    Pattern 2b's engine, shared by the same-class pass and the collaborator
+    pass so both answer the question identically.
+
+    Seeds on a body that calls the OR **facade** with RBAC left on, then closes
+    transitively over same-class calls, because the facade is routinely wrapped
+    several hops down — openbuild's ``schema()`` reaches it as
+    ``findRuleSet() -> query() -> searchObjectsBySlug(..., _rbac: true)``.
+
+    The caller is responsible for establishing that this file actually imports
+    ``OCA\\OpenRegister\\…\\ObjectService``; without that check a local class
+    named ObjectService would qualify.
+    """
+    seeds: set = set()
+    spans = list(_all_method_spans(cleaned))
+    for name, body_start, body_end in spans:
+        body = guard_text[body_start:body_end]
+        if _OR_FACADE_CALL_RE.search(body) and not _RBAC_DISABLED_RE.search(body):
+            seeds.add(name)
+    changed = True
+    while changed:
+        changed = False
+        for name, body_start, body_end in spans:
+            if name in seeds:
+                continue
+            if _calls_guard_helper_before_mutation(
+                guard_text[body_start:body_end], seeds
+            ):
+                seeds.add(name)
+                changed = True
+    return seeds
+
+
 def _collaborator_guard_methods(class_file: str) -> set:
     """Strict guard-bearing method names declared by the class in *class_file*."""
     cached = _COLLABORATOR_GUARD_CACHE.get(class_file)
@@ -1714,7 +1749,20 @@ def _collaborator_guard_methods(class_file: str) -> set:
     # `.github#365`: a collaborator whose only "guard" is a `no user -> 401`
     # preamble (decidesk's `citizenAction()` is the measured example) must not
     # seed a delegation chain either — the defect is the same one call-hop away.
-    result = _strict_guard_methods(cleaned, _guard_source(src, cleaned))
+    gsrc = _guard_source(src, cleaned)
+    result = _strict_guard_methods(cleaned, gsrc)
+    # Pattern 2b, one class out. A controller routinely reaches OpenRegister
+    # through an injected service rather than calling the facade itself —
+    # openbuild's `RulesController::evaluate` delegates to
+    # `RuleEngineService::evaluate`, whose own docblock reads "@throws ... not
+    # found / NOT OWNED" and which resolves via `searchObjectsBySlug(...,
+    # _rbac: true)`. Without this the same delegation clears from a private
+    # helper but not from a collaborator, which is an arbitrary distinction.
+    #
+    # Gated on the collaborator's OWN file importing OpenRegister's
+    # ObjectService, so a same-named local class contributes nothing.
+    if _OR_IMPORT_RE.search(cleaned):
+        result = result | _or_delegating_methods(cleaned, gsrc)
     _COLLABORATOR_GUARD_CACHE[class_file] = result
     return result
 
@@ -2947,39 +2995,13 @@ def _collect_guard_helpers(cleaned: str, src: str, is_or_repo: bool,
         # `searchObjectsBySlug(..., _rbac: true)`. Marking that wrapper
         # guard-bearing lets the existing Pattern-1 closure carry the clear
         # up the chain, instead of Pattern 2b only ever seeing the wrong body.
-        if (
-            leaf_or_delegation
-            and _OR_FACADE_CALL_RE.search(body)
-            and not _RBAC_DISABLED_RE.search(body)
-        ):
-            helpers.add(name)
-
-    # Transitive closure, leaf-delegation mode only.
-    #
-    # Real controllers wrap the OR facade more than one hop down: openbuild's
-    # `schema()` calls `findRuleSet()` calls `query()` calls
-    # `searchObjectsBySlug(..., _rbac: true)`. Marking only `query()` leaves
-    # the chain broken one link above it, so the routed method still reports.
-    # A same-class method that reaches a guard-bearing helper before its first
-    # mutation is itself guard-bearing — the same rule Pattern 4 already
-    # applies to its own graph, iterated here to a fixpoint.
-    #
-    # Gated on leaf_or_delegation so no existing verdict moves: with the flag
-    # off this loop does not run and the returned set is byte-identical to
-    # what it was before Pattern 2b existed.
+    # Pattern 2b, same class. Delegated to the shared engine so this pass and
+    # the collaborator pass cannot drift apart — two copies of an
+    # authorisation rule that disagree is the failure the gates exist to
+    # catch. Gated on leaf_or_delegation, so with the flag off the returned
+    # set is byte-identical to what it was before Pattern 2b existed.
     if leaf_or_delegation:
-        spans = list(_all_method_spans(cleaned))
-        changed = True
-        while changed:
-            changed = False
-            for name, body_start, body_end in spans:
-                if name in helpers:
-                    continue
-                if _calls_guard_helper_before_mutation(
-                    guard_text[body_start:body_end], helpers
-                ):
-                    helpers.add(name)
-                    changed = True
+        helpers |= _or_delegating_methods(cleaned, guard_text)
     return helpers
 
 
