@@ -105,6 +105,50 @@ class SettingsService {
         rc, out = _run(_app({"Service/SettingsService.php": src}), "lookup")
         self.assertEqual(rc, 0, out)
 
+    def test_getInstalledApps_guard_is_recognised(self):
+        """The fleet's DOMINANT guard — 102 call sites, against 10 for isInstalled.
+
+        Measured on zaakafhandelapp 2026-08-14. The first cut of the
+        availability list quoted only `isInstalled` because that is the idiom
+        the ADR happened to use, and it misread every one of these as a
+        violation.
+        """
+        src = """\
+<?php
+namespace OCA\\Zaakafhandelapp\\Service;
+class ObjectMapperService {
+    public function getOpenRegisters(): ?object {
+        if (in_array(needle: 'openregister', haystack: $this->appManager->getInstalledApps())) {
+            try {
+                return $this->container->get('OCA\\OpenRegister\\Service\\ObjectService');
+            } catch (Exception $e) {
+                return null;
+            }
+        }
+        return null;
+    }
+}
+"""
+        rc, out = _run(_app({"Service/ObjectMapperService.php": src}), "lookup")
+        self.assertEqual(rc, 0, out)
+
+    def test_class_exists_guard_is_recognised(self):
+        """`class_exists` answers the question DI would otherwise answer fatally."""
+        src = """\
+<?php
+namespace OCA\\Demo\\Service;
+class Thing {
+    public function run(): array {
+        if (class_exists('OCA\\OpenRegister\\Service\\ObjectService') === false) {
+            return [];
+        }
+        return $this->container->get('OCA\\OpenRegister\\Service\\ObjectService')->findAll();
+    }
+}
+"""
+        rc, out = _run(_app({"Service/Thing.php": src}), "lookup")
+        self.assertEqual(rc, 0, out)
+
     def test_unguarded_lookup_in_the_same_shape_is_still_reported(self):
         """Abuse control: drop the availability check and the finding returns.
 
