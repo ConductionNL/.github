@@ -149,6 +149,55 @@ class Thing {
         rc, out = _run(_app({"Service/Thing.php": src}), "lookup")
         self.assertEqual(rc, 0, out)
 
+    def test_degrading_catch_is_recognised_as_optional_capability(self):
+        """A catch that degrades answers availability by TRYING rather than asking.
+
+        launchpad documents its own: "Retrieve ObjectService lazily —
+        OpenRegister may not be enabled on every instance. Returning an empty
+        manifest (not an error) lets the frontend render its 'no dashboards
+        yet' CTA without a red alert."
+        """
+        src = """\
+<?php
+namespace OCA\\Launchpad\\Controller;
+class ManifestController {
+    public function index(): array {
+        try {
+            $objectService = $this->container->get('OCA\\OpenRegister\\Service\\ObjectService');
+        } catch (\\Throwable $e) {
+            $this->logger->warning('OpenRegister unavailable — empty manifest.');
+            return [];
+        }
+        return $objectService->findAll();
+    }
+}
+"""
+        rc, out = _run(_app({"Controller/ManifestController.php": src}), "lookup")
+        self.assertEqual(rc, 0, out)
+
+    def test_rethrowing_catch_is_still_reported(self):
+        """Abuse control: a catch that RETHROWS is an unconditional dep in disguise.
+
+        Without this the clause would clear every lookup that merely sits in a
+        try, which is most of them.
+        """
+        src = """\
+<?php
+namespace OCA\\Demo\\Service;
+class AccountService {
+    private function os(): object {
+        try {
+            return $this->container->get('OCA\\OpenRegister\\Service\\ObjectService');
+        } catch (\\Throwable $e) {
+            throw new RuntimeException('OpenRegister ObjectService is unavailable.', 0, $e);
+        }
+    }
+}
+"""
+        rc, out = _run(_app({"Service/AccountService.php": src}), "lookup")
+        self.assertEqual(rc, 1, out)
+        self.assertIn("unguarded container lookup", out)
+
     def test_unguarded_lookup_in_the_same_shape_is_still_reported(self):
         """Abuse control: drop the availability check and the finding returns.
 
