@@ -139,11 +139,29 @@ def _rel(root: str, path: str) -> str:
 # Availability established before the reach: `isInstalled('openregister')`, or a
 # local predicate that wraps it. A lookup behind one of these is the CORRECT
 # shape for an optional capability path, not a violation — see _check_lookup.
+#
+# 🔑 SURVEYED, NOT GUESSED. The first cut listed only `isInstalled` because that
+# is the idiom the ADR happened to quote, and it misread 102 call sites: the
+# fleet's DOMINANT guard is `in_array('openregister', getInstalledApps())`.
+#
+# Measured 2026-08-14 over every file in the fleet holding an OpenRegister
+# lookup:
+#
+#     getInstalledApps()                 102
+#     isInstalled('openregister')         10
+#     class_exists(...)                    8
+#     isEnabledForUser('openregister')     2
+#
+# Adding an idiom here CLEARS findings, so the list must be grounded in a
+# survey. `class_exists`/`interface_exists` count because they answer the same
+# question the DI container would have answered fatally at construction.
 _AVAILABILITY_RE = re.compile(
     r"isInstalled\s*\(\s*['\"]openregister['\"]\s*\)"
     r"|isEnabledForUser\s*\(\s*['\"]openregister['\"]"
     r"|isOpenRegisterAvailable\s*\("
     r"|openRegisterAvailable"
+    r"|getInstalledApps\s*\("
+    r"|(?:class_exists|interface_exists)\s*\(\s*['\"]?\\?OCA\\{1,2}OpenRegister"
 )
 
 
