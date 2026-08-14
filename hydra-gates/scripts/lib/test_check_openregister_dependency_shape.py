@@ -78,6 +78,53 @@ class AccountService {
         rc, out = _run(root, "lookup")
         self.assertEqual(rc, 0, out)
 
+    def test_availability_guarded_lookup_is_not_reported(self):
+        """A lookup behind isInstalled() is the CORRECT shape, not a violation.
+
+        Measured on portaliq 2026-08-14. Injecting this dependency would make
+        the whole service unconstructable without OpenRegister, turning a clean
+        "not installed" message into a 500 — the exact failure rule 3 exists to
+        prevent. Rule 1 governs UNCONDITIONAL dependencies.
+        """
+        src = """\
+<?php
+namespace OCA\\Portaliq\\Service;
+class SettingsService {
+    public function isOpenRegisterAvailable(): bool {
+        return $this->appManager->isInstalled('openregister');
+    }
+    public function loadConfiguration(): array {
+        if ($this->isOpenRegisterAvailable() === false) {
+            return ['success' => false, 'message' => 'OpenRegister is not installed or enabled.'];
+        }
+        $cfg = $this->container->get('OCA\\OpenRegister\\Service\\ConfigurationService');
+        return $cfg->importFromApp();
+    }
+}
+"""
+        rc, out = _run(_app({"Service/SettingsService.php": src}), "lookup")
+        self.assertEqual(rc, 0, out)
+
+    def test_unguarded_lookup_in_the_same_shape_is_still_reported(self):
+        """Abuse control: drop the availability check and the finding returns.
+
+        Without this, the guard clause above could be satisfied by any file that
+        merely mentions the word, and the whole check would go quiet.
+        """
+        src = """\
+<?php
+namespace OCA\\Portaliq\\Service;
+class SettingsService {
+    public function loadConfiguration(): array {
+        $cfg = $this->container->get('OCA\\OpenRegister\\Service\\ConfigurationService');
+        return $cfg->importFromApp();
+    }
+}
+"""
+        rc, out = _run(_app({"Service/SettingsService.php": src}), "lookup")
+        self.assertEqual(rc, 1, out)
+        self.assertIn("unguarded container lookup", out)
+
     def test_lookup_named_only_in_a_comment_is_not_reported(self):
         """Abuse control: a docblock must not be able to fail the gate either."""
         root = _app({"Service/AccountService.php": """<?php
