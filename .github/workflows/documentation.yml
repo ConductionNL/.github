@@ -13,10 +13,11 @@ on:
         type: string
         default: "docs"
       node-version:
+        # Kept in step with quality.yml's default (see the rationale there).
         description: "Node.js version for building"
         required: false
         type: string
-        default: "20"
+        default: "22"
       build-image:
         description: >-
           Build and push a self-contained Apache image of the built site to

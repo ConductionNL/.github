@@ -17,10 +17,13 @@ on:
         type: string
         default: "8.3"
       node-version:
+        # Kept in step with quality.yml's default (see the rationale there):
+        # an app whose devDependencies require Node 22 to lint must also be
+        # able to BUILD its release artefact on the same major.
         description: "Node.js version for building"
         required: false
         type: string
-        default: "20"
+        default: "22"
       verify-vendor-deps:
         description: "Enable vendor dependency verification after composer install"
         required: false
