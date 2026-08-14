@@ -749,5 +749,42 @@ class ATagMustBeAtTagPosition(unittest.TestCase):
                 self.assertEqual(len(out), 1, out)
 
 
+class TaskPrefixedCheckboxIds(unittest.TestCase):
+    """`- [x] Task 3.2: …` is OpenSpec's own house format.
+
+    It was unaddressable: the id group stopped at the first token, so the
+    extracted id was the literal string "Task" and no `#task-3.2` could ever
+    match. 2990 checkbox items across the fleet are written this way — 2935 in
+    shillinq alone — and every `@spec` pointing at one was reported as a
+    dangling anchor in the APP, which is where the fix looked like it belonged.
+    """
+
+    PREFIXED = (
+        "- [x] Task 3.1: Author the service\n"
+        "- [x] Task 3.2: Author the calculator\n"
+        "- [ ] Step 4.1 Wire the controller\n"
+    )
+
+    def test_fp_a_task_prefixed_id_now_resolves(self):
+        self.assertTrue(_anchor(self.PREFIXED, "task-3.2"))
+
+    def test_fp_a_step_prefixed_id_now_resolves(self):
+        self.assertTrue(_anchor(self.PREFIXED, "task-4.1"))
+
+    def test_the_bare_form_still_resolves(self):
+        # The dominant form fleet-wide (19175 items). The prefix must be
+        # optional, not required.
+        self.assertTrue(_anchor("- [x] 3.2 Author the calculator\n", "task-3.2"))
+
+    def test_tp_a_word_that_really_is_the_id_is_not_swallowed(self):
+        # THE CONTROL. The prefix is consumed only when a numeric id follows,
+        # so a list whose ids are words keeps them. Without this, the relaxation
+        # would quietly re-point every `#task-task` style anchor.
+        self.assertTrue(_anchor("- [x] Task the thing\n", "task-task"))
+
+    def test_tp_a_prefixed_number_past_the_end_still_fails(self):
+        self.assertFalse(_anchor(self.PREFIXED, "task-9.9"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

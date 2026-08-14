@@ -114,7 +114,23 @@ HEADING = re.compile(r'^\s*#{1,6}\s+(.+?)\s*$')
 # incremented for the skipped line. A wrong positional resolution is worse
 # than a missing one — it can report PASS against a different task.
 CHECKBOX = re.compile(r'^\s*-\s*\[.\]')
-CHECKBOX_ID = re.compile(r'^\s*-\s*\[.\]\s*(?:\*\*)?([A-Za-z0-9][A-Za-z0-9.\-]*)')
+
+# `- [x] Task 3.2: …` and `- [x] Step 4.1 …` are OpenSpec's own house format
+# and were UNADDRESSABLE: the id group stopped at the first token, so the
+# extracted id was the literal string "Task". No `#task-3.2` or `#task-3-2`
+# could ever match it, and the finding read as a dangling anchor in the app.
+#
+# 2990 checkbox items across the fleet are written this way (2935 of them in
+# shillinq alone) against 19175 in the bare `- [x] 3.2 …` form, so this was
+# not a stray spelling — it was a whole app's tasks.md that the gate could
+# not address, reported as ~15 app-side defects.
+#
+# The prefix is OPTIONAL and consumed only when a numeric id follows it, so
+# `- [x] Task the thing` still yields "Task" rather than swallowing a word
+# that really is the id.
+CHECKBOX_ID = re.compile(
+    r'^\s*-\s*\[.\]\s*(?:\*\*)?(?:(?:Task|Step)\s+(?=[0-9]))?([A-Za-z0-9][A-Za-z0-9.\-]*)'
+)
 
 # `(REQ-PAY-001)`, `[REQ-005]`, `(REQ-PAY-001, REQ-PAY-003)`
 DELIMITED = re.compile(r'[(\[]([^)\]]{1,120})[)\]]')
