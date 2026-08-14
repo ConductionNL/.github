@@ -60,8 +60,24 @@ authorisation one call-hop away from the routed method:
     multitenancy layer, which is enforced on every fetch/save.  This pattern
     is deliberately scoped to the ``OCA\\OpenRegister`` namespace: consumer
     apps (decidesk, pipelinq, …) that merely *call* ObjectService still need
-    an explicit controller-level guard (or a Pattern-1 helper), so a real
-    IDOR in a leaf app is never masked.  See "Pattern 2 boundary" below.
+    an explicit controller-level guard for their OWN data layer.  See
+    "Pattern 2 boundary" below, and Pattern 2b for OR delegation from a leaf.
+
+  Pattern 2b — OpenRegister RBAC delegation from a LEAF app (ADR-022).
+    A consumer app that reaches its objects through OpenRegister's
+    ``ObjectService`` facade has delegated per-object authorisation to OR's
+    register RBAC, and is guarded.  ADR-022 requires apps to consume OR's
+    abstractions *including RBAC on data*; before this pattern the gate failed
+    them for doing exactly that (measured 2026-08-14: openbuild 6, pipelinq
+    50).  Narrower than Pattern 2 on three axes, so a leaf app's own storage
+    is still held to an explicit guard:
+
+      * the OR **facade only** — a leaf app's ``*Mapper`` is its own storage
+        and delegates no authorisation, so it clears nothing;
+      * the file must **import** ``OCA\\OpenRegister\\…\\ObjectService`` — a
+        local class of that name clears nothing;
+      * an explicit ``_rbac: false`` **withdraws** the clear, because that is
+        the app declaring in code that OR is not authorising this fetch.
 
   Pattern 4 — delegated guard reached through a chain and/or a collaborator.
     Patterns 1–3 all require the guard to be *one* call-hop away and on
@@ -1837,10 +1853,57 @@ def _delegated_guard_methods(cleaned: str, src: str, guard_map: dict) -> set:
 # Pattern 2 — OpenRegister data-layer RBAC delegation (ADR-022)
 # ---------------------------------------------------------------------------
 
-# Scoped strictly to the OpenRegister app: only there does data-layer access
-# equate to per-object authorisation.  Consumer apps keep the explicit-guard
-# requirement so a real IDOR in a leaf app is never masked.
+# Inside the OpenRegister app, ANY data-layer access (ObjectService or any
+# ``*Mapper``) equates to per-object authorisation, because every one of those
+# fetches runs OR's own RBAC.
 _OR_NAMESPACE_RE = re.compile(r"\bnamespace\s+OCA\\OpenRegister\b")
+
+# ---------------------------------------------------------------------------
+# Pattern 2b — OpenRegister RBAC delegation FROM A LEAF APP (ADR-022)
+# ---------------------------------------------------------------------------
+#
+# Pattern 2 used to be scoped to ``OCA\OpenRegister`` on the reasoning that a
+# consumer app "merely calling" ObjectService should still guard for itself.
+# That contradicted ADR-022, which is explicit that apps consume OpenRegister's
+# abstractions *including RBAC on data* — so the fleet was told to delegate and
+# then failed a gate for delegating. Measured 2026-08-14: 6 findings on
+# openbuild and 50 on pipelinq, and every openbuild one resolved through
+# ``searchObjectsBySlug(..., _rbac: true)``, with RuleEngineService's own
+# docblock reading "@throws … not found / NOT OWNED".
+#
+# So a leaf app MAY rely on OpenRegister for per-object authorisation. The
+# clear is deliberately narrower than Pattern 2's, on two axes, because the
+# thing that must not be masked is a leaf app's own unguarded data layer:
+#
+#   1. It matches the OpenRegister FACADE ONLY — ``objectService`` /
+#      ``ObjectService``. A bare ``*Mapper`` does NOT clear a leaf app: in
+#      OpenRegister a mapper IS the RBAC-enforcing layer, but in a leaf app
+#      ``$this->invoiceMapper->`` is that app's own storage and carries no
+#      OR authorisation whatsoever. This is the "with the exception of when
+#      they have their own services" half of the rule.
+#   2. It requires the file to actually IMPORT OpenRegister's ObjectService.
+#      A local class that happens to be named ObjectService clears nothing.
+#
+# And it is withdrawn when the call turns RBAC OFF: ``_rbac: false`` is the
+# app saying, in code, that OR is not authorising this fetch — at which point
+# the delegation the clear rests on does not exist.
+_OR_IMPORT_RE = re.compile(
+    r"\buse\s+OCA\\OpenRegister\\[A-Za-z0-9_\\]*ObjectService\b"
+)
+
+# The OR facade only. Note the absence of a ``*Mapper`` alternative: that is
+# the whole point of this pattern versus Pattern 2.
+_OR_FACADE_CALL_RE = re.compile(
+    r"->\s*objectService\s*->"
+    r"|\$objectService\s*->"
+)
+
+# ``_rbac: false`` (or ``_rbac : FALSE``) anywhere in the call — the app has
+# explicitly opted out of the authorisation it would otherwise be delegating.
+# ``_multitenancy: false`` is deliberately NOT disqualifying: a system-wide
+# register is a legitimate shape (openbuild's rules register is one) and it is
+# RBAC, not multitenancy, that answers "may this caller have this object".
+_RBAC_DISABLED_RE = re.compile(r"_rbac\s*:\s*false\b", re.IGNORECASE)
 
 # Data access routed through OR's RBAC-enforcing layer: the ObjectService
 # facade or any ``*Mapper``.  Every fetch/save on these enforces register
@@ -2823,7 +2886,8 @@ def _is_preflight_cors_method(name: str) -> bool:
     return name.lower().startswith("preflightedcors")
 
 
-def _collect_guard_helpers(cleaned: str, src: str, is_or_repo: bool) -> set:
+def _collect_guard_helpers(cleaned: str, src: str, is_or_repo: bool,
+                           leaf_or_delegation: bool = False) -> set:
     """Return the set of same-class method names that carry an auth guard.
 
     A method is guard-bearing when its name reads like an authorisation
@@ -2876,6 +2940,46 @@ def _collect_guard_helpers(cleaned: str, src: str, is_or_repo: bool) -> set:
             continue
         if is_or_repo and _OR_RBAC_ACCESS_RE.search(body):
             helpers.add(name)
+            continue
+        # Pattern 2b, one hop away. A leaf app almost never calls OR's facade
+        # from the routed method itself — openbuild's RulesController routes
+        # evaluate/schema/testAll through a private `query()` that wraps
+        # `searchObjectsBySlug(..., _rbac: true)`. Marking that wrapper
+        # guard-bearing lets the existing Pattern-1 closure carry the clear
+        # up the chain, instead of Pattern 2b only ever seeing the wrong body.
+        if (
+            leaf_or_delegation
+            and _OR_FACADE_CALL_RE.search(body)
+            and not _RBAC_DISABLED_RE.search(body)
+        ):
+            helpers.add(name)
+
+    # Transitive closure, leaf-delegation mode only.
+    #
+    # Real controllers wrap the OR facade more than one hop down: openbuild's
+    # `schema()` calls `findRuleSet()` calls `query()` calls
+    # `searchObjectsBySlug(..., _rbac: true)`. Marking only `query()` leaves
+    # the chain broken one link above it, so the routed method still reports.
+    # A same-class method that reaches a guard-bearing helper before its first
+    # mutation is itself guard-bearing — the same rule Pattern 4 already
+    # applies to its own graph, iterated here to a fixpoint.
+    #
+    # Gated on leaf_or_delegation so no existing verdict moves: with the flag
+    # off this loop does not run and the returned set is byte-identical to
+    # what it was before Pattern 2b existed.
+    if leaf_or_delegation:
+        spans = list(_all_method_spans(cleaned))
+        changed = True
+        while changed:
+            changed = False
+            for name, body_start, body_end in spans:
+                if name in helpers:
+                    continue
+                if _calls_guard_helper_before_mutation(
+                    guard_text[body_start:body_end], helpers
+                ):
+                    helpers.add(name)
+                    changed = True
     return helpers
 
 
@@ -2934,7 +3038,13 @@ def scan_file(path: str) -> int:
     # reported, so findings name real lines.
     gsrc = _blank_authentication_only_guards(cleaned, src)
     is_or_repo = bool(_OR_NAMESPACE_RE.search(cleaned))
-    guard_helpers = _collect_guard_helpers(cleaned, gsrc, is_or_repo)
+    # Pattern 2b context: does this leaf-app file actually import OpenRegister's
+    # ObjectService? A local class of the same name must clear nothing.
+    imports_or_object_service = bool(_OR_IMPORT_RE.search(cleaned))
+    guard_helpers = _collect_guard_helpers(
+        cleaned, gsrc, is_or_repo,
+        leaf_or_delegation=(imports_or_object_service and not is_or_repo),
+    )
     # Pattern 4 context: resolve this class's typed collaborators to real files
     # and read their guard-bearing methods out of their own source, then close
     # the same-class delegation graph over that. Both are lazy/cached; a file
@@ -3053,9 +3163,26 @@ def scan_file(path: str) -> int:
         # ---- Pattern 2: OpenRegister data-layer RBAC delegation ---------
         # Inside the OpenRegister app, data access through ObjectService or a
         # *Mapper delegates per-object authz to OR's register RBAC +
-        # multitenancy (ADR-022). Scoped to OCA\OpenRegister so leaf-app
-        # IDORs are never masked.
+        # multitenancy (ADR-022).
         if is_or_repo and _OR_RBAC_ACCESS_RE.search(body):
+            continue
+
+        # ---- Pattern 2b: a LEAF APP delegating to OpenRegister ----------
+        # ADR-022 says apps consume OR's abstractions including RBAC, so a
+        # leaf app that reaches its objects through OR's ObjectService has
+        # delegated per-object authorisation and is guarded.
+        #
+        # Narrower than Pattern 2 on purpose: the facade only (a leaf app's
+        # own *Mapper is its OWN storage and guards nothing), the import must
+        # be OpenRegister's, and an explicit `_rbac: false` withdraws it —
+        # that is the app declaring in code that OR is not authorising this
+        # fetch, which is exactly when the leaf app must guard for itself.
+        if (
+            not is_or_repo
+            and imports_or_object_service
+            and _OR_FACADE_CALL_RE.search(body)
+            and not _RBAC_DISABLED_RE.search(body)
+        ):
             continue
 
         # ---- Pattern 3: session-scoped, no caller-supplied reference ----

@@ -845,11 +845,13 @@ class DeckLinksController {
         self.assertEqual(_scan(src), [])
 
     def test_same_objectservice_access_OUTSIDE_or_namespace_still_flags(self):
-        """The delegation is OR-scoped: an identical leaf-app method still flags.
+        """A leaf app whose `$this->objectService` is NOT OpenRegister's still flags.
 
-        This is the decidesk#44 safety proof — a consumer app that fetches via
-        ObjectService without an explicit controller guard is a real IDOR and
-        must NOT be masked by Pattern 2.
+        This is the decidesk#44 safety proof. Pattern 2b (2026-08-14) lets a
+        leaf app delegate authorisation to OpenRegister, but only when the file
+        actually imports `OCA\\OpenRegister\\…\\ObjectService`. This fixture
+        does not, so `$this->objectService` is an unresolved local collaborator
+        and clears nothing — a real IDOR is still reported.
         """
         src = """\
 <?php
@@ -868,6 +870,88 @@ class MinutesController {
         findings = _scan(src)
         self.assertEqual(len(findings), 1)
         self.assertIn("generateALVDraft", findings[0])
+
+    def test_leaf_app_delegating_to_openregister_objectservice_cleared(self):
+        """ADR-022: a leaf app reaching objects through OR's ObjectService is guarded.
+
+        Measured on openbuild 2026-08-14: RulesController::evaluate resolved via
+        `searchObjectsBySlug(..., _rbac: true)` and was reported as an IDOR, in
+        direct contradiction of ADR-022, which requires apps to consume OR's
+        abstractions including RBAC on data.
+        """
+        src = """\
+<?php
+namespace OCA\\OpenBuild\\Controller;
+
+use OCA\\OpenRegister\\Service\\ObjectService;
+
+class RulesController {
+    /**
+     * @NoAdminRequired
+     */
+    public function evaluate(string $ruleSetSlug): JSONResponse
+    {
+        $rows = $this->objectService->searchObjectsBySlug(
+            'openbuild', 'rule-set', ['slug' => $ruleSetSlug], _rbac: true, _multitenancy: false
+        );
+        return new JSONResponse($rows);
+    }
+}
+"""
+        self.assertEqual(_scan(src), [])
+
+    def test_leaf_app_openregister_delegation_with_rbac_false_still_flags(self):
+        """`_rbac: false` withdraws the clear — the app said OR is NOT authorising."""
+        src = """\
+<?php
+namespace OCA\\OpenBuild\\Controller;
+
+use OCA\\OpenRegister\\Service\\ObjectService;
+
+class RulesController {
+    /**
+     * @NoAdminRequired
+     */
+    public function evaluate(string $ruleSetSlug): JSONResponse
+    {
+        $rows = $this->objectService->searchObjectsBySlug(
+            'openbuild', 'rule-set', ['slug' => $ruleSetSlug], _rbac: false
+        );
+        return new JSONResponse($rows);
+    }
+}
+"""
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("evaluate", findings[0])
+
+    def test_leaf_app_own_mapper_still_flags_even_with_or_import(self):
+        """A leaf app's OWN mapper is its own storage and delegates no authorisation.
+
+        This is the "with the exception of when they have their own services"
+        half of the rule: importing OR's ObjectService must not launder an
+        endpoint that actually reads through the app's own data layer.
+        """
+        src = """\
+<?php
+namespace OCA\\OpenBuild\\Controller;
+
+use OCA\\OpenRegister\\Service\\ObjectService;
+
+class InvoiceController {
+    /**
+     * @NoAdminRequired
+     */
+    public function show(string $invoiceId): JSONResponse
+    {
+        $invoice = $this->invoiceMapper->find($invoiceId);
+        return new JSONResponse($invoice);
+    }
+}
+"""
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("show", findings[0])
 
     def test_or_namespace_no_data_access_still_flags(self):
         """An OR method with NO ObjectService/Mapper access and no guard still flags."""
