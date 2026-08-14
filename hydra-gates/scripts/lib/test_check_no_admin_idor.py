@@ -1011,6 +1011,60 @@ class TestController {
         self.assertEqual(len(findings), 1)
         self.assertIn("evaluate", findings[0])
 
+    def test_container_resolved_openregister_objectservice_cleared(self):
+        """The container form counts: a leaf app cannot hard-depend on OR's class.
+
+        Measured on pipelinq 2026-08-14: 75 of 160 service files resolve
+        ObjectService out of the container against 11 that import it, because
+        OpenRegister may not be installed. Recognising only the `use` import
+        declared those 75 unguarded.
+        """
+        src = """\
+<?php
+namespace OCA\\Pipelinq\\Controller;
+
+class LoyaltyController {
+    /**
+     * @NoAdminRequired
+     */
+    public function accounts(string $programmeId): JSONResponse
+    {
+        $objectService = $this->container->get('OCA\\OpenRegister\\Service\\ObjectService');
+        return new JSONResponse($objectService->findAll(config: ['filters' => ['programmeId' => $programmeId]]));
+    }
+}
+"""
+        self.assertEqual(_scan(src), [])
+
+    def test_openregister_named_only_in_a_comment_does_not_clear(self):
+        """Abuse control: a docblock mention must not qualify the file.
+
+        The container form lives in a string literal, so the check cannot read
+        `cleaned` (strings blanked). Reading raw source instead would let a
+        sentence in a comment switch this gate off — exactly the failure these
+        gates exist to catch. It reads comment-free source, strings preserved.
+        """
+        src = """\
+<?php
+namespace OCA\\Pipelinq\\Controller;
+
+class LoyaltyController {
+    /**
+     * Storage is eventually OCA\\OpenRegister\\Service\\ObjectService, but this
+     * controller talks to its own mapper.
+     *
+     * @NoAdminRequired
+     */
+    public function accounts(string $programmeId): JSONResponse
+    {
+        return new JSONResponse($this->accountMapper->findByProgramme($programmeId));
+    }
+}
+"""
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("accounts", findings[0])
+
     def test_leaf_app_own_mapper_still_flags_even_with_or_import(self):
         """A leaf app's OWN mapper is its own storage and delegates no authorisation.
 
