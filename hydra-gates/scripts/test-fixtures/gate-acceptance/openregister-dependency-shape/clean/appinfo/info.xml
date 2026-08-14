@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<id>ordepfixture</id>
+	<name>OpenRegister Dependency Shape Fixture</name>
+	<summary>Fixture app for ADR-083 / gate-66. Not a real app.</summary>
+	<description>Exists so the acceptance matrix can prove gate-66 fails on each ADR-083 violation and passes on the conforming shape.</description>
+	<version>1.0.0</version>
+	<licence>agpl</licence>
+	<author>Conduction</author>
+	<namespace>OrDepFixture</namespace>
+	<category>tools</category>
+	<dependencies><nextcloud min-version="32" max-version="34"/></dependencies>
+</info>
