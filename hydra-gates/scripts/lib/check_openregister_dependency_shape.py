@@ -218,6 +218,16 @@ def _check_lookup(root: str, files: list[str]) -> list[str]:
     """
     findings = []
     for path in files:
+        # lib/AppInfo/Application.php is the COMPOSITION ROOT. Its registration
+        # closures receive the container as a parameter and exist to wire
+        # services together — `$c->get(...)` there is not a service reaching
+        # around its own constructor, it IS the constructor-wiring layer.
+        # Rule 1 has nothing to say about it.
+        #
+        # 16 of 435 findings sat here, and all four of opencatalogi's did.
+        if os.path.basename(path) == "Application.php" and \
+                os.path.basename(os.path.dirname(path)) == "AppInfo":
+            continue
         src = _strip_comments(_read(path))
         # File-scoped on purpose. A class that establishes availability anywhere
         # is running the optional-capability pattern, and per-method scoping
