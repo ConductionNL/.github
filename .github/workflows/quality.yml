@@ -2514,8 +2514,20 @@ jobs:
             php scripts/coverage-guard.php coverage/clover.xml
             exit 0
           fi
+          # THE REMEDY AN ERROR NAMES HAS TO EXIST.
+          #
+          # This message used to say "Update it from ConductionNL/.github",
+          # and there was no coverage-guard.php anywhere in that repository —
+          # a recursive tree search returned nothing. An author following the
+          # instruction exactly could not comply, and the only way to find the
+          # right file was to notice that eighteen unrelated app repos happen
+          # to agree on one. That is the unclosable-gate shape gate-59 exists
+          # to forbid, in an error message rather than in a finding.
+          #
+          # The canonical copy now lives at quality-config/coverage-guard.php
+          # in this repository, so the path below resolves.
           php scripts/coverage-guard.php --capabilities 2>/dev/null | grep -qx against \
-            || { echo "::error::scripts/coverage-guard.php predates merge-base comparison. Update it from ConductionNL/.github before enabling the ratchet."; exit 1; }
+            || { echo "::error::scripts/coverage-guard.php predates merge-base comparison (it does not report the 'against' capability). Copy the canonical version from ConductionNL/.github at quality-config/coverage-guard.php into scripts/coverage-guard.php, or set enable-coverage-guard: false until you do."; exit 1; }
           php scripts/coverage-guard.php coverage/clover.xml --against="$RUNNER_TEMP/base-clover.xml"
 
       - name: Upload coverage artifact
