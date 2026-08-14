@@ -79,6 +79,13 @@ _THROTTLE = re.compile(
     r'\bAnonRateLimit\b|\bUserRateLimit\b|\bBruteForceProtection\b'
 )
 
+# `class Foo extends Bar` — the parent is optional.
+_CLASS = re.compile(
+    r'^\s*(?:final\s+|abstract\s+|readonly\s+)*class\s+([A-Za-z0-9_]+)'
+    r'(?:\s+extends\s+\\?([A-Za-z0-9_\\]+))?',
+    re.MULTILINE,
+)
+
 # Lines that legitimately sit between a docblock and its function.
 _ATTACHED = re.compile(r'^\s*(?:/\*|\*|\*/|#\[|//|\])')
 
@@ -121,6 +128,32 @@ def _attached_block(lines: list, idx: int) -> list:
         break
     out.reverse()
     return out
+
+
+def is_controller(src: str) -> bool:
+    """Whether this file declares a routable controller.
+
+    🔑 AN ANNOTATION ON AN UNROUTED CLASS IS INERT, AND FLAGGING IT PRODUCES A
+    FINDING NOBODY CAN FIX.
+
+    Measured 2026-08-14 on opencatalogi: `lib/Service/PublicationService.php`
+    carries three real `@PublicPage` annotations — on `index`, `uses` and
+    `used` — copy-pasted from a controller. The class declares
+    `class PublicationService {`, extends nothing, and appears nowhere in
+    `appinfo/routes.php`. Nextcloud reads the marker off the ROUTED controller
+    method, so nothing there is reachable and no rate limit would ever apply.
+
+    Deliberately generous: a class qualifies if its own name ends in
+    `Controller` OR it extends something ending in `Controller`. That admits
+    project-local bases (`extends PortalBaseController`) rather than hardcoding
+    the framework's class list, so the test cannot hide a real controller — the
+    failure it must never have.
+    """
+    for m in _CLASS.finditer(src):
+        name, parent = m.group(1), (m.group(2) or '')
+        if name.endswith('Controller') or parent.endswith('Controller'):
+            return True
+    return False
 
 
 def public_methods(src: str) -> list:
@@ -167,9 +200,20 @@ def main(argv: list) -> int:
 
     findings = []
     public_total = 0
+    inert = []
     for path in files:
         src = _read(path)
-        for method, form, throttled in public_methods(src):
+        methods = public_methods(src)
+        if not methods:
+            continue
+        # An annotation on a class the router never reaches cannot be exercised,
+        # so it is not a finding. It IS reported, because a silent exclusion is
+        # indistinguishable from a clean file.
+        if not is_controller(src):
+            inert += ['%s::%s' % (os.path.relpath(path, root), m[0])
+                      for m in methods]
+            continue
+        for method, form, throttled in methods:
             public_total += 1
             if throttled:
                 continue
@@ -180,16 +224,22 @@ def main(argv: list) -> int:
                 % (os.path.relpath(path, root), method, form)
             )
 
+    for name in inert:
+        print('NOTE %s carries a public-page marker on a class the router '
+              'never reaches, so it is inert and not counted. Remove the '
+              'marker — it reads as an exposure that does not exist.' % name)
+
     if public_total == 0:
-        print('this app declares no #[PublicPage] or @PublicPage method under '
-              'lib/, so ADR-082 has no subject matter here.')
+        print('this app declares no #[PublicPage] or @PublicPage method on a '
+              'controller under lib/, so ADR-082 has no subject matter here.')
         print('checked %d file(s)' % len(files))
         return 4
 
     for line in findings:
         print(line)
-    print('%d public method(s), %d throttled, %d unthrottled'
-          % (public_total, public_total - len(findings), len(findings)))
+    print('%d public method(s), %d throttled, %d unthrottled, %d inert'
+          % (public_total, public_total - len(findings), len(findings),
+             len(inert)))
     print('checked %d file(s)' % len(files))
     return 1 if findings else 0
 

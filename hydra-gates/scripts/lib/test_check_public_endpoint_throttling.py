@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import unittest
 
-from check_public_endpoint_throttling import public_methods
+from check_public_endpoint_throttling import is_controller, public_methods
 
 
 def _one(src: str):
@@ -210,6 +210,40 @@ class C {
 '''
         got = public_methods(src)
         self.assertEqual([g[0] for g in got], ['open'])
+
+
+class OnlyRoutableClassesCount(unittest.TestCase):
+    """An annotation on a class the router never reaches is inert.
+
+    Shape taken from opencatalogi `lib/Service/PublicationService.php`, which
+    carries three real @PublicPage annotations copy-pasted from a controller.
+    It declares `class PublicationService {`, extends nothing, and appears
+    nowhere in appinfo/routes.php.
+    """
+
+    def test_or_a_plain_service_class_is_not_a_controller(self):
+        self.assertFalse(is_controller('<?php\nclass PublicationService {\n}\n'))
+
+    def test_or_a_class_named_controller_counts(self):
+        self.assertTrue(is_controller('<?php\nclass CatalogiController {\n}\n'))
+
+    def test_or_a_class_extending_controller_counts(self):
+        self.assertTrue(
+            is_controller('<?php\nclass Foo extends Controller {\n}\n'))
+
+    def test_or_a_project_local_controller_base_counts(self):
+        """The generous test exists so the gate cannot HIDE a real controller —
+        the one failure it must never have."""
+        self.assertTrue(
+            is_controller('<?php\nclass Foo extends PortalBaseController {\n}\n'))
+
+    def test_or_an_fq_parent_counts(self):
+        self.assertTrue(
+            is_controller('<?php\nclass Foo extends \\OCP\\AppFramework\\ApiController {\n}\n'))
+
+    def test_or_a_service_extending_a_service_base_does_not_count(self):
+        self.assertFalse(
+            is_controller('<?php\nclass FooService extends AbstractService {\n}\n'))
 
 
 if __name__ == '__main__':
