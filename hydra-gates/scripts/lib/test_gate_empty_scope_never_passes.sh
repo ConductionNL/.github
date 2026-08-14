@@ -91,7 +91,14 @@ cat > "${_app}/lib/Controller/ThingController.php" <<'PHP'
 <?php
 namespace OCA\Fx\Controller;
 class ThingController {
+    // The AnonRateLimit is here so this fixture carries ONLY the two findings
+    // it was built to carry (gate-19 and gate-25). Without it, gate-82 fires a
+    // genuine ADR-082 finding on the #[PublicPage] below and the run exits 1,
+    // which is a real defect in the fixture rather than in the gate — the
+    // method IS a public endpoint with no volume ceiling. gate-25 still fires,
+    // because it judges the absence of a contract test, not the throttle.
     #[PublicPage]
+    #[AnonRateLimit(limit: 120, period: 60)]
     public function index() { return 1; }
 }
 PHP
