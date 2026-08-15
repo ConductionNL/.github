@@ -10135,6 +10135,53 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Gate 67 — openregister-contract-parity (ADR-084)
+#
+# ADR-084 has OpenRegister publish the surface it is consumed through, so that
+# sixteen apps stop hand-rolling doubles of a class they do not own. Ten of them
+# already had one, declaring between 0 and 13 methods against a real class of 88.
+#
+# Delivering that promise needs the interface in TWO places, for two reasons
+# that do not overlap:
+#
+#   lib/Contract/           openregister, at RUNTIME. `implements` is resolved
+#                           at autoload, and a require-dev package is absent
+#                           from a production install — every route would fatal.
+#   hydra-gates/contracts/  leaf apps, under PHPUnit. hydra-gates is already
+#                           require-dev everywhere, so this puts the interface
+#                           in each consumer's vendor/ where a double can
+#                           implement it.
+#
+# Two copies is a drift risk, and "we will keep them in step" is not a
+# mechanism. THIS GATE IS THE MECHANISM: byte-identical or red.
+#
+# NOT diff-scoped. Parity is a property of the tree; a PR that edits one copy
+# and not the other is exactly the case this must catch, and diff-scoping would
+# make the untouched side invisible.
+_orcp_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-openregister-contract-parity.log
+: > "${_orcp_log}"
+set +e
+python3 "${SCRIPT_DIR}/lib/check_openregister_contract_parity.py" . > "${_orcp_log}" 2>&1
+_orcp_rc=$?
+set +e
+# Same terminal-line contract as gate 66: a run that stops before stating how
+# many files it read CRASHED. Reading the exit code alone is how a dead checker
+# reports as a pass.
+if ! grep -qE '^checked [0-9]+ file\(s\)$' "${_orcp_log}" 2>/dev/null; then
+    _fail 67 "openregister-contract-parity" "the checker did not print its terminal 'checked N file(s)' line, so it did NOT complete — this is a crash, not a clean tree. See ${_orcp_log}"
+elif [ "${_orcp_rc}" -eq 0 ]; then
+    _pass 67 "openregister-contract-parity"
+elif [ "${_orcp_rc}" -eq 3 ]; then
+    _skip 67 "openregister-contract-parity" na "no lib/Contract/ — this repo does not own the OpenRegister contract, so it has nothing to keep in step."
+elif [ "${_orcp_rc}" -eq 4 ]; then
+    _skip 67 "openregister-contract-parity" na "lib/Contract/ exists but no shipped copy was found to compare it against. NOT a pass — nothing was verified."
+else
+    _orcp_n=$(grep -cE '^FAIL ' "${_orcp_log}" 2>/dev/null || true)
+    case "${_orcp_n}" in ''|*[!0-9]*) _orcp_n=1 ;; esac
+    _fail 67 "openregister-contract-parity" "${_orcp_n} contract file(s) out of step between lib/Contract/ and hydra-gates/contracts/ — a published contract with two definitions is the drift ADR-084 forbids; see ${_orcp_log}"
+fi
+
+# ---------------------------------------------------------------------------
 # gate-82 — ADR-082: a publicly reachable method carries a volume ceiling
 #
 # THERE ARE TWO WAYS TO DECLARE A PUBLIC PAGE, AND KNOWING ONE OF THEM MEANS
