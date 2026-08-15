@@ -10266,7 +10266,10 @@ if [ -f package.json ]; then
     set +e
     python3 "${SCRIPT_DIR}/lib/check_npm_supply_chain_config.py" . > "${_nsc_log}" 2>&1
     _nsc_rc=$?
-    set -e
+    # `set +e`, not `set -e`: errexit off is the state this script actually
+    # runs in, and re-enabling it here would abort the run on the first
+    # non-zero anything downstream. See the note at the top of this file.
+    set +e
 
     if [ "${_nsc_rc}" -eq 0 ]; then
         _pass 84 "npm-supply-chain-config"
