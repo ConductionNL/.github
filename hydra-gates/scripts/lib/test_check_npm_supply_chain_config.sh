@@ -87,9 +87,13 @@ case_test "unparseable package.json fails, never reads as clean" \
 d="${TMP}/summary"; rm -rf "$d"; mkdir -p "$d"
 printf '%b' "${GOOD_NPMRC}" > "$d/.npmrc"; printf '%b' "${GOOD_PKG}" > "$d/package.json"
 out="$(python3 "${CHECKER}" "$d" 2>&1 || true)"
-printf '%s' "${out}" | grep -qE '^checked [0-9]+ npm supply-chain setting' \
-    && ok "prints the terminal summary the runner asserts on" \
-    || no "prints the terminal summary the runner asserts on" "got: ${out}"
+# A real if/then/else, not `A && B || C`: in that form C also runs when A is
+# true and B fails, so a passing assertion could report both PASS and FAIL.
+if printf '%s' "${out}" | grep -qE '^checked [0-9]+ npm supply-chain setting'; then
+    ok "prints the terminal summary the runner asserts on"
+else
+    no "prints the terminal summary the runner asserts on" "got: ${out}"
+fi
 
 echo "  ${pass} passed, ${fail} failed"
 [ "${fail}" -eq 0 ]

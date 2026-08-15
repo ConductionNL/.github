@@ -10432,6 +10432,15 @@ _a11y_has_markup_dir || _declare_na "no src/, templates/ or appinfo/templates/ �
 # `if [ -d templates ] || [ -d appinfo/templates ]` — gate 41
 { [ -d templates ] || [ -d appinfo/templates ]; } || _declare_na "no templates/ and no appinfo/templates/ — this repo ships no server-rendered HTML document to carry a lang attribute." \
     41
+# `if [ -f package.json ]` — gate 84
+#
+# Without this the gate emits NOTHING on a PHP-only repo, and a silence is
+# indistinguishable from a pass — which is exactly what
+# --require-full-coverage exists to catch. Caught by
+# test-hydra-gates-bin.sh's all-not-applicable fixture, which has no
+# package.json: the flag exited 98 on a repository with nothing wrong with it.
+[ -f package.json ] || _declare_na "no package.json — this repo installs nothing from npm, so there is no dependency resolution for a release-age cooldown to govern." \
+    84
 
 _emitted_n=$(printf '%s\n' ${_EMITTED_GATES} | grep -c . || true)
 _emitted_n="${_emitted_n:-0}"
