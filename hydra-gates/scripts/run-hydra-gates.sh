@@ -10283,7 +10283,10 @@ if [ -d lib/Contract ]; then
         python3 "${SCRIPT_DIR}/lib/check_contract_surface_shift.py" . --all > "${_css_log}" 2>&1
         _css_rc=$?
     fi
-    set -e
+    # `set +e`, not `set -e`: errexit off is the state this script actually
+    # runs in, and re-enabling it here would abort the run on the first
+    # non-zero anything downstream. See the note at the top of this file.
+    set +e
 
     if [ "${_css_rc}" -eq 0 ]; then
         _pass 83 "contract-surface-shift"
