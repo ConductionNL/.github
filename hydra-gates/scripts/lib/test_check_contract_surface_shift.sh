@@ -126,9 +126,13 @@ rc=$?
 # WIRING: the terminal summary line the runner greps for must be printed, or
 # the runner cannot tell a clean run from a crashed one.
 out="$(python3 "${CHECKER}" "${TMP}/a" --base HEAD~1 2>&1 || true)"
-printf '%s' "${out}" | grep -qE '^checked [0-9]+ contract ' \
-    && ok "prints the terminal summary the runner asserts on" \
-    || no "prints the terminal summary the runner asserts on" "got: ${out}"
+# A real if/then/else, not `A && B || C`: in that form C also runs when A is
+# true and B fails, so a passing assertion could report both PASS and FAIL.
+if printf '%s' "${out}" | grep -qE '^checked [0-9]+ contract '; then
+    ok "prints the terminal summary the runner asserts on"
+else
+    no "prints the terminal summary the runner asserts on" "got: ${out}"
+fi
 
 echo "  ${pass} passed, ${fail} failed"
 [ "${fail}" -eq 0 ]

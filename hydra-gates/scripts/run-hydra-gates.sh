@@ -10455,6 +10455,14 @@ _a11y_has_markup_dir || _declare_na "no src/, templates/ or appinfo/templates/ �
 # `if [ -d templates ] || [ -d appinfo/templates ]` — gate 41
 { [ -d templates ] || [ -d appinfo/templates ]; } || _declare_na "no templates/ and no appinfo/templates/ — this repo ships no server-rendered HTML document to carry a lang attribute." \
     41
+# `if [ -d lib/Contract ]` — gate 83
+#
+# Without this the gate emits NOTHING in every repo that consumes a contract
+# rather than publishing one — which is 18 of the 19 — and a silence is
+# indistinguishable from a pass, the exact failure --require-full-coverage
+# exists to catch.
+[ -d lib/Contract ] || _declare_na "no lib/Contract/ — this repo publishes no contract interface, so it exposes no method surface whose magic-versus-declared shape consumers could have doubled." \
+    83
 
 _emitted_n=$(printf '%s\n' ${_EMITTED_GATES} | grep -c . || true)
 _emitted_n="${_emitted_n:-0}"
