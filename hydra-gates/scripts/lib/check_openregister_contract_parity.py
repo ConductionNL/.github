@@ -25,17 +25,27 @@ Two copies is a drift risk, and "we will keep them in step" is not a mechanism.
 This gate IS the mechanism: the copies must be byte-identical, or the build is
 red. One definition, enforced rather than promised.
 
-The comparison runs wherever both sides are present -- in practice openregister,
-which has lib/Contract/ in its tree and hydra-gates in its vendor/. A repo with
-no lib/Contract/ does not own the contract and is skipped; it is not judged, so
-it is not reported as a pass.
+Finding the shipped copy is not as simple as it looks. The Hydra Gates job
+fetches this runner from `.github@main` and never runs `composer install`, so in
+CI there is no `vendor/` to read -- the first version of this gate looked only
+there and consequently reported NOT APPLICABLE on every run. Three locations are
+tried, in this order:
+
+    vendor/conduction/hydra-gates/...   the consumer's own install, so an app
+                                        pinning an older hydra-gates is judged
+                                        against the version it actually ships
+    hydra-gates/contracts/              inside the .github repo itself
+    <alongside this script>             the copy that travels with the runner
+
+A repo with no lib/Contract/ does not own the contract and is skipped; it is not
+judged, so it is not reported as a pass.
 
 Exit codes
     0  the copies agree
     1  they differ -- see the FAIL lines
     3  no lib/Contract/ -- this repo does not own the contract
-    4  lib/Contract/ exists but there is no vendor copy to compare it against.
-       NOT a pass: nothing was verified.
+    4  lib/Contract/ exists but no shipped copy was found in any of the three
+       locations. NOT a pass: nothing was verified.
 
 Every run ends by printing `checked N file(s)`. A run that stops before that
 line CRASHED, and the runner treats a missing line as a failure rather than as
@@ -54,6 +64,18 @@ SHIPPED_DIR = Path("vendor") / "conduction" / "hydra-gates" / "hydra-gates" / "c
 # The same directory, seen from inside the .github repo itself, where there is
 # no vendor/ because the package IS this repo.
 SELF_DIR = Path("hydra-gates") / "contracts"
+
+# And the copy that travels WITH THIS SCRIPT.
+#
+# This is the one that actually works in CI. The gates runner is fetched from
+# `.github@main` rather than installed from composer, so the Hydra Gates job has
+# no `vendor/` at all — the first version of this gate looked only in vendor/ and
+# therefore reported NOT APPLICABLE on every run, including the run whose whole
+# purpose was to bump the lock to a version that ships the contracts. A gate that
+# can only skip protects nothing.
+#
+# scripts/lib/<this file> -> scripts/lib -> scripts -> hydra-gates -> contracts/
+RUNNER_DIR = Path(__file__).resolve().parent.parent.parent / "contracts"
 
 
 def _php_files(directory: Path) -> dict[str, Path]:
@@ -82,15 +104,21 @@ def main(argv: list[str]) -> int:
         print("checked 0 file(s)")
         return 3
 
-    shipped_dir = root / SHIPPED_DIR
-    if not shipped_dir.is_dir():
-        shipped_dir = root / SELF_DIR
+    # Order matters. The consumer's own vendor/ wins when it exists, so an app
+    # that pins an older hydra-gates is judged against the version it actually
+    # installs. Only then fall back to the copy shipped with this script.
+    for candidate in (root / SHIPPED_DIR, root / SELF_DIR, RUNNER_DIR):
+        if candidate.is_dir() and any(candidate.glob("*.php")):
+            shipped_dir = candidate
+            break
+    else:
+        shipped_dir = root / SHIPPED_DIR
     shipped = _php_files(shipped_dir)
     if not shipped:
         print(
             "SKIP lib/Contract/ exists but no shipped copy was found at "
-            f"{SHIPPED_DIR} or {SELF_DIR}. Nothing was compared, so this is "
-            "NOT a pass — install conduction/hydra-gates and re-run."
+            f"{SHIPPED_DIR}, {SELF_DIR} or alongside this checker "
+            f"({RUNNER_DIR}). Nothing was compared, so this is NOT a pass."
         )
         print(f"checked {len(canonical)} file(s)")
         return 4
