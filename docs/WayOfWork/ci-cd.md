@@ -302,6 +302,128 @@ Four things to fix, in order of how quietly they fail:
    it tells Prettier to use 2-space indentation and double quotes for `.ts` files
    — both of which `@nextcloud/eslint-config` then flags. Delete it or wire it up.
 
+## Consuming OpenRegister (ADR-083, ADR-084)
+
+Almost every app depends on OpenRegister, and for a long time almost none of them
+said so where a reader — or a tool — could see it. The dominant shape was a lazy
+container lookup inside a private accessor:
+
+```php
+private function getObjectService(): object {
+    return $this->container->get('OCA\OpenRegister\Service\ObjectService');
+}
+```
+
+The dependency is announced nowhere: not in the constructor, not in the `use`
+block, not in any type. It appears mid-method, as a **string**.
+
+That is not a style complaint. Gate-7 reported **50 findings on pipelinq**, every
+one a correctly-delegated endpoint — it could not *see* the delegation, because
+the only evidence was a string literal. A human review of the same code the same
+day reached the opposite conclusion about who was enforcing authorisation, and
+wrote it down. A reader with grep and an hour got the story backwards.
+
+### The four rules (ADR-083), enforced by gate-66
+
+**1. Inject an unconditional dependency; do not look it up.** A class that needs
+`ObjectService` on its normal path declares it as a constructor-promoted, typed
+property — typed as the *interface*, see below.
+
+> **Exception — the optional-capability path.** Where a class reaches for
+> OpenRegister *only after establishing it is installed*, the lookup stays.
+> Deferring construction is the whole point of that shape, and injecting it
+> would make the service unconstructable on an instance without OpenRegister —
+> turning a clean "OpenRegister is not installed" message into a 500.
+>
+> A guard can be written three ways and **all three count**: ask the app manager
+> (`isInstalled`, `getInstalledApps`), ask the autoloader (`class_exists`), or
+> try-and-degrade (a `catch` that logs and returns rather than rethrowing). A
+> `catch` that **rethrows** is not a guard.
+
+**2. Never `extends` or `implements` an OpenRegister class.** A reference in a
+class header is fatal at autoload — it takes down the very route that would have
+explained the problem. Compose instead. (Constructor injection is *not* that: it
+resolves when the service is constructed, so a route that never constructs it
+never fails.)
+
+**3. The default route stays core-only.** The controller behind an app's start
+screen depends on core only, and publishes availability to the frontend so it can
+render an install prompt rather than an error:
+
+```php
+$this->initialState->provideInitialState(
+    'openregister_available',
+    $this->appManager->isInstalled('openregister')
+);
+```
+
+**4. Check the version floor, do not install.** An app MAY compare
+`IAppManager::getAppVersion('openregister')` against its floor and report it. It
+MUST NOT install or update OpenRegister: the only thing that can fetch from the
+app store is `OC\Installer` — namespace `OC`, **private API**, no BC guarantee —
+and it bypasses admin consent. Detect, inform, link to the store page.
+
+> **The rule was too broad when first written, and the gate enforced it
+> faithfully.** The finding count went 1263 → 1010 → 883 → **441**; the 822-site
+> difference was code that was already correct, in one of the three guard forms
+> above. A rule derived from one observed idiom will mistake every other correct
+> idiom for debt, at fleet scale and with a straight face. Survey first, then
+> write the rule.
+
+### Type-hint the contract, never the concrete class (ADR-084, gate-67)
+
+Rule 1 is unenforceable on its own, and this is the half that makes it work.
+An app that uses OpenRegister's `ObjectService` **type-hints the published
+interface**:
+
+```php
+use OCA\OpenRegister\Contract\ObjectServiceInterface;
+
+public function __construct(
+    private readonly ObjectServiceInterface $objectService,
+) {
+}
+```
+
+and binds it once, in the composition root:
+
+```php
+$context->registerServiceAlias(
+    ObjectServiceInterface::class,
+    'OCA\OpenRegister\Service\ObjectService'
+);
+```
+
+Nextcloud autowires concrete classes across apps but **not** interfaces, so the
+binding has to be stated. An alias, not a factory: it resolves when something
+asks for the interface, so an app on an instance without OpenRegister fails at
+the route that needed the data rather than at registration.
+
+**Why not the concrete class.** A leaf app cannot load a class from another
+Nextcloud app, so a typed parameter had no satisfiable test double:
+
+```
+TypeError: __construct(): Argument #4 ($objectService) must be of type
+OCA\OpenRegister\Service\ObjectService, class@anonymous given
+```
+
+Ten of the sixteen consuming apps had hand-rolled a stub instead, declaring
+between 0 and 13 methods against a real class of 88 — union 23. Four declared
+**zero**: a shell that satisfies a type-hint and checks nothing.
+
+**Keep the concrete import where the concrete NAME is still used.**
+`ObjectService::class` as a container key, or `instanceof ObjectService`, names
+the class itself. Import both in that case. Dropping the concrete import there
+is silent damage: `::class` does not require the class to exist, so
+`$container->get(ObjectService::class)` quietly resolves to *your app's own*
+namespace and looks up a key nobody registered, and `instanceof` becomes
+permanently false. Neither errors at the point of the change.
+
+**gate-67 `openregister-contract-parity`** keeps the two copies of the interface
+— openregister's `lib/Contract/` and the one shipped in hydra-gates — byte
+identical, in both directions. Two definitions of a published contract is the
+drift the ADR forbids, and an intention to keep them in step is not a mechanism.
+
 ## Where the configuration lives
 
 As of this change, the PHP quality configuration has **one** home:
@@ -344,7 +466,7 @@ the distribution channel is part of the standard, not an implementation detail.
 | Package | Registry | Contains | Consumed by |
 | --- | --- | --- | --- |
 | [`conduction/coding-standard`](https://packagist.org/packages/conduction/coding-standard) | Packagist | php-cs-fixer config extending Nextcloud's | every app, `require-dev` |
-| [`conduction/hydra-gates`](https://packagist.org/packages/conduction/hydra-gates) | Packagist | the mechanical gates **and** `quality-config/` (PHPCS, PHPMD, PHPStan base, custom sniffs) | every app, `require-dev` |
+| [`conduction/hydra-gates`](https://packagist.org/packages/conduction/hydra-gates) | Packagist | the mechanical gates, `quality-config/` (PHPCS, PHPMD, PHPStan base, custom sniffs) **and** `contracts/` — the OpenRegister interfaces apps type-hint (ADR-084) | every app, `require-dev` |
 | [`@conduction/nextcloud-vue`](https://www.npmjs.com/package/@conduction/nextcloud-vue) | npm | shared Vue components **and** the ESLint / Stylelint config | every app, `dependencies` |
 
 Both composer packages are built from repositories that also do other things —
@@ -374,6 +496,42 @@ Apps require `^1.0`, not an exact version. A pin is a silent expiry date: 22 rep
 once sat on gate package `v1.0.1` while 16 gates were dead fleet-wide and every one
 of them reported PASS. Hold a package still only for a stated reason, in that app,
 with the reason written next to the constraint.
+
+### Two distribution paths in one package, and only one of them needs a tag
+
+`conduction/hydra-gates` ships two kinds of thing, and they reach an app by
+different routes. Confusing them costs a release.
+
+| what | how it reaches an app | needs a tag? |
+| --- | --- | --- |
+| the gate scripts (`scripts/`, the runner) | the shared CI workflow fetches them from **`.github@main`** | **no** — a merge to `main` is live immediately, in every app's next run |
+| `contracts/` — the OpenRegister interfaces | **composer**, from the app's `vendor/` | **yes** — apps pin `^1.0`, so nothing reaches them until a version is tagged |
+
+So a fix to a checker is live on merge, while a change to a published interface
+is invisible until the tag exists **and** each app's `composer.lock` moves.
+
+Measured 2026-08-15, and the failure mode is quiet. `openregister` merged
+`lib/Contract/`, then bumped its lock to `v1.8.0` specifically so gate-67 would
+start comparing the two copies. It still reported:
+
+```
+[gate-67] openregister-contract-parity: NOT APPLICABLE — lib/Contract/ exists but
+no shipped copy was found to compare it against. NOT a pass — nothing was verified.
+```
+
+The gate looked for the shipped copy in `vendor/conduction/hydra-gates/…`, and
+**the Hydra Gates job never runs `composer install`** — it fetches the runner from
+`main`, so that job has no `vendor/` at all and never will. The gate could only
+ever skip. It now also looks for the copy sitting alongside the running script,
+which is the path that exists in CI (`.github#465`).
+
+Two things worth carrying:
+
+- **A gate that has only ever skipped has not been shown to work.** `NOT
+  APPLICABLE` is deliberately not a pass, and this is why: the wording was
+  correct and the gate was still useless.
+- **Check the gate's verdict in a real run**, not just that the change that
+  should enable it has landed.
 
 ### Publishing, and how to tell it actually published
 
@@ -439,6 +597,7 @@ version gets the wrong library.
 
 - [Development Pipeline](development-pipeline.md) — branch flow and release triggers
 - [Contributing](contributing.md) — PR checklist and commit conventions
+- **ADR-083** and **ADR-084** in [`ConductionNL/hydra`](https://github.com/ConductionNL/hydra/tree/development/openspec/architecture) — how an app depends on OpenRegister, and the contract it type-hints
 - [`quality-config/` README](https://github.com/ConductionNL/.github/tree/main/quality-config) — the mechanism, and the phpcs behaviour it was built on
 - [nextcloud/.github workflow templates](https://github.com/nextcloud/.github/tree/master/workflow-templates)
 - [nextcloud/coding-standard](https://github.com/nextcloud/coding-standard)
