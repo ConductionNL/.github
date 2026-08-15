@@ -302,10 +302,79 @@ Four things to fix, in order of how quietly they fail:
    it tells Prettier to use 2-space indentation and double quotes for `.ts` files
    — both of which `@nextcloud/eslint-config` then flags. Delete it or wire it up.
 
-## Consuming OpenRegister: type-hint the contract (ADR-084, gate-67)
+## Consuming OpenRegister (ADR-083, ADR-084)
 
+Almost every app depends on OpenRegister, and for a long time almost none of them
+said so where a reader — or a tool — could see it. The dominant shape was a lazy
+container lookup inside a private accessor:
+
+```php
+private function getObjectService(): object {
+    return $this->container->get('OCA\OpenRegister\Service\ObjectService');
+}
+```
+
+The dependency is announced nowhere: not in the constructor, not in the `use`
+block, not in any type. It appears mid-method, as a **string**.
+
+That is not a style complaint. Gate-7 reported **50 findings on pipelinq**, every
+one a correctly-delegated endpoint — it could not *see* the delegation, because
+the only evidence was a string literal. A human review of the same code the same
+day reached the opposite conclusion about who was enforcing authorisation, and
+wrote it down. A reader with grep and an hour got the story backwards.
+
+### The four rules (ADR-083), enforced by gate-66
+
+**1. Inject an unconditional dependency; do not look it up.** A class that needs
+`ObjectService` on its normal path declares it as a constructor-promoted, typed
+property — typed as the *interface*, see below.
+
+> **Exception — the optional-capability path.** Where a class reaches for
+> OpenRegister *only after establishing it is installed*, the lookup stays.
+> Deferring construction is the whole point of that shape, and injecting it
+> would make the service unconstructable on an instance without OpenRegister —
+> turning a clean "OpenRegister is not installed" message into a 500.
+>
+> A guard can be written three ways and **all three count**: ask the app manager
+> (`isInstalled`, `getInstalledApps`), ask the autoloader (`class_exists`), or
+> try-and-degrade (a `catch` that logs and returns rather than rethrowing). A
+> `catch` that **rethrows** is not a guard.
+
+**2. Never `extends` or `implements` an OpenRegister class.** A reference in a
+class header is fatal at autoload — it takes down the very route that would have
+explained the problem. Compose instead. (Constructor injection is *not* that: it
+resolves when the service is constructed, so a route that never constructs it
+never fails.)
+
+**3. The default route stays core-only.** The controller behind an app's start
+screen depends on core only, and publishes availability to the frontend so it can
+render an install prompt rather than an error:
+
+```php
+$this->initialState->provideInitialState(
+    'openregister_available',
+    $this->appManager->isInstalled('openregister')
+);
+```
+
+**4. Check the version floor, do not install.** An app MAY compare
+`IAppManager::getAppVersion('openregister')` against its floor and report it. It
+MUST NOT install or update OpenRegister: the only thing that can fetch from the
+app store is `OC\Installer` — namespace `OC`, **private API**, no BC guarantee —
+and it bypasses admin consent. Detect, inform, link to the store page.
+
+> **The rule was too broad when first written, and the gate enforced it
+> faithfully.** The finding count went 1263 → 1010 → 883 → **441**; the 822-site
+> difference was code that was already correct, in one of the three guard forms
+> above. A rule derived from one observed idiom will mistake every other correct
+> idiom for debt, at fleet scale and with a straight face. Survey first, then
+> write the rule.
+
+### Type-hint the contract, never the concrete class (ADR-084, gate-67)
+
+Rule 1 is unenforceable on its own, and this is the half that makes it work.
 An app that uses OpenRegister's `ObjectService` **type-hints the published
-interface**, never the concrete class:
+interface**:
 
 ```php
 use OCA\OpenRegister\Contract\ObjectServiceInterface;
