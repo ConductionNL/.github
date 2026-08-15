@@ -127,23 +127,40 @@ on:
         type: boolean
         default: true
       node-version:
-        # Node 22, because @nextcloud/eslint-config@9 CANNOT run on Node 20:
-        # it declares `engines.node: ^22.14 || ^24 || >=26` and imports
-        # `findPackageJSON` from `node:module`, an API that first exists in
-        # 22.14. On Node 20 the eslint job dies before linting a single file
-        # with `SyntaxError: The requested module 'node:module' does not
-        # provide an export named 'findPackageJSON'` — and npm reports the
-        # mismatch only as an EBADENGINE warning it then continues past, so
+        # Node 24, and the reason is npm, not Node.
+        #
+        # The fleet's supply-chain cooldown (`min-release-age` +
+        # `min-release-age-exclude` in each repo's .npmrc) is an npm 11+
+        # feature. It does not exist in npm 10 AT ALL — not as a rejected
+        # value, not as a warning: `npm config get min-release-age` answers
+        # `undefined` and the setting is read by nothing. And EVERY Node 22
+        # release bundles npm 10 (22.23.2, the latest, ships 10.9.8), so no
+        # value of this input in the 22 line can deliver it. Node 24.19 bundles
+        # npm 11.17.
+        #
+        # This supersedes the previous "Node 22 is what Nextcloud's own apps
+        # target" rationale. That still holds as a statement about upstream,
+        # but a cooldown that is silently inert is worse than no cooldown: it
+        # reads as protection nobody has. The apps' own `engines.node` already
+        # declares `^22.14 || ^24 || >=26`, so 24 was always an allowed
+        # runtime here — this makes it the one CI uses.
+        #
+        # The Node 20 floor below is unchanged and still binding:
+        # @nextcloud/eslint-config@9 declares `engines.node: ^22.14 || ^24 ||
+        # >=26` and imports `findPackageJSON` from `node:module`, an API that
+        # first exists in 22.14. On Node 20 the eslint job dies before linting
+        # a single file with `SyntaxError: The requested module 'node:module'
+        # does not provide an export named 'findPackageJSON'` — and npm reports
+        # the mismatch only as an EBADENGINE warning it then continues past, so
         # the crash is the only signal.
         #
-        # Node 22 is also what Nextcloud's own apps target, so this keeps the
-        # fleet matching the upstream toolchain rather than moving ahead of it.
-        # Apps still on eslint 8 run fine on 22; nothing pins Node 20 except
-        # `engines` fields, which npm only warns about.
+        # A caller that must stay on 22 can still pass `node-version: "22"`.
+        # It will get npm 10 and the cooldown will be inert for that repo,
+        # which gate-84 reports rather than letting it pass quietly.
         description: "Node.js version for all frontend/npm steps"
         required: false
         type: string
-        default: "22"
+        default: "24"
       frontend-path:
         description: "Directory containing package.json + package-lock.json for all npm-side jobs (Vue Quality, Frontend Checks, npm security/license legs). Default: repo root. Use for repos where the frontend lives in a subdirectory (e.g. 'pwa')."
         required: false

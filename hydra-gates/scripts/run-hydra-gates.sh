@@ -10231,6 +10231,62 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# GATE 84 — npm-supply-chain-config
+#
+# The cooldown is THREE settings that only work together, and any one alone is
+# a configuration that looks like protection and is not:
+#
+#   .npmrc        min-release-age=<days>              (>= 2)
+#   .npmrc        min-release-age-exclude[]=@conduction/*
+#   package.json  engines.npm admitting ONLY npm 11+
+#
+# MEASURED 2026-08-15, both halves:
+#
+#  * `min-release-age` DOES NOT EXIST IN NPM 10 — `npm config get
+#    min-release-age` answers `undefined`, and every Node 22 release bundles
+#    npm 10 (22.23.2 ships 10.9.8). 13 of 19 apps declared npm 10 while
+#    carrying a comment describing a 24h guard. The guard was read by nothing.
+#
+#  * WITHOUT THE EXCLUSION THE COOLDOWN DOES NOT FAIL LOUDLY, IT SILENTLY
+#    RESOLVES BACKWARDS. An install of @conduction/nextcloud-vue on release
+#    day under min-release-age=1 with no exclusion resolved 2.0.7 instead of
+#    2.3.0 AND EXITED 0. A green install of months-old code is worse than a
+#    red one: nothing distinguishes it from a correct install.
+#
+# FULL-TREE, deliberately NOT diff-scoped. This is a conformance property of
+# the repository, not of a change. Diff-scoped it would report nothing on
+# every PR that does not touch .npmrc — almost all of them — and a gate silent
+# on 99% of PRs cannot establish fleet-wide conformance, which is its purpose.
+#
+# NOTE ON PLACEMENT: top level, outside any `_FAILED` guard.
+# ---------------------------------------------------------------------------
+_nsc_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-npm-supply-chain-config.log
+: > "${_nsc_log}"
+if [ -f package.json ]; then
+    set +e
+    python3 "${SCRIPT_DIR}/lib/check_npm_supply_chain_config.py" . > "${_nsc_log}" 2>&1
+    _nsc_rc=$?
+    # `set +e`, not `set -e`: errexit off is the state this script actually
+    # runs in, and re-enabling it here would abort the run on the first
+    # non-zero anything downstream. See the note at the top of this file.
+    set +e
+
+    if [ "${_nsc_rc}" -eq 0 ]; then
+        _pass 84 "npm-supply-chain-config"
+    elif [ "${_nsc_rc}" -eq 4 ]; then
+        _skip 84 "npm-supply-chain-config" na "this repo has no package.json, so it has no npm surface to harden. See ${_nsc_log}."
+    elif ! _helper_finished "${_nsc_log}" '^checked [0-9]+ npm supply-chain setting'; then
+        # A CRASH IS NOT A FINDING.
+        _nsc_why=$(head -3 "${_nsc_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+        _skip 84 "npm-supply-chain-config" wiring "check_npm_supply_chain_config.py exited ${_nsc_rc} without printing its terminal 'checked N npm supply-chain setting(s)' summary, so the cooldown configuration is UNVERIFIED by this run. Checker output: ${_nsc_why:-<empty>}. See ${_nsc_log}."
+    else
+        _nsc_n=$(grep -cE '^FAIL ' "${_nsc_log}" 2>/dev/null || true)
+        case "${_nsc_n}" in ''|*[!0-9]*) _nsc_n=1 ;; esac
+        _fail 84 "npm-supply-chain-config" "${_nsc_n} npm supply-chain setting(s) missing or too weak — the cooldown is inert or silently resolves first-party packages backwards; see ${_nsc_log}"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
 # Summary + COVERAGE ACCOUNTING
 #
 # The banner used to read "ALL 63 GATES GREEN" whenever the failure count was
@@ -10379,6 +10435,15 @@ _a11y_has_markup_dir || _declare_na "no src/, templates/ or appinfo/templates/ �
 # `if [ -d templates ] || [ -d appinfo/templates ]` — gate 41
 { [ -d templates ] || [ -d appinfo/templates ]; } || _declare_na "no templates/ and no appinfo/templates/ — this repo ships no server-rendered HTML document to carry a lang attribute." \
     41
+# `if [ -f package.json ]` — gate 84
+#
+# Without this the gate emits NOTHING on a PHP-only repo, and a silence is
+# indistinguishable from a pass — which is exactly what
+# --require-full-coverage exists to catch. Caught by
+# test-hydra-gates-bin.sh's all-not-applicable fixture, which has no
+# package.json: the flag exited 98 on a repository with nothing wrong with it.
+[ -f package.json ] || _declare_na "no package.json — this repo installs nothing from npm, so there is no dependency resolution for a release-age cooldown to govern." \
+    84
 
 _emitted_n=$(printf '%s\n' ${_EMITTED_GATES} | grep -c . || true)
 _emitted_n="${_emitted_n:-0}"
