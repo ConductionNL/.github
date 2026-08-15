@@ -10231,6 +10231,82 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# GATE 83 — contract-surface-shift (ADR-084)
+#
+# A method on a published contract can be served two ways: DECLARED
+# (`public function getSchema(): ?string`) or MAGIC (an `@method` docblock tag
+# routed through `__call()`). Moving one between those surfaces is a BREAKING
+# CHANGE FOR EVERY CONSUMER, and it breaks them WITH NO COMMIT IN THEIR
+# REPOSITORIES.
+#
+# PHPUnit picks its mock builder on exactly that distinction:
+#   addMethods()  throws CannotUseAddMethodsException  if the method EXISTS
+#   onlyMethods() throws CannotUseOnlyMethodsException if it does NOT
+# so every consumer that doubles the class has hard-coded which surface each
+# method sits on.
+#
+# MEASURED, not hypothetical. 2026-08-15, openregister#2498 published the
+# ObjectService/ObjectEntity interfaces, forcing getUuid()/getRegister()/
+# getSchema() to be declared. Fallout in repos that had not changed a line:
+# opencatalogi 42 errors across all 6 PHPUnit cells, decidesk 1. Both
+# `development` branches went red on commits that had passed hours earlier,
+# and the failures surfaced on unrelated dependency PRs where they read as
+# those PRs' fault. Replayed against that commit, this gate names all five
+# shifted methods.
+#
+# WHY IT LIVES ON THE PRODUCER SIDE. It cannot be written in the consuming
+# repo: this job checks out exactly two things, the app and the gates package,
+# so a consumer-side checker cannot see the real class and would resolve every
+# external double as "unknown" — reporting ZERO for the one change that
+# matters, which reads as a pass. The authority lives with the class, so the
+# check does too.
+#
+# ALWAYS diff-scoped: this gate is about the MOMENT of the shift. A whole-tree
+# sweep would report every declared method on every contract class forever,
+# which describes the codebase rather than finding anything.
+#
+# NOTE ON PLACEMENT: top level, deliberately outside any `_FAILED` guard — a
+# gate that only runs once everything else passed is green-but-dead.
+# ---------------------------------------------------------------------------
+_css_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-contract-surface-shift.log
+: > "${_css_log}"
+if [ -d lib/Contract ]; then
+    set +e
+    if [ "${HAVE_DELTA_BASE}" = "1" ]; then
+        python3 "${SCRIPT_DIR}/lib/check_contract_surface_shift.py" . --base "${BASE_REF}" > "${_css_log}" 2>&1
+        _css_rc=$?
+    else
+        # ALWAYS RUN THE CHECKER, EVALUATE WIRING FIRST, THEN SCOPE. Declining
+        # earlier would make a python3 that cannot run indistinguishable from a
+        # repo with nothing to judge — a crashed checker reading as an empty
+        # scope is the regression this package has already made twice.
+        python3 "${SCRIPT_DIR}/lib/check_contract_surface_shift.py" . --all > "${_css_log}" 2>&1
+        _css_rc=$?
+    fi
+    set -e
+
+    if [ "${_css_rc}" -eq 0 ]; then
+        _pass 83 "contract-surface-shift"
+    elif [ "${_css_rc}" -eq 3 ]; then
+        if [ "${HAVE_DELTA_BASE}" = "1" ]; then
+            _skip 83 "contract-surface-shift" na "the diff against '${BASE_REF}' touched no published-contract file, so no surface shift could occur. This gate runs on the next change that edits lib/Contract/ or a class implementing it. See ${_css_log}."
+        else
+            _skip 83 "contract-surface-shift" na "this run computed NO diff (no delta base), and a surface shift is only visible against one — so NO contract method was compared and the published surface is UNVERIFIED by this run. This is NOT a clean bill of health; there was no diff to exclude anything. Re-measure with --base <ref> or HYDRA_GATE_BASE_REF. See ${_css_log}."
+        fi
+    elif [ "${_css_rc}" -eq 4 ]; then
+        _skip 83 "contract-surface-shift" na "this repo publishes no lib/Contract/*Interface.php, so it exposes no contract surface consumers can double. See ${_css_log}."
+    elif ! _helper_finished "${_css_log}" '^checked [0-9]+ contract '; then
+        # A CRASH IS NOT A FINDING.
+        _css_why=$(head -3 "${_css_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+        _skip 83 "contract-surface-shift" wiring "check_contract_surface_shift.py exited ${_css_rc} without printing its terminal 'checked N contract ...' summary, so NO contract method was compared and the published surface is UNVERIFIED by this run. Checker output: ${_css_why:-<empty>}. See ${_css_log}."
+    else
+        _css_n=$(grep -cE '^FAIL ' "${_css_log}" 2>/dev/null || true)
+        case "${_css_n}" in ''|*[!0-9]*) _css_n=1 ;; esac
+        _fail 83 "contract-surface-shift" "${_css_n} undeclared shift(s) of a published contract method between the magic and declared surfaces — this breaks consumers' test doubles with no commit in their repos. Annotate with @contract-shift <announced|internal-only|new-contract> — <reason>; see ${_css_log}"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
 # Summary + COVERAGE ACCOUNTING
 #
 # The banner used to read "ALL 63 GATES GREEN" whenever the failure count was
