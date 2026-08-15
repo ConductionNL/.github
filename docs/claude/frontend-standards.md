@@ -80,6 +80,35 @@ All `<style>` blocks in `.vue` files **must** use the `scoped` attribute. Global
 - `css/` directory — styles loaded by Nextcloud outside of webpack (e.g., dashboard widget icons)
 - Import in `main.js`: `import './assets/app.css'`
 
+## Routing History Mode
+
+**Path-based Vue Router history (`createWebHistory`) is the fleet convention.** Hash-based (`createWebHashHistory`, `#/…` URLs) is the thing being migrated away from, not a valid alternative for new apps.
+
+**Why path, not hash**: hash routing needs zero server-side work (everything after `#` never reaches the server) at the cost of permanently ugly URLs and broken `#`-based deep links whenever an app also wants to use the fragment for something else (e.g. anchors). Path routing gives real, shareable, refresh-safe URLs, but the trade is real: it needs a server-side catch-all, or a direct hit on a deep client route (e.g. a bookmark, a page refresh) 404s.
+
+**A path-history app with no working catch-all is not ahead of the convention — it is broken**, and worse than staying on hash. Do not flip `createWebHashHistory` → `createWebHistory` in `main.js` without first confirming (and, ideally, live-testing a hard reload of a deep route against) one of the two sanctioned catch-all mechanisms below.
+
+### Two sanctioned ways to get the catch-all
+
+1. **`\OCA\OpenRegister\AppHost\Routes::standard($extra)`** — the shared route-table builder. Call it from `appinfo/routes.php` and it appends a `/{path}` catch-all (excluding `/api/*`) to whatever app-specific routes you pass as `$extra`. This is the preferred mechanism for any app that already depends on OpenRegister. Reference: `docudesk/appinfo/routes.php`.
+2. **A hand-rolled catch-all route** in `appinfo/routes.php` that matches `/{path}` (or equivalent) and excludes `/api/*`, dispatching to a controller action that just renders the SPA shell (e.g. `dashboard#catchAll`, `ui#dashboard`). Reference: `openconnector/appinfo/routes.php`'s `ui#dashboard` route — pre-existing from an earlier, unfinished migration, verified working and now wired up to the frontend.
+
+Either way, `main.js`'s `createWebHistory(...)` call needs no other change — the catch-all is purely a backend routing concern.
+
+### Gate: `lint-router-history-mode.sh`
+
+`.github/hydra-gates/scripts/lint-router-history-mode.sh` checks both halves of this convention per app: router mode in `src/main.js`, and (for apps already on path history) catch-all presence in `appinfo/routes.php`. A missing catch-all on a path-history app is an unconditional failure regardless of gate mode — it is a real bug, not an in-progress migration state.
+
+```bash
+# Single app, from that app's repo root:
+bash ../.github/hydra-gates/scripts/lint-router-history-mode.sh
+
+# Fleet-wide summary, from apps-extra/:
+bash .github/hydra-gates/scripts/lint-router-history-mode.sh --fleet
+```
+
+As of 2026-08-15 (19 apps checked, `--fleet`): `openconnector` is on path history with a verified catch-all; `decidesk`, `docudesk`, `hermiq`, `hrmq`, `openbuild`, `portaliq`, `procest`, `scholiq`, `shillinq` were already on path history; `doriath`, `larpingapp`, `opencatalogi`, `openregister`, `pipelinq`, `softwarecatalog`, `zaakafhandelapp` remain on hash history, not yet converted. The gate runs in `WARN` mode (`HYDRA_ROUTER_HISTORY_GATE_MODE=WARN`, the default) — it reports hash-history apps without failing CI — until every remaining app has a verified catch-all and is converted; flip to `BLOCK` only after that.
+
 ## Admin Detection
 
 Never use `OC.isAdmin` — it doesn't exist in Nextcloud's frontend JavaScript API. Instead:
