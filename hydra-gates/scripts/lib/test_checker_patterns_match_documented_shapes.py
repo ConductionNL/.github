@@ -98,12 +98,10 @@ REGISTRY = [
             "$objectService->searchObjects($query);",
             # Accessor, chained.
             "$this->getObjectService()->find($id);",
-            # Accessor, ASSIGNED then used — defect (6) above.
-            "$objectService = $this->settingsService->getObjectService();",
-            "$orService = $this->mapperService->getOpenRegisters();",
-            "return $this->getOpenRegisters();",
-            # The container resolution IS obtaining the facade.
+            # The container resolution IS obtaining the facade — the app names
+            # the class it is getting, in code. Defect (6) above.
             "return $this->container->get('OCA\\OpenRegister\\Service\\ObjectService');",
+            "$svc = $c->get(id: 'OCA\\\\OpenRegister\\\\Service\\\\ObjectService');",
         ],
         [
             # A NAME is not a call. These must keep needing the arrow.
@@ -113,6 +111,18 @@ REGISTRY = [
             "$this->invoiceMapper->findAll();",
             # An unrelated getter.
             "$this->getObjectStore()->read($id);",
+            # ⚠️ AN ACCESSOR CALLED BY NAME IS DELIBERATELY NOT THIS PATTERN'S
+            # BUSINESS, and putting it here is the point. `.github#373`'s
+            # planted fixture is a `getObjectService()` whose body is
+            # `class_exists('\OCA\OpenRegister\…\ObjectService')` and which
+            # returns a LOCAL service — it names OpenRegister and delivers
+            # something else. Matching the name cleared the fixture's planted
+            # method. These shapes are `_or_delegating_methods_deep`'s
+            # responsibility, which READS the accessor's body; pinned by
+            # `AccessorReachIsEstablishedFromTheBody` below.
+            "$objectService = $this->settingsService->getObjectService();",
+            "$orService = $this->mapperService->getOpenRegisters();",
+            "return $this->getOpenRegisters();",
         ],
     ),
     (
@@ -220,6 +230,71 @@ class WordBoundaryAgainstIdentifierFragments(unittest.TestCase):
         self.assertIsNone(
             idor._OR_IMPORT_RE.search(
                 "use OCA\\OpenRegister\\Contract\\ObjectServiceInterfaceFactory;"))
+
+
+class AccessorReachIsEstablishedFromTheBody(unittest.TestCase):
+    """An accessor's NAME buys nothing; its BODY is the evidence.
+
+    Two classes, identical accessor names, opposite verdicts. This is the arm
+    that would have caught the first version of the facade widening — it matched
+    `->getObjectService()` by name and cleared `.github#373`'s planted service
+    locator, which is called exactly that and returns a local service.
+
+    ⚠️ Both use the ASSIGNMENT spelling (`$svc = $this->getObjectService();`),
+    which is the fixture's shape and the fleet's. The CHAINED spelling
+    `->getObjectService()->` is a pre-existing alternative in
+    `_OR_FACADE_CALL_RE` that has always matched by name; it is untouched here
+    and is deliberately not what this arm is about.
+    """
+
+    REAL = """<?php
+namespace OCA\\Demo\\Service;
+class SettingsService {
+    private function getObjectService(): ?object {
+        return $this->container->get('OCA\\OpenRegister\\Service\\ObjectService');
+    }
+    public function search(string $id): array {
+        $objects = $this->getObjectService();
+        return $objects->find($id);
+    }
+}
+"""
+    LOCATOR = """<?php
+namespace OCA\\Demo\\Service;
+class ThemeLocator {
+    private function getObjectService(): ThemeService {
+        if (!class_exists('\\OCA\\OpenRegister\\Service\\ObjectService')) {
+            throw new \\RuntimeException('OpenRegister is not installed');
+        }
+        return $this->themes;
+    }
+    public function search(string $id): array {
+        $objects = $this->getObjectService();
+        return $objects->find($id);
+    }
+}
+"""
+
+    def _or_methods(self, source: str) -> set:
+        import tempfile
+        # Written under a `lib/` segment so `_app_root_for` resolves.
+        root = tempfile.mkdtemp()
+        libdir = os.path.join(root, 'lib', 'Service')
+        os.makedirs(libdir)
+        path = os.path.join(libdir, 'X.php')
+        with open(path, 'w', encoding='utf-8') as handle:
+            handle.write(source)
+        idor._OR_DELEGATION_CACHE.clear()
+        idor._CLASS_INDEX_CACHE.clear()
+        idor._TYPE_RESOLVE_CACHE.clear()
+        return idor._or_delegating_methods_deep(path, idor._OR_DELEGATION_MAX_DEPTH)
+
+    def test_an_accessor_that_resolves_the_facade_seeds_its_callers(self):
+        self.assertIn('search', self._or_methods(self.REAL))
+
+    def test_a_locator_that_merely_NAMES_openregister_does_not(self):
+        """The negative control, and the one the acceptance matrix pinned."""
+        self.assertNotIn('search', self._or_methods(self.LOCATOR))
 
 
 class ComputedVerbsAreMutating(unittest.TestCase):
