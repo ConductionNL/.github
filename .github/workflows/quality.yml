@@ -2596,9 +2596,51 @@ jobs:
             # changed, nothing to compare" rather than as zero coverage.
             git diff --name-only "$MERGE_BASE" HEAD -- '*.php' > "$RUNNER_TEMP/changed-php.txt" || true
             echo "Changed PHP files in this PR: $(wc -l < "$RUNNER_TEMP/changed-php.txt")"
+
+            # ── DELETIONS ARE NOT COVERAGE REGRESSIONS ────────────────────────
+            #
+            # The scoping above removed the noise; it did not remove the
+            # ARITHMETIC. `cgRatioDropped()` is one integer cross-product with no
+            # tolerance, and read plainly it demands that the code you touched be
+            # at least as well covered as the code you did not. For additions that
+            # is exactly right. For deletions it inverts: removing `d` statements
+            # of which `c` were covered lowers the ratio whenever the deleted code
+            # was better tested than what remains — and DEAD CODE IS DEAD BECAUSE
+            # NOTHING CALLS IT, NOT BECAUSE NOTHING TESTED IT. gate-57
+            # (orphaned-write-capability) exists to find precisely that code, so
+            # the two are in arithmetic opposition, not tension. Such a pull
+            # request cannot satisfy the ratchet from inside its own subject: the
+            # only moves are delete less, add filler, or delete additional
+            # *uncovered* statements until it balances. Measured on
+            # opencatalogi#895 (-0.62% scoped) and launchpad#128 (-0.32% scoped),
+            # both of which deleted dead code and neither of which could comply.
+            #
+            # `--deletion-neutral` compares METHOD BUCKETS asymmetrically:
+            # base-only methods leave the base side, head-only methods stay on the
+            # head side. A pure deletion becomes exactly neutral; a regression in
+            # surviving code and new untested code both still fail. The symmetric
+            # version of that rule is the obvious one and it is broken — it also
+            # drops head-only statements, so forty new statements with none
+            # covered pass. quality-config/tests/test-coverage-guard.py asserts all
+            # four cases and kills a mutant that reintroduces the symmetric rule.
+            #
+            # PROBED, not assumed, for the same reason as the flag above: a copy
+            # predating this flag would accept it and ignore it, silently
+            # restoring the deletion penalty while reporting success. Older copies
+            # keep today's behaviour rather than erroring — this narrows an
+            # existing check, it is not the difference between a check running and
+            # not running.
+            CG_MODE=()
+            if php scripts/coverage-guard.php --capabilities 2>/dev/null | grep -qx deletion-neutral; then
+              CG_MODE+=(--deletion-neutral)
+            else
+              echo "::notice::scripts/coverage-guard.php predates --deletion-neutral, so deleting well-tested dead code will still read as a coverage drop. Copy the canonical version from ConductionNL/.github at quality-config/coverage-guard.php to pick it up."
+            fi
+
             php scripts/coverage-guard.php coverage/clover.xml \
               --against="$RUNNER_TEMP/base-clover.xml" \
-              --changed-files="$RUNNER_TEMP/changed-php.txt"
+              --changed-files="$RUNNER_TEMP/changed-php.txt" \
+              "${CG_MODE[@]}"
           else
             php scripts/coverage-guard.php coverage/clover.xml --against="$RUNNER_TEMP/base-clover.xml"
           fi
