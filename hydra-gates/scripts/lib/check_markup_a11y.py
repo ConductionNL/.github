@@ -94,6 +94,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from source_scope import (  # noqa: E402
+    _OPEN_TAG,
     html_markup_mask,
     iter_open_tags,
     js_comment_mask,
@@ -183,8 +184,74 @@ def _tokens(text: str) -> set[str]:
     return {t for t in _NON_ALNUM.sub(" ", spaced).lower().split() if t}
 
 
+# NAMED BY CONTEXT. `alt=""` is a lie only when the image is the ONLY thing
+# carrying the meaning. Inside an element that takes its accessible name from
+# its own text content, an empty alt is the CORRECT answer and the one WCAG
+# asks for (H67): the name announced is the sibling text, and giving the image
+# its own alt makes assistive technology say the same thing twice.
+#
+#     <a href="…">
+#       <img :src="item.thumbnailUrl" alt="">   <-- decorative, correctly
+#       <h4>{{ item.title }}</h4>               <-- THIS names the link
+#     </a>
+#
+# So the noun test still decides WHICH images are suspicious; this decides
+# whether the suspicion survives the markup around it. Deliberately narrow:
+# only these four elements, and only when the ancestor actually carries text
+# besides the image. An `<a>` wrapping nothing but the image is still a
+# finding, because then the image IS the link's only possible name.
+_NAME_GIVING = frozenset({"a", "button", "label", "figure"})
+# Void elements never nest, so they must not be pushed onto the tag stack.
+_VOID_ELEMENTS = frozenset({
+    "area", "base", "br", "col", "embed", "hr", "img", "input",
+    "link", "meta", "param", "source", "track", "wbr",
+})
+_TAG_STRIP = re.compile(r"<[^>]*>", re.DOTALL)
+
+
+def _name_giving_spans(masked: str) -> list[tuple[int, int]]:
+    """Content spans of every `_NAME_GIVING` element, innermost last.
+
+    A single forward pass with an explicit stack. Unbalanced markup simply
+    never yields a span for the unclosed element, which is the safe direction:
+    no span means no exemption means the finding stands.
+    """
+    stack: list[tuple[str, int]] = []
+    spans: list[tuple[int, int]] = []
+    for m in _OPEN_TAG.finditer(masked):
+        name = m.group(2).lower()
+        if m.group(1):                                  # closing tag
+            for i in range(len(stack) - 1, -1, -1):
+                if stack[i][0] == name:
+                    if name in _NAME_GIVING:
+                        spans.append((stack[i][1], m.start()))
+                    del stack[i:]
+                    break
+            continue
+        if m.group(4) or name in _VOID_ELEMENTS:        # self-closing / void
+            continue
+        stack.append((name, m.end()))
+    return spans
+
+
+def _named_by_context(masked: str, spans: list[tuple[int, int]],
+                      img_start: int, img_end: int) -> bool:
+    """True when some name-giving ancestor of the image also carries text."""
+    for start, end in spans:
+        if not (start <= img_start and img_end <= end):
+            continue
+        # Everything the ancestor contains EXCEPT this image's own tag. Vue
+        # interpolation counts: `{{ item.title }}` renders as the text that
+        # names the link.
+        inner = masked[start:img_start] + masked[img_end:end]
+        if _TAG_STRIP.sub("", inner).strip():
+            return True
+    return False
+
+
 def _img_alt_empty_only(path: str, masked: str) -> list[str]:
     out = []
+    spans = _name_giving_spans(masked)
     for tag in iter_open_tags(masked, {"img"}):
         if not EMPTY_ALT.search(tag.attrs):
             continue
@@ -192,8 +259,11 @@ def _img_alt_empty_only(path: str, masked: str) -> list[str]:
         if m is None:
             continue
         value = m.group(4) if m.group(4) is not None else (m.group(5) or "")
-        if _tokens(value) & SEMANTIC_NOUNS:
-            out.append(f"{path}:{tag.line}: {tag.flat} rule=empty-alt-on-semantic-bound-src")
+        if not (_tokens(value) & SEMANTIC_NOUNS):
+            continue
+        if _named_by_context(masked, spans, tag.start, tag.end):
+            continue
+        out.append(f"{path}:{tag.line}: {tag.flat} rule=empty-alt-on-semantic-bound-src")
     return out
 
 
