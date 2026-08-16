@@ -86,6 +86,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from exclusion_reason import exclude_pattern, is_reason_bearing  # noqa: E402
 from source_scope import php_mask, script_mask  # noqa: E402
 
 
@@ -223,6 +224,59 @@ def _slice_balanced(cleaned: str, start: int, open_ch: str, close_ch: str) -> tu
                 return (j, k + 1)
         k += 1
     return (-1, -1)
+
+
+_ORPHAN_AUTH_EXCLUDE_RE = re.compile(exclude_pattern("orphan-auth"))
+
+
+def _is_excluded(src: str, line_no: int) -> bool:
+    """True when the method at *line_no* carries `@orphan-auth exclude <reason>`.
+
+    WHY THIS EXISTS
+    ---------------
+    gate-57 (orphaned-write-capability) has had `@orphaned-write-capability
+    exclude <reason>` since it shipped. gate-6 asks the same question about the
+    same population — a capability that exists and nothing calls — and had no
+    way to answer it at all. So a dormant predicate someone had already
+    reasoned about, written up and assigned an owner still failed the build,
+    and the only ways out were to delete a deliberate near-term capability or
+    to invent a caller for it. pipelinq#764 is exactly that case: seven dormant
+    capabilities behind gates 6 and 57, with a decision pending, and the ones
+    behind gate-57 could be marked while the identical ones behind gate-6 could
+    not.
+
+    A reason is REQUIRED, matching every other exclude in the suite. The walk
+    skips blanks, PHP attributes AND `//` line comments — a comment sitting
+    between the docblock and the declaration made gate-25 read the docblock as
+    absent, and that defect should not be reimplemented here.
+    """
+    lines = src.splitlines()
+    i = line_no - 2                        # line_no is 1-based; start above it
+    while i >= 0:
+        stripped = lines[i].strip()
+        if (stripped == "" or stripped.startswith("#[")
+                or stripped.startswith("]") or stripped.startswith("//")):
+            i -= 1
+            continue
+        break
+    if i < 0 or "*/" not in lines[i]:
+        return False
+
+    block: list[str] = []
+    while i >= 0:
+        block.append(lines[i])
+        if "/**" in lines[i] or "/*" in lines[i]:
+            break
+        i -= 1
+
+    for entry in block:
+        m = _ORPHAN_AUTH_EXCLUDE_RE.search(entry)
+        if m is None:
+            continue
+        reason = m.group("reason").strip().rstrip("*/").strip()
+        if is_reason_bearing(reason):
+            return True
+    return False
 
 
 def _iter_methods(src: str):
@@ -447,6 +501,8 @@ def scan_files(files: list[str]) -> list[str]:
                 continue
             # The router is a caller the `lib/`+`src/` corpus cannot contain.
             if _is_routed(f, name, head, route_corpus):
+                continue
+            if _is_excluded(src, line_no):
                 continue
             findings.append(f"{f}:{line_no} method={name} rule=defined-but-never-called")
     return findings
