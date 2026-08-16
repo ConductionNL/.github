@@ -297,6 +297,26 @@ class TestImgAltEmptyOnly(unittest.TestCase):
                '<img :src="user.avatarUrl" alt=""></a></template>')
         self.assertEqual(scan("img-alt-empty-only", src), [])
 
+    # --- DECLARED DECORATIVE ------------------------------------------------
+    def test_role_presentation_and_aria_hidden_declare_the_image_decorative(self):
+        for attrs in (
+            ':src="user.avatarUrl" alt="" role="presentation"',
+            ':src="user.avatarUrl" alt="" role="none"',
+            ':src="user.avatarUrl" alt="" aria-hidden="true"',
+        ):
+            with self.subTest(attrs=attrs):
+                self.assertEqual(scan("img-alt-empty-only", self._img(attrs)), [])
+
+    def test_a_near_miss_on_those_attributes_still_fires(self):
+        # aria-hidden="false" is not a declaration of decorativeness, and
+        # role="img" is the opposite of one.
+        for attrs in (
+            ':src="user.avatarUrl" alt="" aria-hidden="false"',
+            ':src="user.avatarUrl" alt="" role="img"',
+        ):
+            with self.subTest(attrs=attrs):
+                self.assertEqual(len(scan("img-alt-empty-only", self._img(attrs))), 1)
+
     # --- ANTI-WIDENING for the exemption above ------------------------------
     def test_a_link_whose_ONLY_content_is_the_image_still_fires(self):
         # The image is the link's only possible accessible name, so alt=""

@@ -201,6 +201,25 @@ def _tokens(text: str) -> set[str]:
 # besides the image. An `<a>` wrapping nothing but the image is still a
 # finding, because then the image IS the link's only possible name.
 _NAME_GIVING = frozenset({"a", "button", "label", "figure"})
+# DECLARED DECORATIVE, IN THE PLATFORM'S OWN VOCABULARY.
+#
+# `alt=""` alone is ambiguous — it is what an honest author writes for a
+# decorative image AND what a careless one writes to silence gate-31. These
+# three are not ambiguous: `role="presentation"` and `role="none"` remove the
+# element's semantics, and `aria-hidden="true"` removes it from the
+# accessibility tree entirely. An author who writes one of them has made an
+# explicit, reviewable accessibility decision, and every assistive technology
+# honours it.
+#
+# This is deliberately NOT a gate-specific opt-out tag. A token invented for a
+# linter can be pasted to silence it and means nothing to a browser; these mean
+# something to the browser first and to this gate only as a consequence. If the
+# author is wrong, the markup is wrong in a way a screen-reader user can
+# actually observe — which is the right place for that to be wrong.
+_DECORATIVE_DECLARED = re.compile(
+    r'(^|\s)(?:role\s*=\s*["\'](?:presentation|none)["\']'
+    r'|aria-hidden\s*=\s*["\']true["\'])'
+)
 # Void elements never nest, so they must not be pushed onto the tag stack.
 _VOID_ELEMENTS = frozenset({
     "area", "base", "br", "col", "embed", "hr", "img", "input",
@@ -260,6 +279,8 @@ def _img_alt_empty_only(path: str, masked: str) -> list[str]:
             continue
         value = m.group(4) if m.group(4) is not None else (m.group(5) or "")
         if not (_tokens(value) & SEMANTIC_NOUNS):
+            continue
+        if _DECORATIVE_DECLARED.search(tag.attrs):
             continue
         if _named_by_context(masked, spans, tag.start, tag.end):
             continue
