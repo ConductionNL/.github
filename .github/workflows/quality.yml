@@ -2508,25 +2508,96 @@ jobs:
       # optional — a missing or zero-statement report is a hard error in both
       # this step and the guard, because a base measured as 0% would set the
       # floor to zero and pass every possible drop.
+      #
+      # ── THE MERGE BASE IS DERIVED, NOT READ OUT OF THE EVENT PAYLOAD ──────
+      #
+      # This step used to compute `git merge-base "$BASE_SHA" "$HEAD_SHA"` with
+      # BASE_SHA taken from `github.event.pull_request.base.sha`. Both halves of
+      # that expression are wrong, and they hid each other:
+      #
+      #  1. `pull_request.base.sha` is the base branch tip SNAPSHOTTED when the
+      #     pull request was opened. GitHub does not refresh it as the base
+      #     branch advances. Measured on zaakafhandelapp#247 ("Release: merge
+      #     development into beta"), opened 2026-05-23: `base.sha` still reads
+      #     b233af99 — beta's tip on that day — although beta moved to a92d8707
+      #     on 2026-06-25. Nearly three months of drift, on a PR that is
+      #     re-run nightly.
+      #
+      #  2. On a `pull_request` event actions/checkout leaves `refs/pull/N/merge`
+      #     at HEAD, and that merge commit ALREADY CONTAINS the base branch. So
+      #     `git merge-base <any base commit> <merge ref>` returns that base
+      #     commit unchanged — the call was a no-op that laundered a stale sha
+      #     into something that reads like a computed merge base. The step's own
+      #     comment claims "the merge base is immutable for a given head, so it
+      #     cannot go stale"; the value it actually used was neither.
+      #
+      # The consequence is not cosmetic. On zaakafhandelapp the "merge base"
+      # resolved to a commit that predates this repository committing a
+      # composer.lock AND predates phpunit/phpunit being a dependency at all, so
+      # `composer install` resolved to latest, produced a 64-package set with no
+      # test runner in it, and the step died on
+      # `./vendor/bin/phpunit: No such file or directory` — reported as
+      # "Could not measure coverage at merge base", which reads like an
+      # unreachable object and is not. The suite itself was GREEN in the same
+      # job: `OK (268 tests, 825 assertions)`.
+      #
+      # The merge ref's parents are the authoritative answer and cost nothing:
+      # parent 1 is the CURRENT base tip, parent 2 is the pull request head. We
+      # only trust them when parent 2 actually IS `pull_request.head.sha`, so a
+      # checkout of a PR head that happens to be a merge commit cannot be
+      # mistaken for the merge ref. Verified against the real refs of
+      # zaakafhandelapp#247 (merge ref cb1439f3):
+      #   old logic -> b233af99  (no phpunit at that commit -> hard failure)
+      #   new logic -> 27027b32  (merge-base of a92d8707 and 986730b8)
       - name: Measure merge-base coverage
         if: ${{ inputs.enable-coverage-guard && github.event_name == 'pull_request' && matrix.php-version == inputs.php-version && matrix.nextcloud-ref == needs.nextcloud-matrix.outputs.single-server }}
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
           cd "server/apps/${{ inputs.app-name }}"
           HEAD_SHA="$(git rev-parse HEAD)"
-          MERGE_BASE="$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
-          echo "head=$HEAD_SHA base=$BASE_SHA merge-base=$MERGE_BASE"
+
+          SECOND_PARENT="$(git rev-parse --verify --quiet "${HEAD_SHA}^2" || true)"
+          if [ "$HEAD_SHA" != "$PR_HEAD_SHA" ] && [ "$SECOND_PARENT" = "$PR_HEAD_SHA" ]; then
+            BASE_TIP="$(git rev-parse "${HEAD_SHA}^1")"
+            MERGE_BASE="$(git merge-base "$BASE_TIP" "$PR_HEAD_SHA")"
+            echo "resolved via the merge ref: base-tip=$BASE_TIP pr-head=$PR_HEAD_SHA"
+          elif git rev-parse --verify --quiet "refs/remotes/origin/$BASE_REF" >/dev/null; then
+            BASE_TIP="$(git rev-parse "refs/remotes/origin/$BASE_REF")"
+            MERGE_BASE="$(git merge-base "$BASE_TIP" "$HEAD_SHA")"
+            echo "resolved via origin/$BASE_REF: base-tip=$BASE_TIP"
+          else
+            MERGE_BASE="$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
+            echo "::warning::Neither the merge ref nor origin/$BASE_REF was available; falling back to the event payload's base.sha=$BASE_SHA, which is the base tip as of PR creation and may be stale."
+          fi
+          echo "head=$HEAD_SHA merge-base=$MERGE_BASE"
+
           cp coverage/clover.xml "$RUNNER_TEMP/head-clover.xml"
           git checkout --force --detach "$MERGE_BASE"
           composer install --no-progress --prefer-dist --optimize-autoloader
+          # Recorded WHILE the base is checked out — after the checkout back to
+          # HEAD the evidence is gone, and "no clover file" would otherwise be
+          # reported with a cause the log does not support.
+          BASE_HAS_RUNNER=yes
+          [ -x ./vendor/bin/phpunit ] || BASE_HAS_RUNNER=no
           ./vendor/bin/phpunit -c phpunit.xml --coverage-clover="$RUNNER_TEMP/base-clover.xml" || true
           git checkout --force --detach "$HEAD_SHA"
           composer install --no-progress --prefer-dist --optimize-autoloader
           cp "$RUNNER_TEMP/head-clover.xml" coverage/clover.xml
-          test -s "$RUNNER_TEMP/base-clover.xml" \
-            || { echo "::error::Could not measure coverage at merge base $MERGE_BASE — refusing to report a ratchet that did not run."; exit 1; }
+
+          # THE REMEDY AN ERROR NAMES HAS TO EXIST — the two ways this can fail
+          # have different remedies, and the old single message named neither.
+          if [ ! -s "$RUNNER_TEMP/base-clover.xml" ]; then
+            if [ "$BASE_HAS_RUNNER" = "no" ]; then
+              echo "::error::Merge base $MERGE_BASE has no ./vendor/bin/phpunit after composer install — that commit predates this repository's PHPUnit setup, so there is no coverage floor to measure against. Merge the current base branch ($BASE_REF) into this pull request, or rebase it onto a base that carries the test suite. Refusing to report a ratchet that did not run."
+            else
+              echo "::error::PHPUnit is present at merge base $MERGE_BASE but produced no clover report there — the base suite could not run at all (check the PHPUnit output above this line). Refusing to report a ratchet that did not run."
+            fi
+            exit 1
+          fi
 
       # The capability probe is deliberately a HARD failure, not a fallback.
       # An older copy of scripts/coverage-guard.php accepts `--against` and
