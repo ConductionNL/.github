@@ -399,11 +399,35 @@ def _method_is_public_endpoint(lines: list[str], decl_idx: int) -> bool:
 
 def _docblock_block(lines: list[str], decl_idx: int) -> list[str]:
     """Return the /** ... */ block immediately above ``decl_idx`` (skipping PHP
-    attributes + blanks), or [] when absent."""
+    attributes, line comments + blanks), or [] when absent.
+
+    ``//`` IS PART OF THE GAP (.github, doriath 2026-08-16)
+    ------------------------------------------------------
+    This walk skipped blanks and ``#[...]`` attributes but stopped dead on a
+    ``//`` line. Attributes very often carry an explanatory comment beside
+    them, and doriath spells it exactly that way::
+
+         */
+        #[PublicPage]
+        #[NoCSRFRequired]
+        // The public shell — one of only four rendered public pages ...
+        #[AnonRateLimit(limit: 120, period: 60)]
+        public function page(): TemplateResponse {
+
+    The walk halted on the comment, found no ``*/`` there, and returned [] —
+    so the docblock was INVISIBLE and every tag read out of it (``@contract``,
+    ``@contract exclude``) silently stopped working. The endpoint was reported
+    as having no contract test while carrying a reason-bearing exclusion three
+    lines above, and the only way to satisfy the gate was to move a comment.
+
+    A gate that can be switched off by where a comment sits is not measuring
+    the thing it names.
+    """
     i = decl_idx - 1
     while i >= 0:
         stripped = lines[i].strip()
-        if stripped == "" or stripped.startswith("#[") or stripped.startswith("]"):
+        if (stripped == "" or stripped.startswith("#[")
+                or stripped.startswith("]") or stripped.startswith("//")):
             i -= 1
             continue
         break

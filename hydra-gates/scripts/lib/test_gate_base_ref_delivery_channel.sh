@@ -103,10 +103,20 @@ trap 'rm -rf "${WORK}"' EXIT
 # EXTRACT ON THE VERDICT SHAPE, NEVER BY EXCLUDING WHAT LOOKS LIKE A PASS: a
 # FAIL line whose remedial prose contains the word "pass" was silently dropped
 # by a `grep -v PASS` elsewhere in this programme on 2026-08-12.
+#
+# ⚠️ WARNING BELONGS IN THIS SET (.github#477, added late).
+# When gate-19 was demoted to advisory, WARNING was added to the package's two
+# OTHER verdict parsers and not to this one. Nothing went red: a verdict word
+# this pattern does not know is simply DROPPED, so gate-19 vanished from both
+# channels' sets and the comparison went on matching — over a set that no
+# longer contained the gate this whole suite was built to watch. A parser that
+# narrows silently is the same defect as two parsers that disagree loudly, and
+# only the loud one has ever been caught. This set is asserted identical to the
+# other two by ARM P3 of test_gate_discarded_counts_and_empty_deltas.sh.
 _verdict_set() {
     printf '%s\n' "$1" \
-        | grep -E '^\[gate-[0-9]+\] [a-z0-9-]+: (PASS|FAIL|NOT APPLICABLE|SKIPPED)' \
-        | sed -E 's/^\[gate-([0-9]+)\] [a-z0-9-]+: (PASS|FAIL — [0-9]+|FAIL|NOT APPLICABLE|SKIPPED).*/\1|\2/' \
+        | grep -E '^\[gate-[0-9]+\] [a-z0-9-]+: (PASS|FAIL|WARNING|NOT APPLICABLE|SKIPPED)' \
+        | sed -E 's/^\[gate-([0-9]+)\] [a-z0-9-]+: (PASS|FAIL — [0-9]+|FAIL|WARNING — [0-9]+|WARNING|NOT APPLICABLE|SKIPPED).*/\1|\2/' \
         | sort -t'|' -k1,1n -u
 }
 
@@ -215,8 +225,11 @@ for _arm in arg env; do
     _ovar="_out_${_arm}"
     _o="${!_ovar}"
     _v="$(gf_verdict "${_o}" 19)"
+    # FAIL or WARNING both satisfy this suite: it asserts the gate SAW the
+    # uncovered scenario at full file scope, not that the finding blocks.
+    # gate-19 became advisory in .github#477 (see _warn in run-hydra-gates.sh).
     case "${_v}" in
-        *FAIL*) _ok "arm ${_arm}: gate-19 FAILS — ${_v#*: }" ;;
+        *FAIL*|*WARNING*) _ok "arm ${_arm}: gate-19 reports the finding — ${_v#*: }" ;;
         *"NOT APPLICABLE"*)
             _bad "arm ${_arm}: gate-19 reported NOT APPLICABLE at FULL file scope over a tree whose uncovered scenario the positive control just named. This is .github#416: the base leaked past the scope decision and diff-scoped a state gate. Verdict: ${_v:0:200}"
             ;;

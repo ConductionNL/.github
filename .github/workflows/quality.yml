@@ -2629,7 +2629,50 @@ jobs:
           # in this repository, so the path below resolves.
           php scripts/coverage-guard.php --capabilities 2>/dev/null | grep -qx against \
             || { echo "::error::scripts/coverage-guard.php predates merge-base comparison (it does not report the 'against' capability). Copy the canonical version from ConductionNL/.github at quality-config/coverage-guard.php into scripts/coverage-guard.php, or set enable-coverage-guard: false until you do."; exit 1; }
-          php scripts/coverage-guard.php coverage/clover.xml --against="$RUNNER_TEMP/base-clover.xml"
+          # Scope the ratchet to the PHP this change actually touches.
+          #
+          # The whole-project comparison fired on measurement noise. doriath#240
+          # was a pull request whose entire diff was `webpack.config.js` — no PHP
+          # at all — and it went red:
+          #
+          #     Coverage current:       60.50%  (8303/13723 statements)
+          #     Coverage merge base:    60.55%  (8309/13723 statements)
+          #     FAIL: coverage dropped by 0.05% against the merge base.
+          #
+          # Identical denominator, and both runs reported exactly
+          # `Tests: 948, Assertions: 3051, Skipped: 1`. Only which six statements
+          # xdebug recorded as covered moved between two runs of the same code.
+          # The measured `--against` floor removes DRIVER variance, as its header
+          # says; it does not remove RUN-TO-RUN variance, and the guard has no
+          # tolerance. A gate that can fail a diff containing none of the language
+          # it measures gets routinely overridden, and after that its silences
+          # stop meaning anything either.
+          #
+          # A tolerance band was the alternative and is worse: it blinds the gate
+          # to small real regressions forever, at a threshold nobody can defend.
+          # Scoping keeps full strength on changed code and makes the noise
+          # unreachable rather than forgiven.
+          #
+          # PROBED, not assumed. A copy predating the flag would accept
+          # `--changed-files` and ignore it, silently restoring whole-project
+          # comparison while still reporting success — the same silent-downgrade
+          # shape the `against` probe above exists to prevent. Older copies keep
+          # the previous behaviour instead of erroring, because unlike `against`
+          # this is a narrowing of an existing check, not the difference between
+          # a check running and not running.
+          if php scripts/coverage-guard.php --capabilities 2>/dev/null | grep -qx changed-files; then
+            MERGE_BASE="$(git merge-base "${{ github.event.pull_request.base.sha }}" HEAD)"
+            # `|| true`: an empty diff is a legitimate answer (docs-only, or a
+            # merge commit), and the guard treats an empty list as "no PHP
+            # changed, nothing to compare" rather than as zero coverage.
+            git diff --name-only "$MERGE_BASE" HEAD -- '*.php' > "$RUNNER_TEMP/changed-php.txt" || true
+            echo "Changed PHP files in this PR: $(wc -l < "$RUNNER_TEMP/changed-php.txt")"
+            php scripts/coverage-guard.php coverage/clover.xml \
+              --against="$RUNNER_TEMP/base-clover.xml" \
+              --changed-files="$RUNNER_TEMP/changed-php.txt"
+          else
+            php scripts/coverage-guard.php coverage/clover.xml --against="$RUNNER_TEMP/base-clover.xml"
+          fi
 
       - name: Upload coverage artifact
         if: always() && matrix.php-version == inputs.php-version && matrix.nextcloud-ref == needs.nextcloud-matrix.outputs.single-server

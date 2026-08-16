@@ -653,6 +653,71 @@ def _build_job_class_seam(app_root: str) -> set[str]:
     return seam
 
 
+def _build_route_seam(app_root: str) -> set[tuple[str, str]]:
+    """(ControllerShortName, method) pairs registered in appinfo/routes.php.
+
+    A routed controller method is invoked by Nextcloud's dispatcher from a URL.
+    There is no ``->method(`` call site anywhere in the app and there never will
+    be, so the caller index cannot see it — exactly like the listener, job and
+    MCP-attribute seams above.
+
+    Without this seam the gate reports every routed write endpoint as dead. On
+    docudesk (2026-08-16) that was **12 of its 15 findings**: `settings#update`,
+    `consent#update`, `printJob#updateStatus`, `anonymization#upload` and eight
+    more, all live and all reachable from the UI. Acting on that report means
+    altering twelve working endpoints to satisfy a checker, and the three REAL
+    orphans in the same run were invisible in the noise.
+
+    Nextcloud offers three registration shapes and all three are read, because a
+    seam that covers two of them is worse than none: it makes the gate look
+    route-aware while still condemning whichever app used the third.
+
+      routes  => [['name' => 'settings#update', ...]]
+      ocs     => [['name' => 'api#index', ...]]
+      resources => ['note' => [...]]   (index/show/create/update/destroy)
+
+    The controller short name is derived the way NC derives it: the part before
+    ``#``, upper-cased on the first character, plus ``Controller``. So
+    ``customDictionary#import`` seams ``CustomDictionaryController::import``.
+    """
+    seam: set[tuple[str, str]] = set()
+    routes_php = os.path.join(app_root, "appinfo", "routes.php")
+    if not os.path.isfile(routes_php):
+        return seam
+    try:
+        with open(routes_php, encoding="utf-8", errors="replace") as fh:
+            # A commented-out route is NOT registered. Same false-GREEN shape
+            # as the job seam: exempting a method whose route is commented out
+            # would hide a genuinely unreachable endpoint.
+            text = _blank_php_comments(fh.read())
+    except OSError:
+        return seam
+
+    for m in re.finditer(
+        r"""['"]name['"]\s*=>\s*['"]([A-Za-z0-9_]+)#([A-Za-z0-9_]+)['"]""", text
+    ):
+        controller, method = m.group(1), m.group(2)
+        seam.add((_controller_class_for(controller), method))
+
+    # `resources` generates the five RESTful actions without naming them.
+    for block in re.finditer(
+        r"""['"]resources['"]\s*=>\s*\[(.*?)\]\s*[,)]""", text, re.DOTALL
+    ):
+        for entry in re.finditer(r"""['"]([A-Za-z0-9_]+)['"]\s*=>\s*\[""", block.group(1)):
+            controller = _controller_class_for(entry.group(1))
+            for action in ("index", "show", "create", "update", "destroy"):
+                seam.add((controller, action))
+
+    return seam
+
+
+def _controller_class_for(route_prefix: str) -> str:
+    """Derive a controller's short class name from its route prefix."""
+    if not route_prefix:
+        return ""
+    return route_prefix[0].upper() + route_prefix[1:] + "Controller"
+
+
 def _enumerate_lib_php(app_root: str, include_untracked: bool = False) -> list[str]:
     """PHP files under <app_root>/lib, enumerated via ``git ls-files``.
 
@@ -842,7 +907,7 @@ def _build_caller_index(app_root: str, extra_roots: list[str] | None = None) -> 
 
 
 def scan_file(file_path: str, app_root: str, seams, caller_counts, findings: list[str]):
-    register_seam, listener_seam, job_seam, mcp_seam = seams
+    register_seam, listener_seam, job_seam, mcp_seam, route_seam = seams
     try:
         with open(file_path, encoding="utf-8", errors="replace") as fh:
             text = fh.read()
@@ -880,6 +945,12 @@ def scan_file(file_path: str, app_root: str, seams, caller_counts, findings: lis
         if _preceding_docblock_has_exclude(lines, idx):
             continue
         if class_short and (class_short, name) in register_seam:
+            continue
+        if class_short and (class_short, name) in route_seam:
+            # Registered in appinfo/routes.php — invoked by the NC dispatcher
+            # from a URL, so there is no `->method(` call site to find. PER
+            # METHOD, not per class: an unrouted write method on a routed
+            # controller is still an orphan and is still reported.
             continue
         if (
             class_short
@@ -953,6 +1024,7 @@ def _scan_app(app_root: str, files: list[str], findings: list[str]) -> None:
     listener_seam = _build_listener_class_seam(app_root)
     job_seam = _build_job_class_seam(app_root)
     mcp_seam = _build_mcp_attribute_seam(app_root)
+    route_seam = _build_route_seam(app_root)
 
     # --- Cross-app caller awareness (hydra#106, FP class 1) --------------
     # A leaf app's services are consumed only by that app (ADR-022: apps
@@ -994,7 +1066,7 @@ def _scan_app(app_root: str, files: list[str], findings: list[str]) -> None:
         scan_file(
             fp,
             app_root,
-            (register_seam, listener_seam, job_seam, mcp_seam),
+            (register_seam, listener_seam, job_seam, mcp_seam, route_seam),
             caller_counts,
             findings,
         )

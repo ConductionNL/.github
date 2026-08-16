@@ -269,6 +269,76 @@ class TestImgAltEmptyOnly(unittest.TestCase):
                '// <img :src="user.avatarUrl" alt=""> in a docblock\n</script>')
         self.assertEqual(scan("img-alt-empty-only", src), [])
 
+    # --- NAMED BY CONTEXT (WCAG H67) ---------------------------------------
+    # An empty alt is the CORRECT answer when the enclosing element already
+    # takes its accessible name from its own text. The noun test still decides
+    # which images are suspicious; the markup decides whether the suspicion
+    # survives.
+    def test_image_named_by_sibling_text_in_a_link_is_not_a_finding(self):
+        src = ('<template><a :href="item.link">'
+               '<img :src="item.thumbnailUrl" alt="">'
+               "<h4>{{ item.title }}</h4></a></template>")
+        self.assertEqual(scan("img-alt-empty-only", src), [])
+
+    def test_figure_button_and_static_text_all_name_the_image(self):
+        for src in (
+            '<template><figure><img :src="user.photoUrl" alt="">'
+            "<figcaption>{{ user.name }}</figcaption></figure></template>",
+            '<template><button><img :src="user.avatarUrl" alt="">'
+            "<span>Open profile</span></button></template>",
+            '<template><a href="/team"><img :src="m.headshotUrl" alt="">'
+            "Meet the team</a></template>",
+        ):
+            with self.subTest(src=src[:48]):
+                self.assertEqual(scan("img-alt-empty-only", src), [])
+
+    def test_text_BEFORE_the_image_names_it_too(self):
+        src = ('<template><a href="/x"><span>Ada Lovelace</span>'
+               '<img :src="user.avatarUrl" alt=""></a></template>')
+        self.assertEqual(scan("img-alt-empty-only", src), [])
+
+    # --- DECLARED DECORATIVE ------------------------------------------------
+    def test_role_presentation_and_aria_hidden_declare_the_image_decorative(self):
+        for attrs in (
+            ':src="user.avatarUrl" alt="" role="presentation"',
+            ':src="user.avatarUrl" alt="" role="none"',
+            ':src="user.avatarUrl" alt="" aria-hidden="true"',
+        ):
+            with self.subTest(attrs=attrs):
+                self.assertEqual(scan("img-alt-empty-only", self._img(attrs)), [])
+
+    def test_a_near_miss_on_those_attributes_still_fires(self):
+        # aria-hidden="false" is not a declaration of decorativeness, and
+        # role="img" is the opposite of one.
+        for attrs in (
+            ':src="user.avatarUrl" alt="" aria-hidden="false"',
+            ':src="user.avatarUrl" alt="" role="img"',
+        ):
+            with self.subTest(attrs=attrs):
+                self.assertEqual(len(scan("img-alt-empty-only", self._img(attrs))), 1)
+
+    # --- ANTI-WIDENING for the exemption above ------------------------------
+    def test_a_link_whose_ONLY_content_is_the_image_still_fires(self):
+        # The image is the link's only possible accessible name, so alt=""
+        # leaves it nameless. An exemption keyed on "inside a link" rather than
+        # "the link also has text" would wrongly clear this.
+        src = ('<template><a :href="user.profile">'
+               '<img :src="user.avatarUrl" alt=""></a></template>')
+        self.assertEqual(len(scan("img-alt-empty-only", src)), 1)
+
+    def test_a_plain_div_wrapper_is_not_name_giving(self):
+        # `<div>` takes no accessible name from its text, so neighbouring
+        # prose does NOT excuse the empty alt.
+        src = ('<template><div><img :src="user.avatarUrl" alt="">'
+               "<h4>Ada</h4></div></template>")
+        self.assertEqual(len(scan("img-alt-empty-only", src)), 1)
+
+    def test_a_sibling_link_does_not_excuse_an_image_outside_it(self):
+        # The image is NOT inside the named element — no exemption.
+        src = ('<template><div><img :src="user.avatarUrl" alt="">'
+               "<a href='/x'>Ada Lovelace</a></div></template>")
+        self.assertEqual(len(scan("img-alt-empty-only", src)), 1)
+
 
 class TestTabindexPositive(unittest.TestCase):
     """gate-36. The defect was NOISE, so the silence-cases come first."""
