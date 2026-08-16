@@ -126,11 +126,16 @@ gf_commit_paths "${_R}" "spec: 300 uncovered scenarios" openspec
 
 _out="$(gf_run_wrapper "${_R}" "${WORK}/log-bulk")"
 _v="$(gf_verdict "${_out}" 19)"
+# The verdict WORD is WARNING since .github#477 demoted gate-19 to advisory.
+# This property is about the COUNT, not the severity: the whole point is that
+# 300 must survive the exit byte uncorrupted. Demoting the gate must not be
+# allowed to stop that being checked, so the count assertion is unchanged and
+# only the word moved.
 case "${_v}" in
-    *"FAIL — 300 scenario"*) _ok "gate-19 reports 300, uncorrupted — ${_v:0:70}" ;;
-    *"FAIL — 44 scenario"*)  _bad "gate-19 reported 44 = 300 & 255. The count is being taken from the exit byte (#209 has regressed)." ;;
-    *PASS*)                  _bad "gate-19 reported PASS over 300 uncovered scenarios — a green over 300 findings." ;;
-    *)                       _bad "gate-19 wanted 'FAIL — 300 scenario', got: ${_v:0:140}" ;;
+    *"WARNING — 300 scenario"*) _ok "gate-19 reports 300, uncorrupted — ${_v:0:70}" ;;
+    *"WARNING — 44 scenario"*)  _bad "gate-19 reported 44 = 300 & 255. The count is being taken from the exit byte (#209 has regressed)." ;;
+    *PASS*)                     _bad "gate-19 reported PASS over 300 uncovered scenarios — a green over 300 findings." ;;
+    *)                          _bad "gate-19 wanted 'WARNING — 300 scenario', got: ${_v:0:140}" ;;
 esac
 
 # ===========================================================================
