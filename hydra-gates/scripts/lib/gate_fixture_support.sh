@@ -117,7 +117,9 @@ gf_run_wrapper() {
 # would manufacture exactly the false gate defect this change removes.
 gf_verdict() {
     local _v
-    _v=$(printf '%s' "$1" | grep -E "^\[gate-$2\] [^:]+: (PASS|FAIL|NOT APPLICABLE|SKIPPED)\b" | head -1)
+    # WARNING joined the set with .github#477 — kept in step with `_verdict`
+    # in test_gate_acceptance_matrix.sh.
+    _v=$(printf '%s' "$1" | grep -E "^\[gate-$2\] [^:]+: (PASS|FAIL|WARNING|NOT APPLICABLE|SKIPPED)\b" | head -1)
     if [ -n "${_v}" ]; then
         printf '%s' "${_v}"
         return 0
