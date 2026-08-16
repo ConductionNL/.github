@@ -1403,5 +1403,96 @@ class CommentIsNotACaller(unittest.TestCase):
         self.assertEqual(out, [])
 
 
+class RouteSeamTest(unittest.TestCase):
+    """A routed controller method is invoked by the NC dispatcher, not by a call site.
+
+    Regression for the docudesk 2026-08-16 run, where 12 of 15 findings were
+    live routed endpoints (`settings#update`, `consent#update`,
+    `printJob#updateStatus`, `anonymization#upload`, …). Acting on that report
+    means altering twelve working endpoints, and the three REAL orphans in the
+    same run were invisible in the noise.
+    """
+
+    CONTROLLER = (
+        "<?php\nnamespace OCA\\Fixture\\Controller;\n"
+        "class SettingsController {\n"
+        "    public function update(array $data): void { /* routed */ }\n"
+        "    public function saveDraft(array $data): void { /* NOT routed */ }\n"
+        "}\n"
+    )
+
+    def _app(self, root, routes):
+        full = os.path.join(root, "lib/Controller/SettingsController.php")
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        with open(full, "w", encoding="utf-8") as fh:
+            fh.write(self.CONTROLLER)
+        rp = os.path.join(root, "appinfo/routes.php")
+        os.makedirs(os.path.dirname(rp), exist_ok=True)
+        with open(rp, "w", encoding="utf-8") as fh:
+            fh.write(routes)
+        return full
+
+    def test_a_routed_method_is_not_flagged(self):
+        with _AppFixture() as root:
+            full = self._app(root, "<?php\nreturn ['routes' => [\n"
+                             "  ['name' => 'settings#update', 'url' => '/settings', 'verb' => 'PUT'],\n"
+                             "]];\n")
+            out = _run_main(full)
+            self.assertNotIn("method=update", "\n".join(out), out)
+
+    def test_an_UNROUTED_method_on_a_routed_controller_is_STILL_flagged(self):
+        """The seam is per METHOD, not per class.
+
+        Exempting the whole controller because one of its methods is routed
+        would be the wrong fix: it would hide every genuinely unreachable
+        endpoint on any controller that has at least one route."""
+        with _AppFixture() as root:
+            full = self._app(root, "<?php\nreturn ['routes' => [\n"
+                             "  ['name' => 'settings#update', 'url' => '/settings', 'verb' => 'PUT'],\n"
+                             "]];\n")
+            out = _run_main(full)
+            self.assertEqual(len(out), 1, out)
+            self.assertIn("method=saveDraft", out[0])
+
+    def test_a_COMMENTED_OUT_route_does_not_seam(self):
+        """CONTROL. A commented-out route is not registered, and exempting it
+        would hide a genuinely unreachable endpoint — the same false-GREEN the
+        job seam guards against with its XML-comment strip."""
+        with _AppFixture() as root:
+            full = self._app(root, "<?php\nreturn ['routes' => [\n"
+                             "  // ['name' => 'settings#update', 'url' => '/s', 'verb' => 'PUT'],\n"
+                             "]];\n")
+            out = _run_main(full)
+            self.assertIn("method=update", "\n".join(out), out)
+
+    def test_ocs_routes_seam_too(self):
+        with _AppFixture() as root:
+            full = self._app(root, "<?php\nreturn ['ocs' => [\n"
+                             "  ['name' => 'settings#update', 'url' => '/api/settings', 'verb' => 'PUT'],\n"
+                             "]];\n")
+            out = _run_main(full)
+            self.assertNotIn("method=update", "\n".join(out), out)
+
+    def test_resources_generate_the_restful_actions(self):
+        """`resources` never names `update`, so a seam reading only `name` keys
+        would still condemn every resource controller in the fleet."""
+        with _AppFixture() as root:
+            full = self._app(root, "<?php\nreturn ['resources' => [\n"
+                             "  'settings' => ['url' => '/settings'],\n"
+                             "]];\n")
+            out = _run_main(full)
+            self.assertNotIn("method=update", "\n".join(out), out)
+
+    def test_no_routes_file_leaves_the_verdict_unchanged(self):
+        with _AppFixture() as root:
+            full = os.path.join(root, "lib/Controller/SettingsController.php")
+            os.makedirs(os.path.dirname(full), exist_ok=True)
+            with open(full, "w", encoding="utf-8") as fh:
+                fh.write(self.CONTROLLER)
+            out = _run_main(full)
+            self.assertEqual(len(out), 2, out)
+
+
+
 if __name__ == "__main__":
     unittest.main()
