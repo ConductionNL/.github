@@ -702,7 +702,7 @@ case "${_pv2}" in
         _bad "gf_verdict returned gate-53's PRE-EXISTING advisory instead of the verdict. Got: ${_pv2}" ;;
 esac
 
-# ARM P3 — THE TWO PARSERS MUST STAY IN STEP. `gf_verdict` is used by the
+# ARM P3 — EVERY VERDICT PARSER MUST STAY IN STEP. `gf_verdict` is used by the
 # repo-shaped suites; the acceptance matrix has its own copy, and that copy is
 # the one that filtered NOTHING. A comment saying "keep these in step" is not a
 # mechanism; this is.
@@ -722,33 +722,57 @@ esac
 # is kept as a floor: whatever the alternation contains, it must still contain
 # the four core verdict forms, so nobody can satisfy "identical" by gutting
 # both parsers back to a denylist.
-_matrix="${GF_PKG_ROOT}/scripts/lib/test_gate_acceptance_matrix.sh"
-_support="${GF_PKG_ROOT}/scripts/lib/gate_fixture_support.sh"
+# ⚠️ THERE ARE THREE PARSERS, NOT TWO. `.github#477` taught two of them the new
+# WARNING form and left `_verdict_set` in test_gate_base_ref_delivery_channel.sh
+# behind — and THAT one failed silently, because a verdict word the pattern does
+# not know is simply dropped: gate-19 disappeared from both channels' verdict
+# sets and the comparison went on matching over a set that no longer contained
+# the gate that suite exists to watch. A parser that narrows quietly is worse
+# than two that disagree loudly. All three are compared here, by name.
+_PARSER_FILES="
+gate_fixture_support.sh
+test_gate_acceptance_matrix.sh
+test_gate_base_ref_delivery_channel.sh
+"
 
 # `\((PASS|FAIL)…\)` — the parenthesised alternation a verdict matcher uses.
 # Anchored on PASS|FAIL so it cannot latch onto some unrelated group.
 _verdict_alternation() {  # <file> -> the alternation, or empty
     grep -oE '\(PASS\|FAIL[A-Z| ]*\)' "$1" | head -1
 }
-_alt_support="$(_verdict_alternation "${_support}")"
-_alt_matrix="$(_verdict_alternation "${_matrix}")"
 
-if [ -z "${_alt_support}" ] || [ -z "${_alt_matrix}" ]; then
-    _bad "a verdict parser no longer carries a recognisable \`(PASS|FAIL|…)\` alternation — support='${_alt_support:-none}' matrix='${_alt_matrix:-none}'. A parser this suite cannot read is a parser it cannot police."
-elif [ "${_alt_support}" != "${_alt_matrix}" ]; then
-    _bad "the two verdict parsers have drifted apart: gate_fixture_support.sh matches ${_alt_support} and the acceptance matrix matches ${_alt_matrix}, so the same output would be graded differently by two suites"
+_alt_ref=""; _alt_ref_file=""; _alt_unreadable=""; _alt_drift=""
+for _pf in ${_PARSER_FILES}; do
+    _alt="$(_verdict_alternation "${GF_PKG_ROOT}/scripts/lib/${_pf}")"
+    if [ -z "${_alt}" ]; then
+        _alt_unreadable="${_alt_unreadable}${_pf} "
+        continue
+    fi
+    if [ -z "${_alt_ref}" ]; then
+        _alt_ref="${_alt}"; _alt_ref_file="${_pf}"
+    elif [ "${_alt}" != "${_alt_ref}" ]; then
+        _alt_drift="${_alt_drift}${_pf} matches ${_alt}; "
+    fi
+done
+
+if [ -n "${_alt_unreadable}" ]; then
+    _bad "verdict parser(s) ${_alt_unreadable}no longer carry a recognisable \`(PASS|FAIL|…)\` alternation. A parser this suite cannot read is a parser it cannot police — and an unreadable parser is not an agreeing one."
+elif [ -n "${_alt_drift}" ]; then
+    _bad "the verdict parsers have drifted apart: ${_alt_ref_file} matches ${_alt_ref}, but ${_alt_drift%; } — the same output would be graded differently by different suites, and a parser missing a word DROPS that gate rather than complaining"
 else
     _missing_form=""
     for _form in 'PASS' 'FAIL' 'NOT APPLICABLE' 'SKIPPED'; do
-        printf '%s' "${_alt_support}" | grep -qF -- "${_form}" \
+        printf '%s' "${_alt_ref}" | grep -qF -- "${_form}" \
             || _missing_form="${_missing_form}${_form}, "
     done
     if [ -n "${_missing_form}" ]; then
-        _bad "both verdict parsers agree, but the shared alternation ${_alt_support} no longer covers ${_missing_form%, } — agreement satisfied by narrowing both is the .github#401 defect in a new coat"
+        _bad "all verdict parsers agree, but the shared alternation ${_alt_ref} no longer covers ${_missing_form%, } — agreement satisfied by narrowing every parser is the .github#401 defect in a new coat"
     else
-        _ok "both verdict parsers match by the SAME shape — gate_fixture_support.sh and the acceptance matrix agree on ${_alt_support}"
+        _ok "all 3 verdict parsers match by the SAME shape — gate_fixture_support.sh, the acceptance matrix and the base-ref channel set agree on ${_alt_ref}"
     fi
 fi
+_alt_support="${_alt_ref}"
+_matrix="${GF_PKG_ROOT}/scripts/lib/test_gate_acceptance_matrix.sh"
 
 # POSITIVE CONTROL for the assertion above. Without it, "extract and compare"
 # is satisfiable by an extractor that returns empty for everything and calls
