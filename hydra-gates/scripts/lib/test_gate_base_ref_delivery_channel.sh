@@ -215,8 +215,11 @@ for _arm in arg env; do
     _ovar="_out_${_arm}"
     _o="${!_ovar}"
     _v="$(gf_verdict "${_o}" 19)"
+    # FAIL or WARNING both satisfy this suite: it asserts the gate SAW the
+    # uncovered scenario at full file scope, not that the finding blocks.
+    # gate-19 became advisory in .github#477 (see _warn in run-hydra-gates.sh).
     case "${_v}" in
-        *FAIL*) _ok "arm ${_arm}: gate-19 FAILS — ${_v#*: }" ;;
+        *FAIL*|*WARNING*) _ok "arm ${_arm}: gate-19 reports the finding — ${_v#*: }" ;;
         *"NOT APPLICABLE"*)
             _bad "arm ${_arm}: gate-19 reported NOT APPLICABLE at FULL file scope over a tree whose uncovered scenario the positive control just named. This is .github#416: the base leaked past the scope decision and diff-scoped a state gate. Verdict: ${_v:0:200}"
             ;;

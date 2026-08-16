@@ -132,7 +132,11 @@ _verdict() {  # <gate-n> -> that gate's verdict line
     # the denylist is the fallback so an unrecognised verdict word degrades to
     # today's behaviour rather than to a false silence.
     local _v
-    _v=$(printf '%s' "${_OUT}" | grep -E "^\[gate-$1\] [^:]+: (PASS|FAIL|NOT APPLICABLE|SKIPPED)\b" | head -1)
+    # WARNING joined the set with .github#477 (gate-19 demoted to advisory). It
+    # is a REAL verdict — the gate ran and found something — so a fixture may
+    # legitimately expect it, and omitting it here would make a demoted gate
+    # read as "emitted NO verdict line at all".
+    _v=$(printf '%s' "${_OUT}" | grep -E "^\[gate-$1\] [^:]+: (PASS|FAIL|WARNING|NOT APPLICABLE|SKIPPED)\b" | head -1)
     if [ -n "${_v}" ]; then
         printf '%s' "${_v}"
         return 0

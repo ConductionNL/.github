@@ -1588,6 +1588,30 @@ _fail() {
 }
 _pass() { set +e; echo "[gate-$1] $2: PASS"; _EMITTED_GATES="${_EMITTED_GATES}$1 "; }
 
+# _warn — A GATE THAT REPORTED A REAL FINDING AND IS DELIBERATELY NOT BLOCKING.
+#
+# This is NOT `_skip`. A skip means the gate did not judge — no scope, no
+# wiring, nothing inspected. `_warn` means the gate ran, found something, and
+# the fleet has decided that finding does not stop a merge yet. The count is
+# real and is printed; it simply does not reach `_FAILED`.
+#
+# It still registers in `_EMITTED_GATES`, so the COVERAGE line keeps counting
+# this gate as having reported. That matters: demoting a gate must not quietly
+# reduce the number of gates the run claims to have executed, which is exactly
+# how a suite shrinks without anyone noticing.
+#
+# ⚠️ Use this ONLY with a tracked issue and a stated reason. A warning with no
+# owner is a gate nobody will ever turn back on.
+_warn() {
+    set +e
+    local _reason
+    _reason=$(printf '%s' "${3:-}" | tr '\n' ' ')
+    echo "[gate-$1] $2: WARNING${_reason:+ — ${_reason}}"
+    _WARNED=$((_WARNED + 1))
+    _EMITTED_GATES="${_EMITTED_GATES}$1 "
+}
+_WARNED=0
+
 # _optout_text — every place a reason-bearing `[hydra-gate-<name> exclude]` tag
 # may legitimately be written, as one stream to grep.
 #
@@ -4105,7 +4129,28 @@ if [ -d openspec/specs ] || [ -d tests/e2e ]; then
             _e2e_ran=0
             _skip 19 "e2e-coverage" wiring "check_e2e_coverage.py exited ${_e2e_fail} (error) — no scenario verdict was produced; @e2e traceability (ADR-020) is UNVERIFIED by this run. See ${_e2e_log}."
         else
-            _fail 19 "e2e-coverage" "${_e2e_count} scenario(s) missing @e2e — see ${_e2e_log}"
+            # ADVISORY, NOT BLOCKING — .github#477.
+            #
+            # The count below is REAL and is still measured on every run. What
+            # changed is only that it no longer stops a merge. Measured across
+            # the fleet on 2026-08-16: 1,173 unannotated scenarios in four apps
+            # alone (hermiq 491, docudesk 405, doriath 149, launchpad 128), and
+            # on the one app worked end-to-end the honest split was roughly one
+            # scenario in five genuinely reachable from a browser. The rest were
+            # colour arithmetic, `occ` file writes and background-job intervals
+            # — real behaviour, proven by PHPUnit, not by a page.
+            #
+            # Left blocking, that arithmetic has one cheap answer and one
+            # expensive one, and the cheap one is mass `@e2e exclude`. nldesign
+            # was already carrying 585 of 786 scenarios excluded before any of
+            # this began. A gate whose realistic remedy is "waive most of it"
+            # is not measuring coverage any more, and every app it reddens also
+            # hides that app's OTHER gates behind the same red job.
+            #
+            # So: keep measuring, stop blocking, and fix the gate properly on
+            # its own — see .github#477. This is a temporary demotion with an
+            # owner, not a retirement.
+            _warn 19 "e2e-coverage" "${_e2e_count} scenario(s) missing @e2e (advisory, non-blocking — see .github#477) — see ${_e2e_log}"
         fi
     fi
 fi
@@ -10595,6 +10640,16 @@ if [ "${_not_run_n}" -gt 0 ]; then
         [ -z "${_nr}" ] && continue
         echo "[hydra-gates]   gate-${_nr%% *} ${_nr#* }"
     done <<< "${_not_run}"
+fi
+
+# ADVISORY GATES — printed BEFORE the verdict, and deliberately never folded
+# into it. A gate that reported a real finding and was demoted to non-blocking
+# must stay legible in the summary; the whole failure mode of a demotion is
+# that the finding quietly stops being read.
+if [ "${_WARNED}" -gt 0 ]; then
+    echo "[hydra-gates] ${_WARNED} gate(s) reported ADVISORY findings — real, measured, and NOT blocking this run."
+    echo "[hydra-gates] They are named WARNING above, each with its count and its tracking issue."
+    echo "[hydra-gates] A green verdict below means 'nothing BLOCKING failed', not 'nothing was found'."
 fi
 
 if [ "${_FAILED}" -eq 0 ]; then
