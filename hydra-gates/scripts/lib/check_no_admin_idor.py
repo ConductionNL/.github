@@ -2365,12 +2365,28 @@ _OR_IMPORT_RE = re.compile(
 # `->` answered a narrower question than the one the pattern is named for, and
 # answered it "no".
 #
-# So the accessor alternative drops its trailing `->`, and a container
-# resolution of OpenRegister's ObjectService is added. Note what is NOT
-# relaxed: `->objectService` and `$objectService` still require the arrow,
-# because those are NAMES and a name alone is not a call. `getObjectService()`
-# and `container->get(<OR FQCN>)` are calls that return the facade, so the
-# call itself is the evidence.
+# So a CONTAINER RESOLUTION of OpenRegister's ObjectService is added — that is
+# the app naming the class it is obtaining, in code — and the reach of an
+# ACCESSOR is left to the transitive pass to establish from the accessor's own
+# BODY rather than from its name.
+#
+# 🔴 AND THE NAME MUST NOT BE ENOUGH, WHICH THIS CHANGE LEARNED THE HARD WAY.
+# A first version added `->getObjectService()` (no trailing `->`) as an
+# alternative here, and the package's own acceptance matrix caught it:
+# `comment-silenced-guard/planted` — `.github#373`'s planted defect — is a
+# SERVICE LOCATOR called `getObjectService()` whose body is
+#
+#     if (!class_exists('\OCA\OpenRegister\Service\ObjectService')) { throw … }
+#     return $this->themes;                       // a LOCAL service
+#
+# It names OpenRegister and returns something else entirely. Matching the
+# accessor by name cleared `ThemeController::show`, and the fixture went from
+# naming its planted method to naming a different one. The rule that survives
+# is the one the rest of this module already applies to collaborators: READ THE
+# CALLEE, never infer it from what it is called.
+#
+# What is NOT relaxed either: `->objectService` and `$objectService` still
+# require the arrow, because those are NAMES and a name alone is not a call.
 #
 # The safety is unchanged and it is upstream of this pattern: a clear also
 # requires the FILE to name `OCA\OpenRegister\…\ObjectService` in code
@@ -2383,7 +2399,7 @@ _OR_CONTAINER_GET_RE = re.compile(
 _OR_FACADE_CALL_RE = re.compile(
     r"->\s*objectService\s*->"
     r"|\$objectService\s*->"
-    r"|->\s*get(?:ObjectService|OpenRegisters?)\s*\(\s*\)"
+    r"|->\s*getObjectService\s*\(\s*\)\s*->"
     r"|" + _OR_CONTAINER_GET_RE.pattern
 )
 
