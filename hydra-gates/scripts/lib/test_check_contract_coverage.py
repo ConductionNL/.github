@@ -598,6 +598,64 @@ return ['routes' => [
         self.assertEqual(rc, ccc.EXIT_FAIL, out)
         self.assertIn("thing#destroy", out)
 
+    def test_a_line_comment_beside_the_attributes_does_not_hide_the_docblock(self):
+        """A `//` between the docblock and the declaration used to make the
+        WHOLE docblock invisible, so a reason-bearing `@contract exclude`
+        three lines above the method was never read and the endpoint was
+        reported as untested. Measured on doriath's PublicShellController,
+        where the comment sits between two PHP attributes.
+        """
+        self.app.write(
+            "lib/Controller/ThingController.php",
+            "<?php\n"
+            "namespace OCA\\Fx\\Controller;\n"
+            "class ThingController\n"
+            "{\n"
+            "    /**\n"
+            "     * Destroy a thing.\n"
+            "     *\n"
+            "     * @contract exclude renders a template, not an API response,"
+            " so there is no wire contract to assert.\n"
+            "     */\n"
+            "    #[NoAdminRequired]\n"
+            "    // Why this endpoint is shaped the way it is.\n"
+            "    #[SomeOtherAttribute]\n"
+            "    public function destroy(int $id)\n"
+            "    {\n"
+            "        return 1;\n"
+            "    }\n"
+            "}\n",
+        )
+        self.app.commit()
+        rc, out = self.app.verdict()
+        self.assertEqual(rc, ccc.EXIT_PASS, out)
+
+    def test_that_same_shape_still_requires_a_REASON(self):
+        """The comment-skipping repair must not turn a bare exclude into a
+        pass — otherwise it would have widened the gate rather than repaired
+        its reach."""
+        self.app.write(
+            "lib/Controller/ThingController.php",
+            "<?php\n"
+            "namespace OCA\\Fx\\Controller;\n"
+            "class ThingController\n"
+            "{\n"
+            "    /**\n"
+            "     * @contract exclude\n"
+            "     */\n"
+            "    #[NoAdminRequired]\n"
+            "    // Why this endpoint is shaped the way it is.\n"
+            "    public function destroy(int $id)\n"
+            "    {\n"
+            "        return 1;\n"
+            "    }\n"
+            "}\n",
+        )
+        self.app.commit()
+        rc, out = self.app.verdict()
+        self.assertEqual(rc, ccc.EXIT_FAIL, out)
+        self.assertIn("thing#destroy", out)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
