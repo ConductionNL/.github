@@ -556,5 +556,50 @@ return ['routes' => [
         self.assertEqual(findings, [])
 
 
+class OrphanAuthExclusion(unittest.TestCase):
+    """gate-6 gained `@orphan-auth exclude <reason>` to match gate-57, which has
+    always had one. Both gates ask the same question about the same population —
+    a capability that exists and nothing calls — and pipelinq#764 is a live case
+    where the findings behind gate-57 could be marked and the identical ones
+    behind gate-6 could not."""
+
+    def _src(self, marker: str) -> str:
+        return (
+            "<?php\nclass T {\n"
+            "    /**\n"
+            "     * Whether the actor may do the thing.\n"
+            f"     *{marker}\n"
+            "     */\n"
+            "    public function isUserPermitted(string $userId): bool "
+            "{ return $this->permissions->allows($userId); }\n}\n"
+        )
+
+    def test_a_reason_bearing_exclusion_is_honoured(self):
+        src = self._src(" @orphan-auth exclude deliberate near-term capability, tracked in app#764.")
+        self.assertEqual(_scan_in_repo("lib/Service/T.php", src, {}), [])
+
+    def test_a_bare_exclusion_is_not(self):
+        src = self._src(" @orphan-auth exclude")
+        self.assertEqual(len(_scan_in_repo("lib/Service/T.php", src, {})), 1)
+
+    def test_no_marker_still_fires(self):
+        self.assertEqual(len(_scan_in_repo("lib/Service/T.php", self._src(""), {})), 1)
+
+    def test_an_attribute_or_line_comment_between_docblock_and_declaration_does_not_hide_it(self):
+        """gate-25 had exactly this bug: its docblock walk stopped on a `//`
+        line, so a tag three lines above the method was never read."""
+        src = (
+            "<?php\nclass T {\n"
+            "    /**\n"
+            "     * @orphan-auth exclude deliberate near-term capability, tracked in app#764.\n"
+            "     */\n"
+            "    #[SomeAttribute]\n"
+            "    // why this exists\n"
+            "    public function isUserPermitted(string $userId): bool "
+            "{ return $this->permissions->allows($userId); }\n}\n"
+        )
+        self.assertEqual(_scan_in_repo("lib/Service/T.php", src, {}), [])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
