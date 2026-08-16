@@ -1106,6 +1106,112 @@ def _declared_parameter_names(params: str) -> set:
     return set(re.findall(r"\$([A-Za-z_][A-Za-z0-9_]*)", params))
 
 
+# An identity written INTO an array, at any subscript depth:
+#
+#     $options['participants'] = [$orgUuid];
+#     $filters['owner'][]      = $userId;
+#
+# The base name is captured; what the key is called is the app's business.
+_IDENTITY_INTO_ARRAY_RE = re.compile(
+    r"\$([A-Za-z_][A-Za-z0-9_]*)\s*(?:\[[^\]\n]{0,120}\]\s*)+=\s*([^;\n]{1,200});")
+
+
+def _expression_carries_identity(expr: str, session: set) -> bool:
+    """True when *expr* evaluates to — or is a list containing — the caller's identity."""
+    expr = expr.strip()
+    m = re.fullmatch(r"\[(.*)\]", expr, re.S)
+    if m is not None:
+        return any(_expression_carries_identity(part, session)
+                   for part in _split_arguments(m.group(1)))
+    if _SESSION_IDENTITY_RE.search(expr):
+        return True
+    m = re.fullmatch(r"\$([A-Za-z_][A-Za-z0-9_]*)",
+                     _strip_leading_scalar_casts(expr))
+    return m is not None and m.group(1) in session
+
+
+def _identity_carrier_names(body: str, session: set, declared: set = None) -> set:
+    """Names of arrays the caller's identity has been written INTO.
+
+    🔴 PATTERN 6'S BLIND SPOT: AN IDENTITY WRITTEN INTO A TAINTED ARRAY.
+
+    Pattern 6 asks whether every call receiving a caller-supplied value also
+    receives the session identity. It read that identity only out of a whole-
+    variable assignment, so the fleet's canonical way of FORCING a scope onto a
+    caller-supplied query was invisible to it. MEASURED on softwarecatalog
+    `GebruikController::getGebruikenForDeelnemer`:
+
+        $options = $this->request->getParams();     <- caller-supplied
+        $options['participants'] = [$orgUuid];      <- session-derived scope,
+                                                       written AFTER getParams()
+                                                       so the caller cannot
+                                                       override it
+        $this->gebruikService->getGebruiken(options: $options);
+
+    The single argument carries BOTH the caller's values and an identity the
+    caller cannot forge, and Pattern 6 saw only the first half — so it reported
+    "a caller-controlled value reaching an unscoped call" about a call that is
+    scoped. A gate that is red for a reason that is false is how reviewers
+    learn to wave its output through.
+
+    THESE NAMES ARE DELIBERATELY *NOT* SUBTRACTED BY `declared`. That is the
+    whole shape: the array is tainted AND scoped at once, and the existing
+    `session - declared` subtraction exists to stop a CALLER-CHOSEN value being
+    read as an identity — which cannot happen here, because what promotes the
+    name is an assignment whose right-hand side is itself a session identity.
+
+    The array is treated as the carrier at the same epistemic level as every
+    other hand-off this pattern recognises: it cannot verify that the callee
+    honours the key, exactly as it cannot verify that a callee honours a
+    `userId:` argument. Same bar, same evidence.
+
+    Closed to a fixpoint so `$scope['org'] = $orgUuid; $q['scope'] = $scope;`
+    is followed.
+
+    ⚠️ IT ALSO HAS TO FOLLOW ONE DERIVATION, or it does not fire on the shape
+    it was written for. `_is_identity_expression` refuses any call WITH
+    ARGUMENTS — deliberately, so `canAccess($id, $uid)` can never read as an
+    identity — and softwarecatalog's org uuid comes from
+    `getUserValue($user->getUID(), 'core', 'organisation')`. That is a value
+    DERIVED from the session, and the derivation carries arguments.
+
+    So a local is treated as session-derived when its right-hand side mentions
+    a session identity AND mentions no caller-supplied name. The second half is
+    the safety: the moment a declared/tainted name appears in the derivation,
+    the caller has influenced the value and it is not an identity any more.
+    """
+    out: set = set(session)
+    declared = declared or set()
+    tainted_re = re.compile(
+        "|".join(r"\$" + re.escape(d) + r"\b" for d in sorted(declared))
+    ) if declared else None
+    for _ in range(4):  # fixpoint; these chains are one or two links long
+        grew = False
+        # (a) `$orgUuid = <expression mentioning the session, and nothing the
+        #      caller supplied>` — one derivation hop.
+        for m in re.finditer(
+                r"\$([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([^;\n]{1,200});", body):
+            name, rhs = m.group(1), m.group(2)
+            if name in out or name in declared:
+                continue
+            if tainted_re is not None and tainted_re.search(rhs):
+                continue
+            if _expression_carries_identity(rhs, out):
+                out.add(name)
+                grew = True
+        # (b) `$options['participants'] = [$orgUuid];` — the array carrier.
+        for m in _IDENTITY_INTO_ARRAY_RE.finditer(body):
+            name, rhs = m.group(1), m.group(2)
+            if name in out:
+                continue
+            if _expression_carries_identity(rhs, out):
+                out.add(name)
+                grew = True
+        if not grew:
+            break
+    return out - set(session)
+
+
 def _session_identity_names(body: str, declared: set) -> set:
     """Locals in *body* assigned from an argument-free identity expression."""
     out: set = set()
@@ -1396,6 +1502,13 @@ def _has_session_identity_handoff(body: str, params, helper_bodies=None,
     # `#398` half (A): follow the caller's value through the locals it is
     # laundered into, so half (B) below cannot silently drop a real IDOR.
     declared = _taint_closure(body, declared, session)
+    # Arrays the identity was WRITTEN INTO carry it as an argument even though
+    # they are themselves caller-supplied — see `_identity_carrier_names`. They
+    # are added AFTER the taint closure on purpose: an array that carries the
+    # scope is still tainted, so clause 2 keeps asking about it, and the only
+    # thing this changes is that the answer can now be "yes, and it also
+    # carries the identity".
+    carriers = _identity_carrier_names(body, session, declared)
 
     saw_scoped_call = False
     for m in _METHOD_CALL_RE.finditer(body):
@@ -1407,7 +1520,8 @@ def _has_session_identity_handoff(body: str, params, helper_bodies=None,
         if not args:
             continue
         identity_here = any(
-            _argument_is_session_identity(a, declared, session) for a in args
+            _argument_is_session_identity(a, declared, session | carriers)
+            for a in args
         )
         caller_value_here = any(
             re.search(r"\$" + re.escape(p) + r"\b", a) for a in args for p in declared
@@ -1713,12 +1827,33 @@ def _or_delegating_methods(cleaned: str, guard_text: str) -> set:
     The caller is responsible for establishing that this file actually imports
     ``OCA\\OpenRegister\\…\\ObjectService``; without that check a local class
     named ObjectService would qualify.
+
+    🔴 `_rbac: false` VETOES THE CLOSURE, NOT ONLY THE SEED — and it did not.
+
+    The seed test has always withdrawn on `_rbac: false`. The CLOSURE below did
+    not re-apply it, so a method that reached the facade through a helper kept
+    the clear even though its own call turns OpenRegister's authorisation off.
+    That was latent until the seed set grew to include a bare accessor.
+    MEASURED on softwarecatalog `GebruikController::getGebruikenForDeelnemer`:
+
+        GebruikService::getObjectService()   -> seeded (obtains the facade)
+        GebruikService::getGebruiken()       -> calls it, so the closure added it
+            ... searchObjectsPaginated(query: $options, _rbac: false,
+                                       _multitenancy: false)
+
+    and the controller above it cleared — on a query whose own arguments say
+    OpenRegister is NOT authorising this fetch, which is exactly the case the
+    leaf app must guard for itself. A widening that un-finds THAT is a
+    regression, so the veto now applies wherever a name enters the set.
     """
+    def _rbac_off(text: str) -> bool:
+        return bool(_RBAC_DISABLED_RE.search(text))
+
     seeds: set = set()
     spans = list(_all_method_spans(cleaned))
     for name, body_start, body_end in spans:
         body = guard_text[body_start:body_end]
-        if _OR_FACADE_CALL_RE.search(body) and not _RBAC_DISABLED_RE.search(body):
+        if _OR_FACADE_CALL_RE.search(body) and not _rbac_off(body):
             seeds.add(name)
     changed = True
     while changed:
@@ -1726,12 +1861,205 @@ def _or_delegating_methods(cleaned: str, guard_text: str) -> set:
         for name, body_start, body_end in spans:
             if name in seeds:
                 continue
-            if _calls_guard_helper_before_mutation(
-                guard_text[body_start:body_end], seeds
-            ):
+            body = guard_text[body_start:body_end]
+            if _rbac_off(body):
+                continue
+            if _calls_guard_helper_before_mutation(body, seeds):
                 seeds.add(name)
                 changed = True
     return seeds
+
+
+# ---------------------------------------------------------------------------
+# Pattern 4c — the delegation chain is longer than ONE class, and part of it
+#              lives in a TRAIT
+# ---------------------------------------------------------------------------
+#
+# `_collaborator_guard_methods` reads the immediate collaborator's own file and
+# stops there. That is one hop, and the fleet's real chains are three:
+#
+#     procest  TemplateController::activate
+#         -> TemplateLibraryService::activateTemplate
+#         -> SettingsService::getObjectService()
+#         -> OpenRegister\Service\ObjectService
+#
+#     zaakafhandelapp  ZakenController::index
+#         -> ZaakAfhandelApp\Service\ObjectService::getResultArrayForRequest
+#         -> MapperService::getOpenRegisters()
+#         -> OpenRegister\Service\ObjectService
+#
+# The middle class names OpenRegister nowhere, so a one-hop pass sees an
+# ordinary app service and reports the controller as unguarded — for a
+# delegation ADR-022 tells the app to write.
+#
+# ⚠️ AND A WIDER TYPE MATCH DOES NOT REACH IT. The obvious alternative — accept
+# a collaborator whose declared type IS OpenRegister's ObjectService — fails on
+# the shape the fleet actually ships: procest's accessors are declared
+# `getObjectService(): ?object` and zaakafhandelapp's `getOpenRegisters():
+# ?\OCA\OpenRegister\Service\ObjectService`, so the type on the property is
+# `object` or absent. What generalises is following the CALL, bounded.
+#
+# TRAITS ARE PART OF THE SAME PROBLEM. procest puts its OpenRegister bridge in
+# `use SearchesObjects;` — 89 classes — and a trait's methods are callable as
+# `$this->method()` while living in a different file entirely, so every span
+# scan in this module is blind to them.
+#
+# BOUNDED, and the bound is the point:
+#   * depth 3 — measured against the two chains above, which are the longest in
+#     the fleet. An unbounded walk would eventually reach some class that names
+#     OpenRegister and clear everything above it.
+#   * a cycle stack, so `A -> B -> A` terminates.
+#   * a resolved file only — an unresolvable type or trait contributes nothing,
+#     and the routed method keeps its finding. That is the fail-closed
+#     direction and it is why this widening cannot go green on ignorance.
+#   * every hop still requires the hop's OWN file to name OpenRegister's
+#     ObjectService in CODE (comments stripped), and an `_rbac: false` anywhere
+#     on the seeding call still withdraws the clear.
+_OR_DELEGATION_MAX_DEPTH = 3
+
+# Per-(file, depth) cache of the transitively OR-delegating method names.
+_OR_DELEGATION_CACHE: dict = {}
+
+# The first type declaration in the file. Everything before it is a namespace
+# import; a `use X;` AFTER it is a trait composition. Distinguishing the two by
+# position is what keeps `use OCP\IRequest;` out of the trait resolver.
+_TYPE_DECL_RE = re.compile(r"\b(?:class|trait|interface|enum)\s+[A-Za-z_]")
+
+# `use SearchesObjects;` / `use A, B;` inside a class body. Deliberately
+# unqualified-only: a trait imported by FQCN also carries a top-of-file `use`,
+# which the class index resolves by short name anyway.
+_TRAIT_USE_RE = re.compile(
+    r"\buse\s+([A-Za-z_][A-Za-z0-9_]*(?:\s*,\s*[A-Za-z_][A-Za-z0-9_]*)*)\s*;"
+)
+
+
+# ``(root, short, kind) -> [file, ...]``. The transitive pass asks the same
+# question many times over one repo; without this the walk re-reads and
+# re-cleans every candidate file on every hop.
+_TYPE_RESOLVE_CACHE: dict = {}
+
+
+def _resolve_type_files(short: str, path: str, kind: str = "class") -> list:
+    """Files under the app's ``lib/`` that actually declare ``<kind> <short>``.
+
+    Shared by the collaborator and trait resolvers so both answer "which file
+    is this?" identically. An unresolvable name yields ``[]``, which is the
+    fail-closed answer everywhere it is used.
+    """
+    root = _app_root_for(path)
+    if root is None:
+        return []
+    key = (root, short, kind)
+    declaring = _TYPE_RESOLVE_CACHE.get(key)
+    if declaring is None:
+        decl_re = re.compile(r"\b(?:abstract\s+|final\s+|readonly\s+)*"
+                             + kind + r"\s+" + re.escape(short) + r"\b")
+        declaring = []
+        for candidate in _class_index(root).get(short, []):
+            try:
+                with open(candidate, encoding="utf-8") as fh:
+                    csrc = fh.read()
+            except OSError:
+                continue
+            if decl_re.search(_strip_strings_and_comments(csrc)):
+                declaring.append(candidate)
+        _TYPE_RESOLVE_CACHE[key] = declaring
+    # The self-exclusion is per CALLER, so it must not be cached with the
+    # declaring set: the same class is "self" for one caller and a resolvable
+    # collaborator for the next.
+    here = os.path.abspath(path)
+    return [c for c in declaring if os.path.abspath(c) != here]
+
+
+def _trait_files(cleaned: str, path: str) -> list:
+    """Files declaring the traits this class composes with ``use <Trait>;``."""
+    decl = _TYPE_DECL_RE.search(cleaned)
+    if decl is None:
+        return []
+    out = []
+    for m in _TRAIT_USE_RE.finditer(cleaned, decl.end()):
+        for name in (n.strip() for n in m.group(1).split(",")):
+            if not name:
+                continue
+            out.extend(_resolve_type_files(name, path, kind="trait"))
+    return out
+
+
+def _or_delegating_methods_deep(class_file: str, depth: int,
+                                stack: frozenset = frozenset()) -> set:
+    """Methods of *class_file* that reach OpenRegister's facade within *depth* hops.
+
+    Depth 0 is exactly :func:`_or_delegating_methods` — the class's own bodies,
+    gated on the class's own file naming OpenRegister's ObjectService. Each
+    further hop adds: the OR-delegating methods of a RESOLVED typed
+    collaborator, reachable as ``$this-><prop>-><method>(``; and those of a
+    RESOLVED composed trait, reachable as ``$this-><method>(``. The result is
+    then closed over same-class calls, so an internal helper chain of any
+    length inside one file is followed as it already was.
+    """
+    absolute = os.path.abspath(class_file)
+    key = (absolute, depth)
+    cached = _OR_DELEGATION_CACHE.get(key)
+    if cached is not None:
+        return cached
+    if absolute in stack:
+        return set()          # cycle — contributes nothing, fails closed
+    try:
+        with open(class_file, encoding="utf-8") as fh:
+            src = fh.read()
+    except OSError:
+        _OR_DELEGATION_CACHE[key] = set()
+        return set()
+    cleaned = _strip_strings_and_comments(src)
+    gsrc = _guard_source(src, cleaned)
+    result: set = set()
+    # This file's own reach, gated on this file naming OpenRegister in CODE.
+    if _OR_IMPORT_RE.search(_strip_strings_and_comments(src, keep_strings=True)):
+        result |= _or_delegating_methods(cleaned, gsrc)
+    if depth > 0:
+        deeper = stack | {absolute}
+        # Composed traits: their methods are called as `$this->method(`, so
+        # they join this class's own name set directly.
+        for trait_file in _trait_files(cleaned, class_file):
+            result |= _or_delegating_methods_deep(trait_file, depth - 1, deeper)
+        # Typed collaborators: their methods are called as
+        # `$this-><prop>-><method>(`, so they need the property name.
+        child_map: dict = {}
+        for type_name, prop in _PROPERTY_DECL_RE.findall(cleaned):
+            short = type_name.rsplit("\\", 1)[-1]
+            if short.lower() in _COLLABORATOR_SKIP_TYPES:
+                continue
+            for candidate in _resolve_type_files(short, class_file):
+                child = _or_delegating_methods_deep(candidate, depth - 1, deeper)
+                if child:
+                    child_map.setdefault(prop, set()).update(child)
+        if child_map:
+            for name, body_start, body_end in _all_method_spans(cleaned):
+                if name in result:
+                    continue
+                body = gsrc[body_start:body_end]
+                # `_rbac: false` withdraws the clear at EVERY hop, not only at
+                # the seed — see the note in `_or_delegating_methods`.
+                if _RBAC_DISABLED_RE.search(body):
+                    continue
+                if _calls_collaborator_guard_before_mutation(body, child_map):
+                    result.add(name)
+    if result:
+        spans = list(_all_method_spans(cleaned))
+        changed = True
+        while changed:
+            changed = False
+            for name, body_start, body_end in spans:
+                if name in result:
+                    continue
+                body = gsrc[body_start:body_end]
+                if _RBAC_DISABLED_RE.search(body):
+                    continue
+                if _calls_guard_helper_before_mutation(body, result):
+                    result.add(name)
+                    changed = True
+    _OR_DELEGATION_CACHE[key] = result
+    return result
 
 
 def _collaborator_guard_methods(class_file: str) -> set:
@@ -1766,8 +2094,15 @@ def _collaborator_guard_methods(class_file: str) -> set:
     # container-resolved file was silently missed. Raw `src` would fix that and
     # introduce a worse bug: a class merely NAMED in a docblock would qualify
     # the file — a security gate switched off by prose.
-    if _OR_IMPORT_RE.search(_strip_strings_and_comments(src, keep_strings=True)):
-        result = result | _or_delegating_methods(cleaned, gsrc)
+    #
+    # `_or_delegating_methods_deep` is the same question asked to a bounded
+    # depth (Pattern 4c): depth 0 is the previous behaviour exactly, and each
+    # further hop follows a RESOLVED collaborator or composed trait. It carries
+    # its own `_OR_IMPORT_RE` gate per hop, so the check that used to guard the
+    # call now lives inside it.
+    result = result | _or_delegating_methods_deep(
+        class_file, _OR_DELEGATION_MAX_DEPTH
+    )
     _COLLABORATOR_GUARD_CACHE[class_file] = result
     return result
 
@@ -1952,9 +2287,54 @@ _OR_NAMESPACE_RE = re.compile(r"\bnamespace\s+OCA\\OpenRegister\b")
 # on pipelinq 2026-08-14, 75 of 160 service files resolve it that way against
 # 11 that import it. Recognising only the import declared those 75 unguarded,
 # which is how this gate reported 50 findings against an app that delegates.
+# ⚠️ AND THE CONTRACT SPELLING COUNTS TOO — `ObjectServiceInterface`.
+#
+# `ObjectService\b` does NOT match `ObjectServiceInterface`: `\b` needs a
+# non-word character after the `e`, and `I` is a word character. So the moment
+# a repo adopted ADR-084 and replaced the container-string lookup with
+#
+#     use OCA\OpenRegister\Contract\ObjectServiceInterface;
+#
+# the delegation this pattern exists to recognise became invisible, and the
+# gate reported the app as unguarded for doing exactly what the ADR told it to
+# do. MEASURED 2026-08-16 on real `origin/development` trees: decidesk went
+# **5 -> 12 with no controller edit**, and adding `(?:Interface)?` puts it back
+# to 5. This is the third `\b`-against-an-identifier-fragment defect this fleet
+# has paid for, and all three failed in the same direction — silently, toward
+# "no match". See `ObjectServiceInterfaceIsTheSameContract` in
+# test_check_no_admin_idor.py, which pins both halves: the interface spelling
+# must match, and `ObjectServiceHelper` / a leaf app's own `ObjectService`
+# still must not.
+#
+# ⚠️ AND A THIRD SPELLING EXISTED ALL ALONG — THE TYPE-POSITION FQCN.
+#
+# The two alternatives this pattern used to carry were `use <FQCN>;` and a
+# QUOTED `'<FQCN>'`. Neither matches the file that skips the import and writes
+# the fully-qualified name where the type goes:
+#
+#     private readonly \OCA\OpenRegister\Contract\ObjectServiceInterface $svc,
+#     $this->container->get(\OCA\OpenRegister\Service\ObjectService::class)
+#
+# Both name OpenRegister's ObjectService as unambiguously as an import does,
+# and the pattern's own stated question — "does this file name OpenRegister's
+# ObjectService?" — is answered yes by all three. So the three alternatives
+# collapse into one: the FQCN itself, wherever it appears in code.
+#
+# `\\{1,2}` covers the single backslash of source position and the escaped
+# double backslash of a single-quoted PHP string; the interior
+# `(?:[A-Za-z0-9_]+\\{1,2})*` covers `Service\`, `Contract\` and any future
+# sub-namespace. The trailing `\b` is what keeps `ObjectServiceHelper` and
+# `ObjectServiceInterfaceFactory` out.
+#
+# THE ANCHOR IS THE SAFETY, AND IT IS UNCHANGED: every alternative still
+# begins `OCA\OpenRegister\`, so a leaf app's own `OCA\Foo\Service\
+# ObjectService` — which is that app's OWN storage and carries no OR
+# authorisation — still contributes nothing. And the caller passes
+# COMMENT-FREE source, so a class merely named in a docblock cannot qualify a
+# file: a security gate must not be switchable off by prose.
 _OR_IMPORT_RE = re.compile(
-    r"\buse\s+OCA\\OpenRegister\\[A-Za-z0-9_\\]*ObjectService\b"
-    r"|(?:'|\")OCA\\{1,2}OpenRegister\\{1,2}Service\\{1,2}ObjectService(?:'|\")"
+    r"\bOCA\\{1,2}OpenRegister\\{1,2}(?:[A-Za-z0-9_]+\\{1,2})*"
+    r"ObjectService(?:Interface)?\b"
 )
 
 # The OR facade only. Note the absence of a ``*Mapper`` alternative: that is
@@ -1964,10 +2344,47 @@ _OR_IMPORT_RE = re.compile(
 # call site reads `$this->getObjectService()->findAll(...)`. Matching only a
 # property would miss every container-resolved app. Safe because the file must
 # ALSO name OpenRegister's ObjectService (see _OR_IMPORT_RE).
+#
+# ⚠️ AND IT MISSED THE TWO SHAPES THE FLEET ACTUALLY WRITES MOST.
+#
+# The three alternatives above all require the facade to be the RECEIVER of
+# the very next `->`. That is one way to reach it, and it is not the common
+# one. Measured 2026-08-16 on `origin/development`:
+#
+#   zaakafhandelapp  lib/Service/ObjectService.php
+#       $orService = $this->mapperService->getOpenRegisters();   // then used
+#   procest          lib/Service/SettingsService.php
+#       return $this->container->get('OCA\OpenRegister\Service\ObjectService');
+#   procest          89 classes
+#       $objectService = $this->settingsService->getObjectService();
+#       $this->searchObjectsAsArrays($objectService, …)          // PASSED ON
+#
+# In every one of these the code has OBTAINED OpenRegister's facade — which is
+# the question this pattern asks — and then assigned it, returned it, or handed
+# it to a helper instead of dereferencing it in place. Requiring the trailing
+# `->` answered a narrower question than the one the pattern is named for, and
+# answered it "no".
+#
+# So the accessor alternative drops its trailing `->`, and a container
+# resolution of OpenRegister's ObjectService is added. Note what is NOT
+# relaxed: `->objectService` and `$objectService` still require the arrow,
+# because those are NAMES and a name alone is not a call. `getObjectService()`
+# and `container->get(<OR FQCN>)` are calls that return the facade, so the
+# call itself is the evidence.
+#
+# The safety is unchanged and it is upstream of this pattern: a clear also
+# requires the FILE to name `OCA\OpenRegister\…\ObjectService` in code
+# (`_OR_IMPORT_RE`), and an explicit `_rbac: false` still withdraws it.
+_OR_CONTAINER_GET_RE = re.compile(
+    r"->\s*get\s*\(\s*(?:id\s*:\s*)?['\"]?\\{0,2}OCA\\{1,2}OpenRegister\\{1,2}"
+    r"(?:[A-Za-z0-9_]+\\{1,2})*ObjectService(?:Interface)?\b"
+)
+
 _OR_FACADE_CALL_RE = re.compile(
     r"->\s*objectService\s*->"
     r"|\$objectService\s*->"
-    r"|->\s*getObjectService\s*\(\s*\)\s*->"
+    r"|->\s*get(?:ObjectService|OpenRegisters?)\s*\(\s*\)"
+    r"|" + _OR_CONTAINER_GET_RE.pattern
 )
 
 # ``_rbac: false`` (or ``_rbac : FALSE``) anywhere in the call — the app has
@@ -2157,12 +2574,46 @@ def _parameter_list(cleaned: str, sig_start: int):
     return None
 
 
-def _is_session_scoped_no_reference(params, body: str) -> bool:
+def _is_session_scoped_no_reference(params, body: str,
+                                    raw_body: str = None) -> bool:
     """True when the method has no caller-supplied object reference (Pattern 3).
 
     See the Pattern 3 commentary above for why all three conditions are
     required. *params* is the raw parameter-list text (``None`` when it could
     not be parsed — treated as "not clearable", fail-closed).
+
+    🔴 CONDITION 3 READS THE RAW BODY, AND UNTIL NOW IT DID NOT — WHICH MADE
+    THE VERDICT DEPEND ON THE SPELLING OF THE PREAMBLE.
+    ------------------------------------------------------------------------
+    `#365` blanks authentication-only guard clauses so that "is anyone logged
+    in" can never be mistaken for an authorisation guard. Condition 3 is not a
+    guard test: it asks whether the method references a caller identity at all,
+    as evidence that it is scoped to the caller rather than reading globally.
+    Running it against the blanked text conflated the two questions, and the
+    consequence was a verdict that turned on where the author put a variable:
+
+        $user = $this->userSession->getUser();      <- survives the blanking
+        if ($user === null) { return 401; }
+        return $this->service->findPendingForCurrentUser();     -> CLEARED
+
+        if ($this->userSession->getUser() === null) { return 401; }
+        return $this->service->findPendingForCurrentUser();     -> FINDING
+
+    Two spellings of one preamble, two verdicts, because the inline form put
+    the body's ONLY session token inside the clause `#365` deletes. Measured on
+    procest, where three findings were exactly this and nothing else — and the
+    right response was never to hoist the assignment, which is a semantic no-op
+    whose only effect is moving a regex past a checker.
+
+    Conditions 1 and 2 still read the blanked body and are unchanged; they are
+    the ones that carry the "no caller-controlled value exists" argument.
+
+    ⚠️ WHAT THIS DOES NOT FIX, stated rather than left to be discovered:
+    Pattern 3 has no mutation veto, so a zero-input method that mutates and
+    carries only an authentication preamble clears. That was already true via
+    the assignment spelling; this change makes the inline spelling agree with
+    it rather than introducing it. Pattern 3b — which does veto mutation — is
+    unaffected. Closing it is a separate decision about Pattern 3's contract.
     """
     if params is None:
         return False
@@ -2170,7 +2621,8 @@ def _is_session_scoped_no_reference(params, body: str) -> bool:
         return False
     if _REQUEST_INPUT_RE.search(body):
         return False
-    return bool(_SESSION_IDENTITY_RE.search(body))
+    return bool(_SESSION_IDENTITY_RE.search(
+        body if raw_body is None else raw_body))
 
 
 def _is_zero_input_read_only(params, body: str) -> bool:
@@ -3241,7 +3693,12 @@ def scan_file(path: str) -> int:
         # so IDOR is not structurally possible. See the Pattern 3 commentary
         # for why all three conditions are required.
         _params = _parameter_list(cleaned, sig_start)
-        if _is_session_scoped_no_reference(_params, body):
+        # ⚠️ `cleaned`, never `src`: comments and string literals are blanked,
+        # so a docblock naming `$this->userSession->getUser()` cannot satisfy
+        # condition 3. `#415` — prose is not the guard, and it is not the
+        # evidence either. Offsets are preserved, so the span is the same one.
+        if _is_session_scoped_no_reference(_params, body,
+                                           cleaned[body_start:body_end]):
             continue
 
         # ---- Pattern 3b: zero-input READ, no session identity needed ----

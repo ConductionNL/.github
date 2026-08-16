@@ -7687,8 +7687,23 @@ elif [ "${HAVE_DELTA_BASE}" = "1" ]; then
     else
         set +e
         _csrf_err="${HYDRA_GATE_LOG_DIR}/hydra-gate-csrf-cochange.err"
+        # `--repo`/`--base` turn on the POST-IMAGE test: a removed annotation
+        # whose method no longer exists at HEAD is a DELETED endpoint, not a
+        # dropped protection, and a `-U0` diff cannot tell the two apart on its
+        # own. Measured on zaakafhandelapp#371 (five `DashboardController`
+        # methods deleted): 5 removals -> 0. The negative control is #380, which
+        # STRIPPED the annotation from ten surviving methods: 10 -> 10.
+        # Without these arguments the helper behaves exactly as before, so a
+        # repo it cannot read is never a reason to drop a security finding.
+        # ⚠️ THE DIFF IS THREE-DOT, SO ITS BASE SIDE IS THE MERGE BASE — not
+        # BASE_REF. Passing BASE_REF would address line numbers in the wrong
+        # image; the helper verifies the line content it was given and reports
+        # on a mismatch, so the error would be silent over-reporting rather
+        # than a false pass, but the right image is cheap to name.
+        _csrf_mb=$(git merge-base "${BASE_REF}" HEAD 2>/dev/null || true)
+        [ -n "${_csrf_mb}" ] || _csrf_mb="${BASE_REF}"
         _csrf_removed=$(git diff -U0 "${BASE_REF}...HEAD" -- 'lib/Controller/*.php' 2>/dev/null \
-            | python3 "${_csrf_helper}" 2>"${_csrf_err}")
+            | python3 "${_csrf_helper}" --repo . --base "${_csrf_mb}" 2>"${_csrf_err}")
         _csrf_rc=$?
         if [ "${_csrf_rc}" -ne 0 ]; then
             _csrf_ran=0
