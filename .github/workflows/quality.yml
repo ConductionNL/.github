@@ -652,16 +652,57 @@ jobs:
                 exit 0
               fi
               require_script phpcs "the enable-phpcs input"
-              # Exit code 0 = clean, 1 = warnings only, 2 = errors found.
-              # We treat warnings as non-blocking (exit 1 → success). This is only
-              # safe because require_script has already proven the script exists.
+              #
+              # ⚠️ THE EXIT CODES ARE NOT WHAT THIS BLOCK USED TO CLAIM.
+              #
+              # The comment here used to read "0 = clean, 1 = warnings only,
+              # 2 = errors found", and the block mapped exit 1 to SUCCESS on
+              # that basis. Measured against php_codesniffer 3.13.6
+              # (`Runner::runPHPCS()`) with this fleet's real ruleset, the
+              # actual mapping is:
+              #
+              #   0  No ERRORS. Warnings never reach the exit code at all: the
+              #      shared hydra-gates ruleset sets `ignore_warnings_on_exit=1`,
+              #      which subtracts them in `Runner::run()` before
+              #      `runPHPCS()` ever looks at the total.
+              #   1  ERRORS present, and NONE of the violations are
+              #      phpcbf-fixable.
+              #   2  ERRORS present, and at least one IS phpcbf-fixable.
+              #   3  phpcs could not run at all (config/tokenizer failure).
+              #
+              # So exit 1 never meant "warnings only". It meant "errors, none
+              # auto-fixable" — and this block passed every single one of them.
+              #
+              # The old rule was not merely wrong, it was near-total. The shared
+              # ruleset deliberately removed every auto-fixable formatting sniff
+              # (see its own header: 111,747 of 111,932 findings were the
+              # formatter being argued with). That makes exit 2 nearly
+              # unreachable and exit 1 the ORDINARY way for errors to present,
+              # so the special case swallowed essentially the whole fleet's
+              # error debt. Measured 2026-08-17 across all 18 core repos on
+              # `development`: 12 repos green with 707 real phpcs errors between
+              # them; every one of the 12 returned exit 1, and every one of the
+              # 6 genuinely clean repos returned 0. Zero repos returned 2.
+              #
+              # Warnings staying non-blocking needs NO special case here, because
+              # phpcs already returns 0 for them. Passing the code straight
+              # through is both the correct rule and the simpler one.
+              #
+              # `--runtime-set ignore_warnings_on_exit 1` is appended so that
+              # "warnings do not fail the build" holds BY CONSTRUCTION at the
+              # gate, rather than by inheritance from a vendored ruleset that an
+              # app could stop referencing. All 18 core repos currently inherit
+              # it and none set it themselves, so today it rests on one line in
+              # one vendored file — too thin to carry an enforcement flip.
+              #
               # NB: capture via `|| RC=$?` — a bare `composer phpcs; RC=$?`
               # is killed by `set -e` before RC is ever assigned.
               RC=0
-              composer phpcs || RC=$?
-              if [ "$RC" -eq 1 ]; then
-                echo "::warning::PHPCS found warnings but no errors — passing."
-                exit 0
+              composer phpcs -- --runtime-set ignore_warnings_on_exit 1 || RC=$?
+              if [ "$RC" -eq 3 ]; then
+                echo "::error::PHPCS could not run (exit 3) — this is a configuration or tokenizer failure, not a code finding. Check the app's phpcs.xml."
+              elif [ "$RC" -ne 0 ]; then
+                echo "::error::PHPCS found errors (exit $RC). Warnings are non-blocking and are NOT counted here — this is errors only."
               fi
               exit $RC
               ;;
