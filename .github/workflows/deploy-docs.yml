@@ -33,3 +33,96 @@ jobs:
     with:
       cname: docs.conduction.nl
       source-folder: website
+
+  # ---------------------------------------------------------------------------
+  # THE JOB ABOVE DOES NOT PUBLISH THIS SITE. It pushes the build to `gh-pages`,
+  # and for three months everyone read that as "the docs deployed".
+  #
+  # docs.conduction.nl is served by the Cloudflare Worker `conduction-docs`
+  # (Workers Static Assets) — the same pattern as the ~33 other *.conduction.nl
+  # docs sites (`openregister-docs`, `shillinq-docs`, …). Look it up with
+  # `GET /accounts/{id}/workers/domains`; Worker custom domains do NOT appear
+  # under `zones/{id}/workers/routes`.
+  #
+  # That Worker was deployed from Forgejo (`.forgejo/workflows/documentation-deploy.yml`).
+  # When Forgejo was retired the deploy stopped, the Worker froze at its
+  # 2026-06-01 build, and nothing anywhere reported a problem: `gh-pages` kept
+  # updating, GitHub Pages kept claiming the domain as `verified`, and the site
+  # kept answering 200 — with stale content. This job closes that loop.
+  # ---------------------------------------------------------------------------
+  publish-worker:
+    name: Publish to docs.conduction.nl
+    needs: deploy
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the built site from gh-pages
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: build
+
+      # The `secrets` context cannot be read in an `if:` expression, so map it to
+      # env and branch on an output instead.
+      - name: Detect Cloudflare credentials
+        id: creds
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: |
+          if [ -n "$CF_API_TOKEN" ] && [ -n "$CF_ACCOUNT_ID" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Worker deploy skipped::CF_API_TOKEN / CF_ACCOUNT_ID are not set, so this run cannot push to the conduction-docs Worker. The check below will fail if the public site is consequently stale."
+          fi
+
+      - name: Deploy to the conduction-docs Worker
+        if: steps.creds.outputs.present == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: |
+          rm -rf build/.git
+          cat > wrangler.toml <<'EOF'
+          name = "conduction-docs"
+          compatibility_date = "2026-05-30"
+
+          [assets]
+          directory = "./build"
+          EOF
+          npx -y wrangler@4 deploy
+
+      # THE GATE. It asserts the condition that actually matters — "the public
+      # host serves what we just built" — rather than a proxy for it such as
+      # "a secret is present" or "wrangler exited 0".
+      #
+      # This distinction is the whole lesson of the 3-month outage: `gh-pages`
+      # updated, GitHub Pages reported the domain `verified`, the URL answered
+      # 200, and every one of those was true while the site was stale. Only a
+      # byte-for-byte comparison against the live host could see it.
+      #
+      # It therefore fails on DRIFT, not on configuration. With no credentials
+      # and an unchanged site it passes; with no credentials and a changed site
+      # it fails, which is correct — the site really is stale at that point.
+      - name: Verify the public host serves THIS build
+        run: |
+          expected=$(md5sum build/index.html | cut -d' ' -f1)
+          for i in $(seq 1 10); do
+            live=$(curl -sL "https://docs.conduction.nl/" --max-time 25 | md5sum | cut -d' ' -f1)
+            if [ "$expected" = "$live" ]; then
+              echo "Verified: docs.conduction.nl serves this build ($expected)."
+              exit 0
+            fi
+            echo "attempt $i: live=$live expected=$expected — retrying"
+            sleep 15
+          done
+          if [ "${{ steps.creds.outputs.present }}" = "true" ]; then
+            echo "::error title=Published build not being served::wrangler reported success but docs.conduction.nl still serves different bytes."
+          else
+            echo "::error title=docs.conduction.nl is now STALE::The build reached gh-pages but nothing published it to the conduction-docs Worker. Add repo secrets CF_API_TOKEN (Account > Workers Scripts > Edit) and CF_ACCOUNT_ID, then re-run."
+          fi
+          exit 1
