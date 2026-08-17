@@ -2345,9 +2345,36 @@ jobs:
             echo "Checking out $repo ($name) at $ref..."
             git clone --depth 1 --branch "$ref" "https://github.com/$repo.git" "server/apps/$name"
             if [ -f "server/apps/$name/composer.json" ]; then
-              cd "server/apps/$name"
-              composer install --no-progress --prefer-dist --optimize-autoloader --no-dev 2>/dev/null || true
-              cd -
+              echo "Installing composer dependencies for $name..."
+              # ⚠️ This install used to end in `2>/dev/null || true` — stderr
+              # discarded AND the exit status thrown away. It was the ONLY
+              # `composer install` of the 20+ in this workflow to do either,
+              # and the `git clone` immediately above it has always failed
+              # loudly, so the asymmetry was not a deliberate policy.
+              #
+              # A sibling app whose dependencies did not install is not a
+              # neutral condition. The suite then runs against a HALF-INSTALLED
+              # app, and its missing classes surface as failures of the
+              # CONSUMING repository — a red cell pointing at the wrong repo.
+              #
+              # Measured on decidesk#517 (2026-08-17), a diff of exactly one
+              # `.ts` file and zero PHP: ALL SIX PHPUnit cells hit a transient
+              # HTTP 504 while installing openregister's dependencies, and all
+              # six reported this step as SUCCESSFUL. Three then went red with
+              # 87 errors — the first being
+              #   Class "Twig\Extension\AbstractExtension" not found
+              #   in server/apps/openregister/lib/Twig/MappingExtension.php
+              # — while three went green. The only difference was WHICH package
+              # the 504 happened to remove; the green cells were exactly as
+              # half-installed as the red ones.
+              #
+              # So: keep stderr, and fail the step naming the app and its ref.
+              # Retrying is an operator's decision to take knowingly, not a
+              # silent default.
+              if ! ( cd "server/apps/$name" && composer install --no-progress --prefer-dist --optimize-autoloader --no-dev ); then
+                echo "::error::Dependency install FAILED for sibling app '$name' ($repo@$ref). Refusing to continue: the suite would otherwise run against a half-installed app and report its missing classes as this repository's failures."
+                exit 1
+              fi
             fi
           done
 
