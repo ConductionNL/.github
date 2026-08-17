@@ -581,5 +581,160 @@ class RenamesAreNotContentChanges(unittest.TestCase):
         )
 
 
+class ADeletedFileHasNoTestToWrite(unittest.TestCase):
+    """#485 — `git diff -U0` returns added and removed lines undifferentiated,
+    so a `-` line scored exactly like a `+` line and any deletion-only PR
+    reddened this gate.
+
+    Measured 2026-08-16 on procest#867 against base `463181f0`: `FAIL — 7
+    security-touching change(s) without a test co-change`, all seven `D`
+    records, every matched line the deleted `requesttoken: OC.requestToken`
+    header of a removed `src/views/**` component. Unclosable from the app repo
+    (keyed to a base already in history) and it self-cleared on the next push
+    — which is the evidence vanishing, not a repair.
+
+    THE PAIRING IS THE WHOLE POINT. The exemption is the `D` STATUS, never the
+    `-` sign. `test_tp_removing_the_token_from_a_SURVIVING_file_still_fires`
+    is the arm that goes red if anyone "simplifies" this to classifying added
+    lines only — which would retire the gate's ability to see a guard being
+    taken OUT of live code, the shape it exists to catch.
+    """
+
+    def setUp(self):
+        self.repo = _Repo()
+
+    def tearDown(self):
+        self.repo.close()
+
+    def _delete(self, rel: str) -> None:
+        (self.repo.root / rel).unlink()
+
+    def test_fp_deleting_the_whole_file_is_not_a_security_change(self):
+        self.repo.write("src/dialogs/ImportDialog.vue", VUE_WITH_CSRF)
+        base = self.repo.commit("base")
+        self._delete("src/dialogs/ImportDialog.vue")
+        self.repo.write("src/views/Kept.vue", "<template><div/></template>\n")
+        self.repo.commit("remove the unreachable dialog")
+        security, _ = self.repo.scan(base)
+        self.assertEqual(security, [])
+
+    def test_control_the_deleted_file_IS_still_in_the_change_set(self):
+        """Show the fixture can fail before trusting that it passed.
+
+        An empty diff satisfies `assertEqual(security, [])` for the wrong
+        reason — the trap `_Repo.move` already documents one level up. This
+        asserts the deleted file really is in `changed_files` (so the gate had
+        it in hand and chose to exempt it) and that `deleted_files` is what
+        named it.
+        """
+        self.repo.write("src/dialogs/ImportDialog.vue", VUE_WITH_CSRF)
+        base = self.repo.commit("base")
+        self._delete("src/dialogs/ImportDialog.vue")
+        self.repo.commit("remove the dialog")
+        root = str(self.repo.root)
+        self.assertIn("src/dialogs/ImportDialog.vue",
+                      csc.changed_files(base, root))
+        self.assertEqual(csc.deleted_files(base, root),
+                         {"src/dialogs/ImportDialog.vue"})
+
+    def test_control_the_removed_lines_really_did_match_the_vocabulary(self):
+        """…and that the pre-fix classifier really did fire on them.
+
+        Without this the suite would be equally consistent with "the deleted
+        file never contained a security token", i.e. with there having been no
+        bug. `changed_lines` is unchanged by #485 — it still returns the `-`
+        lines — so this reproduces the exact pre-fix input and shows
+        `line_is_security_relevant` says True on it.
+        """
+        self.repo.write("src/dialogs/ImportDialog.vue", VUE_WITH_CSRF)
+        base = self.repo.commit("base")
+        self._delete("src/dialogs/ImportDialog.vue")
+        self.repo.commit("remove the dialog")
+        lines = csc.changed_lines(base, "src/dialogs/ImportDialog.vue",
+                                  str(self.repo.root))
+        self.assertTrue(any(
+            csc.line_is_security_relevant(ln, "src/dialogs/ImportDialog.vue")
+            for ln in lines),
+            "the deleted file's removed lines were supposed to match the "
+            "vocabulary — this fixture no longer reproduces #485")
+
+    def test_tp_removing_the_token_from_a_SURVIVING_file_still_fires(self):
+        # THE ANTI-WIDENING ARM. This is why the exemption is keyed to the
+        # file's diff STATUS and not to the `-` sign. A CSRF header taken out
+        # of a component that still ships is a security change with a test to
+        # write, and it must still be reported.
+        self.repo.write("src/dialogs/ImportDialog.vue", VUE_WITH_CSRF)
+        base = self.repo.commit("base")
+        self.repo.write("src/dialogs/ImportDialog.vue", VUE_WITH_CSRF.replace(
+            "        headers: { requesttoken: OC.requestToken },\n", ""))
+        self.repo.commit("drop the CSRF header")
+        security, has_test = self.repo.scan(base)
+        self.assertEqual(security, ["src/dialogs/ImportDialog.vue"])
+        self.assertFalse(has_test)
+
+    def test_tp_adding_the_token_with_no_test_still_fires(self):
+        self.repo.write("src/dialogs/ImportDialog.vue", VUE_WITH_CSRF.replace(
+            "        headers: { requesttoken: OC.requestToken },\n", ""))
+        base = self.repo.commit("base")
+        self.repo.write("src/dialogs/ImportDialog.vue", VUE_WITH_CSRF)
+        self.repo.commit("send the CSRF header")
+        security, has_test = self.repo.scan(base)
+        self.assertEqual(security, ["src/dialogs/ImportDialog.vue"])
+        self.assertFalse(has_test)
+
+    def test_tp_deleting_one_file_does_not_excuse_editing_another(self):
+        # The exemption is per FILE. A PR that deletes a component and, in the
+        # same diff, drops an auth attribute from a surviving controller is
+        # still a finding — otherwise "delete something" would be a universal
+        # opt-out.
+        self.repo.write("src/dialogs/ImportDialog.vue", VUE_WITH_CSRF)
+        self.repo.write("lib/Controller/ThingController.php", PHP_BEFORE)
+        base = self.repo.commit("base")
+        self._delete("src/dialogs/ImportDialog.vue")
+        self.repo.write("lib/Controller/ThingController.php",
+                        PHP_BEFORE.replace("    #[NoAdminRequired]\n", ""))
+        self.repo.commit("delete the dialog and open up the controller")
+        security, _ = self.repo.scan(base)
+        self.assertEqual(security, ["lib/Controller/ThingController.php"])
+
+    def test_tp_deleting_a_file_under_an_auth_path_is_also_exempt(self):
+        # Stated, not hidden: the path arm is exempted on `D` too, because its
+        # remedy is the same remedy and there is still nothing to test. The
+        # KNOWN LIMIT recorded in `scan`'s docstring.
+        self.repo.write("lib/Service/Auth/TokenVerifier.php", "<?php\nclass T {}\n")
+        self.repo.write("src/views/Kept.vue", "<template><div/></template>\n")
+        base = self.repo.commit("base")
+        self._delete("lib/Service/Auth/TokenVerifier.php")
+        self.repo.commit("retire the verifier")
+        security, _ = self.repo.scan(base)
+        self.assertEqual(security, [])
+
+    def test_control_editing_that_same_auth_path_file_still_fires(self):
+        self.repo.write("lib/Service/Auth/TokenVerifier.php", "<?php\nclass T {}\n")
+        base = self.repo.commit("base")
+        self.repo.write("lib/Service/Auth/TokenVerifier.php",
+                        "<?php\nclass T { public $x = 1; }\n")
+        self.repo.commit("edit the verifier")
+        security, _ = self.repo.scan(base)
+        self.assertEqual(security, ["lib/Service/Auth/TokenVerifier.php"])
+
+    def test_control_a_rename_is_not_read_as_a_deletion(self):
+        # `-M` is on, so a move is an `R` record with no `D` side. If rename
+        # detection were ever dropped, a move would become D+A and the added
+        # half would still be classified — this pins that the D set stays
+        # empty across a pure move.
+        self.repo.write("src/components/ImportDialog.vue", VUE_WITH_CSRF)
+        base = self.repo.commit("base")
+        self.repo.move("src/components/ImportDialog.vue",
+                       "src/dialogs/ImportDialog.vue")
+        self.repo.commit("move the dialog")
+        self.assertEqual(csc.deleted_files(base, str(self.repo.root)), set())
+
+    def test_C_the_scanner_actually_consults_the_deletion_set(self):
+        # An unapplied change looks exactly like a passing test (cf. C8).
+        import inspect
+        self.assertIn("if f in deleted:", inspect.getsource(csc.scan))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
