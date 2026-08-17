@@ -1,0 +1,772 @@
+<!doctype html>
+<html lang="en-GB" dir="ltr" class="docs-wrapper plugin-docs plugin-id-default docs-version-current docs-doc-page docs-doc-id-WayOfWork/ci-cd" data-has-hydrated="false">
+<head>
+<meta charset="UTF-8">
+<meta name="generator" content="Docusaurus v3.10.1">
+<title data-rh="true">CI/CD and Code Standards | Conduction Docs</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" property="og:image" content="https://docs.conduction.nl/img/og-conduction.png"><meta data-rh="true" name="twitter:image" content="https://docs.conduction.nl/img/og-conduction.png"><meta data-rh="true" property="og:url" content="https://docs.conduction.nl/WayOfWork/ci-cd/"><meta data-rh="true" property="og:locale" content="en_GB"><meta data-rh="true" property="og:locale:alternate" content="nl_NL"><meta data-rh="true" name="docusaurus_locale" content="en"><meta data-rh="true" name="docsearch:language" content="en"><meta data-rh="true" name="twitter:site" content="@ConductionNL"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:type" content="website"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="CI/CD and Code Standards | Conduction Docs"><meta data-rh="true" name="description" content="What our pipeline runs, where the configuration lives, and how we stay strictly compatible with Nextcloud&#x27;s own app CI/CD"><meta data-rh="true" property="og:description" content="What our pipeline runs, where the configuration lives, and how we stay strictly compatible with Nextcloud&#x27;s own app CI/CD"><link data-rh="true" rel="icon" href="/img/favicon.svg"><link data-rh="true" rel="canonical" href="https://docs.conduction.nl/WayOfWork/ci-cd/"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/WayOfWork/ci-cd/" hreflang="en-GB"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/nl/WayOfWork/ci-cd/" hreflang="nl-NL"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/WayOfWork/ci-cd/" hreflang="x-default"><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","@id":"https://docs.conduction.nl/WayOfWork/ci-cd#article","mainEntityOfPage":"https://docs.conduction.nl/WayOfWork/ci-cd","headline":"CI/CD and Code Standards","inLanguage":"en","publisher":{"@id":"https://www.conduction.nl/#org"},"description":"What our pipeline runs, where the configuration lives, and how we stay strictly compatible with Nextcloud's own app CI/CD","author":{"@type":"Organization","name":"Conduction","@id":"https://www.conduction.nl/#org"}}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","@id":"https://www.conduction.nl/#org","name":"Conduction B.V.","alternateName":"Conduction","url":"https://www.conduction.nl/","logo":"https://www.conduction.nl/img/brand/avatar-conduction-gold-on-white.svg","foundingDate":"2019","description":"Dutch open-source software company building EUPL-1.2 apps for the Nextcloud workspace.","address":{"@type":"PostalAddress","streetAddress":"Lauriergracht 14h","postalCode":"1016 RR","addressLocality":"Amsterdam","addressCountry":"NL"},"email":"info@conduction.nl","telephone":"+31-85-303-6840","taxID":"NL860784241B01","vatID":"NL860784241B01","identifier":{"@type":"PropertyValue","propertyID":"KvK","value":"76741850"},"sameAs":["https://github.com/ConductionNL","https://www.linkedin.com/company/conduction/"]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","@id":"https://docs.conduction.nl/#website","url":"https://docs.conduction.nl/","name":"Conduction Docs","publisher":{"@id":"https://www.conduction.nl/#org"},"inLanguage":["en","nl"]}</script><link rel="stylesheet" href="/assets/css/styles.f2866016.css">
+<script src="/assets/js/runtime~main.515df4f8.js" defer="defer"></script>
+<script src="/assets/js/main.2e95517d.js" defer="defer"></script>
+</head>
+<body>
+<svg style="display: none;"><defs>
+<symbol id="theme-svg-external-link" viewBox="0 0 24 24"><path fill="currentColor" d="M21 13v10h-21v-19h12v2h-10v15h17v-8h2zm3-12h-10.988l4.035 4-6.977 7.07 2.828 2.828 6.977-7.07 4.125 4.172v-11z"/></symbol>
+</defs></svg>
+<script>!function(){var t=function(){try{return new URLSearchParams(window.location.search).get("docusaurus-theme")}catch(t){}}()||function(){try{return window.localStorage.getItem("theme")}catch(t){}}();document.documentElement.setAttribute("data-theme",t||(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")),document.documentElement.setAttribute("data-theme-choice",t||"system")}(),function(){try{const c=new URLSearchParams(window.location.search).entries();for(var[t,e]of c)if(t.startsWith("docusaurus-data-")){var a=t.replace("docusaurus-data-","data-");document.documentElement.setAttribute(a,e)}}catch(t){}}()</script><div id="__docusaurus"><div role="region" aria-label="Skip to main content"><a class="skipToContent_fXgn" href="#__docusaurus_skipToContent_fallback">Skip to main content</a></div><nav class="navbar nav_MuJ0" role="navigation" aria-label="Main"><div class="left__6eY"><a class="wordmark_mhs1" href="/"><img src="/img/logo.svg" alt="Conduction Docs avatar" class="wordmarkIcon_boru" width="32" height="32"><span class="wordmarkText_r1t1">Conduction Docs</span></a><div class="links_cXJT"><a class="link_CwQh" href="/WayOfWork/way-of-work/">Way of Work</a><a href="https://github.com/orgs/ConductionNL/projects/4" class="ghost_SGJf" target="_blank" rel="noopener noreferrer">Roadmap</a><a class="link_CwQh" href="/hydra/">Hydra</a><a class="link_CwQh" href="/claude/">Using Hydra</a><a class="link_CwQh" href="/iso/">ISO</a><a href="https://www.conduction.nl/support/" class="ghost_SGJf" target="_blank" rel="noopener noreferrer">Support</a><a href="https://www.conduction.nl/apps/" class="ghost_SGJf" target="_blank" rel="noopener noreferrer">Products</a></div></div><div class="ctas_jpo4"><div class="localeWrapper__Pip"><div class="navbar__item dropdown dropdown--hoverable dropdown--right"><a href="#" aria-haspopup="true" aria-expanded="false" role="button" class="navbar__link" type="localeDropdown"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" class="iconLanguage_nlXk"><path fill="currentColor" d="M12.87 15.07l-2.54-2.51.03-.03c1.74-1.94 2.98-4.17 3.71-6.53H17V4h-7V2H8v2H1v1.99h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z"></path></svg>English</a><ul class="dropdown__menu"><li><a href="/WayOfWork/ci-cd/" target="_self" rel="noopener noreferrer" class="dropdown__link dropdown__link--active" lang="en-GB">English</a></li><li><a href="/nl/WayOfWork/ci-cd/" target="_self" rel="noopener noreferrer" class="dropdown__link" lang="nl-NL">Nederlands</a></li></ul></div></div><a href="https://github.com/ConductionNL/.github" class="ghost_SGJf" target="_blank" rel="noopener noreferrer">GitHub</a></div></nav><div id="__docusaurus_skipToContent_fallback" class="theme-layout-main main-wrapper mainWrapper_z2l0"><div class="docsWrapper_hBAB"><button aria-label="Scroll back to top" class="clean-btn theme-back-to-top-button backToTopButton_sjWU" type="button"></button><div class="docRoot_UBD9"><main class="docMainContainer_TBSr docMainContainerEnhanced_lQrH"><div class="container padding-top--md padding-bottom--lg"><div class="row"><div class="col docItemCol_VOVn"><div class="docItemContainer_Djhp"><article><div class="tocCollapsible_ETCw theme-doc-toc-mobile tocMobile_ITEo"><button type="button" class="clean-btn tocCollapsibleButton_TO0P">On this page</button></div><div class="theme-doc-markdown markdown"><header><h1>CI/CD and Code Standards</h1></header>
+<p>We build Nextcloud apps, so we hold ourselves to Nextcloud&#x27;s rules:</p>
+<blockquote>
+<p><strong>Conduction code must pass Nextcloud&#x27;s own checks unchanged. We may be
+stricter than Nextcloud; we may not be different from it.</strong></p>
+</blockquote>
+<p>&quot;Stricter&quot; means adding a rule Nextcloud has no opinion on. It never means giving
+one of their rules a different value — code that satisfies us must still satisfy
+them. Where a difference exists today it is a defect, not a dialect, and this page
+is where each one is tracked.</p>
+<p>Two companion pages stay authoritative for what they cover:
+<a class="" href="/WayOfWork/development-pipeline/">Development Pipeline</a> for the branch flow and
+<a class="" href="/WayOfWork/release-process/">Release Process</a> for versioning.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="one-pipeline-eighteen-thin-callers">One pipeline, eighteen thin callers<a href="#one-pipeline-eighteen-thin-callers" class="hash-link" aria-label="Direct link to One pipeline, eighteen thin callers" title="Direct link to One pipeline, eighteen thin callers" translate="no">​</a></h2>
+<p>Every core app&#x27;s <code>.github/workflows/code-quality.yml</code> is a caller. The pipeline
+itself is one reusable workflow:</p>
+<div class="language-yaml codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-yaml codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token key atrule">jobs</span><span class="token punctuation" style="color:rgb(199, 146, 234)">:</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">  </span><span class="token key atrule">quality</span><span class="token punctuation" style="color:rgb(199, 146, 234)">:</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    </span><span class="token key atrule">uses</span><span class="token punctuation" style="color:rgb(199, 146, 234)">:</span><span class="token plain"> ConductionNL/.github/.github/workflows/quality.yml@main</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    </span><span class="token key atrule">with</span><span class="token punctuation" style="color:rgb(199, 146, 234)">:</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">      </span><span class="token key atrule">app-name</span><span class="token punctuation" style="color:rgb(199, 146, 234)">:</span><span class="token plain"> myapp</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">      </span><span class="token comment" style="color:rgb(105, 112, 152);font-style:italic"># …feature flags…</span><br></div></code></pre></div></div>
+<p>Consumed at <code>@main</code>, deliberately. A pinned ref is a silent expiry date: 22 repos
+once sat on gate package <code>v1.0.1</code> while 16 gates were dead fleet-wide and every
+one of them reported PASS.</p>
+<p><code>quality.yml</code> emits up to <strong>18 job groups</strong>, not the four the older docs describe:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Group</th><th>Jobs</th></tr></thead><tbody><tr><td>PHP Quality</td><td><code>lint</code>, <code>phpcs</code>, <code>phpmd</code>, <code>psalm</code>, <code>phpstan</code>, <code>phpmetrics</code> (matrix)</td></tr><tr><td>Vue Quality</td><td><code>eslint</code>, <code>stylelint</code> (matrix)</td></tr><tr><td>Frontend</td><td><code>Frontend Build</code>, <code>Frontend Tests (unit)</code>, <code>Frontend Check (…)</code> per declared npm script</td></tr><tr><td>Tests</td><td><code>PHPUnit</code> (PHP × Nextcloud matrix), <code>Integration Tests (Newman)</code>, <code>E2E Tests (Playwright)</code></td></tr><tr><td>Accessibility</td><td><code>axe-core</code> (opt-in)</td></tr><tr><td>Supply chain</td><td><code>Security (composer)</code>, <code>Security (npm)</code>, <code>License (composer)</code>, <code>License (npm)</code>, <code>SBOM</code></td></tr><tr><td>Governance</td><td><code>Hydra Gates</code>, <code>Coverage Baseline Protection</code>, <code>Features Extract</code>, <code>Journeydoc Capture</code></td></tr><tr><td>Rollup</td><td><code>Quality Report</code></td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="nextclouds-equivalent">Nextcloud&#x27;s equivalent<a href="#nextclouds-equivalent" class="hash-link" aria-label="Direct link to Nextcloud&#x27;s equivalent" title="Direct link to Nextcloud&#x27;s equivalent" translate="no">​</a></h3>
+<p>Nextcloud ships <strong>workflow templates</strong>, not a reusable workflow: an app copies
+<code>lint-php-cs.yml</code>, <code>psalm.yml</code>, <code>lint-eslint.yml</code>, <code>node-test.yml</code>,
+<code>phpunit-*.yml</code>, <code>appstore-build-publish.yml</code> and so on from <code>nextcloud/.github</code>
+into its own repo, and a <code>sync-workflow-templates</code> job keeps them refreshed.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th></th><th>Conduction</th><th>Nextcloud</th></tr></thead><tbody><tr><td>Shape</td><td>one reusable workflow, thin callers</td><td>~40 copied templates per app</td></tr><tr><td>Update path</td><td>change <code>@main</code>, all 18 apps follow</td><td>sync job re-copies templates</td></tr><tr><td>Action pinning</td><td>tags (<code>actions/checkout@v4</code>)</td><td>commit SHAs</td></tr><tr><td>Trigger</td><td><code>push</code> + <code>pull_request</code></td><td><code>pull_request</code>, with <code>dorny/paths-filter</code> change detection and a <code>summary</code> job so branch protection still matches when skipped</td></tr></tbody></table>
+<p>Neither shape is wrong. Ours propagates a fix instantly and gives a single rollup;
+theirs survives the org repo being unavailable and pins its supply chain harder.
+<strong>Action SHA-pinning is the one we should adopt</strong> — it is a supply-chain control,
+not a style preference.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="php">PHP<a href="#php" class="hash-link" aria-label="Direct link to PHP" title="Direct link to PHP" translate="no">​</a></h2>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="formatting--one-standard-and-it-is-nextclouds">Formatting — one standard, and it is Nextcloud&#x27;s<a href="#formatting--one-standard-and-it-is-nextclouds" class="hash-link" aria-label="Direct link to Formatting — one standard, and it is Nextcloud&#x27;s" title="Direct link to Formatting — one standard, and it is Nextcloud&#x27;s" translate="no">​</a></h3>
+<p><strong>Conduction code must pass <code>nextcloud/coding-standard</code> unchanged. We may be
+stricter than Nextcloud; we may not be different from it.</strong></p>
+<p>That rule is newer than most of the code. Measured 2026-08-12 against
+openregister&#x27;s <code>lib/</code>, <strong>all 1,427 files failed</strong> Nextcloud&#x27;s standard:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>php-cs-fixer rule</th><th style="text-align:right">files affected</th></tr></thead><tbody><tr><td><code>curly_braces_position</code></td><td style="text-align:right">1,427 — 100%</td></tr><tr><td><code>indentation_type</code></td><td style="text-align:right">1,409 — 98.7%</td></tr><tr><td><code>phpdoc_align</code></td><td style="text-align:right">1,221 — 85.6%</td></tr><tr><td><code>binary_operator_spaces</code></td><td style="text-align:right">1,104 — 77.4%</td></tr><tr><td><code>trailing_comma_in_multiline</code></td><td style="text-align:right">693 — 48.6%</td></tr><tr><td><code>cast_spaces</code></td><td style="text-align:right">676 — 47.4%</td></tr><tr><td><code>concat_space</code></td><td style="text-align:right">583 — 40.9%</td></tr></tbody></table>
+<p>The fleet had been formatting with a PEAR-derived PHPCS ruleset — four spaces,
+next-line braces, <code>(int) $x</code>, <code>&#x27;a&#x27;.&#x27;b&#x27;</code> — which is not a stricter standard but a
+different dialect. Under the rule above it has to go, and it has.</p>
+<h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="two-tools-disjoint-jurisdiction">Two tools, disjoint jurisdiction<a href="#two-tools-disjoint-jurisdiction" class="hash-link" aria-label="Direct link to Two tools, disjoint jurisdiction" title="Direct link to Two tools, disjoint jurisdiction" translate="no">​</a></h4>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Concern</th><th>Tool</th><th>Where the config lives</th></tr></thead><tbody><tr><td><strong>Formatting</strong> — whitespace, braces, imports, quotes, casts</td><td>php-cs-fixer</td><td><a href="https://github.com/ConductionNL/coding-standard" target="_blank" rel="noopener noreferrer" class=""><code>conduction/coding-standard</code></a></td></tr><tr><td><strong>Semantics</strong> — named parameters, <code>@spec</code>, banned functions, removed NC APIs, line length</td><td>PHP_CodeSniffer</td><td><a href="https://github.com/ConductionNL/.github/tree/main/quality-config" target="_blank" rel="noopener noreferrer" class=""><code>quality-config/</code></a></td></tr><tr><td><strong>Types</strong></td><td>Psalm + PHPStan</td><td><code>quality-config/</code></td></tr></tbody></table>
+<p><code>Conduction\CodingStandard\Config</code> <strong>extends</strong> Nextcloud&#x27;s and merges a private
+<code>ADDITIONS</code> array onto <code>parent::getRules()</code>. The package&#x27;s invariant test fails
+the build if <code>ADDITIONS</code> shares a single key with the parent set, if any parent
+rule is dropped, or if any parent rule&#x27;s <em>value</em> changed. The policy is therefore
+enforced by construction, not by review — and each assertion carries a positive
+control, because a suite that cannot fail is indistinguishable from one that
+passes.</p>
+<p><code>ADDITIONS</code> is currently <strong>empty</strong>, which is a result rather than an omission.
+Every rule this fleet wants beyond Nextcloud&#x27;s is semantic, not typographic, and
+php-cs-fixer cannot express any of them.</p>
+<h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="why-phpcs-had-to-be-cut-back-not-just-re-pointed">Why PHPCS had to be cut back, not just re-pointed<a href="#why-phpcs-had-to-be-cut-back-not-just-re-pointed" class="hash-link" aria-label="Direct link to Why PHPCS had to be cut back, not just re-pointed" title="Direct link to Why PHPCS had to be cut back, not just re-pointed" translate="no">​</a></h4>
+<p>Left alone, the two tools contradict each other and the app becomes unfixable —
+<code>composer cs:fix</code> and <code>composer phpcs</code> demand opposite things and neither can be
+satisfied. That was the fleet&#x27;s real state. Running the old ruleset over
+php-cs-fixer-formatted code produced <strong>111,932 findings, 111,747 of them
+auto-fixable formatting</strong>:</p>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">Generic.WhiteSpace.DisallowTabIndent                62,123</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">Generic.WhiteSpace.ScopeIndent                      35,030</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">Generic.Arrays.ArrayIndent                           3,726</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">PEAR.Commenting.FunctionComment (param spacing)      2,797</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">PEAR.Functions.FunctionDeclaration (indent + brace)  2,576</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">Generic.Formatting.MultipleStatementAlignment        1,132</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">Generic.Formatting.SpaceAfterCast                      909</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">Squiz.Strings.ConcatenationSpacing                     534</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">Squiz.ControlStructures.ElseIfDeclaration               31</span><br></div></code></pre></div></div>
+<p>That last line is the shape of the whole problem: Squiz&#x27;s sniff <strong>forbids</strong> the
+<code>elseif</code> keyword Nextcloud&#x27;s <code>elseif</code> fixer <strong>requires</strong>. Two tools cannot both be
+right about one token.</p>
+<p>With every formatting sniff removed, the same measurement yields <strong>185 findings,
+all semantic</strong> — 181 missing <code>@spec</code>, 2 over the 150-character line limit, 2 SPDX
+end-char. The named-parameter and legacy-accessor sniffs fire <strong>zero</strong> times,
+which is what stricter-but-compatible looks like when it is true rather than
+assumed.</p>
+<p>Docblock <em>presence</em> stays; docblock <em>layout</em> is <code>phpdoc_align</code>&#x27;s. The alignment
+codes are excluded individually rather than by dropping the sniff — losing the
+presence requirement would be a real regression.</p>
+<p><code>quality-config/tests/compatibility.sh</code> makes this permanent: format a fixture,
+run PHPCS over the result, fail on any formatting sniff.</p>
+<h4 class="anchor anchorTargetStickyNavbar_Vzrq" id="what-migrating-an-app-looks-like">What migrating an app looks like<a href="#what-migrating-an-app-looks-like" class="hash-link" aria-label="Direct link to What migrating an app looks like" title="Direct link to What migrating an app looks like" translate="no">​</a></h4>
+<p>Proven end-to-end on <code>nextcloud-app-template</code>
+(<a href="https://github.com/ConductionNL/nextcloud-app-template/pull/141" target="_blank" rel="noopener noreferrer" class="">PR #141</a>):</p>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">php-cs-fixer   Found 0 of 23 files that can be fixed</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">phpcs          39 violations, ALL WARNINGS (35 @spec, 4 SPDX). Zero errors.</span><br></div></code></pre></div></div>
+<div class="theme-admonition theme-admonition-warning admonition_xJq3 alert alert--warning"><div class="admonitionHeading_Gvgb"><span class="admonitionIcon_Rf37"><svg viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8.893 1.5c-.183-.31-.52-.5-.887-.5s-.703.19-.886.5L.138 13.499a.98.98 0 0 0 0 1.001c.193.31.53.501.886.501h13.964c.367 0 .704-.19.877-.5a1.03 1.03 0 0 0 .01-1.002L8.893 1.5zm.133 11.497H6.987v-2.003h2.039v2.003zm0-3.004H6.987V5.987h2.039v4.006z"></path></svg></span>warning</div><div class="admonitionContent_BuS1"><mdxadmonitiontitle><code>cs:check</code> and <code>cs:fix</code> used to lie</mdxadmonitiontitle><p>They are the script names <code>nextcloud/coding-standard</code> defines, and what
+Nextcloud&#x27;s own <code>lint-php-cs.yml</code> invokes. In this fleet they were <strong>aliases for
+PHPCS</strong> — so a contributor running the documented Nextcloud command got four-space
+PEAR reformatting. Worse, 17 of 18 apps carried <code>nextcloud/coding-standard</code> in
+<code>require-dev</code> with no <code>.php-cs-fixer.dist.php</code> and no invocation anywhere: loaded,
+and ready to reformat the whole codebase for whoever found it.</p><p>They now run php-cs-fixer, and the direct dependency is dropped — it arrives
+transitively at a version <code>conduction/coding-standard</code> has tested against.</p></div></div>
+<div class="theme-admonition theme-admonition-danger admonition_xJq3 alert alert--danger"><div class="admonitionHeading_Gvgb"><span class="admonitionIcon_Rf37"><svg viewBox="0 0 12 16"><path fill-rule="evenodd" d="M5.05.31c.81 2.17.41 3.38-.52 4.31C3.55 5.67 1.98 6.45.9 7.98c-1.45 2.05-1.7 6.53 3.53 7.7-2.2-1.16-2.67-4.52-.3-6.61-.61 2.03.53 3.33 1.94 2.86 1.39-.47 2.3.53 2.27 1.67-.02.78-.31 1.44-1.13 1.81 3.42-.59 4.78-3.42 4.78-5.56 0-2.84-2.53-3.22-1.25-5.61-1.52.13-2.03 1.13-1.89 2.75.09 1.08-1.02 1.8-1.86 1.33-.67-.41-.66-1.19-.06-1.78C8.18 5.31 8.68 2.45 5.05.32L5.03.3l.02.01z"></path></svg></span>A missing autoloader reports as a clean tree</div><div class="admonitionContent_BuS1"><p><code>.php-cs-fixer.dist.php</code> <strong>must</strong> start with <code>require_once __DIR__ . &#x27;/vendor/autoload.php&#x27;;</code>.
+php-cs-fixer includes the config before your autoloader runs, so without it the
+run dies with <code>Class not found</code> — and in <code>--format=json</code> that fatal is reported as
+<strong>zero files needing changes</strong>. It reads exactly like a pass.</p></div></div>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="the-editorconfig-gap">The <code>.editorconfig</code> gap<a href="#the-editorconfig-gap" class="hash-link" aria-label="Direct link to the-editorconfig-gap" title="Direct link to the-editorconfig-gap" translate="no">​</a></h3>
+<p><strong>No fleet app shipped an <code>.editorconfig</code>.</strong> Nextcloud core does. An editor
+opening one of our PHP files fell back to whatever the user configured — and for
+anyone whose defaults came from Nextcloud work, that is tabs, which the old PHPCS
+ruleset then rejected.</p>
+<p>Nextcloud&#x27;s <code>.editorconfig</code> is now copied <strong>verbatim</strong> into every app
+(<code>indent_style = tab</code>, <code>indent_size = 4</code>, two-space YAML and <code>package*.json</code>). It
+agrees with the formatter instead of fighting it.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="static-analysis-and-the-nextcloud-version-it-is-analysing-against">Static analysis and the Nextcloud version it is analysing against<a href="#static-analysis-and-the-nextcloud-version-it-is-analysing-against" class="hash-link" aria-label="Direct link to Static analysis and the Nextcloud version it is analysing against" title="Direct link to Static analysis and the Nextcloud version it is analysing against" translate="no">​</a></h3>
+<p>Nextcloud&#x27;s <code>psalm.yml</code> does two things ours does not:</p>
+<div class="language-yaml codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-yaml codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token punctuation" style="color:rgb(199, 146, 234)">-</span><span class="token plain"> </span><span class="token key atrule">uses</span><span class="token punctuation" style="color:rgb(199, 146, 234)">:</span><span class="token plain"> icewind1991/nextcloud</span><span class="token punctuation" style="color:rgb(199, 146, 234)">-</span><span class="token plain">version</span><span class="token punctuation" style="color:rgb(199, 146, 234)">-</span><span class="token plain">matrix   </span><span class="token comment" style="color:rgb(105, 112, 152);font-style:italic"># reads appinfo/info.xml</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"></span><span class="token punctuation" style="color:rgb(199, 146, 234)">-</span><span class="token plain"> </span><span class="token key atrule">run</span><span class="token punctuation" style="color:rgb(199, 146, 234)">:</span><span class="token plain"> grep &#x27;phpVersion=&quot;$</span><span class="token punctuation" style="color:rgb(199, 146, 234)">{</span><span class="token punctuation" style="color:rgb(199, 146, 234)">{</span><span class="token plain"> steps.versions.outputs.php</span><span class="token punctuation" style="color:rgb(199, 146, 234)">-</span><span class="token plain">min </span><span class="token punctuation" style="color:rgb(199, 146, 234)">}</span><span class="token punctuation" style="color:rgb(199, 146, 234)">}</span><span class="token plain">&#x27; psalm.xml</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"></span><span class="token punctuation" style="color:rgb(199, 146, 234)">-</span><span class="token plain"> </span><span class="token key atrule">run</span><span class="token punctuation" style="color:rgb(199, 146, 234)">:</span><span class="token plain"> composer remove nextcloud/ocp </span><span class="token punctuation" style="color:rgb(199, 146, 234)">-</span><span class="token punctuation" style="color:rgb(199, 146, 234)">-</span><span class="token plain">dev </span><span class="token punctuation" style="color:rgb(199, 146, 234)">-</span><span class="token punctuation" style="color:rgb(199, 146, 234)">-</span><span class="token plain">no</span><span class="token punctuation" style="color:rgb(199, 146, 234)">-</span><span class="token plain">scripts</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"></span><span class="token punctuation" style="color:rgb(199, 146, 234)">-</span><span class="token plain"> </span><span class="token key atrule">run</span><span class="token punctuation" style="color:rgb(199, 146, 234)">:</span><span class="token plain"> composer require </span><span class="token punctuation" style="color:rgb(199, 146, 234)">-</span><span class="token punctuation" style="color:rgb(199, 146, 234)">-</span><span class="token plain">dev nextcloud/ocp</span><span class="token punctuation" style="color:rgb(199, 146, 234)">:</span><span class="token plain">dev</span><span class="token punctuation" style="color:rgb(199, 146, 234)">-</span><span class="token plain">$</span><span class="token punctuation" style="color:rgb(199, 146, 234)">{</span><span class="token punctuation" style="color:rgb(199, 146, 234)">{</span><span class="token plain"> steps.versions.outputs.branches</span><span class="token punctuation" style="color:rgb(199, 146, 234)">-</span><span class="token plain">max </span><span class="token punctuation" style="color:rgb(199, 146, 234)">}</span><span class="token punctuation" style="color:rgb(199, 146, 234)">}</span><br></div></code></pre></div></div>
+<p>The analysed API surface is <strong>derived from what the app declares it supports</strong>, and
+the run fails if <code>psalm.xml</code> does not pin the minimum PHP version.</p>
+<p>Ours is static, and as of 2026-08-12 it is inconsistent with itself:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th></th><th>Declared in <code>appinfo/info.xml</code></th><th>Analysed against</th><th>Tested against</th></tr></thead><tbody><tr><td>16 apps</td><td>NC <strong>32–34</strong></td><td><code>nextcloud/ocp:^31.0</code> (15 apps)</td><td><code>stable32</code> and/or <code>stable33</code></td></tr></tbody></table>
+<p>Three consequences, in increasing order of seriousness:</p>
+<ol>
+<li class="">No app is tested on <strong>NC 34</strong>, which all of them claim to support.</li>
+<li class="">Static analysis runs one major <strong>below</strong> the declared minimum, so nothing added
+in 32/33/34 is visible to it.</li>
+<li class="">Nothing <strong>removed</strong> in 32/33/34 can be reported either. That is why the removal
+of <code>\OC::$server</code> in NC 34 needed a hand-written PHPCS sniff to catch — the type
+checker was looking at NC 31 and could not see it.</li>
+</ol>
+<p>No app&#x27;s <code>psalm.xml</code> sets <code>phpVersion</code>, so our configs would fail Nextcloud&#x27;s own
+psalm gate outright. Adopting version-matrix derivation removes the whole class of
+problem: the matrix can no longer drift from <code>info.xml</code>, because it is computed
+from it.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="what-psalm-is-actually-checking">What Psalm is actually checking<a href="#what-psalm-is-actually-checking" class="hash-link" aria-label="Direct link to What Psalm is actually checking" title="Direct link to What Psalm is actually checking" translate="no">​</a></h3>
+<p>Every app runs <code>errorLevel=&quot;4&quot;</code> and suppresses ~34 issue types. The suppression
+list includes <code>InvalidArgument</code>, <code>InvalidReturnType</code>, <code>InvalidReturnStatement</code>,
+<code>InvalidMethodCall</code>, <code>UndefinedInterfaceMethod</code>, <code>TypeDoesNotContainType</code>,
+<code>InvalidArrayOffset</code> and <code>EmptyArrayAccess</code>, plus <code>UndefinedClass</code> for the whole
+<code>OCP\</code> namespace. Read a green Psalm leg accordingly.</p>
+<p>PHPStan is level 5 fleet-wide, which the older docs state correctly.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="checks-nextcloud-runs-that-we-do-not">Checks Nextcloud runs that we do not<a href="#checks-nextcloud-runs-that-we-do-not" class="hash-link" aria-label="Direct link to Checks Nextcloud runs that we do not" title="Direct link to Checks Nextcloud runs that we do not" translate="no">​</a></h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Nextcloud check</th><th>What it catches</th><th>Our coverage</th></tr></thead><tbody><tr><td><code>lint-info-xml.yml</code></td><td><code>appinfo/info.xml</code> validated against the App Store XSD</td><td><strong>none</strong> — <code>quality.yml</code> never reads <code>info.xml</code></td></tr><tr><td><code>occ app:check-code</code></td><td>use of private / deprecated server APIs</td><td><strong>partial</strong> — one custom sniff for <code>\OC::$server</code> only</td></tr><tr><td><code>occ integrity:sign-app</code></td><td>writes <code>appinfo/signature.json</code> into the package</td><td><strong>none</strong> — see below</td></tr><tr><td><code>reuse.yml</code></td><td>REUSE / SPDX compliance as a CI job</td><td>partial — a PHPCS sniff and a hydra gate, not the REUSE tool</td></tr><tr><td>PHPUnit on mariadb / mysql / oci / sqlite</td><td>database-portability bugs</td><td>pgsql only (one app opts into pgsql explicitly; the shared default is pgsql)</td></tr></tbody></table>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="release-and-signing">Release and signing<a href="#release-and-signing" class="hash-link" aria-label="Direct link to Release and signing" title="Direct link to Release and signing" translate="no">​</a></h3>
+<p>Both paths build a tarball, attach it to a GitHub release and POST it to the App
+Store. One step differs and it is not cosmetic:</p>
+<ul>
+<li class=""><strong>Nextcloud</strong> runs <code>occ integrity:sign-app --privateKey --certificate</code>, which
+writes <code>appinfo/signature.json</code> <strong>inside</strong> the package, then uploads.</li>
+<li class=""><strong>We</strong> sign only the tarball (<code>openssl dgst -sha512</code>) for the App Store API.
+There is no <code>integrity:sign-app</code> step in <code>release.yml</code>, <code>release-beta.yml</code> or
+<code>release-stable.yml</code>.</li>
+</ul>
+<p>The upload is accepted either way, but an installed app with no
+<code>appinfo/signature.json</code> cannot be verified by Nextcloud&#x27;s integrity checker.</p>
+<p>We also package with <code>rsync</code> rather than <code>krankerl</code>; no app ships a
+<code>krankerl.toml</code>. Nextcloud&#x27;s template supports both, so this is a free choice.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="frontend">Frontend<a href="#frontend" class="hash-link" aria-label="Direct link to Frontend" title="Direct link to Frontend" translate="no">​</a></h2>
+<p>Here we are much closer to Nextcloud than on the backend — we use their configs
+directly.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th></th><th>Conduction</th><th>Nextcloud (current apps)</th></tr></thead><tbody><tr><td>ESLint config</td><td><code>@nextcloud/eslint-config@^8.4.1</code> (17/18 apps)</td><td><code>@nextcloud/eslint-config@^9.0.1</code></td></tr><tr><td>ESLint</td><td><code>^8.56</code> — resolves to 8.57.1, <strong>end of life</strong></td><td>9.x / 10.x</td></tr><tr><td>Stylelint config</td><td><code>@nextcloud/stylelint-config@^2.4.0</code></td><td><code>@nextcloud/stylelint-config@^3.2.2</code></td></tr><tr><td>Stylelint</td><td>15.x</td><td>16.x</td></tr><tr><td>Unit tests</td><td>vitest (11 apps), jest (6), <strong>none (3)</strong></td><td>vitest</td></tr><tr><td>E2E</td><td>Playwright</td><td>Cypress</td></tr><tr><td>Node in CI</td><td>hardcoded <code>20</code></td><td>read from <code>package.json</code> <code>engines</code>, fallback <code>^24</code></td></tr></tbody></table>
+<p>Four things to fix, in order of how quietly they fail:</p>
+<ol>
+<li class=""><strong>Unquoted globs in the <code>stylelint</code> script.</strong> Thirteen apps run
+<code>stylelint src/**/*.vue src/**/*.scss src/**/*.css</code> without quotes, so the
+<em>shell</em> expands the glob and — without <code>globstar</code> — <code>src/**/</code> matches only one
+directory level. Nested components are silently not linted. The four apps that
+quote it (<code>procest</code>, <code>pipelinq</code>, <code>shillinq</code>, <code>doriath</code>) check strictly more
+files than the other fourteen. A passing stylelint job does not currently mean
+the same thing in two apps.</li>
+<li class=""><strong><code>npm run lint</code> is <code>eslint src</code> with no <code>--max-warnings</code>.</strong> Warnings never fail
+a build, so they accumulate indefinitely. (ESLint itself <em>is</em> running: the flat
+config loads correctly under 8.57.1 — verified from a live job log, not
+assumed.)</li>
+<li class=""><strong>Three apps have no unit test script at all</strong> — <code>scholiq</code>, <code>portaliq</code>,
+<code>hermiq</code>. The shared workflow detects this honestly and records a skip, which
+renders as a pass in the rollup.</li>
+<li class=""><strong><code>.prettierrc</code> exists in 14 apps and <code>prettier</code> is a dependency in none.</strong> No
+<code>format</code> script invokes it either. It is inert in CI but not in editors, where
+it tells Prettier to use 2-space indentation and double quotes for <code>.ts</code> files
+— both of which <code>@nextcloud/eslint-config</code> then flags. Delete it or wire it up.</li>
+</ol>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="consuming-openregister-adr-083-adr-084">Consuming OpenRegister (ADR-083, ADR-084)<a href="#consuming-openregister-adr-083-adr-084" class="hash-link" aria-label="Direct link to Consuming OpenRegister (ADR-083, ADR-084)" title="Direct link to Consuming OpenRegister (ADR-083, ADR-084)" translate="no">​</a></h2>
+<p>Almost every app depends on OpenRegister, and for a long time almost none of them
+said so where a reader — or a tool — could see it. The dominant shape was a lazy
+container lookup inside a private accessor:</p>
+<div class="language-php codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-php codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">private function getObjectService(): object {</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    return $this-&gt;container-&gt;get(&#x27;OCA\OpenRegister\Service\ObjectService&#x27;);</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">}</span><br></div></code></pre></div></div>
+<p>The dependency is announced nowhere: not in the constructor, not in the <code>use</code>
+block, not in any type. It appears mid-method, as a <strong>string</strong>.</p>
+<p>That is not a style complaint. Gate-7 reported <strong>50 findings on pipelinq</strong>, every
+one a correctly-delegated endpoint — it could not <em>see</em> the delegation, because
+the only evidence was a string literal. A human review of the same code the same
+day reached the opposite conclusion about who was enforcing authorisation, and
+wrote it down. A reader with grep and an hour got the story backwards.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="the-four-rules-adr-083-enforced-by-gate-66">The four rules (ADR-083), enforced by gate-66<a href="#the-four-rules-adr-083-enforced-by-gate-66" class="hash-link" aria-label="Direct link to The four rules (ADR-083), enforced by gate-66" title="Direct link to The four rules (ADR-083), enforced by gate-66" translate="no">​</a></h3>
+<p><strong>1. Inject an unconditional dependency; do not look it up.</strong> A class that needs
+<code>ObjectService</code> on its normal path declares it as a constructor-promoted, typed
+property — typed as the <em>interface</em>, see below.</p>
+<blockquote>
+<p><strong>Exception — the optional-capability path.</strong> Where a class reaches for
+OpenRegister <em>only after establishing it is installed</em>, the lookup stays.
+Deferring construction is the whole point of that shape, and injecting it
+would make the service unconstructable on an instance without OpenRegister —
+turning a clean &quot;OpenRegister is not installed&quot; message into a 500.</p>
+<p>A guard can be written three ways and <strong>all three count</strong>: ask the app manager
+(<code>isInstalled</code>, <code>getInstalledApps</code>), ask the autoloader (<code>class_exists</code>), or
+try-and-degrade (a <code>catch</code> that logs and returns rather than rethrowing). A
+<code>catch</code> that <strong>rethrows</strong> is not a guard.</p>
+</blockquote>
+<p><strong>2. Never <code>extends</code> or <code>implements</code> an OpenRegister class.</strong> A reference in a
+class header is fatal at autoload — it takes down the very route that would have
+explained the problem. Compose instead. (Constructor injection is <em>not</em> that: it
+resolves when the service is constructed, so a route that never constructs it
+never fails.)</p>
+<p><strong>3. The default route stays core-only.</strong> The controller behind an app&#x27;s start
+screen depends on core only, and publishes availability to the frontend so it can
+render an install prompt rather than an error:</p>
+<div class="language-php codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-php codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">$this-&gt;initialState-&gt;provideInitialState(</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    &#x27;openregister_available&#x27;,</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    $this-&gt;appManager-&gt;isInstalled(&#x27;openregister&#x27;)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">);</span><br></div></code></pre></div></div>
+<p><strong>4. Check the version floor, do not install.</strong> An app MAY compare
+<code>IAppManager::getAppVersion(&#x27;openregister&#x27;)</code> against its floor and report it. It
+MUST NOT install or update OpenRegister: the only thing that can fetch from the
+app store is <code>OC\Installer</code> — namespace <code>OC</code>, <strong>private API</strong>, no BC guarantee —
+and it bypasses admin consent. Detect, inform, link to the store page.</p>
+<blockquote>
+<p><strong>The rule was too broad when first written, and the gate enforced it
+faithfully.</strong> The finding count went 1263 → 1010 → 883 → <strong>441</strong>; the 822-site
+difference was code that was already correct, in one of the three guard forms
+above. A rule derived from one observed idiom will mistake every other correct
+idiom for debt, at fleet scale and with a straight face. Survey first, then
+write the rule.</p>
+</blockquote>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="type-hint-the-contract-never-the-concrete-class-adr-084-gate-67">Type-hint the contract, never the concrete class (ADR-084, gate-67)<a href="#type-hint-the-contract-never-the-concrete-class-adr-084-gate-67" class="hash-link" aria-label="Direct link to Type-hint the contract, never the concrete class (ADR-084, gate-67)" title="Direct link to Type-hint the contract, never the concrete class (ADR-084, gate-67)" translate="no">​</a></h3>
+<p>Rule 1 is unenforceable on its own, and this is the half that makes it work.
+An app that uses OpenRegister&#x27;s <code>ObjectService</code> <strong>type-hints the published
+interface</strong>:</p>
+<div class="language-php codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-php codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">use OCA\OpenRegister\Contract\ObjectServiceInterface;</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">public function __construct(</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    private readonly ObjectServiceInterface $objectService,</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">) {</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">}</span><br></div></code></pre></div></div>
+<p>and binds it once, in the composition root:</p>
+<div class="language-php codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-php codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">$context-&gt;registerServiceAlias(</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    ObjectServiceInterface::class,</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    &#x27;OCA\OpenRegister\Service\ObjectService&#x27;</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">);</span><br></div></code></pre></div></div>
+<p>Nextcloud autowires concrete classes across apps but <strong>not</strong> interfaces, so the
+binding has to be stated. An alias, not a factory: it resolves when something
+asks for the interface, so an app on an instance without OpenRegister fails at
+the route that needed the data rather than at registration.</p>
+<p><strong>Why not the concrete class.</strong> A leaf app cannot load a class from another
+Nextcloud app, so a typed parameter had no satisfiable test double:</p>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">TypeError: __construct(): Argument #4 ($objectService) must be of type</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">OCA\OpenRegister\Service\ObjectService, class@anonymous given</span><br></div></code></pre></div></div>
+<p>Ten of the sixteen consuming apps had hand-rolled a stub instead, declaring
+between 0 and 13 methods against a real class of 88 — union 23. Four declared
+<strong>zero</strong>: a shell that satisfies a type-hint and checks nothing.</p>
+<p><strong>Keep the concrete import where the concrete NAME is still used.</strong>
+<code>ObjectService::class</code> as a container key, or <code>instanceof ObjectService</code>, names
+the class itself. Import both in that case. Dropping the concrete import there
+is silent damage: <code>::class</code> does not require the class to exist, so
+<code>$container-&gt;get(ObjectService::class)</code> quietly resolves to <em>your app&#x27;s own</em>
+namespace and looks up a key nobody registered, and <code>instanceof</code> becomes
+permanently false. Neither errors at the point of the change.</p>
+<p><strong>gate-67 <code>openregister-contract-parity</code></strong> keeps the two copies of the interface
+— openregister&#x27;s <code>lib/Contract/</code> and the one shipped in hydra-gates — byte
+identical, in both directions. Two definitions of a published contract is the
+drift the ADR forbids, and an intention to keep them in step is not a mechanism.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="where-the-configuration-lives">Where the configuration lives<a href="#where-the-configuration-lives" class="hash-link" aria-label="Direct link to Where the configuration lives" title="Direct link to Where the configuration lives" translate="no">​</a></h2>
+<p>As of this change, the PHP quality configuration has <strong>one</strong> home:
+<a href="https://github.com/ConductionNL/.github/tree/main/quality-config" target="_blank" rel="noopener noreferrer" class=""><code>quality-config/</code></a>
+in this repository, shipped inside the existing <code>conduction/hydra-gates</code> composer
+package. An app pulls it with <code>composer install</code> and reduces its own files to
+stubs:</p>
+<div class="language-xml codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-xml codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token tag punctuation" style="color:rgb(199, 146, 234)">&lt;</span><span class="token tag" style="color:rgb(255, 85, 114)">ruleset</span><span class="token tag" style="color:rgb(255, 85, 114)"> </span><span class="token tag attr-name" style="color:rgb(255, 203, 107)">name</span><span class="token tag attr-value punctuation attr-equals" style="color:rgb(199, 146, 234)">=</span><span class="token tag attr-value punctuation" style="color:rgb(199, 146, 234)">&quot;</span><span class="token tag attr-value" style="color:rgb(255, 85, 114)">myapp</span><span class="token tag attr-value punctuation" style="color:rgb(199, 146, 234)">&quot;</span><span class="token tag punctuation" style="color:rgb(199, 146, 234)">&gt;</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    </span><span class="token tag punctuation" style="color:rgb(199, 146, 234)">&lt;</span><span class="token tag" style="color:rgb(255, 85, 114)">file</span><span class="token tag punctuation" style="color:rgb(199, 146, 234)">&gt;</span><span class="token plain">lib</span><span class="token tag punctuation" style="color:rgb(199, 146, 234)">&lt;/</span><span class="token tag" style="color:rgb(255, 85, 114)">file</span><span class="token tag punctuation" style="color:rgb(199, 146, 234)">&gt;</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    </span><span class="token tag punctuation" style="color:rgb(199, 146, 234)">&lt;</span><span class="token tag" style="color:rgb(255, 85, 114)">rule</span><span class="token tag" style="color:rgb(255, 85, 114)"> </span><span class="token tag attr-name" style="color:rgb(255, 203, 107)">ref</span><span class="token tag attr-value punctuation attr-equals" style="color:rgb(199, 146, 234)">=</span><span class="token tag attr-value punctuation" style="color:rgb(199, 146, 234)">&quot;</span><span class="token tag attr-value" style="color:rgb(255, 85, 114)">vendor/conduction/hydra-gates/quality-config/phpcs.xml</span><span class="token tag attr-value punctuation" style="color:rgb(199, 146, 234)">&quot;</span><span class="token tag punctuation" style="color:rgb(199, 146, 234)">/&gt;</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"></span><span class="token tag punctuation" style="color:rgb(199, 146, 234)">&lt;/</span><span class="token tag" style="color:rgb(255, 85, 114)">ruleset</span><span class="token tag punctuation" style="color:rgb(199, 146, 234)">&gt;</span><br></div></code></pre></div></div>
+<p>Same config in CI and on a laptop, which is the point — a config only CI sees
+becomes its own drift source.</p>
+<p>The drift this replaces, measured across all 18 core apps on 2026-08-12:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>File</th><th style="text-align:right">Distinct variants across 18 apps</th></tr></thead><tbody><tr><td><code>psalm.xml</code>, <code>phpstan.neon</code>, <code>playwright.config.ts</code>, <code>code-quality.yml</code></td><td style="text-align:right"><strong>18 each</strong></td></tr><tr><td><code>eslint.config.js</code></td><td style="text-align:right">17</td></tr><tr><td><code>phpmd.xml</code></td><td style="text-align:right">15</td></tr><tr><td><code>vitest.config.js</code></td><td style="text-align:right">14</td></tr><tr><td><code>phpcs.xml</code>, <code>stylelint.config.js</code></td><td style="text-align:right">6 each</td></tr><tr><td><code>NamedParametersSniff.php</code> (a <em>custom rule</em>)</td><td style="text-align:right">6</td></tr><tr><td><code>.prettierrc</code></td><td style="text-align:right">1</td></tr></tbody></table>
+<p><code>psalm.xml</code> and the frontend configs are not stub-able yet — Psalm has no config
+inheritance and ESLint flat config resolves plugins relative to the config file.
+Both are covered in the <a href="https://github.com/ConductionNL/.github/tree/main/quality-config#not-yet-centralised-and-why" target="_blank" rel="noopener noreferrer" class=""><code>quality-config/</code> README</a>.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="package-registry">Package registry<a href="#package-registry" class="hash-link" aria-label="Direct link to Package registry" title="Direct link to Package registry" translate="no">​</a></h2>
+<p>Shared configuration only stops drifting if every app pulls it the same way, so
+the distribution channel is part of the standard, not an implementation detail.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Package</th><th>Registry</th><th>Contains</th><th>Consumed by</th></tr></thead><tbody><tr><td><a href="https://packagist.org/packages/conduction/coding-standard" target="_blank" rel="noopener noreferrer" class=""><code>conduction/coding-standard</code></a></td><td>Packagist</td><td>php-cs-fixer config extending Nextcloud&#x27;s</td><td>every app, <code>require-dev</code></td></tr><tr><td><a href="https://packagist.org/packages/conduction/hydra-gates" target="_blank" rel="noopener noreferrer" class=""><code>conduction/hydra-gates</code></a></td><td>Packagist</td><td>the mechanical gates, <code>quality-config/</code> (PHPCS, PHPMD, PHPStan base, custom sniffs) <strong>and</strong> <code>contracts/</code> — the OpenRegister interfaces apps type-hint (ADR-084)</td><td>every app, <code>require-dev</code></td></tr><tr><td><a href="https://www.npmjs.com/package/@conduction/nextcloud-vue" target="_blank" rel="noopener noreferrer" class=""><code>@conduction/nextcloud-vue</code></a></td><td>npm</td><td>shared Vue components <strong>and</strong> the ESLint / Stylelint config</td><td>every app, <code>dependencies</code></td></tr></tbody></table>
+<p>Both composer packages are built from repositories that also do other things —
+<code>conduction/hydra-gates</code> is the root package of <code>ConductionNL/.github</code>, which also
+hosts this documentation site. One repository can publish exactly one composer
+package, which is why the coding standard needed a repository of its own.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="registration-is-not-cosmetic">Registration is not cosmetic<a href="#registration-is-not-cosmetic" class="hash-link" aria-label="Direct link to Registration is not cosmetic" title="Direct link to Registration is not cosmetic" translate="no">​</a></h3>
+<p>Before registration, an app consuming <code>conduction/hydra-gates</code> needed this in its
+own <code>composer.json</code>:</p>
+<div class="language-jsonc codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-jsonc codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">&quot;repositories&quot;: [</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    { &quot;type&quot;: &quot;vcs&quot;, &quot;url&quot;: &quot;https://github.com/ConductionNL/.github.git&quot;, &quot;no-api&quot;: true }</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">]</span><br></div></code></pre></div></div>
+<p>That block is a per-app file, and per-app files are what drift — it is the same
+failure mode the shared config exists to end. <code>no-api: true</code> also made composer
+clone the <strong>entire</strong> <code>.github</code> repository, docs site included, on every install.
+Registration deletes the block from all 18 apps.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="constraints-float-they-are-not-pinned">Constraints float; they are not pinned<a href="#constraints-float-they-are-not-pinned" class="hash-link" aria-label="Direct link to Constraints float; they are not pinned" title="Direct link to Constraints float; they are not pinned" translate="no">​</a></h3>
+<p>Apps require <code>^1.0</code>, not an exact version. A pin is a silent expiry date: 22 repos
+once sat on gate package <code>v1.0.1</code> while 16 gates were dead fleet-wide and every one
+of them reported PASS. Hold a package still only for a stated reason, in that app,
+with the reason written next to the constraint.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="two-distribution-paths-in-one-package-and-only-one-of-them-needs-a-tag">Two distribution paths in one package, and only one of them needs a tag<a href="#two-distribution-paths-in-one-package-and-only-one-of-them-needs-a-tag" class="hash-link" aria-label="Direct link to Two distribution paths in one package, and only one of them needs a tag" title="Direct link to Two distribution paths in one package, and only one of them needs a tag" translate="no">​</a></h3>
+<p><code>conduction/hydra-gates</code> ships two kinds of thing, and they reach an app by
+different routes. Confusing them costs a release.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>what</th><th>how it reaches an app</th><th>needs a tag?</th></tr></thead><tbody><tr><td>the gate scripts (<code>scripts/</code>, the runner)</td><td>the shared CI workflow fetches them from <strong><code>.github@main</code></strong></td><td><strong>no</strong> — a merge to <code>main</code> is live immediately, in every app&#x27;s next run</td></tr><tr><td><code>contracts/</code> — the OpenRegister interfaces</td><td><strong>composer</strong>, from the app&#x27;s <code>vendor/</code></td><td><strong>yes</strong> — apps pin <code>^1.0</code>, so nothing reaches them until a version is tagged</td></tr></tbody></table>
+<p>So a fix to a checker is live on merge, while a change to a published interface
+is invisible until the tag exists <strong>and</strong> each app&#x27;s <code>composer.lock</code> moves.</p>
+<p>Measured 2026-08-15, and the failure mode is quiet. <code>openregister</code> merged
+<code>lib/Contract/</code>, then bumped its lock to <code>v1.8.0</code> specifically so gate-67 would
+start comparing the two copies. It still reported:</p>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">[gate-67] openregister-contract-parity: NOT APPLICABLE — lib/Contract/ exists but</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">no shipped copy was found to compare it against. NOT a pass — nothing was verified.</span><br></div></code></pre></div></div>
+<p>The gate looked for the shipped copy in <code>vendor/conduction/hydra-gates/…</code>, and
+<strong>the Hydra Gates job never runs <code>composer install</code></strong> — it fetches the runner from
+<code>main</code>, so that job has no <code>vendor/</code> at all and never will. The gate could only
+ever skip. It now also looks for the copy sitting alongside the running script,
+which is the path that exists in CI (<code>.github#465</code>).</p>
+<p>Two things worth carrying:</p>
+<ul>
+<li class=""><strong>A gate that has only ever skipped has not been shown to work.</strong> <code>NOT APPLICABLE</code> is deliberately not a pass, and this is why: the wording was
+correct and the gate was still useless.</li>
+<li class=""><strong>Check the gate&#x27;s verdict in a real run</strong>, not just that the change that
+should enable it has landed.</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="publishing-and-how-to-tell-it-actually-published">Publishing, and how to tell it actually published<a href="#publishing-and-how-to-tell-it-actually-published" class="hash-link" aria-label="Direct link to Publishing, and how to tell it actually published" title="Direct link to Publishing, and how to tell it actually published" translate="no">​</a></h3>
+<p>Submitting a repository creates a push webhook on it automatically —
+<code>https://packagist.org/api/github</code>, <code>push</code> events. There is nothing to wire up by
+hand and nothing for <code>gh</code> to configure; GitHub Apps cannot be installed through
+the API in any case.</p>
+<p><strong>Verify against the endpoint Composer actually reads.</strong> Packagist serves package
+metadata from two places, and they do not update together:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>endpoint</th><th>who reads it</th><th>freshness</th></tr></thead><tbody><tr><td><code>repo.packagist.org/p2/&lt;vendor&gt;/&lt;pkg&gt;.json</code></td><td><strong>Composer</strong></td><td>current</td></tr><tr><td><code>packagist.org/packages/&lt;vendor&gt;/&lt;pkg&gt;.json</code></td><td>the website</td><td>lags, sometimes by tens of minutes</td></tr></tbody></table>
+<p>Measured 2026-08-12: <code>conduction/hydra-gates</code> <code>v1.7.0</code> was tagged and pushed. The
+web endpoint showed <code>v1.6.0</code> as the newest tag for the next half hour, while the
+p2 endpoint already had <code>v1.7.0</code> — and <code>composer require conduction/hydra-gates:^1.0</code>
+resolved to <code>v1.7.0 (b9c6520a)</code> throughout. Nothing was broken. The instrument was.</p>
+<p>That mistake is worth naming because it produced a confident, wrong diagnosis: a
+webhook returning <code>202</code>, a package that &quot;had not updated&quot;, and a missing Packagist
+GitHub App all pointed at a publishing failure that was not happening.</p>
+<p>So the check is one command, and it is the one Composer would make:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">curl -s https://repo.packagist.org/p2/&lt;vendor&gt;/&lt;pkg&gt;.json \</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">  | jq -r &#x27;.packages | to_entries[0].value[0] | &quot;\(.version)  \(.source.reference[0:8])&quot;&#x27;</span><br></div></code></pre></div></div>
+<p>Compare that SHA to <code>git rev-parse HEAD</code>. Three things that are <strong>not</strong> evidence:
+a <code>ping</code> delivery (Packagist sends one on install, it proves only that the
+endpoint answers a handshake), an HTTP <code>202</code> (it means <em>accepted for processing</em>),
+and <code>package.time</code> on the web endpoint (that is the package&#x27;s <strong>creation</strong>
+timestamp and never moves).</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="npm">npm<a href="#npm" class="hash-link" aria-label="Direct link to npm" title="Direct link to npm" translate="no">​</a></h3>
+<p><code>@conduction/nextcloud-vue</code> was already published, so homing the frontend config
+there adds export paths to an existing package rather than creating a new one.
+Note its dist-tags: apps consume <strong><code>vue3</code></strong>, currently <code>2.2.0-vue3.x</code>. The <code>latest</code>
+tag is <code>1.0.0-beta.3</code>, an old Vue 2 build — installing without a tag or an explicit
+version gets the wrong library.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="corrections-to-older-pages">Corrections to older pages<a href="#corrections-to-older-pages" class="hash-link" aria-label="Direct link to Corrections to older pages" title="Direct link to Corrections to older pages" translate="no">​</a></h2>
+<ul>
+<li class="">&quot;<strong>Code style — PHPCS (PSR-12)</strong>&quot;, in
+<a class="" href="/WayOfWork/development-pipeline/">development-pipeline.md</a> and
+<a class="" href="/WayOfWork/contributing/">contributing.md</a>, is wrong. The ruleset is PEAR-derived. Four
+PSR-2/PSR-12 sniffs are pulled in individually; the standard as a whole is not.</li>
+<li class="">&quot;<strong>four parallel quality gates</strong>&quot; understates the pipeline by an order of
+magnitude — see the table at the top of this page.</li>
+<li class="">&quot;<strong>Hydra … coming soon</strong>&quot; is stale: <code>enable-hydra-gates: true</code> is set in all 18
+core apps today.</li>
+<li class="">&quot;<strong>There are no development builds</strong>&quot;, in
+<a class="" href="/WayOfWork/release-process/">release-process.md</a>, is contradicted by
+<code>release-development.yml</code>, which exists in 14 of 18 apps and calls the shared
+beta release workflow with <code>channel: dev</code>.</li>
+</ul>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="further-reading">Further reading<a href="#further-reading" class="hash-link" aria-label="Direct link to Further reading" title="Direct link to Further reading" translate="no">​</a></h2>
+<ul>
+<li class=""><a class="" href="/WayOfWork/development-pipeline/">Development Pipeline</a> — branch flow and release triggers</li>
+<li class=""><a class="" href="/WayOfWork/contributing/">Contributing</a> — PR checklist and commit conventions</li>
+<li class=""><strong>ADR-083</strong> and <strong>ADR-084</strong> in <a href="https://github.com/ConductionNL/hydra/tree/development/openspec/architecture" target="_blank" rel="noopener noreferrer" class=""><code>ConductionNL/hydra</code></a> — how an app depends on OpenRegister, and the contract it type-hints</li>
+<li class=""><a href="https://github.com/ConductionNL/.github/tree/main/quality-config" target="_blank" rel="noopener noreferrer" class=""><code>quality-config/</code> README</a> — the mechanism, and the phpcs behaviour it was built on</li>
+<li class=""><a href="https://github.com/nextcloud/.github/tree/master/workflow-templates" target="_blank" rel="noopener noreferrer" class="">nextcloud/.github workflow templates</a></li>
+<li class=""><a href="https://github.com/nextcloud/coding-standard" target="_blank" rel="noopener noreferrer" class="">nextcloud/coding-standard</a></li>
+</ul></div><footer class="theme-doc-footer docusaurus-mt-lg"><div class="row margin-top--sm theme-doc-footer-edit-meta-row"><div class="col noPrint_WFHX"><a href="https://github.com/ConductionNL/.github/tree/main/../docs/WayOfWork/ci-cd.md" target="_blank" rel="noopener noreferrer" class="theme-edit-this-page"><svg fill="currentColor" height="20" width="20" viewBox="0 0 40 40" class="iconEdit_Z9Sw" aria-hidden="true"><g><path d="m34.5 11.7l-3 3.1-6.3-6.3 3.1-3q0.5-0.5 1.2-0.5t1.1 0.5l3.9 3.9q0.5 0.4 0.5 1.1t-0.5 1.2z m-29.5 17.1l18.4-18.5 6.3 6.3-18.4 18.4h-6.3v-6.2z"></path></g></svg>Edit this page</a></div><div class="col lastUpdated_JAkA"></div></div></footer></article><nav class="docusaurus-mt-lg pagination-nav" aria-label="Docs pages"></nav></div></div><div class="col col--3"><div class="tableOfContents_bqdL thin-scrollbar theme-doc-toc-desktop"><ul class="table-of-contents table-of-contents__left-border"><li><a href="#one-pipeline-eighteen-thin-callers" class="table-of-contents__link toc-highlight">One pipeline, eighteen thin callers</a><ul><li><a href="#nextclouds-equivalent" class="table-of-contents__link toc-highlight">Nextcloud&#39;s equivalent</a></li></ul></li><li><a href="#php" class="table-of-contents__link toc-highlight">PHP</a><ul><li><a href="#formatting--one-standard-and-it-is-nextclouds" class="table-of-contents__link toc-highlight">Formatting — one standard, and it is Nextcloud&#39;s</a></li><li><a href="#the-editorconfig-gap" class="table-of-contents__link toc-highlight">The <code>.editorconfig</code> gap</a></li><li><a href="#static-analysis-and-the-nextcloud-version-it-is-analysing-against" class="table-of-contents__link toc-highlight">Static analysis and the Nextcloud version it is analysing against</a></li><li><a href="#what-psalm-is-actually-checking" class="table-of-contents__link toc-highlight">What Psalm is actually checking</a></li><li><a href="#checks-nextcloud-runs-that-we-do-not" class="table-of-contents__link toc-highlight">Checks Nextcloud runs that we do not</a></li><li><a href="#release-and-signing" class="table-of-contents__link toc-highlight">Release and signing</a></li></ul></li><li><a href="#frontend" class="table-of-contents__link toc-highlight">Frontend</a></li><li><a href="#consuming-openregister-adr-083-adr-084" class="table-of-contents__link toc-highlight">Consuming OpenRegister (ADR-083, ADR-084)</a><ul><li><a href="#the-four-rules-adr-083-enforced-by-gate-66" class="table-of-contents__link toc-highlight">The four rules (ADR-083), enforced by gate-66</a></li><li><a href="#type-hint-the-contract-never-the-concrete-class-adr-084-gate-67" class="table-of-contents__link toc-highlight">Type-hint the contract, never the concrete class (ADR-084, gate-67)</a></li></ul></li><li><a href="#where-the-configuration-lives" class="table-of-contents__link toc-highlight">Where the configuration lives</a></li><li><a href="#package-registry" class="table-of-contents__link toc-highlight">Package registry</a><ul><li><a href="#registration-is-not-cosmetic" class="table-of-contents__link toc-highlight">Registration is not cosmetic</a></li><li><a href="#constraints-float-they-are-not-pinned" class="table-of-contents__link toc-highlight">Constraints float; they are not pinned</a></li><li><a href="#two-distribution-paths-in-one-package-and-only-one-of-them-needs-a-tag" class="table-of-contents__link toc-highlight">Two distribution paths in one package, and only one of them needs a tag</a></li><li><a href="#publishing-and-how-to-tell-it-actually-published" class="table-of-contents__link toc-highlight">Publishing, and how to tell it actually published</a></li><li><a href="#npm" class="table-of-contents__link toc-highlight">npm</a></li></ul></li><li><a href="#corrections-to-older-pages" class="table-of-contents__link toc-highlight">Corrections to older pages</a></li><li><a href="#further-reading" class="table-of-contents__link toc-highlight">Further reading</a></li></ul></div></div></div></div></main></div></div></div><footer class="canal-footer" aria-label="Site footer"><div class="skyline" role="presentation"></div><div class="kade"><div class="kade-items"><svg class="ki ki-bike-1" width="22" height="16" viewBox="0 -2 22 18" aria-hidden="true"><g stroke="var(--c-cobalt-900)" stroke-width="1.4" fill="none" stroke-linecap="round"><circle cx="4" cy="12" r="3"></circle><circle cx="18" cy="12" r="3"></circle><line x1="4" y1="12" x2="11" y2="6"></line><line x1="11" y1="6" x2="18" y2="12"></line><line x1="11" y1="6" x2="14" y2="12"></line><line x1="11" y1="6" x2="11" y2="3"></line><line x1="11" y1="3" x2="14" y2="6"></line></g><circle cx="11" cy="1.5" r="1.6" fill="var(--c-cobalt-900)"></circle></svg><svg class="ki ki-car-1" width="38" height="16" viewBox="0 0 38 16" aria-hidden="true"><rect x="0" y="6" width="38" height="6" rx="2" fill="#C8482F"></rect><path d="M 5,6 L 9,2 L 29,2 L 33,6 Z" fill="#C8482F"></path><rect x="11" y="3" width="6" height="3" fill="rgba(255,255,255,0.5)"></rect><rect x="20" y="3" width="6" height="3" fill="rgba(255,255,255,0.5)"></rect><circle cx="9" cy="13" r="2" fill="var(--c-cobalt-900)"></circle><circle cx="29" cy="13" r="2" fill="var(--c-cobalt-900)"></circle></svg><svg class="ki ki-bike-2" width="22" height="16" viewBox="0 -2 22 18" aria-hidden="true"><g stroke="var(--c-cobalt-900)" stroke-width="1.4" fill="none" stroke-linecap="round"><circle cx="4" cy="12" r="3"></circle><circle cx="18" cy="12" r="3"></circle><line x1="4" y1="12" x2="11" y2="6"></line><line x1="11" y1="6" x2="18" y2="12"></line><line x1="11" y1="6" x2="14" y2="12"></line><line x1="11" y1="6" x2="11" y2="3"></line><line x1="11" y1="3" x2="14" y2="6"></line></g><circle cx="11" cy="1.5" r="1.6" fill="var(--c-cobalt-900)"></circle></svg><svg class="ki ki-car-2" width="38" height="16" viewBox="0 0 38 16" aria-hidden="true"><rect x="0" y="6" width="38" height="6" rx="2" fill="var(--c-cobalt-900)"></rect><path d="M 5,6 L 9,2 L 29,2 L 33,6 Z" fill="var(--c-cobalt-900)"></path><rect x="11" y="3" width="6" height="3" fill="rgba(255,255,255,0.4)"></rect><rect x="20" y="3" width="6" height="3" fill="rgba(255,255,255,0.4)"></rect><circle cx="9" cy="13" r="2" fill="#C8482F"></circle><circle cx="29" cy="13" r="2" fill="#C8482F"></circle></svg></div></div><div class="water"><div class="canal-items"><svg class="ci ci-cruise" width="120" height="28" viewBox="0 -10 120 28" aria-hidden="true"><line x1="2" y1="14" x2="2" y2="-9" stroke="var(--c-orange-knvb)" stroke-width="0.9"></line><rect x="2.5" y="-9" width="9" height="2" fill="#AE1C28"></rect><rect x="2.5" y="-7" width="9" height="2" fill="#FFFFFF"></rect><rect x="2.5" y="-5" width="9" height="2" fill="#21468B"></rect><path d="M 0,16 L 6,18 L 114,18 L 120,16 L 120,11 L 0,11 Z" fill="var(--c-orange-knvb)"></path><rect x="8" y="5" width="104" height="6" fill="var(--c-orange-knvb)"></rect><path d="M 8,5 Q 60,0 112,5 L 8,5 Z" fill="var(--c-orange-knvb)"></path><g fill="rgba(255,247,210,0.85)"><rect x="14" y="7" width="6" height="3"></rect><rect x="22" y="7" width="6" height="3"></rect><rect x="30" y="7" width="6" height="3"></rect><rect x="38" y="7" width="6" height="3"></rect><rect x="46" y="7" width="6" height="3"></rect><rect x="54" y="7" width="6" height="3"></rect><rect x="62" y="7" width="6" height="3"></rect><rect x="70" y="7" width="6" height="3"></rect><rect x="78" y="7" width="6" height="3"></rect><rect x="86" y="7" width="6" height="3"></rect><rect x="94" y="7" width="6" height="3"></rect><rect x="102" y="7" width="6" height="3"></rect></g></svg><svg class="ci ci-sloep" width="50" height="20" viewBox="0 -2 50 20" aria-hidden="true"><path d="M 0,12 L 4,16 L 46,16 L 50,12 L 50,8 L 0,8 Z" fill="var(--c-orange-knvb)"></path><rect x="20" y="2" width="12" height="6" rx="1" fill="var(--c-orange-knvb)"></rect><circle cx="26" cy="0" r="1.4" fill="var(--c-orange-knvb)"></circle></svg><svg class="ci ci-row" width="44" height="16" viewBox="-2 0 48 16" aria-hidden="true"><path d="M 0,10 L 4,14 L 40,14 L 44,10 Z" fill="var(--c-orange-knvb)"></path><line x1="8" y1="10" x2="0" y2="3" stroke="var(--c-orange-knvb)" stroke-width="1.2" stroke-linecap="round"></line><line x1="36" y1="10" x2="44" y2="3" stroke="var(--c-orange-knvb)" stroke-width="1.2" stroke-linecap="round"></line><circle cx="22" cy="7" r="1.6" fill="var(--c-orange-knvb)"></circle></svg><svg class="ci ci-swim" width="26" height="10" viewBox="-3 0 30 10" aria-hidden="true"><ellipse cx="13" cy="6" rx="7" ry="1.4" fill="var(--c-orange-knvb)"></ellipse><circle cx="17" cy="4" r="1.7" fill="var(--c-orange-knvb)"></circle><line x1="13" y1="5" x2="11" y2="3" stroke="var(--c-orange-knvb)" stroke-width="1" stroke-linecap="round"></line><line x1="-3" y1="6" x2="2" y2="6" stroke="var(--c-orange-knvb)" stroke-width="0.7" opacity="0.55"></line><line x1="0" y1="8" x2="3" y2="8" stroke="var(--c-orange-knvb)" stroke-width="0.7" opacity="0.4"></line></svg><svg class="ci ci-periscope" width="14" height="26" viewBox="-3 -2 18 28" aria-hidden="true"><rect x="4" y="4" width="2" height="18" fill="var(--c-orange-knvb)"></rect><rect x="0" y="0" width="9" height="3" fill="var(--c-orange-knvb)"></rect><rect x="4" y="3" width="2" height="2" fill="var(--c-orange-knvb)"></rect><ellipse cx="5" cy="24" rx="7" ry="0.9" fill="var(--c-orange-knvb)" opacity="0.5"></ellipse></svg><svg class="ci ci-whale" width="76" height="18" viewBox="-3 -4 82 22" aria-hidden="true"><path d="M 0,12 Q 0,4 26,3 Q 54,2 64,7 L 72,4 L 68,9 L 72,14 L 64,11 Q 54,14 26,14 Q 6,14 0,12 Z" fill="var(--c-orange-knvb)"></path><g opacity="0.55" stroke="var(--c-orange-knvb)" stroke-width="1" stroke-linecap="round"><line x1="22" y1="2" x2="20" y2="-3"></line><line x1="25" y1="2" x2="25" y2="-4"></line><line x1="28" y1="2" x2="30" y2="-3"></line></g></svg><svg class="ci ci-hover" width="74" height="26" viewBox="0 -4 74 28" aria-hidden="true"><ellipse cx="37" cy="22" rx="37" ry="2.5" fill="var(--c-orange-knvb)" opacity="0.4"></ellipse><path d="M 6,18 L 10,10 L 64,10 L 68,18 Z" fill="var(--c-orange-knvb)"></path><path d="M 14,10 Q 37,-4 60,10 L 14,10 Z" fill="var(--c-orange-knvb)"></path><ellipse cx="37" cy="4" rx="16" ry="3.2" fill="rgba(255,247,210,0.7)"></ellipse><polygon points="37,11 42,13.5 42,16.5 37,19 32,16.5 32,13.5" fill="#FFFFFF"></polygon><text x="37" y="17.4" font-size="4" text-anchor="middle" fill="var(--c-orange-knvb)" font-family="sans-serif" font-weight="900">C</text><g stroke="var(--c-orange-knvb)" stroke-width="0.7" opacity="0.6"><line x1="8" y1="22" x2="12" y2="22"></line><line x1="16" y1="22" x2="20" y2="22"></line><line x1="26" y1="22" x2="30" y2="22"></line><line x1="36" y1="22" x2="40" y2="22"></line><line x1="46" y1="22" x2="50" y2="22"></line><line x1="56" y1="22" x2="60" y2="22"></line></g></svg></div><svg class="canal-waves" viewBox="0 0 1400 500" preserveAspectRatio="none" aria-hidden="true"><path class="w1" d="M 0,96 L 140,82 L 280,96 L 420,82 L 560,96 L 700,82 L 840,96 L 980,82 L 1120,96 L 1260,82 L 1400,96"></path><path class="w2" d="M 0,206 L 180,182 L 360,206 L 540,182 L 720,206 L 900,182 L 1080,206 L 1260,182 L 1400,200"></path><path class="w3" d="M 0,362 L 220,332 L 440,362 L 660,332 L 880,362 L 1100,332 L 1320,362 L 1400,348"></path></svg><div class="footer-grid"><div class="brand"><div class="wm">Conduction</div><p>Open-source apps for <span class="next-blue">Nextcloud</span>. Built and maintained by Conduction in Amsterdam, released under EUPL-1.2.</p><div class="triad"><span><span class="h"></span>Conduction<!-- --> <svg class="heart" viewBox="0 0 24 24" fill="currentColor" aria-label="loves" role="img"><path d="M12 21s-6.7-4.35-9.2-8.4C.8 9.2 2 5.5 5.2 4.7c2-.5 3.8.4 4.8 1.9 1-1.5 2.8-2.4 4.8-1.9 3.2.8 4.4 4.5 2.4 7.9C18.7 16.65 12 21 12 21z"></path></svg> <a href="https://nextcloud.com" target="_blank" rel="noopener noreferrer" class="next-blue">Nextcloud</a></span></div><div class="socials"><a href="https://github.com/ConductionNL" aria-label="GitHub" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="filled" d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.04 1.53 1.04.9 1.53 2.36 1.09 2.93.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.6 9.6 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.93.36.31.68.92.68 1.86v2.76c0 .27.18.58.69.48A10 10 0 0 0 12 2z"></path></svg></a><a href="https://www.linkedin.com/company/conduction" aria-label="LinkedIn" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-4 0v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle class="filled" cx="4" cy="4" r="2"></circle></svg></a><a href="mailto:info@conduction.nl" aria-label="Email info@conduction.nl"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 7l9 6 9-6"></path></svg></a><a href="tel:+31853036840" aria-label="Phone +31 (0)85 303 6840"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.72 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0 1 22 16.92z"></path></svg></a><a href="https://maps.google.com/?q=Lauriergracht+14h+Amsterdam" aria-label="Lauriergracht 14h, Amsterdam, open in Google Maps" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg></a></div></div><div><h4>Documentation</h4><ul><li><a href="https://github.com/orgs/ConductionNL/projects/4" target="_blank" rel="noopener noreferrer">Roadmap</a></li><li><a href="/hydra/">Hydra</a></li><li><a href="/claude/">Using Hydra</a></li><li><a href="/iso/">ISO compliance</a></li></ul></div><div><h4>Conduction</h4><ul><li><a href="https://conduction.nl/about" target="_blank" rel="noopener noreferrer">About</a></li><li><a href="https://conduction.nl/about#opensource" target="_blank" rel="noopener noreferrer">Open source</a></li><li><a href="https://conduction.nl/about#team" target="_blank" rel="noopener noreferrer">Team</a></li><li><a href="https://conduction.nl/iso" target="_blank" rel="noopener noreferrer">ISO</a></li></ul></div><div><h4>Documentatie</h4><ul><li><a href="https://identity.conduction.nl/" target="_blank" rel="noopener noreferrer">Brand book</a></li><li><a href="https://identity.conduction.nl/diagrams/" target="_blank" rel="noopener noreferrer">Diagram set</a></li></ul></div></div><div class="legal-bar"><div class="left"><span>Conduction B.V. · KvK 76741850 · BTW NL860784241B01 · IBAN NL51 ABNA 0868951550 · Lauriergracht 14h, 1016 RR Amsterdam · 2026</span><span class="legal-links"><a href="https://www.conduction.nl/privacy" target="_blank" rel="noopener noreferrer">Privacy</a><span class="sep">·</span><a href="https://www.conduction.nl/terms" target="_blank" rel="noopener noreferrer">Terms</a><span class="sep">·</span><a href="https://www.conduction.nl/iso" target="_blank" rel="noopener noreferrer">ISO</a></span></div><div class="right"><a href="https://www.conduction.nl/iso" target="_blank" rel="noopener noreferrer" class="iso-badge" aria-label="ISO 9001:2015 certified, see details"><span class="iso-mark">ISO</span><span class="iso-num">9001:2015</span></a><a href="https://www.conduction.nl/iso" target="_blank" rel="noopener noreferrer" class="iso-badge" aria-label="ISO 27001:2022 certified, see details"><span class="iso-mark">ISO</span><span class="iso-num">27001:2022</span></a></div></div></div></footer><div style="display:none" aria-hidden="true">
+      <template id="tpl-h-a">
+        <svg class="house h-a" viewBox="0 -2 80 202" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,200 L 0,38 L 8,38 L 8,26 L 16,26 L 16,14 L 24,14 L 24,8 L 56,8 L 56,14 L 64,14 L 64,26 L 72,26 L 72,38 L 80,38 L 80,200 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="22" y="68" width="10" height="16" fill="rgba(255,247,210,0.95)"/>
+          <rect x="48" y="68" width="10" height="16" fill="rgba(11,32,73,0.35)"/>
+          <rect x="22" y="98" width="10" height="16" fill="rgba(11,32,73,0.35)"/>
+          <rect x="48" y="98" width="10" height="16" fill="rgba(255,247,210,0.6)"/>
+          <rect x="22" y="128" width="10" height="16" fill="rgba(11,32,73,0.35)"/>
+          <rect x="48" y="128" width="10" height="16" fill="rgba(11,32,73,0.35)"/>
+          <rect x="32" y="160" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+      <template id="tpl-h-b">
+        <svg class="house h-b" viewBox="0 0 100 220" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,220 L 0,58 L 8,58 L 8,47 L 16,47 L 16,36 L 24,36 L 24,25 L 32,25 L 32,14 L 50,4 L 68,14 L 68,25 L 76,25 L 76,36 L 84,36 L 84,47 L 92,47 L 92,58 L 100,58 L 100,220 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="14" y="80" width="14" height="20" fill="rgba(255,247,210,0.85)"/>
+          <rect x="43" y="80" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="72" y="80" width="14" height="20" fill="rgba(255,247,210,0.55)"/>
+          <rect x="14" y="115" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="43" y="115" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="72" y="115" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="14" y="150" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="43" y="150" width="14" height="20" fill="rgba(255,247,210,0.7)"/>
+          <rect x="72" y="150" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="42" y="180" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+      <template id="tpl-h-c">
+        <svg class="house h-c" viewBox="0 0 70 240" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,240 L 0,48 L 5,48 L 5,41 L 10,41 L 10,34 L 15,34 L 15,27 L 20,27 L 20,20 L 25,20 L 25,15 L 45,15 L 45,20 L 50,20 L 50,27 L 55,27 L 55,34 L 60,34 L 60,41 L 65,41 L 65,48 L 70,48 L 70,240 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="14" y="70" width="12" height="18" fill="rgba(255,247,210,0.55)"/>
+          <rect x="44" y="70" width="12" height="18" fill="rgba(255,247,210,0.85)"/>
+          <rect x="14" y="100" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="44" y="100" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="14" y="130" width="12" height="18" fill="rgba(255,247,210,0.7)"/>
+          <rect x="44" y="130" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="14" y="160" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="44" y="160" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="27" y="200" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+      <template id="tpl-h-d">
+        <svg class="house h-d" viewBox="0 -10 90 180" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,170 L 0,30 L 8,30 L 8,20 L 16,20 L 16,10 L 24,10 L 24,4 L 66,4 L 66,10 L 74,10 L 74,20 L 82,20 L 82,30 L 90,30 L 90,170 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="12" y="60" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="38" y="60" width="14" height="20" fill="rgba(255,247,210,0.85)"/>
+          <rect x="64" y="60" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="12" y="100" width="14" height="20" fill="rgba(255,247,210,0.6)"/>
+          <rect x="38" y="100" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="64" y="100" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="37" y="130" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+      <template id="tpl-h-e">
+        <svg class="house h-e" viewBox="0 0 95 210" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,210 L 0,55 L 8,55 L 8,44 L 16,44 L 16,33 L 24,33 L 24,22 L 32,22 L 32,11 L 35,11 L 35,6 L 59,6 L 59,11 L 63,11 L 63,22 L 71,22 L 71,33 L 79,33 L 79,44 L 87,44 L 87,55 L 95,55 L 95,210 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="13" y="75" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="40" y="75" width="14" height="20" fill="rgba(255,247,210,0.65)"/>
+          <rect x="68" y="75" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="13" y="110" width="14" height="20" fill="rgba(255,247,210,0.8)"/>
+          <rect x="40" y="110" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="68" y="110" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="13" y="145" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="40" y="145" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="68" y="145" width="14" height="20" fill="rgba(255,247,210,0.55)"/>
+          <rect x="39.5" y="175" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+</div></div>
+</body>
+</html>

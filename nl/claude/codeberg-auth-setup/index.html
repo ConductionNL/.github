@@ -1,0 +1,571 @@
+<!doctype html>
+<html lang="nl-NL" dir="ltr" class="docs-wrapper plugin-docs plugin-id-default docs-version-current docs-doc-page docs-doc-id-claude/codeberg-auth-setup" data-has-hydrated="false">
+<head>
+<meta charset="UTF-8">
+<meta name="generator" content="Docusaurus v3.10.1">
+<title data-rh="true">Codeberg Authentication Setup (WSL + VS Code + Claude Code) | Conduction Docs</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" property="og:image" content="https://docs.conduction.nl/nl/img/og-conduction.png"><meta data-rh="true" name="twitter:image" content="https://docs.conduction.nl/nl/img/og-conduction.png"><meta data-rh="true" property="og:url" content="https://docs.conduction.nl/nl/claude/codeberg-auth-setup/"><meta data-rh="true" property="og:locale" content="nl_NL"><meta data-rh="true" property="og:locale:alternate" content="en_GB"><meta data-rh="true" name="docusaurus_locale" content="nl"><meta data-rh="true" name="docsearch:language" content="nl"><meta data-rh="true" name="twitter:site" content="@ConductionNL"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:type" content="website"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="Codeberg Authentication Setup (WSL + VS Code + Claude Code) | Conduction Docs"><meta data-rh="true" name="description" content="This guide takes you from a fresh WSL install to a fully-authenticated Codeberg workstation, so every tool you use — git from any shell, VS Code&#x27;s source control panel, the Gitea extension, the tea CLI, and Claude Code&#x27;s Bash tool — can clone, push, and create pull requests on Codeberg without re-authenticating."><meta data-rh="true" property="og:description" content="This guide takes you from a fresh WSL install to a fully-authenticated Codeberg workstation, so every tool you use — git from any shell, VS Code&#x27;s source control panel, the Gitea extension, the tea CLI, and Claude Code&#x27;s Bash tool — can clone, push, and create pull requests on Codeberg without re-authenticating."><link data-rh="true" rel="icon" href="/nl/img/favicon.svg"><link data-rh="true" rel="canonical" href="https://docs.conduction.nl/nl/claude/codeberg-auth-setup/"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/claude/codeberg-auth-setup/" hreflang="en-GB"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/nl/claude/codeberg-auth-setup/" hreflang="nl-NL"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/claude/codeberg-auth-setup/" hreflang="x-default"><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","@id":"https://docs.conduction.nl/nl/claude/codeberg-auth-setup#article","mainEntityOfPage":"https://docs.conduction.nl/nl/claude/codeberg-auth-setup","headline":"Codeberg Authentication Setup (WSL + VS Code + Claude Code)","inLanguage":"en","publisher":{"@id":"https://www.conduction.nl/#org"},"description":"This guide takes you from a fresh WSL install to a fully-authenticated Codeberg workstation, so every tool you use — git from any shell, VS Code's source control panel, the Gitea extension, the tea CLI, and Claude Code's Bash tool — can clone, push, and create pull requests on Codeberg without re-authenticating.","author":{"@type":"Organization","name":"Conduction","@id":"https://www.conduction.nl/#org"}}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","@id":"https://www.conduction.nl/#org","name":"Conduction B.V.","alternateName":"Conduction","url":"https://www.conduction.nl/","logo":"https://www.conduction.nl/img/brand/avatar-conduction-gold-on-white.svg","foundingDate":"2019","description":"Dutch open-source software company building EUPL-1.2 apps for the Nextcloud workspace.","address":{"@type":"PostalAddress","streetAddress":"Lauriergracht 14h","postalCode":"1016 RR","addressLocality":"Amsterdam","addressCountry":"NL"},"email":"info@conduction.nl","telephone":"+31-85-303-6840","taxID":"NL860784241B01","vatID":"NL860784241B01","identifier":{"@type":"PropertyValue","propertyID":"KvK","value":"76741850"},"sameAs":["https://github.com/ConductionNL","https://www.linkedin.com/company/conduction/"]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","@id":"https://docs.conduction.nl/#website","url":"https://docs.conduction.nl/","name":"Conduction Docs","publisher":{"@id":"https://www.conduction.nl/#org"},"inLanguage":["en","nl"]}</script><link rel="stylesheet" href="/nl/assets/css/styles.f2866016.css">
+<script src="/nl/assets/js/runtime~main.63e6f1dc.js" defer="defer"></script>
+<script src="/nl/assets/js/main.1d67c9ad.js" defer="defer"></script>
+</head>
+<body>
+<svg style="display: none;"><defs>
+<symbol id="theme-svg-external-link" viewBox="0 0 24 24"><path fill="currentColor" d="M21 13v10h-21v-19h12v2h-10v15h17v-8h2zm3-12h-10.988l4.035 4-6.977 7.07 2.828 2.828 6.977-7.07 4.125 4.172v-11z"/></symbol>
+</defs></svg>
+<script>!function(){var t=function(){try{return new URLSearchParams(window.location.search).get("docusaurus-theme")}catch(t){}}()||function(){try{return window.localStorage.getItem("theme")}catch(t){}}();document.documentElement.setAttribute("data-theme",t||(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")),document.documentElement.setAttribute("data-theme-choice",t||"system")}(),function(){try{const c=new URLSearchParams(window.location.search).entries();for(var[t,e]of c)if(t.startsWith("docusaurus-data-")){var a=t.replace("docusaurus-data-","data-");document.documentElement.setAttribute(a,e)}}catch(t){}}()</script><div id="__docusaurus"><div role="region" aria-label="Ga naar hoofdinhoud"><a class="skipToContent_fXgn" href="#__docusaurus_skipToContent_fallback">Ga naar hoofdinhoud</a></div><nav class="navbar nav_MuJ0" role="navigation" aria-label="Main"><div class="left__6eY"><a class="wordmark_mhs1" href="/nl/"><img src="/nl/img/logo.svg" alt="Conduction Docs avatar" class="wordmarkIcon_boru" width="32" height="32"><span class="wordmarkText_r1t1">Conduction Docs</span></a><div class="links_cXJT"><a class="link_CwQh" href="/nl/WayOfWork/way-of-work/">Manier van Werken</a><a href="https://github.com/orgs/ConductionNL/projects/4" class="ghost_SGJf" target="_blank" rel="noopener noreferrer">Roadmap</a><a class="link_CwQh" href="/nl/hydra/">Hydra</a><a class="link_CwQh" href="/nl/claude/">Hydra gebruiken</a><a class="link_CwQh" href="/nl/iso/">ISO</a><a href="https://www.conduction.nl/support/" class="ghost_SGJf" target="_blank" rel="noopener noreferrer">Ondersteuning</a><a href="https://www.conduction.nl/apps/" class="ghost_SGJf" target="_blank" rel="noopener noreferrer">Producten</a></div></div><div class="ctas_jpo4"><div class="localeWrapper__Pip"><div class="navbar__item dropdown dropdown--hoverable dropdown--right"><a href="#" aria-haspopup="true" aria-expanded="false" role="button" class="navbar__link" type="localeDropdown"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" class="iconLanguage_nlXk"><path fill="currentColor" d="M12.87 15.07l-2.54-2.51.03-.03c1.74-1.94 2.98-4.17 3.71-6.53H17V4h-7V2H8v2H1v1.99h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z"></path></svg>Nederlands</a><ul class="dropdown__menu"><li><a href="/claude/codeberg-auth-setup/" target="_self" rel="noopener noreferrer" class="dropdown__link" lang="en-GB">English</a></li><li><a href="/nl/claude/codeberg-auth-setup/" target="_self" rel="noopener noreferrer" class="dropdown__link dropdown__link--active" lang="nl-NL">Nederlands</a></li></ul></div></div><a href="https://github.com/ConductionNL/.github" class="ghost_SGJf" target="_blank" rel="noopener noreferrer">GitHub</a></div></nav><div id="__docusaurus_skipToContent_fallback" class="theme-layout-main main-wrapper mainWrapper_z2l0"><div class="docsWrapper_hBAB"><button aria-label="Terug naar boven" class="clean-btn theme-back-to-top-button backToTopButton_sjWU" type="button"></button><div class="docRoot_UBD9"><main class="docMainContainer_TBSr docMainContainerEnhanced_lQrH"><div class="container padding-top--md padding-bottom--lg"><div class="row"><div class="col docItemCol_VOVn"><div class="docItemContainer_Djhp"><article><div class="tocCollapsible_ETCw theme-doc-toc-mobile tocMobile_ITEo"><button type="button" class="clean-btn tocCollapsibleButton_TO0P">Op deze pagina</button></div><div class="theme-doc-markdown markdown"><header><h1>Codeberg Authentication Setup (WSL + VS Code + Claude Code)</h1></header>
+<p>This guide takes you from a fresh WSL install to a fully-authenticated Codeberg workstation, so every tool you use — <code>git</code> from any shell, VS Code&#x27;s source control panel, the Gitea extension, the <code>tea</code> CLI, and Claude Code&#x27;s Bash tool — can clone, push, and create pull requests on Codeberg without re-authenticating.</p>
+<p>The setup is two layers:</p>
+<ol>
+<li class=""><strong>SSH key</strong> — handles all <code>git</code> operations (clone, fetch, push, pull). Authenticated once per WSL reboot via <code>keychain</code> + the passphrase.</li>
+<li class=""><strong><code>tea</code> CLI + API token</strong> — handles PR/issue/label operations that aren&#x27;t part of the git protocol (creating PRs, posting comments, listing issues). Authenticated once per machine; the token sits in <code>~/.config/tea/config.yml</code> from then on.</li>
+</ol>
+<p>Once both are configured, Claude Code can drive the entire Codeberg workflow inside your existing session — no extra prompts, no token paste-ins.</p>
+<blockquote>
+<p><strong>Why Codeberg?</strong> Conduction migrated from <code>github.com/ConductionNL</code> to <code>codeberg.org/Conduction</code> in May 2026. Codeberg runs Forgejo (a Gitea fork) — a community-owned, EU-hosted alternative to GitHub. The platform-preference order is <strong>Codeberg primary, GitHub secondary, GitLab alternative</strong>. Hydra and all migrated skills still understand GitHub URLs, so older repos and PR links continue to work.</p>
+</blockquote>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="prerequisites">Prerequisites<a href="#prerequisites" class="hash-link" aria-label="Directe link naar Prerequisites" title="Directe link naar Prerequisites" translate="no">​</a></h2>
+<ul>
+<li class="">WSL2 with Ubuntu (see <a class="" href="/nl/claude/workstation-setup/">Workstation Setup</a> → &quot;Install WSL2&quot;)</li>
+<li class="">A Codeberg account at <a href="https://codeberg.org" target="_blank" rel="noopener noreferrer" class="">https://codeberg.org</a></li>
+<li class="">Membership in the <code>Conduction</code> organisation (ask a maintainer if you&#x27;re missing access)</li>
+<li class="">VS Code with the Remote WSL extension installed on the Windows side</li>
+</ul>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="step-1--generate-an-ssh-key">Step 1 — Generate an SSH key<a href="#step-1--generate-an-ssh-key" class="hash-link" aria-label="Directe link naar Step 1 — Generate an SSH key" title="Directe link naar Step 1 — Generate an SSH key" translate="no">​</a></h2>
+<p>In your WSL terminal:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">ssh-keygen -t ed25519 -C &quot;your.name@conduction.nl&quot; -f ~/.ssh/id_ed25519_codeberg</span><br></div></code></pre></div></div>
+<ul>
+<li class=""><strong>Algorithm</strong>: ED25519 — small, fast, modern. Don&#x27;t use RSA unless you have a specific compatibility reason.</li>
+<li class=""><strong>Filename</strong>: <code>id_ed25519_codeberg</code> — explicit name so you can have separate keys per host (one for Codeberg, one for GitHub, etc.) without them colliding.</li>
+<li class=""><strong>Passphrase</strong>: <strong>enter one</strong>. A passphraseless key on disk is a stand-alone credential — anyone who reads the file can push to every repo you have access to. The passphrase is your second factor; <code>keychain</code> (Step 3) makes the day-to-day cost almost zero.</li>
+</ul>
+<p>This creates two files:</p>
+<ul>
+<li class=""><code>~/.ssh/id_ed25519_codeberg</code> — the <strong>private key</strong> (never share, never commit)</li>
+<li class=""><code>~/.ssh/id_ed25519_codeberg.pub</code> — the <strong>public key</strong> (safe to share; goes to Codeberg)</li>
+</ul>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="step-2--add-the-public-key-to-codeberg">Step 2 — Add the public key to Codeberg<a href="#step-2--add-the-public-key-to-codeberg" class="hash-link" aria-label="Directe link naar Step 2 — Add the public key to Codeberg" title="Directe link naar Step 2 — Add the public key to Codeberg" translate="no">​</a></h2>
+<p>Print the public key:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">cat ~/.ssh/id_ed25519_codeberg.pub</span><br></div></code></pre></div></div>
+<p>You&#x27;ll see a single line that looks like:</p>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA...long-base64-string... your.name@conduction.nl</span><br></div></code></pre></div></div>
+<p>That whole line is the public key. The three space-separated parts are:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Part</th><th>Example</th><th>Meaning</th></tr></thead><tbody><tr><td>Algorithm</td><td><code>ssh-ed25519</code></td><td>Key type. Always starts with <code>ssh-</code>.</td></tr><tr><td>Public key data</td><td><code>AAAAC3Nz...</code></td><td>Base64-encoded public component.</td></tr><tr><td>Comment</td><td><code>your.name@conduction.nl</code></td><td>Free-form identifier — usually your email so future-you knows which key this is.</td></tr></tbody></table>
+<p>Optionally, copy it straight to the Windows clipboard from WSL:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">cat ~/.ssh/id_ed25519_codeberg.pub | clip.exe</span><br></div></code></pre></div></div>
+<p>Then go to <a href="https://codeberg.org/user/settings/keys" target="_blank" rel="noopener noreferrer" class="">https://codeberg.org/user/settings/keys</a> → <strong>Add Key</strong>:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Field</th><th>Value</th></tr></thead><tbody><tr><td>Key Name</td><td>Free-form label only you see, e.g. <code>WSL Ubuntu - SKIKK Laptop</code>. Doesn&#x27;t have to match the comment in the key.</td></tr><tr><td>Content</td><td>Paste the <strong>whole line</strong> from <code>cat</code> (algorithm + key + comment).</td></tr></tbody></table>
+<p>Click <strong>Add Key</strong>.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="step-3--tell-ssh-to-use-this-key-for-codeberg">Step 3 — Tell SSH to use this key for Codeberg<a href="#step-3--tell-ssh-to-use-this-key-for-codeberg" class="hash-link" aria-label="Directe link naar Step 3 — Tell SSH to use this key for Codeberg" title="Directe link naar Step 3 — Tell SSH to use this key for Codeberg" translate="no">​</a></h2>
+<p>Append a host block to <code>~/.ssh/config</code> so the <code>codeberg.org</code> host always uses this specific key, regardless of how many other keys you have loaded:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">cat &gt;&gt; ~/.ssh/config &lt;&lt;&#x27;EOF&#x27;</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">Host codeberg.org</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">  HostName codeberg.org</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">  User git</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">  IdentityFile ~/.ssh/id_ed25519_codeberg</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">  IdentitiesOnly yes</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">EOF</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">chmod 600 ~/.ssh/config</span><br></div></code></pre></div></div>
+<p><code>chmod 600</code> is <strong>required</strong> — SSH refuses to read a config file that other users could see, and silently falls back to defaults. Forgetting this is the most common cause of &quot;I added my key but it still asks for a password.&quot;</p>
+<blockquote>
+<p><strong>Common mistake:</strong> Pasting the <code>Host codeberg.org</code> block directly into the shell. The shell tries to run <code>Host</code> as a command and you get <code>Command &#x27;Host&#x27; not found</code>. The block belongs <em>inside</em> the file, hence the <code>cat &gt;&gt; ... &lt;&lt;EOF</code> heredoc above.</p>
+</blockquote>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="step-4--verify-ssh-works">Step 4 — Verify SSH works<a href="#step-4--verify-ssh-works" class="hash-link" aria-label="Directe link naar Step 4 — Verify SSH works" title="Directe link naar Step 4 — Verify SSH works" translate="no">​</a></h2>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">ssh -T git@codeberg.org</span><br></div></code></pre></div></div>
+<p>Expected output:</p>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">Hi there, &lt;YourCodebergUsername&gt;! You&#x27;ve successfully authenticated with the key named &lt;Your Key Name&gt;, but Forgejo does not provide shell access.</span><br></div></code></pre></div></div>
+<p>The &quot;does not provide shell access&quot; line is expected and correct — Codeberg only allows git operations over SSH, not interactive shell sessions.</p>
+<p>If you instead see <code>Permission denied (publickey)</code>:</p>
+<ul>
+<li class="">Did you paste the <strong>public</strong> key (<code>.pub</code> file) to Codeberg, not the private one?</li>
+<li class="">Did you <code>chmod 600 ~/.ssh/config</code>?</li>
+<li class="">Try <code>ssh -vT git@codeberg.org</code> for verbose output and check which key file SSH actually offered.</li>
+</ul>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="step-5--set-up-keychain-so-the-passphrase-persists-across-shells">Step 5 — Set up keychain so the passphrase persists across shells<a href="#step-5--set-up-keychain-so-the-passphrase-persists-across-shells" class="hash-link" aria-label="Directe link naar Step 5 — Set up keychain so the passphrase persists across shells" title="Directe link naar Step 5 — Set up keychain so the passphrase persists across shells" translate="no">​</a></h2>
+<p>Without help, SSH asks for the passphrase <strong>every time</strong> you <code>git push</code>. <code>keychain</code> is the standard solution: it runs <code>ssh-agent</code> once per WSL boot, loads your key into it (passphrase prompt), and then every subsequent shell (including Claude Code&#x27;s Bash tool) shares the unlocked agent.</p>
+<p>Install:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">sudo apt install -y keychain</span><br></div></code></pre></div></div>
+<p>Add to <code>~/.bashrc</code> (or <code>~/.zshrc</code>):</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">cat &gt;&gt; ~/.bashrc &lt;&lt;&#x27;EOF&#x27;</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"># Keep an ssh-agent alive across shells, with the Codeberg key loaded</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">eval $(keychain --eval --quiet --agents ssh ~/.ssh/id_ed25519_codeberg)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">EOF</span><br></div></code></pre></div></div>
+<p>Open a new terminal — keychain prompts for the passphrase <strong>once</strong>. From then on, every shell on the same WSL instance inherits the loaded agent. Reboot WSL → prompted once again. That&#x27;s the floor: a passphrase is real security, and reducing it below &quot;once per WSL reboot&quot; would require pinning the passphrase to disk somewhere, which defeats the point.</p>
+<blockquote>
+<p>If you do not want a passphrase prompt <strong>ever</strong> (single-user laptop, you accept the risk), regenerate the key with an empty passphrase: <code>ssh-keygen -t ed25519 -N &quot;&quot; -f ~/.ssh/id_ed25519_codeberg</code>. Not recommended — the only protection against a leaked key file is then nothing.</p>
+</blockquote>
+<p>Verify the key is loaded:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">ssh-add -l</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"># Expected:</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"># 256 SHA256:... your.name@conduction.nl (ED25519)</span><br></div></code></pre></div></div>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="step-6--install-the-tea-cli-for-prissue-api-operations">Step 6 — Install the <code>tea</code> CLI for PR/issue API operations<a href="#step-6--install-the-tea-cli-for-prissue-api-operations" class="hash-link" aria-label="Directe link naar step-6--install-the-tea-cli-for-prissue-api-operations" title="Directe link naar step-6--install-the-tea-cli-for-prissue-api-operations" translate="no">​</a></h2>
+<p>SSH covers the git protocol. Operations that aren&#x27;t part of the git protocol — creating a PR, posting a comment, listing issues, applying labels — go through Codeberg&#x27;s REST API. The <code>tea</code> CLI is Gitea&#x27;s official CLI for this; think of it as <code>gh</code> for Codeberg.</p>
+<p>Install (Linux/WSL amd64):</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">sudo wget -O /usr/local/bin/tea https://dl.gitea.com/tea/0.11.0/tea-0.11.0-linux-amd64</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">sudo chmod +x /usr/local/bin/tea</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">tea --version</span><br></div></code></pre></div></div>
+<p>Other platforms / latest releases: <a href="https://gitea.com/gitea/tea/releases" target="_blank" rel="noopener noreferrer" class="">https://gitea.com/gitea/tea/releases</a>.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="step-7--create-a-codeberg-api-token">Step 7 — Create a Codeberg API token<a href="#step-7--create-a-codeberg-api-token" class="hash-link" aria-label="Directe link naar Step 7 — Create a Codeberg API token" title="Directe link naar Step 7 — Create a Codeberg API token" translate="no">​</a></h2>
+<p>The token is what <code>tea</code> uses to identify itself when calling the REST API. It is <strong>separate</strong> from your SSH key — SSH is for git over SSH, the token is for HTTPS API calls.</p>
+<p>Go to <a href="https://codeberg.org/user/settings/applications" target="_blank" rel="noopener noreferrer" class="">https://codeberg.org/user/settings/applications</a> → <strong>Generate New Token</strong>:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Field</th><th>Value</th></tr></thead><tbody><tr><td>Token Name</td><td><code>tea-cli-&lt;laptop&gt;</code> or similar, so you can recognise + revoke it later</td></tr><tr><td>Expiration</td><td>90 days is a good default; rotate every quarter</td></tr><tr><td>Scopes</td><td>See table below</td></tr></tbody></table>
+<p><strong>Required scopes</strong> (tick the <strong>write</strong> sub-checkbox where applicable):</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Scope</th><th>Why</th></tr></thead><tbody><tr><td><code>repository</code></td><td>Push branches, create files via API, manage releases</td></tr><tr><td><code>issue</code></td><td>PRs share the issue API surface on Gitea — needed for comments, labels, assignees, reviews</td></tr><tr><td><code>user</code></td><td>Identify the authenticated user</td></tr><tr><td><code>organization</code></td><td>List <code>Conduction</code> org repos, manage team membership reads</td></tr></tbody></table>
+<p><strong>Skip</strong> these — they add risk without value for normal dev work:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Scope</th><th>Reason to skip</th></tr></thead><tbody><tr><td><code>activitypub</code></td><td>Federation between Gitea instances (Mastodon-style). Not used by Conduction.</td></tr><tr><td><code>misc</code></td><td>Marginal endpoints (<code>/version</code>, <code>/signing-key</code>). Not needed.</td></tr><tr><td><code>package</code></td><td>Gitea package registry. Not used by Conduction.</td></tr><tr><td><code>admin</code></td><td>Instance admin. Codeberg admins only.</td></tr><tr><td><code>notification</code></td><td>Optional — only tick <code>read</code> if you want a future skill to read your Codeberg notifications.</td></tr></tbody></table>
+<p>Click <strong>Generate Token</strong>. <strong>Copy it immediately</strong> — Codeberg shows it once and never again.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="step-8--tell-tea-about-the-token">Step 8 — Tell <code>tea</code> about the token<a href="#step-8--tell-tea-about-the-token" class="hash-link" aria-label="Directe link naar step-8--tell-tea-about-the-token" title="Directe link naar step-8--tell-tea-about-the-token" translate="no">​</a></h2>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">tea login add --name codeberg --url https://codeberg.org --token &lt;paste-token-here&gt;</span><br></div></code></pre></div></div>
+<p>Verify:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">tea login list</span><br></div></code></pre></div></div>
+<p>You should see one row with <code>NAME=codeberg</code>, <code>URL=https://codeberg.org</code>, <code>USER=&lt;YourCodebergUsername&gt;</code>.</p>
+<p>The token is stored in <code>~/.config/tea/config.yml</code> from now on. Every <code>tea</code> invocation reuses it.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="step-9--switch-existing-repo-remotes-to-codeberg">Step 9 — Switch existing repo remotes to Codeberg<a href="#step-9--switch-existing-repo-remotes-to-codeberg" class="hash-link" aria-label="Directe link naar Step 9 — Switch existing repo remotes to Codeberg" title="Directe link naar Step 9 — Switch existing repo remotes to Codeberg" translate="no">​</a></h2>
+<p>Repos cloned before the migration still point at GitHub. To switch one:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">git -C /path/to/repo remote set-url origin git@codeberg.org:Conduction/&lt;repo-name&gt;.git</span><br></div></code></pre></div></div>
+<p>For a freshly-cloned repo, use the SSH URL from the start:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">git clone git@codeberg.org:Conduction/&lt;repo-name&gt;.git</span><br></div></code></pre></div></div>
+<p><strong>Sanity check</strong> for any repo whose remote you switched:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">git -C /path/to/repo ls-remote --heads origin | head -3</span><br></div></code></pre></div></div>
+<p>If you see branch refs, the remote is correctly pointing at Codeberg and your SSH key works. If you see &quot;Permission denied&quot; or &quot;repository not found&quot;, retrace Steps 1-5.</p>
+<blockquote>
+<p><strong>Heads-up for Hydra users:</strong> The Hydra orchestrator and its cron scripts (<code>scripts/orchestrate.sh</code>, <code>scripts/cron-*.sh</code>, <code>scripts/hydra-supervisor.sh</code>) still assume GitHub for issue dispatch. If you switch the Hydra repo&#x27;s <code>origin</code> to Codeberg, <code>git push</code> from inside those scripts goes to Codeberg, but <code>gh issue</code> calls still hit GitHub — a temporary split-brain. Hold off on switching <code>hydra</code> and <code>openregister</code> origins until Hydra has migrated to <code>tea</code>/Codeberg APIs. The other repos (<code>.github</code>, <code>openwoo-app-website</code>, app repos) are safe to switch immediately.</p>
+</blockquote>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="step-10--install-the-vs-code-gitea-extension-optional-but-recommended">Step 10 — Install the VS Code Gitea extension (optional but recommended)<a href="#step-10--install-the-vs-code-gitea-extension-optional-but-recommended" class="hash-link" aria-label="Directe link naar Step 10 — Install the VS Code Gitea extension (optional but recommended)" title="Directe link naar Step 10 — Install the VS Code Gitea extension (optional but recommended)" translate="no">​</a></h2>
+<p>VS Code&#x27;s built-in source control panel already works with the SSH remote — you can commit, push, pull, branch, and resolve conflicts. What it doesn&#x27;t show is Codeberg issues + PRs (the GitHub PR extension has no Codeberg equivalent).</p>
+<p>The community extension that fills this gap:</p>
+<ul>
+<li class=""><strong>Name</strong>: Gitea</li>
+<li class=""><strong>Publisher</strong>: Gitea Authors (also a separate <code>Gitea-VSCode</code> by IJustDev — that one is a working fallback if the official extension misbehaves)</li>
+<li class=""><strong>Install</strong>: VS Code → Extensions → search &quot;Gitea&quot; → Install</li>
+<li class=""><strong>Configure</strong>: Settings (<code>Ctrl+,</code>) → search &quot;gitea&quot; → set <code>gitea.serverurl</code> to <code>https://codeberg.org</code> and paste your token from Step 7 into <code>gitea.token</code></li>
+</ul>
+<p>What it gives you:</p>
+<ul>
+<li class="">Issues + PRs sidebar (open from the source control activity bar)</li>
+<li class="">PR list with status badges</li>
+<li class="">Click-through to PR diffs in the editor</li>
+</ul>
+<p>What it doesn&#x27;t give you:</p>
+<ul>
+<li class="">Inline review-comment threads pinned to file:line (the GitHub PR extension does this; Codeberg/Gitea&#x27;s API supports it but no extension implements it cleanly yet)</li>
+<li class="">Workflow run logs (the GitHub Actions extension&#x27;s equivalent for Forgejo Actions does not exist)</li>
+</ul>
+<p>For the missing pieces, Claude Code + <code>tea</code> + the REST API fills the gap from inside your terminal.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="step-11--optional-web-session-cookies-for-pr-thread-resolution">Step 11 — Optional: web-session cookies for PR thread resolution<a href="#step-11--optional-web-session-cookies-for-pr-thread-resolution" class="hash-link" aria-label="Directe link naar Step 11 — Optional: web-session cookies for PR thread resolution" title="Directe link naar Step 11 — Optional: web-session cookies for PR thread resolution" translate="no">​</a></h2>
+<p><strong>Skip this step unless you regularly do PR re-reviews on Codeberg.</strong> It&#x27;s a workaround for one specific gap in the Codeberg API; if you only push code and create PRs, the SSH key + <code>tea</code> token from Steps 1–8 are enough.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="what-this-is-for">What this is for<a href="#what-this-is-for" class="hash-link" aria-label="Directe link naar What this is for" title="Directe link naar What this is for" translate="no">​</a></h3>
+<p>When you finish a re-review on a Codeberg PR and submit an APPROVE verdict, the inline-comment threads from your previous review stay open in the UI as unresolved &quot;conversations&quot; (Dutch: <em>Gesprekken</em>). On GitHub, the <code>/review-pr</code> skill closes these via the GraphQL <code>resolveReviewThread</code> mutation — but Codeberg&#x27;s v1 REST API (<code>/api/v1/...</code>) has <strong>no equivalent setter</strong>. The <code>resolver</code> and <code>resolved_at</code> fields are exposed on <code>PullReviewComment</code> for reading but cannot be written.</p>
+<p>The only way to programmatically click &quot;Gesprek oplossen&quot; / &quot;Resolve conversation&quot; on Codeberg is via the same web-form endpoint the browser uses (<code>POST /&lt;owner&gt;/&lt;repo&gt;/issues/resolve_conversation</code>), which requires the <strong>browser session cookies</strong>, not the API token. Treating those cookies like a password and storing them encrypted with your existing Codeberg SSH key lets Claude resolve threads programmatically without you re-extracting from the browser every time.</p>
+<p>This is an alternative to manually clicking &quot;Gesprek oplossen&quot; on each thread. Pick this if either is true:</p>
+<ul>
+<li class="">You re-review more than two or three Codeberg PRs per week.</li>
+<li class="">You frequently have 5+ inline comments per re-review and the manual click-fest is painful.</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="how-it-works">How it works<a href="#how-it-works" class="hash-link" aria-label="Directe link naar How it works" title="Directe link naar How it works" translate="no">​</a></h3>
+<p>Four browser cookies authenticate the resolve endpoint (verified against Conduction/openregister on 2026-06-02):</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Cookie</th><th>Lifetime</th><th>Purpose</th></tr></thead><tbody><tr><td><code>cb_sessionid</code></td><td>Browser session</td><td>Codeberg session ID (Codeberg-specific name — vanilla Forgejo uses <code>i_like_gitea</code>)</td></tr><tr><td><code>persistent</code></td><td>Weeks / months</td><td>&quot;Remember me&quot; token — this is what actually authenticates the request</td></tr><tr><td><code>techaro.lol-anubis-auth</code></td><td>~7 days (see JWT <code>exp</code>)</td><td>Anubis anti-bot JWT — without it the request gets redirected to a challenge page</td></tr><tr><td><code>x-robot-challenge-2</code></td><td>Session</td><td>Secondary Anubis marker (literal value <code>passed</code>)</td></tr></tbody></table>
+<p>The <code>/issues/resolve_conversation</code> route does <strong>not</strong> require a CSRF token despite being state-changing — cookies alone are sufficient. (Other Codeberg form endpoints do require CSRF; this one is the exception.)</p>
+<p>The practical horizon is the Anubis JWT (~7 days). After it expires, calls start failing with <code>HTTP 302/303 → /user/login</code> and you re-extract from a fresh browser tab.</p>
+<p><strong>Three-cookie shortcut (verified 2026-06-05 and 2026-06-08, 18+ POSTs across multiple PRs):</strong> <code>/issues/resolve_conversation</code> often accepts POSTs without the <code>techaro.lol-anubis-auth</code> JWT — just <code>cb_sessionid</code> + <code>persistent</code> + <code>x-robot-challenge-2=passed</code> is enough in many sessions. Try the POST with whatever cookies are available; only re-extract the Anubis JWT if you get a 303. The cookie that rotates fastest is <code>cb_sessionid</code> — when you hit a 303 after working calls earlier in the day, refresh <code>cb_sessionid</code> first before reaching for the others. The required <code>Cookie:</code> header form is:</p>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">Cookie: cb_sessionid=&lt;v&gt;; persistent=&lt;v&gt;; x-robot-challenge-2=passed</span><br></div></code></pre></div></div>
+<p>Plus the <code>POST</code> body shape (URL-encoded form, no CSRF token):</p>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">action=Resolve&amp;comment_id=&lt;review_comment_id&gt;&amp;origin=PullDetails</span><br></div></code></pre></div></div>
+<p>Returns <code>HTTP 200</code> with empty body on success. Success is confirmed by re-reading <code>GET /api/v1/repos/{o}/{r}/pulls/{n}/reviews/{review_id}/comments</code> and checking <code>.resolver.login</code> is set — the <code>.resolved_at</code> field stays <code>null</code> even on a successful resolve.</p>
+<p><strong><code>cb-cookies-load</code> cannot run from Claude Code&#x27;s Bash.</strong> <code>age -d</code> reads the SSH key file directly and prompts for the passphrase via <code>/dev/tty</code>. Claude&#x27;s Bash is non-interactive — decryption fails with <code>failed to obtain passphrase</code>. The exported <code>$CB_COOKIES</code> <em>is</em> inherited by child shells launched from a terminal that already ran <code>cb-cookies-load</code>, so the smoothest workflow is: you run <code>cb-cookies-load</code> in the terminal first, then launch <code>claude</code> from that same terminal. Alternative fallback (when launching from a fresh terminal): paste the cookie string once into the chat, write it to a <code>chmod 600</code> tmpfile, <code>export CB_COOKIES=&quot;$(cat /tmp/&lt;file&gt;)&quot;</code> for the duration of the session, then <code>rm</code> + <code>unset</code> afterwards.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="setup">Setup<a href="#setup" class="hash-link" aria-label="Directe link naar Setup" title="Directe link naar Setup" translate="no">​</a></h3>
+<ol>
+<li class="">
+<p><strong>Install <code>age</code></strong> (modern file encryption, single binary):</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">sudo apt install -y age</span><br></div></code></pre></div></div>
+</li>
+<li class="">
+<p><strong>Extract the four cookies from a logged-in Codeberg browser tab.</strong> DevTools → <strong>Application</strong> (Chrome) or <strong>Storage</strong> (Firefox) → <strong>Cookies</strong> → <code>https://codeberg.org</code>. Copy the <strong>Value</strong> of each cookie above. Join them with <code>; </code> into a single string:</p>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">cb_sessionid=&lt;v&gt;; persistent=&lt;v&gt;; techaro.lol-anubis-auth=&lt;v&gt;; x-robot-challenge-2=passed</span><br></div></code></pre></div></div>
+</li>
+<li class="">
+<p><strong>Encrypt the cookie string to disk</strong>, using your Codeberg SSH pubkey as the recipient so the same key that already secures <code>git push</code> also secures these cookies:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">age -R ~/.ssh/id_ed25519_codeberg.pub -o ~/.codeberg-cookies.age</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"># paste the cookie string above, press Enter, then Ctrl-D</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">chmod 600 ~/.codeberg-cookies.age</span><br></div></code></pre></div></div>
+<p>The encrypted blob is ~800 bytes. Anyone reading the file without your SSH private key cannot decrypt it.</p>
+</li>
+<li class="">
+<p><strong>Add three shell helpers to <code>~/.bashrc</code></strong>:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">cat &gt;&gt; ~/.bashrc &lt;&lt;&#x27;EOF&#x27;</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"># ---- Codeberg web-session cookies (for resolve-conversation form posts) ----</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"># Encrypted at ~/.codeberg-cookies.age via the Codeberg SSH pubkey.</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"># Decryption prompts for the SSH passphrase once per terminal session.</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"># See ~/.github/docs/claude/codeberg-auth-setup.md Step 11.</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">cb-cookies-load() {</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    if [ -n &quot;$CB_COOKIES&quot; ]; then</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">        echo &quot;Codeberg cookies already loaded in this shell.&quot;</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">        return 0</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    fi</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    if [ ! -f ~/.codeberg-cookies.age ]; then</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">        echo &quot;cb-cookies-load: ~/.codeberg-cookies.age not found.&quot; &gt;&amp;2</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">        echo &quot;  Re-extract from a logged-in Codeberg browser tab and run cb-cookies-refresh.&quot; &gt;&amp;2</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">        return 1</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    fi</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    local out</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    out=&quot;$(age -d -i ~/.ssh/id_ed25519_codeberg ~/.codeberg-cookies.age)&quot; || return 1</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    export CB_COOKIES=&quot;$out&quot;</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    echo &quot;Codeberg cookies loaded into \$CB_COOKIES (this shell only).&quot;</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">}</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">cb-cookies-refresh() {</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    echo &quot;Paste the full Codeberg cookie string (single line, semicolon-separated), then Enter:&quot;</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    local new</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    IFS= read -rs new</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    echo</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    if [ -z &quot;$new&quot; ]; then</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">        echo &quot;cb-cookies-refresh: empty input, aborted.&quot; &gt;&amp;2</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">        return 1</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    fi</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    printf &#x27;%s&#x27; &quot;$new&quot; | age -R ~/.ssh/id_ed25519_codeberg.pub -o ~/.codeberg-cookies.age || return 1</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    chmod 600 ~/.codeberg-cookies.age</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    unset new</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    export CB_COOKIES=&quot;&quot;</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    echo &quot;Codeberg cookies re-encrypted at ~/.codeberg-cookies.age. Run cb-cookies-load to use them.&quot;</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">}</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain" style="display:inline-block"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">cb-cookies-clear() {</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    unset CB_COOKIES</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    echo &quot;Codeberg cookies cleared from this shell.&quot;</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">}</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">EOF</span><br></div></code></pre></div></div>
+<p>Open a new terminal so <code>~/.bashrc</code> reloads.</p>
+</li>
+</ol>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="daily-use">Daily use<a href="#daily-use" class="hash-link" aria-label="Directe link naar Daily use" title="Directe link naar Daily use" translate="no">​</a></h3>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">cb-cookies-load    # once per terminal session (prompts for SSH passphrase)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"># ... Claude or you can now POST to /issues/resolve_conversation with $CB_COOKIES ...</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">cb-cookies-clear   # when done, hygiene</span><br></div></code></pre></div></div>
+<p>The <code>/review-pr</code> skill detects <code>~/.codeberg-cookies.age</code> automatically and, on a Codeberg re-review, prompts you to run <code>cb-cookies-load</code> instead of re-pasting cookies each time.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="refreshing-when-cookies-expire-7-days">Refreshing when cookies expire (~7 days)<a href="#refreshing-when-cookies-expire-7-days" class="hash-link" aria-label="Directe link naar Refreshing when cookies expire (~7 days)" title="Directe link naar Refreshing when cookies expire (~7 days)" translate="no">​</a></h3>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">cb-cookies-refresh   # paste fresh cookie string from the browser, Enter</span><br></div></code></pre></div></div>
+<p>The function reads the new value with <code>IFS= read -rs</code> so the cookie string never appears on a command line, in process listings, or in shell history.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="reading-the-anubis-jwt-expiry-sanity-check">Reading the Anubis JWT expiry (sanity check)<a href="#reading-the-anubis-jwt-expiry-sanity-check" class="hash-link" aria-label="Directe link naar Reading the Anubis JWT expiry (sanity check)" title="Directe link naar Reading the Anubis JWT expiry (sanity check)" translate="no">​</a></h3>
+<p>The <code>techaro.lol-anubis-auth</code> cookie is a JWT — decode it to know exactly when it expires:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">python3 -c &quot;</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">import base64, json, sys</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">jwt = sys.argv[1].split(&#x27;.&#x27;)[1]</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">print(json.loads(base64.urlsafe_b64decode(jwt + &#x27;==&#x27;)))</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">&quot; &#x27;&lt;paste-jwt-here&gt;&#x27;</span><br></div></code></pre></div></div>
+<p>Output includes <code>exp: &lt;unix-timestamp&gt;</code>; convert with <code>date -d @&lt;ts&gt;</code> to a human date.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="why-an-existing-ssh-key-instead-of-gpg-or-a-fresh-age-identity">Why an existing SSH key instead of <code>gpg</code> or a fresh <code>age</code> identity?<a href="#why-an-existing-ssh-key-instead-of-gpg-or-a-fresh-age-identity" class="hash-link" aria-label="Directe link naar why-an-existing-ssh-key-instead-of-gpg-or-a-fresh-age-identity" title="Directe link naar why-an-existing-ssh-key-instead-of-gpg-or-a-fresh-age-identity" translate="no">​</a></h3>
+<ul>
+<li class=""><strong><code>age</code> + SSH key</strong> — re-uses the key you already have. The same <code>keychain</code>-unlocked passphrase that protects <code>git push</code> also protects the cookies. No new credential surface.</li>
+<li class=""><code>gpg</code> / <code>pass</code> — works fine but requires a GPG keyring you may not have set up.</li>
+<li class="">A fresh <code>age</code> identity (<code>age-keygen</code>) — adds another secret to store somewhere. Net loss of simplicity.</li>
+</ul>
+<p>The trade-off with the SSH key route: <code>age</code> reads the key file directly and cannot tap the SSH agent, so each shell session prompts for the SSH passphrase once on first <code>cb-cookies-load</code>. That&#x27;s the same pattern as <code>git push</code> over SSH and acceptable for a once-per-terminal cost.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="how-claude-code-uses-this-setup">How Claude Code uses this setup<a href="#how-claude-code-uses-this-setup" class="hash-link" aria-label="Directe link naar How Claude Code uses this setup" title="Directe link naar How Claude Code uses this setup" translate="no">​</a></h2>
+<p>Claude Code&#x27;s Bash tool inherits your shell environment, including <code>SSH_AUTH_SOCK</code> from keychain and the <code>~/.config/tea/config.yml</code> token. That means:</p>
+<ul>
+<li class=""><code>git clone</code>, <code>fetch</code>, <code>push</code>, <code>pull</code> against Codeberg — <strong>just works</strong> as long as you&#x27;ve entered the keychain passphrase since the last WSL boot.</li>
+<li class=""><code>tea</code> commands that don&#x27;t prompt (e.g. <code>tea pulls list</code>, simple reads) — <strong>just work</strong> because the token is already on disk.</li>
+<li class="">REST calls via <code>curl https://codeberg.org/api/v1/...</code> with <code>-H &quot;Authorization: token &lt;TOKEN&gt;&quot;</code> — <strong>just work</strong> once Claude can read the token (see the Bash permission rule below).</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="edge-case-1-stale-ssh_auth_sock-from-an-old-claude-code-launch">Edge case 1: stale <code>SSH_AUTH_SOCK</code> from an old Claude Code launch<a href="#edge-case-1-stale-ssh_auth_sock-from-an-old-claude-code-launch" class="hash-link" aria-label="Directe link naar edge-case-1-stale-ssh_auth_sock-from-an-old-claude-code-launch" title="Directe link naar edge-case-1-stale-ssh_auth_sock-from-an-old-claude-code-launch" translate="no">​</a></h3>
+<p>Claude Code&#x27;s <em>non-login non-interactive</em> Bash shells don&#x27;t source <code>~/.bashrc</code> or <code>~/.profile</code>, so the <code>SSH_AUTH_SOCK</code> Claude inherits is whatever your shell environment had at Claude-launch time. If keychain&#x27;s agent has since died (reboot) or the agent was replaced (running <code>eval $(ssh-agent)</code> manually in a sibling terminal), Claude&#x27;s <code>git push</code> to Codeberg fails with <code>ssh_askpass: ... No such file</code> followed by <code>Permission denied (publickey)</code> — and there&#x27;s no way to type the passphrase from Claude&#x27;s TTY-less shell.</p>
+<p><strong>Two recoveries</strong>:</p>
+<ul>
+<li class="">
+<p><strong>Sustainable</strong>: close Claude Code, open a fresh terminal where <code>~/.bashrc</code> has run (you&#x27;ll see &quot;* ssh-agent / ssh-add ...&quot; from keychain), then relaunch Claude Code. The new Claude inherits keychain&#x27;s live <code>SSH_AUTH_SOCK</code>.</p>
+</li>
+<li class="">
+<p><strong>In-session, if relaunching is inconvenient</strong>: source the keychain env file at the start of any single Bash command that needs SSH:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">. ~/.keychain/$(hostname)-sh &amp;&amp; git push codeberg &lt;branch&gt;</span><br></div></code></pre></div></div>
+<p>Keychain writes a stable <code>$HOME/.keychain/&lt;HOSTNAME&gt;-sh</code> file with the current <code>SSH_AUTH_SOCK</code> / <code>SSH_AGENT_PID</code> <code>export</code> lines. Sourcing it gives the current Bash command access to the live agent without restarting Claude.</p>
+</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="edge-case-2-tea-pulls-create-cannot-run-from-claude-code">Edge case 2: <code>tea pulls create</code> cannot run from Claude Code<a href="#edge-case-2-tea-pulls-create-cannot-run-from-claude-code" class="hash-link" aria-label="Directe link naar edge-case-2-tea-pulls-create-cannot-run-from-claude-code" title="Directe link naar edge-case-2-tea-pulls-create-cannot-run-from-claude-code" translate="no">​</a></h3>
+<p><code>tea</code> v0.11.0 uses <a href="https://github.com/charmbracelet/huh" target="_blank" rel="noopener noreferrer" class=""><code>huh</code></a> for its final confirmation prompt. <code>huh</code> opens <code>/dev/tty</code> directly — it does <strong>not</strong> read stdin — so piped input (<code>yes | tea ...</code>), <code>setsid -w bash -c &#x27;tea ... &lt; /dev/zero&#x27;</code>, <code>--login codeberg</code> + all fields specified, and any other way of avoiding a real interactive operator all fail with:</p>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">huh: could not open a new TTY: open /dev/tty: no such device or address</span><br></div></code></pre></div></div>
+<p><code>script -q -c &#x27;tea ...&#x27; /tmp/log</code> <em>does</em> create a PTY, but tea then hangs because there&#x27;s still no operator typing y/n at the prompt. There is no <code>--non-interactive</code>, <code>--yes</code>, or env-var override in tea v0.11.0. Until upstream adds one, you cannot run <code>tea pulls create</code> (or any other tea command that confirms) from Claude Code.</p>
+<p><strong>Workaround — direct Codeberg REST API call</strong>:</p>
+<p>The Codeberg REST API has no such prompt. Claude can create PRs, post comments, edit labels, etc. directly via <code>curl</code> using the same token tea has on disk. One-time setup:</p>
+<ol>
+<li class="">
+<p>Add a Bash permission rule to your <strong>global</strong> <code>~/.claude/settings.json</code> so Claude can read the token. The auto-mode classifier blocks credential-file reads even when <code>Bash(cat:*)</code> is in the allow list — you need an explicit path rule:</p>
+<div class="language-json codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-json codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token punctuation" style="color:rgb(199, 146, 234)">{</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">  </span><span class="token property">&quot;permissions&quot;</span><span class="token operator" style="color:rgb(137, 221, 255)">:</span><span class="token plain"> </span><span class="token punctuation" style="color:rgb(199, 146, 234)">{</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    </span><span class="token property">&quot;allow&quot;</span><span class="token operator" style="color:rgb(137, 221, 255)">:</span><span class="token plain"> </span><span class="token punctuation" style="color:rgb(199, 146, 234)">[</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">      </span><span class="token string" style="color:rgb(195, 232, 141)">&quot;Bash(cat:*)&quot;</span><span class="token punctuation" style="color:rgb(199, 146, 234)">,</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">      </span><span class="token string" style="color:rgb(195, 232, 141)">&quot;Bash(cat:~/.config/tea/config.yml*)&quot;</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    </span><span class="token punctuation" style="color:rgb(199, 146, 234)">]</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">  </span><span class="token punctuation" style="color:rgb(199, 146, 234)">}</span><span class="token plain"></span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain"></span><span class="token punctuation" style="color:rgb(199, 146, 234)">}</span><br></div></code></pre></div></div>
+<p>The settings file is often <code>chattr +i</code>&#x27;d for safety; remove with <code>sudo chattr -i ~/.claude/settings.json</code>, edit, optionally re-apply with <code>sudo chattr +i ...</code> after.</p>
+</li>
+<li class="">
+<p>Claude (and any team member&#x27;s Claude) can now create PRs like this:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">TOKEN=$(grep -E &quot;^\s*token:&quot; ~/.config/tea/config.yml | head -1 | awk &#x27;{print $2}&#x27;)</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">curl -sL -X POST \</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">  -H &quot;Content-Type: application/json&quot; \</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">  -H &quot;Authorization: token ${TOKEN}&quot; \</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">  -d &quot;$(jq -Rn &#x27;{</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    head: &quot;&lt;branch&gt;&quot;,</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    base: &quot;main&quot;,</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    title: &quot;&lt;title&gt;&quot;,</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    body: &quot;&lt;markdown body&gt;&quot;</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">  }&#x27;)&quot; \</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">  &quot;https://codeberg.org/api/v1/repos/Conduction/&lt;repo&gt;/pulls&quot;</span><br></div></code></pre></div></div>
+<p>HTTP <code>201</code> = created; the response JSON has <code>.html_url</code> pointing at the new PR. Sanitize any log echo with <code>sed &#x27;s/[a-f0-9]\{40\}/&lt;TOKEN-REDACTED&gt;/g&#x27;</code> to avoid leaking the token (or any 40-char hex like commit SHAs) in conversation history.</p>
+</li>
+</ol>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="edge-case-3-the-explicit-push-authorization-phrase">Edge case 3: the explicit push-authorization phrase<a href="#edge-case-3-the-explicit-push-authorization-phrase" class="hash-link" aria-label="Directe link naar Edge case 3: the explicit push-authorization phrase" title="Directe link naar Edge case 3: the explicit push-authorization phrase" translate="no">​</a></h3>
+<p>Claude Code&#x27;s safety hook may also block <code>git push</code> until you say one of the explicit phrases (<code>push my changes</code>, <code>push for me</code>, <code>commit and push</code>, <code>please git push</code>) in your message to it. That&#x27;s a separate guardrail layered on top of authentication — auth determines <em>can</em>, the phrase determines <em>should</em>. Both must pass.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="edge-case-4-codeberg-blocks-self-review-verdicts-the-failure-modes-differ">Edge case 4: Codeberg blocks self-review verdicts (the failure modes differ)<a href="#edge-case-4-codeberg-blocks-self-review-verdicts-the-failure-modes-differ" class="hash-link" aria-label="Directe link naar Edge case 4: Codeberg blocks self-review verdicts (the failure modes differ)" title="Directe link naar Edge case 4: Codeberg blocks self-review verdicts (the failure modes differ)" translate="no">​</a></h3>
+<p>Codeberg / Forgejo refuses formal review verdicts (APPROVE / REQUEST_CHANGES) on your own PRs. The two failure modes look different and the recovery is different:</p>
+<ul>
+<li class=""><strong><code>POST /repos/{o}/{r}/pulls/{n}/reviews</code> with <code>event=REQUEST_CHANGES</code></strong> on your own PR — returns <code>HTTP 422 {&quot;message&quot;:&quot;reject your own pull is not allowed&quot;}</code> immediately. Nothing persisted.</li>
+<li class=""><strong><code>POST /repos/{o}/{r}/pulls/{n}/reviews</code> with <code>event=APPROVE</code></strong> on your own PR — returns <code>HTTP 200</code> and creates a review in <code>state=PENDING</code> (a silent draft, visible in the API but not on the PR page). The follow-up <code>POST .../reviews/{id}</code> to submit it then returns <code>422 &quot;approve your own pull is not allowed&quot;</code>. <code>POST .../reviews/{id}/submit</code> returns <code>405</code> (no such endpoint on Forgejo).</li>
+</ul>
+<p><strong>Workflow when reviewing your own Codeberg PR:</strong></p>
+<ol>
+<li class="">
+<p><strong>Detect upfront.</strong> Compare <code>gh api user --jq .login</code> (or <code>tea</code> login) against the PR&#x27;s <code>.user.login</code>. If they match, skip the REST verdict call entirely.</p>
+</li>
+<li class="">
+<p><strong>Post <code>event=COMMENT</code> instead.</strong> <code>event=COMMENT</code> is <em>not</em> blocked on self-review — it accepts the same <code>comments[]</code> array (inline findings) AND carries the verdict text in the review body. Frame the verdict in the body explicitly, e.g.:</p>
+<div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">**APPROVE** (re-review, Standard mode) — all prior findings resolved. Codeberg blocks</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">self-APPROVE so posting this as a COMMENT review; the verdict is the body, not the state.</span><br></div></code></pre></div></div>
+</li>
+<li class="">
+<p><strong>Clean up any PENDING-draft from a prior failed APPROVE attempt</strong> before posting the COMMENT:</p>
+<div class="language-bash codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-bash codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">gh api repos/{o}/{r}/pulls/{n}/reviews \</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    --jq &#x27;.[] | select(.user.login==&quot;&lt;me&gt;&quot; and .state==&quot;PENDING&quot;) | .id&#x27; \</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    | while read id; do</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">        curl -X DELETE -H &quot;Authorization: token $TOKEN&quot; \</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">            &quot;https://codeberg.org/api/v1/repos/{o}/{r}/pulls/{n}/reviews/$id&quot;</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">    done   # returns 204 per delete</span><br></div></code></pre></div></div>
+</li>
+</ol>
+<p>Inline-comment posting still works via the normal <code>POST .../reviews</code> with <code>event=COMMENT</code> + <code>comments[]</code> array. The thread resolution flow from Step 11 is unaffected — cookies-form POST resolves the threads regardless of who authored the PR.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="save-your-codeberg-setup-facts-to-claude-memory">Save your Codeberg setup facts to Claude memory<a href="#save-your-codeberg-setup-facts-to-claude-memory" class="hash-link" aria-label="Directe link naar Save your Codeberg setup facts to Claude memory" title="Directe link naar Save your Codeberg setup facts to Claude memory" translate="no">​</a></h2>
+<p>Once this guide is working on your machine, save the host-specific facts (key path, <code>~/.keychain/$(hostname)-sh</code> env-file location, <code>~/.ssh/config</code> host alias) to <strong>global</strong> user memory at <code>~/.claude/CLAUDE.md</code>, <strong>not</strong> to a per-project auto-memory directory under <code>~/.claude/projects/&lt;slug&gt;/memory/</code>. Codeberg auth applies to every repo you touch, so a project-scoped file only fires when Claude is working in that one repo and misses every other Codeberg session.</p>
+<p>Rule of thumb:</p>
+<ul>
+<li class=""><strong>Global (<code>~/.claude/CLAUDE.md</code>)</strong> — per-user, cross-project facts: SSH key path, keychain env-file location, copy-paste preferences, the <code>tea</code> login name. Loaded on every session.</li>
+<li class=""><strong>Project auto-memory (<code>~/.claude/projects/&lt;slug&gt;/memory/</code>)</strong> — project-scoped facts: a repo&#x27;s conventions, ongoing initiatives, recurring review nits in that codebase. Loaded only when Claude opens that repo.</li>
+</ul>
+<p>Either way, memory entries should link back to this canonical doc so the troubleshooting table stays the single source of truth.</p>
+<p>A ready-to-copy template for the Codeberg-auth section of <code>~/.claude/CLAUDE.md</code> lives in <a class="" href="/nl/claude/example-claude-md-codeberg/">example-claude-md-codeberg.md</a>. Copy that block once per machine and every future Claude Code session — in any repo — reaches the right fix in one step instead of re-diagnosing from scratch.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="troubleshooting">Troubleshooting<a href="#troubleshooting" class="hash-link" aria-label="Directe link naar Troubleshooting" title="Directe link naar Troubleshooting" translate="no">​</a></h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td><code>Permission denied (publickey)</code> on <code>ssh -T git@codeberg.org</code></td><td>Public key not added to Codeberg, or wrong key file referenced in <code>~/.ssh/config</code></td><td>Re-paste <code>~/.ssh/id_ed25519_codeberg.pub</code> at <a href="https://codeberg.org/user/settings/keys" target="_blank" rel="noopener noreferrer" class="">https://codeberg.org/user/settings/keys</a>. Verify <code>IdentityFile</code> in <code>~/.ssh/config</code>.</td></tr><tr><td>SSH config block is being interpreted as shell commands (<code>Host: command not found</code>)</td><td>Pasted block into the shell instead of into <code>~/.ssh/config</code></td><td>Use the <code>cat &gt;&gt; ~/.ssh/config &lt;&lt;&#x27;EOF&#x27;</code> heredoc from Step 3.</td></tr><tr><td>Every <code>git push</code> asks for the passphrase</td><td><code>keychain</code> not installed or not added to <code>~/.bashrc</code></td><td>Step 5. After editing <code>~/.bashrc</code>, <strong>open a new terminal</strong> — keychain only runs on shell start.</td></tr><tr><td>Claude Code&#x27;s Bash hangs on <code>git push</code> and never returns</td><td>Claude Code&#x27;s shell doesn&#x27;t have <code>SSH_AUTH_SOCK</code> — the WSL session it launched from had no agent</td><td>Run <code>keychain ~/.ssh/id_ed25519_codeberg</code> in any shell on the same WSL instance. New Claude Code Bash calls pick up the agent automatically.</td></tr><tr><td><code>tea pulls list</code> errors with <code>could not open a new TTY</code> and no default-login is set</td><td><code>tea</code> is asking for an interactive login selection</td><td>Run <code>tea login default codeberg</code>, or pass <code>--login codeberg</code> to every command.</td></tr><tr><td><code>tea pulls create</code> errors with <code>could not open a new TTY</code> even with <code>--login codeberg</code> + all fields specified</td><td>tea&#x27;s final confirmation prompt uses <code>huh</code>, which opens <code>/dev/tty</code> directly — there is no <code>--yes</code> / <code>--non-interactive</code> flag in v0.11.0</td><td>Use the direct REST API workaround in <a href="#edge-case-2-tea-pulls-create-cannot-run-from-claude-code" class="">Edge case 2 above</a> — <code>curl</code> to <code>POST /api/v1/repos/&lt;owner&gt;/&lt;repo&gt;/pulls</code> with the tea-stored token. Requires the <code>Bash(cat:~/.config/tea/config.yml*)</code> permission rule.</td></tr><tr><td><code>tea login add</code> succeeds but <code>tea pulls create</code> says &quot;401 Unauthorized&quot;</td><td>Token lacks <code>write:repository</code> or <code>write:issue</code></td><td>Regenerate the token with the scopes from Step 7. <code>tea login delete codeberg &amp;&amp; tea login add ...</code>.</td></tr><tr><td>Pushed a branch but no PR appears in the Codeberg UI</td><td>Branches and PRs are separate — pushing a branch never creates a PR by itself</td><td>Run <code>tea pulls create --base development --head &lt;branch&gt; --title &quot;...&quot; --description &quot;...&quot;</code> or open it via the web UI.</td></tr><tr><td>Claude Code refuses to <code>git push</code> even though SSH works</td><td>The safety hook requires an explicit authorisation phrase</td><td>Reply to Claude with &quot;push my changes&quot;, &quot;push for me&quot;, &quot;commit and push&quot;, or &quot;please git push&quot;.</td></tr><tr><td><code>cb-cookies-load</code> succeeds but Claude&#x27;s <code>/issues/resolve_conversation</code> POSTs return <code>HTTP 302/303 → /user/login</code></td><td>Anubis JWT (<code>techaro.lol-anubis-auth</code>) has expired (~7-day lifetime), or the browser session was logged out</td><td>Re-extract all four cookies from a fresh logged-in Codeberg browser tab, then <code>cb-cookies-refresh</code> and <code>cb-cookies-load</code> again. Step 11.</td></tr><tr><td><code>age: failed to obtain passphrase: ... /dev/tty is not available</code> when running <code>cb-cookies-load</code> from a non-interactive shell</td><td><code>age</code> reads the SSH key file directly and prompts for the passphrase via <code>/dev/tty</code>; it cannot use the <code>ssh-agent</code></td><td>Run <code>cb-cookies-load</code> once in an interactive terminal <em>before</em> the non-interactive shell starts. The exported <code>$CB_COOKIES</code> is inherited by every child shell launched from there.</td></tr></tbody></table>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="bidirectional--migration-notes">Bidirectional / migration notes<a href="#bidirectional--migration-notes" class="hash-link" aria-label="Directe link naar Bidirectional / migration notes" title="Directe link naar Bidirectional / migration notes" translate="no">​</a></h2>
+<p>The migration to Codeberg may reverse — Conduction&#x27;s tooling is being kept <strong>bidirectional</strong>, not Codeberg-only:</p>
+<ul>
+<li class="">The same SSH key works on GitHub too — add the same <code>.pub</code> to <a href="https://github.com/settings/keys" target="_blank" rel="noopener noreferrer" class="">https://github.com/settings/keys</a> and your existing GitHub workflow keeps working unchanged.</li>
+<li class="">Skills that talk to git hosts (<code>create-pr</code>, <code>review-pr</code>, <code>report-out</code>, <code>opsx-*</code>) detect the platform from the git remote URL and dispatch to <code>tea</code> / <code>gh</code> / <code>glab</code> accordingly. No skill is Codeberg-only.</li>
+<li class="">If you ever need to switch a repo back to GitHub: <code>git remote set-url origin git@github.com:ConductionNL/&lt;repo&gt;.git</code> — reversible at any time.</li>
+</ul>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="see-also">See also<a href="#see-also" class="hash-link" aria-label="Directe link naar See also" title="Directe link naar See also" translate="no">​</a></h2>
+<ul>
+<li class=""><a class="" href="/nl/claude/example-claude-md-codeberg/">Example <code>~/.claude/CLAUDE.md</code> snippet</a> — ready-to-copy Codeberg-auth section for your global Claude memory</li>
+<li class=""><a class="" href="/nl/claude/workstation-setup/">Workstation Setup</a> — the broader new-machine guide; this doc plugs into the GitHub CLI / Codeberg CLI section</li>
+<li class=""><a class="" href="/nl/claude/global-claude-settings/">Global Claude settings</a> — read-only Bash policy + write-approval hooks (the source of the <code>push my changes</code> phrase)</li>
+<li class=""><a href="https://codeberg.org/user/settings/keys" target="_blank" rel="noopener noreferrer" class="">Codeberg user settings — Keys</a></li>
+<li class=""><a href="https://codeberg.org/user/settings/applications" target="_blank" rel="noopener noreferrer" class="">Codeberg user settings — Applications</a></li>
+<li class=""><a href="https://gitea.com/gitea/tea" target="_blank" rel="noopener noreferrer" class=""><code>tea</code> documentation</a> — full command reference for the Gitea CLI</li>
+<li class=""><a href="https://codeberg.org/api/swagger" target="_blank" rel="noopener noreferrer" class="">Codeberg API reference</a> — Swagger UI for the REST API surface (for the operations <code>tea</code> does not yet wrap)</li>
+<li class=""><a href="https://github.com/FiloSottile/age" target="_blank" rel="noopener noreferrer" class=""><code>age</code> documentation</a> — modern file encryption; used in Step 11 to protect the Codeberg web-session cookies with your existing Codeberg SSH key</li>
+</ul></div><footer class="theme-doc-footer docusaurus-mt-lg"><div class="row margin-top--sm theme-doc-footer-edit-meta-row"><div class="col noPrint_WFHX"><a href="https://github.com/ConductionNL/.github/tree/main/../docs/claude/codeberg-auth-setup.md" target="_blank" rel="noopener noreferrer" class="theme-edit-this-page"><svg fill="currentColor" height="20" width="20" viewBox="0 0 40 40" class="iconEdit_Z9Sw" aria-hidden="true"><g><path d="m34.5 11.7l-3 3.1-6.3-6.3 3.1-3q0.5-0.5 1.2-0.5t1.1 0.5l3.9 3.9q0.5 0.4 0.5 1.1t-0.5 1.2z m-29.5 17.1l18.4-18.5 6.3 6.3-18.4 18.4h-6.3v-6.2z"></path></g></svg>Deze pagina bewerken</a></div><div class="col lastUpdated_JAkA"></div></div></footer></article><nav class="docusaurus-mt-lg pagination-nav" aria-label="Documentatiepagina&#x27;s"></nav></div></div><div class="col col--3"><div class="tableOfContents_bqdL thin-scrollbar theme-doc-toc-desktop"><ul class="table-of-contents table-of-contents__left-border"><li><a href="#prerequisites" class="table-of-contents__link toc-highlight">Prerequisites</a></li><li><a href="#step-1--generate-an-ssh-key" class="table-of-contents__link toc-highlight">Step 1 — Generate an SSH key</a></li><li><a href="#step-2--add-the-public-key-to-codeberg" class="table-of-contents__link toc-highlight">Step 2 — Add the public key to Codeberg</a></li><li><a href="#step-3--tell-ssh-to-use-this-key-for-codeberg" class="table-of-contents__link toc-highlight">Step 3 — Tell SSH to use this key for Codeberg</a></li><li><a href="#step-4--verify-ssh-works" class="table-of-contents__link toc-highlight">Step 4 — Verify SSH works</a></li><li><a href="#step-5--set-up-keychain-so-the-passphrase-persists-across-shells" class="table-of-contents__link toc-highlight">Step 5 — Set up keychain so the passphrase persists across shells</a></li><li><a href="#step-6--install-the-tea-cli-for-prissue-api-operations" class="table-of-contents__link toc-highlight">Step 6 — Install the <code>tea</code> CLI for PR/issue API operations</a></li><li><a href="#step-7--create-a-codeberg-api-token" class="table-of-contents__link toc-highlight">Step 7 — Create a Codeberg API token</a></li><li><a href="#step-8--tell-tea-about-the-token" class="table-of-contents__link toc-highlight">Step 8 — Tell <code>tea</code> about the token</a></li><li><a href="#step-9--switch-existing-repo-remotes-to-codeberg" class="table-of-contents__link toc-highlight">Step 9 — Switch existing repo remotes to Codeberg</a></li><li><a href="#step-10--install-the-vs-code-gitea-extension-optional-but-recommended" class="table-of-contents__link toc-highlight">Step 10 — Install the VS Code Gitea extension (optional but recommended)</a></li><li><a href="#step-11--optional-web-session-cookies-for-pr-thread-resolution" class="table-of-contents__link toc-highlight">Step 11 — Optional: web-session cookies for PR thread resolution</a><ul><li><a href="#what-this-is-for" class="table-of-contents__link toc-highlight">What this is for</a></li><li><a href="#how-it-works" class="table-of-contents__link toc-highlight">How it works</a></li><li><a href="#setup" class="table-of-contents__link toc-highlight">Setup</a></li><li><a href="#daily-use" class="table-of-contents__link toc-highlight">Daily use</a></li><li><a href="#refreshing-when-cookies-expire-7-days" class="table-of-contents__link toc-highlight">Refreshing when cookies expire (~7 days)</a></li><li><a href="#reading-the-anubis-jwt-expiry-sanity-check" class="table-of-contents__link toc-highlight">Reading the Anubis JWT expiry (sanity check)</a></li><li><a href="#why-an-existing-ssh-key-instead-of-gpg-or-a-fresh-age-identity" class="table-of-contents__link toc-highlight">Why an existing SSH key instead of <code>gpg</code> or a fresh <code>age</code> identity?</a></li></ul></li><li><a href="#how-claude-code-uses-this-setup" class="table-of-contents__link toc-highlight">How Claude Code uses this setup</a><ul><li><a href="#edge-case-1-stale-ssh_auth_sock-from-an-old-claude-code-launch" class="table-of-contents__link toc-highlight">Edge case 1: stale <code>SSH_AUTH_SOCK</code> from an old Claude Code launch</a></li><li><a href="#edge-case-2-tea-pulls-create-cannot-run-from-claude-code" class="table-of-contents__link toc-highlight">Edge case 2: <code>tea pulls create</code> cannot run from Claude Code</a></li><li><a href="#edge-case-3-the-explicit-push-authorization-phrase" class="table-of-contents__link toc-highlight">Edge case 3: the explicit push-authorization phrase</a></li><li><a href="#edge-case-4-codeberg-blocks-self-review-verdicts-the-failure-modes-differ" class="table-of-contents__link toc-highlight">Edge case 4: Codeberg blocks self-review verdicts (the failure modes differ)</a></li></ul></li><li><a href="#save-your-codeberg-setup-facts-to-claude-memory" class="table-of-contents__link toc-highlight">Save your Codeberg setup facts to Claude memory</a></li><li><a href="#troubleshooting" class="table-of-contents__link toc-highlight">Troubleshooting</a></li><li><a href="#bidirectional--migration-notes" class="table-of-contents__link toc-highlight">Bidirectional / migration notes</a></li><li><a href="#see-also" class="table-of-contents__link toc-highlight">See also</a></li></ul></div></div></div></div></main></div></div></div><footer class="canal-footer" aria-label="Site footer"><div class="skyline" role="presentation"></div><div class="kade"><div class="kade-items"><svg class="ki ki-bike-1" width="22" height="16" viewBox="0 -2 22 18" aria-hidden="true"><g stroke="var(--c-cobalt-900)" stroke-width="1.4" fill="none" stroke-linecap="round"><circle cx="4" cy="12" r="3"></circle><circle cx="18" cy="12" r="3"></circle><line x1="4" y1="12" x2="11" y2="6"></line><line x1="11" y1="6" x2="18" y2="12"></line><line x1="11" y1="6" x2="14" y2="12"></line><line x1="11" y1="6" x2="11" y2="3"></line><line x1="11" y1="3" x2="14" y2="6"></line></g><circle cx="11" cy="1.5" r="1.6" fill="var(--c-cobalt-900)"></circle></svg><svg class="ki ki-car-1" width="38" height="16" viewBox="0 0 38 16" aria-hidden="true"><rect x="0" y="6" width="38" height="6" rx="2" fill="#C8482F"></rect><path d="M 5,6 L 9,2 L 29,2 L 33,6 Z" fill="#C8482F"></path><rect x="11" y="3" width="6" height="3" fill="rgba(255,255,255,0.5)"></rect><rect x="20" y="3" width="6" height="3" fill="rgba(255,255,255,0.5)"></rect><circle cx="9" cy="13" r="2" fill="var(--c-cobalt-900)"></circle><circle cx="29" cy="13" r="2" fill="var(--c-cobalt-900)"></circle></svg><svg class="ki ki-bike-2" width="22" height="16" viewBox="0 -2 22 18" aria-hidden="true"><g stroke="var(--c-cobalt-900)" stroke-width="1.4" fill="none" stroke-linecap="round"><circle cx="4" cy="12" r="3"></circle><circle cx="18" cy="12" r="3"></circle><line x1="4" y1="12" x2="11" y2="6"></line><line x1="11" y1="6" x2="18" y2="12"></line><line x1="11" y1="6" x2="14" y2="12"></line><line x1="11" y1="6" x2="11" y2="3"></line><line x1="11" y1="3" x2="14" y2="6"></line></g><circle cx="11" cy="1.5" r="1.6" fill="var(--c-cobalt-900)"></circle></svg><svg class="ki ki-car-2" width="38" height="16" viewBox="0 0 38 16" aria-hidden="true"><rect x="0" y="6" width="38" height="6" rx="2" fill="var(--c-cobalt-900)"></rect><path d="M 5,6 L 9,2 L 29,2 L 33,6 Z" fill="var(--c-cobalt-900)"></path><rect x="11" y="3" width="6" height="3" fill="rgba(255,255,255,0.4)"></rect><rect x="20" y="3" width="6" height="3" fill="rgba(255,255,255,0.4)"></rect><circle cx="9" cy="13" r="2" fill="#C8482F"></circle><circle cx="29" cy="13" r="2" fill="#C8482F"></circle></svg></div></div><div class="water"><div class="canal-items"><svg class="ci ci-cruise" width="120" height="28" viewBox="0 -10 120 28" aria-hidden="true"><line x1="2" y1="14" x2="2" y2="-9" stroke="var(--c-orange-knvb)" stroke-width="0.9"></line><rect x="2.5" y="-9" width="9" height="2" fill="#AE1C28"></rect><rect x="2.5" y="-7" width="9" height="2" fill="#FFFFFF"></rect><rect x="2.5" y="-5" width="9" height="2" fill="#21468B"></rect><path d="M 0,16 L 6,18 L 114,18 L 120,16 L 120,11 L 0,11 Z" fill="var(--c-orange-knvb)"></path><rect x="8" y="5" width="104" height="6" fill="var(--c-orange-knvb)"></rect><path d="M 8,5 Q 60,0 112,5 L 8,5 Z" fill="var(--c-orange-knvb)"></path><g fill="rgba(255,247,210,0.85)"><rect x="14" y="7" width="6" height="3"></rect><rect x="22" y="7" width="6" height="3"></rect><rect x="30" y="7" width="6" height="3"></rect><rect x="38" y="7" width="6" height="3"></rect><rect x="46" y="7" width="6" height="3"></rect><rect x="54" y="7" width="6" height="3"></rect><rect x="62" y="7" width="6" height="3"></rect><rect x="70" y="7" width="6" height="3"></rect><rect x="78" y="7" width="6" height="3"></rect><rect x="86" y="7" width="6" height="3"></rect><rect x="94" y="7" width="6" height="3"></rect><rect x="102" y="7" width="6" height="3"></rect></g></svg><svg class="ci ci-sloep" width="50" height="20" viewBox="0 -2 50 20" aria-hidden="true"><path d="M 0,12 L 4,16 L 46,16 L 50,12 L 50,8 L 0,8 Z" fill="var(--c-orange-knvb)"></path><rect x="20" y="2" width="12" height="6" rx="1" fill="var(--c-orange-knvb)"></rect><circle cx="26" cy="0" r="1.4" fill="var(--c-orange-knvb)"></circle></svg><svg class="ci ci-row" width="44" height="16" viewBox="-2 0 48 16" aria-hidden="true"><path d="M 0,10 L 4,14 L 40,14 L 44,10 Z" fill="var(--c-orange-knvb)"></path><line x1="8" y1="10" x2="0" y2="3" stroke="var(--c-orange-knvb)" stroke-width="1.2" stroke-linecap="round"></line><line x1="36" y1="10" x2="44" y2="3" stroke="var(--c-orange-knvb)" stroke-width="1.2" stroke-linecap="round"></line><circle cx="22" cy="7" r="1.6" fill="var(--c-orange-knvb)"></circle></svg><svg class="ci ci-swim" width="26" height="10" viewBox="-3 0 30 10" aria-hidden="true"><ellipse cx="13" cy="6" rx="7" ry="1.4" fill="var(--c-orange-knvb)"></ellipse><circle cx="17" cy="4" r="1.7" fill="var(--c-orange-knvb)"></circle><line x1="13" y1="5" x2="11" y2="3" stroke="var(--c-orange-knvb)" stroke-width="1" stroke-linecap="round"></line><line x1="-3" y1="6" x2="2" y2="6" stroke="var(--c-orange-knvb)" stroke-width="0.7" opacity="0.55"></line><line x1="0" y1="8" x2="3" y2="8" stroke="var(--c-orange-knvb)" stroke-width="0.7" opacity="0.4"></line></svg><svg class="ci ci-periscope" width="14" height="26" viewBox="-3 -2 18 28" aria-hidden="true"><rect x="4" y="4" width="2" height="18" fill="var(--c-orange-knvb)"></rect><rect x="0" y="0" width="9" height="3" fill="var(--c-orange-knvb)"></rect><rect x="4" y="3" width="2" height="2" fill="var(--c-orange-knvb)"></rect><ellipse cx="5" cy="24" rx="7" ry="0.9" fill="var(--c-orange-knvb)" opacity="0.5"></ellipse></svg><svg class="ci ci-whale" width="76" height="18" viewBox="-3 -4 82 22" aria-hidden="true"><path d="M 0,12 Q 0,4 26,3 Q 54,2 64,7 L 72,4 L 68,9 L 72,14 L 64,11 Q 54,14 26,14 Q 6,14 0,12 Z" fill="var(--c-orange-knvb)"></path><g opacity="0.55" stroke="var(--c-orange-knvb)" stroke-width="1" stroke-linecap="round"><line x1="22" y1="2" x2="20" y2="-3"></line><line x1="25" y1="2" x2="25" y2="-4"></line><line x1="28" y1="2" x2="30" y2="-3"></line></g></svg><svg class="ci ci-hover" width="74" height="26" viewBox="0 -4 74 28" aria-hidden="true"><ellipse cx="37" cy="22" rx="37" ry="2.5" fill="var(--c-orange-knvb)" opacity="0.4"></ellipse><path d="M 6,18 L 10,10 L 64,10 L 68,18 Z" fill="var(--c-orange-knvb)"></path><path d="M 14,10 Q 37,-4 60,10 L 14,10 Z" fill="var(--c-orange-knvb)"></path><ellipse cx="37" cy="4" rx="16" ry="3.2" fill="rgba(255,247,210,0.7)"></ellipse><polygon points="37,11 42,13.5 42,16.5 37,19 32,16.5 32,13.5" fill="#FFFFFF"></polygon><text x="37" y="17.4" font-size="4" text-anchor="middle" fill="var(--c-orange-knvb)" font-family="sans-serif" font-weight="900">C</text><g stroke="var(--c-orange-knvb)" stroke-width="0.7" opacity="0.6"><line x1="8" y1="22" x2="12" y2="22"></line><line x1="16" y1="22" x2="20" y2="22"></line><line x1="26" y1="22" x2="30" y2="22"></line><line x1="36" y1="22" x2="40" y2="22"></line><line x1="46" y1="22" x2="50" y2="22"></line><line x1="56" y1="22" x2="60" y2="22"></line></g></svg></div><svg class="canal-waves" viewBox="0 0 1400 500" preserveAspectRatio="none" aria-hidden="true"><path class="w1" d="M 0,96 L 140,82 L 280,96 L 420,82 L 560,96 L 700,82 L 840,96 L 980,82 L 1120,96 L 1260,82 L 1400,96"></path><path class="w2" d="M 0,206 L 180,182 L 360,206 L 540,182 L 720,206 L 900,182 L 1080,206 L 1260,182 L 1400,200"></path><path class="w3" d="M 0,362 L 220,332 L 440,362 L 660,332 L 880,362 L 1100,332 L 1320,362 L 1400,348"></path></svg><div class="footer-grid"><div class="brand"><div class="wm">Conduction</div><p>Open-source apps for <span class="next-blue">Nextcloud</span>. Built and maintained by Conduction in Amsterdam, released under EUPL-1.2.</p><div class="triad"><span><span class="h"></span>Conduction<!-- --> <svg class="heart" viewBox="0 0 24 24" fill="currentColor" aria-label="loves" role="img"><path d="M12 21s-6.7-4.35-9.2-8.4C.8 9.2 2 5.5 5.2 4.7c2-.5 3.8.4 4.8 1.9 1-1.5 2.8-2.4 4.8-1.9 3.2.8 4.4 4.5 2.4 7.9C18.7 16.65 12 21 12 21z"></path></svg> <a href="https://nextcloud.com" target="_blank" rel="noopener noreferrer" class="next-blue">Nextcloud</a></span></div><div class="socials"><a href="https://github.com/ConductionNL" aria-label="GitHub" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="filled" d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.04 1.53 1.04.9 1.53 2.36 1.09 2.93.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.6 9.6 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.93.36.31.68.92.68 1.86v2.76c0 .27.18.58.69.48A10 10 0 0 0 12 2z"></path></svg></a><a href="https://www.linkedin.com/company/conduction" aria-label="LinkedIn" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-4 0v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle class="filled" cx="4" cy="4" r="2"></circle></svg></a><a href="mailto:info@conduction.nl" aria-label="Email info@conduction.nl"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 7l9 6 9-6"></path></svg></a><a href="tel:+31853036840" aria-label="Phone +31 (0)85 303 6840"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.72 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0 1 22 16.92z"></path></svg></a><a href="https://maps.google.com/?q=Lauriergracht+14h+Amsterdam" aria-label="Lauriergracht 14h, Amsterdam, open in Google Maps" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg></a></div></div><div><h4>Documentatie</h4><ul><li><a href="https://github.com/orgs/ConductionNL/projects/4" target="_blank" rel="noopener noreferrer">Roadmap</a></li><li><a href="/nl/hydra/">Hydra</a></li><li><a href="/nl/claude/">Hydra gebruiken</a></li><li><a href="/nl/iso/">ISO-compliance</a></li></ul></div><div><h4>Conduction</h4><ul><li><a href="https://conduction.nl/about" target="_blank" rel="noopener noreferrer">About</a></li><li><a href="https://conduction.nl/about#opensource" target="_blank" rel="noopener noreferrer">Open source</a></li><li><a href="https://conduction.nl/about#team" target="_blank" rel="noopener noreferrer">Team</a></li><li><a href="https://conduction.nl/iso" target="_blank" rel="noopener noreferrer">ISO</a></li></ul></div><div><h4>Documentatie</h4><ul><li><a href="https://identity.conduction.nl/" target="_blank" rel="noopener noreferrer">Brand book</a></li><li><a href="https://identity.conduction.nl/diagrams/" target="_blank" rel="noopener noreferrer">Diagram set</a></li></ul></div></div><div class="legal-bar"><div class="left"><span>Conduction B.V. · KvK 76741850 · BTW NL860784241B01 · IBAN NL51 ABNA 0868951550 · Lauriergracht 14h, 1016 RR Amsterdam · 2026</span><span class="legal-links"><a href="https://www.conduction.nl/privacy" target="_blank" rel="noopener noreferrer">Privacy</a><span class="sep">·</span><a href="https://www.conduction.nl/terms" target="_blank" rel="noopener noreferrer">Terms</a><span class="sep">·</span><a href="https://www.conduction.nl/iso" target="_blank" rel="noopener noreferrer">ISO</a></span></div><div class="right"><a href="https://www.conduction.nl/iso" target="_blank" rel="noopener noreferrer" class="iso-badge" aria-label="ISO 9001:2015 certified, see details"><span class="iso-mark">ISO</span><span class="iso-num">9001:2015</span></a><a href="https://www.conduction.nl/iso" target="_blank" rel="noopener noreferrer" class="iso-badge" aria-label="ISO 27001:2022 certified, see details"><span class="iso-mark">ISO</span><span class="iso-num">27001:2022</span></a></div></div></div></footer><div style="display:none" aria-hidden="true">
+      <template id="tpl-h-a">
+        <svg class="house h-a" viewBox="0 -2 80 202" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,200 L 0,38 L 8,38 L 8,26 L 16,26 L 16,14 L 24,14 L 24,8 L 56,8 L 56,14 L 64,14 L 64,26 L 72,26 L 72,38 L 80,38 L 80,200 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="22" y="68" width="10" height="16" fill="rgba(255,247,210,0.95)"/>
+          <rect x="48" y="68" width="10" height="16" fill="rgba(11,32,73,0.35)"/>
+          <rect x="22" y="98" width="10" height="16" fill="rgba(11,32,73,0.35)"/>
+          <rect x="48" y="98" width="10" height="16" fill="rgba(255,247,210,0.6)"/>
+          <rect x="22" y="128" width="10" height="16" fill="rgba(11,32,73,0.35)"/>
+          <rect x="48" y="128" width="10" height="16" fill="rgba(11,32,73,0.35)"/>
+          <rect x="32" y="160" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+      <template id="tpl-h-b">
+        <svg class="house h-b" viewBox="0 0 100 220" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,220 L 0,58 L 8,58 L 8,47 L 16,47 L 16,36 L 24,36 L 24,25 L 32,25 L 32,14 L 50,4 L 68,14 L 68,25 L 76,25 L 76,36 L 84,36 L 84,47 L 92,47 L 92,58 L 100,58 L 100,220 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="14" y="80" width="14" height="20" fill="rgba(255,247,210,0.85)"/>
+          <rect x="43" y="80" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="72" y="80" width="14" height="20" fill="rgba(255,247,210,0.55)"/>
+          <rect x="14" y="115" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="43" y="115" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="72" y="115" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="14" y="150" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="43" y="150" width="14" height="20" fill="rgba(255,247,210,0.7)"/>
+          <rect x="72" y="150" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="42" y="180" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+      <template id="tpl-h-c">
+        <svg class="house h-c" viewBox="0 0 70 240" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,240 L 0,48 L 5,48 L 5,41 L 10,41 L 10,34 L 15,34 L 15,27 L 20,27 L 20,20 L 25,20 L 25,15 L 45,15 L 45,20 L 50,20 L 50,27 L 55,27 L 55,34 L 60,34 L 60,41 L 65,41 L 65,48 L 70,48 L 70,240 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="14" y="70" width="12" height="18" fill="rgba(255,247,210,0.55)"/>
+          <rect x="44" y="70" width="12" height="18" fill="rgba(255,247,210,0.85)"/>
+          <rect x="14" y="100" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="44" y="100" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="14" y="130" width="12" height="18" fill="rgba(255,247,210,0.7)"/>
+          <rect x="44" y="130" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="14" y="160" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="44" y="160" width="12" height="18" fill="rgba(11,32,73,0.35)"/>
+          <rect x="27" y="200" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+      <template id="tpl-h-d">
+        <svg class="house h-d" viewBox="0 -10 90 180" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,170 L 0,30 L 8,30 L 8,20 L 16,20 L 16,10 L 24,10 L 24,4 L 66,4 L 66,10 L 74,10 L 74,20 L 82,20 L 82,30 L 90,30 L 90,170 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="12" y="60" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="38" y="60" width="14" height="20" fill="rgba(255,247,210,0.85)"/>
+          <rect x="64" y="60" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="12" y="100" width="14" height="20" fill="rgba(255,247,210,0.6)"/>
+          <rect x="38" y="100" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="64" y="100" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="37" y="130" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+      <template id="tpl-h-e">
+        <svg class="house h-e" viewBox="0 0 95 210" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 0,210 L 0,55 L 8,55 L 8,44 L 16,44 L 16,33 L 24,33 L 24,22 L 32,22 L 32,11 L 35,11 L 35,6 L 59,6 L 59,11 L 63,11 L 63,22 L 71,22 L 71,33 L 79,33 L 79,44 L 87,44 L 87,55 L 95,55 L 95,210 Z" fill="var(--c-orange-knvb)"/>
+          <rect x="13" y="75" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="40" y="75" width="14" height="20" fill="rgba(255,247,210,0.65)"/>
+          <rect x="68" y="75" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="13" y="110" width="14" height="20" fill="rgba(255,247,210,0.8)"/>
+          <rect x="40" y="110" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="68" y="110" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="13" y="145" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="40" y="145" width="14" height="20" fill="rgba(11,32,73,0.35)"/>
+          <rect x="68" y="145" width="14" height="20" fill="rgba(255,247,210,0.55)"/>
+          <rect x="39.5" y="175" width="16" height="34" fill="rgba(11,32,73,0.55)"/>
+        </svg>
+      </template>
+</div></div>
+</body>
+</html>
