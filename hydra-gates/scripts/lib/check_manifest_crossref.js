@@ -460,13 +460,20 @@ function collectRouteRefs(node, out) {
 // states that, checkably. The eighth — `BesluitvormingAgenda`, a CROSS-CASE
 // meeting-agenda compiler — moved to **decidesk**. With only the same-app form
 // available, procest's honest options were (i) leave a true FAIL standing or
-// (ii) name a local page that does exist and is reachable. 🔑 THE GATE WOULD
+// (ii) name a local page that does exist and is reachable. NOTE THE GATE WOULD
 // HAVE ACCEPTED `CaseDetail`: existence + reachability is the whole of what it
 // checks, so the false claim would have passed and NOTHING downstream could
 // have caught it. A form that cannot state the truth does not prevent lies; it
 // selects for them. Hence `<appId>:<PageId>`.
 //
-// 🔴 WHAT A CROSS-APP TARGET CAN AND CANNOT BE CHECKED — STATED, NOT IMPLIED.
+// WHAT A CROSS-APP TARGET CAN AND CANNOT BE CHECKED — STATED, NOT IMPLIED.
+//
+// (No emoji anywhere in this file, on purpose: js_scope.jsCommentMask masks by
+// UTF-16 CODE UNIT and source_scope.js_comment_mask by CODE POINT, so a single
+// astral character makes the two produce masks of DIFFERENT LENGTH and
+// test_js_scope.js's drift arm fails. Measured: three emoji here, three
+// characters of divergence, and this was the only .js in scripts/lib carrying
+// one — which is why the drift had never fired. Recorded, not fixed here.)
 //
 // The gate reads THIS app's manifest. It has no access to decidesk's manifest,
 // its menu, or its pages, and it is not going to acquire one: the runner is
@@ -484,7 +491,7 @@ function collectRouteRefs(node, out) {
 //               that the app is even installed on the instance
 //               that it carries the retired functionality
 //
-// 🔑 AND THE PROPERTY #490 PRIZED IS THE ONE THAT IS LOST: a same-app waiver
+// AND THE PROPERTY #490 PRIZED IS THE ONE THAT IS LOST: a same-app waiver
 // ROTS LOUDLY — the day the named page leaves the menu, every waiver pointing
 // at it FAILs. A cross-app waiver CANNOT rot, because there is nothing local
 // left to rot against. decidesk can delete `BesluitvormingAgenda` tomorrow and
