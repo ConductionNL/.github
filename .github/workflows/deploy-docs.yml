@@ -10,8 +10,22 @@ on:
       - '.github/workflows/documentation.yml'
   workflow_dispatch:
 
+# `documentation.yml` contains an `image` job that pushes a fallback Apache
+# image to GHCR and therefore declares `packages: write`. A called workflow may
+# never request a permission its caller does not hold, and Actions validates
+# that STATICALLY, at run creation — before any job-level `if:` is evaluated. So
+# the image job being conditional does not exempt it, and omitting the scope
+# here does not merely skip that job: the whole run fails to start.
+#
+# That is what happened. The image job arrived on 2026-05-26 (#104); the last
+# successful docs deploy was three hours earlier the same day. Every run since
+# has been `startup_failure` — no jobs, no logs, no annotations — so
+# docs.conduction.nl silently served a build from 26 May for nearly three
+# months while `main` kept moving. A workflow that never starts is not a failing
+# job; it is an absent one, and absence is the harder failure to notice.
 permissions:
   contents: write
+  packages: write
 
 jobs:
   deploy:
