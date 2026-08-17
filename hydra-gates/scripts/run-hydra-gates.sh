@@ -10360,6 +10360,57 @@ if [ -f package.json ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# GATE 93 — composer-cooldown-config (ADR-093, proposed: hydra#591)
+#
+# Composer has no native equivalent to npm's min-release-age (gate 84).
+# composer/composer#12847 tracks the upstream request, unreleased at time of
+# writing. Two third-party install-time plugins were evaluated and rejected —
+# one requires php ^8.4 and breaks `composer install` on the PHP 8.3 leg every
+# core app's CI matrix tests; the other is PHP-compatible but, like the
+# first, is a ~3-month-old single-maintainer package — so the fleet leans on
+# GitHub Dependabot's own native `cooldown:` key instead: no new runtime
+# dependency, nothing new executes during `composer install` anywhere.
+#
+# MANDATORY, NOT SKIP-UNTIL-ADOPTED — same posture as gate 84 for
+# package.json. A gate that only checks a setting IF it is already present
+# never catches the repo that never adopted it, which is "declared gate,
+# enforced nowhere" — the exact failure shape gate 84 itself replaced.
+#
+# FULL-TREE, deliberately NOT diff-scoped, for the identical reason gate 84
+# gives: diff-scoped would report nothing on the ~99% of PRs that never touch
+# dependabot.yml, and a gate silent on nearly everything cannot establish
+# fleet-wide conformance, which is the entire point of it.
+#
+# NOTE ON PLACEMENT: top level, outside any `_FAILED` guard — a gate that only
+# runs once everything else passed is green-but-dead.
+# ---------------------------------------------------------------------------
+_ccc_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-composer-cooldown-config.log
+: > "${_ccc_log}"
+if [ -f composer.json ]; then
+    set +e
+    python3 "${SCRIPT_DIR}/lib/check_composer_cooldown.py" . > "${_ccc_log}" 2>&1
+    _ccc_rc=$?
+    # `set +e`, not `set -e`: errexit off is the state this script actually
+    # runs in, and re-enabling it here would abort the run on the first
+    # non-zero anything downstream. See the note at the top of this file.
+    set +e
+
+    if [ "${_ccc_rc}" -eq 0 ]; then
+        _pass 93 "composer-cooldown-config"
+    elif [ "${_ccc_rc}" -eq 4 ]; then
+        _skip 93 "composer-cooldown-config" na "this repo has no composer.json, so it has no Composer surface to harden. See ${_ccc_log}."
+    elif ! _helper_finished "${_ccc_log}" '^checked [0-9]+ composer cooldown setting'; then
+        # A CRASH IS NOT A FINDING.
+        _ccc_why=$(head -3 "${_ccc_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+        _skip 93 "composer-cooldown-config" wiring "check_composer_cooldown.py exited ${_ccc_rc} without printing its terminal 'checked N composer cooldown setting(s)' summary, so the cooldown configuration is UNVERIFIED by this run. Checker output: ${_ccc_why:-<empty>}. See ${_ccc_log}."
+    else
+        _ccc_n=$(grep -cE '^FAIL ' "${_ccc_log}" 2>/dev/null || true)
+        case "${_ccc_n}" in ''|*[!0-9]*) _ccc_n=1 ;; esac
+        _fail 93 "composer-cooldown-config" "${_ccc_n} composer cooldown setting(s) missing or too weak — see ${_ccc_log}"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
 # GATE 83 — contract-surface-shift (ADR-084)
 #
 # A method on a published contract can be served two ways: DECLARED
@@ -10604,6 +10655,15 @@ _a11y_has_markup_dir || _declare_na "no src/, templates/ or appinfo/templates/ �
 # exists to catch.
 [ -d lib/Contract ] || _declare_na "no lib/Contract/ — this repo publishes no contract interface, so it exposes no method surface whose magic-versus-declared shape consumers could have doubled." \
     83
+# `if [ -f composer.json ]` — gate 93
+#
+# Without this the gate emits NOTHING on a repo with no composer.json (an
+# ExApp sidecar, for instance) — a silence indistinguishable from a pass,
+# the exact failure --require-full-coverage exists to catch. Same defect
+# class gate 84 already had for package.json; caught by
+# test-hydra-gates-bin.sh's all-not-applicable fixture the same way.
+[ -f composer.json ] || _declare_na "no composer.json — this repo has no Composer surface, so there is no dependency resolution for a release-age cooldown to govern." \
+    93
 
 _emitted_n=$(printf '%s\n' ${_EMITTED_GATES} | grep -c . || true)
 _emitted_n="${_emitted_n:-0}"
