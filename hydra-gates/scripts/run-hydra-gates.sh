@@ -8878,6 +8878,17 @@ fi
 # and is itself reachable before downgrading to WARN. Never a free-text reason:
 # a page id rots loudly, prose does not.
 #
+# A replacement that moved to ANOTHER APP is spelled '<appId>:<PageId>'
+# (procest's cross-case agenda compiler moved to decidesk, and the same-app
+# form could only have been satisfied by naming a local page that does not
+# carry it — a false claim the gate would have accepted). This form gets a
+# STRICTLY WEAKER check and says so: syntax, a known Conduction fleet app id,
+# and NOT this app (that is the same-app case in disguise and takes the strict
+# path). The gate does not read another app's manifest, so it CANNOT check that
+# the page exists there, is reachable there, or carries the functionality — and
+# unlike a same-app waiver it does NOT rot. The WARN states every one of those
+# limits on every run; a cross-app waiver is a review judgement, not a proof.
+#
 # Why (2026-07-06 audit item 19): gate-22 validates ONLY the base manifest.
 # shillinq ships 75+ fragments gate-22 never sees; the 2026-07-06 live e2e
 # caught zaakafhandelapp detail widgets referencing besluit/resultaat schemas

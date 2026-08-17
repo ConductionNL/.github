@@ -402,16 +402,35 @@ function parseReport(stdout) {
 {
 	// One app builder: pages + menu + menu-layout, nothing else. Every arm
 	// retires `HiddenMenu`, whose page `Hidden` is otherwise navigationless.
-	const mkApp = (pages, menu, layout) => {
-		const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gate30-reach-'))
+	// `opts` exists only for the cross-app arms further down:
+	//   opts.appId  — write appinfo/info.xml <id>, so the "names THIS app"
+	//                 refusal can be exercised through its authoritative source.
+	//   opts.dirName— place the app under a directory of that NAME, so the
+	//                 SECOND self-id source (basename(APP_DIR), which is what CI
+	//                 actually provides) can be exercised on its own.
+	//   opts.deps   — manifest `dependencies`, reported in the cross-app WARN.
+	const mkApp = (pages, menu, layout, opts) => {
+		const o = opts || {}
+		let dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gate30-reach-'))
+		if (o.dirName) {
+			dir = path.join(dir, o.dirName)
+			fs.mkdirSync(dir, { recursive: true })
+		}
 		fs.mkdirSync(path.join(dir, 'src'), { recursive: true })
-		fs.writeFileSync(path.join(dir, 'src', 'manifest.json'), JSON.stringify({
+		const base = {
 			$schema: 'https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json',
 			version: '1.0.0',
 			menu,
 			pages,
-		}))
+		}
+		if (o.deps) base.dependencies = o.deps
+		fs.writeFileSync(path.join(dir, 'src', 'manifest.json'), JSON.stringify(base))
 		fs.writeFileSync(path.join(dir, 'src', 'menu-layout.json'), JSON.stringify(layout))
+		if (o.appId) {
+			fs.mkdirSync(path.join(dir, 'appinfo'), { recursive: true })
+			fs.writeFileSync(path.join(dir, 'appinfo', 'info.xml'),
+				`<?xml version="1.0"?>\n<info>\n\t<id>${o.appId}</id>\n\t<name>Fixture</name>\n</info>\n`)
+		}
 		return dir
 	}
 	const orphans = (dir) => parseReport(run([CHECKER, '--app-dir', dir]).stdout)
@@ -566,6 +585,177 @@ function parseReport(stdout) {
 		const dir = mkApp([HOME(), HIDDEN], MENU, LAYOUT({ removalsReplacedBy: { SomeOtherEntry: 'Home' } }))
 		assert(orphans(dir).length === 1,
 			'CONTROL: removalsReplacedBy is keyed PER REMOVAL — an unrelated key does not waive this one')
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+
+	// --- the CROSS-APP form `<appId>:<PageId>` -------------------------------
+	// Exists because procest's `BesluitvormingAgenda` (a cross-case
+	// meeting-agenda compiler) moved to decidesk, and the same-app form could
+	// only have been satisfied by naming a LOCAL page that does not carry it —
+	// which the gate would have ACCEPTED. The check here is deliberately
+	// weaker than the same-app one and every arm below pins one edge of it.
+
+	// A6 — well-formed, a known fleet app, not this app: WARN, not error, and
+	// the WARN must NAME the reduced guarantee. A WARN that read like the
+	// same-app one would hide exactly the thing this form gives up.
+	{
+		const dir = mkApp([HOME(), HIDDEN], MENU,
+			LAYOUT({ removalsReplacedBy: { HiddenMenu: 'decidesk:BesluitvormingAgenda' } }))
+		assert(orphans(dir).length === 0, 'cross-app: a well-formed known-app waiver clears the error')
+		const w = waived(dir)
+		// `msg` never indexes an absent element: this arm is ALSO run as a
+		// mutant against the pre-fix helper (where the finding is an error and
+		// `w` is empty), and a suite that CRASHES there stops reporting the
+		// arms after it — the mutant run must stay readable to be evidence.
+		const msg = (w[0] && w[0].message) || ''
+		assert(w.length === 1
+			&& msg.includes('REDUCED GUARANTEE')
+			&& msg.includes("'decidesk'")
+			&& msg.includes('BesluitvormingAgenda')
+			&& msg.includes('does not read another app'),
+			`cross-app: the WARN must state the REDUCED GUARANTEE and name both sides (got ${w.length}: ${w.map((f) => f.message).join(' | ')})`)
+		assert(msg.includes('does NOT rot'),
+			'cross-app: the WARN must say the waiver does not rot — that is the property a same-app waiver has and this one cannot')
+		assert(msg.includes('NO manifest dependency'),
+			'cross-app: with no declared dependency the WARN says nothing in the repo corroborates the claim')
+		assert(run([CHECKER, '--app-dir', dir]).status === 0, 'cross-app: a warn does not set the exit code')
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+
+	// A6b — the same waiver in an app that DOES declare the dependency. Only
+	// the reported corroboration changes; the verdict must not.
+	{
+		const dir = mkApp([HOME(), HIDDEN], MENU,
+			LAYOUT({ removalsReplacedBy: { HiddenMenu: 'decidesk:BesluitvormingAgenda' } }),
+			{ deps: ['openregister', { id: 'decidesk', required: false }] })
+		assert(orphans(dir).length === 0, 'cross-app: a declared dependency does not change the verdict')
+		const w = waived(dir)
+		assert(w.length === 1 && ((w[0] && w[0].message) || '').includes("does declare a manifest dependency on 'decidesk'"),
+			'cross-app: the WARN reports the declared dependency as corroboration')
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+
+	// A6-CONTROL a — THE DISGUISE. Naming THIS app with a colon must FAIL:
+	// the cross-app branch checks strictly less, so a same-app claim routed
+	// through it would skip exists / not-itself / reachable. Source 1:
+	// appinfo/info.xml.
+	{
+		const dir = mkApp([HOME(), HIDDEN], MENU,
+			LAYOUT({ removalsReplacedBy: { HiddenMenu: 'procest:Home' } }), { appId: 'procest' })
+		const errs = orphans(dir)
+		assert(errs.length === 1,
+			`ANTI-WIDENING: '<thisApp>:<Page>' is STILL an error (got ${errs.length}: ${errs.map((f) => f.message).join(' | ')})`)
+		assert(((errs[0] && errs[0].message) || '').includes('same-app case wearing a cross-app disguise'),
+			"CONTROL: '<thisApp>:<Page>' is refused AS a disguise — it must take the strict local path")
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+
+	// A6-CONTROL a2 — the SAME refusal from the OTHER self-id source, with NO
+	// appinfo/info.xml at all: the app directory basename, which is what CI
+	// hands the checker (/home/runner/work/procest/procest). Without this arm
+	// "the disguise is refused" would rest on a single source that a partial
+	// checkout can remove.
+	{
+		const dir = mkApp([HOME(), HIDDEN], MENU,
+			LAYOUT({ removalsReplacedBy: { HiddenMenu: 'docudesk:Whatever' } }), { dirName: 'docudesk' })
+		assert(!fs.existsSync(path.join(dir, 'appinfo', 'info.xml')),
+			'CONTROL a2 precondition: this fixture must have NO appinfo/info.xml, or it tests the wrong source')
+		const errs = orphans(dir)
+		assert(errs.length === 1,
+			`ANTI-WIDENING: the basename-disguise fixture is STILL an error (got ${errs.length}: ${errs.map((f) => f.message).join(' | ')})`)
+		assert(((errs[0] && errs[0].message) || '').includes('same-app case wearing a cross-app disguise'),
+			'CONTROL: the disguise is refused from the DIRECTORY BASENAME too')
+		fs.rmSync(path.dirname(dir), { recursive: true, force: true })
+	}
+
+	// A6-CONTROL b — an app the fleet has never heard of. A free syntax check
+	// would bless a typo forever, and an unrecognised id would then read as a
+	// verified waiver.
+	{
+		const dir = mkApp([HOME(), HIDDEN], MENU,
+			LAYOUT({ removalsReplacedBy: { HiddenMenu: 'decidsk:BesluitvormingAgenda' } }))
+		const errs = orphans(dir)
+		assert(errs.length === 1,
+			`ANTI-WIDENING: an unknown app id (a one-letter typo of a real one) is STILL an error (got ${errs.length}: ${errs.map((f) => f.message).join(' | ')})`)
+		assert(((errs[0] && errs[0].message) || '').includes('not a known Conduction fleet app id'),
+			'CONTROL: an unknown app id is refused AS an unknown app, naming the constant to update')
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+
+	// A6-CONTROL c — the app part is not an app id. `Decidesk` is a real app
+	// in the wrong case; NC app ids are lowercase, and accepting the variant
+	// would make the fleet-list check case-dependent theatre.
+	{
+		const dir = mkApp([HOME(), HIDDEN], MENU,
+			LAYOUT({ removalsReplacedBy: { HiddenMenu: 'Decidesk:BesluitvormingAgenda' } }))
+		const errs = orphans(dir)
+		assert(errs.length === 1,
+			`ANTI-WIDENING: a malformed app part is STILL an error (got ${errs.length}: ${errs.map((f) => f.message).join(' | ')})`)
+		assert(((errs[0] && errs[0].message) || '').includes('is not a Nextcloud app id'),
+			'CONTROL: a malformed app part is refused AS malformed')
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+
+	// A6-CONTROL d — the page part is not a page id: empty, or a path. The
+	// form names a PAGE in the other app; a URL is not checkable in any sense
+	// and would invite a link to anywhere.
+	{
+		const empty = mkApp([HOME(), HIDDEN], MENU,
+			LAYOUT({ removalsReplacedBy: { HiddenMenu: 'decidesk:' } }))
+		const e1 = orphans(empty)
+		assert(e1.length === 1,
+			`ANTI-WIDENING: an empty page part is STILL an error (got ${e1.length}: ${e1.map((f) => f.message).join(' | ')})`)
+		assert(((e1[0] && e1[0].message) || '').includes('is not a page id'),
+			'CONTROL: an empty page part is refused AS an unusable page reference')
+		fs.rmSync(empty, { recursive: true, force: true })
+
+		const url = mkApp([HOME(), HIDDEN], MENU,
+			LAYOUT({ removalsReplacedBy: { HiddenMenu: 'decidesk:/agenda/compiler' } }))
+		const e2 = orphans(url)
+		assert(e2.length === 1,
+			`ANTI-WIDENING: a PATH as the page part is STILL an error (got ${e2.length}: ${e2.map((f) => f.message).join(' | ')})`)
+		assert(((e2[0] && e2[0].message) || '').includes('is not a page id'),
+			'CONTROL: a PATH as the page part is refused AS an unusable page reference')
+		fs.rmSync(url, { recursive: true, force: true })
+	}
+
+	// A6-CONTROL e — THE ANTI-BYPASS, both directions.
+	//
+	// (i) A value that resolves to a LOCAL page never enters the cross-app
+	//     branch, even though a parameterised route contains a colon. Here the
+	//     waiver is spelled as `Detail`'s route `/home/:id`: it must be checked
+	//     the STRICT way (exists + reachable + not itself) and produce the
+	//     same-app WARN, with no "REDUCED GUARANTEE" anywhere.
+	{
+		const dir = mkApp([
+			HOME({ actions: [{ id: 'view', label: 'View', type: 'handler', handler: 'navigate', route: 'Detail' }] }),
+			{ id: 'Detail', route: '/home/:id', type: 'detail', title: 'Detail', config: { register: 'ctl', schema: 'item' } },
+			HIDDEN,
+		], MENU, LAYOUT({ removalsReplacedBy: { HiddenMenu: '/home/:id' } }))
+		assert(orphans(dir).length === 0, 'anti-bypass: a colon-bearing LOCAL route still resolves the same-app way')
+		const w = waived(dir)
+		assert(w.length === 1 && !((w[0] && w[0].message) || '').includes('REDUCED GUARANTEE'),
+			`anti-bypass: a local route must take the STRICT path, not the cross-app one (got ${w.map((f) => f.message).join(' | ')})`)
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+	// (ii) An UNRESOLVABLE parameterised route is still the old "resolves to no
+	//     page" FAIL, not a confusing "unknown app" one — the `/` before the
+	//     colon keeps it out of the cross-app branch.
+	{
+		const dir = mkApp([HOME(), HIDDEN], MENU,
+			LAYOUT({ removalsReplacedBy: { HiddenMenu: '/nope/:id' } }))
+		const errs = orphans(dir)
+		assert(errs.length === 1 && ((errs[0] && errs[0].message) || '').includes('resolves to no pages[].id or pages[].route'),
+			`CONTROL: an unresolvable PATH keeps its own diagnosis, it is not misread as an app reference (got ${errs.map((f) => f.message).join(' | ')})`)
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+	// (iii) The cross-app form is STILL keyed per removal — it is not a
+	//     file-level opt-out any more than the same-app form is.
+	{
+		const dir = mkApp([HOME(), HIDDEN], MENU,
+			LAYOUT({ removalsReplacedBy: { SomeOtherEntry: 'decidesk:BesluitvormingAgenda' } }))
+		assert(orphans(dir).length === 1,
+			'CONTROL: a cross-app waiver keyed to ANOTHER removal does not waive this one')
 		fs.rmSync(dir, { recursive: true, force: true })
 	}
 }
