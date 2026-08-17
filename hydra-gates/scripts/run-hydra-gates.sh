@@ -10642,6 +10642,15 @@ _a11y_has_markup_dir || _declare_na "no src/, templates/ or appinfo/templates/ �
 # exists to catch.
 [ -d lib/Contract ] || _declare_na "no lib/Contract/ — this repo publishes no contract interface, so it exposes no method surface whose magic-versus-declared shape consumers could have doubled." \
     83
+# `if [ -f composer.json ]` — gate 93
+#
+# Without this the gate emits NOTHING on a repo with no composer.json (an
+# ExApp sidecar, for instance) — a silence indistinguishable from a pass,
+# the exact failure --require-full-coverage exists to catch. Same defect
+# class gate 84 already had for package.json; caught by
+# test-hydra-gates-bin.sh's all-not-applicable fixture the same way.
+[ -f composer.json ] || _declare_na "no composer.json — this repo has no Composer surface, so there is no dependency resolution for a release-age cooldown to govern." \
+    93
 
 _emitted_n=$(printf '%s\n' ${_EMITTED_GATES} | grep -c . || true)
 _emitted_n="${_emitted_n:-0}"
