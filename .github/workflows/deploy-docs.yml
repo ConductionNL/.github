@@ -33,3 +33,84 @@ jobs:
     with:
       cname: docs.conduction.nl
       source-folder: website
+
+  # ---------------------------------------------------------------------------
+  # THE JOB ABOVE DOES NOT PUBLISH THIS SITE. It pushes the build to `gh-pages`,
+  # and for three months everyone read that as "the docs deployed".
+  #
+  # docs.conduction.nl is served by the Cloudflare Worker `conduction-docs`
+  # (Workers Static Assets) — the same pattern as the ~33 other *.conduction.nl
+  # docs sites (`openregister-docs`, `shillinq-docs`, …). Look it up with
+  # `GET /accounts/{id}/workers/domains`; Worker custom domains do NOT appear
+  # under `zones/{id}/workers/routes`.
+  #
+  # That Worker was deployed from Forgejo (`.forgejo/workflows/documentation-deploy.yml`).
+  # When Forgejo was retired the deploy stopped, the Worker froze at its
+  # 2026-06-01 build, and nothing anywhere reported a problem: `gh-pages` kept
+  # updating, GitHub Pages kept claiming the domain as `verified`, and the site
+  # kept answering 200 — with stale content. This job closes that loop.
+  # ---------------------------------------------------------------------------
+  publish-worker:
+    name: Publish to docs.conduction.nl
+    needs: deploy
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      # A missing secret must FAIL, never skip. A skipped publish is exactly the
+      # silence that hid this for three months: the workflow goes green, and the
+      # live site quietly stops tracking `main`. Red here means "the docs did not
+      # reach the public site", which is the truth worth reporting.
+      - name: Require the Cloudflare credentials
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: |
+          missing=
+          [ -z "$CF_API_TOKEN" ] && missing="$missing CF_API_TOKEN"
+          [ -z "$CF_ACCOUNT_ID" ] && missing="$missing CF_ACCOUNT_ID"
+          if [ -n "$missing" ]; then
+            echo "::error title=docs.conduction.nl NOT updated::Missing repo secret(s):$missing — the build is in gh-pages but the public site still serves the previous deploy. Add a Cloudflare API token scoped to Account > Workers Scripts > Edit."
+            exit 1
+          fi
+
+      - name: Check out the built site from gh-pages
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: build
+
+      - name: Deploy to the conduction-docs Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: |
+          rm -rf build/.git
+          cat > wrangler.toml <<'EOF'
+          name = "conduction-docs"
+          compatibility_date = "2026-05-30"
+
+          [assets]
+          directory = "./build"
+          EOF
+          npx -y wrangler@4 deploy
+
+      # Round-trip the bytes that shipped. HTTP 200 is not evidence: the stale
+      # Worker answered 200 for months. Compare a hash of a file we just
+      # published against what the public host actually serves.
+      - name: Verify the public host serves THIS build
+        run: |
+          local_md5=$(md5sum build/index.html | cut -d' ' -f1)
+          for i in $(seq 1 10); do
+            live_md5=$(curl -sL "https://docs.conduction.nl/" --max-time 25 | md5sum | cut -d' ' -f1)
+            if [ "$local_md5" = "$live_md5" ]; then
+              echo "Verified: docs.conduction.nl serves this build ($local_md5)."
+              exit 0
+            fi
+            echo "attempt $i: live=$live_md5 expected=$local_md5 — retrying"
+            sleep 15
+          done
+          echo "::error title=Published build not being served::wrangler reported success but docs.conduction.nl still serves different bytes."
+          exit 1
