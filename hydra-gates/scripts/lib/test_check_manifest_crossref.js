@@ -388,6 +388,188 @@ function parseReport(stdout) {
 	}
 }
 
+// --- removals-invariant: REACHABILITY IS A CLOSURE OVER NAVIGATION EDGES ----
+//
+// The menu is not the only way to reach a page, and until this landed the
+// invariant pretended it was. Measured on procest `development` @78c96081:
+// eight retired menu entries, all eight reported as orphaned routes, one of
+// them (`Voorstellen`) named by a `viewAllRoute` on a page the menu reaches.
+//
+// EVERY POSITIVE ARM BELOW IS PAIRED WITH ITS OWN CONTROL, on a fixture that
+// differs in ONE field. A gate that can no longer fail is worse than the false
+// positive it removes, so each widening is pinned against the narrowest
+// mutation that must still FAIL.
+{
+	// One app builder: pages + menu + menu-layout, nothing else. Every arm
+	// retires `HiddenMenu`, whose page `Hidden` is otherwise navigationless.
+	const mkApp = (pages, menu, layout) => {
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gate30-reach-'))
+		fs.mkdirSync(path.join(dir, 'src'), { recursive: true })
+		fs.writeFileSync(path.join(dir, 'src', 'manifest.json'), JSON.stringify({
+			$schema: 'https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json',
+			version: '1.0.0',
+			menu,
+			pages,
+		}))
+		fs.writeFileSync(path.join(dir, 'src', 'menu-layout.json'), JSON.stringify(layout))
+		return dir
+	}
+	const orphans = (dir) => parseReport(run([CHECKER, '--app-dir', dir]).stdout)
+		.findings.filter((f) => f.check === 'removals-invariant' && f.severity === 'error')
+	const waived = (dir) => parseReport(run([CHECKER, '--app-dir', dir]).stdout)
+		.findings.filter((f) => f.check === 'removals-invariant' && f.severity === 'warn')
+
+	const HIDDEN = { id: 'Hidden', route: '/hidden', type: 'index', title: 'Hidden', config: { register: 'ctl', schema: 'item' } }
+	const HOME = (config) => ({ id: 'Home', route: '/home', type: 'index', title: 'Home', config: Object.assign({ register: 'ctl', schema: 'item' }, config || {}) })
+	const MENU = [
+		{ id: 'HomeMenu', label: 'Home', route: 'Home' },
+		{ id: 'HiddenMenu', label: 'Hidden', route: 'Hidden' },
+	]
+	const LAYOUT = (extra) => Object.assign({ relocations: {}, removals: ['HiddenMenu'], settingsSection: [] }, extra || {})
+
+	// A1 — a `viewAllRoute` on a MENU-REACHABLE page reaches the retired page.
+	{
+		const dir = mkApp([
+			HOME({ widgets: [{ id: 'w', widgetKey: 'object-table', content: { register: 'ctl', schema: 'item', viewAllRoute: 'Hidden' } }] }),
+			HIDDEN,
+		], MENU, LAYOUT())
+		assert(orphans(dir).length === 0,
+			'reachability: a viewAllRoute on a menu-reachable page is an entry point, not an orphan')
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+
+	// A1-CONTROL — the SAME edge, declared by a page nothing reaches. Two
+	// orphans must not vouch for each other. One field differs: the widget
+	// moved from `Home` (in the menu) to `Attic` (in nothing).
+	{
+		const dir = mkApp([
+			HOME(),
+			{ id: 'Attic', route: '/attic', type: 'index', title: 'Attic', config: { register: 'ctl', schema: 'item', widgets: [{ id: 'w', widgetKey: 'object-table', content: { register: 'ctl', schema: 'item', viewAllRoute: 'Hidden' } }] } },
+			HIDDEN,
+		], MENU, LAYOUT())
+		assert(orphans(dir).length === 1,
+			'CONTROL: an edge declared by an UNREACHABLE page does not make its target reachable')
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+
+	// A2 — TRANSITIVE, two hops: menu → Home -(handler:'navigate')-> Detail
+	// -(viewAllRoute)-> Hidden. procest's real shape (`Cases` → `CaseDetail`
+	// → `Voorstellen`); a one-hop closure reports it as an orphan.
+	{
+		const dir = mkApp([
+			HOME({ actions: [{ id: 'view', label: 'View', type: 'handler', handler: 'navigate', route: 'Detail' }] }),
+			{ id: 'Detail', route: '/home/:id', type: 'detail', title: 'Detail', config: { register: 'ctl', schema: 'item', widgets: [{ id: 'w', widgetKey: 'object-table', content: { register: 'ctl', schema: 'item', viewAllRoute: 'Hidden' } }] } },
+			HIDDEN,
+		], MENU, LAYOUT())
+		assert(orphans(dir).length === 0,
+			'reachability: the closure is TRANSITIVE — menu -> action route -> viewAllRoute reaches the retired page')
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+
+	// A3 — an `open-page` action target is an edge; an `open-modal` target of
+	// the same spelling is NOT (the schema overloads `target`, and a modal id
+	// that happens to match a page id must not vouch for it).
+	{
+		const openPage = mkApp([
+			HOME({ actions: [{ id: 'go', label: 'Go', type: 'open-page', target: 'Hidden' }] }),
+			HIDDEN,
+		], MENU, LAYOUT())
+		assert(orphans(openPage).length === 0, "reachability: an open-page action target is an entry point")
+		fs.rmSync(openPage, { recursive: true, force: true })
+
+		const openModal = mkApp([
+			HOME({ actions: [{ id: 'go', label: 'Go', type: 'open-modal', target: 'Hidden' }] }),
+			HIDDEN,
+		], MENU, LAYOUT())
+		assert(orphans(openModal).length === 1,
+			'CONTROL: an open-MODAL target is a modal id, not a page — it must not vouch for a page of the same name')
+		fs.rmSync(openModal, { recursive: true, force: true })
+	}
+
+	// A4 — THE BASELINE THAT MUST NEVER MOVE. No edge of any kind: still an
+	// orphan, still an error. If this ever falls silent the widening above has
+	// swallowed the check.
+	{
+		const dir = mkApp([HOME(), HIDDEN], MENU, LAYOUT())
+		const errs = orphans(dir)
+		assert(errs.length === 1 && errs[0].message.includes("'HiddenMenu'"),
+			`CONTROL: a removal with no menu entry and NO navigation edge is STILL an error (got ${errs.length})`)
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+
+	// --- menu-layout.json#removalsReplacedBy ---------------------------------
+	// The declared, VERIFIED waiver. It exists because three real replacement
+	// mechanisms (folderSidebar filter, page viewMode, per-object sidebar tab)
+	// name the retired page NOWHERE — there is no edge to widen toward — and
+	// procest cannot otherwise close a finding that is wrong.
+
+	// A5 — declared, the named page exists and is reachable: WARN, not error.
+	{
+		const dir = mkApp([HOME({ viewModes: ['table', 'map'] }), HIDDEN], MENU, LAYOUT({ removalsReplacedBy: { HiddenMenu: 'Home' } }))
+		assert(orphans(dir).length === 0, 'removalsReplacedBy: a verified waiver clears the error')
+		const w = waived(dir)
+		assert(w.length === 1 && w[0].message.includes("'Home'"),
+			`removalsReplacedBy: the debt is still REPORTED, as a WARN naming the replacement (got ${w.length})`)
+		assert(run([CHECKER, '--app-dir', dir]).status === 0, 'removalsReplacedBy: a warn does not set the exit code')
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+
+	// A5-CONTROL a — the named page does not exist.
+	{
+		const dir = mkApp([HOME(), HIDDEN], MENU, LAYOUT({ removalsReplacedBy: { HiddenMenu: 'NoSuchPage' } }))
+		const errs = orphans(dir)
+		assert(errs.length === 1 && errs[0].message.includes("'NoSuchPage'"),
+			'CONTROL: a waiver naming a page that does not exist is refused')
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+
+	// A5-CONTROL b — the named page exists but is ITSELF unreachable. This is
+	// the arm that makes the waiver rot loudly: the day the replacement leaves
+	// the menu, every waiver pointing at it fails.
+	{
+		const dir = mkApp([
+			HOME(),
+			{ id: 'Attic', route: '/attic', type: 'index', title: 'Attic', config: { register: 'ctl', schema: 'item' } },
+			HIDDEN,
+		], MENU, LAYOUT({ removalsReplacedBy: { HiddenMenu: 'Attic' } }))
+		const errs = orphans(dir)
+		assert(errs.length === 1 && errs[0].message.includes('ITSELF unreachable'),
+			'CONTROL: a waiver naming an UNREACHABLE page is refused — it moves the orphan, it does not close it')
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+
+	// A5-CONTROL c — the waiver names the retired page itself, by its ROUTE
+	// spelling (so this also pins that the waiver goes through pageKey).
+	{
+		const dir = mkApp([HOME(), HIDDEN], MENU, LAYOUT({ removalsReplacedBy: { HiddenMenu: '/hidden' } }))
+		const errs = orphans(dir)
+		assert(errs.length === 1 && errs[0].message.includes('ITSELF as its replacement'),
+			'CONTROL: a page cannot vouch for its own reachability, in either spelling')
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+
+	// A5-CONTROL d — a waiver that is not a usable reference at all. `true`
+	// must not be credited the way a one-full-stop reason once was (#400).
+	{
+		const dir = mkApp([HOME(), HIDDEN], MENU, LAYOUT({ removalsReplacedBy: { HiddenMenu: true } }))
+		assert(orphans(dir).length === 1,
+			'CONTROL: a non-string waiver names nothing checkable and is refused')
+		const empty = mkApp([HOME(), HIDDEN], MENU, LAYOUT({ removalsReplacedBy: { HiddenMenu: '' } }))
+		assert(orphans(empty).length === 1, 'CONTROL: an EMPTY waiver is refused')
+		fs.rmSync(dir, { recursive: true, force: true })
+		fs.rmSync(empty, { recursive: true, force: true })
+	}
+
+	// A5-CONTROL e — a waiver for a DIFFERENT removal does not blanket this
+	// one. Keys are per-removal, never a file-level opt-out.
+	{
+		const dir = mkApp([HOME(), HIDDEN], MENU, LAYOUT({ removalsReplacedBy: { SomeOtherEntry: 'Home' } }))
+		assert(orphans(dir).length === 1,
+			'CONTROL: removalsReplacedBy is keyed PER REMOVAL — an unrelated key does not waive this one')
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+}
+
 console.log('')
 if (fails === 0) {
 	console.log('ALL gate-30 effective-manifest-crossref assertions PASSED')

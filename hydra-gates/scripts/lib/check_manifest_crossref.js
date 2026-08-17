@@ -31,8 +31,20 @@
 //                        FAIL on miss.
 //   (e) removals-invariant (ADR-044 no-functionality-loss) — every id in
 //                        menu-layout.json#removals must, after assembly, leave
-//                        its route reachable via another surviving menu entry.
-//                        FAIL on an orphaned route.
+//                        its page reachable. Reachability is the transitive
+//                        closure of the manifest's DECLARATIVE navigation
+//                        edges (open-page action targets, handler:'navigate'
+//                        routes, viewAllRoute / rowRoute / clickRoute /
+//                        onSuccessRoute / drilldown.route), seeded by the
+//                        surviving menu — not the surviving menu alone.
+//                        FAIL on an orphaned page. When the replacement
+//                        surface names the retired page NOWHERE (its
+//                        functionality moved rather than its link), the app
+//                        may name that surface in
+//                        menu-layout.json#removalsReplacedBy; the gate
+//                        verifies the named page exists and is ITSELF
+//                        reachable, then downgrades to WARN. Never a
+//                        free-text reason — see the block comment at (e).
 //   (f) registry-crossref— the manifest and src/registry.js must agree about
 //                        which components exist. A manifest `component` /
 //                        slot-override naming no registry export renders
@@ -365,6 +377,74 @@ function collectMenuRoutes(items, ptr, out) {
 	})
 }
 
+// --- (e) declarative navigation edges ----------------------------------------
+//
+// THE MENU IS NOT THE ONLY WAY TO REACH A PAGE, AND PRETENDING IT IS PRODUCES
+// FALSE ORPHANS.
+//
+// The removals-invariant used to ask "does a surviving MENU entry still point
+// at this route". A page reached by a dashboard tile's click-through, a
+// widget's "view all" link, a header action or a chart drilldown is reachable
+// by any honest reading of ADR-044 no-functionality-loss, and every one of
+// those is a first-class, statically checkable field of the manifest schema —
+// gate-32 (check_detail_page_discipline.py (f)/(f2)) already resolves
+// `viewAllRoute` / `rowRoute` and the object `{name}` route form against the
+// page-id set for exactly this reason. Measured on procest `development`
+// @78c96081: `Voorstellen` is named by
+// `CaseDetail.config.widgets[12].content.viewAllRoute` and was still reported
+// an orphan by this invariant.
+//
+// THE KEYS BELOW ARE THE SCHEMA'S, NOT A GUESS. Each is a documented
+// destination field in scripts/schemas/app-manifest-v2.schema.json:
+//   route           $defs/action ("Destination route name for handler:
+//                   'navigate'"), $defs/primaryAction, the stat/banner tile
+//                   click-through, and drilldown.route — the last is a `route`
+//                   key inside the drilldown object, so it needs no entry of
+//                   its own.
+//   viewAllRoute    widget "view all" link       (gate-32 (f) resolves it too)
+//   rowRoute        widget row click-through     (gate-32 (f) resolves it too)
+//   clickRoute      whole-tile click-through ("Alias of content.route")
+//   onSuccessRoute  open-form action navigates here after a successful save
+// `target` is handled separately because the schema OVERLOADS it: it is a
+// modal id for open-modal and a URL for navigate — only the open-page form
+// names a page, and crediting the other two would let a modal id vouch for a
+// page that happens to share its name.
+//
+// `href` is deliberately absent: an external URL is not a page. deepLinks are
+// deliberately absent too — they are matched by PATH PREFIX (check (d)), so a
+// deepLink at `/` would vouch for every page in the app, and they declare an
+// entry point from ANOTHER app rather than a navigation edge within this one.
+const ROUTE_REF_KEYS = new Set([
+	'route',
+	'viewAllRoute',
+	'rowRoute',
+	'clickRoute',
+	'onSuccessRoute',
+])
+
+// Collect every destination reference beneath `node`. Accepts the string form
+// ("CaseDetail" / "/cases") and the OBJECT form ({ name, query }) that
+// stats-block entries use — openconnector shipped a dangling one of those and
+// a string-only scan reported "no unresolvable route refs" while the page threw
+// on mount (see check_detail_page_discipline.py (f2)).
+function collectRouteRefs(node, out) {
+	if (Array.isArray(node)) {
+		node.forEach((v) => collectRouteRefs(v, out))
+		return
+	}
+	if (!node || typeof node !== 'object') return
+	const push = (v) => {
+		if (typeof v === 'string' && v !== '') out.push(v)
+		else if (v && typeof v === 'object' && typeof v.name === 'string' && v.name !== '') out.push(v.name)
+	}
+	if (node.type === 'open-page') push(node.target)
+	for (const [k, v] of Object.entries(node)) {
+		if (k === '_note' || k === '_meta') continue
+		if (ROUTE_REF_KEYS.has(k)) push(v)
+		collectRouteRefs(v, out)
+	}
+}
+
 // Recursively collect action objects: any array under an `actions` key whose
 // items carry a `label` (the $defs/action required key) — covers pages[].
 // actions, object-table props.actions, and widget header actionItems.
@@ -573,6 +653,82 @@ function main() {
 			const effectiveRoutes = []
 			collectMenuRoutes(manifest.menu, '/menu', effectiveRoutes)
 			const effectiveKeys = new Set(effectiveRoutes.map((m) => pageKey(m.route)))
+
+			// REACHABILITY IS A CLOSURE, NOT A ONE-HOP MENU LOOKUP.
+			//
+			// Seeded by the surviving menu, then expanded along the declarative
+			// navigation edges each reachable page declares (ROUTE_REF_KEYS
+			// above). TRANSITIVE ON PURPOSE: an edge is credited only when it
+			// is declared BY A PAGE THAT IS ITSELF REACHABLE, so two orphaned
+			// pages linking to each other cannot vouch for one another — the
+			// same trap the pageKey normalisation above is careful not to fall
+			// into with unresolvable references.
+			//
+			// UNIONED WITH `effectiveKeys`, NEVER SUBSTITUTED FOR IT. The
+			// closure only credits keys that resolve to a real page, while
+			// `effectiveKeys` also carries menu routes that resolve to nothing
+			// (check (a) fails those separately, and this invariant must not
+			// fail them a second time). Taking the union makes this change
+			// strictly ADDITIVE: no removal that passed this invariant before
+			// can fail it now.
+			const edgesByPage = new Map()
+			for (const p of pages) {
+				if (!p || typeof p.id !== 'string') continue
+				const refs = []
+				collectRouteRefs(p, refs)
+				edgesByPage.set(p.id, refs)
+			}
+			const reachable = new Set(effectiveKeys)
+			const seen = new Set()
+			const queue = []
+			const visit = (key) => {
+				if (!pageIds.has(key)) return
+				reachable.add(key)
+				if (seen.has(key)) return
+				seen.add(key)
+				queue.push(key)
+			}
+			for (const k of effectiveKeys) visit(k)
+			while (queue.length > 0) {
+				const from = queue.shift()
+				for (const ref of (edgesByPage.get(from) || [])) visit(pageKey(ref))
+			}
+
+			// menu-layout.json#removalsReplacedBy — THE ONE THING THE GATE
+			// CANNOT DERIVE, DECLARED BY THE APP AND VERIFIED BY THE GATE.
+			//
+			// A navigation surface is sometimes retired because the
+			// FUNCTIONALITY moved to a surface that does not — and should not —
+			// name the old page anywhere: an index page superseded by a
+			// `folderSidebar` filter on another index, a standalone map page
+			// superseded by `viewModes: ["map"]` on the index it duplicated,
+			// three decision pages superseded by one sidebar tab on a detail
+			// page. All three shipped on procest, and NONE of them references
+			// the retired page in the manifest — measured, not assumed: a full
+			// string walk of procest's assembled manifest finds seven of its
+			// eight retired pages named by NOTHING but their own `pages[]`
+			// entry. There is no edge to widen toward, and inferring one from a
+			// page TYPE (`viewModes` contains "map", so any map page may go)
+			// would bless deleting a map page in every app that owns a map
+			// viewMode — the widening that retires the check.
+			//
+			// So the gate is RIGHT that the page has no entry point, and WRONG
+			// that this is a functionality loss. That is exactly the ambiguity
+			// check (f) direction 1 already answers with a WARN — "an orphan is
+			// either wired or deleted and the gate cannot know which". Here the
+			// app CAN say, and the claim is CHECKABLE rather than prose: it
+			// names the page carrying the functionality now, and the gate
+			// refuses it unless that page exists AND is itself reachable. It
+			// therefore ROTS LOUDLY — the day the named page leaves the menu,
+			// every waiver pointing at it FAILs. That is the property a
+			// free-text reason does not have, and the reason this is not
+			// `@removals-invariant exclude <reason>`.
+			const replacedBy = (inputs.menuLayout
+				&& typeof inputs.menuLayout.removalsReplacedBy === 'object'
+				&& inputs.menuLayout.removalsReplacedBy !== null
+				&& !Array.isArray(inputs.menuLayout.removalsReplacedBy))
+				? inputs.menuLayout.removalsReplacedBy
+				: {}
 			removals.forEach((id, i) => {
 				const entry = findEntry(preRemoval, id)
 				if (!entry) {
@@ -580,8 +736,23 @@ function main() {
 					return
 				}
 				if (typeof entry.route !== 'string' || entry.route === '') return // nothing routable retired
-				if (!effectiveKeys.has(pageKey(entry.route))) {
-					fail('removals-invariant', `/menu-layout/removals/${i}`, `removal '${id}' orphans route '${entry.route}' — no surviving menu entry reaches it (ADR-044 no-functionality-loss)`)
+				if (!reachable.has(pageKey(entry.route))) {
+					const ptr = `/menu-layout/removals/${i}`
+					const key = pageKey(entry.route)
+					const declared = replacedBy[id]
+					if (declared === undefined) {
+						fail('removals-invariant', ptr, `removal '${id}' orphans route '${entry.route}' — no surviving menu entry, and no declarative navigation edge (open-page action target, handler:'navigate' route, viewAllRoute / rowRoute / clickRoute / onSuccessRoute / drilldown.route) on any REACHABLE page names it (ADR-044 no-functionality-loss). If the FUNCTIONALITY moved to another surface rather than the link, name that surface's page in menu-layout.json#removalsReplacedBy['${id}'] — the gate then verifies that page exists and is itself reachable`)
+					} else if (typeof declared !== 'string' || declared === '') {
+						fail('removals-invariant', ptr, `removal '${id}' orphans route '${entry.route}' and its menu-layout.json#removalsReplacedBy entry is not a non-empty page reference — the waiver names nothing the gate can check (ADR-044 no-functionality-loss)`)
+					} else if (!pageIds.has(pageKey(declared))) {
+						fail('removals-invariant', ptr, `removal '${id}' orphans route '${entry.route}' and its declared replacement '${declared}' resolves to no pages[].id or pages[].route — a waiver pointing at a page that does not exist is not a replacement (ADR-044 no-functionality-loss)`)
+					} else if (pageKey(declared) === key) {
+						fail('removals-invariant', ptr, `removal '${id}' orphans route '${entry.route}' and declares ITSELF as its replacement — a page cannot vouch for its own reachability (ADR-044 no-functionality-loss)`)
+					} else if (!reachable.has(pageKey(declared))) {
+						fail('removals-invariant', ptr, `removal '${id}' orphans route '${entry.route}' and its declared replacement '${declared}' is ITSELF unreachable — the waiver moves the orphan, it does not close it (ADR-044 no-functionality-loss)`)
+					} else {
+						warn('removals-invariant', ptr, `removal '${id}' leaves route '${entry.route}' with no navigation entry point of its own; menu-layout.json declares its functionality moved to '${declared}', which exists and is reachable. The page stays routable for deep links. The gate can only check that '${declared}' IS reachable — whether it genuinely carries this functionality is a review judgement`)
+					}
 				}
 			})
 		}

@@ -8863,7 +8863,20 @@ fi
 #      lib/Settings/*register*.json (+ register.d/*.json; no register JSON
 #      in-repo → WARN, runtime-bound registers), deepLink route
 #      correspondence, and the ADR-044 no-functionality-loss removals
-#      invariant (a removal must never orphan its route).
+#      invariant (a removal must never orphan its page).
+#
+# THE REMOVALS INVARIANT ASKS ABOUT REACHABILITY, NOT ABOUT THE MENU.
+# Reachability is the transitive closure of the manifest's DECLARATIVE
+# navigation edges — open-page action targets, handler:'navigate' routes,
+# viewAllRoute / rowRoute / clickRoute / onSuccessRoute / drilldown.route —
+# seeded by the surviving menu. A page a dashboard tile or a "view all" link
+# reaches is reachable; a page reached only from another orphan is not.
+# When the replacement surface names the retired page NOWHERE (the
+# functionality moved, not the link — a folderSidebar filter, a page viewMode,
+# a per-object sidebar tab), the app declares the replacement in
+# menu-layout.json#removalsReplacedBy and the gate VERIFIES that page exists
+# and is itself reachable before downgrading to WARN. Never a free-text reason:
+# a page id rots loudly, prose does not.
 #
 # Why (2026-07-06 audit item 19): gate-22 validates ONLY the base manifest.
 # shillinq ships 75+ fragments gate-22 never sees; the 2026-07-06 live e2e
