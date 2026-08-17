@@ -59,30 +59,29 @@ jobs:
     permissions:
       contents: read
     steps:
-      # A missing secret must FAIL, never skip. A skipped publish is exactly the
-      # silence that hid this for three months: the workflow goes green, and the
-      # live site quietly stops tracking `main`. Red here means "the docs did not
-      # reach the public site", which is the truth worth reporting.
-      - name: Require the Cloudflare credentials
-        env:
-          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-        run: |
-          missing=
-          [ -z "$CF_API_TOKEN" ] && missing="$missing CF_API_TOKEN"
-          [ -z "$CF_ACCOUNT_ID" ] && missing="$missing CF_ACCOUNT_ID"
-          if [ -n "$missing" ]; then
-            echo "::error title=docs.conduction.nl NOT updated::Missing repo secret(s):$missing — the build is in gh-pages but the public site still serves the previous deploy. Add a Cloudflare API token scoped to Account > Workers Scripts > Edit."
-            exit 1
-          fi
-
       - name: Check out the built site from gh-pages
         uses: actions/checkout@v4
         with:
           ref: gh-pages
           path: build
 
+      # The `secrets` context cannot be read in an `if:` expression, so map it to
+      # env and branch on an output instead.
+      - name: Detect Cloudflare credentials
+        id: creds
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: |
+          if [ -n "$CF_API_TOKEN" ] && [ -n "$CF_ACCOUNT_ID" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Worker deploy skipped::CF_API_TOKEN / CF_ACCOUNT_ID are not set, so this run cannot push to the conduction-docs Worker. The check below will fail if the public site is consequently stale."
+          fi
+
       - name: Deploy to the conduction-docs Worker
+        if: steps.creds.outputs.present == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
@@ -97,20 +96,33 @@ jobs:
           EOF
           npx -y wrangler@4 deploy
 
-      # Round-trip the bytes that shipped. HTTP 200 is not evidence: the stale
-      # Worker answered 200 for months. Compare a hash of a file we just
-      # published against what the public host actually serves.
+      # THE GATE. It asserts the condition that actually matters — "the public
+      # host serves what we just built" — rather than a proxy for it such as
+      # "a secret is present" or "wrangler exited 0".
+      #
+      # This distinction is the whole lesson of the 3-month outage: `gh-pages`
+      # updated, GitHub Pages reported the domain `verified`, the URL answered
+      # 200, and every one of those was true while the site was stale. Only a
+      # byte-for-byte comparison against the live host could see it.
+      #
+      # It therefore fails on DRIFT, not on configuration. With no credentials
+      # and an unchanged site it passes; with no credentials and a changed site
+      # it fails, which is correct — the site really is stale at that point.
       - name: Verify the public host serves THIS build
         run: |
-          local_md5=$(md5sum build/index.html | cut -d' ' -f1)
+          expected=$(md5sum build/index.html | cut -d' ' -f1)
           for i in $(seq 1 10); do
-            live_md5=$(curl -sL "https://docs.conduction.nl/" --max-time 25 | md5sum | cut -d' ' -f1)
-            if [ "$local_md5" = "$live_md5" ]; then
-              echo "Verified: docs.conduction.nl serves this build ($local_md5)."
+            live=$(curl -sL "https://docs.conduction.nl/" --max-time 25 | md5sum | cut -d' ' -f1)
+            if [ "$expected" = "$live" ]; then
+              echo "Verified: docs.conduction.nl serves this build ($expected)."
               exit 0
             fi
-            echo "attempt $i: live=$live_md5 expected=$local_md5 — retrying"
+            echo "attempt $i: live=$live expected=$expected — retrying"
             sleep 15
           done
-          echo "::error title=Published build not being served::wrangler reported success but docs.conduction.nl still serves different bytes."
+          if [ "${{ steps.creds.outputs.present }}" = "true" ]; then
+            echo "::error title=Published build not being served::wrangler reported success but docs.conduction.nl still serves different bytes."
+          else
+            echo "::error title=docs.conduction.nl is now STALE::The build reached gh-pages but nothing published it to the conduction-docs Worker. Add repo secrets CF_API_TOKEN (Account > Workers Scripts > Edit) and CF_ACCOUNT_ID, then re-run."
+          fi
           exit 1
