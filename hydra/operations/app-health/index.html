@@ -5,7 +5,7 @@
 <meta name="generator" content="Docusaurus v3.10.1">
 <title data-rh="true">App health | Conduction Docs</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" property="og:image" content="https://docs.conduction.nl/img/og-conduction.png"><meta data-rh="true" name="twitter:image" content="https://docs.conduction.nl/img/og-conduction.png"><meta data-rh="true" property="og:url" content="https://docs.conduction.nl/hydra/operations/app-health/"><meta data-rh="true" property="og:locale" content="en_GB"><meta data-rh="true" property="og:locale:alternate" content="nl_NL"><meta data-rh="true" name="docusaurus_locale" content="en"><meta data-rh="true" name="docsearch:language" content="en"><meta data-rh="true" name="twitter:site" content="@ConductionNL"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:type" content="website"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="App health | Conduction Docs"><meta data-rh="true" name="description" content="Live Code Quality status for every Conduction Nextcloud app, on each of the"><meta data-rh="true" property="og:description" content="Live Code Quality status for every Conduction Nextcloud app, on each of the"><link data-rh="true" rel="icon" href="/img/favicon.svg"><link data-rh="true" rel="canonical" href="https://docs.conduction.nl/hydra/operations/app-health/"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/hydra/operations/app-health/" hreflang="en-GB"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/nl/hydra/operations/app-health/" hreflang="nl-NL"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/hydra/operations/app-health/" hreflang="x-default"><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Hydra","item":"https://docs.conduction.nl/hydra/"},{"@type":"ListItem","position":2,"name":"App health","item":"https://docs.conduction.nl/hydra/operations/app-health"}]}</script><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","@id":"https://docs.conduction.nl/hydra/operations/app-health#article","mainEntityOfPage":"https://docs.conduction.nl/hydra/operations/app-health","headline":"App health","inLanguage":"en","publisher":{"@id":"https://www.conduction.nl/#org"},"description":"Live Code Quality status for every Conduction Nextcloud app, on each of the","author":{"@type":"Organization","name":"Conduction","@id":"https://www.conduction.nl/#org"}}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","@id":"https://www.conduction.nl/#org","name":"Conduction B.V.","alternateName":"Conduction","url":"https://www.conduction.nl/","logo":"https://www.conduction.nl/img/brand/avatar-conduction-gold-on-white.svg","foundingDate":"2019","description":"Dutch open-source software company building EUPL-1.2 apps for the Nextcloud workspace.","address":{"@type":"PostalAddress","streetAddress":"Lauriergracht 14h","postalCode":"1016 RR","addressLocality":"Amsterdam","addressCountry":"NL"},"email":"info@conduction.nl","telephone":"+31-85-303-6840","taxID":"NL860784241B01","vatID":"NL860784241B01","identifier":{"@type":"PropertyValue","propertyID":"KvK","value":"76741850"},"sameAs":["https://github.com/ConductionNL","https://www.linkedin.com/company/conduction/"]}</script>
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","@id":"https://docs.conduction.nl/#website","url":"https://docs.conduction.nl/","name":"Conduction Docs","publisher":{"@id":"https://www.conduction.nl/#org"},"inLanguage":["en","nl"]}</script><link rel="stylesheet" href="/assets/css/styles.f2866016.css">
-<script src="/assets/js/runtime~main.fa4f064c.js" defer="defer"></script>
+<script src="/assets/js/runtime~main.547167c7.js" defer="defer"></script>
 <script src="/assets/js/main.2e95517d.js" defer="defer"></script>
 </head>
 <body>
@@ -16,80 +16,6 @@
 <p>Live <code>Code Quality</code> status for every Conduction Nextcloud app, on each of the
 three branches it ships through. Badges come straight from GitHub Actions and
 update themselves — click one to open that branch&#x27;s runs.</p>
-<div class="theme-admonition theme-admonition-caution admonition_xJq3 alert alert--warning"><div class="admonitionHeading_Gvgb"><span class="admonitionIcon_Rf37"><svg viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8.893 1.5c-.183-.31-.52-.5-.887-.5s-.703.19-.886.5L.138 13.499a.98.98 0 0 0 0 1.001c.193.31.53.501.886.501h13.964c.367 0 .704-.19.877-.5a1.03 1.03 0 0 0 .01-1.002L8.893 1.5zm.133 11.497H6.987v-2.003h2.039v2.003zm0-3.004H6.987V5.987h2.039v4.006z"></path></svg></span>Read a badge carefully — red is not one thing</div><div class="admonitionContent_BuS1"><p>A <strong>grey <code>no status</code></strong> badge does not mean healthy. It means the workflow has
-<strong>never run on that branch</strong>. Unmeasured and passing look identical here, and
-unmeasured is the more expensive of the two.</p><p>A <strong>red</strong> badge has at least five distinct causes, and only the first is what
-most readers assume:</p><ol>
-<li class="">A check genuinely failed.</li>
-<li class="">The workflow never started (<code>startup_failure</code>) — nothing was ever measured.</li>
-<li class=""><code>gate-4 composer-audit</code> hit an advisory that has since been <strong>withdrawn</strong>.
-It reads a live feed, so a rerun clears it with no code change.</li>
-<li class="">A GitHub platform incident (<code>codeload</code> 429/503) meant the job could not
-download its own dependencies.</li>
-<li class="">The job <strong>ran, exited non-zero, and did no work</strong> — which renders exactly
-like a real failure.</li>
-</ol><p>The ten-second discriminator for 3–5 is the log: open the run and check the job
-produced its own output marker (<code>Tests:</code>, <code>[gate-</code>, <code>assertions</code>). A PHP job log
-of ~3 KB did nothing.</p></div></div>
-<div class="theme-admonition theme-admonition-tip admonition_xJq3 alert alert--success"><div class="admonitionHeading_Gvgb"><span class="admonitionIcon_Rf37"><svg viewBox="0 0 12 16"><path fill-rule="evenodd" d="M6.5 0C3.48 0 1 2.19 1 5c0 .92.55 2.25 1 3 1.34 2.25 1.78 2.78 2 4v1h5v-1c.22-1.22.66-1.75 2-4 .45-.75 1-2.08 1-3 0-2.81-2.48-5-5.5-5zm3.64 7.48c-.25.44-.47.8-.67 1.11-.86 1.41-1.25 2.06-1.45 3.23-.02.05-.02.11-.02.17H5c0-.06 0-.13-.02-.17-.2-1.17-.59-1.83-1.45-3.23-.2-.31-.42-.67-.67-1.11C2.44 6.78 2 5.65 2 5c0-2.2 2.02-4 4.5-4 1.22 0 2.36.42 3.22 1.19C10.55 2.94 11 3.94 11 5c0 .66-.44 1.78-.86 2.48zM4 14h5c-.23 1.14-1.3 2-2.5 2s-2.27-.86-2.5-2z"></path></svg></span>These badges show the BRANCH, not the last pull request</div><div class="admonitionContent_BuS1"><p>Each badge is filtered to <strong><code>event=push</code></strong>, so it reflects the state of the
-branch itself — the run that fired when a commit landed on it.</p><p>That filter is load-bearing. GitHub&#x27;s own badge endpoint
-(<code>github.com/.../badge.svg?branch=X</code>) has <strong>no event parameter</strong>: it renders the
-newest run on the branch <em>whatever the event</em>, and a pull request whose <strong>head</strong>
-is <code>development</code> counts as &quot;on development&quot;. The fleet promotes with
-<code>development -&gt; beta</code> pull requests, so those promotion runs landed under the
-<code>development</code> badge and, being newer, won.</p><p>Measured 2026-08-18 — six apps, all with a green <code>development</code> branch:</p>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-<table><thead><tr><th>App</th><th>branch (push)</th><th>GitHub badge</th><th>shields badge (<code>event=push</code>)</th></tr></thead><tbody><tr><td>hermiq</td><td>success</td><td><strong>failing</strong></td><td>passing</td></tr><tr><td>openconnector</td><td>success</td><td><strong>failing</strong></td><td>passing</td></tr><tr><td>pipelinq</td><td>success</td><td><strong>failing</strong></td><td>passing</td></tr><tr><td>shillinq</td><td>success</td><td><strong>failing</strong></td><td>passing</td></tr><tr><td>opencatalogi</td><td>success</td><td>passing</td><td>passing</td></tr><tr><td>openregister</td><td>success</td><td>passing</td><td>passing</td></tr></tbody></table><p>Four apps read as broken while their branches were green. A red badge here now
-means the branch is red — a failing promotion pull request no longer shows up as
-one.</p><p>To check a branch yourself:</p><div class="language-text codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#bfc7d5;--prism-background-color:#292d3e"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-text codeBlock_bY9V thin-scrollbar" style="color:#bfc7d5;background-color:#292d3e"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#bfc7d5"><span class="token plain">gh api &quot;repos/ConductionNL/&lt;app&gt;/actions/workflows/code-quality.yml/runs?branch=development&amp;event=push&amp;per_page=5&quot; \</span><br></div><div class="token-line" style="color:#bfc7d5"><span class="token plain">  --jq &#x27;[.workflow_runs[]]|sort_by(.created_at)|reverse|.[0]|&quot;\(.conclusion) \(.created_at)&quot;&#x27;</span><br></div></code></pre></div></div><p>⚠️ Two things these badges still cannot tell you. <strong>shields.io caches</strong> for a
-few minutes, so a badge can lag a run that has just finished — when it matters,
-read the API. And a <strong>grey <code>no status</code></strong> badge still means the workflow has
-never run on that branch with that event: unmeasured, not healthy.</p></div></div>
 <h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="nextcloud-apps">Nextcloud apps<a href="#nextcloud-apps" class="hash-link" aria-label="Direct link to Nextcloud apps" title="Direct link to Nextcloud apps" translate="no">​</a></h2>
 
 
