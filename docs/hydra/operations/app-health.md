@@ -124,6 +124,32 @@ version leaves upstream support. Check the anchor version before assuming an old
 install is out of scope: **the app's clock started at its launch, not at
 Nextcloud's end-of-life.**
 
+## Friday automation
+
+Every Friday at **08:00 Europe/Amsterdam**, per app:
+
+1. Merge outstanding `development` pull requests whose checks are **fully green**
+2. Open `development → beta`; when green, merge it
+3. Release
+
+**Green means green.** Not parity with a red base, not "only the usual
+failures" — a pull request merges unattended only when every check has a verdict
+and none of them failed. A pending check is not a pass, and an unreadable
+response is not a pass either; both mean skip and report.
+
+Anything the routine skips is logged with its reason. A silent skip is
+indistinguishable from a merge that happened, and a routine you cannot audit is
+a routine you cannot trust to run while nobody is watching.
+
+⚠️ **The clock is UTC.** GitHub cron has no time-zone support, so 08:00 Dutch is
+`06:00 UTC` in summer and `07:00 UTC` in winter. A fixed cron drifts an hour
+twice a year; the schedule is set in UTC and the job checks local time before
+acting, rather than pretending the drift does not exist.
+
+**Status: designed, not yet running.** Until the workflow exists this section
+describes intent, not behaviour — and a documented routine that nothing executes
+is worth less than no routine at all, because it reads as a guarantee.
+
 ## Release schedule
 
 App Store on **Friday**, social announcement the following **Monday**. After the
