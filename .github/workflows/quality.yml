@@ -2555,9 +2555,68 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BASE_REF: ${{ github.event.pull_request.base.ref }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           set -euo pipefail
           cd "server/apps/${{ inputs.app-name }}"
+
+          # A RELEASE PROMOTION HAS NO RATCHET TO RUN, AND ITS BASE CANNOT BOOT.
+          #
+          # This step runs the BASE's test suite inside the HEAD's environment.
+          # `server/` is checked out once, at
+          # `needs.nextcloud-matrix.outputs.single-server` (the numerically
+          # highest stable branch), and is never moved when the app is rewound
+          # to the merge base. For a feature branch that is harmless: the merge
+          # base is days old, and base and head agree about which Nextcloud
+          # they are written against. For a `development -> beta` promotion the
+          # merge base is the PREVIOUS RELEASE POINT, a whole cycle behind, and
+          # that span routinely contains a Nextcloud major adoption. The base
+          # then fatals at LOAD time, produces no clover at all, and the guard
+          # below refuses — correctly on its own terms, but naming no remedy
+          # the author can take, because a merge base is immutable history.
+          #
+          # Observed 2026-08-18 on ConductionNL/openconnector#1094
+          # (`development -> beta`, 1752 files, run 32111820806). Merge base
+          # 071eb50e (2026-07-09) still carried the pre-NC34 stub
+          # `tests/stubs/OC/Hooks/Emitter.php`, and the base suite died in 1.8s:
+          #
+          #   PHP Fatal error: Declaration of OC\Files\Node\LazyFolder::listen(
+          #   $scope, $method, callable $callback) must be compatible with
+          #   OC\Hooks\Emitter::listen(string $scope, string $method,
+          #   callable $callback): void
+          #
+          # That stub was made untyped in openconnector#1229 on 2026-08-12 —
+          # INSIDE the promotion diff. The sibling branch's remedy ("merge the
+          # current base branch into this pull request") was checked and does
+          # not work either: `beta`'s own tip 01a15d4f carries the same typed
+          # stub, so merging it moves the merge base to a commit that fatals
+          # identically. Every run of #1094 from 2026-08-16 on was red on this
+          # step alone — the suite itself passed with
+          # `Tests: 2359, Assertions: 8341` and the head clover measured 62.05%
+          # against a committed floor of 60.65%.
+          #
+          # THIS IS NOT A COVERAGE FLOOR GOING UNCHECKED. `Guard coverage
+          # baseline` below falls back to the committed `.coverage-baseline` on
+          # exactly this condition, so an absolute floor is still enforced and
+          # the log says in words which check ran. What is skipped is the
+          # RATCHET, and on a promotion it has nothing to catch: every commit in
+          # the diff already faced the ratchet on its own pull request into
+          # `development`.
+          #
+          # SCOPED BY THE HEAD REF, NEVER BY THE BASE REF. Nine of the eighteen
+          # fleet repositories have `main` as their GitHub default branch, so
+          # exempting "pull requests targeting main" would silently disarm the
+          # ratchet for half the fleet's ordinary feature work. `development`
+          # and `beta` are protected long-lived integration branches and no
+          # feature branch is named either, so a pull request whose HEAD is one
+          # of them is a promotion by construction.
+          case "$PR_HEAD_REF" in
+            development|beta)
+              echo "::notice::Release promotion ($PR_HEAD_REF -> $BASE_REF): skipping the merge-base coverage ratchet. Its merge base is the previous release point and cannot be booted in this job's Nextcloud environment, and every commit in the diff already passed the ratchet on its own pull request into $PR_HEAD_REF. The committed .coverage-baseline floor is still enforced by the next step."
+              exit 0
+              ;;
+          esac
+
           HEAD_SHA="$(git rev-parse HEAD)"
 
           SECOND_PARENT="$(git rev-parse --verify --quiet "${HEAD_SHA}^2" || true)"
@@ -2608,6 +2667,11 @@ jobs:
       # this should never fire; if it does, the repository is the thing to fix.
       - name: Guard coverage baseline
         if: inputs.enable-coverage-guard && matrix.php-version == inputs.php-version && matrix.nextcloud-ref == needs.nextcloud-matrix.outputs.single-server
+        env:
+          # Through `env:`, never interpolated into the script body. A branch
+          # name is attacker-controlled text and git permits a double quote in
+          # one, so `case "${{ ... }}" in` would be a script-injection site.
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           set -euo pipefail
           cd "server/apps/${{ inputs.app-name }}"
@@ -2660,6 +2724,29 @@ jobs:
           # the previous behaviour instead of erroring, because unlike `against`
           # this is a narrowing of an existing check, not the difference between
           # a check running and not running.
+          # THE PROMOTION EXEMPTION, ENFORCED HERE TOO — and nowhere wider.
+          #
+          # `Measure merge-base coverage` exits 0 without writing
+          # base-clover.xml for a `development`/`beta` head ref; its comment
+          # carries the evidence. Falling back on the mere ABSENCE of that file
+          # would be the wrong test: absence is also what a future bug in that
+          # step would look like, and this branch would then quietly demote the
+          # ratchet to the constant floor while still reporting success — the
+          # silent-downgrade shape the `against` probe above exists to prevent.
+          # So the fallback is gated on the SAME head-ref condition, and any
+          # other route to a missing base clover stays a hard failure.
+          case "${PR_HEAD_REF:-}" in
+            development|beta)
+              echo "::notice::Release promotion: the merge-base ratchet did not run (see the previous step). Enforcing the committed .coverage-baseline floor instead."
+              php scripts/coverage-guard.php coverage/clover.xml
+              exit 0
+              ;;
+          esac
+          if [ ! -s "$RUNNER_TEMP/base-clover.xml" ]; then
+            echo "::error::No merge-base clover report, and this is not a release promotion — 'Measure merge-base coverage' should have failed before this step was reached. Refusing to report a ratchet that did not run."
+            exit 1
+          fi
+
           if php scripts/coverage-guard.php --capabilities 2>/dev/null | grep -qx changed-files; then
             MERGE_BASE="$(git merge-base "${{ github.event.pull_request.base.sha }}" HEAD)"
             # `|| true`: an empty diff is a legitimate answer (docs-only, or a
