@@ -90,6 +90,40 @@ before treating a blank cell as healthy.
 in its npm metadata. Codeberg is retired; the live source is
 `ConductionNL/design-system`.
 
+## Lifecycle and support
+
+Every app release is **tied to a Nextcloud version** — the one current at its
+launch — though a release may still support lower versions. That anchor is what
+the support window is measured from.
+
+| Guarantee | Window |
+| --- | --- |
+| Bug fixes | **2 years** |
+| Security fixes (CVE) | **5 years** |
+
+### When a release happens relative to Nextcloud
+
+The fleet runs two-week phases, so a beta is always one phase ahead of its
+stable release.
+
+| Category | Stable release | Beta available |
+| --- | --- | --- |
+| **Platform apps** | the **day** Nextcloud releases | **2 weeks before** the Nextcloud release |
+| **Application apps** | the **week after** Nextcloud releases | **1 week before** the Nextcloud release |
+
+Platform apps go first on purpose: application apps are thin clients over
+`openregister` and `openconnector`, so the layer underneath has to be on the new
+Nextcloud version before the layer above can be.
+
+Application releases are normally **minor** — a new Nextcloud version is not by
+itself a reason for a breaking change.
+
+A five-year CVE window tied to a launch-time Nextcloud version means an app
+released today is still receiving security fixes long after that Nextcloud
+version leaves upstream support. Check the anchor version before assuming an old
+install is out of scope: **the app's clock started at its launch, not at
+Nextcloud's end-of-life.**
+
 ## Release schedule
 
 App Store on **Friday**, social announcement the following **Monday**. After the
