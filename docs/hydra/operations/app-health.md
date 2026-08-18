@@ -4,69 +4,6 @@ Live `Code Quality` status for every Conduction Nextcloud app, on each of the
 three branches it ships through. Badges come straight from GitHub Actions and
 update themselves — click one to open that branch's runs.
 
-:::caution Read a badge carefully — red is not one thing
-
-A **grey `no status`** badge does not mean healthy. It means the workflow has
-**never run on that branch**. Unmeasured and passing look identical here, and
-unmeasured is the more expensive of the two.
-
-A **red** badge has at least five distinct causes, and only the first is what
-most readers assume:
-
-1. A check genuinely failed.
-2. The workflow never started (`startup_failure`) — nothing was ever measured.
-3. `gate-4 composer-audit` hit an advisory that has since been **withdrawn**.
-   It reads a live feed, so a rerun clears it with no code change.
-4. A GitHub platform incident (`codeload` 429/503) meant the job could not
-   download its own dependencies.
-5. The job **ran, exited non-zero, and did no work** — which renders exactly
-   like a real failure.
-
-The ten-second discriminator for 3–5 is the log: open the run and check the job
-produced its own output marker (`Tests:`, `[gate-`, `assertions`). A PHP job log
-of ~3 KB did nothing.
-:::
-
-:::tip These badges show the BRANCH, not the last pull request
-
-Each badge is filtered to **`event=push`**, so it reflects the state of the
-branch itself — the run that fired when a commit landed on it.
-
-That filter is load-bearing. GitHub's own badge endpoint
-(`github.com/.../badge.svg?branch=X`) has **no event parameter**: it renders the
-newest run on the branch *whatever the event*, and a pull request whose **head**
-is `development` counts as "on development". The fleet promotes with
-`development -> beta` pull requests, so those promotion runs landed under the
-`development` badge and, being newer, won.
-
-Measured 2026-08-18 — six apps, all with a green `development` branch:
-
-| App | branch (push) | GitHub badge | shields badge (`event=push`) |
-| --- | --- | --- | --- |
-| hermiq | success | **failing** | passing |
-| openconnector | success | **failing** | passing |
-| pipelinq | success | **failing** | passing |
-| shillinq | success | **failing** | passing |
-| opencatalogi | success | passing | passing |
-| openregister | success | passing | passing |
-
-Four apps read as broken while their branches were green. A red badge here now
-means the branch is red — a failing promotion pull request no longer shows up as
-one.
-
-To check a branch yourself:
-
-```
-gh api "repos/ConductionNL/<app>/actions/workflows/code-quality.yml/runs?branch=development&event=push&per_page=5" \
-  --jq '[.workflow_runs[]]|sort_by(.created_at)|reverse|.[0]|"\(.conclusion) \(.created_at)"'
-```
-
-⚠️ Two things these badges still cannot tell you. **shields.io caches** for a
-few minutes, so a badge can lag a run that has just finished — when it matters,
-read the API. And a **grey `no status`** badge still means the workflow has
-never run on that branch with that event: unmeasured, not healthy.
-:::
-
 ## Nextcloud apps
 
 | App | main | beta | development |
