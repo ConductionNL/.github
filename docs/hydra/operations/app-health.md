@@ -27,6 +27,38 @@ produced its own output marker (`Tests:`, `[gate-`, `assertions`). A PHP job log
 of ~3 KB did nothing.
 :::
 
+:::caution A `development` badge is not only the `development` branch
+
+GitHub renders `?branch=X` as **the latest run on that branch, whatever the
+event** — and a pull request whose **head** is `development` counts as "on
+development". The fleet promotes with `development → beta` PRs, so those
+promotion runs land under this badge alongside the branch's own push runs.
+
+They do not measure the same thing. A promotion PR is diff-scoped against
+`origin/beta`, so delta gates such as `gate-16 spec-coverage` judge *everything
+accumulated since the last promotion* — a far larger diff than any single push.
+Measured on 2026-08-18, four apps showed exactly this split:
+
+| App | `development` push | `development → beta` PR |
+| --- | --- | --- |
+| hermiq | success | failure |
+| openconnector | success | failure |
+| pipelinq | success | failure |
+| scholiq | success | failure |
+
+Same branch, same day, opposite verdicts — and the badge shows the PR one,
+because it is newer. So a red `development` badge means **either** the branch's
+own CI is failing **or** its promotion to `beta` is blocked, and the two need
+different fixes.
+
+To see which, filter by event:
+
+```
+gh run list -R ConductionNL/<app> --workflow "Code Quality" \
+    --branch development --event push --limit 1
+```
+:::
+
 ## Nextcloud apps
 
 | App | main | beta | development |
