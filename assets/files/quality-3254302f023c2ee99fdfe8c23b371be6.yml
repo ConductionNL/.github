@@ -894,9 +894,30 @@ jobs:
             echo "No appinfo/info.xml — this repo is not a Nextcloud app."
           fi
 
+      # BOUNDED, AND NOT SILENT. `-qq` on both halves meant a stalled Ubuntu
+      # mirror produced ZERO bytes of output for the full step timeout, so the
+      # log showed the command and nothing else — measured on decidesk,
+      # procest and zaakafhandelapp on 2026-08-18, 10m19s of silence apiece
+      # before the runner killed it. There was no way to tell a hung mirror
+      # from a hung runner from a package that does not exist.
+      #
+      # `timeout 300` fails this step in five minutes instead of burning the
+      # job's whole budget, and one `q` less lets apt say what it is doing.
+      # The retry covers the common case where the mirror is briefly
+      # unreachable rather than down.
       - name: Install xmllint
         if: steps.detect.outputs.run == 'true'
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libxml2-utils
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if timeout 300 sudo apt-get update -q && timeout 300 sudo apt-get install -y -q libxml2-utils; then
+              exit 0
+            fi
+            echo "::warning::apt attempt ${attempt}/3 failed or timed out after 300s; retrying."
+            sleep 10
+          done
+          echo "::error::Could not install libxml2-utils after 3 bounded attempts — the Ubuntu mirror is unreachable or stalled. This is infrastructure, not this app's manifest."
+          exit 1
 
       - name: Fetch the App Store schema
         if: steps.detect.outputs.run == 'true'
@@ -5586,8 +5607,39 @@ jobs:
           path: results/playwright-report/
         continue-on-error: true
 
+      # A PACKAGE INSTALL MUST NOT BE ABLE TO DISABLE THE GATE.
+      #
+      # Measured on decidesk run 32158299327 and shillinq run 32158364133,
+      # 2026-08-18: this step produced zero output for SIXTY MINUTES, hit the
+      # job timeout, and the runner cancelled the job. Everything downstream —
+      # including "Gate — fail when any upstream job failed", "Gate — a test
+      # job that was ENABLED but never ran", and "Gate — fail when an upstream
+      # job was cancelled" — was SKIPPED. Both runs went red on `development`
+      # with every other job green, and the three steps whose entire purpose is
+      # to decide pass/fail never executed. An apt mirror turned the quality
+      # gate off.
+      #
+      # pandoc and wkhtmltopdf render the markdown report to PDF. That is a
+      # nice-to-have attachment; the report, the step summary and the gates all
+      # work without them. So this is now bounded (5 min per attempt, 3
+      # attempts), non-fatal, and records whether it succeeded. `-qq` is gone
+      # because it hid the stall completely — the old log contained the command
+      # and nothing else.
       - name: Install PDF tools
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq pandoc wkhtmltopdf
+        id: pdf_tools
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          for attempt in 1 2 3; do
+            if timeout 300 sudo apt-get update -q && timeout 300 sudo apt-get install -y -q pandoc wkhtmltopdf; then
+              echo "available=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "::warning::apt attempt ${attempt}/3 failed or timed out after 300s; retrying."
+            sleep 10
+          done
+          echo "available=false" >> "$GITHUB_OUTPUT"
+          echo "::warning::pandoc/wkhtmltopdf could not be installed after 3 bounded attempts. The PDF rendering of the quality report is skipped; the report, the step summary and every gate below still run. This is infrastructure, not a finding about this app."
 
       - name: Generate report
         run: |
@@ -5814,7 +5866,12 @@ jobs:
 
           echo "Report generated: $(wc -l < "$REPORT") lines"
 
+      # Only when the tools actually installed. Previously this ran
+      # unconditionally, so a failed install turned into a second, more
+      # confusing failure here ("pandoc: command not found") on top of the
+      # first.
       - name: Convert to PDF
+        if: steps.pdf_tools.outputs.available == 'true'
         run: |
           pandoc quality-report.md \
             -o quality-report.pdf \
