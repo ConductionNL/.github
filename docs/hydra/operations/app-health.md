@@ -75,13 +75,49 @@ gh run list -R ConductionNL/<app> --workflow "Code Quality" \
 | [openconnector](https://github.com/ConductionNL/openconnector) | ![main](https://github.com/ConductionNL/openconnector/actions/workflows/code-quality.yml/badge.svg?branch=main) | ![beta](https://github.com/ConductionNL/openconnector/actions/workflows/code-quality.yml/badge.svg?branch=beta) | ![development](https://github.com/ConductionNL/openconnector/actions/workflows/code-quality.yml/badge.svg?branch=development) |
 | [openregister](https://github.com/ConductionNL/openregister) | ![main](https://github.com/ConductionNL/openregister/actions/workflows/code-quality.yml/badge.svg?branch=main) | ![beta](https://github.com/ConductionNL/openregister/actions/workflows/code-quality.yml/badge.svg?branch=beta) | ![development](https://github.com/ConductionNL/openregister/actions/workflows/code-quality.yml/badge.svg?branch=development) |
 | [pipelinq](https://github.com/ConductionNL/pipelinq) | ![main](https://github.com/ConductionNL/pipelinq/actions/workflows/code-quality.yml/badge.svg?branch=main) | ![beta](https://github.com/ConductionNL/pipelinq/actions/workflows/code-quality.yml/badge.svg?branch=beta) | ![development](https://github.com/ConductionNL/pipelinq/actions/workflows/code-quality.yml/badge.svg?branch=development) |
-| [planix](https://github.com/ConductionNL/planix) | ![main](https://github.com/ConductionNL/planix/actions/workflows/code-quality.yml/badge.svg?branch=main) | ![beta](https://github.com/ConductionNL/planix/actions/workflows/code-quality.yml/badge.svg?branch=beta) | ![development](https://github.com/ConductionNL/planix/actions/workflows/code-quality.yml/badge.svg?branch=development) |
 | [portaliq](https://github.com/ConductionNL/portaliq) | ![main](https://github.com/ConductionNL/portaliq/actions/workflows/code-quality.yml/badge.svg?branch=main) | ![beta](https://github.com/ConductionNL/portaliq/actions/workflows/code-quality.yml/badge.svg?branch=beta) | ![development](https://github.com/ConductionNL/portaliq/actions/workflows/code-quality.yml/badge.svg?branch=development) |
 | [procest](https://github.com/ConductionNL/procest) | ![main](https://github.com/ConductionNL/procest/actions/workflows/code-quality.yml/badge.svg?branch=main) | ![beta](https://github.com/ConductionNL/procest/actions/workflows/code-quality.yml/badge.svg?branch=beta) | ![development](https://github.com/ConductionNL/procest/actions/workflows/code-quality.yml/badge.svg?branch=development) |
 | [scholiq](https://github.com/ConductionNL/scholiq) | ![main](https://github.com/ConductionNL/scholiq/actions/workflows/code-quality.yml/badge.svg?branch=main) | ![beta](https://github.com/ConductionNL/scholiq/actions/workflows/code-quality.yml/badge.svg?branch=beta) | ![development](https://github.com/ConductionNL/scholiq/actions/workflows/code-quality.yml/badge.svg?branch=development) |
 | [shillinq](https://github.com/ConductionNL/shillinq) | ![main](https://github.com/ConductionNL/shillinq/actions/workflows/code-quality.yml/badge.svg?branch=main) | ![beta](https://github.com/ConductionNL/shillinq/actions/workflows/code-quality.yml/badge.svg?branch=beta) | ![development](https://github.com/ConductionNL/shillinq/actions/workflows/code-quality.yml/badge.svg?branch=development) |
 | [softwarecatalog](https://github.com/ConductionNL/softwarecatalog) | ![main](https://github.com/ConductionNL/softwarecatalog/actions/workflows/code-quality.yml/badge.svg?branch=main) | ![beta](https://github.com/ConductionNL/softwarecatalog/actions/workflows/code-quality.yml/badge.svg?branch=beta) | ![development](https://github.com/ConductionNL/softwarecatalog/actions/workflows/code-quality.yml/badge.svg?branch=development) |
-| [zaakafhandelapp](https://github.com/ConductionNL/zaakafhandelapp) | ![main](https://github.com/ConductionNL/zaakafhandelapp/actions/workflows/code-quality.yml/badge.svg?branch=main) | ![beta](https://github.com/ConductionNL/zaakafhandelapp/actions/workflows/code-quality.yml/badge.svg?branch=beta) | ![development](https://github.com/ConductionNL/zaakafhandelapp/actions/workflows/code-quality.yml/badge.svg?branch=development) |
+
+## Deprecated apps
+
+Still in the repository and still building, but **not being taken forward**.
+They are listed because a deprecated app that disappears from the dashboard
+becomes an app nobody is measuring — and unmeasured is the state this page
+exists to make visible. Red here is informational: do not spend effort greening
+a row in this table without checking first whether the work is wanted.
+
+| App | main | beta | development | Status |
+| --- | --- | --- | --- | --- |
+| [planix](https://github.com/ConductionNL/planix) | ![main](https://github.com/ConductionNL/planix/actions/workflows/code-quality.yml/badge.svg?branch=main) | ![beta](https://github.com/ConductionNL/planix/actions/workflows/code-quality.yml/badge.svg?branch=beta) | ![development](https://github.com/ConductionNL/planix/actions/workflows/code-quality.yml/badge.svg?branch=development) | deprecated |
+| [zaakafhandelapp](https://github.com/ConductionNL/zaakafhandelapp) | ![main](https://github.com/ConductionNL/zaakafhandelapp/actions/workflows/code-quality.yml/badge.svg?branch=main) | ![beta](https://github.com/ConductionNL/zaakafhandelapp/actions/workflows/code-quality.yml/badge.svg?branch=beta) | ![development](https://github.com/ConductionNL/zaakafhandelapp/actions/workflows/code-quality.yml/badge.svg?branch=development) | deprecated |
+
+## Renaming
+
+Apps are being renamed onto a common suffix. Both names appear in the wild
+during a rename — the repository, the `appinfo/info.xml` id, the OpenSpec
+directory and the App Store listing do not all move on the same day — so this
+table is the mapping of record.
+
+⚠️ **A rename is a data migration, not a find-and-replace.** The app id appears
+in `appinfo/info.xml`, route names, OpenRegister register slugs, app-config
+keys, and any object already written under the old id. Renaming the repository
+alone leaves live data pointing at a name nothing answers to.
+
+| Old name | New name | Status |
+| --- | --- | --- |
+| `mydash` | **`launchpad`** | done — the `mydash` repo is archived; treat any surviving reference as stale |
+| `scholiq` | `Learniq` | planned |
+| `nldesign` | `Themiq` | planned |
+| `hrmq` | `Humaniq` | planned |
+| `decidesk` | `Decidiq` | planned |
+| `larpingapp` | `Larpiq` | planned |
+| `openbuild` | `Buildiq` | planned |
+
+Until a row reads *done*, the **old** name is the one that resolves — the badges
+above and every `gh` command still use it.
 
 ## Libraries
 
@@ -117,6 +153,13 @@ That matters. A hand-maintained fleet list previously omitted seven live apps,
 and one of them carried well over a thousand outstanding gate findings while
 going entirely unmeasured, because nothing swept an app that wasn't on the list.
 Building this page from the catalog immediately surfaced `planix`, a Nextcloud
-app running `Code Quality` that the working fleet list did not include.
+app running `Code Quality` that the working fleet list did not include. It is
+now listed under **Deprecated apps** — which is the point: it went unmeasured
+for months precisely because no list carried it, and "deprecated" is a reason to
+record an app, not to drop it.
+
+**This page is the list of record.** If an app is not on it — active,
+deprecated, or excluded with a reason below — it is not being measured by
+anybody. Add the row before you need it.
 
 Archived repositories are excluded.
