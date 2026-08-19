@@ -877,7 +877,21 @@ jobs:
     if: ${{ inputs.enable-php }}
     runs-on: ubuntu-latest
     name: "info.xml lint"
-    timeout-minutes: 10
+    # 🔑 A JOB CAP MUST BE LARGER THAN ITS OWN STEPS' WORST CASE, OR THE
+    # CAREFUL BOUNDED RETRY BELOW CAN NEVER FINISH.
+    #
+    # This was 10 while `Install xmllint` was written to allow 3 attempts of up
+    # to 300s + 300s each — a worst case of ~30 minutes inside a 10-minute job.
+    # The retry was therefore killed mid-SECOND attempt every time, and the
+    # outcome was `cancelled` (no verdict, neither failed nor passed) rather
+    # than the clear "the mirror is unreachable, this is infrastructure" error
+    # it was written to produce. Observed 2026-08-19 on hrmq (10m10s) and
+    # app-versions (10m18s).
+    #
+    # The step's attempts are now 120s + 180s, so its worst case is
+    # 3 × 300s + 2 × 10s sleep ≈ 15.3 min. 20 leaves headroom for checkout and
+    # the validation steps. CHANGE BOTH TOGETHER — the arithmetic is the point.
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -909,14 +923,28 @@ jobs:
         if: steps.detect.outputs.run == 'true'
         run: |
           set -euo pipefail
+
+          # DON'T REACH FOR apt AT ALL IF THE TOOL IS ALREADY HERE. The runner
+          # image ships libxml2-utils, so the overwhelmingly common path needs
+          # no package manager — and the stall this step keeps hitting is apt
+          # blocking on /var/lib/dpkg/lock-frontend, which it waits on forever
+          # by design while printing nothing. The cheapest way not to hang on a
+          # lock is not to take it.
+          if command -v xmllint > /dev/null 2>&1; then
+            echo "xmllint already present: $(xmllint --version 2>&1 | head -1)"
+            exit 0
+          fi
+
+          # Fallback, bounded so its worst case fits this job's cap:
+          # 3 × (120s + 180s) + 2 × 10s ≈ 15.3 min against timeout-minutes: 20.
           for attempt in 1 2 3; do
-            if timeout 300 sudo apt-get update -q && timeout 300 sudo apt-get install -y -q libxml2-utils; then
+            if timeout 120 sudo apt-get update -q && timeout 180 sudo apt-get install -y -q libxml2-utils; then
               exit 0
             fi
-            echo "::warning::apt attempt ${attempt}/3 failed or timed out after 300s; retrying."
+            echo "::warning::apt attempt ${attempt}/3 failed or timed out; retrying."
             sleep 10
           done
-          echo "::error::Could not install libxml2-utils after 3 bounded attempts — the Ubuntu mirror is unreachable or stalled. This is infrastructure, not this app's manifest."
+          echo "::error::Could not install libxml2-utils after 3 bounded attempts — the Ubuntu mirror is unreachable or apt is stalled on the dpkg lock. This is infrastructure, not this app's manifest."
           exit 1
 
       - name: Fetch the App Store schema
@@ -3368,10 +3396,69 @@ jobs:
           fi
 
       - name: Install Playwright
+        # A STALLED SETUP STEP EATS THE JOB'S WHOLE CAP AND LEAVES NO VERDICT.
+        #
+        # Measured 2026-08-19 on app-versions' `development` push run: this step
+        # ran 45m24s and the job was cancelled at its `timeout-minutes: 45`
+        # bound — `Run Playwright tests` never started, so the run produced no
+        # tally, no trace upload (`if: failure()` does not fire on a cancelled
+        # job) and no report. It still renders as a red check while carrying no
+        # information about the app, and `cancelled` is neither failed nor
+        # passed. The same PR's E2E job completed in 24m, so the stall is
+        # intermittent, not a capacity problem.
+        #
+        # `--with-deps` shells out to apt, which is the same thing that hung
+        # `Install PDF tools` for 60 minutes across the fleet (#504) and
+        # silently switched the quality gate off there too.
+        #
+        # A step bound converts that into a fast, readable failure. Measured
+        # normal duration for this step is under 3 minutes, so 10 leaves more
+        # than 3x headroom — a bound that a healthy run could hit would just be
+        # a new way to invent a phantom defect.
+        timeout-minutes: 10
         run: |
           cd server/apps/${{ inputs.app-name }}
           npm install --save-dev @playwright/test
-          npx playwright install --with-deps chromium
+
+          # ── WHY THIS IS TWO COMMANDS AND NOT `--with-deps` ──────────────────
+          #
+          # `--with-deps` does two unrelated things in one process: download the
+          # browser binaries from a CDN, and `apt-get install` the system
+          # libraries. Measured 2026-08-19 across THREE runs in one morning
+          # (app-versions development, app-versions #151, hrmq #87), the
+          # combined command printed NOT ONE LINE of output and hung until the
+          # job's 45-minute cap killed it:
+          #
+          #     Terminate orphan process: pid (3857)
+          #         (npm exec playwright install --with-deps chromium)
+          #
+          # Silence from the first instant is the signature of apt blocking on
+          # /var/lib/dpkg/lock-frontend — apt waits for that lock forever by
+          # design and says nothing while it does. Same mechanism as the
+          # `Install PDF tools` stall in #504.
+          #
+          # Split, the two halves can be treated according to what they are:
+          #
+          # 1. The browser download is REQUIRED and is a plain CDN fetch that
+          #    prints progress, so a stall there is visible and fatal.
+          npx playwright install chromium
+
+          # 2. The system libraries are ATTEMPTED, bounded, and NOT fatal.
+          #    GitHub's ubuntu runner image already ships the libraries chromium
+          #    needs, which is why the suites that got past this step ran fine.
+          #    A `timeout` gives apt the bound it will not give itself.
+          #
+          #    ⚠️ NOT-FATAL IS A DELIBERATE TRADE, NOT A SWALLOWED ERROR. If a
+          #    library really is missing, the browser fails to launch in the
+          #    test step and Playwright says exactly which one — a real verdict
+          #    about a real problem. The alternative it replaces is a 45-minute
+          #    cancellation that produces no tally, no trace and no report while
+          #    still rendering as a red check.
+          if timeout 300 npx playwright install-deps chromium; then
+            echo "Playwright system dependencies installed."
+          else
+            echo "::warning::playwright install-deps did not finish within 5m (apt lock or mirror). Continuing: the runner image ships these libraries, and a genuinely missing one fails loudly at browser launch."
+          fi
 
       # ── Reuse the bundle the `frontend-build` job already compiled ─────────
       #
@@ -4482,10 +4569,53 @@ jobs:
           fi
 
       - name: Install Playwright
+        # Same bound, same reason as the playwright job's copy of this step: an
+        # apt stall inside `--with-deps` otherwise consumes the job's cap and
+        # cancels it before any capture runs, producing no verdict at all.
+        timeout-minutes: 10
         run: |
           cd server/apps/${{ inputs.app-name }}
           npm install --save-dev @playwright/test
-          npx playwright install --with-deps chromium
+
+          # ── WHY THIS IS TWO COMMANDS AND NOT `--with-deps` ──────────────────
+          #
+          # `--with-deps` does two unrelated things in one process: download the
+          # browser binaries from a CDN, and `apt-get install` the system
+          # libraries. Measured 2026-08-19 across THREE runs in one morning
+          # (app-versions development, app-versions #151, hrmq #87), the
+          # combined command printed NOT ONE LINE of output and hung until the
+          # job's 45-minute cap killed it:
+          #
+          #     Terminate orphan process: pid (3857)
+          #         (npm exec playwright install --with-deps chromium)
+          #
+          # Silence from the first instant is the signature of apt blocking on
+          # /var/lib/dpkg/lock-frontend — apt waits for that lock forever by
+          # design and says nothing while it does. Same mechanism as the
+          # `Install PDF tools` stall in #504.
+          #
+          # Split, the two halves can be treated according to what they are:
+          #
+          # 1. The browser download is REQUIRED and is a plain CDN fetch that
+          #    prints progress, so a stall there is visible and fatal.
+          npx playwright install chromium
+
+          # 2. The system libraries are ATTEMPTED, bounded, and NOT fatal.
+          #    GitHub's ubuntu runner image already ships the libraries chromium
+          #    needs, which is why the suites that got past this step ran fine.
+          #    A `timeout` gives apt the bound it will not give itself.
+          #
+          #    ⚠️ NOT-FATAL IS A DELIBERATE TRADE, NOT A SWALLOWED ERROR. If a
+          #    library really is missing, the browser fails to launch in the
+          #    test step and Playwright says exactly which one — a real verdict
+          #    about a real problem. The alternative it replaces is a 45-minute
+          #    cancellation that produces no tally, no trace and no report while
+          #    still rendering as a red check.
+          if timeout 300 npx playwright install-deps chromium; then
+            echo "Playwright system dependencies installed."
+          else
+            echo "::warning::playwright install-deps did not finish within 5m (apt lock or mirror). Continuing: the runner image ships these libraries, and a genuinely missing one fails loudly at browser launch."
+          fi
 
       - name: Build app frontend
         # Same rationale as the playwright job: SPA mount via Util::addScript()
@@ -5630,6 +5760,16 @@ jobs:
         continue-on-error: true
         run: |
           set -uo pipefail
+
+          # Same reasoning as `Install xmllint`: the cheapest way not to hang on
+          # the dpkg lock is not to take it. Cheap to ask, and it costs nothing
+          # when the answer is no.
+          if command -v pandoc > /dev/null 2>&1 && command -v wkhtmltopdf > /dev/null 2>&1; then
+            echo "pandoc and wkhtmltopdf already present."
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           for attempt in 1 2 3; do
             if timeout 300 sudo apt-get update -q && timeout 300 sudo apt-get install -y -q pandoc wkhtmltopdf; then
               echo "available=true" >> "$GITHUB_OUTPUT"

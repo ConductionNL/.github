@@ -5,7 +5,7 @@
 <meta name="generator" content="Docusaurus v3.10.1">
 <title data-rh="true">App health | Conduction Docs</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" property="og:image" content="https://docs.conduction.nl/img/og-conduction.png"><meta data-rh="true" name="twitter:image" content="https://docs.conduction.nl/img/og-conduction.png"><meta data-rh="true" property="og:url" content="https://docs.conduction.nl/hydra/operations/app-health/"><meta data-rh="true" property="og:locale" content="en_GB"><meta data-rh="true" property="og:locale:alternate" content="nl_NL"><meta data-rh="true" name="docusaurus_locale" content="en"><meta data-rh="true" name="docsearch:language" content="en"><meta data-rh="true" name="twitter:site" content="@ConductionNL"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:type" content="website"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="App health | Conduction Docs"><meta data-rh="true" name="description" content="Live Code Quality status for every Conduction Nextcloud app, on each of the"><meta data-rh="true" property="og:description" content="Live Code Quality status for every Conduction Nextcloud app, on each of the"><link data-rh="true" rel="icon" href="/img/favicon.svg"><link data-rh="true" rel="canonical" href="https://docs.conduction.nl/hydra/operations/app-health/"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/hydra/operations/app-health/" hreflang="en-GB"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/nl/hydra/operations/app-health/" hreflang="nl-NL"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/hydra/operations/app-health/" hreflang="x-default"><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Hydra","item":"https://docs.conduction.nl/hydra/"},{"@type":"ListItem","position":2,"name":"App health","item":"https://docs.conduction.nl/hydra/operations/app-health"}]}</script><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","@id":"https://docs.conduction.nl/hydra/operations/app-health#article","mainEntityOfPage":"https://docs.conduction.nl/hydra/operations/app-health","headline":"App health","inLanguage":"en","publisher":{"@id":"https://www.conduction.nl/#org"},"description":"Live Code Quality status for every Conduction Nextcloud app, on each of the","author":{"@type":"Organization","name":"Conduction","@id":"https://www.conduction.nl/#org"}}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","@id":"https://www.conduction.nl/#org","name":"Conduction B.V.","alternateName":"Conduction","url":"https://www.conduction.nl/","logo":"https://www.conduction.nl/img/brand/avatar-conduction-gold-on-white.svg","foundingDate":"2019","description":"Dutch open-source software company building EUPL-1.2 apps for the Nextcloud workspace.","address":{"@type":"PostalAddress","streetAddress":"Lauriergracht 14h","postalCode":"1016 RR","addressLocality":"Amsterdam","addressCountry":"NL"},"email":"info@conduction.nl","telephone":"+31-85-303-6840","taxID":"NL860784241B01","vatID":"NL860784241B01","identifier":{"@type":"PropertyValue","propertyID":"KvK","value":"76741850"},"sameAs":["https://github.com/ConductionNL","https://www.linkedin.com/company/conduction/"]}</script>
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","@id":"https://docs.conduction.nl/#website","url":"https://docs.conduction.nl/","name":"Conduction Docs","publisher":{"@id":"https://www.conduction.nl/#org"},"inLanguage":["en","nl"]}</script><link rel="stylesheet" href="/assets/css/styles.f2866016.css">
-<script src="/assets/js/runtime~main.c8513766.js" defer="defer"></script>
+<script src="/assets/js/runtime~main.b99b2ed4.js" defer="defer"></script>
 <script src="/assets/js/main.2e95517d.js" defer="defer"></script>
 </head>
 <body>
@@ -452,9 +452,56 @@ a routine you cannot trust to run while nobody is watching.</p>
 <code>06:00 UTC</code> in summer and <code>07:00 UTC</code> in winter. A fixed cron drifts an hour
 twice a year; the schedule is set in UTC and the job checks local time before
 acting, rather than pretending the drift does not exist.</p>
-<p><strong>Status: designed, not yet running.</strong> Until the workflow exists this section
-describes intent, not behaviour — and a documented routine that nothing executes
-is worth less than no routine at all, because it reads as a guarantee.</p>
+<p><strong>Status: built, and blocked on one secret.</strong> This section described intent
+rather than behaviour for long enough that someone read the page and reasonably
+believed the fleet was being merged every Friday. It is now three workflows,
+each of which refuses loudly rather than reporting a routine that measured
+nothing:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>workflow</th><th>Friday (UTC)</th><th>what it does</th></tr></thead><tbody><tr><td><code>fleet-drift-sweep.yml</code></td><td>06:00</td><td>re-runs Code Quality on <code>development</code> for every app, and <strong>fails</strong> when any app is not green</td></tr><tr><td><code>fleet-cve-release.yml</code></td><td>06:30</td><td>merges Dependabot <strong>security</strong> fixes, classified against GitHub&#x27;s own alerts</td></tr><tr><td><code>fleet-friday-merge.yml</code></td><td>07:00</td><td>merges <code>development</code> pull requests that are genuinely green</td></tr></tbody></table>
+<p>⚠️ <strong>None of them can run until <code>FLEET_DISPATCH_TOKEN</code> exists.</strong> It is an
+org-level secret needing <code>contents: write</code>, <code>pull-requests: write</code> and
+<code>security-events: read</code> on every repo in <code>fleet-apps.json</code>; <code>GITHUB_TOKEN</code> is
+repository-scoped and cannot reach another repo. All three assert it first and
+exit 1 — verified by dispatching them, which failed at exactly that step with
+everything downstream skipped.</p>
+<p>Two things are deliberately <strong>not</strong> automated, and are gaps rather than
+oversights:</p>
+<ul>
+<li class=""><strong>Promotion past <code>development</code>.</strong> Shipping a CVE by promoting
+<code>development → beta → main</code> would release the whole unreleased backlog —
+measured 2026-08-19, openregister&#x27;s <code>development</code> is <strong>3,238 commits ahead of
+<code>beta</code></strong> and 5,454 ahead of <code>main</code>. One dependency bump would carry thousands
+of unreviewed functional commits through the protection this is allowed to
+cross <em>only</em> for CVEs.</li>
+<li class=""><strong>Release.</strong> It waits on a dry run being read against real pull requests. An
+unattended release is not where you discover that a lockfile cherry-pick
+conflicts.</li>
+</ul>
 <h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="the-merge-routine-would-not-have-caught-gate-drift">The merge routine would not have caught gate drift<a href="#the-merge-routine-would-not-have-caught-gate-drift" class="hash-link" aria-label="Direct link to The merge routine would not have caught gate drift" title="Direct link to The merge routine would not have caught gate drift" translate="no">​</a></h3>
 <p>Merging green pull requests is not the same as knowing the fleet is still
 compliant, and it is worth being explicit about why.</p>
