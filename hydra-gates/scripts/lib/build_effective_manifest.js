@@ -35,12 +35,14 @@
 //   2 — base src/manifest.json missing (Tier 0 — caller decides how to treat)
 //
 // Also require()-able as a module:
-//   const { buildManifest, loadAppInputs, assembleFromDir } = require('./build_effective_manifest.js')
+//   const { buildManifest, loadAppInputs, assembleFromDir, assembleAtRef } = require('./build_effective_manifest.js')
 
 'use strict'
 
 const fs = require('fs')
+const os = require('os')
 const path = require('path')
+const { spawnSync } = require('child_process')
 
 /**
  * Build an app's effective manifest from its bundled base, its modular
@@ -314,6 +316,111 @@ function assembleFromDir(appDir) {
 	return { manifest, inputs }
 }
 
+/**
+ * True when `<ref>:<relPath>` resolves to a blob or tree in `gitRoot` — used
+ * to decide which of the three manifest inputs to hand to `git archive`
+ * (see the block comment on `assembleAtRef` for why this cannot be skipped).
+ *
+ * @param {string} gitRoot Git repository root.
+ * @param {string} ref A committish.
+ * @param {string} relPath Path relative to `gitRoot`.
+ * @return {boolean} True when the path exists at that ref.
+ */
+function _pathExistsAtRef(gitRoot, ref, relPath) {
+	const res = spawnSync('git', ['-C', gitRoot, 'cat-file', '-e', `${ref}:${relPath}`])
+	return !res.error && res.status === 0
+}
+
+/**
+ * Assemble an app's effective manifest as it existed at an arbitrary git
+ * ref — the base-ref half of gate-68's ratchet (ADR-097 Decision 5). Reuses
+ * `assembleFromDir` for 100% of the merge/discovery logic: this function's
+ * only job is to materialize the three manifest inputs (`src/manifest.json`,
+ * `src/manifest.d/*.json`, `src/menu-layout.json`) as they existed at `ref`
+ * into a throwaway directory, via `git archive`, then hand that directory to
+ * `assembleFromDir` unchanged.
+ *
+ * MEASURED, NOT ASSUMED: `git archive <ref> -- <a> <b> <c>` does NOT silently
+ * drop a pathspec that matches nothing at `ref` — it exits 128 with
+ * `fatal: pathspec '<b>' did not match any files` and produces NO archive at
+ * all, for the whole invocation, even though `<a>` and `<c>` exist. (Verified
+ * against the git binary in this environment 2026-08-19 — a single
+ * `git archive HEAD -- src/manifest.json src/manifest.d` against a tree with
+ * no `manifest.d/` exits 128, not a partial archive.) So EACH of the three
+ * candidate paths is checked with `git cat-file -e <ref>:<path>` first, and
+ * only the paths that exist are ever passed to `git archive` — the "missing
+ * input is absent, not an error" contract this function promises is
+ * implemented here, not inside `git archive` itself.
+ *
+ * @param {string} gitRoot Git repository root (absolute or resolvable from CWD).
+ * @param {string} ref A committish (branch, tag, or SHA) to assemble at.
+ * @param {string} appRelDir The app's root, relative to `gitRoot` (use '.'
+ *   when the app repo root IS the git root).
+ * @return {{ manifest: object, inputs: object }} Same shape as `assembleFromDir`.
+ * @throws {Error} `.code === 'EBADREF'` when `ref` does not resolve to
+ *   anything archivable in `gitRoot`; `.code === 'ENOBASE'` when
+ *   `src/manifest.json` itself is absent at `ref` (the app had no manifest
+ *   yet at that point in history); a plain Error when `git archive`/`tar`
+ *   fail for any other reason (corrupt ref, unreadable repo, `tar`
+ *   unavailable).
+ */
+function assembleAtRef(gitRoot, ref, appRelDir) {
+	const dir = appRelDir || '.'
+	const manifestRel = path.join(dir, 'src', 'manifest.json')
+	const fragDirRel = path.join(dir, 'src', 'manifest.d')
+	const layoutRel = path.join(dir, 'src', 'menu-layout.json')
+
+	// `^{tree}` — not `^{commit}` — deliberately. run-hydra-gates.sh remaps a
+	// diff-scoped run whose BASE_REF equals HEAD (the mainline-push shape) to
+	// git's canonical EMPTY-TREE sha
+	// (4b825dc642cb6eb9a060e54bf8d69288fbee4904), so that a base-vs-head
+	// ratchet still means something instead of comparing HEAD with itself.
+	// That sha is a valid tree-ish (`git archive`/`git cat-file` both accept
+	// it) but is NOT a commit — `${ref}^{commit}` rejects it with "expected
+	// commit type, but the object dereferences to tree type" (measured
+	// 2026-08-19), which would have made every SAME-COMMIT-AS-HEAD run
+	// silently fall back to WARN-only instead of correctly ratcheting against
+	// "nothing existed before this commit". `^{tree}` accepts both a real
+	// commit (peels to its tree) and a bare tree object, and still rejects a
+	// genuinely unresolvable ref.
+	const refCheck = spawnSync('git', ['-C', gitRoot, 'rev-parse', '--verify', '--quiet', `${ref}^{tree}`])
+	if (refCheck.error || refCheck.status !== 0) {
+		const err = new Error(`ref '${ref}' does not resolve to a tree in ${gitRoot}`)
+		err.code = 'EBADREF'
+		throw err
+	}
+
+	if (!_pathExistsAtRef(gitRoot, ref, manifestRel)) {
+		const err = new Error(`base manifest missing at ${ref}:${manifestRel}`)
+		err.code = 'ENOBASE'
+		throw err
+	}
+	const pathspecs = [manifestRel]
+	if (_pathExistsAtRef(gitRoot, ref, fragDirRel)) pathspecs.push(fragDirRel)
+	if (_pathExistsAtRef(gitRoot, ref, layoutRel)) pathspecs.push(layoutRel)
+
+	const tmpdir = fs.mkdtempSync(path.join(os.tmpdir(), 'hydra-gate68-assemble-'))
+	try {
+		const archiveRes = spawnSync('git', ['-C', gitRoot, 'archive', ref, '--', ...pathspecs], {
+			maxBuffer: 1024 * 1024 * 256,
+		})
+		if (archiveRes.error || archiveRes.status !== 0) {
+			const msg = archiveRes.stderr ? archiveRes.stderr.toString('utf8').trim()
+				: (archiveRes.error ? archiveRes.error.message : `git archive exited ${archiveRes.status}`)
+			throw new Error(`git archive ${ref} failed: ${msg}`)
+		}
+		const tarRes = spawnSync('tar', ['-x', '-C', tmpdir], { input: archiveRes.stdout })
+		if (tarRes.error || tarRes.status !== 0) {
+			const msg = tarRes.stderr ? tarRes.stderr.toString('utf8').trim()
+				: (tarRes.error ? tarRes.error.message : `tar exited ${tarRes.status}`)
+			throw new Error(`extracting the ${ref} archive failed: ${msg}`)
+		}
+		return assembleFromDir(path.join(tmpdir, dir))
+	} finally {
+		fs.rmSync(tmpdir, { recursive: true, force: true })
+	}
+}
+
 module.exports = {
 	buildManifest,
 	applyMenuLayout,
@@ -324,6 +431,7 @@ module.exports = {
 	applySettingsSection,
 	loadAppInputs,
 	assembleFromDir,
+	assembleAtRef,
 }
 
 // --- CLI --------------------------------------------------------------------

@@ -1,0 +1,15 @@
+{
+	"pages": [
+		{
+			"id": "SubsidiesVerleend",
+			"route": "/subsidies/verleend",
+			"type": "index",
+			"title": "Subsidies verleend",
+			"config": {
+				"register": "shillinq",
+				"schema": "Subsidie"
+			}
+		}
+	],
+	"menu": []
+}

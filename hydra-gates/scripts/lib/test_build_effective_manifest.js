@@ -16,7 +16,9 @@
 'use strict'
 
 const fs = require('fs')
+const os = require('os')
 const path = require('path')
+const { spawnSync } = require('child_process')
 const {
 	buildManifest,
 	mergeMenuItems,
@@ -25,6 +27,7 @@ const {
 	applyMenuRemovals,
 	applySettingsSection,
 	assembleFromDir,
+	assembleAtRef,
 } = require('./build_effective_manifest.js')
 
 // --- guard the guard --------------------------------------------------------
@@ -166,6 +169,82 @@ function assert(cond, label) {
 	const itemsGroup = manifest.menu.find((m) => m.id === 'items-group')
 	assert(itemsGroup && itemsGroup.children.some((c) => c.id === 'reports-entry'), 'assembleFromDir: relocations applied (reports-entry under items-group)')
 	assert(itemsGroup.children.find((c) => c.id === 'reports-entry').order === 20, 'assembleFromDir: keyed menu merge — base scalar (order 20) beat the fragment re-declaration (25)')
+}
+
+// --- assembleAtRef (gate-68) — base-ref assembly reproduces assembleFromDir ------
+{
+	const goodDir = path.resolve(__dirname, '..', 'test-fixtures', 'effective-manifest', 'good')
+	const tmpRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'hydra-gate68-selftest-'))
+	const git = (args) => spawnSync('git', ['-C', tmpRepo, ...args], { encoding: 'utf8' })
+	try {
+		git(['init', '-q', '.'])
+		git(['config', 'user.email', 'test@example.invalid'])
+		git(['config', 'user.name', 'Gate Test'])
+
+		// Commit 1: base manifest ONLY — predates manifest.d/ and menu-layout.json,
+		// mirroring an app before it adopted ADR-037 fragments.
+		fs.mkdirSync(path.join(tmpRepo, 'src'), { recursive: true })
+		fs.copyFileSync(path.join(goodDir, 'src', 'manifest.json'), path.join(tmpRepo, 'src', 'manifest.json'))
+		git(['add', '-A'])
+		git(['commit', '-q', '-m', 'base manifest only'])
+		const baseSha = git(['rev-parse', 'HEAD']).stdout.trim()
+
+		// Commit 2: the full "good" fixture tree (manifest.d/ + menu-layout.json).
+		fs.mkdirSync(path.join(tmpRepo, 'src', 'manifest.d'), { recursive: true })
+		for (const f of ['10-archive.json', '20-settings.json']) {
+			fs.copyFileSync(path.join(goodDir, 'src', 'manifest.d', f), path.join(tmpRepo, 'src', 'manifest.d', f))
+		}
+		fs.copyFileSync(path.join(goodDir, 'src', 'menu-layout.json'), path.join(tmpRepo, 'src', 'menu-layout.json'))
+		git(['add', '-A'])
+		git(['commit', '-q', '-m', 'add manifest.d + menu-layout.json'])
+		const headSha = git(['rev-parse', 'HEAD']).stdout.trim()
+
+		const atHead = assembleAtRef(tmpRepo, headSha, '.')
+		const fromDir = assembleFromDir(goodDir)
+		assert(JSON.stringify(atHead.manifest) === JSON.stringify(fromDir.manifest),
+			'assembleAtRef: output at a ref whose tree equals the live fixture directory equals assembleFromDir\'s output')
+
+		const atBase = assembleAtRef(tmpRepo, baseSha, '.')
+		assert(atBase.inputs.fragmentFiles.length === 0,
+			'assembleAtRef: correctly omits manifest.d/ when assembling a ref that predates it')
+		assert(atBase.inputs.menuLayoutPath === null,
+			'assembleAtRef: correctly omits menu-layout.json when assembling a ref that predates it')
+		assert(JSON.stringify(atBase.manifest.pages) === JSON.stringify(fromDir.inputs.base.pages),
+			'assembleAtRef: base-only ref assembles to exactly the base manifest\'s pages (no fragment merge to omit)')
+
+		let badRefThrew = null
+		try {
+			assembleAtRef(tmpRepo, 'no-such-ref-exists', '.')
+		} catch (e) {
+			badRefThrew = e
+		}
+		assert(badRefThrew && badRefThrew.code === 'EBADREF',
+			'assembleAtRef: an unresolvable ref throws .code === \'EBADREF\', not a silent empty result')
+
+		const emptyRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'hydra-gate68-selftest-empty-'))
+		try {
+			const gitEmpty = (args) => spawnSync('git', ['-C', emptyRepo, ...args], { encoding: 'utf8' })
+			gitEmpty(['init', '-q', '.'])
+			gitEmpty(['config', 'user.email', 'test@example.invalid'])
+			gitEmpty(['config', 'user.name', 'Gate Test'])
+			fs.writeFileSync(path.join(emptyRepo, 'README.md'), 'no manifest here\n')
+			gitEmpty(['add', '-A'])
+			gitEmpty(['commit', '-q', '-m', 'no manifest yet'])
+			const emptySha = gitEmpty(['rev-parse', 'HEAD']).stdout.trim()
+			let noBaseThrew = null
+			try {
+				assembleAtRef(emptyRepo, emptySha, '.')
+			} catch (e) {
+				noBaseThrew = e
+			}
+			assert(noBaseThrew && noBaseThrew.code === 'ENOBASE',
+				'assembleAtRef: a ref that predates src/manifest.json itself throws .code === \'ENOBASE\'')
+		} finally {
+			fs.rmSync(emptyRepo, { recursive: true, force: true })
+		}
+	} finally {
+		fs.rmSync(tmpRepo, { recursive: true, force: true })
+	}
 }
 
 console.log('')
