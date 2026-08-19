@@ -37,16 +37,22 @@ WHAT CHANGED
    discriminator is which token, not whether the line is a comment, because
    collapsing the two is what produced the comment-only false positive.
 
-Path-based classification (`lib/**/Auth/**`, `lib/*Csrf*`, …) is unchanged:
-a file under those paths is security code by location, and any change to it
-qualifies.
+3. **A file the diff DELETES is exempt** (#485). Not its removed lines — the
+   file. See ``scan``: removing a CSRF token from a surviving file is still a
+   security change and still demands a test; a file that no longer exists has
+   no code to test, so the finding is unclosable by construction.
+
+Path-based classification (`lib/**/Auth/**`, `lib/*Csrf*`, …) is otherwise
+unchanged: a file under those paths is security code by location, and any
+change short of deleting it qualifies.
 
 WHAT STILL FIRES
 ----------------
 A hunk that adds, removes or edits an auth annotation, a CSRF exemption, a
-session lookup, a signature comparison or a URL parse — with no test file in
-the same diff — is still reported, and ``test_check_security_cochange.py``
-proves it for every token in the vocabulary.
+session lookup, a signature comparison or a URL parse — in a file that still
+exists, with no test file in the same diff — is still reported, and
+``test_check_security_cochange.py`` proves it for every token in the
+vocabulary, and proves the removal arm separately from the addition arm.
 
 Usage:
     check_security_cochange.py <base-ref> [app-dir]
@@ -290,12 +296,18 @@ def changed_files(base_ref: str, cwd: str) -> list[str]:
     return [ln.strip() for ln in out.splitlines() if ln.strip()]
 
 
-def rename_map(base_ref: str, cwd: str) -> dict[str, str]:
-    """``{destination: source}`` for every file the diff reports as renamed.
+def name_status(base_ref: str, cwd: str) -> list[list[str]]:
+    """The diff's ``--name-status -M`` records, tab-split and stripped.
 
     Read once, unscoped, so rename detection actually has both sides to pair.
     `changed_lines` needs the source spelling to ask git a question whose
-    answer is not an artefact of the pathspec — see its docstring.
+    answer is not an artefact of the pathspec — see its docstring; and
+    `deleted_files` needs the STATUS LETTER, which `--name-only` does not
+    carry at all.
+
+    The `...HEAD` / plain-base fallback mirrors `changed_files` and
+    `changed_lines`, so all three agree about what "the diff" is on a
+    checkout with no merge base.
     """
     out = ""
     for ref in (f"{base_ref}...HEAD", base_ref):
@@ -307,21 +319,76 @@ def rename_map(base_ref: str, cwd: str) -> dict[str, str]:
         out = proc.stdout
         if out.strip():
             break
-    renames: dict[str, str] = {}
-    for raw in out.splitlines():
-        parts = raw.split("\t")
-        if len(parts) == 3 and parts[0].startswith("R"):
-            renames[parts[2].strip()] = parts[1].strip()
-    return renames
+    return [[field.strip() for field in raw.split("\t")]
+            for raw in out.splitlines() if raw.strip()]
+
+
+def renames_from(records: list[list[str]]) -> dict[str, str]:
+    return {r[2]: r[1] for r in records
+            if len(r) == 3 and r[0].startswith("R")}
+
+
+def deletions_from(records: list[list[str]]) -> set[str]:
+    """The paths this diff DELETES OUTRIGHT.
+
+    ``-M`` is on, so a file that moved is an `R` record and never reaches
+    here: only a file with no destination left in the tree is a `D`.
+    """
+    return {r[1] for r in records if len(r) == 2 and r[0].startswith("D")}
+
+
+def rename_map(base_ref: str, cwd: str) -> dict[str, str]:
+    """``{destination: source}`` for every file the diff reports as renamed."""
+    return renames_from(name_status(base_ref, cwd))
+
+
+def deleted_files(base_ref: str, cwd: str) -> set[str]:
+    """Every path the diff deletes outright."""
+    return deletions_from(name_status(base_ref, cwd))
 
 
 def scan(base_ref: str, cwd: str = ".") -> tuple[list[str], bool]:
-    """(security-touching files, whether the diff also touches a test)."""
+    """(security-touching files, whether the diff also touches a test).
+
+    A DELETED FILE IS EXEMPT — AND THIS IS NARROWER THAN IT LOOKS (#485).
+    -------------------------------------------------------------------
+    `changed_lines` runs `git diff -U0` and returns added and removed lines
+    UNDIFFERENTIATED, which is correct: removing `requesttoken:
+    OC.requestToken` from a component that still exists is a real security
+    change and must still demand a test co-change. What is NOT a security
+    change with a test to write is a file that is GONE. There is no code
+    left to exercise, so the finding names a file the author cannot open.
+
+    Measured 2026-08-16 on procest#867: `FAIL — 7 security-touching
+    change(s) without a test co-change`, and all seven were `D` records
+    whose only matched lines were the deleted `requesttoken:
+    OC.requestToken` headers of seven removed `src/views/**` components.
+    That finding is UNCLOSABLE from the app repo — it is keyed to a base
+    already in history — and it self-clears on the next push once the base
+    advances, which is not a repair, it is the evidence disappearing.
+
+    THE EXEMPTION IS THE `D` STATUS, NOT THE `-` SIGN. Filtering to added
+    lines only is the tempting one-liner and it is the WRONG fix: it would
+    retire the gate's ability to see a guard being taken out of a file that
+    survives, which is the shape it exists to catch. `test_…py` pairs every
+    arm below with exactly that case.
+
+    KNOWN LIMIT, stated rather than hidden: deleting a file can itself be a
+    security regression — dropping `lib/Middleware/CsrfMiddleware.php`
+    removes a guard — and this gate no longer speaks to that. It never
+    could: its remedy is "co-change a test", and there is nothing left to
+    test. Removal of an auth ATTRIBUTE from surviving code remains covered
+    here and in gate-48.
+    """
     files = changed_files(base_ref, cwd)
     has_test = any(is_test_path(f) for f in files)
-    renames = rename_map(base_ref, cwd)
+    records = name_status(base_ref, cwd)
+    renames = renames_from(records)
+    deleted = deletions_from(records)
     security: list[str] = []
     for f in files:
+        if f in deleted:
+            continue
         if is_security_path(f):
             security.append(f)
             continue

@@ -105,6 +105,12 @@ _mkrepo() {
         # So the fixture adopts it, mirroring the compliant scaffold in
         # test_check_coding_standard_adoption.sh.
         printf '{\n  "name": "conduction/fixture",\n  "license": "EUPL-1.2",\n  "require-dev": {\n    "conduction/coding-standard": "^1.0"\n  },\n  "scripts": {\n    "cs:check": "php-cs-fixer fix --dry-run --diff",\n    "cs:fix": "php-cs-fixer fix"\n  }\n}\n' > composer.json
+        # gate-93 (composer-cooldown-config) is ALSO not diff-scoped, for the
+        # identical reason gate-65 above is not: it judges the repo's standing
+        # dependabot.yml, and a fixture with a composer.json but no compliant
+        # cooldown entry now fails it too, breaking the same two GREEN-whole-run
+        # assertions gate-65's comment describes. Adopted the same way.
+        printf 'version: 2\nupdates:\n  - package-ecosystem: "composer"\n    directory: "/"\n    schedule:\n      interval: "weekly"\n    cooldown:\n      default-days: 2\n      exclude:\n        - "conduction/*"\n' > .github/dependabot.yml
         # Quoted heredoc, not printf: the body is PHP and contains `$config`,
         # which printf-with-single-quotes makes ShellCheck read as a shell
         # expansion that will not expand (SC2016). <<'PHP' says "verbatim" to
