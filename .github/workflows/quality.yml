@@ -877,7 +877,21 @@ jobs:
     if: ${{ inputs.enable-php }}
     runs-on: ubuntu-latest
     name: "info.xml lint"
-    timeout-minutes: 10
+    # 🔑 A JOB CAP MUST BE LARGER THAN ITS OWN STEPS' WORST CASE, OR THE
+    # CAREFUL BOUNDED RETRY BELOW CAN NEVER FINISH.
+    #
+    # This was 10 while `Install xmllint` was written to allow 3 attempts of up
+    # to 300s + 300s each — a worst case of ~30 minutes inside a 10-minute job.
+    # The retry was therefore killed mid-SECOND attempt every time, and the
+    # outcome was `cancelled` (no verdict, neither failed nor passed) rather
+    # than the clear "the mirror is unreachable, this is infrastructure" error
+    # it was written to produce. Observed 2026-08-19 on hrmq (10m10s) and
+    # app-versions (10m18s).
+    #
+    # The step's attempts are now 120s + 180s, so its worst case is
+    # 3 × 300s + 2 × 10s sleep ≈ 15.3 min. 20 leaves headroom for checkout and
+    # the validation steps. CHANGE BOTH TOGETHER — the arithmetic is the point.
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -909,14 +923,28 @@ jobs:
         if: steps.detect.outputs.run == 'true'
         run: |
           set -euo pipefail
+
+          # DON'T REACH FOR apt AT ALL IF THE TOOL IS ALREADY HERE. The runner
+          # image ships libxml2-utils, so the overwhelmingly common path needs
+          # no package manager — and the stall this step keeps hitting is apt
+          # blocking on /var/lib/dpkg/lock-frontend, which it waits on forever
+          # by design while printing nothing. The cheapest way not to hang on a
+          # lock is not to take it.
+          if command -v xmllint > /dev/null 2>&1; then
+            echo "xmllint already present: $(xmllint --version 2>&1 | head -1)"
+            exit 0
+          fi
+
+          # Fallback, bounded so its worst case fits this job's cap:
+          # 3 × (120s + 180s) + 2 × 10s ≈ 15.3 min against timeout-minutes: 20.
           for attempt in 1 2 3; do
-            if timeout 300 sudo apt-get update -q && timeout 300 sudo apt-get install -y -q libxml2-utils; then
+            if timeout 120 sudo apt-get update -q && timeout 180 sudo apt-get install -y -q libxml2-utils; then
               exit 0
             fi
-            echo "::warning::apt attempt ${attempt}/3 failed or timed out after 300s; retrying."
+            echo "::warning::apt attempt ${attempt}/3 failed or timed out; retrying."
             sleep 10
           done
-          echo "::error::Could not install libxml2-utils after 3 bounded attempts — the Ubuntu mirror is unreachable or stalled. This is infrastructure, not this app's manifest."
+          echo "::error::Could not install libxml2-utils after 3 bounded attempts — the Ubuntu mirror is unreachable or apt is stalled on the dpkg lock. This is infrastructure, not this app's manifest."
           exit 1
 
       - name: Fetch the App Store schema
@@ -5732,6 +5760,16 @@ jobs:
         continue-on-error: true
         run: |
           set -uo pipefail
+
+          # Same reasoning as `Install xmllint`: the cheapest way not to hang on
+          # the dpkg lock is not to take it. Cheap to ask, and it costs nothing
+          # when the answer is no.
+          if command -v pandoc > /dev/null 2>&1 && command -v wkhtmltopdf > /dev/null 2>&1; then
+            echo "pandoc and wkhtmltopdf already present."
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           for attempt in 1 2 3; do
             if timeout 300 sudo apt-get update -q && timeout 300 sudo apt-get install -y -q pandoc wkhtmltopdf; then
               echo "available=true" >> "$GITHUB_OUTPUT"
