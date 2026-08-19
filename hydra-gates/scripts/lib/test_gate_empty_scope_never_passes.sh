@@ -133,16 +133,73 @@ _verdict() { grep -oE "^\[gate-$2\] [^:]+: [A-Z]+( [A-Z]+)*( \([a-z]+\))?" "$1" 
 
 # ---------------------------------------------------------------------------
 # ARM 1 — the planted true positives are still caught, full-tree.
+#
+# ⚠️ WHAT THIS ARM ASSERTS, AND WHAT IT DELIBERATELY DOES NOT (.github#477)
+# ------------------------------------------------------------------------
+# This arm is the POSITIVE CONTROL for the fixture, not a statement about
+# blocking policy. Everything below it — "an empty scope is NOT APPLICABLE" —
+# proves nothing unless the gate demonstrably SEES the planted defect when the
+# scope is open. So what has to hold is: the gate opened the scope, computed a
+# real finding, and named a count.
+#
+# `.github#477` demoted gate-19 (e2e-coverage) from `_fail` to `_warn`: it
+# still runs, still counts and still names every unannotated scenario, but the
+# finding no longer stops a merge. That moved gate-19's verdict word from FAIL
+# to WARNING and this arm — which matched the word rather than the property —
+# went red on `.github@main` from 13:15 on 2026-08-16, alongside ARM P3 of
+# test_gate_discarded_counts_and_empty_deltas.sh. Three sibling suites were
+# taught the new word in the same commit (exit-code-semantics,
+# base-ref-delivery-channel, the acceptance matrix + its expect.conf); these
+# two were not, because they were not run. That is the hand-maintained-list
+# decay this package's own runner exists to prevent — see
+# tests/run-helper-suites.sh.
+#
+# So gate-19 is accepted at FAIL *or* WARNING, and NOT on the word alone: the
+# verdict line must also carry a non-zero finding count, because a demotion's
+# real failure mode is the finding quietly ceasing to be read. gate-25 is NOT
+# demoted and keeps the strict FAIL — accepting WARNING for a gate nobody
+# demoted would be exactly the invisible pass this file guards.
+#
+# Note what this arm still catches for gate-19 without the word FAIL: a gate
+# that went blind prints PASS, and a gate that self-scoped to nothing prints
+# NOT APPLICABLE. Neither is accepted here, and ARM 2 separately requires
+# NOT APPLICABLE over the empty scope, so the two arms remain distinguishable.
+#
+# Which gates may be advisory at all is bounded by name — see ARM P4 of
+# test_gate_discarded_counts_and_empty_deltas.sh, so a second demotion cannot
+# land without reddening this package.
 # ---------------------------------------------------------------------------
 _full="${_tmp}/full.txt"
 _run "${_full}"
-for _g in 19 25; do
-    if grep -qE "^\[gate-${_g}\][^:]*: FAIL" "${_full}"; then
-        _ok "gate-${_g} still catches its planted true positive over the full tree"
+
+# gate-25 — NOT demoted. Strict FAIL.
+if grep -qE "^\[gate-25\][^:]*: FAIL" "${_full}"; then
+    _ok "gate-25 still catches its planted true positive over the full tree"
+else
+    _bad "gate-25 did NOT catch its planted true positive — got: $(_verdict "${_full}" 25)"
+fi
+
+# gate-19 — advisory since .github#477. FAIL or WARNING, and it must NAME a count.
+_g19_line="$(grep -E "^\[gate-19\][^:]*: (FAIL|WARNING)\b" "${_full}" | head -1)"
+if [ -n "${_g19_line}" ]; then
+    if printf '%s' "${_g19_line}" | grep -qE '[1-9][0-9]* scenario'; then
+        _ok "gate-19 still catches its planted true positive over the full tree, and names the count — ${_g19_line#*: }"
     else
-        _bad "gate-${_g} did NOT catch its planted true positive — got: $(_verdict "${_full}" "${_g}")"
+        _bad "gate-19 reached a FAIL/WARNING verdict but named no non-zero scenario count — a demotion whose finding stops being legible is the invisible pass. Got: ${_g19_line}"
     fi
-done
+else
+    _bad "gate-19 did NOT catch its planted true positive — got: $(_verdict "${_full}" 19)"
+fi
+
+# …and the SUMMARY must say so. A demotion is only safe while the reader is
+# told that a green verdict means "nothing BLOCKING failed", not "nothing was
+# found". Without this, `_warn` degrades into a silent soft-fail.
+if grep -qF 'reported ADVISORY findings' "${_full}" \
+    && grep -qF "means 'nothing BLOCKING failed'" "${_full}"; then
+    _ok "the run's summary announces the advisory findings and says green != 'nothing was found'"
+else
+    _bad "a gate reported an advisory finding and the summary did not say so — a demoted gate whose finding is not announced is a soft-fail nobody reads"
+fi
 
 # Full-tree must actually OPEN the manifests rather than diff-scope itself to
 # nothing: 62/63 are clean in this fixture, so they must PASS, not SKIP.

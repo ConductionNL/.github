@@ -877,7 +877,21 @@ jobs:
     if: ${{ inputs.enable-php }}
     runs-on: ubuntu-latest
     name: "info.xml lint"
-    timeout-minutes: 10
+    # 🔑 A JOB CAP MUST BE LARGER THAN ITS OWN STEPS' WORST CASE, OR THE
+    # CAREFUL BOUNDED RETRY BELOW CAN NEVER FINISH.
+    #
+    # This was 10 while `Install xmllint` was written to allow 3 attempts of up
+    # to 300s + 300s each — a worst case of ~30 minutes inside a 10-minute job.
+    # The retry was therefore killed mid-SECOND attempt every time, and the
+    # outcome was `cancelled` (no verdict, neither failed nor passed) rather
+    # than the clear "the mirror is unreachable, this is infrastructure" error
+    # it was written to produce. Observed 2026-08-19 on hrmq (10m10s) and
+    # app-versions (10m18s).
+    #
+    # The step's attempts are now 120s + 180s, so its worst case is
+    # 3 × 300s + 2 × 10s sleep ≈ 15.3 min. 20 leaves headroom for checkout and
+    # the validation steps. CHANGE BOTH TOGETHER — the arithmetic is the point.
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -894,9 +908,44 @@ jobs:
             echo "No appinfo/info.xml — this repo is not a Nextcloud app."
           fi
 
+      # BOUNDED, AND NOT SILENT. `-qq` on both halves meant a stalled Ubuntu
+      # mirror produced ZERO bytes of output for the full step timeout, so the
+      # log showed the command and nothing else — measured on decidesk,
+      # procest and zaakafhandelapp on 2026-08-18, 10m19s of silence apiece
+      # before the runner killed it. There was no way to tell a hung mirror
+      # from a hung runner from a package that does not exist.
+      #
+      # `timeout 300` fails this step in five minutes instead of burning the
+      # job's whole budget, and one `q` less lets apt say what it is doing.
+      # The retry covers the common case where the mirror is briefly
+      # unreachable rather than down.
       - name: Install xmllint
         if: steps.detect.outputs.run == 'true'
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libxml2-utils
+        run: |
+          set -euo pipefail
+
+          # DON'T REACH FOR apt AT ALL IF THE TOOL IS ALREADY HERE. The runner
+          # image ships libxml2-utils, so the overwhelmingly common path needs
+          # no package manager — and the stall this step keeps hitting is apt
+          # blocking on /var/lib/dpkg/lock-frontend, which it waits on forever
+          # by design while printing nothing. The cheapest way not to hang on a
+          # lock is not to take it.
+          if command -v xmllint > /dev/null 2>&1; then
+            echo "xmllint already present: $(xmllint --version 2>&1 | head -1)"
+            exit 0
+          fi
+
+          # Fallback, bounded so its worst case fits this job's cap:
+          # 3 × (120s + 180s) + 2 × 10s ≈ 15.3 min against timeout-minutes: 20.
+          for attempt in 1 2 3; do
+            if timeout 120 sudo apt-get update -q && timeout 180 sudo apt-get install -y -q libxml2-utils; then
+              exit 0
+            fi
+            echo "::warning::apt attempt ${attempt}/3 failed or timed out; retrying."
+            sleep 10
+          done
+          echo "::error::Could not install libxml2-utils after 3 bounded attempts — the Ubuntu mirror is unreachable or apt is stalled on the dpkg lock. This is infrastructure, not this app's manifest."
+          exit 1
 
       - name: Fetch the App Store schema
         if: steps.detect.outputs.run == 'true'
@@ -2508,25 +2557,155 @@ jobs:
       # optional — a missing or zero-statement report is a hard error in both
       # this step and the guard, because a base measured as 0% would set the
       # floor to zero and pass every possible drop.
+      #
+      # ── THE MERGE BASE IS DERIVED, NOT READ OUT OF THE EVENT PAYLOAD ──────
+      #
+      # This step used to compute `git merge-base "$BASE_SHA" "$HEAD_SHA"` with
+      # BASE_SHA taken from `github.event.pull_request.base.sha`. Both halves of
+      # that expression are wrong, and they hid each other:
+      #
+      #  1. `pull_request.base.sha` is the base branch tip SNAPSHOTTED when the
+      #     pull request was opened. GitHub does not refresh it as the base
+      #     branch advances. Measured on zaakafhandelapp#247 ("Release: merge
+      #     development into beta"), opened 2026-05-23: `base.sha` still reads
+      #     b233af99 — beta's tip on that day — although beta moved to a92d8707
+      #     on 2026-06-25. Nearly three months of drift, on a PR that is
+      #     re-run nightly.
+      #
+      #  2. On a `pull_request` event actions/checkout leaves `refs/pull/N/merge`
+      #     at HEAD, and that merge commit ALREADY CONTAINS the base branch. So
+      #     `git merge-base <any base commit> <merge ref>` returns that base
+      #     commit unchanged — the call was a no-op that laundered a stale sha
+      #     into something that reads like a computed merge base. The step's own
+      #     comment claims "the merge base is immutable for a given head, so it
+      #     cannot go stale"; the value it actually used was neither.
+      #
+      # The consequence is not cosmetic. On zaakafhandelapp the "merge base"
+      # resolved to a commit that predates this repository committing a
+      # composer.lock AND predates phpunit/phpunit being a dependency at all, so
+      # `composer install` resolved to latest, produced a 64-package set with no
+      # test runner in it, and the step died on
+      # `./vendor/bin/phpunit: No such file or directory` — reported as
+      # "Could not measure coverage at merge base", which reads like an
+      # unreachable object and is not. The suite itself was GREEN in the same
+      # job: `OK (268 tests, 825 assertions)`.
+      #
+      # The merge ref's parents are the authoritative answer and cost nothing:
+      # parent 1 is the CURRENT base tip, parent 2 is the pull request head. We
+      # only trust them when parent 2 actually IS `pull_request.head.sha`, so a
+      # checkout of a PR head that happens to be a merge commit cannot be
+      # mistaken for the merge ref. Verified against the real refs of
+      # zaakafhandelapp#247 (merge ref cb1439f3):
+      #   old logic -> b233af99  (no phpunit at that commit -> hard failure)
+      #   new logic -> 27027b32  (merge-base of a92d8707 and 986730b8)
       - name: Measure merge-base coverage
         if: ${{ inputs.enable-coverage-guard && github.event_name == 'pull_request' && matrix.php-version == inputs.php-version && matrix.nextcloud-ref == needs.nextcloud-matrix.outputs.single-server }}
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           set -euo pipefail
           cd "server/apps/${{ inputs.app-name }}"
+
+          # A RELEASE PROMOTION HAS NO RATCHET TO RUN, AND ITS BASE CANNOT BOOT.
+          #
+          # This step runs the BASE's test suite inside the HEAD's environment.
+          # `server/` is checked out once, at
+          # `needs.nextcloud-matrix.outputs.single-server` (the numerically
+          # highest stable branch), and is never moved when the app is rewound
+          # to the merge base. For a feature branch that is harmless: the merge
+          # base is days old, and base and head agree about which Nextcloud
+          # they are written against. For a `development -> beta` promotion the
+          # merge base is the PREVIOUS RELEASE POINT, a whole cycle behind, and
+          # that span routinely contains a Nextcloud major adoption. The base
+          # then fatals at LOAD time, produces no clover at all, and the guard
+          # below refuses — correctly on its own terms, but naming no remedy
+          # the author can take, because a merge base is immutable history.
+          #
+          # Observed 2026-08-18 on ConductionNL/openconnector#1094
+          # (`development -> beta`, 1752 files, run 32111820806). Merge base
+          # 071eb50e (2026-07-09) still carried the pre-NC34 stub
+          # `tests/stubs/OC/Hooks/Emitter.php`, and the base suite died in 1.8s:
+          #
+          #   PHP Fatal error: Declaration of OC\Files\Node\LazyFolder::listen(
+          #   $scope, $method, callable $callback) must be compatible with
+          #   OC\Hooks\Emitter::listen(string $scope, string $method,
+          #   callable $callback): void
+          #
+          # That stub was made untyped in openconnector#1229 on 2026-08-12 —
+          # INSIDE the promotion diff. The sibling branch's remedy ("merge the
+          # current base branch into this pull request") was checked and does
+          # not work either: `beta`'s own tip 01a15d4f carries the same typed
+          # stub, so merging it moves the merge base to a commit that fatals
+          # identically. Every run of #1094 from 2026-08-16 on was red on this
+          # step alone — the suite itself passed with
+          # `Tests: 2359, Assertions: 8341` and the head clover measured 62.05%
+          # against a committed floor of 60.65%.
+          #
+          # THIS IS NOT A COVERAGE FLOOR GOING UNCHECKED. `Guard coverage
+          # baseline` below falls back to the committed `.coverage-baseline` on
+          # exactly this condition, so an absolute floor is still enforced and
+          # the log says in words which check ran. What is skipped is the
+          # RATCHET, and on a promotion it has nothing to catch: every commit in
+          # the diff already faced the ratchet on its own pull request into
+          # `development`.
+          #
+          # SCOPED BY THE HEAD REF, NEVER BY THE BASE REF. Nine of the eighteen
+          # fleet repositories have `main` as their GitHub default branch, so
+          # exempting "pull requests targeting main" would silently disarm the
+          # ratchet for half the fleet's ordinary feature work. `development`
+          # and `beta` are protected long-lived integration branches and no
+          # feature branch is named either, so a pull request whose HEAD is one
+          # of them is a promotion by construction.
+          case "$PR_HEAD_REF" in
+            development|beta)
+              echo "::notice::Release promotion ($PR_HEAD_REF -> $BASE_REF): skipping the merge-base coverage ratchet. Its merge base is the previous release point and cannot be booted in this job's Nextcloud environment, and every commit in the diff already passed the ratchet on its own pull request into $PR_HEAD_REF. The committed .coverage-baseline floor is still enforced by the next step."
+              exit 0
+              ;;
+          esac
+
           HEAD_SHA="$(git rev-parse HEAD)"
-          MERGE_BASE="$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
-          echo "head=$HEAD_SHA base=$BASE_SHA merge-base=$MERGE_BASE"
+
+          SECOND_PARENT="$(git rev-parse --verify --quiet "${HEAD_SHA}^2" || true)"
+          if [ "$HEAD_SHA" != "$PR_HEAD_SHA" ] && [ "$SECOND_PARENT" = "$PR_HEAD_SHA" ]; then
+            BASE_TIP="$(git rev-parse "${HEAD_SHA}^1")"
+            MERGE_BASE="$(git merge-base "$BASE_TIP" "$PR_HEAD_SHA")"
+            echo "resolved via the merge ref: base-tip=$BASE_TIP pr-head=$PR_HEAD_SHA"
+          elif git rev-parse --verify --quiet "refs/remotes/origin/$BASE_REF" >/dev/null; then
+            BASE_TIP="$(git rev-parse "refs/remotes/origin/$BASE_REF")"
+            MERGE_BASE="$(git merge-base "$BASE_TIP" "$HEAD_SHA")"
+            echo "resolved via origin/$BASE_REF: base-tip=$BASE_TIP"
+          else
+            MERGE_BASE="$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
+            echo "::warning::Neither the merge ref nor origin/$BASE_REF was available; falling back to the event payload's base.sha=$BASE_SHA, which is the base tip as of PR creation and may be stale."
+          fi
+          echo "head=$HEAD_SHA merge-base=$MERGE_BASE"
+
           cp coverage/clover.xml "$RUNNER_TEMP/head-clover.xml"
           git checkout --force --detach "$MERGE_BASE"
           composer install --no-progress --prefer-dist --optimize-autoloader
+          # Recorded WHILE the base is checked out — after the checkout back to
+          # HEAD the evidence is gone, and "no clover file" would otherwise be
+          # reported with a cause the log does not support.
+          BASE_HAS_RUNNER=yes
+          [ -x ./vendor/bin/phpunit ] || BASE_HAS_RUNNER=no
           ./vendor/bin/phpunit -c phpunit.xml --coverage-clover="$RUNNER_TEMP/base-clover.xml" || true
           git checkout --force --detach "$HEAD_SHA"
           composer install --no-progress --prefer-dist --optimize-autoloader
           cp "$RUNNER_TEMP/head-clover.xml" coverage/clover.xml
-          test -s "$RUNNER_TEMP/base-clover.xml" \
-            || { echo "::error::Could not measure coverage at merge base $MERGE_BASE — refusing to report a ratchet that did not run."; exit 1; }
+
+          # THE REMEDY AN ERROR NAMES HAS TO EXIST — the two ways this can fail
+          # have different remedies, and the old single message named neither.
+          if [ ! -s "$RUNNER_TEMP/base-clover.xml" ]; then
+            if [ "$BASE_HAS_RUNNER" = "no" ]; then
+              echo "::error::Merge base $MERGE_BASE has no ./vendor/bin/phpunit after composer install — that commit predates this repository's PHPUnit setup, so there is no coverage floor to measure against. Merge the current base branch ($BASE_REF) into this pull request, or rebase it onto a base that carries the test suite. Refusing to report a ratchet that did not run."
+            else
+              echo "::error::PHPUnit is present at merge base $MERGE_BASE but produced no clover report there — the base suite could not run at all (check the PHPUnit output above this line). Refusing to report a ratchet that did not run."
+            fi
+            exit 1
+          fi
 
       # The capability probe is deliberately a HARD failure, not a fallback.
       # An older copy of scripts/coverage-guard.php accepts `--against` and
@@ -2537,6 +2716,11 @@ jobs:
       # this should never fire; if it does, the repository is the thing to fix.
       - name: Guard coverage baseline
         if: inputs.enable-coverage-guard && matrix.php-version == inputs.php-version && matrix.nextcloud-ref == needs.nextcloud-matrix.outputs.single-server
+        env:
+          # Through `env:`, never interpolated into the script body. A branch
+          # name is attacker-controlled text and git permits a double quote in
+          # one, so `case "${{ ... }}" in` would be a script-injection site.
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           set -euo pipefail
           cd "server/apps/${{ inputs.app-name }}"
@@ -2589,6 +2773,29 @@ jobs:
           # the previous behaviour instead of erroring, because unlike `against`
           # this is a narrowing of an existing check, not the difference between
           # a check running and not running.
+          # THE PROMOTION EXEMPTION, ENFORCED HERE TOO — and nowhere wider.
+          #
+          # `Measure merge-base coverage` exits 0 without writing
+          # base-clover.xml for a `development`/`beta` head ref; its comment
+          # carries the evidence. Falling back on the mere ABSENCE of that file
+          # would be the wrong test: absence is also what a future bug in that
+          # step would look like, and this branch would then quietly demote the
+          # ratchet to the constant floor while still reporting success — the
+          # silent-downgrade shape the `against` probe above exists to prevent.
+          # So the fallback is gated on the SAME head-ref condition, and any
+          # other route to a missing base clover stays a hard failure.
+          case "${PR_HEAD_REF:-}" in
+            development|beta)
+              echo "::notice::Release promotion: the merge-base ratchet did not run (see the previous step). Enforcing the committed .coverage-baseline floor instead."
+              php scripts/coverage-guard.php coverage/clover.xml
+              exit 0
+              ;;
+          esac
+          if [ ! -s "$RUNNER_TEMP/base-clover.xml" ]; then
+            echo "::error::No merge-base clover report, and this is not a release promotion — 'Measure merge-base coverage' should have failed before this step was reached. Refusing to report a ratchet that did not run."
+            exit 1
+          fi
+
           if php scripts/coverage-guard.php --capabilities 2>/dev/null | grep -qx changed-files; then
             MERGE_BASE="$(git merge-base "${{ github.event.pull_request.base.sha }}" HEAD)"
             # `|| true`: an empty diff is a legitimate answer (docs-only, or a
@@ -3231,10 +3438,69 @@ jobs:
           fi
 
       - name: Install Playwright
+        # A STALLED SETUP STEP EATS THE JOB'S WHOLE CAP AND LEAVES NO VERDICT.
+        #
+        # Measured 2026-08-19 on app-versions' `development` push run: this step
+        # ran 45m24s and the job was cancelled at its `timeout-minutes: 45`
+        # bound — `Run Playwright tests` never started, so the run produced no
+        # tally, no trace upload (`if: failure()` does not fire on a cancelled
+        # job) and no report. It still renders as a red check while carrying no
+        # information about the app, and `cancelled` is neither failed nor
+        # passed. The same PR's E2E job completed in 24m, so the stall is
+        # intermittent, not a capacity problem.
+        #
+        # `--with-deps` shells out to apt, which is the same thing that hung
+        # `Install PDF tools` for 60 minutes across the fleet (#504) and
+        # silently switched the quality gate off there too.
+        #
+        # A step bound converts that into a fast, readable failure. Measured
+        # normal duration for this step is under 3 minutes, so 10 leaves more
+        # than 3x headroom — a bound that a healthy run could hit would just be
+        # a new way to invent a phantom defect.
+        timeout-minutes: 10
         run: |
           cd server/apps/${{ inputs.app-name }}
           npm install --save-dev @playwright/test
-          npx playwright install --with-deps chromium
+
+          # ── WHY THIS IS TWO COMMANDS AND NOT `--with-deps` ──────────────────
+          #
+          # `--with-deps` does two unrelated things in one process: download the
+          # browser binaries from a CDN, and `apt-get install` the system
+          # libraries. Measured 2026-08-19 across THREE runs in one morning
+          # (app-versions development, app-versions #151, hrmq #87), the
+          # combined command printed NOT ONE LINE of output and hung until the
+          # job's 45-minute cap killed it:
+          #
+          #     Terminate orphan process: pid (3857)
+          #         (npm exec playwright install --with-deps chromium)
+          #
+          # Silence from the first instant is the signature of apt blocking on
+          # /var/lib/dpkg/lock-frontend — apt waits for that lock forever by
+          # design and says nothing while it does. Same mechanism as the
+          # `Install PDF tools` stall in #504.
+          #
+          # Split, the two halves can be treated according to what they are:
+          #
+          # 1. The browser download is REQUIRED and is a plain CDN fetch that
+          #    prints progress, so a stall there is visible and fatal.
+          npx playwright install chromium
+
+          # 2. The system libraries are ATTEMPTED, bounded, and NOT fatal.
+          #    GitHub's ubuntu runner image already ships the libraries chromium
+          #    needs, which is why the suites that got past this step ran fine.
+          #    A `timeout` gives apt the bound it will not give itself.
+          #
+          #    ⚠️ NOT-FATAL IS A DELIBERATE TRADE, NOT A SWALLOWED ERROR. If a
+          #    library really is missing, the browser fails to launch in the
+          #    test step and Playwright says exactly which one — a real verdict
+          #    about a real problem. The alternative it replaces is a 45-minute
+          #    cancellation that produces no tally, no trace and no report while
+          #    still rendering as a red check.
+          if timeout 300 npx playwright install-deps chromium; then
+            echo "Playwright system dependencies installed."
+          else
+            echo "::warning::playwright install-deps did not finish within 5m (apt lock or mirror). Continuing: the runner image ships these libraries, and a genuinely missing one fails loudly at browser launch."
+          fi
 
       # ── Reuse the bundle the `frontend-build` job already compiled ─────────
       #
@@ -4345,10 +4611,53 @@ jobs:
           fi
 
       - name: Install Playwright
+        # Same bound, same reason as the playwright job's copy of this step: an
+        # apt stall inside `--with-deps` otherwise consumes the job's cap and
+        # cancels it before any capture runs, producing no verdict at all.
+        timeout-minutes: 10
         run: |
           cd server/apps/${{ inputs.app-name }}
           npm install --save-dev @playwright/test
-          npx playwright install --with-deps chromium
+
+          # ── WHY THIS IS TWO COMMANDS AND NOT `--with-deps` ──────────────────
+          #
+          # `--with-deps` does two unrelated things in one process: download the
+          # browser binaries from a CDN, and `apt-get install` the system
+          # libraries. Measured 2026-08-19 across THREE runs in one morning
+          # (app-versions development, app-versions #151, hrmq #87), the
+          # combined command printed NOT ONE LINE of output and hung until the
+          # job's 45-minute cap killed it:
+          #
+          #     Terminate orphan process: pid (3857)
+          #         (npm exec playwright install --with-deps chromium)
+          #
+          # Silence from the first instant is the signature of apt blocking on
+          # /var/lib/dpkg/lock-frontend — apt waits for that lock forever by
+          # design and says nothing while it does. Same mechanism as the
+          # `Install PDF tools` stall in #504.
+          #
+          # Split, the two halves can be treated according to what they are:
+          #
+          # 1. The browser download is REQUIRED and is a plain CDN fetch that
+          #    prints progress, so a stall there is visible and fatal.
+          npx playwright install chromium
+
+          # 2. The system libraries are ATTEMPTED, bounded, and NOT fatal.
+          #    GitHub's ubuntu runner image already ships the libraries chromium
+          #    needs, which is why the suites that got past this step ran fine.
+          #    A `timeout` gives apt the bound it will not give itself.
+          #
+          #    ⚠️ NOT-FATAL IS A DELIBERATE TRADE, NOT A SWALLOWED ERROR. If a
+          #    library really is missing, the browser fails to launch in the
+          #    test step and Playwright says exactly which one — a real verdict
+          #    about a real problem. The alternative it replaces is a 45-minute
+          #    cancellation that produces no tally, no trace and no report while
+          #    still rendering as a red check.
+          if timeout 300 npx playwright install-deps chromium; then
+            echo "Playwright system dependencies installed."
+          else
+            echo "::warning::playwright install-deps did not finish within 5m (apt lock or mirror). Continuing: the runner image ships these libraries, and a genuinely missing one fails loudly at browser launch."
+          fi
 
       - name: Build app frontend
         # Same rationale as the playwright job: SPA mount via Util::addScript()
@@ -5470,8 +5779,49 @@ jobs:
           path: results/playwright-report/
         continue-on-error: true
 
+      # A PACKAGE INSTALL MUST NOT BE ABLE TO DISABLE THE GATE.
+      #
+      # Measured on decidesk run 32158299327 and shillinq run 32158364133,
+      # 2026-08-18: this step produced zero output for SIXTY MINUTES, hit the
+      # job timeout, and the runner cancelled the job. Everything downstream —
+      # including "Gate — fail when any upstream job failed", "Gate — a test
+      # job that was ENABLED but never ran", and "Gate — fail when an upstream
+      # job was cancelled" — was SKIPPED. Both runs went red on `development`
+      # with every other job green, and the three steps whose entire purpose is
+      # to decide pass/fail never executed. An apt mirror turned the quality
+      # gate off.
+      #
+      # pandoc and wkhtmltopdf render the markdown report to PDF. That is a
+      # nice-to-have attachment; the report, the step summary and the gates all
+      # work without them. So this is now bounded (5 min per attempt, 3
+      # attempts), non-fatal, and records whether it succeeded. `-qq` is gone
+      # because it hid the stall completely — the old log contained the command
+      # and nothing else.
       - name: Install PDF tools
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq pandoc wkhtmltopdf
+        id: pdf_tools
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+
+          # Same reasoning as `Install xmllint`: the cheapest way not to hang on
+          # the dpkg lock is not to take it. Cheap to ask, and it costs nothing
+          # when the answer is no.
+          if command -v pandoc > /dev/null 2>&1 && command -v wkhtmltopdf > /dev/null 2>&1; then
+            echo "pandoc and wkhtmltopdf already present."
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          for attempt in 1 2 3; do
+            if timeout 300 sudo apt-get update -q && timeout 300 sudo apt-get install -y -q pandoc wkhtmltopdf; then
+              echo "available=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "::warning::apt attempt ${attempt}/3 failed or timed out after 300s; retrying."
+            sleep 10
+          done
+          echo "available=false" >> "$GITHUB_OUTPUT"
+          echo "::warning::pandoc/wkhtmltopdf could not be installed after 3 bounded attempts. The PDF rendering of the quality report is skipped; the report, the step summary and every gate below still run. This is infrastructure, not a finding about this app."
 
       - name: Generate report
         run: |
@@ -5698,7 +6048,12 @@ jobs:
 
           echo "Report generated: $(wc -l < "$REPORT") lines"
 
+      # Only when the tools actually installed. Previously this ran
+      # unconditionally, so a failed install turned into a second, more
+      # confusing failure here ("pandoc: command not found") on top of the
+      # first.
       - name: Convert to PDF
+        if: steps.pdf_tools.outputs.available == 'true'
         run: |
           pandoc quality-report.md \
             -o quality-report.pdf \

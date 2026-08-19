@@ -702,25 +702,142 @@ case "${_pv2}" in
         _bad "gf_verdict returned gate-53's PRE-EXISTING advisory instead of the verdict. Got: ${_pv2}" ;;
 esac
 
-# ARM P3 — THE TWO PARSERS MUST STAY IN STEP. `gf_verdict` is used by the
+# ARM P3 — EVERY VERDICT PARSER MUST STAY IN STEP. `gf_verdict` is used by the
 # repo-shaped suites; the acceptance matrix has its own copy, and that copy is
 # the one that filtered NOTHING. A comment saying "keep these in step" is not a
 # mechanism; this is.
-_matrix="${GF_PKG_ROOT}/scripts/lib/test_gate_acceptance_matrix.sh"
-_shape='(PASS|FAIL|NOT APPLICABLE|SKIPPED)'
-if grep -qF -- "${_shape}" "${GF_PKG_ROOT}/scripts/lib/gate_fixture_support.sh" \
-    && grep -qF -- "${_shape}" "${_matrix}"; then
-    _ok "both verdict parsers match by shape — gate_fixture_support.sh and the acceptance matrix agree"
+#
+# ⚠️ THE FIRST MECHANISM WAS THE WRONG SHAPE, AND IT SAID SO OUT LOUD.
+# It asserted that the literal string `(PASS|FAIL|NOT APPLICABLE|SKIPPED)`
+# appeared in BOTH files. That is not "the parsers agree" — it is "the verdict
+# vocabulary is frozen at these four words". `.github#477` added WARNING to
+# both files, IN STEP, exactly as their comments require, and this assertion
+# went red anyway; it was one of the two that reddened `.github@main` from
+# 13:15 on 2026-08-16. Worse, its own repair path was to retype the literal in
+# the test, which nobody can check against the files it is supposed to police.
+#
+# So the property is asserted directly instead: EXTRACT the alternation each
+# parser actually uses and require the two to be byte-identical. Vocabulary may
+# grow — it just cannot grow in one file only. The shape half of the property
+# is kept as a floor: whatever the alternation contains, it must still contain
+# the four core verdict forms, so nobody can satisfy "identical" by gutting
+# both parsers back to a denylist.
+# ⚠️ THERE ARE THREE PARSERS, NOT TWO. `.github#477` taught two of them the new
+# WARNING form and left `_verdict_set` in test_gate_base_ref_delivery_channel.sh
+# behind — and THAT one failed silently, because a verdict word the pattern does
+# not know is simply dropped: gate-19 disappeared from both channels' verdict
+# sets and the comparison went on matching over a set that no longer contained
+# the gate that suite exists to watch. A parser that narrows quietly is worse
+# than two that disagree loudly. All three are compared here, by name.
+_PARSER_FILES="
+gate_fixture_support.sh
+test_gate_acceptance_matrix.sh
+test_gate_base_ref_delivery_channel.sh
+"
+
+# `\((PASS|FAIL)…\)` — the parenthesised alternation a verdict matcher uses.
+# Anchored on PASS|FAIL so it cannot latch onto some unrelated group.
+_verdict_alternation() {  # <file> -> the alternation, or empty
+    grep -oE '\(PASS\|FAIL[A-Z| ]*\)' "$1" | head -1
+}
+
+_alt_ref=""; _alt_ref_file=""; _alt_unreadable=""; _alt_drift=""
+for _pf in ${_PARSER_FILES}; do
+    _alt="$(_verdict_alternation "${GF_PKG_ROOT}/scripts/lib/${_pf}")"
+    if [ -z "${_alt}" ]; then
+        _alt_unreadable="${_alt_unreadable}${_pf} "
+        continue
+    fi
+    if [ -z "${_alt_ref}" ]; then
+        _alt_ref="${_alt}"; _alt_ref_file="${_pf}"
+    elif [ "${_alt}" != "${_alt_ref}" ]; then
+        _alt_drift="${_alt_drift}${_pf} matches ${_alt}; "
+    fi
+done
+
+if [ -n "${_alt_unreadable}" ]; then
+    _bad "verdict parser(s) ${_alt_unreadable}no longer carry a recognisable \`(PASS|FAIL|…)\` alternation. A parser this suite cannot read is a parser it cannot police — and an unreadable parser is not an agreeing one."
+elif [ -n "${_alt_drift}" ]; then
+    _bad "the verdict parsers have drifted apart: ${_alt_ref_file} matches ${_alt_ref}, but ${_alt_drift%; } — the same output would be graded differently by different suites, and a parser missing a word DROPS that gate rather than complaining"
 else
-    _bad "the two verdict parsers have drifted apart: one matches a verdict by shape and the other does not, so the same output would be graded differently by two suites"
+    _missing_form=""
+    for _form in 'PASS' 'FAIL' 'NOT APPLICABLE' 'SKIPPED'; do
+        printf '%s' "${_alt_ref}" | grep -qF -- "${_form}" \
+            || _missing_form="${_missing_form}${_form}, "
+    done
+    if [ -n "${_missing_form}" ]; then
+        _bad "all verdict parsers agree, but the shared alternation ${_alt_ref} no longer covers ${_missing_form%, } — agreement satisfied by narrowing every parser is the .github#401 defect in a new coat"
+    else
+        _ok "all 3 verdict parsers match by the SAME shape — gate_fixture_support.sh, the acceptance matrix and the base-ref channel set agree on ${_alt_ref}"
+    fi
+fi
+_alt_support="${_alt_ref}"
+_matrix="${GF_PKG_ROOT}/scripts/lib/test_gate_acceptance_matrix.sh"
+
+# POSITIVE CONTROL for the assertion above. Without it, "extract and compare"
+# is satisfiable by an extractor that returns empty for everything and calls
+# that agreement. Drift a COPY of one parser by one word and require the same
+# check to say NO.
+_pdrift="${_tmp}/parser-drift"; mkdir -p "${_pdrift}"
+sed 's/(PASS|FAIL/(PASS|FAIL|BOGUS/' "${_matrix}" > "${_pdrift}/matrix.sh"
+_alt_drifted="$(_verdict_alternation "${_pdrift}/matrix.sh")"
+if [ -n "${_alt_drifted}" ] && [ "${_alt_drifted}" != "${_alt_support}" ]; then
+    _ok "control: the drift check FAILS a parser changed on one side only (${_alt_drifted} vs ${_alt_support})"
+else
+    _bad "control BROKEN: a one-sided parser change was not detected (drifted='${_alt_drifted:-none}', support='${_alt_support}') — the arm above proves nothing"
+fi
+
+# ---------------------------------------------------------------------------
+# ARM P4 — WHICH GATES MAY BE ADVISORY IS BOUNDED BY NAME.
+#
+# `_warn` (added by .github#477) is one line away from being a soft-fail switch
+# for any gate in the suite: a gate that reports a real finding and does not
+# reach `_FAILED`. That is the invisible pass, in the package whose entire job
+# is preventing them — and nothing else in this package would notice a second
+# one landing.
+#
+# So the allowlist lives here, and demoting another gate means editing this
+# test and stating why. This does not stop a demotion; it stops a SILENT one.
+#
+# ⚠️ Note this counts `_warn` CALL SITES, not the word WARNING. gate-18 prints
+# a long-standing advisory line that is not a demotion of its verdict.
+# ---------------------------------------------------------------------------
+# gate -> the reason it is permitted to be non-blocking.
+_ADVISORY_ALLOWED_GATES="19"   # e2e-coverage — .github#477, temporary, owned.
+
+_runner_src="${GF_PKG_ROOT}/scripts/run-hydra-gates.sh"
+_warn_gates="$(grep -oE '^[[:space:]]*_warn[[:space:]]+[0-9]+' "${_runner_src}" \
+    | grep -oE '[0-9]+$' | sort -un | tr '\n' ' ')"
+_warn_gates="${_warn_gates% }"
+if [ "${_warn_gates}" = "${_ADVISORY_ALLOWED_GATES}" ]; then
+    _ok "the advisory (_warn) gates are exactly the allowlisted ones: ${_ADVISORY_ALLOWED_GATES:-none}"
+else
+    _bad "the set of gates demoted to advisory has changed without this test being told: found '${_warn_gates:-none}', allowed '${_ADVISORY_ALLOWED_GATES:-none}'. A gate that reports a real finding and does not block is a soft-fail; if the demotion is intended, add it here WITH its tracking issue."
+fi
+
+# POSITIVE CONTROL — the allowlist check must be able to say NO. Plant a second
+# `_warn` call site in a COPY of the runner and require the same extraction to
+# come back with a set the allowlist rejects.
+_wdrift="${_tmp}/warn-drift"; mkdir -p "${_wdrift}"
+{ cat "${_runner_src}"; printf '    _warn 7 "no-admin-idor" "pretend"\n'; } > "${_wdrift}/runner.sh"
+_warn_drifted="$(grep -oE '^[[:space:]]*_warn[[:space:]]+[0-9]+' "${_wdrift}/runner.sh" \
+    | grep -oE '[0-9]+$' | sort -un | tr '\n' ' ')"
+_warn_drifted="${_warn_drifted% }"
+if [ "${_warn_drifted}" != "${_ADVISORY_ALLOWED_GATES}" ] && [ -n "${_warn_drifted}" ]; then
+    _ok "control: a second _warn call site is detected (${_warn_drifted}) — the allowlist can refuse"
+else
+    _bad "control BROKEN: planting a _warn on gate-7 produced '${_warn_drifted:-none}', which the allowlist would accept — ARM P4 proves nothing"
 fi
 
 echo
 echo "== summary =="
 echo "   assertions: ${_asserts}"
 echo "   failures:   ${_failures}"
-if [ "${_asserts}" -lt 34 ]; then
-    echo "FAIL — only ${_asserts} assertions ran; this suite declares 34+. A short run is not a green run."
+# 34 -> 37: ARM P3 gained its positive control, and ARM P4 (the advisory-gate
+# allowlist) plus its control are new. The floor tracks the suite, otherwise a
+# whole arm can be deleted and the run still reads green.
+if [ "${_asserts}" -lt 37 ]; then
+    echo "FAIL — only ${_asserts} assertions ran; this suite declares 37+. A short run is not a green run."
     exit 1
 fi
 [ "${_failures}" -eq 0 ] || exit 1

@@ -7687,8 +7687,23 @@ elif [ "${HAVE_DELTA_BASE}" = "1" ]; then
     else
         set +e
         _csrf_err="${HYDRA_GATE_LOG_DIR}/hydra-gate-csrf-cochange.err"
+        # `--repo`/`--base` turn on the POST-IMAGE test: a removed annotation
+        # whose method no longer exists at HEAD is a DELETED endpoint, not a
+        # dropped protection, and a `-U0` diff cannot tell the two apart on its
+        # own. Measured on zaakafhandelapp#371 (five `DashboardController`
+        # methods deleted): 5 removals -> 0. The negative control is #380, which
+        # STRIPPED the annotation from ten surviving methods: 10 -> 10.
+        # Without these arguments the helper behaves exactly as before, so a
+        # repo it cannot read is never a reason to drop a security finding.
+        # ⚠️ THE DIFF IS THREE-DOT, SO ITS BASE SIDE IS THE MERGE BASE — not
+        # BASE_REF. Passing BASE_REF would address line numbers in the wrong
+        # image; the helper verifies the line content it was given and reports
+        # on a mismatch, so the error would be silent over-reporting rather
+        # than a false pass, but the right image is cheap to name.
+        _csrf_mb=$(git merge-base "${BASE_REF}" HEAD 2>/dev/null || true)
+        [ -n "${_csrf_mb}" ] || _csrf_mb="${BASE_REF}"
         _csrf_removed=$(git diff -U0 "${BASE_REF}...HEAD" -- 'lib/Controller/*.php' 2>/dev/null \
-            | python3 "${_csrf_helper}" 2>"${_csrf_err}")
+            | python3 "${_csrf_helper}" --repo . --base "${_csrf_mb}" 2>"${_csrf_err}")
         _csrf_rc=$?
         if [ "${_csrf_rc}" -ne 0 ]; then
             _csrf_ran=0
@@ -8848,7 +8863,31 @@ fi
 #      lib/Settings/*register*.json (+ register.d/*.json; no register JSON
 #      in-repo → WARN, runtime-bound registers), deepLink route
 #      correspondence, and the ADR-044 no-functionality-loss removals
-#      invariant (a removal must never orphan its route).
+#      invariant (a removal must never orphan its page).
+#
+# THE REMOVALS INVARIANT ASKS ABOUT REACHABILITY, NOT ABOUT THE MENU.
+# Reachability is the transitive closure of the manifest's DECLARATIVE
+# navigation edges — open-page action targets, handler:'navigate' routes,
+# viewAllRoute / rowRoute / clickRoute / onSuccessRoute / drilldown.route —
+# seeded by the surviving menu. A page a dashboard tile or a "view all" link
+# reaches is reachable; a page reached only from another orphan is not.
+# When the replacement surface names the retired page NOWHERE (the
+# functionality moved, not the link — a folderSidebar filter, a page viewMode,
+# a per-object sidebar tab), the app declares the replacement in
+# menu-layout.json#removalsReplacedBy and the gate VERIFIES that page exists
+# and is itself reachable before downgrading to WARN. Never a free-text reason:
+# a page id rots loudly, prose does not.
+#
+# A replacement that moved to ANOTHER APP is spelled '<appId>:<PageId>'
+# (procest's cross-case agenda compiler moved to decidesk, and the same-app
+# form could only have been satisfied by naming a local page that does not
+# carry it — a false claim the gate would have accepted). This form gets a
+# STRICTLY WEAKER check and says so: syntax, a known Conduction fleet app id,
+# and NOT this app (that is the same-app case in disguise and takes the strict
+# path). The gate does not read another app's manifest, so it CANNOT check that
+# the page exists there, is reachable there, or carries the functionality — and
+# unlike a same-app waiver it does NOT rot. The WARN states every one of those
+# limits on every run; a cross-app waiver is a review judgement, not a proof.
 #
 # Why (2026-07-06 audit item 19): gate-22 validates ONLY the base manifest.
 # shillinq ships 75+ fragments gate-22 never sees; the 2026-07-06 live e2e
@@ -10332,6 +10371,57 @@ if [ -f package.json ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# GATE 93 — composer-cooldown-config (ADR-093, proposed: hydra#591)
+#
+# Composer has no native equivalent to npm's min-release-age (gate 84).
+# composer/composer#12847 tracks the upstream request, unreleased at time of
+# writing. Two third-party install-time plugins were evaluated and rejected —
+# one requires php ^8.4 and breaks `composer install` on the PHP 8.3 leg every
+# core app's CI matrix tests; the other is PHP-compatible but, like the
+# first, is a ~3-month-old single-maintainer package — so the fleet leans on
+# GitHub Dependabot's own native `cooldown:` key instead: no new runtime
+# dependency, nothing new executes during `composer install` anywhere.
+#
+# MANDATORY, NOT SKIP-UNTIL-ADOPTED — same posture as gate 84 for
+# package.json. A gate that only checks a setting IF it is already present
+# never catches the repo that never adopted it, which is "declared gate,
+# enforced nowhere" — the exact failure shape gate 84 itself replaced.
+#
+# FULL-TREE, deliberately NOT diff-scoped, for the identical reason gate 84
+# gives: diff-scoped would report nothing on the ~99% of PRs that never touch
+# dependabot.yml, and a gate silent on nearly everything cannot establish
+# fleet-wide conformance, which is the entire point of it.
+#
+# NOTE ON PLACEMENT: top level, outside any `_FAILED` guard — a gate that only
+# runs once everything else passed is green-but-dead.
+# ---------------------------------------------------------------------------
+_ccc_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-composer-cooldown-config.log
+: > "${_ccc_log}"
+if [ -f composer.json ]; then
+    set +e
+    python3 "${SCRIPT_DIR}/lib/check_composer_cooldown.py" . > "${_ccc_log}" 2>&1
+    _ccc_rc=$?
+    # `set +e`, not `set -e`: errexit off is the state this script actually
+    # runs in, and re-enabling it here would abort the run on the first
+    # non-zero anything downstream. See the note at the top of this file.
+    set +e
+
+    if [ "${_ccc_rc}" -eq 0 ]; then
+        _pass 93 "composer-cooldown-config"
+    elif [ "${_ccc_rc}" -eq 4 ]; then
+        _skip 93 "composer-cooldown-config" na "this repo has no composer.json, so it has no Composer surface to harden. See ${_ccc_log}."
+    elif ! _helper_finished "${_ccc_log}" '^checked [0-9]+ composer cooldown setting'; then
+        # A CRASH IS NOT A FINDING.
+        _ccc_why=$(head -3 "${_ccc_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+        _skip 93 "composer-cooldown-config" wiring "check_composer_cooldown.py exited ${_ccc_rc} without printing its terminal 'checked N composer cooldown setting(s)' summary, so the cooldown configuration is UNVERIFIED by this run. Checker output: ${_ccc_why:-<empty>}. See ${_ccc_log}."
+    else
+        _ccc_n=$(grep -cE '^FAIL ' "${_ccc_log}" 2>/dev/null || true)
+        case "${_ccc_n}" in ''|*[!0-9]*) _ccc_n=1 ;; esac
+        _fail 93 "composer-cooldown-config" "${_ccc_n} composer cooldown setting(s) missing or too weak — see ${_ccc_log}"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
 # GATE 83 — contract-surface-shift (ADR-084)
 #
 # A method on a published contract can be served two ways: DECLARED
@@ -10576,6 +10666,15 @@ _a11y_has_markup_dir || _declare_na "no src/, templates/ or appinfo/templates/ �
 # exists to catch.
 [ -d lib/Contract ] || _declare_na "no lib/Contract/ — this repo publishes no contract interface, so it exposes no method surface whose magic-versus-declared shape consumers could have doubled." \
     83
+# `if [ -f composer.json ]` — gate 93
+#
+# Without this the gate emits NOTHING on a repo with no composer.json (an
+# ExApp sidecar, for instance) — a silence indistinguishable from a pass,
+# the exact failure --require-full-coverage exists to catch. Same defect
+# class gate 84 already had for package.json; caught by
+# test-hydra-gates-bin.sh's all-not-applicable fixture the same way.
+[ -f composer.json ] || _declare_na "no composer.json — this repo has no Composer surface, so there is no dependency resolution for a release-age cooldown to govern." \
+    93
 
 _emitted_n=$(printf '%s\n' ${_EMITTED_GATES} | grep -c . || true)
 _emitted_n="${_emitted_n:-0}"
