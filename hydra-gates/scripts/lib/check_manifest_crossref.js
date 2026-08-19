@@ -176,6 +176,321 @@ function discoverDeclaredSlugs(appDir) {
 	return { files, registers, schemas }
 }
 
+// --- role-resolvable / group-declared discovery (fix-dead-role-gates) --------
+//
+// Closes the defect class fix-dead-role-gates exists for: a manifest
+// `visibleIf.user.primaryRole` literal that the app's own role resolver can
+// never emit (silent, permanent menu-item lockout), and the mirror-image
+// defect — an `IGroupManager::isInGroup()` call naming a group id nothing in
+// the app declares (a role that can never be granted). Both are silent at
+// runtime: a `visibleIf` mismatch just hides a menu entry, and an undeclared
+// group returns `false` from `isInGroup()` forever. See
+// openspec/changes/fix-dead-role-gates/design.md "CI Gate Extension".
+
+// Blank out PHP comments (`//`, `#` except `#[Attribute]`, `/* */`) while
+// keeping string literal CONTENTS, all other code, and every newline —
+// same-length output so an index into the mask addresses the original text.
+//
+// WHY THIS EXISTS: a PHPDoc block is free to contain example code (this very
+// file's fixtures do — "a `provideInitialState('primaryRole', ...)` call
+// site" is prose, not a call site). Scanning raw source found that sentence
+// before the real call and mis-resolved the method name from it. Masking
+// comments first is the same fix js_scope.js applies for JS registries (#424)
+// — a two-line unescaped regex swallowed real registrations there; scanning
+// unmasked PHP source here would misattribute resolver discovery to prose.
+function phpCommentMask(text) {
+	let out = ''
+	let i = 0
+	const n = text.length
+	while (i < n) {
+		const c = text[i]
+		if (c === "'" || c === '"') {
+			const quote = c
+			out += c
+			i++
+			while (i < n) {
+				const ch = text[i]
+				out += ch
+				if (ch === '\\' && i + 1 < n) { out += text[i + 1]; i += 2; continue }
+				i++
+				if (ch === quote) break
+			}
+			continue
+		}
+		if (c === '/' && text[i + 1] === '/') {
+			while (i < n && text[i] !== '\n') { out += ' '; i++ }
+			continue
+		}
+		if (c === '#' && text[i + 1] !== '[') {
+			while (i < n && text[i] !== '\n') { out += ' '; i++ }
+			continue
+		}
+		if (c === '/' && text[i + 1] === '*') {
+			out += '  '
+			i += 2
+			while (i < n && !(text[i] === '*' && text[i + 1] === '/')) {
+				out += (text[i] === '\n') ? '\n' : ' '
+				i++
+			}
+			if (i < n) { out += '  '; i += 2 }
+			continue
+		}
+		out += c
+		i++
+	}
+	return out
+}
+
+// Recursively list every `.php` file under `<appDir>/lib` (skip vendor/
+// node_modules defensively — neither should exist under lib/, but a
+// misplaced vendored copy must not be scanned as first-party code).
+function listPhpFiles(appDir) {
+	const root = path.join(appDir, 'lib')
+	const out = []
+	function walk(dir) {
+		let entries
+		try {
+			entries = fs.readdirSync(dir, { withFileTypes: true })
+		} catch (e) {
+			return
+		}
+		for (const entry of entries) {
+			if (entry.name === 'vendor' || entry.name === 'node_modules') continue
+			const full = path.join(dir, entry.name)
+			if (entry.isDirectory()) {
+				walk(full)
+			} else if (entry.isFile() && entry.name.endsWith('.php')) {
+				out.push(full)
+			}
+		}
+	}
+	walk(root)
+	return out
+}
+
+// Find the app's role-resolution service and its producible-value set.
+//
+// Discovery mirrors how `hydra-gate-initial-state` already locates the
+// `IInitialState::provideInitialState` call site: grep every lib/**/*.php
+// file for a call keyed on the literal `'primaryRole'`, take the method
+// invoked on its second argument (e.g. `$this->dashboardRoleSvc-
+// >resolvePrimaryRole($user)` → `resolvePrimaryRole`), then find the file
+// that DEFINES a method of that name — that file is the resolver.
+//
+// From the resolver file, the producible-value set is the union of:
+//   - every literal string `return 'x';` / `return "x";` in the file
+//   - every key (associative) or bare value (plain list) of a `const` array
+//     whose name contains ROLE (case-insensitive) — covers both the
+//     `GROUP_BACKED_ROLES` role => group-id map shape and a plain
+//     positional role-name list shape (the pre-fix scholiq form).
+//
+// Returns `{ file, roles: Set<string> }`, or `null` when no call site is
+// discoverable (most apps do not gate on `primaryRole` at all — the caller
+// WARNs and skips, matching this gate's existing WARN-on-unknowable posture
+// for slug-resolution).
+function discoverRoleResolver(appDir) {
+	const files = listPhpFiles(appDir)
+	let methodName = null
+	for (const file of files) {
+		let src
+		try {
+			src = phpCommentMask(fs.readFileSync(file, 'utf8'))
+		} catch (e) {
+			continue
+		}
+		const m = /provideInitialState\s*\(\s*['"]primaryRole['"]\s*,\s*([^;]+?)\)\s*;/.exec(src)
+		if (!m) continue
+		const callExpr = m[1]
+		const calls = callExpr.match(/->\s*(\w+)\s*\(/g)
+		if (!calls || calls.length === 0) continue
+		const last = calls[calls.length - 1]
+		methodName = /->\s*(\w+)\s*\(/.exec(last)[1]
+		break
+	}
+	if (!methodName) return null
+
+	for (const file of files) {
+		let src
+		try {
+			src = phpCommentMask(fs.readFileSync(file, 'utf8'))
+		} catch (e) {
+			continue
+		}
+		const defRe = new RegExp(`function\\s+${methodName}\\s*\\(`)
+		if (!defRe.test(src)) continue
+
+		const roles = new Set()
+		const returnRe = /return\s+['"]([a-z][a-z0-9-]*)['"]\s*;/g
+		let rm
+		while ((rm = returnRe.exec(src)) !== null) roles.add(rm[1])
+
+		const constRe = /(?:private|public|protected)\s+const\s+(\w*ROLE\w*)\s*=\s*\[([\s\S]*?)\];/gi
+		let cm
+		while ((cm = constRe.exec(src)) !== null) {
+			const body = cm[2]
+			// Associative `'key' => 'value'` — the key is the producible role.
+			const assocRe = /['"]([a-z][a-z0-9-]*)['"]\s*=>/g
+			let am
+			let sawAssoc = false
+			while ((am = assocRe.exec(body)) !== null) { roles.add(am[1]); sawAssoc = true }
+			// Plain positional list `'role', 'role', ...` (no `=>` at all in
+			// the array) — every quoted entry is itself a producible role.
+			if (!sawAssoc) {
+				const listRe = /['"]([a-z][a-z0-9-]*)['"]/g
+				let lm
+				while ((lm = listRe.exec(body)) !== null) roles.add(lm[1])
+			}
+		}
+		return { file, roles }
+	}
+	return null
+}
+
+// Collect every `visibleIf.user.primaryRole.in[]` literal in the assembled
+// manifest, at any nesting depth, with the nearest enclosing menu item id.
+function collectRoleLiterals(node, ptr, nearestId, out) {
+	if (Array.isArray(node)) {
+		node.forEach((v, i) => collectRoleLiterals(v, `${ptr}/${i}`, nearestId, out))
+		return
+	}
+	if (!node || typeof node !== 'object') return
+	const ownId = (typeof node.id === 'string' && node.id !== '') ? node.id : nearestId
+	if (node.visibleIf && typeof node.visibleIf === 'object') {
+		const pr = node.visibleIf['user.primaryRole']
+		if (pr && typeof pr === 'object' && Array.isArray(pr.in)) {
+			pr.in.forEach((literal, i) => {
+				if (typeof literal === 'string' && literal !== '') {
+					out.push({ ptr: `${ptr}/visibleIf/user.primaryRole/in/${i}`, id: ownId, literal })
+				}
+			})
+		}
+	}
+	for (const [k, v] of Object.entries(node)) {
+		if (k === '_note' || k === '_meta') continue
+		collectRoleLiterals(v, `${ptr}/${k}`, ownId, out)
+	}
+}
+
+// Collect every group id referenced anywhere in an OAS-shaped register
+// document — a JS port of OpenRegister's `RbacGroupCollector::fromDocument()`
+// (openregister/lib/Service/Authorization/RbacGroupCollector.php): the
+// DERIVED floor (register + schema + property `authorization` blocks) unioned
+// with the AUTHORED scope map
+// (`components.securitySchemes.oauth2.flows.authorizationCode.scopes` keys).
+const RESERVED_PRINCIPALS = new Set(['admin', 'public'])
+
+function groupsFromAuthorizationBlock(authorization, out) {
+	if (!authorization || typeof authorization !== 'object') return
+	for (const [key, value] of Object.entries(authorization)) {
+		if (!value || typeof value !== 'object') continue // e.g. `public: true`
+		if (key === 'roles') {
+			// role-name => group(s) map; only the VALUES are group ids.
+			for (const assigned of Object.values(value)) {
+				const list = Array.isArray(assigned) ? assigned : [assigned]
+				for (const g of list) if (typeof g === 'string') out.add(g)
+			}
+			continue
+		}
+		if (!Array.isArray(value)) continue
+		for (const rule of value) {
+			if (typeof rule === 'string') { out.add(rule); continue }
+			if (rule && typeof rule === 'object' && typeof rule.group === 'string') out.add(rule.group)
+		}
+	}
+}
+
+function groupsFromSchemaDefinition(schemaDefinition, out) {
+	groupsFromAuthorizationBlock(schemaDefinition && schemaDefinition.authorization, out)
+	const properties = schemaDefinition && schemaDefinition.properties
+	if (!properties || typeof properties !== 'object') return
+	for (const propertyDefinition of Object.values(properties)) {
+		groupsFromAuthorizationBlock(propertyDefinition && propertyDefinition.authorization, out)
+	}
+}
+
+// Discover every group id declared anywhere in the app's register JSON: the
+// derived-floor authorization blocks plus the authored OAS scope map. Reads
+// the same `lib/Settings/*register*.json` (+ `register.d/*.json`) files
+// `discoverDeclaredSlugs` already locates.
+function discoverDeclaredGroups(appDir) {
+	const settingsDir = path.join(appDir, 'lib', 'Settings')
+	const files = []
+	if (fs.existsSync(settingsDir) && fs.statSync(settingsDir).isDirectory()) {
+		for (const f of fs.readdirSync(settingsDir).sort()) {
+			if (/register/i.test(f) && f.endsWith('.json')) files.push(path.join(settingsDir, f))
+		}
+		const fragDir = path.join(settingsDir, 'register.d')
+		if (fs.existsSync(fragDir) && fs.statSync(fragDir).isDirectory()) {
+			for (const f of fs.readdirSync(fragDir).sort()) {
+				if (f.endsWith('.json')) files.push(path.join(fragDir, f))
+			}
+		}
+	}
+	const groups = new Set()
+	for (const file of files) {
+		let doc
+		try {
+			doc = JSON.parse(fs.readFileSync(file, 'utf8'))
+		} catch (e) {
+			continue // corrupt register JSON is already reported by slug-resolution
+		}
+		const registers = (doc.components && doc.components.registers) || doc.registers
+		if (registers && typeof registers === 'object') {
+			for (const def of Object.values(registers)) {
+				groupsFromAuthorizationBlock(def && def.authorization, groups)
+			}
+		}
+		const schemas = (doc.components && doc.components.schemas) || doc.schemas
+		if (schemas && typeof schemas === 'object') {
+			for (const def of Object.values(schemas)) {
+				groupsFromSchemaDefinition(def, groups)
+			}
+		}
+		const scopes = doc.components && doc.components.securitySchemes
+			&& doc.components.securitySchemes.oauth2
+			&& doc.components.securitySchemes.oauth2.flows
+			&& doc.components.securitySchemes.oauth2.flows.authorizationCode
+			&& doc.components.securitySchemes.oauth2.flows.authorizationCode.scopes
+		if (scopes && typeof scopes === 'object') {
+			for (const key of Object.keys(scopes)) groups.add(key)
+		}
+	}
+	for (const p of RESERVED_PRINCIPALS) groups.add(p)
+	return { hasRegisterJson: files.length > 0, groups }
+}
+
+// Collect every `IGroupManager::isInGroup($uid, <arg>)` call site under
+// lib/**/*.php. A LITERAL second argument (single- or double-quoted string)
+// is checkable; anything else (variable, concatenation, method call) is
+// dynamically-constructed and cannot be resolved statically.
+function collectIsInGroupCallSites(appDir) {
+	const out = []
+	for (const file of listPhpFiles(appDir)) {
+		let raw
+		try {
+			raw = fs.readFileSync(file, 'utf8')
+		} catch (e) {
+			continue
+		}
+		const src = phpCommentMask(raw) // same length/newlines as raw — a doc-comment example must not read as a real call site
+		const lines = raw.split('\n')
+		const callRe = /->\s*isInGroup\s*\(\s*[^,]+,\s*([^)]+)\)/g
+		let m
+		while ((m = callRe.exec(src)) !== null) {
+			const arg = m[1].trim()
+			const lineNo = src.slice(0, m.index).split('\n').length
+			const literalMatch = /^['"]([^'"]*)['"]$/.exec(arg)
+			out.push({
+				file,
+				line: lineNo,
+				lineText: (lines[lineNo - 1] || '').trim(),
+				literal: literalMatch ? literalMatch[1] : null,
+			})
+		}
+	}
+	return out
+}
+
 // --- manifest walkers ----------------------------------------------------------
 
 // True when a slug value is a literal (checkable) string — runtime sentinels
@@ -621,6 +936,51 @@ function main() {
 			if (!REGISTRY_KINDS_REQUIRING_A_POSITION.has(meta.kind)) continue
 			warn('registry-crossref', '/pages',
 				`src/registry.js exports '${name}' (kind '${meta.kind}') but no manifest tabs[]/sections[]/page entry names it — the surface it renders has no entry point. Wire it, or delete it`)
+		}
+	}
+
+	// (g) role-resolvable (fix-dead-role-gates) — every visibleIf.user.
+	// primaryRole literal must resolve to a value the app's role resolver can
+	// actually emit. A mismatch is silent in the running app (the menu entry
+	// just never appears), so this is the mechanical enforcement of that
+	// invariant.
+	const roleLiterals = []
+	collectRoleLiterals(manifest, '', null, roleLiterals)
+	if (roleLiterals.length > 0) {
+		const resolver = discoverRoleResolver(APP_DIR)
+		if (!resolver) {
+			warn('role-resolvable', '/', `manifest gates on user.primaryRole but no role-resolution service is discoverable (no 'primaryRole' provideInitialState call site under lib/) — role-resolvable cannot be checked`)
+		} else {
+			for (const { ptr, id, literal } of roleLiterals) {
+				if (!resolver.roles.has(literal)) {
+					fail('role-resolvable', ptr, `menu item '${id || '(no id)'}' names role '${literal}' in visibleIf.user.primaryRole, which ${path.relative(APP_DIR, resolver.file)}'s resolver can never emit`)
+				}
+			}
+		}
+	}
+
+	// (h) group-declared (fix-dead-role-gates) — every literal-string
+	// IGroupManager::isInGroup() call site must name a group id declared
+	// somewhere the app's RBAC group collector reads (register/schema
+	// authorization blocks or the OAS scope map). An undeclared literal group
+	// id can never be granted — isInGroup() against a non-existent group
+	// always returns false, so the gated role is permanently unreachable.
+	const groupCallSites = collectIsInGroupCallSites(APP_DIR)
+	if (groupCallSites.length > 0) {
+		const declaredGroups = discoverDeclaredGroups(APP_DIR)
+		for (const site of groupCallSites) {
+			const rel = path.relative(APP_DIR, site.file)
+			if (site.literal === null) {
+				warn('group-declared', `${rel}:${site.line}`, `isInGroup() call names a dynamically-constructed group id ('${site.lineText}') — not statically resolvable`)
+				continue
+			}
+			if (!declaredGroups.hasRegisterJson) {
+				warn('group-declared', `${rel}:${site.line}`, `isInGroup($uid, '${site.literal}') cannot be resolved — no lib/Settings/*register*.json in repo`)
+				continue
+			}
+			if (!declaredGroups.groups.has(site.literal)) {
+				fail('group-declared', `${rel}:${site.line}`, `isInGroup($uid, '${site.literal}') names a group id declared nowhere in this app's RBAC configuration (register/schema authorization blocks or the OAS scope map)`)
+			}
 		}
 	}
 

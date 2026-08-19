@@ -8,14 +8,22 @@
 //   good/   → assembles, structurally validates (when Ajv is resolvable),
 //             and cross-resolves: checker exit 0, summary "passed", exactly
 //             ONE warn-severity finding (the open-modal registry WARN) and
-//             ZERO error findings — warnings never set the exit code.
+//             ZERO error findings — warnings never set the exit code. Also
+//             carries good/lib/Service/RoleService.php (fix-dead-role-gates):
+//             a role resolver + one visibleIf.user.primaryRole gate + one
+//             literal isInGroup() call, all resolving cleanly — zero
+//             role-resolvable / group-declared findings either.
 //   broken/ → checker exit 1, summary "failed", EXACTLY one error finding
 //             per seeded defect class (menu-route, action-target open-page,
 //             slug-resolution zaakafhandelapp-shape, deeplink-route,
-//             removals-invariant) — none missed, none extra — plus the
-//             open-modal WARN; and the ASSEMBLED manifest fails
-//             check_manifest.js on the fragment-introduced `layout[]`
-//             violation (structural stage, Ajv path only).
+//             removals-invariant, role-resolvable, group-declared) — none
+//             missed, none extra — plus the open-modal WARN; and the
+//             ASSEMBLED manifest fails check_manifest.js on the
+//             fragment-introduced `layout[]` violation (structural stage,
+//             Ajv path only). broken/lib/Service/RoleService.php seeds one
+//             role-resolvable defect (a visibleIf literal, "auditor", the
+//             resolver never returns) and one group-declared defect (a
+//             literal isInGroup() call naming a group nothing declares).
 //
 // THE FIXTURES ARE PART OF THIS TEST. Until 2026-08-04 this file referenced
 // ../test-fixtures/effective-manifest/{good,broken}/ — a directory that had
@@ -57,10 +65,12 @@ const VALIDATOR = path.join(LIB, 'check_manifest.js')
 		'good/src/manifest.d/20-settings.json',
 		'good/src/menu-layout.json',
 		'good/lib/Settings/items-register.json',
+		'good/lib/Service/RoleService.php',
 		'broken/src/manifest.json',
 		'broken/src/manifest.d/10-besluiten.json',
 		'broken/src/menu-layout.json',
 		'broken/lib/Settings/zaken-register.json',
+		'broken/lib/Service/RoleService.php',
 		'registry-wired/src/manifest.json',
 		'registry-wired/src/registry.js',
 		'registry-orphan/src/manifest.json',
@@ -137,6 +147,10 @@ function parseReport(stdout) {
 	assert(errors.length === 0, 'good: zero error findings')
 	assert(warns.length === 1 && warns[0].check === 'action-target', 'good: exactly one WARN (open-modal registry not statically checkable)')
 	assert(/^at .*: WARN /m.test(check.stderr), 'good: WARN reported as "at <path>: WARN …" on stderr')
+	assert(rep.findings.filter((f) => f.check === 'role-resolvable').length === 0,
+		"good: zero role-resolvable findings — reports-entry's [\"admin\",\"viewer\"] gate resolves against RoleService.php's producible set")
+	assert(rep.findings.filter((f) => f.check === 'group-declared').length === 0,
+		"good: zero group-declared findings — RoleService.php's isInGroup($uid, 'viewers') resolves against items-register.json's authorization block")
 	fs.rmSync(path.dirname(tmp), { recursive: true, force: true })
 }
 
@@ -173,7 +187,14 @@ function parseReport(stdout) {
 	assert(byCheck('removals-invariant').length === 1
 		&& byCheck('removals-invariant')[0].message.includes("'cases-index'"),
 	'broken: exactly one removals-invariant error (orphaned route cases-index, ADR-044)')
-	assert(errors.length === 5, `broken: exactly 5 error findings — none missed, none extra (got ${errors.length})`)
+	assert(byCheck('role-resolvable').length === 1
+		&& byCheck('role-resolvable')[0].message.includes("'zaken-index-entry'")
+		&& byCheck('role-resolvable')[0].message.includes("'auditor'"),
+	'broken: exactly one role-resolvable error (zaken-index-entry names "auditor", which RoleService.php never returns — fix-dead-role-gates)')
+	assert(byCheck('group-declared').length === 1
+		&& byCheck('group-declared')[0].message.includes("'undeclared-auditors'"),
+	'broken: exactly one group-declared error (isInGroup names a group nothing declares — fix-dead-role-gates)')
+	assert(errors.length === 7, `broken: exactly 7 error findings — none missed, none extra (got ${errors.length})`)
 	assert(warns.length === 1 && warns[0].check === 'action-target', 'broken: the open-modal WARN present, warn severity')
 	fs.rmSync(path.dirname(tmp), { recursive: true, force: true })
 }
