@@ -585,7 +585,34 @@ fi
 #                        hunks and found no security change. Computed.
 #   48 csrf-cochange   — DELTA, real base: it looked for a removed attribute in
 #                        the diff and found none. Computed.
-_ARM6_ALLOWED=" 4 15 16 23 47 48 "
+#   68 duplicate-index-pages — never diff-scoped, same posture as gate-23: it
+#                        always assembles the WHOLE effective manifest (base +
+#                        manifest.d/* fragments) and groups every type:"index"
+#                        page by (register, schema), regardless of which files
+#                        the diff touched — that is this gate's OWN spec
+#                        requirement ("Gate scope — computed app-wide, not
+#                        file-diff-scoped"). This fixture's manifest is
+#                        {"pages":[]} — zero pages of any type — so there is
+#                        no type:"index" page anywhere in the tree for it to
+#                        group, at either scope. MEASURED, not assumed:
+#                        `hydra-gate-duplicate-index-pages.log` reads
+#                        `findings=0` byte-for-byte identically at full scope
+#                        and at --scope-to-diff --base HEAD~1; the ONLY line
+#                        that differs between the two runs is the
+#                        informational "ratchet computed against BASE_REF"
+#                        note, not the verdict. A computed, honest,
+#                        whole-tree zero, not a scope artifact.
+#                        SEPARATELY: gate-68 is a RATCHET (design.md Decision
+#                        3) — with no resolvable base (the plain `_wide_full`
+#                        run above passes none) it can only ever report WARN
+#                        or PASS, by design, never FAIL; a planted duplicate
+#                        here would show WARNING (which this arm does not
+#                        flag — only literal PASS), never FAIL, so "FAIL the
+#                        planted tree at full scope" is not a reachable
+#                        verdict for this gate absent a base showing growth,
+#                        which this fixture's docs-only second commit does
+#                        not supply for ANY gate.
+_ARM6_ALLOWED=" 4 15 16 23 47 48 68 "
 
 _wide_bad=""
 while IFS= read -r _g; do
