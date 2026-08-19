@@ -3368,6 +3368,26 @@ jobs:
           fi
 
       - name: Install Playwright
+        # A STALLED SETUP STEP EATS THE JOB'S WHOLE CAP AND LEAVES NO VERDICT.
+        #
+        # Measured 2026-08-19 on app-versions' `development` push run: this step
+        # ran 45m24s and the job was cancelled at its `timeout-minutes: 45`
+        # bound — `Run Playwright tests` never started, so the run produced no
+        # tally, no trace upload (`if: failure()` does not fire on a cancelled
+        # job) and no report. It still renders as a red check while carrying no
+        # information about the app, and `cancelled` is neither failed nor
+        # passed. The same PR's E2E job completed in 24m, so the stall is
+        # intermittent, not a capacity problem.
+        #
+        # `--with-deps` shells out to apt, which is the same thing that hung
+        # `Install PDF tools` for 60 minutes across the fleet (#504) and
+        # silently switched the quality gate off there too.
+        #
+        # A step bound converts that into a fast, readable failure. Measured
+        # normal duration for this step is under 3 minutes, so 10 leaves more
+        # than 3x headroom — a bound that a healthy run could hit would just be
+        # a new way to invent a phantom defect.
+        timeout-minutes: 10
         run: |
           cd server/apps/${{ inputs.app-name }}
           npm install --save-dev @playwright/test
@@ -4482,6 +4502,10 @@ jobs:
           fi
 
       - name: Install Playwright
+        # Same bound, same reason as the playwright job's copy of this step: an
+        # apt stall inside `--with-deps` otherwise consumes the job's cap and
+        # cancels it before any capture runs, producing no verdict at all.
+        timeout-minutes: 10
         run: |
           cd server/apps/${{ inputs.app-name }}
           npm install --save-dev @playwright/test
