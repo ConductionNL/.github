@@ -3391,7 +3391,46 @@ jobs:
         run: |
           cd server/apps/${{ inputs.app-name }}
           npm install --save-dev @playwright/test
-          npx playwright install --with-deps chromium
+
+          # ── WHY THIS IS TWO COMMANDS AND NOT `--with-deps` ──────────────────
+          #
+          # `--with-deps` does two unrelated things in one process: download the
+          # browser binaries from a CDN, and `apt-get install` the system
+          # libraries. Measured 2026-08-19 across THREE runs in one morning
+          # (app-versions development, app-versions #151, hrmq #87), the
+          # combined command printed NOT ONE LINE of output and hung until the
+          # job's 45-minute cap killed it:
+          #
+          #     Terminate orphan process: pid (3857)
+          #         (npm exec playwright install --with-deps chromium)
+          #
+          # Silence from the first instant is the signature of apt blocking on
+          # /var/lib/dpkg/lock-frontend — apt waits for that lock forever by
+          # design and says nothing while it does. Same mechanism as the
+          # `Install PDF tools` stall in #504.
+          #
+          # Split, the two halves can be treated according to what they are:
+          #
+          # 1. The browser download is REQUIRED and is a plain CDN fetch that
+          #    prints progress, so a stall there is visible and fatal.
+          npx playwright install chromium
+
+          # 2. The system libraries are ATTEMPTED, bounded, and NOT fatal.
+          #    GitHub's ubuntu runner image already ships the libraries chromium
+          #    needs, which is why the suites that got past this step ran fine.
+          #    A `timeout` gives apt the bound it will not give itself.
+          #
+          #    ⚠️ NOT-FATAL IS A DELIBERATE TRADE, NOT A SWALLOWED ERROR. If a
+          #    library really is missing, the browser fails to launch in the
+          #    test step and Playwright says exactly which one — a real verdict
+          #    about a real problem. The alternative it replaces is a 45-minute
+          #    cancellation that produces no tally, no trace and no report while
+          #    still rendering as a red check.
+          if timeout 300 npx playwright install-deps chromium; then
+            echo "Playwright system dependencies installed."
+          else
+            echo "::warning::playwright install-deps did not finish within 5m (apt lock or mirror). Continuing: the runner image ships these libraries, and a genuinely missing one fails loudly at browser launch."
+          fi
 
       # ── Reuse the bundle the `frontend-build` job already compiled ─────────
       #
@@ -4509,7 +4548,46 @@ jobs:
         run: |
           cd server/apps/${{ inputs.app-name }}
           npm install --save-dev @playwright/test
-          npx playwright install --with-deps chromium
+
+          # ── WHY THIS IS TWO COMMANDS AND NOT `--with-deps` ──────────────────
+          #
+          # `--with-deps` does two unrelated things in one process: download the
+          # browser binaries from a CDN, and `apt-get install` the system
+          # libraries. Measured 2026-08-19 across THREE runs in one morning
+          # (app-versions development, app-versions #151, hrmq #87), the
+          # combined command printed NOT ONE LINE of output and hung until the
+          # job's 45-minute cap killed it:
+          #
+          #     Terminate orphan process: pid (3857)
+          #         (npm exec playwright install --with-deps chromium)
+          #
+          # Silence from the first instant is the signature of apt blocking on
+          # /var/lib/dpkg/lock-frontend — apt waits for that lock forever by
+          # design and says nothing while it does. Same mechanism as the
+          # `Install PDF tools` stall in #504.
+          #
+          # Split, the two halves can be treated according to what they are:
+          #
+          # 1. The browser download is REQUIRED and is a plain CDN fetch that
+          #    prints progress, so a stall there is visible and fatal.
+          npx playwright install chromium
+
+          # 2. The system libraries are ATTEMPTED, bounded, and NOT fatal.
+          #    GitHub's ubuntu runner image already ships the libraries chromium
+          #    needs, which is why the suites that got past this step ran fine.
+          #    A `timeout` gives apt the bound it will not give itself.
+          #
+          #    ⚠️ NOT-FATAL IS A DELIBERATE TRADE, NOT A SWALLOWED ERROR. If a
+          #    library really is missing, the browser fails to launch in the
+          #    test step and Playwright says exactly which one — a real verdict
+          #    about a real problem. The alternative it replaces is a 45-minute
+          #    cancellation that produces no tally, no trace and no report while
+          #    still rendering as a red check.
+          if timeout 300 npx playwright install-deps chromium; then
+            echo "Playwright system dependencies installed."
+          else
+            echo "::warning::playwright install-deps did not finish within 5m (apt lock or mirror). Continuing: the runner image ships these libraries, and a genuinely missing one fails loudly at browser launch."
+          fi
 
       - name: Build app frontend
         # Same rationale as the playwright job: SPA mount via Util::addScript()
