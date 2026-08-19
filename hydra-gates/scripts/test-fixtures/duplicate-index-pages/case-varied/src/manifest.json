@@ -1,0 +1,27 @@
+{
+	"$schema": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
+	"version": "1.0.0",
+	"pages": [
+		{
+			"id": "StockLevels",
+			"route": "/stock-levels",
+			"type": "index",
+			"title": "Stock levels",
+			"config": {
+				"register": "Shillinq",
+				"schema": "InventoryStock"
+			}
+		},
+		{
+			"id": "StockByLocation",
+			"route": "/stock-by-location",
+			"type": "index",
+			"title": "Stock by location",
+			"config": {
+				"register": "shillinq",
+				"schema": "inventorystock"
+			}
+		}
+	],
+	"menu": []
+}

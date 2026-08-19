@@ -1,0 +1,15 @@
+{
+	"pages": [
+		{
+			"id": "SubsidiesTeruggevorderd",
+			"route": "/subsidies/teruggevorderd",
+			"type": "index",
+			"title": "Subsidies teruggevorderd",
+			"config": {
+				"register": "shillinq",
+				"schema": "Subsidie"
+			}
+		}
+	],
+	"menu": []
+}

@@ -1,0 +1,15 @@
+{
+	"pages": [
+		{
+			"id": "reports-index",
+			"route": "/reports",
+			"type": "index",
+			"title": "Reports",
+			"config": {
+				"register": "reports",
+				"schema": "report"
+			}
+		}
+	],
+	"menu": []
+}

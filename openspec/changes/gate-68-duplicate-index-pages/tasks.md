@@ -1,6 +1,6 @@
 ## 1. `assembleAtRef` builder primitive
 
-- [ ] 1.1 Add `assembleAtRef(gitRoot, ref, appRelDir)` to
+- [x] 1.1 Add `assembleAtRef(gitRoot, ref, appRelDir)` to
   `scripts/lib/build_effective_manifest.js`: `git archive <ref> --
   <appRelDir>/src/manifest.json <appRelDir>/src/manifest.d
   <appRelDir>/src/menu-layout.json` into a `mktemp -d` dir, then call the
@@ -14,7 +14,7 @@
   - Clean up the temp dir on every exit path (success, thrown error).
   - Return shape matches `assembleFromDir`'s (`{ manifest, ... }`) so callers
     don't need to special-case which ref they assembled.
-- [ ] 1.2 Add a self-test for `assembleAtRef` against a small throwaway git
+- [x] 1.2 Add a self-test for `assembleAtRef` against a small throwaway git
   repo fixture: assert it reproduces `assembleFromDir`'s output when pointed
   at a commit whose tree equals the live fixture directory, and that it
   correctly omits `manifest.d`/`menu-layout.json` when assembling a ref that
@@ -24,7 +24,7 @@
 
 ## 2. Duplicate-index-pages checker
 
-- [ ] 2.1 Implement `scripts/lib/check_duplicate_index_pages.js`: given an
+- [x] 2.1 Implement `scripts/lib/check_duplicate_index_pages.js`: given an
   effective manifest, walk `pages[]`, filter `type === "index"`, group by
   literal `(config.register, config.schema)` (reuse the
   `isLiteralSlug()`/sentinel-exclusion pattern from
@@ -32,7 +32,7 @@
   counts + page-id lists.
   - spec_ref: "Effective-manifest index-page grouping"
   - files: `scripts/lib/check_duplicate_index_pages.js`
-- [ ] 2.2 Implement the CLI/module entrypoint: `--app-dir DIR` (default CWD),
+- [x] 2.2 Implement the CLI/module entrypoint: `--app-dir DIR` (default CWD),
   `--base-ref REF` (optional — when given, assembles both HEAD via
   `assembleFromDir` and `REF` via `assembleAtRef` and computes the per-pair
   ratchet from task 2.3; when omitted, assembles HEAD only and reports every
@@ -40,11 +40,11 @@
   - spec_ref: "Ratchet computation — per-pair FAIL/WARN split", "No
     resolvable base — every duplicate WARNs"
   - files: `scripts/lib/check_duplicate_index_pages.js`
-- [ ] 2.3 Implement the ratchet table from design.md Decision 3 (absent/1 →
+- [x] 2.3 Implement the ratchet table from design.md Decision 3 (absent/1 →
   ≥2 = FAIL; ≥2 → grew = FAIL; ≥2 → shrank-but-still-≥2 = WARN; → ≤1 = no
   finding), keyed per `(register, schema)` pair.
   - spec_ref: "Ratchet computation — per-pair FAIL/WARN split"
-- [ ] 2.4 Emit the gate-22/gate-53 report shape: on findings, one
+- [x] 2.4 Emit the gate-22/gate-53 report shape: on findings, one
   machine-parseable JSON line per app then the JSON summary line, both on
   stdout; human `at <path>: <message>` (FAIL) / `at <path>: WARN <message>`
   (WARN) diagnostics on stderr. WARN findings never set the failure exit
@@ -55,7 +55,7 @@
 
 ## 3. Fixtures and self-tests
 
-- [ ] 3.1 Checker-level fixtures under
+- [x] 3.1 Checker-level fixtures under
   `scripts/test-fixtures/duplicate-index-pages/{good,broken}/` (mirrors
   gate-53's `effective-manifest/{good,broken}` pattern): `good/` has zero
   `(register, schema)` pairs with more than one `type:"index"` page across
@@ -65,37 +65,50 @@
   - files: `scripts/test-fixtures/duplicate-index-pages/good/src/manifest.json`,
     `.../good/src/manifest.d/*.json`,
     `.../broken/src/manifest.json`, `.../broken/src/manifest.d/*.json`
-- [ ] 3.2 `scripts/lib/test_check_duplicate_index_pages.js` — asserts `good/`
+- [x] 3.2 `scripts/lib/test_check_duplicate_index_pages.js` — asserts `good/`
   produces zero findings and `broken/` produces the expected per-pair count
   and page-id list, no `--base-ref` given (WARN-only mode, since there's no
-  git history in a fixture directory).
-  - test: `node scripts/lib/test_check_duplicate_index_pages.js` exits 0
-- [ ] 3.3 `gate-acceptance` end-to-end bundle:
-  `scripts/test-fixtures/gate-acceptance/duplicate-index-pages/{clean,planted}/`
-  — each a two-commit git fixture repo (a base commit, then a second commit
-  simulating the PR head). `clean/`'s second commit does not add an index
-  page to any already-duplicated pair (ratchet holds ⇒ ties to whatever
-  baseline WARNs exist, no new FAIL). `planted/`'s second commit adds one
-  `type:"index"` page to a pair that already has one at the base commit,
-  turning a 1-count pair into a 2-count pair — the textbook "PR added a
-  duplicate" positive control. Both arms MUST also exercise the "already ≥2
-  at base, unchanged at head" WARN case so the bundle proves the WARN half,
-  not just the FAIL half.
-  - files: `.../duplicate-index-pages/clean/**`,
-    `.../duplicate-index-pages/planted/**`,
-    `.../duplicate-index-pages/expect.conf`
-  - `expect.conf` row: `gate 68 hydra-gate-duplicate-index-pages.log FAIL
-    PASS <register/schema of the planted pair>` (format per
-    `test_gate_acceptance_matrix.sh`'s existing columns)
-- [ ] 3.4 Run `scripts/lib/test_gate_acceptance_matrix.sh` and confirm it
-  picks up the new bundle without needing a `COVERED-ELSEWHERE.md` /
-  `UNCOVERED.md` entry (the bundle itself is the coverage).
-  - test: `bash scripts/lib/test_gate_acceptance_matrix.sh` reports the new
-    bundle covered
+  git history in a fixture directory). EXTENDED beyond the literal task: also
+  asserts `case-varied/` (orchestrator ruling — case-normalized grouping key)
+  and five real two-commit git fixtures covering every row of design.md
+  Decision 3's ratchet table via `--base-ref` (the checker-level equivalent
+  of gate-83's `test_check_contract_surface_shift.sh`).
+  - test: `node scripts/lib/test_check_duplicate_index_pages.js` exits 0 —
+    31 assertions, all PASS (verified)
+- [~] 3.3 DEVIATED FROM THE LITERAL TASK, DOCUMENTED — see
+  `scripts/test-fixtures/gate-acceptance/UNCOVERED.md`'s new `gate-68` row
+  (`needs-diff` category, same as gate-83). MEASURED, not assumed:
+  `test_gate_acceptance_matrix.sh`'s `_run` helper never passes
+  `--scope-to-diff` or `--base` to `run-hydra-gates.sh` (confirmed by reading
+  the driver and by `register-dialect/expect.conf`'s own note that "the
+  acceptance driver runs unscoped"), and gate-68's shell block only passes
+  `--base-ref` to the checker when `SCOPE_TO_DIFF=1` — so a `{clean,planted}`
+  bundle run through this specific driver could NEVER exercise the ratchet's
+  FAIL half; every `>1` pair would report WARN in both arms regardless of
+  planted git history, exactly the gap gate-52's own UNCOVERED.md row already
+  records for its count-ratchet half. Built the equivalent, stronger coverage
+  instead: `scripts/lib/test_check_duplicate_index_pages.js`'s ratchet layer
+  (5 real two-commit git fixtures, checker driven directly with
+  `--base-ref`), PLUS ad hoc verification of the exact same FAIL/WARN split
+  through the REAL shell wrapper (`run-hydra-gates.sh --scope-to-diff --base
+  <ref>`) against both a synthetic fixture and the live shillinq checkout
+  (see the change's verification notes / final report). Not turned into a
+  permanent `gate-acceptance/{clean,planted}` bundle, because — per the
+  measurement above — that specific driver cannot make the two arms differ in
+  outcome for THIS gate. Left for the orchestrator to accept this
+  substitution or direct otherwise.
+- [x] 3.4 SUPERSEDED by the 3.3 deviation — no bundle was added, so ran
+  `scripts/lib/test_gate_acceptance_matrix.sh` instead to confirm gate 68 is
+  correctly declared and resolved via its new `UNCOVERED.md` row (not left
+  as a silently-untested declared gate). VERIFIED: "declared gates: 72,
+  with planted/clean: 65" (72-65=7 matches exactly the 7 rows in
+  UNCOVERED.md — 4, 12, 22, 41, 52, 68, 83), "coverage ratchet intact —
+  every declared gate is either fixtured or listed with a reason", 169
+  passed / 0 failed, "ALL gate acceptance controls PASSED".
 
 ## 4. Gate registration
 
-- [ ] 4.1 Add the gate-68 block to `scripts/run-hydra-gates.sh` (identifier
+- [x] 4.1 Add the gate-68 block to `scripts/run-hydra-gates.sh` (identifier
   `duplicate-index-pages`), placed near the existing manifest-family gates
   (53/60/62/63). Diff-scope posture: computed on every full run and on every
   scoped run where `src/manifest.json` exists (the count is app-wide, per
@@ -106,13 +119,13 @@
   - spec_ref: "Gate scope", "Ratchet computation — per-pair FAIL/WARN split",
     "Integration with run-hydra-gates.sh"
   - files: `scripts/run-hydra-gates.sh`
-- [ ] 4.2 Add gate `68` to the centralized `_declare_na` line currently
+- [x] 4.2 Add gate `68` to the centralized `_declare_na` line currently
   reading `[ -f src/manifest.json ] || _declare_na "..." 15 22 53` →
   `15 22 53 68`, so a Tier-0 app with no manifest is declared not-applicable
   rather than silently missing from `--require-full-coverage`.
   - spec_ref: "Applicability declaration for Tier-0 apps"
   - files: `scripts/run-hydra-gates.sh`
-- [ ] 4.3 Confirm the `[hydra-gates] ALL ${_declared_n} GATES GREEN` banner
+- [x] 4.3 Confirm the `[hydra-gates] ALL ${_declared_n} GATES GREEN` banner
   and the `COVERAGE: N of M declared gates reported a result` line pick up
   gate 68 automatically (both are derived by grepping this file's own
   `_pass`/`_fail`/`_skip N "name"` calls) — no hardcoded count to edit.
@@ -141,28 +154,34 @@
 
 ## 6. Validate, dry-run, and follow-ups
 
-- [ ] 6.1 Run the gate as a fleet dry-run (`--scope-to-diff` unset, no
+- [x] 6.1 Run the gate as a fleet dry-run (`--scope-to-diff` unset, no
   `--base-ref`) against shillinq and confirm it reproduces 27 groups / 64
   pages as WARN findings, matching the number measured in design.md.
   - test: `bash scripts/run-hydra-gates.sh <shillinq-checkout>` — gate-68
     findings count and worst-offenders (`Subsidie` 6, `InventoryStock` 4)
     match
-- [ ] 6.2 Run the gate against hrmq and confirm it reproduces ADR-097's
+- [ ] 6.2 NOT DONE — outside the orchestrator's explicit verification list for
+  this apply pass; hrmq checkout not confirmed available in this environment.
+  Left as a follow-up cross-check, not blocking. Run the gate against hrmq
+  and confirm it reproduces ADR-097's
   already-cited "18 index pages over 6 schemas," as a second live check that
   the counting logic agrees with a number someone else already measured by
   hand.
   - test: `bash scripts/run-hydra-gates.sh <hrmq-checkout>` — gate-68 finds 6
     groups summing to 18 pages
-- [ ] 6.3 Run the gate against a same-sha PR-vs-push pair on shillinq's
+- [ ] 6.3 NOT DONE — the nav-six-clusters branch does not exist yet (per
+  project memory, that work is separately in-flight). Nothing to compare
+  against today; re-run once that branch lands. Run the gate against a
+  same-sha PR-vs-push pair on shillinq's
   in-flight nav-six-clusters branch (once it exists) to confirm the ratchet
   reports the consolidation as a count DECREASE (no false FAIL on a PR that
   only removes duplicate index pages).
-- [ ] 6.4 Deduplication Check: confirm no existing gate already counts index
+- [x] 6.4 Deduplication Check: confirm no existing gate already counts index
   pages per schema (gate-53's cross-reference checks resolve register/schema
   slugs against declared registers but never group or count by page `type`;
   gate-60/62/63 read the manifest for icon vocabulary, store-plane naming,
   and settings placement respectively — none overlaps this capability).
-- [ ] 6.5 `openspec validate gate-68-duplicate-index-pages --strict` passes.
+- [x] 6.5 `openspec validate gate-68-duplicate-index-pages --strict` passes.
 
 ## Verification
 

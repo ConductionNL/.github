@@ -1,0 +1,27 @@
+{
+	"$schema": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
+	"version": "1.0.0",
+	"pages": [
+		{
+			"id": "SubsidiesOverzicht",
+			"route": "/subsidies",
+			"type": "index",
+			"title": "Subsidies",
+			"config": {
+				"register": "shillinq",
+				"schema": "Subsidie"
+			}
+		},
+		{
+			"id": "SubsidieDetail",
+			"route": "/subsidies/:id",
+			"type": "detail",
+			"title": "Subsidie",
+			"config": {
+				"register": "shillinq",
+				"schema": "Subsidie"
+			}
+		}
+	],
+	"menu": []
+}

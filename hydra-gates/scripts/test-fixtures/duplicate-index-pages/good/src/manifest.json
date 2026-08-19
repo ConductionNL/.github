@@ -1,0 +1,47 @@
+{
+	"$schema": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
+	"version": "1.0.0",
+	"pages": [
+		{
+			"id": "items-index",
+			"route": "/items",
+			"type": "index",
+			"title": "Items",
+			"config": {
+				"register": "items",
+				"schema": "item"
+			}
+		},
+		{
+			"id": "items-detail",
+			"route": "/items/:id",
+			"type": "detail",
+			"title": "Item",
+			"config": {
+				"register": "items",
+				"schema": "item"
+			}
+		},
+		{
+			"id": "tenant-scoped-index",
+			"route": "/tenant-items",
+			"type": "index",
+			"title": "Tenant items",
+			"config": {
+				"register": "@resolve:tenantRegister",
+				"schema": "@resolve:tenantSchema"
+			}
+		},
+		{
+			"id": "tenant-scoped-index-2",
+			"route": "/tenant-items-2",
+			"type": "index",
+			"title": "Tenant items (again)",
+			"config": {
+				"register": "@resolve:tenantRegister",
+				"schema": "@resolve:tenantSchema"
+			}
+		}
+	],
+	"menu": []
+}

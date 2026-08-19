@@ -10266,6 +10266,104 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Gate 68: duplicate-index-pages — ADR-097 Decision 5: "a second index over
+# an already-indexed schema is a role lens, not a page." For every
+# (register, schema) pair a type:"index" page names in the app's EFFECTIVE
+# manifest (base src/manifest.json + src/manifest.d/*.json fragments, the
+# SAME assembly gate-53 uses), counts the index pages bound to it — more
+# than one is a finding.
+#
+# NOT NUMBERED 65 OR 97. Sequential numbering runs 1-67 with no gaps; four
+# gates since then (82/83/84/93) took their governing ADR's number because
+# each is a 1:1 gate-per-ADR mapping. This gate implements ONE decision out
+# of ADR-097's eight and does not fit that convention — and ADR-097 §8's own
+# "gate-65" reference is stale the day it was written (gate-65 is
+# coding-standard-adoption, already shipped). See design.md Decision 1.
+#
+# RATCHET, PER (register, schema) PAIR, not one fleet-wide scalar (modeled on
+# gate-52, generalized the way gate-53 is diff-scoped): with a resolvable
+# BASE_REF, a pair whose HEAD count exceeds its BASE_REF count FAILs (a new
+# duplicate, or an existing one that grew); a pair that is >1 but did not
+# grow WARNs (pre-existing, not this PR's doing). With NO resolvable base —
+# --scope-to-diff unset, or set with no delta base — every >1 pair WARNs:
+# the gate never blocks on a comparison it could not make. shillinq's
+# 27-group/64-page backlog (ADR-097's own Context table) is exactly this
+# shape and ships GREEN on day one, same posture as gate-53's own
+# WARN-is-informational convention: this gate PASSes whenever no pair
+# FAILed, and separately reports how many pairs are standing WARNs.
+#
+# NO EXCLUDE-REASON ESCAPE HATCH, unlike gates 16/19/52 (design.md Decision
+# 4). ADR-097 Decision 5 names two sanctioned fixes — a menu[].query preset,
+# or an authorization match clause — not a please-look-past-this marker.
+#
+# Diff-scope (ADR-020): the count is APP-WIDE, not file-diff-scoped — same
+# reasoning gate-52 applies to its own ratchet half (a PR that never touches
+# src/manifest.json can still be judged against BASE_REF's count, and a
+# scoped run with no manifest file in the diff still computes the count).
+# What changes with scope is only whether the FAIL/WARN split can run at
+# all: the checker's --base-ref flag is passed only when this run is
+# diff-scoped (SCOPE_TO_DIFF=1) — at that point BASE_REF is GUARANTEED
+# resolvable, because an unresolvable base already made the runner exit 99
+# before any gate ran (see "FAIL CLOSED WHEN THE BASE REF DOES NOT EXIST"
+# above). A full-scope run (the default) never passes --base-ref, even when
+# HYDRA_GATE_BASE_REF/--base named one — mirrors gate-52's own
+# `if [ "${SCOPE_TO_DIFF}" = "1" ]` gate exactly, so this gate's ratchet and
+# gate-52's ratchet agree about which channel delivers a base.
+#
+# Fail-closed (mirrors gate-53): a missing vendored helper FAILs, never
+# passes silently.
+#
+# Skill: .claude/skills/hydra-gate-duplicate-index-pages/SKILL.md (hydra repo)
+# Spec:  openspec/changes/gate-68-duplicate-index-pages/specs/gate-duplicate-index-pages/spec.md
+# ---------------------------------------------------------------------------
+if [ -f src/manifest.json ]; then
+    _dip_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-duplicate-index-pages.log
+    : > "${_dip_log}"
+    _dip_builder="${SCRIPT_DIR}/lib/build_effective_manifest.js"
+    _dip_checker="${SCRIPT_DIR}/lib/check_duplicate_index_pages.js"
+    if [ ! -f "${_dip_builder}" ] || [ ! -f "${_dip_checker}" ]; then
+        _fail 68 "duplicate-index-pages" "vendored helper missing under ${SCRIPT_DIR}/lib (need build_effective_manifest.js + check_duplicate_index_pages.js) — fail-closed"
+    elif ! command -v node >/dev/null 2>&1; then
+        _skip 68 "duplicate-index-pages" wiring "src/manifest.json is present but \`node\` is not on PATH — the effective manifest could not be assembled or grouped. This is a missing tool in the runner environment, not a finding about the manifest."
+    else
+        set +e
+        if [ "${SCOPE_TO_DIFF}" = "1" ]; then
+            node "${_dip_checker}" --app-dir . --base-ref "${BASE_REF}" >> "${_dip_log}" 2>&1
+        else
+            node "${_dip_checker}" --app-dir . >> "${_dip_log}" 2>&1
+        fi
+        _dip_rc=$?
+        set +e
+        _dip_reported=$(grep -oE '\[duplicate-index-pages\] findings=[0-9]+' "${_dip_log}" 2>/dev/null \
+            | tail -1 | sed 's/.*findings=//')
+        case "${_dip_reported}" in
+            ''|*[!0-9]*)
+                # THE HELPER DID NOT FINISH (#209 convention, same as gate-52).
+                # No `findings=` line means it crashed, was killed, or predates
+                # this contract — never read its silence as a clean manifest.
+                _skip 68 "duplicate-index-pages" wiring "check_duplicate_index_pages.js exited ${_dip_rc} without printing its \`findings=\` count — it did NOT finish, so the effective manifest's type:\"index\" pages were left uninspected and ADR-097 Decision 5 is UNVERIFIED by this run. This is a broken checker, NOT a finding about the manifest. See ${_dip_log}."
+                ;;
+            *)
+                _dip_warn_n=$(_count '^at .*: WARN ' "${_dip_log}")
+                [ "${_dip_warn_n}" -gt 0 ] && echo "[gate-68] duplicate-index-pages: ${_dip_warn_n} WARN pair(s) (non-blocking; ADR-097 Decision 5 backlog) — see ${_dip_log}"
+                if [ "${SCOPE_TO_DIFF}" = "1" ]; then
+                    echo "[gate-68] duplicate-index-pages: ratchet computed against BASE_REF '${BASE_REF}'"
+                elif [ "${_dip_reported}" -gt 0 ]; then
+                    echo "[hydra-gates] gate-68 duplicate-index-pages: the RATCHET half was NOT computed — this run is full-scope (no --scope-to-diff), so every >1 pair above is reported WARN regardless of whether THIS change grew it. Re-run with --scope-to-diff (and a resolvable base) to have growth judged."
+                fi
+                if [ "${_dip_rc}" -eq 0 ]; then
+                    _pass 68 "duplicate-index-pages"
+                else
+                    _dip_error_n=$(grep -E '^at ' "${_dip_log}" 2>/dev/null | grep -cvE ': WARN ' || true)
+                    case "${_dip_error_n}" in ''|*[!0-9]*) _dip_error_n=1 ;; esac
+                    _fail 68 "duplicate-index-pages" "${_dip_error_n} (register, schema) pair(s) with a NEW or GROWN duplicate type:\"index\" page count vs BASE_REF (ADR-097 Decision 5) — see ${_dip_log}"
+                fi
+                ;;
+        esac
+    fi
+fi
+
+# ---------------------------------------------------------------------------
 # gate-82 — ADR-082: a publicly reachable method carries a volume ceiling
 #
 # THERE ARE TWO WAYS TO DECLARE A PUBLIC PAGE, AND KNOWING ONE OF THEM MEANS
@@ -10635,9 +10733,9 @@ _a11y_has_markup_dir || _declare_na "no src/, templates/ or appinfo/templates/ �
 # `if [ -d lib/Controller ] && [ -f appinfo/routes.php ]` — gate 14
 { [ -d lib/Controller ] && [ -f appinfo/routes.php ]; } || _declare_na "no lib/Controller/ and appinfo/routes.php pair — there is no controller-to-route mapping for this gate to resolve." \
     14
-# `if [ -f src/manifest.json ]` — gates 15 22 53
+# `if [ -f src/manifest.json ]` — gates 15 22 53 68
 [ -f src/manifest.json ] || _declare_na "no src/manifest.json — this repo declares no manifest, so there are no pages, widgets or handler references for this gate to inspect." \
-    15 22 53
+    15 22 53 68
 # `if [ -d openspec/specs ] || [ -d tests/e2e ]` — gate 19
 { [ -d openspec/specs ] || [ -d tests/e2e ]; } || _declare_na "no openspec/specs/ and no tests/e2e/ — there is neither a spec scenario to trace nor an e2e suite to trace it to." \
     19
