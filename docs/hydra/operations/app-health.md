@@ -150,6 +150,44 @@ acting, rather than pretending the drift does not exist.
 describes intent, not behaviour — and a documented routine that nothing executes
 is worth less than no routine at all, because it reads as a guarantee.
 
+### The merge routine would not have caught gate drift
+
+Merging green pull requests is not the same as knowing the fleet is still
+compliant, and it is worth being explicit about why.
+
+**A green badge is a verdict about a moment, not a state.** The gates are
+consumed at `@main`, so a stricter gate reaches every app the instant it merges
+— but a gate only produces a verdict when a workflow *runs*, and app workflows
+run on `push` and `pull_request` only. An app nobody has touched keeps the green
+badge it earned under the *old* gates. Tighten a gate on Friday and the fleet is
+non-compliant and green at the same time, until somebody happens to push.
+
+Measured 2026-08-19: of 21 swept apps, exactly **one** (pipelinq) had any
+scheduled run at all. The other twenty could only be re-measured by hand.
+
+So a separate **fleet drift sweep** re-runs Code Quality on `development` for
+every app, Fridays at 06:00 UTC — `.github/workflows/fleet-drift-sweep.yml`,
+iterating `fleet-apps.json`.
+
+⚠️ **It cannot be a cron inside each app**, and the reason is easy to get wrong.
+GitHub runs a scheduled workflow from the repository's **default branch** and
+gives you no way to choose a ref. The fleet's defaults are split — measured
+2026-08-19, **11 apps default to `development` and 10 to `main`** — so copying
+pipelinq's cron everywhere would measure `main` on ten of them. `main` is
+stale-red across much of the fleet, so those ten would go red for reasons that
+have nothing to do with drift. `workflow_dispatch` *does* take a ref, which is
+why the sweep is central and passes `--ref development` explicitly.
+
+The sweep grades nothing. It starts the runs; each app's own Quality Report
+decides, and the badges above show the result. Its only job is to make sure a
+verdict exists that was computed against **today's** gates.
+
+**Status: the workflow exists; it needs a token.** It requires an org-level
+`FLEET_DISPATCH_TOKEN` with `actions: write` on every repo in `fleet-apps.json`
+— `GITHUB_TOKEN` is repository-scoped and cannot dispatch elsewhere. The job
+asserts the token first and **fails loudly** when it is absent, rather than
+being refused 21 times and reporting a green sweep that measured nothing.
+
 ## Release schedule
 
 App Store on **Friday**, social announcement the following **Monday**. After the
