@@ -335,6 +335,42 @@ jobs:
           PY
           echo "OK — the matrix is derived from info.xml, and it changes when info.xml does."
 
+  coverage-guard:
+    name: "The coverage guard's deletion rule"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # quality-config/coverage-guard.php is copied into all 18 app repos and its
+      # verdict blocks pull requests, and until now nothing in this repository
+      # executed it. That is the same shape as every other job here: an
+      # instrument nobody has watched refuse.
+      #
+      # The suite runs the SHIPPED program against clover reports built to the
+      # shape PHPUnit actually emits, and it FAILS FIRST — the two pull requests
+      # the file-scoped rule blocked (opencatalogi#895, launchpad#128) are
+      # asserted to still fail under the old flags, with the exact percentages CI
+      # printed, before the new flag is exercised at all. A test that only ever
+      # sees the fixed program cannot tell a fix from a no-op.
+      - name: "Exercise the shipped coverage guard"
+        run: python3 quality-config/tests/test-coverage-guard.py
+
+      # POSITIVE CONTROL FOR THE HARNESS ITSELF. The suite above shells out to
+      # `php`; if php were missing, or the guard path wrong, a harness that
+      # treated "could not run" as "nothing to report" would print a clean pass
+      # forever. Point it at a file that is not the guard and require it to fail.
+      - name: "Positive control — the suite must fail against a program that is not the guard"
+        run: |
+          set -eu
+          printf '#!/usr/bin/env php\n<?php\nexit(0);\n' > "$RUNNER_TEMP/not-the-guard.php"
+          if python3 quality-config/tests/test-coverage-guard.py "$RUNNER_TEMP/not-the-guard.php" > /dev/null 2>&1; then
+            echo "::error::the coverage-guard suite reported PASS against a program that exits 0 and \
+          measures nothing. It is not executing the subject, so its verdict above means nothing."
+            exit 1
+          fi
+          echo "OK — the suite fails when handed the wrong program. Its clean pass above is a verdict."
+
   probe:
     name: "quality.yml resolves (job count > 0)"
     runs-on: ubuntu-latest
@@ -412,7 +448,7 @@ jobs:
   guard:
     name: "Shared-workflow guard"
     runs-on: ubuntu-latest
-    needs: [static-limits, seed-semantics, gate-completeness, matrix-derivation, probe]
+    needs: [static-limits, seed-semantics, gate-completeness, matrix-derivation, coverage-guard, probe]
     if: ${{ !cancelled() }}
     steps:
       - name: Assert both guards reached a verdict
@@ -421,13 +457,14 @@ jobs:
           SEED: ${{ needs.seed-semantics.result }}
           LEGS: ${{ needs.gate-completeness.result }}
           MATRIX: ${{ needs.matrix-derivation.result }}
+          COVERAGE: ${{ needs.coverage-guard.result }}
           PROBE: ${{ needs.probe.result }}
         run: |
           set -eu
-          echo "static-limits=${STATIC} seed-semantics=${SEED} gate-completeness=${LEGS} matrix-derivation=${MATRIX} probe=${PROBE}"
+          echo "static-limits=${STATIC} seed-semantics=${SEED} gate-completeness=${LEGS} matrix-derivation=${MATRIX} coverage-guard=${COVERAGE} probe=${PROBE}"
           # `skipped` is failed here on purpose. A guard that did not run is
           # not a guard that passed.
-          for pair in "static-limits:${STATIC}" "seed-semantics:${SEED}" "gate-completeness:${LEGS}" "matrix-derivation:${MATRIX}" "probe:${PROBE}"; do
+          for pair in "static-limits:${STATIC}" "seed-semantics:${SEED}" "gate-completeness:${LEGS}" "matrix-derivation:${MATRIX}" "coverage-guard:${COVERAGE}" "probe:${PROBE}"; do
             name="${pair%%:*}"; result="${pair##*:}"
             [ "${result}" = "success" ] || {
               echo "::error::${name} did not succeed (result=${result}). A guard that \
