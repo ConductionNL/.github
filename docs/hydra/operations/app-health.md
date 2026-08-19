@@ -178,9 +178,48 @@ stale-red across much of the fleet, so those ten would go red for reasons that
 have nothing to do with drift. `workflow_dispatch` *does* take a ref, which is
 why the sweep is central and passes `--ref development` explicitly.
 
-The sweep grades nothing. It starts the runs; each app's own Quality Report
-decides, and the badges above show the result. Its only job is to make sure a
-verdict exists that was computed against **today's** gates.
+### 🔴 The badges above cannot see the sweep — read the sweep run instead
+
+The sweep's first draft stopped at dispatching, on the reasoning that each app's
+own Quality Report decides and the badges above show the result. Measured
+2026-08-19, **that is false**, and it matters: it would have rebuilt the same
+silent failure one layer down.
+
+Every badge on this page carries `&event=push`:
+
+```
+…/code-quality.yml?branch=development&event=push&label=development
+```
+
+A sweep produces `workflow_dispatch` runs, so shields.io does not look at them
+at all — the badge keeps showing the last **push** verdict. Positive control on
+`pipelinq`/`development`, which proves the filter is live rather than inert:
+
+| Query | Newest run it sees |
+| --- | --- |
+| `?branch=development&event=push` | `push` — **success** |
+| `?branch=development` | `pull_request` — **failure** |
+
+So an app could fail every gate in the Friday sweep and stay green on this page.
+
+**Dropping `&event=push` is not the fix.** Unfiltered, the newest run on a
+branch is frequently a `pull_request` run of a PR merge ref — a verdict about a
+proposal, not about the branch, exactly as the control above shows.
+
+Instead the sweep's `collect` job waits for every dispatched run and **fails**
+when any app is not `success`, with a per-app table in its run summary. One red
+run covers the whole fleet, and — unlike a badge — it cannot go green by having
+measured nothing: `cancelled`, `no run appeared` and `still running at deadline`
+are each reported as red, never folded into a pass.
+
+A second badge column keyed on `event=workflow_dispatch` is the natural
+follow-up (an app with no dispatch run renders a grey `no status`, not a false
+red — verified against `nextcloud-app-template`, which has none). It is **not**
+added yet: every app already carries unrelated *manual* dispatch runs —
+`openregister`'s newest is from 2026-08-11 and failed — so the column would open
+showing week-old verdicts as though they were this Friday's. Add it once the
+first sweep has given every app a dispatch run that means what the column
+claims.
 
 **Status: the workflow exists; it needs a token.** It requires an org-level
 `FLEET_DISPATCH_TOKEN` with `actions: write` on every repo in `fleet-apps.json`

@@ -77,6 +77,10 @@ jobs:
     runs-on: ubuntu-latest
     # 21 dispatch calls plus their assertions. Nothing is waited on.
     timeout-minutes: 20
+    outputs:
+      apps: ${{ steps.apps.outputs.apps }}
+      count: ${{ steps.apps.outputs.count }}
+      started: ${{ steps.window.outputs.started }}
 
     steps:
       - uses: actions/checkout@v4
@@ -118,6 +122,18 @@ jobs:
           echo "apps=${APPS}" >> "$GITHUB_OUTPUT"
           echo "count=${COUNT}" >> "$GITHUB_OUTPUT"
           echo "Sweeping ${COUNT} app(s): ${APPS}"
+
+      - name: Stamp the dispatch window
+        id: window
+        run: |
+          set -euo pipefail
+          # Recorded BEFORE the first dispatch. The collect job identifies "the
+          # run this sweep started" as the newest workflow_dispatch run on the
+          # ref created at or after this instant — `gh workflow run` returns no
+          # run id, and picking "the newest dispatch run" without a lower bound
+          # would happily adopt a run from last week and report its verdict as
+          # today's.
+          echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
       - name: Dispatch Code Quality on every app
         env:
@@ -162,13 +178,169 @@ jobs:
         if: always()
         run: |
           {
-            echo "### Fleet drift sweep"
+            echo "### Fleet drift sweep — dispatch"
             echo ""
-            echo "Re-ran Code Quality on \`${{ inputs.ref || 'development' }}\` for"
-            echo "${{ steps.apps.outputs.count }} app(s)."
+            echo "Started Code Quality on \`${{ inputs.ref || 'development' }}\` for"
+            echo "${{ steps.apps.outputs.count }} app(s) at ${{ steps.window.outputs.started }}."
             echo ""
-            echo "This sweep does not grade anything — each app's own Quality Report"
-            echo "decides, and the badges on the app-health page show the outcome."
-            echo "Its only job is to make sure a verdict exists that was computed"
-            echo "against TODAY's gates."
+            echo "The \`collect\` job reports what they concluded."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # WHY THIS JOB EXISTS: THE BADGES CANNOT SEE A SWEEP
+  # ══════════════════════════════════════════════════════════════════════════
+  #
+  # Dispatching is not reporting, and the first draft of this workflow stopped
+  # at dispatching on the reasoning that "each app's own Quality Report decides
+  # and the badges show the outcome". Measured 2026-08-19, that is false.
+  #
+  # EVERY badge on docs.conduction.nl/hydra/operations/app-health/ carries
+  # `&event=push`:
+  #
+  #     .../code-quality.yml?branch=development&event=push&label=development
+  #
+  # A sweep produces `workflow_dispatch` runs, so shields.io does not look at
+  # them at all — the badge keeps showing the last PUSH verdict. Positive
+  # control on pipelinq/development the same day, which proves the filter is
+  # live rather than inert:
+  #
+  #     ?branch=development&event=push  -> newest run: push, success
+  #     ?branch=development             -> newest run: pull_request, FAILURE
+  #
+  # So without this job the sweep would re-run every gate, an app could fail
+  # every one of them, and the fleet page would stay green — the precise
+  # failure this workflow was written to prevent, reintroduced one layer down.
+  #
+  # Dropping `event=push` from the badges is NOT the fix: unfiltered, the
+  # newest run on a branch is often a `pull_request` run of a PR merge ref,
+  # which is a verdict about a proposal, not about the branch — exactly what
+  # the positive control above shows.
+  #
+  # A second badge column on `event=workflow_dispatch` IS viable and is the
+  # natural follow-up: an app with no dispatch run renders grey `no status`
+  # rather than a false red (verified against nextcloud-app-template, which
+  # has 0). It is not added yet, because every app already carries unrelated
+  # MANUAL dispatch runs — openregister's newest is from 2026-08-11 and failed
+  # — so the column would open showing week-old verdicts as though they were
+  # this Friday's. Add it once the first sweep has given every app a dispatch
+  # run that means what the column claims.
+  #
+  # Reporting centrally works today and covers the whole fleet in one signal
+  # that cannot go green by having measured nothing.
+  collect:
+    needs: sweep
+    runs-on: ubuntu-latest
+    # Longest observed Code Quality run in the fleet is ~30 min (the PHPUnit
+    # leg installs a Nextcloud server). 70 gives that headroom plus polling.
+    timeout-minutes: 70
+
+    steps:
+      - name: Wait for every dispatched run, then report
+        env:
+          GH_TOKEN: ${{ secrets.FLEET_DISPATCH_TOKEN }}
+          REF: ${{ inputs.ref || 'development' }}
+          APPS: ${{ needs.sweep.outputs.apps }}
+          STARTED: ${{ needs.sweep.outputs.started }}
+        run: |
+          # -e is deliberately OFF for this step: `gh api` failing on one app
+          # (a transient 502, a repo the token cannot read) must degrade that
+          # app to a visible non-verdict, not abort the sweep and leave the
+          # other twenty unreported.
+          set +e
+          set -uo pipefail
+
+          DEADLINE=$(( $(date -u +%s) + 3600 ))
+          declare -A VERDICT URL
+
+          # The run this sweep started, or empty while it has not appeared yet.
+          # `created_at >= STARTED` is what makes this THIS sweep's verdict:
+          # without it an app whose dispatch silently failed would be reported
+          # with a stale run's conclusion.
+          find_run() {
+            gh api "repos/ConductionNL/$1/actions/workflows/code-quality.yml/runs?branch=${REF}&event=workflow_dispatch&per_page=10" \
+              --jq "[.workflow_runs[] | select(.created_at >= \"${STARTED}\")] | sort_by(.created_at) | last | \"\(.status)|\(.conclusion)|\(.html_url)\"" 2>/dev/null
+          }
+
+          PENDING="${APPS}"
+          while [ -n "${PENDING// /}" ] && [ "$(date -u +%s)" -lt "${DEADLINE}" ]; do
+            STILL=""
+            for app in ${PENDING}; do
+              row=$(find_run "${app}")
+              status="${row%%|*}"
+              rest="${row#*|}"
+              conclusion="${rest%%|*}"
+              url="${rest#*|}"
+
+              if [ "${status}" = "completed" ]; then
+                VERDICT[$app]="${conclusion}"
+                URL[$app]="${url}"
+              else
+                STILL="${STILL} ${app}"
+              fi
+            done
+            PENDING="${STILL}"
+            [ -n "${PENDING// /}" ] && sleep 60
+          done
+
+          # ANYTHING STILL PENDING IS UNKNOWN, NOT PASSING. A run that was
+          # still going when the deadline arrived has produced no verdict, and
+          # an unmeasured app must never be subtracted as though it passed.
+          #
+          # The two reasons are worth telling apart: "no run ever appeared"
+          # means the dispatch did not take (a wrong ref, a workflow without a
+          # workflow_dispatch trigger on THAT branch), while "still running"
+          # means only that the deadline was too short. jq's `last` over an
+          # empty array yields null, which interpolates to the literal "null".
+          for app in ${PENDING}; do
+            if [ "$(find_run "${app}")" = "null|null|null" ]; then
+              VERDICT[$app]="no run appeared"
+            else
+              VERDICT[$app]="still running at deadline"
+            fi
+            URL[$app]=""
+          done
+
+          RED=""
+          {
+            echo "### Fleet drift sweep — verdicts on \`${REF}\`"
+            echo ""
+            echo "Runs started at ${STARTED}, measured against TODAY's gates."
+            echo ""
+            echo "| App | Verdict |"
+            echo "| --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          for app in ${APPS}; do
+            v="${VERDICT[$app]:-no-run}"
+            u="${URL[$app]:-}"
+            case "${v}" in
+              success) mark="✅ green" ;;
+              *)       mark="🔴 ${v}"; RED="${RED} ${app}" ;;
+            esac
+            if [ -n "${u}" ]; then
+              echo "| [\`${app}\`](${u}) | ${mark} |" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "| \`${app}\` | ${mark} |" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+
+          echo ""
+          # `success` is the ONLY green. cancelled, skipped, timed-out and
+          # no-run are each a missing verdict, and a missing verdict is the
+          # thing this whole workflow exists to make visible.
+          if [ -n "${RED// /}" ]; then
+            echo "::error::not green on ${REF}:${RED}"
+            {
+              echo ""
+              echo "**Not green:**${RED}"
+              echo ""
+              echo "A red here with no corresponding commit means the GATES moved, not the app."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          echo "Every swept app is green on ${REF} under today's gates."
+          {
+            echo ""
+            echo "Every swept app is green under today's gates."
           } >> "$GITHUB_STEP_SUMMARY"
