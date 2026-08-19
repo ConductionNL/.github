@@ -146,9 +146,37 @@ a routine you cannot trust to run while nobody is watching.
 twice a year; the schedule is set in UTC and the job checks local time before
 acting, rather than pretending the drift does not exist.
 
-**Status: designed, not yet running.** Until the workflow exists this section
-describes intent, not behaviour — and a documented routine that nothing executes
-is worth less than no routine at all, because it reads as a guarantee.
+**Status: built, and blocked on one secret.** This section described intent
+rather than behaviour for long enough that someone read the page and reasonably
+believed the fleet was being merged every Friday. It is now three workflows,
+each of which refuses loudly rather than reporting a routine that measured
+nothing:
+
+| workflow | Friday (UTC) | what it does |
+| --- | --- | --- |
+| `fleet-drift-sweep.yml` | 06:00 | re-runs Code Quality on `development` for every app, and **fails** when any app is not green |
+| `fleet-cve-release.yml` | 06:30 | merges Dependabot **security** fixes, classified against GitHub's own alerts |
+| `fleet-friday-merge.yml` | 07:00 | merges `development` pull requests that are genuinely green |
+
+⚠️ **None of them can run until `FLEET_DISPATCH_TOKEN` exists.** It is an
+org-level secret needing `contents: write`, `pull-requests: write` and
+`security-events: read` on every repo in `fleet-apps.json`; `GITHUB_TOKEN` is
+repository-scoped and cannot reach another repo. All three assert it first and
+exit 1 — verified by dispatching them, which failed at exactly that step with
+everything downstream skipped.
+
+Two things are deliberately **not** automated, and are gaps rather than
+oversights:
+
+- **Promotion past `development`.** Shipping a CVE by promoting
+  `development → beta → main` would release the whole unreleased backlog —
+  measured 2026-08-19, openregister's `development` is **3,238 commits ahead of
+  `beta`** and 5,454 ahead of `main`. One dependency bump would carry thousands
+  of unreviewed functional commits through the protection this is allowed to
+  cross *only* for CVEs.
+- **Release.** It waits on a dry run being read against real pull requests. An
+  unattended release is not where you discover that a lockfile cherry-pick
+  conflicts.
 
 ### The merge routine would not have caught gate drift
 
