@@ -1,0 +1,45 @@
+{
+  "$comment": [
+    "THE FLEET'S SCOPE OF RECORD, in machine-readable form.",
+    "",
+    "docs/hydra/operations/app-health.md is the human page; this is what the",
+    "Friday drift sweep iterates. They must agree — an app in one and not the",
+    "other is an app that is either unmeasured or unreported, and both look",
+    "exactly like an app that is fine.",
+    "",
+    "This list has been wrong before, in the direction that hides problems:",
+    "it stood at 11 entries while seven live apps went uncounted, and hrmq sat",
+    "red on development for six days because no sweep named it. Adding an app",
+    "here is part of creating it.",
+    "",
+    "`deprecated` apps are listed but NOT swept: their CI is not maintained, so",
+    "a red is not a defect anyone intends to fix. They stay in the file so that",
+    "the decision is visible rather than the name simply being absent."
+  ],
+  "swept": [
+    "app-versions",
+    "decidesk",
+    "docudesk",
+    "doriath",
+    "hermiq",
+    "hrmq",
+    "larpingapp",
+    "launchpad",
+    "nextcloud-app-template",
+    "nldesign",
+    "openbuild",
+    "opencatalogi",
+    "openconnector",
+    "openregister",
+    "pipelinq",
+    "portaliq",
+    "procest",
+    "scholiq",
+    "shillinq",
+    "softwarecatalog",
+    "zaakafhandelapp"
+  ],
+  "deprecated": [
+    "planix"
+  ]
+}
