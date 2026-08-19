@@ -32,8 +32,25 @@ Measured 2026-08-08 on a tab-indented file:
 
 Braces are the language's own block delimiter, so this walks them, over a
 comment-masked copy (#184) so a docblock DESCRIBING the anti-pattern — as the
-fixed decidesk code now does — is not itself a finding. String contents are
-kept: they are evidence about code, and blanking them would delete it.
+fixed decidesk code now does — is not itself a finding.
+
+STRING CONTENTS ARE BLANKED TOO (#424)
+--------------------------------------
+The mask ran with `blank_strings=False`, so the docblock case was fixed and the
+STRING LITERAL case was not. Measured on main:
+
+    public function getAuthorizationService(): ?IAuth {
+        $doc = 'catch (\\Throwable $e) { return null; }';   // <- prose, in quotes
+        try { return $this->container->get(IAuth::class); }
+        catch (\\Throwable $e) { throw new ServiceUnavailable(...); }
+    }
+      -> FAIL — 1 fail-open pattern(s), on a resolver that correctly RETHROWS.
+
+Nothing this gate matches is ever a string: `function <name>(`, `catch
+(\\Throwable`, `return null;` and the braces are all syntax. So there is no
+evidence to lose — and blanking string contents also repairs the BRACE WALKER,
+which previously counted a `{` or `}` written inside a literal as a real block
+delimiter.
 
 WHAT IS DELIBERATELY UNCHANGED
 ------------------------------
@@ -93,12 +110,88 @@ def _block_after(masked: str, i: int) -> tuple[int, int] | None:
     return None
 
 
+def _classify_callers(masked: str, name: str) -> str:
+    """How this file's callers CONSUME a null from ``name``.
+
+    Returns ``"open"``, ``"deny"`` or ``"unknown"``.
+
+    THE SHAPE IS NOT THE DEFECT; THE CONSUMPTION IS.
+
+    `catch (\\Throwable) { return null; }` is what this gate matches, but it is
+    only a fail-open when the CALLER treats null as "check skipped". That was
+    decidesk#45:
+
+        $auth = $this->getAuthorizationService();
+        if ($auth !== null) {          # <- null SKIPS the check
+            $auth->assertMayApprove($user);
+        }
+
+    The opposite consumption is fail-CLOSED and is not a defect at all:
+
+        if ($this->authorizeEmployee($employeeId) === null) {
+            return new JSONResponse([...], Http::STATUS_NOT_FOUND);   # <- null DENIES
+        }
+
+    Measured 2026-08-19 on hrmq: 13 findings, all thirteen of the second shape,
+    across AvgDsr/Comp/Document/Expense/Interview/Leave/Loonbeslag/Offer/
+    Payroll/Roster controllers. Reporting those asks an app to make its
+    authorization WEAKER to satisfy an authorization gate.
+
+    Narrowing the catch is not an escape either, and that matters for why this
+    lives here rather than in the apps: OpenRegister's `ObjectService::find()`
+    throws a bare `Exception` when an object is missing, so for these resolvers
+    the catch IS the not-found path. There is no narrower exception to name.
+
+    `!== null` anywhere wins, because a single skip-shaped caller is the defect
+    regardless of how many deny-shaped ones sit beside it. No classifiable
+    caller returns ``"unknown"`` and the finding stands — a resolver whose
+    consumption cannot be seen is exactly the one to keep reporting, and it
+    keeps every existing fixture (which have no callers at all) reported.
+    """
+    call_rx = re.compile(
+        r"(?:\$([A-Za-z_]\w*)\s*=\s*)?\$this\s*->\s*" + re.escape(name) + r"\s*\(",
+    )
+    seen_deny = False
+    n = len(masked)
+
+    for m in call_rx.finditer(masked):
+        var = m.group(1)
+        if var:
+            # Assigned first, tested later: `$x = $this->resolve(); if ($x === null)`.
+            if re.search(r"\$" + re.escape(var) + r"\s*!==\s*null", masked):
+                return "open"
+            if re.search(r"\$" + re.escape(var) + r"\s*===\s*null", masked):
+                seen_deny = True
+            continue
+
+        # Tested inline: `if ($this->resolve(...) === null)`. Walk to the call's
+        # own closing paren so a nested call cannot end the scan early.
+        depth, k = 0, masked.find("(", m.end() - 1)
+        while k < n:
+            if masked[k] == "(":
+                depth += 1
+            elif masked[k] == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+            k += 1
+        tail = masked[k + 1 : k + 60]
+        if re.match(r"\s*!==\s*null", tail):
+            return "open"
+        if re.match(r"\s*===\s*null", tail):
+            seen_deny = True
+
+    if seen_deny:
+        return "deny"
+    return "unknown"
+
+
 def scan_file(path: str) -> list[str]:
     try:
         src = read_text(path)
     except OSError:
         return []
-    masked = php_mask(src)
+    masked = php_mask(src, blank_strings=True)
 
     out: list[str] = []
     for m in _METHOD_RX.finditer(masked):
@@ -124,6 +217,10 @@ def scan_file(path: str) -> list[str]:
             if cspan is None:
                 continue
             if _RETURN_NULL_RX.search(body[cspan[0] : cspan[1]]):
+                # The shape matches. Whether it is a DEFECT depends on how the
+                # callers consume the null — see _classify_callers().
+                if _classify_callers(masked, name) == "deny":
+                    break
                 line = masked.count("\n", 0, m.start()) + 1
                 out.append(
                     f"{path}:{line} method={name} rule=throwable-caught-returns-null"

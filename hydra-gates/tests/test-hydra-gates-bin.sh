@@ -25,6 +25,27 @@ SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 PKG_ROOT="$(cd "${SELF_DIR}/.." && pwd)"
 BIN="${PKG_ROOT}/bin/hydra-gates"
 
+# ---------------------------------------------------------------------------
+# THIS FILE IS THE DIFF-SCOPING CONTRACT, AND DIFF SCOPING IS NO LONGER THE
+# DEFAULT (hydra-gates/ADR-020-SUPERSEDED.md).
+#
+# Properties 2, 3 and the whole push-base section below are statements about
+# what happens WHEN A RUN IS SCOPED TO A DIFF: an unresolvable base must exit
+# 99, an empty diff must be reported as empty, `github.event.before` must be
+# mined when the base is HEAD. Every one of them is still true and still
+# load-bearing — they just are not reached by an argument-free invocation any
+# more, because the default is now full scope.
+#
+# Declared ONCE, here, rather than by appending `--scope-to-diff` to twenty
+# invocations. A per-call edit is twenty chances to miss one, and a missed one
+# does not fail: it silently starts measuring the other mode, which is exactly
+# the class of defect this file exists to catch.
+#
+# ⚠️ The DEFAULT is asserted separately, at the bottom of this file, with this
+# variable explicitly unset. Without that section this line would hide the
+# reversal instead of documenting it.
+export HYDRA_GATE_SCOPE=diff
+
 PASS=0
 FAIL=0
 _ok()   { echo "  ok   — $1"; PASS=$((PASS + 1)); }
@@ -1002,6 +1023,165 @@ if [ "${RC_FEAT}" -ne 99 ]; then
     _ok "a usable base is never replaced by the event (rc=${RC_FEAT})"
 else
     _bad "exit 99 — the null push base was consulted even though origin/development was usable"
+fi
+
+# ===========================================================================
+echo ""
+echo "[test] THE DEFAULT SCOPE IS FULL, AND THE DELTA BASE SURVIVES IT"
+# ===========================================================================
+#
+# The reversal, asserted where a reader looks for it: everything above ran with
+# HYDRA_GATE_SCOPE=diff because it is the diff contract. This section unsets it
+# and measures what a caller who passes nothing actually gets.
+#
+# ⚠️ THE ORDER MATTERS. `unset` must happen here and the variable must not be
+# restored, or a later section would silently inherit the wrong mode. This is
+# the last section in the file for that reason.
+unset HYDRA_GATE_SCOPE
+
+# 1. No flags at all -> full file scope, stated in one machine-readable line.
+OUT_DEF="$("${BIN}" --app-dir "${FIX}" 2>&1)"; RC_DEF=$?
+if printf '%s\n' "${OUT_DEF}" | grep -qF '[hydra-gates] SCOPE-MODE: full'; then
+    _ok "an argument-free invocation runs at FULL file scope and says so"
+else
+    _bad "an argument-free invocation did not announce 'SCOPE-MODE: full' — the ADR-020 reversal is not in effect, or it is not observable, and both are the same problem for a reader"
+fi
+
+# 2. It must NOT have exited 99. The old default resolved a base and refused
+#    when it could not; full scope has no such dependency, and a repo whose
+#    base cannot be resolved must still get 59 real verdicts.
+if [ "${RC_DEF}" -ne 99 ]; then
+    _ok "a full-scope run does not exit 99 over base resolution (rc=${RC_DEF} is a gate count)"
+else
+    _bad "a full-scope run exited 99 — base resolution is still fatal at full scope, so an unresolvable base still costs every gate instead of only the five delta gates"
+fi
+
+# 3. THE POINT OF THE WHOLE CHANGE: inherited debt is judged.
+#
+#    ⚠️ ON ITS OWN TREE, NOT ON `${FIX}`. Written against `${FIX}` first, this
+#    assertion reported 0 vs 0 and refused to grade — correctly: by this point
+#    in the file `${FIX}` has been mutated by the sections above and carries no
+#    inherited violation for full scope to find. That refusal is the assertion
+#    working (a control must perturb something the metric actually counts), and
+#    it is why the tree is built here instead of borrowed.
+#
+#    Shape: commit 1 carries a real gate-1 violation (a lib/ PHP file with no
+#    @license/@copyright). Commit 2 touches only docs. Diff-scoped against
+#    commit 1, gate-1 is quiet — that is ADR-020 working as designed. At full
+#    scope it must fire. ONE tree, one commit apart, only the scope input
+#    changed.
+DEBTFIX="${WORK}/inherited-debt"
+mkdir -p "${DEBTFIX}/lib/Service" "${DEBTFIX}/appinfo"
+cat > "${DEBTFIX}/lib/Service/LegacyService.php" <<'PHP'
+<?php
+namespace OCA\Fx\Service;
+/** No @license and no @copyright — inherited debt, gate-1's subject. */
+class LegacyService {
+    public function summarise(): string { return 'x'; }
+}
+PHP
+printf '<?php\nreturn [];\n' > "${DEBTFIX}/appinfo/routes.php"
+printf 'notes\n' > "${DEBTFIX}/README.md"
+(
+    cd "${DEBTFIX}" || exit 1
+    git init -q .
+    git config user.email fixture@example.invalid
+    git config user.name "Gate Fixture"
+    git config commit.gpgsign false
+    git add -f .
+    git commit -qm "base: a service carrying inherited SPDX debt"
+) >/dev/null 2>&1
+DEBT_BASE="$(git -C "${DEBTFIX}" rev-parse HEAD)"
+(
+    cd "${DEBTFIX}" || exit 1
+    printf 'notes\nmore notes\n' > README.md
+    git add README.md
+    git commit -qm "docs: an unrelated change"
+) >/dev/null 2>&1
+
+OUT_DEBT_FULL="$("${BIN}" --app-dir "${DEBTFIX}" 2>&1)"
+OUT_DEBT_DIFF="$(env HYDRA_GATE_SCOPE=diff "${BIN}" --app-dir "${DEBTFIX}" --base "${DEBT_BASE}" 2>&1)"
+
+# POSITIVE CONTROL FIRST: name the gate, do not just count. A count going up
+# for some other reason would read as the reversal working.
+if printf '%s\n' "${OUT_DEBT_FULL}" | grep -qE '^\[gate-1\][^:]*: FAIL'; then
+    _ok "full scope FAILS gate-1 on inherited SPDX debt the diff never touched"
+else
+    _bad "full scope did not fail gate-1 on a lib/ PHP file with no @license — the positive control is broken, so the comparison below proves nothing. Got: $(printf '%s\n' "${OUT_DEBT_FULL}" | grep -E '^\[gate-1\]' | head -1)"
+fi
+if printf '%s\n' "${OUT_DEBT_DIFF}" | grep -qE '^\[gate-1\][^:]*: FAIL'; then
+    _bad "the DIFF-scoped run also failed gate-1 on a docs-only change set — inherited debt is leaking into the opt-in diff mode, which is the false RED ADR-020 existed to prevent and which the reversal does not license"
+else
+    _ok "the same tree, diff-scoped one commit back, does NOT fail gate-1 — the two modes genuinely differ, and only the scope input changed"
+fi
+
+# 4. ANTI-WIDENING, and the half most easily lost: a full-scope run WITH a base
+#    must still run the delta gates. If flipping the default retired gates 16,
+#    29, 47, 48 and 61 on every PR in the fleet, that is a downgrade wearing an
+#    upgrade's clothes — and it would be invisible, because NOT APPLICABLE is
+#    excluded from the verdict.
+OUT_FULLBASE="$("${BIN}" --app-dir "${FIX}" --base "${BASE_SHA}" 2>&1)"
+if printf '%s\n' "${OUT_FULLBASE}" | grep -qE '^\[hydra-gates\] Delta base: [^N]'; then
+    _ok "a full-scope run still resolves and names a DELTA base"
+else
+    _bad "a full-scope run with an explicit --base did not report a delta base — the five delta gates have been retired by the default flip"
+fi
+#    ⚠️ gate-48 IS ASSERTED ON A DIFFERENT FIXTURE, AND IT HAS TO BE
+#    (.github#401). `${FIX}` ships no `lib/Controller/` at all — not in the
+#    diff, not anywhere in the tree — so gate-48 has never had a subject here.
+#    Before `#401` it printed PASS over that nothing, and "produced a verdict"
+#    was satisfied by a gate that had opened no file: this clause was GREEN
+#    while meaning nothing for gate-48, which is the same disease the clause
+#    exists to detect, one level up.
+#
+#    Now that a delta with no candidate file declines by name, keeping gate-48
+#    in this loop would read as "the default flip retired it" when what
+#    actually happened is that the fixture never contained a controller.
+#    `${SECFIX}` was purpose-built for exactly this — a controller IN THE DIFF,
+#    for gates 6/7, with the comment above it saying so — and `SEC_WITH` is
+#    already a full-scope run of it against a real base. That is where the
+#    anti-widening claim can be made truthfully, so that is where it is made.
+#
+#    gates 16 and 47 stay here: `${FIX}`'s diff genuinely carries lib/ and src/
+#    files, so both have real subject matter and a decline from either would be
+#    the retirement this clause is guarding against.
+_delta_na=""
+for _g in 16 47; do
+    printf '%s\n' "${OUT_FULLBASE}" | grep -qE "^\[gate-${_g}\][^:]*: NOT APPLICABLE" \
+        && _delta_na="${_delta_na}${_g} "
+done
+if [ -z "${_delta_na}" ]; then
+    _ok "delta gates 16/47 still produce a verdict at full scope when a base is present"
+else
+    _bad "delta gate(s) ${_delta_na}went NOT APPLICABLE at full scope though a base WAS resolved and \${FIX}'s diff carries lib/ and src/ files — the delta gates are keyed on the file scope instead of on the base, which retires them on every PR"
+fi
+if printf '%s\n' "${SEC_WITH}" | grep -qE "^\[gate-48\][^:]*: NOT APPLICABLE"; then
+    _bad "gate-48 went NOT APPLICABLE at full scope over a diff that ADDS lib/Controller/ThingController.php — a base was resolved and the gate's own subject matter is in the change set, so this is the delta gates being keyed on file scope, which retires them on every PR"
+else
+    _ok "gate-48 still produces a verdict at full scope when a base is present AND the diff contains a controller"
+fi
+
+# 5. And with NO base they must decline BY NAME rather than pass. This is the
+#    workflow_dispatch shape, and it is the one place the reversal legitimately
+#    costs coverage — so it has to be stated, not absorbed.
+_delta_pass=""
+for _g in 16 47 48; do
+    printf '%s\n' "${OUT_DEF}" | grep -qE "^\[gate-${_g}\][^:]*: PASS" && _delta_pass="${_delta_pass}${_g} "
+done
+if [ -z "${_delta_pass}" ]; then
+    _ok "with no delta base, gates 16/47/48 do not report PASS"
+else
+    _bad "delta gate(s) ${_delta_pass}reported PASS with NO base to compare against — a co-change verdict announced without a change set, and it counts toward 'N of N applicable gates ran'"
+fi
+
+# 6. An unrecognised scope must be refused, not guessed. A run whose scope
+#    nobody can name is not evidence about anything, and silently defaulting is
+#    how the wrong mode gets measured for months.
+OUT_BADSCOPE="$(HYDRA_GATE_SCOPE=whole-repo "${BIN}" --app-dir "${FIX}" 2>&1)"; RC_BADSCOPE=$?
+if [ "${RC_BADSCOPE}" -eq 99 ] && printf '%s\n' "${OUT_BADSCOPE}" | grep -qF 'is not '; then
+    _ok "an unrecognised \$HYDRA_GATE_SCOPE is refused with exit 99 rather than silently defaulting"
+else
+    _bad "\$HYDRA_GATE_SCOPE='whole-repo' was accepted (rc=${RC_BADSCOPE}) — an unnameable scope produced verdicts"
 fi
 
 echo ""

@@ -422,5 +422,184 @@ return ['routes' => [
         self.assertIn("method=validateQuorum", findings[0])
 
 
+# ---------------------------------------------------------------------------
+# The caller corpus is CODE, not bytes (#415 class, #422).
+#
+# Reverted against origin/main, arms 2, 3 and 4 FLIP (finding -> no finding).
+# Arms 1, 5 and 6 pass either way and are CONTROLS: without arm 1 firing the
+# other five measure nothing, and 5/6 are the anti-widening pair — the mask
+# that closes the false negative must not delete a real call site.
+# ---------------------------------------------------------------------------
+_GUARD_SRC = """\
+<?php
+namespace OCA\\Demo\\Service;
+
+class AuthzService {
+    public function requiresChairAuthorization(string $userId, string $meetingId): bool
+    {
+        if (!$this->acl->isAllowed($userId)) {
+            throw new \\OCP\\AppFramework\\OCS\\OCSForbiddenException('not the chair');
+        }
+        return true;
+    }
+}
+"""
+
+
+def _caller_file(body: str) -> str:
+    return (
+        "<?php\n"
+        "namespace OCA\\Demo\\Service;\n"
+        "\n"
+        "class MeetingService {\n"
+        "    public function advance(string $userId, string $meetingId): void\n"
+        "    {\n"
+        f"{body}"
+        "        $this->state = 'advanced';\n"
+        "    }\n"
+        "}\n"
+    )
+
+
+class CommentIsNotACallSite(unittest.TestCase):
+    """A guard is orphaned until CODE calls it — prose naming the call is not
+    a call. Same shape as gate-7's `// TODO: throw new OCSForbiddenException`
+    (#425), in the gate whose entire framing is "an unwired guard is identical
+    to no guard": the sentence admitting it is unwired reported it wired."""
+
+    def _scan(self, caller_body: str) -> list[str]:
+        return _scan_in_repo(
+            "lib/Service/AuthzService.php", _GUARD_SRC,
+            {"lib/Service/MeetingService.php": _caller_file(caller_body)},
+        )
+
+    def test_1_positive_control_no_caller_at_all(self):
+        """CONTROL. Without this firing, nothing below is a measurement."""
+        findings = self._scan("")
+        self.assertEqual(len(findings), 1, findings)
+        self.assertIn("method=requiresChairAuthorization", findings[0])
+
+    def test_2_line_comment_naming_the_call_is_not_a_call(self):
+        findings = self._scan(
+            "        // TODO: we should call\n"
+            "        // $this->authz->requiresChairAuthorization($userId, $meetingId)\n"
+            "        // here before advancing. Not done yet.\n"
+        )
+        self.assertEqual(len(findings), 1, findings)
+
+    def test_3_block_comment_naming_the_call_is_not_a_call(self):
+        findings = self._scan(
+            "        /*\n"
+            "        Wiring note: the chair check belongs here —\n"
+            "        $this->authz->requiresChairAuthorization($userId, $meetingId)\n"
+            "        */\n"
+        )
+        self.assertEqual(len(findings), 1, findings)
+
+    def test_4_hash_comment_naming_the_call_is_not_a_call(self):
+        """`#` is PHP's other line comment, and a repair that handled only
+        `//` would be one alternative spelling away from being bypassed."""
+        findings = self._scan(
+            "        # TODO: $this->authz->requiresChairAuthorization($userId, $meetingId)\n"
+        )
+        self.assertEqual(len(findings), 1, findings)
+
+    def test_5_a_real_call_still_clears_the_guard(self):
+        """CONTROL (anti-widening). Passes before and after."""
+        findings = self._scan(
+            "        if (!$this->authz->requiresChairAuthorization($userId, $meetingId)) {\n"
+            "            return;\n"
+            "        }\n"
+        )
+        self.assertEqual(findings, [])
+
+    def test_6_a_call_under_an_attribute_still_counts(self):
+        """CONTROL (anti-widening). `#[` opens a PHP 8 ATTRIBUTE, not a
+        comment — a mask that ate it would blank the line that follows and
+        could take a real call with it."""
+        findings = self._scan(
+            "        #[Pure]\n"
+            "        $ok = $this->authz->requiresChairAuthorization($userId, $meetingId);\n"
+            "        if (!$ok) { return; }\n"
+        )
+        self.assertEqual(findings, [])
+
+    def test_7_the_route_table_is_still_read_UNMASKED(self):
+        """CONTROL (anti-widening), and the reason string contents are kept.
+
+        A routed controller action has no `->method(` anywhere by construction
+        — the router reaches it through the STRING `'meeting#validateQuorum'`.
+        Blanking literals in the caller corpus would not touch routes.php, but
+        an agent generalising "strings are not evidence" across this file
+        would, and every routed action would go back to being reported dead
+        (launchpad, #290). This arm is what makes that regression loud."""
+        src = """\
+<?php
+class MeetingController {
+    public function validateQuorum(string $userId, string $meetingId): bool
+    {
+        if (!$this->acl->isAllowed($userId)) {
+            throw new \\OCP\\AppFramework\\OCS\\OCSForbiddenException('no quorum rights');
+        }
+        return true;
+    }
+}
+"""
+        routes = """\
+<?php
+return ['routes' => [
+    ['name' => 'meeting#validateQuorum', 'url' => '/api/meeting/quorum', 'verb' => 'POST'],
+]];
+"""
+        findings = _scan_in_repo("lib/Controller/MeetingController.php", src,
+                                 {"appinfo/routes.php": routes})
+        self.assertEqual(findings, [])
+
+
+class OrphanAuthExclusion(unittest.TestCase):
+    """gate-6 gained `@orphan-auth exclude <reason>` to match gate-57, which has
+    always had one. Both gates ask the same question about the same population —
+    a capability that exists and nothing calls — and pipelinq#764 is a live case
+    where the findings behind gate-57 could be marked and the identical ones
+    behind gate-6 could not."""
+
+    def _src(self, marker: str) -> str:
+        return (
+            "<?php\nclass T {\n"
+            "    /**\n"
+            "     * Whether the actor may do the thing.\n"
+            f"     *{marker}\n"
+            "     */\n"
+            "    public function isUserPermitted(string $userId): bool "
+            "{ return $this->permissions->allows($userId); }\n}\n"
+        )
+
+    def test_a_reason_bearing_exclusion_is_honoured(self):
+        src = self._src(" @orphan-auth exclude deliberate near-term capability, tracked in app#764.")
+        self.assertEqual(_scan_in_repo("lib/Service/T.php", src, {}), [])
+
+    def test_a_bare_exclusion_is_not(self):
+        src = self._src(" @orphan-auth exclude")
+        self.assertEqual(len(_scan_in_repo("lib/Service/T.php", src, {})), 1)
+
+    def test_no_marker_still_fires(self):
+        self.assertEqual(len(_scan_in_repo("lib/Service/T.php", self._src(""), {})), 1)
+
+    def test_an_attribute_or_line_comment_between_docblock_and_declaration_does_not_hide_it(self):
+        """gate-25 had exactly this bug: its docblock walk stopped on a `//`
+        line, so a tag three lines above the method was never read."""
+        src = (
+            "<?php\nclass T {\n"
+            "    /**\n"
+            "     * @orphan-auth exclude deliberate near-term capability, tracked in app#764.\n"
+            "     */\n"
+            "    #[SomeAttribute]\n"
+            "    // why this exists\n"
+            "    public function isUserPermitted(string $userId): bool "
+            "{ return $this->permissions->allows($userId); }\n}\n"
+        )
+        self.assertEqual(_scan_in_repo("lib/Service/T.php", src, {}), [])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

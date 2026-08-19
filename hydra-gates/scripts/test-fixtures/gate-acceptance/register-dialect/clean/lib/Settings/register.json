@@ -1,0 +1,71 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+        "title": "Register Dialect Fixture",
+        "version": "1.0.0"
+    },
+    "components": {
+        "schemas": {
+            "Thing": {
+                "title": "Thing",
+                "type": "object",
+                "x-openregister-notifications": {
+                    "onIntakeClosed": {
+                        "trigger": {
+                            "type": "lifecycle",
+                            "state": "closed"
+                        },
+                        "channels": ["mail"],
+                        "recipients": ["owner"],
+                        "subject": {
+                            "en": "Intake closed"
+                        }
+                    },
+                    "onScoreChanged": {
+                        "trigger": {
+                            "type": "propertyChange",
+                            "property": "score"
+                        },
+                        "channels": ["mail"],
+                        "recipients": ["owner"],
+                        "subject": {
+                            "en": "Score changed"
+                        }
+                    }
+                },
+                "x-openregister-aggregations": {
+                    "openIntakes": {
+                        "filter": {
+                            "@self.register": "things",
+                            "status": "open"
+                        },
+                        "operation": "count"
+                    }
+                },
+                "properties": {
+                    "governanceBody": {
+                        "type": "string",
+                        "title": "Governance body",
+                        "description": "The body that governs this thing."
+                    },
+                    "closedAt": {
+                        "type": "string",
+                        "format": "date-time",
+                        "title": "Closed at",
+                        "description": "The moment this thing was closed."
+                    },
+                    "channel": {
+                        "type": "string",
+                        "title": "Channel",
+                        "description": "The delivery channel this thing was received on."
+                    },
+                    "label": {
+                        "type": "string",
+                        "title": "Label",
+                        "description": "The human-readable name of this thing."
+                    }
+                }
+            }
+        }
+    }
+}

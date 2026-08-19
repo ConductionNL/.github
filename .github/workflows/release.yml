@@ -17,10 +17,13 @@ on:
         type: string
         default: "8.3"
       node-version:
+        # Kept in step with quality.yml's default (see the rationale there):
+        # an app whose devDependencies require Node 22 to lint must also be
+        # able to BUILD its release artefact on the same major.
         description: "Node.js version for building"
         required: false
         type: string
-        default: "20"
+        default: "22"
       verify-vendor-deps:
         description: "Enable vendor dependency verification after composer install"
         required: false
@@ -42,6 +45,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      # The version bump is routed through a pull request rather than pushed
+      # straight at a protected branch, so the job needs to open one.
+      pull-requests: write
     # Observed across 73 executions of the shared release jobs: median 1.3 min,
     # p95 3.0 min, max 4.0 min (nextcloud-vue). A release is expensive to fail
     # spuriously — it builds the frontend (measured at 211 s under load),
@@ -223,6 +229,99 @@ jobs:
 
       # ── Package ──
 
+      # ── Commit the version to the repository, BEFORE the tag exists ──
+      #
+      # This retires "Version Is Not In The Repository". The version used to
+      # exist only inside the built package: `sed` rewrote appinfo/info.xml in
+      # the copy under package/, and the committed file kept whatever stale
+      # number was last hand-edited.
+      #
+      # That is incompatible with Nextcloud's own release template, which reads
+      # the version FROM appinfo/info.xml and asserts the tag matches:
+      #
+      #     [ "$APP_VERSION" = "v$(xpath info.xml //version)" ]
+      #
+      # Following Nextcloud means the repository has to be the source of truth,
+      # so the bump is committed here and the tag is cut from that commit. The
+      # tag then names a tree whose info.xml says what the tag says.
+      #
+      # `[skip ci]` because this commit changes one number in one XML file and
+      # the quality suite has already run on the code being released. Without
+      # it, every release starts a second full pipeline on a tree that differs
+      # from the tested one by a version string.
+      #
+      # No push on a dry run and no push when the number has not moved — a
+      # re-run of a release that already happened must not create an empty
+      # commit and re-tag it.
+      - name: Commit the version bump
+        id: bump
+        run: |
+          set -euo pipefail
+          CURRENT=$(grep -oP '(?<=<version>)[^<]+' appinfo/info.xml | head -1)
+          if [ "$CURRENT" = "${{ env.NEW_VERSION }}" ]; then
+            echo "appinfo/info.xml already says ${{ env.NEW_VERSION }} — nothing to commit."
+            echo "bump_sha=" >> "$GITHUB_OUTPUT"
+            echo "bump_branch=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          sed -i "s|<version>.*</version>|<version>${{ env.NEW_VERSION }}</version>|" appinfo/info.xml
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add appinfo/info.xml
+          git commit -m "chore(release): ${{ env.NEW_VERSION }} [skip ci]"
+
+          # The bump lands on its OWN branch, never on ${{ github.ref_name }}.
+          # `development`, `beta` and `main` all require a pull request, so a
+          # direct push is rejected with GH013 and the release dies there — which
+          # is exactly what happened to openregister and openconnector.
+          BUMP_BRANCH="release/v${{ env.NEW_VERSION }}"
+          if git ls-remote --exit-code --heads origin "$BUMP_BRANCH" >/dev/null 2>&1; then
+            # A previous run of this same version already created it. Reuse it
+            # rather than overwriting: a force push here would discard whatever
+            # that run produced, and the tag below has to name a real commit.
+            BUMP_SHA=$(git ls-remote origin "refs/heads/$BUMP_BRANCH" | cut -f1)
+            echo "::notice::$BUMP_BRANCH already exists at ${BUMP_SHA} — reusing it."
+          else
+            git push origin "HEAD:refs/heads/$BUMP_BRANCH"
+            BUMP_SHA=$(git rev-parse HEAD)
+            echo "Committed ${CURRENT} -> ${{ env.NEW_VERSION }} on $BUMP_BRANCH"
+          fi
+          echo "bump_sha=${BUMP_SHA}" >> "$GITHUB_OUTPUT"
+          echo "bump_branch=${BUMP_BRANCH}" >> "$GITHUB_OUTPUT"
+
+      # THE TAG STILL NAMES A TREE WHOSE info.xml MATCHES IT.
+      #
+      # That requirement is not ours — Nextcloud's release template asserts it:
+      #     [ "$APP_VERSION" = "v$(xpath info.xml //version)" ]
+      # A tag does not have to sit on the integration branch to satisfy it, so
+      # the tag is cut from the bump commit on the release branch (see `commit:`
+      # on the release step) and the branch catches up via this pull request.
+      - name: Open the version-bump pull request
+        if: steps.bump.outputs.bump_branch != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          BR="${{ steps.bump.outputs.bump_branch }}"
+          if gh pr view "$BR" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "A pull request for $BR already exists."
+            exit 0
+          fi
+          gh pr create \
+            --repo "${{ github.repository }}" \
+            --base "${{ github.ref_name }}" \
+            --head "$BR" \
+            --title "chore(release): ${{ env.NEW_VERSION }}" \
+            --body "Version bump for ${{ env.NEW_VERSION }}, opened by the release workflow.
+
+          The tag v${{ env.NEW_VERSION }} already names this commit, so the released
+          package and its label agree. Merging this brings ${{ github.ref_name }} up
+          to the released version.
+
+          Raised as a pull request rather than pushed directly because
+          ${{ github.ref_name }} requires one; a direct push is rejected with GH013
+          and takes the release down with it."
+
       - name: Copy files into package directory
         run: |
           mkdir -p package/${{ inputs.app-name }}
@@ -324,6 +423,67 @@ jobs:
           echo "${{ secrets.NEXTCLOUD_SIGNING_KEY }}" > signing-key.key
           echo "${{ secrets.NEXTCLOUD_SIGNING_CERT }}" > signing-cert.crt
 
+      # ── Nextcloud's own integrity signature ──
+      #
+      # THE GAP THIS CLOSES: every release this fleet has ever published went
+      # out WITHOUT appinfo/signature.json. We signed the tarball — which is
+      # what the App Store API authenticates the upload with — and stopped
+      # there. Nextcloud's integrity checker verifies something else entirely:
+      # a per-file manifest INSIDE the app directory. Without it, `occ
+      # integrity:check-app <app>` reports the app as unverifiable, and an
+      # administrator running an integrity check sees our apps as the ones that
+      # cannot be vouched for.
+      #
+      # `occ` has to come from somewhere, so the server is fetched at the
+      # version the app declares it needs. Reading min-version from info.xml
+      # rather than hardcoding it is the same principle as
+      # icewind1991/nextcloud-version-matrix: the release cannot drift from what
+      # the app says it supports, because it is computed from it.
+      #
+      # NOT continue-on-error. An unsigned package that ships looks exactly like
+      # a signed one until an administrator checks, which is precisely the class
+      # of silent gap this whole change is about.
+      - name: Fetch Nextcloud server for occ
+        run: |
+          set -euo pipefail
+          # ANCHORED TO THE <nextcloud> ELEMENT ON PURPOSE. info.xml carries
+          # min-version on <php> too, and <php> comes FIRST in every fleet
+          # app. Measured across all 18 on 2026-08-12, an unanchored
+          # `(?<=min-version=")[0-9]+` returned:
+          #   13 apps -> 8    (from <php min-version="8.3"/>)
+          #   portaliq -> 28  (from a <nextcloud> further down, but the WRONG one)
+          # The first form fails loudly, because updates.nextcloud.com has no
+          # NC 8. The second does not: it resolves a real server and signs the
+          # app against a Nextcloud four majors below what it supports.
+          NCVERSION=$(grep -oP '<nextcloud[^>]*min-version="\K[0-9]+' appinfo/info.xml | head -1)
+          [ -n "${NCVERSION}" ] || { echo "::error::appinfo/info.xml declares no <nextcloud min-version>."; exit 1; }
+          echo "App declares min-version ${NCVERSION}; fetching that server to sign with."
+          URL=$(curl -sS "https://updates.nextcloud.com/updater_server/latest?channel=stable&version=${NCVERSION}" | jq -r '.downloads.zip[0]')
+          if [ -z "$URL" ] || [ "$URL" = "null" ]; then
+            echo "::warning::No stable download for NC ${NCVERSION}; falling back to the beta channel."
+            URL=$(curl -sS "https://updates.nextcloud.com/updater_server/latest?channel=beta&version=${NCVERSION}" | jq -r '.downloads.zip[0]')
+          fi
+          [ -n "$URL" ] && [ "$URL" != "null" ] || { echo "::error::Could not resolve a Nextcloud server download for min-version ${NCVERSION}."; exit 1; }
+          curl -sSL "$URL" -o nextcloud.zip
+          unzip -q nextcloud.zip
+          test -f nextcloud/occ || { echo "::error::The downloaded archive has no nextcloud/occ."; exit 1; }
+
+      - name: Sign the app with occ integrity:sign-app
+        run: |
+          set -euo pipefail
+          php nextcloud/occ integrity:sign-app \
+            --privateKey="$PWD/signing-key.key" \
+            --certificate="$PWD/signing-cert.crt" \
+            --path="$PWD/package/${{ inputs.app-name }}"
+          SIG="package/${{ inputs.app-name }}/appinfo/signature.json"
+          # POSITIVE CONTROL. `integrity:sign-app` exits 0 on several paths that
+          # produce no manifest, so the exit code alone is not evidence. Assert
+          # the artefact exists and actually enumerates files.
+          test -f "$SIG" || { echo "::error::integrity:sign-app exited 0 but wrote no ${SIG}. The package would ship unsigned."; exit 1; }
+          COUNT=$(jq -r '.hashes | length' "$SIG" 2>/dev/null || echo 0)
+          [ "${COUNT:-0}" -gt 0 ] || { echo "::error::${SIG} exists but hashes 0 files — an empty manifest verifies nothing."; exit 1; }
+          echo "Signed ${COUNT} file(s) into ${SIG}"
+
       - name: Create tarball
         run: |
           cd package && tar -czf ../nextcloud-release.tar.gz ${{ inputs.app-name }}
@@ -357,6 +517,11 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           tag: v${{ env.NEW_VERSION }}
+          # Tag the BUMP commit, not the branch head — that is the tree whose
+          # info.xml says ${{ env.NEW_VERSION }}. Falls back to the triggering
+          # sha when no bump was needed (a re-run of an already-released
+          # version), which is the same tree by definition.
+          commit: ${{ steps.bump.outputs.bump_sha || github.sha }}
           name: "${{ inputs.release-type == 'stable' && 'Release' || (inputs.release-type == 'beta' && 'Beta' || 'Unstable') }} ${{ env.NEW_VERSION }}"
           draft: false
           prerelease: ${{ inputs.release-type != 'stable' }}

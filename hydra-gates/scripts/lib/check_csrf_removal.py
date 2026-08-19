@@ -55,6 +55,7 @@ always; the OUTPUT is the answer (#209).
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 
 # `-` then optional whitespace then `#[`, with NoCSRFRequired inside the
@@ -70,10 +71,17 @@ DIFF_HEADER = re.compile(r'^---(\s|$)')
 # `+++ b/lib/Controller/X.php` — starts a new file's hunks. `+++` must be
 # tested before the `+` addition branch, exactly as `---` is before `-`.
 DIFF_FILE_HEADER = re.compile(r'^\+\+\+\s+(?:b/)?(?P<path>\S+)')
+# `@@ -12,5 +12,0 @@` — the base-image start line of the hunk.
+HUNK_HEADER = re.compile(r'^@@\s+-(?P<start>\d+)(?:,\d+)?\s')
 
 
 def removals(diff: str) -> list[str]:
-    """Removed lines that genuinely DROPPED CSRF protection.
+    """Removed lines that genuinely DROPPED CSRF protection (paths dropped)."""
+    return [line for _path, line, _lineno in removals_with_paths(diff)]
+
+
+def removals_with_paths(diff: str) -> list:
+    """``(path, line)`` for every removed line that dropped CSRF protection.
 
     A REMOVAL PAIRED WITH AN IDENTICAL ADDITION IS A MOVE, NOT A REMOVAL.
 
@@ -94,41 +102,190 @@ def removals(diff: str) -> list[str]:
     from one controller and added to another is a real change of posture for
     the first one; by multiset because a diff that removes a tag twice and
     restores it once has removed it once.
+
+    A RE-INDENTED LINE IS THE SAME LINE (the coding-standard migration).
+    ------------------------------------------------------------------
+    Cancellation used to compare RAW BYTES, on the stated reasoning that
+    "treating a re-indented line as a move would let a reformat swallow a
+    genuine deletion". Measured on the fleet-wide move to Nextcloud's coding
+    standard (`chore/nextcloud-coding-standard`, larpingapp#313 and 17
+    siblings), that reasoning cost more than it bought: php-cs-fixer re-indents
+    every controller from 4 spaces to a tab, so
+
+        -    #[NoCSRFRequired]
+        +\t#[NoCSRFRequired]
+
+    is emitted for EVERY attribute in the app. On launchpad the helper reported
+    25 "removals" against a tree whose `NoCSRFRequired` count is 43 before and
+    43 after — the annotation was never dropped, only moved one indent level.
+    gate-48 went red on 8 of the 18 migrating apps for that reason alone.
+
+    The fear behind byte-exactness does not survive MULTISET accounting, which
+    is what makes the relaxation safe: a re-indentation contributes exactly one
+    addition for each removal it causes, so the net count is unchanged and
+    nothing cancels that was not restored. Delete one annotation inside an
+    otherwise fully re-indented file and the removals outnumber the additions
+    by one, so exactly one finding survives — pinned by
+    `test_a_genuine_deletion_inside_a_full_reindent_still_reports`, which is
+    the positive control for this relaxation and fails if it is over-applied.
+
+    Only leading/trailing whitespace is normalised. The attribute list itself
+    is still compared verbatim, so `#[NoAdminRequired, NoCSRFRequired]` can
+    never cancel a removed `#[NoCSRFRequired]`.
     """
-    # {path: [raw content of each added line]} and the removals in file order.
+    # {path: [normalised content of each added line]}, removals in file order.
     added: dict[str | None, list[str]] = {}
-    found: list[tuple[str | None, str]] = []
+    found: list = []
     path: str | None = None
+    # BASE-IMAGE LINE NUMBER, tracked from the hunk headers. Five identical
+    # `- * @NoCSRFRequired` lines are indistinguishable by CONTENT, so the
+    # post-image test below can only be positional. `-U0` emits no context
+    # lines, so a `-` advances the base cursor and a `+` does not.
+    base_lineno = 0
 
     for line in diff.splitlines():
         header = DIFF_FILE_HEADER.match(line)
         if header:
             path = header.group('path')
             continue
+        hunk = HUNK_HEADER.match(line)
+        if hunk:
+            base_lineno = int(hunk.group('start'))
+            continue
         if line.startswith('+'):
-            added.setdefault(path, []).append(line[1:])
+            added.setdefault(path, []).append(line[1:].strip())
             continue
         if not line.startswith('-') or DIFF_HEADER.match(line):
+            if line.startswith(' '):
+                base_lineno += 1
             continue
+        here = base_lineno
+        base_lineno += 1
         if ATTRIBUTE_REMOVED.match(line) or DOCBLOCK_TAG_REMOVED.match(line):
-            found.append((path, line))
+            found.append((path, line, here))
 
-    out: list[str] = []
-    for file_path, line in found:
+    out: list = []
+    for file_path, line, here in found:
         pool = added.get(file_path)
-        if pool is not None and line[1:] in pool:
+        key = line[1:].strip()
+        if pool is not None and key in pool:
             # Consume the pairing so a second identical removal still reports.
-            pool.remove(line[1:])
+            pool.remove(key)
             continue
-        out.append(line)
+        out.append((file_path, line, here))
     return out
 
 
+# ---------------------------------------------------------------------------
+# 🔴 DELETING THE METHOD AND STRIPPING ITS ANNOTATION ARE NOT THE SAME CHANGE,
+#    AND A `-U0` DIFF CANNOT TELL THEM APART
+# ---------------------------------------------------------------------------
+#
+# Everything above reads only `-` lines. A `-U0` diff of
+#
+#     -    #[NoCSRFRequired]
+#     -    public function legacyDashboard(): JSONResponse { ... }
+#
+# and a `-U0` diff of
+#
+#     -    #[NoCSRFRequired]
+#
+# produce the SAME evidence for this helper: one removed attribute line. But
+# the first change DELETED the endpoint — there is nothing left for a forged
+# request to reach — while the second turned CSRF enforcement ON for a method
+# that survives. Only the second is a posture change this gate should judge,
+# and only the second can have a frontend counterpart to co-change.
+#
+# MEASURED on zaakafhandelapp#371: base declared `#[NoCSRFRequired]` six times
+# on `DashboardController`, the branch declares it once on the surviving
+# `page()`, and the other five methods are GONE. gate-48 reported five
+# removals. The PR spent a coordinator decision, a security warning and an
+# exclusion marker on a finding about endpoints that no longer exist.
+#
+# THE TEST, and it is a property of the POST-IMAGE rather than of the diff:
+# a removal is out of scope when no `function <name>` survives in that file at
+# HEAD, where `<name>` is the method the removed line annotated in the BASE
+# image. Both images are read from git, so this needs a repo and a base ref;
+# without them the behaviour is unchanged and every removal is reported. THAT
+# IS THE FAIL-CLOSED DIRECTION — an unreadable image is never a reason to drop
+# a security finding.
+_FUNCTION_DECL = re.compile(
+    r"\bfunction\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\(")
+
+
+def _git_show(repo: str, ref: str, path: str):
+    """File contents at *ref*, or ``None`` when it cannot be read."""
+    try:
+        proc = subprocess.run(
+            ["git", "-C", repo, "show", f"{ref}:{path}"],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        )
+    except OSError:
+        return None
+    if proc.returncode != 0:
+        return None
+    return proc.stdout.decode("utf-8", "replace")
+
+
+def _annotated_method(image: str, lineno: int, needle: str):
+    """Name of the method the removed line at 1-based *lineno* annotates.
+
+    An attribute or docblock tag sits ABOVE its declaration, so the method is
+    the next `function <name>(` at or after that line. ``None`` when the line
+    is not where the diff said it was — verified against *needle*, so a stale
+    or misparsed offset cannot silently address a different method.
+    """
+    lines = image.splitlines()
+    index = lineno - 1
+    if index < 0 or index >= len(lines):
+        return None
+    if lines[index].strip() != needle:
+        return None
+    m = _FUNCTION_DECL.search("\n".join(lines[index:]))
+    return m.group("name") if m is not None else None
+
+
+def survives_at_head(repo: str, base_ref: str, path: str, line: str,
+                     lineno: int = 0) -> bool:
+    """True when the method this removal annotated still exists at HEAD.
+
+    Returns True — i.e. "report it" — whenever the question cannot be answered:
+    no repo, no base ref, an unreadable image, or a line that cannot be located
+    in the base image. An unanswerable question is not a clean bill of health.
+    """
+    if not repo or not base_ref or not path or not lineno:
+        return True
+    head_image = _git_show(repo, "HEAD", path)
+    if head_image is None:
+        # The whole controller file is gone at HEAD. Every endpoint in it is
+        # gone with it, so there is nothing left to protect.
+        return False
+    base_image = _git_show(repo, base_ref, path)
+    if base_image is None:
+        return True
+    name = _annotated_method(base_image, lineno, line[1:].strip())
+    if name is None:
+        return True
+    surviving = {m.group("name") for m in _FUNCTION_DECL.finditer(head_image)}
+    return name in surviving
+
+
 def main(argv: list[str]) -> int:
-    if len(argv) > 1:
-        print("usage: check_csrf_removal.py < unified.diff", file=sys.stderr)
-        return 2
-    for line in removals(sys.stdin.read()):
+    repo = base_ref = None
+    args = argv[1:]
+    while args:
+        head = args.pop(0)
+        if head == "--repo" and args:
+            repo = args.pop(0)
+        elif head == "--base" and args:
+            base_ref = args.pop(0)
+        else:
+            print("usage: check_csrf_removal.py [--repo DIR --base REF] "
+                  "< unified.diff", file=sys.stderr)
+            return 2
+    for path, line, lineno in removals_with_paths(sys.stdin.read()):
+        if not survives_at_head(repo, base_ref, path or "", line, lineno):
+            continue
         print(line)
     return 0
 

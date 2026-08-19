@@ -178,6 +178,62 @@ function parseReport(stdout) {
 	fs.rmSync(path.dirname(tmp), { recursive: true, force: true })
 }
 
+// --- removals-invariant compares PAGE IDENTITY, not route spelling (#340) ----
+//
+// `menu[].route` may hold EITHER a pages[].id or a pages[].route — check (a)
+// accepts both. Until 2026-08-13 this invariant compared the raw strings, so
+// two menu entries reaching the SAME page by different spellings did not count
+// as reaching each other, and retiring one of them — exactly the "duplicate
+// navigation entry whose page is still reachable" ADR-044 §5 sanctions — was
+// reported as an orphaned route.
+//
+// Both arms run off ONE fixture pair that differs only in whether a second
+// menu entry survives. Arm B is the control: if the normalisation were written
+// as "any removal whose page exists is fine", arm B would fall silent too.
+{
+	const mkApp = (menu) => {
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gate30-idroute-'))
+		fs.mkdirSync(path.join(dir, 'src'), { recursive: true })
+		fs.writeFileSync(path.join(dir, 'src', 'manifest.json'), JSON.stringify({
+			manifestVersion: '2.0',
+			app: { id: 'demo', name: 'Demo' },
+			menu,
+			pages: [{
+				id: 'ItemsPage', route: '/items', type: 'index', title: 'Items',
+				config: { register: 'demo', schema: 'item' },
+			}],
+		}))
+		fs.writeFileSync(path.join(dir, 'src', 'menu-layout.json'), JSON.stringify({
+			relocations: {}, removals: ['items-by-path'], settingsSection: [],
+		}))
+		return dir
+	}
+	const orphans = (dir) => {
+		const rep = parseReport(run([CHECKER, '--app-dir', dir]).stdout)
+		return rep.findings.filter((f) => f.check === 'removals-invariant' && f.severity === 'error')
+	}
+
+	// ARM A — the duplicate survives, spelled as the page ID. Reachable.
+	const dup = mkApp([
+		{ id: 'items-by-id', label: 'Items', route: 'ItemsPage' },
+		{ id: 'items-by-path', label: 'Items again', route: '/items' },
+	])
+	assert(orphans(dup).length === 0,
+		'removals-invariant: an id-spelled survivor covers a path-spelled removal (#340)')
+
+	// ARM B — CONTROL. Same removal, but nothing else reaches the page. The
+	// route is genuinely orphaned and MUST still be reported.
+	const solo = mkApp([
+		{ id: 'items-by-path', label: 'Items', route: '/items' },
+	])
+	const soloFindings = orphans(solo)
+	assert(soloFindings.length === 1 && soloFindings[0].message.includes("'items-by-path'"),
+		`removals-invariant CONTROL: the sole entry's removal is STILL an orphan (got ${soloFindings.length})`)
+
+	fs.rmSync(dup, { recursive: true, force: true })
+	fs.rmSync(solo, { recursive: true, force: true })
+}
+
 // --- structural stage on the ASSEMBLED broken manifest (Ajv path) ---------------
 // The fragment-introduced `layout[]` page property is invisible to the base
 // gate-22 run and to the crossref checker; it must fail check_manifest.js on
@@ -304,6 +360,18 @@ function parseReport(stdout) {
 			"a double-quoted hyphenated key resolves too — \"agent-skills\"")
 		assert(!msgs.includes("'LegacyOnlyPanel'"),
 			'a component registered ONLY in src/customComponents.js resolves — the second source (9 false FAILs on softwarecatalog)')
+		// #424. `glob: '/*.vue'` opened a block comment in the private
+		// stripper, and everything up to the next real `*/` was deleted from
+		// the registry. Measured on THIS fixture by swapping js_scope back to
+		// the two-line regex: `AfterGlob` disappeared and the error count
+		// below went 1 -> 2.
+		//   CONTROL  — the entry carrying the glob is BEFORE the phantom
+		//              opener, so it resolved either way.
+		assert(!msgs.includes("'GlobPage'"),
+			"a registry entry carrying `glob: '/*.vue'` still resolves (#424)")
+		//   EVIDENCE — the entry after it did not.
+		assert(!msgs.includes("'AfterGlob'"),
+			'the entry AFTER that glob is not swallowed by a comment that never opened (#424)')
 		assert(errs.length === 1 && errs[0].message.includes("'NotAnywherePanel'"),
 			`THE CONTROL: a component in NEITHER file still FAILS (got ${errs.length} error(s))`)
 		assert(check.status === 1,
@@ -317,6 +385,378 @@ function parseReport(stdout) {
 		const check = run([CHECKER, '--app-dir', path.join(FIX, 'good')])
 		const rx = parseReport(check.stdout).findings.filter((f) => f.check === 'registry-crossref')
 		assert(rx.length === 0, 'no src/registry.js → check (f) not applicable, zero findings')
+	}
+}
+
+// --- removals-invariant: REACHABILITY IS A CLOSURE OVER NAVIGATION EDGES ----
+//
+// The menu is not the only way to reach a page, and until this landed the
+// invariant pretended it was. Measured on procest `development` @78c96081:
+// eight retired menu entries, all eight reported as orphaned routes, one of
+// them (`Voorstellen`) named by a `viewAllRoute` on a page the menu reaches.
+//
+// EVERY POSITIVE ARM BELOW IS PAIRED WITH ITS OWN CONTROL, on a fixture that
+// differs in ONE field. A gate that can no longer fail is worse than the false
+// positive it removes, so each widening is pinned against the narrowest
+// mutation that must still FAIL.
+{
+	// One app builder: pages + menu + menu-layout, nothing else. Every arm
+	// retires `HiddenMenu`, whose page `Hidden` is otherwise navigationless.
+	// `opts` exists only for the cross-app arms further down:
+	//   opts.appId  — write appinfo/info.xml <id>, so the "names THIS app"
+	//                 refusal can be exercised through its authoritative source.
+	//   opts.dirName— place the app under a directory of that NAME, so the
+	//                 SECOND self-id source (basename(APP_DIR), which is what CI
+	//                 actually provides) can be exercised on its own.
+	//   opts.deps   — manifest `dependencies`, reported in the cross-app WARN.
+	const mkApp = (pages, menu, layout, opts) => {
+		const o = opts || {}
+		let dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gate30-reach-'))
+		if (o.dirName) {
+			dir = path.join(dir, o.dirName)
+			fs.mkdirSync(dir, { recursive: true })
+		}
+		fs.mkdirSync(path.join(dir, 'src'), { recursive: true })
+		const base = {
+			$schema: 'https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json',
+			version: '1.0.0',
+			menu,
+			pages,
+		}
+		if (o.deps) base.dependencies = o.deps
+		fs.writeFileSync(path.join(dir, 'src', 'manifest.json'), JSON.stringify(base))
+		fs.writeFileSync(path.join(dir, 'src', 'menu-layout.json'), JSON.stringify(layout))
+		if (o.appId) {
+			fs.mkdirSync(path.join(dir, 'appinfo'), { recursive: true })
+			fs.writeFileSync(path.join(dir, 'appinfo', 'info.xml'),
+				`<?xml version="1.0"?>\n<info>\n\t<id>${o.appId}</id>\n\t<name>Fixture</name>\n</info>\n`)
+		}
+		return dir
+	}
+	const orphans = (dir) => parseReport(run([CHECKER, '--app-dir', dir]).stdout)
+		.findings.filter((f) => f.check === 'removals-invariant' && f.severity === 'error')
+	const waived = (dir) => parseReport(run([CHECKER, '--app-dir', dir]).stdout)
+		.findings.filter((f) => f.check === 'removals-invariant' && f.severity === 'warn')
+
+	const HIDDEN = { id: 'Hidden', route: '/hidden', type: 'index', title: 'Hidden', config: { register: 'ctl', schema: 'item' } }
+	const HOME = (config) => ({ id: 'Home', route: '/home', type: 'index', title: 'Home', config: Object.assign({ register: 'ctl', schema: 'item' }, config || {}) })
+	const MENU = [
+		{ id: 'HomeMenu', label: 'Home', route: 'Home' },
+		{ id: 'HiddenMenu', label: 'Hidden', route: 'Hidden' },
+	]
+	const LAYOUT = (extra) => Object.assign({ relocations: {}, removals: ['HiddenMenu'], settingsSection: [] }, extra || {})
+
+	// A1 — a `viewAllRoute` on a MENU-REACHABLE page reaches the retired page.
+	{
+		const dir = mkApp([
+			HOME({ widgets: [{ id: 'w', widgetKey: 'object-table', content: { register: 'ctl', schema: 'item', viewAllRoute: 'Hidden' } }] }),
+			HIDDEN,
+		], MENU, LAYOUT())
+		assert(orphans(dir).length === 0,
+			'reachability: a viewAllRoute on a menu-reachable page is an entry point, not an orphan')
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+
+	// A1-CONTROL — the SAME edge, declared by a page nothing reaches. Two
+	// orphans must not vouch for each other. One field differs: the widget
+	// moved from `Home` (in the menu) to `Attic` (in nothing).
+	{
+		const dir = mkApp([
+			HOME(),
+			{ id: 'Attic', route: '/attic', type: 'index', title: 'Attic', config: { register: 'ctl', schema: 'item', widgets: [{ id: 'w', widgetKey: 'object-table', content: { register: 'ctl', schema: 'item', viewAllRoute: 'Hidden' } }] } },
+			HIDDEN,
+		], MENU, LAYOUT())
+		assert(orphans(dir).length === 1,
+			'CONTROL: an edge declared by an UNREACHABLE page does not make its target reachable')
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+
+	// A2 — TRANSITIVE, two hops: menu → Home -(handler:'navigate')-> Detail
+	// -(viewAllRoute)-> Hidden. procest's real shape (`Cases` → `CaseDetail`
+	// → `Voorstellen`); a one-hop closure reports it as an orphan.
+	{
+		const dir = mkApp([
+			HOME({ actions: [{ id: 'view', label: 'View', type: 'handler', handler: 'navigate', route: 'Detail' }] }),
+			{ id: 'Detail', route: '/home/:id', type: 'detail', title: 'Detail', config: { register: 'ctl', schema: 'item', widgets: [{ id: 'w', widgetKey: 'object-table', content: { register: 'ctl', schema: 'item', viewAllRoute: 'Hidden' } }] } },
+			HIDDEN,
+		], MENU, LAYOUT())
+		assert(orphans(dir).length === 0,
+			'reachability: the closure is TRANSITIVE — menu -> action route -> viewAllRoute reaches the retired page')
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+
+	// A3 — an `open-page` action target is an edge; an `open-modal` target of
+	// the same spelling is NOT (the schema overloads `target`, and a modal id
+	// that happens to match a page id must not vouch for it).
+	{
+		const openPage = mkApp([
+			HOME({ actions: [{ id: 'go', label: 'Go', type: 'open-page', target: 'Hidden' }] }),
+			HIDDEN,
+		], MENU, LAYOUT())
+		assert(orphans(openPage).length === 0, "reachability: an open-page action target is an entry point")
+		fs.rmSync(openPage, { recursive: true, force: true })
+
+		const openModal = mkApp([
+			HOME({ actions: [{ id: 'go', label: 'Go', type: 'open-modal', target: 'Hidden' }] }),
+			HIDDEN,
+		], MENU, LAYOUT())
+		assert(orphans(openModal).length === 1,
+			'CONTROL: an open-MODAL target is a modal id, not a page — it must not vouch for a page of the same name')
+		fs.rmSync(openModal, { recursive: true, force: true })
+	}
+
+	// A4 — THE BASELINE THAT MUST NEVER MOVE. No edge of any kind: still an
+	// orphan, still an error. If this ever falls silent the widening above has
+	// swallowed the check.
+	{
+		const dir = mkApp([HOME(), HIDDEN], MENU, LAYOUT())
+		const errs = orphans(dir)
+		assert(errs.length === 1 && errs[0].message.includes("'HiddenMenu'"),
+			`CONTROL: a removal with no menu entry and NO navigation edge is STILL an error (got ${errs.length})`)
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+
+	// --- menu-layout.json#removalsReplacedBy ---------------------------------
+	// The declared, VERIFIED waiver. It exists because three real replacement
+	// mechanisms (folderSidebar filter, page viewMode, per-object sidebar tab)
+	// name the retired page NOWHERE — there is no edge to widen toward — and
+	// procest cannot otherwise close a finding that is wrong.
+
+	// A5 — declared, the named page exists and is reachable: WARN, not error.
+	{
+		const dir = mkApp([HOME({ viewModes: ['table', 'map'] }), HIDDEN], MENU, LAYOUT({ removalsReplacedBy: { HiddenMenu: 'Home' } }))
+		assert(orphans(dir).length === 0, 'removalsReplacedBy: a verified waiver clears the error')
+		const w = waived(dir)
+		assert(w.length === 1 && w[0].message.includes("'Home'"),
+			`removalsReplacedBy: the debt is still REPORTED, as a WARN naming the replacement (got ${w.length})`)
+		assert(run([CHECKER, '--app-dir', dir]).status === 0, 'removalsReplacedBy: a warn does not set the exit code')
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+
+	// A5-CONTROL a — the named page does not exist.
+	{
+		const dir = mkApp([HOME(), HIDDEN], MENU, LAYOUT({ removalsReplacedBy: { HiddenMenu: 'NoSuchPage' } }))
+		const errs = orphans(dir)
+		assert(errs.length === 1 && errs[0].message.includes("'NoSuchPage'"),
+			'CONTROL: a waiver naming a page that does not exist is refused')
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+
+	// A5-CONTROL b — the named page exists but is ITSELF unreachable. This is
+	// the arm that makes the waiver rot loudly: the day the replacement leaves
+	// the menu, every waiver pointing at it fails.
+	{
+		const dir = mkApp([
+			HOME(),
+			{ id: 'Attic', route: '/attic', type: 'index', title: 'Attic', config: { register: 'ctl', schema: 'item' } },
+			HIDDEN,
+		], MENU, LAYOUT({ removalsReplacedBy: { HiddenMenu: 'Attic' } }))
+		const errs = orphans(dir)
+		assert(errs.length === 1 && errs[0].message.includes('ITSELF unreachable'),
+			'CONTROL: a waiver naming an UNREACHABLE page is refused — it moves the orphan, it does not close it')
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+
+	// A5-CONTROL c — the waiver names the retired page itself, by its ROUTE
+	// spelling (so this also pins that the waiver goes through pageKey).
+	{
+		const dir = mkApp([HOME(), HIDDEN], MENU, LAYOUT({ removalsReplacedBy: { HiddenMenu: '/hidden' } }))
+		const errs = orphans(dir)
+		assert(errs.length === 1 && errs[0].message.includes('ITSELF as its replacement'),
+			'CONTROL: a page cannot vouch for its own reachability, in either spelling')
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+
+	// A5-CONTROL d — a waiver that is not a usable reference at all. `true`
+	// must not be credited the way a one-full-stop reason once was (#400).
+	{
+		const dir = mkApp([HOME(), HIDDEN], MENU, LAYOUT({ removalsReplacedBy: { HiddenMenu: true } }))
+		assert(orphans(dir).length === 1,
+			'CONTROL: a non-string waiver names nothing checkable and is refused')
+		const empty = mkApp([HOME(), HIDDEN], MENU, LAYOUT({ removalsReplacedBy: { HiddenMenu: '' } }))
+		assert(orphans(empty).length === 1, 'CONTROL: an EMPTY waiver is refused')
+		fs.rmSync(dir, { recursive: true, force: true })
+		fs.rmSync(empty, { recursive: true, force: true })
+	}
+
+	// A5-CONTROL e — a waiver for a DIFFERENT removal does not blanket this
+	// one. Keys are per-removal, never a file-level opt-out.
+	{
+		const dir = mkApp([HOME(), HIDDEN], MENU, LAYOUT({ removalsReplacedBy: { SomeOtherEntry: 'Home' } }))
+		assert(orphans(dir).length === 1,
+			'CONTROL: removalsReplacedBy is keyed PER REMOVAL — an unrelated key does not waive this one')
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+
+	// --- the CROSS-APP form `<appId>:<PageId>` -------------------------------
+	// Exists because procest's `BesluitvormingAgenda` (a cross-case
+	// meeting-agenda compiler) moved to decidesk, and the same-app form could
+	// only have been satisfied by naming a LOCAL page that does not carry it —
+	// which the gate would have ACCEPTED. The check here is deliberately
+	// weaker than the same-app one and every arm below pins one edge of it.
+
+	// A6 — well-formed, a known fleet app, not this app: WARN, not error, and
+	// the WARN must NAME the reduced guarantee. A WARN that read like the
+	// same-app one would hide exactly the thing this form gives up.
+	{
+		const dir = mkApp([HOME(), HIDDEN], MENU,
+			LAYOUT({ removalsReplacedBy: { HiddenMenu: 'decidesk:BesluitvormingAgenda' } }))
+		assert(orphans(dir).length === 0, 'cross-app: a well-formed known-app waiver clears the error')
+		const w = waived(dir)
+		// `msg` never indexes an absent element: this arm is ALSO run as a
+		// mutant against the pre-fix helper (where the finding is an error and
+		// `w` is empty), and a suite that CRASHES there stops reporting the
+		// arms after it — the mutant run must stay readable to be evidence.
+		const msg = (w[0] && w[0].message) || ''
+		assert(w.length === 1
+			&& msg.includes('REDUCED GUARANTEE')
+			&& msg.includes("'decidesk'")
+			&& msg.includes('BesluitvormingAgenda')
+			&& msg.includes('does not read another app'),
+			`cross-app: the WARN must state the REDUCED GUARANTEE and name both sides (got ${w.length}: ${w.map((f) => f.message).join(' | ')})`)
+		assert(msg.includes('does NOT rot'),
+			'cross-app: the WARN must say the waiver does not rot — that is the property a same-app waiver has and this one cannot')
+		assert(msg.includes('NO manifest dependency'),
+			'cross-app: with no declared dependency the WARN says nothing in the repo corroborates the claim')
+		assert(run([CHECKER, '--app-dir', dir]).status === 0, 'cross-app: a warn does not set the exit code')
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+
+	// A6b — the same waiver in an app that DOES declare the dependency. Only
+	// the reported corroboration changes; the verdict must not.
+	{
+		const dir = mkApp([HOME(), HIDDEN], MENU,
+			LAYOUT({ removalsReplacedBy: { HiddenMenu: 'decidesk:BesluitvormingAgenda' } }),
+			{ deps: ['openregister', { id: 'decidesk', required: false }] })
+		assert(orphans(dir).length === 0, 'cross-app: a declared dependency does not change the verdict')
+		const w = waived(dir)
+		assert(w.length === 1 && ((w[0] && w[0].message) || '').includes("does declare a manifest dependency on 'decidesk'"),
+			'cross-app: the WARN reports the declared dependency as corroboration')
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+
+	// A6-CONTROL a — THE DISGUISE. Naming THIS app with a colon must FAIL:
+	// the cross-app branch checks strictly less, so a same-app claim routed
+	// through it would skip exists / not-itself / reachable. Source 1:
+	// appinfo/info.xml.
+	{
+		const dir = mkApp([HOME(), HIDDEN], MENU,
+			LAYOUT({ removalsReplacedBy: { HiddenMenu: 'procest:Home' } }), { appId: 'procest' })
+		const errs = orphans(dir)
+		assert(errs.length === 1,
+			`ANTI-WIDENING: '<thisApp>:<Page>' is STILL an error (got ${errs.length}: ${errs.map((f) => f.message).join(' | ')})`)
+		assert(((errs[0] && errs[0].message) || '').includes('same-app case wearing a cross-app disguise'),
+			"CONTROL: '<thisApp>:<Page>' is refused AS a disguise — it must take the strict local path")
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+
+	// A6-CONTROL a2 — the SAME refusal from the OTHER self-id source, with NO
+	// appinfo/info.xml at all: the app directory basename, which is what CI
+	// hands the checker (/home/runner/work/procest/procest). Without this arm
+	// "the disguise is refused" would rest on a single source that a partial
+	// checkout can remove.
+	{
+		const dir = mkApp([HOME(), HIDDEN], MENU,
+			LAYOUT({ removalsReplacedBy: { HiddenMenu: 'docudesk:Whatever' } }), { dirName: 'docudesk' })
+		assert(!fs.existsSync(path.join(dir, 'appinfo', 'info.xml')),
+			'CONTROL a2 precondition: this fixture must have NO appinfo/info.xml, or it tests the wrong source')
+		const errs = orphans(dir)
+		assert(errs.length === 1,
+			`ANTI-WIDENING: the basename-disguise fixture is STILL an error (got ${errs.length}: ${errs.map((f) => f.message).join(' | ')})`)
+		assert(((errs[0] && errs[0].message) || '').includes('same-app case wearing a cross-app disguise'),
+			'CONTROL: the disguise is refused from the DIRECTORY BASENAME too')
+		fs.rmSync(path.dirname(dir), { recursive: true, force: true })
+	}
+
+	// A6-CONTROL b — an app the fleet has never heard of. A free syntax check
+	// would bless a typo forever, and an unrecognised id would then read as a
+	// verified waiver.
+	{
+		const dir = mkApp([HOME(), HIDDEN], MENU,
+			LAYOUT({ removalsReplacedBy: { HiddenMenu: 'decidsk:BesluitvormingAgenda' } }))
+		const errs = orphans(dir)
+		assert(errs.length === 1,
+			`ANTI-WIDENING: an unknown app id (a one-letter typo of a real one) is STILL an error (got ${errs.length}: ${errs.map((f) => f.message).join(' | ')})`)
+		assert(((errs[0] && errs[0].message) || '').includes('not a known Conduction fleet app id'),
+			'CONTROL: an unknown app id is refused AS an unknown app, naming the constant to update')
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+
+	// A6-CONTROL c — the app part is not an app id. `Decidesk` is a real app
+	// in the wrong case; NC app ids are lowercase, and accepting the variant
+	// would make the fleet-list check case-dependent theatre.
+	{
+		const dir = mkApp([HOME(), HIDDEN], MENU,
+			LAYOUT({ removalsReplacedBy: { HiddenMenu: 'Decidesk:BesluitvormingAgenda' } }))
+		const errs = orphans(dir)
+		assert(errs.length === 1,
+			`ANTI-WIDENING: a malformed app part is STILL an error (got ${errs.length}: ${errs.map((f) => f.message).join(' | ')})`)
+		assert(((errs[0] && errs[0].message) || '').includes('is not a Nextcloud app id'),
+			'CONTROL: a malformed app part is refused AS malformed')
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+
+	// A6-CONTROL d — the page part is not a page id: empty, or a path. The
+	// form names a PAGE in the other app; a URL is not checkable in any sense
+	// and would invite a link to anywhere.
+	{
+		const empty = mkApp([HOME(), HIDDEN], MENU,
+			LAYOUT({ removalsReplacedBy: { HiddenMenu: 'decidesk:' } }))
+		const e1 = orphans(empty)
+		assert(e1.length === 1,
+			`ANTI-WIDENING: an empty page part is STILL an error (got ${e1.length}: ${e1.map((f) => f.message).join(' | ')})`)
+		assert(((e1[0] && e1[0].message) || '').includes('is not a page id'),
+			'CONTROL: an empty page part is refused AS an unusable page reference')
+		fs.rmSync(empty, { recursive: true, force: true })
+
+		const url = mkApp([HOME(), HIDDEN], MENU,
+			LAYOUT({ removalsReplacedBy: { HiddenMenu: 'decidesk:/agenda/compiler' } }))
+		const e2 = orphans(url)
+		assert(e2.length === 1,
+			`ANTI-WIDENING: a PATH as the page part is STILL an error (got ${e2.length}: ${e2.map((f) => f.message).join(' | ')})`)
+		assert(((e2[0] && e2[0].message) || '').includes('is not a page id'),
+			'CONTROL: a PATH as the page part is refused AS an unusable page reference')
+		fs.rmSync(url, { recursive: true, force: true })
+	}
+
+	// A6-CONTROL e — THE ANTI-BYPASS, both directions.
+	//
+	// (i) A value that resolves to a LOCAL page never enters the cross-app
+	//     branch, even though a parameterised route contains a colon. Here the
+	//     waiver is spelled as `Detail`'s route `/home/:id`: it must be checked
+	//     the STRICT way (exists + reachable + not itself) and produce the
+	//     same-app WARN, with no "REDUCED GUARANTEE" anywhere.
+	{
+		const dir = mkApp([
+			HOME({ actions: [{ id: 'view', label: 'View', type: 'handler', handler: 'navigate', route: 'Detail' }] }),
+			{ id: 'Detail', route: '/home/:id', type: 'detail', title: 'Detail', config: { register: 'ctl', schema: 'item' } },
+			HIDDEN,
+		], MENU, LAYOUT({ removalsReplacedBy: { HiddenMenu: '/home/:id' } }))
+		assert(orphans(dir).length === 0, 'anti-bypass: a colon-bearing LOCAL route still resolves the same-app way')
+		const w = waived(dir)
+		assert(w.length === 1 && !((w[0] && w[0].message) || '').includes('REDUCED GUARANTEE'),
+			`anti-bypass: a local route must take the STRICT path, not the cross-app one (got ${w.map((f) => f.message).join(' | ')})`)
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+	// (ii) An UNRESOLVABLE parameterised route is still the old "resolves to no
+	//     page" FAIL, not a confusing "unknown app" one — the `/` before the
+	//     colon keeps it out of the cross-app branch.
+	{
+		const dir = mkApp([HOME(), HIDDEN], MENU,
+			LAYOUT({ removalsReplacedBy: { HiddenMenu: '/nope/:id' } }))
+		const errs = orphans(dir)
+		assert(errs.length === 1 && ((errs[0] && errs[0].message) || '').includes('resolves to no pages[].id or pages[].route'),
+			`CONTROL: an unresolvable PATH keeps its own diagnosis, it is not misread as an app reference (got ${errs.map((f) => f.message).join(' | ')})`)
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+	// (iii) The cross-app form is STILL keyed per removal — it is not a
+	//     file-level opt-out any more than the same-app form is.
+	{
+		const dir = mkApp([HOME(), HIDDEN], MENU,
+			LAYOUT({ removalsReplacedBy: { SomeOtherEntry: 'decidesk:BesluitvormingAgenda' } }))
+		assert(orphans(dir).length === 1,
+			'CONTROL: a cross-app waiver keyed to ANOTHER removal does not waive this one')
+		fs.rmSync(dir, { recursive: true, force: true })
 	}
 }
 

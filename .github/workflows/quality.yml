@@ -18,10 +18,69 @@ on:
         type: string
         default: '["8.3", "8.4"]'
       nextcloud-test-refs:
-        description: "JSON array of Nextcloud server branches for PHPUnit matrix"
+        # ── AN OVERRIDE NOW, NOT THE SOURCE OF TRUTH ──────────────────────
+        #
+        # The matrix is DERIVED from the app's own appinfo/info.xml by the
+        # `nextcloud-matrix` job below. Leave this unset — the default — and the
+        # tested range cannot disagree with the declared one, because there is
+        # only one place the range is written down.
+        #
+        # WHY THAT CHANGED. This value used to be hand-maintained per app, and
+        # the fleet broke the info.xml <-> matrix agreement in BOTH directions
+        # inside a single programme:
+        #
+        #   * every app declared NC 32-34 and tested stable31/stable32, so the
+        #     version being adopted was exercised by nothing. And stable31 was
+        #     worse than useless: openregister declares min-version="32", so
+        #     `occ app:enable openregister` failed with only a ::warning::, the
+        #     run continued with NO data layer, and every /apps/openregister/...
+        #     call returned Nextcloud's HTML 404 page. That leg's red said
+        #     nothing and its green said less.
+        #   * the migration that fixed it REPLACED the list with '["stable34"]'
+        #     instead of extending it, and 16 apps stopped testing their own
+        #     declared floor.
+        #
+        # Both were detectable. Neither was detected, because the two halves
+        # were two files that could be edited independently. Derivation removes
+        # the second half.
+        #
+        # WHEN TO SET IT ANYWAY. A repo whose tested range must deliberately
+        # differ from its declared range — petstore declares NC 28-34 and has no
+        # intention of running seven server legs — passes an explicit array here
+        # and keeps exactly today's behaviour. gate-65 rule 11 then requires
+        # that array to agree with info.xml, so an override is a decision
+        # somebody has to defend, not a place a value can quietly rot.
+        #
+        # The ORDER of an override is no longer load-bearing. It used to be:
+        # `fromJSON(...)[0]` was read as THE single server for newman,
+        # playwright, journeydoc-capture and the coverage guard. Those six reads
+        # are now `needs.nextcloud-matrix.outputs.single-server`, which is the
+        # NUMERICALLY HIGHEST stable branch in the resolved set, whichever way
+        # round it is written. A positional convention is how a defect like this
+        # survives: it is invisible in a diff and it is not checkable.
+        description: "OVERRIDE for the Nextcloud server branches used by the PHPUnit matrix, as a JSON array. LEAVE UNSET (default) to derive the range from appinfo/info.xml, which is the supported configuration — a derived matrix cannot disagree with the declared range. Set it only when the tested range must deliberately differ from the declared one; gate-65 rule 11 then requires the two to agree."
         required: false
         type: string
-        default: '["stable31", "stable32"]'
+        default: ""
+      nextcloud-info-path:
+        # The manifest the matrix is derived from. Two reasons this is an input
+        # rather than a hard-coded 'appinfo/info.xml':
+        #
+        #   1. It is how THIS repository proves its own derivation. .github is
+        #      not a Nextcloud app and has no appinfo/info.xml, so without a
+        #      path input `quality-selftest.yml` could only ever exercise the
+        #      no-manifest fallback — and a derivation that is never executed in
+        #      the repo that ships it is a derivation nobody has measured. The
+        #      selftest points this at a fixture declaring 32-34, and a second
+        #      caller points it at one declaring 32-33; the two runs differing
+        #      is the positive control that the matrix TRACKS info.xml rather
+        #      than returning a constant.
+        #   2. Repos whose app manifest is not at the default path. Same shape
+        #      as `frontend-path`.
+        description: "Path to the appinfo/info.xml the Nextcloud test matrix is derived from. Default: appinfo/info.xml. A repo with no manifest at this path derives nothing and falls back to the shared default range."
+        required: false
+        type: string
+        default: "appinfo/info.xml"
       enable-php:
         description: "Master switch for the PHP toolchain (php-quality, PHPUnit, composer security/license legs, SBOM). Set false for JS-only repos without composer.json."
         required: false
@@ -68,10 +127,40 @@ on:
         type: boolean
         default: true
       node-version:
+        # Node 24, and the reason is npm, not Node.
+        #
+        # The fleet's supply-chain cooldown (`min-release-age` +
+        # `min-release-age-exclude` in each repo's .npmrc) is an npm 11+
+        # feature. It does not exist in npm 10 AT ALL — not as a rejected
+        # value, not as a warning: `npm config get min-release-age` answers
+        # `undefined` and the setting is read by nothing. And EVERY Node 22
+        # release bundles npm 10 (22.23.2, the latest, ships 10.9.8), so no
+        # value of this input in the 22 line can deliver it. Node 24.19 bundles
+        # npm 11.17.
+        #
+        # This supersedes the previous "Node 22 is what Nextcloud's own apps
+        # target" rationale. That still holds as a statement about upstream,
+        # but a cooldown that is silently inert is worse than no cooldown: it
+        # reads as protection nobody has. The apps' own `engines.node` already
+        # declares `^22.14 || ^24 || >=26`, so 24 was always an allowed
+        # runtime here — this makes it the one CI uses.
+        #
+        # The Node 20 floor below is unchanged and still binding:
+        # @nextcloud/eslint-config@9 declares `engines.node: ^22.14 || ^24 ||
+        # >=26` and imports `findPackageJSON` from `node:module`, an API that
+        # first exists in 22.14. On Node 20 the eslint job dies before linting
+        # a single file with `SyntaxError: The requested module 'node:module'
+        # does not provide an export named 'findPackageJSON'` — and npm reports
+        # the mismatch only as an EBADENGINE warning it then continues past, so
+        # the crash is the only signal.
+        #
+        # A caller that must stay on 22 can still pass `node-version: "22"`.
+        # It will get npm 10 and the cooldown will be inert for that repo,
+        # which gate-84 reports rather than letting it pass quietly.
         description: "Node.js version for all frontend/npm steps"
         required: false
         type: string
-        default: "20"
+        default: "24"
       frontend-path:
         description: "Directory containing package.json + package-lock.json for all npm-side jobs (Vue Quality, Frontend Checks, npm security/license legs). Default: repo root. Use for repos where the frontend lives in a subdirectory (e.g. 'pwa')."
         required: false
@@ -92,6 +181,69 @@ on:
         required: false
         type: string
         default: "[]"
+      database-test-matrix:
+        description: "JSON array of databases to run PHPUnit against, e.g. '[\"pgsql\", \"mysql\", \"sqlite\"]'. Nextcloud runs its own suites on mariadb, mysql, oci and sqlite separately, because database-portability bugs are invisible on a single backend. DEFAULT IS EMPTY, which means 'use the single `database` input' — today's behaviour exactly, so this change is inert until an app opts in."
+        required: false
+        type: string
+        default: "[]"
+      enable-check-code:
+        # DEFAULT FLIPPED true -> false, because the command this job runs DOES
+        # NOT EXIST any more and the job therefore cannot pass in any repo here.
+        #
+        # `occ app:check-code` was removed from Nextcloud server after v20.
+        # Measured, extracting the registered App-namespace commands from
+        # `core/register_command.php` at each tag — same expression, same file,
+        # only the tag varying:
+        #
+        #   v20.0.0  Disable Enable GetPath Install ListApps Remove Update
+        #            + CheckCode                       <- the control: it CAN appear
+        #   v34.0.0  Disable Enable GetPath Install ListApps Remove Update
+        #                                              <- CheckCode is gone
+        #
+        # Corroborated independently: `core/Command/App/CheckCode.php` answers
+        # 200 at v20 and v21 and 404 at v25, v31, v32, v33 and v34, while
+        # `core/Command/App/ListApps.php` answers 200 at every one of those tags
+        # — so the 404s are a removal, not a bad path.
+        #
+        # Every app in this fleet declares <nextcloud min-version> of 31, 32 or
+        # 34, and this job fetches the server at the version the app DECLARES.
+        # So `occ` would be asked for a command roughly eleven majors dead. It
+        # would print no recognisable verdict, the job's own positive control
+        # would fire, and that control's `exit 1` is UNCONDITIONAL — it sits
+        # above the `check-code-blocking` branch and is not covered by it. The
+        # result would be a hard failure in every PHP repo in the fleet, on a
+        # check that can never pass.
+        #
+        # The positive control is doing its job here, exactly as designed: it
+        # refuses to report "no private API usage" from a run that inspected
+        # nothing. The job is what is wrong, not the control.
+        #
+        # LEFT WIRED, NOT DELETED, and still listed in the Quality Report's
+        # `needs:`. A skipped job's result is `skipped`, not `failure`, so this
+        # blocks nothing while it is off — and when someone rebuilds the check on
+        # something that exists (Psalm/PHPStan over the private surface, or
+        # nextcloud/app-api's linter), the wiring is already correct and one
+        # input turns it on. Deleting it would lose that and quietly re-open the
+        # gap #385 was written to close.
+        description: "Run `occ app:check-code` against the Nextcloud version the app declares in info.xml. OFF BY DEFAULT AND CURRENTLY UNUSABLE: `app:check-code` was removed from Nextcloud server after v20 (verified against core/register_command.php and core/Command/App/CheckCode.php from v20 through v34), and every app here declares min-version 31 or later, so the command cannot be found and the job's positive control fails the run. Do not set this true until the check is rebuilt on tooling that still exists."
+        required: false
+        type: boolean
+        default: false
+      check-code-blocking:
+        description: "Turn app:check-code findings into a build failure. OFF by default on purpose: every app in this fleet reaches into server internals somewhere, and a gate that is red on arrival is a gate nobody turns on. Flip it per app once the findings are worked down."
+        required: false
+        type: boolean
+        default: false
+      enable-reuse:
+        description: "Run the REUSE/SPDX linter, as Nextcloud does on every app. Broader than the PHPCS @license sniff, which only sees PHP docblocks."
+        required: false
+        type: boolean
+        default: true
+      reuse-blocking:
+        description: "Turn REUSE findings into a build failure. OFF by default — most fleet apps ship no REUSE.toml or LICENSES/ directory yet."
+        required: false
+        type: boolean
+        default: false
       enable-license-check:
         description: "Run dependency license compliance check (composer + npm)"
         required: false
@@ -500,16 +652,57 @@ jobs:
                 exit 0
               fi
               require_script phpcs "the enable-phpcs input"
-              # Exit code 0 = clean, 1 = warnings only, 2 = errors found.
-              # We treat warnings as non-blocking (exit 1 → success). This is only
-              # safe because require_script has already proven the script exists.
+              #
+              # ⚠️ THE EXIT CODES ARE NOT WHAT THIS BLOCK USED TO CLAIM.
+              #
+              # The comment here used to read "0 = clean, 1 = warnings only,
+              # 2 = errors found", and the block mapped exit 1 to SUCCESS on
+              # that basis. Measured against php_codesniffer 3.13.6
+              # (`Runner::runPHPCS()`) with this fleet's real ruleset, the
+              # actual mapping is:
+              #
+              #   0  No ERRORS. Warnings never reach the exit code at all: the
+              #      shared hydra-gates ruleset sets `ignore_warnings_on_exit=1`,
+              #      which subtracts them in `Runner::run()` before
+              #      `runPHPCS()` ever looks at the total.
+              #   1  ERRORS present, and NONE of the violations are
+              #      phpcbf-fixable.
+              #   2  ERRORS present, and at least one IS phpcbf-fixable.
+              #   3  phpcs could not run at all (config/tokenizer failure).
+              #
+              # So exit 1 never meant "warnings only". It meant "errors, none
+              # auto-fixable" — and this block passed every single one of them.
+              #
+              # The old rule was not merely wrong, it was near-total. The shared
+              # ruleset deliberately removed every auto-fixable formatting sniff
+              # (see its own header: 111,747 of 111,932 findings were the
+              # formatter being argued with). That makes exit 2 nearly
+              # unreachable and exit 1 the ORDINARY way for errors to present,
+              # so the special case swallowed essentially the whole fleet's
+              # error debt. Measured 2026-08-17 across all 18 core repos on
+              # `development`: 12 repos green with 707 real phpcs errors between
+              # them; every one of the 12 returned exit 1, and every one of the
+              # 6 genuinely clean repos returned 0. Zero repos returned 2.
+              #
+              # Warnings staying non-blocking needs NO special case here, because
+              # phpcs already returns 0 for them. Passing the code straight
+              # through is both the correct rule and the simpler one.
+              #
+              # `--runtime-set ignore_warnings_on_exit 1` is appended so that
+              # "warnings do not fail the build" holds BY CONSTRUCTION at the
+              # gate, rather than by inheritance from a vendored ruleset that an
+              # app could stop referencing. All 18 core repos currently inherit
+              # it and none set it themselves, so today it rests on one line in
+              # one vendored file — too thin to carry an enforcement flip.
+              #
               # NB: capture via `|| RC=$?` — a bare `composer phpcs; RC=$?`
               # is killed by `set -e` before RC is ever assigned.
               RC=0
-              composer phpcs || RC=$?
-              if [ "$RC" -eq 1 ]; then
-                echo "::warning::PHPCS found warnings but no errors — passing."
-                exit 0
+              composer phpcs -- --runtime-set ignore_warnings_on_exit 1 || RC=$?
+              if [ "$RC" -eq 3 ]; then
+                echo "::error::PHPCS could not run (exit 3) — this is a configuration or tokenizer failure, not a code finding. Check the app's phpcs.xml."
+              elif [ "$RC" -ne 0 ]; then
+                echo "::error::PHPCS found errors (exit $RC). Warnings are non-blocking and are NOT counted here — this is errors only."
               fi
               exit $RC
               ;;
@@ -557,6 +750,285 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: result-php-quality-${{ matrix.tool }}
+          path: quality-results/
+
+  # ── occ app:check-code — private and deprecated Nextcloud API usage ────
+  #
+  # Nextcloud's own tooling for "is this app using things it should not?".
+  # This fleet ran no equivalent. The closest we had was ONE hand-written PHPCS
+  # sniff covering ONE symbol (\OC::$server, removed in NC 34) — written by
+  # hand precisely because static analysis could not see the removal while
+  # nextcloud/ocp was pinned below the declared min-version.
+  #
+  # app:check-code is the general form of that sniff. It knows the whole private
+  # API surface of the server version it ships with, so it needs no per-symbol
+  # maintenance and it moves forward when Nextcloud does.
+  #
+  # WARN, NOT FAIL, and deliberately so. Every app in this fleet reaches into
+  # server internals somewhere — OCA\DAV, OC_App, Doctrine\DBAL are all
+  # ignored in phpstan-base.neon by name. Turning this red on day one would make
+  # it a gate nobody can turn on, which is how the E2E job in openregister ended
+  # up never having succeeded. It reports, the findings get worked down, and the
+  # `check-code-blocking` input flips it to a hard failure per app when that app
+  # is ready.
+  app-check-code:
+    if: ${{ inputs.enable-php && inputs.enable-check-code }}
+    runs-on: ubuntu-latest
+    name: "Nextcloud API check (app:check-code)"
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: ${{ inputs.app-name }}
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php-version }}
+          extensions: mbstring, intl, zip, gd, curl, xml, json, sqlite3, pdo_sqlite
+          coverage: none
+
+      # The server version the app DECLARES it supports, not a hardcoded one.
+      # Anchored to the <nextcloud> element: info.xml carries min-version on
+      # <php> too, and <php> comes first. Measured across 18 apps, an
+      # unanchored pattern returned 8 for thirteen of them and a plausible-but
+      # -wrong 28 for a fourteenth.
+      - name: Fetch the declared Nextcloud server
+        id: server
+        run: |
+          set -euo pipefail
+          NCVERSION=$(grep -oP '<nextcloud[^>]*min-version="\K[0-9]+' "${{ inputs.app-name }}/appinfo/info.xml" | head -1)
+          [ -n "${NCVERSION}" ] || { echo "::error::appinfo/info.xml declares no <nextcloud min-version>."; exit 1; }
+          echo "Declared min-version: ${NCVERSION}"
+          URL=$(curl -sS "https://updates.nextcloud.com/updater_server/latest?channel=stable&version=${NCVERSION}" | jq -r '.downloads.zip[0]')
+          if [ -z "$URL" ] || [ "$URL" = "null" ]; then
+            URL=$(curl -sS "https://updates.nextcloud.com/updater_server/latest?channel=beta&version=${NCVERSION}" | jq -r '.downloads.zip[0]')
+          fi
+          [ -n "$URL" ] && [ "$URL" != "null" ] || { echo "::error::No Nextcloud download for min-version ${NCVERSION}."; exit 1; }
+          curl -sSL "$URL" -o nextcloud.zip
+          unzip -q nextcloud.zip
+          test -f nextcloud/occ || { echo "::error::The archive has no nextcloud/occ."; exit 1; }
+
+      - name: app:check-code
+        id: check
+        run: |
+          set +e
+          cp -r "${{ inputs.app-name }}" "nextcloud/apps/${{ inputs.app-name }}"
+          php -d memory_limit=512M nextcloud/occ app:check-code "${{ inputs.app-name }}" > check-code.log 2>&1
+          RC=$?
+          set -e
+          cat check-code.log
+
+          # POSITIVE CONTROL. occ exits 0 on paths that inspect nothing — an app
+          # directory it cannot see, a command that bailed on the environment
+          # check. A silent exit 0 must not read as "no private API usage".
+          if ! grep -qiE 'App is compliant|[0-9]+ error|deprecated|private' check-code.log; then
+            echo "::error::app:check-code produced no recognisable verdict (exit ${RC}). It inspected nothing, so private-API usage is UNVERIFIED by this run."
+            exit 1
+          fi
+
+          if [ "$RC" -ne 0 ]; then
+            if [ "${{ inputs.check-code-blocking }}" = "true" ]; then
+              echo "::error::app:check-code reported findings and check-code-blocking is on."
+              exit "$RC"
+            fi
+            echo "::warning::app:check-code reported findings. Not blocking yet — set check-code-blocking: true once they are worked down."
+          fi
+          exit 0
+
+      - name: Record result
+        if: always()
+        run: |
+          mkdir -p quality-results
+          echo "${{ job.status }}" > quality-results/app-check-code.txt
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-app-check-code
+          path: quality-results/
+
+  # ── REUSE / SPDX compliance ────────────────────────────────────────────
+  #
+  # Nextcloud runs reuse.yml on every app. We had a PHPCS sniff that checks for
+  # @license and @copyright in PHP docblocks, which is a proxy for one file type
+  # and says nothing about images, JSON, YAML, or the LICENSES/ directory REUSE
+  # requires.
+  #
+  # It also closes a loop opened by the coding-standard migration: the SPDX
+  # `InvalidEndChar` exception in the shared PHPCS ruleset exists because a
+  # trailing full stop would turn a machine-parsed SPDX expression into an
+  # invalid one. That exception is only worth having if something actually
+  # parses those expressions. This is that something.
+  #
+  # Non-blocking by default for the same reason as app:check-code — 2 of the 4
+  # apps sampled ship a REUSE.toml at all.
+  reuse:
+    if: ${{ inputs.enable-reuse }}
+    runs-on: ubuntu-latest
+    name: "REUSE compliance"
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: REUSE lint
+        id: lint
+        continue-on-error: ${{ !inputs.reuse-blocking }}
+        uses: fsfe/reuse-action@v5
+
+      - name: Explain a non-blocking failure
+        if: steps.lint.outcome == 'failure' && !inputs.reuse-blocking
+        run: |
+          echo "::warning::REUSE reported findings. Not blocking yet — set reuse-blocking: true once this app ships a REUSE.toml and a LICENSES/ directory."
+
+      - name: Record result
+        if: always()
+        run: |
+          mkdir -p quality-results
+          echo "${{ steps.lint.outcome }}" > quality-results/reuse.txt
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-reuse
+          path: quality-results/
+
+  # ── appinfo/info.xml, validated against the App Store's own schema ─────
+  #
+  # Nextcloud ships `lint-info-xml.yml` as a workflow template and every
+  # upstream app runs it. This fleet ran no equivalent: `quality.yml` did not
+  # reference appinfo/info.xml anywhere, so a malformed manifest was discovered
+  # at App Store upload time — after the release had been built, tagged and
+  # published to GitHub.
+  #
+  # That matters more now than it did last week. The release path reads
+  # info.xml for two things it cannot get wrong: the version the tag must match,
+  # and the Nextcloud version whose `occ` signs the package. A file that does
+  # not validate can still parse well enough for a grep to return something
+  # plausible — which is exactly how an unanchored min-version pattern resolved
+  # `8` from `<php min-version="8.3"/>` in 13 apps.
+  #
+  # The schema is fetched from nextcloud/appstore rather than vendored, because
+  # a vendored copy is a claim about what the App Store accepts that goes stale
+  # silently. If the fetch fails the job FAILS — a validator that cannot get its
+  # schema has validated nothing, and saying so is the whole point.
+  info-xml:
+    if: ${{ inputs.enable-php }}
+    runs-on: ubuntu-latest
+    name: "info.xml lint"
+    # 🔑 A JOB CAP MUST BE LARGER THAN ITS OWN STEPS' WORST CASE, OR THE
+    # CAREFUL BOUNDED RETRY BELOW CAN NEVER FINISH.
+    #
+    # This was 10 while `Install xmllint` was written to allow 3 attempts of up
+    # to 300s + 300s each — a worst case of ~30 minutes inside a 10-minute job.
+    # The retry was therefore killed mid-SECOND attempt every time, and the
+    # outcome was `cancelled` (no verdict, neither failed nor passed) rather
+    # than the clear "the mirror is unreachable, this is infrastructure" error
+    # it was written to produce. Observed 2026-08-19 on hrmq (10m10s) and
+    # app-versions (10m18s).
+    #
+    # The step's attempts are now 120s + 180s, so its worst case is
+    # 3 × 300s + 2 × 10s sleep ≈ 15.3 min. 20 leaves headroom for checkout and
+    # the validation steps. CHANGE BOTH TOGETHER — the arithmetic is the point.
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: appinfo/
+
+      - name: Is there an info.xml to lint?
+        id: detect
+        run: |
+          if [ -f appinfo/info.xml ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No appinfo/info.xml — this repo is not a Nextcloud app."
+          fi
+
+      # BOUNDED, AND NOT SILENT. `-qq` on both halves meant a stalled Ubuntu
+      # mirror produced ZERO bytes of output for the full step timeout, so the
+      # log showed the command and nothing else — measured on decidesk,
+      # procest and zaakafhandelapp on 2026-08-18, 10m19s of silence apiece
+      # before the runner killed it. There was no way to tell a hung mirror
+      # from a hung runner from a package that does not exist.
+      #
+      # `timeout 300` fails this step in five minutes instead of burning the
+      # job's whole budget, and one `q` less lets apt say what it is doing.
+      # The retry covers the common case where the mirror is briefly
+      # unreachable rather than down.
+      - name: Install xmllint
+        if: steps.detect.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+
+          # DON'T REACH FOR apt AT ALL IF THE TOOL IS ALREADY HERE. The runner
+          # image ships libxml2-utils, so the overwhelmingly common path needs
+          # no package manager — and the stall this step keeps hitting is apt
+          # blocking on /var/lib/dpkg/lock-frontend, which it waits on forever
+          # by design while printing nothing. The cheapest way not to hang on a
+          # lock is not to take it.
+          if command -v xmllint > /dev/null 2>&1; then
+            echo "xmllint already present: $(xmllint --version 2>&1 | head -1)"
+            exit 0
+          fi
+
+          # Fallback, bounded so its worst case fits this job's cap:
+          # 3 × (120s + 180s) + 2 × 10s ≈ 15.3 min against timeout-minutes: 20.
+          for attempt in 1 2 3; do
+            if timeout 120 sudo apt-get update -q && timeout 180 sudo apt-get install -y -q libxml2-utils; then
+              exit 0
+            fi
+            echo "::warning::apt attempt ${attempt}/3 failed or timed out; retrying."
+            sleep 10
+          done
+          echo "::error::Could not install libxml2-utils after 3 bounded attempts — the Ubuntu mirror is unreachable or apt is stalled on the dpkg lock. This is infrastructure, not this app's manifest."
+          exit 1
+
+      - name: Fetch the App Store schema
+        if: steps.detect.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          curl -sSfL -o info.xsd \
+            https://raw.githubusercontent.com/nextcloud/appstore/master/nextcloudappstore/api/v1/release/info.xsd
+          # A 200 that returned an error page is not a schema. Assert the shape
+          # before trusting a validation result produced with it.
+          head -1 info.xsd | grep -q '<?xml' || { echo "::error::The fetched info.xsd is not XML — validating against it would prove nothing."; exit 1; }
+          grep -q 'schema' info.xsd || { echo "::error::The fetched info.xsd contains no schema element."; exit 1; }
+
+      - name: Validate appinfo/info.xml
+        if: steps.detect.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          xmllint --noout --schema info.xsd appinfo/info.xml
+
+      # The two values the release path reads out of this file. Validity alone
+      # does not mean they are present, and their absence surfaces at release
+      # time — long after this PR merged.
+      - name: Assert the release-critical fields exist
+        if: steps.detect.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          grep -qoP '<version>[^<]+</version>' appinfo/info.xml \
+            || { echo "::error::appinfo/info.xml declares no <version>. The release tag has nothing to match against."; exit 1; }
+          grep -qoP '<nextcloud[^>]*min-version="[0-9]+"' appinfo/info.xml \
+            || { echo "::error::appinfo/info.xml declares no <nextcloud min-version>. The release cannot resolve which server to sign with."; exit 1; }
+          echo "version:     $(grep -oP '(?<=<version>)[^<]+' appinfo/info.xml | head -1)"
+          echo "nextcloud:   $(grep -oP '<nextcloud[^>]*' appinfo/info.xml | head -1)"
+
+      - name: Record result
+        if: always()
+        run: |
+          mkdir -p quality-results
+          echo "${{ job.status }}" > quality-results/info-xml.txt
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-info-xml
           path: quality-results/
 
   # ── Group 2: Vue Quality ────────────────────────
@@ -1560,6 +2032,7 @@ jobs:
   # ╔══════════════════════════════════════════════╗
   # ║  STAGE 2 — Tests                              ║
   # ║                                               ║
+  # ║  • Nextcloud test matrix (derived)            ║
   # ║  • PHPUnit matrix (PHP × Nextcloud versions)  ║
   # ║  • Integration tests (Newman)                 ║
   # ║  • E2E browser tests (Playwright)             ║
@@ -1570,6 +2043,235 @@ jobs:
   # ║  finding must not silently delete the test    ║
   # ║  signal. Newman still does; see its `if:`.    ║
   # ╚══════════════════════════════════════════════╝
+
+  # WHICH NEXTCLOUD VERSIONS THIS APP IS TESTED ON, AND WHERE THAT COMES FROM.
+  #
+  # `appinfo/info.xml` is a promise to the App Store: these server majors work.
+  # The test matrix is the only thing that can redeem that promise, and for as
+  # long as the two were separate hand-maintained lists they disagreed — first
+  # in one direction, then, after the migration that "fixed" it, in the other.
+  # See the note on the `nextcloud-test-refs` input for the two incidents.
+  #
+  # This job derives the range from the manifest, so the disagreement has
+  # nowhere left to live. Nextcloud's own app CI does the same thing with the
+  # same action, which is the point: we may be stricter than Nextcloud, we may
+  # not be different from it.
+  #
+  # THREE OUTPUTS, AND WHY `single-server` IS ONE OF THEM.
+  #
+  #   branches       the whole set — the PHPUnit matrix dimension.
+  #   single-server  THE one server that newman, playwright, journeydoc-capture
+  #                  and the coverage guard run against.
+  #   source         derived | override | fallback. Printed on every run, so
+  #                  "where did this range come from" is never a question you
+  #                  have to answer by reading three files.
+  #
+  # Those four jobs used to read `fromJSON(inputs.nextcloud-test-refs)[0]`, and
+  # the fleet's convention of writing the newest version first is what made that
+  # correct. The action's `branches` output is OLDEST-FIRST — measured in its
+  # source, where `range(min,max)` is reversed for the branched-off check and
+  # reversed back again, so `["stable32","stable33","stable34"]` is what comes
+  # out. Consuming it positionally would have moved every one of those jobs onto
+  # stable32 silently, and stable34 at that position is not incidental: it is
+  # what surfaced eight dead NC32/33-only selectors on portaliq. stable34 is the
+  # least-exercised version, which is exactly why the single-server jobs belong
+  # on it.
+  #
+  # The fix is NOT to reverse the array. It is to stop reading a meaning off a
+  # position: `single-server` is the numerically highest stable branch in the
+  # resolved set, computed and printed, and for the derived path it is the
+  # action's own `branches-max` output rather than anything this file infers.
+  nextcloud-matrix:
+    runs-on: ubuntu-latest
+    name: "Nextcloud test matrix"
+    # No `if:` and no `needs:`. Every consumer below is a different combination
+    # of enable-flags, so gating this on any one of them would delete the matrix
+    # for the others; and a job with `needs:` but no status function is deletable
+    # by its producer (see scripts/assert-no-producer-deletes-a-verdict.py).
+    # Observed cost is a checkout of one file plus ~15s of API calls.
+    timeout-minutes: 10
+    outputs:
+      branches: ${{ steps.resolve.outputs.branches }}
+      single-server: ${{ steps.resolve.outputs.single-server }}
+      source: ${{ steps.resolve.outputs.source }}
+    steps:
+      - name: Checkout the app manifest
+        uses: actions/checkout@v4
+        with:
+          # Non-cone mode: the pattern is a FILE, and cone mode only accepts
+          # directory prefixes — in cone mode `appinfo/info.xml` checks out
+          # nothing and the detect step below would report "not a Nextcloud
+          # app" for every caller in the fleet.
+          sparse-checkout: ${{ inputs.nextcloud-info-path }}
+          sparse-checkout-cone-mode: false
+
+      - name: Is there a manifest to derive from?
+        id: detect
+        env:
+          INFO_PATH: ${{ inputs.nextcloud-info-path }}
+        run: |
+          set -eu
+          if [ -f "$INFO_PATH" ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "Deriving from ${INFO_PATH}:"
+            grep -o '<nextcloud[^>]*>' "$INFO_PATH" || \
+              echo "::warning::${INFO_PATH} declares no <nextcloud> element — derivation will fail."
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "No ${INFO_PATH} — this repo has no app manifest to derive from."
+          fi
+
+      # PINNED BY COMMIT SHA, not by tag. `8a7bac6` IS v1.3.2, the newest
+      # release; the tag is recorded in the comment so a human can read what the
+      # SHA means, and the SHA is what the runner resolves so a moved tag cannot
+      # change what executes here. That is a supply-chain decision, not a style
+      # one: this workflow is consumed at @main by 23 repositories, so a
+      # third-party action running here runs in all of them, unreviewed, at
+      # whatever content the tag points to on the day.
+      #
+      # v1.3.2 is deliberately not the action's tip. The tip carries an
+      # unreleased ES-module/node24 rewrite; the tagged release is node20 and
+      # `dist/index.js`. We take releases, not commits-since-a-release.
+      #
+      # Runs even when an override is set, and that is on purpose: the derived
+      # value is what the resolve step below compares the override against, so a
+      # hand-declared matrix that has drifted away from info.xml is reported in
+      # the run rather than only by the static gate.
+      - name: Derive the range from the manifest
+        id: derive
+        if: ${{ steps.detect.outputs.found == 'true' }}
+        uses: icewind1991/nextcloud-version-matrix@8a7bac6300b2f0f3100088b297995a229558ddba # v1.3.2
+        with:
+          filename: ${{ inputs.nextcloud-info-path }}
+
+      # `!cancelled()` because the step above can FAIL — a manifest with no
+      # max-version makes the action throw — and this step still has to publish
+      # a syntactically valid array. An empty `branches` output is not a
+      # skipped PHPUnit job, it is a matrix that cannot be evaluated, and a job
+      # deleted at expansion time renders no verdict at all.
+      - name: Resolve the matrix
+        id: resolve
+        if: ${{ !cancelled() }}
+        env:
+          INFO_PATH: ${{ inputs.nextcloud-info-path }}
+          OVERRIDE: ${{ inputs.nextcloud-test-refs }}
+          DERIVED: ${{ steps.derive.outputs.branches }}
+          DERIVED_MAX: ${{ steps.derive.outputs.branches-max }}
+          FOUND: ${{ steps.detect.outputs.found }}
+          # The pre-derivation shared default, kept for exactly one case: a repo
+          # with no app manifest at all (nextcloud-vue is the live example).
+          # It is NOT a soft landing for a failed derivation — that path sets
+          # `hard` below and the job goes red.
+          FALLBACK: '["stable32", "stable33", "stable34"]'
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, re, sys
+
+          out_path = os.environ["GITHUB_OUTPUT"]
+          summary  = os.environ.get("GITHUB_STEP_SUMMARY", os.devnull)
+          override = os.environ["OVERRIDE"].strip()
+          derived  = os.environ["DERIVED"].strip()
+          dmax     = os.environ["DERIVED_MAX"].strip()
+          found    = os.environ["FOUND"].strip()
+          fallback = os.environ["FALLBACK"].strip()
+
+          hard = []
+
+          def parse(raw, what):
+              try:
+                  value = json.loads(raw)
+              except json.JSONDecodeError as exc:
+                  hard.append(f"{what} is not valid JSON ({exc}): {raw!r}")
+                  return None
+              if not isinstance(value, list) or not value:
+                  hard.append(f"{what} is not a non-empty JSON array: {raw!r}")
+                  return None
+              if not all(isinstance(v, str) and v for v in value):
+                  hard.append(f"{what} contains a non-string entry: {value!r}")
+                  return None
+              return value
+
+          derived_refs = parse(derived, "the derived branch list") if derived else None
+
+          if override:
+              refs = parse(override, "nextcloud-test-refs") or parse(fallback, "the fallback range")
+              source = "override"
+          elif derived_refs is not None:
+              refs = derived_refs
+              source = "derived"
+          else:
+              refs = parse(fallback, "the fallback range")
+              source = "fallback"
+              if found == "true":
+                  hard.append(
+                      "a manifest was found but no range could be derived from it. "
+                      "The matrix below is the SHARED FALLBACK, not this app's "
+                      "declared range, so these legs prove nothing about the "
+                      "versions appinfo/info.xml promises."
+                  )
+
+          refs = refs or json.loads(fallback)
+
+          def stable_no(ref):
+              m = re.fullmatch(r"stable(\d+)", ref)
+              return int(m.group(1)) if m else None
+
+          if source == "derived" and dmax:
+              # The action's OWN maximum, not one inferred from a position in
+              # its output. See the block comment above this job.
+              single = dmax
+          else:
+              numbered = [(stable_no(r), r) for r in refs if stable_no(r) is not None]
+              single = max(numbered)[1] if numbered else refs[0]
+
+          lines = []
+          # An override that disagrees with the manifest is a WARNING here and a
+          # FAILURE in gate-65 rule 11. Warning rather than error on purpose:
+          # this file is consumed unpinned by 23 repositories, and turning three
+          # of them red the moment it merges is a flag day. The gate is where
+          # the disagreement is enforced, per app, on that app's own schedule.
+          if source == "override" and derived_refs is not None:
+              if set(refs) != set(derived_refs):
+                  lines.append(
+                      f"::warning::nextcloud-test-refs is set to {refs} but "
+                      f"{os.environ.get('INFO_PATH', 'appinfo/info.xml')} derives "
+                      f"{derived_refs}. The tested range and the declared range "
+                      f"disagree; gate-65 rule 11 reports this per app. Remove the "
+                      f"override to derive, or correct the manifest."
+                  )
+              else:
+                  lines.append(
+                      "The override matches the derived range exactly — it can be "
+                      "removed, and the matrix will keep the same shape."
+                  )
+
+          for problem in hard:
+              lines.append(f"::error::{problem}")
+
+          for line in lines:
+              print(line)
+
+          print(f"source        = {source}")
+          print(f"branches      = {json.dumps(refs)}")
+          print(f"single-server = {single}")
+
+          # WRITTEN BEFORE ANY NON-ZERO EXIT. A failed resolve must still hand
+          # downstream a usable array: a job that cannot expand its matrix is
+          # DELETED, and a deleted job is not a red one.
+          with open(out_path, "a", encoding="utf-8") as fh:
+              fh.write(f"branches={json.dumps(refs)}\n")
+              fh.write(f"single-server={single}\n")
+              fh.write(f"source={source}\n")
+
+          with open(summary, "a", encoding="utf-8") as fh:
+              fh.write("### Nextcloud test matrix\n\n")
+              fh.write(f"- source: `{source}`\n")
+              fh.write(f"- PHPUnit server legs: `{json.dumps(refs)}`\n")
+              fh.write(f"- single server (newman / playwright / journeydoc / coverage guard): `{single}`\n")
+
+          sys.exit(1 if hard else 0)
+          PY
 
   phpunit:
     # NOT gated on php-quality — deliberately. `php-quality` is a matrix job, so
@@ -1633,8 +2335,13 @@ jobs:
     # Playwright job's frontend-build artifact check.
     if: ${{ inputs.enable-php && inputs.enable-phpunit && !cancelled() }}
     runs-on: ubuntu-latest
-    name: "PHPUnit (PHP ${{ matrix.php-version }}, NC ${{ matrix.nextcloud-ref }})"
-    needs: [security]
+    name: "PHPUnit (PHP ${{ matrix.php-version }}, NC ${{ matrix.nextcloud-ref }}, ${{ matrix.database }})"
+    # `nextcloud-matrix` is a REAL edge, unlike `security`: this job's matrix
+    # dimension and its coverage-guard steps both read that job's outputs.
+    # `!cancelled()` in the `if:` above still suppresses the implicit success(),
+    # so a failed resolve does not delete these legs — the resolve step publishes
+    # a valid array before it exits non-zero, precisely so this stays true.
+    needs: [security, nextcloud-matrix]
     # Observed across 337 SUCCESSFUL executions: median 1.7 min, p95 13.6 min,
     # max 18.9 min (shillinq, green). The spread is huge because each leg
     # installs a full Nextcloud server before the suite runs, so a tight bound
@@ -1642,9 +2349,13 @@ jobs:
     # observed green run and still cuts a hang from 6 hours to 45 minutes.
     timeout-minutes: 45
 
+    # A service whose `image` evaluates to an empty string is not started, which
+    # is how one job definition serves several backends. Both are keyed off
+    # matrix.database rather than inputs.database so a multi-database matrix
+    # starts the right container per leg.
     services:
       postgres:
-        image: ${{ inputs.database == 'pgsql' && 'postgres:16' || '' }}
+        image: ${{ matrix.database == 'pgsql' && 'postgres:16' || '' }}
         env:
           POSTGRES_USER: nextcloud
           POSTGRES_PASSWORD: nextcloud
@@ -1656,11 +2367,38 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
+      mysql:
+        image: ${{ matrix.database == 'mysql' && 'mysql:8.4' || '' }}
+        env:
+          MYSQL_ROOT_PASSWORD: nextcloud
+          MYSQL_USER: nextcloud
+          MYSQL_PASSWORD: nextcloud
+          MYSQL_DATABASE: nextcloud
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -unextcloud -pnextcloud"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
 
     strategy:
       matrix:
         php-version: ${{ fromJSON(inputs.php-test-versions) }}
-        nextcloud-ref: ${{ fromJSON(inputs.nextcloud-test-refs) }}
+        # DERIVED from appinfo/info.xml by the `nextcloud-matrix` job, not read
+        # from an input any more. The `needs:` edge below is what makes this
+        # expression resolvable; without it the matrix evaluates to nothing and
+        # the job is DELETED rather than failed.
+        nextcloud-ref: ${{ fromJSON(needs.nextcloud-matrix.outputs.branches) }}
+        # An empty database-test-matrix collapses to the single `database`
+        # input, which is what every caller uses today — so the matrix keeps
+        # exactly its current dimensions until an app opts in. Routed through
+        # fromJSON on BOTH sides on purpose: a string comparison against '[]'
+        # accepts '[ ]' and '[""]' and then resolves to an empty matrix vector,
+        # and an empty vector does not skip a job — it DELETES it from the run,
+        # with no row, no annotation and no trace. Measured on this repo's
+        # self-test for frontend-checks: 19 jobs instead of 21.
+        database: ${{ join(fromJSON(inputs.database-test-matrix), ',') != '' && fromJSON(inputs.database-test-matrix) || fromJSON(format('["{0}"]', inputs.database)) }}
       fail-fast: false
 
     steps:
@@ -1697,9 +2435,36 @@ jobs:
             echo "Checking out $repo ($name) at $ref..."
             git clone --depth 1 --branch "$ref" "https://github.com/$repo.git" "server/apps/$name"
             if [ -f "server/apps/$name/composer.json" ]; then
-              cd "server/apps/$name"
-              composer install --no-progress --prefer-dist --optimize-autoloader --no-dev 2>/dev/null || true
-              cd -
+              echo "Installing composer dependencies for $name..."
+              # ⚠️ This install used to end in `2>/dev/null || true` — stderr
+              # discarded AND the exit status thrown away. It was the ONLY
+              # `composer install` of the 20+ in this workflow to do either,
+              # and the `git clone` immediately above it has always failed
+              # loudly, so the asymmetry was not a deliberate policy.
+              #
+              # A sibling app whose dependencies did not install is not a
+              # neutral condition. The suite then runs against a HALF-INSTALLED
+              # app, and its missing classes surface as failures of the
+              # CONSUMING repository — a red cell pointing at the wrong repo.
+              #
+              # Measured on decidesk#517 (2026-08-17), a diff of exactly one
+              # `.ts` file and zero PHP: ALL SIX PHPUnit cells hit a transient
+              # HTTP 504 while installing openregister's dependencies, and all
+              # six reported this step as SUCCESSFUL. Three then went red with
+              # 87 errors — the first being
+              #   Class "Twig\Extension\AbstractExtension" not found
+              #   in server/apps/openregister/lib/Twig/MappingExtension.php
+              # — while three went green. The only difference was WHICH package
+              # the 504 happened to remove; the green cells were exactly as
+              # half-installed as the red ones.
+              #
+              # So: keep stderr, and fail the step naming the app and its ref.
+              # Retrying is an operator's decision to take knowingly, not a
+              # silent default.
+              if ! ( cd "server/apps/$name" && composer install --no-progress --prefer-dist --optimize-autoloader --no-dev ); then
+                echo "::error::Dependency install FAILED for sibling app '$name' ($repo@$ref). Refusing to continue: the suite would otherwise run against a half-installed app and report its missing classes as this repository's failures."
+                exit 1
+              fi
             fi
           done
 
@@ -1707,29 +2472,64 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php-version }}
-          extensions: mbstring, intl, sqlite3, pgsql, pdo_pgsql, zip, gd, curl, xml, json
+          # pdo_mysql joins the list unconditionally: setup-php installs
+          # extensions per leg, and a leg that does not use MySQL pays only the
+          # install cost. Making it conditional would mean a mysql leg silently
+          # falling back to the else-branch of the install below and testing
+          # sqlite while its name said mysql.
+          extensions: mbstring, intl, sqlite3, pgsql, pdo_pgsql, mysqli, pdo_mysql, zip, gd, curl, xml, json
           coverage: xdebug
           tools: composer:v2
 
       - name: Install Nextcloud
         run: |
           cd server
-          if [ "${{ inputs.database }}" = "pgsql" ]; then
-            php occ maintenance:install \
-              --database pgsql \
-              --database-host 127.0.0.1 \
-              --database-port 5432 \
-              --database-name nextcloud \
-              --database-user nextcloud \
-              --database-pass nextcloud \
-              --admin-user admin \
-              --admin-pass admin
-          else
-            php occ maintenance:install \
-              --database ${{ inputs.database }} \
-              --admin-user admin \
-              --admin-pass admin
+          DB="${{ matrix.database }}"
+          case "$DB" in
+            pgsql)
+              php occ maintenance:install \
+                --database pgsql \
+                --database-host 127.0.0.1 \
+                --database-port 5432 \
+                --database-name nextcloud \
+                --database-user nextcloud \
+                --database-pass nextcloud \
+                --admin-user admin \
+                --admin-pass admin
+              ;;
+            mysql|mariadb)
+              php occ maintenance:install \
+                --database mysql \
+                --database-host 127.0.0.1 \
+                --database-port 3306 \
+                --database-name nextcloud \
+                --database-user nextcloud \
+                --database-pass nextcloud \
+                --admin-user admin \
+                --admin-pass admin
+              ;;
+            sqlite)
+              php occ maintenance:install \
+                --database sqlite \
+                --admin-user admin \
+                --admin-pass admin
+              ;;
+            *)
+              echo "::error::Unknown database '$DB'. Supported: pgsql, mysql, mariadb, sqlite."
+              exit 1
+              ;;
+          esac
+          # POSITIVE CONTROL. `maintenance:install` can exit 0 having fallen back
+          # to a different backend, and a suite that passes on sqlite while the
+          # leg is named mysql is worse than no leg at all. Assert the server is
+          # actually on the backend this leg claims.
+          ACTUAL=$(php occ config:system:get dbtype)
+          EXPECT="$DB"; [ "$DB" = "mariadb" ] && EXPECT="mysql"
+          if [ "$ACTUAL" != "$EXPECT" ]; then
+            echo "::error::This leg is named '$DB' but the server installed on '$ACTUAL'. The result would describe the wrong backend."
+            exit 1
           fi
+          echo "Installed on $ACTUAL, as declared."
           # A REQUIRED additional app that does not enable is an ENVIRONMENT
           # failure, and it must not be allowed to resurface as APPLICATION
           # failures. It used to: `|| echo "::warning::…, continuing"` let the
@@ -1859,25 +2659,155 @@ jobs:
       # optional — a missing or zero-statement report is a hard error in both
       # this step and the guard, because a base measured as 0% would set the
       # floor to zero and pass every possible drop.
+      #
+      # ── THE MERGE BASE IS DERIVED, NOT READ OUT OF THE EVENT PAYLOAD ──────
+      #
+      # This step used to compute `git merge-base "$BASE_SHA" "$HEAD_SHA"` with
+      # BASE_SHA taken from `github.event.pull_request.base.sha`. Both halves of
+      # that expression are wrong, and they hid each other:
+      #
+      #  1. `pull_request.base.sha` is the base branch tip SNAPSHOTTED when the
+      #     pull request was opened. GitHub does not refresh it as the base
+      #     branch advances. Measured on zaakafhandelapp#247 ("Release: merge
+      #     development into beta"), opened 2026-05-23: `base.sha` still reads
+      #     b233af99 — beta's tip on that day — although beta moved to a92d8707
+      #     on 2026-06-25. Nearly three months of drift, on a PR that is
+      #     re-run nightly.
+      #
+      #  2. On a `pull_request` event actions/checkout leaves `refs/pull/N/merge`
+      #     at HEAD, and that merge commit ALREADY CONTAINS the base branch. So
+      #     `git merge-base <any base commit> <merge ref>` returns that base
+      #     commit unchanged — the call was a no-op that laundered a stale sha
+      #     into something that reads like a computed merge base. The step's own
+      #     comment claims "the merge base is immutable for a given head, so it
+      #     cannot go stale"; the value it actually used was neither.
+      #
+      # The consequence is not cosmetic. On zaakafhandelapp the "merge base"
+      # resolved to a commit that predates this repository committing a
+      # composer.lock AND predates phpunit/phpunit being a dependency at all, so
+      # `composer install` resolved to latest, produced a 64-package set with no
+      # test runner in it, and the step died on
+      # `./vendor/bin/phpunit: No such file or directory` — reported as
+      # "Could not measure coverage at merge base", which reads like an
+      # unreachable object and is not. The suite itself was GREEN in the same
+      # job: `OK (268 tests, 825 assertions)`.
+      #
+      # The merge ref's parents are the authoritative answer and cost nothing:
+      # parent 1 is the CURRENT base tip, parent 2 is the pull request head. We
+      # only trust them when parent 2 actually IS `pull_request.head.sha`, so a
+      # checkout of a PR head that happens to be a merge commit cannot be
+      # mistaken for the merge ref. Verified against the real refs of
+      # zaakafhandelapp#247 (merge ref cb1439f3):
+      #   old logic -> b233af99  (no phpunit at that commit -> hard failure)
+      #   new logic -> 27027b32  (merge-base of a92d8707 and 986730b8)
       - name: Measure merge-base coverage
-        if: ${{ inputs.enable-coverage-guard && github.event_name == 'pull_request' && matrix.php-version == inputs.php-version && matrix.nextcloud-ref == fromJSON(inputs.nextcloud-test-refs)[0] }}
+        if: ${{ inputs.enable-coverage-guard && github.event_name == 'pull_request' && matrix.php-version == inputs.php-version && matrix.nextcloud-ref == needs.nextcloud-matrix.outputs.single-server }}
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           set -euo pipefail
           cd "server/apps/${{ inputs.app-name }}"
+
+          # A RELEASE PROMOTION HAS NO RATCHET TO RUN, AND ITS BASE CANNOT BOOT.
+          #
+          # This step runs the BASE's test suite inside the HEAD's environment.
+          # `server/` is checked out once, at
+          # `needs.nextcloud-matrix.outputs.single-server` (the numerically
+          # highest stable branch), and is never moved when the app is rewound
+          # to the merge base. For a feature branch that is harmless: the merge
+          # base is days old, and base and head agree about which Nextcloud
+          # they are written against. For a `development -> beta` promotion the
+          # merge base is the PREVIOUS RELEASE POINT, a whole cycle behind, and
+          # that span routinely contains a Nextcloud major adoption. The base
+          # then fatals at LOAD time, produces no clover at all, and the guard
+          # below refuses — correctly on its own terms, but naming no remedy
+          # the author can take, because a merge base is immutable history.
+          #
+          # Observed 2026-08-18 on ConductionNL/openconnector#1094
+          # (`development -> beta`, 1752 files, run 32111820806). Merge base
+          # 071eb50e (2026-07-09) still carried the pre-NC34 stub
+          # `tests/stubs/OC/Hooks/Emitter.php`, and the base suite died in 1.8s:
+          #
+          #   PHP Fatal error: Declaration of OC\Files\Node\LazyFolder::listen(
+          #   $scope, $method, callable $callback) must be compatible with
+          #   OC\Hooks\Emitter::listen(string $scope, string $method,
+          #   callable $callback): void
+          #
+          # That stub was made untyped in openconnector#1229 on 2026-08-12 —
+          # INSIDE the promotion diff. The sibling branch's remedy ("merge the
+          # current base branch into this pull request") was checked and does
+          # not work either: `beta`'s own tip 01a15d4f carries the same typed
+          # stub, so merging it moves the merge base to a commit that fatals
+          # identically. Every run of #1094 from 2026-08-16 on was red on this
+          # step alone — the suite itself passed with
+          # `Tests: 2359, Assertions: 8341` and the head clover measured 62.05%
+          # against a committed floor of 60.65%.
+          #
+          # THIS IS NOT A COVERAGE FLOOR GOING UNCHECKED. `Guard coverage
+          # baseline` below falls back to the committed `.coverage-baseline` on
+          # exactly this condition, so an absolute floor is still enforced and
+          # the log says in words which check ran. What is skipped is the
+          # RATCHET, and on a promotion it has nothing to catch: every commit in
+          # the diff already faced the ratchet on its own pull request into
+          # `development`.
+          #
+          # SCOPED BY THE HEAD REF, NEVER BY THE BASE REF. Nine of the eighteen
+          # fleet repositories have `main` as their GitHub default branch, so
+          # exempting "pull requests targeting main" would silently disarm the
+          # ratchet for half the fleet's ordinary feature work. `development`
+          # and `beta` are protected long-lived integration branches and no
+          # feature branch is named either, so a pull request whose HEAD is one
+          # of them is a promotion by construction.
+          case "$PR_HEAD_REF" in
+            development|beta)
+              echo "::notice::Release promotion ($PR_HEAD_REF -> $BASE_REF): skipping the merge-base coverage ratchet. Its merge base is the previous release point and cannot be booted in this job's Nextcloud environment, and every commit in the diff already passed the ratchet on its own pull request into $PR_HEAD_REF. The committed .coverage-baseline floor is still enforced by the next step."
+              exit 0
+              ;;
+          esac
+
           HEAD_SHA="$(git rev-parse HEAD)"
-          MERGE_BASE="$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
-          echo "head=$HEAD_SHA base=$BASE_SHA merge-base=$MERGE_BASE"
+
+          SECOND_PARENT="$(git rev-parse --verify --quiet "${HEAD_SHA}^2" || true)"
+          if [ "$HEAD_SHA" != "$PR_HEAD_SHA" ] && [ "$SECOND_PARENT" = "$PR_HEAD_SHA" ]; then
+            BASE_TIP="$(git rev-parse "${HEAD_SHA}^1")"
+            MERGE_BASE="$(git merge-base "$BASE_TIP" "$PR_HEAD_SHA")"
+            echo "resolved via the merge ref: base-tip=$BASE_TIP pr-head=$PR_HEAD_SHA"
+          elif git rev-parse --verify --quiet "refs/remotes/origin/$BASE_REF" >/dev/null; then
+            BASE_TIP="$(git rev-parse "refs/remotes/origin/$BASE_REF")"
+            MERGE_BASE="$(git merge-base "$BASE_TIP" "$HEAD_SHA")"
+            echo "resolved via origin/$BASE_REF: base-tip=$BASE_TIP"
+          else
+            MERGE_BASE="$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
+            echo "::warning::Neither the merge ref nor origin/$BASE_REF was available; falling back to the event payload's base.sha=$BASE_SHA, which is the base tip as of PR creation and may be stale."
+          fi
+          echo "head=$HEAD_SHA merge-base=$MERGE_BASE"
+
           cp coverage/clover.xml "$RUNNER_TEMP/head-clover.xml"
           git checkout --force --detach "$MERGE_BASE"
           composer install --no-progress --prefer-dist --optimize-autoloader
+          # Recorded WHILE the base is checked out — after the checkout back to
+          # HEAD the evidence is gone, and "no clover file" would otherwise be
+          # reported with a cause the log does not support.
+          BASE_HAS_RUNNER=yes
+          [ -x ./vendor/bin/phpunit ] || BASE_HAS_RUNNER=no
           ./vendor/bin/phpunit -c phpunit.xml --coverage-clover="$RUNNER_TEMP/base-clover.xml" || true
           git checkout --force --detach "$HEAD_SHA"
           composer install --no-progress --prefer-dist --optimize-autoloader
           cp "$RUNNER_TEMP/head-clover.xml" coverage/clover.xml
-          test -s "$RUNNER_TEMP/base-clover.xml" \
-            || { echo "::error::Could not measure coverage at merge base $MERGE_BASE — refusing to report a ratchet that did not run."; exit 1; }
+
+          # THE REMEDY AN ERROR NAMES HAS TO EXIST — the two ways this can fail
+          # have different remedies, and the old single message named neither.
+          if [ ! -s "$RUNNER_TEMP/base-clover.xml" ]; then
+            if [ "$BASE_HAS_RUNNER" = "no" ]; then
+              echo "::error::Merge base $MERGE_BASE has no ./vendor/bin/phpunit after composer install — that commit predates this repository's PHPUnit setup, so there is no coverage floor to measure against. Merge the current base branch ($BASE_REF) into this pull request, or rebase it onto a base that carries the test suite. Refusing to report a ratchet that did not run."
+            else
+              echo "::error::PHPUnit is present at merge base $MERGE_BASE but produced no clover report there — the base suite could not run at all (check the PHPUnit output above this line). Refusing to report a ratchet that did not run."
+            fi
+            exit 1
+          fi
 
       # The capability probe is deliberately a HARD failure, not a fallback.
       # An older copy of scripts/coverage-guard.php accepts `--against` and
@@ -1887,7 +2817,12 @@ jobs:
       # sets enable-coverage-guard was updated before this workflow changed, so
       # this should never fire; if it does, the repository is the thing to fix.
       - name: Guard coverage baseline
-        if: inputs.enable-coverage-guard && matrix.php-version == inputs.php-version && matrix.nextcloud-ref == fromJSON(inputs.nextcloud-test-refs)[0]
+        if: inputs.enable-coverage-guard && matrix.php-version == inputs.php-version && matrix.nextcloud-ref == needs.nextcloud-matrix.outputs.single-server
+        env:
+          # Through `env:`, never interpolated into the script body. A branch
+          # name is attacker-controlled text and git permits a double quote in
+          # one, so `case "${{ ... }}" in` would be a script-injection site.
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           set -euo pipefail
           cd "server/apps/${{ inputs.app-name }}"
@@ -1895,12 +2830,132 @@ jobs:
             php scripts/coverage-guard.php coverage/clover.xml
             exit 0
           fi
+          # THE REMEDY AN ERROR NAMES HAS TO EXIST.
+          #
+          # This message used to say "Update it from ConductionNL/.github",
+          # and there was no coverage-guard.php anywhere in that repository —
+          # a recursive tree search returned nothing. An author following the
+          # instruction exactly could not comply, and the only way to find the
+          # right file was to notice that eighteen unrelated app repos happen
+          # to agree on one. That is the unclosable-gate shape gate-59 exists
+          # to forbid, in an error message rather than in a finding.
+          #
+          # The canonical copy now lives at quality-config/coverage-guard.php
+          # in this repository, so the path below resolves.
           php scripts/coverage-guard.php --capabilities 2>/dev/null | grep -qx against \
-            || { echo "::error::scripts/coverage-guard.php predates merge-base comparison. Update it from ConductionNL/.github before enabling the ratchet."; exit 1; }
-          php scripts/coverage-guard.php coverage/clover.xml --against="$RUNNER_TEMP/base-clover.xml"
+            || { echo "::error::scripts/coverage-guard.php predates merge-base comparison (it does not report the 'against' capability). Copy the canonical version from ConductionNL/.github at quality-config/coverage-guard.php into scripts/coverage-guard.php, or set enable-coverage-guard: false until you do."; exit 1; }
+          # Scope the ratchet to the PHP this change actually touches.
+          #
+          # The whole-project comparison fired on measurement noise. doriath#240
+          # was a pull request whose entire diff was `webpack.config.js` — no PHP
+          # at all — and it went red:
+          #
+          #     Coverage current:       60.50%  (8303/13723 statements)
+          #     Coverage merge base:    60.55%  (8309/13723 statements)
+          #     FAIL: coverage dropped by 0.05% against the merge base.
+          #
+          # Identical denominator, and both runs reported exactly
+          # `Tests: 948, Assertions: 3051, Skipped: 1`. Only which six statements
+          # xdebug recorded as covered moved between two runs of the same code.
+          # The measured `--against` floor removes DRIVER variance, as its header
+          # says; it does not remove RUN-TO-RUN variance, and the guard has no
+          # tolerance. A gate that can fail a diff containing none of the language
+          # it measures gets routinely overridden, and after that its silences
+          # stop meaning anything either.
+          #
+          # A tolerance band was the alternative and is worse: it blinds the gate
+          # to small real regressions forever, at a threshold nobody can defend.
+          # Scoping keeps full strength on changed code and makes the noise
+          # unreachable rather than forgiven.
+          #
+          # PROBED, not assumed. A copy predating the flag would accept
+          # `--changed-files` and ignore it, silently restoring whole-project
+          # comparison while still reporting success — the same silent-downgrade
+          # shape the `against` probe above exists to prevent. Older copies keep
+          # the previous behaviour instead of erroring, because unlike `against`
+          # this is a narrowing of an existing check, not the difference between
+          # a check running and not running.
+          # THE PROMOTION EXEMPTION, ENFORCED HERE TOO — and nowhere wider.
+          #
+          # `Measure merge-base coverage` exits 0 without writing
+          # base-clover.xml for a `development`/`beta` head ref; its comment
+          # carries the evidence. Falling back on the mere ABSENCE of that file
+          # would be the wrong test: absence is also what a future bug in that
+          # step would look like, and this branch would then quietly demote the
+          # ratchet to the constant floor while still reporting success — the
+          # silent-downgrade shape the `against` probe above exists to prevent.
+          # So the fallback is gated on the SAME head-ref condition, and any
+          # other route to a missing base clover stays a hard failure.
+          case "${PR_HEAD_REF:-}" in
+            development|beta)
+              echo "::notice::Release promotion: the merge-base ratchet did not run (see the previous step). Enforcing the committed .coverage-baseline floor instead."
+              php scripts/coverage-guard.php coverage/clover.xml
+              exit 0
+              ;;
+          esac
+          if [ ! -s "$RUNNER_TEMP/base-clover.xml" ]; then
+            echo "::error::No merge-base clover report, and this is not a release promotion — 'Measure merge-base coverage' should have failed before this step was reached. Refusing to report a ratchet that did not run."
+            exit 1
+          fi
+
+          if php scripts/coverage-guard.php --capabilities 2>/dev/null | grep -qx changed-files; then
+            MERGE_BASE="$(git merge-base "${{ github.event.pull_request.base.sha }}" HEAD)"
+            # `|| true`: an empty diff is a legitimate answer (docs-only, or a
+            # merge commit), and the guard treats an empty list as "no PHP
+            # changed, nothing to compare" rather than as zero coverage.
+            git diff --name-only "$MERGE_BASE" HEAD -- '*.php' > "$RUNNER_TEMP/changed-php.txt" || true
+            echo "Changed PHP files in this PR: $(wc -l < "$RUNNER_TEMP/changed-php.txt")"
+
+            # ── DELETIONS ARE NOT COVERAGE REGRESSIONS ────────────────────────
+            #
+            # The scoping above removed the noise; it did not remove the
+            # ARITHMETIC. `cgRatioDropped()` is one integer cross-product with no
+            # tolerance, and read plainly it demands that the code you touched be
+            # at least as well covered as the code you did not. For additions that
+            # is exactly right. For deletions it inverts: removing `d` statements
+            # of which `c` were covered lowers the ratio whenever the deleted code
+            # was better tested than what remains — and DEAD CODE IS DEAD BECAUSE
+            # NOTHING CALLS IT, NOT BECAUSE NOTHING TESTED IT. gate-57
+            # (orphaned-write-capability) exists to find precisely that code, so
+            # the two are in arithmetic opposition, not tension. Such a pull
+            # request cannot satisfy the ratchet from inside its own subject: the
+            # only moves are delete less, add filler, or delete additional
+            # *uncovered* statements until it balances. Measured on
+            # opencatalogi#895 (-0.62% scoped) and launchpad#128 (-0.32% scoped),
+            # both of which deleted dead code and neither of which could comply.
+            #
+            # `--deletion-neutral` compares METHOD BUCKETS asymmetrically:
+            # base-only methods leave the base side, head-only methods stay on the
+            # head side. A pure deletion becomes exactly neutral; a regression in
+            # surviving code and new untested code both still fail. The symmetric
+            # version of that rule is the obvious one and it is broken — it also
+            # drops head-only statements, so forty new statements with none
+            # covered pass. quality-config/tests/test-coverage-guard.py asserts all
+            # four cases and kills a mutant that reintroduces the symmetric rule.
+            #
+            # PROBED, not assumed, for the same reason as the flag above: a copy
+            # predating this flag would accept it and ignore it, silently
+            # restoring the deletion penalty while reporting success. Older copies
+            # keep today's behaviour rather than erroring — this narrows an
+            # existing check, it is not the difference between a check running and
+            # not running.
+            CG_MODE=()
+            if php scripts/coverage-guard.php --capabilities 2>/dev/null | grep -qx deletion-neutral; then
+              CG_MODE+=(--deletion-neutral)
+            else
+              echo "::notice::scripts/coverage-guard.php predates --deletion-neutral, so deleting well-tested dead code will still read as a coverage drop. Copy the canonical version from ConductionNL/.github at quality-config/coverage-guard.php to pick it up."
+            fi
+
+            php scripts/coverage-guard.php coverage/clover.xml \
+              --against="$RUNNER_TEMP/base-clover.xml" \
+              --changed-files="$RUNNER_TEMP/changed-php.txt" \
+              "${CG_MODE[@]}"
+          else
+            php scripts/coverage-guard.php coverage/clover.xml --against="$RUNNER_TEMP/base-clover.xml"
+          fi
 
       - name: Upload coverage artifact
-        if: always() && matrix.php-version == inputs.php-version && matrix.nextcloud-ref == fromJSON(inputs.nextcloud-test-refs)[0]
+        if: always() && matrix.php-version == inputs.php-version && matrix.nextcloud-ref == needs.nextcloud-matrix.outputs.single-server
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
@@ -1952,7 +3007,8 @@ jobs:
     if: ${{ inputs.enable-newman && !cancelled() }}
     runs-on: ubuntu-latest
     name: "Integration Tests (Newman)"
-    needs: [security]
+    # `nextcloud-matrix` supplies the server this job checks out. Real edge.
+    needs: [security, nextcloud-matrix]
     # Observed across 39 executions: median 1.9 min, max 7.5 min (launchpad).
     # Also installs a full Nextcloud server first, so 30 min — 4x the worst run.
     timeout-minutes: 30
@@ -1977,7 +3033,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: nextcloud/server
-          ref: ${{ fromJSON(inputs.nextcloud-test-refs)[0] }}
+          # THE single server for this job — the numerically highest stable
+          # branch in the resolved set, published by the `nextcloud-matrix` job.
+          # It used to be entry [0] of a hand-written array, and the action this
+          # now derives from returns its branches OLDEST-FIRST, so reading a
+          # position would silently have moved this job onto the oldest
+          # supported server. See the comment on `nextcloud-matrix`.
+          ref: ${{ needs.nextcloud-matrix.outputs.single-server }}
           path: server
 
       - name: Checkout server submodules
@@ -2352,7 +3414,9 @@ jobs:
     # artifact. It is still not a gate — `!cancelled()` above suppresses the
     # implicit `success()`, so a failed or skipped frontend-build still lets this
     # job run and simply rebuild the bundle itself.
-    needs: [security, frontend-build]
+    #
+    # `nextcloud-matrix` supplies the server this job checks out. Real edge.
+    needs: [security, frontend-build, nextcloud-matrix]
     # No job in this file declared a timeout, so a hung suite ran to GitHub's
     # 6-hour default. Observed durations once the suite is healthy: 4-10 min
     # (planix 0.8, doriath 4.2, zaakafhandelapp 5.3, softwarecatalog 6.1,
@@ -2382,7 +3446,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: nextcloud/server
-          ref: ${{ fromJSON(inputs.nextcloud-test-refs)[0] }}
+          # THE single server for this job — the numerically highest stable
+          # branch in the resolved set, published by the `nextcloud-matrix` job.
+          # It used to be entry [0] of a hand-written array, and the action this
+          # now derives from returns its branches OLDEST-FIRST, so reading a
+          # position would silently have moved this job onto the oldest
+          # supported server. See the comment on `nextcloud-matrix`.
+          ref: ${{ needs.nextcloud-matrix.outputs.single-server }}
           path: server
 
       - name: Checkout server submodules
@@ -2538,10 +3608,69 @@ jobs:
           fi
 
       - name: Install Playwright
+        # A STALLED SETUP STEP EATS THE JOB'S WHOLE CAP AND LEAVES NO VERDICT.
+        #
+        # Measured 2026-08-19 on app-versions' `development` push run: this step
+        # ran 45m24s and the job was cancelled at its `timeout-minutes: 45`
+        # bound — `Run Playwright tests` never started, so the run produced no
+        # tally, no trace upload (`if: failure()` does not fire on a cancelled
+        # job) and no report. It still renders as a red check while carrying no
+        # information about the app, and `cancelled` is neither failed nor
+        # passed. The same PR's E2E job completed in 24m, so the stall is
+        # intermittent, not a capacity problem.
+        #
+        # `--with-deps` shells out to apt, which is the same thing that hung
+        # `Install PDF tools` for 60 minutes across the fleet (#504) and
+        # silently switched the quality gate off there too.
+        #
+        # A step bound converts that into a fast, readable failure. Measured
+        # normal duration for this step is under 3 minutes, so 10 leaves more
+        # than 3x headroom — a bound that a healthy run could hit would just be
+        # a new way to invent a phantom defect.
+        timeout-minutes: 10
         run: |
           cd server/apps/${{ inputs.app-name }}
           npm install --save-dev @playwright/test
-          npx playwright install --with-deps chromium
+
+          # ── WHY THIS IS TWO COMMANDS AND NOT `--with-deps` ──────────────────
+          #
+          # `--with-deps` does two unrelated things in one process: download the
+          # browser binaries from a CDN, and `apt-get install` the system
+          # libraries. Measured 2026-08-19 across THREE runs in one morning
+          # (app-versions development, app-versions #151, hrmq #87), the
+          # combined command printed NOT ONE LINE of output and hung until the
+          # job's 45-minute cap killed it:
+          #
+          #     Terminate orphan process: pid (3857)
+          #         (npm exec playwright install --with-deps chromium)
+          #
+          # Silence from the first instant is the signature of apt blocking on
+          # /var/lib/dpkg/lock-frontend — apt waits for that lock forever by
+          # design and says nothing while it does. Same mechanism as the
+          # `Install PDF tools` stall in #504.
+          #
+          # Split, the two halves can be treated according to what they are:
+          #
+          # 1. The browser download is REQUIRED and is a plain CDN fetch that
+          #    prints progress, so a stall there is visible and fatal.
+          npx playwright install chromium
+
+          # 2. The system libraries are ATTEMPTED, bounded, and NOT fatal.
+          #    GitHub's ubuntu runner image already ships the libraries chromium
+          #    needs, which is why the suites that got past this step ran fine.
+          #    A `timeout` gives apt the bound it will not give itself.
+          #
+          #    ⚠️ NOT-FATAL IS A DELIBERATE TRADE, NOT A SWALLOWED ERROR. If a
+          #    library really is missing, the browser fails to launch in the
+          #    test step and Playwright says exactly which one — a real verdict
+          #    about a real problem. The alternative it replaces is a 45-minute
+          #    cancellation that produces no tally, no trace and no report while
+          #    still rendering as a red check.
+          if timeout 300 npx playwright install-deps chromium; then
+            echo "Playwright system dependencies installed."
+          else
+            echo "::warning::playwright install-deps did not finish within 5m (apt lock or mirror). Continuing: the runner image ships these libraries, and a genuinely missing one fails loudly at browser launch."
+          fi
 
       # ── Reuse the bundle the `frontend-build` job already compiled ─────────
       #
@@ -3489,7 +4618,8 @@ jobs:
     if: ${{ inputs.enable-journeydoc-capture && !cancelled() }}
     runs-on: ubuntu-latest
     name: "Journeydoc Capture (screenshots)"
-    needs: [security]
+    # `nextcloud-matrix` supplies the server this job checks out. Real edge.
+    needs: [security, nextcloud-matrix]
     # UNMEASURED: no caller in the fleet currently sets
     # `enable-journeydoc-capture: true`, so this job has never executed (312
     # skipped records, 0 executions, across 15 repos). Its step list is a
@@ -3522,7 +4652,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: nextcloud/server
-          ref: ${{ fromJSON(inputs.nextcloud-test-refs)[0] }}
+          # THE single server for this job — the numerically highest stable
+          # branch in the resolved set, published by the `nextcloud-matrix` job.
+          # It used to be entry [0] of a hand-written array, and the action this
+          # now derives from returns its branches OLDEST-FIRST, so reading a
+          # position would silently have moved this job onto the oldest
+          # supported server. See the comment on `nextcloud-matrix`.
+          ref: ${{ needs.nextcloud-matrix.outputs.single-server }}
           path: server
 
       - name: Checkout server submodules
@@ -3679,10 +4815,53 @@ jobs:
           fi
 
       - name: Install Playwright
+        # Same bound, same reason as the playwright job's copy of this step: an
+        # apt stall inside `--with-deps` otherwise consumes the job's cap and
+        # cancels it before any capture runs, producing no verdict at all.
+        timeout-minutes: 10
         run: |
           cd server/apps/${{ inputs.app-name }}
           npm install --save-dev @playwright/test
-          npx playwright install --with-deps chromium
+
+          # ── WHY THIS IS TWO COMMANDS AND NOT `--with-deps` ──────────────────
+          #
+          # `--with-deps` does two unrelated things in one process: download the
+          # browser binaries from a CDN, and `apt-get install` the system
+          # libraries. Measured 2026-08-19 across THREE runs in one morning
+          # (app-versions development, app-versions #151, hrmq #87), the
+          # combined command printed NOT ONE LINE of output and hung until the
+          # job's 45-minute cap killed it:
+          #
+          #     Terminate orphan process: pid (3857)
+          #         (npm exec playwright install --with-deps chromium)
+          #
+          # Silence from the first instant is the signature of apt blocking on
+          # /var/lib/dpkg/lock-frontend — apt waits for that lock forever by
+          # design and says nothing while it does. Same mechanism as the
+          # `Install PDF tools` stall in #504.
+          #
+          # Split, the two halves can be treated according to what they are:
+          #
+          # 1. The browser download is REQUIRED and is a plain CDN fetch that
+          #    prints progress, so a stall there is visible and fatal.
+          npx playwright install chromium
+
+          # 2. The system libraries are ATTEMPTED, bounded, and NOT fatal.
+          #    GitHub's ubuntu runner image already ships the libraries chromium
+          #    needs, which is why the suites that got past this step ran fine.
+          #    A `timeout` gives apt the bound it will not give itself.
+          #
+          #    ⚠️ NOT-FATAL IS A DELIBERATE TRADE, NOT A SWALLOWED ERROR. If a
+          #    library really is missing, the browser fails to launch in the
+          #    test step and Playwright says exactly which one — a real verdict
+          #    about a real problem. The alternative it replaces is a 45-minute
+          #    cancellation that produces no tally, no trace and no report while
+          #    still rendering as a red check.
+          if timeout 300 npx playwright install-deps chromium; then
+            echo "Playwright system dependencies installed."
+          else
+            echo "::warning::playwright install-deps did not finish within 5m (apt lock or mirror). Continuing: the runner image ships these libraries, and a genuinely missing one fails loudly at browser launch."
+          fi
 
       - name: Build app frontend
         # Same rationale as the playwright job: SPA mount via Util::addScript()
@@ -4713,7 +5892,56 @@ jobs:
     # been waved through yet. A gate that would not catch a failure is still a
     # dead gate, and `scripts/assert-quality-report-gates-every-leg.py` now
     # keeps the list complete.
-    needs: [php-quality, vue-quality, frontend-build, frontend-checks, frontend-tests, security, license, phpunit, newman, playwright, journeydoc-capture, baseline-protection, sbom, features-check, features-extract, hydra-gates]
+    #
+    # THE THREE NEXTCLOUD LEGS (#383, #385) ARE ON THIS LIST DELIBERATELY, and
+    # what that does per leg is not the same thing:
+    #
+    #   app-check-code  internally non-blocking by default. The step swallows a
+    #                   non-zero `occ` exit and warns unless `check-code-blocking`
+    #                   is set, so the job concludes `success` with findings and
+    #                   listing it changes nothing today. It becomes a real gate
+    #                   the moment an app flips its own input — which is the
+    #                   point: the wiring must already be there, or flipping the
+    #                   input would be a no-op nobody notices.
+    #   reuse           same shape, via `continue-on-error: ${{ !inputs.reuse-blocking }}`.
+    #   info-xml        HAS NO SUCH FLAG AND IS BLOCKING ON ARRIVAL. #383
+    #                   measured 5 pass / 13 fail before it merged. RE-MEASURED
+    #                   2026-08-12 14:20Z against every repo's live `development`
+    #                   tip, same App Store XSD: 6 PASS / 12 FAIL. Eleven of the
+    #                   twelve are xs:sequence element ORDER; the twelfth
+    #                   (zaakafhandelapp) is a <summary> over the schema's length
+    #                   cap. The one-app difference is not drift in the
+    #                   instrument — larpingapp's manifest was reordered by
+    #                   efa6aead at 11:28:48Z, and validating that one file at
+    #                   both refs gives FAIL then PASS.
+    #
+    #                   Live-confirmed against CI, not only locally: openregister
+    #                   run 31591669849 emitted `Element 'documentation': This
+    #                   element is not expected` — the same message, byte for
+    #                   byte, as the local validator.
+    #
+    #                   So listing it here turns 12 of 18 apps red until their
+    #                   manifests are reordered, and that is the authorised
+    #                   trade: the App Store rejects the same files at upload
+    #                   time, after the release has been built, tagged and
+    #                   published. TREAT THE 12 AS DECAYING — it is a count over
+    #                   files several agents edit daily, so re-measure before
+    #                   quoting it.
+    #
+    # The two remaining Nextcloud checks are NOT missing from this list. Multi
+    # database PHPUnit is a matrix dimension of `phpunit`, which is already
+    # here, and `occ integrity:sign-app` lives in release.yml, which has no
+    # Quality Report to gate.
+    #
+    # `nextcloud-matrix` IS ON THIS LIST, and it is the one entry whose failure
+    # does not describe the app's code. It fails when the range the app promises
+    # the App Store cannot be turned into a set of servers to test on — a
+    # malformed <nextcloud> element, or a derivation that produced nothing. The
+    # legs still run, on the shared fallback range, and they still go green,
+    # which is exactly why this has to be gated separately: a green PHPUnit
+    # matrix measured on versions the app never claimed is the failure this
+    # whole change exists to remove, and it looks identical to a pass.
+    needs: [php-quality, vue-quality, frontend-build, frontend-checks, frontend-tests, security, license, nextcloud-matrix, phpunit, newman, playwright, journeydoc-capture, baseline-protection, sbom, features-check, features-extract, hydra-gates, app-check-code, info-xml, reuse]
     if: always()
     # Observed across 266 executions: median 0.6 min — but 2% of runs sit at
     # ~30 min because the `Install PDF tools` apt-get step stalls on the Ubuntu
@@ -4755,8 +5983,49 @@ jobs:
           path: results/playwright-report/
         continue-on-error: true
 
+      # A PACKAGE INSTALL MUST NOT BE ABLE TO DISABLE THE GATE.
+      #
+      # Measured on decidesk run 32158299327 and shillinq run 32158364133,
+      # 2026-08-18: this step produced zero output for SIXTY MINUTES, hit the
+      # job timeout, and the runner cancelled the job. Everything downstream —
+      # including "Gate — fail when any upstream job failed", "Gate — a test
+      # job that was ENABLED but never ran", and "Gate — fail when an upstream
+      # job was cancelled" — was SKIPPED. Both runs went red on `development`
+      # with every other job green, and the three steps whose entire purpose is
+      # to decide pass/fail never executed. An apt mirror turned the quality
+      # gate off.
+      #
+      # pandoc and wkhtmltopdf render the markdown report to PDF. That is a
+      # nice-to-have attachment; the report, the step summary and the gates all
+      # work without them. So this is now bounded (5 min per attempt, 3
+      # attempts), non-fatal, and records whether it succeeded. `-qq` is gone
+      # because it hid the stall completely — the old log contained the command
+      # and nothing else.
       - name: Install PDF tools
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq pandoc wkhtmltopdf
+        id: pdf_tools
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+
+          # Same reasoning as `Install xmllint`: the cheapest way not to hang on
+          # the dpkg lock is not to take it. Cheap to ask, and it costs nothing
+          # when the answer is no.
+          if command -v pandoc > /dev/null 2>&1 && command -v wkhtmltopdf > /dev/null 2>&1; then
+            echo "pandoc and wkhtmltopdf already present."
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          for attempt in 1 2 3; do
+            if timeout 300 sudo apt-get update -q && timeout 300 sudo apt-get install -y -q pandoc wkhtmltopdf; then
+              echo "available=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "::warning::apt attempt ${attempt}/3 failed or timed out after 300s; retrying."
+            sleep 10
+          done
+          echo "available=false" >> "$GITHUB_OUTPUT"
+          echo "::warning::pandoc/wkhtmltopdf could not be installed after 3 bounded attempts. The PDF rendering of the quality report is skipped; the report, the step summary and every gate below still run. This is infrastructure, not a finding about this app."
 
       - name: Generate report
         run: |
@@ -4865,6 +6134,31 @@ jobs:
             sec_npm=$(read_result "results/result-security-npm/npm.txt")
             echo "| npm | | | $(icon "$sec_npm") | $(license_info "npm") | |"
 
+            # The three Nextcloud legs. They are in `needs:` above, so their
+            # failure reds this job — but a leg the report never mentions is the
+            # exact silence the Hydra-gates row below exists to correct, and it
+            # would have been reintroduced the day these three landed.
+            #
+            # READ THESE THREE CELLS DIFFERENTLY, because the artefacts behind
+            # them hold different things:
+            #
+            #   REUSE           records `steps.lint.outcome` — the RAW step
+            #                   outcome, before `continue-on-error` rewrites it.
+            #                   So this cell goes ❌ on findings even while the
+            #                   job concludes success. That is the useful shape.
+            #   app:check-code  records `job.status`, and the step exits 0 on
+            #                   findings unless `check-code-blocking` is set. So
+            #                   ✅ here means "the run produced a recognisable
+            #                   verdict", NOT "no private API usage" — the
+            #                   findings are in that job's `::warning::` only.
+            #                   Worth narrowing to the step's own finding count;
+            #                   deliberately not done in this commit.
+            #   info.xml        records `job.status` and has no non-blocking
+            #                   flag, so its cell and its gate agree.
+            echo "| app:check-code | $(icon "$(read_result "results/result-app-check-code/app-check-code.txt")") | | | | |"
+            echo "| info.xml | $(icon "$(read_result "results/result-info-xml/info-xml.txt")") | | | | |"
+            echo "| REUSE | $(icon "$(read_result "results/result-reuse/reuse.txt")") | | | | |"
+
             # Test rows. `test_icon` rather than `icon`: see its definition —
             # an enabled-but-skipped test job is the absence of a verdict and
             # says so in words.
@@ -4958,7 +6252,12 @@ jobs:
 
           echo "Report generated: $(wc -l < "$REPORT") lines"
 
+      # Only when the tools actually installed. Previously this ran
+      # unconditionally, so a failed install turned into a second, more
+      # confusing failure here ("pandoc: command not found") on top of the
+      # first.
       - name: Convert to PDF
+        if: steps.pdf_tools.outputs.available == 'true'
         run: |
           pandoc quality-report.md \
             -o quality-report.pdf \

@@ -142,6 +142,89 @@ class LibScanIsDiffScoped(unittest.TestCase):
         self.assertEqual(rc, 1)
 
 
+class ACommentDoesNotManufactureAFinding(unittest.TestCase):
+    """#415/#423 — the store-discovery rule was a substring test over RAW text.
+
+    A docblock recording that the class deliberately does NOT do the thing
+    produced a finding INDISTINGUISHABLE from the real violation's. The
+    author's cheapest fix is to delete the paragraph, which is how a gate
+    teaches a codebase to stop explaining itself.
+
+    S1 is the POSITIVE CONTROL and passes both before and after — without it
+    S2/S3 could be had by deleting the rule.
+    """
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+        (self.root / "lib" / "Service").mkdir(parents=True)
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def _scan(self, php_src: str) -> list[str]:
+        (self.root / "lib" / "Service" / "Subject.php").write_text(
+            php_src, encoding="utf-8")
+        findings: list[str] = []
+        css.check_store(self.root, [], findings)
+        return [f for f in findings if "Subject.php" in f]
+
+    def test_S1_control_a_real_objects_api_fetch_still_fires(self):
+        self.assertEqual(len(self._scan(LEGACY_STORE_PHP.replace(
+            "LegacyStoreService", "Subject"))), 1)
+
+    def test_S2_a_docblock_saying_it_does_NOT_is_not_a_violation(self):
+        php = """<?php
+namespace OCA\\Test\\Service;
+
+class Subject
+{
+    /**
+     * Load the catalogue.
+     *
+     * We deliberately do NOT hit /apps/openregister/api/objects/ with an
+     * IClientService here — GenericStoreService owns store discovery
+     * (ADR-080 D2/D3). Two earlier attempts did; this is the note that
+     * stops a third.
+     */
+    public function load(): array
+    {
+        return $this->store->all();
+    }
+}
+"""
+        self.assertEqual(self._scan(php), [])
+
+    def test_S3_a_line_comment_and_a_hash_comment_are_comments_too(self):
+        php = """<?php
+class Subject
+{
+    public function load(): array
+    {
+        // was: $client->get('/apps/openregister/api/objects/' . $reg)
+        # IClientService was injected here until 2.4.
+        return $this->store->all();
+    }
+}
+"""
+        self.assertEqual(self._scan(php), [])
+
+    def test_S4_control_the_url_is_a_string_literal_and_must_survive(self):
+        # The anti-widening pair for S2/S3. The evidence this rule looks for
+        # lives inside a quoted literal in every real violation, so a mask
+        # that blanked string CONTENTS would turn this false positive into a
+        # false negative. If someone sets blank_strings=True, this goes red.
+        php = """<?php
+class Subject
+{
+    public function fetch(IClientService $client)
+    {
+        return $client->newClient()->get('/apps/openregister/api/objects/x');
+    }
+}
+"""
+        self.assertEqual(len(self._scan(php)), 1)
+
+
 class GateIsNotBlind(unittest.TestCase):
     """If `check_store` ever stops producing findings entirely, the scoping
     assertions above still pass. This asserts the floor directly."""
@@ -156,6 +239,79 @@ class GateIsNotBlind(unittest.TestCase):
             self.assertTrue(any("ShoppingOutline" in f for f in findings))
         finally:
             shutil.rmtree(root, ignore_errors=True)
+
+
+class CaptionsAreNotMenuEntriesForThisGate(unittest.TestCase):
+    """The gate-60 / gate-62 divergence, and the decision that resolved it.
+
+    Until 2026-08-12 these two gates disagreed about one node, in the same
+    package: gate 60 exempted a `type: "caption"` entry, and gate 62 failed it
+    TWICE. Reproduced on a fixture carrying
+    `{"type":"caption","label":"Store","icon":"ViewGridOutline"}` —
+    gate-60 → 0 findings, gate-62 → 2 FAILs.
+
+    Decided against the RENDERER, not by aligning whichever was easier to
+    change. `CnAppNav.vue` renders a caption as
+    `<NcAppNavigationCaption :name=... :data-testid=... />` — no `#icon` slot,
+    no `:to`, no children loop — and its docblock states "Caption entries
+    ignore `route`, `href`, `action`, `icon`, `count`, `children`, and
+    `pinned`". The manifest schema says the same independently. Every rule in
+    `check_store` is a claim about a rendered icon or a resolved route, and a
+    caption has neither, so gate 62 was emitting unclosable findings about
+    dead metadata. Gate 62 was aligned to gate 60; gate 60 now WARNs about the
+    dead keys so the information is not merely dropped.
+    """
+
+    def _findings(self, entry, gate="store"):
+        root = Path(tempfile.mkdtemp())
+        try:
+            data = {"id": "app", "menu": [entry], "pages": []}
+            findings: list[str] = []
+            fn = css.check_store if gate == "store" else css.check_settings
+            fn(root, [(root / "src" / "manifest.json", data)], findings)
+            return findings
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_a_caption_claiming_the_store_concept_is_not_failed(self):
+        findings = self._findings({
+            "id": "cap", "type": "caption", "label": "Store",
+            "icon": "ViewGridOutline"})
+        self.assertEqual(findings, [])
+
+    def test_the_identical_node_without_type_caption_still_fails_twice(self):
+        # THE DECISIVE PAIR. Same label, same icon; only `type` differs. If
+        # this arm ever goes green the exemption has become a hole.
+        findings = self._findings({
+            "id": "cap", "label": "Store", "icon": "ViewGridOutline"})
+        self.assertEqual(len(findings), 2, findings)
+        self.assertTrue(all(f.startswith("FAIL") for f in findings))
+
+    def test_a_child_of_a_caption_is_not_judged_either(self):
+        # The renderer does not walk a caption's children, so nothing under it
+        # is drawn. gate 60 skips the subtree for the same reason.
+        findings = self._findings({
+            "id": "cap", "type": "caption", "label": "Section",
+            "children": [{"id": "s", "label": "Store", "icon": "ViewGridOutline"}]})
+        self.assertEqual(findings, [])
+
+    def test_a_non_caption_parent_still_has_its_children_judged(self):
+        # ANTI-WIDENING for the arm above: the subtree skip must be caused by
+        # `type: "caption"` and by nothing else.
+        findings = self._findings({
+            "id": "grp", "label": "Section",
+            "children": [{"id": "s", "label": "Store", "icon": "ViewGridOutline"}]})
+        self.assertEqual(len(findings), 2, findings)
+
+    def test_gate_63_still_walks_captions_because_labels_ARE_rendered(self):
+        # SCOPE OF THE DECISION. It covers icon and route rules only. A
+        # caption's LABEL is honoured by the renderer, so ADR-079 D4 — which is
+        # a rule about the label — must keep applying to one.
+        findings = self._findings(
+            {"id": "cap", "type": "caption", "label": "Settings",
+             "section": "settings"},
+            gate="settings")
+        self.assertTrue(any("ADR-079 D4" in f for f in findings), findings)
 
 
 if __name__ == "__main__":

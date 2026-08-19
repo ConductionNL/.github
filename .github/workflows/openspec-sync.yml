@@ -19,19 +19,19 @@ on:
         default: "ConductionNL"
     secrets:
       PROJECT_TOKEN:
-        # NOT `required: true`. `required` means "the caller passed something",
-        # not "the something works" — a caller passing an empty or revoked
-        # secret satisfies it and then dies at the first API call. On
-        # 2026-08-08 that produced `HttpError: Bad credentials` (401) and made
-        # `sync / Sync OpenSpec to GitHub Issues` a failing job name on the
-        # `development` branch of FIVE repos at once, for a reason that had
-        # nothing to do with their code.
+        # UNUSED while the project-board steps are disabled (#432). Kept
+        # declared so the callers that already forward it keep validating.
         #
-        # The preflight step below draws the distinction this declaration
-        # cannot: token ABSENT -> skip with a notice and succeed (there was
-        # nowhere to sync to); token PRESENT but rejected -> FAIL LOUDLY,
-        # because that is a genuinely broken integration and silence hides it.
-        description: "Token with project+issues scope. Absent = sync skipped. Present but invalid = hard failure."
+        # It stays NOT required for the reason that outlived it: `required`
+        # means "the caller passed something", not "the something works" — a
+        # caller passing an empty or revoked secret satisfies it and then dies
+        # at the first API call. On 2026-08-08 that produced `HttpError: Bad
+        # credentials` (401) and made `sync / Sync OpenSpec to GitHub Issues` a
+        # failing job name on the `development` branch of FIVE repos at once,
+        # for a reason that had nothing to do with their code.
+        description: >-
+          UNUSED while project-board steps are disabled. Kept declared, and not
+          required, so existing callers keep validating.
         required: false
 
 jobs:
@@ -52,47 +52,28 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Distinguishes "no token configured" from "token configured and broken".
-      # Without this the job dies inside github-script with a bare
-      # `HttpError: Bad credentials`, which reads as an app-quality failure on
-      # the caller's `development` branch. A project-management sync is not a
-      # code-quality verdict; a MISSING integration should skip, and a BROKEN
-      # one should shout. Never silently pass a configured-but-failing token —
-      # that is how a check stops measuring while still looking green.
-      - name: Preflight - is PROJECT_TOKEN present and valid?
-        id: preflight
-        env:
-          PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
-        run: |
-          set -uo pipefail
-          if [ -z "${PROJECT_TOKEN//[[:space:]]/}" ]; then
-            echo "::notice title=OpenSpec sync skipped::PROJECT_TOKEN is not configured for this repository, so there is no project to sync to. This is a SKIP, not a pass - configure the secret to enable the sync."
-            echo "sync=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          # Read the status code directly; do not infer success from a body.
-          code=$(curl -sS -o /dev/null -w '%{http_code}' \
-                   -H "Authorization: token ${PROJECT_TOKEN}" \
-                   -H "Accept: application/vnd.github+json" \
-                   https://api.github.com/user || echo "000")
-          if [ "$code" = "200" ]; then
-            echo "PROJECT_TOKEN is present and accepted (HTTP 200)."
-            echo "sync=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          echo "::error title=PROJECT_TOKEN is configured but rejected::GitHub answered HTTP ${code} for this token. The OpenSpec sync cannot run. This is a REAL failure - the secret exists but does not work (revoked, expired, or missing project/issues scope). Rotate or re-scope it; do not remove this job to make the build green."
-          exit 1
-
+      # THE PREFLIGHT IS GONE BECAUSE THE TOKEN IT GUARDED IS GONE.
+      #
+      # It distinguished "no token configured" from "token configured and
+      # broken", because without it the job died inside github-script with a
+      # bare `HttpError: Bad credentials` on the caller's `development` branch —
+      # a project-management failure wearing the costume of a code-quality
+      # verdict. That distinction still matters and is restated here, because
+      # the trap comes back the day a project token does.
+      #
+      # This run now authenticates with `GITHUB_TOKEN`, which every workflow
+      # gets for free and which cannot expire or be revoked out from under the
+      # fleet. It can do all of the issue work below. It cannot do ProjectsV2 —
+      # see the header on issue-triage.yml for why — so those steps are
+      # disabled behind `PROJECTS_ENABLED` and say so out loud (#432).
       - name: Sync OpenSpec changes to issues
-        if: steps.preflight.outputs.sync == 'true'
         uses: actions/github-script@v7
         env:
-          PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
           PROJECT_NUMBER: ${{ inputs.project-number }}
           PROJECT_OWNER: ${{ inputs.project-owner }}
           APP_NAME: ${{ inputs.app-name }}
         with:
-          github-token: ${{ secrets.PROJECT_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
             const path = require('path');
@@ -293,8 +274,17 @@ jobs:
             // --- Use the branch that triggered the workflow for file links ---
             const defaultBranch = context.ref ? context.ref.replace('refs/heads/', '') : 'development';
 
+            // ProjectsV2 is unavailable to GITHUB_TOKEN — see the header on
+            // issue-triage.yml (#432). The query must not merely be ignored, it
+            // must not RUN: an unauthorised GraphQL call throws, and that would
+            // abort the sync before a single issue was created or updated.
+            const PROJECTS_ENABLED = false;
+            if (!PROJECTS_ENABLED) {
+              core.notice('OpenSpec issues will be created and updated, but NOT placed on the project board or given a Status. ProjectsV2 needs a project-scoped token and this run uses GITHUB_TOKEN. See ConductionNL/.github#432.');
+            }
+
             // --- Get project ID and field info via GraphQL ---
-            const projectQuery = await github.graphql(`
+            const projectQuery = !PROJECTS_ENABLED ? null : await github.graphql(`
               query($owner: String!, $number: Int!) {
                 organization(login: $owner) {
                   projectV2(number: $number) {
@@ -318,30 +308,35 @@ jobs:
               }
             `, { owner: projectOwner, number: projectNumber });
 
-            const project = projectQuery.organization.projectV2;
-            const projectId = project.id;
+            const project = projectQuery ? projectQuery.organization.projectV2 : null;
+            const projectId = project ? project.id : null;
 
-            // Find Status field and its options
-            const statusField = project.fields.nodes.find(f => f.name === 'Status' && f.options);
-            if (!statusField) {
+            // Find Status field and its options.
+            // A missing Status field is still fatal WHEN the board is in use —
+            // that means the project was reconfigured under us. It must not be
+            // fatal when we never asked the board anything.
+            const statusField = project ? project.fields.nodes.find(f => f.name === 'Status' && f.options) : null;
+            if (PROJECTS_ENABLED && !statusField) {
               core.setFailed('Status field not found on project');
               return;
             }
 
             const statusOptions = {};
-            for (const opt of statusField.options) {
+            for (const opt of (statusField ? statusField.options : [])) {
               statusOptions[opt.name] = opt.id;
             }
-            console.log('Available statuses:', Object.keys(statusOptions).join(', '));
+            if (statusField) {
+              console.log('Available statuses:', Object.keys(statusOptions).join(', '));
+            }
 
             // Find App field (single select) if it exists
-            const appField = project.fields.nodes.find(f => f.name === 'App' && f.options);
+            const appField = project ? project.fields.nodes.find(f => f.name === 'App' && f.options) : null;
 
             // Find Change Name field (text) if it exists
-            const changeNameField = project.fields.nodes.find(f => f.name === 'Change Name' && f.dataType === 'TEXT');
+            const changeNameField = project ? project.fields.nodes.find(f => f.name === 'Change Name' && f.dataType === 'TEXT') : null;
 
             // Find Source field (single select) if it exists
-            const sourceField = project.fields.nodes.find(f => f.name === 'Source' && f.options);
+            const sourceField = project ? project.fields.nodes.find(f => f.name === 'Source' && f.options) : null;
 
             // --- Process each change ---
             for (const change of allChanges) {
@@ -492,6 +487,13 @@ jobs:
               }
 
               // --- Add to project and set Status ---
+              // The issue itself has been created or updated above; that is the
+              // durable half of this sync and it is complete. Only the board
+              // placement is skipped, and the notice at the top said so.
+              if (!PROJECTS_ENABLED) {
+                continue;
+              }
+
               // Check if issue is already on project
               const itemQuery = await github.graphql(`
                 query($projectId: ID!, $cursor: String) {

@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<id>commentguardfixture</id>
+	<name>Comment-Silenced Guard Fixture</name>
+	<summary>Fixture app for gate-7's guard-helper recognition. Not a real app.</summary>
+	<description>Exists so the acceptance matrix can express the three repairs .github#373 made to _collect_guard_helpers as separately-revertable arms.</description>
+	<version>1.0.0</version>
+	<licence>agpl</licence>
+	<author>Conduction</author>
+	<namespace>CommentGuardFixture</namespace>
+	<category>tools</category>
+	<dependencies><nextcloud min-version="30" max-version="32"/></dependencies>
+</info>

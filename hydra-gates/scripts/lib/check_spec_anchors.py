@@ -62,7 +62,46 @@ import re
 import sys
 
 # Match `@spec openspec/...` but NOT `@spec exclude ...`
-TAG = re.compile(r'@spec\s+(openspec/[^\s`\'"]+)')
+#
+# POSITION-ANCHORED (#415/#423). Gates 47 and 48 were given exactly this
+# treatment for exactly this reason; gate-46 never was, and it is the gate
+# with no false-NEGATIVE direction at all — every defect it can have is a
+# finding it manufactures.
+#
+#   const spec = '@spec openspec/specs/imaginary/spec.md'     -> FAIL
+#   // See @spec openspec/specs/gone/spec.md#missing for why. -> FAIL
+#
+# Neither is an annotation. The first is a string literal (test data, or the
+# name of a tag being discussed); the second is a sentence. Both reported a
+# dangling spec reference against code that annotates nothing, and the
+# author's cheapest fix is to delete the sentence — on a gate whose whole
+# job is to keep references honest.
+#
+# THE RULE, borrowed verbatim in shape from `check_security_cochange.
+# _ANNOTATION_RE`: an optional comment lead-in (`*`, `//`, `#`, `/*`,
+# `<!--`) and then the tag AT THE START of the content. That is the only
+# position a docblock parser accepts a tag in, and it is not a position
+# prose reaches. The lead-in is permissive on purpose — `// @spec …` is
+# still a declaration-shaped line — and markdown's list markers are included
+# because `openspec/**/tasks.md` writes its tags as list items.
+#
+# What is excluded is the tag appearing PART-WAY THROUGH a line, which is
+# the only shape prose and string literals take.
+#
+# ⚠️ EACH OPTIONAL GROUP SWALLOWS ITS OWN TRAILING WHITESPACE, and that is
+# not a style choice. Written the obvious way —
+# `[^\S\n]*(?:lead-in)?[^\S\n]*` — the two whitespace runs are adjacent
+# whenever the lead-in matches empty, and a line of N spaces that never
+# reaches `@spec` costs O(N²): 64,000 spaces took >20s on this machine while
+# the shape below is 0.0000s. Same family as the `py/redos` CodeQL raised on
+# gate-28's tail rule in this change; found by sweeping the other regexes it
+# adds rather than by waiting for the alert.
+TAG = re.compile(
+    r'^[^\S\n]*(?:(?:\*+/?|//+|\#(?!\[)|/\*+|<!--|[-+]|\d+\.)[^\S\n]*)?'
+    r'(?:\[[ xX~\-]\][^\S\n]*)?'
+    r'@spec\s+(openspec/[^\s`\'"]+)',
+    re.MULTILINE,
+)
 DATE = re.compile(r'\b\d{4}-\d{2}-\d{2}\b')
 HEADING = re.compile(r'^\s*#{1,6}\s+(.+?)\s*$')
 
@@ -75,7 +114,23 @@ HEADING = re.compile(r'^\s*#{1,6}\s+(.+?)\s*$')
 # incremented for the skipped line. A wrong positional resolution is worse
 # than a missing one — it can report PASS against a different task.
 CHECKBOX = re.compile(r'^\s*-\s*\[.\]')
-CHECKBOX_ID = re.compile(r'^\s*-\s*\[.\]\s*(?:\*\*)?([A-Za-z0-9][A-Za-z0-9.\-]*)')
+
+# `- [x] Task 3.2: …` and `- [x] Step 4.1 …` are OpenSpec's own house format
+# and were UNADDRESSABLE: the id group stopped at the first token, so the
+# extracted id was the literal string "Task". No `#task-3.2` or `#task-3-2`
+# could ever match it, and the finding read as a dangling anchor in the app.
+#
+# 2990 checkbox items across the fleet are written this way (2935 of them in
+# shillinq alone) against 19175 in the bare `- [x] 3.2 …` form, so this was
+# not a stray spelling — it was a whole app's tasks.md that the gate could
+# not address, reported as ~15 app-side defects.
+#
+# The prefix is OPTIONAL and consumed only when a numeric id follows it, so
+# `- [x] Task the thing` still yields "Task" rather than swallowing a word
+# that really is the id.
+CHECKBOX_ID = re.compile(
+    r'^\s*-\s*\[.\]\s*(?:\*\*)?(?:(?:Task|Step)\s+(?=[0-9]))?([A-Za-z0-9][A-Za-z0-9.\-]*)'
+)
 
 # `(REQ-PAY-001)`, `[REQ-005]`, `(REQ-PAY-001, REQ-PAY-003)`
 DELIMITED = re.compile(r'[(\[]([^)\]]{1,120})[)\]]')

@@ -178,6 +178,62 @@ else
     FAILS=$((FAILS + 1))
 fi
 
+# --- the CAPABILITY table's grep row must read code too (#415/#423) ---------
+#
+# The PDOK rule above has routed through `_code_lines` since it was written.
+# `OR_CAPABILITY_RULES`' one `grep`-kind row — Postgres `search_path` tenant
+# isolation — never did, so a docblock saying the class deliberately does NOT
+# do the thing produced a finding IDENTICAL to a real one. Both halves are
+# asserted here: the documented file goes quiet, the real statement does not.
+#
+# ⚠️ THE CAPABILITY ROWS HAVE THEIR OWN BAKE-IN EPOCH, so `run_gate`'s forced
+# BLOCK mode does NOT reach them: in WARN mode the script exits 0 whether or
+# not a capability rule matched. Written as `assert_rc 0` first, BOTH halves
+# passed — including on the unfixed script, where the "silent" arm was
+# measuring the epoch and not the finding. Assert the FILE LIST instead, and
+# force the capability epoch too so the exit status is a second witness.
+assert_out() {  # <yes|no> <regex> <label>
+    local want="$1" rx="$2" label="$3"
+    HYDRA_OR_CAPABILITY_GATE_BLOCK_AFTER_EPOCH=0 run_gate >/dev/null
+    if grep -qE "${rx}" "${WORK}/.out"; then
+        if [ "${want}" = "yes" ]; then echo "PASS — ${label}"; return; fi
+    elif [ "${want}" = "no" ]; then
+        echo "PASS — ${label}"; return
+    fi
+    echo "FAIL — ${label} (expected the output ${want} to match /${rx}/)"
+    sed 's/^/        /' "${WORK}/.out"
+    FAILS=$((FAILS + 1))
+}
+
+reset_tree
+cat > "${WORK}/lib/Service/RowFetcher.php" <<'PHPEOF'
+<?php
+class RowFetcher {
+    /**
+     * Fetch rows for the caller's organisation.
+     *
+     * We deliberately do NOT set a Postgres search_path here — isolation is
+     * OpenRegister's job (ADR-022), and doing it locally would be an
+     * app-local re-implementation of an OR-owned capability.
+     */
+    public function findAll(): array {
+        return $this->or->objects()->all();
+    }
+}
+PHPEOF
+assert_out no "RowFetcher\.php" "silent: a docblock explaining that search_path is NOT set is not a finding"
+
+reset_tree
+cat > "${WORK}/lib/Service/RealScope.php" <<'PHPEOF'
+<?php
+class RealScope {
+    public function scope(string $t): void {
+        $this->db->executeStatement('SET search_path TO '.$t);
+    }
+}
+PHPEOF
+assert_out yes "RealScope\.php" "fires: a real SET search_path is still OR-owned-capability duplication"
+
 # --- openconnector itself owns the adapter and is exempt --------------------
 reset_tree
 printf '<?xml version="1.0"?>\n<info>\n  <id>openconnector</id>\n</info>\n' > "${WORK}/appinfo/info.xml"

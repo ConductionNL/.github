@@ -183,7 +183,10 @@ class CommentIsNotAWriteTest(GateCase):
             + "\n        // TODO: " + WRITE % ("'leaf'", f"'{KEY}'"),
         )
         try:
-            gate.php_mask = lambda text: text  # the pre-fix behaviour
+            # The pre-fix behaviour. `**_kw` swallows `blank_strings=`, which
+            # scan_app now passes for the CALL-SITE anchor (#424) — the mutant
+            # must disable BOTH masks, or it would only half-mutate.
+            gate.php_mask = lambda text, **_kw: text
             rc, _ = _run(self.dir)
             self.assertEqual(
                 rc, 0,
@@ -289,6 +292,59 @@ class SuppressionTest(GateCase):
             "        " + READ % ("'leaf'", f"'{KEY}'"),
         )
         self.assertFinding("a suppression is per-key, not per-file")
+
+
+class StringLiteralIsNotAWriteTest(GateCase):
+    """#424 — a SENTENCE about a setter is not a setter.
+
+    The comment axis above was fixed in #276 and the literal axis was not, so
+    the same false GREEN survived one quote character away.
+
+    Mutation-checked: point the call-site anchor back at `php_mask(text)`
+    (string contents kept) and three of the four arms below go red. The fourth
+    — `test_the_real_write_beside_that_sentence_still_closes_it` — is green
+    both ways and is therefore the CONTROL: it proves the fix did not blank
+    the key literal this gate reads its evidence out of.
+    """
+
+    SENTENCE = (
+        '$hint = "call ' + (WRITE % ("'leaf'", f"'{KEY}'")).replace('"', "'")
+        + ' next";'
+    )
+
+    def test_a_setter_quoted_inside_a_string_does_not_close_the_gate(self):
+        """EVIDENCE: red before #424, green after."""
+        _app(self.dir, READ % ("'leaf'", f"'{KEY}'") + "\n        " + self.SENTENCE)
+        self.assertFinding("a string literal is prose, not a write")
+
+    def test_the_real_write_beside_that_sentence_still_closes_it(self):
+        """The PAIRED true positive — the fix must not blank the KEY, which
+        this gate reads out of a string literal on purpose."""
+        _app(
+            self.dir,
+            READ % ("'leaf'", f"'{KEY}'")
+            + "\n        " + self.SENTENCE
+            + "\n        " + WRITE % ("'leaf'", f"'{KEY}'"),
+        )
+        self.assertClean("the key must still be read out of the real call's literal")
+
+    def test_a_read_quoted_inside_a_string_is_not_a_read_either(self):
+        """EVIDENCE, the other direction: prose must not CREATE a finding.
+        Measured red before #424 — the pre-fix gate read the sentence as a
+        real read, found no write, and reported an unclosable gate that the
+        app has no code to close."""
+        _app(self.dir, '$hint = "we call ' + (READ % ("'leaf'", f"'{KEY}'")).replace('"', "'") + ' here";')
+        self.assertClean()
+
+    def test_a_const_declared_inside_a_string_is_not_a_declaration(self):
+        _app(
+            self.dir,
+            READ % ("'leaf'", "self::CONFIG_KEY")
+            + "\n        $doc = \"private const CONFIG_KEY = '" + KEY + "';\";",
+        )
+        rc, out = _run(self.dir)
+        self.assertEqual(rc, 0, out)
+        self.assertNotIn(KEY, out, "an unresolvable constant must not resolve via prose")
 
 
 class NoSubjectTest(GateCase):

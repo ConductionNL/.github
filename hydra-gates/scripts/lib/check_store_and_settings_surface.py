@@ -19,9 +19,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from source_scope import php_mask  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # AN EXIT CODE IS A STATUS (.github#240 / #242)
@@ -88,11 +92,20 @@ def _load(path: Path) -> dict | None:
         return None
 
 
-def _walk_menu(items, out):
+def _walk_menu(items, out, skip_captions: bool = False):
+    """Flatten a menu tree into *out*.
+
+    ``skip_captions`` drops ``type: "caption"`` nodes AND their subtrees. See
+    :func:`check_store` for the decision and its evidence; gate 63 keeps
+    walking them, because the rule it applies to a caption (its LABEL) is a
+    property the renderer does honour.
+    """
     for item in items or []:
         if isinstance(item, dict):
+            if skip_captions and item.get("type") == "caption":
+                continue
             out.append(item)
-            _walk_menu(item.get("children"), out)
+            _walk_menu(item.get("children"), out, skip_captions)
 
 
 def _pages_by_id(manifests: list[tuple[Path, dict]]) -> dict[str, dict]:
@@ -105,12 +118,53 @@ def _pages_by_id(manifests: list[tuple[Path, dict]]) -> dict[str, dict]:
 
 
 def check_store(root: Path, manifests, findings, changed: set[str] | None = None) -> None:
-    """ADR-080: store / templates / catalogue are three distinct concepts."""
+    """ADR-080: store / templates / catalogue are three distinct concepts.
+
+    A ``type: "caption"`` entry is NOT a menu entry for this gate's purposes.
+    -----------------------------------------------------------------------
+    Until 2026-08-12 this gate and gate 60 (icon-vocabulary) DISAGREED about
+    that node, in the same package, on the same three lines of JSON: gate 60
+    exempted it, and this gate failed it TWICE — once for "names the STORE
+    concept but renders X", once for "one glyph, two meanings". Reproduced on
+    a fixture carrying `{"type":"caption","label":"Store","icon":
+    "ViewGridOutline"}`: gate-60 → 0 findings, gate-62 → 2 FAILs.
+
+    The disagreement was decided against the RENDERER, not by aligning
+    whichever gate was easier to edit. ``CnAppNav.vue`` renders a caption as
+
+        <NcAppNavigationCaption v-if="isCaption(item)"
+            :name="resolveLabel(item)"
+            :data-testid="`cn-nav-caption-${item.id}`" />
+
+    — the label and a test id, and nothing else. No ``#icon`` slot, no ``:to``,
+    no children loop. Its own docblock states the contract ("Caption entries
+    ignore `route`, `href`, `action`, `icon`, `count`, `children`, and
+    `pinned`"), and the manifest schema states it independently ("'caption'
+    renders an NcAppNavigationCaption section divider — only label, id, order,
+    and section are honoured").
+
+    EVERY rule below is a claim about a rendered ICON or a resolved ROUTE, and
+    a caption has neither. So gate 60 was right and this gate was wrong: it was
+    emitting unclosable findings about dead metadata, whose only "fix" changes
+    no pixel. This gate is therefore aligned to gate 60, and gate 60 now emits
+    a WARN naming the dead keys so the information is not merely dropped.
+
+    ⚠️ SCOPE OF THE DECISION. It covers the ICON and ROUTE rules only. A
+    caption's LABEL *is* honoured by the renderer, so a label rule on a caption
+    would still be legitimate — gate 63 (settings-surface) keeps walking
+    captions for exactly that reason, and its ADR-079 D4 rule is about the
+    label. Nothing here exempts a caption from a future naming rule.
+
+    Fleet exposure, measured before the change across 14 repos and 145
+    manifests: **1** caption node exists and **0** carry any dead key, so this
+    corrects a latent contradiction, not a live count. The census was
+    positive-controlled (it found the 1 caption, so a 0 is a result).
+    """
     pages = _pages_by_id(manifests)
 
     for path, data in manifests:
         entries: list[dict] = []
-        _walk_menu(data.get("menu"), entries)
+        _walk_menu(data.get("menu"), entries, skip_captions=True)
         rel = path.relative_to(root)
 
         for entry in entries:
@@ -195,8 +249,27 @@ def check_store(root: Path, manifests, findings, changed: set[str] | None = None
                 text = php.read_text(encoding="utf-8", errors="ignore")
             except OSError:
                 continue
-            if "/apps/openregister/api/objects/" in text and (
-                "IClientService" in text or "newClient()" in text
+            # A COMMENT MUST NOT MANUFACTURE A FINDING (#415/#423).
+            #
+            # This was a substring test over the RAW file, so the docblock
+            #
+            #     We deliberately do NOT hit /apps/openregister/api/objects/
+            #     with an IClientService here — GenericStoreService owns
+            #     store discovery (ADR-080 D2/D3).
+            #
+            # produced a finding IDENTICAL to the real violation's, naming a
+            # file that does exactly what the gate wants. The author's
+            # cheapest fix is to delete the paragraph recording the decision
+            # — which is the same shape gate-64 was already repaired for
+            # (doriath's `loadApp`), one gate over.
+            #
+            # STRING CONTENTS ARE KEPT (`blank_strings` at its default): the
+            # URL this rule exists to find is a string literal in every real
+            # violation, so blanking literals would delete the evidence and
+            # turn the false positive into a false negative.
+            code = php_mask(text)
+            if "/apps/openregister/api/objects/" in code and (
+                "IClientService" in code or "newClient()" in code
             ):
                 findings.append(
                     f"FAIL {php.relative_to(root)}: builds and fetches an OpenRegister objects-API URL "

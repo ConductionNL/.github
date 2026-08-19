@@ -40,13 +40,32 @@
 # for apps following the standard Conduction NC app layout: lib/ + appinfo/
 # + optional src/ + tests/.
 #
+# SCOPE: FULL BY DEFAULT. ADR-020 IS SUPERSEDED — see
+# hydra-gates/ADR-020-SUPERSEDED.md for the decision and what it costs.
+#
+# The scope is TWO independent, named inputs, and both are printed every run:
+#
+#   FILE SCOPE   which files the STATE gates open. Defaults to the entire
+#                tracked tree. `--scope-to-diff` narrows it to the change.
+#   DELTA BASE   what the five DELTA gates (16, 29, 47, 48, 61) compare
+#                against. Resolved independently of the file scope, so a
+#                full-scope run on a PR still judges the change.
+#
 # Options:
-#   --scope-to-diff [BASE]   — Phase G: only scan files changed vs BASE
-#                              (default origin/development). Inherited debt
-#                              in unchanged files is ignored. Required for
-#                              reviewer/security post-flight enforcement;
-#                              optional for builder (build mode runs full).
-#   --base BRANCH            — override the diff base (default origin/development)
+#   --full                   — scan the whole tree. THIS IS THE DEFAULT; the
+#                              flag names it rather than switching to it.
+#   --scope-to-diff, --diff  — the old ADR-020 behaviour, now OPT-IN: judge only
+#                              the files this change touched. Inherited debt in
+#                              unchanged files is not judged.
+#   --base BRANCH            — the delta base. Also the file-scope base when
+#                              --scope-to-diff is given. NO DEFAULT: the old
+#                              hardcoded `origin/development` is the shared root
+#                              cause of .github#347 and #361 — a base nobody
+#                              supplied, silently diffing a branch against
+#                              itself, and printing PASS.
+#   $HYDRA_GATE_SCOPE        — `full` | `diff`, the env form of the two flags.
+#                              Anything else stops the run: a run whose scope
+#                              nobody can name is not evidence about anything.
 #
 # When the base resolves to the SAME COMMIT as HEAD — which is what every push
 # to a mainline branch looks like — the scope is taken from the push's own
@@ -200,8 +219,45 @@ else
     echo "[hydra-gates] Set HYDRA_GATES_PKG_SHA to make the comparison sound."
 fi
 
+# ---------------------------------------------------------------------------
+# THE SCOPE IS TWO INPUTS, NOT ONE, AND BOTH ARE NAMED AND PRINTED.
+#
+# `SCOPE_TO_DIFF` used to be the only scope control, and it decided two
+# unrelated things at once:
+#
+#   FILE SCOPE   which files the STATE gates open ("is the tree valid?")
+#   DELTA BASE   what the DELTA gates compare against ("did this change do X
+#                without Y?")
+#
+# Conflating them is why "I ran it with no base" was never a scope. On a full
+# run gate-19 swept the whole tree while gate-16 fell back to a hardcoded
+# `origin/development` and reported PASS over nothing (`.github#361`), and
+# gate-61 declined citing a diff the run had never computed (`.github#347`) —
+# the same package answering the same question two different ways.
+#
+# So they are separate now:
+#
+#   SCOPE_TO_DIFF=0  FULL SCOPE — the default. Every state gate reads the whole
+#                    tracked tree. This is the reversal of ADR-020; see
+#                    hydra-gates/ADR-020-SUPERSEDED.md for why, and for what it
+#                    costs.
+#   SCOPE_TO_DIFF=1  the old ADR-020 behaviour, now OPT-IN via --scope-to-diff.
+#   HAVE_DELTA_BASE  set independently of the above. A delta gate runs when
+#                    this is 1 and reports NOT APPLICABLE — never PASS — when
+#                    it is 0. A full-scope run on a PR still HAS a base, so
+#                    gates 16/29/47/48/61 keep working; a workflow_dispatch has
+#                    none, and they say so by name.
+#
+# `BASE_REF` starts EMPTY, deliberately. The old `origin/development` default
+# is the exact shape SHARED-LESSONS records twice: a base nobody supplied,
+# silently diffing a branch against itself, and printing PASS. If a base is
+# wanted it is stated — by --base, by $HYDRA_GATE_BASE_REF, or by the
+# auto-detection below — and the winner is printed.
 SCOPE_TO_DIFF=0
-BASE_REF="origin/development"
+BASE_REF=""
+# 1 once a usable base has been resolved AND its changed-file set computed.
+# Read by the DELTA gates (16, 29, 47, 48, 61) instead of SCOPE_TO_DIFF.
+HAVE_DELTA_BASE=0
 APP_DIR=""
 # Treat "a declared gate did not run" as a failure (exit 98). Off by default so
 # a Tier-0 app is not blocked by gates it has no surface for; on, the run
@@ -225,9 +281,82 @@ REQUIRE_FULL_COVERAGE="${HYDRA_GATE_REQUIRE_FULL_COVERAGE:-0}"
 # to guess "unverified" in both cases, which is why --require-full-coverage was
 # unusable in every repo in the fleet.
 AXE_ENABLED="${HYDRA_GATE_AXE_ENABLED:-0}"
+# THE SCOPE IS AN EXPLICIT, NAMED INPUT — never inferred from whether a base
+# happens to be set. `$HYDRA_GATE_SCOPE` is the env form of the flags below; an
+# unrecognised value is a hard stop rather than a silent fall-back to either
+# mode, because "which scope did that run use?" is the one question every
+# verdict in this file is an answer to.
+case "${HYDRA_GATE_SCOPE:-full}" in
+    full) SCOPE_TO_DIFF=0 ;;
+    diff) SCOPE_TO_DIFF=1 ;;
+    *)
+        echo "[hydra-gates] FATAL: \$HYDRA_GATE_SCOPE='${HYDRA_GATE_SCOPE}' is not 'full' or 'diff'." >&2
+        echo "[hydra-gates] Refusing to guess a scope. A run whose scope nobody can name is not" >&2
+        echo "[hydra-gates] evidence about anything. NOTHING WAS CHECKED." >&2
+        exit 99
+        ;;
+esac
+BASE_REF="${HYDRA_GATE_BASE_REF:-}"
+# ---------------------------------------------------------------------------
+# THE SCOPE DECISION HAS EXACTLY ONE SOURCE, AND IT IS THIS SHELL (.github#416)
+# ---------------------------------------------------------------------------
+# The line above CONSUMES the variable. It is an INPUT to this runner — one of
+# three, alongside `--base` and the auto-detection below — and once read, the
+# decision lives in `${BASE_REF}` and `${SCOPE_TO_DIFF}`, both of which are
+# printed. So the variable is removed from this process's environment right
+# here, and every checker below is spawned into an environment that does not
+# contain it.
+#
+# WHY, and it is not hygiene. TEN helpers in scripts/lib/ read
+# `HYDRA_GATE_BASE_REF` from `os.environ` and diff-scope themselves when they
+# find it. Three of them — gate-16's, gate-53's scoper and gate-61's — are
+# always handed their base explicitly and were never exposed. The other SEVEN
+# (gates 19, 25, 26, 51, 52, 54, 55) are invoked through the same shape:
+#
+#     if [ "${SCOPE_TO_DIFF}" = "1" ]; then
+#         HYDRA_GATE_BASE_REF="${BASE_REF}" python3 …/check_x.py .
+#     else
+#         python3 …/check_x.py .          # <-- inherits the AMBIENT variable
+#     fi
+#
+# That `if` guards the EXPLICIT pass and was added for `#242`. It cannot guard
+# the environment: on any run where the caller exported the variable, the
+# `else` branch spawned a child that read it anyway, and the gate silently
+# diff-scoped itself on a run this script had already announced as full scope.
+#
+# The shared quality workflow exports it on `pull_request` and leaves it empty
+# on `push` — so this reopened `#242` on exactly the event that gates a merge,
+# and nowhere else. Measured on docudesk (`ConductionNL/.github@5e73e640`), one
+# tree, one base, `SCOPE-MODE: full` in both arms, only the delivery channel
+# different: gates 19/25/26 reported `NOT APPLICABLE` when the base arrived
+# through the environment and `FAIL — 396` / `PASS` / `FAIL — 6` when the same
+# base arrived through `--base`. And the run's own preamble — the line this
+# file prints once the base resolves, "The DELTA gates (16, 29, 47, 48, 61)
+# judge that change set. Every other gate reads the whole tree." — was FALSE in
+# the first arm, identically worded in both, with nothing in the log letting a
+# reader tell which one they were holding.
+#
+# Unsetting it here rather than patching the seven `else` branches is
+# deliberate. A per-gate `env -u` is a fix each of the seven has to remember,
+# and gate 51/52/54/55's authors each wrote the same shape after gate-19's
+# author had already written the `#242` comment explaining it. A new gate added
+# tomorrow with the same `if/else` is correct BY CONSTRUCTION under this line,
+# and cannot be made incorrect by anything a caller exports.
+#
+# The invariant, stated so it can be tested (and it is, by
+# scripts/lib/test_gate_base_ref_delivery_channel.sh): FOR ONE TREE AND ONE
+# BASE, THE PER-GATE VERDICTS MUST NOT DEPEND ON WHICH CHANNEL DELIVERED THE
+# BASE. `--base X` and `HYDRA_GATE_BASE_REF=X` are two spellings of one input;
+# a gate that can tell them apart is reading a second, unprinted source of
+# scope.
+unset HYDRA_GATE_BASE_REF
 while [ $# -gt 0 ]; do
     case "$1" in
-        --scope-to-diff) SCOPE_TO_DIFF=1; shift ;;
+        --scope-to-diff|--diff) SCOPE_TO_DIFF=1; shift ;;
+        # Explicit and redundant, and kept because it is what every caller in
+        # the fleet already passes for an audit run. It now names the DEFAULT
+        # rather than switching to it.
+        --full) SCOPE_TO_DIFF=0; shift ;;
         --require-full-coverage) REQUIRE_FULL_COVERAGE=1; shift ;;
         --axe-enabled) AXE_ENABLED=1; shift ;;
         --base) BASE_REF="$2"; shift 2 ;;
@@ -236,7 +365,61 @@ while [ $# -gt 0 ]; do
     esac
 done
 APP_DIR="${APP_DIR:-$(pwd)}"
+# ---------------------------------------------------------------------------
+# ABSOLUTISE THE APP DIR *BEFORE* THE `cd`, AND NEVER LET A RELATIVE PATH REACH
+# A CHECKER (.github#374).
+#
+# This line used to be a bare `cd "${APP_DIR}"`, leaving ${APP_DIR} holding
+# whatever spelling the caller typed. Every gate that only ever works from the
+# CURRENT DIRECTORY is unaffected — but gate-17 hands `${APP_DIR}` to
+# detect-redundant-controllers.py as its scan root AFTER the `cd`, so a
+# relative path resolves a second time, against the app dir itself.
+#
+# Measured on a fixture holding exactly one ADR-022 pass-through wrapper, same
+# tree, same commit, only the path SPELLING changed:
+#
+#     bash run-hydra-gates.sh /abs/path/relapp   ->  [gate-17] FAIL — 1
+#     bash run-hydra-gates.sh relapp             ->  [gate-17] PASS
+#
+# The checker was pointed at `relapp/relapp`, found nothing, printed its
+# terminal `# count=0`, and the runner correctly read that as "clean". Every
+# layer behaved exactly as designed; the scan root was wrong before any of them
+# saw it.
+#
+# `bin/hydra-gates` already absolutises (bin/hydra-gates: `APP_DIR="$(cd …)"`),
+# so CI has never been exposed — but the invocation this file's own header
+# documents for humans (`./scripts/run-hydra-gates.sh [options] [app-dir]`) is,
+# and a gate that reports PASS because of how its caller spelled a path is the
+# same defect as a gate that reports PASS over an empty scope.
+#
+# Resolved ONCE, HERE, so it is impossible to reach a checker with a relative
+# path: everything below this line — including every `${APP_DIR}` a gate passes
+# on — is absolute by construction. `cd -P` resolves symlinks too, so the value
+# a checker receives is the directory it will actually read.
+_app_dir_abs="$(cd -P "${APP_DIR}" 2>/dev/null && pwd)"
+if [ -z "${_app_dir_abs}" ]; then
+    # Keep the caller's SPELLING in the message — that is the thing they typed
+    # and the thing they can fix. Overwriting APP_DIR first would print an
+    # empty path and blame nothing.
+    echo "[hydra-gates] ERROR: ${APP_DIR} not accessible" >&2
+    exit 99
+fi
+APP_DIR="${_app_dir_abs}"
 cd "${APP_DIR}" 2>/dev/null || { echo "[hydra-gates] ERROR: ${APP_DIR} not accessible" >&2; exit 99; }
+echo "[hydra-gates] App dir: ${APP_DIR} (absolute)"
+
+# ONE MACHINE-READABLE LINE FOR THE FILE SCOPE, EMITTED EXACTLY ONCE.
+#
+# Downstream must never infer the scope from prose, from whether a base was
+# printed, or from a gate's own wording. Every one of those has been wrong at
+# least once in this package's history.
+if [ "${SCOPE_TO_DIFF}" = "1" ]; then
+    echo "[hydra-gates] SCOPE-MODE: diff"
+    echo "[hydra-gates] File scope: the diff only (--scope-to-diff / HYDRA_GATE_SCOPE=diff). Inherited debt in untouched files is NOT judged."
+else
+    echo "[hydra-gates] SCOPE-MODE: full"
+    echo "[hydra-gates] File scope: the ENTIRE tracked tree — the default. A gate added or tightened after this code was written WILL surface its inherited debt here, and that is the point (hydra-gates/ADR-020-SUPERSEDED.md)."
+fi
 
 # When scope-to-diff is requested, derive the changed-files set once.
 # Non-diff branches that need the set: each gate below filters its
@@ -456,8 +639,67 @@ if [ "${SCOPE_TO_DIFF}" = "1" ]; then
     else
         echo "[hydra-gates] Scope: diff vs ${BASE_REF} — ${_cf_count} changed file(s)"
     fi
+    # A diff-scoped run that got this far has a usable base by construction —
+    # every path that could not produce one exited 99 above.
+    HAVE_DELTA_BASE=1
 else
     echo "[hydra-gates] Scope: full repo"
+    # ── A DELTA BASE FOR A FULL-SCOPE RUN ───────────────────────────────────
+    #
+    # Full FILE scope does not mean "no base". The five DELTA gates —
+    # 16 spec-coverage, 29 gitignore-then-commit, 47 security-change-has-tests,
+    # 48 csrf-cochange, 61 listener-work-placement — ask questions only a diff
+    # can answer, and switching the default to full scope would have silently
+    # retired all five on every PR in the fleet. They are the gates that
+    # protect the change in front of you, so losing them to gain inherited-debt
+    # coverage would be a straight downgrade.
+    #
+    # So: if the caller named a base, resolve it and hand it to those gates
+    # while every OTHER gate reads the whole tree.
+    #
+    # EVERY FAILURE HERE IS NON-FATAL, and that is the difference from the
+    # diff-scoped branch above. There, an unusable base means the run cannot be
+    # scoped and exit 99 is correct. Here, an unusable base costs five gates
+    # and nothing else — 59 of 64 still have a real verdict — so refusing would
+    # throw away a good answer to punish a bad input. The five say NOT
+    # APPLICABLE, by name, with the reason below quoted back at the reader.
+    if [ -n "${BASE_REF}" ]; then
+        _db_why=""
+        _db_head=$(git -c safe.directory='*' rev-parse --verify --quiet 'HEAD^{commit}' 2>/dev/null || true)
+        _db_base=$(git -c safe.directory='*' rev-parse --verify --quiet "${BASE_REF}^{commit}" 2>/dev/null || true)
+        if [ -z "${_db_base}" ]; then
+            _db_why="it does not resolve in this repository"
+        elif [ "${_db_base}" = "${_db_head}" ]; then
+            # The mainline-push shape. `bin/hydra-gates` re-scopes this to
+            # github.event.before before it ever reaches here, so seeing it
+            # means a direct runner invocation. Comparing HEAD with itself
+            # yields an empty diff and would make the delta gates report a
+            # confident PASS over nothing — the exact defect this file spends
+            # 200 lines guarding against on the other branch.
+            _db_why="it is the SAME COMMIT as HEAD (${_db_head}), so the diff would be empty by construction"
+        elif ! git -c safe.directory='*' merge-base "${BASE_REF}" HEAD > /dev/null 2>&1; then
+            _db_why="it shares NO history with HEAD — the shape of a shallow checkout (fetch-depth: 1)"
+        else
+            CHANGED_FILES=$(git -c safe.directory='*' diff --name-only \
+                --diff-filter=ACMR "${BASE_REF}...HEAD" 2>/dev/null) \
+                && HAVE_DELTA_BASE=1 || _db_why="git could not compute the diff against it"
+        fi
+        if [ "${HAVE_DELTA_BASE}" = "1" ]; then
+            _db_count=$(printf '%s' "${CHANGED_FILES}" | grep -c . 2>/dev/null || true)
+            echo "[hydra-gates] Delta base: ${BASE_REF} = $(git -c safe.directory='*' rev-parse --short "${BASE_REF}" 2>/dev/null) — ${_db_count:-0} changed file(s)."
+            echo "[hydra-gates] The DELTA gates (16, 29, 47, 48, 61) judge that change set. Every other gate reads the whole tree."
+        else
+            CHANGED_FILES=""
+            echo "[hydra-gates] Delta base: UNUSABLE — '${BASE_REF}' was named but ${_db_why}."
+            echo "[hydra-gates] Gates 16, 29, 47, 48 and 61 will report NOT APPLICABLE by name. They are"
+            echo "[hydra-gates] NOT counted as passing. Every other gate is unaffected and still reads the whole tree."
+            BASE_REF=""
+        fi
+    else
+        echo "[hydra-gates] Delta base: none — no --base and no \$HYDRA_GATE_BASE_REF."
+        echo "[hydra-gates] Gates 16, 29, 47, 48 and 61 ask what a CHANGE did and have no change to read."
+        echo "[hydra-gates] They will report NOT APPLICABLE by name, which is not a pass and does not count as one."
+    fi
 fi
 
 # Helper — return 0 if $1 (a file path) is in scope (i.e. either we're
@@ -1133,6 +1375,64 @@ _ctrl_path_from_name() {
 }
 
 # ---------------------------------------------------------------------------
+# _php_code_copy <php-file> — path to a COMMENT-MASKED copy of <php-file>,
+# cached per path. Echoes nothing and returns 1 when the mask is unavailable,
+# so a caller can decline to judge rather than silently grade raw text.
+#
+# WHY (#415 / #422). A gate that answers a question about CODE by grepping the
+# bytes of a FILE answers it about PROSE too, and this runner asked several
+# such questions of raw files. The masked copy is length- and
+# newline-preserving (source_scope.php_mask), so every line number, `sed -n
+# "${n}p"` and awk `NR` computed on it names the same line of the original —
+# which is what lets a gate anchor on the mask and still read a suppression
+# marker out of the ORIGINAL text at that line.
+#
+# STRING CONTENTS SURVIVE, deliberately and per caller: `php_mask` keeps them
+# by default, and the two callers below both need them. A route name IS a
+# string (`'thing#index'`), and `"user $uid not found"` IS a use of $uid —
+# PHP interpolates it. Blanking literals here would not close a false
+# negative, it would manufacture false positives on correct code.
+#
+# NOT A SECOND COPY OF gate-5's `_ra_masked_copy`: that one predates this and
+# is scoped to gate-5's own cache directory and its own wiring guard. This is
+# the shared form; folding gate-5 into it means re-proving gate-5's suite and
+# belongs in its own change.
+# ---------------------------------------------------------------------------
+_HYDRA_MASK_HELPER="${SCRIPT_DIR}/lib/source_scope.py"
+_HYDRA_MASK_DIR="${HYDRA_GATE_LOG_DIR}/php-code-copies"
+
+# POSITIVE CONTROL ON THE MASK ITSELF, once per run. A helper that is missing,
+# or that silently echoes its input back, would put every caller straight into
+# the false negative it is here to close — and a false negative leaves no log
+# to notice. So the mask is asked a question with a known answer before it is
+# trusted: of these two lines, exactly ONE must survive.
+_HYDRA_MASK_OK=1
+if [ ! -f "${_HYDRA_MASK_HELPER}" ]; then
+    _HYDRA_MASK_OK=0
+else
+    _hydra_mask_probe=$(printf '// $uid\n$uid\n' \
+        | python3 "${_HYDRA_MASK_HELPER}" --mask php - 2>/dev/null \
+        | grep -c 'uid')
+    [ "${_hydra_mask_probe}" = "1" ] || _HYDRA_MASK_OK=0
+fi
+
+_php_code_copy() {
+    local _src="$1" _dst
+    [ "${_HYDRA_MASK_OK}" -eq 1 ] || return 1
+    [ -f "${_src}" ] || return 1
+    mkdir -p "${_HYDRA_MASK_DIR}" 2>/dev/null || return 1
+    _dst="${_HYDRA_MASK_DIR}/$(printf '%s' "${_src}" | tr '/' '_')"
+    if [ ! -f "${_dst}" ]; then
+        if ! python3 "${_HYDRA_MASK_HELPER}" --mask php "${_src}" > "${_dst}.tmp" 2>/dev/null; then
+            rm -f "${_dst}.tmp"
+            return 1
+        fi
+        mv "${_dst}.tmp" "${_dst}"
+    fi
+    printf '%s' "${_dst}"
+}
+
+# ---------------------------------------------------------------------------
 # _head_block <php-file> <declaration-line> — the annotation region that
 # belongs to the method declared on <declaration-line>, as text.
 #
@@ -1165,10 +1465,46 @@ _ctrl_path_from_name() {
 # than the run alone matters for a multi-line attribute
 # (`#[AuthorizedAdminSetting(\n  Application::APP_ID\n)]`), whose middle lines
 # are ordinary code and would otherwise cut the run short.
+#
+# ⚠️ AND THE UNION WAS NOT ENOUGH: A COMMENT COULD STILL SPEND THE BUDGET
+# (#415/#423). The union only rescues a multi-line attribute while the
+# 20-line SLICE still reaches it, so the explanation between the attribute
+# and the declaration is charged against the attribute's visibility.
+# Measured on two fixtures differing in NOTHING but the length of an
+# ordinary docblock, both carrying a real
+# `#[AuthorizedAdminSetting(\n Application::APP_ID\n)]` above it:
+#
+#     2 doc lines  -> [gate-5] route-auth: PASS
+#    30 doc lines  -> [gate-5] route-auth: FAIL — 1 routed method(s)
+#                       missing auth attribute
+#
+# The attribute is there in both. The run breaks at the `)]` line — which
+# matches none of the five patterns above — so `run` stops BELOW the
+# attribute, and past twenty lines of prose the slice no longer reaches it
+# either. An author who documents the endpoint goes red; the same author who
+# deletes the paragraph goes green having changed nothing about its auth.
+# That is the corrosive direction: it teaches people to delete the
+# explanation, and this is a SECURITY gate whose findings a human has to be
+# able to check.
+#
+# So the walk now STEPS OVER a multi-line attribute by structure rather than
+# by distance — the same repair `check_contract_coverage` documents at its
+# L208 ("WHY THIS IS NOT A LINE WINDOW"). On a line that closes a bracket,
+# it scans up for the `#[` that opens it, requiring the brackets between to
+# BALANCE, and resumes the run from there. It cannot run away: the scan is
+# bounded, it must find a real `#[` at line start, and the previous-member
+# clamp below still cuts the window at the last `}` — so a short guarded
+# method still cannot donate its attribute to the next one.
 # ---------------------------------------------------------------------------
 _head_block() {
     local _file="$1" _def="$2"
     awk -v D="${_def}" '
+        # Net bracket depth of one line: `[` opens, `]` closes.
+        function _brk(s,   t, o, c) {
+            t = s; o = gsub(/\[/, "", t)
+            t = s; c = gsub(/\]/, "", t)
+            return o - c
+        }
         NR <= D { line[NR] = $0 }
         NR > D  { exit }
         END {
@@ -1181,6 +1517,21 @@ _head_block() {
                 if (l ~ /^[[:space:]]*\*/)             { run = i; continue }
                 if (l ~ /^[[:space:]]*\/\//)           { run = i; continue }
                 if (l ~ /^[[:space:]]*#\[/)            { run = i; continue }
+                # A line that closes more brackets than it opens may be the
+                # tail of a multi-line attribute. Walk up while the brackets
+                # stay unbalanced; if the line that balances them opens an
+                # attribute, the whole span belongs to this declaration.
+                if (_brk(l) < 0) {
+                    bal = 0
+                    for (j = i; j >= 1 && i - j <= 40; j--) {
+                        bal += _brk(line[j])
+                        if (bal == 0) {
+                            if (line[j] ~ /^[[:space:]]*#\[/) { run = j; i = j }
+                            break
+                        }
+                    }
+                    if (run == i) { continue }
+                }
                 break
             }
             slice = (D > 20) ? D - 20 : 1
@@ -1236,6 +1587,30 @@ _fail() {
     _EMITTED_GATES="${_EMITTED_GATES}$1 "
 }
 _pass() { set +e; echo "[gate-$1] $2: PASS"; _EMITTED_GATES="${_EMITTED_GATES}$1 "; }
+
+# _warn — A GATE THAT REPORTED A REAL FINDING AND IS DELIBERATELY NOT BLOCKING.
+#
+# This is NOT `_skip`. A skip means the gate did not judge — no scope, no
+# wiring, nothing inspected. `_warn` means the gate ran, found something, and
+# the fleet has decided that finding does not stop a merge yet. The count is
+# real and is printed; it simply does not reach `_FAILED`.
+#
+# It still registers in `_EMITTED_GATES`, so the COVERAGE line keeps counting
+# this gate as having reported. That matters: demoting a gate must not quietly
+# reduce the number of gates the run claims to have executed, which is exactly
+# how a suite shrinks without anyone noticing.
+#
+# ⚠️ Use this ONLY with a tracked issue and a stated reason. A warning with no
+# owner is a gate nobody will ever turn back on.
+_warn() {
+    set +e
+    local _reason
+    _reason=$(printf '%s' "${3:-}" | tr '\n' ' ')
+    echo "[gate-$1] $2: WARNING${_reason:+ — ${_reason}}"
+    _WARNED=$((_WARNED + 1))
+    _EMITTED_GATES="${_EMITTED_GATES}$1 "
+}
+_WARNED=0
 
 # _optout_text — every place a reason-bearing `[hydra-gate-<name> exclude]` tag
 # may legitimately be written, as one stream to grep.
@@ -1439,6 +1814,54 @@ _skip() {
             _EMITTED_GATES="${_EMITTED_GATES}$1 "
             ;;
     esac
+}
+
+# ---------------------------------------------------------------------------
+# _skip_empty_scope <n> <name> <subject-phrase>
+#
+# THE ONE HELPER FOR "THIS GATE OPENED NOTHING". Never PASS.
+#
+# WHY IT EXISTS (.github#374)
+# ---------------------------
+# Seventeen gates ended their file loop with a bare
+#
+#     if [ "${#_files[@]}" -eq 0 ]; then
+#         : # nothing in scope; the PASS below describes the diff.
+#     fi
+#     ...
+#     [ "${_fail}" -eq 0 ] && _pass N "name"
+#
+# so a gate that inspected ZERO files printed a verdict byte-identical to one
+# that read every file in the app and found every one of them clean. Measured
+# on a planted tree with every defect still on disk, docs-only diff:
+# gates 14, 17, 18, 21, 22, 34-44 and 52 all printed PASS.
+#
+# That is worse than hiding a finding. `NOT APPLICABLE` is EXCLUDED from the
+# verdict, but a `PASS` is COUNTED as an applicable gate that ran — so the
+# `COVERAGE: N of 64` line, the one line this whole programme relies on to tell
+# an honest green from a vacuous one, was overstated by up to seventeen.
+#
+# Full scope removes the empty set for most of these, but it does NOT retire
+# the defect: the fall-through is still there, and it would resurface the
+# moment anything narrows the scope again (`--scope-to-diff`, a repo that
+# genuinely ships no `src/`). So it is fixed at the fall-through, not merely
+# routed around, and `test_gate_empty_scope_never_passes.sh` asserts the
+# property across the package rather than by convention.
+#
+# Gates 26, 31 and 32 already modelled the right answer — a gate-level `na`
+# WITH A REASON — on the same input where the seventeen passed. This is that
+# answer, factored out so a new gate inherits it instead of copying the bug.
+#
+# The reason states BOTH halves a reader needs: what went uninspected, and
+# which of the two possible causes it was. Those are different situations and
+# only one of them is under the author's control.
+_skip_empty_scope() {
+    local _n="$1" _name="$2" _subject="$3"
+    if [ "${SCOPE_TO_DIFF}" = "1" ]; then
+        _skip "${_n}" "${_name}" na "no ${_subject} is in scope for this run: the run was NARROWED with --scope-to-diff and the diff against '${BASE_REF}' touches none (the ADR-020 rule, now opt-in — see hydra-gates/ADR-020-SUPERSEDED.md). NOTHING was inspected and nothing could be, so this is NOT a pass. Re-run at the default full scope to judge the whole tree."
+    else
+        _skip "${_n}" "${_name}" na "no ${_subject} exists in this repository. This run is FULL-SCOPE (the default — see hydra-gates/ADR-020-SUPERSEDED.md), so the whole tracked tree was enumerated and it contains no such file. NOTHING was inspected and nothing could be, so this is NOT a pass."
+    fi
 }
 
 # An abort before the summary (set -e / set -u, a helper blowing up, ...) used
@@ -1657,12 +2080,50 @@ fi
 # service/controller that declares a caller-identity parameter
 # ($uid / $callerUid / $userId / $caller) but never references it in
 # its body is an unfinished stub and fails gate-3. See ADR-021.
+#
+# A TODO NAMING THE PARAMETER IS NOT A USE OF IT (#415 / #422).
+# -----------------------------------------------------------
+# The reference count below was `grep -cF "$param"` over the RAW body, so a
+# comment counted as a reference. Measured through this gate, one fixture, ONE
+# ADDED LINE:
+#
+#   public function authorize(string $uid, string $id): bool {
+#       $this->log('checked');
+#       return true;
+#   }                       -> FAIL — rule=caller-identity-ignored   (correct)
+#
+#   the same method with
+#     `// TODO: verify $uid actually owns this object before returning true.`
+#                           -> PASS                                 <- the defect
+#
+# That is the sentence a diligent author writes while acknowledging the stub,
+# and this gate exists BECAUSE the builder's fix-mode wrote exactly such stubs
+# (decidesk#45): methods that accept a caller identity and ignore it, which
+# gate-7 also passed. A stub that documents what it does not do is still a
+# stub.
+#
+# The `;` vs `{` terminator test above has the same exposure and the same
+# repair — a `/* … ; … */` in a signature made a real method read as an
+# abstract DECLARATION and be skipped entirely (gate-57 carried that defect
+# verbatim, #422). Both now read the masked copy.
+#
+# ⚠️ STRING CONTENTS SURVIVE, AND HERE THAT IS THE WHOLE POINT. In PHP,
+# `"user $uid not found"` INTERPOLATES $uid — it is a genuine reference, and
+# `throw new NotFoundException("no such user: $uid")` is a perfectly good use
+# of a caller identity. Blanking literals would report those methods as stubs.
+# The single-quoted `'$uid'` that is NOT a use stays a residual false negative
+# and is #424's; it is the fail-safe direction for a gate that accuses a
+# method of being unfinished.
 while IFS= read -r f; do
     [ -f "$f" ] || continue
     _in_scope "$f" || continue
-    grep -nE '^\s*public\s+function\s+\w+\s*\([^)]*\$(uid|callerUid|userId|caller)\b' "$f" \
+    # Anchor on CODE. A file whose mask cannot be produced is not judged by
+    # this arm — reading the raw text instead is the behaviour being removed.
+    _stub_code=$(_php_code_copy "$f") || continue
+    [ -n "${_stub_code}" ] || continue
+    grep -nE '^\s*public\s+function\s+\w+\s*\([^)]*\$(uid|callerUid|userId|caller)\b' "${_stub_code}" \
         | while IFS=: read -r _line_no _; do
-            _sig=$(sed -n "${_line_no}p" "$f")
+            _sig=$(sed -n "${_line_no}p" "${_stub_code}")
             _method=$(echo "$_sig" | grep -oE 'function\s+\w+' | awk '{print $2}')
             _param=$(echo "$_sig" | grep -oE '\$(uid|callerUid|userId|caller)\b' | head -1)
             [ -z "$_method" ] || [ -z "$_param" ] && continue
@@ -1695,10 +2156,10 @@ while IFS= read -r f; do
             #
             # Decide it on the SIGNATURE's terminator, which is the property that
             # actually distinguishes the two: `;` = declaration, `{` = body.
-            _sig_region=$(awk -v start="${_line_no}" 'NR >= start { printf "%s", $0; if (/[;{]/) exit }' "$f")
+            _sig_region=$(awk -v start="${_line_no}" 'NR >= start { printf "%s", $0; if (/[;{]/) exit }' "${_stub_code}")
             _sig_term=$(printf '%s' "${_sig_region}" | grep -oE '[;{]' | head -1)
             [ "${_sig_term}" = ";" ] && continue
-            _body=$(awk -v start="${_line_no}" 'NR >= start { print; if (NR > start && /^    \}/) exit }' "$f")
+            _body=$(awk -v start="${_line_no}" 'NR >= start { print; if (NR > start && /^    \}/) exit }' "${_stub_code}")
             _body_lines=$(echo "${_body}" | wc -l)
             # A legitimate ≥3-line method that accepts a caller-identity
             # param and never references it is a stub. Skip very short
@@ -1708,10 +2169,49 @@ while IFS= read -r f; do
             # so <2 means body never references it.
             _count=$(echo "${_body}" | grep -cF "${_param}")
             if [ "${_count}" -lt 2 ]; then
-                echo "${f}:${_line_no} method=${_method} rule=caller-identity-ignored param=${_param}" >> "${_stub_log}"
+                # A CONTRACT-IMPOSED PARAMETER THE AUTHOR MARKED UNUSED IS NOT A
+                # STUB (.github#339).
+                #
+                # An unused caller identity is a defect when the author chose the
+                # signature and forgot the check (decidesk#45). It is NOT a defect
+                # when a supertype chose the signature and this implementor has no
+                # business consulting the caller — a strategy/guard/handler
+                # interface that passes the caller to implementors that do not all
+                # need it is a normal shape. Measured on procest: all 3 findings
+                # implement GuardEvaluatorInterface::evaluate(..., string $userId),
+                # which RoleGuard and MandaatGuard genuinely use. Deleting the
+                # parameter breaks the interface and every call site; referencing
+                # it pointlessly is dead code written to satisfy a stub detector.
+                # Neither is a fix, so the finding had no closing action.
+                #
+                # The helper exempts ONLY when BOTH hold: a supertype resolvable
+                # in this repo declares the same method with the same parameter
+                # (mechanical — an invented method cannot acquire one from a
+                # docblock), AND the method docblock's @param line for THAT
+                # parameter carries an explicit unused marker. Either alone still
+                # reports. Fail-closed: a missing helper, an unreadable file or an
+                # unresolvable supertype all leave the finding standing.
+                _ci_exempt=1
+                _ci_helper="${SCRIPT_DIR}/lib/check_caller_identity_exempt.py"
+                if [ -f "${_ci_helper}" ]; then
+                    python3 "${_ci_helper}" --root . --file "$f" --line "${_line_no}" \
+                        --method "${_method}" --param "${_param}" 2>>"${HYDRA_GATE_LOG_DIR}/hydra-gate-stub-scan.err"
+                    _ci_exempt=$?
+                fi
+                if [ "${_ci_exempt}" -ne 0 ]; then
+                    echo "${f}:${_line_no} method=${_method} rule=caller-identity-ignored param=${_param}" >> "${_stub_log}"
+                fi
             fi
         done
 done < <(_enum_tracked '\.php$' lib/Service lib/Controller)
+# AN ARM THAT SILENTLY DID NOT RUN IS NOT A PASS. The caller-identity arm above
+# `continue`s on every file whose comment mask cannot be produced, so without
+# this the gate would print PASS with one of its four arms switched off and no
+# log to notice — the shape this package keeps finding (#147, #245, #374).
+if [ "${_stub_ran}" -eq 1 ] && [ "${_stub_scope}" -gt 0 ] && [ "${_HYDRA_MASK_OK}" -eq 0 ]; then
+    _stub_ran=0
+    _skip 3 "stub-scan" wiring "source_scope.py at ${_HYDRA_MASK_HELPER} could not blank a PHP comment (positive control failed) — ${_stub_scope} file(s) were in scope and the caller-identity arm judged NONE of them. Without the mask a TODO naming \$uid counts as a use of \$uid (#422), so the run declines rather than reporting a pass over an arm that did not execute."
+fi
 if [ "${_stub_ran}" -eq 1 ] && [ "${_stub_scope}" -eq 0 ]; then
     _stub_ran=0
     _skip 3 "stub-scan" na "scope was empty — 0 tracked .php/.vue file(s) under lib/ or src/ in this diff, so NOTHING was inspected; stub code (unfinished run() bodies, 'In a complete implementation' markers, ignored caller-identity parameters) is UNVERIFIED by this run."
@@ -2152,7 +2652,17 @@ fi
 #     ->forbiddenWords( is not a false guard)
 #   - TemplateResponse return type / instantiation — SPA page renderers
 #   - (delegated guards, see check_no_admin_idor.py: Pattern 1 same-class
-#     guard-helper; Pattern 2 OpenRegister ObjectService/*Mapper RBAC)
+#     guard-helper; Pattern 2 OpenRegister ObjectService/*Mapper RBAC;
+#     Pattern 6 session-identity hand-off; Pattern 7 in-body ownership
+#     comparison, including the deliberate 404 anti-oracle refusal)
+#
+# NOT a guard (.github#365): an AUTHENTICATION check. `if ($user === null)
+# { ... 401 ... }` asks whether anyone is logged in; this gate asks whether
+# THIS caller may touch THIS object. Under #[NoAdminRequired] the framework
+# has already answered the first question, so the clause cannot fail — and it
+# was clearing the gate in all eighteen fleet apps at once. Such a clause is
+# now ignored whatever status it answers with, because authentication-ness is
+# a property of the CONDITION, not of the status code.
 #
 # Exemptions (never IDOR vectors):
 #   - __construct — not a routed action endpoint
@@ -2246,7 +2756,7 @@ if [ "${_idor_ran}" -eq 1 ]; then
         # service layer — which is where reading naturally stops, because the
         # service is what the controller calls. Saying so here costs nothing
         # and is the difference between a triage and a wrong security report.
-        _fail 7 "no-admin-idor" "${_idor_fail} method(s) with NoAdminRequired + no guard — see ${_idor_log}. BEFORE treating any of these as real: the checker sees ONLY the controller method body. If the endpoint reaches storage through a service or mapper, check whether the guard is enforced THERE (e.g. an organisation/tenant filter applied in the query builder) — and note that a deliberate 404-style tenancy refusal IS a guard, chosen so a 403 cannot become an existence oracle for another tenant's ids."
+        _fail 7 "no-admin-idor" "${_idor_fail} method(s) with NoAdminRequired + no guard — see ${_idor_log}. BEFORE treating any of these as real: the checker sees ONLY the controller method body. If the endpoint reaches storage through a service or mapper, check whether the guard is enforced THERE (e.g. an organisation/tenant filter applied in the query builder) — and note that a deliberate 404-style tenancy refusal IS a guard, chosen so a 403 cannot become an existence oracle for another tenant's ids. AND BEFORE 'fixing' any of these: a 'no user -> 401' preamble is NOT the fix (.github#365). It answers whether anyone is logged in, which #[NoAdminRequired] has already settled; the gate ignores it whatever status it returns. The fix is to scope the object to the caller — compare ownership, pass the session identity into the query, or call the app's existing per-object predicate."
     fi
 fi
 
@@ -2680,20 +3190,36 @@ if [ -d src ]; then
         # kept and the status is read, so a broken interpreter reports `wiring`
         # rather than leaving an empty log this gate would call clean.
         set +e
-        python3 - "${vue}" <<'PYMI' >> "${_mi_log}" 2>>"${_mi_log}.err"
+        python3 - "${SCRIPT_DIR}/lib" "${vue}" <<'PYMI' >> "${_mi_log}" 2>>"${_mi_log}.err"
 import re, sys
-fname = sys.argv[1]
+sys.path.insert(0, sys.argv[1])
+from source_scope import vue_markup_mask     # a missing lib is a CRASH, not a pass
+fname = sys.argv[2]
 try:
     src = open(fname, encoding='utf-8', errors='replace').read()
 except Exception:
     sys.exit(0)
 
-# HTML comments in the template, block and line comments in <script>.
-# `(?<![:\w])` keeps the `//` of a `https://` URL from blanking the rest of
-# the line — the same trap gate-45 hit on `url(https://…)`.
-src = re.sub(r'<!--.*?-->', lambda m: re.sub(r'[^\n]', ' ', m.group(0)), src, flags=re.DOTALL)
-src = re.sub(r'/\*.*?\*/', lambda m: re.sub(r'[^\n]', ' ', m.group(0)), src, flags=re.DOTALL)
-src = re.sub(r'(?<![:\w])//[^\n]*', lambda m: ' ' * len(m.group(0)), src)
+# THE SCOPE IS THE RENDERED TEMPLATE (#424).
+#
+# This block used to blank three comment classes with its own re.sub calls and
+# then search the WHOLE FILE. Two things were wrong with that:
+#
+#   * a fourth private comment dialect, drifting from source_scope — and its
+#     `<!--.*?-->` carried the delimiter hole #424 group 2 is about, so
+#     `{{ '<!--' }}` … `{{ '-->' }}` blanked the template between them.
+#   * no string awareness at all, so
+#         const help = 'use <NcDialog> for confirmations'
+#     in <script> reported `1 file(s) with inline modal/dialog`. The gate that
+#     asks you to extract a modal was closable — and openable — by prose.
+#
+# `vue_markup_mask` answers exactly the question this rule asks: what does the
+# SFC RENDER? <script> and <style> are blanked whole, so a string or a JSDoc
+# there is out of scope by construction rather than by a third regex; HTML
+# comments inside the template go with them. This does not weaken the rule:
+# an INLINE modal is by definition written in the template, so no real finding
+# lives in the regions now excluded.
+src = vue_markup_mask(src)
 
 # The delimiter set, PLUS end-of-line and any other whitespace. A lookahead
 # rather than a consuming class so the boundary is asserted without being
@@ -2747,11 +3273,57 @@ fi
 if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
     _rr_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-route-reachability.log
     : > "${_rr_log}"
+    # One line per route this gate actually judged — see the note at the loop.
+    _rr_seen=${HYDRA_GATE_LOG_DIR}/hydra-gate-route-reachability.inspected
+    : > "${_rr_seen}"
 
     # Touching appinfo/routes.php puts every routed entry back in scope for
     # invariant 2 — see the scope note at that loop.
     _rr_routes_touched=0
     _in_scope "appinfo/routes.php" && _rr_routes_touched=1
+
+    # A ROUTE WRITTEN ONLY IN A COMMENT IS NOT A ROUTE (#415 / #422).
+    # ---------------------------------------------------------------
+    # Invariant 1 asks "does a route entry for this method exist?" and answered
+    # it with `grep -qF "'thing#index'"` over the RAW routes.php. The in-code
+    # note at that grep says false positives from comments are "vanishingly
+    # rare" — it anticipated the FALSE POSITIVE and missed the false NEGATIVE,
+    # which is the direction that ships a 404. Measured through this gate, one
+    # fixture, ONE ADDED LINE:
+    #
+    #   ThingController::orphanReport(): JSONResponse, no route entry
+    #     -> FAIL — rule=missing-route                              (correct)
+    #   the same tree with routes.php gaining
+    #     `// TODO: wire up 'thing#orphanReport' once the export lands.`
+    #     -> PASS                                                   <- the defect
+    #
+    # The endpoint 404s at runtime and the gate reports it reachable, on the
+    # strength of the line saying it is not wired up yet.
+    #
+    # ⚠️ STRING CONTENTS SURVIVE, and here they ARE the evidence: a route name
+    # is the literal `'thing#index'` and nothing else. `php_mask` keeps them by
+    # default. This is the gate where blanking literals would not widen the
+    # gate, it would delete every route in the file.
+    #
+    # The masked copy also feeds the auto-resource scan below — a commented-out
+    # `'resources' => [...]` block otherwise exempts a live controller's whole
+    # CRUD quintet from invariant 1, same direction, same cause.
+    #
+    # Invariant 2 still reads the raw file. Its exposure is the OPPOSITE
+    # direction (a commented-out route name manufacturing a phantom route) and
+    # belongs with the false-positive half, #423 — changing both here would put
+    # two independent verdict changes behind one measurement.
+    #
+    # A MASK THAT CANNOT BE PRODUCED IS NOT A LICENCE TO GRADE RAW TEXT. If the
+    # helper is missing or fails its positive control, this gate declines
+    # rather than falling back — a silent fallback is exactly the false
+    # negative being closed, and it would leave no log to notice. Same
+    # decision, and the same wording, as gate-5's (#147, #245).
+    _rr_routes_src=""
+    _rr_routes_code=$(_php_code_copy appinfo/routes.php) && _rr_routes_src="${_rr_routes_code}"
+    if [ -z "${_rr_routes_src}" ]; then
+        _skip 14 "route-reachability" wiring "source_scope.py at ${_HYDRA_MASK_HELPER} could not blank a PHP comment (positive control failed) — appinfo/routes.php was NOT masked, so NO route was judged. Without it a route written only in a comment satisfies invariant 1 and the endpoint 404s at runtime (#422), so the run declines rather than reporting a pass it cannot support."
+    else
 
     # Resource auto-routes (entries inside the top-level `'resources' => [...]`
     # block) generate index/show/create/update/destroy on the named
@@ -2766,7 +3338,7 @@ if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
             match($0, /[A-Za-z][A-Za-z0-9_]*/); key=substr($0, RSTART, RLENGTH)
             print tolower(substr(key,1,1)) substr(key,2)
         }
-    ' appinfo/routes.php | sort -u)
+    ' "${_rr_routes_src}" | sort -u)
 
     # ---- Invariant 1: every Response-returning controller method has a route
     # Iterate Controller files. For each public method whose return type is
@@ -2778,6 +3350,15 @@ if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
     while IFS= read -r _ctrl_path; do
         [ -n "${_ctrl_path}" ] || continue
         _in_scope "${_ctrl_path}" || continue
+        # BOTH INVARIANTS COUNT TOWARD "THIS GATE OPENED SOMETHING" (.github#374).
+        #
+        # A first draft counted only invariant 2's route loop, and gate-14 then
+        # went NOT APPLICABLE on a full run over a fixture whose `routes.php`
+        # declares no route at all — while invariant 1 was busy finding a real
+        # unrouted controller method in it. The regression was caught by the
+        # before/after table, not by reasoning, which is the whole reason both
+        # arms are recorded here rather than at one convenient place.
+        echo "${_ctrl_path}" >> "${_rr_seen}"
 
         # Derive the controller route slug — strip lib/Controller/ prefix +
         # Controller.php suffix, lowercase the first character. Settings/
@@ -2800,6 +3381,32 @@ if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
         # opening `{`, and grep that buffer for any `): ...Response` return
         # type. Done in plain awk for portability (no pcregrep dependency).
         # Helper-prefixed names are excluded by the gate convention.
+        #
+        # ⚠️ THE BUFFER MUST END AT THE SIGNATURE LINE WHEN THAT LINE ALREADY
+        # OPENS THE BODY (K&R braces). Both stop conditions below are tested
+        # against `nxt` — the lines READ AHEAD — and never against `$0`, so
+        # under Allman the buffer stopped at the very next line (`{` alone) and
+        # under K&R it did not stop at all: it ran on through the body, the
+        # closing brace and the NEXT method's docblock until it hit that
+        # method's signature. The buffer then contained a `: SomeResponse` that
+        # belongs to a DIFFERENT method, and the gate reported the first one as
+        # an unrouted endpoint.
+        #
+        # That is not a corner case now. Nextcloud's coding standard is K&R,
+        # and the fleet is migrating to it: every `__construct` immediately
+        # followed by a Response-returning action becomes a phantom finding the
+        # moment an app reformats. MEASURED on openconnector#1229 —
+        # `lib/Controller/UiController.php method=__construct
+        # expected_route='ui#__construct' rule=missing-route`, where the
+        # inherited return type came from `makeSpaResponse(): TemplateResponse`
+        # eleven lines below. The SAME awk over the SAME file in Allman braces
+        # prints nothing. Brace style is not supposed to be an input to this
+        # gate, and while it was, the reformat looked like the defect.
+        #
+        # Reading nothing ahead is correct rather than merely quieter: if the
+        # signature line ends in `{`, the whole signature — parameters, return
+        # type and all — is ON that line, so there is nothing further to find.
+        # A K&R method that DOES return a Response still matches on `$0`.
         _methods=$(awk -v RESPONSE_RX='Response[ |\\{]' '
             /^[[:space:]]*public[[:space:]]+function[[:space:]]+[a-zA-Z_][a-zA-Z0-9_]*[[:space:]]*\(/ {
                 method = $0
@@ -2808,7 +3415,7 @@ if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
                 if (method ~ /^(helper|assert|validate|guard|ensure|prepare|format|render)/) next
                 buf = $0
                 n = 0
-                while (n < 12) {
+                while (n < 12 && $0 !~ /\{[[:space:]]*$/) {
                     if ((getline nxt) <= 0) break
                     buf = buf "\n" nxt
                     n++
@@ -2835,7 +3442,7 @@ if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
             # those apps this grep was asking the wrong file and answering "no"
             # every time, which is why five apps were told their working
             # `dashboard#page` / `settings#index` endpoints 404.
-            if ! grep -qF "'${_ctrl_slug}#${_m}'" appinfo/routes.php \
+            if ! grep -qF "'${_ctrl_slug}#${_m}'" "${_rr_routes_src}" \
                 && ! _apphost_supplies_route "${_ctrl_slug}#${_m}"; then
                 echo "${_ctrl_path} method=${_m} expected_route='${_ctrl_slug}#${_m}' rule=missing-route" >> "${_rr_log}"
             fi
@@ -2893,6 +3500,15 @@ if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
             [ "${_rr_routes_touched}" -eq 1 ] && _rr_scoped=1
             _in_scope "${_path}" && _rr_scoped=1
             [ "${_rr_scoped}" -eq 1 ] || continue
+            # COUNT WHAT WAS OPENED, VIA A FILE, NOT A VARIABLE (.github#374).
+            #
+            # This loop is fed by a PIPE (`{ … } | sort -u | while …`), so its
+            # body runs in a SUBSHELL: a counter incremented here is discarded
+            # the moment the loop ends, and the emptiness test below would read
+            # 0 on every run — turning the fix into a permanent skip. One line
+            # per inspected route, counted after the pipeline, is the shape
+            # that survives.
+            echo "${_ctrl}#${_method}" >> "${_rr_seen}"
             if [ ! -f "${_path}" ]; then
                 # UNTIL 2026-08-05 this `continue`d with the comment "gate-5
                 # already flags this". Gate-5 flagged it as a MISSING AUTH
@@ -2923,11 +3539,20 @@ if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
         done
 
     _rr_fail=$(wc -l < "${_rr_log}" 2>/dev/null || echo 0)
-    if [ "${_rr_fail}" -eq 0 ]; then
+    _rr_inspected=$(wc -l < "${_rr_seen}" 2>/dev/null || echo 0)
+    _rr_inspected="${_rr_inspected:-0}"
+    if [ "${_rr_inspected}" -eq 0 ]; then
+        # AN UNOPENED SCOPE IS NEVER A PASS (.github#374). Measured on a tree
+        # carrying a real unrouted method: full run FAIL — 1, docs-only diff
+        # PASS. The routes were all filtered out by `_in_scope` and the gate
+        # printed the same word as a complete cross-check. See _skip_empty_scope.
+        _skip_empty_scope 14 "route-reachability" "routed controller method (an entry in appinfo/routes.php whose target class is in scope)"
+    elif [ "${_rr_fail}" -eq 0 ]; then
         _pass 14 "route-reachability"
     else
         _fail 14 "route-reachability" "${_rr_fail} unrouted method(s) or wrong-target route(s) — see ${_rr_log}"
     fi
+    fi  # mask available
 fi
 
 # ---------------------------------------------------------------------------
@@ -2975,17 +3600,63 @@ if [ -f src/manifest.json ]; then
         sed -i '/^# count=[0-9]*$/d' "${_da_log}" 2>/dev/null || true
         # Filter to scope when --scope-to-diff is set — the helper reports
         # absolute paths, so strip the app-dir prefix before comparing.
+        #
+        # IT COMPUTED THE FINDING AND THREW IT AWAY (.github#396).
+        # ------------------------------------------------------
+        # This gate is POST-FILTER: the checker always runs over the WHOLE tree
+        # (it needs the manifest and the .vue tree to correlate a page with the
+        # component embedded in another page's widget slot), and the narrowing
+        # happens HERE, to its FINDINGS. So on a narrow scope the log went from
+        # one line to ZERO BYTES, `wc -l` read 0, and the gate printed the same
+        # word as a clean tree — while the defect sat on disk, measured, in a
+        # temp file this runner had just deleted.
+        #
+        # Reproduced 2026-08-12 on one tree, one package, only the scope input
+        # varying: full -> `FAIL — 1`, findings log 140 bytes; `--scope-to-diff
+        # --base <base>` with a README-only diff -> `PASS`, findings log 0
+        # BYTES. 🔑 The decisive instrument was the byte count, not the verdict.
+        #
+        # ⚠️ THE OBVIOUS FIX IS WRONG. "Pre-filter count non-zero => do not
+        # print PASS" also fires at PARTIAL scope — a PR touching one clean
+        # .vue drops 1 finding to 0 and the gate would go NOT APPLICABLE on
+        # most PRs in any affected repo, which retires it exactly where it is
+        # cheapest to run. The scoped verdict is CORRECT; what was missing is
+        # that it never said anything had been discarded.
+        #
+        # So this follows gates 53 and 61 instead: FILTER, then STATE THE
+        # DISCARDED COUNT as an advisory. The verdict is unchanged in every
+        # arm; a scoped green simply stops reading as "the manifest is clean".
+        #
+        # ⚠️ The advisory is STASHED, not printed here, and it is prefixed
+        # `NOTE:`. A `[gate-15] ...` line emitted BEFORE the verdict is read as
+        # the verdict by every "first match wins" parser in this package —
+        # that is `.github#401`, one gate over. Print after, and tag it so the
+        # shared parsers skip it even if someone reorders this again.
+        _da_dropped_note=""
         if [ "${SCOPE_TO_DIFF}" = "1" ]; then
             _da_tmp=$(mktemp)
+            # The discarded findings are WRITTEN OUT, not just counted. A count
+            # with no file behind it is the thing that has to be believed; a
+            # file can be read.
+            _da_dropped_log="${_da_log}.discarded"
+            : > "${_da_dropped_log}"
             while IFS= read -r _line; do
                 [ -z "${_line}" ] && continue
                 _f="${_line%%:*}"
                 # Convert absolute path back to repo-relative if it lives
                 # under the current pwd.
                 _rel="${_f#${APP_DIR}/}"
-                _in_scope "${_rel}" && echo "${_line}" >> "${_da_tmp}"
+                if _in_scope "${_rel}"; then
+                    echo "${_line}" >> "${_da_tmp}"
+                else
+                    echo "${_line}" >> "${_da_dropped_log}"
+                fi
             done < "${_da_log}"
             mv "${_da_tmp}" "${_da_log}"
+            _da_dropped=$(_count '.' "${_da_dropped_log}")
+            if [ "${_da_dropped}" -gt 0 ]; then
+                _da_dropped_note="[gate-15] NOTE: this run was NARROWED with --scope-to-diff, and the scope filter DISCARDED ${_da_dropped} nested-dashboard finding(s) that the checker had ALREADY COMPUTED over the whole tree — they sit in files the diff against '${BASE_REF}' does not touch. ADVISORY, and it decides nothing here: the verdict above is a statement about this diff, NOT a clean bill of health for src/manifest.json and the .vue tree. Re-run at the default full scope to judge them. See ${_da_dropped_log}."
+            fi
         fi
         _da_fail=$(wc -l < "${_da_log}" 2>/dev/null || echo 0)
     else
@@ -2998,6 +3669,8 @@ if [ -f src/manifest.json ]; then
         else
             _fail 15 "dashboard-antipattern" "${_da_fail} nested-dashboard pattern(s) — see ${_da_log}"
         fi
+        # AFTER the verdict, deliberately (.github#401).
+        [ -n "${_da_dropped_note:-}" ] && echo "${_da_dropped_note}"
     fi
 fi
 
@@ -3031,13 +3704,58 @@ if [ -d lib ] || [ -d src ]; then
         # exits 1. The terminal `# count=` marker is the evidence it finished.
         _sc_err="${HYDRA_GATE_LOG_DIR}/hydra-gate-spec-coverage.err"
         : > "${_sc_err}"
+        # EMPTY SCOPE IS NOT A PASS (.github#361). gate-16 is diff-scoped BY
+        # DESIGN (see the ADR-020 note above). On a full-repo run there is no
+        # diff to scope to: the runner passes BASE_REF unguarded, the checker
+        # falls back to its `origin/development` default, and on `development`
+        # itself that diffs the branch against itself — `# count=0` → PASS over
+        # a scope nothing was ever read from.
+        #
+        # Measured on one tree, changing only this input: pipelinq 0 / 185
+        # (origin/beta) / 1466 (report) · openregister 0 / 232 / 234 · docudesk
+        # 0 / 290 / 471 · procest 0 / 113 / 445. Caught live on openregister
+        # #2422, where gates 19/25/26 printed NOT APPLICABLE and gate-16 printed
+        # PASS four lines apart over the same empty scope.
+        #
+        # gate-19 already guards this (the #242 fix, ~285 lines below); gate-16
+        # was simply never given the same treatment. Deliberately NOT a literal
+        # copy of gate-19's else-branch: gate-19 falls back to a full sweep,
+        # which for gate-16 would flag the entire legacy @spec surface — the
+        # wrong contract per ADR-020, and a false RED in every repo. Reporting
+        # NOT APPLICABLE with a reason that names the ABSENCE of a diff is both
+        # honest and incapable of going false-RED.
+        # ALWAYS run the checker, on every scope. An earlier draft of this fix
+        # skipped the invocation entirely on a full run — and the package's own
+        # `test_gate_crashed_checker_is_not_a_finding.sh` caught the regression:
+        # a CRASHED checker became invisible at full scope, because nothing ran
+        # to crash. Running it costs nothing and keeps that invariant intact.
         HYDRA_GATE_BASE_REF="${BASE_REF}" \
             python3 "${_sc_lib_dir}/check_spec_coverage.py" . \
             >> "${_sc_log}" 2>"${_sc_err}" || true
+        # Order matters: WIRING first (did the checker finish?), then SCOPE (is
+        # its answer meaningful?). A crash must never be reported as an empty
+        # scope, and an empty scope must never be reported as a pass.
         if ! grep -qE '^# count=[0-9]+$' "${_sc_log}" 2>/dev/null; then
             _sc_ran=0
             _sc_why=$(head -3 "${_sc_err}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
             _skip 16 "spec-coverage" wiring "check_spec_coverage.py did not complete — it never printed its terminal '# count=' marker, so NO changed method was inspected and @spec traceability (ADR-003/ADR-020) is UNVERIFIED by this run. Checker output: ${_sc_why:-<empty>}. See ${_sc_err}."
+        elif [ "${HAVE_DELTA_BASE}" != "1" ]; then
+            # `HAVE_DELTA_BASE`, NOT `SCOPE_TO_DIFF`. gate-16 is a DELTA gate:
+            # what it needs is a BASE, not a narrowed file list. Keying it on
+            # the file scope would have made it NOT APPLICABLE on every PR in
+            # the fleet the moment full scope became the default — silently
+            # retiring @spec enforcement to buy inherited-debt coverage it
+            # cannot use. With a base present it judges the change set exactly
+            # as before, while every state gate around it reads the whole tree.
+            #
+            # The checker RAN and finished — but with no base it had no
+            # diff to scope to, so `# count=0` means "nothing was read", not
+            # "nothing is wrong". Category MUST be one of na|structural|wiring:
+            # `_skip` treats anything else as an internal-error FAIL, which is
+            # exactly the false RED this change exists to prevent (my first
+            # draft passed `scope` and would have done that fleet-wide).
+            _sc_ran=0
+            _skip 16 "spec-coverage" na "this run has NO delta base, and gate-16 is a DELTA gate — it asks which methods THIS CHANGE added or modified without an @spec anchor, which a checkout cannot answer. NO changed method was inspected and @spec traceability is UNVERIFIED by this run. This is NOT a pass, and it is not counted as one. Give it a base to judge (--base <ref> or HYDRA_GATE_BASE_REF=origin/beta); the file scope is independent and every state gate still read the whole tree."
         fi
         sed -i '/^# count=[0-9]*$/d' "${_sc_log}" 2>/dev/null || true
         _sc_fail=$(wc -l < "${_sc_log}" 2>/dev/null || echo 0)
@@ -3109,10 +3827,30 @@ if [ "${SCOPE_TO_DIFF}" = "1" ] && [ -n "${CHANGED_FILES}" ]; then
     printf '%s\n' "${CHANGED_FILES}" > "${_redundant_scope_file}" 2>/dev/null \
         && _redundant_args+=("--changed-files-file=${_redundant_scope_file}")
 fi
+# IS THERE ANYTHING FOR THE CHECKER TO READ AT ALL? (.github#374)
+#
+# Computed here and USED BELOW, after the checker has run — never instead of
+# running it. Declining early would make `SKIPPED (wiring)` unreachable for
+# gate-17: nothing would execute, so nothing could crash, and a crashed checker
+# would be reported as not-applicable. That regression was caught once already
+# by test_gate_crashed_checker_is_not_a_finding.sh (#364's first draft), and
+# the repair is the same one Ruben made then — ALWAYS RUN THE CHECKER, EVALUATE
+# WIRING FIRST AND SCOPE SECOND.
+_redundant_empty_scope=0
+if [ "${SCOPE_TO_DIFF}" = "1" ] \
+    && ! printf '%s\n' "${CHANGED_FILES}" | grep -qE '^lib/.*\.php$'; then
+    _redundant_empty_scope=1
+fi
 _redundant_args+=("${APP_DIR}")
 if python3 "${SCRIPT_DIR_REDUNDANT}/lib/detect-redundant-controllers.py" \
         "${_redundant_args[@]}" > "${_redundant_log}" 2>&1; then
-    _pass 17 "redundant-controller"
+    # WIRING FIRST (it exited 0, so it ran), THEN SCOPE. `# count=0` over an
+    # empty scope is "nothing was read", not "nothing is wrong" (.github#374).
+    if [ "${_redundant_empty_scope}" -eq 1 ]; then
+        _skip_empty_scope 17 "redundant-controller" "PHP file under lib/ (ADR-022 pass-through wrappers live in lib/Controller and lib/Service)"
+    else
+        _pass 17 "redundant-controller"
+    fi
 elif ! grep -q '^# count=' "${_redundant_log}" 2>/dev/null; then
     # THE CHECKER DID NOT FINISH. Its terminal `# count=<n>` marker is absent,
     # so it never reached its own summary — E2BIG, a traceback, an OOM kill, a
@@ -3137,7 +3875,14 @@ elif grep -q '^# count=0$' "${_redundant_log}" 2>/dev/null; then
     # (349/349 tests pass, all 19 gates green per its own self-report)
     # but Rule 0b's re-run hit the script's zero-finding non-zero exit
     # and burned 40 turns + $1+ on a fix loop with no fixable code.
-    _pass 17 "redundant-controller"
+    #
+    # Same scope test as the exit-0 arm above: a `# count=0` produced over an
+    # empty scope is not a clean sheet (.github#374).
+    if [ "${_redundant_empty_scope}" -eq 1 ]; then
+        _skip_empty_scope 17 "redundant-controller" "PHP file under lib/ (ADR-022 pass-through wrappers live in lib/Controller and lib/Service)"
+    else
+        _pass 17 "redundant-controller"
+    fi
 else
     # `grep -c` prints the count (0 on no match); the old `|| echo 0`
     # appended a second "0" on the zero-match exit-1, so the failure
@@ -3262,6 +4007,17 @@ if [ "${_nd_is_engine}" = "0" ] && [ -d lib ]; then
 fi
 _nd_warn=$(wc -l < "${_nd_warn_log}" 2>/dev/null || echo 0)
 
+if [ "${_nd_ran}" -eq 1 ] && [ -z "${_nd_register_files}" ]; then
+    # AN UNOPENED SCOPE IS NEVER A PASS (.github#374).
+    #
+    # Half (a) — the only half that decides this verdict — runs solely when
+    # `_nd_register_files` is non-empty. With it empty the whole `if` above was
+    # skipped, `_nd_fail` stayed 0, and the gate printed PASS having opened no
+    # register file at all. The advisory half (b) is unaffected: it is pure
+    # bash, it still ran, and it still prints its WARNING line below.
+    _nd_ran=0
+    _skip_empty_scope 18 "notification-dialect" "register JSON under lib/Settings (*register*.json or register.d/*.json)"
+fi
 if [ "${_nd_ran}" -eq 1 ]; then
     if [ "${_nd_fail}" -eq 0 ]; then
         _pass 18 "notification-dialect"
@@ -3373,7 +4129,28 @@ if [ -d openspec/specs ] || [ -d tests/e2e ]; then
             _e2e_ran=0
             _skip 19 "e2e-coverage" wiring "check_e2e_coverage.py exited ${_e2e_fail} (error) — no scenario verdict was produced; @e2e traceability (ADR-020) is UNVERIFIED by this run. See ${_e2e_log}."
         else
-            _fail 19 "e2e-coverage" "${_e2e_count} scenario(s) missing @e2e — see ${_e2e_log}"
+            # ADVISORY, NOT BLOCKING — .github#477.
+            #
+            # The count below is REAL and is still measured on every run. What
+            # changed is only that it no longer stops a merge. Measured across
+            # the fleet on 2026-08-16: 1,173 unannotated scenarios in four apps
+            # alone (hermiq 491, docudesk 405, doriath 149, launchpad 128), and
+            # on the one app worked end-to-end the honest split was roughly one
+            # scenario in five genuinely reachable from a browser. The rest were
+            # colour arithmetic, `occ` file writes and background-job intervals
+            # — real behaviour, proven by PHPUnit, not by a page.
+            #
+            # Left blocking, that arithmetic has one cheap answer and one
+            # expensive one, and the cheap one is mass `@e2e exclude`. nldesign
+            # was already carrying 585 of 786 scenarios excluded before any of
+            # this began. A gate whose realistic remedy is "waive most of it"
+            # is not measuring coverage any more, and every app it reddens also
+            # hides that app's OTHER gates behind the same red job.
+            #
+            # So: keep measuring, stop blocking, and fix the gate properly on
+            # its own — see .github#477. This is a temporary demotion with an
+            # owner, not a retirement.
+            _warn 19 "e2e-coverage" "${_e2e_count} scenario(s) missing @e2e (advisory, non-blocking — see .github#477) — see ${_e2e_log}"
         fi
     fi
 fi
@@ -3476,6 +4253,12 @@ if [ -d lib ]; then
     : > "${_or_log}.err"
     _or_hits=0
     _or_ran=1
+    # COUNT WHAT WAS OPENED (.github#374). `_or_hits` counts FINDINGS, so zero
+    # findings over zero files printed the same PASS as zero findings over
+    # every tracked PHP file in lib/. Found by sweeping the gate table rather
+    # than from the issue: gate-20 is NOT one of the sixteen #374 lists, and
+    # neither is gate-14 — the enumeration in that issue is a floor.
+    _or_inspected=0
     _or_broken=""
     _or_mask="${SCRIPT_DIR}/lib/source_scope.py"
     # Receiver-anchored: the call must be made ON something named
@@ -3487,6 +4270,7 @@ if [ -d lib ]; then
         [ -z "${_file}" ] && continue
         [ -f "${_file}" ] || continue
         _in_scope "${_file}" || continue
+        _or_inspected=$((_or_inspected + 1))
         # Comments blanked BEFORE the search (#294). Offsets and newlines are
         # preserved by php_mask, so grep's -n line numbers still address the
         # real file.
@@ -3527,6 +4311,9 @@ if [ -d lib ]; then
     done < <(_enum_tracked '\.php$' lib)
     if [ "${_or_ran}" -eq 0 ]; then
         _skip 20 "or-objectservice-api" wiring "the comment mask or grep did NOT complete on ${_or_broken} — no call site was judged from that file onward. Calls to methods that do not exist on OpenRegister's ObjectService are UNVERIFIED by this run. See ${_or_log}.err."
+    elif [ "${_or_inspected}" -eq 0 ]; then
+        # AN UNOPENED SCOPE IS NEVER A PASS (.github#374). See _skip_empty_scope.
+        _skip_empty_scope 20 "or-objectservice-api" "tracked PHP file under lib/"
     elif [ "${_or_hits}" -eq 0 ]; then
         _pass 20 "or-objectservice-api"
     else
@@ -3552,10 +4339,53 @@ fi
 # --scope-to-diff is on). The marker pattern is anchored to start-of-
 # line + at least 7 chars + space, which is git's canonical conflict
 # marker shape and unlikely to collide with prose / code.
+#
+# ⚠️ A BARE `=======` IS ALSO A MARKDOWN SETEXT H1 UNDERLINE (2026-08-12).
+# `^={7}$` is git's separator AND, at exactly seven characters, a legal
+# Markdown heading underline:
+#
+#     Release
+#     =======
+#
+# Reproduced on a purpose-built fixture: one conflicted `.php` plus one
+# perfectly ordinary `openspec/notes.md` reported as `2 file(s) with
+# unresolved conflict markers`. Measured live pressure at the same time:
+# pipelinq carries two setext underlines inside this gate's own find scope
+# (`openspec/specs/admin-settings/spec.md:732` and its archived twin), both 26
+# characters — so the fleet is TWO KEYSTROKES from a false red, and the gate's
+# quiet today is luck, not correctness.
+#
+# The discriminator is structural, not a relaxation of the pattern: git cannot
+# emit a `=======` separator without a `<<<<<<< ` above it and a `>>>>>>> `
+# below, so in a Markdown file a bare `=======` with NEITHER companion marker
+# anywhere in the file is a heading. Non-Markdown files are untouched — a lone
+# `=======` in `.php`/`.json` is still a finding, which is where every incident
+# this gate was built for actually happened (DSOIntakeController.php,
+# appinfo/routes.php, package.json, l10n/*.json).
+#
+# ENUMERATION: `find`, NOT `_enum_tracked` — DELIBERATE, and here is why.
+# This is the only gate in 1–21 that does not enumerate via `git ls-files`, and
+# that asymmetry was reviewed rather than removed. An untracked file carrying
+# conflict markers is a real state on this fleet's shared checkouts (several
+# agents write into one work tree), and the cost of the wider corpus is one
+# grep per file. `git ls-files` would also make the gate blind to exactly the
+# file a developer has not staged yet — which is the moment this gate is
+# supposed to speak. Switching it would NARROW the true-positive class to buy
+# tidiness, so it stays.
+# ⚠️ What WAS wrong in the enumeration: `appinfo` was named TWICE, so `find`
+# walked it twice and every file under it was inspected twice. A conflicted
+# `appinfo/routes.php` — incident #12, one of the three this gate was written
+# for — was therefore reported as `2 file(s)`. Verified: `find lib appinfo src
+# tests openspec l10n appinfo -name '*.xml'` prints `appinfo/info.xml` twice.
 # ---------------------------------------------------------------------------
 _cm_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-conflict-markers.log
 : > "${_cm_log}"
 _cm_hits=0
+# COUNT WHAT WAS OPENED (.github#374). `_cm_hits` counts FINDINGS, and zero
+# findings over zero files printed the same PASS as zero findings over the
+# whole tree — measured on a fixture holding a real `<<<<<<<` marker:
+# full run FAIL — 1, docs-only diff PASS.
+_cm_inspected=0
 # Match git's exact marker shapes: `<<<<<<< ` / `======= ` (end of line OK) / `>>>>>>> `
 # at the start of a line. Length is exactly 7 chars of the marker glyph; the
 # trailing content for << / >> is a ref name, ======= can be bare.
@@ -3563,18 +4393,30 @@ while IFS= read -r _file; do
     [ -z "${_file}" ] && continue
     [ ! -f "${_file}" ] && continue
     _in_scope "${_file}" || continue
+    _cm_inspected=$((_cm_inspected + 1))
     # grep -l would short-circuit but we want a line count for the log.
     _matches=$(grep -nE '^(<{7}[[:space:]]|>{7}[[:space:]]|={7}$)' "${_file}" 2>/dev/null || true)
     [ -z "${_matches}" ] && continue
+    # Markdown only: a bare `=======` with no `<<<<<<< ` or `>>>>>>> ` anywhere
+    # in the same file is a setext H1 underline, not half a conflict.
+    case "${_file}" in
+        *.md|*.markdown)
+            printf '%s\n' "${_matches}" \
+                | grep -qE '^[0-9]+:(<{7}|>{7})[[:space:]]' || continue
+            ;;
+    esac
     echo "${_file}:" >> "${_cm_log}"
     echo "${_matches}" | head -5 | sed 's/^/  /' >> "${_cm_log}"
     _cm_hits=$((_cm_hits + 1))
-done < <(find lib appinfo src tests openspec l10n appinfo \
+done < <(find lib appinfo src tests openspec l10n \
             \( -name '*.php' -o -name '*.js' -o -name '*.ts' \
              -o -name '*.vue' -o -name '*.json' -o -name '*.md' \
              -o -name '*.yaml' -o -name '*.yml' -o -name '*.xml' \) \
              2>/dev/null)
-if [ "${_cm_hits}" -eq 0 ]; then
+if [ "${_cm_inspected}" -eq 0 ]; then
+    # AN UNOPENED SCOPE IS NEVER A PASS (.github#374). See _skip_empty_scope.
+    _skip_empty_scope 21 "conflict-markers" "source file under lib|appinfo|src|tests|openspec|l10n (php|js|ts|vue|json|md|yaml|yml|xml)"
+elif [ "${_cm_hits}" -eq 0 ]; then
     _pass 21 "conflict-markers"
 else
     _fail 21 "conflict-markers" "${_cm_hits} file(s) with unresolved conflict markers — see ${_cm_log}"
@@ -3632,11 +4474,17 @@ if [ -f src/manifest.json ]; then
     _mv_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-manifest-validation.log
     : > "${_mv_log}"
     _mv_validator="${SCRIPT_DIR}/lib/check_manifest.js"
-    # Diff-scope: when --scope-to-diff is set and src/manifest.json was NOT
-    # touched in this PR, the gate runs informationally (PASS without
-    # spending time on a clean manifest the PR didn't touch).
+    # AN UNOPENED SCOPE IS NEVER A PASS (.github#374).
+    #
+    # This arm used to be a bare `_pass 22`, with a comment calling it "runs
+    # informationally (PASS without spending time on a clean manifest the PR
+    # didn't touch)". There is no such thing as an informational PASS: the line
+    # printed is `[gate-22] manifest-validation: PASS`, byte-identical to a run
+    # that put the manifest through the canonical validator, and `bin/hydra-gates`
+    # counts it as an applicable gate that ran. Measured on a fixture whose
+    # manifest fails validation: full run FAIL, docs-only diff PASS.
     if [ "${SCOPE_TO_DIFF}" = "1" ] && ! _in_scope "src/manifest.json"; then
-        _pass 22 "manifest-validation"
+        _skip_empty_scope 22 "manifest-validation" "src/manifest.json"
     elif [ ! -f "${_mv_validator}" ]; then
         _fail 22 "manifest-validation" "vendored validator missing at ${_mv_validator} — gate misconfiguration, fail-closed"
     elif ! command -v node >/dev/null 2>&1; then
@@ -3672,9 +4520,32 @@ if [ -f src/manifest.json ]; then
             0)  _pass 22 "manifest-validation" ;;
             3)  _fail 22 "manifest-validation" "SCHEMA VALIDATION DID NOT HAPPEN — Ajv is not resolvable, so the vendored validator could only run its AppHost structural lint. A weaker check reported as a pass is not a pass. Run \`npm ci\` (ajv is already in package-lock.json) or set NODE_PATH; see ${_mv_log}" ;;
             2)  _fail 22 "manifest-validation" "vendored canonical schema could not be loaded — gate misconfiguration; see ${_mv_log}" ;;
-            *)  _mv_fail=$(_count '^at ' "${_mv_log}")
-                [ "${_mv_fail}" -eq 0 ] && _mv_fail=1
-                _fail 22 "manifest-validation" "${_mv_fail} schema violation(s) in src/manifest.json — see ${_mv_log}${_mv_app_note}" ;;
+            *)  # A CRASH IS NOT A FINDING (.github#233/#245/#330). `node` exits
+                # 1 both for "the manifest has violations" and for "the
+                # validator threw", and the two are indistinguishable by the
+                # byte. What DOES separate them is that every path in
+                # check_manifest.js that reaches a verdict prints at least one
+                # `at <pointer>: <message>` line — the schema errors at
+                # report():221 and the not-valid-JSON diagnostic at :463 — while
+                # a process that died on import prints an indented node stack
+                # trace and no `^at ` line at all.
+                #
+                # The old code read that zero and CLAMPED IT TO ONE, so a dead
+                # validator was reported as `FAIL — 1 schema violation(s) in
+                # src/manifest.json`: a finding count nobody had measured,
+                # naming a file that was never opened. Measured 2026-08-12 on a
+                # fixture whose manifest validates clean — PASS with a working
+                # node, `FAIL — 1 schema violation(s)` with a node that exits 1.
+                #
+                # A count of zero is therefore evidence the checker did not
+                # report, never evidence of one violation.
+                _mv_fail=$(_count '^at ' "${_mv_log}")
+                if [ "${_mv_fail}" -eq 0 ]; then
+                    _mv_why=$(head -3 "${_mv_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+                    _skip 22 "manifest-validation" wiring "the vendored canonical validator (${_mv_validator}) exited ${_mv_rc} WITHOUT reporting a single \`at <pointer>: <message>\` diagnostic, so src/manifest.json was NOT schema-validated and NO violation was measured. That is a crashed validator, not a finding about the manifest — the manifest is UNVERIFIED by this run. Validator output: ${_mv_why:-<empty>}. See ${_mv_log}${_mv_app_note}"
+                else
+                    _fail 22 "manifest-validation" "${_mv_fail} schema violation(s) in src/manifest.json — see ${_mv_log}${_mv_app_note}"
+                fi ;;
         esac
     fi
 fi
@@ -3741,9 +4612,51 @@ if [ -d lib ]; then
         else
             # In BLOCK mode (post bake-in epoch) the script exits 1 on any
             # match. Count the per-rule lines in the log.
-            _or_abs_hits=$(_count '^\s+\[' "${_or_abs_log}")
-            [ "${_or_abs_hits}" -eq 0 ] && _or_abs_hits=1
-            _fail 23 "or-abstraction-anti-patterns" "${_or_abs_hits} OR-abstraction match(es) — see ${_or_abs_log}"
+            #
+            # A CRASH IS NOT A FINDING (.github#394) — the same repair gate-24
+            # got in `#378`, and gate-23 is the sibling that did not call the
+            # guard that already lives in this file.
+            #
+            # `[ "${_or_abs_hits}" -eq 0 ] && _or_abs_hits=1` clamped an
+            # UNREAD count to one, so a linter that died before opening a file
+            # was reported as `FAIL — 1 OR-abstraction match(es)`: a number
+            # nobody measured, naming an anti-pattern nobody found. Measured
+            # 2026-08-12 with the linter replaced by a stub that writes a
+            # traceback and exits 1, over a fixture whose lib/ holds exactly
+            # one inert service — `FAIL — 1`. Positive control on the SAME
+            # fixture with the real linter: `PASS`, log ending
+            # `or_abstraction_findings=0 ... mode=BLOCK`.
+            #
+            # ⚠️ Only the BLOCK branch could reach it: in WARN mode the linter
+            # exits 0 whatever it found, so a crash lands in the `if` above and
+            # is read there. BLOCK mode is what the acceptance driver forces
+            # (HYDRA_OR_GATE_BLOCK_AFTER_EPOCH=0), and it is what the fleet
+            # gets after the bake-in epoch.
+            #
+            # UNLIKE gate-24, this helper DOES declare a terminal-marker
+            # contract — `or_abstraction_findings=<n> app_id=<id> mode=<MODE>`
+            # is its last line, on every path that reaches a verdict, and the
+            # PASS branch above already reads it. So the two situations ARE
+            # separable here and the honest verdict for a crash is
+            # `SKIPPED (wiring)`, not a fabricated FAIL. (gate-24 had to stay
+            # FAIL precisely because its wrapper is app-owned and declares no
+            # such contract — see the note in its block.)
+            if ! _helper_finished "${_or_abs_log}" '^or_abstraction_findings=[0-9]+'; then
+                _or_abs_why=$(head -3 "${_or_abs_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+                _skip 23 "or-abstraction-anti-patterns" wiring "lint-or-abstraction-anti-patterns.sh (${_or_abs_script}) exited non-zero WITHOUT printing its terminal 'or_abstraction_findings=<n>' summary, so lib/ was NOT scanned and NO anti-pattern was measured. That is a crashed linter, not a finding about this repository — ADR-022 OR-abstraction duplication is UNVERIFIED by this run. Linter output: ${_or_abs_why:-<empty>}. See ${_or_abs_log}."
+            else
+                _or_abs_hits=$(_count '^\s+\[' "${_or_abs_log}")
+                if [ "${_or_abs_hits}" -eq 0 ]; then
+                    # It finished and said non-zero, but printed nothing this
+                    # runner can count: a FORMAT DRIFT between linter and
+                    # runner, not a dead linter. Fail closed — a real BLOCK
+                    # exit must not become a skip — but stop asserting a size
+                    # nobody measured. Same wording as gate-24's guarded clamp.
+                    _fail 23 "or-abstraction-anti-patterns" "the OR-abstraction linter reached its own summary and exited non-zero, but printed no per-rule line this runner can count — the failure is real, its SIZE is unmeasured, so no count is claimed. Read ${_or_abs_log}."
+                else
+                    _fail 23 "or-abstraction-anti-patterns" "${_or_abs_hits} OR-abstraction match(es) — see ${_or_abs_log}"
+                fi
+            fi
         fi
     else
         # A MISSING HELPER MUST NOT REPORT PASS (#147). This branch said
@@ -3837,15 +4750,84 @@ _parity_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-integration-parity.log
 # any leaves at all.
 _parity_has_php=0
 _parity_has_js=0
-if [ -d lib ] && grep -rqE 'new[[:space:]]+LeafDescriptor[[:space:]]*\(' lib/ --include='*.php' 2>/dev/null; then
+# A COMMENT MUST NOT MANUFACTURE A CLASSIFICATION (#415/#423).
+#
+# Both probes below were raw `grep -r`, and their answer decides whether an
+# absent wrapper is reported as `na` (no subject matter, not counted) or as
+# `structural` (a real gap, counted against coverage). Two comments —
+#
+#     // TODO: one day we could do `new LeafDescriptor(...)` here
+#     // We used to call registerIntegration({...}); removed in 2.4
+#
+# flipped `NOT APPLICABLE` to `SKIPPED (structural)`, and the run's
+# `--require-full-coverage` exit went 5 -> 6 on the same tree. Not a red
+# gate; a fabricated gap, in the arithmetic that decides whether the fleet's
+# coverage is believed.
+#
+# `_parity_code` finds candidates with grep (fast, and it opens the whole
+# tree) and then re-asks the question on the file's CODE. The masks are the
+# shared, offset-preserving ones. A file type with no mask is judged RAW —
+# which is the pre-#423 behaviour and errs towards `structural`, the
+# stricter side — and `.vue` is deliberately in that set: masking an SFC
+# routes through the `<!-- … -->` handling #424 is repairing, and a hole
+# there would let a comment REMOVE a real registration from the count. Same
+# for a mask that fails to run: the raw answer stands.
+_parity_code() {  # <file> — the file's code, or its raw text if unmaskable
+    case "$1" in
+        *.php) python3 "${SCRIPT_DIR}/lib/source_scope.py" --mask php "$1" 2>/dev/null || cat "$1" ;;
+        *.js|*.ts|*.mjs|*.cjs|*.jsx|*.tsx)
+               python3 "${SCRIPT_DIR}/lib/source_scope.py" --mask js-comments "$1" 2>/dev/null || cat "$1" ;;
+        *)     cat "$1" ;;
+    esac
+}
+_parity_probe() {  # <dir> <extended-regex> <find-args...> — 0 when a CODE line matches
+    local _dir="$1" _rx="$2"; shift 2
+    local _cand
+    while IFS= read -r _cand; do
+        [ -z "${_cand}" ] && continue
+        [ -f "${_cand}" ] || continue
+        if _parity_code "${_cand}" | grep -qE "${_rx}" 2>/dev/null; then
+            return 0
+        fi
+    done < <(grep -rlE "${_rx}" "${_dir}" "$@" 2>/dev/null)
+    return 1
+}
+if [ -d lib ] && _parity_probe lib/ 'new[[:space:]]+LeafDescriptor[[:space:]]*\(' --include='*.php'; then
     _parity_has_php=1
 fi
-if [ -d src ] && grep -rqE '\bregisterIntegration[[:space:]]*\(' src/ 2>/dev/null; then
+# THE JS PROBE MUST MATCH BOTH SUPPORTED REGISTRATION APIs, NOT ONE.
+#
+# `registerIntegration(descriptor)` is the convenience wrapper exported from
+# @conduction/nextcloud-vue (src/integrations/registry.js). The registry object
+# it wraps is equally canonical and is called directly as
+# `OCA.OpenRegister.integrations.register(descriptor)` — including by
+# nextcloud-vue's OWN built-in leaves (src/integrations/builtin/files.js).
+#
+# Probing for only the wrapper made this gate produce a FALSE ABSENCE CLAIM, and
+# the claim was load-bearing: an app registering leaves via the direct form was
+# told "this repo registers no integration leaves at all", which routes it to
+# `na` (not counted as a gap) instead of `structural` (counted). So the one gate
+# that exists to correlate the server and JS halves of a leaf switched itself
+# off, silently, in exactly the repos that have leaves to correlate.
+#
+# MEASURED across the fleet checkout, both forms are live:
+#   registerIntegration(     -> hermiq/src/integration-leaf.js,
+#                               openconnector/src/integration.js,
+#                               procest/src/main.js
+#   integrations.register(   -> decidesk/src/integrations/registerDecisionsLeaf.js,
+#                               openregister/src/main.js
+# decidesk registers `decidesk-decisions` through the second form and was
+# reported by this gate as having no leaves at all, on a --full run, while that
+# very id was present in the live JS registry.
+#
+# `integrations\.register` cannot collide with `unregister(` (the qualifier is
+# part of the match) nor with `registerIntegrationIcons(` (the `\(` anchors it).
+if [ -d src ] && _parity_probe src/ '\b(registerIntegration|integrations\.register)[[:space:]]*\('; then
     _parity_has_js=1
 fi
 if [ ! -f scripts/check-integration-parity.sh ]; then
     if [ "${_parity_has_php}" = "0" ] && [ "${_parity_has_js}" = "0" ]; then
-        _skip 24 "integration-parity" na "no scripts/check-integration-parity.sh, and this repo registers no integration leaves at all — no \`new LeafDescriptor(\` in lib/ and no \`registerIntegration(\` in src/. There is no server↔JS pair for parity to correlate."
+        _skip 24 "integration-parity" na "no scripts/check-integration-parity.sh, and this repo registers no integration leaves at all — no \`new LeafDescriptor(\` in lib/ and neither \`registerIntegration(\` nor \`integrations.register(\` in src/. There is no server↔JS pair for parity to correlate."
     else
         _skip 24 "integration-parity" structural "no scripts/check-integration-parity.sh, but this repo DOES register integration leaves (lib/ LeafDescriptor: ${_parity_has_php}, src/ registerIntegration: ${_parity_has_js}). server↔JS leaf parity (ADR-066 Decisions 4/7: phantom render surfaces, orphan JS registrations, renderMode mismatch) is UNVERIFIED — a leaf whose other half never registered is invisible to this run."
     fi
@@ -3874,7 +4856,7 @@ if [ -f scripts/check-integration-parity.sh ]; then
         if grep -qiE 'skipping|not found locally|could not be located' "${_parity_log}" 2>/dev/null \
             && ! grep -qE '^(✓|✗)' "${_parity_log}" 2>/dev/null; then
             if [ "${_parity_has_php}" = "0" ] && [ "${_parity_has_js}" = "0" ]; then
-                _skip 24 "integration-parity" na "scripts/check-integration-parity.sh ran but SKIPPED (it could not locate the canonical JS check), and this repo registers no integration leaves at all — no \`new LeafDescriptor(\` in lib/ and no \`registerIntegration(\` in src/. There is no server↔JS pair for parity to correlate. See ${_parity_log}."
+                _skip 24 "integration-parity" na "scripts/check-integration-parity.sh ran but SKIPPED (it could not locate the canonical JS check), and this repo registers no integration leaves at all — no \`new LeafDescriptor(\` in lib/ and neither \`registerIntegration(\` nor \`integrations.register(\` in src/. There is no server↔JS pair for parity to correlate. See ${_parity_log}."
             else
                 _skip 24 "integration-parity" structural "scripts/check-integration-parity.sh ran but SKIPPED — it could not locate the canonical JS check, so NOTHING was correlated — while this repo DOES register integration leaves (lib/ LeafDescriptor: ${_parity_has_php}, src/ registerIntegration: ${_parity_has_js}). server↔JS leaf parity (ADR-066 Decisions 4/7: phantom render surfaces, orphan JS registrations, renderMode mismatch) is UNVERIFIED by this run — this is NOT a pass. See ${_parity_log}."
             fi
@@ -3893,8 +4875,27 @@ if [ -f scripts/check-integration-parity.sh ]; then
         # `⚠` header — never "missing"/"mismatch"/`^✗` — so this hard-failure
         # count excludes them by construction.
         _parity_hits=$(_count '^✗|missing|mismatch' "${_parity_log}")
-        [ "${_parity_hits}" -eq 0 ] && _parity_hits=1
-        _fail 24 "integration-parity" "${_parity_hits} parity violation(s) — see ${_parity_log}"
+        if [ "${_parity_hits}" -eq 0 ]; then
+            # DO NOT INVENT THE COUNT (.github#374, and the #330 family).
+            #
+            # This line was `[ "${_parity_hits}" -eq 0 ] && _parity_hits=1`, so
+            # a wrapper that exited non-zero having written nothing this runner
+            # can parse was reported as `FAIL — 1 parity violation(s)`: a
+            # fabricated number with a plausible message and nothing behind it.
+            # Same shape as gates 22, 25 and 28 (`.github#379`).
+            #
+            # ⚠️ THE VERDICT DELIBERATELY STAYS `FAIL`, and this is the whole
+            # judgement. `scripts/check-integration-parity.sh` is APP-OWNED and
+            # declares no terminal-marker contract, so unlike gates 17, 18, 52
+            # and 61 there is nothing here that can tell "it crashed" from "it
+            # found violations it phrased differently". Guessing `wiring` would
+            # turn a real parity failure into a skip — a green hole, and the
+            # strictly worse direction. So: fail closed, and stop asserting a
+            # number nobody measured.
+            _fail 24 "integration-parity" "the parity wrapper exited non-zero and printed no line this runner can count as a violation — the failure is real but its SIZE is unmeasured, so no count is claimed. Read ${_parity_log}."
+        else
+            _fail 24 "integration-parity" "${_parity_hits} parity violation(s) — see ${_parity_log}"
+        fi
     fi
 fi
 
@@ -3968,6 +4969,25 @@ if [ -f appinfo/routes.php ]; then
         elif [ "${_cc_fail}" -ge 2 ]; then
             _cc_ran=0
             _skip 25 "contract-coverage" wiring "check_contract_coverage.py exited ${_cc_fail} (error) — no endpoint verdict was produced; wire-contract coverage is UNVERIFIED by this run. See ${_cc_log}."
+        elif [ "${_cc_count}" = "an unreported number of" ]; then
+            # A CRASH IS NOT A FINDING (.github#233/#245/#330). EXIT_FAIL is 1
+            # and a python traceback also exits 1, so the byte cannot separate
+            # "I found uncovered endpoints" from "I died". The helper's own
+            # terminal line — `FAIL — N new public endpoint(s) without a
+            # contract test` — CAN: it is printed on the only path that reaches
+            # EXIT_FAIL, and a process that crashed never printed it.
+            #
+            # The old code took the missing count as a licence to say "an
+            # unreported number of new public endpoint(s) missing a contract
+            # test" and BLOCK on it — a red verdict about endpoints nobody had
+            # counted. Measured 2026-08-12 on a fixture with exactly one
+            # uncovered endpoint: `FAIL — 1` with a working python3,
+            # `FAIL — an unreported number of` with a python3 that exits 1.
+            #
+            # "An unreported number" was the tell. It is now the branch.
+            _cc_ran=0
+            _cc_why=$(head -3 "${_cc_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+            _skip 25 "contract-coverage" wiring "check_contract_coverage.py exited ${_cc_fail} WITHOUT printing its own \`FAIL — N new public endpoint(s)\` summary, so NO endpoint was judged and NO count was measured; wire-contract coverage of newly-exposed endpoints is UNVERIFIED by this run. Checker output: ${_cc_why:-<empty>}. See ${_cc_log}."
         else
             _fail 25 "contract-coverage" "${_cc_count} new public endpoint(s) missing a contract test — see ${_cc_log}"
         fi
@@ -4260,14 +5280,46 @@ if [ -n "${_composer_lic}" ] && [ -d lib ]; then
         _lt_ran=0
         _skip 28 "license-triangle" wiring "check_license_triangle.py not found at ${_lt_helper} — ${#_lt_files[@]} PHP file(s) were in scope and NONE had their licence declarations read; licence drift is UNVERIFIED by this run."
     else
-        # Findings to the log (stdout), the compared-file count back here
-        # (stderr). `2>&1 >>file |` duplicates the CURRENT stdout — the pipe —
-        # onto fd 2 BEFORE stdout is redirected to the log, so the two streams
-        # separate. The count keeps #172's PASS-only-if-something-was-compared
-        # rule intact now that the reading lives in a helper.
-        _lt_checked=$(python3 "${_lt_helper}" "${_composer_lic}" "${_lt_files[@]}" \
-            2>&1 >> "${_lt_log}" | sed -n 's/^declared_files=//p' | head -1)
+        # Findings to the log (stdout), the compared-file count to stderr.
+        #
+        # A CRASHED CHECKER MUST NOT BECOME A CLAIM ABOUT THE REPOSITORY
+        # (.github#233/#245/#330). This used to be a pipeline —
+        # `$(python3 … 2>&1 >>log | sed -n 's/^declared_files=//p')` — which
+        # threw away BOTH the helper's exit status (the pipeline's value is
+        # sed's) AND its traceback (consumed by sed and never written to disk).
+        # A helper that died left `_lt_checked` empty, the log empty, and the
+        # chain below fell through to its LAST branch:
+        #
+        #   SKIPPED (structural) — … N lib/**/*.php file(s) WERE in scope, but
+        #   not one carried an @license or SPDX-License-Identifier declaration
+        #
+        # Measured 2026-08-12 on a fixture where BOTH files carry
+        # `@license EUPL-1.2`: PASS with a working python3, that sentence with a
+        # python3 that exits 1. The gate stated a false fact about the source.
+        #
+        # The header five lines above this one was written to prevent exactly
+        # this — "the repository is fine; the gate is broken, and those must not
+        # wear the same words" — but it guards only a MISSING helper. A helper
+        # that is present and CRASHES walked straight past it. That gap is the
+        # bug, and it is closed here by reading the status the same way the
+        # missing-helper branch reads the file's existence.
+        _lt_err="${_lt_log}.err"
+        : > "${_lt_err}"
+        set +e
+        python3 "${_lt_helper}" "${_composer_lic}" "${_lt_files[@]}" \
+            2>"${_lt_err}" >> "${_lt_log}"
+        _lt_rc=$?
+        set +e
+        _lt_checked=$(sed -n 's/^declared_files=//p' "${_lt_err}" | head -1)
         [ -z "${_lt_checked}" ] && _lt_checked=0
+        # The status AND the marker, because either alone can lie: a helper can
+        # exit 0 having printed nothing (then nothing was compared), and a
+        # helper can print the marker and then die.
+        if [ "${_lt_rc}" -ne 0 ] || ! _helper_finished "${_lt_err}" '^declared_files=[0-9]+'; then
+            _lt_ran=0
+            _lt_why=$(head -3 "${_lt_err}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+            _skip 28 "license-triangle" wiring "check_license_triangle.py exited ${_lt_rc} without printing its own \`declared_files=N\` summary — ${#_lt_files[@]} lib/**/*.php file(s) were in scope and NONE had their licence declarations read, so nothing was compared against composer.json's license=${_composer_lic}; licence drift is UNVERIFIED by this run. This is the toolchain, NOT a statement about the files. Checker output: ${_lt_why:-<empty>}. See ${_lt_err}."
+        fi
     fi
 fi
 _lt_fail=$(wc -l < "${_lt_log}" 2>/dev/null || echo 0)
@@ -4330,7 +5382,11 @@ _gi_new_count=0
 # misdescribes the diff, and folding it into "rules checked" would claim a
 # lookup that never happened. See .github#293.
 _gi_neg_count=0
-if [ "${SCOPE_TO_DIFF}" = "1" ] && [ -f .gitignore ]; then
+# `HAVE_DELTA_BASE`, NOT `SCOPE_TO_DIFF` — gate-29 is a DELTA gate. It reads the
+# `+` lines of the .gitignore diff, so what it needs is a BASE, not a narrowed
+# file list. Keyed on the file scope it would have gone NOT APPLICABLE on every
+# PR the moment full scope became the default.
+if [ "${HAVE_DELTA_BASE}" = "1" ] && [ -f .gitignore ]; then
     # Lines newly added to .gitignore in this PR (excluding blanks + comments)
     _new_ignores=$(git -c safe.directory='*' diff "${BASE_REF}...HEAD" -- .gitignore 2>/dev/null \
         | grep -E '^\+[^+]' | sed 's/^+//' | grep -vE '^\s*(#|$)' || true)
@@ -4410,8 +5466,8 @@ elif [ "${_gi_ran}" -eq 1 ] && [ "${_gi_neg_count}" -gt 0 ]; then
     # "adds no non-comment line" here (the branch below) would misdescribe the
     # diff, and PASS would claim a lookup that never happened.
     _skip 29 "gitignore-then-commit" na "the diff adds ${_gi_neg_count} .gitignore line(s) and every one is a NEGATION (\`!\`), which un-ignores rather than ignores. A tracked file behind a negation is the intended state, so there is no new ignore rule whose path could already be tracked. See .github#293."
-elif [ "${SCOPE_TO_DIFF}" != "1" ]; then
-    _skip 29 "gitignore-then-commit" na "this check is intrinsically diff-relative — it asks whether THIS change adds an ignore rule over files that are already tracked — and this run is not --scope-to-diff, so there is no set of newly-added rules to look up. Nothing was inspected and nothing could be. It runs on every PR."
+elif [ "${HAVE_DELTA_BASE}" != "1" ]; then
+    _skip 29 "gitignore-then-commit" na "this check is intrinsically diff-relative — it asks whether THIS change adds an ignore rule over files that are already tracked — and this run has NO delta base, so there is no set of newly-added rules to look up. Nothing was inspected and nothing could be, and no change to this repository could make a baseless run able to answer it. It runs on every PR, at any file scope."
 elif [ ! -f .gitignore ]; then
     _skip 29 "gitignore-then-commit" na "this repository has no .gitignore, so this diff cannot have added an ignore rule over already-tracked files."
 else
@@ -5040,7 +6096,9 @@ if _a11y_has_markup_dir; then
            -o -name '*.php' -o -name '*.html' -o -name '*.htm' \) 2>/dev/null \
         | grep -vE '(^|/)(node_modules|vendor|dist|build|coverage|phpmetrics|\.git)/' || true)
     if [ "${#_wc_files[@]}" -eq 0 ]; then
-        : # nothing in scope; the verdict below describes the diff.
+        # AN UNOPENED SCOPE IS NEVER A PASS (.github#374). See _skip_empty_scope.
+        _wc_ran=0
+        _skip_empty_scope 34 "window-confirm" "frontend source file (src|templates|appinfo/templates **/*.vue|js|ts|php|html)"
     elif [ ! -f "${_wc_helper}" ]; then
         _wc_ran=0
         _skip 34 "window-confirm" wiring "check_js_call_sites.py not found at ${_wc_helper} — ${#_wc_files[@]} file(s) were in scope and NONE were inspected; native browser dialogs are UNVERIFIED by this run."
@@ -5077,6 +6135,29 @@ fi
 # `<img src="img/decoration.svg" alt="">`). The gate only fires when the
 # bound src name explicitly signals dynamic user content.
 #
+# ⚠️ THE NOUN LIST WAS `\b`-ANCHORED AND THEREFORE BLIND (2026-08-12).
+# `grep -qiE '\b(avatar|photo|thumbnail|picture|…)\b'` cannot match
+# `avatarUrl`: `\b` is a WORD-character boundary and `U` is a word character.
+# Nor `avatar_url`, for the same reason — `_` is a word character too. So the
+# four commonest spellings in a Vue codebase were invisible. Measured on a
+# seven-image probe in which EVERY image was a violation: the gate reported
+# THREE. `avatarUrl`, `thumbnailUrl`, `photoUrl`, `pictureUrl` all passed.
+#
+# Extraction moved to scripts/lib/check_markup_a11y.py — the same helper
+# gates 31 and 32 already use — which reads the markup scope only and
+# tokenises the src expression on camelCase / `_` / `-` / `.` / `/` boundaries,
+# then asks for token EQUALITY against the noun set. Equality is the part that
+# matters: a substring match on `<noun>Url` would also light up
+# `photographerBio` and `pictures`, and buying recall with noise is how a gate
+# earns the reputation that makes its silences believed.
+#
+# ⚠️ Live fleet exposure was ZERO when this was fixed, positive-controlled
+# across all 18 apps: 17 `<img` occurrences fleet-wide, of which 3 are JSDoc
+# prose in openbuild and exactly ONE carries `alt=""` — docudesk's
+# `uploadIcon`, correctly silent before and after. This repair buys
+# trustworthiness, not a closed defect. Sizing note for whoever reads the
+# number next: do not infer urgency from it.
+#
 # References:
 #   - ADR-010 (NL Design — WCAG 2.2 AA)
 #   - openspec/architecture/wcag-coverage.md SC 1.1.1 (Non-text Content)
@@ -5084,39 +6165,52 @@ fi
 if _a11y_has_markup_dir; then
     _iae_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-img-alt-empty-only.log
     : > "${_iae_log}"
+    # COUNT WHAT WAS OPENED (.github#374). main added `_iae_inspected` because
+    # the grep implementation had no file array to test for emptiness and fell
+    # through to `_pass 35` having read nothing. This branch removes the grep
+    # entirely in favour of the helper, so the file array IS that count — the
+    # invariant #374 asked for is kept, by the structure rather than a counter.
+    _iae_ran=1
+    _iae_helper="${SCRIPT_DIR}/lib/check_markup_a11y.py"
+    _iae_files=()
     while IFS= read -r vue; do
+        [ -f "${vue}" ] || continue
         _in_scope "${vue}" || continue
-        _flat=$(tr '\n' ' ' < "${vue}")
-        echo "${_flat}" \
-            | grep -oE '<img\b[^>]*>' 2>/dev/null \
-            | while IFS= read -r tag; do
-                [ -z "${tag}" ] && continue
-                # Must have literal alt="" (not bound `:alt=""` — bound expressions
-                # with computed-default-empty are out of scope; the developer there
-                # at least went through a prop pipeline).
-                # Both quote styles: `alt=''` renders identically to `alt=""`
-                # and was invisible here. Measured as a PASS on a planted
-                # `<img src='/img/avatar.png' alt=''> in both a .vue app and a
-                # PHP-template app.
-                echo "${tag}" | grep -qE 'alt[[:space:]]*=[[:space:]]*("[[:space:]]*"|'"'"'[[:space:]]*'"'"')' || continue
-                # Must have a src that names a semantic noun. A BOUND :src /
-                # v-bind:src carries the noun in its expression; a PHP template
-                # or plain HTML carries it in the literal attribute value
-                # (`src="<?php p($avatarUrl) ?>"`, `src="/img/avatar.png"`).
-                # Both mean the same thing — the author knew the image was a
-                # person or a picture and still gave it an empty alt (#225).
-                _src_expr=$(echo "${tag}" | grep -oE '(:src|v-bind:src|src)[[:space:]]*=[[:space:]]*("[^"]*"|'"'"'[^'"'"']*'"'"')' | head -1 || true)
-                [ -z "${_src_expr}" ] && continue
-                if echo "${_src_expr}" | grep -qiE '\b(avatar|photo|thumbnail|picture|headshot|portrait|profilePicture)\b'; then
-                    echo "${vue}: ${tag} rule=empty-alt-on-semantic-bound-src" >> "${_iae_log}"
-                fi
-            done
+        _iae_files+=("${vue}")
     done < <(_a11y_markup_files)
-    _iae_fail=$(wc -l < "${_iae_log}" 2>/dev/null || echo 0)
-    if [ "${_iae_fail}" -eq 0 ]; then
-        _pass 35 "img-alt-empty-only"
+    if [ "${#_iae_files[@]}" -eq 0 ]; then
+        # AN EMPTY SCOPE IS NOT A PASS (#147, .github#374) — the shape the whole
+        # a11y band was falsely green in on nldesign. Reported through main's
+        # `_skip_empty_scope`, not the hand-written reason this branch carried:
+        # that reason named ADR-020 as the rule in force, and under #378 diff
+        # scoping is opt-in, so it would state the wrong cause on every
+        # full-scope run. The shared helper says which of the two actually
+        # emptied the scope.
+        _iae_ran=0
+        _skip_empty_scope 35 "img-alt-empty-only" "markup file (src|templates|appinfo/templates **/*.vue|php|html)"
+    elif [ ! -f "${_iae_helper}" ]; then
+        _iae_ran=0
+        _skip 35 "img-alt-empty-only" wiring "check_markup_a11y.py not found at ${_iae_helper} — ${#_iae_files[@]} markup file(s) were in scope and NONE were inspected; content images silenced with alt=\"\" (WCAG 1.1.1) are UNVERIFIED by this run."
     else
-        _fail 35 "img-alt-empty-only" "${_iae_fail} <img alt=\"\"> on semantic-bound src — see ${_iae_log}"
+        set +e
+        _iae_err="${HYDRA_GATE_LOG_DIR}/hydra-gate-img-alt-empty-only.err"
+        python3 "${_iae_helper}" --rule img-alt-empty-only "${_iae_files[@]}" >> "${_iae_log}" 2>"${_iae_err}"
+        _iae_rc=$?
+        if [ "${_iae_rc}" -ne 0 ]; then
+            # A CRASHED CHECKER IS NOT A CLEAN FILE (#245, #249).
+            _iae_ran=0
+            _skip 35 "img-alt-empty-only" wiring "check_markup_a11y.py exited ${_iae_rc} — ${#_iae_files[@]} markup file(s) were in scope and NONE were judged. See ${_iae_err}."
+        fi
+    fi
+    _iae_fail=$(wc -l < "${_iae_log}" 2>/dev/null || echo 0)
+    [ -z "${_iae_fail}" ] && _iae_fail=0
+    if [ "${_iae_ran}" -eq 1 ]; then
+        if [ "${_iae_fail}" -eq 0 ]; then
+            echo "[hydra-gates] gate-35 img-alt-empty-only: ${#_iae_files[@]} markup file(s) inspected, 0 content image silenced with alt=\"\"."
+            _pass 35 "img-alt-empty-only"
+        else
+            _fail 35 "img-alt-empty-only" "${_iae_fail} <img alt=\"\"> on semantic-bound src — see ${_iae_log}"
+        fi
     fi
 fi
 
@@ -5133,28 +6227,86 @@ fi
 #   - WHATWG / W3C: "Authors should generally use `tabindex='0'` or
 #     `tabindex='-1'`. Positive integer values are very rarely useful."
 # ---------------------------------------------------------------------------
+# ⚠️ THE LAST RAW GREP IN THE 31–36 FAMILY, AND IT READ COMMENTS (2026-08-12).
+# `grep -rnE` over raw bytes reported
+#
+#     <!-- never write tabindex="5" here; positive values break focus order -->
+#
+# as a positive tabindex. That is gate-32's #236 defect exactly: the comment
+# written to document the rule scores AS a violation of it, so the better a
+# team documents its focus order the redder its repo goes — and a gate a
+# comment can redden is a gate whose findings reviewers learn to discard.
+#
+# Extraction moved to scripts/lib/check_markup_a11y.py. The VALUE rule is
+# carried over character for character (quoted positive integer, both quote
+# styles, whitespace inside the quotes allowed, bound `:tabindex` still out of
+# scope), so before/after counts stay comparable.
+#
+# ⚠️ THE MASK IS COMMENTS-ONLY, NOT THE MARKUP SCOPE — deliberately. gates 31,
+# 32 and 35 use `markup_mask`, which blanks `<script>`, `<style>` and PHP code
+# wholesale. That is right for `<img>`, which only a template renders, and
+# WRONG here: a positive tabindex is a property of the rendered DOM whoever
+# emitted it, including a render function and `echo '<div tabindex="5">'`.
+# Blanking those would have removed the noise by removing detection, which is
+# not a repair. `.js`/`.ts` stay in scope for the same reason.
+#
+# ⚠️ Live fleet exposure was ZERO when this was fixed — positive-controlled,
+# all 18 apps, zero positive tabindex values anywhere. As with gate-35 this
+# buys trustworthiness rather than closing a defect; do not read urgency into
+# the number.
 if _a11y_has_markup_dir; then
     _tp_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-tabindex-positive.log
     : > "${_tp_log}"
-    # Match tabindex with quoted positive integer. Allow whitespace
-    # inside the quotes. Excludes tabindex="0", tabindex="-1", and any
-    # form where the value is bound (`:tabindex="..."` is reviewer-judgment).
-    # templates/ too (#225): focus order is a property of the rendered DOM, not
-    # of the language that emitted it.
-    #
-    # BOTH QUOTE STYLES. The pattern read `"` only, so `tabindex='5'` — the
-    # same rendered DOM, the same defect — reported PASS in both a .vue app
-    # and a PHP-template app when it was planted there. Zero occurrences in
-    # the fleet today, which is precisely why it could sit here unnoticed.
-    grep -rnE 'tabindex[[:space:]]*=[[:space:]]*["'"'"'][[:space:]]*[1-9][0-9]*[[:space:]]*["'"'"']' src/ templates/ appinfo/templates/ \
-        --include='*.vue' --include='*.js' --include='*.ts' \
-        --include='*.php' --include='*.html' --include='*.htm' 2>/dev/null \
-        | _filter_grep_by_scope >> "${_tp_log}" || true
-    _tp_fail=$(wc -l < "${_tp_log}" 2>/dev/null || echo 0)
-    if [ "${_tp_fail}" -eq 0 ]; then
-        _pass 36 "tabindex-positive"
+    # COUNT WHAT WAS OPENED (.github#374). main measured emptiness with a
+    # `_tp_inspected` counter because `grep -r` hands back no file list. The
+    # helper takes an explicit file array, so that array IS the corpus and the
+    # count — including the .js/.ts extensions `_a11y_markup_files` omits,
+    # which is the distinction #374 was careful to preserve.
+    _tp_ran=1
+    _tp_helper="${SCRIPT_DIR}/lib/check_markup_a11y.py"
+    # Same three roots and same six extensions the grep used — `.js`/`.ts`
+    # included, which `_a11y_markup_files` does not carry. Generated trees are
+    # pruned as everywhere else in this family.
+    _tp_files=()
+    while IFS= read -r _tpf; do
+        [ -f "${_tpf}" ] || continue
+        _in_scope "${_tpf}" || continue
+        _tp_files+=("${_tpf}")
+    done < <(find src templates appinfo/templates -type f \
+                \( -name '*.vue' -o -name '*.js' -o -name '*.ts' \
+                 -o -name '*.php' -o -name '*.html' -o -name '*.htm' \) \
+                2>/dev/null \
+                | grep -vE '(^|/)(node_modules|vendor|dist|build|coverage|phpmetrics|\.git)/' \
+                || true)
+    if [ "${#_tp_files[@]}" -eq 0 ]; then
+        # AN UNOPENED SCOPE IS NEVER A PASS (.github#374). Through main's shared
+        # helper rather than the hand-written reason this branch carried: that
+        # reason named ADR-020 as the rule in force, and under #378 diff scoping
+        # is opt-in, so it would state the wrong cause on every full-scope run.
+        _tp_ran=0
+        _skip_empty_scope 36 "tabindex-positive" "frontend source file (src|templates|appinfo/templates **/*.vue|js|ts|php|html)"
+    elif [ ! -f "${_tp_helper}" ]; then
+        _tp_ran=0
+        _skip 36 "tabindex-positive" wiring "check_markup_a11y.py not found at ${_tp_helper} — ${#_tp_files[@]} file(s) were in scope and NONE were inspected; positive tabindex values (WCAG 2.4.3) are UNVERIFIED by this run."
     else
-        _fail 36 "tabindex-positive" "${_tp_fail} positive tabindex value(s) — use \"0\" or \"-1\" — see ${_tp_log}"
+        set +e
+        _tp_err="${HYDRA_GATE_LOG_DIR}/hydra-gate-tabindex-positive.err"
+        python3 "${_tp_helper}" --rule tabindex-positive "${_tp_files[@]}" >> "${_tp_log}" 2>"${_tp_err}"
+        _tp_rc=$?
+        if [ "${_tp_rc}" -ne 0 ]; then
+            _tp_ran=0
+            _skip 36 "tabindex-positive" wiring "check_markup_a11y.py exited ${_tp_rc} — ${#_tp_files[@]} file(s) were in scope and NONE were judged. See ${_tp_err}."
+        fi
+    fi
+    _tp_fail=$(wc -l < "${_tp_log}" 2>/dev/null || echo 0)
+    [ -z "${_tp_fail}" ] && _tp_fail=0
+    if [ "${_tp_ran}" -eq 1 ]; then
+        if [ "${_tp_fail}" -eq 0 ]; then
+            echo "[hydra-gates] gate-36 tabindex-positive: ${#_tp_files[@]} file(s) inspected, 0 positive tabindex."
+            _pass 36 "tabindex-positive"
+        else
+            _fail 36 "tabindex-positive" "${_tp_fail} positive tabindex value(s) — use \"0\" or \"-1\" — see ${_tp_log}"
+        fi
     fi
 fi
 
@@ -5208,7 +6360,9 @@ if _a11y_has_markup_dir; then
         _ahf_files+=("${vue}")
     done < <(_a11y_markup_files)
     if [ "${#_ahf_files[@]}" -eq 0 ]; then
-        :   # nothing in scope; the PASS below describes the diff, as everywhere else.
+        # AN UNOPENED SCOPE IS NEVER A PASS (.github#374). See _skip_empty_scope.
+        _ahf_ran=0
+        _skip_empty_scope 37 "aria-hidden-focusable" "markup file (src|templates|appinfo/templates **/*.vue|php|html)"
     elif [ ! -f "${_ahf_helper}" ]; then
         # A MISSING HELPER MUST NOT REPORT PASS (#147).
         _ahf_ran=0
@@ -5331,9 +6485,18 @@ if [ -d src ] || [ -d templates ] || [ -d appinfo/templates ]; then
     # have reported PASS on nothing. One `--classify` call for the whole set
     # prints `<path>: page-root|fragment`, and a non-zero exit is a wiring
     # failure rather than an answer.
+    # HOW MANY SUBJECTS THIS GATE ACTUALLY OPENED (.github#374).
+    #
+    # gate-38 has two arms — Vue page roots and document-owning PHP templates —
+    # and neither counted. With both empty the gate fell through to `_pass 38`,
+    # which is why a docs-only diff over a tree carrying a planted skip-link
+    # defect printed the same word as a clean sweep. Incremented AFTER the
+    # `_in_scope` guard, so it counts files judged, not files enumerated.
+    _sl_inspected=0
     _sl_check() {
         local _f="$1"
         _in_scope "$_f" || return 0
+        _sl_inspected=$((_sl_inspected + 1))
         if grep -qE '<NcContent\b|<NcAppContent\b|<NcAppContentList\b' "$_f" 2>/dev/null; then return 0; fi
         # The shared app shell. `<CnAppRoot>` (@conduction/nextcloud-vue) IS an
         # <NcContent> — it renders one as its own root element and puts the
@@ -5389,7 +6552,10 @@ if [ -d src ] || [ -d templates ] || [ -d appinfo/templates ]; then
             _in_scope "$_f" && _sl_php+=("$_f")
         done < <(_a11y_markup_files)
         if [ "${#_sl_php[@]}" -eq 0 ]; then
-            :   # nothing in scope; the verdict below describes the diff, as everywhere else.
+            # No PHP template in scope. NOT a verdict on its own — the Vue arm
+            # above may still have judged something, so the decision is taken
+            # once, from `_sl_inspected`, below (.github#374).
+            :
         elif [ ! -f "${_sl_helper}" ]; then
             # A MISSING HELPER MUST NOT REPORT PASS (#147). Without the
             # classifier every template silently reads as a fragment, the
@@ -5413,6 +6579,11 @@ if [ -d src ] || [ -d templates ] || [ -d appinfo/templates ]; then
                 _sl_ran=0
                 _skip 38 "skip-link" wiring "php_template_scope.py exited ${_sl_rc} — ${#_sl_php[@]} PHP template(s) were in scope and NONE were classified; a document-owning template with no bypass mechanism (WCAG 2.4.1) is UNVERIFIED by this run. See ${_sl_cls_err}."
             else
+                # Every template handed to the classifier WAS inspected — a
+                # `fragment` verdict is a judgement, not a skip. Counting only
+                # page roots here would make an app whose 40 templates are all
+                # fragments look like a gate that opened nothing.
+                _sl_inspected=$((_sl_inspected + ${#_sl_php[@]}))
                 while IFS= read -r _line; do
                     case "${_line}" in
                         *": page-root") _sl_check "${_line%: page-root}" ;;
@@ -5420,6 +6591,12 @@ if [ -d src ] || [ -d templates ] || [ -d appinfo/templates ]; then
                 done <<< "${_sl_cls}"
             fi
         fi
+    fi
+    # AN UNOPENED SCOPE IS NEVER A PASS (.github#374). Taken once, over BOTH
+    # arms, so a gate that judged a Vue root but no template still reports.
+    if [ "${_sl_ran}" -eq 1 ] && [ "${_sl_inspected}" -eq 0 ]; then
+        _sl_ran=0
+        _skip_empty_scope 38 "skip-link" "app page root (src/App.vue, src/**/*Root.vue) or document-owning PHP template (templates|appinfo/templates **/*.php)"
     fi
     _sl_fail=$(wc -l < "${_sl_log}" 2>/dev/null || echo 0)
     if [ "${_sl_ran}" -eq 1 ]; then
@@ -5486,7 +6663,9 @@ if _a11y_has_markup_dir; then
         _bn_files+=("${vue}")
     done < <(_a11y_markup_files)
     if [ "${#_bn_files[@]}" -eq 0 ]; then
-        :   # nothing in scope; the PASS below describes the diff, as everywhere else.
+        # AN UNOPENED SCOPE IS NEVER A PASS (.github#374). See _skip_empty_scope.
+        _bn_ran=0
+        _skip_empty_scope 39 "button-name" "markup file (src|templates|appinfo/templates **/*.vue|php|html)"
     elif [ ! -f "${_bn_helper}" ]; then
         # A MISSING HELPER MUST NOT REPORT PASS (#147).
         _bn_ran=0
@@ -5559,15 +6738,32 @@ if _a11y_has_markup_dir; then
         _in_scope "${vue}" || continue
         _fl_files+=("${vue}")
     done < <(_a11y_markup_files)
-    # NOTE: an empty in-scope set is NOT declared `na` here. Every other gate
-    # in this family reports PASS over an empty diff scope — that is what
-    # ADR-020 diff scoping MEANS — and tests/test-hydra-gates-bin.sh asserts
-    # that none of gates 10/12/13/26/31..45 goes NOT APPLICABLE while src/
-    # exists. Making gate-40 alone answer differently would drift the
-    # applicability table away from the guards it mirrors, which is the one
-    # way that change could hide a live gate.
+    # THE NOTE THAT USED TO SIT HERE WAS FALSE ON BOTH OF ITS CLAIMS, AND THE
+    # SAME RUN REFUTED BOTH (.github#374).
+    #
+    # It said an empty in-scope set must NOT be declared `na` here, because
+    # (1) "every other gate in this family reports PASS over an empty diff
+    # scope" and (2) tests/test-hydra-gates-bin.sh "asserts that none of gates
+    # 10/12/13/26/31..45 goes NOT APPLICABLE while src/ exists".
+    #
+    #   (1) is false: gates 26, 31 and 32 already reported a gate-level `na`
+    #       WITH A REASON on exactly this input, and had done since #276.
+    #   (2) misreads the assertion it cites. That loop matches the
+    #       APPLICABILITY TABLE's own wording —
+    #       `NOT APPLICABLE — no src/(,| directory)` — and exists to catch the
+    #       table excusing a gate whose guard would have run it. A gate-level
+    #       `na` naming its OWN empty file set does not match that pattern and
+    #       passes the assertion unharmed. The very next assertion in that file
+    #       accepts `[gate-45] prefers-reduced-motion: NOT APPLICABLE — scope
+    #       was empty` as the CORRECT answer, from the same family.
+    #
+    # So the note argued for keeping the defect on the strength of a sibling
+    # that does not have it and a test that does not say what it was quoted as
+    # saying. Both are checked now rather than asserted.
     if [ "${#_fl_files[@]}" -eq 0 ]; then
-        : # nothing in scope; the PASS below describes the diff, as everywhere else.
+        # AN UNOPENED SCOPE IS NEVER A PASS (.github#374). See _skip_empty_scope.
+        _fl_ran=0
+        _skip_empty_scope 40 "form-label-association" "markup file (src|templates|appinfo/templates **/*.vue|php|html)"
     elif [ ! -f "${_fl_helper}" ]; then
         # A MISSING HELPER MUST NOT REPORT PASS (#147).
         _fl_ran=0
@@ -5667,7 +6863,9 @@ if [ -d templates ] || [ -d appinfo/templates ]; then
         _in_scope "$_f" && _hl_files+=("$_f")
     done < <(_a11y_markup_files)
     if [ "${#_hl_files[@]}" -eq 0 ]; then
-        : # nothing in scope; the verdict below describes the diff.
+        # AN UNOPENED SCOPE IS NEVER A PASS (.github#374). See _skip_empty_scope.
+        _hl_ran=0
+        _skip_empty_scope 41 "html-lang" "PHP template (templates|appinfo/templates **/*.php)"
     elif [ ! -f "${_hl_helper}" ]; then
         _hl_ran=0
         _skip 41 "html-lang" wiring "php_template_scope.py not found at ${_hl_helper} — ${#_hl_files[@]} PHP template(s) were in scope and NONE were inspected; a document without a declared language (WCAG 3.1.1) is UNVERIFIED by this run."
@@ -5733,7 +6931,9 @@ if _a11y_has_markup_dir; then
         _lq_files+=("${vue}")
     done < <(_a11y_markup_files)
     if [ "${#_lq_files[@]}" -eq 0 ]; then
-        :   # nothing in scope; the PASS below describes the diff, as everywhere else.
+        # AN UNOPENED SCOPE IS NEVER A PASS (.github#374). See _skip_empty_scope.
+        _lq_ran=0
+        _skip_empty_scope 42 "link-text-quality" "markup file (src|templates|appinfo/templates **/*.vue|php|html)"
     elif [ ! -f "${_lq_helper}" ]; then
         # A MISSING HELPER MUST NOT REPORT PASS (#147).
         _lq_ran=0
@@ -5810,7 +7010,9 @@ if _a11y_has_markup_dir; then
         _th_files+=("${vue}")
     done < <(_a11y_markup_files)
     if [ "${#_th_files[@]}" -eq 0 ]; then
-        :   # nothing in scope; the PASS below describes the diff, as everywhere else.
+        # AN UNOPENED SCOPE IS NEVER A PASS (.github#374). See _skip_empty_scope.
+        _th_ran=0
+        _skip_empty_scope 43 "table-headers" "markup file (src|templates|appinfo/templates **/*.vue|php|html)"
     elif [ ! -f "${_th_helper}" ]; then
         # A MISSING HELPER MUST NOT REPORT PASS (#147).
         _th_ran=0
@@ -5879,7 +7081,9 @@ if _a11y_has_markup_dir; then
         _ac_files+=("${vue}")
     done < <(_a11y_markup_files)
     if [ "${#_ac_files[@]}" -eq 0 ]; then
-        :   # nothing in scope; the PASS below describes the diff, as everywhere else.
+        # AN UNOPENED SCOPE IS NEVER A PASS (.github#374). See _skip_empty_scope.
+        _ac_ran=0
+        _skip_empty_scope 44 "autocomplete-attr" "markup file (src|templates|appinfo/templates **/*.vue|php|html)"
     elif [ ! -f "${_ac_helper}" ]; then
         # A MISSING HELPER MUST NOT REPORT PASS (#147).
         _ac_ran=0
@@ -5982,6 +7186,48 @@ if _a11y_has_style_dir; then
     #
     # Fails CLOSED: any error leaves the flag at 0, i.e. more findings, never
     # fewer. A crashed pre-pass must not manufacture a global exemption.
+    #
+    # A COMMENTED-OUT RESET IS NOT A RESET (.github#421) — AND THIS IS THE
+    # WORST PLACE IN THE PACKAGE TO GET THAT WRONG.
+    #
+    # The per-file checker below already masks comments before it looks for
+    # motion or for a guard (`_mask_comments`, #294). This pre-pass did not:
+    # it grepped `UNIVERSAL` over raw file text. So the two halves of one gate
+    # disagreed about what a comment is, and the careless half ran first.
+    #
+    # The consequence is not one missed finding. The flag it sets makes the
+    # per-file checker `sys.exit(0)` on EVERY file in the repository, so ONE
+    # comment in ONE stylesheet anywhere in the tree silenced gate-45 for the
+    # whole app — and the comment that did it is the one an author writes
+    # while acknowledging the debt:
+    #
+    #     /* TODO(a11y): we still need
+    #          @media (prefers-reduced-motion: reduce) { *, *::before … }
+    #        Not done yet — tracked in #999. */
+    #
+    # Measured 2026-08-13, one fixture, one variable — a css/motion.css with
+    # two real unguarded motion declarations, plus a css/reset.css whose only
+    # universal reset is inside that comment:
+    #
+    #   comment present            PASS                          <- the defect
+    #   the same tree, comment deleted
+    #                              FAIL — 1 stylesheet with motion
+    #   a REAL universal reset in reset.css
+    #                              PASS   <- the positive control: the pre-pass
+    #                                        does set the flag on real CSS, so
+    #                                        the arm above means something
+    #
+    # ⚠️ THE MASK MUST EAT COMMENTS, NOT CSS. A mask that swallowed a rule
+    # would turn this gate from "silenceable" into "always red" — the fix
+    # over-applied — which is why the third arm is pinned in
+    # test_gate_45_stylesheet_scope.sh alongside the first two.
+    #
+    # Character for character the same masking as `_mask_comments` in the
+    # PYRM heredoc below, including the `(?<!:)` that keeps the `//` of a
+    # `url(https://…)` out of the SCSS arm. The two copies are pinned
+    # together by the drift arm in test_gate_45_stylesheet_scope.sh: they are
+    # separate `python3` invocations and cannot share a function, so the test
+    # is what stops them diverging again.
     _rm_global=0
     if [ -n "$(_a11y_style_files)" ]; then
         _rm_global=$(_a11y_style_files | python3 -c '
@@ -5989,16 +7235,24 @@ import re, sys
 UNIVERSAL = re.compile(
     r"@media[^{]*prefers-reduced-motion[^{]*\{(?:[^{}]|\{[^{}]*\})*?(?<![\w.#\[-])\*",
     re.IGNORECASE | re.DOTALL)
+
+def _mask_comments(text, scss):
+    text = re.sub(r"/\*.*?\*/", lambda m: re.sub(r"[^\n]", " ", m.group(0)), text, flags=re.DOTALL)
+    if scss:
+        text = re.sub(r"(?<!:)//[^\n]*", lambda m: " " * len(m.group(0)), text)
+    return text
+
 for line in sys.stdin:
     p = line.strip()
     if not p:
         continue
     try:
-        if UNIVERSAL.search(open(p, encoding="utf-8", errors="replace").read()):
-            print(1)
-            break
+        raw = open(p, encoding="utf-8", errors="replace").read()
     except Exception:
         continue
+    if UNIVERSAL.search(_mask_comments(raw, not p.lower().endswith(".css"))):
+        print(1)
+        break
 else:
     print(0)
 ' 2>>"${_rm_log}.err" || echo 0)
@@ -6252,7 +7506,7 @@ _scht_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-security-change-has-tests.log
 : > "${_scht_log}"
 _scht_ran=1
 _scht_helper="${SCRIPT_DIR}/lib/check_security_cochange.py"
-if [ "${SCOPE_TO_DIFF}" != "1" ] || [ -z "${BASE_REF}" ]; then
+if [ "${HAVE_DELTA_BASE}" != "1" ]; then
     # NO DIFF, NO VERDICT — and NOT a PASS (#242/#240/#258/#268).
     #
     # This gate's whole subject is "what did this change touch, and did it also
@@ -6260,10 +7514,49 @@ if [ "${SCOPE_TO_DIFF}" != "1" ] || [ -z "${BASE_REF}" ]; then
     # `if` above was simply false and the gate fell through to `_pass 47`,
     # announcing a co-change verdict it had not formed. Every full-repo run in
     # the fleet — every builder iteration — printed that green.
+    #
+    # Keyed on `HAVE_DELTA_BASE`, not on the FILE scope: gate-47 is a DELTA
+    # gate and needs a base, not a narrowed file list. A full-scope PR run
+    # still has one, so this gate did not quietly retire when full scope
+    # became the default (.github#374).
     _scht_ran=0
-    _skip 47 "security-change-has-tests" na "this run is not diff-scoped (no --scope-to-diff / no base ref), so there is no change set to classify. This gate compares a PR's hunks against the tests it touched; on a whole-repository run there is no such pair, and no change in this repository could create one."
-elif [ "${SCOPE_TO_DIFF}" = "1" ] && [ -n "${BASE_REF}" ]; then
-    if [ ! -f "${_scht_helper}" ]; then
+    _skip 47 "security-change-has-tests" na "this run has NO delta base, so there is no change set to classify. This gate compares a change's hunks against the tests it touched; with no base there is no such pair, and no change in this repository could create one. Give it a base (--base <ref> or HYDRA_GATE_BASE_REF) and it runs at any file scope."
+elif [ "${HAVE_DELTA_BASE}" = "1" ]; then
+    # A DELTA WITH NO CANDIDATE FILE IN IT IS NOT A PASS (#242/#268, applied
+    # here for the ninth and tenth time — gates 46, 50, 55, 56, 58, 59, 60 and
+    # 62 already carry this remedy; 47 and 48 were the last two without it).
+    #
+    # ⚠️ THE PRECISE SHAPE MATTERS, and my first framing of it was wrong. A
+    # TRULY empty delta is UNREACHABLE through bin/hydra-gates: `--base
+    # <sha-of-HEAD>` is caught upstream and every delta gate says NOT
+    # APPLICABLE already. What IS reachable — and is the common case on a
+    # docs PR — is a delta with a real diff in it that contains ZERO
+    # INSPECTABLE FILES. Measured 2026-08-12, README-only head commit, a real
+    # base: gates 19, 29 and 61 said NOT APPLICABLE and named what had been
+    # excluded, while 16, 47 and 48 said PASS. 47 and 48 had opened no
+    # candidate file at all.
+    #
+    # THE PROBE IS DELIBERATELY WIDER THAN THE CHECKER'S OWN RULE. The helper
+    # classifies `^(lib/.*\.php|src/.*\.(vue|js|ts))$` plus four `^lib/` path
+    # patterns; this asks only "did the diff touch ANYTHING under lib/ or
+    # src/". That is a strict superset, so the gate can only ever decline when
+    # the checker provably had nothing to read — a narrower probe here would
+    # be `#242`'s remedy turned into a green hole, which is the direction that
+    # cannot be allowed to drift (cf. gate-45's guard vs its enumerator).
+    #
+    # The `...HEAD` / plain-base fallback mirrors the helper's own, so the two
+    # agree about what "the diff" is on a checkout with no merge base.
+    _scht_changed=$(git diff --name-only "${BASE_REF}...HEAD" 2>/dev/null || true)
+    [ -z "${_scht_changed}" ] && _scht_changed=$(git diff --name-only "${BASE_REF}" 2>/dev/null || true)
+    _scht_cand=$(printf '%s\n' "${_scht_changed}" | grep -cE '^(lib|src)/' 2>/dev/null || true)
+    _scht_cand="${_scht_cand%%$'\n'*}"
+    case "${_scht_cand}" in ''|*[!0-9]*) _scht_cand=0 ;; esac
+    if [ "${_scht_cand}" -eq 0 ]; then
+        _scht_ran=0
+        _scht_sec=""
+        _scht_has_test="1"
+        _skip 47 "security-change-has-tests" na "the diff against '${BASE_REF}' touches NO file under lib/ or src/, so there was not one candidate for this gate to classify — NO hunk was read and no security-touching change could have been found. This is NOT a clean bill of health and NOT a statement that the change is safe: it is a statement that this gate's subject matter is absent from this change set. It runs on the next change that touches application code."
+    elif [ ! -f "${_scht_helper}" ]; then
         # A MISSING HELPER MUST NOT REPORT PASS (#147).
         _scht_ran=0
         _skip 47 "security-change-has-tests" wiring "check_security_cochange.py not found at ${_scht_helper} — the diff was NOT classified; a security change shipping without a test co-change is UNVERIFIED by this run."
@@ -6341,13 +7634,14 @@ fi
 _csrf_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-csrf-cochange.log
 : > "${_csrf_log}"
 _csrf_ran=1
-if [ "${SCOPE_TO_DIFF}" != "1" ] || [ -z "${BASE_REF}" ]; then
+if [ "${HAVE_DELTA_BASE}" != "1" ]; then
     # NO DIFF, NO VERDICT — and NOT a PASS (#242/#240/#258/#268). Identical
     # reasoning to gate-47 above: "was an attribute REMOVED" is a question only
     # a diff can answer, and a full-repo run printed PASS without asking it.
+    # Keyed on the delta base, not the file scope, for the same reason.
     _csrf_ran=0
-    _skip 48 "csrf-cochange" na "this run is not diff-scoped (no --scope-to-diff / no base ref), so there is no removal to detect. Whether a controller DROPPED @NoCSRFRequired is a property of a change set, not of a checkout, and no change in this repository could make a whole-repository run able to answer it."
-elif [ "${SCOPE_TO_DIFF}" = "1" ] && [ -n "${BASE_REF}" ]; then
+    _skip 48 "csrf-cochange" na "this run has NO delta base, so there is no removal to detect. Whether a controller DROPPED @NoCSRFRequired is a property of a CHANGE SET, not of a checkout, and no change in this repository could make a baseless run able to answer it. Give it a base (--base <ref> or HYDRA_GATE_BASE_REF) and it runs at any file scope."
+elif [ "${HAVE_DELTA_BASE}" = "1" ]; then
     # Find removed @NoCSRFRequired lines in changed PHP files.
     #
     # A REMOVED COMMENT IS NOT A REMOVED ATTRIBUTE (#191).
@@ -6365,7 +7659,26 @@ elif [ "${SCOPE_TO_DIFF}" = "1" ] && [ -n "${BASE_REF}" ]; then
     # requires the token in a code position — `#[` at the start of the
     # content, or `@NoCSRFRequired` at docblock-tag position.
     _csrf_helper="${SCRIPT_DIR}/lib/check_csrf_removal.py"
-    if [ ! -f "${_csrf_helper}" ]; then
+    # A DELTA WITH NO CONTROLLER IN IT IS NOT A PASS (#242/#268) — the same
+    # repair as gate-47 immediately above, keyed on this gate's OWN subject
+    # matter. Everything this gate can ever read comes through the pathspec
+    # `lib/Controller/*.php` two screens down; when the diff touches none of
+    # those, `_csrf_removed` is empty for a reason that has nothing to do with
+    # CSRF and the gate printed PASS. Measured 2026-08-12 on a README-only
+    # head commit against a real base: PASS, over a diff in which not one
+    # controller line was read.
+    #
+    # The pathspec is the SAME STRING the gate itself uses, on purpose: this
+    # guard cannot drift away from the enumerator it defends without the two
+    # visibly disagreeing in one file.
+    _csrf_cand=$(git diff --name-only "${BASE_REF}...HEAD" -- 'lib/Controller/*.php' 2>/dev/null | grep -c . 2>/dev/null || true)
+    _csrf_cand="${_csrf_cand%%$'\n'*}"
+    case "${_csrf_cand}" in ''|*[!0-9]*) _csrf_cand=0 ;; esac
+    if [ "${_csrf_cand}" -eq 0 ]; then
+        _csrf_ran=0
+        _csrf_removed=""
+        _skip 48 "csrf-cochange" na "the diff against '${BASE_REF}' touches NO lib/Controller/*.php, so there was no controller for a #[NoCSRFRequired] to be dropped FROM — NOT ONE controller line was read by this run. A removal is a property of a change set, and this change set contains no candidate for one. This is NOT a clean bill of health for the app's CSRF posture; it runs on the next change that touches a controller."
+    elif [ ! -f "${_csrf_helper}" ]; then
         # A MISSING HELPER MUST NOT REPORT PASS (#147). Without it the gate
         # sees no removals at all and goes green on every diff.
         _csrf_ran=0
@@ -6374,8 +7687,23 @@ elif [ "${SCOPE_TO_DIFF}" = "1" ] && [ -n "${BASE_REF}" ]; then
     else
         set +e
         _csrf_err="${HYDRA_GATE_LOG_DIR}/hydra-gate-csrf-cochange.err"
+        # `--repo`/`--base` turn on the POST-IMAGE test: a removed annotation
+        # whose method no longer exists at HEAD is a DELETED endpoint, not a
+        # dropped protection, and a `-U0` diff cannot tell the two apart on its
+        # own. Measured on zaakafhandelapp#371 (five `DashboardController`
+        # methods deleted): 5 removals -> 0. The negative control is #380, which
+        # STRIPPED the annotation from ten surviving methods: 10 -> 10.
+        # Without these arguments the helper behaves exactly as before, so a
+        # repo it cannot read is never a reason to drop a security finding.
+        # ⚠️ THE DIFF IS THREE-DOT, SO ITS BASE SIDE IS THE MERGE BASE — not
+        # BASE_REF. Passing BASE_REF would address line numbers in the wrong
+        # image; the helper verifies the line content it was given and reports
+        # on a mismatch, so the error would be silent over-reporting rather
+        # than a false pass, but the right image is cheap to name.
+        _csrf_mb=$(git merge-base "${BASE_REF}" HEAD 2>/dev/null || true)
+        [ -n "${_csrf_mb}" ] || _csrf_mb="${BASE_REF}"
         _csrf_removed=$(git diff -U0 "${BASE_REF}...HEAD" -- 'lib/Controller/*.php' 2>/dev/null \
-            | python3 "${_csrf_helper}" 2>"${_csrf_err}")
+            | python3 "${_csrf_helper}" --repo . --base "${_csrf_mb}" 2>"${_csrf_err}")
         _csrf_rc=$?
         if [ "${_csrf_rc}" -ne 0 ]; then
             _csrf_ran=0
@@ -6392,8 +7720,107 @@ elif [ "${SCOPE_TO_DIFF}" = "1" ] && [ -n "${BASE_REF}" ]; then
         # i.e. "no frontend co-change at all" was read as "co-change found" and
         # the gate PASSED. A CSRF-protection removal with no frontend counterpart
         # is precisely what this gate exists to stop, so the bug was fail-OPEN.
-        _csrf_fe_signals=$(git diff "${BASE_REF}...HEAD" -- 'src/**/*.vue' 'src/**/*.js' 'src/**/*.ts' 2>/dev/null \
-            | grep -cE '^\+.*(OCS-APIRequest|requesttoken|@nextcloud/axios|getRequestToken)' 2>/dev/null || true)
+        # THE SIGNAL MUST BE ON A LINE THAT EXECUTES (#415).
+        # ---------------------------------------------------
+        # This was `grep -cE '^\+.*(…)'` over the raw diff, and this file's own
+        # note twenty lines down already named the hole: "the cheapest way to
+        # green would have been a cosmetic edit under src/ containing the word
+        # `requesttoken`: exactly the prose-satisfaction #191 warns against."
+        # It was written as a hypothetical. It was not one — measured, one
+        # fixture, one variable:
+        #
+        #   a diff dropping #[NoCSRFRequired], no frontend change
+        #     -> FAIL — @NoCSRFRequired dropped without frontend co-change
+        #   the same diff, plus ONE added line under src/ reading
+        #     `// TODO: this call still needs a requesttoken header. Not done yet.`
+        #     -> PASS                                            <- the defect
+        #
+        # A CSRF protection was removed and the gate was satisfied by a comment
+        # saying the replacement protection had NOT been added. Worse than a
+        # missed finding: the short-circuit below means the caller-state check
+        # — the mitigation built for exactly this — never runs at all once the
+        # count is non-zero. One comment skips the guard and the guard's backup.
+        #
+        # So the count is taken over the SCRIPT SCOPE of each changed file at
+        # HEAD (comments blanked, string literals kept — `requesttoken` and
+        # `'OCS-APIRequest'` are header names that ARE strings), restricted to
+        # the line numbers this diff actually added. Same question, asked of
+        # code.
+        #
+        # ⚠️ A CRASH HERE MUST NOT BE READ AS ZERO. Zero routes to the
+        # caller-state branch, which is the CONSERVATIVE direction — it can
+        # only add findings, never remove them — so a failure to compute falls
+        # back to 0 deliberately rather than to "signal found".
+        _csrf_fe_signals=$(PYTHONPATH="${_gate_helper_dir}${PYTHONPATH:+:${PYTHONPATH}}" \
+            python3 - "${BASE_REF}" 2>/dev/null <<'PYCSRF' || true
+import re, subprocess, sys
+try:
+    from source_scope import script_mask
+except ImportError:
+    print(0)
+    raise SystemExit(0)
+base = sys.argv[1]
+SIGNAL = re.compile(r'OCS-APIRequest|requesttoken|@nextcloud/axios|getRequestToken',
+                    re.IGNORECASE)
+# `:(glob)` IS LOAD-BEARING — WITHOUT IT `src/**/*.js` CANNOT SEE `src/thing.js`
+# (.github#428).
+#
+# In a PLAIN git pathspec there is no `**` operator: it is two ordinary `*`s,
+# and a plain `*` MATCHES `/`. So `src/**/*.js` reads as "src/, then anything,
+# then /, then anything, then .js" — it REQUIRES at least one directory below
+# src/, and every file sitting at `src/foo.js` was invisible to this scan.
+#
+# Reproduced 2026-08-13, one repo, one commit dropping #[NoCSRFRequired], one
+# JS file, nothing varying but its path:
+#
+#   git diff --name-only HEAD~1...HEAD
+#     lib/Controller/ThingController.php
+#     src/thing.js
+#   git diff --name-only HEAD~1...HEAD -- 'src/**/*.js'            -> (empty)
+#   git diff --name-only HEAD~1...HEAD -- ':(glob)src/**/*.js'     -> src/thing.js
+#
+# With `:(glob)` magic, `**` means "zero or more directory components" and a
+# single `*` no longer crosses `/`, so the glob matches `src/thing.js` AND
+# `src/sub/thing.js` AND `src/a/b/c.js`. It is a strict superset of the old
+# spelling: nothing that matched before stops matching.
+#
+# DIRECTION: this can only ADD signals, i.e. it can only move a run from the
+# conservative caller-state branch to the "a signal was added" branch. It was
+# never letting a CSRF removal through — a missed signal made the count 0,
+# which routes to check_csrf_callers.py — but it made the count a FLOOR rather
+# than a count, and the NOTE this gate prints about the frontend diff could be
+# wrong about what it had read.
+out = subprocess.run(
+    ['git', 'diff', '-U0', f'{base}...HEAD', '--',
+     ':(glob)src/**/*.vue', ':(glob)src/**/*.js', ':(glob)src/**/*.ts'],
+    capture_output=True, text=True, check=False).stdout
+added, path = {}, None
+hunk = re.compile(r'^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@')
+for line in out.splitlines():
+    if line.startswith('+++ b/'):
+        path = line[6:]
+        added.setdefault(path, set())
+    elif line.startswith('+++ /dev/null'):
+        path = None
+    elif line.startswith('@@') and path is not None:
+        m = hunk.match(line)
+        if m:
+            start = int(m.group(1))
+            count = int(m.group(2)) if m.group(2) is not None else 1
+            added[path].update(range(start, start + count))
+count = 0
+for rel, lines in added.items():
+    try:
+        with open(rel, encoding='utf-8', errors='replace') as fh:
+            masked = script_mask(fh.read(), rel).splitlines()
+    except OSError:
+        continue
+    for n in sorted(lines):
+        if 1 <= n <= len(masked) and SIGNAL.search(masked[n - 1]):
+            count += 1
+print(count)
+PYCSRF
+)
         _csrf_fe_signals="${_csrf_fe_signals%%$'\n'*}"
         case "${_csrf_fe_signals}" in ''|*[!0-9]*) _csrf_fe_signals=0 ;; esac
         if [ "${_csrf_fe_signals}" -eq 0 ]; then
@@ -6449,10 +7876,29 @@ elif [ "${SCOPE_TO_DIFF}" = "1" ] && [ -n "${BASE_REF}" ]; then
             if [ "${_csrf_callers_ran}" -eq 1 ] && [ -z "${_csrf_unprotected}" ]; then
                 # Stated, never silent: a green here is a claim about the
                 # callers, and the reader must be able to see which claim.
-                echo "[gate-48] no CSRF signal was ADDED by this diff, and none was needed:" \
-                    "every mutating call site under src/ already carries one" \
-                    "(requesttoken / OCS-APIRequest / getRequestToken / @nextcloud/axios)." \
-                    "Checked by scripts/lib/check_csrf_callers.py over the working tree."
+                #
+                # STASHED AND TAGGED, NOT PRINTED HERE (.github#401).
+                # --------------------------------------------------
+                # This `echo` used to run BEFORE `_pass 48`, so the gate's
+                # FIRST `[gate-48] ` line was the advisory. Both parsers in
+                # this package take the first match: `gf_verdict` filters only
+                # `NOTE|WARN|INFO:` (which this line did not carry) and the
+                # acceptance matrix's `_verdict` filters NOTHING. Measured
+                # 2026-08-12 on a one-commit diff that drops #[NoCSRFRequired]
+                # from a controller whose callers are all already protected —
+                # BOTH parsers returned this sentence, and the matrix driver's
+                # message for that is "gate-48 emitted NO verdict line at all
+                # — a gate that says nothing is not a pass". The first author
+                # of a gate-48 fixture would have filed a gate defect that
+                # does not exist.
+                #
+                # Two fixes, because either alone leaves the trap armed: this
+                # line now carries the `NOTE:` tag the shared parsers already
+                # know how to skip, AND it is printed AFTER the verdict. The
+                # parsers were hardened too — a verdict is now matched by its
+                # SHAPE rather than by excluding the advisory forms someone
+                # remembered to list.
+                _csrf_callers_note="[gate-48] NOTE: no CSRF signal was ADDED by this diff, and none was needed: every mutating call site under src/ already carries one (requesttoken / OCS-APIRequest / getRequestToken / @nextcloud/axios). Checked by scripts/lib/check_csrf_callers.py over the working tree."
             elif [ -z "${_csrf_optout}" ]; then
                 echo "@NoCSRFRequired removed but no frontend CSRF-signal added in diff:" >> "${_csrf_log}"
                 echo "${_csrf_removed}" >> "${_csrf_log}"
@@ -6476,6 +7922,8 @@ if [ "${_csrf_ran}" -eq 1 ]; then
     else
         _fail 48 "csrf-cochange" "@NoCSRFRequired dropped without frontend CSRF co-change — see ${_csrf_log}"
     fi
+    # AFTER the verdict, deliberately (.github#401) — see the stash site above.
+    [ -n "${_csrf_callers_note:-}" ] && echo "${_csrf_callers_note}"
 fi
 
 # ---------------------------------------------------------------------------
@@ -6505,10 +7953,75 @@ if [ "${#_cxt_files[@]}" -gt 0 ]; then
     # of this inline python was never read, so a broken interpreter left an
     # empty log and the gate called every controller clean.
     set +e
+    # PYTHONPATH so the heredoc can import the SHARED mask (lib/source_scope.py)
+    # rather than growing a private copy of it — see the note below the argv
+    # block. `_gate_helper_dir` is the same absolute lib/ that gate-5 already
+    # resolves `source_scope.py` from, so this adds no new packaging assumption.
+    PYTHONPATH="${_gate_helper_dir}${PYTHONPATH:+:${PYTHONPATH}}" \
     python3 - "${_cxt_log}" "${_cxt_files[@]}" 2>>"${_cxt_log}.err" << 'PY'
 import re, sys, os
 log_path = sys.argv[1]
 files = sys.argv[2:]
+
+# A COMMENT MUST NEITHER SATISFY THIS GATE NOR MANUFACTURE A FINDING (#415).
+#
+# This gate asked two questions of the RAW method body — "is there a catch of
+# a tracked exception?" and "does this method call a risky service method?" —
+# and prose is made of the same bytes as code, so a comment answered both.
+# Measured on this gate directly, three fixtures, one variable:
+#
+#   POSITIVE CONTROL  destroy() calling $this->objectService->deleteObject()
+#                     with no try/catch and no @throws
+#                       -> FAIL — 1 controller method(s)          (correct)
+#
+#   FALSE NEGATIVE    the SAME method, with a TODO above the call reading
+#                     "we should catch (DoesNotExistException $e) here and
+#                     translate it to a 404 JSONResponse. Not done yet."
+#                       -> PASS                                   <- the defect
+#                     A comment STATING THE DEBT satisfied the gate that
+#                     exists to collect it. Identical to the shape gate 19 was
+#                     fixed for and gate 50 was fixed for in #415; it was
+#                     never looked for here.
+#
+#   FALSE POSITIVE    index() which calls nothing riskier than
+#                     $this->renderer->toArray(), carrying a comment saying
+#                     "this endpoint used to call
+#                     $this->objectService->deleteObject($id) directly. It no
+#                     longer does."
+#                       -> FAIL — 1 ... names index()             <- the defect
+#                     The removal note scored as the removed call. The better
+#                     the documentation, the redder the repo (#230's shape).
+#
+# Both close by anchoring the body questions on `source_scope.php_mask`, which
+# blanks comments AND string contents while PRESERVING OFFSETS, so a line
+# number computed on the mask still names the right line of the original.
+# `blank_strings=True` is deliberate: neither `catch (` nor `$this->x->y(` is
+# ever legitimately spelled inside a string literal, so an error message that
+# quotes one cannot answer either question.
+#
+# THE DOCBLOCK IS STILL READ FROM THE ORIGINAL TEXT. `@throws` lives in a
+# comment BY DESIGN — it is the author's declaration, not incidental prose —
+# and masking it would delete the only intentional suppression this gate has,
+# turning a false-negative fix into a fleet of false positives. Two questions,
+# two sources, one coordinate system: the mask answers "is this position
+# code?", the original answers "what does the author declare?".
+#
+# NOT A PRIVATE COPY, deliberately. `php_mask` already exists in
+# lib/source_scope.py and already knows that `#[` opens a PHP 8 ATTRIBUTE
+# rather than a comment and that `//` inside `'https://x'` opens nothing.
+# A fourth hand-rolled stripper is how N copies drift.
+try:
+    from source_scope import php_mask
+except ImportError as exc:                       # pragma: no cover - wiring
+    # FAIL CLOSED AND LOUD. Falling back to the raw text would silently
+    # restore the exact defect this import removes, and the gate would print
+    # PASS while doing it. A non-zero exit makes the wrapper say SKIPPED
+    # (wiring) instead, which is a verdict about the run rather than the code.
+    sys.stderr.write(
+        "controller-exception-translation: cannot import source_scope "
+        f"({exc}); refusing to grade raw text.\n"
+    )
+    sys.exit(3)
 # Documented-throw shapes we track — these are known-not-auto-translated by NC's dispatcher.
 TRACKED = [
     'DoesNotExistException',
@@ -6521,20 +8034,68 @@ TRACKED = [
     'AppendOnlyException',
     'ArchivalImmutableException',
 ]
+# THE DOCBLOCK GROUP MUST BE ONE DOCBLOCK, NOT A SPAN (.github#343 family).
+#
+# This used to open `(/\*\*[\s\S]*?\*/)?\s*`. `[\s\S]*?` is lazy but it is not
+# bounded: it can expand THROUGH a `*/` and stop at a later one. re.finditer
+# returns the LEFTMOST match, and in a normal controller the leftmost `/**` is
+# the FILE-HEADER docblock — so for the first method in every file, group(1)
+# became the entire span from the file header down to that method's own
+# docblock, header text included.
+#
+# Consequence: `@throws \Throwable` written once at the top of a file silenced
+# the first method in it, invisibly and fleet-wide. Measured 2026-08-12,
+# one fixture, three arms:
+#
+#   destroy() with no @throws anywhere            FAIL — 1, names destroy()
+#   + `@throws \Throwable` in the FILE HEADER      PASS          <- the defect
+#   + a second unhandled purge()                   FAIL — 1, names purge() only
+#
+# The tell was in the finding itself: it reported `ThingController.php:2` for a
+# method declared on line 22 — the match started at the file header.
+#
+# `(?:(?!\*/)[\s\S])*` is the tempered form: it cannot cross a `*/`, so the
+# group is exactly ONE comment. The `\s*` that follows then has to reach the
+# declaration through whitespace alone, which `namespace …; use …; class X {`
+# is not — so a header tag can no longer bind forward to anything.
+#
+# NOT WIDENED HERE, deliberately: a docblock separated from its declaration by
+# a PHP attribute (`#[NoAdminRequired]`) did not bind before this change and
+# still does not, because `\s*` cannot cross a `#`. That is a separate
+# decision with its own direction (it would REMOVE findings) and it is not
+# smuggled in behind a fix that adds them.
 METHOD_RE = re.compile(
-    r'(/\*\*[\s\S]*?\*/)?\s*'                    # optional preceding docblock
+    r'(/\*\*(?:(?!\*/)[\s\S])*\*/)?\s*'          # optional ADJACENT docblock — exactly one
     r'(public|protected|private)\s+function\s+'
     r'(?P<name>\w+)\s*\([^)]*\)[^{]*\{',
     re.MULTILINE,
 )
-def _method_bodies(src):
+def _method_bodies(src, masked):
+    """Declarations and docblocks from *src*; BODIES from *masked*.
+
+    `masked` is `php_mask(src)` and is the same length, so every offset means
+    the same thing in both. The declaration is matched on the original because
+    `m.group(1)` must be the real docblock text — see the `@throws` note above.
+
+    THE BRACE WALK RUNS ON THE MASK. A `{` or `}` inside a comment or a string
+    (`// close the block with }` / `$fmt = '{';`) mis-balances a walk over raw
+    text, and a mis-balanced walk does not report an error — it silently
+    attributes the wrong span of code to the method, which is a finding about
+    lines the method does not contain.
+    """
     out = []
     for m in METHOD_RE.finditer(src):
         start = m.end() - 1  # position of the `{`
+        # A DECLARATION FOUND INSIDE A COMMENT IS NOT A METHOD. If the brace
+        # the regex landed on is blank in the mask, the whole match was prose
+        # — a docblock saying `public function destroy(...) {` describes a
+        # method, it does not declare one.
+        if start >= len(masked) or masked[start] != '{':
+            continue
         depth = 0
         p = start
-        while p < len(src):
-            c = src[p]
+        while p < len(masked):
+            c = masked[p]
             if c == '{':
                 depth += 1
             elif c == '}':
@@ -6543,7 +8104,7 @@ def _method_bodies(src):
                     out.append({
                         'name': m.group('name'),
                         'docblock': m.group(1) or '',
-                        'body': src[start+1:p],
+                        'body': masked[start+1:p],
                         'start_line': src[:m.start()].count('\n') + 1,
                     })
                     break
@@ -6555,7 +8116,9 @@ for fp in files:
             src = f.read()
     except OSError:
         continue
-    methods = _method_bodies(src)
+    # Comments and string CONTENTS blanked, offsets and line count preserved.
+    masked_src = php_mask(src, blank_strings=True)
+    methods = _method_bodies(src, masked_src)
     for m in methods:
         body = m['body']
         # Find calls of shape $this->prop->method(...) which is a proxy for "calls a service"
@@ -6666,10 +8229,12 @@ _scfm_rc=0
 if [ "${#_scfm_files[@]}" -gt 0 ]; then
     # A CRASHED CHECKER MUST NOT REPORT PASS (#147 / #249 / #262).
     set +e
-    python3 - "${_scfm_log}" "${_scfm_files[@]}" 2>>"${_scfm_log}.err" << 'PY'
+    python3 - "${SCRIPT_DIR}/lib" "${_scfm_log}" "${_scfm_files[@]}" 2>>"${_scfm_log}.err" << 'PY'
 import re, sys
-log_path = sys.argv[1]
-files = sys.argv[2:]
+sys.path.insert(0, sys.argv[1])
+from source_scope import php_mask           # a missing lib is a CRASH, not a pass
+log_path = sys.argv[2]
+files = sys.argv[3:]
 SEC_KEY = re.compile(
     # FIRST ARGUMENT: THE APP ID, IN ANY FORM.
     #
@@ -6707,13 +8272,44 @@ SEC_KEY = re.compile(
     # `self::APP_ID`, `static::APP_ID`) — which is exactly the blind spot that
     # was measured: 7 security-relevant reads across 5 repos.
     #
-    # KNOWN BLIND SPOT, STATED RATHER THAN QUIETLY ENFORCED: a read whose app
-    # id is a plain variable is still invisible to this gate. It is not a safe
-    # shape, it is an unmeasured one — separating the settings read-outs from
-    # the real scope decisions among them needs a data-flow question this
-    # regex cannot ask.
+    # THE BLIND SPOT IS NOW CLOSED, AND THE SEPARATION IT NEEDED IS SYNTACTIC.
+    #
+    # The paragraph above used to end here, saying a variable app id "is not a
+    # safe shape, it is an unmeasured one". It has now been measured, and it
+    # was hiding the gate's own founding defect IN THE APP THE GATE WAS BUILT
+    # FOR. opencatalogi reads
+    #
+    #     $this->config->getValueString($this->appName, 'listing_register', '')
+    #     $this->config->getValueString($this->appName, 'listing_schema',   '')
+    #
+    # unguarded, and 14 more of exactly that shape across CatalogiService,
+    # DirectoryService, PublicationService and SetupController — `catalog_
+    # register`, `catalog_schema`, `publication_register`, `publication_schema`.
+    # Sixteen reads of the opencatalogi#86 keys, in opencatalogi, reported
+    # PASS, because the app id is spelled `$this->appName` rather than
+    # `'opencatalogi'`. Same family as #184 and as the class-constant fix
+    # above: a matcher that only handles the spellings someone thought of is a
+    # floor, not a count. (The fleet has ~30 `method_exists($x, $variable)`
+    # sites invisible to literal greps for the same reason.)
+    #
+    # WHAT THE FIRST ATTEMPT GOT WRONG, AND WHY THIS ONE IS DIFFERENT.
+    # The rejected draft accepted `[^,()]+` and softwarecatalog went 23 -> 64,
+    # with 47 of the new findings being SETTINGS READ-OUTS. That cost is real
+    # and it is why the widening was backed out. But the diagnosis was wrong:
+    # the noise does not come from the app id being a variable, it comes from
+    # the read sitting in an ARRAY-LITERAL VALUE POSITION, where the gate's own
+    # remedy cannot be written. Measured over 12 repos, the two populations
+    # separate perfectly on that one syntactic fact:
+    #
+    #     softwarecatalog  +47 new, 47 of 47 in `'key' => ...` position
+    #     docudesk         + 1 new,  1 of  1 in `'key' => ...` position
+    #     opencatalogi     +16 new,  0 of 16 in `'key' => ...` position
+    #
+    # So the app id is widened to include a variable, and the array-literal
+    # value position is exempted instead — see _ARRAY_VALUE below.
     r"getValue(?:String|Bool|Int)\s*\(\s*"
-    r"(?:['\"][^'\"]*['\"]|(?:self|static|parent|[A-Z]\w*)(?:\\\w+)*::\w+)"
+    r"(?:['\"][^'\"]*['\"]|(?:self|static|parent|[A-Z]\w*)(?:\\\w+)*::\w+"
+    r"|\$this\s*->\s*\w+|\$\w+)"
     r"\s*,\s*['\"]"
     r"(?P<key>[^'\"]*"
     r"(?:register|schema|allow[_-]?list|allow_?list|whitelist|blocklist|"
@@ -6730,6 +8326,182 @@ SEC_KEY = re.compile(
     r"['\"]",
     re.IGNORECASE,
 )
+
+# THE ONE EXEMPTION THIS GATE GRANTS, AND THE CLAIM THAT JUSTIFIES IT.
+#
+# Shape:   'someLabel' => $this->config->getValueString($app, 'x_key', ''),
+#
+# CLAIM (testable): at this syntactic position NONE of the six remedies the
+# gate's own guard vocabulary recognises — an empty-compare, `empty()`, a
+# logger->warning, a `throw`, or an early Response return — can be written
+# without restructuring the surrounding expression. There is no local variable
+# to test and no statement slot to put a test in. A finding here names a line
+# at which no closing action exists, which is the unclosable-gate shape
+# (#252) that gate 59 exists to forbid, and 47 of them in one repo is how a
+# gate teaches people to stop reading it.
+#
+# TEST OF THE CLAIM: read the sites. softwarecatalog
+# ArchiMateImportService::getAmefConfiguration() builds `$decoded` as one array
+# literal of eight such reads; the only place a guard can go is the consumer of
+# `$decoded`, in a different function. The near-miss arm in
+# test_gate_45_to_55_acceptance.sh plants the SAME key read into a local
+# variable and asserts the gate still FAILS, so the exemption is about the
+# position and not about the key.
+#
+# NOT SILENT. An exemption that produces silence is how a gate's quiet gets
+# believed. Every demoted read is written to <log>.notes with its file, line
+# and key, so "the gate saw it and demoted it" is checkable rather than
+# indistinguishable from "the gate never looked".
+#
+# DELIBERATELY NOT EXEMPTED: `fn() => $this->config->getValueString(...)`. The
+# pattern requires an array KEY before the `=>`, and an arrow function has `)`
+# there, so a single-expression closure is still reported.
+_ARRAY_VALUE = re.compile(
+    r"(?:['\"][^'\"]*['\"]|\w+)\s*=>\s*"
+    r"(?:[\w\$]+(?:\s*(?:->|::)\s*[\w\$]+)*\s*(?:->|::)\s*)?$"
+)
+# A COMMENT MUST NEITHER CONSUME THE WINDOW NOR SATISFY IT (#415).
+#
+# The window was raw file text, so comment lines did BOTH — and the two
+# failures point in opposite directions from one cause. Measured on this
+# checker directly, four fixtures, one variable:
+#
+#   FALSE POSITIVE   A textbook guard — `if ($reg === '') { return []; }` —
+#                    reported as an unsafe read because twelve lines of
+#                    ordinary explanation sat between it and the call. 8 of
+#                    gate-50's 16 opencatalogi findings were this. The gate
+#                    penalised the DOCUMENTED fix and passed the undocumented
+#                    one: an author who deletes the comment goes green having
+#                    changed nothing about the code's safety.
+#
+#   FALSE NEGATIVE   An unguarded read of an `api_token` reported CLEAN
+#                    because the TODO above it said "we should throw new
+#                    RuntimeException here when empty, and compare $tok === ''
+#                    before use. Not done yet." A comment stating the debt
+#                    satisfied the gate that exists to collect it. This is the
+#                    same defect as the one gate 19 was fixed for; it was
+#                    never looked for here.
+#
+# Both are closed by stripping comment TEXT before the window is built, so
+# comments occupy no budget and offer no evidence. Line numbering is
+# preserved (text is blanked, lines are not removed) because findings report
+# a line number.
+#
+# STRING-SAFE, not a naive split: `'https://x'` must not truncate the line,
+# and `#[PublicPage]` is a PHP 8 attribute, not a comment.
+#
+# THE FOURTH DIALECT IS GONE (#424, over #420 and #429). Every property this
+# block needs is `source_scope.php_mask`'s contract, and #420 shipped a
+# hand-rolled `_strip_php_comments` beside it anyway — a fourth definition of
+# "where does a PHP comment start" next to `php_mask`,
+# `check_apphost_autoload_prelude.strip_comments` and
+# `check_no_admin_idor._strip_strings_and_comments`. Four copies of one rule
+# is four chances to drift, and every gate in this package that drifted did so
+# in BOTH directions at once.
+#
+# #429 then grew that private copy rather than the library: it added HEREDOC
+# handling and a `for_structure=True` mode for the brace walk below. Both were
+# right and neither belonged here, so both moved INTO `php_mask`:
+#
+#   php_mask(src)                      guard-search text — comments blanked,
+#                                      string and heredoc CONTENTS kept.
+#   php_mask(src, blank_strings=True)  structural text — contents blanked too,
+#                                      which is what `_method_spans` walks.
+#
+# Deleting the private copy without moving its heredoc handling first would
+# have been a silent capability loss dressed as a cleanup, which is the shape
+# this whole programme exists to stop.
+#
+# `for_structure=True`'s successor is `php_mask(..., blank_strings=True)`. It
+# keeps the quotes and the line count, and that copy is only ever brace-walked
+# (see _method_spans), never searched for a guard, so no guard vocabulary
+# changes meaning: `$fmt = '{';` and a `<<<SQL … {$x} … SQL;` body must not
+# mis-balance a walk, but `throw new` inside a heredoc must not stop being
+# whatever it already was to the window search.
+# THE WINDOW MUST NOT CROSS INTO THE NEXT METHOD (#429).
+#
+# The window is "eleven lines of code following the read", counted over the
+# FILE, with no notion of where the method ends. A guard belonging to a
+# DIFFERENT method therefore cleared an unguarded read in the method above it.
+#
+# Reproduced 2026-08-13 on c26f9a3, one file, one variable — an unguarded
+# `api_token` read in `readToken()` with an ordinary guarded read in the next
+# method five code lines below:
+#
+#   both methods present   PASS                                <- the defect
+#   delete readRegister()
+#   and nothing else       FAIL — 1, naming api_token at :6    <- the control
+#
+# #420 changed the window's BUDGET (comments no longer spend it) but not its
+# EXTENT, so that fix moved this defect closer rather than away: blanking
+# comments means real code lines from the next method arrive inside the
+# window sooner.
+#
+# It is also order-dependent in a way nobody can see while reading — moving a
+# method, or adding one below, changes the verdict for a method whose body did
+# not change.
+#
+# `_method_spans` is the brace walk gate-49's checker already runs over masked
+# text, kept local here so gate-50 gains no new import and no new wiring
+# failure mode. It walks the `for_structure` copy for the reason gate-49 gives:
+# a `{` inside a comment or a string does not mis-balance a walk loudly, it
+# silently attributes the wrong span of code to the method.
+#
+# FAILS IN THE LOOSE DIRECTION. If the walk never balances (an unterminated
+# body, a heredoc shape this stripper does not know) the span runs to EOF and
+# the window is exactly what it was before this change — a false NEGATIVE at
+# worst, never a finding at a line where no guard could be written.
+_METHOD_DECL = re.compile(r'\bfunction\s+(?P<name>\w+)\s*\(')
+
+
+def _method_spans(text):
+    """[(start_line, end_line, name)] for every NAMED function in *text*.
+
+    Anonymous closures (`function ($x) {`) and arrow functions are deliberately
+    not boundaries: they are written INSIDE a method, and treating one as a new
+    method would clip a window in the middle of the body it belongs to.
+    """
+    spans, n = [], len(text)
+    for m in _METHOD_DECL.finditer(text):
+        p = text.find('(', m.start())
+        if p < 0:
+            continue
+        depth, i = 0, p
+        while i < n:
+            if text[i] == '(':
+                depth += 1
+            elif text[i] == ')':
+                depth -= 1
+                if depth == 0:
+                    break
+            i += 1
+        if i >= n:
+            continue
+        j = i + 1
+        while j < n and text[j] not in '{;':
+            j += 1
+        start_line = text[:m.start()].count('\n') + 1
+        if j >= n or text[j] == ';':
+            # An abstract/interface declaration has no body; its span is the
+            # declaration itself, so nothing is ever clipped INTO it.
+            spans.append((start_line, text[:min(j, n - 1)].count('\n') + 1, m.group('name')))
+            continue
+        depth, k = 0, j
+        while k < n:
+            if text[k] == '{':
+                depth += 1
+            elif text[k] == '}':
+                depth -= 1
+                if depth == 0:
+                    break
+            k += 1
+        end_line = text[:k].count('\n') + 1 if k < n else text.count('\n') + 1
+        spans.append((start_line, end_line, m.group('name')))
+    return spans
+
+
+notes_path = log_path + '.notes'
+open(notes_path, 'w', encoding='utf-8').close()
 for fp in files:
     try:
         with open(fp, encoding='utf-8', errors='replace') as f:
@@ -6737,6 +8509,11 @@ for fp in files:
     except OSError:
         continue
     src = ''.join(lines)
+    # Offsets and line count survive both masks, so `code_lines[n - 1]` is
+    # still line n of the file — which is what the window below indexes with,
+    # and what `_method_spans` reports its boundaries in.
+    code_lines = php_mask(src).split('\n')
+    _spans = _method_spans(php_mask(src, blank_strings=True))
     for m in SEC_KEY.finditer(src):
         # Find the line number of the match
         lineno = src[:m.start()].count('\n') + 1
@@ -6783,7 +8560,31 @@ for fp in files:
         _end_line = src[:_p].count('\n') + 1 if _p < len(src) else lineno
         # `_end_line - 1` is the 0-based index of the call's closing line, so
         # the window INCLUDES the rest of that line (the same-line case).
-        window = ''.join(lines[_end_line-1:_end_line+10])
+        #
+        # THE BUDGET IS ELEVEN LINES OF CODE, NOT ELEVEN LINES OF FILE (#415).
+        # Blank and comment-only lines no longer spend it, and the text
+        # searched below is comment-stripped, so a comment can neither push a
+        # guard out of range nor stand in for one.
+        #
+        # …AND THE EXTENT IS THE ENCLOSING METHOD, NOT THE FILE (#429).
+        # A guard in the NEXT method is not this read's guard. The innermost
+        # span containing the read wins, so a named function nested inside
+        # another clips to itself rather than to its host. A read that belongs
+        # to no span (a property initialiser, or a walk that never balanced)
+        # keeps the pre-#429 extent — the loose direction.
+        _limit, _encl = len(code_lines), None
+        for _s, _e, _nm in _spans:
+            if _s <= lineno <= _e and (_encl is None or _s > _encl[0]):
+                _encl = (_s, _e, _nm)
+        if _encl is not None:
+            _limit = min(_limit, _encl[1])
+        _budget, _win, _i = 11, [], _end_line - 1
+        while _i < _limit and _budget > 0:
+            _win.append(code_lines[_i])
+            if code_lines[_i].strip():
+                _budget -= 1
+            _i += 1
+        window = '\n'.join(_win)
         # Look for fail-mode signals
         #
         # THE EMPTY-COMPARE ARM MUST SURVIVE A COMPOUND CONDITION.
@@ -6825,8 +8626,20 @@ for fp in files:
             window,
         )
         if not has_guard:
+            if _ARRAY_VALUE.search(src[max(0, m.start() - 200):m.start()]):
+                with open(notes_path, 'a', encoding='utf-8') as g:
+                    g.write(f"{fp}:{lineno}: NOTE security-relevant config read of "
+                            f"\"{m.group('key')}\" is unguarded but sits in an "
+                            f"array-literal value position, where no guard can be "
+                            f"written — demoted, not ignored. Guard it at the "
+                            f"consumer of the assembled array.\n")
+                continue
             with open(log_path, 'a', encoding='utf-8') as g:
-                g.write(f"{fp}:{lineno}: security-relevant config read of \"{m.group('key')}\" has no fail-mode guard within 10 lines\n")
+                # NAME THE METHOD THE WINDOW WAS CLIPPED TO (#429). Without it
+                # the reader cannot tell "unguarded" from "the guard is just
+                # out of range", which is the question the clip decides.
+                _where = f" inside {_encl[2]}()" if _encl is not None else ""
+                g.write(f"{fp}:{lineno}: security-relevant config read of \"{m.group('key')}\" has no fail-mode guard within 10 lines{_where}\n")
 PY
     _scfm_rc=$?
 fi
@@ -7004,9 +8817,29 @@ fi
 # reported so migrations can show the number shrinking).
 _cwr_counts=$(grep -m1 -o 'base=[0-9]* head=[0-9]* delta=[+-]*[0-9]*.*' "${_cwr_log}" 2>/dev/null || true)
 [ -n "${_cwr_counts}" ] && echo "[gate-52] custom-widget-ratchet: ${_cwr_counts}"
+# THE RATCHET HALF IS NOT ALWAYS COMPUTED, AND IT USED TO SAY SO NOWHERE
+# (.github#374). check_custom_widget_ratchet.py computes base-vs-head only when
+# it is given a base; without one it runs the JUSTIFICATION half alone and
+# prints no `base=/head=/delta=` line at all. The gate could then print PASS
+# while the mechanic it is NAMED after had not run. Not prefixed `[gate-` so no
+# `^\[gate-` consumer reads it as a verdict — same convention as gate-31's.
+if [ "${#_cwr_files[@]}" -gt 0 ] && [ "${_cwr_ran}" -eq 1 ] && [ -z "${_cwr_counts}" ]; then
+    echo "[hydra-gates] gate-52 custom-widget-ratchet: the RATCHET half was NOT computed — the helper printed no base/head/delta counts, which it does only when it has a base ref to compare against. The JUSTIFICATION half (every custom kind:\"widget\" entry needs a \`_note\`) did run over ${#_cwr_files[@]} file(s). A PASS below covers that half only."
+fi
 if [ "${#_cwr_files[@]}" -eq 0 ]; then
     # AN UNOPENED SCOPE IS NEVER A PASS (#242/#240/#258/#268).
     _skip 52 "custom-widget-ratchet" na "no src/**/*.{js,ts,vue} file(s) in this repo, so there is no component registry to hold a custom kind:\"widget\" entry and no ratchet to compute."
+elif [ "${SCOPE_TO_DIFF}" = "1" ] && ! printf '%s\n' "${CHANGED_FILES}" | grep -qE '^src/.*\.(js|ts|vue)$'; then
+    # AN UNOPENED SCOPE IS NEVER A PASS (.github#374).
+    #
+    # `_cwr_files` is deliberately NOT `_in_scope`-filtered — the ratchet count
+    # is app-wide — so on a narrowed run this array is non-empty even when the
+    # diff contains no frontend file at all. The helper then self-scopes its
+    # justification half to changed entries, finds none, prints `findings=0`,
+    # and the gate printed PASS having judged nothing. The array being full is
+    # what made this one invisible: every other gate in this class gave itself
+    # away with an empty file list.
+    _skip_empty_scope 52 "custom-widget-ratchet" "src/**/*.{js,ts,vue} file (a component registry declaring kind:\"widget\" entries)"
 elif [ "${_cwr_ran}" -eq 1 ]; then
     if [ "${_cwr_fail}" -eq 0 ]; then
         _pass 52 "custom-widget-ratchet"
@@ -7030,7 +8863,31 @@ fi
 #      lib/Settings/*register*.json (+ register.d/*.json; no register JSON
 #      in-repo → WARN, runtime-bound registers), deepLink route
 #      correspondence, and the ADR-044 no-functionality-loss removals
-#      invariant (a removal must never orphan its route).
+#      invariant (a removal must never orphan its page).
+#
+# THE REMOVALS INVARIANT ASKS ABOUT REACHABILITY, NOT ABOUT THE MENU.
+# Reachability is the transitive closure of the manifest's DECLARATIVE
+# navigation edges — open-page action targets, handler:'navigate' routes,
+# viewAllRoute / rowRoute / clickRoute / onSuccessRoute / drilldown.route —
+# seeded by the surviving menu. A page a dashboard tile or a "view all" link
+# reaches is reachable; a page reached only from another orphan is not.
+# When the replacement surface names the retired page NOWHERE (the
+# functionality moved, not the link — a folderSidebar filter, a page viewMode,
+# a per-object sidebar tab), the app declares the replacement in
+# menu-layout.json#removalsReplacedBy and the gate VERIFIES that page exists
+# and is itself reachable before downgrading to WARN. Never a free-text reason:
+# a page id rots loudly, prose does not.
+#
+# A replacement that moved to ANOTHER APP is spelled '<appId>:<PageId>'
+# (procest's cross-case agenda compiler moved to decidesk, and the same-app
+# form could only have been satisfied by naming a local page that does not
+# carry it — a false claim the gate would have accepted). This form gets a
+# STRICTLY WEAKER check and says so: syntax, a known Conduction fleet app id,
+# and NOT this app (that is the same-app case in disguise and takes the strict
+# path). The gate does not read another app's manifest, so it CANNOT check that
+# the page exists there, is reachable there, or carries the functionality — and
+# unlike a same-app waiver it does NOT rot. The WARN states every one of those
+# limits on every run; a cross-app waiver is a review judgement, not a proof.
 #
 # Why (2026-07-06 audit item 19): gate-22 validates ONLY the base manifest.
 # shillinq ships 75+ fragments gate-22 never sees; the 2026-07-06 live e2e
@@ -7233,7 +9090,20 @@ if [ -f src/manifest.json ]; then
         # is prevention rather than a burn-down list nobody can close.
         # -------------------------------------------------------------------
         _em_orphaned=""
-        if [ "${SCOPE_TO_DIFF}" = "1" ] && [ -n "${BASE_REF}" ] && [ "${_em_warns}" -gt 0 ]; then
+        # THIS SUB-CHECK IS A DELTA HALF INSIDE A STATE GATE, AND ITS ABSENCE
+        # USED TO BE SILENT (.github#374).
+        #
+        # "Did THIS change remove the last manifest reference to a component"
+        # is unanswerable without a base, so with none it simply does not run —
+        # and gate-53 could still print PASS, saying nothing about the half
+        # that did not execute. Keyed on `HAVE_DELTA_BASE` (the file scope is
+        # irrelevant to it) and, when it cannot run over live WARNs, it says so
+        # on stdout. Not prefixed `[gate-` so no `^\[gate-` consumer reads it
+        # as a verdict.
+        if [ "${HAVE_DELTA_BASE}" != "1" ] && [ "${_em_warns}" -gt 0 ]; then
+            echo "[hydra-gates] gate-53 effective-manifest-crossref: the ORPHAN-PROMOTION half was NOT computed — it asks whether this CHANGE removed the last \"component\" reference to one of the ${_em_warns} registry export(s) below, and this run has no delta base. Those WARNs stay advisory. Give the run a base (--base <ref> or HYDRA_GATE_BASE_REF) to have them judged."
+        fi
+        if [ "${HAVE_DELTA_BASE}" = "1" ] && [ -n "${BASE_REF}" ] && [ "${_em_warns}" -gt 0 ]; then
             set +e
             _em_removed_refs=$(git diff -U0 "${BASE_REF}...HEAD" -- \
                 'src/manifest.json' 'src/manifest.d/*' 'src/menu-layout.json' 2>/dev/null \
@@ -7331,6 +9201,34 @@ set +e
 [ -z "${_rd_fail}" ] && _rd_fail=0
 [ -z "${_rd_warn}" ] && _rd_warn=0
 [ "${_rd_warn}" -gt 0 ] && echo "[gate-54] relation-dialect: ${_rd_warn} WARN finding(s) (non-blocking) — see ${_rd_log}"
+# INHERITED vs INTRODUCED, stated rather than left to be guessed.
+#
+# Checks (a) and (c)-(f) are FILE-scoped by design and STAY blocking — a
+# structural defect in a register this PR edited is this PR's to fix, and
+# narrowing them to the touched lines would be making the gate green by
+# weakening it. But a one-line retitle inherits every finding in the file, and
+# until now the output said nothing about that: a FAIL over a defect the author
+# wrote and a FAIL over a defect they stood next to printed the same sentence.
+#
+# The checker now suffixes each finding with [INHERITED …] or [INTRODUCED …]
+# when a base is known, so the verdict can carry the split. It is a SUFFIX
+# precisely so the two counts below — which key off `^WARN:` — keep working.
+_rd_inh=0
+_rd_new=0
+if [ "${_rd_fail}" -gt 0 ]; then
+    _rd_inh=$(grep -v '^WARN:' "${_rd_log}" 2>/dev/null | grep -cF '[INHERITED' || true)
+    _rd_new=$(grep -v '^WARN:' "${_rd_log}" 2>/dev/null | grep -cF '[INTRODUCED' || true)
+    case "${_rd_inh}" in ''|*[!0-9]*) _rd_inh=0 ;; esac
+    case "${_rd_new}" in ''|*[!0-9]*) _rd_new=0 ;; esac
+fi
+_rd_split=""
+if [ $((_rd_inh + _rd_new)) -gt 0 ]; then
+    _rd_split=" (${_rd_new} INTRODUCED by this change, ${_rd_inh} INHERITED — already present at '${BASE_REF}' in a file this change touched; both block, per-finding labels are in the log)"
+elif [ "${_rd_fail}" -gt 0 ]; then
+    # No base was available, so no finding could be labelled. Say that, rather
+    # than let the absence of labels read as "all of these are yours".
+    _rd_split=" (this run knew no base, so NONE of these could be classified as introduced or inherited — re-measure with HYDRA_GATE_BASE_REF set to attribute them)"
+fi
 if [ "${#_rd_files[@]}" -eq 0 ]; then
     # AN UNOPENED SCOPE IS NEVER A PASS (#242/#240/#258/#268).
     _skip 54 "relation-dialect" na "scope was empty — 0 lib/Settings/*register*.json (or register.d/*.json) file(s) in this repo or this diff, so NO relation property was inspected; non-canonical relation dialects (ADR-062 rules 6/7/10) are UNVERIFIED by this run."
@@ -7338,7 +9236,7 @@ elif [ "${_rd_ran}" -eq 1 ]; then
     if [ "${_rd_fail}" -eq 0 ]; then
         _pass 54 "relation-dialect"
     else
-        _fail 54 "relation-dialect" "${_rd_fail} non-canonical relation dialect finding(s) — see ${_rd_log}"
+        _fail 54 "relation-dialect" "${_rd_fail} non-canonical relation dialect finding(s)${_rd_split} — see ${_rd_log}"
     fi
 fi
 
@@ -7553,6 +9451,41 @@ elif [ "${#_owc_files[@]}" -gt 0 ]; then
         if [ "${_owc_rc}" -ne 0 ]; then
             _owc_ran=0
             _skip 57 "orphaned-write-capability" wiring "check_orphaned_write_capability.py exited ${_owc_rc} — ${#_owc_files[@]} service file(s) were in scope and NONE were judged; orphaned (mintable-but-unreachable) write capabilities are UNVERIFIED by this run. This helper always exits 0 when it runs, so this is a crash, not a finding count. See ${_owc_err}."
+        elif grep -qF '[orphaned-write-capability] SKIP:' "${_owc_err}" 2>/dev/null; then
+            # THE CHECKER DECLINED TO JUDGE. THAT ZERO IS A SKIP, NOT A CLEAN
+            # BILL (.github#403 follow-up).
+            #
+            # `#403` repaired the hydra#106 fail-safe: it keys on the intrinsic
+            # `appinfo/info.xml` `<id>` instead of the checkout directory name,
+            # so on a foundation repo with no sibling apps beside it the
+            # checker now refuses — cross-app callers cannot be resolved, so
+            # deadness is unprovable. That is exactly right, and it is CI's
+            # normal shape: `quality.yml` checks out to `path: app`, one repo,
+            # no siblings.
+            #
+            # But the refusal is written to STDERR, and this gate counts lines
+            # on STDOUT. A checker that judged nothing therefore produced zero
+            # lines, and zero lines printed PASS — so repairing a guard that
+            # had never engaged replaced a FALSE RED with a FALSE GREEN, over a
+            # scope the checker had explicitly declined. That is the `#374`
+            # family arriving through a fix rather than through a bug, and it
+            # is why the marker is a contract rather than a log line.
+            #
+            # Reproduced 2026-08-12 on a two-arm control differing by exactly
+            # ONE thing — whether a sibling app exists beside the repo — over a
+            # tree carrying one planted orphan: no sibling gave PASS with the
+            # SKIP on stderr; a sibling gave `FAIL — 1` naming the method. The
+            # subject was present and mintable in BOTH arms.
+            #
+            # ⚠️ THE REASON MUST NOT READ AS A CLEAN BILL, because it is not
+            # one and never was. openregister's and openconnector's orphaned
+            # capabilities are UNVERIFIED in CI and always have been: the guard
+            # never engaged there, so the eleven findings CI printed were the
+            # unlabelled output of a check that could not see cross-app
+            # callers. `#403` REMOVES those eleven; it does not clean anything.
+            _owc_ran=0
+            _owc_why=$(grep -F '[orphaned-write-capability] SKIP:' "${_owc_err}" 2>/dev/null | head -1 | cut -c1-300)
+            _skip 57 "orphaned-write-capability" na "the checker DECLINED to judge: ${#_owc_files[@]} lib/Service file(s) were in scope and NONE were assessed for deadness, because this is a foundation repo checked out with no sibling apps beside it, so a cross-app caller cannot be distinguished from no caller at all (hydra#106). THIS IS NOT A CLEAN BILL OF HEALTH AND NOT A PASS — orphaned (mintable-but-unreachable) write capabilities in this repository are UNVERIFIED by this run, as they have been in every single-repo CI run. To get a verdict, run this gate from a checkout that has the consuming apps beside it (a fleet sweep from apps-extra/), not from a one-repo CI workspace. Checker said: ${_owc_why:-<marker present but unreadable>}. See ${_owc_err}."
         fi
     else
         _owc_ran=0
@@ -7851,16 +9784,156 @@ if [ -d lib/AppInfo ]; then
     # unscoped, so it would have surfaced the whole backlog as blocking
     # findings on every build. The helper still fails CLOSED when the base
     # does not resolve, so an unscopable run is never reported as a clean one.
-    python3 "${SCRIPT_DIR}/lib/check_listener_placement.py" . --base "${BASE_REF}" > "${_lwp_log}" 2>&1
-    _lwp_rc=$?
+    #
+    # `--base` IS ONLY PASSED WHEN THERE IS ONE (.github#374). `BASE_REF` may
+    # now legitimately be empty — the runner no longer carries a hardcoded
+    # `origin/development`, which is the root cause `.github#347` and `#361`
+    # share. Handing the helper `--base ""` would OVERRIDE its own argparse
+    # default with an empty string, and what it does with that is the helper's
+    # business, not a verdict this runner should route on. With no base we go
+    # straight to rc 3, which is exactly the branch below that states the
+    # absence honestly and runs the advisory whole-tree sweep for the size.
+    if [ "${HAVE_DELTA_BASE}" = "1" ]; then
+        python3 "${SCRIPT_DIR}/lib/check_listener_placement.py" . --base "${BASE_REF}" > "${_lwp_log}" 2>&1
+        _lwp_rc=$?
+    else
+        # ALWAYS RUN THE CHECKER. EVALUATE WIRING FIRST, THEN SCOPE (#364).
+        #
+        # A first draft skipped the invocation entirely with no base and
+        # short-circuited to rc 3 — and `test_gate_crashed_checker_is_not_a_finding.sh`
+        # caught it immediately: with a python3 that cannot run, gate-61
+        # reported NOT APPLICABLE instead of SKIPPED (wiring). Nothing ran, so
+        # nothing could crash, and A CRASHED CHECKER READ AS AN EMPTY SCOPE —
+        # the exact regression `#364`'s first draft made in gate-16, caught by
+        # the exact same suite. Declining EARLIER silently retires a wiring
+        # invariant; that is the general shape, and this is the second instance.
+        #
+        # `--all` is the mode that needs no base. It is invoked here for ONE
+        # reason — to learn whether the checker can run at all — and its
+        # FINDINGS are deliberately discarded: sweeping the tree on a baseless
+        # run was tried before and reverted, because the builder runs that way
+        # and it surfaces the fleet's whole registration backlog on every build.
+        python3 "${SCRIPT_DIR}/lib/check_listener_placement.py" . --all > "${_lwp_log}" 2>&1
+        _lwp_rc=$?
+        # WIRING FIRST: did it reach its own terminal summary? If yes it ran,
+        # and the honest verdict is "there is no delta base", which is rc 3's
+        # branch below. If no, leave the real status alone so the wiring branch
+        # further down catches it and says what went unchecked.
+        if _helper_finished "${_lwp_log}" '^checked [0-9]+ (post-event )?registration\(s\)'; then
+            _lwp_rc=3
+        fi
+    fi
     set +e
+    # PROVENANCE: SAY WHICH BASE THIS GATE ACTUALLY JUDGED AGAINST (.github#347
+    # residual). `--base` above is passed UNCONDITIONALLY and deliberately (see
+    # the invocation comment), but on a `--full` run `bin/hydra-gates` does not
+    # forward one, so `${BASE_REF}` here is the RUNNER'S OWN DEFAULT — while the
+    # run's preamble two screens up has already printed
+    #
+    #     [hydra-gates] Base ref: n/a — --full requested, scanning the entire tree.
+    #
+    # `#371` fixed the empty-scope REASON. It did not fix this: when the head
+    # commit DOES touch a listener, that default resolves, the diff is real, and
+    # the gate returns a verdict — a FAIL, on a run whose own header says there
+    # was no base. Reproduced 2026-08-12 on one fixture, `--full` both times,
+    # only the head commit varying:
+    #
+    #     head touches the listener   FAIL — 1 post-event listener(s) …
+    #     head touches only docs      NOT APPLICABLE — this run computed NO diff
+    #
+    # Two different answers from one tree prove the verdict is diff-derived; the
+    # preamble denies the diff exists. Whichever way the full-scope-by-default
+    # decision goes, a verdict must not be readable as covering a scope it never
+    # had, so the gate now states its own base wherever it states a verdict.
+    _lwp_scope_note=""
+    if [ "${SCOPE_TO_DIFF}" != "1" ] \
+        && { [ "${_lwp_rc}" -eq 0 ] || [ "${_lwp_rc}" -eq 1 ]; }; then
+        # The preamble's own wording is deliberately NOT quoted here. Reproducing
+        # a line that other tooling greps for would plant a match for it inside a
+        # gate verdict — the same shape as a PR body echoed into the gates log,
+        # where a quoted failure became a finding in the artefact meant to
+        # disprove it. Say what this gate did; do not re-emit the run's banner.
+        _lwp_scope_note=" judged DIFF-SCOPED against delta base '${BASE_REF}' (gate-61 is always diff-scoped, ADR-078/ADR-020) even though the run itself reads the whole tree — so this covers ONLY the registrations that diff touched and is NOT a whole-tree result;"
+        echo "[gate-61] NOTE: this run reads the whole tree, but gate-61 is always diff-scoped and judged this tree against the delta base '${BASE_REF}' (named by --base or \$HYDRA_GATE_BASE_REF, or resolved from the remote's default branch). Read its verdict as a statement about that diff, not about the whole tree."
+    fi
     if [ "${_lwp_rc}" -eq 0 ]; then
         _pass 61 "listener-work-placement"
     elif [ "${_lwp_rc}" -eq 3 ]; then
         # EMPTY SCOPE. This gate is always diff-scoped (ADR-020), so on any PR
         # that touches no listener EVERY registration falls out of scope. That
         # used to print PASS (.github#276).
-        _skip 61 "listener-work-placement" na "the diff against '${BASE_REF}' put every post-event registration out of scope, so NONE were inspected. Diff-scoped out under ADR-020 — the fleet's 149-registration backlog is a work-list, not a reason to block an unrelated PR. This gate runs on the next PR that touches a listener registration. See ${_lwp_log}."
+        #
+        # BUT AN EMPTY SCOPE HAS TWO CAUSES AND ONLY ONE OF THEM IS A DIFF
+        # (.github#347). `bin/hydra-gates` forwards `--base` only on a
+        # diff-scoped run, so on `--full` the runner keeps its own
+        # `origin/development` default and hands it over anyway. On
+        # `development` itself that diffs the branch against itself, the
+        # checker returns 3, and this gate printed
+        #
+        #   NOT APPLICABLE — the diff against 'origin/development' put every
+        #   post-event registration out of scope
+        #
+        # two lines after the run's own preamble said `Base ref: n/a — --full
+        # requested`. THERE WAS NO DIFF. The verdict was defensible; the stated
+        # reason named a thing that did not exist, and an unfalsifiable reason
+        # is how this stood fleet-wide for weeks. Sibling of `.github#361` —
+        # `check_listener_placement.py:555` carries the same non-empty argparse
+        # default. Positive control on the same tree, changing only the scope
+        # flag: `--all` -> 45 registrations checked, 3 failures.
+        #
+        # THE VERDICT DOES NOT CHANGE, DELIBERATELY. Sweeping the tree on an
+        # unscoped run was tried here before and reverted (see the invocation
+        # comment above): the builder runs unscoped, so `--all` would surface
+        # the fleet's whole registration backlog as blocking findings on every
+        # build. `na` with an HONEST reason is the third answer — it cannot go
+        # false-RED, and it stops the run claiming an exclusion nothing
+        # performed. What was missing was the SIZE of what went unread, so an
+        # advisory sweep supplies it: informational, never a verdict.
+        # `HAVE_DELTA_BASE`, not `SCOPE_TO_DIFF`: what distinguishes these two
+        # branches is whether a diff was COMPUTED, never how the file scope was
+        # set. Reading the file scope here is precisely how `.github#347` got
+        # its false reason — a `NOT APPLICABLE` blaming a diff on a run that
+        # computed none.
+        # THE ADVISORY SWEEP RUNS IN **BOTH** BRANCHES (.github#374).
+        #
+        # It used to run only on the no-base branch, because `--full` was the
+        # only way to reach a state where the size of the unread backlog was
+        # interesting. Full file scope is now the DEFAULT, so "a base resolved
+        # and it excluded every registration" is the COMMON case — every PR in
+        # the fleet — and `0 of 1` and `0 of 45` were still typographically
+        # identical there. The whole point of the reversal is that inherited
+        # debt stops being invisible; leaving this gate's backlog unstated on
+        # the common path would have exempted it from exactly that.
+        #
+        # ADVISORY ONLY, in both branches. Its exit status is discarded on
+        # purpose: a sweep that finds inherited debt must not become this run's
+        # verdict, and a sweep that CRASHES must not either — the count is
+        # quoted only when the helper printed its own terminal summary line.
+        _lwp_all_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-listener-work-placement.advisory.log
+        python3 "${SCRIPT_DIR}/lib/check_listener_placement.py" . --all \
+            > "${_lwp_all_log}" 2>&1 || true
+        #
+        # THE SUMMARY IS RECOMPOSED, NOT QUOTED. The helper's own line ends
+        # "…, 0 out of scope: 1 failure(s)", and pasting that in would put
+        # the phrase "out of scope" back into a reason on a run that
+        # computed no scope — the exact sentence this fix removes, smuggled
+        # in as a quotation. The suite asserts against that phrase
+        # gate-agnostically and caught it here.
+        _lwp_backlog=""
+        if grep -qE '^checked [0-9]+ post-event registration' "${_lwp_all_log}" 2>/dev/null; then
+            _lwp_all_n=$(grep -oE '^checked [0-9]+ post-event registration' "${_lwp_all_log}" | tail -1 | grep -oE '[0-9]+' | head -1)
+            _lwp_all_f=$(grep -oE '[0-9]+ failure\(s\)' "${_lwp_all_log}" | tail -1 | grep -oE '[0-9]+' | head -1)
+            _lwp_backlog=" ADVISORY, and it decides nothing here: a whole-tree sweep of this same tree reaches ${_lwp_all_n:-an unreported number of} registration(s) carrying ${_lwp_all_f:-an unreported number of} finding(s), NONE of which this run judged — see ${_lwp_all_log}."
+        fi
+        if [ "${HAVE_DELTA_BASE}" = "1" ]; then
+            # A diff WAS computed, so naming it is a true statement, not the
+            # `.github#347` lie. The discriminator is `HAVE_DELTA_BASE`, and the
+            # base itself is printed by the preamble — so a reader can check the
+            # claim rather than having to trust it.
+            _skip 61 "listener-work-placement" na "the diff against '${BASE_REF}' put every post-event registration out of scope, so NONE were inspected. This gate is deliberately delta-scoped even at full file scope — the fleet's registration backlog is a work-list, not a reason to block an unrelated change. It runs on the next change that touches a listener registration.${_lwp_backlog} See ${_lwp_log}."
+        else
+            _skip 61 "listener-work-placement" na "this run computed NO diff (no delta base), and gate-61 is delta-scoped by design (ADR-078, it is about NEW debt) — so NO post-event registration was inspected and ADR-078 work placement is UNVERIFIED by this run. This is NOT a clean bill of health, and NO diff excluded anything: there was no diff. Re-measure with an explicit base (--base <ref> or HYDRA_GATE_BASE_REF=origin/beta).${_lwp_backlog} See ${_lwp_log}."
+        fi
     elif [ "${_lwp_rc}" -eq 4 ]; then
         _skip 61 "listener-work-placement" na "this repo registers no post-object-event listener, so there is no work to place on or off the write path (ADR-078). See ${_lwp_log}."
     elif ! _helper_finished "${_lwp_log}" '^checked [0-9]+ (post-event )?registration\(s\)'; then
@@ -7868,9 +9941,20 @@ if [ -d lib/AppInfo ]; then
         _lwp_why=$(head -3 "${_lwp_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
         _skip 61 "listener-work-placement" wiring "check_listener_placement.py exited ${_lwp_rc} without printing its terminal 'checked N ... registration(s)' summary, so NO post-object-event listener was judged and ADR-078 work placement is UNVERIFIED by this run. Checker output: ${_lwp_why:-<empty>}. See ${_lwp_log}."
     else
+        # THIS CLAMP IS GUARDED, AND THAT IS WHY IT STAYS (.github#374).
+        #
+        # A sweep for `[ "${_n}" -eq 0 ] && _n=1` flags this line alongside
+        # gate-24's, which WAS a crash-rendered-as-a-finding. This one is not:
+        # the `_helper_finished` branch immediately above has already proved the
+        # checker printed its terminal `checked N registration(s)` summary, so a
+        # crash can never reach here. Zero `^FAIL` lines with a non-zero exit is
+        # a FORMAT DRIFT between helper and runner, not a checker that died.
+        #
+        # Left alone deliberately, with the reason written down, so the next
+        # sweep does not re-flag it and does not "fix" it into a skip.
         _lwp_n=$(_count '^FAIL' "${_lwp_log}")
         [ "${_lwp_n}" -eq 0 ] && _lwp_n=1
-        _fail 61 "listener-work-placement" "${_lwp_n} post-event listener(s) doing synchronous work with no deferral and no justification (ADR-078); see ${_lwp_log}"
+        _fail 61 "listener-work-placement" "${_lwp_n} post-event listener(s) doing synchronous work with no deferral and no justification (ADR-078),${_lwp_scope_note} see ${_lwp_log}"
     fi
 else
     _skip 61 "listener-work-placement" na "no lib/AppInfo/ — this repo has no Nextcloud composition root, so it registers no object-event listener."
@@ -8051,6 +10135,372 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Gate 65: coding-standard-adoption — the app must still be on the fleet's
+# shared standard, and must not have pinned itself away from it.
+#
+# WHY THIS EXISTS
+# ---------------
+# Centralising configuration does not stop it drifting. The 18 mutually
+# different psalm.xml files measured on 2026-08-12 were all copies of something
+# that had been shared once. What stops recurrence is a check that fails when an
+# app walks away from the centre — including by freezing itself against it.
+#
+# NOT DIFF-SCOPED, deliberately. The subject is the app's standing configuration,
+# not the lines a PR touched: an app that never touches phpcs.xml again must not
+# thereby become exempt from having one. Every rule is a whole-repo property that
+# is either true today or is not.
+#
+# The checker prints one `FAIL <rule>: <detail>` per violation and a terminal
+# `checked N rule(s)`. Its ABSENCE is treated as a wiring failure rather than a
+# pass — a crashed checker and a clean repo are otherwise the same silence.
+# ---------------------------------------------------------------------------
+_csa_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-coding-standard-adoption.log
+: > "${_csa_log}"
+if [ -f composer.json ] || [ -f phpcs.xml ]; then
+    set +e
+    python3 "${SCRIPT_DIR}/lib/check_coding_standard_adoption.py" . > "${_csa_log}" 2>&1
+    _csa_rc=$?
+    set +e
+    grep -E '^FAIL ' "${_csa_log}" || true
+    if ! _helper_finished "${_csa_log}" '^checked [0-9]+ rule\(s\)$'; then
+        # A CRASH IS NOT A FINDING (.github#330).
+        _csa_why=$(head -3 "${_csa_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+        _skip 65 "coding-standard-adoption" wiring "check_coding_standard_adoption.py exited ${_csa_rc} without printing its terminal 'checked N rule(s)' summary, so NO rule was evaluated and this repo's adoption of the shared standard is UNVERIFIED by this run. Checker output: ${_csa_why:-<empty>}. See ${_csa_log}."
+    elif [ "${_csa_rc}" -eq 0 ]; then
+        _pass 65 "coding-standard-adoption"
+    else
+        # Count comes off the checker's own FAIL lines, not off the exit code,
+        # so a future exit-code change cannot silently alter the number.
+        _csa_n=$(grep -cE '^FAIL ' "${_csa_log}" 2>/dev/null || true)
+        case "${_csa_n}" in ''|*[!0-9]*) _csa_n=1 ;; esac
+        _fail 65 "coding-standard-adoption" "${_csa_n} deviation(s) from the shared coding standard; see ${_csa_log}"
+    fi
+else
+    _skip 65 "coding-standard-adoption" na "no composer.json and no phpcs.xml — this repo ships no PHP for a coding standard to apply to."
+fi
+
+# ---------------------------------------------------------------------------
+# Gate 66 — openregister-dependency-shape (ADR-083)
+# ---------------------------------------------------------------------------
+#
+# Three checks in one helper: a container lookup of OpenRegister anywhere under
+# lib/; an OpenRegister type in a class header (fatal at autoload, so it takes
+# down the very route that would explain the problem); and a default route that
+# transitively constructs an OpenRegister-dependent class.
+#
+# NOT diff-scoped. The shape of a dependency is a property of the tree, not of
+# a diff: a PR that touches one service cannot be judged on whether the app's
+# START SCREEN still boots without OpenRegister. Scoping this to the diff would
+# make rule 3 unanswerable on every PR that does not happen to edit the page
+# controller — which is nearly all of them.
+_ords_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-openregister-dependency-shape.log
+: > "${_ords_log}"
+set +e
+python3 "${SCRIPT_DIR}/lib/check_openregister_dependency_shape.py" . > "${_ords_log}" 2>&1
+_ords_rc=$?
+set +e
+# EVERY run of this helper ends by stating how many files it read. A run that
+# stops before that line CRASHED; it did not find a clean tree. Checking the
+# exit code alone is how a dead checker reports as a pass.
+if ! grep -qE '^checked [0-9]+ file\(s\)$' "${_ords_log}" 2>/dev/null; then
+    _fail 66 "openregister-dependency-shape" "the checker did not print its terminal 'checked N file(s)' line, so it did NOT complete — this is a crash, not a clean tree. See ${_ords_log}"
+elif [ "${_ords_rc}" -eq 0 ]; then
+    _pass 66 "openregister-dependency-shape"
+elif [ "${_ords_rc}" -eq 3 ]; then
+    _skip 66 "openregister-dependency-shape" na "no lib/ PHP tree — this repo has no Nextcloud app for ADR-083 to apply to."
+elif [ "${_ords_rc}" -eq 4 ]; then
+    _skip 66 "openregister-dependency-shape" na "this app references OpenRegister nowhere under lib/, so it holds no OpenRegister dependency to shape. NOT a pass — nothing was judged."
+else
+    # Count from the checker's own FAIL lines so a future exit-code change
+    # cannot silently alter the number.
+    _ords_n=$(grep -cE '^FAIL ' "${_ords_log}" 2>/dev/null || true)
+    case "${_ords_n}" in ''|*[!0-9]*) _ords_n=1 ;; esac
+    _fail 66 "openregister-dependency-shape" "${_ords_n} ADR-083 violation(s) — a container lookup, an OpenRegister class header, or a default route that cannot boot without OpenRegister; see ${_ords_log}"
+fi
+
+# ---------------------------------------------------------------------------
+# Gate 67 — openregister-contract-parity (ADR-084)
+#
+# ADR-084 has OpenRegister publish the surface it is consumed through, so that
+# sixteen apps stop hand-rolling doubles of a class they do not own. Ten of them
+# already had one, declaring between 0 and 13 methods against a real class of 88.
+#
+# Delivering that promise needs the interface in TWO places, for two reasons
+# that do not overlap:
+#
+#   lib/Contract/           openregister, at RUNTIME. `implements` is resolved
+#                           at autoload, and a require-dev package is absent
+#                           from a production install — every route would fatal.
+#   hydra-gates/contracts/  leaf apps, under PHPUnit. hydra-gates is already
+#                           require-dev everywhere, so this puts the interface
+#                           in each consumer's vendor/ where a double can
+#                           implement it.
+#
+# Two copies is a drift risk, and "we will keep them in step" is not a
+# mechanism. THIS GATE IS THE MECHANISM: byte-identical or red.
+#
+# NOT diff-scoped. Parity is a property of the tree; a PR that edits one copy
+# and not the other is exactly the case this must catch, and diff-scoping would
+# make the untouched side invisible.
+_orcp_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-openregister-contract-parity.log
+: > "${_orcp_log}"
+set +e
+python3 "${SCRIPT_DIR}/lib/check_openregister_contract_parity.py" . > "${_orcp_log}" 2>&1
+_orcp_rc=$?
+set +e
+# Same terminal-line contract as gate 66: a run that stops before stating how
+# many files it read CRASHED. Reading the exit code alone is how a dead checker
+# reports as a pass.
+if ! grep -qE '^checked [0-9]+ file\(s\)$' "${_orcp_log}" 2>/dev/null; then
+    _fail 67 "openregister-contract-parity" "the checker did not print its terminal 'checked N file(s)' line, so it did NOT complete — this is a crash, not a clean tree. See ${_orcp_log}"
+elif [ "${_orcp_rc}" -eq 0 ]; then
+    _pass 67 "openregister-contract-parity"
+elif [ "${_orcp_rc}" -eq 3 ]; then
+    _skip 67 "openregister-contract-parity" na "no lib/Contract/ — this repo does not own the OpenRegister contract, so it has nothing to keep in step."
+elif [ "${_orcp_rc}" -eq 4 ]; then
+    _skip 67 "openregister-contract-parity" na "lib/Contract/ exists but no shipped copy was found to compare it against. NOT a pass — nothing was verified."
+else
+    _orcp_n=$(grep -cE '^FAIL ' "${_orcp_log}" 2>/dev/null || true)
+    case "${_orcp_n}" in ''|*[!0-9]*) _orcp_n=1 ;; esac
+    _fail 67 "openregister-contract-parity" "${_orcp_n} contract file(s) out of step between lib/Contract/ and hydra-gates/contracts/ — a published contract with two definitions is the drift ADR-084 forbids; see ${_orcp_log}"
+fi
+
+# ---------------------------------------------------------------------------
+# gate-82 — ADR-082: a publicly reachable method carries a volume ceiling
+#
+# THERE ARE TWO WAYS TO DECLARE A PUBLIC PAGE, AND KNOWING ONE OF THEM MEANS
+# REPORTING ZERO FOR THE OTHER.
+#
+#     #[PublicPage]      the attribute form
+#     @PublicPage        the legacy annotation, still honoured by the server
+#
+# Measured 2026-08-14. The sweep that closed ADR-082 line-anchored the ATTRIBUTE
+# form and excluded docblock matches — a correction made for a good reason,
+# because an earlier count had matched the attribute name where it appeared in
+# docblock prose. That fix was right about mentions and wrong about the
+# annotation, which is not a mention of anything. Proven live twice against the
+# running server: openregister GraphQLController::execute and opencatalogi
+# CatalogiController::index are public by annotation ONLY and each answer 200
+# to an unauthenticated caller.
+#
+# The sweep reported the fleet fully throttled. Counting both forms: 361 public
+# methods, 161 throttled, 200 UNTHROTTLED — 199 in the invisible form. This gate
+# exists so that number cannot come back unseen.
+#
+# NOT diff-scoped, for the same reason as gate-66: whether an endpoint is
+# reachable without a ceiling is a property of the tree. A PR that never touches
+# a controller would otherwise be judged clean while the app carries the gap.
+_pet_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-public-endpoint-throttling.log
+: > "${_pet_log}"
+set +e
+python3 "${SCRIPT_DIR}/lib/check_public_endpoint_throttling.py" . > "${_pet_log}" 2>&1
+_pet_rc=$?
+set +e
+# Same terminal-line contract as gate-66. The checker written for this gate
+# CRASHED at import on its first outing (a `list[str]` annotation under an older
+# Python) and printed nothing — and nothing read as a clean tree. The exit code
+# alone would not have caught it.
+if ! grep -qE '^checked [0-9]+ file\(s\)$' "${_pet_log}" 2>/dev/null; then
+    _fail 82 "public-endpoint-throttling" "the checker did not print its terminal 'checked N file(s)' line, so it did NOT inspect the tree; see ${_pet_log}"
+elif [ "${_pet_rc}" -eq 0 ]; then
+    _pass 82 "public-endpoint-throttling"
+elif [ "${_pet_rc}" -eq 3 ]; then
+    _skip 82 "public-endpoint-throttling" na "no lib/ PHP tree — this repo has no Nextcloud app for ADR-082 to apply to."
+elif [ "${_pet_rc}" -eq 4 ]; then
+    _skip 82 "public-endpoint-throttling" na "this app declares no #[PublicPage] or @PublicPage method under lib/, so it exposes no public endpoint to throttle. NOT a pass — nothing was judged."
+else
+    _pet_n=$(grep -cE '^FAIL ' "${_pet_log}" 2>/dev/null || true)
+    case "${_pet_n}" in ''|*[!0-9]*) _pet_n=1 ;; esac
+    _fail 82 "public-endpoint-throttling" "${_pet_n} public endpoint(s) with no volume ceiling — add #[AnonRateLimit(limit: N, period: 60)] per ADR-082; see ${_pet_log}"
+fi
+
+# ---------------------------------------------------------------------------
+# GATE 84 — npm-supply-chain-config
+#
+# The cooldown is THREE settings that only work together, and any one alone is
+# a configuration that looks like protection and is not:
+#
+#   .npmrc        min-release-age=<days>              (>= 2)
+#   .npmrc        min-release-age-exclude[]=@conduction/*
+#   package.json  engines.npm admitting ONLY npm 11+
+#
+# MEASURED 2026-08-15, both halves:
+#
+#  * `min-release-age` DOES NOT EXIST IN NPM 10 — `npm config get
+#    min-release-age` answers `undefined`, and every Node 22 release bundles
+#    npm 10 (22.23.2 ships 10.9.8). 13 of 19 apps declared npm 10 while
+#    carrying a comment describing a 24h guard. The guard was read by nothing.
+#
+#  * WITHOUT THE EXCLUSION THE COOLDOWN DOES NOT FAIL LOUDLY, IT SILENTLY
+#    RESOLVES BACKWARDS. An install of @conduction/nextcloud-vue on release
+#    day under min-release-age=1 with no exclusion resolved 2.0.7 instead of
+#    2.3.0 AND EXITED 0. A green install of months-old code is worse than a
+#    red one: nothing distinguishes it from a correct install.
+#
+# FULL-TREE, deliberately NOT diff-scoped. This is a conformance property of
+# the repository, not of a change. Diff-scoped it would report nothing on
+# every PR that does not touch .npmrc — almost all of them — and a gate silent
+# on 99% of PRs cannot establish fleet-wide conformance, which is its purpose.
+#
+# NOTE ON PLACEMENT: top level, outside any `_FAILED` guard.
+# ---------------------------------------------------------------------------
+_nsc_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-npm-supply-chain-config.log
+: > "${_nsc_log}"
+if [ -f package.json ]; then
+    set +e
+    python3 "${SCRIPT_DIR}/lib/check_npm_supply_chain_config.py" . > "${_nsc_log}" 2>&1
+    _nsc_rc=$?
+    # `set +e`, not `set -e`: errexit off is the state this script actually
+    # runs in, and re-enabling it here would abort the run on the first
+    # non-zero anything downstream. See the note at the top of this file.
+    set +e
+
+    if [ "${_nsc_rc}" -eq 0 ]; then
+        _pass 84 "npm-supply-chain-config"
+    elif [ "${_nsc_rc}" -eq 4 ]; then
+        _skip 84 "npm-supply-chain-config" na "this repo has no package.json, so it has no npm surface to harden. See ${_nsc_log}."
+    elif ! _helper_finished "${_nsc_log}" '^checked [0-9]+ npm supply-chain setting'; then
+        # A CRASH IS NOT A FINDING.
+        _nsc_why=$(head -3 "${_nsc_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+        _skip 84 "npm-supply-chain-config" wiring "check_npm_supply_chain_config.py exited ${_nsc_rc} without printing its terminal 'checked N npm supply-chain setting(s)' summary, so the cooldown configuration is UNVERIFIED by this run. Checker output: ${_nsc_why:-<empty>}. See ${_nsc_log}."
+    else
+        _nsc_n=$(grep -cE '^FAIL ' "${_nsc_log}" 2>/dev/null || true)
+        case "${_nsc_n}" in ''|*[!0-9]*) _nsc_n=1 ;; esac
+        _fail 84 "npm-supply-chain-config" "${_nsc_n} npm supply-chain setting(s) missing or too weak — the cooldown is inert or silently resolves first-party packages backwards; see ${_nsc_log}"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
+# GATE 93 — composer-cooldown-config (ADR-093, proposed: hydra#591)
+#
+# Composer has no native equivalent to npm's min-release-age (gate 84).
+# composer/composer#12847 tracks the upstream request, unreleased at time of
+# writing. Two third-party install-time plugins were evaluated and rejected —
+# one requires php ^8.4 and breaks `composer install` on the PHP 8.3 leg every
+# core app's CI matrix tests; the other is PHP-compatible but, like the
+# first, is a ~3-month-old single-maintainer package — so the fleet leans on
+# GitHub Dependabot's own native `cooldown:` key instead: no new runtime
+# dependency, nothing new executes during `composer install` anywhere.
+#
+# MANDATORY, NOT SKIP-UNTIL-ADOPTED — same posture as gate 84 for
+# package.json. A gate that only checks a setting IF it is already present
+# never catches the repo that never adopted it, which is "declared gate,
+# enforced nowhere" — the exact failure shape gate 84 itself replaced.
+#
+# FULL-TREE, deliberately NOT diff-scoped, for the identical reason gate 84
+# gives: diff-scoped would report nothing on the ~99% of PRs that never touch
+# dependabot.yml, and a gate silent on nearly everything cannot establish
+# fleet-wide conformance, which is the entire point of it.
+#
+# NOTE ON PLACEMENT: top level, outside any `_FAILED` guard — a gate that only
+# runs once everything else passed is green-but-dead.
+# ---------------------------------------------------------------------------
+_ccc_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-composer-cooldown-config.log
+: > "${_ccc_log}"
+if [ -f composer.json ]; then
+    set +e
+    python3 "${SCRIPT_DIR}/lib/check_composer_cooldown.py" . > "${_ccc_log}" 2>&1
+    _ccc_rc=$?
+    # `set +e`, not `set -e`: errexit off is the state this script actually
+    # runs in, and re-enabling it here would abort the run on the first
+    # non-zero anything downstream. See the note at the top of this file.
+    set +e
+
+    if [ "${_ccc_rc}" -eq 0 ]; then
+        _pass 93 "composer-cooldown-config"
+    elif [ "${_ccc_rc}" -eq 4 ]; then
+        _skip 93 "composer-cooldown-config" na "this repo has no composer.json, so it has no Composer surface to harden. See ${_ccc_log}."
+    elif ! _helper_finished "${_ccc_log}" '^checked [0-9]+ composer cooldown setting'; then
+        # A CRASH IS NOT A FINDING.
+        _ccc_why=$(head -3 "${_ccc_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+        _skip 93 "composer-cooldown-config" wiring "check_composer_cooldown.py exited ${_ccc_rc} without printing its terminal 'checked N composer cooldown setting(s)' summary, so the cooldown configuration is UNVERIFIED by this run. Checker output: ${_ccc_why:-<empty>}. See ${_ccc_log}."
+    else
+        _ccc_n=$(grep -cE '^FAIL ' "${_ccc_log}" 2>/dev/null || true)
+        case "${_ccc_n}" in ''|*[!0-9]*) _ccc_n=1 ;; esac
+        _fail 93 "composer-cooldown-config" "${_ccc_n} composer cooldown setting(s) missing or too weak — see ${_ccc_log}"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
+# GATE 83 — contract-surface-shift (ADR-084)
+#
+# A method on a published contract can be served two ways: DECLARED
+# (`public function getSchema(): ?string`) or MAGIC (an `@method` docblock tag
+# routed through `__call()`). Moving one between those surfaces is a BREAKING
+# CHANGE FOR EVERY CONSUMER, and it breaks them WITH NO COMMIT IN THEIR
+# REPOSITORIES.
+#
+# PHPUnit picks its mock builder on exactly that distinction:
+#   addMethods()  throws CannotUseAddMethodsException  if the method EXISTS
+#   onlyMethods() throws CannotUseOnlyMethodsException if it does NOT
+# so every consumer that doubles the class has hard-coded which surface each
+# method sits on.
+#
+# MEASURED, not hypothetical. 2026-08-15, openregister#2498 published the
+# ObjectService/ObjectEntity interfaces, forcing getUuid()/getRegister()/
+# getSchema() to be declared. Fallout in repos that had not changed a line:
+# opencatalogi 42 errors across all 6 PHPUnit cells, decidesk 1. Both
+# `development` branches went red on commits that had passed hours earlier,
+# and the failures surfaced on unrelated dependency PRs where they read as
+# those PRs' fault. Replayed against that commit, this gate names all five
+# shifted methods.
+#
+# WHY IT LIVES ON THE PRODUCER SIDE. It cannot be written in the consuming
+# repo: this job checks out exactly two things, the app and the gates package,
+# so a consumer-side checker cannot see the real class and would resolve every
+# external double as "unknown" — reporting ZERO for the one change that
+# matters, which reads as a pass. The authority lives with the class, so the
+# check does too.
+#
+# ALWAYS diff-scoped: this gate is about the MOMENT of the shift. A whole-tree
+# sweep would report every declared method on every contract class forever,
+# which describes the codebase rather than finding anything.
+#
+# NOTE ON PLACEMENT: top level, deliberately outside any `_FAILED` guard — a
+# gate that only runs once everything else passed is green-but-dead.
+# ---------------------------------------------------------------------------
+_css_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-contract-surface-shift.log
+: > "${_css_log}"
+if [ -d lib/Contract ]; then
+    set +e
+    if [ "${HAVE_DELTA_BASE}" = "1" ]; then
+        python3 "${SCRIPT_DIR}/lib/check_contract_surface_shift.py" . --base "${BASE_REF}" > "${_css_log}" 2>&1
+        _css_rc=$?
+    else
+        # ALWAYS RUN THE CHECKER, EVALUATE WIRING FIRST, THEN SCOPE. Declining
+        # earlier would make a python3 that cannot run indistinguishable from a
+        # repo with nothing to judge — a crashed checker reading as an empty
+        # scope is the regression this package has already made twice.
+        python3 "${SCRIPT_DIR}/lib/check_contract_surface_shift.py" . --all > "${_css_log}" 2>&1
+        _css_rc=$?
+    fi
+    # `set +e`, not `set -e`: errexit off is the state this script actually
+    # runs in, and re-enabling it here would abort the run on the first
+    # non-zero anything downstream. See the note at the top of this file.
+    set +e
+
+    if [ "${_css_rc}" -eq 0 ]; then
+        _pass 83 "contract-surface-shift"
+    elif [ "${_css_rc}" -eq 3 ]; then
+        if [ "${HAVE_DELTA_BASE}" = "1" ]; then
+            _skip 83 "contract-surface-shift" na "the diff against '${BASE_REF}' touched no published-contract file, so no surface shift could occur. This gate runs on the next change that edits lib/Contract/ or a class implementing it. See ${_css_log}."
+        else
+            _skip 83 "contract-surface-shift" na "this run computed NO diff (no delta base), and a surface shift is only visible against one — so NO contract method was compared and the published surface is UNVERIFIED by this run. This is NOT a clean bill of health; there was no diff to exclude anything. Re-measure with --base <ref> or HYDRA_GATE_BASE_REF. See ${_css_log}."
+        fi
+    elif [ "${_css_rc}" -eq 4 ]; then
+        _skip 83 "contract-surface-shift" na "this repo publishes no lib/Contract/*Interface.php, so it exposes no contract surface consumers can double. See ${_css_log}."
+    elif ! _helper_finished "${_css_log}" '^checked [0-9]+ contract '; then
+        # A CRASH IS NOT A FINDING.
+        _css_why=$(head -3 "${_css_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+        _skip 83 "contract-surface-shift" wiring "check_contract_surface_shift.py exited ${_css_rc} without printing its terminal 'checked N contract ...' summary, so NO contract method was compared and the published surface is UNVERIFIED by this run. Checker output: ${_css_why:-<empty>}. See ${_css_log}."
+    else
+        _css_n=$(grep -cE '^FAIL ' "${_css_log}" 2>/dev/null || true)
+        case "${_css_n}" in ''|*[!0-9]*) _css_n=1 ;; esac
+        _fail 83 "contract-surface-shift" "${_css_n} undeclared shift(s) of a published contract method between the magic and declared surfaces — this breaks consumers' test doubles with no commit in their repos. Annotate with @contract-shift <announced|internal-only|new-contract> — <reason>; see ${_css_log}"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
 # Summary + COVERAGE ACCOUNTING
 #
 # The banner used to read "ALL 63 GATES GREEN" whenever the failure count was
@@ -8199,6 +10649,32 @@ _a11y_has_markup_dir || _declare_na "no src/, templates/ or appinfo/templates/ �
 # `if [ -d templates ] || [ -d appinfo/templates ]` — gate 41
 { [ -d templates ] || [ -d appinfo/templates ]; } || _declare_na "no templates/ and no appinfo/templates/ — this repo ships no server-rendered HTML document to carry a lang attribute." \
     41
+# `if [ -f package.json ]` — gate 84
+#
+# Without this the gate emits NOTHING on a PHP-only repo, and a silence is
+# indistinguishable from a pass — which is exactly what
+# --require-full-coverage exists to catch. Caught by
+# test-hydra-gates-bin.sh's all-not-applicable fixture, which has no
+# package.json: the flag exited 98 on a repository with nothing wrong with it.
+[ -f package.json ] || _declare_na "no package.json — this repo installs nothing from npm, so there is no dependency resolution for a release-age cooldown to govern." \
+    84
+# `if [ -d lib/Contract ]` — gate 83
+#
+# Without this the gate emits NOTHING in every repo that consumes a contract
+# rather than publishing one — which is 18 of the 19 — and a silence is
+# indistinguishable from a pass, the exact failure --require-full-coverage
+# exists to catch.
+[ -d lib/Contract ] || _declare_na "no lib/Contract/ — this repo publishes no contract interface, so it exposes no method surface whose magic-versus-declared shape consumers could have doubled." \
+    83
+# `if [ -f composer.json ]` — gate 93
+#
+# Without this the gate emits NOTHING on a repo with no composer.json (an
+# ExApp sidecar, for instance) — a silence indistinguishable from a pass,
+# the exact failure --require-full-coverage exists to catch. Same defect
+# class gate 84 already had for package.json; caught by
+# test-hydra-gates-bin.sh's all-not-applicable fixture the same way.
+[ -f composer.json ] || _declare_na "no composer.json — this repo has no Composer surface, so there is no dependency resolution for a release-age cooldown to govern." \
+    93
 
 _emitted_n=$(printf '%s\n' ${_EMITTED_GATES} | grep -c . || true)
 _emitted_n="${_emitted_n:-0}"
@@ -8263,6 +10739,16 @@ if [ "${_not_run_n}" -gt 0 ]; then
         [ -z "${_nr}" ] && continue
         echo "[hydra-gates]   gate-${_nr%% *} ${_nr#* }"
     done <<< "${_not_run}"
+fi
+
+# ADVISORY GATES — printed BEFORE the verdict, and deliberately never folded
+# into it. A gate that reported a real finding and was demoted to non-blocking
+# must stay legible in the summary; the whole failure mode of a demotion is
+# that the finding quietly stops being read.
+if [ "${_WARNED}" -gt 0 ]; then
+    echo "[hydra-gates] ${_WARNED} gate(s) reported ADVISORY findings — real, measured, and NOT blocking this run."
+    echo "[hydra-gates] They are named WARNING above, each with its count and its tracking issue."
+    echo "[hydra-gates] A green verdict below means 'nothing BLOCKING failed', not 'nothing was found'."
 fi
 
 if [ "${_FAILED}" -eq 0 ]; then

@@ -642,5 +642,149 @@ class CapabilityResolutionSurvivesArchiving(unittest.TestCase):
             csa.capability_of("openspec/changes/foo/specs/bar/spec.md"), "bar")
 
 
+class ATagMustBeAtTagPosition(unittest.TestCase):
+    """#415/#423 — `TAG` was unanchored, so prose and string literals matched.
+
+    Gates 47 and 48 were position-anchored for exactly this reason; gate-46
+    never was, and it is the gate with NO false-negative direction — every
+    defect it can have is a finding it manufactures.
+
+    A1, A5, A6, A7 are CONTROLS: they pass before and after, and they are
+    what stops "anchor the tag" from becoming "see no tags".
+
+    Fleet measurement behind the shape of the anchor: over every lib/, src/
+    and tests/ file of openregister, opencatalogi, procest, docudesk,
+    larpingapp and softwarecatalog — 5,684 files, 17,408 tags — the anchored
+    regex sees 17,406, and the finding SETS are identical (25 = 25, no
+    additions, no removals). The two tags it stops seeing are:
+
+      lib/Db/MultiTenancyTrait.php   `// Per @spec openspec/…/spec.md ("the
+                                      system MUST …` — a sentence;
+      src/views/dso/VthDashboard.vue `NOTE: this used to read
+                                      `@spec openspec/…#T07`.` — a note about
+                                      a tag that was REMOVED, in backticks.
+
+    which is this defect class verbatim, twice.
+    """
+
+    TREE = {
+        "openspec/specs/real/spec.md":
+            "# Spec\n\n## Requirement: Real Thing\n\ntext\n",
+    }
+
+    def test_A1_control_a_real_dangling_annotation_still_fails(self):
+        out = _scan(self.TREE, "lib/Thing.php",
+                    "<?php\n/**\n * @spec openspec/specs/absent/spec.md\n */\n"
+                    "class Thing {}\n")
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("absent", out[0])
+
+    def test_A2_a_tag_inside_a_string_literal_is_not_an_annotation(self):
+        out = _scan(self.TREE, "lib/Thing.php",
+                    "<?php\n$spec = '@spec openspec/specs/imaginary/spec.md';\n")
+        self.assertEqual(out, [])
+
+    def test_A3_a_tag_part_way_through_a_sentence_is_not_an_annotation(self):
+        out = _scan(
+            self.TREE, "lib/Thing.php",
+            "<?php\n"
+            "// See @spec openspec/specs/gone/spec.md#missing for why this went.\n")
+        self.assertEqual(out, [])
+
+    def test_A4_a_note_about_a_tag_that_was_removed_is_not_the_tag(self):
+        # The procest/VthDashboard.vue shape, verbatim in structure.
+        out = _scan(
+            self.TREE, "src/views/Dash.vue",
+            "<template><div /></template>\n<script>\n"
+            "// NOTE: this used to read `@spec openspec/specs/gone/spec.md`.\n"
+            "export default {}\n</script>\n")
+        self.assertEqual(out, [])
+
+    def test_A5_control_a_docblock_tag_still_resolves_and_is_still_read(self):
+        out = _scan(
+            self.TREE, "lib/Thing.php",
+            "<?php\n/**\n * @spec openspec/specs/real/spec.md#requirement-real-thing\n */\n"
+            "class Thing {}\n")
+        self.assertEqual(out, [])
+        # …and the same tag with a broken fragment must still be reported, or
+        # the arm above proves only that the gate stopped looking.
+        bad = _scan(
+            self.TREE, "lib/Thing.php",
+            "<?php\n/**\n * @spec openspec/specs/real/spec.md#requirement-imaginary\n */\n"
+            "class Thing {}\n")
+        self.assertEqual(len(bad), 1, bad)
+
+    def test_A6_control_a_line_comment_tag_is_still_a_declaration(self):
+        out = _scan(self.TREE, "src/store/thing.js",
+                    "// @spec openspec/specs/nowhere/spec.md\n"
+                    "export default {}\n")
+        self.assertEqual(len(out), 1, out)
+
+    def test_A8_the_anchor_is_linear_in_the_line_length(self):
+        """Written the obvious way the anchor was QUADRATIC.
+
+        `[^\\S\\n]*(?:lead-in)?[^\\S\\n]*` puts two whitespace runs next to
+        each other whenever the lead-in matches empty, and a line of N spaces
+        that never reaches the tag costs O(N²) — 64,000 spaces took over 20s
+        before each optional group was made to swallow its own trailing
+        whitespace. Same family as the ReDoS CodeQL raised on gate-28's tail
+        rule in this change; found by sweeping rather than by waiting for the
+        alert. Bound is 5s against a true cost of ~0.007s.
+        """
+        import time
+
+        start = time.monotonic()
+        self.assertIsNone(csa.TAG.match(" " * 64000 + "x"))
+        self.assertLess(time.monotonic() - start, 5.0)
+
+    def test_A7_control_a_markdown_task_item_tag_is_still_read(self):
+        # openspec/**/tasks.md writes its tags as list items, and `.md` is in
+        # this gate's scope. Anchoring must not drop the list marker forms.
+        for line in ("- @spec openspec/specs/nowhere/spec.md",
+                     "- [ ] @spec openspec/specs/nowhere/spec.md",
+                     "* @spec openspec/specs/nowhere/spec.md",
+                     "1. @spec openspec/specs/nowhere/spec.md"):
+            with self.subTest(line=line):
+                out = _scan(self.TREE, "lib/notes.md", line + "\n")
+                self.assertEqual(len(out), 1, out)
+
+
+class TaskPrefixedCheckboxIds(unittest.TestCase):
+    """`- [x] Task 3.2: …` is OpenSpec's own house format.
+
+    It was unaddressable: the id group stopped at the first token, so the
+    extracted id was the literal string "Task" and no `#task-3.2` could ever
+    match. 2990 checkbox items across the fleet are written this way — 2935 in
+    shillinq alone — and every `@spec` pointing at one was reported as a
+    dangling anchor in the APP, which is where the fix looked like it belonged.
+    """
+
+    PREFIXED = (
+        "- [x] Task 3.1: Author the service\n"
+        "- [x] Task 3.2: Author the calculator\n"
+        "- [ ] Step 4.1 Wire the controller\n"
+    )
+
+    def test_fp_a_task_prefixed_id_now_resolves(self):
+        self.assertTrue(_anchor(self.PREFIXED, "task-3.2"))
+
+    def test_fp_a_step_prefixed_id_now_resolves(self):
+        self.assertTrue(_anchor(self.PREFIXED, "task-4.1"))
+
+    def test_the_bare_form_still_resolves(self):
+        # The dominant form fleet-wide (19175 items). The prefix must be
+        # optional, not required.
+        self.assertTrue(_anchor("- [x] 3.2 Author the calculator\n", "task-3.2"))
+
+    def test_tp_a_word_that_really_is_the_id_is_not_swallowed(self):
+        # THE CONTROL. The prefix is consumed only when a numeric id follows,
+        # so a list whose ids are words keeps them. Without this, the relaxation
+        # would quietly re-point every `#task-task` style anchor.
+        self.assertTrue(_anchor("- [x] Task the thing\n", "task-task"))
+
+    def test_tp_a_prefixed_number_past_the_end_still_fails(self):
+        self.assertFalse(_anchor(self.PREFIXED, "task-9.9"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

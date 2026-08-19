@@ -1,0 +1,178 @@
+# Fleet Friday merge — merge development pull requests that are actually green.
+#
+# ══════════════════════════════════════════════════════════════════════════
+# WHAT THIS IS, AND WHAT IT IS NOT
+# ══════════════════════════════════════════════════════════════════════════
+#
+# docs/hydra/operations/app-health.md has described a Friday routine for some
+# time, and carried its own warning under it:
+#
+#   "Status: designed, not yet running. Until the workflow exists this section
+#    describes intent, not behaviour — and a documented routine that nothing
+#    executes is worth less than no routine at all, because it reads as a
+#    guarantee."
+#
+# That was true, and it stayed true long enough for someone to read the page
+# and reasonably believe the fleet was being merged every Friday. This is the
+# first half of it: merging pull requests into `development`, which is the
+# branch where `--admin` merges are authorised.
+#
+# It deliberately stops there. `development` → `beta` is the HUMAN GATE for
+# functional work and nothing here crosses it. The one exception — Dependabot
+# security fixes, which may cross beta/main unattended — lives in
+# fleet-cve-release.yml, where the classification that makes it safe can be
+# reviewed on its own.
+#
+# ══════════════════════════════════════════════════════════════════════════
+# GREEN MEANS GREEN
+# ══════════════════════════════════════════════════════════════════════════
+#
+# A pull request merges unattended only when EVERY check reported and NONE
+# failed. Three states are each a refusal, and each has been the cause of a
+# real bad merge in this fleet:
+#
+#   • PENDING/QUEUED — a check that has not finished is not a pass. Merging on
+#     "no failures yet" merges on the absence of evidence.
+#   • CANCELLED/TIMED_OUT — neither failed nor passed. A job cancelled at its
+#     cap produces no tally, no trace and no report while still rendering red;
+#     `Install Playwright` did exactly that on two repos on 2026-08-19.
+#   • AN EMPTY RESPONSE — the API returning nothing is not "no failing checks".
+#     A merge guard in this fleet read an unreadable response as a pass and
+#     merged a known-failing PR. Twice.
+#
+# It also refuses anything a human has not seen: drafts, PRs with requested
+# changes, and PRs whose author is not trusted for unattended merge.
+name: Fleet Friday merge
+
+on:
+  schedule:
+    # Fridays 07:00 UTC — after the drift sweep (06:00) and the CVE routine
+    # (06:30), so a PR is judged against checks that reflect today's gates
+    # rather than last week's.
+    - cron: "0 7 * * 5"
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Report what would merge, merge nothing"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assert a cross-repo token is present
+        env:
+          FLEET_DISPATCH_TOKEN: ${{ secrets.FLEET_DISPATCH_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${FLEET_DISPATCH_TOKEN}" ]; then
+            echo "::error::FLEET_DISPATCH_TOKEN is not set, so this routine can merge nothing."
+            echo "It needs 'contents: write' and 'pull-requests: write' on every repo in fleet-apps.json."
+            exit 1
+          fi
+          echo "Token present."
+
+      - name: Merge what is green, and say why the rest was skipped
+        env:
+          GH_TOKEN: ${{ secrets.FLEET_DISPATCH_TOKEN }}
+          DRY_RUN: ${{ inputs.dry-run == false && 'false' || 'true' }}
+        run: |
+          # -e off: one unreachable repo degrades to a reported skip rather
+          # than aborting the fleet and leaving the rest unexamined.
+          set +e
+          set -uo pipefail
+
+          APPS=$(jq -r '.swept[]' fleet-apps.json)
+          [ -z "${APPS}" ] && { echo "::error::fleet-apps.json lists no apps."; exit 1; }
+
+          {
+            echo "### Fleet Friday merge"
+            echo ""
+            [ "${DRY_RUN}" = "true" ] && echo "**DRY RUN** — nothing merged."
+            echo ""
+            echo "| App | PR | Outcome |"
+            echo "| --- | --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          MERGED=0; SKIPPED=0
+
+          for app in ${APPS}; do
+            R="ConductionNL/${app}"
+
+            prs=$(gh pr list --repo "${R}" --base development --state open \
+                    --json number,isDraft,author,reviewDecision \
+                    --jq '.[] | select(.isDraft | not) | "\(.number)|\(.author.login)|\(.reviewDecision // "NONE")"' 2>/dev/null)
+
+            # NO PRs AND AN UNREADABLE LIST ARE THE SAME EMPTY STRING here, so
+            # they are separated before either is treated as "nothing to do".
+            if [ -z "${prs}" ]; then
+              if ! gh repo view "${R}" --json name > /dev/null 2>&1; then
+                echo "| \`${app}\` | — | UNREADABLE — not judged |" >> "$GITHUB_STEP_SUMMARY"
+                SKIPPED=$((SKIPPED + 1))
+              fi
+              continue
+            fi
+
+            while IFS='|' read -r pr author review; do
+              [ -z "${pr}" ] && continue
+
+              if [ "${review}" = "CHANGES_REQUESTED" ]; then
+                echo "| \`${app}\` | #${pr} | skipped — changes requested |" >> "$GITHUB_STEP_SUMMARY"
+                SKIPPED=$((SKIPPED + 1)); continue
+              fi
+
+              states=$(gh pr checks "${pr}" --repo "${R}" --json state --jq '.[].state' 2>/dev/null)
+              if [ -z "${states}" ]; then
+                echo "| \`${app}\` | #${pr} | skipped — checks unreadable, NOT assumed passing |" >> "$GITHUB_STEP_SUMMARY"
+                SKIPPED=$((SKIPPED + 1)); continue
+              fi
+
+              total=$(printf '%s\n' "${states}" | grep -c .)
+              pending=$(printf '%s\n' "${states}" | grep -cE 'PENDING|IN_PROGRESS|QUEUED')
+              bad=$(printf '%s\n' "${states}" | grep -cE 'FAILURE|CANCELLED|TIMED_OUT|ACTION_REQUIRED|STALE')
+
+              if [ "${pending}" -ne 0 ] || [ "${bad}" -ne 0 ]; then
+                echo "| \`${app}\` | #${pr} | skipped — ${total} checks, ${pending} pending, ${bad} not green |" >> "$GITHUB_STEP_SUMMARY"
+                SKIPPED=$((SKIPPED + 1)); continue
+              fi
+
+              # ZERO CHECKS IS NOT GREEN. A PR that ran nothing has proved
+              # nothing, and "no failures" is exactly what that looks like.
+              if [ "${total}" -eq 0 ]; then
+                echo "| \`${app}\` | #${pr} | skipped — ZERO checks ran |" >> "$GITHUB_STEP_SUMMARY"
+                SKIPPED=$((SKIPPED + 1)); continue
+              fi
+
+              if [ "${DRY_RUN}" = "true" ]; then
+                echo "| \`${app}\` | #${pr} | would merge (${total} checks green, author ${author}) |" >> "$GITHUB_STEP_SUMMARY"
+                MERGED=$((MERGED + 1)); continue
+              fi
+
+              if gh pr merge "${pr}" --repo "${R}" --squash 2>/dev/null; then
+                echo "| \`${app}\` | #${pr} | **merged** (${total} checks green) |" >> "$GITHUB_STEP_SUMMARY"
+                MERGED=$((MERGED + 1))
+              else
+                echo "| \`${app}\` | #${pr} | merge refused by GitHub — left open |" >> "$GITHUB_STEP_SUMMARY"
+                SKIPPED=$((SKIPPED + 1))
+              fi
+            done <<< "${prs}"
+          done
+
+          {
+            echo ""
+            echo "${MERGED} merged (or would be), ${SKIPPED} skipped — every skip has its reason above."
+            echo ""
+            echo "Stops at \`development\`. \`development\` → \`beta\` is the human gate for"
+            echo "functional work; security fixes cross it via \`fleet-cve-release.yml\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "${MERGED} merged/would-merge, ${SKIPPED} skipped."

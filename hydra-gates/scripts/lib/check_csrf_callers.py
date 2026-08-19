@@ -58,6 +58,9 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from source_scope import script_mask  # noqa: E402
+
 SRC_SUFFIXES = ('.vue', '.js', '.ts', '.mjs', '.cjs')
 SKIP_DIRS = {'node_modules', 'dist', 'build', 'vendor', '.git', 'coverage'}
 
@@ -66,6 +69,117 @@ MUTATING_METHOD = re.compile(
     r"""method\s*:\s*['"`](?P<verb>POST|PUT|PATCH|DELETE)['"`]""",
     re.IGNORECASE,
 )
+
+# 🔴 A QUOTED LITERAL IS NOT THE ONLY WAY TO SPELL A VERB — AND THE OTHER WAYS
+#    WERE INVISIBLE, WHICH MEANS THEY WERE COUNTED AS SAFE.
+#
+# `MUTATING_METHOD` requires the verb to be a quoted literal sitting directly
+# after `method:`. The fleet's create-or-update handlers do not write it that
+# way; they compute it:
+#
+#     const method = isNew ? 'POST' : 'PUT'
+#     await fetch(url, { method, headers, body })
+#
+#     fetch(url, { method: this.editing ? 'PUT' : 'POST', ... })
+#
+# Neither matches, so `verb is None`, so the call is skipped — and skipped is
+# indistinguishable from protected in this helper's output. MEASURED on
+# zaakafhandelapp: **15 call sites reported, 27 actually unprotected.** The
+# twelve invisible ones are exactly the create-or-update handlers, which are
+# the most CSRF-relevant calls in the app.
+#
+# THE RULE IS FAIL-CLOSED, and that is the whole design: a `method` key whose
+# value this helper cannot PROVE is a safe verb counts as mutating. Proof is
+# narrow on purpose — a quoted `GET`/`HEAD`/`OPTIONS`, or an identifier whose
+# every assignment in the file resolves to safe verbs. Anything else (a
+# ternary, a template literal, a call, a shorthand `{ method }` whose binding
+# cannot be found) is treated as mutating. An unreadable value is not a pass.
+METHOD_KEY_VALUE = re.compile(r"""(?<![\w$.])method\s*:\s*(?P<val>[^,}\n]+)""")
+# ES6 shorthand: `{ method }` / `{ ..., method, ... }` — the value is the
+# binding of the same name, resolved below.
+METHOD_SHORTHAND = re.compile(r"""[{,]\s*method\s*(?=[,}])""")
+SAFE_VERB_LITERAL = re.compile(r"""^\s*['"`](?:GET|HEAD|OPTIONS)['"`]\s*$""",
+                               re.IGNORECASE)
+MUTATING_VERB_ANYWHERE = re.compile(r"""['"`](?:POST|PUT|PATCH|DELETE)['"`]""",
+                                    re.IGNORECASE)
+BARE_IDENTIFIER = re.compile(r"""^\s*(?P<name>[A-Za-z_$][\w$]*)\s*$""")
+
+
+def _binding_values(text: str, name: str, before: int = None) -> list:
+    """Right-hand sides assigned to *name*, NEAREST PRECEDING BINDING WINS.
+
+    ⚠️ A WHOLE-FILE SEARCH IS THE WRONG INSTRUMENT HERE, and its error is a
+    FALSE POSITIVE — which in a security gate is the error that gets the gate
+    ignored. A store module routinely holds
+
+        const method = 'GET'              // in one action
+        const method = isNew ? 'POST' : 'PUT'   // in another
+
+    and answering "can `method` ever be mutating" over the whole file reports
+    the GET caller too. So the resolution is positional: the last binding
+    ESTABLISHED BEFORE the call site, which is what a reader resolves. When
+    *before* is given and no binding precedes it, the list is empty and the
+    caller fails closed.
+    """
+    pattern = re.compile(
+        r"""(?:(?:const|let|var)\s+)?(?<![\w$.])"""
+        + re.escape(name) + r"""\s*=\s*([^;\n]{1,200})""")
+    hits = [m for m in pattern.finditer(text)
+            if before is None or m.start() < before]
+    if before is None:
+        return [m.group(1) for m in hits]
+    return [hits[-1].group(1)] if hits else []
+
+
+def _method_value_is_mutating(value: str, text: str, depth: int = 0,
+                              before: int = None):
+    """Ternary verdict for one `method` value: True / False / None.
+
+    ``True``  — it is, or may be, a mutating verb.
+    ``False`` — proven to be a safe verb.
+    ``None``  — there is no `method` key at all (the caller decides).
+    """
+    value = value.strip()
+    if value == "":
+        return True
+    if SAFE_VERB_LITERAL.match(value):
+        return False
+    if MUTATING_VERB_ANYWHERE.search(value):
+        return True
+    ident = BARE_IDENTIFIER.match(value)
+    if ident is not None and depth < 2:
+        bindings = _binding_values(text, ident.group('name'), before)
+        if not bindings:
+            return True          # unresolvable binding — fail closed
+        return any(
+            _method_value_is_mutating(b, text, depth + 1, before) is not False
+            for b in bindings
+        )
+    # A call, a member expression, a template literal, a computed value: this
+    # helper cannot show it is safe, so it is not.
+    return True
+
+
+def _fetch_is_mutating(call: str, text: str, at: int = None):
+    """``(is_mutating, label)`` for one `fetch(...)` call expression.
+
+    *at* is the offset of the call inside *text*, used to resolve an identifier
+    to the binding that precedes it rather than to any binding in the file.
+    """
+    verdict = None
+    label = "method"
+    for m in METHOD_KEY_VALUE.finditer(call):
+        value = m.group('val')
+        if _method_value_is_mutating(value, text, before=at):
+            return True, value.strip()[:40]
+        verdict = False
+        label = value.strip()[:40]
+    if verdict is None and METHOD_SHORTHAND.search(call):
+        # `{ method }` — resolve the binding of that name.
+        if _method_value_is_mutating("method", text, before=at):
+            return True, "shorthand { method }"
+        return False, "shorthand { method }"
+    return (False, label) if verdict is False else (None, label)
 # axios.post( / axios.put( / this.$axios.delete( ...
 AXIOS_MUTATING = re.compile(
     r"""\baxios\s*\.\s*(?P<verb>post|put|patch|delete)\s*\(""",
@@ -101,6 +215,36 @@ def _call_text(text: str, open_paren: int) -> str:
     return text[open_paren:]
 
 
+# ---------------------------------------------------------------------------
+# ⚠️ WHAT IS DELIBERATELY *NOT* HERE: ENDPOINT SCOPING
+# ---------------------------------------------------------------------------
+#
+# gate-48 blocks when an annotation was removed AND any unprotected mutating
+# caller exists ANYWHERE under `src/` — without relating the two. That is a
+# real defect (zaakafhandelapp#371 was blocked by 15 call sites, byte-identical
+# on `origin/development`, none of them targeting `api/dashboard`), and the
+# obvious repair is to correlate the call site's URL with the routes of the
+# controller that lost its annotation.
+#
+# IT WAS BUILT AND THEN WITHDRAWN, BECAUSE ITS OWN CONTROL FAILED. Measured on
+# zaakafhandelapp at `d7cea2a` with routes read from `appinfo/routes.php`:
+#
+#     repo-wide                       27
+#     scoped to DashboardController   11
+#     scoped to ZakenController       11   <- IDENTICAL SET
+#
+# An identical count across two unrelated controllers is a property of the
+# instrument, not of the diffs. The filter was dominated by the unresolvable
+# residue, and among the 16 it ruled out for ZakenController was
+# `src/store/modules/zaken.ts:128 — fetch() DELETE` — a zaken caller, dropped
+# from the zaken scope, because the route table says `/api/zaken` while the
+# store calls `/api/zrc/zaken`. A correlation that drops a true finding is
+# worse than the over-blocking it replaces.
+#
+# `check_csrf_removal.py`'s post-image test (the deleted-vs-stripped fix)
+# already clears #371 honestly on its own — measured 5 removals -> 0 — so the
+# outcome this scoping was wanted for is delivered without it. Recorded here
+# rather than shipped, so the next attempt starts from the measurement.
 def unprotected_call_sites(app_dir: str) -> list[str]:
     """Mutating frontend call sites carrying no CSRF-bearing mechanism."""
     findings: list[str] = []
@@ -120,6 +264,40 @@ def unprotected_call_sites(app_dir: str) -> list[str]:
             except OSError:
                 continue
             rel = os.path.relpath(path, app_dir)
+
+            # A COMMENT IS NOT A CSRF TOKEN (#415).
+            # ------------------------------------
+            # Every question below used to be asked of the RAW file, and this
+            # helper's whole job is to make an AFFIRMATIVE claim — "every
+            # mutating call site under src/ already carries a signal" — which
+            # the runner then prints as a NOTE and passes on. So prose here
+            # does not merely hide a finding; it manufactures a green with a
+            # sentence attached saying the code is safe.
+            #
+            # Measured on this helper, one fixture, one variable:
+            #
+            #   fetch(url, { method: 'DELETE', headers: {} })
+            #     -> reported UNPROTECTED, gate-48 FAIL          (correct)
+            #   the same call with
+            #     `// TODO: add the requesttoken header here. Not done yet.`
+            #     INSIDE the init object
+            #     -> reported protected, gate-48 PASS + the NOTE <- the defect
+            #
+            # `NEXTCLOUD_AXIOS_IMPORT` was read the same way, so a
+            # COMMENTED-OUT import silenced every axios.post in the file at
+            # once — one dead line, whole-file amnesty.
+            #
+            # STRING CONTENTS ARE KEPT, deliberately. `script_mask` blanks
+            # comments and leaves literals intact, and that is required
+            # rather than incidental: `'OCS-APIRequest': 'true'` is a header
+            # name that IS a string, and `method: 'DELETE'` is how a mutating
+            # call is recognised at all. Blanking literals here would delete
+            # the evidence in both directions at once — the classic
+            # over-applied fix that turns a repaired gate into a dead one.
+            #
+            # Offsets are preserved by the mask, so the reported line numbers
+            # still address the original file.
+            text = script_mask(text, path)
             uses_nc_axios = bool(NEXTCLOUD_AXIOS_IMPORT.search(text))
 
             # 1. axios.<verb>(...) — protected iff the file imports @nextcloud/axios.
@@ -135,18 +313,23 @@ def unprotected_call_sites(app_dir: str) -> list[str]:
                     f"signal and no @nextcloud/axios import"
                 )
 
-            # 2. fetch(...) — mutating iff its init object names a mutating verb.
+            # 2. fetch(...) — mutating unless its `method` is PROVEN to be a
+            #    safe verb. A `method` key whose value cannot be resolved to
+            #    GET/HEAD/OPTIONS counts as mutating; see the commentary above
+            #    `METHOD_KEY_VALUE`. No `method` key at all is still a GET and
+            #    is still skipped.
             for m in FETCH_CALL.finditer(text):
                 call = _call_text(text, m.end() - 1)
-                verb = MUTATING_METHOD.search(call)
-                if verb is None:
+                is_mutating, label = _fetch_is_mutating(call, text, m.start())
+                if is_mutating is not True:
                     continue
                 if CSRF_SIGNAL.search(call):
                     continue
+                verb = MUTATING_METHOD.search(call)
+                shown = verb.group('verb').upper() if verb else label
                 line = text.count('\n', 0, m.start()) + 1
                 findings.append(
-                    f"{rel}:{line} — fetch() {verb.group('verb').upper()} with no "
-                    f"CSRF signal"
+                    f"{rel}:{line} — fetch() {shown} with no CSRF signal"
                 )
     return findings
 

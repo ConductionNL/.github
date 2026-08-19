@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<id>channelfixture</id>
+	<name>Base-Ref Delivery Channel Fixture</name>
+	<summary>Fixture app for the base-ref delivery-channel parity suite. Not a real app.</summary>
+	<description>Carries one uncovered spec scenario so gate-19 has a subject, and a real git history so the same base can be delivered two ways.</description>
+	<version>1.0.0</version>
+	<licence>agpl</licence>
+	<author>Conduction</author>
+	<namespace>ChannelFixture</namespace>
+	<category>tools</category>
+	<dependencies><nextcloud min-version="30" max-version="32"/></dependencies>
+</info>

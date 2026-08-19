@@ -219,6 +219,98 @@ fi
 
 # ===========================================================================
 echo
+echo "== gate-24: BOTH registration APIs count as having leaves (.github#349) =="
+# ===========================================================================
+# `clean/` has no parity wrapper AND no leaf, so its NOT APPLICABLE above is
+# correct. Drop ONE file on top of it — a leaf registered through
+# `OCA.OpenRegister.integrations.register(...)`, the direct form — and the
+# verdict must become SKIPPED (structural): the repo now has a server↔JS pair
+# to correlate and nothing correlated it.
+#
+# The distinction is not cosmetic. `na` does NOT count against coverage;
+# `structural` does. A gate that misreads its own subject matter as absent
+# switches itself off silently, and prints a confident absence claim while
+# doing it — measured on decidesk, whose registered leaf id was enumerable from
+# the live JS registry in the same repo's Playwright run.
+#
+# THE PAIRED ARM MATTERS: `clean/` untouched must STAY `na`. A fix that made
+# gate-24 structural everywhere would pass a one-armed version of this test and
+# would be a false gap in every repo in the fleet.
+_DIRECT="$(mktemp -d "${TMPDIR:-/tmp}/hydra-gate-24-direct.XXXXXXXX")"
+cp -r "${FIXTURES}/clean/." "${_DIRECT}/"
+cp "${FIXTURES}/direct-registry-overlay/src/integration-leaf-direct.js" "${_DIRECT}/src/"
+if [ ! -f "${_DIRECT}/src/integration-leaf-direct.js" ]; then
+    _bad "the direct-registry overlay did not land — every assertion in this arm would be vacuous"
+elif grep -rq 'scripts/check-integration-parity.sh' "${_DIRECT}" 2>/dev/null \
+     || [ -f "${_DIRECT}/scripts/check-integration-parity.sh" ]; then
+    _bad "the direct-registry arm inherited a parity wrapper from clean/, so it exercises the wrapper path and not the leaf-detection path this arm is about"
+elif _run "${_DIRECT}"; then
+    _expect 24 "SKIPPED (structural)" \
+        "gate-24 recognises a leaf registered via integrations.register( — structural, not na"
+    _expect 24 "DOES register integration leaves" \
+        "gate-24 says WHY it is structural"
+    # And the reason must not still claim the repo has no leaves.
+    _l24="$(_verdict 24)"
+    case "${_l24}" in
+        *"registers no integration leaves at all"*)
+            _bad "gate-24 still asserts 'registers no integration leaves at all' over a tree that registers one — .github#349 is live: ${_l24:0:160}"
+            ;;
+        *)  _ok "gate-24 no longer claims the leaf set is empty" ;;
+    esac
+fi
+rm -rf "${_DIRECT}"
+
+# ===========================================================================
+echo
+echo "== gate-24: a COMMENT is not a registration (.github#415/#423) =="
+# ===========================================================================
+# The two probes that decide `na` vs `structural` were raw greps, so
+#
+#     // TODO: one day we could do `new LeafDescriptor(...)` here
+#     // We used to call registerIntegration({...}); removed in 2.4
+#
+# made the gate claim the repo has a server↔JS pair nobody correlated. Not a
+# red gate — a FABRICATED GAP, in the arithmetic that decides whether the
+# run's coverage is believed. Measured on this fixture: the COVERAGE line went
+# from "17 of 18 applicable gates ran" to "17 of 17".
+#
+# The paired arm is the one that matters, and it is the arm above plus this
+# one: a real `new LeafDescriptor(` and a real `registerIntegration(` must
+# STILL be structural. A mask that over-blanked would make every repo `na`,
+# which is the same gate switched off from the other side.
+_CMT="$(mktemp -d "${TMPDIR:-/tmp}/hydra-gate-24-comment.XXXXXXXX")"
+cp -r "${FIXTURES}/clean/." "${_CMT}/"
+mkdir -p "${_CMT}/lib/Service" "${_CMT}/src"
+cat > "${_CMT}/lib/Service/LeafNotes.php" <<'PHPEOF'
+<?php
+namespace OCA\Fixture\Service;
+
+class LeafNotes
+{
+    public function run(): void
+    {
+        // TODO: one day we could do `new LeafDescriptor(...)` here so the
+        // files integration can render our objects. Not done yet.
+    }
+}
+PHPEOF
+cat > "${_CMT}/src/integration-notes.js" <<'JSEOF'
+// We used to call registerIntegration({ id: 'fixture-thing' }); it was
+// removed in 2.4 when the leaf moved into openregister.
+export default {}
+JSEOF
+if [ ! -f "${_CMT}/lib/Service/LeafNotes.php" ]; then
+    _bad "the comment-only overlay did not land — the gate-24 comment arm would be vacuous"
+elif _run "${_CMT}"; then
+    _expect 24 "NOT APPLICABLE" \
+        "gate-24: a leaf named only in two comments is not a leaf"
+    _expect 24 "registers no integration leaves at all" \
+        "gate-24 says WHY it is na"
+fi
+rm -rf "${_CMT}"
+
+# ===========================================================================
+echo
 echo "== gate-23 in WARN mode: a finding must still be VISIBLE =="
 # ===========================================================================
 # Before the bake-in epoch the linter exits 0 whatever it found, so the gate

@@ -146,6 +146,43 @@ if _run "${FIXTURES}/guarded"; then
 fi
 
 # ---------------------------------------------------------------------------
+# 2b. A COMMENT MUST NOT SPEND THE WINDOW (.github#415/#423).
+#
+# `_head_block` took the union of {the contiguous annotation run, a 20-line
+# slice}. For a MULTI-LINE attribute the run breaks at the `)]` line, so the
+# slice was the only thing reaching the `#[` — and an ordinary docblock
+# between the attribute and the declaration spends that slice.
+#
+# Measured on two fixtures differing in NOTHING but the length of the
+# docblock, both carrying a real `#[AuthorizedAdminSetting(\n …\n)]`:
+#
+#     2 doc lines  -> PASS          30 doc lines -> FAIL — 1 routed method(s)
+#
+# so the author who documents the endpoint goes red and the author who
+# deletes the paragraph goes green, having changed nothing about its auth.
+#
+# The pair below is the whole point: stepping over the attribute by STRUCTURE
+# must not let the NEXT method borrow it. `multiline-attribute-borrow` is the
+# same file plus one unguarded routed method, and it must still fail naming
+# `open` — if the step-over ever runs past the previous member's close, this
+# arm goes green and the suite goes red.
+# ---------------------------------------------------------------------------
+if _run "${FIXTURES}/multiline-attribute"; then
+    _expect_gate 5 PASS \
+        "multiline-attribute fixture: a 29-line docblock does not hide a three-line attribute"
+fi
+
+if _run "${FIXTURES}/multiline-attribute-borrow"; then
+    _expect_gate 5 FAIL \
+        "multiline-attribute-borrow fixture: the method BELOW the attribute may not borrow it"
+    _expect_out 'gate-5\] route-auth: FAIL — 1 routed method' \
+        "multiline-attribute-borrow fixture: exactly ONE finding (save is genuinely guarded)"
+    _RALOG="$(cat "${_LOGDIR}/hydra-gate-route-auth.log" 2>/dev/null || true)"
+    _expect_log "${_RALOG}" 'SettingsController.php:[0-9]+ method=open' \
+        "multiline-attribute-borrow fixture: the finding names open, not save"
+fi
+
+# ---------------------------------------------------------------------------
 # 3. DEFECT (a). scholiq's shape: AppHost generics produce NO finding, and the
 #    fact that they were not judged is STATED rather than silently dropped.
 # ---------------------------------------------------------------------------
@@ -348,7 +385,24 @@ if _run "${_REPO}" --scope-to-diff --base "${_BASE}"; then
     # this repository, so "PASS" would have claimed a clean bill of health for
     # four endpoints whose attributes this run cannot see at all.
     _expect_gate 5 "NOT APPLICABLE" "AppHost app, dependency-only diff: gate-5 clean (the scholiq case)"
-    _expect_gate 14 PASS "AppHost app, dependency-only diff: gate-14 clean"
+    # ⚠️ RECLASSIFIED 2026-08-12 from PASS to NOT APPLICABLE (.github#374),
+    # for the SAME reason 6a reclassified gate-5 on 2026-08-08 — and this line
+    # is why that reclassification was only half done.
+    #
+    # gate-14 filters routes through `_in_scope` one route at a time and then
+    # asked `_rr_fail -eq 0`. On this diff every route is filtered out, so zero
+    # findings over zero inspected routes printed `PASS` — indistinguishable
+    # from a repo whose every route was cross-checked and found reachable. The
+    # comment 40 lines up already states the argument in full: *"a PASS here is
+    # scoping, not absence" is a fact the verdict PASS does not state and NOT
+    # APPLICABLE does.* It was applied to gate-5 and not to its neighbour.
+    #
+    # Measured on a fixture carrying a real unrouted controller method: full
+    # scope FAIL — 1, docs-only diff PASS. The controls that keep this honest
+    # are 6b and 6c above (unchanged) plus the four `_expect_gate 14 FAIL`
+    # assertions earlier in this file — gate-14 must still raise a genuinely
+    # unreachable route the moment one is in scope.
+    _expect_gate 14 "NOT APPLICABLE" "AppHost app, dependency-only diff: gate-14 reports NO finding (scoped out, not absent)"
 fi
 
 echo

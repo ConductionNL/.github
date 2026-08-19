@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<id>npmsupplyfx</id>
+	<name>npm Supply Chain Fixture</name>
+	<summary>Fixture app for gate-84 acceptance. Not a real app.</summary>
+	<description>Exists so the gate suite can drive the release-age cooldown configuration through the real wrapper. The planted arm carries the state 13 of 19 fleet apps were in: the cooldown disabled and an engines.npm that admits the one npm where the setting does not exist.</description>
+	<version>1.0.0</version>
+	<licence>agpl</licence>
+	<author>Conduction</author>
+	<namespace>NpmSupplyFx</namespace>
+	<category>tools</category>
+	<dependencies><nextcloud min-version="30" max-version="32"/></dependencies>
+</info>

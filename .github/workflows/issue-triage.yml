@@ -29,56 +29,50 @@ on:
         default: false
     secrets:
       PROJECT_TOKEN:
-        description: "GitHub token with project and issues scope"
-        required: true
+        description: >-
+          UNUSED while the project-board steps are disabled. Kept declared, and
+          deliberately NOT required, so that the eighteen callers that already
+          forward it keep validating without an edit each.
+        required: false
+
+# =============================================================================
+# THE PROJECT-BOARD STEPS ARE DISABLED, AND THIS RUNS ON `GITHUB_TOKEN`.
+#
+# `PROJECT_TOKEN` was a personal access token, and it died on or about
+# 2026-08-04 — HTTP 401 on `GET /user`, which is an authentication probe, so
+# the failure is revocation or expiry and no amount of re-scoping addresses
+# it. It was also stored per-repository in only 8 of the 18 apps; the other 10
+# received an empty value and failed on a different branch of the same root
+# cause. Between them that accounts for the bulk of ~955 failed runs.
+#
+# Every run already gets `GITHUB_TOKEN` for free, and it can do ALL of the
+# issue work here: create, update, label, assign, comment. What it cannot do
+# is ProjectsV2, because it is scoped to one repository and carries no
+# `project` scope, and the board here is an ORGANISATION project
+# (`organization(login:…){ projectV2(number:…) }`).
+#
+# So the split is: keep the issue automation working today on a credential
+# that cannot rot, and disable the board steps until a project-scoped token
+# exists. `PROJECTS_ENABLED` below is the single switch, and every disabled
+# site emits a `::notice` rather than passing silently — a step that stops
+# doing its work while still reporting success is the failure mode this
+# repository exists to prevent.
+#
+# TO RESTORE: a project-scoped credential cannot simply replace
+# `github-token:`, because these scripts also do repo issue work and one
+# client cannot hold both. Create a SECOND authenticated client for the
+# GraphQL calls and flip `PROJECTS_ENABLED`. Tracked in #432.
+#
+# NOTE ON THE DELETED PREFLIGHT: it existed because a missing PROJECT_TOKEN
+# surfaced a minute later as an `actions/github-script` complaint about
+# `github-token` — the action's input, not the missing secret — which reads as
+# an action bug and sends you looking in the wrong place. That diagnosis is
+# preserved here because the trap returns the moment a token comes back.
+# =============================================================================
 
 jobs:
-  # ---------------------------------------------------------------------------
-  # PREFLIGHT — fail in ten seconds naming the real cause.
-  #
-  # `required: true` on a secret means "the caller passed the KEY", not "the
-  # value is non-empty" and not "the value works". When PROJECT_TOKEN is
-  # unavailable it interpolates to the empty string, every job below still
-  # starts, and actions/github-script dies about a minute later naming
-  # `github-token` — the action's INPUT, not the missing secret. That reads as
-  # an action bug and sends you looking in the wrong place.
-  #
-  # Measured on openbuild 2026-08-09: `Issue Triage` had **34 runs and 0
-  # successes since its first run on 2026-07-23** and nobody noticed, because
-  # the error never named PROJECT_TOKEN. It is not the shared workflow at
-  # fault — docudesk (1/12) and pipelinq (3/15) have succeeded on this same
-  # file, which is exactly why the diagnosis has to be in the error message.
-  #
-  # Same defect and same remedy as the openspec-sync preflight (#284).
-  # ---------------------------------------------------------------------------
-  preflight:
-    name: Preflight (PROJECT_TOKEN)
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: PROJECT_TOKEN must be present and valid
-        env:
-          PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
-        run: |
-          set -uo pipefail
-          if [ -z "${PROJECT_TOKEN//[[:space:]]/}" ]; then
-            echo "::error title=PROJECT_TOKEN is empty or was never passed::Issue Triage cannot run. The caller declares the secret, but the value that arrived is empty — so every downstream actions/github-script step would fail about a minute from now complaining about 'github-token', which is the action's input, not the missing thing. Add PROJECT_TOKEN to this repository's (or organisation's) secrets and make sure the caller forwards it, e.g. 'secrets: {PROJECT_TOKEN: \${{ secrets.PROJECT_TOKEN }}}' or 'secrets: inherit'."
-            exit 1
-          fi
-          code=$(curl -sS -o /dev/null -w '%{http_code}' \
-                   -H "Authorization: token ${PROJECT_TOKEN}" \
-                   -H "Accept: application/vnd.github+json" \
-                   https://api.github.com/user || echo "000")
-          if [ "${code}" = "200" ]; then
-            echo "PROJECT_TOKEN present and accepted by the API."
-            exit 0
-          fi
-          echo "::error title=PROJECT_TOKEN was rejected (HTTP ${code})::The secret is set but the API refused it. 401 means expired or revoked; 403 means it lacks the required scopes (issues + project). Rotate or re-scope the token — do not paste its value anywhere."
-          exit 1
-
   triage-single:
     name: Triage New Issue
-    needs: preflight
     runs-on: ubuntu-latest
     # Observed across 8 executions: 0.1 min. A single actions/github-script
     # step labelling one issue; 15 min covers a slow GitHub API.
@@ -96,13 +90,12 @@ jobs:
       - name: Triage new issue
         uses: actions/github-script@v7
         env:
-          PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
           PROJECT_NUMBER: ${{ inputs.project-number }}
           PROJECT_OWNER: ${{ inputs.project-owner }}
           APP_NAME: ${{ inputs.app-name }}
           TRIAGE_ASSIGNEE: ${{ inputs.triage-assignee }}
         with:
-          github-token: ${{ secrets.PROJECT_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const projectNumber = parseInt(process.env.PROJECT_NUMBER);
             const projectOwner = process.env.PROJECT_OWNER;
@@ -112,8 +105,16 @@ jobs:
 
             console.log(`Triaging issue #${issue.number}: ${issue.title}`);
 
+            // ProjectsV2 is unavailable to GITHUB_TOKEN — see the header. Flip
+            // this once a project-scoped client exists (#432).
+            const PROJECTS_ENABLED = false;
+
             // --- Helper: add issue to project (no status — triage view is separate) ---
             async function addToProject(issueNumber) {
+              if (!PROJECTS_ENABLED) {
+                core.notice(`Project board step skipped for #${issueNumber}: ProjectsV2 needs a project-scoped token and this run uses GITHUB_TOKEN. The issue was labelled and assigned; it is NOT on the board. See ConductionNL/.github#432.`);
+                return 'unknown';
+              }
               const projectQuery = await github.graphql(`
                 query($owner: String!, $number: Int!) {
                   organization(login: $owner) {
@@ -215,15 +216,26 @@ jobs:
 
             // Add to project board
             const source = await addToProject(issue.number);
-            console.log(`Added #${issue.number} to project (source: ${source})`);
+            console.log(PROJECTS_ENABLED
+              ? `Added #${issue.number} to project (source: ${source})`
+              : `#${issue.number} was NOT added to the project board (board steps disabled).`);
 
-            // Welcome comment
+            // Welcome comment.
+            //
+            // The greeting must not claim the board placement while the board
+            // step is disabled: a bot telling a contributor their issue is
+            // tracked somewhere it is not is worse than saying nothing, and it
+            // is exactly the shape of a step that reports work it did not do.
+            const boardSentence = PROJECTS_ENABLED
+              ? `It has been added to our [triage board](https://github.com/orgs/${projectOwner}/projects/${projectNumber}/views/2) and assigned to @${triageAssignee} for review.`
+              : `It has been assigned to @${triageAssignee} for review.`;
+
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: issue.number,
               body: [
-                `Thank you for opening this issue! It has been added to our [triage board](https://github.com/orgs/${projectOwner}/projects/${projectNumber}/views/2) and assigned to @${triageAssignee} for review.`,
+                `Thank you for opening this issue! ${boardSentence}`,
                 '',
                 '**What happens next:**',
                 '1. A maintainer will review this issue and determine the appropriate action',
@@ -241,7 +253,6 @@ jobs:
 
   triage-decision:
     name: Handle Triage Decision
-    needs: preflight
     runs-on: ubuntu-latest
     # Same shape as triage-single: one actions/github-script step acting on a
     # single issue. No executed run was sampled, so this mirrors that bound.
@@ -258,11 +269,10 @@ jobs:
       - name: Handle triage label
         uses: actions/github-script@v7
         env:
-          PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
           PROJECT_NUMBER: ${{ inputs.project-number }}
           PROJECT_OWNER: ${{ inputs.project-owner }}
         with:
-          github-token: ${{ secrets.PROJECT_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const label = context.payload.label.name;
             const issue = context.payload.issue;
@@ -270,6 +280,9 @@ jobs:
             const projectOwner = process.env.PROJECT_OWNER;
 
             if (!label.startsWith('triage:')) return;
+
+            // ProjectsV2 is unavailable to GITHUB_TOKEN — see the header (#432).
+            const PROJECTS_ENABLED = false;
 
             console.log(`Triage decision for #${issue.number}: ${label}`);
 
@@ -296,7 +309,13 @@ jobs:
                   ].join('\n'),
                 });
 
-                // Move to Proposal on the project board
+                // Move to Proposal on the project board.
+                // The acceptance comment above has already been posted, so the
+                // human-visible half of this decision is complete either way.
+                if (!PROJECTS_ENABLED) {
+                  core.notice(`#${issue.number} accepted as ${specType}, but its board status was NOT moved to Proposal: ProjectsV2 needs a project-scoped token and this run uses GITHUB_TOKEN. See ConductionNL/.github#432.`);
+                  break;
+                }
                 const projectQuery = await github.graphql(`
                   query($owner: String!, $number: Int!) {
                     organization(login: $owner) {
@@ -381,7 +400,6 @@ jobs:
 
   backlog-triage:
     name: Backlog Triage Existing Issues
-    needs: preflight
     runs-on: ubuntu-latest
     # UNMEASURED: 6 skipped records, 0 executions in the fleet history sampled.
     # Unlike the two single-issue jobs it walks EVERY untriaged open issue and
@@ -397,13 +415,12 @@ jobs:
       - name: Triage all untriaged open issues
         uses: actions/github-script@v7
         env:
-          PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
           PROJECT_NUMBER: ${{ inputs.project-number }}
           PROJECT_OWNER: ${{ inputs.project-owner }}
           APP_NAME: ${{ inputs.app-name }}
           TRIAGE_ASSIGNEE: ${{ inputs.triage-assignee }}
         with:
-          github-token: ${{ secrets.PROJECT_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const projectNumber = parseInt(process.env.PROJECT_NUMBER);
             const projectOwner = process.env.PROJECT_OWNER;
@@ -412,8 +429,17 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
 
+            // ProjectsV2 is unavailable to GITHUB_TOKEN — see the header (#432).
+            // The query below must not merely be ignored, it must not RUN: an
+            // unauthorised GraphQL call throws and would take the whole backlog
+            // sweep down before a single issue got labelled.
+            const PROJECTS_ENABLED = false;
+            if (!PROJECTS_ENABLED) {
+              core.notice('Backlog triage will label and assign only. ProjectsV2 needs a project-scoped token and this run uses GITHUB_TOKEN, so no issue will be added to the board. See ConductionNL/.github#432.');
+            }
+
             // --- Get project info once ---
-            const projectQuery = await github.graphql(`
+            const projectQuery = !PROJECTS_ENABLED ? null : await github.graphql(`
               query($owner: String!, $number: Int!) {
                 organization(login: $owner) {
                   projectV2(number: $number) {
@@ -429,11 +455,11 @@ jobs:
               }
             `, { owner: projectOwner, number: projectNumber });
 
-            const project = projectQuery.organization.projectV2;
-            const projectId = project.id;
-            const appField = project.fields.nodes.find(f => f.name === 'App' && f.options);
+            const project = projectQuery ? projectQuery.organization.projectV2 : null;
+            const projectId = project ? project.id : null;
+            const appField = project ? project.fields.nodes.find(f => f.name === 'App' && f.options) : null;
             const appOption = appField?.options.find(o => o.name === appName);
-            const sourceField = project.fields.nodes.find(f => f.name === 'Source' && f.options);
+            const sourceField = project ? project.fields.nodes.find(f => f.name === 'Source' && f.options) : null;
             const internalOption = sourceField?.options.find(o => o.name === 'internal');
 
             // --- Ensure triage label exists ---
@@ -473,6 +499,13 @@ jobs:
               // Auto-assign if unassigned
               if (!issue.assignees || issue.assignees.length === 0) {
                 await github.rest.issues.addAssignees({ owner, repo, issue_number: issue.number, assignees: [triageAssignee] });
+              }
+
+              // Everything from here down is board work. Labelling and
+              // assignment above are the parts GITHUB_TOKEN can do, and they
+              // have already happened for this issue.
+              if (!PROJECTS_ENABLED) {
+                continue;
               }
 
               // Get issue node ID

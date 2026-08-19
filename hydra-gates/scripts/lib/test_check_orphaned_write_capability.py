@@ -272,15 +272,16 @@ class _FleetFixture:
     invokes the gate. See ForeignCwdTest.
     """
 
-    def __init__(self, app_name: str, cwd: str = "app"):
+    def __init__(self, app_name: str, cwd: str = "app", app_id: str = None):
         self._tmp = tempfile.TemporaryDirectory()
         self._app_name = app_name
         self._cwd_mode = cwd
+        self._app_id = app_id
         self._old_cwd = None
 
     def __enter__(self):
         self.parent = self._tmp.name
-        self.app_root = self.add_app(self._app_name)
+        self.app_root = self.add_app(self._app_name, self._app_id)
         self._old_cwd = os.getcwd()
         os.chdir(self.app_root if self._cwd_mode == "app" else self.parent)
         return self
@@ -289,10 +290,19 @@ class _FleetFixture:
         os.chdir(self._old_cwd)
         self._tmp.cleanup()
 
-    def add_app(self, name: str) -> str:
+    def add_app(self, name: str, app_id: str = None) -> str:
+        """*app_id* writes a real ``<id>`` into info.xml (`.github#398`).
+
+        Left None by default so every pre-existing fixture keeps exercising
+        the basename fallback — those are the arms that prove the fallback
+        still works, and they must not silently migrate to the new path.
+        """
         root = os.path.join(self.parent, name)
         os.makedirs(os.path.join(root, "lib"), exist_ok=True)
-        self.write(root, "appinfo/info.xml", "<?xml version='1.0'?><info></info>\n")
+        body = "" if app_id is None else "<id>%s</id>" % app_id
+        self.write(
+            root, "appinfo/info.xml",
+            "<?xml version='1.0'?><info>%s</info>\n" % body)
         return root
 
     def write(self, root: str, rel_path: str, content: str) -> str:
@@ -380,6 +390,77 @@ class CrossAppCallerTest(unittest.TestCase):
             out = _run_main(svc)
             self.assertEqual(len(out), 1, out)
             self.assertIn("method=emitDisposalJournal", out[0])
+
+
+class CheckoutDirectoryNameTest(unittest.TestCase):
+    """`.github#398` — the foundation fail-safe must not key on the PATH.
+
+    `quality.yml`'s hydra-gates job checks the app out with ``path: app``, so
+    in CI the directory basename is the literal string ``app`` for every
+    repository in the fleet. Keyed on the basename, the hydra#106 fail-safe
+    therefore NEVER ENGAGED IN CI, for any repo, ever — and nothing in the
+    log said so, which is what made it survive.
+
+    Four-arm control on one real openregister tree, varying only the
+    directory name: named ``openregister`` → 0 findings + SKIP; renamed to
+    ``app`` → 8 findings. A leaf app (docudesk) gave 3 under BOTH names,
+    which is what proves the difference is this guard and not the rename.
+    """
+
+    def test_foundation_recognised_when_checked_out_as_app(self):
+        """THE DEFECT. Directory named ``app`` — as CI always names it — with
+        info.xml declaring the real id. The fail-safe must engage."""
+        with _FleetFixture("app", app_id="openregister") as fx:
+            svc = fx.write(fx.app_root, "lib/Service/ObjectService.php",
+                           _FOUNDATION_SVC)
+            self.assertEqual(_run_main(svc), [])
+
+    def test_directory_name_alone_no_longer_decides(self):
+        """The converse, and the arm that stops a basename fallback from
+        quietly reinstating the old behaviour: a directory NAMED
+        ``openregister`` whose info.xml declares a leaf app is NOT the
+        foundation repo, so its genuinely dead method is still reported."""
+        with _FleetFixture("openregister", app_id="shillinq") as fx:
+            svc = fx.write(
+                fx.app_root, "lib/Service/DisposalJournalEmitter.php",
+                "<?php\nnamespace OCA\\Shillinq\\Service;\n"
+                "class DisposalJournalEmitter {\n"
+                "    public function emitDisposalJournal(): void { /* dead */ }\n"
+                "}\n")
+            out = _run_main(svc)
+            self.assertEqual(len(out), 1, out)
+            self.assertIn("method=emitDisposalJournal", out[0])
+
+    def test_identity_and_its_source_are_announced(self):
+        """A fail-safe that stops engaging must not be able to do it in
+        silence. Every run states the id, where it came from, and whether the
+        guard applies — so 'it never engaged in CI' is readable from a log
+        instead of needing a four-arm experiment to discover."""
+        import contextlib
+        with _FleetFixture("app", app_id="openregister") as fx:
+            svc = fx.write(fx.app_root, "lib/Service/ObjectService.php",
+                           _FOUNDATION_SVC)
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                owc.main(["check", svc])
+            line = err.getvalue()
+            self.assertIn("app_id=openregister", line)
+            self.assertIn("source=appinfo/info.xml", line)
+            self.assertIn("foundation=yes", line)
+
+    def test_absent_info_xml_falls_back_to_basename_and_says_so(self):
+        """When the intrinsic source is absent the fallback is the historical
+        basename — but it NAMES ITSELF, which is the whole difference between
+        a documented fallback and the defect being removed."""
+        import contextlib
+        with _FleetFixture("openregister") as fx:  # info.xml carries no <id>
+            svc = fx.write(fx.app_root, "lib/Service/ObjectService.php",
+                           _FOUNDATION_SVC)
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                owc.main(["check", svc])
+            self.assertIn("source=basename", err.getvalue())
+            self.assertIn("foundation=yes", err.getvalue())
 
 
 class ForeignCwdTest(unittest.TestCase):
@@ -1073,6 +1154,344 @@ class McpSeamSpellingTest(unittest.TestCase):
         self.assertIn("createLead", f.methods())
         # And a write method with no attribute on the same class is still dead.
         self.assertIn("createInvoice", self._fully_qualified().methods())
+
+
+class WriteVerbVocabularyTest(unittest.TestCase):
+    """The verb list IS the detector — everything else only removes findings.
+
+    Nothing in this module is examined at all unless the method name starts
+    with a `WRITE_VERB_PREFIXES` entry, so a missing verb is not a weaker
+    check, it is NO check. Measured on a controlled probe before the fix: four
+    orphaned write methods on one service — `postJournalEntry`,
+    `updateLedgerBalance`, `sendRemittanceAdvice`, `deleteJournalEntry`, all
+    zero-caller, no seam — and the gate reported exactly ONE. `delete*`'s
+    absence was load-bearing enough that the fleet board had to warn agents to
+    "plant with `post*`" or they would wrongly record the gate as blind.
+    """
+
+    _FOUR = (
+        "<?php\nnamespace OCA\\Fixture\\Service;\nclass LedgerService {\n"
+        "    public function postJournalEntry(array $e): void { $this->x = $e; }\n"
+        "    public function updateLedgerBalance(array $e): void { $this->x = $e; }\n"
+        "    public function sendRemittanceAdvice(array $e): void { $this->x = $e; }\n"
+        "    public function deleteJournalEntry(string $i): void { $this->x = $i; }\n"
+        "}\n"
+    )
+
+    def _write(self, root, rel, content):
+        full = os.path.join(root, rel)
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        with open(full, "w", encoding="utf-8") as fh:
+            fh.write(content)
+        return full
+
+    def test_all_four_orphaned_write_shapes_are_reported(self):
+        with _AppFixture() as root:
+            path = self._write(root, "lib/Service/LedgerService.php", self._FOUR)
+            out = _run_main(path)
+            self.assertEqual(len(out), 4, out)
+            for name in ("postJournalEntry", "updateLedgerBalance",
+                         "sendRemittanceAdvice", "deleteJournalEntry"):
+                self.assertTrue(any(f"method={name}" in ln for ln in out), (name, out))
+
+    def test_the_same_four_with_callers_are_silent(self):
+        """ANTI-WIDENING. Widening a vocabulary list is exactly how a gate
+        starts crying wolf, so every added verb must be proven NOT to fire on
+        correct code."""
+        with _AppFixture() as root:
+            body = self._FOUR.replace(
+                "}\n",
+                "    public function run(): void {\n"
+                "        $this->postJournalEntry([]);\n"
+                "        $this->updateLedgerBalance([]);\n"
+                "        $this->sendRemittanceAdvice([]);\n"
+                "        $this->deleteJournalEntry('x');\n"
+                "    }\n}\n",
+            )
+            path = self._write(root, "lib/Service/LedgerService.php", body)
+            self.assertEqual(_run_main(path), [])
+
+    def test_each_added_verb_family_fires_on_an_orphan(self):
+        """One representative per family, so a verb cannot be dropped silently."""
+        families = [
+            "persistLoonStrook", "storeInbound", "insertRow", "upsertRecord",
+            "patchDocument", "replaceAttachment", "purgeExpired", "flushQueue",
+            "removeFromQueue", "uploadMedia", "importContact", "syncAbonnement",
+            "transferToIncasso", "archiveAndDelete", "cancelRedemption",
+            "approveRequest", "assignReviewer", "markOptedOut", "finalizeInvoice",
+            "signDocument", "revokeGrant", "grantAccess", "scheduleReminder",
+            "enqueueDispatch", "triggerTerugvordering",
+        ]
+        with _AppFixture() as root:
+            body = ("<?php\nnamespace OCA\\Fixture\\Service;\nclass WideService {\n"
+                    + "".join(f"    public function {n}(): void {{ $this->x = 1; }}\n"
+                              for n in families)
+                    + "}\n")
+            path = self._write(root, "lib/Service/WideService.php", body)
+            out = _run_main(path)
+            missed = [n for n in families
+                      if not any(f"method={n}" in ln for ln in out)]
+            self.assertEqual(missed, [], f"verbs the gate cannot see: {missed}")
+
+    def test_noun_shaped_verbs_are_prefix_only(self):
+        """A MEASURED false positive, not a hypothetical one.
+
+        `KapitaallastenCalculator::schedule()` in shillinq is a PURE function
+        returning a depreciation table. It was the single false positive among
+        the 35 findings the widening added across 12 repos, and it is why
+        `_PREFIX_ONLY_VERBS` exists: `scheduleReminder` counts, bare
+        `schedule` does not.
+        """
+        self.assertFalse(owc._is_write_method("schedule"))
+        self.assertTrue(owc._is_write_method("scheduleReminder"))
+        with _AppFixture() as root:
+            path = self._write(
+                root, "lib/Service/CalculatorService.php",
+                "<?php\nnamespace OCA\\Fixture\\Service;\nclass CalculatorService {\n"
+                "    public function schedule(float $b, int $n): array\n"
+                "    { return array_fill(0, $n, $b / $n); }\n"
+                "}\n")
+            self.assertEqual(_run_main(path), [])
+
+    def test_bare_verbs_that_are_genuine_writes_still_count(self):
+        """ANTI-WIDENING for the arm above: the prefix-only rule must apply to
+        `schedule` and to nothing else. `flush()` and `sync()` are the only
+        other bare-name matches in the fleet and both are real writes."""
+        self.assertTrue(owc._is_write_method("flush"))
+        self.assertTrue(owc._is_write_method("sync"))
+        self.assertTrue(owc._is_write_method("post"))
+
+    def test_read_and_guard_shapes_are_still_gate_6s_territory(self):
+        """The exclusions the gate declares in its own docstring must hold —
+        and `apply*` / `process*` / `register*` were measured and REJECTED
+        (6, 7 and 4 findings, all pure transforms or noun collisions)."""
+        for name in ("isReady", "hasAccess", "getBalance", "findAll",
+                     "listItems", "validateInput", "checkQuorum",
+                     "ensureSchema", "requireAdmin", "authorizeUser",
+                     "applyFilters", "processResponse", "registerHooks",
+                     "setRegister", "addRow"):
+            self.assertFalse(owc._is_write_method(name), name)
+
+
+# ---------------------------------------------------------------------------
+# The caller index is CODE, and a comment cannot make a method bodiless
+# (#415 class, #422).
+#
+# Reverted against origin/main, arms 2, 3, 4 and 5 FLIP (no finding ->
+# finding). Arms 1, 6, 7 and 8 pass either way and are CONTROLS.
+#
+# ⚠️ THIS MODULE ALREADY KNEW. `_blank_php_comments` was written FOR THIS FILE
+# and its docstring states the class in as many words — it was applied to the
+# four seams and never to the caller index, which is the gate's primary
+# evidence. A partially-masked checker looks exactly like a fully-masked one
+# from outside.
+# ---------------------------------------------------------------------------
+_ORPHAN_SERVICE = (
+    "<?php\nnamespace OCA\\Fixture\\Service;\n\n"
+    "class InvoiceService {\n"
+    "    public function postInvoice(string $id): bool\n"
+    "    {\n"
+    "        $this->ledger[$id] = true;\n"
+    "        return true;\n"
+    "    }\n"
+    "}\n"
+)
+
+
+def _controller(body: str) -> str:
+    return (
+        "<?php\nnamespace OCA\\Fixture\\Controller;\n\n"
+        "class InvoiceController {\n"
+        f"{body}"
+        "    public function show(string $id)\n"
+        "    {\n"
+        "        return $this->renderer->toArray($id);\n"
+        "    }\n"
+        "}\n"
+    )
+
+
+class CommentIsNotACaller(unittest.TestCase):
+    def _run(self, service_src: str, controller_body: str) -> list[str]:
+        with _AppFixture() as root:
+            svc = os.path.join(root, "lib", "Service", "InvoiceService.php")
+            ctl = os.path.join(root, "lib", "Controller", "InvoiceController.php")
+            for full, src in ((svc, service_src), (ctl, _controller(controller_body))):
+                os.makedirs(os.path.dirname(full), exist_ok=True)
+                with open(full, "w", encoding="utf-8") as fh:
+                    fh.write(src)
+            return _run_main(svc)
+
+    def test_1_positive_control_no_caller_anywhere(self):
+        """CONTROL. Without this firing, arms 2-4 measure nothing."""
+        out = self._run(_ORPHAN_SERVICE, "")
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("method=postInvoice", out[0])
+
+    def test_2_a_docblock_todo_naming_the_call_is_not_a_caller(self):
+        out = self._run(_ORPHAN_SERVICE,
+                        "    /**\n"
+                        "     * TODO: we should call $this->fooService->postInvoice($id)\n"
+                        "     * here once the ledger migration lands. Not done yet.\n"
+                        "     */\n")
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("method=postInvoice", out[0])
+
+    def test_3_a_line_comment_naming_the_call_is_not_a_caller(self):
+        out = self._run(_ORPHAN_SERVICE,
+                        "    // $this->fooService->postInvoice($id);  // disabled 2026-08\n")
+        self.assertEqual(len(out), 1, out)
+
+    def test_4_a_hash_comment_naming_the_call_is_not_a_caller(self):
+        out = self._run(_ORPHAN_SERVICE,
+                        "    # $this->fooService->postInvoice($id);\n")
+        self.assertEqual(len(out), 1, out)
+
+    def test_5_a_block_comment_in_the_signature_cannot_make_it_bodiless(self):
+        """The quietest of the four. `_declaration_has_body` stripped `//` and
+        quotes but not `/* */`, so a `;` in a signature note terminated the
+        signature, the method classified as an abstract DECLARATION, and it was
+        never looked at — not reported as passing, simply never judged."""
+        out = self._run(
+            "<?php\nnamespace OCA\\Fixture\\Service;\n\n"
+            "class InvoiceService {\n"
+            "    public function postInvoice(string $id) /* returns true; never throws */\n"
+            "    {\n"
+            "        $this->ledger[$id] = true;\n"
+            "        return true;\n"
+            "    }\n"
+            "}\n",
+            "",
+        )
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("method=postInvoice", out[0])
+
+    def test_6_a_real_caller_still_suppresses(self):
+        """CONTROL (anti-widening). Passes before and after."""
+        out = self._run(_ORPHAN_SERVICE,
+                        "    public function store(string $id): void\n"
+                        "    {\n"
+                        "        $this->fooService->postInvoice($id);\n"
+                        "    }\n")
+        self.assertEqual(out, [])
+
+    def test_7_a_genuinely_bodiless_declaration_is_still_skipped(self):
+        """CONTROL (anti-widening). hydra#106 FP class 3 must stay closed: an
+        abstract declaration has no body, so there is nothing that can be dead
+        and there is no fix its author could make."""
+        with _AppFixture() as root:
+            full = os.path.join(root, "lib", "Service", "AbstractInvoice.php")
+            os.makedirs(os.path.dirname(full), exist_ok=True)
+            with open(full, "w", encoding="utf-8") as fh:
+                fh.write(
+                    "<?php\nnamespace OCA\\Fixture\\Service;\n\n"
+                    "abstract class AbstractInvoice {\n"
+                    "    abstract public function postLedger(string $id): bool;\n"
+                    "}\n"
+                )
+            self.assertEqual(_run_main(full), [])
+
+    def test_8_a_caller_inside_a_STRING_still_suppresses(self):
+        """CONTROL, and it states a deliberate limit rather than an oversight.
+
+        String contents are KEPT. This index's fail-safe direction is to
+        SUPPRESS: the gate accuses live code of being dead, and a verdict acted
+        on deletes working code. Blanking literals would push it the other way,
+        so the string axis is left to #424 rather than taken here."""
+        out = self._run(_ORPHAN_SERVICE,
+                        "    public const HINT = 'call $this->x->postInvoice($id) first';\n")
+        self.assertEqual(out, [])
+
+
+class RouteSeamTest(unittest.TestCase):
+    """A routed controller method is invoked by the NC dispatcher, not by a call site.
+
+    Regression for the docudesk 2026-08-16 run, where 12 of 15 findings were
+    live routed endpoints (`settings#update`, `consent#update`,
+    `printJob#updateStatus`, `anonymization#upload`, …). Acting on that report
+    means altering twelve working endpoints, and the three REAL orphans in the
+    same run were invisible in the noise.
+    """
+
+    CONTROLLER = (
+        "<?php\nnamespace OCA\\Fixture\\Controller;\n"
+        "class SettingsController {\n"
+        "    public function update(array $data): void { /* routed */ }\n"
+        "    public function saveDraft(array $data): void { /* NOT routed */ }\n"
+        "}\n"
+    )
+
+    def _app(self, root, routes):
+        full = os.path.join(root, "lib/Controller/SettingsController.php")
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        with open(full, "w", encoding="utf-8") as fh:
+            fh.write(self.CONTROLLER)
+        rp = os.path.join(root, "appinfo/routes.php")
+        os.makedirs(os.path.dirname(rp), exist_ok=True)
+        with open(rp, "w", encoding="utf-8") as fh:
+            fh.write(routes)
+        return full
+
+    def test_a_routed_method_is_not_flagged(self):
+        with _AppFixture() as root:
+            full = self._app(root, "<?php\nreturn ['routes' => [\n"
+                             "  ['name' => 'settings#update', 'url' => '/settings', 'verb' => 'PUT'],\n"
+                             "]];\n")
+            out = _run_main(full)
+            self.assertNotIn("method=update", "\n".join(out), out)
+
+    def test_an_UNROUTED_method_on_a_routed_controller_is_STILL_flagged(self):
+        """The seam is per METHOD, not per class.
+
+        Exempting the whole controller because one of its methods is routed
+        would be the wrong fix: it would hide every genuinely unreachable
+        endpoint on any controller that has at least one route."""
+        with _AppFixture() as root:
+            full = self._app(root, "<?php\nreturn ['routes' => [\n"
+                             "  ['name' => 'settings#update', 'url' => '/settings', 'verb' => 'PUT'],\n"
+                             "]];\n")
+            out = _run_main(full)
+            self.assertEqual(len(out), 1, out)
+            self.assertIn("method=saveDraft", out[0])
+
+    def test_a_COMMENTED_OUT_route_does_not_seam(self):
+        """CONTROL. A commented-out route is not registered, and exempting it
+        would hide a genuinely unreachable endpoint — the same false-GREEN the
+        job seam guards against with its XML-comment strip."""
+        with _AppFixture() as root:
+            full = self._app(root, "<?php\nreturn ['routes' => [\n"
+                             "  // ['name' => 'settings#update', 'url' => '/s', 'verb' => 'PUT'],\n"
+                             "]];\n")
+            out = _run_main(full)
+            self.assertIn("method=update", "\n".join(out), out)
+
+    def test_ocs_routes_seam_too(self):
+        with _AppFixture() as root:
+            full = self._app(root, "<?php\nreturn ['ocs' => [\n"
+                             "  ['name' => 'settings#update', 'url' => '/api/settings', 'verb' => 'PUT'],\n"
+                             "]];\n")
+            out = _run_main(full)
+            self.assertNotIn("method=update", "\n".join(out), out)
+
+    def test_resources_generate_the_restful_actions(self):
+        """`resources` never names `update`, so a seam reading only `name` keys
+        would still condemn every resource controller in the fleet."""
+        with _AppFixture() as root:
+            full = self._app(root, "<?php\nreturn ['resources' => [\n"
+                             "  'settings' => ['url' => '/settings'],\n"
+                             "]];\n")
+            out = _run_main(full)
+            self.assertNotIn("method=update", "\n".join(out), out)
+
+    def test_no_routes_file_leaves_the_verdict_unchanged(self):
+        with _AppFixture() as root:
+            full = os.path.join(root, "lib/Controller/SettingsController.php")
+            os.makedirs(os.path.dirname(full), exist_ok=True)
+            with open(full, "w", encoding="utf-8") as fh:
+                fh.write(self.CONTROLLER)
+            out = _run_main(full)
+            self.assertEqual(len(out), 2, out)
+
 
 
 if __name__ == "__main__":

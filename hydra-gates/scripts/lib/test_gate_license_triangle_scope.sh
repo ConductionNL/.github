@@ -97,7 +97,32 @@ _mkrepo() {
         git config user.email "ci@example.invalid"
         git config user.name "gate28 test"
         printf '<?xml version="1.0"?>\n<info><id>fixture</id><version>1.0.0</version></info>\n' > appinfo/info.xml
-        printf '{\n  "name": "conduction/fixture",\n  "license": "EUPL-1.2"\n}\n' > composer.json
+        # gate-65 (coding-standard-adoption) is deliberately NOT diff-scoped:
+        # it judges the repo's standing configuration, so it fires on this
+        # fixture too. Two assertions below require the whole run to end
+        # GREEN, and a fixture that has not adopted the shared standard cannot
+        # produce that — the arm would be measuring gate-65 instead of gate-28.
+        # So the fixture adopts it, mirroring the compliant scaffold in
+        # test_check_coding_standard_adoption.sh.
+        printf '{\n  "name": "conduction/fixture",\n  "license": "EUPL-1.2",\n  "require-dev": {\n    "conduction/coding-standard": "^1.0"\n  },\n  "scripts": {\n    "cs:check": "php-cs-fixer fix --dry-run --diff",\n    "cs:fix": "php-cs-fixer fix"\n  }\n}\n' > composer.json
+        # gate-93 (composer-cooldown-config) is ALSO not diff-scoped, for the
+        # identical reason gate-65 above is not: it judges the repo's standing
+        # dependabot.yml, and a fixture with a composer.json but no compliant
+        # cooldown entry now fails it too, breaking the same two GREEN-whole-run
+        # assertions gate-65's comment describes. Adopted the same way.
+        printf 'version: 2\nupdates:\n  - package-ecosystem: "composer"\n    directory: "/"\n    schedule:\n      interval: "weekly"\n    cooldown:\n      default-days: 2\n      exclude:\n        - "conduction/*"\n' > .github/dependabot.yml
+        # Quoted heredoc, not printf: the body is PHP and contains `$config`,
+        # which printf-with-single-quotes makes ShellCheck read as a shell
+        # expansion that will not expand (SC2016). <<'PHP' says "verbatim" to
+        # the shell and to the reader at once.
+        cat > .php-cs-fixer.dist.php <<'PHP'
+<?php
+require_once __DIR__ . '/vendor/autoload.php';
+$config = new Conduction\CodingStandard\Config();
+$config->getFinder()->in(__DIR__ . '/lib');
+return $config;
+PHP
+        printf 'root = true\n\n[*]\nindent_style = tab\n' > .editorconfig
         printf 'name: ci\non: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo base\n' > .github/workflows/ci.yml
         if [ "${_withlib}" = "yes" ]; then
             mkdir -p lib
@@ -379,8 +404,14 @@ fi
 #        (composer-audit) applicable, and it fails on a fixture with no vendor
 #        tree — `_FAILED` becomes 1 and the coverage sentence is unreachable
 #        again. The diff must contain the lib PHP file and nothing else.
+#        For the same reason the rewrite below drops ONLY the licence field and
+#        keeps the coding-standard wiring: rewriting composer.json down to a
+#        bare name also un-adopts the shared standard, gate-65 fails, `_FAILED`
+#        is 1 again and the coverage sentence this control reads is never
+#        reached — the control would report the coverage requirement inert when
+#        it is simply never consulted.
 _mkrepo scope-nolicense-fullcov yes
-printf '{\n  "name": "conduction/fixture"\n}\n' > "${_REPO}/composer.json"
+printf '{\n  "name": "conduction/fixture",\n  "require-dev": {\n    "conduction/coding-standard": "^1.0"\n  },\n  "scripts": {\n    "cs:check": "php-cs-fixer fix --dry-run --diff",\n    "cs:fix": "php-cs-fixer fix"\n  }\n}\n' > "${_REPO}/composer.json"
 git -C "${_REPO}" add -A >/dev/null 2>&1
 git -C "${_REPO}" commit -qm "drop the composer license field" >/dev/null 2>&1
 _BASE="$(git -C "${_REPO}" rev-parse HEAD)"

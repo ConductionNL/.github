@@ -47,6 +47,9 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from source_scope import php_mask  # noqa: E402
+
 # Keys whose STRING (or list-of-string) values are treated as class/method
 # references. Object-shaped values under these keys (the declarative CEL
 # `{"type":"precondition","conditions":[...]}` form) are NOT class
@@ -119,6 +122,47 @@ def _method_def_re(method: str) -> re.Pattern:
     return re.compile(r"function\s+" + re.escape(method) + r"\s*\(")
 
 
+def _php_code(path: str) -> str | None:
+    """The CODE of a PHP file, comments blanked. ``None`` when unreadable.
+
+    A COMMENT DESCRIBING A CLASS IS NOT THE CLASS (#415 / #422).
+    -----------------------------------------------------------
+    Both questions this module asks — "does class X exist" and "does it declare
+    method Y" — used to be put to the file's RAW bytes, and a register entry is
+    resolved by whether a regex matches somewhere in it. Measured on this
+    checker, one fixture, one variable:
+
+        handler -> InvoiceGuard::evaluate, class present, no method
+                                            FAIL — guard-method-not-found
+        + a docblock reading                PASS                  <- the defect
+          "* TODO: implement function evaluate() here"
+
+        the class DELETED entirely, its name and its method quoted inside one
+        UNINDENTED `/* */` block in a surviving file
+                                            PASS                  <- the defect
+
+    The second one is the worse of the two: ``_class_def_re`` anchors on the
+    start of a LINE and assumes a docblock line begins with ``*``, so an
+    unindented block comment — the shape a removal note is actually written in
+    — reads as a class declaration. The gate exists because a handler naming a
+    class that is not there is a runtime resolution failure; a note saying the
+    class was removed is the strongest possible evidence FOR the finding, and
+    it was closing it.
+
+    STRING CONTENTS SURVIVE (``blank_strings`` left at its default). A class or
+    function DECLARATION is never legitimately spelled inside a literal, so
+    blanking them would close nothing this does not already close, and PHP's
+    own ``eval``/heredoc-template corner would start manufacturing
+    ``guard-class-not-found`` on code that resolves at runtime. That axis is
+    #424's.
+    """
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            return php_mask(fh.read())
+    except OSError:
+        return None
+
+
 def resolve_fqcn(fqcn: str, method: str | None, app_root: str):
     """Resolve *fqcn* (optionally ``::method``) against *app_root*.
 
@@ -153,10 +197,8 @@ def resolve_fqcn(fqcn: str, method: str | None, app_root: str):
                     if not fn.endswith(".php"):
                         continue
                     fp = os.path.join(dirpath, fn)
-                    try:
-                        with open(fp, encoding="utf-8", errors="replace") as fh:
-                            content = fh.read()
-                    except OSError:
+                    content = _php_code(fp)
+                    if content is None:
                         continue
                     if class_re.search(content):
                         found_file = fp
@@ -168,10 +210,8 @@ def resolve_fqcn(fqcn: str, method: str | None, app_root: str):
         return "guard-class-not-found"
 
     if method:
-        try:
-            with open(found_file, encoding="utf-8", errors="replace") as fh:
-                content = fh.read()
-        except OSError:
+        content = _php_code(found_file)
+        if content is None:
             return "guard-method-not-found"
         if not _method_def_re(method).search(content):
             return "guard-method-not-found"

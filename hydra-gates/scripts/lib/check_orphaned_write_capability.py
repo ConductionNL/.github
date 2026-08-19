@@ -54,9 +54,13 @@ Prints one finding per line:
 Always exits 0 — the calling gate (bash) counts the printed lines.
 
 Suppression: a docblock ``@orphaned-write-capability exclude <reason>``
-(reason >= 10 chars) immediately preceding the method declaration
-suppresses that one method. Mirrors the fleet's
-``@spec exclude <reason>`` / ``@e2e exclude <reason>`` convention.
+immediately preceding the method declaration suppresses that one method.
+Mirrors the fleet's ``@spec exclude <reason>`` / ``@e2e exclude <reason>``
+convention. The reason must be at least :data:`REASON_MIN_CHARS` characters —
+this tag's own, deliberately higher floor — AND carry a letter or digit, the
+rule shared with every other exclusion tag via
+``exclusion_reason.is_reason_bearing()``. Before ``.github#412`` only the
+length half existed, so ``..........`` was a reason here.
 """
 
 from __future__ import annotations
@@ -65,6 +69,11 @@ import os
 import re
 import subprocess
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from exclusion_reason import exclude_pattern, is_reason_bearing  # noqa: E402
+from source_scope import php_mask  # noqa: E402
+from source_scope import mask_html_comments  # noqa: E402
 
 # Foundation repos: the abstractions every leaf app consumes (ADR-022,
 # apps-consume-or-abstractions). A PUBLIC method here is frequently invoked
@@ -86,7 +95,41 @@ _PRUNE_DIRS = {"custom_apps", "vendor", "node_modules", "tests", ".git"}
 # is*/has*/get*/find*/list*/validate*/check*/ensure*/require*/authorize* —
 # those read-or-guard shapes are gate-6's (orphan-auth) territory, not
 # this gate's.
+#
+# THE VERB LIST *IS* THE DETECTOR (.github, 2026-08-12).
+# ------------------------------------------------------
+# Everything else in this module — four indirect seams, a cross-app caller
+# index, comment blanking — only ever REMOVES findings. Nothing is examined
+# at all unless its name starts with one of these words, so a verb that is
+# missing is not a weaker check, it is NO check.
+#
+# Measured on a controlled probe: four orphaned write methods on one service,
+# `postJournalEntry` / `updateLedgerBalance` / `sendRemittanceAdvice` /
+# `deleteJournalEntry`, all with zero callers and no seam. The gate reported
+# exactly ONE — `post*`. The other three were invisible, and `delete*`'s
+# absence was already load-bearing enough that the fleet board had to warn
+# agents to "plant with `post*`" or they would wrongly record the gate as
+# blind.
+#
+# The original seventeen skew heavily to LEDGER vocabulary (`post`, `settle`,
+# `reconcile`, `issue`, `record`, `seed`) because the gate was written from a
+# shillinq bookkeeping sweep. The additions below are the ordinary write verbs
+# any app uses.
+#
+# WIDENING A VOCABULARY LIST IS HOW A GATE STARTS CRYING WOLF, so each verb
+# below was measured on twelve fleet repos BEFORE being added, and every
+# finding it produced was read. The set adds 35 findings to a baseline of 41.
+# Deliberately REJECTED after measurement, with their costs:
+#
+#   apply    (6)  applyFilters/applyDefaults are pure transforms
+#   process  (7)  processResponse/processRow are frequently pure
+#   register (4)  collides with OpenRegister's core NOUN, and with this
+#                 gate's own "registered seam" concept
+#   set/add  (--) never measured and never will be: every PHP setter matches
+#
+# One measured false positive drove _PREFIX_ONLY_VERBS below.
 WRITE_VERB_PREFIXES = (
+    # --- ledger/accounting vocabulary (original seventeen) ---
     "post",
     "create",
     "save",
@@ -104,7 +147,54 @@ WRITE_VERB_PREFIXES = (
     "seed",
     "publish",
     "issue",
+    # --- ordinary persistence writes ---
+    "update",
+    "delete",
+    "remove",
+    "persist",
+    "store",
+    "insert",
+    "upsert",
+    "patch",
+    "replace",
+    "purge",
+    "flush",
+    # --- outward side effects ---
+    "send",
+    "upload",
+    "import",
+    "sync",
+    "transfer",
+    # --- state transitions ---
+    "archive",
+    "cancel",
+    "approve",
+    "assign",
+    "mark",
+    "finalize",
+    "sign",
+    "revoke",
+    "grant",
+    # --- deferred work ---
+    "schedule",
+    "enqueue",
+    "trigger",
 )
+
+# Verbs that are ALSO ordinary English NOUNS, and so may name a pure accessor
+# when used as a whole method name. For these, only the PREFIX form counts
+# (`scheduleReminder` yes, `schedule` no).
+#
+# Measured, not guessed: `KapitaallastenCalculator::schedule()` in shillinq is
+# a PURE function returning a depreciation table — no side effect anywhere in
+# its body — and it was the single false positive among the 35 findings the
+# widening added. `flush()` and `sync()`, the only other bare-name matches in
+# the fleet, are genuine writes and are deliberately NOT listed here.
+#
+# The original seventeen are left alone on purpose: changing their exact-match
+# behaviour would drop existing findings, which is a different change from the
+# one being measured here.
+_PREFIX_ONLY_VERBS = frozenset({"schedule"})
 
 _METHOD_RE = re.compile(
     r"^\s*public\s+function\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\("
@@ -188,13 +278,47 @@ _MCP_TOOL_ATTR_RE = re.compile(
 # directly above a method's attribute block — the previous method's `}`, a
 # property or `use` `;`, the class's opening `{` — ends in one of these.
 _ATTR_BOUNDARY_RE = re.compile(r"[{};]\s*$")
+# THIS TAG'S OWN FLOOR, KEPT DELIBERATELY (.github#412)
+# ------------------------------------------------------
+# Ten characters is what this gate's author chose and it has been live since the
+# gate was written. `#412` aligned this tag on the shared LETTER-OR-DIGIT rule —
+# the half it never had, under which `..........` was a reason — and left the
+# floor alone. Collapsing it to the shared default of 3 would have been a silent
+# RELAXATION of a live bar smuggled in beside a tightening; raising the other
+# tags to 10 would have been a silent fleet policy change in the other direction.
+# Both were measured to be free today, which is exactly why the choice belongs to
+# a human and not to this patch. See the threshold question in .github#412.
+REASON_MIN_CHARS = 10
+
+# `.{10,}` GRADED LENGTH AND NOTHING ELSE (.github#412)
+# -----------------------------------------------------
+# It is the inverse of `#400`'s hole: those four gates had no floor and no
+# alphabet rule; this one had a floor and no alphabet rule, so ten full stops
+# were a justification.
+#
+# A SECOND, UNREPORTED HOLE IN THE SAME PATTERN: the old separator between the
+# marker and the reason was `\s+`, and `\s` matches a NEWLINE. So a marker with
+# no reason at all on its own line silently borrowed the docblock CONTINUATION
+# LINE beneath it — `* Wired up in a later PR` — as its justification. That is
+# the shillinq continuation-line shape from `#400`, except reachable: nothing
+# here breaks on a first match. `exclude_pattern()` separates with `[ \t]*` and
+# terminates at `$`, so the reason must be on the marker's own line, and the
+# pattern is now the same one the other six exclusion tags use.
 _EXCLUDE_RE = re.compile(
-    r"@orphaned-write-capability\s+exclude\s+(?P<reason>.{10,})"
+    exclude_pattern("orphaned-write-capability"), re.MULTILINE
 )
 
 
 def _is_write_method(name: str) -> bool:
-    return any(name.startswith(v) and len(name) > len(v) and name[len(v)].isupper() for v in WRITE_VERB_PREFIXES) or name in WRITE_VERB_PREFIXES
+    if any(
+        name.startswith(v) and len(name) > len(v) and name[len(v)].isupper()
+        for v in WRITE_VERB_PREFIXES
+    ):
+        return True
+    # Exact-name match, except for the noun-shaped verbs (see
+    # _PREFIX_ONLY_VERBS): `schedule()` is as likely to RETURN a schedule as to
+    # write one, and in the fleet it does exactly that.
+    return name in WRITE_VERB_PREFIXES and name not in _PREFIX_ONLY_VERBS
 
 
 def _class_short_name(src: str) -> str | None:
@@ -217,7 +341,23 @@ def _declaration_has_body(lines: list[str], method_line_idx: int) -> bool:
 
     An abstract method inside an abstract class has no body, so there is
     nothing that can be dead. Scans forward across a multi-line signature
-    for whichever of `{` / `;` appears first (hydra#106, FP class 3)."""
+    for whichever of `{` / `;` appears first (hydra#106, FP class 3).
+
+    *lines* MUST BE COMMENT-BLANKED (#422). The local `//` strip below handles
+    exactly one comment syntax, and a `;` inside any other one is read as the
+    signature's terminator — so the method is classified as an abstract
+    DECLARATION and skipped entirely, findings and all:
+
+        public function postInvoice(string $id) /* returns true; never throws */ {
+
+        raw lines      the `;` in the note terminates the signature -> SKIPPED
+        blanked lines  the `{` terminates it                        -> judged
+
+    A comment cannot make a method bodiless, and this is the quietest possible
+    false negative: the method is not reported as passing, it is never looked
+    at. The caller passes the same ``blanked_lines`` the MCP-attribute seam
+    already uses; the two local `re.sub`s stay as a belt-and-braces for any
+    future caller that passes raw lines."""
     for line in lines[method_line_idx : method_line_idx + 12]:
         code = re.sub(r"//.*$", "", line)
         # Drop quoted literals so a `;` or `{` inside a default string value
@@ -251,7 +391,14 @@ def _preceding_docblock_has_exclude(lines: list[str], method_line_idx: int) -> b
             break
         i -= 1
     text = "\n".join(reversed(block))
-    return bool(_EXCLUDE_RE.search(text))
+    m = _EXCLUDE_RE.search(text)
+    if not m:
+        return False
+    # Trailing `*/` is PHP-docblock syntax, not part of the reason. Local, as
+    # `#411` established: normalisation belongs to the file type, the VERDICT is
+    # shared. First match wins, as at every other exclusion call site.
+    reason = m.group("reason").strip().rstrip("*/").strip()
+    return is_reason_bearing(reason, min_chars=REASON_MIN_CHARS)
 
 
 # ---------------------------------------------------------------------------
@@ -335,43 +482,18 @@ def _blank_php_comments(text: str) -> str:
     ``#`` opens a line comment in PHP, but ``#[`` opens an ATTRIBUTE. Blanking
     attributes would delete the very thing being looked for, so the two are
     distinguished.
+
+    THIS IS NOW THE SHARED MASK, NOT A LOCAL DIALECT (#422). The body used to
+    be a hand-rolled state machine — the FIFTH copy of this logic in the
+    package — and it agreed with ``source_scope.php_mask`` clause for clause:
+    strings skipped, ``#[`` excluded, ``/* */`` and ``//`` blanked, length and
+    newlines preserved. Two copies that are equal are a maintenance cost; two
+    copies that MIGHT diverge are a defect, and this module has already been
+    bitten once by applying its mask on some read paths and not others (see
+    :func:`_build_caller_index`). The name and the docstring stay because the
+    call sites and the REASON are this module's; only the implementation moves.
     """
-    out = list(text)
-    i = 0
-    n = len(text)
-    while i < n:
-        ch = text[i]
-        if ch in ("'", '"'):
-            quote = ch
-            i += 1
-            while i < n:
-                if text[i] == "\\":
-                    i += 2
-                    continue
-                if text[i] == quote:
-                    i += 1
-                    break
-                i += 1
-            continue
-        if ch == "/" and i + 1 < n and text[i + 1] == "*":
-            j = text.find("*/", i + 2)
-            j = n if j == -1 else j + 2
-            for k in range(i, j):
-                if out[k] != "\n":
-                    out[k] = " "
-            i = j
-            continue
-        if (ch == "/" and i + 1 < n and text[i + 1] == "/") or (
-            ch == "#" and not (i + 1 < n and text[i + 1] == "[")
-        ):
-            j = text.find("\n", i)
-            j = n if j == -1 else j
-            for k in range(i, j):
-                out[k] = " "
-            i = j
-            continue
-        i += 1
-    return "".join(out)
+    return php_mask(text)
 
 
 def _build_mcp_attribute_seam(app_root: str) -> set[str]:
@@ -516,7 +638,12 @@ def _build_job_class_seam(app_root: str) -> set[str]:
             # `<!-- <job>…</job> -->` is a job that is NOT scheduled. Same
             # false-GREEN shape as the listener seam above: this exempts the
             # whole class. XML comments, not PHP ones, so a separate strip.
-            text = re.sub(r"<!--.*?-->", " ", fh.read(), flags=re.DOTALL)
+            # #424: the private `<!--.*?-->` this replaces called four
+            # characters a comment opener wherever they appeared, including
+            # inside an attribute value — `<job name="<!--">` blanked every
+            # <job> after it, which is the false GREEN this seam exists to
+            # prevent.
+            text = mask_html_comments(fh.read())
     except OSError:
         return seam
     for m in re.finditer(r"<job>\s*([A-Za-z0-9_\\]+)\s*</job>", text):
@@ -524,6 +651,71 @@ def _build_job_class_seam(app_root: str) -> set[str]:
         short = fqcn.split("\\")[-1]
         seam.add(short)
     return seam
+
+
+def _build_route_seam(app_root: str) -> set[tuple[str, str]]:
+    """(ControllerShortName, method) pairs registered in appinfo/routes.php.
+
+    A routed controller method is invoked by Nextcloud's dispatcher from a URL.
+    There is no ``->method(`` call site anywhere in the app and there never will
+    be, so the caller index cannot see it — exactly like the listener, job and
+    MCP-attribute seams above.
+
+    Without this seam the gate reports every routed write endpoint as dead. On
+    docudesk (2026-08-16) that was **12 of its 15 findings**: `settings#update`,
+    `consent#update`, `printJob#updateStatus`, `anonymization#upload` and eight
+    more, all live and all reachable from the UI. Acting on that report means
+    altering twelve working endpoints to satisfy a checker, and the three REAL
+    orphans in the same run were invisible in the noise.
+
+    Nextcloud offers three registration shapes and all three are read, because a
+    seam that covers two of them is worse than none: it makes the gate look
+    route-aware while still condemning whichever app used the third.
+
+      routes  => [['name' => 'settings#update', ...]]
+      ocs     => [['name' => 'api#index', ...]]
+      resources => ['note' => [...]]   (index/show/create/update/destroy)
+
+    The controller short name is derived the way NC derives it: the part before
+    ``#``, upper-cased on the first character, plus ``Controller``. So
+    ``customDictionary#import`` seams ``CustomDictionaryController::import``.
+    """
+    seam: set[tuple[str, str]] = set()
+    routes_php = os.path.join(app_root, "appinfo", "routes.php")
+    if not os.path.isfile(routes_php):
+        return seam
+    try:
+        with open(routes_php, encoding="utf-8", errors="replace") as fh:
+            # A commented-out route is NOT registered. Same false-GREEN shape
+            # as the job seam: exempting a method whose route is commented out
+            # would hide a genuinely unreachable endpoint.
+            text = _blank_php_comments(fh.read())
+    except OSError:
+        return seam
+
+    for m in re.finditer(
+        r"""['"]name['"]\s*=>\s*['"]([A-Za-z0-9_]+)#([A-Za-z0-9_]+)['"]""", text
+    ):
+        controller, method = m.group(1), m.group(2)
+        seam.add((_controller_class_for(controller), method))
+
+    # `resources` generates the five RESTful actions without naming them.
+    for block in re.finditer(
+        r"""['"]resources['"]\s*=>\s*\[(.*?)\]\s*[,)]""", text, re.DOTALL
+    ):
+        for entry in re.finditer(r"""['"]([A-Za-z0-9_]+)['"]\s*=>\s*\[""", block.group(1)):
+            controller = _controller_class_for(entry.group(1))
+            for action in ("index", "show", "create", "update", "destroy"):
+                seam.add((controller, action))
+
+    return seam
+
+
+def _controller_class_for(route_prefix: str) -> str:
+    """Derive a controller's short class name from its route prefix."""
+    if not route_prefix:
+        return ""
+    return route_prefix[0].upper() + route_prefix[1:] + "Controller"
 
 
 def _enumerate_lib_php(app_root: str, include_untracked: bool = False) -> list[str]:
@@ -573,12 +765,68 @@ def _enumerate_lib_php(app_root: str, include_untracked: bool = False) -> list[s
     return files
 
 
+_INFO_XML_ID_RE = re.compile(r"<id>\s*([A-Za-z0-9_.-]+)\s*</id>")
+
+
+def _app_id(app_root: str) -> tuple[str, str]:
+    """Resolve the app's IDENTITY and say where it came from.
+
+    Returns ``(app_id, source)``. ``source`` is one of ``appinfo/info.xml``
+    or ``basename`` and is printed by ``_scan_app`` on every run, so which
+    arm engaged is readable from the log rather than inferred.
+
+    WHY NOT THE DIRECTORY NAME (``ConductionNL/.github#398``)
+    --------------------------------------------------------
+    This function used to *be* ``os.path.basename(app_root)``. The
+    ``quality.yml`` hydra-gates job checks the app out with ``path: app``,
+    so under CI the basename is the literal string ``app`` for EVERY repo —
+    which is in no fleet's ``FOUNDATION_APPS`` set. The hydra#106 fail-safe
+    below therefore **never engaged in CI, for any repository, ever**, and
+    nothing said so. Four-arm control on one openregister tree, varying only
+    the directory name: ``openregister`` → **0 findings + SKIP**, renamed to
+    ``app`` → **8 findings**. A leaf app (docudesk) gave **3 under both
+    names**, which is what proves the difference is this guard and not the
+    rename.
+
+    A guard keyed on a path component is keyed on something the CALLER
+    controls and the checker cannot see. ``appinfo/info.xml``'s ``<id>`` is
+    intrinsic: it travels inside the tree, so it is identical under
+    ``path: app``, under a worktree, under a fleet sweep from
+    ``apps-extra/``, and in a clone named anything at all.
+
+    WHY NOT ``GITHUB_REPOSITORY`` either. It is process-wide, and ``main()``
+    groups its argv by app root and judges each root separately — a fleet
+    sweep legitimately hands this one process files from several repos. An
+    environment variable would stamp ONE repository's name onto EVERY root,
+    which is the same defect wearing different clothes: identity taken from
+    the invocation instead of from the thing being judged.
+
+    WHEN IT IS ABSENT. ``_app_root_for`` already locates the root by looking
+    for exactly this file, so root-finding and identity come from one
+    artifact and cannot disagree. If it is missing or carries no ``<id>``
+    (a bare fixture directory, not a Nextcloud app), identity falls back to
+    the basename — the historical behaviour, so fixtures keep working — but
+    the fallback is ANNOUNCED with ``source=basename``. The defect being
+    removed here is a fail-safe that stopped being a fail-safe *without
+    saying so*; a fallback that names itself in the log is not that.
+    """
+    info = os.path.join(app_root, "appinfo", "info.xml")
+    try:
+        with open(info, encoding="utf-8", errors="replace") as fh:
+            m = _INFO_XML_ID_RE.search(fh.read())
+        if m is not None:
+            return m.group(1), "appinfo/info.xml"
+    except OSError:
+        pass
+    return os.path.basename(os.path.abspath(app_root)), "basename"
+
+
 def _is_foundation(app_root: str) -> bool:
     """True when the repo under scan is one every leaf app consumes."""
     env = os.environ.get("HYDRA_OWC_FOUNDATION")
     if env is not None:
         return env.strip() not in ("", "0", "false", "no")
-    return os.path.basename(os.path.abspath(app_root)) in FOUNDATION_APPS
+    return _app_id(app_root)[0] in FOUNDATION_APPS
 
 
 def _find_sibling_app_roots(app_root: str) -> list[str]:
@@ -617,14 +865,40 @@ def _build_caller_index(app_root: str, extra_roots: list[str] | None = None) -> 
     reported dead. The index is keyed on method NAME only (not FQCN), which
     is deliberately over-permissive: a name collision inflates the caller
     count and SUPPRESSES a finding. That is the fail-safe direction — this
-    gate must never manufacture a "dead" verdict for live code."""
+    gate must never manufacture a "dead" verdict for live code.
+
+    A TODO NAMING THE CALL IS NOT THE CALL (#415 / #422).
+    -----------------------------------------------------
+    This index used to be built from each file's RAW bytes, so a comment
+    counted as a caller. Measured on this checker, one fixture, one variable:
+
+        an uncalled InvoiceService::postInvoice()   FAIL — orphaned-write-capability
+        + a docblock in the controller reading      PASS               <- the defect
+          "* TODO: we should call
+           $this->fooService->postInvoice($id) here
+           once the ledger migration lands.
+           Not done yet."
+
+    ⚠️ THIS MODULE ALREADY KNEW. ``_blank_php_comments`` was written for the
+    SEAMS in this same file, and its docstring states this exact class — "a
+    checker that greps text misses every constant AND matches every comment" —
+    yet the caller index, which is the gate's primary evidence, went on reading
+    raw. **Knowing about the class is not the same as having applied the fix on
+    every read path**, and a partially-masked checker looks exactly like a
+    fully-masked one from the outside.
+
+    STRING CONTENTS SURVIVE (``php_mask`` default). The index is deliberately
+    over-permissive because its fail-safe direction is to SUPPRESS a finding:
+    this gate accuses live code of being dead, and a false accusation acted on
+    deletes working code. Blanking literals would remove callers, i.e. push the
+    gate the wrong way; that axis is #424's and is reported, not smuggled in."""
     counts: dict[str, int] = {}
     call_re = re.compile(r"->([A-Za-z_][A-Za-z0-9_]*)\s*\(")
     for root in [app_root, *(extra_roots or [])]:
         for fp in _enumerate_lib_php(root, include_untracked=True):
             try:
                 with open(fp, encoding="utf-8", errors="replace") as fh:
-                    text = fh.read()
+                    text = _blank_php_comments(fh.read())
             except OSError:
                 continue
             for m in call_re.finditer(text):
@@ -633,7 +907,7 @@ def _build_caller_index(app_root: str, extra_roots: list[str] | None = None) -> 
 
 
 def scan_file(file_path: str, app_root: str, seams, caller_counts, findings: list[str]):
-    register_seam, listener_seam, job_seam, mcp_seam = seams
+    register_seam, listener_seam, job_seam, mcp_seam, route_seam = seams
     try:
         with open(file_path, encoding="utf-8", errors="replace") as fh:
             text = fh.read()
@@ -665,12 +939,18 @@ def scan_file(file_path: str, app_root: str, seams, caller_counts, findings: lis
         name = m.group("name")
         if not _is_write_method(name):
             continue
-        if not _declaration_has_body(lines, idx):
+        if not _declaration_has_body(blanked_lines, idx):
             # Abstract declaration inside an abstract class — no body.
             continue
         if _preceding_docblock_has_exclude(lines, idx):
             continue
         if class_short and (class_short, name) in register_seam:
+            continue
+        if class_short and (class_short, name) in route_seam:
+            # Registered in appinfo/routes.php — invoked by the NC dispatcher
+            # from a URL, so there is no `->method(` call site to find. PER
+            # METHOD, not per class: an unrouted write method on a routed
+            # controller is still an orphan and is still reported.
             continue
         if (
             class_short
@@ -744,6 +1024,7 @@ def _scan_app(app_root: str, files: list[str], findings: list[str]) -> None:
     listener_seam = _build_listener_class_seam(app_root)
     job_seam = _build_job_class_seam(app_root)
     mcp_seam = _build_mcp_attribute_seam(app_root)
+    route_seam = _build_route_seam(app_root)
 
     # --- Cross-app caller awareness (hydra#106, FP class 1) --------------
     # A leaf app's services are consumed only by that app (ADR-022: apps
@@ -752,7 +1033,18 @@ def _scan_app(app_root: str, files: list[str], findings: list[str]) -> None:
     # repo is different: its public methods exist to be called from sibling
     # apps, so proving deadness requires those siblings on disk.
     extra_roots: list[str] = []
-    if _is_foundation(app_root):
+    # `.github#398`: state the identity and its SOURCE on every run. The
+    # previous defect was not that the guard was wrong, it was that nobody
+    # could tell it had stopped engaging — in CI it had never engaged at all
+    # and every log looked exactly the same as one where it had.
+    _id, _id_source = _app_id(app_root)
+    _foundation = _is_foundation(app_root)
+    print(
+        f"[orphaned-write-capability] identity: app_id={_id} source={_id_source} "
+        f"foundation={'yes' if _foundation else 'no'} root={app_root}",
+        file=sys.stderr,
+    )
+    if _foundation:
         extra_roots = _find_sibling_app_roots(app_root)
         if not extra_roots:
             # FAIL SAFE: the consumers of this foundation repo are not on
@@ -761,7 +1053,7 @@ def _scan_app(app_root: str, files: list[str], findings: list[str]) -> None:
             # Reporting here is what made the gate dangerous — it named
             # live code dead. Report nothing and say why.
             print(
-                f"[orphaned-write-capability] SKIP: {os.path.basename(app_root)} is a "
+                f"[orphaned-write-capability] SKIP: {_id} is a "
                 "foundation repo and no sibling apps were found next to it — cross-app "
                 "callers cannot be resolved, so deadness is unprovable. See hydra#106.",
                 file=sys.stderr,
@@ -774,7 +1066,7 @@ def _scan_app(app_root: str, files: list[str], findings: list[str]) -> None:
         scan_file(
             fp,
             app_root,
-            (register_seam, listener_seam, job_seam, mcp_seam),
+            (register_seam, listener_seam, job_seam, mcp_seam, route_seam),
             caller_counts,
             findings,
         )

@@ -3,7 +3,7 @@
 	"$id": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
 	"title": "Conduction App Manifest v2",
 	"description": "v2 schema for the JSON-driven page and navigation manifest consumed by @conduction/nextcloud-vue. Introduces a uniform widgets[] array on every page type with a per-slot grid coordinate system, a typed actions[] discriminator, and the required $schema field for version detection. v1 manifests continue to validate against app-manifest.schema.json (unchanged).",
-	"version": "2.19.0",
+	"version": "2.22.0",
 	"type": "object",
 	"required": ["$schema", "version"],
 	"allOf": [
@@ -227,6 +227,10 @@
 					"type": "object",
 					"description": "Per-user runtime context. Populated by the backend for authenticated requests. All fields are optional; the FE predicate evaluator treats missing fields as undefined.",
 					"additionalProperties": true
+				},
+				"theme": {
+					"$ref": "#/$defs/runtimeTheme",
+					"description": "NL Design System scoped theme selection (scoped-theme-applier). Consumed by CnAppRoot's useScopedTheme wiring, not by the backend."
 				}
 			}
 		},
@@ -369,6 +373,37 @@
 		}
 	},
 	"$defs": {
+		"runtimeTheme": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["source", "tokenSet"],
+			"description": "A leaf app's NL Design token-set selection, as returned by nldesign's GET /api/token-sets catalogue (app-token-set-selection). Applied by CnAppRoot via useScopedTheme — the ONLY consumer; the backend does not read this field.",
+			"properties": {
+				"source": {
+					"type": "string",
+					"enum": ["nldesign"],
+					"description": "Theme provider. Closed to 'nldesign' — the only scoped-theme source this schema (and useScopedTheme) currently supports."
+				},
+				"tokenSet": {
+					"type": "string",
+					"pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+					"description": "The nldesign token-set id (a GET /api/token-sets entry's `id`), kebab-case. Resolves the token CSS at css/tokens/<tokenSet>.css."
+				},
+				"tokenSetName": {
+					"type": "string",
+					"description": "Optional human-readable name (the matching catalogue entry's `name`), cached at selection time so a picker can display it without a second catalogue fetch."
+				},
+				"preview": {
+					"type": "object",
+					"additionalProperties": false,
+					"description": "Optional cached swatch preview (the matching catalogue entry's theming colors), for a picker to render a preview chip without re-fetching the catalogue.",
+					"properties": {
+						"primaryColor": { "type": "string", "description": "Cached theming.primary_color from the catalogue entry." },
+						"backgroundColor": { "type": "string", "description": "Cached theming.background_color from the catalogue entry." }
+					}
+				}
+			}
+		},
 		"pageTemplate": {
 			"type": "object",
 			"additionalProperties": false,
@@ -1033,6 +1068,7 @@
 								"properties": {
 									"horizontal": { "type": "boolean", "description": "Render type:'bar' charts horizontally (row bars)." },
 									"legendPosition": { "type": "string", "enum": ["top", "bottom", "left", "right"], "description": "Legend placement override (empty/omitted keeps the automatic placement)." },
+								"valueAxisBaseline": { "type": "string", "enum": ["auto", "zero", "fit"], "description": "Value-axis baseline: 'auto' (the default — zero for bar/area, a bounded window for line/scatter), 'zero' (force a zero baseline), or 'fit' (let ApexCharts frame the data range, for a series living far from zero such as an SLA hovering 95–99%)." },
 									"valueFormat": {
 										"description": "Named value formatter applied to the value axis + tooltip: 'currency' | 'currency-compact' | 'percent', or the object form { name, currency?, decimals? }.",
 										"oneOf": [
@@ -1436,9 +1472,9 @@
 				},
 				"type": {
 					"type": "string",
-					"enum": ["handler", "open-modal", "open-page", "navigate", "object-op", "export", "open-form", "refresh", "api-call", "toggle"],
+					"enum": ["handler", "open-modal", "open-page", "navigate", "object-op", "export", "open-form", "refresh", "api-call", "agent", "toggle"],
 					"default": "handler",
-					"description": "Action behaviour discriminator. Defaults to 'handler' when omitted (back-compat with v1.3.0). handler: calls a registry function; open-modal: opens a modal by target id; open-page: navigates to a named route; navigate: navigates to a URL; object-op: dispatches a declarative mutation (patch | delete | create) of an OpenRegister object via the shared object store; export: opens the shared CnMassExportDialog export launcher configured via entities[]/formats[] — the confirm payload ({format, entity?}) routes to the action's `handler` in the manifest actions map (the app's export service does the download). open-form (#91 Wave 3): CnActionButtons opens a schema-driven create dialog (CnAdvancedFormDialog) for the action's register/schema, saves + toasts + refreshes + optionally navigates to onSuccessRoute. refresh (#91 Wave 3): bumps the page-level cn:page:refresh event-bus signal so every endpoint-bound widget refetches. api-call (#91 Wave 3): POST/PUT the token-interpolated url with params (JSON body) + success/error toast + auto page-refresh (unless refresh:false); confirm gating is surface-consumed intent (object-op precedent). toggle (#91 Wave 3): a stateful two-way state button rendered by CnActionButtons (GET stateSource on mount, optimistic write on click) — NOT dispatchable through dispatchAction. object-op declares mutation INTENT only — authority is enforced server-side by OpenRegister RBAC (ADR-022/ADR-023); authorization-shaped fields have no client-side effect and are not accepted here."
+					"description": "Action behaviour discriminator. Defaults to 'handler' when omitted (back-compat with v1.3.0). handler: calls a registry function; open-modal: opens a modal by target id; open-page: navigates to a named route; navigate: navigates to a URL; object-op: dispatches a declarative mutation (patch | delete | create) of an OpenRegister object via the shared object store; export: opens the shared CnMassExportDialog export launcher configured via entities[]/formats[] — the confirm payload ({format, entity?}) routes to the action's `handler` in the manifest actions map (the app's export service does the download). open-form (#91 Wave 3): CnActionButtons opens a schema-driven create dialog (CnAdvancedFormDialog) for the action's register/schema, saves + toasts + refreshes + optionally navigates to onSuccessRoute. refresh (#91 Wave 3): bumps the page-level cn:page:refresh event-bus signal so every endpoint-bound widget refetches. api-call (#91 Wave 3): POST/PUT the token-interpolated url with payload/params (JSON body, payload resolves @-tokens recursively at any depth) + success/error toast + auto page-refresh (unless refresh:false); confirm gating is surface-consumed intent (object-op precedent); download:true requests a binary blob and triggers a browser file download instead (auto-refresh defaults to OFF in that mode). agent (hermiq#41): run a governed hermiq agent against the page object — POSTs { register, schema, objectId, resultField?, skill?, prompt? } to /apps/hermiq/api/agents/{agent}/run-on-object (object-RBAC-scoped; dispatches the governed AgentRunRequestedEvent). register/schema/objectId default to the page's @register/@schema/@objectId object context. A first-class companion to api-call (which remains the fallback for a bespoke body); hermiq is NOT hard-required — an app-level 404 surfaces a graceful 'agent runtime unavailable' toast. toggle (#91 Wave 3): a stateful two-way state button rendered by CnActionButtons (GET stateSource on mount, optimistic write on click) — NOT dispatchable through dispatchAction. object-op declares mutation INTENT only — authority is enforced server-side by OpenRegister RBAC (ADR-022/ADR-023); authorization-shaped fields have no client-side effect and are not accepted here."
 				},
 				"op": {
 					"type": "string",
@@ -1453,7 +1489,7 @@
 				"confirm": {
 					"type": "boolean",
 					"default": false,
-					"description": "Confirm-gating (object-op + #91 Wave 3 api-call / open-form): when true, the action presents a CnConfirmDialog before running (the dispatcher / CnActionButtons runs AFTER confirmation). object-op delete ALWAYS confirms regardless of this flag."
+					"description": "Confirm-gating (object-op + #91 Wave 3 api-call / open-form + agent): when true, the action presents a CnConfirmDialog before running (the dispatcher / CnActionButtons runs AFTER confirmation). object-op delete ALWAYS confirms regardless of this flag."
 				},
 				"target": {
 					"type": "string",
@@ -1470,7 +1506,7 @@
 				},
 				"route": {
 					"type": "string",
-					"description": "Destination route name for handler: 'navigate'. The dispatcher (manifestActionDispatch) calls $router.push({ name: route, params }). For row-level actions params include { id: row[rowKey] }; page-level header actions navigate without row context (e.g. a 'New X' action to a detail route)."
+					"description": "Destination route name for handler: 'navigate'. The dispatcher (manifestActionDispatch) calls $router.push({ name: route, params }). For row-level actions params include { id: row[rowKey] } automatically — do NOT restate it as params: { id: \"{id}\" }, though that placeholder does resolve (see `params`). Page-level header actions navigate without row context (e.g. a 'New X' action to a detail route)."
 				},
 				"icon": {
 					"type": "string",
@@ -1513,38 +1549,72 @@
 				},
 				"url": {
 					"type": "string",
-					"description": "api-call / toggle only: the app endpoint (POST/PUT). App-relative (routed through generateUrl) or absolute (http/https). May interpolate @objectId / @object.<field> / @workspace.<key> / @config.<key> tokens inline (unresolved tokens collapse to empty)."
+					"description": "api-call / toggle only: the app endpoint (POST/PUT). App-relative (routed through generateUrl) or absolute (http/https). May interpolate @objectId / @object.<field> / @workspace.<key> / @config.<key> tokens inline, as well as the literal {objectId} brace placeholder (unresolved tokens collapse to empty)."
 				},
 				"method": {
 					"type": "string",
 					"enum": ["POST", "PUT"],
 					"description": "api-call: HTTP method (default POST). toggle writeUrl: default PUT."
 				},
+				"payload": {
+					"type": "object",
+					"additionalProperties": true,
+					"description": "api-call only: the JSON request body — PREFERRED over `params`, and used instead of it when both are set. Values run the SAME token grammar as `params` (@me, @now, @today±Nd, @monthStart/@quarterStart/@yearStart, @objectId, @object.<field>, @workspace.<key>/@config.<key> with a trailing `?` marking a value OPTIONAL — dropped when unresolved) but resolve RECURSIVELY at ANY nesting depth, including arrays of objects — e.g. a DocuDesk document-generation body: { \"dataRefs\": [{ \"register\": \"crm\", \"schema\": \"lead\", \"id\": \"@objectId\" }] }. A required (non-`?`) token left unresolved anywhere in the tree BLOCKS the call (error toast) instead of sending the literal token string to the server."
+				},
 				"params": {
 					"type": "object",
 					"additionalProperties": true,
-					"description": "api-call / toggle only: the JSON request body. Values run the shared filter-token grammar (@me, @today±Nd, @workspace.<key>/@config.<key> with a trailing `?` for optional values dropped when unresolved; a required unresolved token skips the call)."
+					"description": "Two distinct uses depending on the action's dispatch. (1) api-call / toggle: the JSON request body (legacy — prefer `payload` for anything with nested objects/arrays; ignored when `payload` is set). Values run the shared filter-token grammar ONE level deep (@me, @today±Nd, @workspace.<key>/@config.<key> with a trailing `?` for optional values dropped when unresolved; a required unresolved token skips the call). (2) handler: 'navigate' (index-page row actions, manifestActionDispatch): vue-router params merged OVER the default { id: row[rowKey] }. OMIT it for the ordinary 'open this row's detail page' action — the row id is already injected. String values run the `{field}` ROW-token grammar (NOT the @-token grammar): \"{id}\" resolves to row.id with its type preserved, \"run-{id}\" interpolates as text, and a brace-less \"new\" stays literal (that is what makes a 'New X' action navigate with { id: 'new' }). A token naming a field the row does not carry is dropped with a console.warn — so `id` falls back to the row id — instead of being pushed as a literal %7Bid%7D path segment."
+				},
+				"download": {
+					"type": "boolean",
+					"default": false,
+					"description": "api-call only: request the response as a binary blob (axios responseType 'blob') and trigger a browser file download instead of a JSON toast+refresh cycle. The filename is taken from the response's Content-Disposition header, else the token-resolved `filename`, else 'download.pdf'. The success toast still shows; unlike a normal api-call the page does NOT auto-refresh afterwards unless `refresh: true` is explicitly set."
+				},
+				"filename": {
+					"type": "string",
+					"description": "api-call `download: true` only: fallback filename used when the response carries no Content-Disposition header (falls back further to 'download.pdf'). Interpolates the same token grammar as `url` (@objectId, @object.<field>, @workspace.<key>, @config.<key>, {objectId})."
 				},
 				"successMessage": {
 					"type": "string",
-					"description": "api-call / open-form / toggle: pre-translated success toast text (a library default applies when absent)."
+					"description": "api-call / open-form / agent / toggle: pre-translated success toast text (a library default applies when absent; agent default 'Run queued')."
 				},
 				"errorMessage": {
 					"type": "string",
-					"description": "api-call / toggle: pre-translated error toast text (falls back to the server's error/message, then a library default)."
+					"description": "api-call / agent / toggle: pre-translated error toast text (falls back to the server's error/message, then a library default; an agent 404 with no structured body toasts 'agent runtime unavailable' instead)."
 				},
 				"refresh": {
 					"type": "boolean",
 					"default": true,
-					"description": "api-call / toggle: bump the page-level cn:page:refresh signal after a successful call (default true; set false to skip)."
+					"description": "api-call / agent / toggle: bump the page-level cn:page:refresh signal after a successful call (default true; set false to skip). EXCEPTION: for an api-call with download:true the default flips to false — a file download normally shouldn't also force-refetch every widget — set refresh:true explicitly to opt back in."
+				},
+				"agent": {
+					"type": "string",
+					"description": "agent only (REQUIRED): the hermiq agent uuid to run against the page object. POSTed to /apps/hermiq/api/agents/{agent}/run-on-object (hermiq#41) — object-RBAC-scoped, dispatches the governed AgentRunRequestedEvent. May interpolate the shared @-token grammar (@objectId, @object.<field>, @workspace.<key>, @config.<key>)."
+				},
+				"skill": {
+					"type": "string",
+					"description": "agent only: optional skill id folded into the governed run (interpolates the same @-token grammar as `agent`)."
+				},
+				"prompt": {
+					"type": "string",
+					"description": "agent only: optional prompt handed to the governed run. Interpolates the shared @-token grammar inline (@objectId, @object.<field>, @workspace.<key>, @config.<key>) so it can be grounded on the page object — e.g. 'Summarise @object.title'."
+				},
+				"resultField": {
+					"type": "string",
+					"description": "agent only: the object field the agent's result is written back to (falls back to hermiq's default result field when absent)."
+				},
+				"objectId": {
+					"type": "string",
+					"description": "agent only: the target object id. Defaults to the page object context's @objectId; an unresolved required @objectId BLOCKS the call (fail-closed) rather than sending a literal token. May be an explicit id or an @-token string."
 				},
 				"register": {
 					"type": "string",
-					"description": "open-form only: OpenRegister register slug for the create dialog's schema (falls back to the page object context's register)."
+					"description": "open-form / agent: OpenRegister register slug. open-form: the create dialog's schema register. agent: the run-on-object register — both fall back to the page object context's @register."
 				},
 				"schema": {
 					"type": "string",
-					"description": "open-form only: OpenRegister schema slug — the create dialog fetches this schema and saves the new object against it."
+					"description": "open-form / agent: OpenRegister schema slug. open-form: the create dialog fetches this schema and saves the new object against it. agent: the run-on-object schema — falls back to the page object context's @schema."
 				},
 				"onSuccessRoute": {
 					"description": "open-form only: optional post-save navigation target (#91). A bare route NAME (string) navigates with the saved object's id merged into the route params under `id` (harmless when the route has no `:id` segment — backward compatible). The object form { name, paramField?, objectParam? } names the id param (`paramField`, default `id`) and, when `objectParam` is set, also passes the whole saved object under that param key (for a props:true detail route to render without a refetch). The id is read from saved.id, then saved.uuid, then saved['@self'].id.",
@@ -1615,6 +1685,14 @@
 						"required": ["type"]
 					},
 					"then": { "required": ["schema"] }
+				},
+				{
+					"description": "agent actions MUST declare the target agent uuid via `agent`.",
+					"if": {
+						"properties": { "type": { "const": "agent" } },
+						"required": ["type"]
+					},
+					"then": { "required": ["agent"] }
 				},
 				{
 					"description": "toggle actions MUST declare their write endpoint via `writeUrl`.",

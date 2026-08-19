@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<!--
+    SPDX-License-Identifier: EUPL-1.2
+
+    FIXTURE — not a real app manifest. THE POSITIVE CONTROL.
+
+    Identical to info-32-34.xml in every respect except `max-version`. The
+    second caller in `quality-selftest.yml` points the shared workflow at this
+    file, and its PHPUnit matrix must therefore materialise FOUR legs
+    (stable32, stable33 x PHP 8.3, 8.4) where the other caller materialises SIX,
+    with stable34 absent and `single-server` resolving to stable33.
+
+    Without this file, "the derived matrix equals what the apps hand-declare"
+    would be satisfied just as well by an action that returned
+    ["stable32","stable33","stable34"] unconditionally. A value that matches is
+    not evidence until you have shown it can differ.
+
+    KEEP IDENTICAL TO info-32-34.xml EXCEPT FOR max-version.
+-->
+<info>
+    <id>nextcloud-matrix-fixture</id>
+    <name>Nextcloud matrix fixture</name>
+    <summary>Fixture manifest declaring NC 32-33.</summary>
+    <description>Fixture manifest used by quality-selftest.yml to prove the test matrix is derived from appinfo/info.xml.</description>
+    <version>1.0.0</version>
+    <licence>agpl</licence>
+    <author>Conduction</author>
+    <category>tools</category>
+    <dependencies>
+        <nextcloud min-version="32" max-version="33"/>
+    </dependencies>
+</info>

@@ -425,5 +425,115 @@ class ForeignCwdTest(unittest.TestCase):
                 os.chdir(old)
 
 
+# ---------------------------------------------------------------------------
+# A comment describing a class is not the class (#415 class, #422).
+#
+# Reverted against origin/main, arms 2 and 3 FLIP (finding -> no finding).
+# Arms 1, 4, 5 and 6 pass either way and are CONTROLS.
+# ---------------------------------------------------------------------------
+_REGISTER = {
+    "schemas": {"invoice": {"handler": "OCA\\Fixture\\Service\\InvoiceGuard::evaluate"}}
+}
+
+
+class CommentIsNotADeclaration(unittest.TestCase):
+    """Both of this gate's questions — does the class exist, does it declare
+    the method — used to be put to the file's RAW bytes."""
+
+    def _run(self, files: dict[str, str]) -> list[str]:
+        with _AppFixture() as root:
+            for rel, src in files.items():
+                full = os.path.join(root, *rel.split("/"))
+                os.makedirs(os.path.dirname(full), exist_ok=True)
+                with open(full, "w", encoding="utf-8") as fh:
+                    fh.write(src)
+            reg = os.path.join(root, "lib", "Settings", "register.json")
+            os.makedirs(os.path.dirname(reg), exist_ok=True)
+            with open(reg, "w", encoding="utf-8") as fh:
+                json.dump(_REGISTER, fh)
+            return _run_main(reg)
+
+    def test_1_positive_control_class_present_method_absent(self):
+        """CONTROL. Without this firing, arms 2-3 measure nothing."""
+        out = self._run({
+            "lib/Service/InvoiceGuard.php":
+                "<?php\nnamespace OCA\\Fixture\\Service;\n\nclass InvoiceGuard {\n}\n",
+        })
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("rule=guard-method-not-found", out[0])
+
+    def test_2_a_todo_naming_the_method_is_not_the_method(self):
+        out = self._run({
+            "lib/Service/InvoiceGuard.php":
+                "<?php\nnamespace OCA\\Fixture\\Service;\n\n"
+                "class InvoiceGuard {\n"
+                "    /**\n"
+                "     * TODO: implement function evaluate() here — the register\n"
+                "     * already points at it. Not written yet.\n"
+                "     */\n"
+                "}\n",
+        })
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("rule=guard-method-not-found", out[0])
+
+    def test_3_a_removal_note_in_an_unindented_block_is_not_the_class(self):
+        """The worse of the two. `_class_def_re` anchors on a line start and
+        assumes a docblock line begins with `*`, so the shape a removal note is
+        actually written in — an unindented `/* */` block — read as a class
+        declaration. The class is GONE and the note saying so closed the gate."""
+        out = self._run({
+            "lib/Service/Notes.php":
+                "<?php\nnamespace OCA\\Fixture\\Service;\n\n"
+                "/*\n"
+                "Removed 2026-08:\n"
+                "class InvoiceGuard implements Guard\n"
+                "public function evaluate(array $ctx): bool\n"
+                "*/\n\n"
+                "class Notes {\n}\n",
+        })
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("rule=guard-class-not-found", out[0])
+
+    def test_4_the_real_declaration_still_resolves(self):
+        """CONTROL (anti-widening) — the PSR-4 path branch."""
+        out = self._run({
+            "lib/Service/InvoiceGuard.php":
+                "<?php\nnamespace OCA\\Fixture\\Service;\n\n"
+                "class InvoiceGuard {\n"
+                "    /** Evaluate the guard. */\n"
+                "    public function evaluate(array $ctx): bool { return true; }\n"
+                "}\n",
+        })
+        self.assertEqual(out, [])
+
+    def test_5_a_class_found_only_by_the_lib_walk_still_resolves(self):
+        """CONTROL (anti-widening) — the fallback branch, which is the one the
+        mask is applied inside. A class at an unconventional path must still be
+        found, or every cross-app reference becomes guard-class-not-found."""
+        out = self._run({
+            "lib/Odd/Weird.php":
+                "<?php\nnamespace OCA\\Fixture\\Odd;\n\n"
+                "class InvoiceGuard {\n"
+                "    public function evaluate(array $ctx): bool { return true; }\n"
+                "}\n",
+        })
+        self.assertEqual(out, [])
+
+    def test_6_a_class_name_in_a_STRING_still_does_not_resolve_it(self):
+        """CONTROL. String contents are deliberately KEPT by the mask, so this
+        arm states what that does and does not buy: a literal is not a
+        declaration here either, because `_class_def_re` requires the
+        `class <Name>` KEYWORD at a line start, not the bare name."""
+        out = self._run({
+            "lib/Service/Notes.php":
+                "<?php\nnamespace OCA\\Fixture\\Service;\n\n"
+                "class Notes {\n"
+                "    public const HINT = 'see OCA\\\\Fixture\\\\Service\\\\InvoiceGuard::evaluate';\n"
+                "}\n",
+        })
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("rule=guard-class-not-found", out[0])
+
+
 if __name__ == "__main__":
     unittest.main()

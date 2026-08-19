@@ -1,0 +1,496 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: EUPL-1.2
+#
+# test_gate16_spec_coverage_scope.sh — gate-16 at three scopes, one tree.
+#
+# WHY THIS EXISTS
+# ---------------
+# `.github#361`. gate-16 printed **PASS** on every `--full` run while inspecting
+# nothing, and — unlike gate-61's `NOT APPLICABLE`, which is excluded from the
+# coverage denominator — that PASS **counted toward "N of N applicable gates
+# ran"**. So a full-scope "ALL APPLICABLE GATES PASSED" could contain a gate that
+# opened no file at all. Measured on one tree, changing only the scope input:
+# pipelinq 0 / 185 (origin/beta) / 1466 (report mode); openregister 0 / 232 / 234.
+#
+# Mechanism: `bin/hydra-gates` forwards `--base` only when the run is diff-scoped,
+# so on `--full` the runner keeps its default `BASE_REF="origin/development"` and
+# handed it to the checker unconditionally. On `development` itself that diffs the
+# branch against itself: empty changed-line set, `# count=0`, PASS.
+#
+# THE FIX THIS SUITE PINS, and the two ways it could have gone wrong
+# ------------------------------------------------------------------
+# 1. NOT a full sweep. gate-19's else-branch drops `HYDRA_GATE_BASE_REF` and
+#    scans the whole tree. Doing that for gate-16 would flag the ENTIRE legacy
+#    `@spec` surface — the wrong contract under ADR-020, and a false RED in every
+#    repo in the fleet. `LegacyDebtController.php` in this fixture is that legacy
+#    surface, and arm 3 asserts it is NOT reported.
+# 2. The skip category MUST be one of `na|structural|wiring`. `_skip`'s `*)` arm
+#    turns anything else into `FAIL — internal error`, so a plausible-looking
+#    category such as `scope` would have been the exact fleet-wide false RED the
+#    change exists to avoid. Arm 3 asserts the verdict is NOT APPLICABLE and that
+#    the run does not fail.
+#
+# `na` is also the only category that is honest AND free: `_NA_GATES` is
+# subtracted from the applicable denominator and is explicitly exempt from
+# `--require-full-coverage`, so this can neither hide a gap nor manufacture one.
+#
+# Run: bash scripts/lib/test_gate16_spec_coverage_scope.sh
+set -uo pipefail
+
+GF_PKG_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)"
+export GF_PKG_ROOT
+# shellcheck source=./gate_fixture_support.sh
+. "${GF_PKG_ROOT}/scripts/lib/gate_fixture_support.sh"
+
+SRC="${GF_PKG_ROOT}/scripts/test-fixtures/spec-coverage-scope/app"
+CHECKER="${GF_PKG_ROOT}/scripts/lib/check_spec_coverage.py"
+
+_fail_n=0; _pass_n=0
+_ok()  { _pass_n=$((_pass_n + 1)); printf 'PASS — %s\n' "$1"; }
+_bad() { _fail_n=$((_fail_n + 1)); printf 'FAIL — %s\n' "$1"; }
+
+if [ ! -d "${SRC}" ]; then
+    echo "FAIL — spec-coverage-scope fixture missing at ${SRC}; every assertion below would be vacuous."
+    exit 1
+fi
+if [ ! -f "${CHECKER}" ]; then
+    echo "FAIL — ${CHECKER} not found; the positive control below could not fire."
+    exit 1
+fi
+
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/hydra-gate16.XXXXXXXX")"
+trap 'rm -rf "${WORK}"' EXIT
+
+# ---------------------------------------------------------------------------
+# The tree used by arms 1 and 3: legacy debt only, and a diff that touches docs.
+# ---------------------------------------------------------------------------
+gf_build_repo "${WORK}/inherited" "${SRC}"
+gf_commit_all "${WORK}/inherited" "base: app carrying inherited @spec debt"
+gf_mark_base  "${WORK}/inherited"
+printf '\n- unrelated doc tweak\n' >> "${WORK}/inherited/docs/CHANGELOG.md"
+gf_commit_paths "${WORK}/inherited" "docs: unrelated change" docs/CHANGELOG.md
+
+# ===========================================================================
+echo "== positive control: the legacy debt IS findable in this tree =="
+# ===========================================================================
+# Without this, a NOT APPLICABLE at full scope is ambiguous between "gate-16 is
+# honest about an empty scope" and "the fixture contains nothing to find".
+# `--mode report` is the checker's own NON-diff-scoped path: it walks every
+# in-scope file and evaluates every method, so it answers exactly the question a
+# control has to answer — is the subject matter in this tree at all — without
+# depending on any base ref. (It is also the third column of the #361
+# measurement: 0 / 185 / 1466.)
+_pc="$(cd "${WORK}/inherited" && python3 "${CHECKER}" . --mode report 2>&1)"
+_pc_count="$(printf '%s\n' "${_pc}" | grep -oE '"uncovered_count": [0-9]+' | grep -oE '[0-9]+' | tail -1)"
+if printf '%s' "${_pc}" | grep -qF 'LegacyDebtController.php'; then
+    _ok "positive control: the checker NAMES lib/Controller/LegacyDebtController.php when it is not diff-scoped"
+else
+    echo "FAIL — the positive control did not fire: check_spec_coverage.py named no"
+    echo "       untagged method in a tree that contains two. EITHER the fixture stopped"
+    echo "       carrying the plant OR the checker went blind. Both are fatal here, because"
+    echo "       every arm below reads a NOT APPLICABLE as meaningful only if this control"
+    echo "       proves the subject was findable. Refusing to grade."
+    printf '%s\n' "${_pc}" | sed 's/^/       /'
+    exit 1
+fi
+if [ "${_pc_count:-0}" -ge 2 ]; then
+    _ok "positive control: ${_pc_count} untagged method(s) are present to be judged"
+else
+    _bad "positive control: expected at least 2 untagged methods, checker reported 'uncovered_count=${_pc_count:-<none>}'"
+fi
+
+# ===========================================================================
+echo
+echo "== arm 1 — DIFF scope, diff touches only docs =="
+# ===========================================================================
+# ADR-020. The legacy debt above is real and the positive control just found it,
+# but this PR did not touch it, so gate-16 must not report it. PASS is correct
+# here: the gate DID open the diff, and the diff contained no in-scope method.
+_out="$(gf_run_wrapper "${WORK}/inherited" "${WORK}/log-diff-untouched")"
+_v="$(gf_verdict "${_out}" 16)"
+case "${_v}" in
+    *PASS*) _ok "gate-16 passes on a docs-only diff — inherited debt does not block an unrelated PR (ADR-020)" ;;
+    "")     _bad "gate-16 emitted no verdict at all on the docs-only diff arm" ;;
+    *)      _bad "gate-16 on a docs-only diff wanted PASS, got: ${_v:0:140}" ;;
+esac
+
+# ===========================================================================
+echo
+echo "== arm 2 — DIFF scope, diff ADDS an untagged method =="
+# ===========================================================================
+# Proves gate-16 can fire through the real wrapper at all. If this arm ever goes
+# green the gate is dead at every scope and arm 3 proves nothing.
+gf_build_repo "${WORK}/newwork" "${SRC}"
+gf_commit_all "${WORK}/newwork" "base: no new controller yet"
+gf_mark_base  "${WORK}/newwork"
+cp "${SRC}/lib/Controller/NewWorkController.php.new" "${WORK}/newwork/lib/Controller/NewWorkController.php"
+rm -f "${WORK}/newwork/lib/Controller/NewWorkController.php.new"
+gf_commit_paths "${WORK}/newwork" "feat: add an untagged endpoint (NEW debt)" \
+    lib/Controller/NewWorkController.php
+
+_out2="$(gf_run_wrapper "${WORK}/newwork" "${WORK}/log-diff-touched")"
+_v2="$(gf_verdict "${_out2}" 16)"
+case "${_v2}" in
+    *FAIL*) _ok "gate-16 FAILS when the diff adds an untagged method — ${_v2:0:90}" ;;
+    *)      _bad "gate-16 did NOT fail on a diff that ADDS an untagged in-scope method; got: ${_v2:0:140}" ;;
+esac
+if grep -qF 'NewWorkController.php' "${WORK}/log-diff-touched/hydra-gate-spec-coverage.log" 2>/dev/null; then
+    _ok "gate-16 NAMES the newly added file in its log"
+else
+    _bad "gate-16 failed without naming NewWorkController.php — a bare count is not a finding"
+fi
+
+# ===========================================================================
+echo
+echo "== arm 3 — FULL file scope, NO delta base (.github#361 / #374) =="
+# ===========================================================================
+#
+# REWRITTEN FOR THE ADR-020 REVERSAL (hydra-gates/ADR-020-SUPERSEDED.md).
+#
+# This arm used to run `--full` against a tree that `gf_mark_base` had given a
+# `refs/remotes/origin/development` ref, and assert NOT APPLICABLE — because
+# `--full` used to mean BOTH "read the whole tree" AND "compute no diff".
+#
+# Those are now two separate inputs, and that conflation was the bug: a full
+# file scope says nothing about whether a base exists. gate-16 is a DELTA gate;
+# what it needs is a BASE, not a narrowed file list. So the arm splits:
+#
+#   3a  full file scope, NO base   -> NOT APPLICABLE, with a reason  (below)
+#   3b  full file scope, WITH base -> it JUDGES the change set, and still does
+#                                     NOT sweep the legacy surface  (further down)
+#
+# 3b is the one that matters most: it is the only assertion standing between
+# this package and the false RED `#361`'s fix was written to avoid — reporting
+# every legacy `@spec` gap in the fleet because the file scope went wide.
+#
+# The tree is arm 1's, rebuilt WITHOUT `gf_mark_base`, so nothing in it
+# resolves as a base. Building it explicitly rather than deleting the ref keeps
+# the two arms independent.
+gf_build_repo "${WORK}/inherited-nobase" "${SRC}"
+gf_commit_all "${WORK}/inherited-nobase" "base: app carrying inherited @spec debt"
+printf '\n- unrelated doc tweak\n' >> "${WORK}/inherited-nobase/docs/CHANGELOG.md"
+gf_commit_paths "${WORK}/inherited-nobase" "docs: unrelated change" docs/CHANGELOG.md
+
+_outf="$(gf_run_wrapper "${WORK}/inherited-nobase" "${WORK}/log-full" --full)"
+
+if printf '%s' "${_outf}" | grep -qF 'SCOPE-MODE: full'; then
+    _ok "the run announces its file scope in one machine-readable line"
+else
+    _bad "the run printed no 'SCOPE-MODE: full' line; the rest of this arm is unsafe to interpret because nothing states which scope produced it"
+fi
+if printf '%s' "${_outf}" | grep -qF 'Delta base: NONE'; then
+    _ok "the run states it resolved NO delta base"
+else
+    _bad "the run did not state that it has no delta base — a delta gate's NOT APPLICABLE below would then be unattributable to any input"
+fi
+
+_vf="$(gf_verdict "${_outf}" 16)"
+case "${_vf}" in
+    *"NOT APPLICABLE"*)
+        _ok "gate-16 on --full reports NOT APPLICABLE instead of PASSing over a scope it never read"
+        ;;
+    *PASS*)
+        _bad ".github#361 is LIVE: gate-16 printed PASS on a run with NO delta base, over a tree whose two untagged methods the positive control just named. 0 inspected, and this PASS counts toward 'N of N applicable gates ran'."
+        ;;
+    *FAIL*)
+        _bad ".github#361 was fixed by SWEEPING THE WHOLE TREE. gate-16 is a DELTA gate: widening its FILE scope does not give it a change set, it just reports inherited @spec debt the author never touched — a false RED in every repo in the fleet, and exactly what the ADR-020 reversal must NOT do to this gate. Expected NOT APPLICABLE. Got: ${_vf:0:140}"
+        ;;
+    "")  _bad "gate-16 emitted no verdict at all on the --full arm" ;;
+    *)   _bad "gate-16 on --full gave an unrecognised verdict: ${_vf:0:140}" ;;
+esac
+
+# The reason must name the ABSENCE of a diff, never claim a diff EXCLUDED
+# something — the invariant test_gate_scope_matrix.sh enforces gate-agnostically.
+case "${_vf}" in
+    *"out of scope"*|*"in this diff"*|*"the diff against"*)
+        _bad "gate-16's --full reason blames a diff on a run that computed none — the gate-61 sentence pattern. Got: ${_vf:0:200}"
+        ;;
+    *)
+        _ok "gate-16's --full reason does not blame a diff the run never computed"
+        ;;
+esac
+if printf '%s' "${_vf}" | grep -qE 'NOT APPLICABLE (—|-) .{20,}'; then
+    _ok "gate-16's --full NOT APPLICABLE carries a stated reason"
+else
+    _bad "gate-16's --full verdict is not a reason-bearing NOT APPLICABLE (a bare skip is unfalsifiable, and so is a PASS). Got: ${_vf:0:140}"
+fi
+
+# The legacy surface must NOT be named anywhere: naming it is the full-sweep
+# regression wearing a NOT APPLICABLE hat.
+if grep -qF 'LegacyDebtController.php' "${WORK}/log-full/hydra-gate-spec-coverage.log" 2>/dev/null; then
+    _bad "the --full run wrote inherited legacy @spec debt into gate-16's log. Even without a FAIL verdict that is the full-sweep contract creeping back in."
+else
+    _ok "the --full run reports no inherited legacy @spec debt — ADR-020 upheld"
+fi
+
+# NOT APPLICABLE must not be a FAIL in disguise. `_skip` turns an unrecognised
+# category into `FAIL — internal error`, which is how a category such as `scope`
+# would have reddened the whole fleet.
+if printf '%s' "${_outf}" | grep -E '^\[gate-16\]' | grep -qF 'internal error'; then
+    _bad "gate-16's skip used a category outside na|structural|wiring — _skip turned it into an internal-error FAIL, which is a fleet-wide false RED"
+else
+    _ok "gate-16's skip category is accepted by _skip (no internal-error FAIL)"
+fi
+
+# And it must be counted as not-applicable, not as a silent no-show.
+if printf '%s' "${_outf}" | grep -qE '^\[hydra-gates\] NOT APPLICABLE: .*\b16\b'; then
+    _ok "gate-16 is named in the NOT APPLICABLE block of the coverage summary"
+else
+    _bad "gate-16 did not appear in the coverage summary's NOT APPLICABLE block — it is being counted as a gate that simply did not run, which --require-full-coverage would fail on"
+fi
+
+# ===========================================================================
+echo
+echo "== arm 3b — FULL file scope WITH a delta base (the ADR-020 reversal) =="
+# ===========================================================================
+#
+# THE ARM THAT DID NOT EXIST, AND THE ONE THE REVERSAL MAKES NECESSARY.
+#
+# Full file scope is now the DEFAULT, so this is the shape every PR in the
+# fleet runs in: the whole tree open to the state gates, and a real base for
+# the five delta gates. Two things must hold simultaneously, and they pull in
+# opposite directions:
+#
+#   1. gate-16 must still JUDGE THE CHANGE — otherwise flipping the default
+#      silently retired @spec enforcement fleet-wide, which is a straight
+#      downgrade dressed as an improvement.
+#   2. gate-16 must still NOT NAME THE LEGACY SURFACE — otherwise the wide file
+#      scope leaked into a delta gate and every repo goes red on inherited debt
+#      nobody touched. That is `#361`'s false-RED, arriving by a new route.
+#
+# Arm 1 already proves (2) under `--scope-to-diff`. It proves nothing about the
+# default any more, because the default changed.
+_outfb="$(gf_run_wrapper "${WORK}/newwork" "${WORK}/log-full-base" --full)"
+
+if printf '%s' "${_outfb}" | grep -qE '^\[hydra-gates\] Delta base: [^N]'; then
+    _ok "the full-scope run resolved a delta base and named it"
+else
+    _bad "the full-scope run resolved NO delta base though the fixture has refs/remotes/origin/development — arm 3b would then be measuring arm 3a again and proving nothing"
+fi
+
+_vfb="$(gf_verdict "${_outfb}" 16)"
+case "${_vfb}" in
+    *FAIL*)
+        _ok "gate-16 still JUDGES the change at full file scope — the delta gate survived the reversal: ${_vfb:0:90}"
+        ;;
+    *"NOT APPLICABLE"*)
+        _bad "gate-16 went NOT APPLICABLE at full file scope DESPITE a resolved base. This is the regression the reversal must not cause: keying a delta gate on the FILE scope retires it on every PR in the fleet. Got: ${_vfb:0:160}"
+        ;;
+    *PASS*)
+        _bad "gate-16 PASSed at full file scope over a diff that ADDS an untagged method. It had a base and did not use it. Got: ${_vfb:0:160}"
+        ;;
+    *) _bad "gate-16 gave an unrecognised verdict on the full+base arm: ${_vfb:0:160}" ;;
+esac
+
+if grep -qF 'NewWorkController.php' "${WORK}/log-full-base/hydra-gate-spec-coverage.log" 2>/dev/null; then
+    _ok "gate-16 names the NEWLY ADDED file at full file scope"
+else
+    _bad "gate-16 did not name NewWorkController.php at full file scope — it produced a verdict without evidence"
+fi
+if grep -qF 'LegacyDebtController.php' "${WORK}/log-full-base/hydra-gate-spec-coverage.log" 2>/dev/null; then
+    _bad "the full-scope run wrote INHERITED legacy @spec debt into gate-16's log. The wide file scope has leaked into a delta gate — this is #361's false RED arriving by a new route, and it would redden every repo in the fleet on code nobody touched."
+else
+    _ok "gate-16 does NOT sweep the inherited legacy surface even at full file scope — the delta contract survived the reversal"
+fi
+
+# ===========================================================================
+echo
+echo "== arm 4 — a CODING-STANDARD REFORMAT is not a set of changed methods =="
+# ===========================================================================
+#
+# `.github#395`, the third false positive of this class after gate-14 (#391)
+# and gate-48 (#388). gate-16 derived its changed-method set from a plain
+# `git diff -U0`, so when `nextcloud/coding-standard` moved every `{` onto its
+# signature line, EVERY method in the app read as modified and every one of them
+# was asked for an `@spec` tag it never had. MEASURED on ConductionNL/procest#819
+# (921 PHP files, gate package `80691a7a`): 1 finding on the base branch, 185 on
+# the reformat. `git diff -w` does not help — the brace is a token that MOVED
+# LINES, not whitespace whose width changed.
+#
+# The two arms below are the same tree twice, and they pull in opposite
+# directions:
+#
+#   4a  reformat ONLY            -> gate-16 must report NOTHING
+#   4b  reformat + ONE operator  -> gate-16 must still report THAT method, and
+#                                   must not report the untouched one beside it
+#
+# 4b is the arm that stops the fix from being a false-negative machine: a
+# normalisation loose enough to swallow `+` -> `-` would pass 4a and retire the
+# gate. The `.knr` and `.knr-changed` fixtures differ in exactly one character.
+gf_build_repo "${WORK}/reformat" "${SRC}"
+gf_commit_all "${WORK}/reformat" "base: app before the coding-standard reformat"
+gf_mark_base  "${WORK}/reformat"
+cp "${SRC}/lib/Controller/ReformattedController.php.knr" \
+   "${WORK}/reformat/lib/Controller/ReformattedController.php"
+rm -f "${WORK}/reformat/lib/Controller/ReformattedController.php.knr" \
+      "${WORK}/reformat/lib/Controller/ReformattedController.php.knr-changed"
+gf_commit_paths "${WORK}/reformat" "style: adopt nextcloud/coding-standard" \
+    lib/Controller/ReformattedController.php
+
+# PRE-CONDITION 1 — the reformat has to BE a diff. If the two fixtures were
+# accidentally identical, 4a would pass on an empty change set and prove nothing.
+_churn="$(cd "${WORK}/reformat" && git diff --numstat "$(git rev-parse refs/remotes/origin/development)"...HEAD -- lib/Controller/ReformattedController.php)"
+_churn_added="$(printf '%s' "${_churn}" | awk '{print $1}')"
+if [ "${_churn_added:-0}" -ge 10 ]; then
+    _ok "pre-condition: the reformat rewrites ${_churn_added} lines of ReformattedController.php — 4a is judging a real diff"
+else
+    _bad "pre-condition: the reformat produced ${_churn_added:-0} added line(s). The two fixture variants must differ, or arm 4a is vacuous."
+fi
+
+# PRE-CONDITION 2 — those methods must be findable subject matter. Both are
+# public, in lib/Controller, non-accessor and untagged; if they were not, a
+# silent gate-16 in 4a would be silence about nothing.
+_pc4="$(cd "${WORK}/reformat" && python3 "${CHECKER}" . --mode report 2>&1)"
+if printf '%s' "${_pc4}" | grep -qF 'ReformattedController.php::totalRowWeights'; then
+    _ok "pre-condition: the checker's own report mode names ReformattedController::totalRowWeights as untagged — it IS in scope and IS uncovered"
+else
+    _bad "pre-condition: report mode does not name ReformattedController::totalRowWeights, so arms 4a/4b are not measuring an in-scope untagged method at all"
+fi
+
+_out4="$(gf_run_wrapper "${WORK}/reformat" "${WORK}/log-reformat")"
+_v4="$(gf_verdict "${_out4}" 16)"
+case "${_v4}" in
+    *PASS*) _ok "gate-16 PASSES on a formatting-only reformat — brace style is not a changed method (#395)" ;;
+    *FAIL*) _bad ".github#395 is LIVE: gate-16 reports changed methods on a diff whose only content is brace placement, indentation, quote style and a trailing comma. Got: ${_v4:0:160}" ;;
+    "")     _bad "gate-16 emitted no verdict at all on the reformat arm" ;;
+    *)      _bad "gate-16 gave an unrecognised verdict on the reformat arm: ${_v4:0:160}" ;;
+esac
+if grep -qF 'ReformattedController.php' "${WORK}/log-reformat/hydra-gate-spec-coverage.log" 2>/dev/null; then
+    _bad "gate-16 named ReformattedController.php on a formatting-only diff — even without a FAIL that is #395 still in the log, and it is what a reviewer is asked to act on"
+else
+    _ok "gate-16 writes no finding for the reformatted file"
+fi
+
+# --- 4b — the same reformat with one operator changed ----------------------
+gf_build_repo "${WORK}/reformat-plus" "${SRC}"
+gf_commit_all "${WORK}/reformat-plus" "base: app before the coding-standard reformat"
+gf_mark_base  "${WORK}/reformat-plus"
+cp "${SRC}/lib/Controller/ReformattedController.php.knr-changed" \
+   "${WORK}/reformat-plus/lib/Controller/ReformattedController.php"
+rm -f "${WORK}/reformat-plus/lib/Controller/ReformattedController.php.knr" \
+      "${WORK}/reformat-plus/lib/Controller/ReformattedController.php.knr-changed"
+gf_commit_paths "${WORK}/reformat-plus" "style: adopt the standard, and change one operator" \
+    lib/Controller/ReformattedController.php
+
+_out4b="$(gf_run_wrapper "${WORK}/reformat-plus" "${WORK}/log-reformat-plus")"
+_v4b="$(gf_verdict "${_out4b}" 16)"
+case "${_v4b}" in
+    *FAIL*) _ok "gate-16 still FAILS when a method's BODY changed inside the reformat — ${_v4b:0:90}" ;;
+    *)      _bad "gate-16 did NOT report a method whose operator changed, because the change arrived inside a reformatted file. The normalisation has become a false-negative machine — worse than the over-reporting it replaced. Got: ${_v4b:0:160}" ;;
+esac
+_log4b="${WORK}/log-reformat-plus/hydra-gate-spec-coverage.log"
+if grep -qF 'ReformattedController.php::totalRowWeights' "${_log4b}" 2>/dev/null; then
+    _ok "gate-16 NAMES totalRowWeights — the method whose body actually changed"
+else
+    _bad "gate-16 failed without naming totalRowWeights; a verdict with no evidence cannot be acted on"
+fi
+if grep -qF '::buildRowLabel' "${_log4b}" 2>/dev/null; then
+    _bad "gate-16 also named buildRowLabel, which carries the SAME reformat and no change. The normalisation is not being applied per method — one real change re-opens the whole file, which is #395 at file granularity."
+else
+    _ok "gate-16 does NOT name buildRowLabel — the reformatted-but-unchanged method beside it stays out of scope"
+fi
+
+# ===========================================================================
+echo
+echo "== arm 5 — a PRETTIER reformat is not a set of changed methods either =="
+# ===========================================================================
+#
+# `.github#435`. #395 normalised PHP and deliberately left JS/TS/Vue alone,
+# because a JS trailing comma can be an array ELISION, a JS re-wrap can cross an
+# ASI boundary, and a re-wrap across a `//` uncomments what followed. Those
+# hazards are real; they are the SPECIFICATION for the JS rules, not a reason to
+# have none. MEASURED on ConductionNL/pipelinq#820 (`feat/nextcloud-prettier`,
+# 324 files, the same gate package on both sides): `development` PASS, the
+# reformat 468 findings before and 11 after.
+#
+# Same shape as arm 4, and for the same reason: 5a alone would be passed by a
+# normalisation that had simply switched the frontend half of gate-16 off.
+#
+#   5a  reformat ONLY              -> gate-16 must report NOTHING
+#   5b  reformat + ONE character   -> gate-16 must still report THAT method, and
+#                                     must not report the three beside it
+gf_build_repo "${WORK}/prettier" "${SRC}"
+gf_commit_all "${WORK}/prettier" "base: app before the prettier reformat"
+gf_mark_base  "${WORK}/prettier"
+cp "${SRC}/src/views/ReflowedView.vue.prettier" \
+   "${WORK}/prettier/src/views/ReflowedView.vue"
+rm -f "${WORK}/prettier/src/views/ReflowedView.vue.prettier" \
+      "${WORK}/prettier/src/views/ReflowedView.vue.prettier-changed"
+gf_commit_paths "${WORK}/prettier" "style: adopt @nextcloud/prettier-config" \
+    src/views/ReflowedView.vue
+
+# PRE-CONDITION 1 — the reformat has to BE a diff.
+_churn5="$(cd "${WORK}/prettier" && git diff --numstat "$(git rev-parse refs/remotes/origin/development)"...HEAD -- src/views/ReflowedView.vue)"
+_churn5_added="$(printf '%s' "${_churn5}" | awk '{print $1}')"
+if [ "${_churn5_added:-0}" -ge 10 ]; then
+    _ok "pre-condition: the prettier reformat rewrites ${_churn5_added} lines of ReflowedView.vue — 5a is judging a real diff"
+else
+    _bad "pre-condition: the prettier reformat produced ${_churn5_added:-0} added line(s). The two fixture variants must differ, or arm 5a is vacuous."
+fi
+
+# PRE-CONDITION 2 — the methods must be findable subject matter.
+_pc5="$(cd "${WORK}/prettier" && python3 "${CHECKER}" . --mode report 2>&1)"
+if printf '%s' "${_pc5}" | grep -qF 'ReflowedView.vue::totalWeights'; then
+    _ok "pre-condition: report mode names ReflowedView::totalWeights as untagged — it IS in scope and IS uncovered"
+else
+    _bad "pre-condition: report mode does not name ReflowedView::totalWeights, so arms 5a/5b are not measuring an in-scope untagged frontend method at all"
+fi
+
+_out5="$(gf_run_wrapper "${WORK}/prettier" "${WORK}/log-prettier")"
+_v5="$(gf_verdict "${_out5}" 16)"
+case "${_v5}" in
+    *PASS*) _ok "gate-16 PASSES on a prettier-only reformat — a re-wrap, a trailing comma and a reprinted parenthesis are not changed methods (#435)" ;;
+    *FAIL*) _bad ".github#435 is LIVE: gate-16 reports changed methods on a diff whose only content is prettier's line breaks, trailing commas, arrow parentheses and mustache wrapping. Got: ${_v5:0:160}" ;;
+    "")     _bad "gate-16 emitted no verdict at all on the prettier arm" ;;
+    *)      _bad "gate-16 gave an unrecognised verdict on the prettier arm: ${_v5:0:160}" ;;
+esac
+if grep -qF 'ReflowedView.vue' "${WORK}/log-prettier/hydra-gate-spec-coverage.log" 2>/dev/null; then
+    _bad "gate-16 named ReflowedView.vue on a formatting-only diff — even without a FAIL that is #435 still in the log, and it is what a reviewer is asked to act on"
+else
+    _ok "gate-16 writes no finding for the prettier-reformatted Vue file"
+fi
+
+# --- 5b — the same reformat with ONE character changed ---------------------
+# `.prettier` and `.prettier-changed` differ in exactly one byte: the `+` of
+# `carry + w` is a `-`. If 5b goes quiet, the JS normalisation has become a
+# false-negative machine and gate-16 has stopped watching every `.vue` file in
+# the fleet — strictly worse than the 468 false positives it replaced.
+gf_build_repo "${WORK}/prettier-plus" "${SRC}"
+gf_commit_all "${WORK}/prettier-plus" "base: app before the prettier reformat"
+gf_mark_base  "${WORK}/prettier-plus"
+cp "${SRC}/src/views/ReflowedView.vue.prettier-changed" \
+   "${WORK}/prettier-plus/src/views/ReflowedView.vue"
+rm -f "${WORK}/prettier-plus/src/views/ReflowedView.vue.prettier" \
+      "${WORK}/prettier-plus/src/views/ReflowedView.vue.prettier-changed"
+gf_commit_paths "${WORK}/prettier-plus" "style: adopt prettier, and flip one operator" \
+    src/views/ReflowedView.vue
+
+_out5b="$(gf_run_wrapper "${WORK}/prettier-plus" "${WORK}/log-prettier-plus")"
+_v5b="$(gf_verdict "${_out5b}" 16)"
+case "${_v5b}" in
+    *FAIL*) _ok "gate-16 still FAILS when a Vue method's BODY changed inside the reformat — ${_v5b:0:90}" ;;
+    *)      _bad "gate-16 did NOT report a Vue method whose operator changed, because the change arrived inside a prettier-reformatted file. Got: ${_v5b:0:160}" ;;
+esac
+_log5b="${WORK}/log-prettier-plus/hydra-gate-spec-coverage.log"
+if grep -qF 'ReflowedView.vue::totalWeights' "${_log5b}" 2>/dev/null; then
+    _ok "gate-16 NAMES totalWeights — the Vue method whose body actually changed"
+else
+    _bad "gate-16 failed without naming totalWeights; a verdict with no evidence cannot be acted on"
+fi
+for _neighbour in buildLabel mayEdit persistRow; do
+    if grep -qF "::${_neighbour}" "${_log5b}" 2>/dev/null; then
+        _bad "gate-16 also named ${_neighbour}, which carries the SAME reformat and no change. One real change is re-opening the whole file — #395 at file granularity, arriving through the JS path."
+    else
+        _ok "gate-16 does NOT name ${_neighbour} — the reformatted-but-unchanged method beside it stays out of scope"
+    fi
+done
+
+echo
+echo "== summary =="
+echo "   passed: ${_pass_n}"
+echo "   failed: ${_fail_n}"
+[ "${_fail_n}" -eq 0 ] || exit 1
+[ "${_pass_n}" -gt 0 ] || { echo "FAIL — zero assertions ran; an empty suite is not a green one."; exit 1; }
+echo
+echo "ALL gate-16 scope controls PASSED"
+exit 0

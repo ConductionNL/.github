@@ -196,6 +196,70 @@ class S {
 f = run(NESTED)
 check("a fail-open NESTED inside an if is reported", len(f) == 1, repr(f))
 
+# --- #424: a STRING LITERAL is not code either ------------------------------
+# The comment axis was fixed in #184 and the literal axis was not, so the same
+# false positive survived one quote character away.
+#
+# Mutation-checked by pointing scan_file's mask back at `php_mask(src)`:
+#   EVIDENCE (red under the mutation)
+#     "a quoted DESCRIPTION of the anti-pattern is not the anti-pattern"
+#     "an unbalanced brace inside a literal does not move a method boundary"
+#   CONTROL (green both ways — it proves the fix did not simply stop the gate)
+#     "the REAL fail-open beside that prose is still reported"
+QUOTED_ANTIPATTERN = """<?php
+class DemoService {
+    /** A resolver that correctly RETHROWS. */
+    public function getAuthorizationService(): ?IAuth {
+        $doc = 'catch (\\Throwable $e) { return null; }';
+        try {
+            return $this->container->get(IAuth::class);
+        } catch (\\Throwable $e) {
+            throw new ServiceUnavailable($e->getMessage());
+        }
+    }
+}
+"""
+f = run(QUOTED_ANTIPATTERN)
+check("a quoted DESCRIPTION of the anti-pattern is not the anti-pattern",
+      len(f) == 0, repr(f))
+
+# The paired true positive, in the same file as the prose, so a fix that
+# blanked the whole method would be caught here rather than looking green.
+QUOTED_PLUS_REAL = """<?php
+class DemoService {
+    public function getAuthorizationService(): ?IAuth {
+        $doc = 'catch (\\Throwable $e) { return null; }';
+        try {
+            return $this->container->get(IAuth::class);
+        } catch (\\Throwable $e) {
+            return null;
+        }
+    }
+}
+"""
+f = run(QUOTED_PLUS_REAL)
+check("the REAL fail-open beside that prose is still reported",
+      len(f) == 1, repr(f))
+
+# A `{` or `}` inside a literal is not a block delimiter. Before #424 the brace
+# walker counted them, so an unbalanced brace in prose shifted every method
+# boundary after it.
+UNBALANCED_BRACE_IN_STRING = """<?php
+class DemoService {
+    public function getRoleGuard(): ?IAuth {
+        $sql = 'SELECT json_extract(x, \\'$.a{\\') FROM t';
+        return $this->guard;
+    }
+    public function getCachedLabel(): ?string {
+        try { return $this->cache->get('k'); }
+        catch (\\Throwable $e) { return null; }
+    }
+}
+"""
+f = run(UNBALANCED_BRACE_IN_STRING)
+check("an unbalanced brace inside a literal does not move a method boundary",
+      len(f) == 0, repr(f))
+
 # --- MUTATION CHECK ---------------------------------------------------------
 _SRC = open(
     os.path.join(
@@ -224,6 +288,117 @@ check(
 check(
     "gate-8 reports `na` on an empty scope rather than PASS",
     '_skip 8 "unsafe-auth-resolver" na' in _RUNNER,
+)
+
+# --- caller-aware: the shape is not the defect, the consumption is ----------
+#
+# Both fixtures below contain the SAME `catch (\Throwable) { return null; }`.
+# The only difference is how the caller reads the null, and that difference is
+# the whole gate.
+
+FAIL_CLOSED_CALLER = """<?php
+class C {
+    public function guard(string $id): ?array
+    {
+        if ($this->authorizeEmployee($id) === null) {
+            return null;
+        }
+        return ['ok' => true];
+    }
+
+    private function authorizeEmployee(string $id): ?array
+    {
+        try {
+            return $this->objectService()->find($id);
+        } catch (\\Throwable $e) {
+            return null;
+        }
+    }
+}
+"""
+check(
+    "a resolver whose caller DENIES on null is not reported",
+    run(FAIL_CLOSED_CALLER) == [],
+    repr(run(FAIL_CLOSED_CALLER)),
+)
+
+FAIL_OPEN_CALLER = """<?php
+class C {
+    public function approve(string $user): void
+    {
+        $auth = $this->getAuthorizationService();
+        if ($auth !== null) {
+            $auth->assertMayApprove($user);
+        }
+    }
+
+    private function getAuthorizationService(): ?object
+    {
+        try {
+            return $this->c->get('A');
+        } catch (\\Throwable $e) {
+            return null;
+        }
+    }
+}
+"""
+_fo = run(FAIL_OPEN_CALLER)
+check(
+    "decidesk#45 — a caller that SKIPS on null is still reported",
+    len(_fo) == 1 and "getAuthorizationService" in _fo[0],
+    repr(_fo),
+)
+
+MIXED_CALLERS = """<?php
+class C {
+    public function a(string $id): ?array
+    {
+        if ($this->authorizeThing($id) === null) {
+            return null;
+        }
+        return [];
+    }
+
+    public function b(string $id): void
+    {
+        $t = $this->authorizeThing($id);
+        if ($t !== null) {
+            $t->check();
+        }
+    }
+
+    private function authorizeThing(string $id): ?array
+    {
+        try {
+            return $this->find($id);
+        } catch (\\Throwable $e) {
+            return null;
+        }
+    }
+}
+"""
+check(
+    "one skip-shaped caller among deny-shaped ones is still reported",
+    len(run(MIXED_CALLERS)) == 1,
+    repr(run(MIXED_CALLERS)),
+)
+
+NO_CALLER = """<?php
+class C {
+    private function authorizeThing(string $id): ?array
+    {
+        try {
+            return $this->find($id);
+        } catch (\\Throwable $e) {
+            return null;
+        }
+    }
+}
+"""
+check(
+    "a resolver with NO classifiable caller is still reported",
+    len(run(NO_CALLER)) == 1,
+    repr(run(NO_CALLER)),
 )
 
 print()

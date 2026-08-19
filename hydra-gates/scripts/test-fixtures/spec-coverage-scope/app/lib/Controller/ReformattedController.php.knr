@@ -1,0 +1,51 @@
+<?php
+/**
+ * SPDX-FileCopyrightText: 2026 Conduction
+ * SPDX-License-Identifier: EUPL-1.2
+ *
+ * THE AFTER SIDE OF A CODING-STANDARD REFORMAT (.github#395), and NOTHING ELSE.
+ *
+ * Every difference from `ReformattedController.php` is one php-cs-fixer rule
+ * from `nextcloud/coding-standard`:
+ *
+ *   - K&R braces: `{` moved onto the signature line (which is why `git diff -w`
+ *     does not neutralise this — the brace is a TOKEN THAT MOVED LINES, not
+ *     whitespace whose width changed);
+ *   - tabs instead of four spaces;
+ *   - a trailing comma after the last multi-line parameter;
+ *   - `"row"` -> `'row'`;
+ *   - `(int) (...)` -> `(int)(...)`;
+ *   - the long concatenation re-wrapped across two lines.
+ *
+ * The token stream is unchanged apart from the added `,`, and every one of
+ * those rules is a no-op at runtime. gate-16 must report NOTHING here.
+ */
+
+namespace OCA\SpecCoverageFixture\Controller;
+
+class ReformattedController {
+	/**
+	 * Build a label for a row. No @spec — inherited debt, and it stays that way.
+	 */
+	public function buildRowLabel(
+		string $id,
+		string $kind,
+	): string {
+		$prefix = 'row';
+
+		return $prefix . ':' . $kind
+			. ':' . $id;
+	}
+
+	/**
+	 * Total the weights of the given rows. No @spec — inherited debt.
+	 */
+	public function totalRowWeights(array $rows): int {
+		$total = 0;
+		foreach ($rows as $row) {
+			$total = $total + (int)($row['weight'] ?? 0);
+		}
+
+		return $total;
+	}
+}

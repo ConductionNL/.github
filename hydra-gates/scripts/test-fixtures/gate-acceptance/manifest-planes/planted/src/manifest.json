@@ -1,0 +1,73 @@
+{
+    "$schema": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
+    "version": "1.0.0",
+    "adminSettings": [
+        {
+            "id": "connection",
+            "label": "Connection",
+            "type": "organisation-credentials"
+        }
+    ],
+    "menu": [
+        {
+            "id": "storeNav",
+            "label": "Store",
+            "icon": "ViewGridOutline",
+            "route": "storePage"
+        },
+        {
+            "id": "catalogNav",
+            "label": "Catalog",
+            "icon": "Bookshelf",
+            "route": "catalogPage"
+        },
+        {
+            "id": "templatesNav",
+            "label": "Templates",
+            "icon": "FileReplaceOutline",
+            "route": "templatePage"
+        },
+        {
+            "id": "settingsNav",
+            "label": "Settings",
+            "section": "settings",
+            "icon": "CogOutline",
+            "route": "settings"
+        }
+    ],
+    "pages": [
+        {
+            "id": "storePage",
+            "route": "/store",
+            "title": "Store",
+            "type": "index",
+            "config": {
+                "storeRegistry": true
+            }
+        },
+        {
+            "id": "catalogPage",
+            "route": "/catalog",
+            "title": "Catalog",
+            "type": "index",
+            "config": {
+                "schema": "catalog_item"
+            }
+        },
+        {
+            "id": "templatePage",
+            "route": "/templates",
+            "title": "Templates",
+            "type": "index",
+            "config": {
+                "schema": "template"
+            }
+        },
+        {
+            "id": "settings",
+            "route": "/settings",
+            "title": "Settings",
+            "type": "settings"
+        }
+    ]
+}
