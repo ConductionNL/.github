@@ -45,6 +45,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      # The version bump is routed through a pull request rather than pushed
+      # straight at a protected branch, so the job needs to open one.
+      pull-requests: write
     # Observed across 73 executions of the shared release jobs: median 1.3 min,
     # p95 3.0 min, max 4.0 min (nextcloud-vue). A release is expensive to fail
     # spuriously — it builds the frontend (measured at 211 s under load),
@@ -251,11 +254,14 @@ jobs:
       # re-run of a release that already happened must not create an empty
       # commit and re-tag it.
       - name: Commit the version bump
+        id: bump
         run: |
           set -euo pipefail
           CURRENT=$(grep -oP '(?<=<version>)[^<]+' appinfo/info.xml | head -1)
           if [ "$CURRENT" = "${{ env.NEW_VERSION }}" ]; then
             echo "appinfo/info.xml already says ${{ env.NEW_VERSION }} — nothing to commit."
+            echo "bump_sha=" >> "$GITHUB_OUTPUT"
+            echo "bump_branch=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           sed -i "s|<version>.*</version>|<version>${{ env.NEW_VERSION }}</version>|" appinfo/info.xml
@@ -263,16 +269,58 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add appinfo/info.xml
           git commit -m "chore(release): ${{ env.NEW_VERSION }} [skip ci]"
-          if ! git push origin HEAD:${{ github.ref_name }}; then
-            echo "::error::Could not push the version bump to ${{ github.ref_name }}."
-            echo "The tag must name a tree whose appinfo/info.xml matches it, so this"
-            echo "is a hard stop rather than a warning — releasing past it would put"
-            echo "the old version number inside a package labelled with the new one."
-            echo "If the branch is protected, allow the GitHub Actions bot to push to"
-            echo "it, or route the bump through a PR before the release runs."
-            exit 1
+
+          # The bump lands on its OWN branch, never on ${{ github.ref_name }}.
+          # `development`, `beta` and `main` all require a pull request, so a
+          # direct push is rejected with GH013 and the release dies there — which
+          # is exactly what happened to openregister and openconnector.
+          BUMP_BRANCH="release/v${{ env.NEW_VERSION }}"
+          if git ls-remote --exit-code --heads origin "$BUMP_BRANCH" >/dev/null 2>&1; then
+            # A previous run of this same version already created it. Reuse it
+            # rather than overwriting: a force push here would discard whatever
+            # that run produced, and the tag below has to name a real commit.
+            BUMP_SHA=$(git ls-remote origin "refs/heads/$BUMP_BRANCH" | cut -f1)
+            echo "::notice::$BUMP_BRANCH already exists at ${BUMP_SHA} — reusing it."
+          else
+            git push origin "HEAD:refs/heads/$BUMP_BRANCH"
+            BUMP_SHA=$(git rev-parse HEAD)
+            echo "Committed ${CURRENT} -> ${{ env.NEW_VERSION }} on $BUMP_BRANCH"
           fi
-          echo "Committed ${CURRENT} -> ${{ env.NEW_VERSION }} on ${{ github.ref_name }}"
+          echo "bump_sha=${BUMP_SHA}" >> "$GITHUB_OUTPUT"
+          echo "bump_branch=${BUMP_BRANCH}" >> "$GITHUB_OUTPUT"
+
+      # THE TAG STILL NAMES A TREE WHOSE info.xml MATCHES IT.
+      #
+      # That requirement is not ours — Nextcloud's release template asserts it:
+      #     [ "$APP_VERSION" = "v$(xpath info.xml //version)" ]
+      # A tag does not have to sit on the integration branch to satisfy it, so
+      # the tag is cut from the bump commit on the release branch (see `commit:`
+      # on the release step) and the branch catches up via this pull request.
+      - name: Open the version-bump pull request
+        if: steps.bump.outputs.bump_branch != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          BR="${{ steps.bump.outputs.bump_branch }}"
+          if gh pr view "$BR" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "A pull request for $BR already exists."
+            exit 0
+          fi
+          gh pr create \
+            --repo "${{ github.repository }}" \
+            --base "${{ github.ref_name }}" \
+            --head "$BR" \
+            --title "chore(release): ${{ env.NEW_VERSION }}" \
+            --body "Version bump for ${{ env.NEW_VERSION }}, opened by the release workflow.
+
+          The tag v${{ env.NEW_VERSION }} already names this commit, so the released
+          package and its label agree. Merging this brings ${{ github.ref_name }} up
+          to the released version.
+
+          Raised as a pull request rather than pushed directly because
+          ${{ github.ref_name }} requires one; a direct push is rejected with GH013
+          and takes the release down with it."
 
       - name: Copy files into package directory
         run: |
@@ -469,6 +517,11 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           tag: v${{ env.NEW_VERSION }}
+          # Tag the BUMP commit, not the branch head — that is the tree whose
+          # info.xml says ${{ env.NEW_VERSION }}. Falls back to the triggering
+          # sha when no bump was needed (a re-run of an already-released
+          # version), which is the same tree by definition.
+          commit: ${{ steps.bump.outputs.bump_sha || github.sha }}
           name: "${{ inputs.release-type == 'stable' && 'Release' || (inputs.release-type == 'beta' && 'Beta' || 'Unstable') }} ${{ env.NEW_VERSION }}"
           draft: false
           prerelease: ${{ inputs.release-type != 'stable' }}

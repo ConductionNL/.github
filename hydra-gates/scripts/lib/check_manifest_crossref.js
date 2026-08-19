@@ -31,8 +31,25 @@
 //                        FAIL on miss.
 //   (e) removals-invariant (ADR-044 no-functionality-loss) — every id in
 //                        menu-layout.json#removals must, after assembly, leave
-//                        its route reachable via another surviving menu entry.
-//                        FAIL on an orphaned route.
+//                        its page reachable. Reachability is the transitive
+//                        closure of the manifest's DECLARATIVE navigation
+//                        edges (open-page action targets, handler:'navigate'
+//                        routes, viewAllRoute / rowRoute / clickRoute /
+//                        onSuccessRoute / drilldown.route), seeded by the
+//                        surviving menu — not the surviving menu alone.
+//                        FAIL on an orphaned page. When the replacement
+//                        surface names the retired page NOWHERE (its
+//                        functionality moved rather than its link), the app
+//                        may name that surface in
+//                        menu-layout.json#removalsReplacedBy; the gate
+//                        verifies the named page exists and is ITSELF
+//                        reachable, then downgrades to WARN. Never a
+//                        free-text reason — see the block comment at (e).
+//                        A replacement in ANOTHER app is spelled
+//                        '<appId>:<PageId>' and gets a STRICTLY WEAKER check
+//                        (syntax + known fleet app id + not this app), because
+//                        the gate cannot read another app's manifest; the WARN
+//                        says so explicitly. See CROSS_APP_APP_RE.
 //   (f) registry-crossref— the manifest and src/registry.js must agree about
 //                        which components exist. A manifest `component` /
 //                        slot-override naming no registry export renders
@@ -365,6 +382,207 @@ function collectMenuRoutes(items, ptr, out) {
 	})
 }
 
+// --- (e) declarative navigation edges ----------------------------------------
+//
+// THE MENU IS NOT THE ONLY WAY TO REACH A PAGE, AND PRETENDING IT IS PRODUCES
+// FALSE ORPHANS.
+//
+// The removals-invariant used to ask "does a surviving MENU entry still point
+// at this route". A page reached by a dashboard tile's click-through, a
+// widget's "view all" link, a header action or a chart drilldown is reachable
+// by any honest reading of ADR-044 no-functionality-loss, and every one of
+// those is a first-class, statically checkable field of the manifest schema —
+// gate-32 (check_detail_page_discipline.py (f)/(f2)) already resolves
+// `viewAllRoute` / `rowRoute` and the object `{name}` route form against the
+// page-id set for exactly this reason. Measured on procest `development`
+// @78c96081: `Voorstellen` is named by
+// `CaseDetail.config.widgets[12].content.viewAllRoute` and was still reported
+// an orphan by this invariant.
+//
+// THE KEYS BELOW ARE THE SCHEMA'S, NOT A GUESS. Each is a documented
+// destination field in scripts/schemas/app-manifest-v2.schema.json:
+//   route           $defs/action ("Destination route name for handler:
+//                   'navigate'"), $defs/primaryAction, the stat/banner tile
+//                   click-through, and drilldown.route — the last is a `route`
+//                   key inside the drilldown object, so it needs no entry of
+//                   its own.
+//   viewAllRoute    widget "view all" link       (gate-32 (f) resolves it too)
+//   rowRoute        widget row click-through     (gate-32 (f) resolves it too)
+//   clickRoute      whole-tile click-through ("Alias of content.route")
+//   onSuccessRoute  open-form action navigates here after a successful save
+// `target` is handled separately because the schema OVERLOADS it: it is a
+// modal id for open-modal and a URL for navigate — only the open-page form
+// names a page, and crediting the other two would let a modal id vouch for a
+// page that happens to share its name.
+//
+// `href` is deliberately absent: an external URL is not a page. deepLinks are
+// deliberately absent too — they are matched by PATH PREFIX (check (d)), so a
+// deepLink at `/` would vouch for every page in the app, and they declare an
+// entry point from ANOTHER app rather than a navigation edge within this one.
+const ROUTE_REF_KEYS = new Set([
+	'route',
+	'viewAllRoute',
+	'rowRoute',
+	'clickRoute',
+	'onSuccessRoute',
+])
+
+// Collect every destination reference beneath `node`. Accepts the string form
+// ("CaseDetail" / "/cases") and the OBJECT form ({ name, query }) that
+// stats-block entries use — openconnector shipped a dangling one of those and
+// a string-only scan reported "no unresolvable route refs" while the page threw
+// on mount (see check_detail_page_discipline.py (f2)).
+function collectRouteRefs(node, out) {
+	if (Array.isArray(node)) {
+		node.forEach((v) => collectRouteRefs(v, out))
+		return
+	}
+	if (!node || typeof node !== 'object') return
+	const push = (v) => {
+		if (typeof v === 'string' && v !== '') out.push(v)
+		else if (v && typeof v === 'object' && typeof v.name === 'string' && v.name !== '') out.push(v.name)
+	}
+	if (node.type === 'open-page') push(node.target)
+	for (const [k, v] of Object.entries(node)) {
+		if (k === '_note' || k === '_meta') continue
+		if (ROUTE_REF_KEYS.has(k)) push(v)
+		collectRouteRefs(v, out)
+	}
+}
+
+// --- (e) CROSS-APP replacement targets ---------------------------------------
+//
+// SOME FUNCTIONALITY DOES NOT MOVE TO ANOTHER PAGE — IT MOVES TO ANOTHER APP,
+// AND THE SAME-APP WAIVER CANNOT SAY SO.
+//
+// Measured on procest: seven of its eight retired pages are superseded by a
+// surface in procest itself and `removalsReplacedBy: {"<id>": "<pageId>"}`
+// states that, checkably. The eighth — `BesluitvormingAgenda`, a CROSS-CASE
+// meeting-agenda compiler — moved to **decidesk**. With only the same-app form
+// available, procest's honest options were (i) leave a true FAIL standing or
+// (ii) name a local page that does exist and is reachable. NOTE THE GATE WOULD
+// HAVE ACCEPTED `CaseDetail`: existence + reachability is the whole of what it
+// checks, so the false claim would have passed and NOTHING downstream could
+// have caught it. A form that cannot state the truth does not prevent lies; it
+// selects for them. Hence `<appId>:<PageId>`.
+//
+// WHAT A CROSS-APP TARGET CAN AND CANNOT BE CHECKED — STATED, NOT IMPLIED.
+//
+// (No emoji anywhere in this file, on purpose: js_scope.jsCommentMask masks by
+// UTF-16 CODE UNIT and source_scope.js_comment_mask by CODE POINT, so a single
+// astral character makes the two produce masks of DIFFERENT LENGTH and
+// test_js_scope.js's drift arm fails. Measured: three emoji here, three
+// characters of divergence, and this was the only .js in scripts/lib carrying
+// one — which is why the drift had never fired. Recorded, not fixed here.)
+//
+// The gate reads THIS app's manifest. It has no access to decidesk's manifest,
+// its menu, or its pages, and it is not going to acquire one: the runner is
+// offline, one repo deep, and a gate that reached across repositories would
+// fail for reasons its own PR cannot fix. So a cross-app waiver gets a
+// STRICTLY WEAKER check than a same-app one, and both the code and the WARN
+// say so out loud rather than letting the two look alike in a report.
+//
+//   CAN check   syntax (`<appId>:<PageId>`, one colon, NC app-id charset)
+//               the named app is NOT this app (see below — that is the
+//                 same-app case in disguise and must take the strict path)
+//               the named app is a known Conduction fleet app id
+//   CANNOT check that `<PageId>` exists in that app
+//               that it is reachable there
+//               that the app is even installed on the instance
+//               that it carries the retired functionality
+//
+// AND THE PROPERTY #490 PRIZED IS THE ONE THAT IS LOST: a same-app waiver
+// ROTS LOUDLY — the day the named page leaves the menu, every waiver pointing
+// at it FAILs. A cross-app waiver CANNOT rot, because there is nothing local
+// left to rot against. decidesk can delete `BesluitvormingAgenda` tomorrow and
+// procest's gate stays green. That is the price of being able to state the
+// truth at all, it is not hidden, and the WARN prints it on every run.
+//
+// THE LOCAL PATH IS UNTOUCHED AND UNREACHABLE FROM HERE. A value that resolves
+// to a local pages[].id or pages[].route NEVER enters this branch (see the call
+// site), so the cross-app form cannot be used to skip the exists / reachable /
+// not-itself checks on a local page. Naming this app's OWN id with a colon
+// FAILs for exactly that reason.
+const CROSS_APP_APP_RE = /^[a-z][a-z0-9_-]*$/
+const CROSS_APP_PAGE_RE = /^[A-Za-z][A-Za-z0-9_-]*$/
+// A value is treated as a cross-app ATTEMPT (and validated strictly, with
+// cross-app diagnostics) when it carries a colon whose left side contains no
+// `/`. The `/` exclusion is what keeps a LOCAL ROUTE out of this branch:
+// `/cases/:uuid` and `cases/:uuid` are parameterised page routes, not app
+// references, and misreading one as an app id would replace a precise
+// "resolves to no page" FAIL with a confusing "unknown app" FAIL.
+const CROSS_APP_ATTEMPT_RE = /^([^:/\s]+):(.*)$/
+
+// KNOWN CONDUCTION FLEET APP IDS — 18 core apps + the ExApp sidecar wrappers.
+//
+// ⚠️ THIS LIST DRIFTS, AND IT FAILS CLOSED WHEN IT DOES: a NEW fleet app cannot
+// be named as a cross-app replacement until it is added here, and the FAIL
+// message says so and names this constant. That is the intended direction —
+// the realistic defect is a TYPO (`decidsk:`, `decidesk-old:`), which a free
+// syntax check would bless forever, and an unknown app id would then read as a
+// verified waiver. Verified 2026-08-17 against `gh repo list ConductionNL`
+// (non-archived); ids are the appinfo/info.xml <id>, not the repo name — hence
+// `n8n` for the `n8n-nextcloud` repo. `mydash` is deliberately ABSENT: the app
+// is `launchpad` and the mydash repo is archived.
+//
+// A second copy of a fleet-app list lives in
+// check_phantom_cross_app_rpc.py#FLEET_APP_IDS (12 ids, a different and
+// narrower purpose — quoted app ids in `->call()`). They are NOT merged here on
+// purpose: this is shared infrastructure consumed live at @main by every fleet
+// app, and a refactor touching a second gate's inputs is a wider blast radius
+// than this change is worth. Recorded so the next reader knows both exist.
+const FLEET_APP_IDS = new Set([
+	// 18 core apps
+	'openregister', 'opencatalogi', 'openconnector', 'docudesk', 'nldesign',
+	'launchpad', 'softwarecatalog', 'larpingapp', 'zaakafhandelapp', 'procest',
+	'pipelinq', 'shillinq', 'scholiq', 'portaliq', 'decidesk', 'openbuild',
+	'doriath', 'hermiq',
+	// ExApp sidecar wrappers
+	'openklant', 'opentalk', 'openzaak', 'valtimo', 'n8n',
+])
+
+// This app's OWN id, for the "same-app case wearing a cross-app disguise"
+// refusal. TWO sources, unioned, because either can be absent or wrong and
+// neither failure may open the bypass:
+//   appinfo/info.xml <id>  — authoritative for a Nextcloud app, present in
+//                            every fleet repo.
+//   basename(APP_DIR)      — what CI actually gives us
+//                            (/home/runner/work/procest/procest), and the only
+//                            source when the checker runs over a fixture or a
+//                            partial checkout.
+// A union can only ever REFUSE more, never accept more, so a false positive
+// here costs an app one honest error message ("use the bare form") while a
+// false negative would cost the strict path entirely.
+function declaringAppIds(appDir) {
+	const ids = new Set()
+	const base = path.basename(appDir)
+	if (base) ids.add(base.toLowerCase())
+	try {
+		const xml = fs.readFileSync(path.join(appDir, 'appinfo', 'info.xml'), 'utf8')
+		const m = /<id>\s*([^<\s]+)\s*<\/id>/.exec(xml)
+		if (m) ids.add(m[1].toLowerCase())
+	} catch (e) { /* no appinfo/info.xml — the basename still guards */ }
+	return ids
+}
+
+// Does this app DECLARE a dependency on `appId`? Informational only — it is
+// reported in the WARN and never decides the verdict.
+//
+// Deliberately NOT a requirement, and the reasoning matters: manifest
+// `dependencies` is RUNTIME-LOAD-BEARING (CnAppRoot resolves each id via
+// useAppStatus — a HARD entry blocks the shell behind CnDependencyMissing, a
+// SOFT one raises a dismissible banner). Making the waiver require one would
+// mean adopting it CHANGES WHAT USERS SEE, which the "runtime-inert" property
+// of menu-layout.json exists to avoid, and would push a product decision into
+// a gate. So the gate REPORTS the answer and lets the reviewer weigh it: an
+// app claiming its functionality moved to an app it does not depend on is a
+// coherent thing to notice and an incoherent thing to auto-enforce.
+function declaresDependencyOn(manifest, appId) {
+	const deps = Array.isArray(manifest && manifest.dependencies) ? manifest.dependencies : []
+	return deps.some((d) => (typeof d === 'string' && d === appId)
+		|| (d && typeof d === 'object' && d.id === appId))
+}
+
 // Recursively collect action objects: any array under an `actions` key whose
 // items carry a `label` (the $defs/action required key) — covers pages[].
 // actions, object-table props.actions, and widget header actionItems.
@@ -573,6 +791,83 @@ function main() {
 			const effectiveRoutes = []
 			collectMenuRoutes(manifest.menu, '/menu', effectiveRoutes)
 			const effectiveKeys = new Set(effectiveRoutes.map((m) => pageKey(m.route)))
+
+			// REACHABILITY IS A CLOSURE, NOT A ONE-HOP MENU LOOKUP.
+			//
+			// Seeded by the surviving menu, then expanded along the declarative
+			// navigation edges each reachable page declares (ROUTE_REF_KEYS
+			// above). TRANSITIVE ON PURPOSE: an edge is credited only when it
+			// is declared BY A PAGE THAT IS ITSELF REACHABLE, so two orphaned
+			// pages linking to each other cannot vouch for one another — the
+			// same trap the pageKey normalisation above is careful not to fall
+			// into with unresolvable references.
+			//
+			// UNIONED WITH `effectiveKeys`, NEVER SUBSTITUTED FOR IT. The
+			// closure only credits keys that resolve to a real page, while
+			// `effectiveKeys` also carries menu routes that resolve to nothing
+			// (check (a) fails those separately, and this invariant must not
+			// fail them a second time). Taking the union makes this change
+			// strictly ADDITIVE: no removal that passed this invariant before
+			// can fail it now.
+			const edgesByPage = new Map()
+			for (const p of pages) {
+				if (!p || typeof p.id !== 'string') continue
+				const refs = []
+				collectRouteRefs(p, refs)
+				edgesByPage.set(p.id, refs)
+			}
+			const reachable = new Set(effectiveKeys)
+			const seen = new Set()
+			const queue = []
+			const visit = (key) => {
+				if (!pageIds.has(key)) return
+				reachable.add(key)
+				if (seen.has(key)) return
+				seen.add(key)
+				queue.push(key)
+			}
+			for (const k of effectiveKeys) visit(k)
+			while (queue.length > 0) {
+				const from = queue.shift()
+				for (const ref of (edgesByPage.get(from) || [])) visit(pageKey(ref))
+			}
+
+			// menu-layout.json#removalsReplacedBy — THE ONE THING THE GATE
+			// CANNOT DERIVE, DECLARED BY THE APP AND VERIFIED BY THE GATE.
+			//
+			// A navigation surface is sometimes retired because the
+			// FUNCTIONALITY moved to a surface that does not — and should not —
+			// name the old page anywhere: an index page superseded by a
+			// `folderSidebar` filter on another index, a standalone map page
+			// superseded by `viewModes: ["map"]` on the index it duplicated,
+			// three decision pages superseded by one sidebar tab on a detail
+			// page. All three shipped on procest, and NONE of them references
+			// the retired page in the manifest — measured, not assumed: a full
+			// string walk of procest's assembled manifest finds seven of its
+			// eight retired pages named by NOTHING but their own `pages[]`
+			// entry. There is no edge to widen toward, and inferring one from a
+			// page TYPE (`viewModes` contains "map", so any map page may go)
+			// would bless deleting a map page in every app that owns a map
+			// viewMode — the widening that retires the check.
+			//
+			// So the gate is RIGHT that the page has no entry point, and WRONG
+			// that this is a functionality loss. That is exactly the ambiguity
+			// check (f) direction 1 already answers with a WARN — "an orphan is
+			// either wired or deleted and the gate cannot know which". Here the
+			// app CAN say, and the claim is CHECKABLE rather than prose: it
+			// names the page carrying the functionality now, and the gate
+			// refuses it unless that page exists AND is itself reachable. It
+			// therefore ROTS LOUDLY — the day the named page leaves the menu,
+			// every waiver pointing at it FAILs. That is the property a
+			// free-text reason does not have, and the reason this is not
+			// `@removals-invariant exclude <reason>`.
+			const replacedBy = (inputs.menuLayout
+				&& typeof inputs.menuLayout.removalsReplacedBy === 'object'
+				&& inputs.menuLayout.removalsReplacedBy !== null
+				&& !Array.isArray(inputs.menuLayout.removalsReplacedBy))
+				? inputs.menuLayout.removalsReplacedBy
+				: {}
+			const selfAppIds = declaringAppIds(APP_DIR)
 			removals.forEach((id, i) => {
 				const entry = findEntry(preRemoval, id)
 				if (!entry) {
@@ -580,8 +875,43 @@ function main() {
 					return
 				}
 				if (typeof entry.route !== 'string' || entry.route === '') return // nothing routable retired
-				if (!effectiveKeys.has(pageKey(entry.route))) {
-					fail('removals-invariant', `/menu-layout/removals/${i}`, `removal '${id}' orphans route '${entry.route}' — no surviving menu entry reaches it (ADR-044 no-functionality-loss)`)
+				if (!reachable.has(pageKey(entry.route))) {
+					const ptr = `/menu-layout/removals/${i}`
+					const key = pageKey(entry.route)
+					const declared = replacedBy[id]
+					if (declared === undefined) {
+						fail('removals-invariant', ptr, `removal '${id}' orphans route '${entry.route}' — no surviving menu entry, and no declarative navigation edge (open-page action target, handler:'navigate' route, viewAllRoute / rowRoute / clickRoute / onSuccessRoute / drilldown.route) on any REACHABLE page names it (ADR-044 no-functionality-loss). If the FUNCTIONALITY moved to another surface rather than the link, name that surface's page in menu-layout.json#removalsReplacedBy['${id}'] — the gate then verifies that page exists and is itself reachable. If the functionality moved to ANOTHER app, spell it '<appId>:<PageId>' (e.g. 'decidesk:SomePage'), which the gate can only check syntactically`)
+					} else if (typeof declared !== 'string' || declared === '') {
+						fail('removals-invariant', ptr, `removal '${id}' orphans route '${entry.route}' and its menu-layout.json#removalsReplacedBy entry is not a non-empty page reference — the waiver names nothing the gate can check (ADR-044 no-functionality-loss)`)
+					} else if (!pageIds.has(pageKey(declared)) && CROSS_APP_ATTEMPT_RE.test(declared)) {
+						// CROSS-APP FORM `<appId>:<PageId>` — a STRICTLY WEAKER
+						// check, entered only when the value resolves to NO local
+						// page, so the same-app path above and the exists /
+						// not-itself / reachable path below are never skippable
+						// through this branch. See the block comment at
+						// CROSS_APP_APP_RE for what this can and cannot verify.
+						const [, otherApp, otherPage] = CROSS_APP_ATTEMPT_RE.exec(declared)
+						if (!CROSS_APP_APP_RE.test(otherApp)) {
+							fail('removals-invariant', ptr, `removal '${id}' orphans route '${entry.route}' and its declared replacement '${declared}' is not a usable reference: the part before ':' ('${otherApp}') is not a Nextcloud app id (lowercase, starting with a letter, then letters/digits/_/-). A cross-app replacement is spelled '<appId>:<PageId>' (ADR-044 no-functionality-loss)`)
+						} else if (!CROSS_APP_PAGE_RE.test(otherPage)) {
+							fail('removals-invariant', ptr, `removal '${id}' orphans route '${entry.route}' and its declared replacement '${declared}' is not a usable reference: the part after ':' ('${otherPage}') is not a page id (a bare identifier — not a path, not empty, no second ':'). A cross-app replacement names a PAGE in the other app, not a URL (ADR-044 no-functionality-loss)`)
+						} else if (selfAppIds.has(otherApp.toLowerCase())) {
+							fail('removals-invariant', ptr, `removal '${id}' orphans route '${entry.route}' and its declared replacement '${declared}' names THIS app ('${otherApp}') — that is the same-app case wearing a cross-app disguise, and the cross-app form is checked strictly less. Write the bare page reference ('${otherPage}') so the gate can verify it exists, is not the retired page, and is itself reachable (ADR-044 no-functionality-loss)`)
+						} else if (!FLEET_APP_IDS.has(otherApp)) {
+							fail('removals-invariant', ptr, `removal '${id}' orphans route '${entry.route}' and its declared replacement '${declared}' names '${otherApp}', which is not a known Conduction fleet app id — the gate cannot distinguish an app it has never heard of from a typo, and an unrecognised id would otherwise read as a verified waiver. If '${otherApp}' is a real fleet app, add it to FLEET_APP_IDS in scripts/lib/check_manifest_crossref.js (ADR-044 no-functionality-loss)`)
+						} else {
+							const dep = declaresDependencyOn(manifest, otherApp)
+							warn('removals-invariant', ptr, `removal '${id}' leaves route '${entry.route}' with no navigation entry point of its own; menu-layout.json declares its functionality moved to page '${otherPage}' in ANOTHER app, '${otherApp}'. REDUCED GUARANTEE — THIS WAIVER WAS NOT VERIFIED THE WAY A SAME-APP ONE IS. The gate checked only that '${otherApp}' is a known fleet app id and is not this app; it CANNOT check that page '${otherPage}' exists in '${otherApp}', that it is reachable there, that '${otherApp}' is installed, or that it carries this functionality — it does not read another app's manifest. It also does NOT rot: a same-app waiver FAILs the day its target leaves the menu, this one cannot. ${dep ? `This app does declare a manifest dependency on '${otherApp}'.` : `This app declares NO manifest dependency on '${otherApp}', so nothing in this repo corroborates the claim.`} Verifying it is a review judgement (ADR-044 no-functionality-loss)`)
+						}
+					} else if (!pageIds.has(pageKey(declared))) {
+						fail('removals-invariant', ptr, `removal '${id}' orphans route '${entry.route}' and its declared replacement '${declared}' resolves to no pages[].id or pages[].route — a waiver pointing at a page that does not exist is not a replacement (ADR-044 no-functionality-loss)`)
+					} else if (pageKey(declared) === key) {
+						fail('removals-invariant', ptr, `removal '${id}' orphans route '${entry.route}' and declares ITSELF as its replacement — a page cannot vouch for its own reachability (ADR-044 no-functionality-loss)`)
+					} else if (!reachable.has(pageKey(declared))) {
+						fail('removals-invariant', ptr, `removal '${id}' orphans route '${entry.route}' and its declared replacement '${declared}' is ITSELF unreachable — the waiver moves the orphan, it does not close it (ADR-044 no-functionality-loss)`)
+					} else {
+						warn('removals-invariant', ptr, `removal '${id}' leaves route '${entry.route}' with no navigation entry point of its own; menu-layout.json declares its functionality moved to '${declared}', which exists and is reachable. The page stays routable for deep links. The gate can only check that '${declared}' IS reachable — whether it genuinely carries this functionality is a review judgement`)
+					}
 				}
 			})
 		}

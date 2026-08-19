@@ -578,6 +578,81 @@ Note its dist-tags: apps consume **`vue3`**, currently `2.2.0-vue3.x`. The `late
 tag is `1.0.0-beta.3`, an old Vue 2 build — installing without a tag or an explicit
 version gets the wrong library.
 
+## An upstream tool defect does not get to block a release
+
+Third-party tooling occasionally refuses to run against this fleet for reasons
+that have nothing to do with our code. When that happens there are three
+responses, and only one of them is allowed.
+
+**The worked example.** `nextcloud/openapi-extractor` maps an app's `<licence>`
+to an SPDX identifier through a hardcoded `match()` in `src/Helpers.php`. It
+accepts `agpl` / `mit` / `mpl` / `apache` / `gpl3` and five SPDX spellings, and
+calls `Logger::panic()` — a fatal, not a warning — on anything else:
+
+```
+PHP Fatal error: license: Unable to convert EUPL-1.2 to SPDX identifier
+```
+
+`EUPL-1.2` is a perfectly valid SPDX identifier and is the licence **every**
+Conduction app ships under. The tool therefore could not run against any of
+them. app-versions' `openapi` job had never passed once in its entire history.
+
+**What we do not do.**
+
+- *Relabel the licence to suit the tool.* The licence is a legal fact, not a
+  configuration value, and it would be wrong in the generated spec.
+- *Mark the step `continue-on-error` so the job reports green.* This is worse
+  than the red: a job that cannot run now looks exactly like one that passed,
+  which is the failure mode most of this page exists to prevent.
+- *Wait for upstream.* Upstream `main` still carried the same list months after
+  the defect was reachable. A release cadence cannot depend on someone else's
+  merge queue.
+
+**What we do.** Patch the dependency at install time with
+[`cweagans/composer-patches`](https://github.com/cweagans/composer-patches), in
+the `vendor-bin/` namespace that already pins the tool:
+
+```jsonc
+// vendor-bin/openapi-extractor/composer.json
+{
+  "require-dev": {
+    "cweagans/composer-patches": "^1.7",
+    "nextcloud/openapi-extractor": "v1.8.7"   // pin the exact version
+  },
+  "config": { "allow-plugins": { "cweagans/composer-patches": true } },
+  "extra": {
+    "patches": {
+      "nextcloud/openapi-extractor": {
+        "Allow EUPL-1.1 / EUPL-1.2 as SPDX identifiers": "patches/0001-allow-eupl-spdx-identifiers.patch"
+      }
+    }
+  }
+}
+```
+
+Three properties make this safe rather than a fork:
+
+1. **The version is pinned exactly.** A patch against a floating range is a
+   time bomb; against `v1.8.7` it either applies or it does not.
+2. **It fails loudly.** If the pin moves and the patch stops applying, composer
+   aborts the install. It cannot silently revert to the broken behaviour —
+   which is precisely what a `sed` in a workflow step would do.
+3. **The patch file carries its own rationale** in its header, so it can be
+   sent upstream unchanged, and so the next person reads *why* before *what*.
+
+**Then expect the tool to find real work.** Removing the blocker is not the end
+of it. With the licence fatal gone, the extractor reached app-versions'
+controllers for the first time and reported 50 genuine findings — 27 missing
+`@return` annotations, 11 missing `@param` docs, and 12 uses of `getParam()`
+where a typed method parameter belongs. Those are ours to fix, and a gate that
+reports our own debt is working correctly. Budget for that second half.
+
+One caution when writing the annotations it then demands: derive the response
+shapes from the method's actual `return` statements. Where a payload comes from
+a service whose shape is not visible at the call site, annotate it as a generic
+map rather than a guessed set of keys — **a wrong shape in a published API spec
+is worse than a loose one.**
+
 ## Corrections to older pages
 
 - "**Code style — PHPCS (PSR-12)**", in
