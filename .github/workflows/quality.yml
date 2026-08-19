@@ -2530,11 +2530,45 @@ jobs:
             exit 1
           fi
           echo "Installed on $ACTUAL, as declared."
+          # A REQUIRED additional app that does not enable is an ENVIRONMENT
+          # failure, and it must not be allowed to resurface as APPLICATION
+          # failures. It used to: `|| echo "::warning::…, continuing"` let the
+          # run proceed without the dependency, and the consuming app's tests
+          # then died on the absent classes.
+          #
+          # Measured on ConductionNL/hermiq, full-scope run 31490144919, six
+          # PHPUnit cells, perfect 6/6 correlation:
+          #
+          #   enable ok      -> Tests: 1500, Errors: 5, Failures: 1   (x3)
+          #   enable FAILED  -> Tests: 1500, Errors: 12               (x3)
+          #
+          # The seven extra "errors" were `Interface
+          # "OCA\OpenRegister\Service\Flow\IFlowNodeLogActions" not found` and
+          # `Call to undefined method MockObject_ToolRegistryFacade::
+          # describeTools()` — which read as app debt and were an absent app.
+          # Two distinct causes, one deterministic (OpenRegister declares
+          # min-version="32"; the cell was stable31) and one transient
+          # (`curl error 60 … self-signed certificate` during composer install
+          # left Twig missing, so enabling crashed). Both deserve a red job:
+          # the first is a real configuration error, the second is re-runnable.
+          #
+          # ⚠️ The failure flag goes through a FILE, not a variable. The loop
+          # body runs in a subshell (it is fed by a pipeline), so a variable set
+          # inside it is invisible after `done` — the same trap the gate runner
+          # documents at its gate-30 loop.
           if [ '${{ inputs.additional-apps }}' != '[]' ]; then
+            rm -f "${RUNNER_TEMP:-/tmp}/additional-app-enable-failed"
             echo '${{ inputs.additional-apps }}' | jq -r '.[].app' | while read -r name; do
               echo "Enabling app: $name"
-              php occ app:enable "$name" || echo "::warning::Failed to enable $name, continuing..."
+              if ! php occ app:enable "$name"; then
+                echo "::error::Failed to enable required additional app '$name'. This is an ENVIRONMENT failure, not an application failure — the run cannot measure this repository without it. Common causes: the app declares a min-version above the Nextcloud ref this cell tests, or its composer install did not complete."
+                echo "$name" >> "${RUNNER_TEMP:-/tmp}/additional-app-enable-failed"
+              fi
             done
+            if [ -s "${RUNNER_TEMP:-/tmp}/additional-app-enable-failed" ]; then
+              echo "::error::Aborting: $(tr '\n' ' ' < "${RUNNER_TEMP:-/tmp}/additional-app-enable-failed")could not be enabled."
+              exit 1
+            fi
           fi
           chmod -R a+w config
 
@@ -3061,11 +3095,45 @@ jobs:
               --admin-user admin \
               --admin-pass admin
           fi
+          # A REQUIRED additional app that does not enable is an ENVIRONMENT
+          # failure, and it must not be allowed to resurface as APPLICATION
+          # failures. It used to: `|| echo "::warning::…, continuing"` let the
+          # run proceed without the dependency, and the consuming app's tests
+          # then died on the absent classes.
+          #
+          # Measured on ConductionNL/hermiq, full-scope run 31490144919, six
+          # PHPUnit cells, perfect 6/6 correlation:
+          #
+          #   enable ok      -> Tests: 1500, Errors: 5, Failures: 1   (x3)
+          #   enable FAILED  -> Tests: 1500, Errors: 12               (x3)
+          #
+          # The seven extra "errors" were `Interface
+          # "OCA\OpenRegister\Service\Flow\IFlowNodeLogActions" not found` and
+          # `Call to undefined method MockObject_ToolRegistryFacade::
+          # describeTools()` — which read as app debt and were an absent app.
+          # Two distinct causes, one deterministic (OpenRegister declares
+          # min-version="32"; the cell was stable31) and one transient
+          # (`curl error 60 … self-signed certificate` during composer install
+          # left Twig missing, so enabling crashed). Both deserve a red job:
+          # the first is a real configuration error, the second is re-runnable.
+          #
+          # ⚠️ The failure flag goes through a FILE, not a variable. The loop
+          # body runs in a subshell (it is fed by a pipeline), so a variable set
+          # inside it is invisible after `done` — the same trap the gate runner
+          # documents at its gate-30 loop.
           if [ '${{ inputs.additional-apps }}' != '[]' ]; then
+            rm -f "${RUNNER_TEMP:-/tmp}/additional-app-enable-failed"
             echo '${{ inputs.additional-apps }}' | jq -r '.[].app' | while read -r name; do
               echo "Enabling app: $name"
-              php occ app:enable "$name" || echo "::warning::Failed to enable $name, continuing..."
+              if ! php occ app:enable "$name"; then
+                echo "::error::Failed to enable required additional app '$name'. This is an ENVIRONMENT failure, not an application failure — the run cannot measure this repository without it. Common causes: the app declares a min-version above the Nextcloud ref this cell tests, or its composer install did not complete."
+                echo "$name" >> "${RUNNER_TEMP:-/tmp}/additional-app-enable-failed"
+              fi
             done
+            if [ -s "${RUNNER_TEMP:-/tmp}/additional-app-enable-failed" ]; then
+              echo "::error::Aborting: $(tr '\n' ' ' < "${RUNNER_TEMP:-/tmp}/additional-app-enable-failed")could not be enabled."
+              exit 1
+            fi
           fi
 
       # ── Composer's DOWNLOAD cache, not `vendor/` ──────────────────────────
@@ -3440,11 +3508,45 @@ jobs:
               --admin-user admin \
               --admin-pass admin
           fi
+          # A REQUIRED additional app that does not enable is an ENVIRONMENT
+          # failure, and it must not be allowed to resurface as APPLICATION
+          # failures. It used to: `|| echo "::warning::…, continuing"` let the
+          # run proceed without the dependency, and the consuming app's tests
+          # then died on the absent classes.
+          #
+          # Measured on ConductionNL/hermiq, full-scope run 31490144919, six
+          # PHPUnit cells, perfect 6/6 correlation:
+          #
+          #   enable ok      -> Tests: 1500, Errors: 5, Failures: 1   (x3)
+          #   enable FAILED  -> Tests: 1500, Errors: 12               (x3)
+          #
+          # The seven extra "errors" were `Interface
+          # "OCA\OpenRegister\Service\Flow\IFlowNodeLogActions" not found` and
+          # `Call to undefined method MockObject_ToolRegistryFacade::
+          # describeTools()` — which read as app debt and were an absent app.
+          # Two distinct causes, one deterministic (OpenRegister declares
+          # min-version="32"; the cell was stable31) and one transient
+          # (`curl error 60 … self-signed certificate` during composer install
+          # left Twig missing, so enabling crashed). Both deserve a red job:
+          # the first is a real configuration error, the second is re-runnable.
+          #
+          # ⚠️ The failure flag goes through a FILE, not a variable. The loop
+          # body runs in a subshell (it is fed by a pipeline), so a variable set
+          # inside it is invisible after `done` — the same trap the gate runner
+          # documents at its gate-30 loop.
           if [ '${{ inputs.additional-apps }}' != '[]' ]; then
+            rm -f "${RUNNER_TEMP:-/tmp}/additional-app-enable-failed"
             echo '${{ inputs.additional-apps }}' | jq -r '.[].app' | while read -r name; do
               echo "Enabling app: $name"
-              php occ app:enable "$name" || echo "::warning::Failed to enable $name, continuing..."
+              if ! php occ app:enable "$name"; then
+                echo "::error::Failed to enable required additional app '$name'. This is an ENVIRONMENT failure, not an application failure — the run cannot measure this repository without it. Common causes: the app declares a min-version above the Nextcloud ref this cell tests, or its composer install did not complete."
+                echo "$name" >> "${RUNNER_TEMP:-/tmp}/additional-app-enable-failed"
+              fi
             done
+            if [ -s "${RUNNER_TEMP:-/tmp}/additional-app-enable-failed" ]; then
+              echo "::error::Aborting: $(tr '\n' ' ' < "${RUNNER_TEMP:-/tmp}/additional-app-enable-failed")could not be enabled."
+              exit 1
+            fi
           fi
 
       # ── Composer's DOWNLOAD cache, not `vendor/` ──────────────────────────
@@ -4613,11 +4715,45 @@ jobs:
               --admin-user admin \
               --admin-pass admin
           fi
+          # A REQUIRED additional app that does not enable is an ENVIRONMENT
+          # failure, and it must not be allowed to resurface as APPLICATION
+          # failures. It used to: `|| echo "::warning::…, continuing"` let the
+          # run proceed without the dependency, and the consuming app's tests
+          # then died on the absent classes.
+          #
+          # Measured on ConductionNL/hermiq, full-scope run 31490144919, six
+          # PHPUnit cells, perfect 6/6 correlation:
+          #
+          #   enable ok      -> Tests: 1500, Errors: 5, Failures: 1   (x3)
+          #   enable FAILED  -> Tests: 1500, Errors: 12               (x3)
+          #
+          # The seven extra "errors" were `Interface
+          # "OCA\OpenRegister\Service\Flow\IFlowNodeLogActions" not found` and
+          # `Call to undefined method MockObject_ToolRegistryFacade::
+          # describeTools()` — which read as app debt and were an absent app.
+          # Two distinct causes, one deterministic (OpenRegister declares
+          # min-version="32"; the cell was stable31) and one transient
+          # (`curl error 60 … self-signed certificate` during composer install
+          # left Twig missing, so enabling crashed). Both deserve a red job:
+          # the first is a real configuration error, the second is re-runnable.
+          #
+          # ⚠️ The failure flag goes through a FILE, not a variable. The loop
+          # body runs in a subshell (it is fed by a pipeline), so a variable set
+          # inside it is invisible after `done` — the same trap the gate runner
+          # documents at its gate-30 loop.
           if [ '${{ inputs.additional-apps }}' != '[]' ]; then
+            rm -f "${RUNNER_TEMP:-/tmp}/additional-app-enable-failed"
             echo '${{ inputs.additional-apps }}' | jq -r '.[].app' | while read -r name; do
               echo "Enabling app: $name"
-              php occ app:enable "$name" || echo "::warning::Failed to enable $name, continuing..."
+              if ! php occ app:enable "$name"; then
+                echo "::error::Failed to enable required additional app '$name'. This is an ENVIRONMENT failure, not an application failure — the run cannot measure this repository without it. Common causes: the app declares a min-version above the Nextcloud ref this cell tests, or its composer install did not complete."
+                echo "$name" >> "${RUNNER_TEMP:-/tmp}/additional-app-enable-failed"
+              fi
             done
+            if [ -s "${RUNNER_TEMP:-/tmp}/additional-app-enable-failed" ]; then
+              echo "::error::Aborting: $(tr '\n' ' ' < "${RUNNER_TEMP:-/tmp}/additional-app-enable-failed")could not be enabled."
+              exit 1
+            fi
           fi
 
       # ── Composer's DOWNLOAD cache, not `vendor/` ──────────────────────────
