@@ -290,6 +290,117 @@ check(
     '_skip 8 "unsafe-auth-resolver" na' in _RUNNER,
 )
 
+# --- caller-aware: the shape is not the defect, the consumption is ----------
+#
+# Both fixtures below contain the SAME `catch (\Throwable) { return null; }`.
+# The only difference is how the caller reads the null, and that difference is
+# the whole gate.
+
+FAIL_CLOSED_CALLER = """<?php
+class C {
+    public function guard(string $id): ?array
+    {
+        if ($this->authorizeEmployee($id) === null) {
+            return null;
+        }
+        return ['ok' => true];
+    }
+
+    private function authorizeEmployee(string $id): ?array
+    {
+        try {
+            return $this->objectService()->find($id);
+        } catch (\\Throwable $e) {
+            return null;
+        }
+    }
+}
+"""
+check(
+    "a resolver whose caller DENIES on null is not reported",
+    run(FAIL_CLOSED_CALLER) == [],
+    repr(run(FAIL_CLOSED_CALLER)),
+)
+
+FAIL_OPEN_CALLER = """<?php
+class C {
+    public function approve(string $user): void
+    {
+        $auth = $this->getAuthorizationService();
+        if ($auth !== null) {
+            $auth->assertMayApprove($user);
+        }
+    }
+
+    private function getAuthorizationService(): ?object
+    {
+        try {
+            return $this->c->get('A');
+        } catch (\\Throwable $e) {
+            return null;
+        }
+    }
+}
+"""
+_fo = run(FAIL_OPEN_CALLER)
+check(
+    "decidesk#45 — a caller that SKIPS on null is still reported",
+    len(_fo) == 1 and "getAuthorizationService" in _fo[0],
+    repr(_fo),
+)
+
+MIXED_CALLERS = """<?php
+class C {
+    public function a(string $id): ?array
+    {
+        if ($this->authorizeThing($id) === null) {
+            return null;
+        }
+        return [];
+    }
+
+    public function b(string $id): void
+    {
+        $t = $this->authorizeThing($id);
+        if ($t !== null) {
+            $t->check();
+        }
+    }
+
+    private function authorizeThing(string $id): ?array
+    {
+        try {
+            return $this->find($id);
+        } catch (\\Throwable $e) {
+            return null;
+        }
+    }
+}
+"""
+check(
+    "one skip-shaped caller among deny-shaped ones is still reported",
+    len(run(MIXED_CALLERS)) == 1,
+    repr(run(MIXED_CALLERS)),
+)
+
+NO_CALLER = """<?php
+class C {
+    private function authorizeThing(string $id): ?array
+    {
+        try {
+            return $this->find($id);
+        } catch (\\Throwable $e) {
+            return null;
+        }
+    }
+}
+"""
+check(
+    "a resolver with NO classifiable caller is still reported",
+    len(run(NO_CALLER)) == 1,
+    repr(run(NO_CALLER)),
+)
+
 print()
 if _FAILED:
     print(f"FAILED: {len(_FAILED)} — {_FAILED}")
