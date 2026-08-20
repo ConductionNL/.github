@@ -161,6 +161,7 @@ Usage::
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import sys
@@ -447,7 +448,20 @@ _IDOR_EXEMPT_RE = re.compile(
 _GUARD_BODY_RE = re.compile(
     r"OCSForbiddenException"
     r"|isAdmin\s*\("
-    r"|->\s*(?:authorize|require|ensure)[A-Z][A-Za-z0-9_]*\s*\("
+    # `.github#365` follow-up: an authentication helper is NOT a guard even
+    # when it is DELEGATED. `#365` blanked the inline `getUser() === null`
+    # shape, but `$this->requireUserOr401()` still matched this alternative
+    # on its NAME alone and cleared the method. MEASURED on decidesk
+    # `ConflictOfInterestController` (2026-08-20): three `#[NoAdminRequired]`
+    # methods took a caller-supplied id straight into a service with zero
+    # caller scoping, and gate-7 reported PASS. A one-line probe carrying
+    # ONLY `$this->requireUserOr401(...)` silenced a textbook IDOR.
+    # The lookahead excludes verb+authentication-noun names (requireUser,
+    # requireUserOr401, ensureSession, authorizeAuthenticated, ...) while
+    # KEEPING every authorisation spelling: requireOwner, requireAdmin,
+    # requireUserIsOwner, ensureAccess, authorizePermission — anything with
+    # a real auth token after the noun still matches.
+    r"|->\s*(?:authorize|require|ensure)(?!(?:LoggedIn|Login|UserSession|User|Session|Authenticated|Authentication|Auth)(?:Or\d{3})?\s*\()[A-Z][A-Za-z0-9_]*\s*\("
     r"|Http::STATUS_(?:UNAUTHORIZED|FORBIDDEN)"
     r"|(?:statusCode:\s*|,\s*)(?:401|403)\b"
     r"|(?:::|->)\s*(?:forbidden|unauthorized|accessDenied)\s*\("
@@ -544,7 +558,9 @@ _HELPER_GUARD_BODY_RE = re.compile(
     r"|Permission|NotAuthenticated|Authori[sz]ation|Tenan|Owner)"
     r"|isAdmin\s*\("
     r"|isCurrentUserAdmin\s*\("
-    r"|->\s*(?:authorize|require|ensure|check|assert|guard)[A-Z][A-Za-z0-9_]*\s*\("
+    # Same `#365` exclusion as `_GUARD_BODY_RE` above — a helper whose body
+    # only delegates to an AUTHENTICATION check is not guard-bearing either.
+    r"|->\s*(?:authorize|require|ensure|check|assert|guard)(?!(?:LoggedIn|Login|UserSession|User|Session|Authenticated|Authentication|Auth)(?:Or\d{3})?\s*\()[A-Z][A-Za-z0-9_]*\s*\("
     r"|Http::STATUS_(?:UNAUTHORIZED|FORBIDDEN|NOT_FOUND)"
     r"|(?:statusCode:\s*|,\s*)(?:401|403|404)\b"
 )
@@ -1813,6 +1829,101 @@ def _strict_guard_methods(cleaned: str, src: str) -> set:
     return known
 
 
+_SCHEMA_SLUG_RE = re.compile(r"""schema:\s*['"]([a-z0-9][a-z0-9-]*)['"]|setSchema\s*\(\s*['"]([a-z0-9][a-z0-9-]*)['"]""")
+
+_AUTHORISED_SCHEMAS_CACHE: dict = {}
+
+
+def _schemas_with_authorization(root: str) -> set:
+    """Slugs of every schema in *root* that DECLARES an ``authorization`` block.
+
+    Reads the app's own register JSON — ``lib/Settings/*register*.json`` plus
+    any ``lib/Settings/register.d/*.json`` fragments — and collects the slug of
+    each schema carrying ``x-openregister.authorization``.
+
+    Why this exists (measured, decidesk 2026-08-20).  Pattern 2b clears a
+    routed method because its collaborator reaches OpenRegister's facade with
+    RBAC left on, on the theory that OpenRegister then applies register RBAC.
+    That theory holds ONLY where the target schema actually declares an
+    authorization block: in OpenRegister an ABSENT block leaves the schema
+    OPEN, so "reaches the facade" guards precisely nothing.
+
+    ``ConflictOfInterestController``'s three ``#[NoAdminRequired]`` routes took
+    a caller-supplied id straight into ``ConflictOfInterestService``, which has
+    no caller scoping, against a ``conflict-of-interest`` schema declaring no
+    authorization block at all — and gate-7 reported PASS. Any authenticated
+    user could read any member's conflict declarations and record actions on
+    them.
+
+    Fails OPEN on an unreadable/absent register (returns the sentinel below),
+    because a gate that cannot read the register must not start failing every
+    app in the fleet on a file-layout difference; the seed test then behaves
+    exactly as it did before this check existed.
+    """
+    cached = _AUTHORISED_SCHEMAS_CACHE.get(root)
+    if cached is not None:
+        return cached
+    settings = os.path.join(root, "lib", "Settings")
+    files = []
+    if os.path.isdir(settings):
+        for name in os.listdir(settings):
+            if name.endswith(".json") and "register" in name.lower():
+                files.append(os.path.join(settings, name))
+        frag = os.path.join(settings, "register.d")
+        if os.path.isdir(frag):
+            files.extend(
+                os.path.join(frag, n) for n in os.listdir(frag)
+                if n.endswith(".json")
+            )
+    if not files:
+        _AUTHORISED_SCHEMAS_CACHE[root] = None      # sentinel: unknown
+        return None
+    slugs: set = set()
+    for f in files:
+        try:
+            with open(f, encoding="utf-8") as fh:
+                data = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        schemas = (data.get("components") or {}).get("schemas") or {}
+        for _name, body in schemas.items():
+            if not isinstance(body, dict):
+                continue
+            xo = body.get("x-openregister") or {}
+            if isinstance(xo, dict) and xo.get("authorization"):
+                slug = body.get("slug")
+                if isinstance(slug, str) and slug:
+                    slugs.add(slug)
+    _AUTHORISED_SCHEMAS_CACHE[root] = slugs
+    return slugs
+
+
+def _or_clear_is_credible(class_file: str, src: str) -> bool:
+    """Whether an OpenRegister-RBAC clear can be believed for *class_file*.
+
+    True when the file names no schema at all (nothing to contradict the
+    assumption), when the register cannot be read (fail-open, see above), or
+    when at least one schema it names declares an authorization block.
+    False when EVERY schema slug it names is declared WITHOUT one — there the
+    facade applies no restriction and the clear would be imaginary.
+    """
+    root = _app_root_for(class_file)
+    if root is None:
+        return True
+    authorised = _schemas_with_authorization(root)
+    if authorised is None:
+        return True
+    # COMMENT-FREE SOURCE WITH STRINGS KEPT: `cleaned` blanks string literals,
+    # so the slug would vanish and every class would look like it names none;
+    # raw `src` would let a slug mentioned in a docblock make the clear look
+    # credible — a security gate switched off by prose.
+    scan = _strip_strings_and_comments(src, keep_strings=True)
+    named = {a or b for a, b in _SCHEMA_SLUG_RE.findall(scan) if (a or b)}
+    if not named:
+        return True
+    return bool(named & authorised)
+
+
 def _or_delegating_methods(cleaned: str, guard_text: str) -> set:
     """Methods in this file that resolve their objects through OpenRegister.
 
@@ -2100,9 +2211,14 @@ def _collaborator_guard_methods(class_file: str) -> set:
     # further hop follows a RESOLVED collaborator or composed trait. It carries
     # its own `_OR_IMPORT_RE` gate per hop, so the check that used to guard the
     # call now lives inside it.
-    result = result | _or_delegating_methods_deep(
-        class_file, _OR_DELEGATION_MAX_DEPTH
-    )
+    # An OpenRegister-RBAC clear is only credible when the schema this class
+    # actually names declares an `authorization` block — an ABSENT block leaves
+    # the schema OPEN, so "reaches the facade" would guard nothing. See
+    # `_schemas_with_authorization` for the measured decidesk case.
+    if _or_clear_is_credible(class_file, src):
+        result = result | _or_delegating_methods_deep(
+            class_file, _OR_DELEGATION_MAX_DEPTH
+        )
     _COLLABORATOR_GUARD_CACHE[class_file] = result
     return result
 
