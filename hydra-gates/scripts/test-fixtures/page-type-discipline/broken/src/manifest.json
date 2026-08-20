@@ -1,0 +1,29 @@
+{
+	"$schema": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
+	"version": "1.0.0",
+	"menu": [],
+	"pages": [
+		{
+			"id": "WidgetDetail",
+			"route": "/widgets/:id",
+			"type": "detail",
+			"title": "Widget",
+			"config": { "register": "demo", "schema": "widget" },
+			"widgets": [
+				{
+					"widgetKey": "data",
+					"slot": "body",
+					"gridX": 0, "gridY": 0, "gridWidth": 12, "gridHeight": 4,
+					"props": { "title": "Data" }
+				}
+			]
+		},
+		{
+			"id": "Widgets",
+			"route": "/widgets",
+			"type": "custom",
+			"title": "Widgets",
+			"component": "WidgetsIndex"
+		}
+	]
+}

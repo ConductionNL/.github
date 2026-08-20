@@ -282,6 +282,60 @@ def _src_dir(path):
     return norm[: idx + len(os.sep + "src")]
 
 
+_APP_ICONS_CACHE = {}
+
+
+def _app_registered_icons(path):
+    """Icon names the APP registers itself, via `registerIcons()`.
+
+    Rule 8 used to require membership in ICON_REGISTRY alone and told the
+    author the icon "must be in BOTH to render". That is not what `CnIcon`
+    does. Its resolution order is:
+
+        _registry[name] || DASHBOARD_ICONS[name] || _registry[fallback] || …
+
+    `_registry` is what `registerIcons()` fills from the app's own
+    `src/icons.js`, and it is consulted FIRST — so an icon registered by the
+    app resolves on branch one and never reaches DASHBOARD_ICONS. EITHER
+    registry is sufficient; both are not required.
+
+    Measured on ConductionNL/hrmq#115: the gate reported 70 findings across 41
+    distinct icons, every one of them registered in the app's own icons.js. On
+    the live page all five icons flagged for `EmployeeDetail` rendered
+    correctly, and across 65 icons in that page's widget grid there were zero
+    `ViewDashboard` and zero `HelpCircleOutline` fallbacks. See .github#521.
+
+    Parsed from the `import X from 'vue-material-design-icons/…'` lines, which
+    is what `registerIcons()` is handed. Returns an empty set when the file is
+    absent, so an app that registers nothing is unaffected.
+    """
+    src = _src_dir(path)
+    if src in _APP_ICONS_CACHE:
+        return _APP_ICONS_CACHE[src]
+
+    names = set()
+    icons_js = os.path.join(src, "icons.js")
+    try:
+        with open(icons_js, "r", encoding="utf-8") as fh:
+            text = fh.read()
+    except OSError:
+        _APP_ICONS_CACHE[src] = names
+        return names
+
+    # `import Foo from 'vue-material-design-icons/Bar.vue'` — the LOCAL binding
+    # (Foo) is the registry key, exactly as with DASHBOARD_ICONS above: the
+    # imported filename is just the glyph chosen for the concept.
+    for m in re.finditer(
+        r"^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+['\"]vue-material-design-icons/",
+        text,
+        re.M,
+    ):
+        names.add(m.group(1))
+
+    _APP_ICONS_CACHE[src] = names
+    return names
+
+
 def _pages_of(doc):
     if isinstance(doc, dict) and isinstance(doc.get("pages"), list):
         return doc["pages"]
@@ -418,8 +472,12 @@ def check_page(path, page, page_ids, findings):
     # (e) icons — widget defs.
     icons = []
     _collect(widgets, "icon", icons)
+    # EITHER registry resolves the name — see _app_registered_icons(). The app's
+    # own registration is checked first by CnIcon, so requiring DASHBOARD_ICONS
+    # membership alone reported working icons as broken (.github#521).
+    resolvable = ICON_REGISTRY | _app_registered_icons(path)
     for ic in icons:
-        if isinstance(ic, str) and ic and ic not in ICON_REGISTRY:
+        if isinstance(ic, str) and ic and ic not in resolvable:
             # THE SYMPTOM IS SILENT, NOT A '?' (.github#304).
             #
             # This message used to say the icon "renders the '?' fallback".
@@ -443,9 +501,9 @@ def check_page(path, page, page_ids, findings):
                 f"{path}: page '{pid}' — widget icon '{ic}' is not in the shared "
                 f"icon registry, so it silently renders the DEFAULT icon "
                 f"('ViewDashboard') instead — the intent is lost with no visible "
-                f"breakage (ADR-062 rule 8). NOTE: this checks the nextcloud-vue "
-                f"widget vocabulary only; the app's own src/icons.js registration "
-                f"is gate-60's subject, and an icon must be in BOTH to render"
+                f"breakage (ADR-062 rule 8). Checked against BOTH registries "
+                f"CnIcon consults — the shared widget vocabulary and this app's "
+                f"own src/icons.js — so registering it in either one resolves it"
             )
 
     # (f) viewAllRoute / rowRoute must resolve to a page id.

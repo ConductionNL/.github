@@ -10364,6 +10364,74 @@ if [ -f src/manifest.json ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# Gate 69: page-type-discipline — every page should be one of the three typed
+# archetypes (index / detail / dashboard) AND should actually render that
+# type's page component.
+#
+#   (a) a type:"index|detail|dashboard" page must not carry page-level
+#       widgets[] in the `body` slot — CnPageRenderer renders a bare
+#       CnWidgetGrid INSTEAD of the typed component, so the page silently
+#       never mounts CnDetailPage/CnIndexPage/CnDashboardPage and loses its
+#       header, max-width, padding, sidebar and grid discipline (hrmq#112:
+#       47 detail pages rendered at a different width, no error anywhere);
+#   (b) a type:"custom" page whose component already renders CnIndexPage /
+#       CnDetailPage / CnDashboardPage is a typed page with extra steps —
+#       58 such pages fleet-wide carry ~29,700 lines of shell;
+#   (c) ratchet: the app's type:"custom" page count may not exceed BASE_REF.
+#
+# Diff-scoped (ADR-020) for (a) and (b) by page-object line span, so legacy
+# debt only blocks the PR that touches it. Complements gate-55, which governs
+# the INSIDE of a detail page's grid; this gate governs which page component
+# renders at all. Complements gate-68, which counts duplicate index pages.
+#
+# Skill: .claude/skills/hydra-gate-page-type-discipline/SKILL.md
+# ---------------------------------------------------------------------------
+_ptd_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-page-type-discipline.log
+: > "${_ptd_log}"
+_ptd_files=()
+while IFS= read -r f; do
+    [ -f "$f" ] || continue
+    _in_scope "$f" || continue
+    _ptd_files+=("$f")
+done < <(find src -maxdepth 1 -name 'manifest.json' 2>/dev/null; \
+    find src/manifest.d -name '*.json' 2>/dev/null)
+_ptd_ran=1
+if [ "${#_ptd_files[@]}" -gt 0 ]; then
+    _ptd_helper="${SCRIPT_DIR}/lib/check_page_type_discipline.py"
+    if [ -f "${_ptd_helper}" ]; then
+        # A CRASHED CHECKER MUST NOT REPORT PASS (#147 / #249 / #262).
+        set +e
+        if [ "${SCOPE_TO_DIFF}" = "1" ]; then
+            HYDRA_GATE_BASE_REF="${BASE_REF}" \
+                python3 "${_ptd_helper}" "${_ptd_log}" "${_ptd_files[@]}" >/dev/null 2>>"${_ptd_log}.err"
+        else
+            python3 "${_ptd_helper}" "${_ptd_log}" "${_ptd_files[@]}" >/dev/null 2>>"${_ptd_log}.err"
+        fi
+        _ptd_rc=$?
+        if [ "${_ptd_rc}" -ne 0 ]; then
+            _ptd_ran=0
+            _skip 69 "page-type-discipline" wiring "check_page_type_discipline.py exited ${_ptd_rc} — ${#_ptd_files[@]} manifest file(s) were in scope and no verdict was produced; page-type discipline is UNVERIFIED by this run. See ${_ptd_log}.err."
+        fi
+    else
+        _ptd_ran=0
+        _skip 69 "page-type-discipline" wiring "check_page_type_discipline.py not found at ${_ptd_helper} — ${#_ptd_files[@]} manifest file(s) were in scope and NONE were inspected; page-type discipline is UNVERIFIED by this run."
+    fi
+fi
+set +e
+_ptd_fail=$(wc -l < "${_ptd_log}" 2>/dev/null | tr -d ' ')
+[ -z "${_ptd_fail}" ] && _ptd_fail=0
+if [ "${#_ptd_files[@]}" -eq 0 ]; then
+    # AN UNOPENED SCOPE IS NEVER A PASS (#242/#240/#258/#268).
+    _skip 69 "page-type-discipline" na "scope was empty — 0 src/manifest.json or src/manifest.d/*.json file(s) in this repo or this diff, so NO page was inspected; page-type discipline (typed-component integrity, mislabelled custom pages, custom-page ratchet) is UNVERIFIED by this run."
+elif [ "${_ptd_ran}" -eq 1 ]; then
+    if [ "${_ptd_fail}" -eq 0 ]; then
+        _pass 69 "page-type-discipline"
+    else
+        _fail 69 "page-type-discipline" "${_ptd_fail} page-type discipline finding(s) — see ${_ptd_log}"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
 # gate-82 — ADR-082: a publicly reachable method carries a volume ceiling
 #
 # THERE ARE TWO WAYS TO DECLARE A PUBLIC PAGE, AND KNOWING ONE OF THEM MEANS
