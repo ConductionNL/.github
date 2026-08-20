@@ -3431,6 +3431,116 @@ class C extends Controller {
             )
 
 
+class UnrelatedForbiddenIsNotAGuardTest(unittest.TestCase):
+    """A 403 nobody consulted the CALLER for is not an authorisation decision.
+
+    `_GUARD_BODY_RE` cleared a method whenever a 401/403 appeared anywhere in
+    its body, whatever decided it.
+
+    MEASURED on decidesk `IntegrationController` (2026-08-20): `subscribe()`
+    took a caller-supplied Decision UUID and WROTE `outcomeCallbackUrl` onto
+    that object with no caller scoping, and gate-7 reported PASS — solely
+    because an unrelated anti-SSRF branch answered `Http::STATUS_FORBIDDEN`.
+    Its sibling `getOutcome()`, identical in shape but with no SSRF branch,
+    WAS reported. Same missing guard, visible in one method and invisible in
+    the other, because of a rejection that has nothing to do with who called.
+    """
+
+    def test_ssrf_shaped_403_does_not_clear(self) -> None:
+        src = """<?php
+class C extends Controller {
+    #[NoAdminRequired]
+    public function subscribe(string $id): JSONResponse {
+        $url = (string)$this->request->getParam('callbackUrl', '');
+        if ($this->isRegistryConsumer($url) === false) {
+            return new JSONResponse(['error' => 'ssrf_rejected'], Http::STATUS_FORBIDDEN);
+        }
+        return new JSONResponse($this->objectService->update($id, ['outcomeCallbackUrl' => $url]));
+    }
+}
+"""
+        self.assertTrue(
+            _scan(src),
+            "a 403 decided by URL shape, not by the caller, must not clear",
+        )
+
+    def test_delegated_authorization_exception_still_clears(self) -> None:
+        """A 403 from `catch (NotAuthorizedException)` IS authorisation.
+
+        The decision simply lives in the collaborator — the shape this gate
+        already trusts elsewhere. Without this, the rule reddened openregister
+        `RevertController::revert` (whose `RevertHandler` calls
+        `permissionHandler->hasPermission()` and throws) and openconnector
+        `DatasourceController::resolve`, both of which are correctly guarded.
+        """
+        src = """<?php
+class C extends Controller {
+    #[NoAdminRequired]
+    public function revert(string $id): JSONResponse {
+        try {
+            return new JSONResponse($this->revertService->revert($id));
+        } catch (NotAuthorizedException $e) {
+            return new JSONResponse(['error' => $e->getMessage()], 403);
+        }
+    }
+}
+"""
+        self.assertEqual(
+            [], _scan(src),
+            "delegated authorization surfaced as an exception must still clear",
+        )
+
+    def test_permission_predicates_still_clear(self) -> None:
+        """Apps spell the predicate many ways; each decides on the caller."""
+        for call in (
+            "if (!$this->canRead($id)) { return new JSONResponse([], 403); }",
+            "if ($this->hasPermission($id) === false) { return new JSONResponse([], 403); }",
+            "if ($this->mayEdit($id) === false) { return new JSONResponse([], 403); }",
+            "if ($this->isOwner($id) === false) { return new JSONResponse([], 403); }",
+        ):
+            src = """<?php
+class C extends Controller {
+    #[NoAdminRequired]
+    public function show(string $id): JSONResponse {
+        %s
+        return new JSONResponse($this->service->find($id));
+    }
+}
+""" % call
+            self.assertEqual(
+                [], _scan(src),
+                f"{call} decides the 403 on the caller and must still clear",
+            )
+
+    def test_app_specific_identity_primitive_still_clears(self) -> None:
+        """`$this->subject()` is identity consultation too.
+
+        portaliq's `ContributionController::schema()` decides its 403 on
+        whether THAT subject's manifest references the requested schema — a
+        textbook per-caller guard that an over-narrow identity vocabulary
+        would have reddened.
+        """
+        src = """<?php
+class C extends Controller {
+    #[NoAdminRequired]
+    public function schema(string $schema): JSONResponse {
+        $subject = $this->subject();
+        if ($subject === null) {
+            return new JSONResponse(['authenticated' => false], 401);
+        }
+        if ($this->referencedBy($subject, $schema) === false) {
+            return new JSONResponse(['error' => 'forbidden'], 403);
+        }
+        return new JSONResponse($this->schemaReader->readSchema($schema));
+    }
+}
+"""
+        self.assertEqual(
+            [], _scan(src),
+            "an app's own caller-identity primitive must still clear",
+        )
+
+
 # Keep this block LAST in the file. `tests/run-helper-suites.sh` invokes this
 # suite as `python3 scripts/lib/test_check_no_admin_idor.py`, so `unittest.main()`
 # runs — and exits — at the point it is reached. A test class appended BELOW it

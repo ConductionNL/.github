@@ -468,6 +468,103 @@ _GUARD_BODY_RE = re.compile(
     r"|TemplateResponse",
 )
 
+# A 403 that no caller identity was ever consulted for is not an authorisation
+# decision.
+#
+# `_GUARD_BODY_RE` above clears a method when a 401/403 appears ANYWHERE in the
+# body, whatever decided it. MEASURED on decidesk `IntegrationController`
+# (2026-08-20): `subscribe()` takes a caller-supplied Decision UUID and WRITES
+# `outcomeCallbackUrl` onto that object with no caller scoping at all, and
+# gate-7 reported PASS — solely because an unrelated anti-SSRF branch answers
+# `Http::STATUS_FORBIDDEN` for a callback URL outside the ADR-019 registry. Its
+# sibling `getOutcome()`, identical in shape but with no SSRF branch, WAS
+# reported. That is the whole defect: the same missing guard was visible in one
+# method and invisible in the other because of a rejection that has nothing to
+# do with who is calling. Reproduced on a minimal probe — adding an
+# SSRF-shaped 403 to a bare IDOR silences the gate.
+#
+# So: when the ONLY guard evidence is a status-code spelling, require the body
+# to consult caller identity at all. Every real authorisation guard does — it
+# has to, in order to decide. A method that never asks who is calling cannot be
+# authorising, whatever it returns.
+#
+# The named-guard spellings below clear on their own, exactly as before. They
+# are NOT a widening: each was already accepted via `_GUARD_BODY_RE`, and this
+# list only records which of them count as evidence *without* an accompanying
+# identity reference.
+_NON_STATUS_GUARD_RE = re.compile(
+    r"OCSForbiddenException"
+    r"|isAdmin\s*\("
+    r"|->\s*(?:authorize|require|ensure)(?!(?:LoggedIn|Login|UserSession|User|Session|Authenticated|Authentication|Auth)(?:Or\d{3})?\s*\()[A-Z][A-Za-z0-9_]*\s*\("
+    r"|(?:::|->)\s*(?:forbidden|unauthorized|accessDenied)\s*\("
+    # Permission / access predicates — `canRead(`, `mayEdit(`, `hasPermission(`,
+    # `hasAccess(`, `isOwner(`, `isParticipant(`, `isAllowed(`. These decide the
+    # 403 on the caller's relationship to the object, which is precisely what a
+    # status code on its own cannot evidence.
+    r"|(?:can|may|has|is)(?:Read|Write|Edit|Delete|View|Manage|Access|Permission|Permissions|Role|Right|Rights|Owner|Member|Participant|Allowed|Authorized|Authorised|Signatory|Oversight)[A-Za-z0-9_]*\s*\("
+    # Signature-verified webhooks: the SIGNATURE is the caller identity, and
+    # such endpoints legitimately have no user session at all — e.g. procest's
+    # `DwangsomPaymentCallbackController::callback()`, pinned by
+    # `PublicPageRawBodyTest::test_raw_body_with_an_inline_401_clears`.
+    r"|(?:validate|verify|check|is[A-Za-z]*)[A-Za-z0-9_]*Signature[A-Za-z0-9_]*\s*\("
+    # DELEGATED authorisation surfaced as an exception. A 403 raised from
+    # `catch (NotAuthorizedException $e)` IS an authorisation outcome — the
+    # decision simply lives in the collaborator, which is the shape this gate
+    # already trusts elsewhere (Pattern 2b). Without this arm the rule produced
+    # FOUR fleet-wide findings and ALL FOUR were exactly this: openregister
+    # `RevertController::revert` (whose `RevertHandler` calls
+    # `permissionHandler->hasPermission()` and throws `NotAuthorizedException`)
+    # and openconnector `DatasourceController::resolve` among them. The
+    # unrelated-403 shape this rule targets returns its 403 from an `if`, never
+    # from a `catch`.
+    r"|catch\s*\([^)]*(?:NotAuthorized|Unauthorized|Unauthorised|Forbidden|AccessDenied|Permission)[A-Za-z0-9_]*(?:Exception|Error)?"
+    r"|TemplateResponse",
+)
+
+# Any consultation of who the caller is. Deliberately GENEROUS — the job is to
+# catch the method that never asks at all, not to audit how well it asks. A
+# false negative here just preserves today's behaviour; a false positive would
+# redden a real guard.
+_IDENTITY_CONSULTED_RE = re.compile(
+    r"getUID\s*\("
+    r"|getUser\s*\("
+    r"|[Uu]serSession"
+    r"|isAdmin\s*\("
+    r"|isInGroup\s*\("
+    r"|getGroups\s*\("
+    r"|\$\w*(?:[Uu]id|[Uu]ser)\b"
+    r"|['\"]owner['\"]"
+    r"|->\s*owner\b"
+    r"|getOwner\s*\("
+    r"|@self\.owner"
+    r"|[Cc]urrentUser"
+    r"|[Cc]allerUid"
+    # Apps name their caller-identity primitive differently, and an app that
+    # resolves the caller through its own vocabulary is still consulting
+    # identity. MEASURED: portaliq's `ContributionController::schema()` decides
+    # its 403 on `$this->subject()` — whether THAT subject's manifest
+    # references the requested schema — which is a textbook per-caller guard
+    # that an over-narrow identity list would have reddened.
+    r"|[Ss]ubject\s*\("
+    r"|\$\w*(?:[Ss]ubject|[Cc]aller|[Pp]rincipal|[Aa]ctor|[Tt]enant|[Ii]dentity)\b"
+    r"|resolve(?:Caller|Subject|Principal|Actor|Tenant|Identity)[A-Za-z0-9_]*\s*\("
+    r"|current(?:Subject|Principal|Actor|Tenant|Identity)[A-Za-z0-9_]*\s*\(",
+)
+
+
+def _guard_body_is_credible(text: str) -> bool:
+    """Is this body's guard evidence actually about the caller?
+
+    True when a named guard spelling appears, or when a status-code guard is
+    accompanied by any reference to caller identity. False only for the
+    status-code-only body that never consults who is calling — the
+    `ssrf_rejected -> 403` shape.
+    """
+    if _NON_STATUS_GUARD_RE.search(text):
+        return True
+
+    return bool(_IDENTITY_CONSULTED_RE.search(text))
+
 # The same set WITHOUT the ``TemplateResponse`` alternative, for `@PublicPage`
 # methods. See the note at its use in ``scan_file``.
 _PUBLIC_TEMPLATE_STRIPPED_RE = re.compile(
@@ -3766,7 +3863,12 @@ def scan_file(path: str) -> int:
         # reason is a testable claim; this one does not survive the move.
         if (_PUBLIC_TEMPLATE_STRIPPED_RE if is_public_page
                 else _GUARD_BODY_RE).search(sig + body):
-            continue
+            # ...but a status-code-only body that never consults caller
+            # identity is not authorising anything — see
+            # `_guard_body_is_credible`. Falling through here does NOT report
+            # the method; every later pattern still gets its say.
+            if _guard_body_is_credible(sig + body):
+                continue
 
         # ---- Pattern 7: in-body ownership comparison --------------------
         # An ownership mismatch answered with 404 rather than 403 is the
