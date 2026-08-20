@@ -1143,6 +1143,32 @@ def _git(args: list[str], cwd: Path) -> str:
         return ""
 
 
+def _merge_base(base_ref: str, cwd: Path) -> str:
+    """The merge-base of ``base_ref`` and HEAD, or ``base_ref`` itself when it
+    cannot be resolved.
+
+    Unresolvable means: ``base_ref`` does not exist in this checkout (a
+    shallow clone that never fetched it), or it exists but shares no history
+    with HEAD (a shallow clone with ``fetch-depth: 1``, or genuinely unrelated
+    histories). ``run-hydra-gates.sh`` is this fleet's actual fail-closed gate
+    for that condition — it refuses the whole diff-scoped run (``exit 99``)
+    or marks the five DELTA gates, 16 among them, NOT APPLICABLE and NOT
+    counted as passing (full-scope mode), before this script is ever invoked.
+    By contract ``base_ref`` already shares history with HEAD by the time
+    ``run_gate`` runs it. This fallback only matters for a direct/standalone
+    invocation that bypasses that guard (a local run, a test), and it is not
+    a silent pass even then: falling back to ``base_ref`` itself means every
+    caller below compares against THAT tree, and a tree with no shared
+    history reads as every line of it deleted and every line of HEAD added —
+    a checker built to flag deletions (``spec_tags_removed``) or additions
+    (``changed_lines``) reports LOUDLY, not quietly, against a base this
+    unrelated. Degrading here rather than raising is what lets a caller that
+    does not need this specific comparison (most of ``run_gate``'s loop does
+    not touch ``spec_tags_removed`` or ``_git_show`` at all) keep working.
+    """
+    return _git(["merge-base", base_ref, "HEAD"], cwd).strip() or base_ref
+
+
 def changed_lines(base_ref: str, cwd: Path) -> dict[str, set[int]]:
     """Return {relative_path: {added_line_numbers}} from ``git diff -U0``.
 
@@ -1189,7 +1215,7 @@ def changed_lines(base_ref: str, cwd: Path) -> dict[str, set[int]]:
     # suppressing anything, which is why it is resolved rather than assumed.
     base_commit = base_ref
     if three_dot:
-        base_commit = _git(["merge-base", base_ref, "HEAD"], cwd).strip() or base_ref
+        base_commit = _merge_base(base_ref, cwd)
     return _drop_cosmetic_only(result, base_commit, cwd)
 
 
@@ -1222,24 +1248,43 @@ def spec_tags_removed(base_ref: str, cwd: Path) -> set[str]:
     as a finding, because ADR-020 exists to stop inherited debt blocking
     unrelated work. It fires only when the diff actually TOOK A TAG AWAY, which
     is never inherited debt and is always the author's own doing.
+
+    A BEHIND BRANCH MUST NOT INHERIT ANOTHER COMMIT'S REMOVAL. This used to try
+    ``base_ref...HEAD`` (merge-base, correct) and, whenever THAT diff contained
+    no removed ``@spec`` line, retry ``base_ref`` two-dot (the ref's live tip,
+    working-tree diff) — triggered by "found nothing", not by "the first diff
+    was unusable". On a branch sitting behind ``base_ref``, the merge-base diff
+    is a perfectly good, non-empty answer that legitimately contains zero
+    removed tags; the retry nonetheless fired, compared HEAD against
+    ``base_ref``'s CURRENT tip, and read every tag a commit merged into
+    ``base_ref`` AFTER the branch point as "removed by this PR" — because that
+    tag exists at the live tip and not on the (stale) branch.
+    Measured: shillinq#938, 28 commits behind `origin/development`, a diff
+    touching only 2 `tests/e2e/` files (true scope zero) — 21 methods across
+    six controllers, all tagged by an already-merged commit, reported REMOVED.
+    Merging development into the branch (closing the gap) made the same run
+    report zero.
+
+    Fixed by making the SAME distinction ``changed_lines`` already makes: the
+    two-dot form is for the genuinely-uncommitted-diff case (a local run with
+    no HEAD commit yet), and it is used only when the correct, merge-base-
+    relative diff produced no output at all — never merely because it found
+    nothing worth flagging.
     """
+    diff = _git(["diff", "-U0", "--diff-filter=ACMRD", f"{base_ref}...HEAD"], cwd)
+    if not diff.strip():
+        diff = _git(["diff", "-U0", "--diff-filter=ACMRD", base_ref], cwd)
     removed: set[str] = set()
-    for form in ([f"{base_ref}...HEAD"], [base_ref]):
-        diff = _git(["diff", "-U0", "--diff-filter=ACMRD", *form], cwd)
-        if not diff.strip():
-            continue
-        current: str | None = None
-        for line in diff.splitlines():
-            if line.startswith("--- a/"):
-                current = line[6:]
-            elif line.startswith("+++ b/"):
-                # Prefer the new path for renames; fall back to the old one.
-                current = line[6:]
-            elif line.startswith("-") and not line.startswith("---"):
-                if current and (SPEC_RE.search(line) or SPEC_EXCLUDE_RE.search(line)):
-                    removed.add(current)
-        if removed:
-            break
+    current: str | None = None
+    for line in diff.splitlines():
+        if line.startswith("--- a/"):
+            current = line[6:]
+        elif line.startswith("+++ b/"):
+            # Prefer the new path for renames; fall back to the old one.
+            current = line[6:]
+        elif line.startswith("-") and not line.startswith("---"):
+            if current and (SPEC_RE.search(line) or SPEC_EXCLUDE_RE.search(line)):
+                removed.add(current)
     return removed
 
 
@@ -1533,6 +1578,16 @@ def run_gate(app_dir: Path) -> int:
     # produces an empty `added` set, which the loop below used to skip outright,
     # so the file was not even opened.
     stripped = spec_tags_removed(base_ref, app_dir)
+    # The "before" snapshot for a stripped file has to be the MERGE BASE, not
+    # `base_ref`'s live tip — same reasoning as `changed_lines`' own
+    # `base_commit`. `base_ref` (typically `origin/development`) keeps moving
+    # after a branch diverges; reading "before" off its current tip mixes in
+    # whatever THAT ref did to the file independently of this PR (e.g. a
+    # tagged method development added after the branch point reads as
+    # "covered before, uncovered now" on a branch that never saw it — a
+    # second, subtler face of the same base-drift defect `spec_tags_removed`
+    # had).
+    merge_base = _merge_base(base_ref, app_dir)
     findings: list[str] = []
 
     for rel in sorted(set(changed) | stripped):
@@ -1551,7 +1606,7 @@ def run_gate(app_dir: Path) -> int:
             # findings are the DIFFERENCE. A file that lost one tag reports one
             # finding; a file that lost none reports none, however much
             # pre-existing debt it carries.
-            before = _uncovered_in_text(rel, _git_show(base_ref, rel, app_dir))
+            before = _uncovered_in_text(rel, _git_show(merge_base, rel, app_dir))
             now = _uncovered_in_text(rel, path.read_text(encoding="utf-8"))
             findings.extend(sorted(now - before))
             if not added:
