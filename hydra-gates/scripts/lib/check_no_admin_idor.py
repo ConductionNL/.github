@@ -445,6 +445,9 @@ _IDOR_EXEMPT_RE = re.compile(
 # ``forbidden`` / ``unauthorized`` / ``accessDenied`` called in response
 # position *is* the deny path — recognising it does not widen what counts as a
 # guard shape, only how that already-accepted shape may be written.
+#
+# `->canAccess(` IS DELIBERATELY *NOT* AN ALTERNATIVE HERE — see
+# `_GUARD_VERB_CALL_RE` below for where that vocabulary lives and why.
 _GUARD_BODY_RE = re.compile(
     r"OCSForbiddenException"
     r"|isAdmin\s*\("
@@ -643,9 +646,97 @@ _GUARD_HELPER_NAME_RE = re.compile(
     r"|^isAdmin$"
 )
 
+# ---------------------------------------------------------------------------
+# THE `canAccess(` CALL-SITE GAP (`ConductionNL/.github` — shillinq
+# `security-endpoint-guards`, 2026-08-20 wave-2 triage).
+# ---------------------------------------------------------------------------
+#
+# `_GUARD_HELPER_NAME_RE` above already recognises an `is|has|can|may` +
+# auth-token method NAME as guard-bearing, and that alone already clears
+# shillinq's canonical guard: `#[NoAdminRequired] index() { … if
+# ($this->context->canAccess($administrationId) === false) { throw … } }`
+# resolves via Pattern 1 (same-class) or Pattern 4a (the `AdministrationContextService
+# $context` typed collaborator, one call-hop out) exactly like `canAccess ✗ → ✓`
+# above — CONFIRMED by running this checker against shillinq HEAD's 86 real
+# controller files: 0 findings, and by `test_the_auth_token_may_be_the_first_segment`.
+#
+# Measured on shillinq (`security-endpoint-guards` design.md, Wave 2), though: a
+# 105-candidate mechanical sweep using the SAME verb list `_GUARD_BODY_RE` has —
+# `authorize*`/`require*`/`ensure*`/`isAdmin(`/`OCSForbiddenException`, with no
+# collaborator-name resolution at all — produced **86/105 (82%) false
+# positives**, "essentially all" `canAccess(`. That sweep is a cruder tool than
+# this checker (no Pattern 1/4a), but it exposes a REAL residual gap in THIS
+# checker too: whenever the callee cannot be resolved to a same-class helper or
+# a typed collaborator class file (a private helper delegating one hop further
+# to an UNRESOLVED sub-call, a same-class helper named e.g. `resolveScope()` —
+# a real shillinq/decidesk idiom per the design doc — whose own body reaches
+# `canAccess()` under a name that itself carries no auth token), the vocabulary
+# below is what `_HELPER_GUARD_BODY_RE` / `_STRICT_GUARD_BODY_RE` use to
+# recognise that BODY still performs a real access decision.
+#
+# THE GENERAL SHAPE, not one app's verb. A fleet grep (hrmq, decidesk, pipelinq,
+# procest, openregister `lib/Controller/`) turns up `hasAccess`, `mayAccess`,
+# `isAllowed`, `isAuthorized*`, `hasPermission`, `hasAccessToOrganisation` as
+# real per-object/per-tenant guard calls across five OTHER apps — every one
+# already an `is|has|can|may` + auth-token name, i.e. already inside
+# `_GUARD_HELPER_NAME_RE`'s vetted vocabulary. So this reuses that SAME
+# vocabulary as a call-site fragment, rather than special-casing `canAccess`.
+# (The same grep also found `canManageOrganisationMembers` and `canDelete` —
+# openregister and pipelinq respectively — which carry NO token this
+# vocabulary recognises; left unmatched deliberately, same as `canRender`/
+# `canDelete` below. Flagged as a fleet-wide follow-up, not fixed here: adding
+# `Organisation`/`Tenant`/`Member`/`Delete` etc. as tokens needs its own
+# false-positive/false-negative measurement, the way `#360` did for this set.)
+#
+# ⚠️ DELIBERATELY *NOT* ADDED TO `_GUARD_BODY_RE` (the top-level, resolution-
+# free match applied directly to the ROUTED method). `_GUARD_BODY_RE` already
+# trusts `->authorize*(`/`->require*(`/`->ensure*(` by NAME ALONE with no
+# existence check on the callee — an accepted, pre-existing trade-off for that
+# verb family (it is why `DBAController::ensureAdministrationAccess()` shipped
+# as a documented no-op stub without gate-7 ever flagging it — see
+# `shillinq/lib/Controller/DBAController.php`'s own docblock and
+# `security-endpoint-guards/design.md`: "Both would mechanically PASS gate-7
+# today"). Adding the wider `is|has|can|may` vocabulary to THAT SAME
+# no-existence-check regex would have made the same trade-off for MORE verbs —
+# and unlike `authorize*`/`require*`/`ensure*`, this vocabulary has its own
+# abuse-control test guarding exactly that: `VerbObjectGuardHelperNames.
+# test_shape_a_without_the_helper_is_still_reported` asserts a controller
+# calling `$this->canUserAccessAgent(...)` with NO such method defined
+# anywhere in the class stays FLAGGED. A first draft of this change added
+# `_GUARD_VERB_CALL_RE` to `_GUARD_BODY_RE` too and that test went red — the
+# call-site match cleared the method by name whether or not
+# `canUserAccessAgent` existed, silently deleting Pattern 1's "the helper must
+# actually exist in the class and be invoked — a bare method name is never
+# assumed to guard" guarantee for this entire verb family. Restricting the
+# addition to `_HELPER_GUARD_BODY_RE`/`_STRICT_GUARD_BODY_RE` keeps that
+# guarantee: both are only ever consulted for a method whose EXISTENCE (as a
+# same-class helper, via `_all_method_spans`, or as a typed collaborator class
+# resolved to a real `class Name` declaration under `lib/`) is already
+# confirmed before its body is read — this just widens what counts as evidence
+# inside a body we already know is reachable and real.
+#
+# This does not weaken the no-op-stub case, because the stub was never caught
+# by a body check in the first place — it shipped past `_GUARD_BODY_RE`'s
+# unconditional NAME trust, which this change leaves untouched. What stays
+# caught, unchanged: a bare unguarded method with NO guard-shaped call
+# anywhere (`RealIdorViolationTest`) is unaffected, since `_GUARD_VERB_CALL_RE`
+# only ever adds evidence, never removes the requirement that SOME guard
+# signal be present. And the abuse control that already exists for the
+# NAME-based route holds here identically: `canRender`/`hasChanges`/
+# `canDelete`/`hasItems` carry no auth token and do not match this fragment
+# either — see `_GUARD_HELPER_NAME_RE`'s own `#360` commentary for why that
+# boundary is drawn where it is.
+_GUARD_VERB_CALL_RE = (
+    r"->\s*(?:is|has|can|may)(?:[A-Z][a-z0-9_]*)*?"
+    r"(?:Admin|Access|Permission|Permitted|Owner|Allowed|Authori[sz]ed)"
+    r"(?:[A-Z][A-Za-z0-9_]*)?\s*\("
+)
+
 # A same-class helper also counts as guard-bearing if its BODY performs a
 # recognised authorisation action (throws, returns a 401/403/404, checks
-# admin membership, denies an anonymous session, …).
+# admin membership, denies an anonymous session, …). Also counts: the body
+# reaching a further `is|has|can|may`+auth-token call one hop out — see
+# `_GUARD_VERB_CALL_RE` above.
 _HELPER_GUARD_BODY_RE = re.compile(
     r"OCSForbiddenException"
     r"|NotPermittedException"
@@ -660,6 +751,7 @@ _HELPER_GUARD_BODY_RE = re.compile(
     r"|->\s*(?:authorize|require|ensure|check|assert|guard)(?!(?:LoggedIn|Login|UserSession|User|Session|Authenticated|Authentication|Auth)(?:Or\d{3})?\s*\()[A-Z][A-Za-z0-9_]*\s*\("
     r"|Http::STATUS_(?:UNAUTHORIZED|FORBIDDEN|NOT_FOUND)"
     r"|(?:statusCode:\s*|,\s*)(?:401|403|404)\b"
+    r"|" + _GUARD_VERB_CALL_RE,
 )
 # `.github#365` removed a `getUser() === null` alternative from the line above.
 # It named an AUTHENTICATION test as a guard, which is the whole defect; and in
@@ -691,7 +783,9 @@ _MUTATION_RE = re.compile(
 #
 # What remains is an explicit deny decision: a 401/403, a forbidden exception,
 # an admin-membership test, a call to an authorize*/require*/ensure*/assert*/
-# guard* predicate, or the rejection of an anonymous session.
+# guard* predicate, a further is|has|can|may+auth-token predicate one hop out
+# (`_GUARD_VERB_CALL_RE` — same class of explicit deny call, not the excluded
+# bare-throw/404 shape), or the rejection of an anonymous session.
 _STRICT_GUARD_BODY_RE = re.compile(
     r"OCSForbiddenException"
     r"|NotPermittedException"
@@ -701,6 +795,7 @@ _STRICT_GUARD_BODY_RE = re.compile(
     r"|->\s*(?:authorize|authorise|require|ensure|assert|guard)[A-Z][A-Za-z0-9_]*\s*\("
     r"|Http::STATUS_(?:UNAUTHORIZED|FORBIDDEN)"
     r"|(?:statusCode:\s*|,\s*)(?:401|403)\b"
+    r"|" + _GUARD_VERB_CALL_RE,
 )
 # `.github#365` removed the `(?:getUser|getUID|currentUid|getCurrentUserId)()
 # === null` alternative from the line above — the "anonymous-session rejection"

@@ -6,8 +6,9 @@
 
 return [
 	'routes' => [
-		['name' => 'agent#show',   'url' => '/api/agents/{id}', 'verb' => 'GET'],
-		['name' => 'agent#update', 'url' => '/api/agents/{id}', 'verb' => 'PUT'],
-		['name' => 'agent#diff',   'url' => '/api/agents/{id}/diff', 'verb' => 'GET'],
+		['name' => 'agent#show',    'url' => '/api/agents/{id}', 'verb' => 'GET'],
+		['name' => 'agent#update',  'url' => '/api/agents/{id}', 'verb' => 'PUT'],
+		['name' => 'agent#diff',    'url' => '/api/agents/{id}/diff', 'verb' => 'GET'],
+		['name' => 'agent#archive', 'url' => '/api/agents/{id}/archive', 'verb' => 'POST'],
 	],
 ];

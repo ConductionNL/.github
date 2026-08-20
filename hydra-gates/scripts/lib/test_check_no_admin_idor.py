@@ -2478,6 +2478,240 @@ class DraftController {
 
 
 # ---------------------------------------------------------------------------
+# `_GUARD_VERB_CALL_RE` — the `->canAccess(` CALL-SITE gap
+# (`ConductionNL/.github` — shillinq `security-endpoint-guards`, 2026-08-20)
+#
+# shillinq's canonical per-object/tenant guard is
+# `AdministrationContextService::canAccess(administrationId: …)`: a real
+# `AdministrationMembership` lookup that masks a non-member as a 404, never a
+# 403 (REQ-MA-001). `_GUARD_HELPER_NAME_RE` already recognises `canAccess` as
+# a guard-bearing NAME for a resolvable same-class helper (Pattern 1) or typed
+# collaborator (Pattern 4a) — proven by `test_the_auth_token_may_be_the_first_
+# segment` above and by this checker reporting 0 findings across all 86 real
+# controllers in shillinq HEAD. The residual gap `_GUARD_VERB_CALL_RE` closes:
+# a same-class helper whose OWN NAME carries no auth token (shillinq/decidesk's
+# own idiom — `resolveScope()`, `mayAccessReturn()`, `guardDraftAccess()` per
+# `security-endpoint-guards/design.md`) but whose BODY reaches a
+# `canAccess()`-shaped call one hop further out, through a typed collaborator.
+# ---------------------------------------------------------------------------
+
+_ADMIN_CONTEXT_SERVICE = """\
+<?php
+namespace OCA\\Shillinq\\Service;
+
+class AdministrationContextService {
+    public function canAccess(string $administrationId): bool {
+        if ($administrationId === '') {
+            return false;
+        }
+        return in_array($administrationId, $this->accessibleAdministrationIds(), true);
+    }
+
+    private function accessibleAdministrationIds(): array {
+        return $this->membershipRepository->administrationIdsForUser($this->currentUserId());
+    }
+
+    private function currentUserId(): ?string {
+        $user = $this->userSession->getUser();
+        return $user === null ? null : $user->getUID();
+    }
+}
+"""
+
+
+class GuardVerbCallSiteTest(unittest.TestCase):
+    """`_GUARD_VERB_CALL_RE` itself: the call-site fragment, and its abuse control."""
+
+    def test_matches_the_vetted_verb_family_at_a_call_site(self):
+        matches = cni._GUARD_VERB_CALL_RE
+        import re as _re
+        for call in (
+            "$this->context->canAccess($administrationId)",
+            "$this->context->hasAccess($administrationId)",
+            "$this->guard->isAllowed($id)",
+            "$this->acl->hasPermission($id)",
+            "$this->acl->isAuthorizedForItem($id)",
+            "$this->acl->hasAccessToOrganisation($orgId)",
+        ):
+            self.assertTrue(_re.search(matches, call), f"{call!r} should match")
+
+    def test_abuse_control_no_auth_token_does_not_match(self):
+        """Same abuse control as `#360`, restated for the call-site fragment.
+
+        A guard-shaped VERB with no auth token must not clear the gate just
+        because it is called through a collaborator — `canRender`/`canDelete`
+        are real, common, non-authorisation predicates.
+        """
+        matches = cni._GUARD_VERB_CALL_RE
+        import re as _re
+        for call in (
+            "$this->view->canRender($id)",
+            "$this->repo->canDelete($id)",
+            "$this->list->hasItems()",
+            "$this->flag->isReady()",
+        ):
+            self.assertFalse(_re.search(matches, call), f"{call!r} must NOT match")
+
+
+class CollaboratorCanAccessRegressionTest(unittest.TestCase):
+    """End-to-end regression cover for the shillinq measurement.
+
+    ``AdministrationContextService`` is a real typed collaborator (resolved
+    from a file under ``lib/Service``, per Pattern 4a), and the routed
+    method's own helper carries no auth-token name — the exact residual shape
+    `_GUARD_VERB_CALL_RE` was added for.
+    """
+
+    def test_direct_collaborator_canAccess_call_is_recognised(self):
+        """PASS-ON-GOOD: `$this->context->canAccess()` called directly in the
+        routed method (shillinq's actual, dominant shape) clears the gate.
+
+        This was already true before this change (Pattern 4a name-matching),
+        and stays true — pinned here as the direct regression test the
+        `security-endpoint-guards` measurement never had.
+        """
+        src = """\
+<?php
+namespace OCA\\Shillinq\\Controller;
+
+class TestController {
+    public function __construct(
+        private readonly AdministrationContextService $context,
+    ) {
+    }
+
+    /**
+     * @NoAdminRequired
+     */
+    public function show(string $administrationId) {
+        if ($this->context->canAccess($administrationId) === false) {
+            return new JSONResponse([], Http::STATUS_NOT_FOUND);
+        }
+        return new JSONResponse($this->ledger->findByAdministration($administrationId));
+    }
+}
+"""
+        self.assertEqual(
+            _scan_app(src, {"AdministrationContextService": _ADMIN_CONTEXT_SERVICE}), []
+        )
+
+    def test_helper_with_no_auth_token_name_delegating_to_canAccess_is_recognised(self):
+        """FALSE-POSITIVE FIX: `resolveScope()` carries no auth-token name but
+        its body reaches `$this->context->canAccess()` one hop out.
+
+        Before this change, `_HELPER_GUARD_BODY_RE` had no vocabulary for
+        `->canAccess(`, so `resolveScope()` was not recognised as a guard
+        helper by NAME (no token) or by BODY (no throw/401/403/404/authorize*/
+        require*/ensure*) — the routed method would have been a false
+        positive. `_GUARD_VERB_CALL_RE` closes exactly this.
+        """
+        src = """\
+<?php
+namespace OCA\\Shillinq\\Controller;
+
+class TestController {
+    public function __construct(
+        private readonly AdministrationContextService $context,
+    ) {
+    }
+
+    /**
+     * @NoAdminRequired
+     */
+    public function show(string $administrationId) {
+        $administrationId = $this->resolveScope($administrationId);
+        return new JSONResponse($this->ledger->findByAdministration($administrationId));
+    }
+
+    private function resolveScope(string $administrationId): string {
+        if ($this->context->canAccess($administrationId) === false) {
+            throw new OCSForbiddenException('Not a member of this administration.');
+        }
+        return $administrationId;
+    }
+}
+"""
+        self.assertEqual(
+            _scan_app(src, {"AdministrationContextService": _ADMIN_CONTEXT_SERVICE}), []
+        )
+
+    def test_POSITIVE_CONTROL_helper_with_no_auth_token_name_and_no_guard_body_is_flagged(self):
+        """FAIL-ON-BAD: same shape, but `resolveScope()` is a documented no-op.
+
+        This is the shillinq `DBAController::ensureAdministrationAccess()`
+        shape restated with a no-auth-token helper name: neither the helper's
+        NAME nor its BODY contains any recognised guard signal, so the routed
+        method must still be reported. Proves `_GUARD_VERB_CALL_RE` adds
+        evidence without removing the requirement that SOME guard signal be
+        present — it does not turn `resolveScope()` into an automatic pass.
+        """
+        src = """\
+<?php
+namespace OCA\\Shillinq\\Controller;
+
+class TestController {
+    public function __construct(
+        private readonly AdministrationContextService $context,
+    ) {
+    }
+
+    /**
+     * @NoAdminRequired
+     */
+    public function show(string $administrationId) {
+        $administrationId = $this->resolveScope($administrationId);
+        return new JSONResponse($this->ledger->findByAdministration($administrationId));
+    }
+
+    /**
+     * TODO: wire the real membership check once AdministrationContextService
+     * is available on this controller. For now this is a documented no-op.
+     */
+    private function resolveScope(string $administrationId): string {
+        $this->logger->debug('resolveScope called', ['administrationId' => $administrationId]);
+        return $administrationId;
+    }
+}
+"""
+        findings = _scan_app(
+            src, {"AdministrationContextService": _ADMIN_CONTEXT_SERVICE}
+        )
+        self.assertEqual(len(findings), 1, findings)
+        self.assertIn("method=show", findings[0])
+
+    def test_ROUTED_METHOD_LEVEL_undefined_helper_by_name_alone_stays_flagged(self):
+        """FAIL-ON-BAD, at the layer this change deliberately did NOT touch.
+
+        `_GUARD_BODY_RE` (the top-level, resolution-free match on the ROUTED
+        method itself) does NOT carry `_GUARD_VERB_CALL_RE` — see that
+        constant's own commentary for why: it would let a call to an
+        UNDEFINED `canAccess`-shaped method clear the gate by name alone,
+        with no existence check at all. `VerbObjectGuardHelperNames.
+        test_shape_a_without_the_helper_is_still_reported` already pins the
+        same invariant for `canUserAccessAgent`; restated here with
+        `canAccess` itself, in a single-file scan with no collaborator to
+        resolve, as a direct regression pin for this change.
+        """
+        src = """\
+<?php
+class TestController {
+    /**
+     * @NoAdminRequired
+     */
+    public function show(string $administrationId) {
+        if ($this->context->canAccess($administrationId) === false) {
+            return new JSONResponse([], Http::STATUS_NOT_FOUND);
+        }
+        return new JSONResponse($this->ledger->findByAdministration($administrationId));
+    }
+}
+"""
+        findings = _scan(src)
+        self.assertEqual(len(findings), 1, findings)
+        self.assertIn("method=show", findings[0])
+
+
+# ---------------------------------------------------------------------------
 # `.github#365` — AUTHENTICATION IS NOT AUTHORISATION
 # ---------------------------------------------------------------------------
 
