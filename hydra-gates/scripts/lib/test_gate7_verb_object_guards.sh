@@ -51,25 +51,28 @@ _findings() {  # <arm> [checker-path]
 }
 
 # ===========================================================================
-echo "== the fixed regex: clean is clean, planted names exactly the two plants =="
+echo "== the fixed regex: clean is clean, planted names exactly the three plants =="
 # ===========================================================================
+# Three shapes, not two, since `ConductionNL/.github` (shillinq
+# `security-endpoint-guards`, 2026-08-20): `archive()` is Shape 4, guarded one
+# hop out through `resolveScope()` -> `AdministrationContextService::canAccess()`.
 _clean_out="$(_findings clean)"
 _clean_n="$(printf '%s' "${_clean_out}" | grep -c . || true)"
 if [ "${_clean_n}" -eq 0 ]; then
-    _ok "clean/ produces 0 findings — verb-object guards are recognised (#353)"
+    _ok "clean/ produces 0 findings — verb-object guards are recognised (#353, #360, one-hop-body)"
 else
     _bad "clean/ produced ${_clean_n} finding(s); every method there carries a real per-object guard: ${_clean_out}"
 fi
 
 _planted_out="$(_findings planted)"
 _planted_n="$(printf '%s' "${_planted_out}" | grep -c . || true)"
-if [ "${_planted_n}" -eq 2 ]; then
-    _ok "planted/ produces exactly 2 findings"
+if [ "${_planted_n}" -eq 3 ]; then
+    _ok "planted/ produces exactly 3 findings"
 else
-    _bad "planted/ produced ${_planted_n} finding(s), wanted 2: ${_planted_out}"
+    _bad "planted/ produced ${_planted_n} finding(s), wanted 3: ${_planted_out}"
 fi
 # NAME the plants — a count alone would be satisfied by flagging everything.
-for _m in show update; do
+for _m in show update archive; do
     if printf '%s' "${_planted_out}" | grep -q "method=${_m}\b"; then
         _ok "planted/ names method=${_m}"
     else
@@ -86,10 +89,36 @@ fi
 
 # ===========================================================================
 echo
-echo "== ANTI-DEAD-TEST: revert the #353 relaxation and count the reds =="
+echo "== ANTI-DEAD-TEST: revert #353 AND the one-hop-body fix, count the reds =="
 # ===========================================================================
 # If clean/ passes under the OLD regex too, this fixture proves nothing about
-# #353 and must not be counted as coverage for it.
+# the fixes and must not be counted as coverage for them.
+#
+# ⚠️ Reverts TWO things now, not one. Originally this only undid #353's
+# `_GUARD_HELPER_NAME_RE` widening, and `diff()` (Shape 3, the loader ->
+# `canUserAccessAgent()` transitive closure) was what stayed red to prove it —
+# `show()`/`update()` were already independently cleared by Pattern 6
+# (session-identity hand-off, `.github#365`/`#398`), unrelated to #353, and
+# never carried this control's weight.
+#
+# `ConductionNL/.github` (the one-hop-body fix, `db9f3ec9`) then gave
+# `loadAccessibleAgent()` a SECOND, independent route to guard-bearing status:
+# its own body contains `->canUserAccessAgent(`, which now matches
+# `_GUARD_VERB_CALL_RE` inside `_HELPER_GUARD_BODY_RE` regardless of what
+# `_GUARD_HELPER_NAME_RE` says. That silently finished off this control —
+# reverting ONLY the name regex left `diff()` clearing through the body route
+# instead, and clean/ passed under the "old" checker for a reason that had
+# nothing to do with #353. Confirmed by replaying `db9f3ec9^`'s OWN checker
+# against this same fixture content: reverting only the name regex there DID
+# turn `diff()` red (1 finding) — the one-hop-body fix is what took it away.
+#
+# So the revert below undoes both: `_GUARD_HELPER_NAME_RE`'s #353/#360 shape,
+# AND `_GUARD_VERB_CALL_RE`'s presence in `_HELPER_GUARD_BODY_RE` /
+# `_STRICT_GUARD_BODY_RE`. What it proves is now "clean/ needs at least one of
+# these two fixes", not "#353 alone" — an honest downgrade of the claim, not a
+# weaker test: the fixture no longer contains a shape whose guard recognition
+# depends SOLELY on #353, so a narrower claim would be asserting something the
+# fixture cannot back up.
 _WORK="$(mktemp -d "${TMPDIR:-/tmp}/hydra-g7.XXXXXXXX")"
 trap 'rm -rf "${_WORK}"' EXIT
 _OLDCK="${_WORK}/check_no_admin_idor_OLD.py"
@@ -97,6 +126,8 @@ cp "${CHECKER}" "${_OLDCK}"
 
 # The pre-#353 first alternative: the auth token had to be the FINAL segment.
 # Restored by deleting the trailing optional-segment group that #353 added.
+# Then the pre-one-hop-body shape: `_GUARD_VERB_CALL_RE` stripped back out of
+# `_HELPER_GUARD_BODY_RE` / `_STRICT_GUARD_BODY_RE`.
 python3 - "${_OLDCK}" <<'PYREVERT'
 import re, sys
 p = sys.argv[1]
@@ -116,19 +147,32 @@ old_alt = (
 if new_alt not in s:
     sys.stderr.write("REVERT-FAILED: the post-#353 regex shape was not found\n")
     sys.exit(2)
-open(p, "w").write(s.replace(new_alt, old_alt, 1))
+s = s.replace(new_alt, old_alt, 1)
+# `db9f3ec9`: `_GUARD_VERB_CALL_RE` appended as a trailing alternative to both
+# `_HELPER_GUARD_BODY_RE` and `_STRICT_GUARD_BODY_RE`. Strip both occurrences.
+verb_call_alt = '    r"|" + _GUARD_VERB_CALL_RE,\n'
+if s.count(verb_call_alt) != 2:
+    sys.stderr.write(
+        "REVERT-FAILED: expected _GUARD_VERB_CALL_RE appended to exactly two "
+        f"regexes, found {s.count(verb_call_alt)} — the one-hop-body fix has "
+        "been reshaped, so this control no longer proves the fixture is "
+        "live. Update this revert to match.\n"
+    )
+    sys.exit(2)
+s = s.replace(verb_call_alt, "", 2)
+open(p, "w").write(s)
 PYREVERT
 _revert_rc=$?
 
 if [ "${_revert_rc}" -ne 0 ]; then
-    _bad "could not reconstruct the pre-#353 regex — _GUARD_HELPER_NAME_RE has been reshaped, so this control no longer proves the fixture is live. Re-derive the revert from \`git show 3c8da4c\` and update it here rather than deleting this arm."
+    _bad "could not reconstruct the pre-fix regexes — _GUARD_HELPER_NAME_RE or _GUARD_VERB_CALL_RE has been reshaped, so this control no longer proves the fixture is live. Re-derive the revert from \`git show 3c8da4c\` (#353) and \`git show db9f3ec9\` (one-hop-body) and update it here rather than deleting this arm."
 else
     _old_out="$(_findings clean "${_OLDCK}")"
     _old_n="$(printf '%s' "${_old_out}" | grep -c . || true)"
     if [ "${_old_n}" -gt 0 ]; then
-        _ok "clean/ goes RED (${_old_n} finding(s)) under the pre-#353 regex — the fixture genuinely discriminates fixed from broken"
+        _ok "clean/ goes RED (${_old_n} finding(s)) under the pre-fix regexes — the fixture genuinely discriminates fixed from broken"
     else
-        _bad "clean/ passes under the OLD regex too (${_old_n} findings). This fixture is a DEAD TEST: it would have been green before #353 and asserts nothing about the fix. Add a method whose guard the old regex rejects."
+        _bad "clean/ passes under the OLD regexes too (${_old_n} findings). This fixture is a DEAD TEST: it would have been green before these fixes and asserts nothing about them. Add a method whose guard the old regexes reject."
     fi
     # And the old regex must still catch the real plants, or the revert broke
     # something else and the red above is not the red we think it is.

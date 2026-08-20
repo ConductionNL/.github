@@ -118,8 +118,19 @@ class AgentController extends Controller {
 	 * auth token (`resolveScope`, not `canResolveScope` — shillinq's/decidesk's
 	 * own idiom per the design doc). Neither `_GUARD_HELPER_NAME_RE` (helper
 	 * name) nor the pre-fix `_HELPER_GUARD_BODY_RE` (helper body — no throw/
-	 * 401/403/404/authorize*/require*/ensure*) recognised this; only reading
+	 * 401/403/404/authorize*, require*, ensure*) recognised this; only reading
 	 * `resolveScope()`'s body for a `canAccess(`-shaped call closes it.
+	 *
+	 * ⚠️ Never join a wildcard-verb list with a bare slash in this docblock
+	 * (e.g. one verb, star, slash, next verb, repeated). The checker's own
+	 * `_strip_strings_and_comments` closes a slash-star ... star-slash block
+	 * comment on the FIRST star-slash pair it finds, and that joined form
+	 * spells one right in the middle of this sentence. This whole docblock,
+	 * plus `archive()` and `resolveScope()` below it, silently vanished from
+	 * the scan the one time it was written that way: the file parsed as
+	 * clean not because Shape 4 was recognised, but because the premature
+	 * comment close ate archive() entirely and it was never scanned at all.
+	 * Use a comma-separated list (as above) instead.
 	 */
 	#[NoAdminRequired]
 	public function archive(int $id): JSONResponse {
