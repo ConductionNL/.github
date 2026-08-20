@@ -3378,3 +3378,58 @@ class ItemController {
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AuthenticationHelperIsNotAGuardTest(unittest.TestCase):
+    """`.github#365` follow-up — the DELEGATED authentication check.
+
+    `#365` established that `if ($user === null) { 401 }` is authentication,
+    not authorisation, and blanked it where it is written INLINE. The same
+    clause hidden one call-hop away, behind a helper whose name merely starts
+    with `require`, still cleared the method on its NAME alone.
+
+    MEASURED on decidesk `ConflictOfInterestController` (2026-08-20): three
+    `#[NoAdminRequired]` routes took a caller-supplied id straight into a
+    service with no caller scoping, and gate-7 reported PASS. A probe carrying
+    ONLY `$this->requireUserOr401(...)` silenced a textbook IDOR.
+    """
+
+    def test_require_user_helper_does_not_clear(self) -> None:
+        src = """<?php
+class C extends Controller {
+    #[NoAdminRequired]
+    public function show(string $id): JSONResponse {
+        $auth = $this->requireUserOr401(session: $this->userSession);
+        if ($auth !== null) {
+            return $auth;
+        }
+        return new JSONResponse($this->objectService->find($id));
+    }
+}
+"""
+        self.assertTrue(
+            _scan(src),
+            "an authentication-only helper must not clear an unguarded id",
+        )
+
+    def test_real_authorisation_helpers_still_clear(self) -> None:
+        """The exclusion must not eat genuine authorisation spellings."""
+        for call in (
+            "$this->requireOwner(id: $id);",
+            "$this->requireUserIsOwner(id: $id);",
+            "$this->ensureAccess(id: $id);",
+            "$this->authorizePermission(id: $id);",
+        ):
+            src = """<?php
+class C extends Controller {
+    #[NoAdminRequired]
+    public function show(string $id): JSONResponse {
+        %s
+        return new JSONResponse($this->objectService->find($id));
+    }
+}
+""" % call
+            self.assertEqual(
+                [], _scan(src),
+                f"{call} is an authorisation guard and must still clear",
+            )
