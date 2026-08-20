@@ -181,6 +181,110 @@ function ratchetCase(label, baseCount, headCount, expect) {
 	}
 }
 
+// --- BASE DRIFT: BASE_REF's tip has moved past the PR's merge base ----------
+//
+// `assembleAtRef` used to be handed BASE_REF directly, so the ratchet
+// compared HEAD against BASE_REF's LIVE TIP — not the commit the branch
+// actually diverged from. A behind branch is judged against commits it never
+// saw, and the SAME PR can flip PASS/FAIL between CI runs purely because
+// `origin/development` moved, with the branch itself unchanged.
+//
+// Builds THREE commits: a shared merge base, the PR branch (HEAD, diverges
+// from the base), and a SEPARATE `development-tip` branch (also diverges
+// from the base, simulating commits merged into development after the PR
+// branched). `--base-ref` names `development-tip`'s sha while HEAD stays on
+// the PR branch — exactly what a behind PR's checkout looks like.
+function gitRepoWithDivergentBase(baseCount, headCount, devTipCount) {
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hydra-gate68-drift-'))
+	const git = (args) => spawnSync('git', ['-C', dir, ...args], { encoding: 'utf8' })
+	const pageFor = (n) => ({
+		id: `SubsidiePage${n}`,
+		route: `/subsidies-${n}`,
+		type: 'index',
+		title: `Subsidies ${n}`,
+		config: { register: 'shillinq', schema: 'Subsidie' },
+	})
+	const writeManifest = (n) => {
+		const manifest = {
+			$schema: 'https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json',
+			version: '1.0.0',
+			pages: Array.from({ length: n }, (_v, i) => pageFor(i + 1)),
+			menu: [],
+		}
+		fs.mkdirSync(path.join(dir, 'src'), { recursive: true })
+		fs.writeFileSync(path.join(dir, 'src', 'manifest.json'), JSON.stringify(manifest, null, '\t'))
+	}
+	git(['init', '-q', '.'])
+	git(['config', 'user.email', 'test@example.invalid'])
+	git(['config', 'user.name', 'Gate Test'])
+	writeManifest(baseCount)
+	git(['add', '-A'])
+	git(['commit', '-q', '-m', 'merge-base'])
+	const mergeBaseSha = git(['rev-parse', 'HEAD']).stdout.trim()
+
+	// The PR branch: diverges from the merge base.
+	writeManifest(headCount)
+	git(['add', '-A'])
+	git(['commit', '-q', '-m', 'pr head', '--allow-empty'])
+	const headSha = git(['rev-parse', 'HEAD']).stdout.trim()
+
+	// origin/development's OWN tip: a separate branch off the SAME merge
+	// base — never seen by headSha — simulating commits merged into
+	// development after this PR branched.
+	git(['checkout', '-q', '-b', 'dev-tip', mergeBaseSha])
+	writeManifest(devTipCount)
+	git(['add', '-A'])
+	git(['commit', '-q', '-m', 'dev moved on', '--allow-empty'])
+	const devTipSha = git(['rev-parse', 'HEAD']).stdout.trim()
+
+	// Back to the PR branch, so `git merge-base devTipSha HEAD` inside the
+	// checker sees headSha as HEAD — exactly like a real PR checkout.
+	git(['checkout', '-q', headSha])
+
+	return { dir, mergeBaseSha, headSha, devTipSha }
+}
+
+// FALSE POSITIVE GONE: the PR branch inherits pre-existing duplication (2)
+// from the merge base and never touches it; origin/development independently
+// FIXED it down to 1 on its own tip. Assembling at the live tip would show
+// 2 > 1 and FAIL a PR that never touched the pair.
+{
+	const { dir, devTipSha } = gitRepoWithDivergentBase(/* base */ 2, /* head */ 2, /* devTip */ 1)
+	try {
+		const { status, stdout, stderr } = run(dir, ['--base-ref', devTipSha])
+		assert(status === 0,
+			'base-drift: pre-existing dup unchanged by this PR, base drifted DOWN on dev tip -> exit 0 (WARN, not FAIL)',
+			`stderr: ${stderr}`)
+		assert(findingsCount(stdout) === 1, 'base-drift: still reports the standing pair', `stdout: ${stdout}`)
+		assert(/^at .*: WARN /m.test(stderr),
+			'base-drift: severity is WARN — compared against the MERGE-BASE count (2), not the drifted tip\'s count (1)',
+			stderr)
+	} finally {
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+}
+
+// GENUINE VIOLATION STILL CAUGHT: the PR branch is the one that introduces
+// the duplicate (1 -> 2); origin/development independently ALSO duplicates
+// the same pair on its own tip (1 -> 2), unrelated to this PR. Assembling at
+// the live tip would show 2 == 2 and WARN — masking the PR's own new
+// duplicate as "pre-existing". The merge base was 1; this PR must still FAIL.
+{
+	const { dir, devTipSha } = gitRepoWithDivergentBase(/* base */ 1, /* head */ 2, /* devTip */ 2)
+	try {
+		const { status, stdout, stderr } = run(dir, ['--base-ref', devTipSha])
+		assert(status === 1,
+			'base-drift: PR-introduced dup, dev tip ALSO drifted to the same count -> exit 1 (still FAILs)',
+			`stderr: ${stderr}`)
+		assert(findingsCount(stdout) === 1, 'base-drift: still reports the one grown pair', `stdout: ${stdout}`)
+		assert(/^at .*: (?!WARN)/m.test(stderr),
+			'base-drift: severity is FAIL — compared against the MERGE-BASE count (1), not the drifted tip\'s count (2)',
+			stderr)
+	} finally {
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+}
+
 // BASE_REF absent/1 -> HEAD >=2 : FAIL (new duplicate introduced)
 ratchetCase('ratchet: 1 -> 2 (new duplicate)', 1, 2, { exit: 1, findings: 1, severity: 'error', namesPair: true })
 

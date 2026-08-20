@@ -107,7 +107,31 @@ parameters:
 
     reportUnmatchedIgnoredErrors: false
 
+    # ── PHPStan 2.x parity ───────────────────────────────────────────────────
+    # 2.x narrows types declared ONLY in a docblock and then reports every
+    # defensive check against them as already-decided. On decidesk that alone
+    # accounted for 21 of 60 errors — `is_object($x)` and `$x === true` where
+    # $x's type comes from an @param/@return, i.e. a promise the analyser
+    # trusts but the runtime does not. The checks are deliberate: these values
+    # cross an app boundary (OpenRegister contracts) where the docblock is the
+    # only contract there is. Restores 1.x behaviour rather than deleting real
+    # runtime guards to satisfy a stricter reading of an unenforced type.
+    #
+    # No effect on 1.x, which does not narrow from PHPDoc in the first place.
+    treatPhpDocTypesAsCertain: false
+
     ignoreErrors:
+        # ── PHPMD's @SuppressWarnings is not a PHPStan tag ───────────────────
+        # 2.x began parsing @SuppressWarnings as its own and chokes on PHPMD's
+        # rule syntax — `@SuppressWarnings((PHPMD.UnusedFormalParameter) …)`
+        # reads as "Unexpected token '.UnusedFormalParameter)', expected ')'".
+        # 17 of decidesk's 60 errors were this one annotation. The tag is valid
+        # PHPMD and is read by the phpmd gate; the parse error is PHPStan
+        # commenting on a neighbour's syntax.
+        -
+            identifier: phpDoc.parseError
+            message: '#PHPDoc tag @SuppressWarnings has invalid value#'
+
         # ── Nextcloud server internals (\OC, OC_App, OC\) ────────────────────
         # Not stubbed in nextcloud/ocp. Present at runtime, absent to the analyser.
         - '#Call to an undefined method OC::#'
