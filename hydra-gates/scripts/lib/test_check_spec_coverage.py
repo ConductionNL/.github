@@ -903,6 +903,111 @@ class ReportService {
         self.assertEqual(out, "# count=0\n", f"expected a clean run, got: {out}")
         self.assertEqual(rc, 0)
 
+    # ---- base-drift (shillinq#938) -----------------------------------------
+    #
+    # `spec_tags_removed` used to try `base_ref...HEAD` (merge-base, correct)
+    # and, whenever THAT diff held no removed `@spec` line, retry `base_ref`
+    # two-dot — the ref's LIVE TIP — triggered by "found nothing" rather than
+    # "the first diff was unusable". On a branch sitting behind `base_ref`,
+    # the merge-base diff is a perfectly good answer that legitimately
+    # contains zero removed tags; the retry fired anyway, compared HEAD
+    # against `base_ref`'s CURRENT tip, and read any tag an ALREADY-MERGED
+    # commit added there after the branch point as "removed by this PR".
+    #
+    # Measured: shillinq#938, 28 commits behind `origin/development`, a diff
+    # touching 2 files outside gate-16's scope entirely — 21 methods across
+    # six controllers, tagged by an already-merged commit, reported REMOVED.
+    # Merging development into the branch made the same run report zero.
+
+    def test_a_tag_added_by_base_refs_later_tip_is_not_attributed_to_a_behind_branch(self):
+        base = self._spec_removal_fixture()
+        # HEAD's branch: an UNRELATED commit. BarService.php itself is
+        # untouched (still exactly the `base` state), but the diff as a
+        # whole is real and non-empty — so the merge-base diff is a genuine
+        # (if BarService-empty) answer, not the "no committed diff at all"
+        # case the two-dot fallback exists for.
+        self._write("lib/Service/OtherService.php", """<?php
+class OtherService {
+    /**
+     * Unrelated.
+     *
+     * @spec openspec/specs/other/spec.md
+     */
+    public function ping(): bool
+    {
+        return true;
+    }
+}
+""")
+        self._run("git", "add", "-A")
+        self._run("git", "commit", "-q", "-m", "unrelated: add OtherService")
+        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(self.dir),
+                              capture_output=True, text=True).stdout.strip()
+
+        # `base_ref`'s OWN later tip: a SEPARATE, already-merged commit — off
+        # the same merge base, never seen by HEAD's branch — that tags
+        # `legacyThing()` for the first time. This simulates
+        # `origin/development` moving on after the PR branched.
+        self._run("git", "checkout", "-q", "-b", "development-tip", base)
+        text = (self.dir / "lib/Service/BarService.php").read_text()
+        old = "     * Legacy, never tagged.\n"
+        tagged = "     * Legacy, never tagged.\n     *\n     * @spec openspec/specs/legacy/spec.md\n"
+        self.assertIn(old, text)
+        self._write("lib/Service/BarService.php", text.replace(old, tagged))
+        self._run("git", "add", "-A")
+        self._run("git", "commit", "-q", "-m",
+                  "unrelated: tag legacyThing (merged into development after the branch point)")
+        dev_tip = subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(self.dir),
+                                 capture_output=True, text=True).stdout.strip()
+
+        # Back to the PR branch — a real checkout never stays on the probe branch.
+        self._run("git", "checkout", "-q", head)
+
+        out, rc = self._gate(dev_tip)
+        self.assertEqual(
+            out, "# count=0\n",
+            f"legacyThing was never touched by this branch; tagging it on "
+            f"development's OWN later tip must not read as this PR removing a tag, "
+            f"got: {out}")
+        self.assertEqual(rc, 0)
+
+    def test_a_genuine_removal_is_still_caught_when_base_ref_has_also_moved(self):
+        # The anti-widening control's mirror image: the fix must not swallow
+        # a REAL removal just because base_ref has ALSO moved on. `doThing()`
+        # starts tagged; this PR strips it. Meanwhile `origin/development`'s
+        # own tip, on a divergent branch, makes an unrelated commit — proving
+        # the MERGE BASE, not the live tip, governs the comparison in both
+        # directions.
+        base = self._spec_removal_fixture()
+        text = (self.dir / "lib/Service/BarService.php").read_text()
+        old = "     *\n     * @spec openspec/specs/things/spec.md\n"
+        self.assertIn(old, text)
+        self._write("lib/Service/BarService.php", text.replace(old, ""))
+        self._run("git", "add", "-A")
+        self._run("git", "commit", "-q", "-m", "strip the tag")
+        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(self.dir),
+                              capture_output=True, text=True).stdout.strip()
+
+        self._run("git", "checkout", "-q", "-b", "development-tip", base)
+        self._write("lib/Service/OtherService.php", """<?php
+class OtherService {
+    public function untouched(): bool
+    {
+        return true;
+    }
+}
+""")
+        self._run("git", "add", "-A")
+        self._run("git", "commit", "-q", "-m", "unrelated development work")
+        dev_tip = subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(self.dir),
+                                 capture_output=True, text=True).stdout.strip()
+        self._run("git", "checkout", "-q", head)
+
+        out, rc = self._gate(dev_tip)
+        self.assertIn("doThing", out, "the branch's OWN removal must still be caught")
+        self.assertEqual(rc, 1)
+        self.assertNotIn("legacyThing", out)
+
 
 class TagPositionTest(unittest.TestCase):
     """A SENTENCE ABOUT THE TAG IS NOT THE TAG (#415 class, #422).
