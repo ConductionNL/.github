@@ -258,8 +258,42 @@ jobs:
         run: |
           set -euo pipefail
           CURRENT=$(grep -oP '(?<=<version>)[^<]+' appinfo/info.xml | head -1)
-          if [ "$CURRENT" = "${{ env.NEW_VERSION }}" ]; then
-            echo "appinfo/info.xml already says ${{ env.NEW_VERSION }} — nothing to commit."
+
+          # An app that publishes an OpenAPI document carries the same version a
+          # SECOND time, in `openapi.json`'s `info.version`. Bumping only
+          # appinfo/info.xml leaves the two disagreeing, and that is not
+          # cosmetic: opencatalogi asserts they match (OpenApiParityTest, which
+          # exists because the served document's version is a published API
+          # fact), so ONE release after the numbers diverged all six of its
+          # PHPUnit cells went red — and stayed red, because every subsequent
+          # release moved info.xml again. See opencatalogi#912.
+          #
+          # Three distinct states, kept apart on purpose. Folding "no document"
+          # and "document with no info.version" into one empty string would let
+          # the second pass silently, and OpenAPI 3.x REQUIRES info.version — so
+          # that case is a real defect in the app, worth a warning rather than a
+          # shrug. It does not fail the release: the document was already like
+          # that before this step existed, and a release is the wrong place to
+          # start enforcing it.
+          OPENAPI_CURRENT=""
+          OPENAPI_STATE="absent"
+          if [ -f openapi.json ]; then
+            OPENAPI_CURRENT=$(python3 -c 'import json; print(json.load(open("openapi.json")).get("info", {}).get("version", ""))')
+            if [ -n "$OPENAPI_CURRENT" ]; then
+              OPENAPI_STATE="versioned"
+            else
+              OPENAPI_STATE="unversioned"
+              echo "::warning::openapi.json ships no info.version, which OpenAPI 3.x requires. The release cannot keep a version it cannot find in step with appinfo/info.xml, so this document will drift."
+            fi
+          fi
+
+          # BOTH files have to be current before this is "nothing to commit".
+          # Checking only info.xml would skip a re-run over a tree where the XML
+          # already matches but the JSON still lags — which is precisely the
+          # state opencatalogi was left in.
+          if [ "$CURRENT" = "${{ env.NEW_VERSION }}" ] \
+             && { [ "$OPENAPI_STATE" != "versioned" ] || [ "$OPENAPI_CURRENT" = "${{ env.NEW_VERSION }}" ]; }; then
+            echo "appinfo/info.xml (and openapi.json where present) already say ${{ env.NEW_VERSION }} — nothing to commit."
             echo "bump_sha=" >> "$GITHUB_OUTPUT"
             echo "bump_branch=" >> "$GITHUB_OUTPUT"
             exit 0
@@ -268,6 +302,43 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add appinfo/info.xml
+
+          # Byte-precise edit, NOT a json round-trip. Re-serialising a 2000-line
+          # document to change one string would reformat the whole file and bury
+          # the release diff; it would also silently normalise anything the
+          # generator wrote deliberately. Replace only the first "version" that
+          # follows the top-level "info" key, then prove the result still parses.
+          # The sys.exit below is reachable only for a document whose "info" block
+          # loses its version between the read above and this write.
+          #
+          # The heredoc body sits at the block's base indentation on purpose: YAML
+          # strips the common prefix from a `|` scalar, so anything further in
+          # would reach bash still indented — the terminator would not close the
+          # heredoc, and Python would refuse the leading whitespace.
+          if [ "$OPENAPI_STATE" = "versioned" ] && [ "$OPENAPI_CURRENT" != "${{ env.NEW_VERSION }}" ]; then
+          python3 - <<'PY'
+          import json, os, re, sys
+
+          path = "openapi.json"
+          src = open(path, encoding="utf-8").read()
+          new = os.environ["NEW_VERSION"]
+
+          start = src.index('"info"')
+          match = re.search(r'"version"\s*:\s*"[^"]*"', src[start:])
+          if match is None:
+              sys.exit('openapi.json has an "info" object with no "version" — refusing to guess where the version lives.')
+
+          patched = src[:start + match.start()] + '"version": "%s"' % new + src[start + match.end():]
+
+          if json.loads(patched)["info"]["version"] != new:
+              sys.exit("openapi.json did not carry the new version after patching — refusing to commit it.")
+
+          open(path, "w", encoding="utf-8").write(patched)
+          print("openapi.json info.version -> %s" % new)
+          PY
+            git add openapi.json
+          fi
+
           git commit -m "chore(release): ${{ env.NEW_VERSION }} [skip ci]"
 
           # The bump lands on its OWN branch, never on ${{ github.ref_name }}.
