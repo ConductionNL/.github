@@ -177,6 +177,39 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
 
+      # setup-node installs the npm BUNDLED with the Node it selects, which is
+      # not necessarily the npm the repository requires. Node 22 bundles npm
+      # 10; launchpad and portaliq declare `engines.npm: ^11.0.0` and ship an
+      # `.npmrc` using `min-release-age`, a supply-chain cooldown that exists
+      # ONLY on npm 11+.
+      #
+      # MEASURED 2026-08-20: on npm 10 that setting is silently ignored,
+      # resolution differs, and `npm ci` rejects a PERFECTLY GOOD lock as out
+      # of sync — "Missing: vite@8.2.2 from lock file". The lock is fine: the
+      # identical commit installs cleanly under npm 11 (`npm ci --dry-run`,
+      # exit 0, 1416 packages). Both apps' releases failed on this, and the
+      # error blames the lock, so the obvious "fix" is to regenerate the lock
+      # — which would have re-broken the cooldown policy while papering over a
+      # toolchain mismatch.
+      #
+      # So honour what the repo declares. A repo with no `engines.npm` keeps
+      # the bundled npm and is unaffected.
+      - name: Honour engines.npm
+        run: |
+          set -euo pipefail
+          if [ ! -f package.json ]; then
+            echo "no package.json — nothing to honour"
+            exit 0
+          fi
+          RANGE="$(node -p "(((require('./package.json').engines)||{}).npm)||''")"
+          if [ -z "${RANGE}" ]; then
+            echo "package.json declares no engines.npm — keeping bundled npm $(npm -v)"
+            exit 0
+          fi
+          echo "package.json engines.npm = ${RANGE}; bundled npm is $(npm -v)"
+          npm i -g "npm@${RANGE}"
+          echo "now running npm $(npm -v)"
+
       - name: Set up PHP
         uses: shivammathur/setup-php@v2
         with:
