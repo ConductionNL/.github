@@ -261,16 +261,34 @@ def check_file(path, findings, base_ref):
                     f"is not."
                 )
 
-        # (b) custom page that is really a typed page.
+        # (b) custom page that is really a typed page — UNLESS it says why.
+        #
+        # A reason-bearing `_note` exempts the page, matching the gate-29
+        # custom-widget convention. This is not a formality: every one of the
+        # 58 such pages in the fleet carries a note, and the reasons are real —
+        # a slot the declarative page type cannot express (softwarecatalog's
+        # Suites needs the wizard button in CnIndexPage's #actions), a fetch
+        # that does not come from a plain OpenRegister index endpoint
+        # (docudesk's Consent reads its own PHP controller), a self-contained
+        # composite view. Without this exemption the rule fires on all 58 and
+        # is a 100% false-positive against the fleet's own documented practice.
+        #
+        # So the rule catches the page that reuses a typed component and never
+        # says why — and the ratchet in main() governs growth.
         if ptype == "custom":
+            note = page.get("_note")
+            if isinstance(note, str) and len(note.strip()) >= 40:
+                continue
             archetype, comp_path = _renders_typed_component(src_dir, page.get("component"))
             if archetype:
                 findings.append(
                     f"{path}: page '{pid}' — declared type:\"custom\" but its "
                     f"component ({os.path.relpath(comp_path, src_dir)}) already "
-                    f"renders Cn{archetype.capitalize()}Page. Declare "
-                    f"type:\"{archetype}\" and let the manifest render it; the "
-                    f"hand-written shell is what the page type exists to remove."
+                    f"renders Cn{archetype.capitalize()}Page, and the page gives "
+                    f"no `_note` saying why. Either declare type:\"{archetype}\" "
+                    f"and let the manifest render it, or record what the typed "
+                    f"page cannot do here — a slot it has no room for, a fetch "
+                    f"that is not a plain OpenRegister index."
                 )
 
     return custom_here
