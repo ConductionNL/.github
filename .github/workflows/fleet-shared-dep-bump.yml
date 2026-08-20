@@ -1,0 +1,351 @@
+# Fleet shared-dependency bump — move every app's LOCK to the latest published
+# `conduction/hydra-gates` and `@conduction/nextcloud-vue`, one PR per app.
+#
+# ══════════════════════════════════════════════════════════════════════════
+# WHY THIS EXISTS: THE CARET ALREADY ALLOWED IT — THE LOCKFILE IS THE PIN
+# ══════════════════════════════════════════════════════════════════════════
+#
+# Both shared packages are declared with caret ranges that permit every later
+# release in the major. Nothing was pinned on purpose. What froze the fleet was
+# `composer.lock` / `package-lock.json`, which nobody re-resolves unless they
+# happen to be touching dependencies that day.
+#
+# Measured 2026-08-20, before the manual roll that prompted this workflow:
+#
+#     conduction/hydra-gates      17 of 17 apps on v1.8.0     (v1.8.1 available)
+#     @conduction/nextcloud-vue   14 of 17 apps below 2.7.0   (2.8.2 available)
+#                                 12 of those on 2.3.0
+#
+# Neither number was a decision. Both were the absence of one.
+#
+# The cost was not theoretical. v1.8.0 shipped an `ObjectServiceInterface`
+# WITHOUT `patchObject()`; because hydra-gates claims `OCA\OpenRegister\Contract\`
+# in its composer autoload — a longer psr-4 prefix than openregister's own — a
+# stale copy in ANY app's vendor directory defined the contract for the whole
+# instance. Measured: softwarecatalog's vendor was supplying openregister's
+# interface. And nc-vue's AI-companion singleton landed in 2.7.0, so every app
+# below it rendered a SECOND companion hex beside hermiq's on every page.
+#
+# Both fixes existed upstream for weeks. Nothing carried them.
+#
+# ══════════════════════════════════════════════════════════════════════════
+# WHY IT OPENS PULL REQUESTS AND DOES NOT PUSH TO development
+# ══════════════════════════════════════════════════════════════════════════
+#
+# Because a shared-dependency bump is not always safe, and CI is what knows.
+#
+# Taking hydra-gates v1.8.1 ADDED `patchObject()` to a published interface,
+# which is a load-time FATAL for any concrete double that implements it without
+# the method — `Class ... contains 1 abstract method and must therefore be
+# declared abstract`. The whole suite dies before one test runs. Two apps
+# needed stub updates before they could take the bump at all.
+#
+# A workflow that pushed straight to `development` would have broken them
+# silently. Each PR is gated by that app's own suite, which is the only thing
+# that can tell a safe bump from an unsafe one.
+#
+# ══════════════════════════════════════════════════════════════════════════
+# WHY IT NEVER FORCE-PUSHES
+# ══════════════════════════════════════════════════════════════════════════
+#
+# The first draft of this file reused one long-lived branch per app and
+# force-pushed it every week. That is wrong, and wrong in a way that destroys
+# work: the PR body below invites a maintainer to fix a broken bump ON THAT
+# BRANCH — a stub update, a signature change — and the next Monday run would
+# have overwritten it without a trace.
+#
+# So: if a bump PR is already open for an app, this leaves it completely alone
+# and says so. It only pushes when there is no open PR to disturb, and it
+# pushes a NEW dated branch rather than reusing one. An app that is already
+# being dealt with is not a candidate for automation.
+#
+# ══════════════════════════════════════════════════════════════════════════
+# WHY IT LIVES HERE AND NOT AS A CRON IN EACH APP
+# ══════════════════════════════════════════════════════════════════════════
+#
+# Same reason as the Friday drift sweep: `schedule:` CANNOT CHOOSE A BRANCH.
+# GitHub runs scheduled workflows from the repository's DEFAULT branch, and the
+# fleet's defaults are split roughly evenly between `development` and `main`.
+# A cron copied into each app would resolve locks against `main` for ten of
+# them. This clones `development` explicitly, for every app, from one place.
+#
+# ══════════════════════════════════════════════════════════════════════════
+# WHAT THIS DELIBERATELY DOES NOT DO
+# ══════════════════════════════════════════════════════════════════════════
+#
+#   - It does not merge, and it does not force-push. See above.
+#   - It does not touch `composer.json` / `package.json`. Only the lock moves,
+#     so a bump can never silently widen a declared range.
+#   - It does not open an empty PR. If the lock does not move, the app is
+#     skipped and said so in the summary.
+#   - It does not judge. An app whose PR goes red stays red and visible; this
+#     workflow has no opinion about whose fault that is.
+name: Fleet shared-dependency bump
+
+on:
+  schedule:
+    # Mondays 05:00 UTC — deliberately EARLIER in the week than the Friday
+    # drift sweep, so a bump that turns an app red has the week to be noticed
+    # and the sweep is not the thing that discovers it.
+    #
+    # CRON IS UTC AND DOES NOT KNOW ABOUT SUMMER TIME; this drifts an hour
+    # against local time twice a year, which for a weekly dependency refresh
+    # is not worth a second cron and a date check.
+    - cron: "0 5 * * 1"
+  workflow_dispatch:
+    inputs:
+      apps:
+        description: 'Space-separated app list. Blank = every app in fleet-apps.json .swept[].'
+        type: string
+        required: false
+        default: ''
+      dry_run:
+        description: 'Resolve and report what would move, but open no pull requests.'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fleet-shared-dep-bump
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    name: "Bump shared deps"
+    runs-on: ubuntu-latest
+    # The manual roll this replaces took a few minutes of clone+resolve per app
+    # across 17 apps. Bounded at 90 to cover the full list with a wide margin,
+    # purely as a hang stop.
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assert a cross-repo token is present
+        env:
+          FLEET_BUMP_TOKEN: ${{ secrets.FLEET_DISPATCH_TOKEN }}
+        run: |
+          set -euo pipefail
+          # GITHUB_TOKEN is scoped to THIS repository. It cannot clone a
+          # sibling, push a branch to it, or open a pull request on it. Without
+          # a real token every app would be skipped and the run would report a
+          # tidy "0 apps needed a bump" — a green summary over an empty
+          # measurement, which is the failure this file exists to stop.
+          if [ -z "${FLEET_BUMP_TOKEN}" ]; then
+            echo "::error::FLEET_DISPATCH_TOKEN is not set, so this run can bump nothing."
+            echo ""
+            echo "Provision an org-level secret named FLEET_DISPATCH_TOKEN, visible to"
+            echo "ConductionNL/.github, with 'contents: write' and 'pull-requests: write'"
+            echo "on every repo in fleet-apps.json. A fine-grained PAT or a GitHub App"
+            echo "installation token both work; GITHUB_TOKEN cannot, because it is"
+            echo "repository-scoped."
+            echo ""
+            echo "NOTE: the Friday drift sweep uses this same secret but only needs"
+            echo "'actions: write'. If that is all it was granted, this job fails at the"
+            echo "push step rather than here — widen the grant."
+            exit 1
+          fi
+          echo "Token present."
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          # `composer update --no-install` still evaluates platform
+          # requirements, and the fleet declares extensions this runner does
+          # not carry by default (soap, bcmath and intl were all hit on a real
+          # roll). Installed here rather than papered over with
+          # --ignore-platform-reqs, which would let resolution drift from what
+          # the app actually runs on.
+          extensions: soap, bcmath, intl, zip, gd
+
+      - name: Resolve the app list and the target versions
+        id: plan
+        run: |
+          set -euo pipefail
+          APPS='${{ inputs.apps }}'
+          if [ -z "${APPS}" ]; then
+            # `swept`, not every key: deprecated apps are listed in that file
+            # so the decision stays visible, and are deliberately not bumped.
+            APPS=$(jq -r '.swept[]' fleet-apps.json | tr '\n' ' ')
+          fi
+          COUNT=$(echo "${APPS}" | wc -w)
+          if [ "${COUNT}" -lt 1 ]; then
+            echo "::error::No apps resolved. A bump over an empty list exits 0 and proves nothing."
+            exit 1
+          fi
+
+          COMPOSER_LATEST=$(composer show --all conduction/hydra-gates 2>/dev/null \
+            | awk '/^versions/ {print $3}' | tr -d ',' | head -1)
+          NPM_LATEST=$(npm view @conduction/nextcloud-vue version)
+
+          # A target that did not resolve would make every comparison below
+          # read "already current", and the run would cheerfully report nothing
+          # to do.
+          if [ -z "${COMPOSER_LATEST}" ] || [ -z "${NPM_LATEST}" ]; then
+            echo "::error::Could not resolve a target version (hydra-gates='${COMPOSER_LATEST}' nc-vue='${NPM_LATEST}'). Refusing to compare against a blank."
+            exit 1
+          fi
+
+          echo "apps=${APPS}"                >> "$GITHUB_OUTPUT"
+          echo "composer=${COMPOSER_LATEST}" >> "$GITHUB_OUTPUT"
+          echo "npm=${NPM_LATEST}"           >> "$GITHUB_OUTPUT"
+          echo "Targets: hydra-gates ${COMPOSER_LATEST} · nc-vue ${NPM_LATEST}"
+          echo "Apps (${COUNT}): ${APPS}"
+
+      - name: Bump each app
+        env:
+          GH_TOKEN: ${{ secrets.FLEET_DISPATCH_TOKEN }}
+          COMPOSER_TARGET: ${{ steps.plan.outputs.composer }}
+          NPM_TARGET: ${{ steps.plan.outputs.npm }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          APPS: ${{ steps.plan.outputs.apps }}
+        run: |
+          set -uo pipefail   # NOT -e: one app must not end the run for the rest
+          STAMP=$(date -u +%Y%m%d)
+          SUMMARY="${GITHUB_STEP_SUMMARY}"
+          {
+            echo "## Fleet shared-dependency bump"
+            echo ""
+            echo "Targets: hydra-gates ${COMPOSER_TARGET} · nc-vue ${NPM_TARGET}"
+            echo ""
+            echo "| app | hydra-gates | nc-vue | result |"
+            echo "|---|---|---|---|"
+          } >> "$SUMMARY"
+
+          composer_locked() {
+            jq -r '[(.packages // []),(."packages-dev" // [])] | flatten
+                   | map(select(.name=="conduction/hydra-gates")) | .[0].version // "-"' "$1" 2>/dev/null || echo "-"
+          }
+          npm_locked() {
+            jq -r '.packages["node_modules/@conduction/nextcloud-vue"].version // "-"' "$1" 2>/dev/null || echo "-"
+          }
+
+          FAILED=0
+          for app in ${APPS}; do
+            rm -rf "work/${app}"
+            if ! git clone -q --depth 1 --branch development \
+                 "https://x-access-token:${GH_TOKEN}@github.com/ConductionNL/${app}.git" "work/${app}" 2>/dev/null; then
+              echo "| ${app} | - | - | no development branch, or clone refused |" >> "$SUMMARY"
+              continue
+            fi
+            cd "work/${app}" || continue
+
+            # AN APP ALREADY BEING DEALT WITH IS NOT A CANDIDATE.
+            #
+            # A previous run's PR may be open precisely because the bump broke
+            # something and somebody is fixing it on that branch. Opening a
+            # second PR, or touching the first, would fight them.
+            OPEN=$(gh pr list --repo "ConductionNL/${app}" --state open --search "chore/fleet-shared-deps in:head" \
+                     --json url -q '.[0].url' 2>/dev/null)
+            if [ -n "${OPEN}" ] && [ "${OPEN}" != "null" ]; then
+              echo "| ${app} | - | - | skipped, bump PR already open: ${OPEN} |" >> "$SUMMARY"
+              cd - >/dev/null || true; continue
+            fi
+
+            CB="-"; NB="-"
+            [ -f composer.lock ]     && CB=$(composer_locked composer.lock)
+            [ -f package-lock.json ] && NB=$(npm_locked package-lock.json)
+
+            # Lock-only on both sides: the declared range is never rewritten,
+            # so a bump cannot silently widen what the app accepts.
+            if [ "${CB}" != "-" ] && [ "${CB}" != "${COMPOSER_TARGET}" ]; then
+              composer update conduction/hydra-gates --no-install --no-interaction --no-scripts --no-progress >/dev/null 2>&1 || true
+            fi
+            if [ "${NB}" != "-" ] && [ "${NB}" != "${NPM_TARGET}" ]; then
+              npm update @conduction/nextcloud-vue --package-lock-only --no-audit --no-fund >/dev/null 2>&1 || true
+            fi
+
+            CA="-"; NA="-"
+            [ -f composer.lock ]     && CA=$(composer_locked composer.lock)
+            [ -f package-lock.json ] && NA=$(npm_locked package-lock.json)
+
+            if [ -z "$(git status --porcelain composer.lock package-lock.json 2>/dev/null)" ]; then
+              echo "| ${app} | ${CB} | ${NB} | already current |" >> "$SUMMARY"
+              cd - >/dev/null || true; continue
+            fi
+
+            if [ "${DRY_RUN}" = "true" ]; then
+              echo "| ${app} | ${CB} -> ${CA} | ${NB} -> ${NA} | would open a PR (dry run) |" >> "$SUMMARY"
+              cd - >/dev/null || true; continue
+            fi
+
+            # A NEW dated branch every time, never a reused one. Nothing this
+            # workflow pushes can land on top of somebody else's commit.
+            BRANCH="chore/fleet-shared-deps-${STAMP}"
+            git config user.name  "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git checkout -q -b "${BRANCH}"
+            git add composer.lock package-lock.json 2>/dev/null
+
+            # Bodies are built with printf into files, not written inline:
+            # every line of a `run: |` block must stay indented, and a markdown
+            # table starts its rows at column 0.
+            printf '%s\n' \
+              "chore(deps): refresh the shared Conduction locks" \
+              "" \
+              "hydra-gates ${CB} -> ${CA}" \
+              "nc-vue      ${NB} -> ${NA}" \
+              "" \
+              "Lock-only: both packages are already declared with caret ranges that" \
+              "permit these versions, so nothing about what this app ACCEPTS changes" \
+              "- only what it currently resolves to. Opened by the weekly fleet" \
+              "shared-dependency bump, because a lock nobody re-resolves is a pin" \
+              "nobody chose." \
+              "" \
+              "Merging is gated by this repository's own suite, deliberately: taking" \
+              "hydra-gates v1.8.1 added patchObject() to a published interface, which" \
+              "is a load-time fatal for any concrete double that implements it without" \
+              "the method. CI is the only thing that can tell a safe bump from that." > /tmp/msg.txt
+            git commit -q -F /tmp/msg.txt
+
+            if ! git push -q origin "${BRANCH}" 2>/dev/null; then
+              echo "| ${app} | ${CB} -> ${CA} | ${NB} -> ${NA} | push refused - token needs contents:write |" >> "$SUMMARY"
+              FAILED=1; cd - >/dev/null || true; continue
+            fi
+
+            printf '%s\n' \
+              "Weekly refresh of the two shared Conduction packages. **Lock-only** - both are" \
+              "already declared with caret ranges that permit these versions, so what this app" \
+              "*accepts* is unchanged; only what it currently resolves to moves." \
+              "" \
+              "| package | was | now |" \
+              "|---|---|---|" \
+              "| conduction/hydra-gates | ${CB} | ${CA} |" \
+              "| @conduction/nextcloud-vue | ${NB} | ${NA} |" \
+              "" \
+              "**Why this is automated.** Nothing here was ever pinned on purpose. The caret" \
+              "always allowed the newer release; the lockfile is what froze it, and nobody" \
+              "re-resolves a lock unless they happen to be touching dependencies. Measured" \
+              "across the fleet on 2026-08-20: every app sat on hydra-gates v1.8.0 while" \
+              "v1.8.1 was out, and fourteen sat below nc-vue 2.7.0 - twelve of them on 2.3.0." \
+              "Neither number was a decision." \
+              "" \
+              "**Why it is a PR and not a push.** Because a shared bump is not always safe and" \
+              "this repository's suite is what knows. Taking hydra-gates v1.8.1 added" \
+              "patchObject() to a published interface, which is a load-time fatal for any" \
+              "concrete test double implementing it without the method - the suite dies before" \
+              "a single test runs. Two apps needed stub updates first." \
+              "" \
+              "**If this PR is red, fix it on this branch.** While it stays open the weekly run" \
+              "skips this app entirely and will not touch your commits - it never force-pushes" \
+              "and never reuses a branch." \
+              "" \
+              "Opened by fleet-shared-dep-bump.yml in ConductionNL/.github." > /tmp/body.md
+
+            URL=$(gh pr create --repo "ConductionNL/${app}" --base development --head "${BRANCH}" \
+                    --title "chore(deps): refresh the shared Conduction locks" \
+                    --body-file /tmp/body.md 2>/dev/null | tail -1)
+            echo "| ${app} | ${CB} -> ${CA} | ${NB} -> ${NA} | ${URL:-PR opened} |" >> "$SUMMARY"
+            cd - >/dev/null || true
+          done
+
+          echo "" >> "$SUMMARY"
+          if [ "${FAILED}" -eq 1 ]; then
+            echo "::error::At least one app could not be pushed. See the table - the usual cause is FLEET_DISPATCH_TOKEN lacking 'contents: write' on the app repos."
+            exit 1
+          fi
