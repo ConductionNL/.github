@@ -2459,10 +2459,39 @@ jobs:
               # half-installed as the red ones.
               #
               # So: keep stderr, and fail the step naming the app and its ref.
-              # Retrying is an operator's decision to take knowingly, not a
-              # silent default.
-              if ! ( cd "server/apps/$name" && composer install --no-progress --prefer-dist --optimize-autoloader --no-dev ); then
-                echo "::error::Dependency install FAILED for sibling app '$name' ($repo@$ref). Refusing to continue: the suite would otherwise run against a half-installed app and report its missing classes as this repository's failures."
+              #
+              # BOUNDED RETRY, which is NOT the `|| true` this replaced.
+              # That bug proceeded with a half-installed app and called the
+              # step successful. This retries the WHOLE install and, if every
+              # attempt fails, still fails loudly with the same message — the
+              # guarantee above is unchanged. What it removes is a false red:
+              # measured 2026-08-20, one transient `HTTP/2 504` from
+              # api.github.com's zipball CDN put FOUR apps' development
+              # branches red at once (decidesk 5 legs, scholiq 6, pipelinq 4,
+              # larpingapp 1). Each failure named a DIFFERENT package —
+              # php-fig/log, symfony/polyfill-ctype, php-http/discovery,
+              # PHP-DI/Invoker — which is the signature of a flaky CDN rather
+              # than a broken dependency, and all of them fetched 200 minutes
+              # later with no change to any lockfile.
+              #
+              # A verdict that depends on someone else's CDN is not a verdict
+              # about this code.
+              install_ok=""
+              for attempt in 1 2 3; do
+                if ( cd "server/apps/$name" && composer install --no-progress --prefer-dist --optimize-autoloader --no-dev ); then
+                  install_ok=1
+                  break
+                fi
+                if [ "$attempt" -lt 3 ]; then
+                  # Composer resumes from its cache, so a retry re-fetches only
+                  # what the previous attempt failed to get.
+                  backoff=$((attempt * 15))
+                  echo "::warning::composer install for sibling app '$name' failed on attempt ${attempt}/3; retrying in ${backoff}s. If this is the last line you see about '$name', the retry succeeded and the failure was transient."
+                  sleep "$backoff"
+                fi
+              done
+              if [ -z "$install_ok" ]; then
+                echo "::error::Dependency install FAILED for sibling app '$name' ($repo@$ref) after 3 attempts. Refusing to continue: the suite would otherwise run against a half-installed app and report its missing classes as this repository's failures."
                 exit 1
               fi
             fi
