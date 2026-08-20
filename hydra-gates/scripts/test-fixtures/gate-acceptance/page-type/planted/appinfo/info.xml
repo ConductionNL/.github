@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<id>pagetypefx</id>
+	<name>Page Type Fixture</name>
+	<summary>Fixture app for gate-69 acceptance. Not a real app.</summary>
+	<description>Exists so the gate suite can drive a typed page whose body widgets bypass its page component, and a custom page that wraps a typed component without saying why.</description>
+	<version>1.0.0</version>
+	<licence>agpl</licence>
+	<author>Conduction</author>
+	<namespace>Pagetypefx</namespace>
+	<category>tools</category>
+	<dependencies>
+		<nextcloud min-version="30" max-version="34"/>
+	</dependencies>
+</info>

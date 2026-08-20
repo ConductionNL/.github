@@ -4,8 +4,5 @@
 <script>
 import { CnIndexPage } from '@conduction/nextcloud-vue'
 
-export default {
-	name: 'WidgetsIndex',
-	components: { CnIndexPage },
-}
+export default { name: 'WidgetsIndex', components: { CnIndexPage } }
 </script>

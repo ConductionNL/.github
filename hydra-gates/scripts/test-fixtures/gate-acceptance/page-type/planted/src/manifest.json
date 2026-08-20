@@ -4,7 +4,7 @@
 	"menu": [],
 	"pages": [
 		{
-			"id": "WidgetDetail",
+			"id": "widgetDetail",
 			"route": "/widgets/:id",
 			"type": "detail",
 			"title": "Widget",
@@ -19,7 +19,7 @@
 			]
 		},
 		{
-			"id": "Widgets",
+			"id": "widgets",
 			"route": "/widgets",
 			"type": "custom",
 			"title": "Widgets",
