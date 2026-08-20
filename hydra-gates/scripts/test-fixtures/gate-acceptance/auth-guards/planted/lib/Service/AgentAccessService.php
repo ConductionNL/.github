@@ -23,4 +23,8 @@ class AgentAccessService {
 	public function diff(array $agent): array {
 		return ['id' => $agent['id'], 'changes' => []];
 	}
+
+	public function archive(int $id): array {
+		return ['id' => $id, 'status' => 'archived'];
+	}
 }

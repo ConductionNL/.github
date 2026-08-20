@@ -23,17 +23,26 @@
  * author hit precisely this: their first "now passes" fixture also passed under
  * the old regex.)
  *
+ * `archive()` is Shape 4 (`ConductionNL/.github` — shillinq
+ * `security-endpoint-guards`, 2026-08-20): the guard is `AdministrationContextService
+ * ::canAccess()`, a typed COLLABORATOR reached through a same-class helper
+ * (`resolveScope()`) whose own name carries no auth token. Under the pre-fix
+ * regexes this file produces FOUR findings, not three, for the same "passes
+ * identically before and after" reason as `#353` above.
+ *
  * @license EUPL-1.2
  * @copyright Conduction B.V.
  */
 
 namespace OCA\ScopeFixture\Controller;
 
+use OCA\ScopeFixture\Service\AdministrationContextService;
 use OCA\ScopeFixture\Service\AgentAccessService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\JSONResponse;
+use OCP\AppFramework\OCS\OCSForbiddenException;
 use OCP\IRequest;
 
 class AgentController extends Controller {
@@ -42,6 +51,7 @@ class AgentController extends Controller {
 		string $appName,
 		IRequest $request,
 		private readonly AgentAccessService $access,
+		private readonly AdministrationContextService $context,
 		private readonly string $userId,
 	) {
 		parent::__construct($appName, $request);
@@ -99,5 +109,27 @@ class AgentController extends Controller {
 
 	private function hasOwnerPermissionForAgent(array $agent, string $userId): bool {
 		return $agent['ownerId'] === $userId;
+	}
+
+	/**
+	 * Shape 4 — `ConductionNL/.github` (shillinq `security-endpoint-guards`,
+	 * 2026-08-20): the guard lives one hop out, through a typed COLLABORATOR's
+	 * `canAccess()`, reached by a same-class helper whose own NAME carries no
+	 * auth token (`resolveScope`, not `canResolveScope` — shillinq's/decidesk's
+	 * own idiom per the design doc). Neither `_GUARD_HELPER_NAME_RE` (helper
+	 * name) nor the pre-fix `_HELPER_GUARD_BODY_RE` (helper body — no throw/
+	 * 401/403/404/authorize*/require*/ensure*) recognised this; only reading
+	 * `resolveScope()`'s body for a `canAccess(`-shaped call closes it.
+	 */
+	#[NoAdminRequired]
+	public function archive(int $id): JSONResponse {
+		$this->resolveScope($id);
+		return new JSONResponse($this->access->archive($id));
+	}
+
+	private function resolveScope(int $id): void {
+		if ($this->context->canAccess((string) $id) === false) {
+			throw new OCSForbiddenException('Not a member of this administration.');
+		}
 	}
 }
