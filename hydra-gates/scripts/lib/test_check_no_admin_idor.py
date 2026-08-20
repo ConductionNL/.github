@@ -3376,10 +3376,6 @@ class ItemController {
         self.assertEqual(findings, [])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class AuthenticationHelperIsNotAGuardTest(unittest.TestCase):
     """`.github#365` follow-up — the DELEGATED authentication check.
 
@@ -3433,3 +3429,13 @@ class C extends Controller {
                 [], _scan(src),
                 f"{call} is an authorisation guard and must still clear",
             )
+
+
+# Keep this block LAST in the file. `tests/run-helper-suites.sh` invokes this
+# suite as `python3 scripts/lib/test_check_no_admin_idor.py`, so `unittest.main()`
+# runs — and exits — at the point it is reached. A test class appended BELOW it
+# is never even defined, let alone collected: the run reports OK on a smaller
+# suite, which reads exactly like a passing full one. (Adding two tests under a
+# trailing main block took the CI count from 169 to 169.)
+if __name__ == "__main__":
+    unittest.main()
