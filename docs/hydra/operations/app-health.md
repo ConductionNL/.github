@@ -255,6 +255,70 @@ claims.
 asserts the token first and **fails loudly** when it is absent, rather than
 being refused 21 times and reporting a green sweep that measured nothing.
 
+## Monday automation — keeping the shared dependencies current
+
+The Friday sweep re-measures the fleet. It does not move it. Two packages every
+app depends on drift on their own, and nothing carried them:
+
+| | measured 2026-08-20 | available |
+|---|---|---|
+| `conduction/hydra-gates` | **17 of 17** apps on v1.8.0 | v1.8.1 |
+| `@conduction/nextcloud-vue` | **14 of 17** below 2.7.0 (12 on 2.3.0) | 2.8.2 |
+
+⚠️ **Nothing there was pinned on purpose.** Both are declared with caret ranges
+that already permitted the newer releases. What froze them is the *lockfile*,
+which nobody re-resolves unless they happen to be touching dependencies that
+day. Neither number was a decision; both were the absence of one.
+
+The cost was not theoretical. hydra-gates v1.8.0 shipped an
+`ObjectServiceInterface` **without `patchObject()`**, and because the package
+claims `OCA\OpenRegister\Contract\` in its composer autoload — a *longer*
+psr-4 prefix than openregister's own — a stale copy in **any** app's vendor
+directory defined that contract for the whole instance. Measured:
+softwarecatalog's vendor was supplying openregister's interface. Separately,
+nc-vue's AI-companion singleton landed in 2.7.0, so every app below it rendered
+a **second** companion hex beside hermiq's on every page. Both fixes had existed
+upstream for weeks.
+
+So a **fleet shared-dependency bump** runs Mondays at 05:00 UTC —
+`.github/workflows/fleet-shared-dep-bump.yml`, iterating the same
+`fleet-apps.json`. Monday deliberately, and *earlier in the week than the sweep*,
+so a bump that turns an app red has the week to be noticed rather than being
+discovered by Friday's measurement.
+
+It cannot be a cron inside each app, for the same reason the sweep cannot — see
+above.
+
+### It opens pull requests; it does not push, and it never force-pushes
+
+**A shared bump is not always safe, and CI is what knows.** Taking hydra-gates
+v1.8.1 *added* `patchObject()` to a published interface, which is a load-time
+fatal for any concrete test double implementing it without the method —
+`Class … contains 1 abstract method and must therefore be declared abstract`.
+The suite dies before a single test runs. Two apps needed stub updates before
+they could take the bump at all. A workflow that pushed straight to
+`development` would have broken them silently.
+
+🔴 **And it must never force-push.** The first draft reused one long-lived
+branch per app and force-pushed it weekly. That destroys work: the PR body
+invites a maintainer to fix a broken bump *on that branch*, and the next Monday
+run would have overwritten the fix without a trace. So:
+
+- if a bump PR is **already open** for an app, the run skips that app entirely
+  and says so — an app already being dealt with is not a candidate;
+- when it does push, it pushes a **new dated branch**, never a reused one.
+
+It touches `composer.lock` / `package-lock.json` only. `composer.json` and
+`package.json` are never rewritten, so a bump cannot silently widen what an app
+declares it accepts.
+
+**Status: the workflow exists; it needs a wider token.** It reuses
+`FLEET_DISPATCH_TOKEN`, but needs `contents: write` and `pull-requests: write`
+on the app repos where the sweep only needed `actions: write`. It asserts the
+token first and fails loudly when it is absent; if the grant is merely too
+narrow it fails at the push step, and the run summary names that as the likely
+cause rather than leaving a blank row.
+
 ## Release schedule
 
 App Store on **Friday**, social announcement the following **Monday**. After the
