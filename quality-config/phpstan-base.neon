@@ -117,7 +117,26 @@ parameters:
     # only contract there is. Restores 1.x behaviour rather than deleting real
     # runtime guards to satisfy a stricter reading of an unenforced type.
     #
-    # No effect on 1.x, which does not narrow from PHPDoc in the first place.
+    # ⚠️ IT DOES AFFECT 1.x. This comment previously read "No effect on 1.x,
+    # which does not narrow from PHPDoc in the first place." That is wrong, and
+    # the claim is why v1.8.2 reached the fleet unmeasured on the 1.x apps.
+    #
+    # MEASURED 2026-08-21 on openregister, phpstan 1.12.33 unchanged, only this
+    # line flipped:
+    #     treatPhpDocTypesAsCertain: true   -> 0 errors
+    #     treatPhpDocTypesAsCertain: false  -> 4 errors
+    #
+    # Three fleet apps went red on the v1.8.2 bump: openregister (4),
+    # openconnector (6), procest (2). The flag does not merely stop reporting
+    # PHPDoc-derived certainty — it changes which errors are produced AND their
+    # text, so baseline entries that embedded the old wording stop matching and
+    # previously-silenced findings resurface.
+    #
+    # That turned out to be worth having: it surfaced a real bug in
+    # openregister's SearchQueryHandler, where applying a saved view discarded
+    # the caller's search term and doubled the view's own. Keep the flag —
+    # but expect a 1.x app to need work when it first adopts it, and measure
+    # rather than assume.
     treatPhpDocTypesAsCertain: false
 
     ignoreErrors:
