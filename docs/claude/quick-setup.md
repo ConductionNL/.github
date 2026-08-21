@@ -37,7 +37,7 @@ Two layers — pick what you need, skip the rest:
 
 ```bash
 # The org repo with docs, global Claude settings, and shared tooling
-git clone git@codeberg.org:Conduction/.github.git ~/.github
+git clone git@github.com:ConductionNL/.github.git ~/.github
 ```
 
 **If you'll work on a Conduction Nextcloud app** (most developers):
@@ -45,16 +45,16 @@ git clone git@codeberg.org:Conduction/.github.git ~/.github
 ```bash
 git clone https://github.com/nextcloud/nextcloud-docker-dev.git ~/nextcloud-docker-dev
 cd ~/nextcloud-docker-dev/apps-extra
-git clone git@codeberg.org:Conduction/openregister.git
-git clone git@codeberg.org:Conduction/openconnector.git
-# Add other app repos as needed (opencatalogi, docudesk, …)
+git clone git@github.com:ConductionNL/openregister.git
+git clone git@github.com:ConductionNL/integriq.git
+# Add other app repos as needed (opencatalogi, filinq, …)
 ```
 
 **If you'll work on Hydra itself** (the pipeline, not the apps it builds):
 
 ```bash
 cd ~/nextcloud-docker-dev/apps-extra   # workspace layout per getting-started.md
-git clone git@codeberg.org:Conduction/hydra.git
+git clone git@github.com:ConductionNL/hydra.git
 ```
 
 > **Hydra vs .github — quick reminder.** `.github` is *the manual* (docs, way-of-work, global settings, public Hydra one-pager). `hydra` is *the factory* (containers, agent personas, orchestration scripts, the `.claude/skills/` catalogue). See [`docs/hydra/README.md`](../hydra/README.md#hydra-repo-vs-github-repo) for the full breakdown.

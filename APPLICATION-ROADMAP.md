@@ -2,7 +2,7 @@
 
 > **Purpose**: This document outlines the current Conduction app portfolio and proposed gap apps based on market intelligence from 39,600 tenders across 8 countries. We are collecting colleague feedback on naming for the 10 planned applications.
 >
-> **How to give feedback**: Comment on the discussion thread with your preferred names or suggest alternatives. We want names that are short (5-12 characters), hint at functionality, and target an English-speaking audience — following the pattern of existing apps like Procest, Pipelinq, and Docudesk.
+> **How to give feedback**: Comment on the discussion thread with your preferred names or suggest alternatives. We want names that are short (5-12 characters), hint at functionality, and target an English-speaking audience — following the pattern of existing apps like Dossiq, Pipelinq, and Filinq.
 
 ---
 
@@ -12,15 +12,15 @@
 | ------------------- | ------------------------------------------ | --------------- |
 | **OpenRegister**    | Object registration and database platform  | Core platform   |
 | **OpenCatalogi**    | Federated data catalogue                   | Data management |
-| **OpenConnector**   | API management and iPaaS integration       | Integration     |
-| **Docudesk**        | Document generation and data anonymization | Documents       |
-| **Procest**         | Case management, VTH, and process handling | Cases & permits |
+| **Integriq**        | API management and iPaaS integration       | Integration     |
+| **Filinq**          | Document generation and data anonymization | Documents       |
+| **Dossiq**          | Case management, VTH, and process handling | Cases & permits |
 | **Pipelinq**        | CRM and customer interaction               | Relations       |
 | **LaunchPad**          | Dashboard system                           | Visualization   |
-| **NL Design**       | Government design system (Rijkshuisstijl)  | Theming         |
-| **SoftwareCatalog** | IT asset management                        | IT governance   |
+| **Thematiq**        | Government design system (Rijkshuisstijl)  | Theming         |
+| **Stackiq**         | IT asset management                        | IT governance   |
 | **ZaakAfhandelApp** | Case handling                              | Cases           |
-| **LarpingApp**      | Worldbuilding and campaign management      | Gaming          |
+| **Larpinq**         | Worldbuilding and campaign management      | Gaming          |
 
 ---
 
@@ -109,7 +109,7 @@ The following 10 applications address gaps identified through analysis of 7,662 
 
 | #   | Name           | Rationale                                        |
 | --- | -------------- | ------------------------------------------------ |
-| 1   | **Purchaseq**  | "Purchase" + q suffix — procurement system       |
+| 1   | **Purchasinq**  | "Purchase" + q suffix — procurement system       |
 | 2   | **Kooplink**   | "Koop" (purchase) + "link" — purchase connection |
 | 3   | **Inkoopdesk** | "Inkoop" (procurement) + desk                    |
 | 4   | **Bestelq**    | "Bestel" (order) + q suffix                      |
@@ -266,8 +266,8 @@ The following 10 applications address gaps identified through analysis of 7,662 
 | --- | --------------- | --------------------------------- | ------- | -------------- |
 | 1   | Sociaal Domein  | Caredesk, Welfareq, Casecare      | 162\*   | cross-category |
 | 2   | BOR             | Assetdesk, Groundq, Spacedesk     | 34\*    | cross-category |
-| 3   | ERP             | Budgetq, Fiscalq, Financeq        | 1,083   | 15,243         |
-| 4   | Inkoop          | Purchaseq, Procureq, Orderdesk    | 1,430   | 11,533         |
+| 3   | ERP             | Budgetq, Fiscalq, Accountinq      | 1,083   | 15,243         |
+| 4   | Inkoop          | Purchasinq, Procureq, Orderdesk   | 1,430   | 11,533         |
 | 5   | HRM             | Staffdesk, Peopleq, Teamdesk      | 112     | 589            |
 | 6   | Boekhouding     | Ledgerq, Bookdesk, Auditdesk      | 71      | 462            |
 | 7   | Formulieren     | Formblok, Formdesk, Formflow      | 15      | 624            |

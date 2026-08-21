@@ -13,9 +13,9 @@ Centraal overzicht van geplande verbeteringen en toekomstige features voor het C
 
 | Item                   | Beschrijving                                                                                                                              | Status        | Referentie                            |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------- | ------------------------------------- |
-| Seed data backfill     | Bestaande apps (Pipelinq, Procest, Docudesk, Softwarecatalog, LarpingApp, ZaakAfhandelApp) voorzien van seed data in hun `_register.json` | Te doen       | ADR-016                               |
-| Playwright E2E in CI   | `enable-playwright` input in quality.yml, parallel aan Newman. Pipelinq en Procest hebben tests + test flows.                             | Gereed        | quality.yml                           |
-| LLM test flows per app | Elke app heeft `tests/flows/` met markdown test flows die zowel door Playwright als LLM agents gebruikt worden.                           | In uitvoering | Pipelinq (7 flows), Procest (4 flows) |
+| Seed data backfill     | Bestaande apps (Pipelinq, Dossiq, Filinq, Stackiq, Larpinq, ZaakAfhandelApp) voorzien van seed data in hun `_register.json` | Te doen       | ADR-016                               |
+| Playwright E2E in CI   | `enable-playwright` input in quality.yml, parallel aan Newman. Pipelinq en Dossiq hebben tests + test flows.                             | Gereed        | quality.yml                           |
+| LLM test flows per app | Elke app heeft `tests/flows/` met markdown test flows die zowel door Playwright als LLM agents gebruikt worden.                           | In uitvoering | Pipelinq (7 flows), Dossiq (4 flows) |
 
 ---
 
