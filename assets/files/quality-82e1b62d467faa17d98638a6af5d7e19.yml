@@ -699,10 +699,50 @@ jobs:
               # is killed by `set -e` before RC is ever assigned.
               RC=0
               composer phpcs -- --runtime-set ignore_warnings_on_exit 1 || RC=$?
-              if [ "$RC" -eq 3 ]; then
-                echo "::error::PHPCS could not run (exit 3) — this is a configuration or tokenizer failure, not a code finding. Check the app's phpcs.xml."
-              elif [ "$RC" -ne 0 ]; then
-                echo "::error::PHPCS found errors (exit $RC). Warnings are non-blocking and are NOT counted here — this is errors only."
+
+              # ---------------------------------------------------------------
+              # The mapping above was measured against phpcs 3.13.6. THE CODES
+              # MOVED IN 4.0, and the fleet now spans both majors (shillinq's
+              # lock pins 4.0.4; openregister/opencatalogi/hermiq are on
+              # 3.13.6), so this block must branch on the major it actually ran.
+              #
+              # phpcs 4 exit codes are a BITMASK — verbatim from
+              # `src/Util/ExitCode.php` in 4.0.4:
+              #    0  OKAY
+              #    1  FIXABLE
+              #    2  NON_FIXABLE
+              #    4  FAILED_TO_FIX
+              #   16  PROCESS_ERROR          <- "could not run"
+              #   64  REQUIREMENTS_NOT_MET
+              #
+              # So under 4.x, exit 3 is FIXABLE|NON_FIXABLE — a perfectly
+              # ordinary mixed findings result — and the old `RC -eq 3` rule
+              # relabelled it "could not run". That is the exact INVERSE of the
+              # failure class this gate exists to catch: it dressed a genuine
+              # code finding up as tool noise, inviting a reviewer to wave it
+              # away. Measured directly on 4.0.4: an unresolvable `<rule ref>`
+              # exits 16, and a file with mixed fixable/non-fixable errors
+              # exits 3.
+              # ---------------------------------------------------------------
+              PHPCS_MAJOR="$(vendor/bin/phpcs --version 2>/dev/null | sed -n 's/^PHP_CodeSniffer version \([0-9][0-9]*\).*/\1/p')"
+              if [ -z "$PHPCS_MAJOR" ]; then
+                # Version unreadable (binary missing/broken). Do NOT guess a
+                # major and risk mislabelling: say so and pass the code through.
+                echo "::error::PHPCS exited $RC and its version could not be read (vendor/bin/phpcs missing or broken) — refusing to classify this exit code. Treating as a failure."
+              elif [ "$PHPCS_MAJOR" -ge 4 ]; then
+                if [ "$(( RC & 64 ))" -ne 0 ]; then
+                  echo "::error::PHPCS requirements not met (exit $RC, REQUIREMENTS_NOT_MET) — the environment does not satisfy phpcs's own requirements. Not a code finding."
+                elif [ "$(( RC & 16 ))" -ne 0 ]; then
+                  echo "::error::PHPCS could not run (exit $RC, PROCESS_ERROR) — a configuration or tokenizer failure, not a code finding. Check the app's phpcs.xml."
+                elif [ "$RC" -ne 0 ]; then
+                  echo "::error::PHPCS found errors (exit $RC). Warnings are non-blocking and are NOT counted here — this is errors only."
+                fi
+              else
+                if [ "$RC" -eq 3 ]; then
+                  echo "::error::PHPCS could not run (exit 3) — this is a configuration or tokenizer failure, not a code finding. Check the app's phpcs.xml."
+                elif [ "$RC" -ne 0 ]; then
+                  echo "::error::PHPCS found errors (exit $RC). Warnings are non-blocking and are NOT counted here — this is errors only."
+                fi
               fi
               exit $RC
               ;;
