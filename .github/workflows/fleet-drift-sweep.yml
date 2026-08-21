@@ -317,11 +317,15 @@ jobs:
               success) mark="✅ green" ;;
               *)       mark="🔴 ${v}"; RED="${RED} ${app}" ;;
             esac
+            # The verdict goes to the log as well as the summary: a drift sweep
+            # exists to answer "which apps are red under TODAY's gates", and an
+            # answer that only renders is an answer no script can consume.
             if [ -n "${u}" ]; then
               echo "| [\`${app}\`](${u}) | ${mark} |" >> "$GITHUB_STEP_SUMMARY"
             else
               echo "| \`${app}\` | ${mark} |" >> "$GITHUB_STEP_SUMMARY"
             fi
+            echo "VERDICT: ${app} | ${v} | ${u:-no-url}"
           done
 
           echo ""
