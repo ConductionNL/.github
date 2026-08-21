@@ -147,5 +147,128 @@ class InvocationContractTest(unittest.TestCase):
             self.assertTrue(os.path.exists(log) or True)
 
 
+class FragmentAndTemplateResolutionTest(unittest.TestCase):
+    """The two false-finding classes hrmq's first templated manifest hit.
+
+    (1) `_src_dir` on a RELATIVE fragment path (`src/manifest.d/x.json` — the
+        shape the runner passes) resolved to `src/manifest.d`, so `icons.js`
+        was read from a directory that has none and every fragment page was
+        judged against an EMPTY app registry: 49 false icon findings.
+    (2) The merged page-id universe ignored pages materialised by
+        pageTemplates/pageInstances expansion, so a `rowRoute` to an instance
+        page drew "does not resolve": 28 false findings.
+
+    Each arm has its control: the same shape with a REAL defect must still be
+    a finding, otherwise the fix is just a wider hole.
+    """
+
+    def _app(self, d, *, instances=True):
+        import json
+        os.makedirs(os.path.join(d, "src", "manifest.d"), exist_ok=True)
+        with open(os.path.join(d, "src", "manifest.json"), "w",
+                  encoding="utf-8") as f:
+            json.dump({"version": "0.1.0", "pages": [], "menu": []}, f)
+        with open(os.path.join(d, "src", "icons.js"), "w",
+                  encoding="utf-8") as f:
+            f.write("import AppOwnGlyph from "
+                    "'vue-material-design-icons/AppOwnGlyph.vue'\n"
+                    "export default { AppOwnGlyph }\n")
+        doc = {
+            "pages": [{
+                "id": "ThingDetail", "type": "detail",
+                "config": {"widgets": [
+                    {"id": "w1", "icon": "AppOwnGlyph",
+                     "rowRoute": "ChildIndex"},
+                ], "layout": [
+                    {"widgetId": "w1", "gridX": 0, "gridY": 0,
+                     "gridWidth": 6, "gridHeight": 2},
+                ]},
+            }],
+            "pageTemplates": [{
+                "id": "tpl",
+                "params": [{"name": "id", "required": True}],
+                "page": {"id": "{{id}}", "type": "index"},
+            }],
+            "pageInstances": (
+                [{"templateRef": "tpl", "params": {"id": "ChildIndex"}}]
+                if instances else []),
+        }
+        with open(os.path.join(d, "src", "manifest.d", "10-frag.json"), "w",
+                  encoding="utf-8") as f:
+            json.dump(doc, f)
+
+    def _findings(self, d):
+        import subprocess
+        import sys as _sys
+        log = os.path.join(d, "out.log")
+        # RELATIVE paths from the app root — exactly the runner's shape.
+        r = subprocess.run(
+            [_sys.executable, TARGET, log,
+             "src/manifest.json", "src/manifest.d/10-frag.json"],
+            capture_output=True, text=True, cwd=d)
+        assert r.returncode == 0, r.stderr
+        with open(log, encoding="utf-8") as f:
+            return [ln for ln in f.read().splitlines() if ln]
+
+    def test_a_fragment_icon_registered_in_the_apps_icons_js_is_clean(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            self._app(d)
+            self.assertEqual(self._findings(d), [])
+
+    def test_control_an_unregistered_fragment_icon_is_still_a_finding(self):
+        import json
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            self._app(d)
+            frag = os.path.join(d, "src", "manifest.d", "10-frag.json")
+            with open(frag, encoding="utf-8") as f:
+                doc = json.load(f)
+            doc["pages"][0]["config"]["widgets"][0]["icon"] = "NotRegisteredZz"
+            with open(frag, "w", encoding="utf-8") as f:
+                json.dump(doc, f)
+            found = self._findings(d)
+            self.assertEqual(len(found), 1, found)
+            self.assertIn("NotRegisteredZz", found[0])
+
+    def test_a_row_route_to_an_expanded_instance_page_resolves(self):
+        # Covered by test_a_fragment_icon_...clean (rowRoute ChildIndex is an
+        # instance page there), but pinned separately so a route regression
+        # names itself rather than hiding behind an icon assertion.
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            self._app(d, instances=True)
+            found = [ln for ln in self._findings(d) if "rowRoute" in ln]
+            self.assertEqual(found, [])
+
+    def test_control_a_row_route_to_a_never_instantiated_page_still_fails(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            self._app(d, instances=False)  # template declared, nothing expands
+            found = self._findings(d)
+            self.assertEqual(len(found), 1, found)
+            self.assertIn("rowRoute 'ChildIndex' does not resolve", found[0])
+
+    def test_a_templated_app_with_no_node_is_fail_closed_not_silent(self):
+        # The route universe would be fiction without expansion — that must be
+        # a finding, never a quiet fallback to the raw (smaller) id set.
+        import subprocess
+        import sys as _sys
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            self._app(d)
+            log = os.path.join(d, "out.log")
+            env = dict(os.environ, PATH="/nonexistent-no-node")
+            r = subprocess.run(
+                [_sys.executable, TARGET, log,
+                 "src/manifest.json", "src/manifest.d/10-frag.json"],
+                capture_output=True, text=True, cwd=d, env=env)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            with open(log, encoding="utf-8") as f:
+                content = f.read()
+            self.assertIn("could not be computed", content)
+            self.assertIn("fail-closed", content)
+
+
 if __name__ == "__main__":
     unittest.main()

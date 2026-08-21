@@ -132,6 +132,75 @@ def _manifest_paths(repo: str) -> list[str]:
     return paths
 
 
+def _expanded_pages(repo: str, paths: list[str]) -> tuple[list[dict], str | None]:
+    """(pages materialised by page-template expansion, problem-or-None).
+
+    A manifest may declare its entity scaffold once (`pageTemplates[]`) plus a
+    per-entity `pageInstances[]` list; the runtime (nextcloud-vue
+    `buildManifest()` → `expandPageTemplates()`) substitutes each
+    instantiation's values — INCLUDING `icon` parameters — into concrete pages
+    as its final step. Those substituted icons render through the very CnIcon
+    registry this gate governs, and they exist in no file on disk, so the raw
+    scan alone can neither clear nor catch them.
+
+    ONE expansion implementation, not two: the pages come from the shared
+    vendored builder (build_effective_manifest.js, sync-noted to the
+    nextcloud-vue source), invoked via node. Only invoked when a scanned src
+    manifest actually declares templates/instances, so a template-free app
+    never pays for (or depends on) node here.
+
+    Returns a problem string instead of pages when the builder cannot run —
+    the caller reports that as the third state (not a finding, not a pass),
+    exactly like a missing vue-material-design-icons: substituted icons went
+    unjudged and the run must not read as full coverage.
+    """
+    import subprocess
+    import tempfile
+
+    src_prefix = os.path.join(repo, 'src') + os.sep
+    templated = False
+    for p in paths:
+        if not os.path.abspath(p).startswith(src_prefix):
+            continue  # register JSONs cannot declare page templates
+        try:
+            with open(p, encoding='utf-8') as fh:
+                doc = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        if isinstance(doc, dict) and (doc.get('pageTemplates') or doc.get('pageInstances')):
+            templated = True
+            break
+    if not templated:
+        return [], None
+
+    builder = os.path.join(HERE, 'build_effective_manifest.js')
+    tmp = None
+    try:
+        fd, tmp = tempfile.mkstemp(suffix='.json')
+        os.close(fd)
+        proc = subprocess.run(
+            ['node', builder, '--app-dir', repo,
+             '--out', os.devnull, '--expansion-out', tmp],
+            capture_output=True, text=True, timeout=120,
+        )
+        if proc.returncode != 0:
+            tail = (proc.stderr or '').strip().splitlines()[-1:] or ['<no output>']
+            return [], f'build_effective_manifest.js exited {proc.returncode} ({tail[0]})'
+        with open(tmp, encoding='utf-8') as fh:
+            expansion = json.load(fh)
+        pages = [pg for pg in (expansion.get('expandedPages') or [])
+                 if isinstance(pg, dict)]
+        return pages, None
+    except Exception as exc:  # noqa: BLE001 — node absent, timeout, bad JSON: one third-state answer
+        return [], f'build_effective_manifest.js could not be run ({exc})'
+    finally:
+        if tmp:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+
+
 def _js_code(text: str) -> str:
     """*text* with JS comments blanked and STRING LITERALS KEPT.
 
@@ -236,8 +305,33 @@ def _menu_entries(path: str):
             data = json.load(fh)
     except (OSError, ValueError):
         return
+    yield from _doc_icon_entries(data)
 
-    def walk(node, label_ctx, in_widget=False):
+
+_PLACEHOLDER_RE = re.compile(r'\{\{\s*[^}]+?\s*\}\}')
+
+
+def _doc_icon_entries(data):
+    """Walk an in-memory manifest node — see `_menu_entries` for the contract.
+
+    Split out of `_menu_entries` so the SAME walk (and therefore the same
+    rules) runs over the pages that page-template expansion materialises —
+    those exist in no file, only in the effective manifest.
+
+    Inside a `pageTemplates` subtree a `{{param}}` icon value is a PLACEHOLDER,
+    not a rendered glyph: the expander substitutes the instantiation's value
+    before anything draws it (an exact-match `"{{icon}}"` is replaced wholesale,
+    so no `{{` survives expansion on that path). Flagging the placeholder text
+    itself produced 4 false "bad-lowercase" findings on hrmq's
+    00-templates.json. Skipped ONLY there — a `{{...}}` icon anywhere else
+    (a concrete page, or a pageInstances[].override, whose values are NOT
+    substituted) reaches the renderer literally and stays a finding. The
+    SUBSTITUTED values are still judged, on the expanded pages themselves.
+    A LITERAL icon inside a template is likewise still judged in place: it
+    lands verbatim in every instance.
+    """
+
+    def walk(node, label_ctx, in_widget=False, in_template=False):
         if isinstance(node, dict):
             if node.get('type') == 'caption':
                 # THE CAPTION EXEMPTION, AND WHY IT IS THE CORRECT ONE.
@@ -292,16 +386,18 @@ def _menu_entries(path: str):
                      or node.get('id') or label_ctx)
             icon = node.get('icon')
             if isinstance(icon, str) and icon:
-                yield (str(label or ''), icon, str(node.get('id') or ''), in_widget)
+                if not (in_template and _PLACEHOLDER_RE.search(icon)):
+                    yield (str(label or ''), icon, str(node.get('id') or ''), in_widget)
             for key, value in node.items():
                 if key != 'icon':
                     # Once inside a `widgets` array, everything below it is a
                     # widget icon and stays flagged as one. See the Tier A
                     # concept check for why that distinction matters.
-                    yield from walk(value, label, in_widget or key == 'widgets')
+                    yield from walk(value, label, in_widget or key == 'widgets',
+                                    in_template or key == 'pageTemplates')
         elif isinstance(node, list):
             for item in node:
-                yield from walk(item, label_ctx, in_widget)
+                yield from walk(item, label_ctx, in_widget, in_template)
 
     yield from walk(data, '')
 
@@ -407,9 +503,18 @@ def main() -> int:
     # verified and the missing library changed no answer.
     unverifiable: set[str] = set()
 
-    for path in paths:
-        rel = os.path.relpath(path, repo)
-        for label, icon, entry_id, in_widget in _menu_entries(path):
+    # Pages materialised by page-template expansion carry substituted icon
+    # values that exist in no file — scan them as an extra source, through the
+    # SAME walk and rules as the on-disk manifests.
+    expanded, expansion_problem = _expanded_pages(repo, paths)
+    sources = [(os.path.relpath(p, repo), _menu_entries(p)) for p in paths]
+    for pg in expanded:
+        page_id = str(pg.get('id') or '?')
+        sources.append((f"effective manifest, expanded page '{page_id}'",
+                        _doc_icon_entries(pg)))
+
+    for rel, entries in sources:
+        for label, icon, entry_id, in_widget in entries:
             if label == _CAPTION_DEAD_KEYS:
                 # Not a rendered icon — dead metadata on a section divider.
                 # WARN, never FAIL: there is no glyph to be wrong about, so
@@ -582,15 +687,27 @@ def main() -> int:
         # Neither reading is honest. A missing dependency is a THIRD state:
         # not a finding, and not a pass. (.github#233)
 
+    if expansion_problem:
+        # Same third state as a missing icon library (.github#233): the app
+        # declares page templates, so some rendered icons only exist AFTER
+        # expansion — and expansion could not be computed. Neither a finding
+        # nor a pass; the runner shows it as SKIPPED (wiring) via exit 5.
+        print(f'NOTE: this app declares pageTemplates/pageInstances but the expanded '
+              f'pages could not be computed ({expansion_problem}) — their substituted '
+              f'icon values were NOT judged by this run.')
+
     for w in warns:
         print(f'WARN  {w}')
     for f in fails:
         print(f'FAIL  {f}')
 
+    extra = f'; plus {len(expanded)} expanded template page(s)' if expanded else ''
     print(f'\nchecked {len(paths)} manifest(s): {len(fails)} failure(s), '
-          f'{len(warns)} warning(s)')
+          f'{len(warns)} warning(s){extra}')
     if fails:
         return 1
+    if expansion_problem:
+        return EXIT_TOOLING_MISSING
     if available is None and unverifiable:
         # Clean on every rule that COULD run, but the invented-name rule could
         # not be answered FOR THESE NAMES. The runner reports this as SKIPPED

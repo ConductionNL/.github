@@ -26,6 +26,7 @@ const {
 	applyMenuRelocations,
 	applyMenuRemovals,
 	applySettingsSection,
+	expandPageTemplates,
 	assembleFromDir,
 	assembleAtRef,
 } = require('./build_effective_manifest.js')
@@ -45,7 +46,16 @@ const {
 		'src/manifest.d/20-settings.json',
 		'src/menu-layout.json',
 	]
+	// The templating leg (manifest-entity-scaffold-templating) has its own
+	// fixture directory — guard it the same way, for the same reason.
+	const templatedDir = path.resolve(__dirname, '..', 'test-fixtures', 'effective-manifest', 'templated')
+	const requiredTemplated = [
+		'src/manifest.json',
+		'src/manifest.d/00-templates.json',
+		'src/manifest.d/10-entities.json',
+	]
 	const missing = required.filter((rel) => !fs.existsSync(path.join(goodDir, rel)))
+		.concat(requiredTemplated.filter((rel) => !fs.existsSync(path.join(templatedDir, rel))).map((rel) => `templated/${rel}`))
 	if (missing.length > 0) {
 		console.log(`FAIL — ${missing.length} fixture file(s) MISSING under ${goodDir}; this suite cannot assert anything:`)
 		for (const rel of missing) console.log(`    ${rel}`)
@@ -244,6 +254,153 @@ function assert(cond, label) {
 		}
 	} finally {
 		fs.rmSync(tmpRepo, { recursive: true, force: true })
+	}
+}
+
+// --- page-template expansion (manifest-entity-scaffold-templating) ---------
+// Pins the vendored expandPageTemplates port + buildManifest's collection of
+// fragment-authored pageTemplates/pageInstances/sets — the runtime pipeline's
+// FINAL step (nextcloud-vue buildManifest.js → expandPageTemplates.js).
+{
+	// Direct unit semantics: substitution modes + error strictness.
+	const manifest = {
+		pages: [{ id: 'Concrete' }],
+		sets: { cols: ['a', 'b'] },
+		pageTemplates: [{
+			id: 'tpl',
+			params: [
+				{ name: 'id', required: true },
+				{ name: 'title', required: true },
+				{ name: 'icon', required: false },
+			],
+			page: {
+				id: '{{id}}',
+				title: 'Edit {{title}}',
+				icon: '{{icon}}',
+				config: { columns: '{{set:cols}}' },
+			},
+		}],
+		pageInstances: [
+			{ templateRef: 'tpl', params: { id: 'P1', title: 'Thing' } },
+			{ templateRef: 'tpl', params: { id: 'P2', title: 'Other', icon: 'Cog' } },
+			{ templateRef: 'missing-tpl', params: { id: 'P3', title: 'Ghost' } },
+			{ templateRef: 'tpl', params: { id: 'P4' } }, // title missing (required)
+		],
+	}
+	const res = expandPageTemplates(manifest, { throwOnError: false })
+	assert(res.expandedCount === 2 && res.errors.length === 2,
+		'expandPageTemplates: 2 of 4 instances expand; unknown templateRef + missing required param are NAMED errors, not silence')
+	const p1 = res.manifest.pages.find((p) => p.id === 'P1')
+	assert(p1 && p1.title === 'Edit Thing', 'expandPageTemplates: embedded {{param}} interpolates into the string')
+	assert(p1 && !('icon' in p1), 'expandPageTemplates: absent OPTIONAL param on an exact-match placeholder DROPS the containing key')
+	assert(p1 && JSON.stringify(p1.config.columns) === JSON.stringify(['a', 'b']),
+		'expandPageTemplates: {{set:NAME}} resolves against the shared sets registry with the value\'s own JSON type')
+	const p2 = res.manifest.pages.find((p) => p.id === 'P2')
+	assert(p2 && p2.icon === 'Cog', 'expandPageTemplates: supplied optional param substitutes on the exact-match placeholder')
+	assert(!('pageInstances' in res.manifest) && Array.isArray(res.manifest.pageTemplates),
+		'expandPageTemplates: pageInstances removed after expansion, pageTemplates retained by default')
+	assert(res.errors.every((e) => /pageInstances\[\d+\]/.test(e)),
+		'expandPageTemplates: every expansion error names its instantiation (pageInstances[N])')
+	assert(manifest.pages.length === 1 && Array.isArray(manifest.pageInstances),
+		'expandPageTemplates: input manifest not mutated')
+	let threw = null
+	try {
+		expandPageTemplates(manifest, { throwOnError: true })
+	} catch (e) {
+		threw = e
+	}
+	assert(threw && /Page-template expansion failed/.test(threw.message),
+		'expandPageTemplates: throwOnError:true throws the concatenated named errors')
+}
+
+{
+	// buildManifest collects templates/instances/sets FROM FRAGMENTS and runs
+	// expansion as the FINAL step — meta reports what the runtime would skip.
+	const base = { version: '1.0.0', pages: [{ id: 'Home' }], menu: [] }
+	const fragTpl = {
+		pageTemplates: [{
+			id: 't',
+			params: [{ name: 'id', required: true }],
+			page: { id: '{{id}}', type: 'index' },
+		}],
+		sets: { s: [1] },
+	}
+	const fragInst = {
+		pageInstances: [
+			{ templateRef: 't', params: { id: 'FromFragment' } },
+			{ templateRef: 'nope', params: { id: 'Bad' } },
+		],
+	}
+	const meta = {}
+	const out = buildManifest(base, [fragTpl, fragInst], {}, meta)
+	assert(out.pages.some((p) => p.id === 'FromFragment'),
+		'buildManifest: fragment-authored template + instance expand into concrete pages[]')
+	assert(meta.expansion.expandedCount === 1 && meta.expansion.errors.length === 1
+		&& /templateRef "nope"/.test(meta.expansion.errors[0]),
+	'buildManifest: the skipped instantiation surfaces on meta.expansion.errors (runtime skips, the gate REPORTS)')
+	assert(meta.expansion.expandedPages.length === 1 && meta.expansion.expandedPages[0].id === 'FromFragment',
+		'buildManifest: meta.expansion.expandedPages carries exactly the materialised pages')
+	assert(!('pageInstances' in out), 'buildManifest: no pageInstances key survives expansion')
+}
+
+{
+	// NO-TEMPLATE APPS ARE BYTE-IDENTICAL TO THE PRE-EXPANSION BUILDER — the
+	// no-change control for the whole fleet, pinned as an assertion.
+	const base = { version: '1.0.0', pages: [{ id: 'p' }], menu: [{ id: 'm', label: 'M', route: 'p' }] }
+	const frag = { pages: [{ id: 'q' }] }
+	const meta = {}
+	const out = buildManifest(base, [frag], {}, meta)
+	assert(!('pageTemplates' in out) && !('pageInstances' in out) && !('sets' in out),
+		'buildManifest: an app without templates gains NO templating keys')
+	assert(meta.expansion.expandedCount === 0 && meta.expansion.errors.length === 0,
+		'buildManifest: an app without templates reports an all-zero expansion')
+	assert(JSON.stringify(out) === JSON.stringify({ version: '1.0.0', pages: [{ id: 'p' }, { id: 'q' }], menu: [{ id: 'm', label: 'M', route: 'p' }] }),
+		'buildManifest: no-template output shape unchanged (byte-identical serialisation)')
+}
+
+// --- assembly from the templated fixture dir (files → expansion, end to end) --
+{
+	const templatedDir = path.resolve(__dirname, '..', 'test-fixtures', 'effective-manifest', 'templated')
+	const { manifest, expansion } = assembleFromDir(templatedDir)
+	assert(expansion.expandedCount === 2 && expansion.errors.length === 1,
+		'assembleFromDir(templated): 2 fixture instances expand, the broken templateRef is a named error')
+	const items = manifest.pages.find((p) => p.id === 'Items')
+	assert(items && items.title === 'Items overview' && items.route === '/items'
+		&& JSON.stringify(items.config.columns) === JSON.stringify(['name', 'status'])
+		&& items.config.toolbar && items.config.toolbar.search === true,
+	'assembleFromDir(templated): substituted instance page materialised in pages[] (params + {{set:NAME}})')
+	assert(items && !('icon' in items),
+		'assembleFromDir(templated): optional icon param absent → key dropped from the expanded page')
+	const orders = manifest.pages.find((p) => p.id === 'Orders')
+	assert(orders && orders.title === 'Orders (overridden)' && orders.icon === 'TableColumn',
+		'assembleFromDir(templated): instance override (base+delta merge) applied over the substituted page')
+	assert(!manifest.pages.some((p) => p.id === 'BrokenDetail'),
+		'assembleFromDir(templated): the failing instantiation\'s page is ABSENT (runtime skip semantics) — its error is the report')
+	assert(/pageInstances\[2\].*doesNotExist/.test(expansion.errors[0]),
+		'assembleFromDir(templated): the error names the instantiation and the unknown templateRef')
+}
+
+// --- CLI --expansion-out (the handoff the Python gate helpers consume) --------
+{
+	const templatedDir = path.resolve(__dirname, '..', 'test-fixtures', 'effective-manifest', 'templated')
+	const expFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'hydra-expansion-out-')), 'expansion.json')
+	try {
+		const res = spawnSync(process.execPath, [
+			path.join(__dirname, 'build_effective_manifest.js'),
+			'--app-dir', templatedDir,
+			'--out', path.join(path.dirname(expFile), 'effective.json'),
+			'--expansion-out', expFile,
+		], { encoding: 'utf8' })
+		assert(res.status === 0, 'CLI --expansion-out: assembly exits 0 (runtime skip semantics — errors are REPORTED, not fatal)')
+		const report = JSON.parse(fs.readFileSync(expFile, 'utf8'))
+		assert(report.expandedCount === 2 && report.errors.length === 1
+			&& report.expandedPages.length === 2
+			&& report.expandedPages.some((p) => p.id === 'Items'),
+		'CLI --expansion-out: report carries expandedCount + named errors + the expanded pages themselves')
+		assert(/expansion error:.*doesNotExist/.test(res.stderr),
+			'CLI: every expansion error is printed to stderr (lands in the gate-53 log)')
+	} finally {
+		fs.rmSync(path.dirname(expFile), { recursive: true, force: true })
 	}
 }
 

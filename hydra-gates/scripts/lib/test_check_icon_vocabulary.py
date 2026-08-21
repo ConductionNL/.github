@@ -402,5 +402,104 @@ class ACommentedOutImportRegistersNothing(_TmpCase):
         self.assertEqual(rc, 0, out)
 
 
+class PageTemplateExpansion(_TmpCase):
+    """manifest-entity-scaffold-templating (pageTemplates/pageInstances).
+
+    A `{{param}}` icon inside a pageTemplates subtree is a PLACEHOLDER the
+    expander substitutes before anything renders — hrmq's first templated
+    manifest drew 4 false bad-lowercase findings on the literal placeholder
+    text. The SUBSTITUTED values render for real, so they must be judged on
+    the expanded pages (via the shared build_effective_manifest.js — one
+    expansion implementation, not two). Every arm plants both directions:
+    the placeholder stays silent, the substituted defect is caught.
+    """
+
+    def _templated(self, *, instance_icon, registered):
+        root = _app(self.tmp, [], registered=registered)
+        (root / "src" / "manifest.json").write_text(json.dumps({
+            "version": "0.1.0",
+            "menu": [],
+            "pages": [],
+            "pageTemplates": [{
+                "id": "tpl",
+                "params": [
+                    {"name": "id", "required": True},
+                    {"name": "title", "required": True},
+                    {"name": "icon", "required": False},
+                ],
+                "page": {
+                    "id": "{{id}}",
+                    "type": "index",
+                    "title": "{{title}}",
+                    "icon": "{{icon}}",
+                },
+            }],
+            "pageInstances": [{
+                "templateRef": "tpl",
+                "params": {"id": "Things", "title": "Things",
+                           "icon": instance_icon},
+            }],
+        }), encoding="utf-8")
+        return root
+
+    def test_a_template_placeholder_icon_is_not_flagged(self):
+        # The literal "{{icon}}" never renders — the expander replaces it
+        # wholesale on the exact-match path. Cog substitutes in, so the run
+        # is fully clean.
+        root = self._templated(instance_icon="Cog", registered=["Cog"])
+        rc, out = _run(root)
+        self.assertNotIn("{{icon}}", out)
+        self.assertEqual(rc, 0, out)
+
+    def test_the_expanded_pages_are_declared_in_the_summary(self):
+        # A scan that silently skipped expansion would be indistinguishable
+        # from one that judged it — the summary must say the pages were there.
+        root = self._templated(instance_icon="Cog", registered=["Cog"])
+        rc, out = _run(root)
+        self.assertIn("plus 1 expanded template page(s)", out)
+
+    def test_a_substituted_invented_icon_fails_on_the_expanded_page(self):
+        # The defect exists in NO file — only after substitution. Before the
+        # expanded-page scan this shipped silently.
+        root = self._templated(instance_icon="InventedGlyphQq",
+                               registered=["Cog"])
+        rc, out = _run(root)
+        self.assertEqual(rc, 1, out)
+        self.assertIn("expanded page 'Things'", out)
+        self.assertIn('"InventedGlyphQq" does not exist', out)
+
+    def test_a_placeholder_outside_a_template_still_fails(self):
+        # ANTI-WIDENING. Only the pageTemplates subtree is placeholder
+        # territory: a `{{...}}` icon on a CONCRETE page (or an override,
+        # whose values are never substituted) reaches the renderer literally.
+        root = _app(self.tmp, [], registered=[], pages=[
+            {"id": "Broken", "type": "index", "title": "B",
+             "icon": "{{neverSubstituted}}"}])
+        rc, out = _run(root)
+        self.assertEqual(rc, 1, out)
+        self.assertIn("{{neverSubstituted}}", out)
+
+    def test_a_literal_bad_icon_inside_a_template_is_flagged_in_place(self):
+        # ANTI-WIDENING. The exemption is for placeholders, not for the
+        # template subtree: a literal invented name in a template lands
+        # verbatim in every instance and is caught at its source.
+        root = _app(self.tmp, [], registered=[])
+        (root / "src" / "manifest.json").write_text(json.dumps({
+            "version": "0.1.0",
+            "menu": [],
+            "pages": [],
+            "pageTemplates": [{
+                "id": "tpl",
+                "params": [{"name": "id", "required": True}],
+                "page": {"id": "{{id}}", "type": "index",
+                         "icon": "LiteralInventedGlyphZz"},
+            }],
+            "pageInstances": [],
+        }), encoding="utf-8")
+        rc, out = _run(root)
+        self.assertEqual(rc, 1, out)
+        self.assertIn("LiteralInventedGlyphZz", out)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

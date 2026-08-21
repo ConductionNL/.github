@@ -61,6 +61,15 @@
 //                        the app registry, and are exempt. Skipped entirely
 //                        when the app ships no src/registry.js.
 //                        Closes #238 / larpingapp#286.
+//   (g) template-expansion — every pageInstances[] instantiation must expand.
+//                        The runtime (buildManifest → expandPageTemplates with
+//                        throwOnError:false) SKIPS a failing instantiation so
+//                        one bad instance never blanks the app; the gate
+//                        mirrors that effective manifest but reports each
+//                        named expansion error as a FAIL — a silently missing
+//                        page is exactly the class of loss ADR-044 forbids.
+//                        The skipped page also surfaces indirectly as (a)/(d)
+//                        misses wherever the menu or a deep link names it.
 //
 // Report shape (mirrors gate-22 / check_manifest.js): on findings, ONE
 // machine-parseable per-file JSON line, then always the JSON summary line —
@@ -99,6 +108,7 @@ try {
 // --- argument parsing --------------------------------------------------------
 
 let APP_DIR = process.cwd()
+let APP_DIR_EXPLICIT = false
 let MANIFEST_FILE = null
 // `--scope-ids FILE` (ADR-020) — see manifest_scope_filter.js. The joins are
 // still answered against the WHOLE assembled manifest; the flag only decides
@@ -107,7 +117,7 @@ let SCOPE_IDS_FILE = null
 {
 	const argv = process.argv.slice(2)
 	for (let i = 0; i < argv.length; i++) {
-		if (argv[i] === '--app-dir' && argv[i + 1]) { APP_DIR = path.resolve(argv[++i]); continue }
+		if (argv[i] === '--app-dir' && argv[i + 1]) { APP_DIR = path.resolve(argv[++i]); APP_DIR_EXPLICIT = true; continue }
 		if (argv[i] === '--manifest' && argv[i + 1]) { MANIFEST_FILE = path.resolve(argv[++i]); continue }
 		if (argv[i] === '--scope-ids' && argv[i + 1]) { SCOPE_IDS_FILE = argv[++i]; continue }
 		console.error(`[check_manifest_crossref] unknown argument: ${argv[i]}`)
@@ -644,6 +654,7 @@ function main() {
 	// Assemble (or load) the effective manifest.
 	let manifest
 	let manifestLabel
+	let expansionErrors = []
 	if (MANIFEST_FILE) {
 		manifestLabel = MANIFEST_FILE
 		try {
@@ -653,10 +664,27 @@ function main() {
 			console.log(JSON.stringify({ status: 'failed', checked: 1, failed: 1 }))
 			process.exit(1)
 		}
+		// (g) A pre-assembled manifest cannot carry the expansion errors — the
+		// builder DROPS a failing instantiation (runtime skip semantics), so
+		// the handed-over file looks clean about the very pages it lost.
+		// Re-derive them from the app inputs when the caller named the app dir
+		// (the runner always passes --app-dir alongside --manifest). Guarded to
+		// the explicit flag: a fixture-driven --manifest run whose CWD is some
+		// unrelated tree must not be credited with that tree's expansion.
+		if (APP_DIR_EXPLICIT) {
+			try {
+				expansionErrors = builder.assembleFromDir(APP_DIR).expansion.errors
+			} catch (e) {
+				// No assemblable inputs next to the pre-assembled manifest —
+				// nothing to re-derive; the structural stage already judged it.
+			}
+		}
 	} else {
 		manifestLabel = path.join(APP_DIR, 'src', 'manifest.json') + ' (effective)'
 		try {
-			manifest = builder.assembleFromDir(APP_DIR).manifest
+			const assembled = builder.assembleFromDir(APP_DIR)
+			manifest = assembled.manifest
+			expansionErrors = assembled.expansion.errors
 		} catch (e) {
 			if (e.code === 'ENOBASE') {
 				// Tier 0 — no manifest. Defensive: the gate skips before calling us.
@@ -668,6 +696,17 @@ function main() {
 			console.log(JSON.stringify({ status: 'failed', checked: 1, failed: 1 }))
 			process.exit(1)
 		}
+	}
+
+	// (g) template-expansion: every named expansion error is a FAIL. The
+	// builder already mirrored the runtime's effective result (the failing
+	// instantiation's page is ABSENT from pages[]); this makes the absence a
+	// finding instead of a silence. The error text carries `pageInstances[N]`,
+	// which is turned into the JSON-pointer path.
+	for (const err of expansionErrors) {
+		const m = /pageInstances\[(\d+)\]/.exec(err)
+		const ptr = m ? `/pageInstances/${m[1]}` : '/pageInstances'
+		fail('template-expansion', ptr, `instantiation did not expand and its page was DROPPED from the effective manifest (runtime skip semantics): ${err}`)
 	}
 
 	const pages = Array.isArray(manifest.pages) ? manifest.pages : []

@@ -1,0 +1,39 @@
+{
+	"pageInstances": [
+		{
+			"templateRef": "indexScaffold",
+			"register": "fixture",
+			"schema": "item",
+			"params": {
+				"id": "Items",
+				"route": "/items",
+				"title": "Items",
+				"columns": ["name", "status"]
+			}
+		},
+		{
+			"templateRef": "indexScaffold",
+			"register": "fixture",
+			"schema": "order",
+			"params": {
+				"id": "Orders",
+				"route": "/orders",
+				"title": "Orders",
+				"icon": "TableColumn"
+			},
+			"override": {
+				"title": "Orders (overridden)"
+			}
+		},
+		{
+			"templateRef": "doesNotExist",
+			"register": "fixture",
+			"schema": "ghost",
+			"params": {
+				"id": "BrokenDetail",
+				"route": "/broken/:id",
+				"title": "Broken"
+			}
+		}
+	]
+}

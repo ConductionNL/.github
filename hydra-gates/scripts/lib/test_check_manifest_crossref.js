@@ -70,6 +70,9 @@ const VALIDATOR = path.join(LIB, 'check_manifest.js')
 		'registry-dialects/src/manifest.json',
 		'registry-dialects/src/registry.js',
 		'registry-dialects/src/customComponents.js',
+		'templated/src/manifest.json',
+		'templated/src/manifest.d/00-templates.json',
+		'templated/src/manifest.d/10-entities.json',
 	]
 	const missing = required.filter((rel) => !fs.existsSync(path.join(FIX, rel)))
 	if (missing.length > 0) {
@@ -758,6 +761,51 @@ function parseReport(stdout) {
 			'CONTROL: a cross-app waiver keyed to ANOTHER removal does not waive this one')
 		fs.rmSync(dir, { recursive: true, force: true })
 	}
+}
+
+// --- templated fixture (manifest-entity-scaffold-templating) -----------------
+// The runtime pipeline expands pageTemplates[]+pageInstances[] into concrete
+// pages as buildManifest's FINAL step. The gate must (1) resolve menu routes
+// against the EXPANDED pages — hrmq's first templated manifest drew 76 false
+// menu-route/deeplink-route errors before it did — and (2) report a FAILING
+// instantiation as a template-expansion error rather than letting the
+// runtime's skip semantics drop the page silently.
+{
+	const appDir = path.join(FIX, 'templated')
+
+	// (i) self-assembling shape (no --manifest): expanded routes resolve,
+	//     the broken instantiation is a named error finding.
+	const check = run([CHECKER, '--app-dir', appDir])
+	const rep = parseReport(check.stdout)
+	assert(check.status === 1, 'templated: checker exits 1 (the broken instantiation blocks)')
+	const errors = rep.findings.filter((f) => f.severity === 'error')
+	const expansion = errors.filter((f) => f.check === 'template-expansion')
+	assert(expansion.length === 1
+		&& expansion[0].path === '/pageInstances/2'
+		&& expansion[0].message.includes('doesNotExist'),
+	'templated: EXACTLY one template-expansion error, pointing at /pageInstances/2 and naming the unknown templateRef')
+	const menuRoute = errors.filter((f) => f.check === 'menu-route')
+	assert(menuRoute.length === 1 && menuRoute[0].message.includes("'BrokenDetail'"),
+		'templated: the DROPPED instantiation\'s menu entry is a menu-route error (the loss is visible twice, by design)')
+	assert(!errors.some((f) => f.message.includes("'Items'") && f.check === 'menu-route'),
+		'templated: a menu route to an EXPANDED page resolves — no false menu-route error on Items')
+
+	// (ii) the runner's shape (--manifest pre-assembled + --app-dir): the
+	//      handed-over file cannot carry the expansion errors (the builder
+	//      already dropped the failing page), so the checker must re-derive
+	//      them from the app inputs. This is the regression that would make
+	//      the finding vanish exactly where CI runs it.
+	const tmp = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'gate30-test-')), 'templated-effective.json')
+	const build = run([BUILDER, '--app-dir', appDir, '--out', tmp])
+	assert(build.status === 0, 'templated: builder exits 0 (runtime skip semantics — expansion errors are reported, not fatal)')
+	assert(/expansion error:.*doesNotExist/.test(build.stderr),
+		'templated: builder stderr names the expansion error (lands in the gate-53 log)')
+	const check2 = run([CHECKER, '--app-dir', appDir, '--manifest', tmp])
+	const rep2 = parseReport(check2.stdout)
+	assert(check2.status === 1
+		&& rep2.findings.some((f) => f.check === 'template-expansion' && f.severity === 'error'),
+	'templated: with --manifest (the runner\'s shape) the template-expansion error is STILL reported (re-derived from --app-dir)')
+	fs.rmSync(path.dirname(tmp), { recursive: true, force: true })
 }
 
 console.log('')
