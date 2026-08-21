@@ -59,8 +59,8 @@ docker compose -f .github/docker-compose.yml --profile mail --profile ai --profi
 | `ai`                           | presidio, tgi-llm, dolphin-vlm, openanonymiser, exapp-openwebui                                 | AI/LLM services                                | ~40 GB + GPU |
 | `ollama`                       | ollama                                                                                          | Standalone LLM inference                       | ~16 GB + GPU |
 | `ui`                           | tilburg-woo-ui                                                                                  | Public WOO document frontend                   | ~256 MB      |
-| `exapps`                       | harp, redis, livekit, minio                                                                     | AppAPI infrastructure                          | ~1 GB        |
-| `commonground`                 | keycloak, redis, livekit, minio, exapp-openklant, exapp-openzaak, exapp-valtimo, exapp-opentalk | Common Ground ExApps                           | ~10 GB       |
+| `exapps`                       | harp, redis                                                                                     | AppAPI infrastructure                          | ~1 GB        |
+| `commonground`                 | keycloak, redis                                                                                 | Common Ground identity (OIDC)                  | ~3 GB        |
 | `solr` / `search`              | solr, zookeeper                                                                                 | Solr search engine                             | ~1 GB        |
 | `elasticsearch`                | elasticsearch                                                                                   | Elasticsearch backend                          | ~1 GB        |
 | `standalone`                   | n8n, open-webui                                                                                 | Standalone versions (not ExApps)               | ~1 GB        |
@@ -69,9 +69,6 @@ docker compose -f .github/docker-compose.yml --profile mail --profile ai --profi
 | `openproject` / `integrations` | openproject                                                                                     | Project management                             | ~4 GB        |
 | `xwiki` / `integrations`       | xwiki                                                                                           | Wiki platform                                  | ~4 GB        |
 | `ox` / `integrations`          | open-xchange                                                                                    | Email and groupware (requires registry access) | ~4 GB        |
-| `valtimo` / `commonground`     | valtimo                                                                                         | BPM and case management                        | ~2 GB        |
-| `openzaak` / `commonground`    | openzaak                                                                                        | ZGW API case management                        | ~2 GB        |
-| `openklant` / `commonground`   | openklant                                                                                       | Customer interaction registry                  | ~1 GB        |
 | `exapps-legacy`                | docker-socket-proxy                                                                             | Legacy AppAPI deploy daemon                    | ~128 MB      |
 
 ## Service Details
@@ -240,13 +237,7 @@ Dutch government Common Ground services, running as Nextcloud ExApps:
 | Service         | Container                    | Port | Purpose                       |
 | --------------- | ---------------------------- | ---- | ----------------------------- |
 | Keycloak        | `conduction-exapp-keycloak`  | 8180 | Identity management (OIDC)    |
-| OpenKlant ExApp | `conduction-exapp-openklant` | —    | Customer interaction registry |
-| OpenZaak ExApp  | `conduction-exapp-openzaak`  | —    | ZGW case management           |
-| Valtimo ExApp   | `conduction-exapp-valtimo`   | —    | BPM and case management       |
-| OpenTalk ExApp  | `conduction-exapp-opentalk`  | —    | Video conferencing            |
 | Redis           | `conduction-exapp-redis`     | —    | Shared cache                  |
-| LiveKit         | `conduction-exapp-livekit`   | 7880 | WebRTC media server           |
-| MinIO           | `conduction-exapp-minio`     | —    | Object storage                |
 
 ## Common Operations
 
@@ -315,7 +306,6 @@ Quick reference for all service ports:
 | 5002  | OpenAnonymiser      | ai            |
 | 5432  | PostgreSQL          | _(default)_   |
 | 5678  | n8n (standalone)    | standalone    |
-| 7880  | LiveKit             | commonground  |
 | 8080  | **Nextcloud**       | _(default)_   |
 | 8081  | TGI LLM             | ai            |
 | 8083  | Dolphin VLM         | ai            |
@@ -323,9 +313,6 @@ Quick reference for all service ports:
 | 8086  | OpenProject         | openproject   |
 | 8087  | Open-Xchange        | ox            |
 | 8088  | XWiki               | xwiki         |
-| 8089  | Valtimo             | valtimo       |
-| 8090  | OpenZaak            | openzaak      |
-| 8091  | OpenKlant           | openklant     |
 | 8180  | Keycloak            | commonground  |
 | 8780  | HaRP                | exapps        |
 | 8983  | Solr                | solr          |

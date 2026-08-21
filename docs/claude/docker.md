@@ -27,9 +27,6 @@ Add one or more profiles with `--profile <name>`:
 | `openproject`   | OpenProject                    |
 | `xwiki`         | XWiki                          |
 | `ox`            | Open-Xchange                   |
-| `valtimo`       | Valtimo BPM                    |
-| `openzaak`      | OpenZaak                       |
-| `openklant`     | OpenKlant                      |
 
 **Example:**
 
