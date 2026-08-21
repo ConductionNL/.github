@@ -144,7 +144,10 @@ services:
       - ../pipelinq:/var/www/html/custom_apps/pipelinq
       - ../zaakafhandelapp:/var/www/html/custom_apps/zaakafhandelapp
       - ../larpingapp:/var/www/html/custom_apps/larpingapp
-      - ../scholiq:/var/www/html/custom_apps/scholiq
+      # The app was renamed scholiq -> learniq. Nextcloud requires the app
+      # DIRECTORY name to equal the <id> in appinfo/info.xml, so the mount
+      # destination moves; the checkout path stays until the repo is renamed.
+      - ../scholiq:/var/www/html/custom_apps/learniq
       - ../hermiq:/var/www/html/custom_apps/hermiq
       # These five used to be mounted from ../openregister/custom_apps/<app>,
       # which is NOT their checkout. Those directories are a stale second copy:
@@ -373,7 +376,10 @@ services:
       - ../pipelinq:/var/www/html/custom_apps/pipelinq
       - ../zaakafhandelapp:/var/www/html/custom_apps/zaakafhandelapp
       - ../larpingapp:/var/www/html/custom_apps/larpingapp
-      - ../scholiq:/var/www/html/custom_apps/scholiq
+      # The app was renamed scholiq -> learniq. Nextcloud requires the app
+      # DIRECTORY name to equal the <id> in appinfo/info.xml, so the mount
+      # destination moves; the checkout path stays until the repo is renamed.
+      - ../scholiq:/var/www/html/custom_apps/learniq
       - ../hermiq:/var/www/html/custom_apps/hermiq
       # See the note on the postgres `nextcloud` service: these five are the real
       # ConductionNL checkouts, not the stale ../openregister/custom_apps copies.
