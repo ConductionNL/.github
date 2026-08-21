@@ -1,0 +1,34 @@
+{
+	"$schema": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
+	"version": "1.0.0",
+	"menu": [],
+	"pages": [
+		{
+			"id": "widgets",
+			"route": "/widgets",
+			"type": "index",
+			"title": "Widgets",
+			"config": { "register": "demo", "schema": "widget" }
+		},
+		{
+			"id": "widgetDetail",
+			"route": "/widgets/:id",
+			"type": "detail",
+			"title": "Widget",
+			"config": {
+				"register": "demo",
+				"schema": "widget",
+				"widgets": [{ "id": "data", "type": "data", "title": "Data" }],
+				"layout": [{ "id": 1, "widgetId": "data", "gridX": 0, "gridY": 0, "gridWidth": 12, "gridHeight": 4 }]
+			}
+		},
+		{
+			"id": "scanner",
+			"route": "/scanner",
+			"type": "custom",
+			"title": "Warehouse scanner",
+			"component": "ScannerView",
+			"_note": "A handheld barcode flow: no list, record or widget-grid shape, so no typed archetype fits. Kept custom deliberately."
+		}
+	]
+}
