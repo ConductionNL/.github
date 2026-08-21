@@ -2185,17 +2185,48 @@ jobs:
             echo "No ${INFO_PATH} — this repo has no app manifest to derive from."
           fi
 
-      # PINNED BY COMMIT SHA, not by tag. `8a7bac6` IS v1.3.2, the newest
-      # release; the tag is recorded in the comment so a human can read what the
-      # SHA means, and the SHA is what the runner resolves so a moved tag cannot
-      # change what executes here. That is a supply-chain decision, not a style
-      # one: this workflow is consumed at @main by 23 repositories, so a
-      # third-party action running here runs in all of them, unreviewed, at
-      # whatever content the tag points to on the day.
+      # ── WHY THIS IS NO LONGER icewind1991/nextcloud-version-matrix ───────────
       #
-      # v1.3.2 is deliberately not the action's tip. The tip carries an
-      # unreleased ES-module/node24 rewrite; the tagged release is node20 and
-      # `dist/index.js`. We take releases, not commits-since-a-release.
+      # It was, pinned by SHA to v1.3.2. It was removed on 2026-08-21 because it
+      # decides the matrix from UNAUTHENTICATED probes to github.com, and it
+      # treats a refused probe as a fact about the world.
+      #
+      #   async function getBranch(version) {
+      #       if (await versionHashBranch(version)) return `stable${version}`;
+      #       else                                  return "master";
+      #   }
+      #
+      # `versionHashBranch` is url-exist against
+      # https://github.com/nextcloud/server/tree/stableNN, and url-exist returns
+      #   response.status < 400 || response.status >= 500
+      # so every 4xx is "does not exist" — INCLUDING 403 and 429, which is
+      # precisely what github.com returns to an unauthenticated runner it is
+      # rate-limiting. The failure mode is therefore not an error: the derived
+      # branch SILENTLY becomes "master". `branches` is still a valid non-empty
+      # array, the resolve step below accepts it as "derived", and PHPUnit then
+      # runs against master while the summary reports the app's declared range.
+      # A green verdict about the wrong thing is the one outcome this job exists
+      # to prevent.
+      #
+      # The same rate-limiting also produced the loud symptom that exposed this,
+      # on softwarecatalog 2026-08-21: the action probes php-src release tags the
+      # same way, the probes came back 4xx, the supported-PHP list came back
+      # empty, and `getPHPVersionID(php[0])` threw
+      #   TypeError: Cannot read properties of undefined (reading 'split')
+      # taking the whole matrix job red. A re-run with identical inputs passed,
+      # which is the signature of an external dependency, not of the manifest.
+      # Note the crash was in PHP outputs THIS WORKFLOW NEVER READS — we consume
+      # `branches` and `branches-max` only.
+      #
+      # Both outputs we consume derive from appinfo/info.xml with no network at
+      # all. So they are derived here, and the one thing that genuinely needs the
+      # network — does stableNN exist yet — is asked WITH the run's token and is
+      # allowed exactly two answers: 200 (exists) or 404 (does not). Anything
+      # else, after retries, FAILS THE STEP rather than quietly meaning "master".
+      #
+      # This also removes a third-party action from a workflow that 23
+      # repositories consume at @main, which the previous comment here already
+      # named as the reason for pinning it by SHA.
       #
       # Runs even when an override is set, and that is on purpose: the derived
       # value is what the resolve step below compares the override against, so a
@@ -2204,9 +2235,124 @@ jobs:
       - name: Derive the range from the manifest
         id: derive
         if: ${{ steps.detect.outputs.found == 'true' }}
-        uses: icewind1991/nextcloud-version-matrix@8a7bac6300b2f0f3100088b297995a229558ddba # v1.3.2
-        with:
-          filename: ${{ inputs.nextcloud-info-path }}
+        env:
+          INFO_PATH: ${{ inputs.nextcloud-info-path }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, sys, time, urllib.error, urllib.request
+          import xml.etree.ElementTree as ET
+
+          info_path = os.environ["INFO_PATH"]
+          token     = os.environ.get("GH_TOKEN", "")
+          out_path  = os.environ["GITHUB_OUTPUT"]
+
+          def die(msg):
+              print(f"::error::{msg}")
+              sys.exit(1)
+
+          # A REAL XML PARSE, not a grep. `grep -o '<nextcloud[^>]*>'` also matches
+          # the element when it appears inside an XML COMMENT — opencatalogi's
+          # info.xml discusses `<nextcloud min-version>` in a comment above the
+          # real one, and a grep-based reader picks up the prose first.
+          try:
+              root = ET.parse(info_path).getroot()
+          except ET.ParseError as exc:
+              die(f"{info_path} is not parseable XML: {exc}")
+
+          node = root.find("./dependencies/nextcloud")
+          if node is None:
+              node = root.find(".//nextcloud")
+          if node is None:
+              die(f"{info_path} declares no <nextcloud> element, so no range can be derived.")
+
+          raw_min = (node.get("min-version") or "").strip()
+          raw_max = (node.get("max-version") or "").strip()
+          if not raw_min or not raw_max:
+              die(
+                  f"{info_path} <nextcloud> needs BOTH min-version and max-version "
+                  f"to derive a matrix (got min={raw_min!r} max={raw_max!r})."
+              )
+
+          # Majors only. Nextcloud branches are stable<major>; a declared "32.0.1"
+          # still tests on stable32.
+          def major(raw, what):
+              head = raw.split(".")[0]
+              if not head.isdigit():
+                  die(f"{what} {raw!r} in {info_path} is not a version number.")
+              return int(head)
+
+          lo, hi = major(raw_min, "min-version"), major(raw_max, "max-version")
+          if hi < lo:
+              die(f"{info_path} declares max-version {raw_max} below min-version {raw_min}.")
+
+          # A typo in max-version costs one API call per major. `max-version="340"`
+          # instead of "34" would fire 300 of them, and being rate-limited is the
+          # exact condition this rewrite exists to stop guessing about. No real
+          # Nextcloud app supports a span this wide.
+          SPAN_LIMIT = 12
+          if (hi - lo) >= SPAN_LIMIT:
+              die(
+                  f"{info_path} declares NC {lo}..{hi} — {hi - lo + 1} majors. That is "
+                  f"beyond the sanity limit of {SPAN_LIMIT} and is almost certainly a "
+                  "typo in min-version/max-version."
+              )
+
+          def branch_exists(major_no):
+              """200 -> True, 404 -> False. Anything else is UNKNOWN and fatal.
+
+              The point of the whole rewrite: an unknown answer must never be
+              allowed to read as False, because False here silently means
+              'test master instead of the version the app promises'.
+              """
+              url = f"https://api.github.com/repos/nextcloud/server/branches/stable{major_no}"
+              req = urllib.request.Request(url, method="GET")
+              req.add_header("Accept", "application/vnd.github+json")
+              req.add_header("User-Agent", "conduction-quality-matrix")
+              if token:
+                  req.add_header("Authorization", f"Bearer {token}")
+
+              last = ""
+              for attempt in range(1, 4):
+                  try:
+                      with urllib.request.urlopen(req, timeout=20) as resp:
+                          if resp.status == 200:
+                              return True
+                      last = f"HTTP {resp.status}"
+                  except urllib.error.HTTPError as exc:
+                      if exc.code == 404:
+                          return False
+                      last = f"HTTP {exc.code}"
+                  except Exception as exc:  # noqa: BLE001 - network/DNS/timeout
+                      last = f"{type(exc).__name__}: {exc}"
+                  if attempt < 3:
+                      time.sleep(attempt * 3)
+
+              die(
+                  f"could not determine whether stable{major_no} exists ({last}). "
+                  "Refusing to guess: the previous action treated exactly this "
+                  "answer as 'branch absent' and silently tested master instead."
+              )
+
+          branches = []
+          for n in range(lo, hi + 1):
+              branches.append(f"stable{n}" if branch_exists(n) else "master")
+
+          # Dedupe while preserving order: two unreleased majors would both map to
+          # master and a repeated matrix leg is wasted runner time, not signal.
+          seen, ordered = set(), []
+          for b in branches:
+              if b not in seen:
+                  seen.add(b)
+                  ordered.append(b)
+
+          print(f"{info_path} declares {raw_min}..{raw_max} -> {ordered}")
+
+          with open(out_path, "a", encoding="utf-8") as fh:
+              fh.write(f"branches={json.dumps(ordered)}\n")
+              fh.write(f"branches-max={ordered[-1]}\n")
+          PY
 
       # `!cancelled()` because the step above can FAIL — a manifest with no
       # max-version makes the action throw — and this step still has to publish

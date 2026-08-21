@@ -215,17 +215,34 @@ jobs:
       # DIFFERENT in the specific way info.xml says they should be: the only
       # byte that differs between the two manifests is `max-version`, and
       # stable34 must be present in one and absent from the other.
+      # Both fixtures are put through quality.yml's OWN derive step, not through
+      # the action it used to call. That distinction is the whole value of this
+      # job: quality.yml stopped using icewind1991/nextcloud-version-matrix on
+      # 2026-08-21, and a probe still invoking the action would have kept passing
+      # while measuring code the fleet no longer runs.
+      #
+      # scripts/run-derive-step.py reads the `derive` step out of quality.yml and
+      # executes the Python inside it, so there is exactly one copy of the logic
+      # and no way for the probe's subject to drift from the shipping one. It
+      # raises rather than falls back if it cannot find that step — including if
+      # the step becomes a `uses:` again.
       - name: Derive from a manifest declaring NC 32-34
         id: full
-        uses: icewind1991/nextcloud-version-matrix@8a7bac6300b2f0f3100088b297995a229558ddba # v1.3.2
-        with:
-          filename: scripts/fixtures/nextcloud-matrix/info-32-34.xml
+        env:
+          INFO_PATH: scripts/fixtures/nextcloud-matrix/info-32-34.xml
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 scripts/run-derive-step.py
 
       - name: Derive from a manifest declaring NC 32-33 (positive control)
         id: narrow
-        uses: icewind1991/nextcloud-version-matrix@8a7bac6300b2f0f3100088b297995a229558ddba # v1.3.2
-        with:
-          filename: scripts/fixtures/nextcloud-matrix/info-32-33.xml
+        env:
+          INFO_PATH: scripts/fixtures/nextcloud-matrix/info-32-33.xml
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 scripts/run-derive-step.py
 
       # ── WHAT THIS JOB DOES NOT COVER, AND HOW TO MEASURE IT ───────────────
       #
