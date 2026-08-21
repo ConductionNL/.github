@@ -536,7 +536,31 @@ on:
         default: true
 
 concurrency:
-  group: quality-${{ github.ref }}
+  # KEYED BY EVENT AS WELL AS REF, so a deliberately-requested run is not
+  # cancelled by routine merge traffic.
+  #
+  # Superseding a push run with a newer push run is correct and stays exactly
+  # as it was: once commit N+1 exists, verifying N matters less. What was
+  # wrong is that a `workflow_dispatch` run shared that group, so a run
+  # someone ASKED FOR — a gate-drift sweep, or a verification of a specific
+  # commit — was cancelled by whatever happened to be merged next.
+  #
+  # That is not hypothetical. Measured 2026-08-21 across the 18 core repos,
+  # 69% of `development` push runs (139 of 200) end cancelled, because merges
+  # arrive every 8–12 minutes while a run takes 14–23 (.github#526). A
+  # dispatched run had the same odds, which made the fleet drift sweep
+  # (.github#523) unable to produce a verdict even once its token exists — it
+  # would dispatch, then be cancelled, and report neither pass nor fail.
+  #
+  # A cancelled run is NO VERDICT, and in every summary that counts failures
+  # it is indistinguishable from a pass. Splitting the lane means a
+  # deliberate run now always reaches an answer.
+  #
+  # This does NOT reduce push-side cancellation, which is a cadence problem
+  # and a separate decision (#526). It only stops one lane cancelling the
+  # other. Runs in different lanes are independent: each gets its own
+  # ephemeral server and database, so nothing is shared to contend over.
+  group: quality-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
