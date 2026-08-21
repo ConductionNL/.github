@@ -221,6 +221,20 @@ jobs:
             echo "|---|---|---|---|"
           } >> "$SUMMARY"
 
+          # EVERY PER-APP DECISION GOES TO THE LOG AS WELL AS THE SUMMARY.
+          #
+          # Writing only to $GITHUB_STEP_SUMMARY means `gh run view --log` shows
+          # the ECHO SOURCE and never the verdict, so the one question you ask a
+          # weekly sweep -- "what did it actually decide for each app?" -- is
+          # unanswerable from the log. Establishing that a skip on 2026-08-21 was
+          # the open-PR guard rather than "already current" took cross-checking
+          # an annotation's ABSENCE against a lockfile, which is not a thing
+          # anyone should have to do.
+          row() {
+            echo "| $* |" >> "$SUMMARY"
+            echo "DECISION: $*"
+          }
+
           composer_locked() {
             jq -r '[(.packages // []),(."packages-dev" // [])] | flatten
                    | map(select(.name=="conduction/hydra-gates")) | .[0].version // "-"' "$1" 2>/dev/null || echo "-"
@@ -238,7 +252,7 @@ jobs:
             rm -rf "work/${app}"
             if ! git clone -q --depth 1 --branch development \
                  "https://x-access-token:${GH_TOKEN}@github.com/ConductionNL/${app}.git" "work/${app}" 2>/dev/null; then
-              echo "| ${app} | - | - | no development branch, or clone refused |" >> "$SUMMARY"
+              row "${app} | - | - | no development branch, or clone refused"
               continue
             fi
             cd "work/${app}" || continue
@@ -265,7 +279,7 @@ jobs:
                      --json url,headRefName \
                      -q '[.[]|select(.headRefName|startswith("chore/fleet-shared-deps"))][0].url' 2>/dev/null)
             if [ -n "${OPEN}" ] && [ "${OPEN}" != "null" ]; then
-              echo "| ${app} | - | - | skipped, bump PR already open: ${OPEN} |" >> "$SUMMARY"
+              row "${app} | - | - | skipped, bump PR already open: ${OPEN}"
               cd - >/dev/null || true; continue
             fi
 
@@ -343,12 +357,12 @@ jobs:
             [ -f package-lock.json ] && NA=$(npm_locked package-lock.json)
 
             if [ -z "$(git status --porcelain composer.lock package-lock.json 2>/dev/null)" ]; then
-              echo "| ${app} | ${CB} | ${NB} | already current |" >> "$SUMMARY"
+              row "${app} | ${CB} | ${NB} | already current"
               cd - >/dev/null || true; continue
             fi
 
             if [ "${DRY_RUN}" = "true" ]; then
-              echo "| ${app} | ${CB} -> ${CA} | ${NB} -> ${NA} | would open a PR (dry run) |" >> "$SUMMARY"
+              row "${app} | ${CB} -> ${CA} | ${NB} -> ${NA} | would open a PR (dry run)"
               cd - >/dev/null || true; continue
             fi
 
@@ -382,7 +396,7 @@ jobs:
             git commit -q -F /tmp/msg.txt
 
             if ! git push -q origin "${BRANCH}" 2>/dev/null; then
-              echo "| ${app} | ${CB} -> ${CA} | ${NB} -> ${NA} | push refused - token needs contents:write |" >> "$SUMMARY"
+              row "${app} | ${CB} -> ${CA} | ${NB} -> ${NA} | push refused - token needs contents:write"
               FAILED=1; cd - >/dev/null || true; continue
             fi
 
@@ -418,7 +432,7 @@ jobs:
             URL=$(gh pr create --repo "ConductionNL/${app}" --base development --head "${BRANCH}" \
                     --title "chore(deps): refresh the shared Conduction locks" \
                     --body-file /tmp/body.md 2>/dev/null | tail -1)
-            echo "| ${app} | ${CB} -> ${CA} | ${NB} -> ${NA} | ${URL:-PR opened} |" >> "$SUMMARY"
+            row "${app} | ${CB} -> ${CA} | ${NB} -> ${NA} | ${URL:-PR opened}"
             cd - >/dev/null || true
           done
 
