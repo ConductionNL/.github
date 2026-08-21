@@ -9,7 +9,7 @@ Dutch open-source software company. We build [ConNext](https://www.conduction.nl
 - [**Integriq**](https://codeberg.org/Conduction/openconnector): integration layer for REST, SOAP, GraphQL, file drops, and message queues.
 - [**Filinq**](https://codeberg.org/Conduction/docudesk): anonymise, sign, and publish documents straight from your registers.
 
-Plus [LaunchPad](https://codeberg.org/Conduction/launchpad), [Larpinq](https://codeberg.org/Conduction/larpingapp), [PipelinQ](https://codeberg.org/Conduction/pipelinq), [Dossiq](https://codeberg.org/Conduction/procest), [Decidiq](https://codeberg.org/Conduction/decidesk), [Deskdesk](https://codeberg.org/Conduction/deskdesk), [Learniq](https://codeberg.org/Conduction/scholiq), [Shillinq](https://codeberg.org/Conduction/shillinq), [ZaakAfhandelApp](https://codeberg.org/Conduction/zaakafhandelapp), [Buildiq](https://codeberg.org/Conduction/openbuild), and [Thematiq](https://codeberg.org/Conduction/nldesign).
+Plus [LaunchPad](https://codeberg.org/Conduction/launchpad), [Larpinq](https://codeberg.org/Conduction/larpingapp), [Pipelinq](https://codeberg.org/Conduction/pipelinq), [Dossiq](https://codeberg.org/Conduction/procest), [Decidiq](https://codeberg.org/Conduction/decidesk), [Deskdesk](https://codeberg.org/Conduction/deskdesk), [Learniq](https://codeberg.org/Conduction/scholiq), [Shillinq](https://codeberg.org/Conduction/shillinq), [ZaakAfhandelApp](https://codeberg.org/Conduction/zaakafhandelapp), [Buildiq](https://codeberg.org/Conduction/openbuild), and [Thematiq](https://codeberg.org/Conduction/nldesign).
 
 Every app is EUPL-1.2. Every register exports to JSON. Your data is yours. The day you uninstall is as easy as the day you installed.
 
