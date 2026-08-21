@@ -17,15 +17,8 @@ EOSQL
 }
 
 # Create databases for each ExApp
-for db in keycloak openzaak openklant opentalk valtimo; do
+for db in keycloak; do
     create_db_if_not_exists $db
 done
-
-# Add PostGIS extension to openzaak (required for geo features)
-echo "Adding PostGIS to openzaak..."
-psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "openzaak" <<-EOSQL
-    CREATE EXTENSION IF NOT EXISTS postgis;
-    CREATE EXTENSION IF NOT EXISTS pg_trgm;
-EOSQL
 
 echo "ExApp databases initialized successfully!"
