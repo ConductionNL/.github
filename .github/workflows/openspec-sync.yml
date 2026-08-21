@@ -438,11 +438,28 @@ jobs:
                     color: label === 'openspec'
                       ? '6f42c1'
                       : (label === 'spec:too-large' ? 'd73a4a' : 'c5def5'),
-                    description: label === 'openspec'
+                    // TRUNCATED TO GITHUB'S LIMIT, not merely shortened.
+                    //
+                    // `spec:too-large`'s description was 153 characters
+                    // against a hard limit of 100, so createLabel answered
+                    // 422 "description is too long" and the UNHANDLED
+                    // rejection killed the whole sync — not just that label.
+                    // Every repo that did not already carry the label was
+                    // affected: measured 2026-08-20, openspec-sync was
+                    // failing in portaliq, opencatalogi, openregister,
+                    // launchpad and softwarecatalog, and none of the seven
+                    // repos checked had the label. It reads as "OpenSpec
+                    // sync is broken" rather than as a 53-character string.
+                    //
+                    // The slice covers the `OpenSpec phase: ${phase}` branch
+                    // too. That one is interpolated from repo content, so it
+                    // is the branch most able to overflow later, and fixing
+                    // only the constant would leave the same trap armed.
+                    description: (label === 'openspec'
                       ? 'Managed by OpenSpec workflow'
                       : (label === 'spec:too-large'
-                        ? 'Pre-flight gate / builder bounced: spec has >20 unchecked tasks — fallback: needs-input; operator runs local-builder out-of-band or re-splits via Specter'
-                        : `OpenSpec phase: ${phase}`),
+                        ? 'Builder bounced: >20 unchecked tasks. Fallback needs-input; re-split via Specter.'
+                        : `OpenSpec phase: ${phase}`)).slice(0, 100),
                   });
                 }
               }
