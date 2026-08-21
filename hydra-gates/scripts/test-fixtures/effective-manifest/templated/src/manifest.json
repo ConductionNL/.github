@@ -1,0 +1,18 @@
+{
+	"$schema": "https://conduction.nl/schemas/app-manifest-v2.schema.json",
+	"appId": "templated-fixture",
+	"version": "1.0.0",
+	"pages": [
+		{
+			"id": "Home",
+			"type": "dashboard",
+			"route": "/",
+			"title": "Home"
+		}
+	],
+	"menu": [
+		{ "id": "Home", "label": "Home", "route": "Home" },
+		{ "id": "Items", "label": "Items", "route": "Items" },
+		{ "id": "Broken", "label": "Broken", "route": "BrokenDetail" }
+	]
+}

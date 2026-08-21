@@ -274,8 +274,20 @@ def _is_tracked_at(file_path, base_ref):
 # Manifest-set discovery for cross-fragment route resolution.
 # --------------------------------------------------------------------------
 def _src_dir(path):
+    """The app's src/ directory that owns *path*.
+
+    Resolved on the ABSOLUTE path. The runner hands this helper the changed
+    files RELATIVE to the app dir (``src/manifest.d/hr-assets.json``), and the
+    previous relative ``find("/src/")`` never matched those — a fragment's
+    "src dir" came back as ``src/manifest.d``, so ``icons.js`` was looked up at
+    ``src/manifest.d/icons.js`` (absent) and every fragment-declared page was
+    judged against an EMPTY app icon registry. Measured on hrmq
+    feat/manifest-fragment-pipeline: 49 false icon findings on pages whose
+    icons are all registered in ``src/icons.js`` — the same false-positive
+    class as .github#521, reintroduced one directory level down.
+    """
     marker = os.sep + "src" + os.sep
-    norm = os.path.normpath(path)
+    norm = os.path.normpath(os.path.abspath(path))
     idx = norm.find(marker)
     if idx == -1:
         return os.path.dirname(norm)
@@ -342,7 +354,7 @@ def _pages_of(doc):
     return []
 
 
-def _all_page_ids(paths):
+def _all_page_ids(paths, findings=None):
     ids = set()
     seen = set()
     for p in paths:
@@ -352,18 +364,93 @@ def _all_page_ids(paths):
         seen.add(sd)
         candidates = [os.path.join(sd, "manifest.json")]
         candidates += glob.glob(os.path.join(sd, "manifest.d", "*.json"))
+        templated = False
         for c in candidates:
             try:
                 with open(c, encoding="utf-8") as fh:
                     doc = json.load(fh)
             except (OSError, ValueError):
                 continue
+            if isinstance(doc, dict) and (doc.get("pageTemplates") or doc.get("pageInstances")):
+                templated = True
             for pg in _pages_of(doc):
                 if isinstance(pg, dict):
                     if pg.get("id"):
                         ids.add(pg["id"])
                     if pg.get("route"):
                         ids.add(pg["route"])
+        if templated:
+            ids |= _expanded_page_ids(sd, findings)
+    return ids
+
+
+def _expanded_page_ids(src_dir, findings):
+    """Page ids/routes MATERIALISED by page-template expansion.
+
+    A manifest may declare its entity scaffold once (``pageTemplates[]``) plus
+    a per-entity ``pageInstances[]`` list; the runtime pipeline
+    (nextcloud-vue ``buildManifest()`` → ``expandPageTemplates()``) turns each
+    instantiation into a concrete page as its FINAL step. Those pages are as
+    real a ``viewAllRoute``/``rowRoute`` target as any literal ``pages[]``
+    entry, so the merged-manifest id universe must include them — without
+    this, hrmq's first templated manifest drew 28 false "does not resolve"
+    findings on routes that resolve fine at runtime.
+
+    ONE expansion implementation, not two: the ids come from the shared
+    vendored builder (``build_effective_manifest.js`` — sync-noted to the
+    nextcloud-vue source), invoked via node. Only called when a manifest input
+    actually declares templates/instances, so template-free apps never pay for
+    (or depend on) node here. A failed builder run on a TEMPLATED app is a
+    finding, not a silent fallback: the route universe would be fiction.
+
+    An instantiation that fails to expand contributes NO id — exactly the
+    runtime skip semantics — so a reference to it stays a legitimate finding
+    (gate-53 additionally names the expansion error itself).
+    """
+    import subprocess
+    import tempfile
+
+    ids = set()
+    builder = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "build_effective_manifest.js"
+    )
+    app_root = os.path.dirname(src_dir)
+    tmp = None
+    try:
+        fd, tmp = tempfile.mkstemp(suffix=".json")
+        os.close(fd)
+        proc = subprocess.run(
+            ["node", builder, "--app-dir", app_root,
+             "--out", os.devnull, "--expansion-out", tmp],
+            capture_output=True, text=True, timeout=120,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"builder exited {proc.returncode}: "
+                f"{(proc.stderr or '').strip().splitlines()[-1:] or ['<no output>']}"
+            )
+        with open(tmp, encoding="utf-8") as fh:
+            expansion = json.load(fh)
+        for pg in expansion.get("expandedPages") or []:
+            if isinstance(pg, dict):
+                if pg.get("id"):
+                    ids.add(pg["id"])
+                if pg.get("route"):
+                    ids.add(pg["route"])
+    except Exception as exc:  # noqa: BLE001 — every failure mode lands as ONE finding
+        if findings is not None:
+            findings.append(
+                f"{src_dir}: manifest declares pageTemplates/pageInstances but the "
+                f"expanded page set could not be computed via "
+                f"build_effective_manifest.js ({exc}) — template-instance route "
+                f"references are UNVERIFIABLE, refusing to guess (fail-closed)"
+            )
+    finally:
+        if tmp:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
     return ids
 
 
@@ -601,8 +688,8 @@ def main(argv):
     log_path = argv[1]
     paths = argv[2:]
     base_ref = os.environ.get("HYDRA_GATE_BASE_REF", "").strip()
-    page_ids = _all_page_ids(paths)
     findings = []
+    page_ids = _all_page_ids(paths, findings)
     for p in paths:
         check_file(p, page_ids, findings, base_ref)
     with open(log_path, "a", encoding="utf-8") as g:

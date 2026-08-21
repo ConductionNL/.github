@@ -1,0 +1,32 @@
+{
+	"pageTemplates": [
+		{
+			"id": "indexScaffold",
+			"params": [
+				{ "name": "id", "required": true },
+				{ "name": "route", "required": true },
+				{ "name": "title", "required": true },
+				{ "name": "register", "required": true },
+				{ "name": "schema", "required": true },
+				{ "name": "icon", "required": false },
+				{ "name": "columns", "required": false }
+			],
+			"page": {
+				"id": "{{id}}",
+				"type": "index",
+				"route": "{{route}}",
+				"title": "{{title}} overview",
+				"icon": "{{icon}}",
+				"config": {
+					"register": "{{register}}",
+					"schema": "{{schema}}",
+					"columns": "{{columns}}",
+					"toolbar": "{{set:sharedToolbar}}"
+				}
+			}
+		}
+	],
+	"sets": {
+		"sharedToolbar": { "search": true, "create": true }
+	}
+}

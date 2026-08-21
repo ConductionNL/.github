@@ -12,7 +12,13 @@
 // from @conduction/nextcloud-vue:
 //   nextcloud-vue/src/utils/buildManifest.js
 // (buildManifest, applyMenuLayout, mergeMenuItems, mergePages,
-//  applyMenuRelocations, applyMenuRemovals, applySettingsSection).
+//  applyMenuRelocations, applyMenuRemovals, applySettingsSection),
+//   nextcloud-vue/src/utils/expandPageTemplates.js
+// (expandPageTemplates + its substitution helpers — the entity-scaffold
+//  templating step buildManifest runs LAST), and
+//   nextcloud-vue/src/utils/mergeManifestDelta.js
+// (mergeManifestDelta — the keyed base+delta merge expandPageTemplates uses
+//  for per-instance `override` blocks).
 // hydra has no package.json / node_modules, and the fleet's pinned lib
 // generations span beta.30…beta.146 — vendoring gives ONE deterministic
 // pipeline fleet-wide, mirroring how check_manifest.js vendors the canonical
@@ -20,11 +26,28 @@
 // scripts/lib/test_build_effective_manifest.js (the fixtures pin the
 // observable merge behaviour).
 //
+// EXPANSION ERROR SEMANTICS (gate use vs runtime). The lib's runtime call is
+// expandPageTemplates(merged, { throwOnError: false }): a bad instantiation is
+// SKIPPED with a console.warn, so a single bad instance never blanks the app.
+// The gate mirrors that EFFECTIVE RESULT (the same pages land in `pages[]`)
+// but must never let the skip be silent: buildManifest collects the named
+// expansion errors into the caller-supplied `meta` object, assembleFromDir
+// returns them as `.expansion.errors`, and gate consumers (check_manifest_
+// crossref.js) turn each one into an error-severity finding.
+//
 // Usage (CLI):
 //   node scripts/lib/build_effective_manifest.js [--app-dir DIR] [--out FILE]
+//                                                [--expansion-out FILE]
 //     --app-dir DIR   app repo root (default: CWD). Reads DIR/src/manifest.json,
 //                     DIR/src/manifest.d/*.json, DIR/src/menu-layout.json.
 //     --out FILE      write the assembled manifest JSON to FILE (default: stdout).
+//     --expansion-out FILE
+//                     write the page-template expansion report as JSON:
+//                     { expandedCount, errors, expandedPages }. All-zero/empty
+//                     for an app that declares no pageTemplates/pageInstances.
+//                     This is how the Python gate helpers (check_detail_page_
+//                     discipline.py, check_icon_vocabulary.py) reach the
+//                     expanded pages without a second expansion implementation.
 //
 // Missing src/manifest.d/ and missing src/menu-layout.json are ABSENT INPUTS,
 // not errors: the effective manifest then equals the base manifest.
@@ -47,16 +70,28 @@ const { spawnSync } = require('child_process')
 /**
  * Build an app's effective manifest from its bundled base, its modular
  * `manifest.d/*.json` fragments (ADR-037), and its `menu-layout.json`.
- * Ported verbatim from nextcloud-vue/src/utils/buildManifest.js.
+ * Ported verbatim from nextcloud-vue/src/utils/buildManifest.js — including
+ * the fragment collection of `pageTemplates` / `pageInstances` / `sets` and
+ * the entity-scaffold expansion the lib runs as its FINAL step, so an app
+ * using manifest-entity-scaffold-templating is judged on the same concrete
+ * `pages[]` the runtime renderer sees.
  *
  * @param {object} base The bundled base manifest (`src/manifest.json`).
  * @param {Array<object>} [fragments] Fragment objects (each may carry `pages`/`menu`).
  * @param {object} [menuLayout] `{ relocations?, removals?, settingsSection? }`.
+ * @param {object} [meta] OUT parameter (gate-side addition, not part of the
+ *   lib port): when an object is passed, `meta.expansion` is filled with
+ *   `{ expandedCount, errors, expandedPages }` — the runtime skips a failing
+ *   instantiation, the gate must additionally REPORT it.
  * @return {object} The merged manifest: `{ ...base, pages, menu }`.
  */
-function buildManifest(base, fragments = [], menuLayout = {}) {
+function buildManifest(base, fragments = [], menuLayout = {}, meta = undefined) {
 	const merged = { ...base, pages: [...(base.pages || [])], menu: [] }
 	mergeMenuItems(merged.menu, base.menu || [])
+	// Fragments may also carry page-template instantiations/templates/sets;
+	// collect them so a fragment-authored entity scaffold expands too.
+	const fragTemplates = []
+	const fragInstances = []
 	for (const frag of (Array.isArray(fragments) ? fragments : [])) {
 		if (frag && Array.isArray(frag.pages)) {
 			mergePages(merged.pages, frag.pages)
@@ -64,8 +99,39 @@ function buildManifest(base, fragments = [], menuLayout = {}) {
 		if (frag && Array.isArray(frag.menu)) {
 			mergeMenuItems(merged.menu, frag.menu)
 		}
+		if (frag && Array.isArray(frag.pageTemplates)) fragTemplates.push(...frag.pageTemplates)
+		if (frag && Array.isArray(frag.pageInstances)) fragInstances.push(...frag.pageInstances)
+		if (frag && frag.sets && typeof frag.sets === 'object') {
+			merged.sets = { ...(merged.sets || {}), ...frag.sets }
+		}
 	}
+	if (fragTemplates.length) merged.pageTemplates = [...(merged.pageTemplates || []), ...fragTemplates]
+	if (fragInstances.length) merged.pageInstances = [...(merged.pageInstances || []), ...fragInstances]
 	merged.menu = applyMenuLayout(merged.menu, menuLayout)
+
+	// Entity-scaffold expansion (runtime/boot path). No-op unless the manifest
+	// declares pageTemplates + pageInstances — an app without templating gets
+	// `merged` back untouched, byte-identical to the pre-expansion builder.
+	// Runtime fallback semantics (throwOnError:false): a bad instantiation is
+	// skipped rather than blanking the whole app — but its named error is
+	// handed to the caller via `meta.expansion.errors`, never swallowed.
+	if (Array.isArray(merged.pageTemplates) || Array.isArray(merged.pageInstances)) {
+		const result = expandPageTemplates(merged, { throwOnError: false })
+		if (meta && typeof meta === 'object') {
+			meta.expansion = {
+				expandedCount: result.expandedCount,
+				errors: result.errors,
+				// expandPageTemplates appends the materialised pages AFTER the
+				// concrete base pages, so the last expandedCount entries are
+				// exactly the expanded ones.
+				expandedPages: result.pages.slice(result.pages.length - result.expandedCount),
+			}
+		}
+		return result.manifest
+	}
+	if (meta && typeof meta === 'object') {
+		meta.expansion = { expandedCount: 0, errors: [], expandedPages: [] }
+	}
 	return merged
 }
 
@@ -249,6 +315,473 @@ function applySettingsSection(menu, settingsIds) {
 	return [...remaining, ...lifted]
 }
 
+// --- entity-scaffold page-template expansion (vendored port) ----------------
+//
+// SYNC NOTE — vendored port. Ported FAITHFULLY from @conduction/nextcloud-vue:
+//   nextcloud-vue/src/utils/expandPageTemplates.js
+// (expandPageTemplates, substitute, substituteString, resolveToken,
+//  effectiveParams, declaredParams, instanceLabel, DROP, PLACEHOLDER_RE).
+// The lib runs this as buildManifest's FINAL step, so the runtime renderer
+// only ever sees concrete pages. Two mechanical deltas from the source, both
+// CJS-vendoring artifacts, neither a semantics change:
+//   * `import`/`export` became plain functions + module.exports;
+//   * `isPlainObject` / `clone` are defined ONCE below and shared with the
+//     mergeManifestDelta port (both lib files carry byte-identical copies).
+// If the lib's expansion semantics change, update this block AND
+// scripts/lib/test_build_effective_manifest.js.
+// ---------------------------------------------------------------------------
+
+/**
+ * Unique sentinel meaning "drop the containing key" — an exact-match
+ * placeholder resolved to an absent OPTIONAL parameter.
+ */
+const DROP = Symbol('cn-template-drop')
+
+const PLACEHOLDER_RE = /\{\{\s*([^}]+?)\s*\}\}/g
+
+/**
+ * Expand a manifest's `pageTemplates[]` + `pageInstances[]` into concrete
+ * `pages[]`. Pure: the input manifest is never mutated. See the lib source
+ * (nextcloud-vue/src/utils/expandPageTemplates.js) for the full authoring
+ * model: `{{param}}` substitution, `{{set:NAME}}` shared sets, and the
+ * `override` base+delta merge.
+ *
+ * @param {object} manifest The manifest (may carry pageTemplates/pageInstances/sets).
+ * @param {object} [options] Options.
+ * @param {boolean} [options.throwOnError] When true, throw on any named
+ *   expansion error (build-time / codemod use). When false (runtime fallback,
+ *   and what buildManifest above uses), errors are collected on the returned
+ *   `errors` array and the offending instantiation is skipped.
+ * @param {boolean} [options.stripTemplates] When true, drop
+ *   `pageTemplates` and `sets` from the output as well (build-time ship path).
+ * @return {{ manifest: object, pages: object[], expandedCount: number, errors: string[] }}
+ *   `manifest` is the new manifest with instantiations materialised into
+ *   `pages[]`; `errors` is the (possibly empty) list of named expansion errors.
+ */
+function expandPageTemplates(manifest, options = {}) {
+	const { throwOnError = false, stripTemplates = false } = options
+	const errors = []
+
+	const templates = Array.isArray(manifest && manifest.pageTemplates) ? manifest.pageTemplates : null
+	const instances = Array.isArray(manifest && manifest.pageInstances) ? manifest.pageInstances : null
+
+	// No-op fast path: nothing to expand → return a shallow clone unchanged.
+	if (!templates && !instances) {
+		return { manifest: { ...manifest }, pages: Array.isArray(manifest && manifest.pages) ? manifest.pages : [], expandedCount: 0, errors }
+	}
+
+	const sets = isPlainObject(manifest.sets) ? manifest.sets : {}
+	const templateById = new Map()
+	for (const tpl of (templates || [])) {
+		if (isPlainObject(tpl) && typeof tpl.id === 'string') templateById.set(tpl.id, tpl)
+	}
+
+	const basePages = Array.isArray(manifest.pages) ? manifest.pages.map(clone) : []
+	const expandedPages = []
+
+	;(instances || []).forEach((instance, index) => {
+		const label = instanceLabel(instance, index)
+		if (!isPlainObject(instance)) {
+			errors.push(`[expandPageTemplates] pageInstances[${index}]: instantiation must be an object`)
+			return
+		}
+		const ref = instance.templateRef
+		const template = templateById.get(ref)
+		if (!template) {
+			errors.push(`[expandPageTemplates] ${label}: references unknown templateRef "${ref}" — no pageTemplates[] entry declares it`)
+			return
+		}
+
+		// Effective parameter map: register/schema/label shortcuts, then params
+		// (params win on conflict).
+		const params = effectiveParams(instance)
+		const declared = declaredParams(template)
+
+		// Required-parameter check (named error per missing param).
+		let missing = false
+		for (const [name, spec] of declared) {
+			if (spec.required && !(name in params)) {
+				errors.push(`[expandPageTemplates] ${label}: template "${ref}" requires parameter "${name}" but the instantiation did not supply it`)
+				missing = true
+			}
+		}
+		if (missing) return
+
+		// Substitute placeholders into the template's page shape.
+		const localErrors = []
+		const substituted = substitute(clone(template.page), params, declared, sets, sets, localErrors, label)
+		if (localErrors.length) {
+			errors.push(...localErrors)
+			return
+		}
+
+		// Optional structural override — reuse the base+delta merge (no second
+		// merge model). Template page is the base; the instantiation override is
+		// the delta over it (layered-versioned-app-deltas alignment).
+		let page = substituted
+		if (isPlainObject(instance.override)) {
+			page = mergeManifestDelta(substituted, instance.override).manifest
+		}
+
+		expandedPages.push(page)
+	})
+
+	if (errors.length && throwOnError) {
+		throw new Error('Page-template expansion failed:\n' + errors.join('\n'))
+	}
+
+	const pages = [...basePages, ...expandedPages]
+	const out = { ...manifest, pages }
+	delete out.pageInstances
+	if (stripTemplates) {
+		delete out.pageTemplates
+		delete out.sets
+	}
+
+	return { manifest: out, pages, expandedCount: expandedPages.length, errors }
+}
+
+/**
+ * Recursively substitute `{{param}}` / `{{set:NAME}}` placeholders in a value.
+ *
+ * @param {*} node Value to substitute into.
+ * @param {object} params Effective parameter map.
+ * @param {Map<string, object>} declared Declared params (name → { required }).
+ * @param {object} sets Shared named sets registry.
+ * @param {object} _sets (unused alias kept for signature symmetry).
+ * @param {string[]} errors Accumulator for named errors.
+ * @param {string} label Instantiation label for error messages.
+ * @return {*} Substituted value, or the DROP sentinel.
+ */
+function substitute(node, params, declared, sets, _sets, errors, label) {
+	if (typeof node === 'string') {
+		return substituteString(node, params, declared, sets, errors, label)
+	}
+	if (Array.isArray(node)) {
+		const out = []
+		for (const item of node) {
+			const v = substitute(item, params, declared, sets, _sets, errors, label)
+			if (v !== DROP) out.push(v)
+		}
+		return out
+	}
+	if (isPlainObject(node)) {
+		const out = {}
+		for (const key of Object.keys(node)) {
+			const v = substitute(node[key], params, declared, sets, _sets, errors, label)
+			if (v !== DROP) out[key] = v // drop keys whose optional param was absent
+		}
+		return out
+	}
+	return node
+}
+
+/**
+ * Substitute placeholders within a single string.
+ *
+ * @param {string} str The string value.
+ * @param {object} params Effective parameter map.
+ * @param {Map<string, object>} declared Declared params.
+ * @param {object} sets Shared named sets registry.
+ * @param {string[]} errors Accumulator for named errors.
+ * @param {string} label Instantiation label.
+ * @return {*} Substituted value / typed param value / DROP sentinel.
+ */
+function substituteString(str, params, declared, sets, errors, label) {
+	const exact = str.match(/^\{\{\s*([^}]+?)\s*\}\}$/)
+	if (exact) {
+		const token = exact[1].trim()
+		return resolveToken(token, params, declared, sets, errors, label)
+	}
+	// Embedded placeholders → string interpolation.
+	return str.replace(PLACEHOLDER_RE, (_m, tokenRaw) => {
+		const token = tokenRaw.trim()
+		const v = resolveToken(token, params, declared, sets, errors, label)
+		if (v === DROP || v === undefined || v === null) return ''
+		return String(v)
+	})
+}
+
+/**
+ * Resolve a single placeholder token to its value.
+ *
+ * @param {string} token The inner placeholder text (`register` or `set:NAME`).
+ * @param {object} params Effective parameter map.
+ * @param {Map<string, object>} declared Declared params.
+ * @param {object} sets Shared named sets registry.
+ * @param {string[]} errors Accumulator for named errors.
+ * @param {string} label Instantiation label.
+ * @return {*} Resolved value, or DROP when the parameter is absent.
+ */
+function resolveToken(token, params, declared, sets, errors, label) {
+	if (token.startsWith('set:')) {
+		const name = token.slice(4).trim()
+		if (!(name in sets)) {
+			errors.push(`[expandPageTemplates] ${label}: references unknown set "${name}" — no manifest.sets entry declares it`)
+			return DROP
+		}
+		return clone(sets[name])
+	}
+	// Plain parameter.
+	if (!declared.has(token)) {
+		errors.push(`[expandPageTemplates] ${label}: template placeholder "{{${token}}}" is not a declared parameter of the template`)
+		return DROP
+	}
+	if (token in params) {
+		return clone(params[token])
+	}
+	// Absent parameter. Required-absence was already reported; an optional
+	// absence drops the containing key on an exact match, or interpolates empty
+	// (the caller maps DROP → '' in embedded context).
+	return DROP
+}
+
+/**
+ * Build the effective parameter map from an instantiation.
+ * @param {object} instance The instantiation object.
+ * @return {object} Parameter map (register/schema/label shortcuts + params).
+ */
+function effectiveParams(instance) {
+	const out = {}
+	if (instance.register !== undefined) out.register = instance.register
+	if (instance.schema !== undefined) out.schema = instance.schema
+	if (instance.label !== undefined) out.label = instance.label
+	if (isPlainObject(instance.params)) {
+		for (const k of Object.keys(instance.params)) out[k] = instance.params[k]
+	}
+	return out
+}
+
+/**
+ * Map declared params name → spec ({ required }).
+ * @param {object} template The pageTemplate.
+ * @return {Map<string, {required: boolean}>} Declared params by name.
+ */
+function declaredParams(template) {
+	const map = new Map()
+	if (Array.isArray(template.params)) {
+		for (const p of template.params) {
+			if (isPlainObject(p) && typeof p.name === 'string') {
+				map.set(p.name, { required: p.required === true })
+			}
+		}
+	}
+	return map
+}
+
+function instanceLabel(instance, index) {
+	const id = isPlainObject(instance) && (instance.id || (isPlainObject(instance.params) && instance.params.id))
+	return id ? `pageInstances[${index}] (id "${id}")` : `pageInstances[${index}]`
+}
+
+// --- keyed structural delta merge (vendored port) ---------------------------
+//
+// SYNC NOTE — vendored port. Ported FAITHFULLY from @conduction/nextcloud-vue:
+//   nextcloud-vue/src/utils/mergeManifestDelta.js
+// (mergeManifestDelta, mergeValue, mergeKeyedArray, applyOrder, stripMarkers,
+//  stripOp, KEYED_ARRAYS, DELTA_REMOVE). Used here by expandPageTemplates for
+// a pageInstance's optional `override` block — the template page is the BASE
+// and the override is a DELTA over it. Same CJS-vendoring deltas as the
+// expansion block above (plain functions; shared isPlainObject/clone).
+// ---------------------------------------------------------------------------
+
+/**
+ * Map of array property name → the field that identifies its entries.
+ * Only arrays listed here merge by key; every other array replaces.
+ *
+ * @type {Readonly<Record<string, string>>}
+ */
+const KEYED_ARRAYS = Object.freeze({
+	pages: 'id',
+	widgets: 'id',
+	menu: 'id',
+	// A menu entry's nested nav children merge by child `id` too, so a delta
+	// (or a backend `/api/manifest` override) can add/patch/remove individual
+	// children of a group without replacing the whole `children[]` array.
+	children: 'id',
+})
+
+/** Reserved delta markers — never part of a base manifest. */
+const DELTA_REMOVE = 'remove'
+const ORDER_KEY = '__order'
+const OP_KEY = '$op'
+
+/**
+ * Apply a keyed structural delta to a base manifest.
+ *
+ * @param {object} base The base manifest (bundled manifest or stub).
+ * @param {object} delta The delta payload to apply.
+ * @return {{ manifest: object, orphanedDeltaPaths: string[] }}
+ *   `manifest` is a new merged object (inputs are never mutated);
+ *   `orphanedDeltaPaths` lists the paths of delta entries that targeted a
+ *   missing base entry and were therefore skipped.
+ */
+function mergeManifestDelta(base, delta) {
+	const orphans = []
+	const manifest = mergeValue(base, delta, '', orphans)
+	return { manifest, orphanedDeltaPaths: orphans }
+}
+
+/**
+ * Recursively merge `delta` onto `base` at `path`, collecting orphan paths.
+ *
+ * @param {*} base Base value.
+ * @param {*} delta Delta value (takes precedence).
+ * @param {string} path Current JSON-ish path (for orphan reporting).
+ * @param {string[]} orphans Accumulator for orphaned delta paths.
+ * @return {*} Merged value.
+ */
+function mergeValue(base, delta, path, orphans) {
+	// Delta absent → keep base. Base absent / scalar mismatch → delta wins.
+	if (delta === undefined) return clone(base)
+	if (!isPlainObject(base) || !isPlainObject(delta)) {
+		return clone(delta)
+	}
+
+	const out = { ...clone(base) }
+	for (const key of Object.keys(delta)) {
+		if (key === ORDER_KEY) continue
+		const childPath = path ? `${path}/${key}` : key
+		const baseChild = base[key]
+		const deltaChild = delta[key]
+
+		if (Array.isArray(deltaChild) && Array.isArray(baseChild) && KEYED_ARRAYS[key]) {
+			out[key] = mergeKeyedArray(baseChild, deltaChild, KEYED_ARRAYS[key], childPath, orphans)
+		} else if (isPlainObject(deltaChild) && isPlainObject(baseChild)) {
+			out[key] = mergeValue(baseChild, deltaChild, childPath, orphans)
+		} else {
+			out[key] = clone(deltaChild)
+		}
+	}
+
+	// Apply `__order` last so a reorder-only delta (which carries no copy of
+	// the array itself) still reorders the base array.
+	const orderMap = isPlainObject(delta[ORDER_KEY]) ? delta[ORDER_KEY] : {}
+	for (const [arrKey, seq] of Object.entries(orderMap)) {
+		if (Array.isArray(seq) && Array.isArray(out[arrKey]) && KEYED_ARRAYS[arrKey]) {
+			out[arrKey] = applyOrder(out[arrKey], seq, KEYED_ARRAYS[arrKey])
+		}
+	}
+	return out
+}
+
+/**
+ * Merge two arrays of keyed entries.
+ *
+ * @param {object[]} baseArr Base array.
+ * @param {object[]} deltaArr Delta array.
+ * @param {string} keyField Identity field name (e.g. "id").
+ * @param {string} path Current path (for orphan reporting).
+ * @param {string[]} orphans Accumulator for orphaned delta paths.
+ * @return {object[]} Merged array (ordering, if any, is applied by the caller).
+ */
+function mergeKeyedArray(baseArr, deltaArr, keyField, path, orphans) {
+	// Start from a keyed map of the base entries, preserving order.
+	const merged = baseArr.map((entry) => clone(entry))
+	const indexByKey = new Map()
+	merged.forEach((entry, i) => {
+		if (isPlainObject(entry) && entry[keyField] !== undefined) {
+			indexByKey.set(entry[keyField], i)
+		}
+	})
+
+	for (const deltaEntry of deltaArr) {
+		if (!isPlainObject(deltaEntry)) continue
+		const key = deltaEntry[keyField]
+		const op = deltaEntry[OP_KEY]
+		const entryPath = `${path}/${key}`
+
+		if (op === DELTA_REMOVE) {
+			if (indexByKey.has(key)) {
+				merged[indexByKey.get(key)] = undefined // tombstone; compacted below
+			} else {
+				orphans.push(entryPath)
+			}
+			continue
+		}
+
+		if (indexByKey.has(key)) {
+			// Patch an existing entry (recurse so nested widgets[] merge AND a
+			// nested __order both apply). Keep __order for the recursion —
+			// mergeValue consumes it and never copies it into the output; only
+			// $op is meaningless past this point.
+			const i = indexByKey.get(key)
+			merged[i] = mergeValue(merged[i], stripOp(deltaEntry), entryPath, orphans)
+		} else {
+			// New key → append as an addition.
+			merged.push(clone(stripMarkers(deltaEntry)))
+		}
+	}
+
+	return merged.filter((e) => e !== undefined)
+}
+
+/**
+ * Reorder entries to the given key sequence; unlisted entries follow in their
+ * original relative order.
+ *
+ * @param {object[]} entries Merged entries.
+ * @param {string[]} order Desired key sequence.
+ * @param {string} keyField Identity field name.
+ * @return {object[]} Reordered entries.
+ */
+function applyOrder(entries, order, keyField) {
+	const byKey = new Map(entries.map((e) => [e && e[keyField], e]))
+	const result = []
+	const used = new Set()
+	for (const key of order) {
+		if (byKey.has(key)) {
+			result.push(byKey.get(key))
+			used.add(key)
+		}
+	}
+	for (const e of entries) {
+		if (!used.has(e && e[keyField])) result.push(e)
+	}
+	return result
+}
+
+/**
+ * Strip all delta-only markers from an entry before it lands in the manifest.
+ *
+ * @param {object} entry A delta array entry, possibly carrying the `$op` and
+ *   `__order` markers.
+ * @return {object} A shallow copy with both markers removed.
+ */
+function stripMarkers(entry) {
+	const out = { ...entry }
+	delete out[OP_KEY]
+	delete out[ORDER_KEY]
+	return out
+}
+
+/**
+ * Strip only `$op`, preserving `__order` for a recursive merge to consume.
+ *
+ * @param {object} entry A delta array entry, possibly carrying the `$op` marker.
+ * @return {object} A shallow copy with `$op` removed and `__order` intact.
+ */
+function stripOp(entry) {
+	const out = { ...entry }
+	delete out[OP_KEY]
+	return out
+}
+
+function isPlainObject(value) {
+	return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+/**
+ * Structured clone via JSON (manifests are plain JSON — no cycles/functions).
+ * @param {*} value The value to clone.
+ * @return {*} A deep clone of the value.
+ */
+function clone(value) {
+	if (value === undefined) return undefined
+	if (value === null || typeof value !== 'object') return value
+	return JSON.parse(JSON.stringify(value))
+}
+
 // --- hydra-side input loading (not part of the lib port) --------------------
 
 /**
@@ -308,12 +841,15 @@ function loadAppInputs(appDir) {
  * Assemble the effective manifest for an app repo root.
  *
  * @param {string} appDir App repo root.
- * @return {{ manifest: object, inputs: object }} The assembled manifest + the raw inputs.
+ * @return {{ manifest: object, inputs: object, expansion: { expandedCount: number, errors: string[], expandedPages: object[] } }}
+ *   The assembled manifest + the raw inputs + the page-template expansion
+ *   report (all-zero/empty for an app that declares no templates).
  */
 function assembleFromDir(appDir) {
 	const inputs = loadAppInputs(appDir)
-	const manifest = buildManifest(inputs.base, inputs.fragments, inputs.menuLayout)
-	return { manifest, inputs }
+	const meta = {}
+	const manifest = buildManifest(inputs.base, inputs.fragments, inputs.menuLayout, meta)
+	return { manifest, inputs, expansion: meta.expansion }
 }
 
 /**
@@ -429,6 +965,8 @@ module.exports = {
 	applyMenuRelocations,
 	applyMenuRemovals,
 	applySettingsSection,
+	expandPageTemplates,
+	mergeManifestDelta,
 	loadAppInputs,
 	assembleFromDir,
 	assembleAtRef,
@@ -439,10 +977,12 @@ module.exports = {
 function cliMain() {
 	let appDir = process.cwd()
 	let outFile = null
+	let expansionOutFile = null
 	const argv = process.argv.slice(2)
 	for (let i = 0; i < argv.length; i++) {
 		if (argv[i] === '--app-dir' && argv[i + 1]) { appDir = path.resolve(argv[++i]); continue }
 		if (argv[i] === '--out' && argv[i + 1]) { outFile = path.resolve(argv[++i]); continue }
+		if (argv[i] === '--expansion-out' && argv[i + 1]) { expansionOutFile = path.resolve(argv[++i]); continue }
 		console.error(`[build_effective_manifest] unknown argument: ${argv[i]}`)
 		process.exit(1)
 	}
@@ -457,8 +997,25 @@ function cliMain() {
 		console.error(`[build_effective_manifest] ${e.message}`)
 		process.exit(1)
 	}
-	const { manifest, inputs } = result
+	const { manifest, inputs, expansion } = result
 	console.error(`[build_effective_manifest] base=${inputs.basePath} fragments=${inputs.fragmentFiles.length} menu-layout=${inputs.menuLayoutPath ? 'yes' : 'no'}`)
+	if (expansion.expandedCount > 0 || expansion.errors.length > 0) {
+		// Say what templating did — and NAME every skipped instantiation. The
+		// runtime skips a bad instance silently-but-warned; a gate log must
+		// carry the same names so a finding can point at them.
+		console.error(`[build_effective_manifest] page-templates: expanded ${expansion.expandedCount} instance(s), ${expansion.errors.length} expansion error(s)`)
+		for (const err of expansion.errors) {
+			console.error(`[build_effective_manifest] expansion error: ${err}`)
+		}
+	}
+	if (expansionOutFile) {
+		try {
+			fs.writeFileSync(expansionOutFile, JSON.stringify(expansion, null, '\t') + '\n')
+		} catch (e) {
+			console.error(`[build_effective_manifest] cannot write ${expansionOutFile} (${e.message})`)
+			process.exit(1)
+		}
+	}
 	const json = JSON.stringify(manifest, null, '\t') + '\n'
 	if (outFile) {
 		try {
