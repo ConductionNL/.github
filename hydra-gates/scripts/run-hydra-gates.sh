@@ -937,6 +937,45 @@ if [ -d lib ]; then
         | xargs -0 -r grep -lE 'Bootstrap::register[[:space:]]*\(' 2>/dev/null \
         || true)
 fi
+# ---------------------------------------------------------------------------
+# DIRECT GENERIC REGISTRATION IS ALSO ADOPTION (planix)
+# ---------------------------------------------------------------------------
+# `Bootstrap::register()` is the one-call convenience, not the definition of
+# adoption. An app may wire the SAME generics itself, and planix does — because
+# the one-call helper ALSO runs registerServices(), which aliases the leaf's
+# `Service\SettingsService` to the engine's AppHostSettingsService. An app that
+# ships its own SettingsService (planix does, with per-user due-reminder logic)
+# gets a container that hands its own SettingsController the wrong class and a
+# TypeError on the first request. Its hand-rolled closures register the
+# controllers and NOT the services, which is the only shape that works there.
+#
+# Judged the same way as the call above: the file must reference the AppHost
+# Controller namespace AND hand it to registerService(), in the SAME file, in
+# non-comment code. The generic controller FQCNs are a closed set (the same
+# source of truth as _HYDRA_APPHOST_SLUGS below), so this cannot become a
+# blanket exemption for any missing controller — an app must name the generic
+# it is aliasing.
+#
+# Verified against the failure it fixes: planix reported all six of its
+# AppHost routes as `controller-class-not-found` while the classes were
+# resolving correctly at runtime, because the detector only knew one spelling
+# of a two-spelling invariant.
+if [ "${_HYDRA_APPHOST}" -eq 0 ] && [ -d lib ]; then
+    while IFS= read -r _ah_f; do
+        [ -f "${_ah_f}" ] || continue
+        _ah_code=$(_php_code_only "${_ah_f}")
+        printf '%s\n' "${_ah_code}" \
+            | grep -qE 'AppHost\\+Controller\\+Generic(Dashboard|Preferences|Settings|Health|Metrics)Controller' \
+            || continue
+        printf '%s\n' "${_ah_code}" | grep -qE 'registerService[[:space:]]*\(' || continue
+        _HYDRA_APPHOST=1
+        _HYDRA_APPHOST_SITE="${_ah_f}"
+        break
+    done < <(_enum_tracked '\.php$' lib \
+        | tr '\n' '\0' \
+        | xargs -0 -r grep -lE 'AppHost\\+Controller\\+Generic' 2>/dev/null \
+        || true)
+fi
 # The five controller class names Bootstrap::register() aliases, as route
 # slugs. Source of truth: openregister lib/AppHost/Bootstrap.php
 # ::registerControllers(). Deliberately an explicit list, not a wildcard —

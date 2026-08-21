@@ -1,0 +1,8 @@
+{
+	"version": "2.0",
+	"observability": { "health": [], "metrics": [] },
+	"deepLinks": [
+		{ "urlTemplate": "/apps/fixture/projects/{uuid}", "displayName": "Project" },
+		{ "urlTemplate": "/apps/fixture/invoices/{uuid}", "displayName": "Invoice" }
+	]
+}
