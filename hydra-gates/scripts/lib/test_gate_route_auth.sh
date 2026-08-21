@@ -117,7 +117,7 @@ _expect_log() {   # <snapshot-var-contents> <regex> <description>
 echo "== gate-5 route-auth / gate-14 reachability control pairs =="
 echo
 
-for _f in unguarded guarded apphost apphost-unguarded orphan-route di-registered-generic prose-exempt auth-declared; do
+for _f in unguarded guarded apphost apphost-unguarded apphost-hand-rolled orphan-route di-registered-generic prose-exempt auth-declared; do
     if [ ! -d "${FIXTURES}/${_f}" ]; then
         _bad "fixture ${FIXTURES}/${_f} does not exist — this suite would be green on nothing"
     fi
@@ -258,6 +258,34 @@ if _run "${FIXTURES}/di-registered-generic"; then
     _expect_gate 5 PASS "di-registered-generic fixture: the absent generic is not an auth finding either"
     _expect_log "${_UNRES}" 'genericPreferences#getPreference' \
         "di-registered-generic fixture: gate-5 states the generic was NOT JUDGED rather than dropping it"
+fi
+
+# ---------------------------------------------------------------------------
+# APPHOST ADOPTED THE LONG WAY (planix).
+#
+# `Bootstrap::register()` is the convenience, not the definition of adoption.
+# planix wires the SAME generics itself because the one-call helper also
+# aliases the leaf's Service\SettingsService to the engine's — fatal for an app
+# that ships its own. The detector knew only the one-call spelling, so all of
+# planix's AppHost routes came back `controller-class-not-found` while
+# resolving perfectly at runtime.
+#
+# Both directions are asserted from ONE fixture, so the exemption cannot widen
+# into "this app registers services, therefore absences are fine": the four
+# AppHost slugs are served, `gadget#run` is not an AppHost slug and its
+# controller is genuinely absent, and it must STILL be raised.
+# ---------------------------------------------------------------------------
+if _run "${FIXTURES}/apphost-hand-rolled"; then
+    _expect_gate 14 FAIL "apphost-hand-rolled fixture: the non-AppHost absent controller is still raised"
+    _expect_log "${_RRLOG}" "GadgetController.php route='gadget#run' rule=controller-class-not-found" \
+        "apphost-hand-rolled fixture: gate-14 names gadget#run"
+    for _slug in DashboardController HealthController MetricsController PreferencesController; do
+        if printf '%s' "${_RRLOG}" | grep -q "${_slug}"; then
+            _bad "apphost-hand-rolled fixture: gate-14 reported hand-rolled AppHost generic ${_slug} as unreachable"
+        else
+            _ok "apphost-hand-rolled fixture: ${_slug} is recognised as AppHost-served"
+        fi
+    done
 fi
 
 # ---------------------------------------------------------------------------
