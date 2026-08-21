@@ -248,8 +248,22 @@ jobs:
             # A previous run's PR may be open precisely because the bump broke
             # something and somebody is fixing it on that branch. Opening a
             # second PR, or touching the first, would fight them.
-            OPEN=$(gh pr list --repo "ConductionNL/${app}" --state open --search "chore/fleet-shared-deps in:head" \
-                     --json url -q '.[0].url' 2>/dev/null)
+            # Matched on the REF, never through code search. `in:head` is NOT a
+            # valid pull-request search qualifier: GitHub does not reject it, it
+            # treats the whole thing as free text, and the query then matches
+            # nothing. MEASURED 2026-08-21 with docudesk#711 open — three
+            # consecutive `--search "... in:head"` calls returned EMPTY while the
+            # ref lookup below returned the PR immediately.
+            #
+            # That is the worst possible failure for THIS guard: it exists so the
+            # sweep never opens a second PR on top of one a maintainer is already
+            # fixing, and it is the reason this workflow can safely refuse to
+            # force-push. A guard that always answers "nothing open" silently
+            # withdraws that safety. `--json headRefName` reads refs through the
+            # REST API, so there is no search index to lag or misparse.
+            OPEN=$(gh pr list --repo "ConductionNL/${app}" --state open --limit 100 \
+                     --json url,headRefName \
+                     -q '[.[]|select(.headRefName|startswith("chore/fleet-shared-deps"))][0].url' 2>/dev/null)
             if [ -n "${OPEN}" ] && [ "${OPEN}" != "null" ]; then
               echo "| ${app} | - | - | skipped, bump PR already open: ${OPEN} |" >> "$SUMMARY"
               cd - >/dev/null || true; continue
