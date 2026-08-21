@@ -103,6 +103,21 @@ jobs:
             echo "| --- | --- | --- |"
           } >> "$GITHUB_STEP_SUMMARY"
 
+          # EVERY VERDICT GOES TO THE LOG AS WELL AS THE SUMMARY.
+          #
+          # This workflow MERGES. Writing the per-PR verdicts only to
+          # $GITHUB_STEP_SUMMARY means `gh run view --log` shows the echo source
+          # and never which PRs were merged, or why the rest were not -- so the
+          # audit trail for an unattended merge of dozens of PRs lives in one
+          # rendered artifact and nowhere a script can read it.
+          #
+          # MEASURED 2026-08-21: a dry run reported "39 merged/would-merge, 44
+          # skipped" and the log could not name a single one of the 83.
+          srow() {
+            echo "$1" >> "$GITHUB_STEP_SUMMARY"
+            echo "VERDICT: $(printf '%s' "$1" | tr -d '`*' | sed 's/^| //; s/ |$//')"
+          }
+
           MERGED=0; SKIPPED=0
 
           for app in ${APPS}; do
@@ -116,7 +131,7 @@ jobs:
             # they are separated before either is treated as "nothing to do".
             if [ -z "${prs}" ]; then
               if ! gh repo view "${R}" --json name > /dev/null 2>&1; then
-                echo "| \`${app}\` | — | UNREADABLE — not judged |" >> "$GITHUB_STEP_SUMMARY"
+                srow "| \`${app}\` | — | UNREADABLE — not judged |"
                 SKIPPED=$((SKIPPED + 1))
               fi
               continue
@@ -126,13 +141,13 @@ jobs:
               [ -z "${pr}" ] && continue
 
               if [ "${review}" = "CHANGES_REQUESTED" ]; then
-                echo "| \`${app}\` | #${pr} | skipped — changes requested |" >> "$GITHUB_STEP_SUMMARY"
+                srow "| \`${app}\` | #${pr} | skipped — changes requested |"
                 SKIPPED=$((SKIPPED + 1)); continue
               fi
 
               states=$(gh pr checks "${pr}" --repo "${R}" --json state --jq '.[].state' 2>/dev/null)
               if [ -z "${states}" ]; then
-                echo "| \`${app}\` | #${pr} | skipped — checks unreadable, NOT assumed passing |" >> "$GITHUB_STEP_SUMMARY"
+                srow "| \`${app}\` | #${pr} | skipped — checks unreadable, NOT assumed passing |"
                 SKIPPED=$((SKIPPED + 1)); continue
               fi
 
@@ -141,27 +156,27 @@ jobs:
               bad=$(printf '%s\n' "${states}" | grep -cE 'FAILURE|CANCELLED|TIMED_OUT|ACTION_REQUIRED|STALE')
 
               if [ "${pending}" -ne 0 ] || [ "${bad}" -ne 0 ]; then
-                echo "| \`${app}\` | #${pr} | skipped — ${total} checks, ${pending} pending, ${bad} not green |" >> "$GITHUB_STEP_SUMMARY"
+                srow "| \`${app}\` | #${pr} | skipped — ${total} checks, ${pending} pending, ${bad} not green |"
                 SKIPPED=$((SKIPPED + 1)); continue
               fi
 
               # ZERO CHECKS IS NOT GREEN. A PR that ran nothing has proved
               # nothing, and "no failures" is exactly what that looks like.
               if [ "${total}" -eq 0 ]; then
-                echo "| \`${app}\` | #${pr} | skipped — ZERO checks ran |" >> "$GITHUB_STEP_SUMMARY"
+                srow "| \`${app}\` | #${pr} | skipped — ZERO checks ran |"
                 SKIPPED=$((SKIPPED + 1)); continue
               fi
 
               if [ "${DRY_RUN}" = "true" ]; then
-                echo "| \`${app}\` | #${pr} | would merge (${total} checks green, author ${author}) |" >> "$GITHUB_STEP_SUMMARY"
+                srow "| \`${app}\` | #${pr} | would merge (${total} checks green, author ${author}) |"
                 MERGED=$((MERGED + 1)); continue
               fi
 
               if gh pr merge "${pr}" --repo "${R}" --squash 2>/dev/null; then
-                echo "| \`${app}\` | #${pr} | **merged** (${total} checks green) |" >> "$GITHUB_STEP_SUMMARY"
+                srow "| \`${app}\` | #${pr} | **merged** (${total} checks green) |"
                 MERGED=$((MERGED + 1))
               else
-                echo "| \`${app}\` | #${pr} | merge refused by GitHub — left open |" >> "$GITHUB_STEP_SUMMARY"
+                srow "| \`${app}\` | #${pr} | merge refused by GitHub — left open |"
                 SKIPPED=$((SKIPPED + 1))
               fi
             done <<< "${prs}"
