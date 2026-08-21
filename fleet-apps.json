@@ -8,7 +8,7 @@
     "exactly like an app that is fine.",
     "",
     "This list has been wrong before, in the direction that hides problems:",
-    "it stood at 11 entries while seven live apps went uncounted, and hrmq sat",
+    "it stood at 11 entries while seven live apps went uncounted, and humaniq sat",
     "red on development for six days because no sweep named it. Adding an app",
     "here is part of creating it.",
     "",
@@ -17,29 +17,29 @@
     "the decision is visible rather than the name simply being absent."
   ],
   "swept": [
-    "app-versions",
-    "decidesk",
-    "docudesk",
-    "doriath",
+    "buildiq",
+    "decidiq",
+    "dossiq",
+    "filinq",
     "hermiq",
-    "hrmq",
-    "larpingapp",
+    "humaniq",
+    "integriq",
+    "keepiq",
+    "larpinq",
     "launchpad",
+    "learniq",
     "nextcloud-app-template",
-    "nldesign",
-    "openbuild",
     "opencatalogi",
-    "openconnector",
     "openregister",
     "pipelinq",
     "portaliq",
-    "procest",
-    "scholiq",
     "shillinq",
-    "softwarecatalog",
+    "stackiq",
+    "thematiq",
+    "versioniq",
     "zaakafhandelapp"
   ],
   "deprecated": [
-    "planix"
+    "planiq"
   ]
 }

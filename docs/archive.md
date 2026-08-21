@@ -149,7 +149,7 @@ Repos that are actively used or referenced but are not core apps.
 | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
 | [Softwarecatalogus](https://github.com/ConductionNL/Softwarecatalogus)                   | VNG client repo (fork) — actively synced, NEVER commit directly |
 | [anonymization-experiments](https://github.com/ConductionNL/anonymization-experiments)   | LLM vs ML anonymization research                                |
-| [OpenAnonymiser](https://github.com/ConductionNL/OpenAnonymiser)                         | Anonymisation API (fork) — updated Mar 2026                     |
+| [anonymiq](https://github.com/ConductionNL/anonymiq)                                     | Anonymisation API (fork) — updated Mar 2026                     |
 | [OpenAnonymiser_light](https://github.com/ConductionNL/OpenAnonymiser_light)             | Light anonymiser (fork) — updated Mar 2026                      |
 | [NL_doc](https://github.com/ConductionNL/NL_doc)                                         | Documentation — updated Jan 2026                                |
 | [LLM-configuratie](https://github.com/ConductionNL/LLM-configuratie)                     | LLM configuration                                               |
