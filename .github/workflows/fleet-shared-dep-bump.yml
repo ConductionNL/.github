@@ -148,6 +148,10 @@ jobs:
           fi
           echo "Token present."
 
+      # Node only — the npm that matters is chosen PER APP inside the bump loop
+      # from each repo's own `engines.npm`, because this workflow walks 21 repos
+      # and setup-node can only pin one bundled npm. See the honouring block in
+      # "Bump, branch and open one PR per app".
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -226,6 +230,10 @@ jobs:
           }
 
           FAILED=0
+          # Which engines.npm range the globally-installed npm currently
+          # satisfies, so the loop installs once per distinct range rather than
+          # once per app. Empty = whatever setup-node bundled.
+          NPM_RANGE_ACTIVE=""
           for app in ${APPS}; do
             rm -rf "work/${app}"
             if ! git clone -q --depth 1 --branch development \
@@ -256,8 +264,64 @@ jobs:
             if [ "${CB}" != "-" ] && [ "${CB}" != "${COMPOSER_TARGET}" ]; then
               composer update conduction/hydra-gates --no-install --no-interaction --no-scripts --no-progress >/dev/null 2>&1 || true
             fi
+            # HONOUR engines.npm PER APP — setup-node installs the npm BUNDLED
+            # WITH NODE, not the one the repo asks for. Node 22 ships npm 10;
+            # every app sampled on 2026-08-21 declares `engines.npm: ^11.0.0`.
+            #
+            # MEASURED on the first real run of this workflow (docudesk PR #710):
+            # under npm 10 the lock came back with 84 added / 16 removed lines
+            # for what should have been a ~3-line version bump. Package count was
+            # IDENTICAL (1733 -> 1733, none added, none removed) — what changed
+            # was 81 `@esbuild/*` platform binaries newly marked `"dev": true`,
+            # while `esbuild` itself stayed unflagged. That is npm 10 recomputing
+            # a tree npm 11 had classified differently, not a real dependency
+            # change. release.yml learned this same lesson (#525); a per-repo
+            # workflow reads ./package.json once, but this one walks 21 repos, so
+            # the range has to be re-read and re-honoured inside the loop.
+            #
+            # Installs are cached by range: the fleet is uniformly ^11 today, so
+            # this costs one `npm i -g` for the whole sweep, but it stays correct
+            # if a single app ever diverges.
+            WANT_NPM=""
+            if [ -f package.json ]; then
+              WANT_NPM="$(node -p "(((require('./package.json').engines)||{}).npm)||''" 2>/dev/null || echo '')"
+            fi
+            if [ -n "${WANT_NPM}" ] && [ "${WANT_NPM}" != "${NPM_RANGE_ACTIVE}" ]; then
+              if npm i -g "npm@${WANT_NPM}" >/dev/null 2>&1; then
+                NPM_RANGE_ACTIVE="${WANT_NPM}"
+                echo "::notice::${app}: honouring engines.npm ${WANT_NPM} (npm $(npm -v))"
+              else
+                echo "::warning::${app}: could not install npm@${WANT_NPM}; staying on npm $(npm -v)"
+              fi
+            fi
+
             if [ "${NB}" != "-" ] && [ "${NB}" != "${NPM_TARGET}" ]; then
+              cp package-lock.json /tmp/lock-base.json
               npm update @conduction/nextcloud-vue --package-lock-only --no-audit --no-fund >/dev/null 2>&1 || true
+
+              # A LOCK-ONLY BUMP OF ONE PACKAGE MUST NOT RECLASSIFY OTHERS.
+              #
+              # Adding or removing packages, or flipping an unrelated package's
+              # `dev` flag, means the tree was re-resolved rather than nudged —
+              # the npm-10 signature above. Rather than open a PR nobody can
+              # review (84 changed lines, 3 of them meaningful), revert the npm
+              # side and say why. The composer bump, if any, still proceeds.
+              CHURN="$(node -e '
+                const fs = require("fs");
+                const P = f => (JSON.parse(fs.readFileSync(f, "utf8")).packages || {});
+                const b = P("/tmp/lock-base.json"), h = P("package-lock.json");
+                const add = Object.keys(h).filter(k => !(k in b)).length;
+                const del = Object.keys(b).filter(k => !(k in h)).length;
+                const dev = Object.keys(h).filter(k => k in b && !!b[k].dev !== !!h[k].dev).length;
+                process.stdout.write(add + " " + del + " " + dev);
+              ' 2>/dev/null || echo "0 0 0")"
+              set -- ${CHURN}
+              if [ "${3:-0}" -gt 0 ]; then
+                cp /tmp/lock-base.json package-lock.json
+                echo "::warning::${app}: npm bump reverted — ${3} packages changed dev-flag under npm $(npm -v) (tree re-resolved, not nudged). Added ${1}, removed ${2}."
+                NB="-"
+              fi
+              rm -f /tmp/lock-base.json
             fi
 
             CA="-"; NA="-"
