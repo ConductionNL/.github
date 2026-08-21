@@ -42,6 +42,50 @@ on:
 
 jobs:
   release:
+    # DO NOT RELEASE THE RELEASE.
+    #
+    # This workflow ends by opening a pull request that brings the integration
+    # branch up to the version it just tagged. Merging that pull request is a
+    # push to the integration branch, which triggers this workflow again, which
+    # bumps the version again, which opens another pull request. The bump commit
+    # carries `[skip ci]`, but the MERGE COMMIT that actually lands on the branch
+    # does not, so the marker never gets a chance to work.
+    #
+    # Left running, the repository releases itself indefinitely. Measured on
+    # opencatalogi 2026-08-20, over its last 100 development commits:
+    #
+    #     45  chore(release): version bumps
+    #     46  merges of release/* branches
+    #      9  actual work
+    #
+    # 91% of the branch's history was the workflow reacting to itself, one cycle
+    # roughly every ten minutes, and the base version never advanced — every one
+    # of those releases was 1.0.9-unstable.<timestamp>. It is not obviously a
+    # loop from the outside: each individual run is a legitimate release of a
+    # real commit, and the only symptom is that the branch never settles, which
+    # reads as "someone is committing a lot" rather than as a defect.
+    #
+    # It also breaks things downstream. A development branch that moves every
+    # ten minutes cancels its own in-flight CI by concurrency, so dev→beta pull
+    # requests never finish a full run — opencatalogi's had its E2E and Hydra
+    # Gates jobs cancelled repeatedly for exactly this reason.
+    #
+    # So: skip when the push that triggered us IS the bump landing. Both merge
+    # styles are covered — a merge commit names the `release/v*` head branch,
+    # and a squash produces `chore(release): <version> (#123)`.
+    #
+    # Nothing is lost by skipping. Those pushes contain only appinfo/info.xml
+    # (and openapi.json where present); re-releasing them would build a
+    # byte-identical artefact under a new number.
+    #
+    # `workflow_dispatch` is deliberately never skipped, so a human can always
+    # force a release by hand — including of a commit this guard would refuse.
+    if: >-
+      github.event_name != 'push'
+      || !(
+        startsWith(github.event.head_commit.message, 'chore(release):')
+        || contains(github.event.head_commit.message, '/release/v')
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: write
