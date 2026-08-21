@@ -172,11 +172,11 @@ The Symfony-based Common Ground Gateway that has been fully replaced by the Next
 
 | Repository                                                                                     | Open Issues | Argumentation                                                                                              |
 | ---------------------------------------------------------------------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------- |
-| [commonground-gateway](https://github.com/ConductionNL/commonground-gateway)                   | 91          | **The old platform itself** — Symfony bundle + K8s wrapper, fully replaced by OpenRegister + OpenConnector |
+| [commonground-gateway](https://github.com/ConductionNL/commonground-gateway)                   | 91          | **The old platform itself** — Symfony bundle + K8s wrapper, fully replaced by OpenRegister + Integriq |
 | [commonground-gateway-frontend](https://github.com/ConductionNL/commonground-gateway-frontend) | 3           | React frontend for the old gateway — replaced by Nextcloud UI                                              |
 | [commonground-gateway-ui](https://github.com/ConductionNL/commonground-gateway-ui)             | 2           | Earlier iteration of the gateway UI — replaced by Nextcloud UI                                             |
 | [gateway-ui](https://github.com/ConductionNL/gateway-ui)                                       | 5           | Most recent gateway UI — replaced by Nextcloud UI                                                          |
-| [api-connector](https://github.com/ConductionNL/api-connector)                                 | 0           | Ajax/NLX connector for the old platform — replaced by OpenConnector                                        |
+| [api-connector](https://github.com/ConductionNL/api-connector)                                 | 0           | Ajax/NLX connector for the old platform — replaced by Integriq                                        |
 
 ## Category 6: ARCHIVE — Symfony Bundles (15 repos)
 
@@ -221,14 +221,14 @@ API components built on the old Symfony platform. All replaced by OpenRegister s
 | [contactregistratiecomponent](https://github.com/ConductionNL/contactregistratiecomponent)             | 8           | Contact registration — replaced by Pipelinq                           |
 | [education-component](https://github.com/ConductionNL/education-component)                             | 8           | Education — obsolete, never deployed to production                    |
 | [environment-component](https://github.com/ConductionNL/environment-component)                         | 9           | K8s environment descriptions — replaced by cluster-infra              |
-| [export-component](https://github.com/ConductionNL/export-component)                                   | 4           | Export files — replaced by DocuDesk                                   |
+| [export-component](https://github.com/ConductionNL/export-component)                                   | 4           | Export files — replaced by Filinq                                   |
 | [issue-component](https://github.com/ConductionNL/issue-component)                                     | 8           | Issue handling — replaced by GitHub issues + Nextcloud                |
 | [loggingcomponent](https://github.com/ConductionNL/loggingcomponent)                                   | 0           | Logging — replaced by Nextcloud audit logging                         |
 | [memo-component](https://github.com/ConductionNL/memo-component)                                       | 5           | Memos — replaced by OpenRegister objects                              |
 | [portfolio-component](https://github.com/ConductionNL/portfolio-component)                             | 5           | Portfolio — obsolete                                                  |
 | [review-component](https://github.com/ConductionNL/review-component)                                   | 5           | Reviews — replaced by OpenRegister schema                             |
 | [story-component](https://github.com/ConductionNL/story-component)                                     | 0           | Stories — obsolete                                                    |
-| [taken-component](https://github.com/ConductionNL/taken-component)                                     | 5           | Tasks — replaced by Procest on OpenRegister                           |
+| [taken-component](https://github.com/ConductionNL/taken-component)                                     | 5           | Tasks — replaced by Dossiq on OpenRegister                           |
 | [token-registration-component](https://github.com/ConductionNL/token-registration-component)           | 4           | Token registration — replaced by Keycloak                             |
 | [user-component](https://github.com/ConductionNL/user-component)                                       | 7           | User management — replaced by Nextcloud user management               |
 | [wallet-component](https://github.com/ConductionNL/wallet-component)                                   | 3           | Wallet — updated Jan 2026 but functionality moved to Nextcloud        |
@@ -237,10 +237,10 @@ API components built on the old Symfony platform. All replaced by OpenRegister s
 | [server-analysis-service](https://github.com/ConductionNL/server-analysis-service)                     | 0           | Server analysis — replaced by monitoring stack                        |
 | [Environment-management-component](https://github.com/ConductionNL/Environment-management-component)   | 3           | Environment management (private) — replaced by GitOps                 |
 | [instemming-registratie-component](https://github.com/ConductionNL/instemming-registratie-component)   | 5           | Consent registration — replaced by OpenRegister schema                |
-| [procesregistratiecomponent](https://github.com/ConductionNL/procesregistratiecomponent)               | 4           | Process registration — replaced by Procest                            |
+| [procesregistratiecomponent](https://github.com/ConductionNL/procesregistratiecomponent)               | 4           | Process registration — replaced by Dossiq                            |
 | [orderregistratiecomponent](https://github.com/ConductionNL/orderregistratiecomponent)                 | 5           | Order registration — replaced by OpenRegister schema                  |
 | [Commongroundregistratiecomponent](https://github.com/ConductionNL/Commongroundregistratiecomponent)   | 8           | CG component registry — replaced by OpenCatalogi                      |
-| [zaak-registratie-component](https://github.com/ConductionNL/zaak-registratie-component)               | 47          | Case registration — replaced by Procest + OpenZaak ExApp              |
+| [zaak-registratie-component](https://github.com/ConductionNL/zaak-registratie-component)               | 47          | Case registration — replaced by Dossiq + OpenZaak ExApp              |
 | [grafregistratiecomponent](https://github.com/ConductionNL/grafregistratiecomponent)                   | 0           | Grave registration (fork) — municipality-specific, obsolete           |
 | [verzoekregistratiecomponent](https://github.com/ConductionNL/verzoekregistratiecomponent)             | 6           | Request registration — replaced by Pipelinq                           |
 
@@ -250,27 +250,27 @@ Business logic services built on the old platform. Replaced by n8n workflows or 
 
 | Repository                                                                             | Open Issues | Argumentation                                                           |
 | -------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------- |
-| [adresservice](https://github.com/ConductionNL/adresservice)                           | 7           | Address/BAG enrichment — replaced by OpenConnector source               |
+| [adresservice](https://github.com/ConductionNL/adresservice)                           | 7           | Address/BAG enrichment — replaced by Integriq source               |
 | [agendaservice](https://github.com/ConductionNL/agendaservice)                         | 10          | Agenda/appointments — replaced by Nextcloud Calendar                    |
 | [begrafenisservice](https://github.com/ConductionNL/begrafenisservice)                 | 5           | Funeral service — municipality-specific, obsolete                       |
 | [begraven-service](https://github.com/ConductionNL/begraven-service)                   | 9           | Burial service — municipality-specific, obsolete                        |
 | [berichtservice](https://github.com/ConductionNL/berichtservice)                       | 7           | Messaging (email/SMS) — replaced by n8n workflows                       |
-| [betaalservice](https://github.com/ConductionNL/betaalservice)                         | 5           | Payment processing — replaced by OpenConnector integration              |
-| [brpservice](https://github.com/ConductionNL/brpservice)                               | 6           | BRP (national person registry) proxy — replaced by OpenConnector source |
+| [betaalservice](https://github.com/ConductionNL/betaalservice)                         | 5           | Payment processing — replaced by Integriq integration              |
+| [brpservice](https://github.com/ConductionNL/brpservice)                               | 6           | BRP (national person registry) proxy — replaced by Integriq source |
 | [instemmingservice](https://github.com/ConductionNL/instemmingservice)                 | 5           | Consent processing — replaced by n8n workflow                           |
-| [kvkservice](https://github.com/ConductionNL/kvkservice)                               | 5           | KVK (chamber of commerce) proxy — replaced by OpenConnector source      |
-| [logicservice](https://github.com/ConductionNL/logicservice)                           | 0           | BRP logic — replaced by OpenConnector mapping                           |
-| [stufservice](https://github.com/ConductionNL/stufservice)                             | 5           | StUF protocol bridge — replaced by OpenConnector                        |
+| [kvkservice](https://github.com/ConductionNL/kvkservice)                               | 5           | KVK (chamber of commerce) proxy — replaced by Integriq source      |
+| [logicservice](https://github.com/ConductionNL/logicservice)                           | 0           | BRP logic — replaced by Integriq mapping                           |
+| [stufservice](https://github.com/ConductionNL/stufservice)                             | 5           | StUF protocol bridge — replaced by Integriq                        |
 | [taalhuizen-service](https://github.com/ConductionNL/taalhuizen-service)               | 2           | Language school service — project-specific, obsolete                    |
 | [taalhuizen-logic](https://github.com/ConductionNL/taalhuizen-logic)                   | 0           | Language school notification logic — project-specific, obsolete         |
 | [trouw-service](https://github.com/ConductionNL/trouw-service)                         | 6           | Marriage business logic — municipality-specific, obsolete               |
 | [verhuis-service](https://github.com/ConductionNL/verhuis-service)                     | 5           | Moving service — municipality-specific, obsolete                        |
 | [verzoekconversieservice](https://github.com/ConductionNL/verzoekconversieservice)     | 6           | Request-to-case converter — replaced by n8n workflow                    |
-| [vsbe-service](https://github.com/ConductionNL/vsbe-service)                           | 4           | Very Small Business Engine — replaced by Procest                        |
+| [vsbe-service](https://github.com/ConductionNL/vsbe-service)                           | 4           | Very Small Business Engine — replaced by Dossiq                        |
 | [westfrieslandservice](https://github.com/ConductionNL/westfrieslandservice)           | 7           | West-Friesland-specific logic — municipality-specific, obsolete         |
-| [document-creation-service](https://github.com/ConductionNL/document-creation-service) | 0           | Document creation — replaced by DocuDesk                                |
+| [document-creation-service](https://github.com/ConductionNL/document-creation-service) | 0           | Document creation — replaced by Filinq                                |
 | [bundle-runner](https://github.com/ConductionNL/bundle-runner)                         | 0           | Symfony bundle runner — obsolete with platform migration                |
-| [generic-commonground-bl](https://github.com/ConductionNL/generic-commonground-bl)     | 0           | Generic business logic layer — replaced by OpenConnector                |
+| [generic-commonground-bl](https://github.com/ConductionNL/generic-commonground-bl)     | 0           | Generic business logic layer — replaced by Integriq                |
 
 ## Category 9: ARCHIVE — Common Ground Catalogues (10 repos)
 
@@ -280,11 +280,11 @@ Domain catalogues from the old platform. All replaced by OpenRegister schemas.
 | -------------------------------------------------------------------------------------------- | ----------- | --------------------------------------------------------------- |
 | [locatiecatalogus](https://github.com/ConductionNL/locatiecatalogus)                         | 4           | Location catalogue — replaced by OpenRegister location schema   |
 | [medewerkercatalogus](https://github.com/ConductionNL/medewerkercatalogus)                   | 6           | Employee catalogue — replaced by Nextcloud users + OpenRegister |
-| [procestypecatalogus](https://codeberg.org/Conduction/procestypecatalogus)                   | 6           | Process type catalogue — replaced by Procest                    |
+| [procestypecatalogus](https://codeberg.org/Conduction/procestypecatalogus)                   | 6           | Process type catalogue — replaced by Dossiq                    |
 | [productenendienstencatalogus](https://github.com/ConductionNL/productenendienstencatalogus) | 14          | Products & services catalogue — replaced by OpenRegister schema |
 | [verzoektypecatalogus](https://github.com/ConductionNL/verzoektypecatalogus)                 | 4           | Request type catalogue — replaced by Pipelinq schemas           |
 | [webresourcecatalogus](https://github.com/ConductionNL/webresourcecatalogus)                 | 8           | Web resource catalogue — replaced by Nextcloud Files            |
-| [landelijketabellencatalogus](https://github.com/ConductionNL/landelijketabellencatalogus)   | 4           | National GBA tables — replaced by OpenConnector source          |
+| [landelijketabellencatalogus](https://github.com/ConductionNL/landelijketabellencatalogus)   | 4           | National GBA tables — replaced by Integriq source          |
 | [contactcatalogus](https://github.com/ConductionNL/contactcatalogus)                         | 0           | Contact catalogue — already archived, replaced by Pipelinq      |
 | [componentenoverzicht](https://github.com/ConductionNL/componentenoverzicht)                 | 1           | Component overview — replaced by OpenCatalogi                   |
 | [love-common-ground](https://github.com/ConductionNL/love-common-ground)                     | 42          | CG developer community platform — replaced by OpenCatalogi      |
@@ -305,12 +305,12 @@ Template generators and proto applications for the old platform.
 
 ## Category 11: ARCHIVE — Old Process Engines & Dashboards (4 repos)
 
-Process/case management from before Procest existed.
+Process/case management from before Dossiq existed.
 
 | Repository                                                                       | Open Issues | Argumentation                                                                                               |
 | -------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------- |
-| [procces-engine](https://github.com/ConductionNL/procces-engine)                 | 42          | Headless process/business engine — **direct predecessor to Procest**, high issue count has historical value |
-| [processenDashboard](https://github.com/ConductionNL/processenDashboard)         | 6           | Process dashboard — replaced by Procest UI                                                                  |
+| [procces-engine](https://github.com/ConductionNL/procces-engine)                 | 42          | Headless process/business engine — **direct predecessor to Dossiq**, high issue count has historical value |
+| [processenDashboard](https://github.com/ConductionNL/processenDashboard)         | 6           | Process dashboard — replaced by Dossiq UI                                                                  |
 | [commonground-dashboard](https://github.com/ConductionNL/commonground-dashboard) | 4           | CG dashboard — replaced by LaunchPad                                                                           |
 | [checking](https://github.com/ConductionNL/checking)                             | 3           | Checking app — obsolete                                                                                     |
 
@@ -518,7 +518,7 @@ Forks of external projects that were used for evaluation, contribution, or refer
 
 | Repository                                                                                     | Open Issues | Argumentation                                          |
 | ---------------------------------------------------------------------------------------------- | ----------- | ------------------------------------------------------ |
-| [OpenZaakBrug](https://github.com/ConductionNL/OpenZaakBrug)                                   | 0           | ZDS→ZGW translator (fork) — replaced by OpenConnector  |
+| [OpenZaakBrug](https://github.com/ConductionNL/OpenZaakBrug)                                   | 0           | ZDS→ZGW translator (fork) — replaced by Integriq  |
 | [signals](https://github.com/ConductionNL/signals)                                             | 0           | Amsterdam Signalen (fork) — evaluation completed       |
 | [frontend](https://github.com/ConductionNL/frontend)                                           | 0           | Signalen frontend (fork) — evaluation completed        |
 | [classification](https://github.com/ConductionNL/classification)                               | 0           | ML classification (fork) — evaluation completed        |

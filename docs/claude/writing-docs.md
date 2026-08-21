@@ -452,7 +452,7 @@ When reading or reviewing documentation, certain patterns are signals to stop an
 | Hardcoded port or URL (`localhost:8080`)                           | App config to confirm current port and URL                                            |
 | Links to other docs                                                | Whether the linked file and section still exist                                       |
 | Phase references ("In Phase 1", "POC phase")                       | `openspec/ROADMAP.md` to see if the phase has advanced                                |
-| App or tool names ("OpenCatalogi", "OpenConnector")                | App install scripts or `apps-extra/` to confirm still active                          |
+| App or tool names ("OpenCatalogi", "Integriq")                     | App install scripts or `apps-extra/` to confirm still active                          |
 | Persona names                                                      | `hydra/personas/` to confirm the persona still exists                                 |
 | Command names (`/opsx-archive`, `make reset`)                      | `hydra/.claude/skills/` or `Makefile` to confirm still valid                          |
 | Table of Contents entries                                          | Whether each linked section still exists with the same heading                        |

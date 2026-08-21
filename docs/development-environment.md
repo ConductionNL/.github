@@ -225,7 +225,7 @@ Note: User passwords match their GreenMail email addresses because OX authentica
 | Presidio        | `conduction-presidio-analyzer` | 5001 | PII detection (Microsoft)     |
 | TGI LLM         | `conduction-tgi-llm`           | 8081 | Text generation (HuggingFace) |
 | Dolphin VLM     | `conduction-dolphin-vlm`       | 8083 | Document parsing (Vision LM)  |
-| OpenAnonymiser  | `conduction-openanonymiser`    | 5002 | PII anonymisation             |
+| Anonymiq        | `conduction-openanonymiser`    | 5002 | PII anonymisation             |
 | OpenWebUI ExApp | `conduction-exapp-openwebui`   | —    | AI chat via Nextcloud         |
 
 Requires NVIDIA GPU with Docker GPU support configured.
@@ -303,7 +303,7 @@ Quick reference for all service ports:
 | 3143  | GreenMail IMAP      | mail          |
 | 3306  | MariaDB             | mariadb       |
 | 5001  | Presidio Analyzer   | ai            |
-| 5002  | OpenAnonymiser      | ai            |
+| 5002  | Anonymiq            | ai            |
 | 5432  | PostgreSQL          | _(default)_   |
 | 5678  | n8n (standalone)    | standalone    |
 | 8080  | **Nextcloud**       | _(default)_   |
@@ -327,7 +327,7 @@ Self-contained demo environment that installs apps from the Nextcloud app store.
 docker compose -f .github/docker-compose.yml --profile demo up -d
 ```
 
-This starts a Nextcloud instance that automatically installs OpenRegister, OpenCatalogi, and SoftwareCatalog from the app store. Useful for demos, stakeholder reviews, and quick testing without a full development setup.
+This starts a Nextcloud instance that automatically installs OpenRegister, OpenCatalogi, and Stackiq from the app store. Useful for demos, stakeholder reviews, and quick testing without a full development setup.
 
 **Note**: The `demo` profile uses a different Nextcloud service than the default. Do not combine `demo` with the default profile.
 

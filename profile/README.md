@@ -6,10 +6,10 @@ Dutch open-source software company. We build [ConNext](https://www.conduction.nl
 
 - [**OpenRegister**](https://codeberg.org/Conduction/openregister): schema-driven object store with audit trail. The data foundation underneath every other app.
 - [**OpenCatalogi**](https://codeberg.org/Conduction/opencatalogi): federated catalogue and public publication for any register.
-- [**OpenConnector**](https://codeberg.org/Conduction/openconnector): integration layer for REST, SOAP, GraphQL, file drops, and message queues.
-- [**DocuDesk**](https://codeberg.org/Conduction/docudesk): anonymise, sign, and publish documents straight from your registers.
+- [**Integriq**](https://codeberg.org/Conduction/openconnector): integration layer for REST, SOAP, GraphQL, file drops, and message queues.
+- [**Filinq**](https://codeberg.org/Conduction/docudesk): anonymise, sign, and publish documents straight from your registers.
 
-Plus [LaunchPad](https://codeberg.org/Conduction/launchpad), [LarpingApp](https://codeberg.org/Conduction/larpingapp), [PipelinQ](https://codeberg.org/Conduction/pipelinq), [Procest](https://codeberg.org/Conduction/procest), [Decidesk](https://codeberg.org/Conduction/decidesk), [Deskdesk](https://codeberg.org/Conduction/deskdesk), [ScholiQ](https://codeberg.org/Conduction/scholiq), [Shillinq](https://codeberg.org/Conduction/shillinq), [ZaakAfhandelApp](https://codeberg.org/Conduction/zaakafhandelapp), [OpenBuild](https://codeberg.org/Conduction/openbuild), and [NLDesign](https://codeberg.org/Conduction/nldesign).
+Plus [LaunchPad](https://codeberg.org/Conduction/launchpad), [Larpinq](https://codeberg.org/Conduction/larpingapp), [PipelinQ](https://codeberg.org/Conduction/pipelinq), [Dossiq](https://codeberg.org/Conduction/procest), [Decidiq](https://codeberg.org/Conduction/decidesk), [Deskdesk](https://codeberg.org/Conduction/deskdesk), [Learniq](https://codeberg.org/Conduction/scholiq), [Shillinq](https://codeberg.org/Conduction/shillinq), [ZaakAfhandelApp](https://codeberg.org/Conduction/zaakafhandelapp), [Buildiq](https://codeberg.org/Conduction/openbuild), and [Thematiq](https://codeberg.org/Conduction/nldesign).
 
 Every app is EUPL-1.2. Every register exports to JSON. Your data is yours. The day you uninstall is as easy as the day you installed.
 

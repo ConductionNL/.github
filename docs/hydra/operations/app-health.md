@@ -60,11 +60,26 @@ alone leaves live data pointing at a name nothing answers to.
 | --- | --- | --- |
 | `mydash` | **`launchpad`** | done — the `mydash` repo is archived; treat any surviving reference as stale |
 | `scholiq` | `Learniq` | planned |
-| `nldesign` | `Themiq` | planned |
+| `nldesign` | `Thematiq` | planned |
 | `hrmq` | `Humaniq` | planned |
 | `decidesk` | `Decidiq` | planned |
-| `larpingapp` | `Larpiq` | planned |
+| `larpingapp` | `Larpinq` | planned |
 | `openbuild` | `Buildiq` | planned |
+| `procest` | `Dossiq` | planned |
+| `docudesk` | `Filinq` | planned |
+| `doriath` | `Keepiq` | planned |
+| `softwarecatalog` | `Stackiq` | planned |
+| `openconnector` | `Integriq` | planned |
+| `app-versions` | `Versioniq` | planned |
+| `planix` | `Planiq` | planned — repo is in `deprecated` in fleet-apps.json |
+| `OpenAnonymiser` | `Anonymiq` | planned |
+| `financeq` | `Accountinq` | planned |
+| `purchaseq` | `Purchasinq` | planned |
+
+Unchanged by decision (2026-08-21): `launchpad`, `pipelinq`, `shillinq` (the
+coin, never "Shellinq"), `hermiq`, `portaliq`, `openregister`, `opencatalogi`,
+`openwoo`, `nextcloud-vue`, `nextcloud-app-template`, and the ExApp sidecars.
+`zaakafhandelapp` and `deskdesk` are discontinued and get no new name.
 
 Until a row reads *done*, the **old** name is the one that resolves — the badges
 above and every `gh` command still use it.
@@ -332,7 +347,7 @@ first two slots the cadence is one app every two weeks.
 | +2 weeks | 2026-09-25 | 2026-09-28 | portaliq |
 | +2 weeks | 2026-10-09 | 2026-10-12 | procest |
 | +2 weeks | 2026-10-23 | 2026-10-26 | docudesk |
-| +2 weeks | 2026-11-06 | 2026-11-09 | nldesign (Themiq) |
+| +2 weeks | 2026-11-06 | 2026-11-09 | nldesign (Thematiq) |
 
 Every date above is a Friday, verified. The `Latest release` column in the
 tables is the last **GitHub** release, which is not the same thing as an App
