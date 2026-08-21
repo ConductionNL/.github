@@ -648,6 +648,54 @@ function isPathPrefix(p, t) {
 	return t === p || t.startsWith(p + '/')
 }
 
+// Routes declared by a hand-written vue-router table (src/router/*.js|ts).
+//
+// WHY THIS EXISTS (ConductionNL/.github — planix was the first app to trip it):
+// deepLink correspondence used to read `pages[].route` and nothing else. That
+// is the whole route inventory for a manifest-driven app, but it is EMPTY for
+// an app that renders a hand-written SPA — planix says so in its own manifest
+// ("renders no manifest-driven UI, so there is deliberately no menu/pages"),
+// and its five perfectly valid deepLinks each resolved to "no routable page".
+// The check was therefore unsatisfiable for that class of app: the only way to
+// pass was to declare pages the runtime would then try to render, i.e. to break
+// the app to please the gate.
+//
+// The routes are still DECLARED, just in `src/router/`. This reads that table
+// so the inventory is complete. Parsing is deliberately shallow — a `path:`
+// string literal in a router file — because anything cleverer would be a JS
+// evaluator; a route built dynamically is simply not discovered, which lands
+// on the WARN path below rather than a false FAIL.
+function discoverRouterRoutes(appDir) {
+	const out = new Set()
+	const dirs = [path.join(appDir, 'src', 'router'), path.join(appDir, 'src')]
+	for (const dir of dirs) {
+		let entries = []
+		try {
+			entries = fs.readdirSync(dir, { withFileTypes: true })
+		} catch { continue }
+		for (const e of entries) {
+			if (!e.isFile() || !/^router.*\.(js|ts)$|^index\.(js|ts)$/.test(e.name)) continue
+			let src = ''
+			try {
+				src = fs.readFileSync(path.join(dir, e.name), 'utf8')
+			} catch { continue }
+			// Only treat it as a router table if it actually looks like one.
+			if (!/createRouter|VueRouter|routes\s*:/.test(src)) continue
+			const re = /\bpath\s*:\s*['"`]([^'"`]+)['"`]/g
+			let m
+			while ((m = re.exec(src)) !== null) {
+				const p = m[1]
+				if (typeof p !== 'string' || p === '') continue
+				// vue-router 4 catch-all — matches everything, proves nothing.
+				if (p.includes('pathMatch') || p === '*') continue
+				out.add(p.startsWith('/') ? p : '/' + p)
+			}
+		}
+		if (out.size > 0) break
+	}
+	return out
+}
+
 // --- main ----------------------------------------------------------------------
 
 function main() {
@@ -768,13 +816,26 @@ function main() {
 	}
 
 	// (d) deepLink route correspondence.
-	const routePrefixes = [...pageRoutes].map(staticPrefix)
+	//
+	// The route inventory is pages[].route for a manifest-driven app and the
+	// vue-router table for a hand-written SPA. Both are declarations of the same
+	// thing, so both count; see discoverRouterRoutes() for why reading only the
+	// first made this check unsatisfiable for the second kind of app.
+	const routerRoutes = pageRoutes.size > 0 ? new Set() : discoverRouterRoutes(APP_DIR)
+	const routeSource = pageRoutes.size > 0 ? 'pages[].route' : 'src/router'
+	const routePrefixes = [...pageRoutes, ...routerRoutes].map(staticPrefix)
 	deepLinks.forEach((d, i) => {
 		if (!d || typeof d !== 'object' || typeof d.urlTemplate !== 'string') return
 		const t = staticPrefix(normalizeDeepLinkTemplate(d.urlTemplate))
-		if (!routePrefixes.some((p) => isPathPrefix(p, t))) {
-			fail('deeplink-route', `/deepLinks/${i}`, `urlTemplate '${d.urlTemplate}' corresponds to no routable page (no pages[].route prefix match)`)
+		if (routePrefixes.some((p) => isPathPrefix(p, t))) return
+		if (routePrefixes.length === 0) {
+			// No inventory of any kind was discoverable (no pages[], no parseable
+			// router). Absence of evidence is not evidence of a broken link —
+			// WARN so it is visible without asserting something unproven.
+			warn('deeplink-route', `/deepLinks/${i}`, `urlTemplate '${d.urlTemplate}' cannot be checked — this app declares no pages[] and no parseable src/router route table`)
+			return
 		}
+		fail('deeplink-route', `/deepLinks/${i}`, `urlTemplate '${d.urlTemplate}' corresponds to no routable page (no ${routeSource} prefix match)`)
 	})
 
 	// (e) ADR-044 no-functionality-loss removals invariant. Needs the

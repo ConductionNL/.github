@@ -1,0 +1,9 @@
+{
+	"version": "2.0",
+	"observability": { "health": [], "metrics": [] },
+	"deepLinks": [
+		{ "urlTemplate": "/apps/fixture/projects/{project}?task={uuid}", "displayName": "Task" },
+		{ "urlTemplate": "/apps/fixture/projects/{uuid}", "displayName": "Project" },
+		{ "urlTemplate": "/apps/fixture/projects", "displayName": "Projects" }
+	]
+}
