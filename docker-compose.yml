@@ -147,7 +147,12 @@ services:
       # ⚠️ shillinq's checkout is ahead of the copy (0.9.18 -> 0.9.23), so the
       # first container recreate after this change registers an app upgrade.
       - ../decidesk:/var/www/html/custom_apps/decidesk
-      - ../hrmq:/var/www/html/custom_apps/hrmq
+      # The app was renamed hrmq -> humaniq. Nextcloud requires the app
+      # DIRECTORY name to equal the <id> in appinfo/info.xml, so the mount
+      # destination moves; the checkout path stays until the repo directory
+      # is renamed. Without this the app 500s: the id says humaniq while the
+      # directory says hrmq.
+      - ../hrmq:/var/www/html/custom_apps/humaniq
       - ../openbuild:/var/www/html/custom_apps/openbuild
       - ../petstore:/var/www/html/custom_apps/petstore
       - ../shillinq:/var/www/html/custom_apps/shillinq
@@ -363,7 +368,12 @@ services:
       # See the note on the postgres `nextcloud` service: these five are the real
       # ConductionNL checkouts, not the stale ../openregister/custom_apps copies.
       - ../decidesk:/var/www/html/custom_apps/decidesk
-      - ../hrmq:/var/www/html/custom_apps/hrmq
+      # The app was renamed hrmq -> humaniq. Nextcloud requires the app
+      # DIRECTORY name to equal the <id> in appinfo/info.xml, so the mount
+      # destination moves; the checkout path stays until the repo directory
+      # is renamed. Without this the app 500s: the id says humaniq while the
+      # directory says hrmq.
+      - ../hrmq:/var/www/html/custom_apps/humaniq
       - ../openbuild:/var/www/html/custom_apps/openbuild
       - ../petstore:/var/www/html/custom_apps/petstore
       - ../shillinq:/var/www/html/custom_apps/shillinq
