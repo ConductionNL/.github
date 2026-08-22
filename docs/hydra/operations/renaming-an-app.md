@@ -191,3 +191,34 @@ id, not just your source.
 - **Stale eslint suppressions** fail the job at zero errors. `--prune-suppressions`.
 - **A seed script keyed on a frozen id** — `registers['<newid>']` — is a
   KeyError that aborts the entire e2e job before a single test runs.
+
+### The docs subdomain moves with DNS, not with the code
+
+`<old>.conduction.nl` is a live DNS record and a GitHub Pages CNAME. Renaming
+it in the code just points readers at a host that does not exist: during the
+dossiq rename, 43 `documentationUrl` entries were switched to
+`dossiq.conduction.nl`, which answers HTTP 000 while `procest.conduction.nl`
+still answers 200.
+
+Freeze the subdomain — in the manifest, in `docs/static/CNAME`, and in the
+documentation workflow's `cname:` — and move all three together in the DNS
+pass. The quickest check is the honest one: `curl` both hostnames.
+
+### Telling a register slug from an app id in a bare literal
+
+A positional `'<oldid>'` argument is indistinguishable from an app id by grep.
+It is the OpenRegister **register slug** — and stays — when it is:
+
+- the first string argument to `ObjectService`/OR mapper calls (`getObject`,
+  `find`, `findAll`, `saveObject`, `getObjects`)
+- the segment after `objects/` in `/apps/openregister/api/objects/<slug>/<schema>`
+- inside `registers: ['<slug>']` at boot, an `or-collection-<slug>-*` channel,
+  or an `objectType: '<slug>-*'`
+- the `components.registers.<slug>` key, or its `slug` / `tablePrefix` / `folder`
+
+It is the **app id** — and moves — when it names this app to Nextcloud: a
+route name, `/apps/<id>/`, an l10n domain, `Application::APP_ID`.
+
+Rule of thumb: handed to OpenRegister or read back out of stored data, it
+stays. When unsure, leave it and list it — a wrongly-renamed slug orphans
+stored objects silently, while a wrongly-kept one is a visible cosmetic miss.
