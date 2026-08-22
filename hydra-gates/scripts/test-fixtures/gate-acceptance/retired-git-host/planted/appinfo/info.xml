@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <id>fixtureapp</id>
+    <name>Fixture App</name>
+    <summary>Acceptance fixture for gate-94.</summary>
+    <description>
+        A prose mention of codeberg here is DELIBERATE and must not be a
+        finding: gate-94 is scoped to URL-bearing fields, never to prose.
+    </description>
+    <version>1.0.0</version>
+    <licence>agpl</licence>
+    <author>Conduction</author>
+    <namespace>FixtureApp</namespace>
+    <category>organization</category>
+    <website>https://codeberg.org/Conduction/fixtureapp</website>
+    <bugs>https://codeberg.org/Conduction/fixtureapp/issues</bugs>
+    <repository>https://codeberg.org/Conduction/fixtureapp</repository>
+    <screenshot>https://codeberg.org/Conduction/fixtureapp/raw/branch/main/img/screenshot.png</screenshot>
+    <dependencies>
+        <nextcloud min-version="30" max-version="32"/>
+    </dependencies>
+</info>
