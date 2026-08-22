@@ -73,6 +73,10 @@ const VALIDATOR = path.join(LIB, 'check_manifest.js')
 		'templated/src/manifest.json',
 		'templated/src/manifest.d/00-templates.json',
 		'templated/src/manifest.d/10-entities.json',
+		'router-routes/src/manifest.json',
+		'router-routes/src/router/index.js',
+		'router-routes-broken/src/manifest.json',
+		'router-routes-broken/src/router/index.js',
 	]
 	const missing = required.filter((rel) => !fs.existsSync(path.join(FIX, rel)))
 	if (missing.length > 0) {
@@ -806,6 +810,45 @@ function parseReport(stdout) {
 		&& rep2.findings.some((f) => f.check === 'template-expansion' && f.severity === 'error'),
 	'templated: with --manifest (the runner\'s shape) the template-expansion error is STILL reported (re-derived from --app-dir)')
 	fs.rmSync(path.dirname(tmp), { recursive: true, force: true })
+}
+
+// --- deepLink correspondence for hand-written vue-router apps -------------------
+//
+// An app that renders a hand-written SPA declares its routes in src/router/,
+// not in pages[]. Reading only pages[] made this check UNSATISFIABLE for that
+// class of app (planix: five valid deepLinks, five FAILs, and the only way to
+// pass was to declare pages the runtime would then try to render). Both
+// fixtures below carry the SAME router table, so the pass/fail difference is
+// the deepLink target alone — the assertion cannot be satisfied by the check
+// silently doing nothing.
+{
+	const okDir = path.join(FIX, 'router-routes')
+	const okRun = run([CHECKER, '--app-dir', okDir, '--manifest', path.join(okDir, 'src', 'manifest.json')])
+	const okRep = parseReport(okRun.stdout)
+	assert(okRun.status === 0 && !okRep.findings.some((f) => f.check === 'deeplink-route'),
+		'router-routes: deepLinks resolving against src/router are accepted (no pages[] required)')
+
+	const badDir = path.join(FIX, 'router-routes-broken')
+	const badRun = run([CHECKER, '--app-dir', badDir, '--manifest', path.join(badDir, 'src', 'manifest.json')])
+	const badRep = parseReport(badRun.stdout)
+	const badErrs = badRep.findings.filter((f) => f.check === 'deeplink-route' && f.severity === 'error')
+	assert(badRun.status === 1 && badErrs.length === 1 && badErrs[0].path === '/deepLinks/1',
+		'router-routes-broken: a deepLink the router does NOT declare still FAILS (the check can fail)')
+	assert(/src\/router/.test(badErrs[0] ? badErrs[0].message : ''),
+		'router-routes-broken: the failure names src/router as the inventory it checked against')
+
+	// No inventory of any kind → WARN, never a FAIL: absence of evidence is not
+	// evidence of a broken link.
+	const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gate30-noroutes-'))
+	fs.mkdirSync(path.join(tmpDir, 'src'), { recursive: true })
+	fs.writeFileSync(path.join(tmpDir, 'src', 'manifest.json'),
+		JSON.stringify({ version: '2.0', deepLinks: [{ urlTemplate: '/apps/x/whatever/{id}', displayName: 'W' }] }))
+	const noRun = run([CHECKER, '--app-dir', tmpDir, '--manifest', path.join(tmpDir, 'src', 'manifest.json')])
+	const noRep = parseReport(noRun.stdout)
+	assert(noRun.status === 0
+		&& noRep.findings.some((f) => f.check === 'deeplink-route' && f.severity === 'warn'),
+	'no-inventory: neither pages[] nor a parseable router → WARN, not FAIL')
+	fs.rmSync(tmpDir, { recursive: true, force: true })
 }
 
 console.log('')

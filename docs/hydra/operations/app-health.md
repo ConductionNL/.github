@@ -41,7 +41,7 @@ the work is wanted before greening a row in this table.
 
 | App | Category | Type | Latest release | main | beta | development |
 | --- | --- | --- | --- | --- | --- | --- |
-| [planiq](https://github.com/ConductionNL/planiq) | Application | Project management | 2026-08-03 | [![main](https://img.shields.io/github/actions/workflow/status/ConductionNL/planiq/code-quality.yml?branch=main&event=push&label=main)](https://github.com/ConductionNL/planiq/actions/workflows/code-quality.yml?query=branch%3Amain+event%3Apush) | [![beta](https://img.shields.io/github/actions/workflow/status/ConductionNL/planiq/code-quality.yml?branch=beta&event=push&label=beta)](https://github.com/ConductionNL/planiq/actions/workflows/code-quality.yml?query=branch%3Abeta+event%3Apush) | [![development](https://img.shields.io/github/actions/workflow/status/ConductionNL/planiq/code-quality.yml?branch=development&event=push&label=development)](https://github.com/ConductionNL/planiq/actions/workflows/code-quality.yml?query=branch%3Adevelopment+event%3Apush) |
+| [planninq](https://github.com/ConductionNL/planninq) | Application | Project management | 2026-08-03 | [![main](https://img.shields.io/github/actions/workflow/status/ConductionNL/planninq/code-quality.yml?branch=main&event=push&label=main)](https://github.com/ConductionNL/planninq/actions/workflows/code-quality.yml?query=branch%3Amain+event%3Apush) | [![beta](https://img.shields.io/github/actions/workflow/status/ConductionNL/planninq/code-quality.yml?branch=beta&event=push&label=beta)](https://github.com/ConductionNL/planninq/actions/workflows/code-quality.yml?query=branch%3Abeta+event%3Apush) | [![development](https://img.shields.io/github/actions/workflow/status/ConductionNL/planninq/code-quality.yml?branch=development&event=push&label=development)](https://github.com/ConductionNL/planninq/actions/workflows/code-quality.yml?query=branch%3Adevelopment+event%3Apush) |
 | [zaakafhandelapp](https://github.com/ConductionNL/zaakafhandelapp) | Application | Case management | 2024-10-23 | [![main](https://img.shields.io/github/actions/workflow/status/ConductionNL/zaakafhandelapp/code-quality.yml?branch=main&event=push&label=main)](https://github.com/ConductionNL/zaakafhandelapp/actions/workflows/code-quality.yml?query=branch%3Amain+event%3Apush) | [![beta](https://img.shields.io/github/actions/workflow/status/ConductionNL/zaakafhandelapp/code-quality.yml?branch=beta&event=push&label=beta)](https://github.com/ConductionNL/zaakafhandelapp/actions/workflows/code-quality.yml?query=branch%3Abeta+event%3Apush) | [![development](https://img.shields.io/github/actions/workflow/status/ConductionNL/zaakafhandelapp/code-quality.yml?branch=development&event=push&label=development)](https://github.com/ConductionNL/zaakafhandelapp/actions/workflows/code-quality.yml?query=branch%3Adevelopment+event%3Apush) |
 
 ## Renaming
@@ -71,7 +71,7 @@ alone leaves live data pointing at a name nothing answers to.
 | `softwarecatalog` | `Stackiq` | repo renamed — app id pending |
 | `openconnector` | `Integriq` | repo renamed — app id pending |
 | `app-versions` | `Versioniq` | repo renamed — app id pending |
-| `planix` | `Planiq` | repo renamed — app id pending; repo is in `deprecated` in fleet-apps.json |
+| `planix` | `Planninq` | repo renamed — app id pending; repo is in `deprecated` in fleet-apps.json. Not `Planiq`: that name collides with Anaplan's trademarked PlanIQ™, so the `-inq` form was taken instead |
 | `OpenAnonymiser` | `Anonymiq` | repo renamed — app id pending |
 | `financeq` | `Accountinq` | planned |
 | `purchaseq` | `Purchasinq` | planned |
@@ -287,10 +287,19 @@ day. Neither number was a decision; both were the absence of one.
 
 The cost was not theoretical. hydra-gates v1.8.0 shipped an
 `ObjectServiceInterface` **without `patchObject()`**, and because the package
-claims `OCA\OpenRegister\Contract\` in its composer autoload — a *longer*
-psr-4 prefix than openregister's own — a stale copy in **any** app's vendor
-directory defined that contract for the whole instance. Measured:
-softwarecatalog's vendor was supplying openregister's interface. Separately,
+*used to claim* `OCA\OpenRegister\Contract\` in its composer autoload — a
+*longer* psr-4 prefix than openregister's own — a stale copy in **any** app's
+vendor directory defined that contract for the whole instance. Measured:
+softwarecatalog's vendor was supplying openregister's interface.
+
+> ✅ **That mechanism is gone.** The prefix was removed from the package
+> (ConductionNL/.github#531); the contracts still ship, but a consumer now opts
+> in from its own test bootstrap behind `interface_exists()`, which is
+> order-independent. Four apps needed the opt-in — buildiq, decidiq, filinq and
+> stackiq. The others either ship their own contract stubs (dossiq, pipelinq,
+> shillinq), own the real one (openregister), or never reference it.
+
+Separately,
 nc-vue's AI-companion singleton landed in 2.7.0, so every app below it rendered
 a **second** companion hex beside hermiq's on every page. Both fixes had existed
 upstream for weeks.

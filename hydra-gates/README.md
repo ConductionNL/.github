@@ -146,6 +146,52 @@ gap, not a pass — see *Reading a green*.
 
 ---
 
+## The shipped OpenRegister contracts are opt-in, not autoloaded
+
+`hydra-gates/contracts/` ships `ObjectServiceInterface` and
+`ObjectEntityInterface` so a leaf app can typehint OpenRegister's data-access
+surface under PHPUnit without the OpenRegister app installed.
+
+They are **not** autoloaded. This package used to declare
+
+```json
+"autoload": { "psr-4": { "OCA\\OpenRegister\\Contract\\": "hydra-gates/contracts/" } }
+```
+
+and that was a bug, not a convenience. The prefix is *longer* than
+openregister's own `OCA\OpenRegister\` → `lib/`, PSR-4 is longest-prefix-wins,
+and the package installs into every consumer's `vendor/` — so whichever app's
+autoloader registered first defined OpenRegister's contract **for the whole
+process**. Measured on a real instance: softwarecatalog's vendored copy was
+supplying openregister's own interface, and a v1.8.0 copy without
+`patchObject()` broke callers of the real one (ConductionNL/.github#531).
+
+A consumer that needs these interfaces requires them from its own test
+bootstrap, behind a guard:
+
+```php
+foreach (['ObjectEntityInterface', 'ObjectServiceInterface'] as $contract) {
+	if (interface_exists('\\OCA\\OpenRegister\\Contract\\' . $contract) === false) {
+		$shipped = __DIR__ . '/../vendor/conduction/hydra-gates/hydra-gates/contracts/' . $contract . '.php';
+		if (file_exists($shipped) === true) {
+			require_once $shipped;
+		}
+	}
+}
+```
+
+Put it **before** anything that implements the interface — a stub entity that
+`implements \OCA\OpenRegister\Contract\ObjectEntityInterface` fatals inside the
+bootstrap otherwise, which is a dead run rather than a failed test. And put it
+in the bootstrap `phpunit.xml` actually loads: several apps ship two or three.
+
+`interface_exists()` rather than a fallback autoloader, because
+`spl_autoload_register` appends relative to *registration order*, and
+registration order across independently loaded apps is exactly the thing nobody
+controls. Asking whether the interface is resolvable is order-independent.
+
+---
+
 ## What it needs at runtime
 
 `bash`, `git`, `python3` (about twenty gates are Python helpers) and `node`

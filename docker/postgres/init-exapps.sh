@@ -16,9 +16,16 @@ EOSQL
     echo "Database $db ready"
 }
 
-# Create databases for each ExApp
-for db in keycloak; do
-    create_db_if_not_exists $db
+# Create databases for each ExApp.
+#
+# A list, not a loop over one word: adding the next ExApp's database is meant
+# to be an edit to EXAPP_DATABASES and nothing else. ShellCheck flagged the
+# original `for db in keycloak` (SC2043 — "this loop will only ever run once"),
+# which is exactly right about the shape and exactly wrong about the intent.
+EXAPP_DATABASES=(keycloak)
+
+for db in "${EXAPP_DATABASES[@]}"; do
+    create_db_if_not_exists "$db"
 done
 
 echo "ExApp databases initialized successfully!"

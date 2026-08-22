@@ -18,11 +18,6 @@
     "bin": [
         "hydra-gates/bin/hydra-gates"
     ],
-    "autoload": {
-        "psr-4": {
-            "OCA\\OpenRegister\\Contract\\": "hydra-gates/contracts/"
-        }
-    },
     "require": {
         "php": ">=8.1"
     },
