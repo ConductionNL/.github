@@ -4298,6 +4298,92 @@ jobs:
           NC_ADMIN_PASS: admin
           COLLECT_COVERAGE: ${{ inputs.enable-playwright-coverage }}
 
+      # ── THE SERVER'S OWN ACCOUNT OF A 5xx, WHICH THIS JOB USED TO DISCARD ───
+      #
+      # A Playwright failure is a CLIENT-side observation. When the cause is a
+      # 500, the only description of it lives in the instance's nextcloud.log —
+      # and this job booted that instance, ran the browser against it, and threw
+      # it away.
+      #
+      # MEASURED 2026-08-22 on buildiq: two specs failed as
+      #   Test timeout of 30000ms exceeded.
+      #   waiting for getByRole('option').filter({ hasText: /Bevestigingsbrief/i })
+      # which reads as a flaky picker. The real event was `POST
+      # /apps/docudesk/api/templates` -> HTTP 500 during seeding. Four hours went
+      # into ruling out nc-vue, a register-scope change, a sibling app's branch
+      # and a stale vendored contract — none of which could be confirmed or
+      # dismissed, because the exception behind the 500 never left the runner.
+      #
+      # `if: failure()` only, so a green run carries no extra artifact. The log
+      # is filtered to the app under test plus the shared platform apps and
+      # capped, because the raw file is mostly cron noise and an artifact nobody
+      # opens is the same as no artifact.
+      - name: Capture the server log when the suite failed
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          OUT="${RUNNER_TEMP:-/tmp}/nextcloud-log"
+          mkdir -p "$OUT"
+
+          # The data directory moves with the install; ask the instance rather
+          # than assuming a path, and fall back to the conventional one.
+          DATADIR=$(php server/occ config:system:get datadirectory 2>/dev/null || true)
+          [ -z "${DATADIR}" ] && DATADIR="server/data"
+          LOG="${DATADIR}/nextcloud.log"
+
+          if [ ! -f "${LOG}" ]; then
+            echo "::notice::no nextcloud.log at ${LOG} — nothing to capture."
+            exit 0
+          fi
+
+          # Whole file, for the artifact.
+          cp "${LOG}" "${OUT}/nextcloud.log" 2>/dev/null || true
+
+          # And an inline summary, so the common case needs no artifact download.
+          echo "### Server-side errors during this run" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          python3 - "${LOG}" <<'PY' | tee -a "$GITHUB_STEP_SUMMARY"
+          import json, sys
+          seen, shown = set(), 0
+          for line in open(sys.argv[1], encoding='utf8', errors='replace'):
+              try:
+                  e = json.loads(line)
+              except Exception:
+                  continue
+              if int(e.get('level', 0)) < 3:      # 3 = ERROR, 4 = FATAL
+                  continue
+              d = e.get('data') or {}
+              msg = d.get('message') if isinstance(d, dict) else None
+              msg = msg or e.get('message') or ''
+              key = (e.get('app'), str(msg)[:160])
+              if key in seen:
+                  continue
+              seen.add(key)
+              shown += 1
+              if shown > 40:
+                  print('... more errors in the uploaded artifact')
+                  break
+              print(f"[{e.get('app')}] {e.get('method','')} {e.get('url','')}")
+              print(f"    {str(msg)[:400]}")
+              exc = d.get('exception') if isinstance(d, dict) else None
+              if isinstance(exc, dict) and exc.get('Message'):
+                  print(f"    exception: {str(exc['Message'])[:300]}")
+          if shown == 0:
+              print('(no level>=3 entries — the failure left no server-side error)')
+          PY
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the server log
+        if: ${{ failure() }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextcloud-log-e2e
+          path: ${{ runner.temp }}/nextcloud-log
+          retention-days: 7
+          if-no-files-found: ignore
+
       # ── axe-core: produce the file gate-33 has never had ────────────────────
       #
       # hydra-gates gate-33 consumes `tests/axe/report.json` and fails on
