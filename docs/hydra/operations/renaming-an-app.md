@@ -108,3 +108,86 @@ Afterwards, grep for the old id and justify every remaining hit in the PR
 description. In practice the legitimate survivors are: the register slug, the
 `OLD_APP_ID` constants, archived change directories, CHANGELOG history, and
 the docs subdomain until DNS moves separately.
+
+## What five apps taught us
+
+The pilot documented the shape. Doing four more found the rest, and every
+item below is a defect that shipped green somewhere first.
+
+### The old id may be a substring of a real word
+
+`procest` sits inside the Dutch ZGW vocabulary — `procestermijn`,
+`procestype`, `selectielijstProcestype` — and inside Danish `procestrin`. A
+blanket replace turns those into `dossiqermijn` across the rules engine, its
+validators and the Postman suites. Around five hundred occurrences had to be
+preserved by hand. `softwarecatalog` sits inside the VNG product
+**Softwarecatalogus**; `nldesign` sits next to the **NL Design System**
+standard.
+
+This is the concrete reason scripted edits are banned for code. Before
+renaming, grep the old id and ask of each hit what larger word it belongs to.
+
+### Freeze the literal on both sides, not just where it is defined
+
+One app correctly froze the Files folder holding every generated document —
+with a comment explaining why, right next to the constant. The frontend was
+renamed with the app anyway: forty-one path literals across the store, a
+sidebar guard and a widget. The app then listed a folder that did not exist,
+every existing document became invisible, and nothing errored. Only an e2e
+assertion that a seeded document appears in the listing caught it.
+
+After freezing anything, grep the **new** name across the whole repo and ask
+of each hit whether it is really a different identifier. The definition site
+will look right precisely because the explanation is sitting next to it.
+
+### Put the reads inside the try, not just the write
+
+Two apps shipped repair steps whose `getValueString()` calls sat outside the
+`try` that was meant to contain them. Only the write was guarded, so an
+unreadable value propagated out of `run()`.
+
+That is worse than it sounds. These steps are registered under `<install>`,
+so a repair step that throws does not merely fail an upgrade — **the app never
+enables, and every route goes with it**. Both classes' own docblocks promised
+"every failure is logged and the loop continues".
+
+Neither app's test double could express it: the fake's failure switch only
+refused *writes*. A fixture that cannot fail the way production fails will
+not find this.
+
+### Choose the enumeration strategy from the data
+
+`getUsersForUserValue(app, key, value)` needs the value up front. That is fine
+for a boolean opt-out and useless for an open-valued key — an administration
+id, a session timeout, a secret type. Used there it migrates **nothing while
+reporting success**. Walk `IUserManager::callForSeenUsers()` and ask
+`getUserKeys()` instead, and pin the choice with a test asserting the
+value-enumerating call is never made.
+
+The pilot's implementation did not transfer to a single later app.
+
+### The rename can hollow out a checker
+
+One app's l10n validator hardcoded the old id in a regex that harvested
+`t('<app>', …)` keys out of `src/`. After the rename it went on searching for
+the old name, matched nothing, and reported its check as passing over an empty
+set — a check that validates nothing looks exactly like one that passes. It
+now derives the id from `appinfo/info.xml`. Grep your own tooling for the old
+id, not just your source.
+
+### Expect these in CI
+
+- **gate-16** is diff-scoped, so a rename pulls every touched method into
+  scope and you inherit that file's annotation debt. Annotate against the
+  promoted `openspec/specs/…` path and verify the anchor resolves.
+- **The coverage guard** will notice two new repair classes with thin tests,
+  and it is right to. Write the tests, then break the class and confirm they
+  go red — one app had a reserved-key test whose fixture returned the same
+  value for both namespaces, so the never-overwrite guard suppressed the write
+  and it passed with the reserved list emptied.
+- **Generated files** drift: `docs/features.json`, component docs, manifest
+  fixtures. Regenerate with the project's own generator; hand-editing them
+  cannot satisfy a checker that regenerates and diffs.
+- **Stale eslint suppressions** fail the job at zero errors. `--prune-suppressions`.
+- **A seed script keyed on a frozen id** — `registers['<newid>']` — is a
+  KeyError that aborts the entire e2e job before a single test runs.
