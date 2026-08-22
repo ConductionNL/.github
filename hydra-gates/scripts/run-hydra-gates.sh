@@ -10627,6 +10627,60 @@ if [ -f composer.json ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# GATE 94 — retired-git-host-metadata
+#
+# ConductionNL moved onto Codeberg 2026-05-29 and moved back off 2026-07-23.
+# The GIT layer completed — verified 2026-08-22, zero codeberg remotes
+# fleet-wide. The SHIPPED METADATA did not: 23 apps still declared <bugs>,
+# <website>, <repository> and <screenshot> URLs pointing at
+# codeberg.org/Conduction/<app> in appinfo/info.xml, which is published to
+# the Nextcloud app store. A bug reporter following <bugs> lands on a tracker
+# nobody reads; <screenshot> 404s in the store listing.
+#
+# WHY THIS IS A GATE AND NOT A ONE-OFF SWEEP: it is both. The sweep fixes
+# today's 23; the gate is what stops the 24th. Host migrations are rare but
+# they touch every repo at once, and the fleet has now done two in three
+# months — so the shape recurs even though the specific host does not.
+#
+# FULL-TREE, deliberately NOT diff-scoped, for the reason gates 84 and 93
+# give — and more sharply here. The drift this gate exists to catch is
+# ALREADY IN THE TREE, put there by a migration that touched every repo at
+# once. A diff-scoped version would report nothing on the ~99% of PRs that
+# never open appinfo/info.xml, i.e. it would be blind to 100% of the debt it
+# was written for.
+#
+# SCOPE IS SHIPPED METADATA, NOT PROSE. Docs, changelogs, specs, learnings
+# and archived openspec changes are deliberately out of scope: they record
+# what was true when written, and rewriting them makes the history untrue. A
+# gate noisy enough to be switched off catches nothing.
+#
+# NOTE ON PLACEMENT: top level, outside any `_FAILED` guard — a gate that only
+# runs once everything else passed is green-but-dead.
+# ---------------------------------------------------------------------------
+_rgh_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-retired-git-host-metadata.log
+: > "${_rgh_log}"
+set +e
+python3 "${SCRIPT_DIR}/lib/check_retired_git_host.py" . > "${_rgh_log}" 2>&1
+_rgh_rc=$?
+# `set +e`, not `set -e`: errexit off is the state this script actually runs
+# in. See the note at the top of this file.
+set +e
+
+if [ "${_rgh_rc}" -eq 0 ]; then
+    _pass 94 "retired-git-host-metadata"
+elif [ "${_rgh_rc}" -eq 4 ]; then
+    _skip 94 "retired-git-host-metadata" na "this repo ships no appinfo/info.xml, package.json or composer.json, so it declares no user-facing repository URLs. See ${_rgh_log}."
+elif ! _helper_finished "${_rgh_log}" '^checked [0-9]+ shipped metadata file'; then
+    # A CRASH IS NOT A FINDING.
+    _rgh_why=$(head -3 "${_rgh_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+    _skip 94 "retired-git-host-metadata" wiring "check_retired_git_host.py exited ${_rgh_rc} without printing its terminal 'checked N shipped metadata file(s)' summary, so the shipped repository URLs are UNVERIFIED by this run. Checker output: ${_rgh_why:-<empty>}. See ${_rgh_log}."
+else
+    _rgh_n=$(grep -cE '^FAIL ' "${_rgh_log}" 2>/dev/null || true)
+    case "${_rgh_n}" in ''|*[!0-9]*) _rgh_n=1 ;; esac
+    _fail 94 "retired-git-host-metadata" "${_rgh_n} shipped URL(s) point at a retired git host — see ${_rgh_log}"
+fi
+
+# ---------------------------------------------------------------------------
 # GATE 83 — contract-surface-shift (ADR-084)
 #
 # A method on a published contract can be served two ways: DECLARED
