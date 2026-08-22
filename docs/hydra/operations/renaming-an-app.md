@@ -222,3 +222,30 @@ route name, `/apps/<id>/`, an l10n domain, `Application::APP_ID`.
 Rule of thumb: handed to OpenRegister or read back out of stored data, it
 stays. When unsure, leave it and list it — a wrongly-renamed slug orphans
 stored objects silently, while a wrongly-kept one is a visible cosmetic miss.
+
+### Enumerate the literals before any bulk pass
+
+The instinct is to treat lowercase `oldid` as dangerous and capitalised
+`OldId` as safe display text. That proxy fails: during the dossiq rename a
+blanket `Procest` -> `Dossiq` pass overwrote `senderApplication: "Procest"`,
+which is this app's identity as a municipal zaaksysteem knows it — renaming it
+here does not rename it there, so messages are rejected or silently ignored
+until the municipality re-provisions.
+
+The rule that actually holds, from the worker who caught it:
+
+> **The danger is always a value, never a casing.** A blanket pass over a file
+> with no frozen literal is safe in any case; a blanket pass over a file WITH
+> one is unsafe in any case.
+
+So enumerate every quoted `'oldid'` / `"OldId"` literal in the files you are
+about to touch and hand-classify each one BEFORE running anything. That is
+what surfaced four cross-app identities in one 556-file batch — a `SOURCE_APP`
+const emitted to another app, its matching positional argument, a payload key
+sent to a third app, and a register slug inside a URL path.
+
+Corollary: **a file renamed on disk is not a file renamed.** Two test files
+were moved to their new names with their namespace, imports, class name and
+assertions all still on the old one. Grepping for the new filename does not
+reveal it. One asserted `getAppId()` returned the OLD id, so it would have
+failed outright — the lucky case. Check the contents of every file you rename.
