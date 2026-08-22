@@ -56,6 +56,10 @@ in `appinfo/info.xml`, route names, OpenRegister register slugs, app-config
 keys, and any object already written under the old id. Renaming the repository
 alone leaves live data pointing at a name nothing answers to.
 
+[**Renaming an app**](./renaming-an-app.md) is the procedure: the three phases,
+which stores the app id keys, the repair steps that carry data across, and the
+per-user preference that reverts silently if you forget it.
+
 | Old name | New name | Status |
 | --- | --- | --- |
 | `mydash` | **`launchpad`** | done — the `mydash` repo is archived; treat any surviving reference as stale |
