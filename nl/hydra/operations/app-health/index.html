@@ -5,7 +5,7 @@
 <meta name="generator" content="Docusaurus v3.10.1">
 <title data-rh="true">App health | Conduction Docs</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" property="og:image" content="https://docs.conduction.nl/nl/img/og-conduction.png"><meta data-rh="true" name="twitter:image" content="https://docs.conduction.nl/nl/img/og-conduction.png"><meta data-rh="true" property="og:url" content="https://docs.conduction.nl/nl/hydra/operations/app-health/"><meta data-rh="true" property="og:locale" content="nl_NL"><meta data-rh="true" property="og:locale:alternate" content="en_GB"><meta data-rh="true" name="docusaurus_locale" content="nl"><meta data-rh="true" name="docsearch:language" content="nl"><meta data-rh="true" name="twitter:site" content="@ConductionNL"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:type" content="website"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="App health | Conduction Docs"><meta data-rh="true" name="description" content="Live Code Quality status for every Conduction Nextcloud app, on each of the"><meta data-rh="true" property="og:description" content="Live Code Quality status for every Conduction Nextcloud app, on each of the"><link data-rh="true" rel="icon" href="/nl/img/favicon.svg"><link data-rh="true" rel="canonical" href="https://docs.conduction.nl/nl/hydra/operations/app-health/"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/hydra/operations/app-health/" hreflang="en-GB"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/nl/hydra/operations/app-health/" hreflang="nl-NL"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/hydra/operations/app-health/" hreflang="x-default"><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Hydra","item":"https://docs.conduction.nl/nl/hydra/"},{"@type":"ListItem","position":2,"name":"App health","item":"https://docs.conduction.nl/nl/hydra/operations/app-health"}]}</script><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","@id":"https://docs.conduction.nl/nl/hydra/operations/app-health#article","mainEntityOfPage":"https://docs.conduction.nl/nl/hydra/operations/app-health","headline":"App health","inLanguage":"en","publisher":{"@id":"https://www.conduction.nl/#org"},"description":"Live Code Quality status for every Conduction Nextcloud app, on each of the","author":{"@type":"Organization","name":"Conduction","@id":"https://www.conduction.nl/#org"}}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","@id":"https://www.conduction.nl/#org","name":"Conduction B.V.","alternateName":"Conduction","url":"https://www.conduction.nl/","logo":"https://www.conduction.nl/img/brand/avatar-conduction-gold-on-white.svg","foundingDate":"2019","description":"Dutch open-source software company building EUPL-1.2 apps for the Nextcloud workspace.","address":{"@type":"PostalAddress","streetAddress":"Lauriergracht 14h","postalCode":"1016 RR","addressLocality":"Amsterdam","addressCountry":"NL"},"email":"info@conduction.nl","telephone":"+31-85-303-6840","taxID":"NL860784241B01","vatID":"NL860784241B01","identifier":{"@type":"PropertyValue","propertyID":"KvK","value":"76741850"},"sameAs":["https://github.com/ConductionNL","https://www.linkedin.com/company/conduction/"]}</script>
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","@id":"https://docs.conduction.nl/#website","url":"https://docs.conduction.nl/","name":"Conduction Docs","publisher":{"@id":"https://www.conduction.nl/#org"},"inLanguage":["en","nl"]}</script><link rel="stylesheet" href="/nl/assets/css/styles.f2866016.css">
-<script src="/nl/assets/js/runtime~main.6052e7e9.js" defer="defer"></script>
+<script src="/nl/assets/js/runtime~main.bf02fdae.js" defer="defer"></script>
 <script src="/nl/assets/js/main.1d67c9ad.js" defer="defer"></script>
 </head>
 <body>
@@ -658,10 +658,19 @@ which nobody re-resolves unless they happen to be touching dependencies that
 day. Neither number was a decision; both were the absence of one.</p>
 <p>The cost was not theoretical. hydra-gates v1.8.0 shipped an
 <code>ObjectServiceInterface</code> <strong>without <code>patchObject()</code></strong>, and because the package
-claims <code>OCA\OpenRegister\Contract\</code> in its composer autoload — a <em>longer</em>
-psr-4 prefix than openregister&#x27;s own — a stale copy in <strong>any</strong> app&#x27;s vendor
-directory defined that contract for the whole instance. Measured:
-softwarecatalog&#x27;s vendor was supplying openregister&#x27;s interface. Separately,
+<em>used to claim</em> <code>OCA\OpenRegister\Contract\</code> in its composer autoload — a
+<em>longer</em> psr-4 prefix than openregister&#x27;s own — a stale copy in <strong>any</strong> app&#x27;s
+vendor directory defined that contract for the whole instance. Measured:
+softwarecatalog&#x27;s vendor was supplying openregister&#x27;s interface.</p>
+<blockquote>
+<p>✅ <strong>That mechanism is gone.</strong> The prefix was removed from the package
+(ConductionNL/.github#531); the contracts still ship, but a consumer now opts
+in from its own test bootstrap behind <code>interface_exists()</code>, which is
+order-independent. Four apps needed the opt-in — buildiq, decidiq, filinq and
+stackiq. The others either ship their own contract stubs (dossiq, pipelinq,
+shillinq), own the real one (openregister), or never reference it.</p>
+</blockquote>
+<p>Separately,
 nc-vue&#x27;s AI-companion singleton landed in 2.7.0, so every app below it rendered
 a <strong>second</strong> companion hex beside hermiq&#x27;s on every page. Both fixes had existed
 upstream for weeks.</p>
