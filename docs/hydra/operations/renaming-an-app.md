@@ -249,3 +249,37 @@ were moved to their new names with their namespace, imports, class name and
 assertions all still on the old one. Grepping for the new filename does not
 reveal it. One asserted `getAppId()` returned the OLD id, so it would have
 failed outright — the lucky case. Check the contents of every file you rename.
+
+### A rename PR is where a latent test race finally loses
+
+The keepiq rename failed one Playwright test on both attempts — "moved secret
+must exist" — while the same test passed on `development`. The move had in
+fact worked: the trace showed the new `folderId` persisted and the API
+returning the row. What broke was the test's own name extraction. The helper
+read `.secret-list-item__name`'s `textContent` and compared it for EXACT
+equality against the name in the API payload, but that element wraps both
+`{{ secret.name }}` and an asynchronously-loading `<StrengthBadge>`. Once the
+badge resolved, the string became `"AWS Console Very strong"` and matched
+nothing.
+
+The race was always there. `development` kept winning it; the rename branch
+lost it twice in a row and looked like the culprit.
+
+So when a rename PR reds a test the base branch passes:
+
+1. **Check the base first.** If the test is green there, that is evidence but
+   not a verdict — a race can be green on one branch and red on another with
+   no behavioural difference between them.
+2. **Read the trace before reading the diff.** The recorded request bodies and
+   `page.evaluate` return values say what actually happened. Here they showed
+   the write succeeding and the assertion comparing against a string no
+   payload contained, which points at the test rather than the rename.
+3. **Diff the spec for NON-rename lines.** `git diff origin/development -- <spec>
+   | grep -E '^[+-][^+-]' | grep -vi '<oldid>\|<newid>'` — an empty result
+   means the test logic is untouched and the failure is environmental or
+   latent.
+
+Fix the race rather than the branch: read the element's own text nodes
+(`nodeType === 3`) instead of `textContent`, so the extraction does not depend
+on whether a sibling has rendered yet. Both call sites had the bug; only one
+had failed.
