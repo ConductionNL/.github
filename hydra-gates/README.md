@@ -190,6 +190,43 @@ in the bootstrap `phpunit.xml` actually loads: several apps ship two or three.
 registration order across independently loaded apps is exactly the thing nobody
 controls. Asking whether the interface is resolvable is order-independent.
 
+### The bootstrap is not enough if your `lib/` typehints the contract
+
+**Psalm and PHPStan never run the test bootstrap.** They resolve types through
+the composer autoload map, so the guarded `require` above is invisible to them.
+If the interface appears in *production* code — a constructor promotion, a
+parameter type, a `::class` fetch in `lib/` — the analyser will now report it as
+undefined, and the count is not small: 204 errors on decidiq, 213 on stackiq,
+all the same class.
+
+That is analysis-only. The class still exists at runtime, because OpenRegister
+supplies it. So the fix is a stub, not an autoload entry — putting it back into
+the autoloader is precisely the defect this change removed.
+
+**Psalm** — in `psalm.xml`:
+
+```xml
+<stubs>
+    <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/ObjectServiceInterface.php" />
+    <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/ObjectEntityInterface.php" />
+</stubs>
+```
+
+**PHPStan** — in the app's own `phpstan.neon`:
+
+```neon
+parameters:
+    scanDirectories:
+        - %currentWorkingDirectory%/vendor/conduction/hydra-gates/hydra-gates/contracts
+```
+
+Not in the shared base: openregister owns the real `lib/Contract/`, and scanning
+the vendored copy there would declare the same class twice.
+
+This was missed when the prefix was removed, because the migration was verified
+against PHPUnit in both directions and the analysers were never run. Two apps
+went red on adoption. Check `lib/`, not just `tests/`.
+
 ---
 
 ## What it needs at runtime
