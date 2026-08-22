@@ -287,10 +287,19 @@ day. Neither number was a decision; both were the absence of one.
 
 The cost was not theoretical. hydra-gates v1.8.0 shipped an
 `ObjectServiceInterface` **without `patchObject()`**, and because the package
-claims `OCA\OpenRegister\Contract\` in its composer autoload — a *longer*
-psr-4 prefix than openregister's own — a stale copy in **any** app's vendor
-directory defined that contract for the whole instance. Measured:
-softwarecatalog's vendor was supplying openregister's interface. Separately,
+*used to claim* `OCA\OpenRegister\Contract\` in its composer autoload — a
+*longer* psr-4 prefix than openregister's own — a stale copy in **any** app's
+vendor directory defined that contract for the whole instance. Measured:
+softwarecatalog's vendor was supplying openregister's interface.
+
+> ✅ **That mechanism is gone.** The prefix was removed from the package
+> (ConductionNL/.github#531); the contracts still ship, but a consumer now opts
+> in from its own test bootstrap behind `interface_exists()`, which is
+> order-independent. Four apps needed the opt-in — buildiq, decidiq, filinq and
+> stackiq. The others either ship their own contract stubs (dossiq, pipelinq,
+> shillinq), own the real one (openregister), or never reference it.
+
+Separately,
 nc-vue's AI-companion singleton landed in 2.7.0, so every app below it rendered
 a **second** companion hex beside hermiq's on every page. Both fixes had existed
 upstream for weeks.
