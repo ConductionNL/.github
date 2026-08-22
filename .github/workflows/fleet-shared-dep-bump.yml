@@ -429,15 +429,55 @@ jobs:
               "" \
               "Opened by fleet-shared-dep-bump.yml in ConductionNL/.github." > /tmp/body.md
 
-            URL=$(gh pr create --repo "ConductionNL/${app}" --base development --head "${BRANCH}" \
-                    --title "chore(deps): refresh the shared Conduction locks" \
-                    --body-file /tmp/body.md 2>/dev/null | tail -1)
-            row "${app} | ${CB} -> ${CA} | ${NB} -> ${NA} | ${URL:-PR opened}"
+            # CREATING THE PR IS RATE-LIMITED, AND SILENCE MADE THAT UNDIAGNOSABLE.
+            #
+            # GitHub answers a burst of createPullRequest with
+            #   GraphQL: was submitted too quickly (createPullRequest)
+            # and a sweep over 21 repos is exactly such a burst. MEASURED
+            # 2026-08-22: the run pushed buildiq's branch, the PR call failed, and
+            # the step ended with `Process completed with exit code 1` and NOTHING
+            # else — because `2>/dev/null` here discarded the only line that said
+            # why. A workflow that hides the error it fails on costs more than the
+            # error does.
+            #
+            # So: keep stderr, retry the rate limit rather than losing the whole
+            # sweep to it, and — the part that matters most — NEVER claim success
+            # without a URL. This line used to render `${URL:-PR opened}`, so a
+            # failed create was reported to the summary as "PR opened".
+            URL=""
+            PR_ERR=""
+            for attempt in 1 2 3 4 5; do
+              if PR_OUT=$(gh pr create --repo "ConductionNL/${app}" --base development --head "${BRANCH}" \
+                            --title "chore(deps): refresh the shared Conduction locks" \
+                            --body-file /tmp/body.md 2>&1); then
+                URL=$(printf '%s\n' "${PR_OUT}" | grep -oE 'https://github\.com/[^[:space:]]+/pull/[0-9]+' | tail -1)
+                [ -n "${URL}" ] && break
+              fi
+              PR_ERR=$(printf '%s\n' "${PR_OUT}" | tail -1)
+              case "${PR_ERR}" in
+                *already*exists*)
+                  URL=$(gh pr list --repo "ConductionNL/${app}" --state open --head "${BRANCH}" \
+                          --json url -q '.[0].url' 2>/dev/null)
+                  break
+                  ;;
+              esac
+              sleep $((attempt * 20))
+            done
+
+            if [ -n "${URL}" ]; then
+              row "${app} | ${CB} -> ${CA} | ${NB} -> ${NA} | ${URL}"
+            else
+              # The branch IS pushed at this point, so the work is not lost — but
+              # saying "PR opened" here would be a lie the summary carries forward.
+              echo "::error::${app}: branch ${BRANCH} pushed, but the PR could not be created after 5 attempts: ${PR_ERR}"
+              row "${app} | ${CB} -> ${CA} | ${NB} -> ${NA} | PUSHED but PR FAILED - open one from ${BRANCH}: ${PR_ERR}"
+              FAILED=1
+            fi
             cd - >/dev/null || true
           done
 
           echo "" >> "$SUMMARY"
           if [ "${FAILED}" -eq 1 ]; then
-            echo "::error::At least one app could not be pushed. See the table - the usual cause is FLEET_DISPATCH_TOKEN lacking 'contents: write' on the app repos."
+            echo "::error::At least one app did not get a PR. Read the table: a 'push refused' row means FLEET_DISPATCH_TOKEN lacks 'contents: write' on that repo; a 'PUSHED but PR FAILED' row means the branch is there and only the pull request is missing, most often GitHub rate-limiting createPullRequest across a 21-repo burst. The second kind is recoverable by opening the PR from the named branch - no work is lost."
             exit 1
           fi
