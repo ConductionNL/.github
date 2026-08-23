@@ -18,6 +18,26 @@ on:
         required: false
         type: string
         default: "22"
+      docs-hosts:
+        description: >-
+          Comma-separated hostnames this documentation site is served on, e.g.
+          "openbuild.conduction.nl,buildiq.conduction.nl". Declared EXPLICITLY
+          rather than derived, and listed in FULL, because the deploy below
+          reconciles the worker's triggers: a hostname left out of this list is
+          REMOVED from the worker, which takes that site down. Defaults to
+          `cname` alone, which is correct for a site served on one host.
+        required: false
+        type: string
+        default: ""
+      worker-name:
+        description: >-
+          Cloudflare Worker that serves this site. Defaults to the first label
+          of `cname` plus "-docs" (openbuild.conduction.nl -> openbuild-docs),
+          which is how every fleet docs worker is named. Set it when yours is
+          not.
+        required: false
+        type: string
+        default: ""
       build-image:
         description: >-
           Build and push a self-contained Apache image of the built site to
@@ -130,10 +150,111 @@ jobs:
           allow_empty_commit: true
           keep_files: false
 
-      - name: Verify deployment
+      # ─────────────────────────────────────────────────────────────────────
+      # THE STEP ABOVE DOES NOT PUBLISH THIS SITE, AND FOR THREE MONTHS THAT
+      # WENT UNNOTICED BECAUSE THE ONE BELOW IT SAID "Deployment completed".
+      #
+      # Every fleet docs host is served by a CLOUDFLARE WORKER — the DNS record
+      # for openbuild.conduction.nl is a proxied record bound to the
+      # `openbuild-docs` worker as a custom domain, not a GitHub Pages record.
+      # gh-pages is written on every push and nothing reads it.
+      #
+      # MEASURED 2026-08-23, last worker deployment per site:
+      #   openbuild-docs        2026-06-26     procest-docs   2026-06-06
+      #   hrmq-docs             2026-06-03     scholiq-docs   2026-05-30
+      #   softwarecatalog-docs  2026-05-30
+      #
+      # Meanwhile the sources moved on: buildiq's docs landing page has said
+      # `appId="buildiq"` since the app-id rename merged, and
+      # buildiq.conduction.nl still renders "OpenBuild" with a broken glyph,
+      # because the bytes on the edge are from June.
+      #
+      # ConductionNL/.github fixed exactly this for its own docs.conduction.nl
+      # in deploy-docs.yml, and the fix was never carried into the reusable
+      # workflow the other seventeen repos call.
+      #
+      # ROUTES ARE DECLARED IN FULL, ON PURPOSE. wrangler reconciles a worker's
+      # triggers against the config it is given: a hostname absent from
+      # `routes` is REMOVED, and `workers_dev` absent from the file is DISABLED
+      # (observed — it silently took openbuild-docs.workers.dev from 200 to 404
+      # while reporting success). So both flags are set explicitly and every
+      # host this site answers on must appear in `docs-hosts`.
+      - name: Publish to the Cloudflare Worker that serves this site
+        if: env.CF_API_TOKEN != ''
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          SOURCE_FOLDER: ${{ inputs.source-folder }}
+          CNAME: ${{ inputs.cname }}
+          DOCS_HOSTS: ${{ inputs.docs-hosts }}
+          WORKER_NAME: ${{ inputs.worker-name }}
         run: |
-          git fetch origin gh-pages
-          echo "Deployment completed. Latest commit: $(git rev-parse origin/gh-pages)"
+          set -euo pipefail
+
+          WORKER="${WORKER_NAME:-${CNAME%%.*}-docs}"
+          HOSTS="${DOCS_HOSTS:-$CNAME}"
+
+          cd "$SOURCE_FOLDER"
+          rm -rf build/.git
+
+          {
+            echo "name = \"${WORKER}\""
+            echo "compatibility_date = \"2026-05-30\""
+            echo "workers_dev = true"
+            echo "preview_urls = true"
+            echo ""
+            echo "[assets]"
+            echo "directory = \"./build\""
+            echo ""
+            echo "routes = ["
+            IFS=,
+            for h in $HOSTS; do
+              h="$(echo "$h" | tr -d '[:space:]')"
+              [ -n "$h" ] || continue
+              echo "  { pattern = \"${h}\", custom_domain = true },"
+            done
+            echo "]"
+          } > wrangler.toml
+
+          echo "── publishing ${WORKER} for: ${HOSTS}"
+          cat wrangler.toml
+          npx -y wrangler@4 deploy
+
+      - name: Warn when Cloudflare credentials are absent
+        if: env.CF_API_TOKEN == ''
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        run: |
+          echo "::warning title=Docs published to gh-pages only::CF_API_TOKEN is not set, so the Cloudflare Worker that actually serves ${{ inputs.cname }} was NOT updated. gh-pages now holds the new build and nothing reads it — the live site is unchanged. This is the failure mode that left every fleet docs site on a May/June build."
+
+      - name: Verify the LIVE site serves this build
+        # gh-pages having moved is not evidence the site did. This fetches the
+        # public host and compares it against the build that was just made, so
+        # "deployed" means the bytes are being served rather than written.
+        run: |
+          set -uo pipefail
+          BUILD_INDEX="${{ inputs.source-folder }}/build/index.html"
+          HOST="${{ inputs.cname }}"
+
+          git fetch origin gh-pages --quiet || true
+          echo "gh-pages now at: $(git rev-parse origin/gh-pages 2>/dev/null || echo unknown)"
+
+          for attempt in 1 2 3 4 5 6; do
+            sleep 10
+            LIVE="$(curl -sSL --max-time 30 "https://${HOST}/" || true)"
+            if [ -n "$LIVE" ] && [ "$(printf '%s' "$LIVE" | wc -c)" -gt 200 ]; then
+              LIVE_TITLE="$(printf '%s' "$LIVE"  | grep -o '<title[^>]*>[^<]*' | head -1 || true)"
+              BUILT_TITLE="$(grep -o '<title[^>]*>[^<]*' "$BUILD_INDEX" | head -1 || true)"
+              echo "attempt ${attempt}: live=${LIVE_TITLE:-none} built=${BUILT_TITLE:-none}"
+              if [ -n "$BUILT_TITLE" ] && [ "$LIVE_TITLE" = "$BUILT_TITLE" ]; then
+                echo "The live site serves this build."
+                exit 0
+              fi
+            fi
+          done
+
+          echo "::warning title=Live site not confirmed::${HOST} did not match the freshly built <title> within 60s. Cloudflare caching can explain a short delay; a persistent mismatch means the host is served by something other than the worker this workflow publishes."
 
   image:
     name: Build fallback site image
