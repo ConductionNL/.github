@@ -127,10 +127,20 @@ services:
       - ../nldesign:/var/www/html/custom_apps/nldesign
       - ../launchpad:/var/www/html/custom_apps/launchpad
       - ../docudesk:/var/www/html/custom_apps/docudesk
-      - ../procest:/var/www/html/custom_apps/procest
+      # Renamed app: Nextcloud resolves an app by its DIRECTORY name, so the
+      # mount destination has to follow the <id> in appinfo/info.xml. Until it
+      # does, the app is unreachable in BOTH spellings — /apps/procest 500s and
+      # /apps/dossiq 404s (measured). The checkout path stays until the repo
+      # directory itself is renamed.
+      - ../procest:/var/www/html/custom_apps/dossiq
       - ../pipelinq:/var/www/html/custom_apps/pipelinq
       - ../zaakafhandelapp:/var/www/html/custom_apps/zaakafhandelapp
-      - ../larpingapp:/var/www/html/custom_apps/larpingapp
+      # Renamed app: Nextcloud resolves an app by its DIRECTORY name, so the
+      # mount destination has to follow the <id> in appinfo/info.xml. Until it
+      # does, the app is unreachable in BOTH spellings — /apps/larpingapp 500s and
+      # /apps/larpinq 404s (measured). The checkout path stays until the repo
+      # directory itself is renamed.
+      - ../larpingapp:/var/www/html/custom_apps/larpinq
       # The app was renamed scholiq -> learniq. Nextcloud requires the app
       # DIRECTORY name to equal the <id> in appinfo/info.xml, so the mount
       # destination moves; the checkout path stays until the repo is renamed.
@@ -159,7 +169,12 @@ services:
       # planix had no mount at all, so nothing about it could ever be verified
       # against this instance. Mounting it does not enable it — run
       # `occ app:enable planix` once after the next recreate.
-      - ../planix:/var/www/html/custom_apps/planix
+      # Renamed app: Nextcloud resolves an app by its DIRECTORY name, so the
+      # mount destination has to follow the <id> in appinfo/info.xml. Until it
+      # does, the app is unreachable in BOTH spellings — /apps/planix 500s and
+      # /apps/planninq 404s (measured). The checkout path stays until the repo
+      # directory itself is renamed.
+      - ../planix:/var/www/html/custom_apps/planninq
       # Pre-installed apps — mounted INDIVIDUALLY, not via a single recursive base
       # mount. The old `../openregister/custom_apps:/var/www/html/custom_apps`
       # mount overlapped the 16 child mounts above and, on Docker Desktop/WSL2,
@@ -183,11 +198,21 @@ services:
       # marker file written into ../openconnector that the container could not
       # see — every OpenConnector edit made in the checkout was invisible to this
       # instance, so any "verified live" claim about it was verifying old code.
-      - ../doriath:/var/www/html/custom_apps/doriath
+      # Renamed app: Nextcloud resolves an app by its DIRECTORY name, so the
+      # mount destination has to follow the <id> in appinfo/info.xml. Until it
+      # does, the app is unreachable in BOTH spellings — /apps/doriath 500s and
+      # /apps/keepiq 404s (measured). The checkout path stays until the repo
+      # directory itself is renamed.
+      - ../doriath:/var/www/html/custom_apps/keepiq
       - ../openregister/custom_apps/forms:/var/www/html/custom_apps/forms
       - ../openregister/custom_apps/mail:/var/www/html/custom_apps/mail
       - ../openregister/custom_apps/maps:/var/www/html/custom_apps/maps
-      - ../openconnector:/var/www/html/custom_apps/openconnector
+      # The app id became `integriq` (#1533) and Nextcloud requires the app
+      # DIRECTORY to match the id. The host path stays `../openconnector`
+      # because it is a git submodule of apps-extra — renaming it would mean
+      # rewriting .gitmodules and the submodule wiring for a container-side
+      # requirement. Only the mount destination moves.
+      - ../openconnector:/var/www/html/custom_apps/integriq
       - ../openregister/custom_apps/polls:/var/www/html/custom_apps/polls
       - ../portaliq:/var/www/html/custom_apps/portaliq
       - ../openregister/custom_apps/spreed:/var/www/html/custom_apps/spreed
@@ -356,10 +381,20 @@ services:
       - ../nldesign:/var/www/html/custom_apps/nldesign
       - ../launchpad:/var/www/html/custom_apps/launchpad
       - ../docudesk:/var/www/html/custom_apps/docudesk
-      - ../procest:/var/www/html/custom_apps/procest
+      # Renamed app: Nextcloud resolves an app by its DIRECTORY name, so the
+      # mount destination has to follow the <id> in appinfo/info.xml. Until it
+      # does, the app is unreachable in BOTH spellings — /apps/procest 500s and
+      # /apps/dossiq 404s (measured). The checkout path stays until the repo
+      # directory itself is renamed.
+      - ../procest:/var/www/html/custom_apps/dossiq
       - ../pipelinq:/var/www/html/custom_apps/pipelinq
       - ../zaakafhandelapp:/var/www/html/custom_apps/zaakafhandelapp
-      - ../larpingapp:/var/www/html/custom_apps/larpingapp
+      # Renamed app: Nextcloud resolves an app by its DIRECTORY name, so the
+      # mount destination has to follow the <id> in appinfo/info.xml. Until it
+      # does, the app is unreachable in BOTH spellings — /apps/larpingapp 500s and
+      # /apps/larpinq 404s (measured). The checkout path stays until the repo
+      # directory itself is renamed.
+      - ../larpingapp:/var/www/html/custom_apps/larpinq
       # The app was renamed scholiq -> learniq. Nextcloud requires the app
       # DIRECTORY name to equal the <id> in appinfo/info.xml, so the mount
       # destination moves; the checkout path stays until the repo is renamed.
@@ -392,11 +427,21 @@ services:
       # marker file written into ../openconnector that the container could not
       # see — every OpenConnector edit made in the checkout was invisible to this
       # instance, so any "verified live" claim about it was verifying old code.
-      - ../doriath:/var/www/html/custom_apps/doriath
+      # Renamed app: Nextcloud resolves an app by its DIRECTORY name, so the
+      # mount destination has to follow the <id> in appinfo/info.xml. Until it
+      # does, the app is unreachable in BOTH spellings — /apps/doriath 500s and
+      # /apps/keepiq 404s (measured). The checkout path stays until the repo
+      # directory itself is renamed.
+      - ../doriath:/var/www/html/custom_apps/keepiq
       - ../openregister/custom_apps/forms:/var/www/html/custom_apps/forms
       - ../openregister/custom_apps/mail:/var/www/html/custom_apps/mail
       - ../openregister/custom_apps/maps:/var/www/html/custom_apps/maps
-      - ../openconnector:/var/www/html/custom_apps/openconnector
+      # The app id became `integriq` (#1533) and Nextcloud requires the app
+      # DIRECTORY to match the id. The host path stays `../openconnector`
+      # because it is a git submodule of apps-extra — renaming it would mean
+      # rewriting .gitmodules and the submodule wiring for a container-side
+      # requirement. Only the mount destination moves.
+      - ../openconnector:/var/www/html/custom_apps/integriq
       - ../openregister/custom_apps/polls:/var/www/html/custom_apps/polls
       - ../portaliq:/var/www/html/custom_apps/portaliq
       - ../openregister/custom_apps/spreed:/var/www/html/custom_apps/spreed
