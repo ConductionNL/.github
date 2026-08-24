@@ -69,10 +69,33 @@ on:
       # CF_API_TOKEN being non-empty and warns loudly when it is not, rather
       # than failing a run over a site that may not be Worker-served at all.
       #
-      # The fleet's org secrets are CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID,
-      # so callers map those names onto these. Keeping the callee's names stable
-      # means a consumer whose credentials live under yet another name only
-      # edits its own mapping.
+      # THE FLEET'S ORG SECRETS ARE `CF_API_TOKEN` AND `CF_ACCOUNT_ID` — the
+      # SAME names this workflow reads. A caller therefore maps them onto
+      # themselves:
+      #
+      #     secrets:
+      #       CF_API_TOKEN:  ${{ secrets.CF_API_TOKEN }}
+      #       CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+      #
+      # This comment previously said the org names were `CLOUDFLARE_*`. That was
+      # never true, and because this is the file consumers read to learn how to
+      # call the workflow, ALL TWELVE fleet callers copied it — mapping from
+      # `secrets.CLOUDFLARE_API_TOKEN`, which does not exist anywhere.
+      #
+      # Mapping from a non-existent secret is NOT an error. It yields an empty
+      # string, the publish step's `if: env.CF_API_TOKEN != ''` guard skips, and
+      # the run goes green having changed nothing. Measured 2026-08-24 on
+      # planninq run 32760529026, after the mapping had merged: publish SKIPPED,
+      # `CF_API_TOKEN:` empty in the log, site still serving its pre-rename
+      # build. A wrong name in a comment cost twelve sites months of staleness.
+      #
+      # `conduction-website/.github/workflows/deploy.yml` records the same
+      # discovery independently ("asked for CLOUDFLARE_API_TOKEN, which is not a
+      # secret anywhere"), and `deploy-docs.yml` in this repo reads `CF_*`
+      # directly. Three files now agree.
+      #
+      # A consumer whose credentials genuinely live under another name maps that
+      # name onto these — that is what the mapping is for.
       CF_API_TOKEN:
         description: >-
           Cloudflare API token with Workers Scripts:Edit on the account that
@@ -272,6 +295,11 @@ jobs:
         # gh-pages having moved is not evidence the site did. This fetches the
         # public host and compares it against the build that was just made, so
         # "deployed" means the bytes are being served rather than written.
+        env:
+          # Needed to tell "nothing was published" apart from "published, edge
+          # not warm yet" below. `set -u` is on, so this must be declared here
+          # rather than assumed present from the publish step's own env.
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
         run: |
           set -uo pipefail
           BUILD_INDEX="${{ inputs.source-folder }}/build/index.html"
@@ -294,7 +322,28 @@ jobs:
             fi
           done
 
-          echo "::warning title=Live site not confirmed::${HOST} did not match the freshly built <title> within 60s. Cloudflare caching can explain a short delay; a persistent mismatch means the host is served by something other than the worker this workflow publishes."
+          # A MISMATCH IS A FAILURE WHEN WE KNOW WHY, AND A WARNING WHEN WE DO
+          # NOT.
+          #
+          # This step used to warn in every case, and on 2026-08-24 that made it
+          # useless in exactly the situation it was written for: eleven sites
+          # served their pre-rename build, this step FOUND the mismatch, emitted
+          # a warning, and the job went green. A check that detects the failure
+          # it exists for and then passes is not a check.
+          #
+          # The discriminator is whether the Worker publish actually ran. If it
+          # was SKIPPED — no credentials — then nothing was published and the
+          # mismatch is not a caching artefact, it is the deployment having gone
+          # nowhere. That is certain, so it fails.
+          #
+          # If the publish DID run and the host still disagrees within 60s, that
+          # can legitimately be Cloudflare edge caching, so it stays a warning
+          # rather than failing a run over propagation delay.
+          if [ -z "${CF_API_TOKEN}" ]; then
+            echo "::error title=Docs did not reach the live site::${HOST} still serves a different build, and the Cloudflare Worker publish was SKIPPED because CF_API_TOKEN is empty. gh-pages was updated and nothing reads it. This is not a caching delay — nothing was published. Check that the caller maps CF_API_TOKEN/CF_ACCOUNT_ID from secrets that EXIST (mapping from a missing secret yields an empty string silently)."
+            exit 1
+          fi
+          echo "::warning title=Live site not confirmed::${HOST} did not match the freshly built <title> within 60s, though the Worker publish did run. Cloudflare caching can explain a short delay; a persistent mismatch means the host is served by something other than the worker this workflow publishes."
 
   image:
     name: Build fallback site image
