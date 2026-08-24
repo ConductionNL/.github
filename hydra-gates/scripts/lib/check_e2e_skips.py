@@ -165,8 +165,20 @@ def _load_report(report_dir: Path) -> zipfile.ZipFile:
 	raise SystemExit(2)
 
 
+# Playwright records a run-time exclusion under two annotation types, and both
+# stop a test from running: `skip` and `fixme`. Reading only `skip` reported 45
+# fleet-wide fixme-only tests as "no reason recorded", 2 of which carried a
+# perfectly good one — dossiq's `BUG #427: Cases "Add" opens the generic empty
+# CnFormDialog …` and filinq's `blocked by #339 …`. A gate that cries wolf on
+# the honestly-marked cases is a gate people learn to scroll past.
+EXCLUSION_TYPES = ("skip", "fixme")
+
+
 def _skip_reason(test: dict) -> str:
-	"""Return the skip reason recorded for a test, or the empty string.
+	"""Return the exclusion reason recorded for a test, or the empty string.
+
+	Accepts both annotation types: a `fixme` is as much a test that did not run
+	as a `skip` is, and it carries its reason in the same field.
 
 	:param test: One test entry from the report.
 	:return:     The reason text, stripped; empty when none was recorded.
@@ -175,7 +187,7 @@ def _skip_reason(test: dict) -> str:
 	for result in test.get("results") or []:
 		sources.extend(result.get("annotations") or [])
 	for annotation in sources:
-		if annotation.get("type") != "skip":
+		if annotation.get("type") not in EXCLUSION_TYPES:
 			continue
 		description = (annotation.get("description") or "").strip()
 		if description:
@@ -193,7 +205,7 @@ def _skip_location(test: dict) -> str:
 	for result in test.get("results") or []:
 		sources.extend(result.get("annotations") or [])
 	for annotation in sources:
-		if annotation.get("type") != "skip":
+		if annotation.get("type") not in EXCLUSION_TYPES:
 			continue
 		loc = annotation.get("location") or {}
 		if loc.get("file"):
@@ -321,7 +333,7 @@ def main() -> int:
 	lines.append("")
 	lines.append(f"  V1 spec files executing ZERO tests : {len(zero_test)}")
 	lines.append(f"  V2 skips deferring to a deploy state CI decides : {len(impossible)}")
-	lines.append(f"  V3 skips with no reason recorded : {len(no_reason)}")
+	lines.append(f"  V3 skips/fixmes with no reason recorded : {len(no_reason)}")
 	lines.append(f"  -- allowed (named a real absence) : {allowed}")
 
 	if zero_test:
@@ -344,8 +356,8 @@ def main() -> int:
 
 	if no_reason:
 		lines.append("")
-		lines.append("V3 — a skip is a run-time exclusion; gate-16 and gate-19 both")
-		lines.append("     require exclusions to carry a reason. These carry none:")
+		lines.append("V3 — a skip or fixme is a run-time exclusion; gate-16 and gate-19")
+		lines.append("     both require exclusions to carry a reason. These carry none:")
 		shown: dict[str, int] = {}
 		for name, _skip in no_reason:
 			shown[name] = shown.get(name, 0) + 1
