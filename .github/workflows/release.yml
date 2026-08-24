@@ -437,6 +437,74 @@ jobs:
           echo "bump_sha=${BUMP_SHA}" >> "$GITHUB_OUTPUT"
           echo "bump_branch=${BUMP_BRANCH}" >> "$GITHUB_OUTPUT"
 
+      # THE BUMP PULL REQUEST MERGES WITHOUT A QUALITY GATE, SO BOUND WHAT IT
+      # IS ALLOWED TO CONTAIN.
+      #
+      # A pull request opened with GITHUB_TOKEN does not trigger any workflow —
+      # GitHub's anti-recursion rule — so `Code Quality` and `Merge Hygiene`
+      # never run on it. Measured 2026-08-24: openregister#2817 merged with 4
+      # check-runs, all CodeQL, where neighbouring pull requests had 45. Roughly
+      # 15 such pull requests were merged across the fleet that day.
+      #
+      # We cannot cheaply give it real CI (quality.yml has no `ref` input, so
+      # calling it from here would check out the integration branch and report a
+      # green describing a DIFFERENT commit — the precise failure this guard
+      # exists to prevent). What we CAN do is make the unverified content small
+      # enough that not verifying it is defensible: the bump step stages only
+      # appinfo/info.xml and, where present, openapi.json.
+      #
+      # Two checks, deliberately different in severity:
+      #
+      #   1. The commit THIS RUN created is a hard failure if it strays outside
+      #      the allow-list. That commit is entirely under our control and has no
+      #      legitimate reason to contain anything else.
+      #
+      #   2. The pull request's full diff against the base is a WARNING only.
+      #      The reuse path above adopts a pre-existing release/vX branch whose
+      #      contents this run did not author, and the base may have drifted.
+      #      Failing here would abort the workflow AFTER the tag is cut and the
+      #      package published, turning a reporting gap into a broken release —
+      #      strictly worse than the gap. Annotate loudly and let a human judge.
+      - name: The bump commit may only touch version files
+        if: steps.bump.outputs.bump_sha != ''
+        env:
+          BUMP_SHA: ${{ steps.bump.outputs.bump_sha }}
+          BASE_REF: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          # `git commit` without -a stages nothing on its own, so this is the
+          # exact set the bump step chose to add.
+          ALLOWED='^(appinfo/info\.xml|openapi\.json)$'
+
+          if ! git cat-file -e "${BUMP_SHA}^{commit}" 2>/dev/null; then
+            echo "::notice::${BUMP_SHA} is not present locally (pre-existing branch reused) — skipping the commit check."
+          else
+            CHANGED="$(git diff --name-only "${BUMP_SHA}^" "${BUMP_SHA}")"
+            echo "Files in the bump commit:"
+            echo "${CHANGED}" | sed 's/^/  /'
+            STRAY="$(echo "${CHANGED}" | grep -vE "${ALLOWED}" || true)"
+            if [ -n "${STRAY}" ]; then
+              echo "::error::The version-bump commit touches files outside the version allow-list."
+              echo "::error::This pull request merges WITHOUT a quality gate, so it may only carry version metadata."
+              echo "${STRAY}" | sed 's/^/  unexpected: /'
+              exit 1
+            fi
+            echo "Bump commit is version-only."
+          fi
+
+          # Widen to what will actually be merged. Fetch the base explicitly:
+          # the checkout is shallow and origin/<base> may not be present.
+          git fetch --no-tags --depth=50 origin "${BASE_REF}" >/dev/null 2>&1 || true
+          if git rev-parse --verify -q FETCH_HEAD >/dev/null; then
+            FULL="$(git diff --name-only FETCH_HEAD..."${BUMP_SHA}" 2>/dev/null || true)"
+            EXTRA="$(echo "${FULL}" | grep -vE "${ALLOWED}" | grep -v '^$' || true)"
+            if [ -n "${EXTRA}" ]; then
+              echo "::warning::The bump pull request carries more than version metadata, and nothing will run CI on it."
+              echo "${EXTRA}" | sed 's/^/  also changed: /'
+            fi
+          fi
+
       # THE TAG STILL NAMES A TREE WHOSE info.xml MATCHES IT.
       #
       # That requirement is not ours — Nextcloud's release template asserts it:
