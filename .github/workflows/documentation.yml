@@ -55,6 +55,35 @@ on:
         required: false
         type: boolean
         default: true
+    secrets:
+      # DECLARED, so callers can map them EXPLICITLY. A reusable workflow
+      # receives no secrets by default; the only two ways in are
+      # `secrets: inherit`, which hands over EVERY secret the caller holds, or
+      # an explicit mapping — and an explicit mapping only compiles for secrets
+      # named here. Without this block the sole option was `inherit`, which on
+      # these repos would have passed NEXTCLOUD_SIGNING_KEY, DEPLOY_KEY and the
+      # appstore token to a workflow that needs none of them.
+      #
+      # Both are optional on purpose. A consumer with no Cloudflare credentials
+      # still builds and still deploys to gh-pages; the publish step guards on
+      # CF_API_TOKEN being non-empty and warns loudly when it is not, rather
+      # than failing a run over a site that may not be Worker-served at all.
+      #
+      # The fleet's org secrets are CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID,
+      # so callers map those names onto these. Keeping the callee's names stable
+      # means a consumer whose credentials live under yet another name only
+      # edits its own mapping.
+      CF_API_TOKEN:
+        description: >-
+          Cloudflare API token with Workers Scripts:Edit on the account that
+          owns this site's worker. When absent, the Worker publish is skipped
+          and the run warns that the live site is unchanged.
+        required: false
+      CF_ACCOUNT_ID:
+        description: >-
+          Cloudflare account id that owns the worker. Required alongside
+          CF_API_TOKEN; wrangler cannot resolve the target account without it.
+        required: false
 
 # Two jobs so the AI-baseline validation gate runs on every event,
 # including pull_request, while the actual gh-pages deploy stays
