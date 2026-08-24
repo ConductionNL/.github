@@ -39,7 +39,10 @@ no() { echo "  FAIL  $1"; [ -n "${2:-}" ] && printf '        %s\n' "$2"; fail=$(
 # Build a Playwright HTML report whose embedded result blob contains exactly the
 # tests described by <json-spec>, which is a JSON list of
 #   {"file": "a.spec.ts", "title": "...", "outcome": "expected"|"skipped",
-#    "reason": "..."}
+#    "reason": "...", "kind": "skip"|"fixme"}
+# `kind` defaults to "skip". Playwright records a run-time exclusion under BOTH
+# types and both stop a test running, so the checker must read both — see the
+# fixme cases at the end of this file.
 # The real reporter embeds a zip as a data: URI inside a <script> tag; this
 # reproduces that shape rather than a hand-rolled one, so the parser under test
 # is exercised through the same path it takes in CI.
@@ -74,7 +77,7 @@ with zipfile.ZipFile(buf, "w") as z:
             }
             if t["outcome"] == "skipped" and t.get("reason") is not None:
                 test["annotations"].append({
-                    "type": "skip",
+                    "type": t.get("kind", "skip"),
                     "description": t["reason"],
                     "location": {"file": f"/repo/tests/e2e/{name}", "line": 99, "column": 4},
                 })
@@ -194,6 +197,31 @@ synth "$WORK/prec" '[
    "reason":"the Talk app is not installed on this instance"}
 ]'
 expect "a real absence outranks a deploy-state phrase" "$WORK/prec" 0 0 "allowed (named a real absence) : 1"
+
+
+# --- `fixme` is an exclusion too --------------------------------------------
+# Reading only `skip` reported 45 fleet-wide fixme-only tests as "no reason",
+# 2 of which carried a good one (dossiq "BUG #427: …", filinq "blocked by
+# #339 …"). Both directions are pinned here so that regression cannot return.
+synth "$WORK/fixme_reason" '[
+  {"file":"a.spec.ts","title":"one","outcome":"expected"},
+  {"file":"a.spec.ts","title":"two","outcome":"skipped","kind":"fixme",
+   "reason":"BUG #427: Add opens the generic empty dialog"}
+]'
+expect "a fixme carrying a reason is not a no-reason finding" "$WORK/fixme_reason" 0 0 "allowed (named a real absence) : 1"
+
+synth "$WORK/fixme_bare" '[
+  {"file":"a.spec.ts","title":"one","outcome":"expected"},
+  {"file":"a.spec.ts","title":"two","outcome":"skipped","kind":"fixme","reason":null}
+]'
+expect "a fixme with no reason is still a finding" "$WORK/fixme_bare" 0 1 "no reason recorded : 1"
+
+synth "$WORK/fixme_deploy" '[
+  {"file":"a.spec.ts","title":"one","outcome":"expected"},
+  {"file":"a.spec.ts","title":"two","outcome":"skipped","kind":"fixme",
+   "reason":"Members tab not deployed on this instance"}
+]'
+expect "a fixme deferring to a deploy state is a finding" "$WORK/fixme_deploy" 0 1 "deploy state CI decides : 1"
 
 # --- a missing measurement is NOT a pass -----------------------------------
 mkdir -p "$WORK/empty"
