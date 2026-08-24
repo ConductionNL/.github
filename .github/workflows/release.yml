@@ -470,6 +470,32 @@ jobs:
           ${{ github.ref_name }} requires one; a direct push is rejected with GH013
           and takes the release down with it."
 
+          # CLOSE THE LOOP. Opening the pull request is not the same as landing
+          # the bump, and until 2026-08-24 nothing did the second half: every
+          # release added one more open PR and none were ever merged. The
+          # backlog reached 230 across 17 repos — 25 on openregister, 26 on
+          # shillinq — and each one held the branch one version behind the tag
+          # that had already been published from it.
+          #
+          # Auto-merge rather than a direct merge, because neither alternative
+          # works here:
+          #   --admin  needs admin rights to bypass branch protection, and
+          #            github.token is not an admin;
+          #   plain    merge is refused while the required check is pending.
+          # --auto queues the merge and GitHub performs it when the required
+          # check passes, with no human in the loop and nothing left open.
+          #
+          # `allow_auto_merge` must be true on the repository or this errors —
+          # it was false fleet-wide until 2026-08-24 and is now enabled on all
+          # 17 core apps. A failure here must not fail the release: the tag and
+          # the package are already published by this point, so the bump PR
+          # staying open is a backlog item, not a broken release.
+          gh pr merge "$BR" \
+            --repo "${{ github.repository }}" \
+            --squash \
+            --auto \
+            || echo "::warning::Could not set auto-merge on the version-bump PR for $BR — it stays open and ${{ github.ref_name }} remains one version behind the tag. Check that allow_auto_merge is enabled on this repository."
+
       - name: Copy files into package directory
         run: |
           mkdir -p package/${{ inputs.app-name }}
