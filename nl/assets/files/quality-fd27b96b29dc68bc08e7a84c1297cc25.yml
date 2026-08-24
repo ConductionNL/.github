@@ -402,6 +402,11 @@ on:
         required: false
         type: string
         default: "[]"
+      e2e-skip-blocking:
+        description: "Make the E2E skip-discipline check a hard failure for this app. It reads the RUN's Playwright report — the only place a runtime `test.skip(cond, reason)` is visible — and reports three things: a spec file that executed ZERO tests, a skip deferring to a deploy state CI itself decides ('not deployed', 'deploy drift', 'predates'), and a skip carrying no reason. A skip naming a genuinely absent optional app or external service is allowed. Default false because eight apps carry findings today (measured 2026-08-24: 298/3210 tests skipped fleet-wide, 27 zero-test spec files) and a gate that turns them all red at once is a gate nobody can turn on — same reasoning as check-code-blocking. Flip it per app once that app is worked down; it can then only stay clean."
+        required: false
+        type: boolean
+        default: false
       enable-coverage-guard:
         description: "Enforce the coverage ratchet — READ-ONLY, never commits. On a PULL REQUEST the merge base is measured in the phpunit job and the change must not reduce coverage against it; the floor is measured, not typed, so it cannot go stale and there is nothing for an author to keep up to date. On a PUSH the committed .coverage-baseline is enforced as a conservative fail-safe floor (below it fails; above it is fine). PRs may raise that floor but never lower it. Requires scripts/coverage-guard.php supporting --against; the workflow probes for it and fails loudly rather than silently downgrading the check."
         required: false
@@ -1056,10 +1061,40 @@ jobs:
         if: steps.detect.outputs.run == 'true'
         run: |
           set -euo pipefail
-          curl -sSfL -o info.xsd \
-            https://raw.githubusercontent.com/nextcloud/appstore/master/nextcloudappstore/api/v1/release/info.xsd
+          # RETRIED, for the same reason the apt install above is, and it took a
+          # red app to notice the asymmetry: this step fetched over the network
+          # exactly once. Measured on learniq run 32693697354 (2026-08-24),
+          # which failed the whole `info.xml lint` job — and therefore the app —
+          # on:
+          #
+          #     curl: (35) Recv failure: Connection reset by peer
+          #
+          # The commit before it was green and the commit itself touched no
+          # manifest. That is infrastructure wearing an app's name, which is
+          # precisely what the apt step's own error message warns about, and a
+          # single reset from raw.githubusercontent.com should not be able to
+          # turn a fleet app red.
+          #
+          # Bounded so the worst case still fits this job's cap:
+          # 3 x 60s + 2 x 5s = 3.2 min against timeout-minutes: 20.
+          fetched=0
+          for attempt in 1 2 3; do
+            if timeout 60 curl -sSfL --retry 2 --retry-connrefused -o info.xsd \
+              https://raw.githubusercontent.com/nextcloud/appstore/master/nextcloudappstore/api/v1/release/info.xsd; then
+              fetched=1
+              break
+            fi
+            echo "::warning::info.xsd fetch attempt ${attempt}/3 failed; retrying."
+            sleep 5
+          done
+          if [ "${fetched}" -ne 1 ]; then
+            echo "::error::Could not fetch info.xsd after 3 bounded attempts — raw.githubusercontent.com is unreachable. This is infrastructure, not this app's manifest."
+            exit 1
+          fi
           # A 200 that returned an error page is not a schema. Assert the shape
-          # before trusting a validation result produced with it.
+          # before trusting a validation result produced with it. This also
+          # covers the retry's own failure mode: a truncated body from a reset
+          # connection can still exit 0 on a later attempt.
           head -1 info.xsd | grep -q '<?xml' || { echo "::error::The fetched info.xsd is not XML — validating against it would prove nothing."; exit 1; }
           grep -q 'schema' info.xsd || { echo "::error::The fetched info.xsd contains no schema element."; exit 1; }
 
@@ -2686,9 +2721,27 @@ jobs:
               #
               # A verdict that depends on someone else's CDN is not a verdict
               # about this code.
+              #
+              # THE RETRY ALONE IS NOT ENOUGH, and 2026-08-24 proved it: the
+              # same 504 ran for hours rather than seconds, and because all
+              # three attempts asked for `--prefer-dist` they all queued behind
+              # the SAME degraded zipball CDN. Retrying a call to a service that
+              # is down is not resilience, it is the same call three times.
+              #
+              # So the last attempt switches to `--prefer-source`, which clones
+              # from the git remote instead of downloading a zipball. Different
+              # endpoint, different failure mode — it routes around the CDN
+              # rather than waiting for it. It is slower, which is exactly why
+              # it is the fallback and not the default.
               install_ok=""
               for attempt in 1 2 3; do
-                if ( cd "server/apps/$name" && composer install --no-progress --prefer-dist --optimize-autoloader --no-dev ); then
+                if [ "$attempt" -lt 3 ]; then
+                  fetch_mode="--prefer-dist"
+                else
+                  fetch_mode="--prefer-source"
+                  echo "::warning::composer install for sibling app '$name' failed twice on --prefer-dist; final attempt uses --prefer-source to bypass the zipball CDN."
+                fi
+                if ( cd "server/apps/$name" && composer install --no-progress $fetch_mode --optimize-autoloader --no-dev ); then
                   install_ok=1
                   break
                 fi
@@ -4855,6 +4908,70 @@ jobs:
           console.log('Scenario coverage meets the threshold.');
           SPEC_COVERAGE_JS
           node /tmp/spec-coverage.js
+
+      # ── e2e skip discipline: read the REPORT, not the source ───────────────
+      #
+      # Every other e2e check in this file reads `tests/e2e/**` source. gate-19
+      # parses `test.skip(...)` statically and is careful about it. What no
+      # source reader can settle is the form the fleet actually uses:
+      #
+      #     const present = await someLiveQuery(page)
+      #     test.skip(!present, 'Members tab not deployed on this instance')
+      #
+      # At source level that is indistinguishable from a test that runs. Only
+      # the report of an actual run knows. Nothing read the report, so measured
+      # 2026-08-24 across 20 apps' latest GREEN `development` runs: 298 of 3210
+      # tests skipped (9.3%), 27 spec files executing ZERO tests, 61 skips
+      # deferring to a deploy state CI itself decides, and 142 carrying no
+      # reason at all. decidiq 29.8%, dossiq 27.7%, buildiq 26.3%.
+      #
+      # A zero-test spec file is still accepted by gate-19 as the `@e2e` anchor
+      # for an openspec scenario, so a scenario can be "covered" by a file that
+      # never runs.
+      #
+      # `!cancelled()` and not `always()`: a cancelled run has no verdict to
+      # explain, and a capture hung off a cancelled job produces nothing exactly
+      # when you need it. It deliberately runs when the suite PASSED — a green
+      # suite is where skips hide, and running only on failure would reproduce
+      # the blindness this step exists to remove.
+      #
+      # REPORT, NOT FAIL, on day one, exactly as app:check-code above: eight
+      # apps carry findings today, and turning them all red at once makes it a
+      # gate nobody can turn on. `e2e-skip-blocking` flips it per app as that
+      # app is worked down.
+      - name: E2E skip discipline
+        if: ${{ !cancelled() }}
+        continue-on-error: ${{ !inputs.e2e-skip-blocking }}
+        run: |
+          set -euo pipefail
+          GATE=""
+          for candidate in \
+            "server/apps/${{ inputs.app-name }}/vendor/conduction/hydra-gates/scripts/lib/check_e2e_skips.py" \
+            "hydra-gates/scripts/lib/check_e2e_skips.py"; do
+            if [ -f "${candidate}" ]; then GATE="${candidate}"; break; fi
+          done
+          if [ -z "${GATE}" ]; then
+            echo "::warning::check_e2e_skips.py not found (hydra-gates not vendored here yet) — skip discipline NOT measured on this run."
+            exit 0
+          fi
+
+          REPORT=""
+          for candidate in \
+            "server/apps/${{ inputs.app-name }}/playwright-report" \
+            "server/apps/${{ inputs.app-name }}/tests/e2e/playwright-report"; do
+            if [ -f "${candidate}/index.html" ]; then REPORT="${candidate}"; break; fi
+          done
+          if [ -z "${REPORT}" ]; then
+            # An absent report is an absent measurement, never a pass. Said
+            # loudly, because this is the one failure mode that would quietly
+            # turn the whole gate into a no-op.
+            echo "::error::no Playwright HTML report found — skip discipline could not be measured. Ensure the 'html' reporter is configured."
+            exit 1
+          fi
+
+          MODE=report
+          if [ "${{ inputs.e2e-skip-blocking }}" = "true" ]; then MODE=enforce; fi
+          python3 "${GATE}" --report "${REPORT}" --mode "${MODE}" --summary "${GITHUB_STEP_SUMMARY}"
 
       - name: Upload Playwright report
         if: always()
