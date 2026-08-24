@@ -6970,9 +6970,13 @@ jobs:
   # ║  STAGE 4 — SBOM Generation & Validation      ║
   # ║                                               ║
   # ║  Generates a CycloneDX SBOM from Composer     ║
-  # ║  and npm dependencies, validates against CVE   ║
-  # ║  databases and license policies, then commits  ║
-  # ║  the validated SBOM to the repository.         ║
+  # ║  and npm dependencies, then validates it      ║
+  # ║  against CVE databases and license policies.   ║
+  # ║                                               ║
+  # ║  The SBOM is NOT committed to the repository.  ║
+  # ║  It is published as a run artifact and, on     ║
+  # ║  tags, a release asset — see the "Publish      ║
+  # ║  validated SBOM" block at the end of this job. ║
   # ╚══════════════════════════════════════════════╝
 
   sbom:
