@@ -31,10 +31,18 @@ on:
         default: ""
       worker-name:
         description: >-
-          Cloudflare Worker that serves this site. Defaults to the first label
-          of `cname` plus "-docs" (openbuild.conduction.nl -> openbuild-docs),
-          which is how every fleet docs worker is named. Set it when yours is
-          not.
+          Cloudflare Worker that serves this site. PIN IT. The default derives
+          the name from `cname` (first label + "-docs"), which is only correct
+          while the hostname and the worker still share a name — and across the
+          fleet they no longer do: `integriq.conduction.nl` is served by
+          `openconnector-docs`, `dossiq.conduction.nl` by `procest-docs`, and so
+          on for eight of twelve apps.
+          A derived name that does not exist is NOT an error. wrangler CREATES
+          that worker and deploys to it, while the custom domains keep routing
+          to the real one — so the run goes green and the site never changes.
+          Measured 2026-08-24: every fleet app had left this unset, and every
+          renamed one would have forked its deployment on the first successful
+          publish.
         required: false
         type: string
         default: ""
@@ -193,6 +201,9 @@ jobs:
           set -euo pipefail
 
           WORKER="${WORKER_NAME:-${CNAME%%.*}-docs}"
+          if [ -z "${WORKER_NAME}" ]; then
+            echo "::warning title=worker-name was derived, not pinned::Deploying to '${WORKER}', derived from cname '${CNAME}'. If that worker does not already exist, wrangler will CREATE it and publish there while the custom domains keep routing to the real one — a green run that reaches nobody. Pass worker-name explicitly."
+          fi
           HOSTS="${DOCS_HOSTS:-$CNAME}"
 
           cd "$SOURCE_FOLDER"
