@@ -2721,9 +2721,27 @@ jobs:
               #
               # A verdict that depends on someone else's CDN is not a verdict
               # about this code.
+              #
+              # THE RETRY ALONE IS NOT ENOUGH, and 2026-08-24 proved it: the
+              # same 504 ran for hours rather than seconds, and because all
+              # three attempts asked for `--prefer-dist` they all queued behind
+              # the SAME degraded zipball CDN. Retrying a call to a service that
+              # is down is not resilience, it is the same call three times.
+              #
+              # So the last attempt switches to `--prefer-source`, which clones
+              # from the git remote instead of downloading a zipball. Different
+              # endpoint, different failure mode — it routes around the CDN
+              # rather than waiting for it. It is slower, which is exactly why
+              # it is the fallback and not the default.
               install_ok=""
               for attempt in 1 2 3; do
-                if ( cd "server/apps/$name" && composer install --no-progress --prefer-dist --optimize-autoloader --no-dev ); then
+                if [ "$attempt" -lt 3 ]; then
+                  fetch_mode="--prefer-dist"
+                else
+                  fetch_mode="--prefer-source"
+                  echo "::warning::composer install for sibling app '$name' failed twice on --prefer-dist; final attempt uses --prefer-source to bypass the zipball CDN."
+                fi
+                if ( cd "server/apps/$name" && composer install --no-progress $fetch_mode --optimize-autoloader --no-dev ); then
                   install_ok=1
                   break
                 fi
