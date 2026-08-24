@@ -436,6 +436,9 @@ jobs:
           fi
           echo "bump_sha=${BUMP_SHA}" >> "$GITHUB_OUTPUT"
           echo "bump_branch=${BUMP_BRANCH}" >> "$GITHUB_OUTPUT"
+          # Exported so the pull-request step can refuse to auto-merge a bump
+          # that would move the branch BACKWARDS. See the guard there.
+          echo "prev_version=${CURRENT}" >> "$GITHUB_OUTPUT"
 
       # THE TAG STILL NAMES A TREE WHOSE info.xml MATCHES IT.
       #
@@ -469,6 +472,64 @@ jobs:
           Raised as a pull request rather than pushed directly because
           ${{ github.ref_name }} requires one; a direct push is rejected with GH013
           and takes the release down with it."
+
+          # CLOSE THE LOOP. Opening the pull request is not the same as landing
+          # the bump, and until 2026-08-24 nothing did the second half: every
+          # release added one more open PR and none were ever merged. The
+          # backlog reached 230 across 17 repos — 25 on openregister, 26 on
+          # shillinq — and each one held the branch one version behind the tag
+          # that had already been published from it.
+          #
+          # Auto-merge rather than a direct merge, because neither alternative
+          # works here:
+          #   --admin  needs admin rights to bypass branch protection, and
+          #            github.token is not an admin;
+          #   plain    merge is refused while the required check is pending.
+          # --auto queues the merge and GitHub performs it when the required
+          # check passes, with no human in the loop and nothing left open.
+          #
+          # `allow_auto_merge` must be true on the repository or this errors —
+          # it was false fleet-wide until 2026-08-24 and is now enabled on all
+          # 17 core apps. A failure here must not fail the release: the tag and
+          # the package are already published by this point, so the bump PR
+          # staying open is a backlog item, not a broken release.
+          #
+          # BUT NEVER AUTO-MERGE A BUMP THAT GOES BACKWARDS.
+          #
+          # On a branch carrying a STABLE version, the unstable line computes
+          # its next version from a base that predates that release, and the
+          # result is LOWER than what is already there. Measured 2026-08-24:
+          # integriq `0.3.4` -> `0.2.25-unstable`, thematiq `1.1.0` ->
+          # `1.0.0-unstable`. Those 29 PRs were closed unmerged precisely
+          # because merging them would have downgraded the app.
+          #
+          # Automating the merge without this guard would turn a backlog of
+          # PRs nobody merged into a downgrade nobody reviewed — strictly worse
+          # than the accumulation it replaces. The PR is still opened, so the
+          # case stays visible; it is only the *merge* that is withheld.
+          PREV="${{ steps.bump.outputs.prev_version }}"
+          NEW="${{ env.NEW_VERSION }}"
+          if [ -n "$PREV" ] && ! python3 -c "
+          import sys, re
+          def key(v):
+              m = re.match(r'^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.\-]+))?$', v.strip())
+              if not m:
+                  sys.exit(2)                      # unparseable: do not judge
+              core = tuple(int(m.group(i)) for i in (1, 2, 3))
+              pre = m.group(4)
+              # semver: a release outranks any prerelease of the same core
+              return (core, 1 if pre is None else 0, pre or '')
+          sys.exit(0 if key('$NEW') > key('$PREV') else 1)
+          "; then
+            echo "::warning::Not auto-merging $BR — ${NEW} does not sort above ${PREV}, so merging it would move ${{ github.ref_name }} backwards (or the versions could not be compared). The pull request stays open for a human."
+            exit 0
+          fi
+
+          gh pr merge "$BR" \
+            --repo "${{ github.repository }}" \
+            --squash \
+            --auto \
+            || echo "::warning::Could not set auto-merge on the version-bump PR for $BR — it stays open and ${{ github.ref_name }} remains one version behind the tag. Check that allow_auto_merge is enabled on this repository."
 
       - name: Copy files into package directory
         run: |
