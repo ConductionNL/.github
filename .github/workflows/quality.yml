@@ -7178,11 +7178,34 @@ jobs:
           fi
 
       # ── Publish validated SBOM ──
-      # The SBOM is intentionally NOT committed back to the repo.
+      # The SBOM is intentionally NOT committed back to the repo. A committed
+      # SBOM goes stale the moment a lockfile moves, and the three apps that
+      # carried one (scholiq, decidesk, openbuild) proved it: each was written
+      # by hand at scaffold time in May 2026 and never regenerated.
+      #
       # It is published via two channels:
-      #   1. Workflow artifact (90-day retention) — used by CI debugging + audit replay
-      #   2. Release asset on every tag push — stable URL for downstream consumers
+      #   1. Workflow artifact (90-day retention) — CI debugging + audit replay,
+      #      and the source the release job attaches from (see below).
+      #   2. Release asset on every stable release — the durable, stable URL for
+      #      downstream consumers, attached by release-stable.yml.
       # See SECURITY.md "Software Bill of Materials" for the consumer contract.
+      #
+      # ⚠️ Channel 2 is NOT attached from here, and an earlier attempt to do so
+      # never worked. This job is gated on github.ref being
+      # refs/heads/{main,beta,development} (see the `if:` at the top of the job),
+      # so a step conditioned on `startsWith(github.ref, 'refs/tags/')` — which
+      # is what used to sit here — could never fire: the two conditions are
+      # mutually exclusive. No caller triggers quality.yml on tags either, and
+      # a tag created with github.token would not re-trigger it anyway (Actions
+      # anti-recursion). Between 2026-05 and 2026-08-25 the release-asset channel
+      # therefore published nothing, while the comment above claimed it did.
+      #
+      # release-stable.yml is the only job that sees the tag, because it is the
+      # job that creates it. It fetches this artifact by commit SHA and attaches
+      # it next to the signed tarball. Regenerating it there is not an option:
+      # that job installs composer with --no-dev and cyclonedx-php-composer is a
+      # require-dev plugin, so the document would be both unavailable and, if
+      # obtained another way, unvalidated by the Grype scan above.
 
       - name: Upload SBOM artifact
         uses: actions/upload-artifact@v4
@@ -7190,12 +7213,6 @@ jobs:
           name: sbom-${{ inputs.app-name }}
           path: sbom.cdx.json
           retention-days: 90
-
-      - name: Attach SBOM to release
-        if: ${{ startsWith(github.ref, 'refs/tags/') }}
-        uses: softprops/action-gh-release@v2
-        with:
-          files: sbom.cdx.json
 
   # ╔══════════════════════════════════════════════╗
   # ║  STAGE 5 — Features verification (read-only)  ║

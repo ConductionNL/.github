@@ -305,6 +305,93 @@ jobs:
           tag: v${{ env.NEW_VERSION }}
           overwrite: true
 
+      # ── Attach the CVE-validated SBOM ──
+      # The SBOM is generated and Grype-scanned by quality.yml (STAGE 4), which
+      # publishes it as the run artifact `sbom-<app-name>` and deliberately never
+      # commits it to the repo. This release asset is therefore the only DURABLE
+      # copy — the artifact itself expires after 90 days.
+      #
+      # It is FETCHED rather than regenerated for two reasons: this job installs
+      # composer with --no-dev and cyclonedx/cyclonedx-php-composer is a
+      # require-dev plugin, so `composer CycloneDX:make-sbom` does not exist
+      # here; and a document regenerated here would not have been through the
+      # Grype `--fail-on critical` scan, so it would assert a clean bill of
+      # health nothing checked.
+      #
+      # Why here and not in quality.yml: that job is gated on github.ref being
+      # refs/heads/{main,beta,development}, so its own former "Attach SBOM to
+      # release" step — conditioned on refs/tags/** — could never fire. No caller
+      # triggers quality.yml on tags, and the tag created above with github.token
+      # does not re-trigger it (Actions anti-recursion). This job is the only one
+      # that sees the tag, because it is the one that creates it.
+      #
+      # NON-FATAL BY DESIGN, BUT NEVER SILENT: a missing SBOM must not fail a
+      # release that is otherwise good, but "no SBOM published" must never look
+      # like "SBOM published". Every path below either uploads the file or emits
+      # a ::warning:: naming which path was taken.
+      - name: Fetch CVE-validated SBOM from the quality run
+        id: fetch-sbom
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APP_NAME: ${{ inputs.app-name }}
+        run: |
+          set -euo pipefail
+
+          # The artifacts API filters by exact name and carries workflow_run
+          # metadata, so we can demand the artifact built from THIS commit
+          # rather than "the most recent one", which could describe different
+          # dependencies entirely.
+          ARTIFACT_ID=$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=sbom-${APP_NAME}&per_page=100" \
+            --jq "[.artifacts[]
+                   | select(.expired == false)
+                   | select(.workflow_run.head_sha == \"${GITHUB_SHA}\")]
+                  | sort_by(.created_at) | last | .id // empty")
+
+          if [ -z "$ARTIFACT_ID" ]; then
+            echo "::warning::No unexpired sbom-${APP_NAME} artifact found for commit ${GITHUB_SHA}. The release will be published WITHOUT an SBOM asset. Check that quality.yml ran with enable-sbom:true on this commit."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip" > sbom-artifact.zip
+          unzip -o -q sbom-artifact.zip
+
+          if [ ! -s sbom.cdx.json ]; then
+            echo "::warning::Artifact sbom-${APP_NAME} (id ${ARTIFACT_ID}) contained no readable sbom.cdx.json. The release will be published WITHOUT an SBOM asset."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Fetched SBOM from artifact ${ARTIFACT_ID} ($(wc -c < sbom.cdx.json) bytes, $(jq '.components | length' sbom.cdx.json) components)"
+          echo "found=true" >> "$GITHUB_OUTPUT"
+
+      # `continue-on-error` above turns a hard failure into outcome=failure with
+      # a green job, which is exactly the shape that hides a broken step. The
+      # step sets found=true only on the success path, so anything else — a
+      # crashed gh call included — lands here and is announced.
+      - name: Report missing SBOM
+        if: ${{ steps.fetch-sbom.outputs.found != 'true' }}
+        run: |
+          echo "::warning::Release v${{ env.NEW_VERSION }} of ${{ inputs.app-name }} has NO SBOM release asset (fetch step outcome: ${{ steps.fetch-sbom.outcome }})."
+          {
+            echo "### ⚠️ No SBOM attached to this release"
+            echo ""
+            echo "Release \`v${{ env.NEW_VERSION }}\` was published without \`sbom.cdx.json\`."
+            echo "Fetch step outcome: \`${{ steps.fetch-sbom.outcome }}\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Attach SBOM to release
+        if: ${{ steps.fetch-sbom.outputs.found == 'true' }}
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ github.token }}
+          file: sbom.cdx.json
+          asset_name: ${{ inputs.app-name }}-${{ env.NEW_VERSION }}.cdx.json
+          tag: v${{ env.NEW_VERSION }}
+          overwrite: true
+
       - name: Register and upload to Nextcloud App Store
         run: |
           DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/v${{ env.NEW_VERSION }}/${{ inputs.app-name }}-${{ env.NEW_VERSION }}.tar.gz"
