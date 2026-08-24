@@ -1061,10 +1061,40 @@ jobs:
         if: steps.detect.outputs.run == 'true'
         run: |
           set -euo pipefail
-          curl -sSfL -o info.xsd \
-            https://raw.githubusercontent.com/nextcloud/appstore/master/nextcloudappstore/api/v1/release/info.xsd
+          # RETRIED, for the same reason the apt install above is, and it took a
+          # red app to notice the asymmetry: this step fetched over the network
+          # exactly once. Measured on learniq run 32693697354 (2026-08-24),
+          # which failed the whole `info.xml lint` job — and therefore the app —
+          # on:
+          #
+          #     curl: (35) Recv failure: Connection reset by peer
+          #
+          # The commit before it was green and the commit itself touched no
+          # manifest. That is infrastructure wearing an app's name, which is
+          # precisely what the apt step's own error message warns about, and a
+          # single reset from raw.githubusercontent.com should not be able to
+          # turn a fleet app red.
+          #
+          # Bounded so the worst case still fits this job's cap:
+          # 3 x 60s + 2 x 5s = 3.2 min against timeout-minutes: 20.
+          fetched=0
+          for attempt in 1 2 3; do
+            if timeout 60 curl -sSfL --retry 2 --retry-connrefused -o info.xsd \
+              https://raw.githubusercontent.com/nextcloud/appstore/master/nextcloudappstore/api/v1/release/info.xsd; then
+              fetched=1
+              break
+            fi
+            echo "::warning::info.xsd fetch attempt ${attempt}/3 failed; retrying."
+            sleep 5
+          done
+          if [ "${fetched}" -ne 1 ]; then
+            echo "::error::Could not fetch info.xsd after 3 bounded attempts — raw.githubusercontent.com is unreachable. This is infrastructure, not this app's manifest."
+            exit 1
+          fi
           # A 200 that returned an error page is not a schema. Assert the shape
-          # before trusting a validation result produced with it.
+          # before trusting a validation result produced with it. This also
+          # covers the retry's own failure mode: a truncated body from a reset
+          # connection can still exit 0 on a later attempt.
           head -1 info.xsd | grep -q '<?xml' || { echo "::error::The fetched info.xsd is not XML — validating against it would prove nothing."; exit 1; }
           grep -q 'schema' info.xsd || { echo "::error::The fetched info.xsd contains no schema element."; exit 1; }
 
