@@ -696,9 +696,45 @@ jobs:
       # ── Sign & Release ──
 
       - name: Prepare signing credentials
+        env:
+          SIGNING_KEY: ${{ secrets.NEXTCLOUD_SIGNING_KEY }}
+          SIGNING_CERT: ${{ secrets.NEXTCLOUD_SIGNING_CERT }}
         run: |
-          echo "${{ secrets.NEXTCLOUD_SIGNING_KEY }}" > signing-key.key
-          echo "${{ secrets.NEXTCLOUD_SIGNING_CERT }}" > signing-cert.crt
+          printf '%s\n' "$SIGNING_KEY"  > signing-key.key
+          printf '%s\n' "$SIGNING_CERT" > signing-cert.crt
+
+          # CHECK THE CREDENTIALS HERE, WHERE THE ERROR CAN NAME THEM.
+          #
+          # An absent secret interpolates to an empty string, so this step used
+          # to write a file containing one newline and report success. The
+          # failure then surfaced four steps later, inside Nextcloud, as:
+          #
+          #     TypeError: base64_encode(): Argument #1 ($string) must be of
+          #     type string, false given in .../IntegrityCheck/Checker.php:184
+          #
+          # which is `$privateKey->sign()` returning false because phpseclib
+          # never loaded a key. Nothing in that message mentions a secret, a
+          # repository, or a name to go and set.
+          #
+          # Measured across the fleet on 2026-08-24: NEXTCLOUD_SIGNING_KEY and
+          # NEXTCLOUD_SIGNING_CERT are REPOSITORY-level secrets, not org-level.
+          # Nine repos have them and release cleanly; humaniq, versioniq and
+          # planninq have neither and had been failing every release since at
+          # least 2026-08-23 with the TypeError above. Correlation was exact.
+          for pair in "signing-key.key:NEXTCLOUD_SIGNING_KEY:PRIVATE KEY" \
+                      "signing-cert.crt:NEXTCLOUD_SIGNING_CERT:CERTIFICATE"; do
+            file="${pair%%:*}"; rest="${pair#*:}"
+            name="${rest%%:*}"; marker="${rest#*:}"
+            if [ ! -s "$file" ] || [ "$(tr -d '[:space:]' < "$file" | wc -c)" -eq 0 ]; then
+              echo "::error title=${name} is not set::This repository has no ${name} secret, so the signing ${marker,,} is empty. These are REPOSITORY-level secrets (nine fleet repos have them; this one does not). Add it under Settings → Secrets and variables → Actions. Without this the run fails later inside Nextcloud with 'base64_encode(): ... false given', which names nothing you can act on."
+              exit 1
+            fi
+            if ! grep -q -- "-----BEGIN .*${marker}-----" "$file"; then
+              echo "::error title=${name} is not a PEM ${marker,,}::The secret is set but does not contain a '-----BEGIN ... ${marker}-----' line, so phpseclib will not load it and signing will return false. Check the secret was pasted whole, including its header and footer lines."
+              exit 1
+            fi
+          done
+          echo "Signing credentials present and PEM-shaped."
 
       # ── Nextcloud's own integrity signature ──
       #
