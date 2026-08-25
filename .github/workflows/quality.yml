@@ -3761,7 +3761,25 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ inputs.php-version }}
-          extensions: mbstring, intl, sqlite3, pgsql, pdo_pgsql, zip, gd, curl, xml, json
+          # `apcu` is here for the Playwright job specifically. Nextcloud ships
+          # no cache backend unless one is configured, and this workflow
+          # configured none at all — 7k lines, no `memcache.*`, no cache
+          # extension. Anything the app under test stores through
+          # `ICacheFactory` therefore did not survive from one HTTP request to
+          # the next.
+          #
+          # Measured on filinq: OpenRegister's McpProtocolService keeps MCP
+          # sessions in `$cacheFactory->createDistributed(...)`, so every
+          # JSON-RPC call arrived without its session and the whole
+          # agent-document-editing suite (6 tests) stood down with "the MCP
+          # session does not survive between requests on this instance …
+          # this harness has no cache backend".
+          #
+          # `apc.enable_cli=1` matters because `php -S` IS the CLI SAPI: without
+          # it APCu loads but stays inert, which looks exactly like not having
+          # installed it.
+          extensions: mbstring, intl, sqlite3, pgsql, pdo_pgsql, zip, gd, curl, xml, json, apcu
+          ini-values: apc.enable_cli=1
           tools: composer:v2
 
       - name: Checkout additional apps
@@ -3840,6 +3858,37 @@ jobs:
               exit 1
             fi
           fi
+
+      # ── Give Nextcloud a cache backend ────────────────────────────────────
+      #
+      # Nextcloud has no cache unless one is configured, and this workflow
+      # configured none — so `ICacheFactory::createDistributed()` handed every
+      # caller a null cache and nothing survived from one HTTP request to the
+      # next. That is not how any real instance runs, and it silently changes
+      # the behaviour of anything session- or cache-backed.
+      #
+      # Measured on filinq: OpenRegister's McpProtocolService keeps MCP
+      # sessions in the DISTRIBUTED cache, so every JSON-RPC call arrived
+      # without its session and the agent-document-editing suite (6 tests)
+      # stood down with "the MCP session does not survive between requests on
+      # this instance … this harness has no cache backend". A correct skip for
+      # an environment that should not have been shaped that way.
+      #
+      # APCu for both tiers. It is local-only, which is right here and would be
+      # wrong in production: this job is a single `php -S` process tree on one
+      # runner, so "local" and "distributed" are the same memory, and forked
+      # workers inherit APCu's shared segment.
+      #
+      # Verified, not assumed — a cache that loads but stays inert looks
+      # exactly like no cache at all, which is the failure being fixed.
+      - name: Configure the Nextcloud cache backend
+        run: |
+          cd server
+          php -r 'exit(extension_loaded("apcu") && ini_get("apc.enabled") ? 0 : 1);' \
+            || { echo "::error::apcu is not loaded/enabled for the CLI SAPI; php -S would run without a cache and cache-backed tests would silently degrade."; exit 1; }
+          php occ config:system:set memcache.local --value '\OC\Memcache\APCu'
+          php occ config:system:set memcache.distributed --value '\OC\Memcache\APCu'
+          php occ config:system:get memcache.distributed
 
       # ── Composer's DOWNLOAD cache, not `vendor/` ──────────────────────────
       #
