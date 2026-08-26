@@ -10789,10 +10789,21 @@ _mcs_rc=$?
 # in. See the note at the top of this file.
 set +e
 
-if [ "${_mcs_rc}" -eq 0 ]; then
+# An empty scope must not print the same word as a clean full-tree read.
+# `checked 0` means the checker ran and inspected NOTHING — either the repo
+# ships no manifest, or the manifest it ships declares no user-visible string.
+# Both are `na`. Reporting PASS there is the .github#374 defect, and
+# test_gate_empty_scope_never_passes.sh caught exactly that in this gate's
+# first version: it passed over a planted tree whose every defect was out of
+# scope, indistinguishable from a gate that read the whole tree and found it
+# clean.
+_mcs_checked=$(sed -n 's/^checked \([0-9]\{1,\}\) manifest string.*/\1/p' "${_mcs_log}" 2>/dev/null | tail -1)
+case "${_mcs_checked}" in ''|*[!0-9]*) _mcs_checked=0 ;; esac
+
+if [ "${_mcs_rc}" -eq 4 ] || { [ "${_mcs_rc}" -eq 0 ] && [ "${_mcs_checked}" -eq 0 ]; }; then
+    _skip_empty_scope 96 "manifest-copy-style" "user-visible manifest string (a title / body / task / label / description / emptyText / placeholder / subtitle / helpText in src/manifest.json or src/manifest.d/*.json)"
+elif [ "${_mcs_rc}" -eq 0 ]; then
     _pass 96 "manifest-copy-style"
-elif [ "${_mcs_rc}" -eq 4 ]; then
-    _skip 96 "manifest-copy-style" na "this repo ships no src/manifest.json, so it declares no manifest copy to style-check. See ${_mcs_log}."
 elif ! _helper_finished "${_mcs_log}" '^checked [0-9]+ manifest string'; then
     # A CRASH IS NOT A FINDING.
     _mcs_why=$(head -3 "${_mcs_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
