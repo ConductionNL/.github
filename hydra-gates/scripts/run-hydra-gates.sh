@@ -10681,6 +10681,69 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# GATE 96 — system-elevation-reachability (ADR-099 rule 9)
+#
+# `runAsSystem()` / `SystemOperationContext::run()` runs a callable as a
+# trusted userless principal: no RBAC, no tenancy, no owner. It is for work
+# that genuinely has nobody to act for — an installation seeding its own
+# shipped registers, a migration, a repair step. It MUST NOT be reachable
+# from a flow node, an agent tool, or the handling of an inbound request.
+#
+# WHAT THIS DEFENDS AGAINST is not somebody arguing for an escalation. It is
+# somebody reaching for the nearest thing that makes a refusal go away —
+# and ADR-099 deliberately put refusals everywhere an identity can be
+# missing, each one within a few lines of a method that would make it
+# succeed. The fix works, the test goes green, and every future run of that
+# flow executes with access control off.
+#
+# Nothing downstream can catch it: by the time the callable runs the caller
+# is gone, so no runtime assertion inside the method can say who invoked it.
+# The control has to be structural, and structural controls drift.
+#
+# NO EXCLUSION ANNOTATION, deliberately. An escape hatch on this rule would
+# be used exactly when somebody is making a refusal go away — the case the
+# gate exists for — and a reason written in that moment reads identically to
+# a legitimate one afterwards. Green bought with a plausible sentence is
+# worse than red, because it ends the conversation. A genuine false positive
+# is fixed by moving the elevation out of the forbidden caller, or by fixing
+# this gate. Both leave a visible diff; a comment does not.
+#
+# GENERALISES a PHPUnit test. openregister's SystemOperationContextBoundaryTest
+# pins the call-site set in ONE app; this binds the fleet, so an app that
+# never wrote such a test is covered too.
+#
+# FULL-TREE, not diff-scoped: a diff-scoped version reports nothing on the
+# ~99% of PRs that never open a node or a controller, so it could not
+# establish that the boundary holds — the only claim worth making about a
+# boundary. Noise is not a risk; on a clean repo the finding set is empty.
+#
+# NOTE ON PLACEMENT: top level, outside any `_FAILED` guard — a gate that
+# only runs once everything else passed is green-but-dead.
+# ---------------------------------------------------------------------------
+_sel_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-system-elevation.log
+: > "${_sel_log}"
+set +e
+python3 "${SCRIPT_DIR}/lib/check_system_elevation.py" . > "${_sel_log}" 2>&1
+_sel_rc=$?
+# `set +e`, not `set -e`: errexit off is the state this script actually runs
+# in. See the note at the top of this file.
+set +e
+
+if [ "${_sel_rc}" -eq 0 ]; then
+    _pass 96 "system-elevation-reachability"
+elif [ "${_sel_rc}" -eq 4 ]; then
+    _skip 96 "system-elevation-reachability" na "this repo ships no PHP under lib/, so it has no server code that could elevate to a trusted userless principal. See ${_sel_log}."
+elif ! _helper_finished "${_sel_log}" '^checked [0-9]+ PHP file'; then
+    # A CRASH IS NOT A FINDING.
+    _sel_why=$(head -3 "${_sel_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+    _skip 96 "system-elevation-reachability" wiring "check_system_elevation.py exited ${_sel_rc} without printing its terminal 'checked N PHP file(s)' summary, so the elevation boundary is UNVERIFIED by this run. Checker output: ${_sel_why:-<empty>}. See ${_sel_log}."
+else
+    _sel_n=$(grep -cE '^FAIL ' "${_sel_log}" 2>/dev/null || true)
+    case "${_sel_n}" in ''|*[!0-9]*) _sel_n=1 ;; esac
+    _fail 96 "system-elevation-reachability" "${_sel_n} elevation(s) reachable from a flow node, agent tool or endpoint — see ${_sel_log}"
+fi
+
+# ---------------------------------------------------------------------------
 # GATE 83 — contract-surface-shift (ADR-084)
 #
 # A method on a published contract can be served two ways: DECLARED
