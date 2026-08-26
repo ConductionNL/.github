@@ -3761,7 +3761,25 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ inputs.php-version }}
-          extensions: mbstring, intl, sqlite3, pgsql, pdo_pgsql, zip, gd, curl, xml, json
+          # `apcu` is here for the Playwright job specifically. Nextcloud ships
+          # no cache backend unless one is configured, and this workflow
+          # configured none at all — 7k lines, no `memcache.*`, no cache
+          # extension. Anything the app under test stores through
+          # `ICacheFactory` therefore did not survive from one HTTP request to
+          # the next.
+          #
+          # Measured on filinq: OpenRegister's McpProtocolService keeps MCP
+          # sessions in `$cacheFactory->createDistributed(...)`, so every
+          # JSON-RPC call arrived without its session and the whole
+          # agent-document-editing suite (6 tests) stood down with "the MCP
+          # session does not survive between requests on this instance …
+          # this harness has no cache backend".
+          #
+          # `apc.enable_cli=1` matters because `php -S` IS the CLI SAPI: without
+          # it APCu loads but stays inert, which looks exactly like not having
+          # installed it.
+          extensions: mbstring, intl, sqlite3, pgsql, pdo_pgsql, zip, gd, curl, xml, json, apcu
+          ini-values: apc.enable_cli=1
           tools: composer:v2
 
       - name: Checkout additional apps
@@ -3840,6 +3858,37 @@ jobs:
               exit 1
             fi
           fi
+
+      # ── Give Nextcloud a cache backend ────────────────────────────────────
+      #
+      # Nextcloud has no cache unless one is configured, and this workflow
+      # configured none — so `ICacheFactory::createDistributed()` handed every
+      # caller a null cache and nothing survived from one HTTP request to the
+      # next. That is not how any real instance runs, and it silently changes
+      # the behaviour of anything session- or cache-backed.
+      #
+      # Measured on filinq: OpenRegister's McpProtocolService keeps MCP
+      # sessions in the DISTRIBUTED cache, so every JSON-RPC call arrived
+      # without its session and the agent-document-editing suite (6 tests)
+      # stood down with "the MCP session does not survive between requests on
+      # this instance … this harness has no cache backend". A correct skip for
+      # an environment that should not have been shaped that way.
+      #
+      # APCu for both tiers. It is local-only, which is right here and would be
+      # wrong in production: this job is a single `php -S` process tree on one
+      # runner, so "local" and "distributed" are the same memory, and forked
+      # workers inherit APCu's shared segment.
+      #
+      # Verified, not assumed — a cache that loads but stays inert looks
+      # exactly like no cache at all, which is the failure being fixed.
+      - name: Configure the Nextcloud cache backend
+        run: |
+          cd server
+          php -r 'exit(extension_loaded("apcu") && ini_get("apc.enabled") ? 0 : 1);' \
+            || { echo "::error::apcu is not loaded/enabled for the CLI SAPI; php -S would run without a cache and cache-backed tests would silently degrade."; exit 1; }
+          php occ config:system:set memcache.local --value '\OC\Memcache\APCu'
+          php occ config:system:set memcache.distributed --value '\OC\Memcache\APCu'
+          php occ config:system:get memcache.distributed
 
       # ── Composer's DOWNLOAD cache, not `vendor/` ──────────────────────────
       #
@@ -6970,9 +7019,13 @@ jobs:
   # ║  STAGE 4 — SBOM Generation & Validation      ║
   # ║                                               ║
   # ║  Generates a CycloneDX SBOM from Composer     ║
-  # ║  and npm dependencies, validates against CVE   ║
-  # ║  databases and license policies, then commits  ║
-  # ║  the validated SBOM to the repository.         ║
+  # ║  and npm dependencies, then validates it      ║
+  # ║  against CVE databases and license policies.   ║
+  # ║                                               ║
+  # ║  The SBOM is NOT committed to the repository.  ║
+  # ║  It is published as a run artifact and, on     ║
+  # ║  tags, a release asset — see the "Publish      ║
+  # ║  validated SBOM" block at the end of this job. ║
   # ╚══════════════════════════════════════════════╝
 
   sbom:
@@ -7174,11 +7227,34 @@ jobs:
           fi
 
       # ── Publish validated SBOM ──
-      # The SBOM is intentionally NOT committed back to the repo.
+      # The SBOM is intentionally NOT committed back to the repo. A committed
+      # SBOM goes stale the moment a lockfile moves, and the three apps that
+      # carried one (scholiq, decidesk, openbuild) proved it: each was written
+      # by hand at scaffold time in May 2026 and never regenerated.
+      #
       # It is published via two channels:
-      #   1. Workflow artifact (90-day retention) — used by CI debugging + audit replay
-      #   2. Release asset on every tag push — stable URL for downstream consumers
+      #   1. Workflow artifact (90-day retention) — CI debugging + audit replay,
+      #      and the source the release job attaches from (see below).
+      #   2. Release asset on every stable release — the durable, stable URL for
+      #      downstream consumers, attached by release-stable.yml.
       # See SECURITY.md "Software Bill of Materials" for the consumer contract.
+      #
+      # ⚠️ Channel 2 is NOT attached from here, and an earlier attempt to do so
+      # never worked. This job is gated on github.ref being
+      # refs/heads/{main,beta,development} (see the `if:` at the top of the job),
+      # so a step conditioned on `startsWith(github.ref, 'refs/tags/')` — which
+      # is what used to sit here — could never fire: the two conditions are
+      # mutually exclusive. No caller triggers quality.yml on tags either, and
+      # a tag created with github.token would not re-trigger it anyway (Actions
+      # anti-recursion). Between 2026-05 and 2026-08-25 the release-asset channel
+      # therefore published nothing, while the comment above claimed it did.
+      #
+      # release-stable.yml is the only job that sees the tag, because it is the
+      # job that creates it. It fetches this artifact by commit SHA and attaches
+      # it next to the signed tarball. Regenerating it there is not an option:
+      # that job installs composer with --no-dev and cyclonedx-php-composer is a
+      # require-dev plugin, so the document would be both unavailable and, if
+      # obtained another way, unvalidated by the Grype scan above.
 
       - name: Upload SBOM artifact
         uses: actions/upload-artifact@v4
@@ -7186,12 +7262,6 @@ jobs:
           name: sbom-${{ inputs.app-name }}
           path: sbom.cdx.json
           retention-days: 90
-
-      - name: Attach SBOM to release
-        if: ${{ startsWith(github.ref, 'refs/tags/') }}
-        uses: softprops/action-gh-release@v2
-        with:
-          files: sbom.cdx.json
 
   # ╔══════════════════════════════════════════════╗
   # ║  STAGE 5 — Features verification (read-only)  ║
