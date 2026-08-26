@@ -1,0 +1,10 @@
+{
+  "pages": [
+    {
+      "id": "intake",
+      "title": "Intake",
+      "emptyText": "Nothing here yet -- add the first case to get started.",
+      "helpText": "Reporting covers 2020–2024."
+    }
+  ]
+}
