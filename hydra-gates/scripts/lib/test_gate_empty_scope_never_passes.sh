@@ -612,7 +612,7 @@ fi
 #                        verdict for this gate absent a base showing growth,
 #                        which this fixture's docs-only second commit does
 #                        not supply for ANY gate.
-#   96 system-elevation-reachability — never diff-scoped, same posture as
+#   97 system-elevation-reachability — never diff-scoped, same posture as
 #                        gate-23 and gate-68, and for a reason its own spec
 #                        states: it establishes that a BOUNDARY holds, and a
 #                        boundary cannot be established from a diff. A
@@ -636,7 +636,7 @@ fi
 #                        equivalent lives in gate-acceptance/system-elevation,
 #                        whose planted arm FAILS and whose clean arm PASSES on
 #                        a tree built for it.
-_ARM6_ALLOWED=" 4 15 16 23 47 48 68 96 "
+_ARM6_ALLOWED=" 4 15 16 23 47 48 68 97 "
 
 _wide_bad=""
 while IFS= read -r _g; do
