@@ -10681,6 +10681,68 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# GATE 95 — adr-number-collision
+#
+# An ADR number is a CITATION KEY. `ADR-081` appears in commit messages, gate
+# descriptions, spec deltas and source comments, and each of those is a pointer
+# that only works while the number resolves to exactly one document.
+#
+# Measured 2026-08-26: hydra carried EIGHT numbers claimed by two or three
+# documents each — 037, 041, 049, 050, 051, 076, 081, 084 — over 18 files,
+# with 1,640 citing files across 20 repositories. `ADR-081` meant three
+# different decisions at once (Vue 3 migration, money/effort ownership, public
+# surface placement). scholiq used `ADR-037` for two different meanings in the
+# same repository.
+#
+# WHY A GATE. The duplicates themselves were cheap to fix. What was not cheap
+# is that the ambiguity is INVISIBLE: nothing errors, nothing warns, and a
+# reader follows the number to whichever file the directory listing shows
+# first. By the time anyone notices, the citations can no longer be repaired
+# mechanically — each one has to be read to learn which document it meant. The
+# cost of a duplicate is therefore paid entirely in the future, which is
+# exactly the shape that needs a gate rather than a sweep.
+#
+# It also checks that a file's H1 number matches its filename, because a title
+# reading `# ADR-041` inside `adr-101-*.md` is the same ambiguity wearing a
+# different hat — and it is precisely what a half-finished renumber leaves
+# behind. That half is only checked when the H1 declares a number at all:
+# older ADRs predate the `# ADR-NNN:` convention and say just the topic, which
+# is a style question, not a collision.
+#
+# FULL-TREE, not diff-scoped, for the reason gates 84, 93 and 94 give: the
+# duplicate is already in the tree, and a diff-scoped version would be blind on
+# every PR that does not happen to open openspec/architecture.
+#
+# Archived openspec changes are excluded. They record what was true when
+# written; renumbering them to match the present makes the history untrue.
+#
+# NOTE ON PLACEMENT: top level, outside any `_FAILED` guard — a gate that only
+# runs once everything else passed is green-but-dead.
+# ---------------------------------------------------------------------------
+_adrc_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-adr-number-collision.log
+: > "${_adrc_log}"
+set +e
+python3 "${SCRIPT_DIR}/lib/check_adr_number_collision.py" . > "${_adrc_log}" 2>&1
+_adrc_rc=$?
+# `set +e`, not `set -e`: errexit off is the state this script actually runs
+# in. See the note at the top of this file.
+set +e
+
+if [ "${_adrc_rc}" -eq 0 ]; then
+    _pass 95 "adr-number-collision"
+elif [ "${_adrc_rc}" -eq 4 ]; then
+    _skip 95 "adr-number-collision" na "this repo ships no openspec/architecture ADRs, so it declares no ADR numbers that could collide. See ${_adrc_log}."
+elif ! _helper_finished "${_adrc_log}" '^checked [0-9]+ ADR file'; then
+    # A CRASH IS NOT A FINDING.
+    _adrc_why=$(head -3 "${_adrc_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+    _skip 95 "adr-number-collision" wiring "check_adr_number_collision.py exited ${_adrc_rc} without printing its terminal 'checked N ADR file(s)' summary, so ADR numbering is UNVERIFIED by this run. Checker output: ${_adrc_why:-<empty>}. See ${_adrc_log}."
+else
+    _adrc_n=$(grep -cE '^FAIL ' "${_adrc_log}" 2>/dev/null || true)
+    case "${_adrc_n}" in ''|*[!0-9]*) _adrc_n=1 ;; esac
+    _fail 95 "adr-number-collision" "${_adrc_n} ADR number collision(s) or title/filename mismatch(es) — see ${_adrc_log}"
+fi
+
+# ---------------------------------------------------------------------------
 # GATE 96 — system-elevation-reachability (ADR-099 rule 9)
 #
 # `runAsSystem()` / `SystemOperationContext::run()` runs a callable as a
