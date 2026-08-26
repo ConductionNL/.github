@@ -10743,6 +10743,78 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# GATE 96 — manifest-copy-style
+#
+# The Conduction voice bans em-dashes. `writing/references/voice.md` section 8
+# says it plainly, and the `writing` skill's REVIEW mode uses a walkthrough
+# `steps[0].body` em-dash as its worked example. The rule was already right.
+#
+# MEASURED 2026-08-26. Shipped manifest copy carried 126 violations across 12
+# apps: shillinq 47, hrmq 15, pipelinq 14, opencatalogi 12, decidesk 8,
+# larpingapp 7, openconnector 6, scholiq 6, docudesk 4, hermiq 3, procest 2,
+# softwarecatalog 2. The one a user reported was dossiq step 1 on screen:
+# "a quick spin through case handling - we'll register a case".
+#
+# WHY A GATE WHEN THE RULE ALREADY EXISTS. A skill is opt-in. It applies when
+# an author chooses to load it, and manifest copy is routinely written by hand
+# or by an agent that never invoked the writing skill. Nothing downstream reads
+# the prose at all: `check:manifest` validates against a JSON Schema, and JSON
+# Schema has no opinion about writing. So the rule lived in a document, the
+# copy shipped past it, and the only detector was a human noticing on screen.
+# That is precisely the shape a mechanical gate is for.
+#
+# NOT WALKTHROUGH-ONLY. A first sweep that read only walkthrough steps found
+# 25. Reading every user-visible field found 126 - the rest sit in setup
+# wizard steps, menu labels and widget empty states
+# (`No open debtor invoices - everything is paid.`).
+#
+# READS THE FRAGMENTS TOO. `src/manifest.d/*.json` is merged into the manifest
+# at runtime via require.context, so a checker that opens only
+# `src/manifest.json` is blind to whatever the fragments add. Eight fleet apps
+# use them; shillinq has 87.
+#
+# FULL-TREE, not diff-scoped, for the reason gates 84, 93, 94 and 95 give: the
+# violations are already in the tree, and a diff-scoped version reports clean
+# on every PR that does not happen to touch the manifest.
+#
+# NOTE ON PLACEMENT: top level, outside any `_FAILED` guard - a gate that only
+# runs once everything else passed is green-but-dead.
+# ---------------------------------------------------------------------------
+_mcs_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-manifest-copy-style.log
+: > "${_mcs_log}"
+set +e
+python3 "${SCRIPT_DIR}/lib/check_manifest_copy_style.py" . > "${_mcs_log}" 2>&1
+_mcs_rc=$?
+# `set +e`, not `set -e`: errexit off is the state this script actually runs
+# in. See the note at the top of this file.
+set +e
+
+# An empty scope must not print the same word as a clean full-tree read.
+# `checked 0` means the checker ran and inspected NOTHING — either the repo
+# ships no manifest, or the manifest it ships declares no user-visible string.
+# Both are `na`. Reporting PASS there is the .github#374 defect, and
+# test_gate_empty_scope_never_passes.sh caught exactly that in this gate's
+# first version: it passed over a planted tree whose every defect was out of
+# scope, indistinguishable from a gate that read the whole tree and found it
+# clean.
+_mcs_checked=$(sed -n 's/^checked \([0-9]\{1,\}\) manifest string.*/\1/p' "${_mcs_log}" 2>/dev/null | tail -1)
+case "${_mcs_checked}" in ''|*[!0-9]*) _mcs_checked=0 ;; esac
+
+if [ "${_mcs_rc}" -eq 4 ] || { [ "${_mcs_rc}" -eq 0 ] && [ "${_mcs_checked}" -eq 0 ]; }; then
+    _skip_empty_scope 96 "manifest-copy-style" "user-visible manifest string (a title / body / task / label / description / emptyText / placeholder / subtitle / helpText in src/manifest.json or src/manifest.d/*.json)"
+elif [ "${_mcs_rc}" -eq 0 ]; then
+    _pass 96 "manifest-copy-style"
+elif ! _helper_finished "${_mcs_log}" '^checked [0-9]+ manifest string'; then
+    # A CRASH IS NOT A FINDING.
+    _mcs_why=$(head -3 "${_mcs_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+    _skip 96 "manifest-copy-style" wiring "check_manifest_copy_style.py exited ${_mcs_rc} without printing its terminal 'checked N manifest string(s)' summary, so manifest copy is UNVERIFIED by this run. Checker output: ${_mcs_why:-<empty>}. See ${_mcs_log}."
+else
+    _mcs_n=$(grep -cE '^FAIL ' "${_mcs_log}" 2>/dev/null || true)
+    case "${_mcs_n}" in ''|*[!0-9]*) _mcs_n=1 ;; esac
+    _fail 96 "manifest-copy-style" "${_mcs_n} manifest string(s) break voice.md section 8 (em-dash / double-dash) - see ${_mcs_log}"
+fi
+
+# ---------------------------------------------------------------------------
 # GATE 83 — contract-surface-shift (ADR-084)
 #
 # A method on a published contract can be served two ways: DECLARED
