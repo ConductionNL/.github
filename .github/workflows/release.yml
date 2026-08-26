@@ -48,8 +48,10 @@ jobs:
     # branch up to the version it just tagged. Merging that pull request is a
     # push to the integration branch, which triggers this workflow again, which
     # bumps the version again, which opens another pull request. The bump commit
-    # carries `[skip ci]`, but the MERGE COMMIT that actually lands on the branch
-    # does not, so the marker never gets a chance to work.
+    # used to carry `[skip ci]`, but the MERGE COMMIT that actually lands on the
+    # branch does not, so the marker never got a chance to work anyway. It was
+    # removed on 2026-08-26 — see the note at the commit step for why keeping it
+    # was actively harmful.
     #
     # Left running, the repository releases itself indefinitely. Measured on
     # opencatalogi 2026-08-20, over its last 100 development commits:
@@ -322,10 +324,30 @@ jobs:
       # so the bump is committed here and the tag is cut from that commit. The
       # tag then names a tree whose info.xml says what the tag says.
       #
-      # `[skip ci]` because this commit changes one number in one XML file and
-      # the quality suite has already run on the code being released. Without
-      # it, every release starts a second full pipeline on a tree that differs
-      # from the tested one by a version string.
+      # This commit deliberately does NOT carry `[skip ci]`.
+      #
+      # It used to. The reasoning was that the commit changes one number in one
+      # XML file and the quality suite has already run on the code being
+      # released, so a second full pipeline is waste. That reasoning was sound
+      # about cost and wrong about consequence.
+      #
+      # `[skip ci]` suppresses EVERY workflow on the resulting pull request,
+      # including merge-hygiene.yml — and merge-hygiene's job, "Conflict markers
+      # and PHP syntax", is the single REQUIRED status check on `development` in
+      # all 17 fleet repos. A required check that never runs is never satisfied,
+      # so the pull request sat at MERGEABLE/BLOCKED forever: auto-merge was
+      # enabled, every check that did run was green, and it still could not
+      # merge. That is the mechanism behind the release-PR pile-up in
+      # ConductionNL/.github#562 — the loop opened one per run and nothing ever
+      # closed them. Measured 2026-08-26: 73 of 74 green open PRs fleet-wide
+      # were release bumps in exactly this state.
+      #
+      # The cost objection also weakened: these are public repositories, where
+      # Actions minutes are billed at $0.
+      #
+      # So the suite now runs on the release PR. It verifies the tree that is
+      # actually being tagged, and the required check appears, so auto-merge
+      # completes on its own.
       #
       # No push on a dry run and no push when the number has not moved — a
       # re-run of a release that already happened must not create an empty
@@ -416,7 +438,7 @@ jobs:
             git add openapi.json
           fi
 
-          git commit -m "chore(release): ${{ env.NEW_VERSION }} [skip ci]"
+          git commit -m "chore(release): ${{ env.NEW_VERSION }}"
 
           # The bump lands on its OWN branch, never on ${{ github.ref_name }}.
           # `development`, `beta` and `main` all require a pull request, so a
