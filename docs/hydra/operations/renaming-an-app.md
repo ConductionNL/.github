@@ -12,7 +12,7 @@ than the one before it.
 | --- | --- | --- |
 | 1. Display names | What people read: web properties, docs, `<name>` in `appinfo/info.xml`, READMEs | None — nothing resolves by these |
 | 2. Repository name | The GitHub repo | Low — GitHub redirects old URLs, clones, and open PRs |
-| 3. App id | `<id>`, PHP namespace, routes, l10n domain, frontend URLs | **A data migration** |
+| 3. App id | `<id>`, PHP namespace, routes, l10n domain, frontend URLs, **the signing certificate** | **A data migration**, plus an external wait on Nextcloud |
 
 ## Phase 1 and 2 are not the interesting part
 
@@ -42,6 +42,13 @@ answers to. The new id is simply a different app.
 Everything below is what `planix` → `planninq`
 ([planninq#336](https://github.com/ConductionNL/planninq/pull/336), following
 the earlier `scholiq` → `learniq`) had to handle. Start from that PR.
+
+> ⏱️ **Start the signing certificate before anything else.** It is the only
+> step with an external lead time — see
+> [the signing certificate does not move with the id](#the-signing-certificate-does-not-move-with-the-id).
+> Every other item here is under our control and can be done in an afternoon.
+> This one waits on Nextcloud, and until it lands the renamed app cannot
+> publish a release at all.
 
 ### What breaks, and what carries it across
 
@@ -95,6 +102,40 @@ readers will otherwise "finish the job" and orphan the data.
 
 Same for archived `openspec/changes/` directories and the `@spec` paths that
 point at them: they are history, and rewriting them breaks the paths.
+
+### The signing certificate does not move with the id
+
+`occ integrity:sign-app` binds a certificate to one app id: the certificate's
+CN **is** the id. Rename the app and the certificate in
+`NEXTCLOUD_SIGNING_CERT` stops matching, so the app can no longer publish a
+release — the code migration can be flawless and the app still ships nothing.
+
+**This is the only step in a rename that we cannot do ourselves.** A new
+certificate means a new keypair and a CSR approved by Nextcloud through a PR to
+[`nextcloud/app-certificate-requests`](https://github.com/nextcloud/app-certificate-requests),
+which takes days. Open it at the *start* of Phase 3, not at the end.
+
+Once it is approved:
+
+- the new `<app>.crt` appears in that public repo — the certificate is public,
+  only the key is secret, so it can always be re-fetched from there;
+- store the new private key as the repository secret `NEXTCLOUD_SIGNING_KEY`
+  and the certificate as `NEXTCLOUD_SIGNING_CERT`, both **whole**, including
+  their `-----BEGIN …-----` / `-----END …-----` lines.
+
+Measured on 2026-08-25: `learniq`, `decidiq`, `buildiq` and `keepiq` had all
+shipped their new `<id>` on `development`, and none of them had a certificate
+under that id — only `scholiq`, `decidesk`, `openbuild` and `doriath`. Their
+last published release is the day their id landed. See
+[.github#576](https://github.com/ConductionNL/.github/issues/576).
+
+⚠️ **A malformed certificate used to fail four steps later**, inside Nextcloud,
+as `base64_encode(): Argument #1 ($string) must be of type string, bool given`
+— which names nothing you can act on. The reusable `release.yml` now pre-flights
+both secrets and fails with the credential's actual name instead. If you see
+that pre-flight error, the secret is present but is not a PEM: re-paste it
+whole. If you see a CN mismatch from `integrity:sign-app` instead, the
+certificate is well-formed but belongs to the old id, and you need this section.
 
 ## Verifying
 
