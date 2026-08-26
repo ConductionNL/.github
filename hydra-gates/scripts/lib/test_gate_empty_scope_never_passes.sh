@@ -612,7 +612,31 @@ fi
 #                        verdict for this gate absent a base showing growth,
 #                        which this fixture's docs-only second commit does
 #                        not supply for ANY gate.
-_ARM6_ALLOWED=" 4 15 16 23 47 48 68 "
+#   96 system-elevation-reachability — never diff-scoped, same posture as
+#                        gate-23 and gate-68, and for a reason its own spec
+#                        states: it establishes that a BOUNDARY holds, and a
+#                        boundary cannot be established from a diff. A
+#                        diff-scoped version reports nothing on the ~99% of PRs
+#                        that never open a node or a controller.
+#                        MEASURED, not assumed: `check_system_elevation.py`
+#                        reads NO scope input at all — no BASE_REF, no diff, no
+#                        file list — it walks lib/ itself. On this fixture it
+#                        prints `checked 1 PHP file(s) under lib/ [full tree]:
+#                        0 elevate, 0 failure(s)` byte-for-byte identically at
+#                        full scope and at --scope-to-diff --base HEAD~1,
+#                        because there is no code path by which the scope could
+#                        reach it. The fixture's ThingController calls
+#                        `findAll()`, which is what gates 14/17/21 plant it for;
+#                        it does not elevate, so a whole-tree read of it is an
+#                        honest zero rather than a scope artifact.
+#                        SEPARATELY: "FAIL the planted tree at full scope" is
+#                        not a reachable verdict for this gate on THIS fixture —
+#                        nothing in it elevates at all — so it is deliberately
+#                        absent from the anti-widening list below. Its
+#                        equivalent lives in gate-acceptance/system-elevation,
+#                        whose planted arm FAILS and whose clean arm PASSES on
+#                        a tree built for it.
+_ARM6_ALLOWED=" 4 15 16 23 47 48 68 96 "
 
 _wide_bad=""
 while IFS= read -r _g; do
