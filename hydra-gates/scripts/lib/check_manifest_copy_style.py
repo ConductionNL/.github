@@ -111,6 +111,14 @@ def _walk(node, path, hits, counter):
     """
     if isinstance(node, dict):
         for key, value in node.items():
+            # Underscore-prefixed blocks are internal metadata, never rendered.
+            # `_meta` is the live case: 38 shillinq fragments carry one, holding
+            # spdx-license, spdx-copyright, change, adr and a description that
+            # documents the fragment for developers. Flagging those produced 22
+            # false findings out of 47 on that app alone, and "fixing" them
+            # would have rewritten build provenance as if it were user copy.
+            if key.startswith("_"):
+                continue
             child = "%s.%s" % (path, key) if path else key
             if key in VISIBLE_FIELDS and isinstance(value, str) and value.strip():
                 counter[0] += 1
