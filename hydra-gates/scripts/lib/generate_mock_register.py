@@ -123,7 +123,7 @@ def _expand_class(body: str) -> str:
     return "".join(dict.fromkeys(out)) or "abcdefghijklmnopqrstuvwxyz"
 
 
-def _synthesise(pattern: str, index: int) -> str | None:
+def _synthesise(pattern: str, index: int, min_len: int = 0) -> str | None:
     """Build a string for an anchored class-and-quantifier pattern, or None."""
     body = pattern
     # Lookarounds constrain but do not generate. Dropping them lets the class
@@ -134,6 +134,18 @@ def _synthesise(pattern: str, index: int) -> str | None:
         body = body[1:]
     if body.endswith("$"):
         body = body[:-1]
+
+    # A GROUPED ALTERNATION resolves to its first branch. `^([01]\\d|2[0-3]):[0-5]\\d$`
+    # — a clock time — is the shape this appears in throughout the fleet, and
+    # the walk below cannot step over `(` or `|`. Taking the first branch turns
+    # it back into a plain class-and-quantifier run; _satisfy_pattern still
+    # verifies the result against the FULL pattern, so a wrong branch is caught
+    # rather than shipped.
+    while True:
+        group = re.search(r"\(([^()]*\|[^()]*)\)", body)
+        if group is None:
+            break
+        body = body[:group.start()] + group.group(1).split("|")[0] + body[group.end():]
 
     out = []
     pos = 0
@@ -168,7 +180,12 @@ def _synthesise(pattern: str, index: int) -> str | None:
             # maxLength somewhere else on the same property.
             count = int(token.group("n"))
         elif token.group("one") in {"+", "*"}:
-            count = 3 if token.group("one") == "+" else 0
+            # 🔴 AN OPEN QUANTIFIER MUST REACH minLength. `+` expanded to a flat
+            # three characters, so `minLength: 20` with
+            # `pattern: ^[A-Za-z0-9+/=]+$` produced "ABC" — a value satisfying
+            # its pattern and violating its length, which is the same defect as
+            # one satisfying its length and violating its pattern.
+            count = max(3, min_len) if token.group("one") == "+" else min_len
 
         if fixed:
             out.append(alphabet * max(count, 1) if token.group("n") else alphabet)
@@ -178,17 +195,24 @@ def _synthesise(pattern: str, index: int) -> str | None:
     return "".join(out) or None
 
 
-def _satisfy_pattern(value: Any, pattern: str, index: int) -> Any:
+def _satisfy_pattern(value: Any, pattern: str, index: int, min_len: int = 0) -> Any:
     """Return a value matching `pattern`, or the original when none can be built."""
     try:
         compiled = re.compile(pattern)
     except re.error:
         return value
 
-    if isinstance(value, str) and compiled.search(value):
+    # The length check belongs HERE, not after. An early return on "the pattern
+    # matches" handed back "ABC" for `minLength: 20` — pattern-valid and
+    # length-invalid, because only one of the two constraints was consulted.
+    if (
+        isinstance(value, str)
+        and compiled.search(value)
+        and len(value) >= min_len
+    ):
         return value
 
-    built = _synthesise(pattern, index)
+    built = _synthesise(pattern, index, min_len)
     if built is not None and compiled.search(built):
         return built
 
@@ -307,7 +331,9 @@ def _value(name: str, spec: dict, index: int, depth: int = 0) -> Any:
     # thing `--check` caught: `Voorbeeld Color 1` against `^#[0-9A-Fa-f]{6}$`.
     pattern = spec.get("pattern")
     if isinstance(pattern, str) and pattern:
-        text = _satisfy_pattern(text, pattern, index)
+        text = _satisfy_pattern(
+            text, pattern, index, min_len if isinstance(min_len, int) else 0
+        )
 
     return text
 
@@ -373,6 +399,66 @@ def _descriptors(app_dir: str) -> list[tuple[str, dict]]:
     return found
 
 
+def _register_schema_map(app_dir: str) -> tuple[dict[str, dict], dict[str, list[str]], dict[str, dict]]:
+    """Resolve which schemas each register actually carries.
+
+    🔴 THE REGISTER'S OWN `schemas` LIST IS THE AUTHORITY, and honouring it is
+    not optional. Fleet descriptors are MODULAR: pipelinq declares one register
+    across twenty files, each contributing a few schemas, and one file may
+    declare several registers at once. Pairing every register in a file with
+    every schema in that file is a cross-product — it generated six objects for
+    `client` instead of three, attributed schemas to registers that do not carry
+    them, and validated objects against a same-named schema defined in a
+    different file.
+
+    Falls back to "every schema in this file" only for a register that declares
+    no list, which is what a single-register descriptor looks like.
+
+    @return (registers, register->schema names, schema name->definition)
+    """
+    registers: dict[str, dict] = {}
+    owns: dict[str, set[str]] = {}
+    definitions: dict[str, dict] = {}
+    fallback: dict[str, set[str]] = {}
+
+    for _path, data in _descriptors(app_dir):
+        components = data["components"]
+        decl_registers = components.get("registers") or {}
+        decl_schemas = components.get("schemas") or {}
+        if isinstance(decl_schemas, dict):
+            for name, spec in decl_schemas.items():
+                if isinstance(spec, dict):
+                    definitions.setdefault(name, spec)
+
+        for slug, reg in (decl_registers or {}).items():
+            if not isinstance(reg, dict):
+                continue
+            if slug not in registers or len(reg) > len(registers[slug]):
+                registers[slug] = reg
+            # 🔴 UNION, NOT else. A modular register declares its `schemas` list
+            # in SOME files and not others — pipelinq names it in one file and
+            # omits it in twenty more that each define a few schemas. Treating
+            # the list as authoritative wherever it appeared, and ignoring the
+            # rest, dropped scholiq from 118 schemas to 1 and launchpad to 0.
+            #
+            # A register carries the union of every list it declares AND the
+            # schemas defined alongside it in files where it declares none.
+            listed = reg.get("schemas")
+            if isinstance(listed, list) and listed:
+                owns.setdefault(slug, set()).update(str(x) for x in listed)
+            if isinstance(decl_schemas, dict) and decl_schemas:
+                fallback.setdefault(slug, set()).update(decl_schemas.keys())
+
+    resolved: dict[str, list[str]] = {}
+    for slug in registers:
+        names = set(owns.get(slug, set())) | set(fallback.get(slug, set()))
+        # Only schemas that are actually DEFINED somewhere: a register may list
+        # a name whose definition ships in a file this app does not have.
+        resolved[slug] = sorted(n for n in names if n in definitions)
+
+    return registers, resolved, definitions
+
+
 def build(app_dir: str, app_id: str, per_schema: int, existing: dict | None) -> dict:
     keep: dict[tuple[str, str], list] = {}
     if existing:
@@ -380,37 +466,33 @@ def build(app_dir: str, app_id: str, per_schema: int, existing: dict | None) -> 
             ref = obj.get("@self", {}) if isinstance(obj, dict) else {}
             keep.setdefault((ref.get("register", ""), ref.get("schema", "")), []).append(obj)
 
+    decl_registers, owns, definitions = _register_schema_map(app_dir)
+
     registers: dict[str, Any] = {}
     schemas: dict[str, Any] = {}
     objects: list[dict] = []
 
-    for _path, data in _descriptors(app_dir):
-        components = data["components"]
-        decl_registers = components.get("registers") or {}
-        decl_schemas = components.get("schemas") or {}
-        if not isinstance(decl_schemas, dict):
+    for reg_slug, reg in decl_registers.items():
+        carried_names = owns.get(reg_slug) or []
+        if not carried_names:
             continue
 
-        for reg_slug, reg in decl_registers.items():
-            if not isinstance(reg, dict):
-                continue
-            registers.setdefault(reg_slug, {
-                "slug": reg.get("slug", reg_slug),
-                "title": f"{reg.get('title', reg_slug)} (demo)",
-                "version": reg.get("version", "1.0.0"),
-                "description": "Demo data for "
-                               f"{reg.get('title', reg_slug)}. Generated from the register's own "
-                               "schemas — see hydra/scripts/generate-mock-register.py.",
-            })
+        registers[reg_slug] = {
+            "slug": reg.get("slug", reg_slug),
+            "title": f"{reg.get('title', reg_slug)} (demo)",
+            "version": reg.get("version", "1.0.0"),
+            "description": "Demo data for "
+                           f"{reg.get('title', reg_slug)}. Generated from the register's own "
+                           "schemas — see hydra-gates/scripts/lib/generate_mock_register.py.",
+        }
 
-            for sch_name, sch in decl_schemas.items():
-                if not isinstance(sch, dict):
-                    continue
-                schemas.setdefault(sch_name, sch)
-                carried = keep.get((reg_slug, sch_name), [])
-                objects.extend(carried)
-                for index in range(len(carried), per_schema):
-                    objects.append(_object_for(reg_slug, sch_name, sch, index))
+        for sch_name in carried_names:
+            sch = definitions[sch_name]
+            schemas.setdefault(sch_name, sch)
+            carried = keep.get((reg_slug, sch_name), [])
+            objects.extend(carried)
+            for index in range(len(carried), per_schema):
+                objects.append(_object_for(reg_slug, sch_name, sch, index))
 
     return {
         "openapi": "3.0.0",
@@ -438,9 +520,34 @@ def build(app_dir: str, app_id: str, per_schema: int, existing: dict | None) -> 
 
 
 def _drop_refs(node: Any) -> Any:
-    """Strip `$ref` keys, which in OpenRegister name a schema slug, not a URL."""
+    """Normalise an OpenAPI-flavoured schema into something jsonschema can judge.
+
+    Two dialect differences, both of which produced FALSE FINDINGS:
+
+    `$ref` in OpenRegister names a schema SLUG, not a URL — `{"$ref": "project"}`
+    raises `RefResolutionError: unknown url type: 'project'`. Dropped, because
+    this validator's question is "does the object satisfy the shape declared
+    HERE"; a cross-schema reference is a relation OpenRegister owns.
+
+    🔴 `nullable: true` IS OPENAPI, NOT JSON SCHEMA. Every descriptor in the
+    fleet declares `"openapi": "3.0.0"` and uses it. jsonschema does not know
+    the keyword, so a property declared nullable — and given `null` by the
+    schema's OWN declared `default` — was reported as
+    `None is not of type 'string'`. The data was right and the validator was
+    wrong, which is the more dangerous direction: it would have had an author
+    "fix" conformant demo data.
+
+    Translated to `type: [T, "null"]`, which is what the keyword means.
+    """
     if isinstance(node, dict):
-        return {k: _drop_refs(v) for k, v in node.items() if k != "$ref"}
+        out = {k: _drop_refs(v) for k, v in node.items() if k != "$ref"}
+        if out.pop("nullable", None) is True:
+            kind = out.get("type")
+            if isinstance(kind, str):
+                out["type"] = [kind, "null"]
+            elif isinstance(kind, list) and "null" not in kind:
+                out["type"] = [*kind, "null"]
+        return out
     if isinstance(node, list):
         return [_drop_refs(v) for v in node]
     return node
@@ -465,7 +572,8 @@ def _validate(obj: dict, schema: dict) -> str | None:
 
         stripped = {
             k: v for k, v in schema.items()
-            if k in {"type", "properties", "required", "enum", "items", "additionalProperties"}
+            if k in {"type", "properties", "required", "enum", "items",
+                     "additionalProperties", "nullable"}
         }
         stripped.setdefault("type", "object")
 
@@ -549,40 +657,53 @@ def check(app_dir: str, app_id: str, per_schema: int, only: set[str] | None = No
             have[key] = have.get(key, 0) + 1
             objects_by_key.setdefault(key, []).append(obj)
 
-    checked = failures = 0
+    _regs, owns, definitions = _register_schema_map(app_dir)
+
+    # Which (register, schema) pairs the caller's scope actually covers. Built
+    # from the same authority the generator uses, so the producer and the judge
+    # cannot disagree about which pairs exist.
+    in_scope_pairs: list[tuple[str, str]] = []
     for _path, decl in _descriptors(app_dir):
         if only is not None and os.path.relpath(_path, app_dir) not in only:
             continue
-        components = decl["components"]
-        declared_schemas = components.get("schemas") or {}
-        for reg_slug in (components.get("registers") or {}):
-            for sch_name, sch in declared_schemas.items():
-                checked += 1
-                key = (reg_slug, sch_name)
-                count = have.get(key, 0)
-                if count < per_schema:
-                    failures += 1
-                    print(
-                        f"FAIL {app_id}: register '{reg_slug}' schema '{sch_name}' has "
-                        f"{count} demo object(s), needs {per_schema} (ADR-111 rule 1). Regenerate "
-                        f"with `python3 vendor/conduction/hydra-gates/scripts/lib/generate_mock_register.py .`"
-                    )
-                    continue
+        touched = set((decl["components"].get("schemas") or {}).keys())
+        touched |= set((decl["components"].get("registers") or {}).keys())
+        for reg_slug, names in owns.items():
+            for sch_name in names:
+                if sch_name in touched or reg_slug in touched:
+                    pair = (reg_slug, sch_name)
+                    if pair not in in_scope_pairs:
+                        in_scope_pairs.append(pair)
 
-                # 🔴 AND THE OBJECTS MUST SATISFY THE SCHEMA. Counting them only
-                # proves somebody wrote something. Demo data that fails its own
-                # schema fails at import, in front of whoever asked for a demo.
-                if not isinstance(sch, dict):
-                    continue
-                for obj in objects_by_key.get(key, []):
-                    error = _validate(obj, sch)
-                    if error is not None:
-                        failures += 1
-                        print(
-                            f"FAIL {app_id}: register '{reg_slug}' schema '{sch_name}' has a "
-                            f"demo object that does not satisfy its own schema — {error}"
-                        )
-                        break
+    checked = failures = 0
+    for reg_slug, sch_name in in_scope_pairs:
+        sch = definitions.get(sch_name)
+        checked += 1
+        key = (reg_slug, sch_name)
+        count = have.get(key, 0)
+        if count < per_schema:
+            failures += 1
+            print(
+                f"FAIL {app_id}: register '{reg_slug}' schema '{sch_name}' has "
+                f"{count} demo object(s), needs {per_schema} (ADR-111 rule 1). Regenerate "
+                f"with `python3 vendor/conduction/hydra-gates/scripts/lib/generate_mock_register.py .`"
+            )
+            continue
+
+        # 🔴 AND THE OBJECTS MUST SATISFY THE SCHEMA. Counting them only
+        # proves somebody wrote something. Demo data that fails its own
+        # schema fails at import, in front of whoever asked for a demo.
+        if not isinstance(sch, dict):
+            continue
+        for obj in objects_by_key.get(key, []):
+            error = _validate(obj, sch)
+            if error is not None:
+                failures += 1
+                print(
+                    f"FAIL {app_id}: register '{reg_slug}' schema '{sch_name}' has a "
+                    f"demo object that does not satisfy its own schema — {error}"
+                )
+                break
 
     print(f"checked {checked} schema(s)")
 
