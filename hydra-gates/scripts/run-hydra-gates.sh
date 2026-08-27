@@ -10815,6 +10815,66 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# GATE 99 — manifest-l10n-coverage
+#
+# A manifest string with no key in l10n/nl.json renders its ENGLISH source to a
+# Dutch user. The l10n extractor scans .vue/.js/.ts for t() calls; the manifest
+# is data the renderer walks, so CnAppNav's `menu[].label`, CnPageHeader's
+# `title` / `description` and CnWalkthrough's step copy all look up keys it
+# never saw. The fallback is silent.
+#
+# `check:l10n-js` DOES NOT COVER THIS. It compares l10n/nl.json to the
+# generated l10n/nl.js, and a string absent from BOTH is perfectly in sync.
+# Measured on buildiq 2026-08-27: both files at 1,045 keys, both missing
+# `Flow`, check green.
+#
+# WHY A GATE RATHER THAN A PER-APP SCRIPT. A fleet sweep translated ~3,900
+# manifest strings across 17 apps and left every one at zero missing. Within
+# hours two had regressed the ordinary way, not from old debt but from the next
+# PR that added a string: keepiq #448 (`Registered by`, `Requested`) and
+# buildiq #485 (`Flow`). Both merged green. Only humaniq ran a check that would
+# have failed, because someone had hand-written one for that app. Sixteen
+# separate ports is sixteen chances to miss one; this is a single place.
+#
+# FULL-TREE, not diff-scoped, for the reason gates 84, 93, 94, 95 and 96 give:
+# the string is either covered or it is not, and a diff-scoped version reports
+# clean on every PR that does not happen to touch the manifest.
+#
+# NOTE ON PLACEMENT: top level, outside any `_FAILED` guard — a gate that only
+# runs once everything else passed is green-but-dead.
+# ---------------------------------------------------------------------------
+_mlc_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-manifest-l10n-coverage.log
+: > "${_mlc_log}"
+set +e
+python3 "${SCRIPT_DIR}/lib/check_manifest_l10n_coverage.py" . > "${_mlc_log}" 2>&1
+_mlc_rc=$?
+# `set +e`, not `set -e`: errexit off is the state this script actually runs
+# in. See the note at the top of this file.
+set +e
+
+# An empty scope must not print the same word as a clean full-tree read.
+# `checked 0` means the checker inspected NOTHING — no manifest, or no Dutch
+# catalogue to check it against. Both are `na`, not a pass. Same reasoning as
+# gate-96, and the same defect test_gate_empty_scope_never_passes.sh caught
+# there.
+_mlc_checked=$(sed -n 's/^checked \([0-9]\{1,\}\) manifest string.*/\1/p' "${_mlc_log}" 2>/dev/null | tail -1)
+case "${_mlc_checked}" in ''|*[!0-9]*) _mlc_checked=0 ;; esac
+
+if [ "${_mlc_rc}" -eq 4 ] || { [ "${_mlc_rc}" -eq 0 ] && [ "${_mlc_checked}" -eq 0 ]; }; then
+    _skip_empty_scope 99 "manifest-l10n-coverage" "user-visible manifest string checkable against a Dutch catalogue (src/manifest.json or src/manifest.d/*.json plus l10n/nl.json)"
+elif [ "${_mlc_rc}" -eq 0 ]; then
+    _pass 99 "manifest-l10n-coverage"
+elif ! _helper_finished "${_mlc_log}" '^checked [0-9]+ manifest string'; then
+    # A CRASH IS NOT A FINDING.
+    _mlc_why=$(head -3 "${_mlc_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+    _skip 99 "manifest-l10n-coverage" wiring "check_manifest_l10n_coverage.py exited ${_mlc_rc} without printing its terminal 'checked N manifest string(s)' summary, so manifest translation coverage is UNVERIFIED by this run. Checker output: ${_mlc_why:-<empty>}. See ${_mlc_log}."
+else
+    _mlc_n=$(grep -cE '^FAIL ' "${_mlc_log}" 2>/dev/null || true)
+    case "${_mlc_n}" in ''|*[!0-9]*) _mlc_n=1 ;; esac
+    _fail 99 "manifest-l10n-coverage" "${_mlc_n} manifest string(s) have no l10n/nl.json key and will render English to a Dutch user - see ${_mlc_log}"
+fi
+
+# ---------------------------------------------------------------------------
 # GATE 97 — system-elevation-reachability (ADR-099 rule 9)
 #
 # NUMBERED 97, NOT 96. This gate was written as 96 and #581 landed
