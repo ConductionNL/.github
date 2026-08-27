@@ -59,7 +59,12 @@ PHP
 _info() {  # <registered class names...>
     printf '<?xml version="1.0"?>\n<info>\n    <id>fixture</id>\n    <repair-steps>\n        <post-migration>\n'
     for _c in "$@"; do printf '            <step>OCA\\Fixture\\Repair\\%s</step>\n' "$_c"; done
+    printf '%s' "${_INFO_EXTRA:-}"
     printf '        </post-migration>\n    </repair-steps>\n</info>\n'
+}
+
+_held() {  # <class> <reason> -> the withhold marker, as info.xml carries it
+    printf '            <!-- hydra-gate-98 held: OCA\\Fixture\\Repair\\%s \xe2\x80\x94 %s -->\n' "$1" "$2"
 }
 
 cd "${APP}" || exit 1
@@ -144,6 +149,51 @@ _v="$(_verdict touches-inherited)"
 case "${_v}" in
     *FAIL*) _ok "the same inherited step IS reported once a change touches it — the gate is scoped, not blind" ;;
     *)      _bad "expected FAIL once the inherited step is in the diff, got: ${_v:-<no gate-98 line>}" ;;
+esac
+
+echo "-- ARM 5: a step withheld ON PURPOSE, with a reason, is HELD and not a failure --"
+# The case that forced the hatch: shillinq's RetireSubsidieSchema irreversibly
+# deletes the rows an earlier step folded, so it must lag that fold by a release.
+# Its <step> is commented out, which is correctly "named nowhere" — the gate had
+# the mechanism right and the intent wrong, and no way to tell them apart.
+git checkout --quiet base
+git checkout --quiet -b withheld
+_step DeliberatelyHeld > lib/Repair/DeliberatelyHeld.php
+_INFO_EXTRA="$(_held DeliberatelyHeld 'deletes the source rows the fold created, so it must lag the fold by one release to leave a rollback window')" \
+    _info AlreadyRegistered > appinfo/info.xml
+git add -A && git commit --quiet -m "add a step, withheld on purpose"
+mkdir -p "${WORK}/logs-withheld"
+_v="$(_verdict withheld)"
+case "${_v}" in
+    *FAIL*) _bad "a reasoned withhold marker did not suppress the finding: ${_v}" ;;
+    *)      _ok "a reasoned withhold marker is accepted" ;;
+esac
+
+echo "-- ARM 6: the hatch is not a mute button — a marker with no real reason still FAILS --"
+git checkout --quiet base
+git checkout --quiet -b withheld-thin
+_step ThinExcuse > lib/Repair/ThinExcuse.php
+_INFO_EXTRA="$(_held ThinExcuse 'later')" _info AlreadyRegistered > appinfo/info.xml
+git add -A && git commit --quiet -m "add a step with a thin excuse"
+mkdir -p "${WORK}/logs-withheld-thin"
+_v="$(_verdict withheld-thin)"
+case "${_v}" in
+    *FAIL*) _ok "a marker without a real reason is still a failure — the cheapest way out stays 'wire it up'" ;;
+    *)      _bad "a one-word excuse muted the gate, which makes the hatch a mute button: ${_v:-<no gate-98 line>}" ;;
+esac
+
+echo "-- ARM 7: a marker naming ANOTHER class does not cover this one --"
+git checkout --quiet base
+git checkout --quiet -b withheld-other
+_step NotCovered > lib/Repair/NotCovered.php
+_INFO_EXTRA="$(_held SomeOtherStep 'a perfectly good reason that belongs to an entirely different repair step')" \
+    _info AlreadyRegistered > appinfo/info.xml
+git add -A && git commit --quiet -m "marker for a different class"
+mkdir -p "${WORK}/logs-withheld-other"
+_v="$(_verdict withheld-other)"
+case "${_v}" in
+    *FAIL*) _ok "a marker is per-class and can never become a blanket exemption" ;;
+    *)      _bad "a marker for a different class suppressed this one: ${_v:-<no gate-98 line>}" ;;
 esac
 
 echo

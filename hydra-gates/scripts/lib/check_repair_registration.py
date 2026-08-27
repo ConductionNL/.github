@@ -76,6 +76,49 @@ def declared_steps(info_xml: str) -> set[str]:
     }
 
 
+# A step can be deliberately WITHHELD. shillinq's RetireSubsidieSchema is the
+# case that forced this: it irreversibly deletes the source rows an earlier step
+# folded, so it must lag that fold by at least one release to leave a rollback
+# window. Its registration is commented out in info.xml with that reasoning
+# written above it — and a commented-out <step> is, correctly, "named nowhere":
+# Nextcloud will not run it. The gate was right about the mechanism and wrong
+# about the intent, and it had no way to tell those apart.
+#
+# 🔴 THE HATCH IS NOT A MUTE BUTTON. Three properties keep it from becoming one:
+#   - it names ONE class, so it can never become a blanket exemption;
+#   - it requires a REASON, and a marker without a real one still FAILS, so the
+#     cheapest way out is still to wire the step up;
+#   - a held step is PRINTED as HELD, so it stays visible in the run instead of
+#     vanishing into a pass. A check that detects something and then says
+#     nothing is not a check.
+MIN_REASON_CHARS = 30
+
+HELD_RE = re.compile(
+    r"hydra-gate-98\s+held:\s*\\?(?P<fqcn>[A-Za-z_][\w\\]*)"
+    r"\s*(?:\u2014|--|:)\s*(?P<reason>.*?)(?=-->|\Z)",
+    re.DOTALL,
+)
+
+
+def held_steps(info_xml: str) -> dict[str, str]:
+    """FQCN -> reason, for steps a marker deliberately withholds.
+
+    Read from the RAW TEXT, not the parsed tree: the marker lives in an XML
+    comment, and ElementTree discards comments entirely. Parsing here would find
+    nothing and silently report every held step as a failure.
+    """
+    try:
+        with open(info_xml, encoding="utf-8", errors="replace") as handle:
+            raw = handle.read()
+    except OSError:
+        return {}
+
+    return {
+        match.group("fqcn").strip().lstrip("\\"): " ".join(match.group("reason").split())
+        for match in HELD_RE.finditer(raw)
+    }
+
+
 def repair_classes(path: str) -> list[tuple[str, str]]:
     """(fqcn, class_name) for each IRepairStep implementation in one file."""
     try:
@@ -129,6 +172,7 @@ def main(argv: list[str]) -> int:
         return 4
 
     declared = declared_steps(info_xml)
+    held = held_steps(info_xml)
     checked = 0
     failures = 0
 
@@ -145,12 +189,32 @@ def main(argv: list[str]) -> int:
             if fqcn in declared:
                 continue
 
+            if fqcn in held:
+                reason = held[fqcn]
+                if len(reason) >= MIN_REASON_CHARS:
+                    print(
+                        f"HELD {rel}: {name} is deliberately not registered — {reason}"
+                    )
+                    continue
+
+                failures += 1
+                print(
+                    f"FAIL {rel}: {name} carries a `hydra-gate-98 held:` marker with no "
+                    f"real reason ({len(reason)} chars; at least {MIN_REASON_CHARS} are "
+                    f"required). Withholding a step is a decision, and the marker is where "
+                    f"it gets recorded — say why it is held and when it should be wired up, "
+                    f"or register it."
+                )
+                continue
+
             failures += 1
             print(
                 f"FAIL {rel}: {name} implements IRepairStep and is named nowhere in "
                 f"appinfo/info.xml <repair-steps>, so Nextcloud will never run it. "
                 f"Add <step>{fqcn}</step> to <post-migration> and, if it should also "
-                f"run on a fresh install, to <install>."
+                f"run on a fresh install, to <install>. If it is withheld ON PURPOSE, "
+                f"record that in info.xml as `hydra-gate-98 held: {fqcn} — <why, and "
+                f"what would let it be wired up>`."
             )
 
     print(f"checked {checked} repair step(s)")
