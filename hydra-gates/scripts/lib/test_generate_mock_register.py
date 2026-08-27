@@ -344,6 +344,86 @@ class AppIdentity(unittest.TestCase):
             self.assertIn("--app=humaniq", built["x-openregister"]["description"])
 
 
+class IconScope(unittest.TestCase):
+    """A vocabulary icon the app does not REGISTER renders nothing.
+
+    `CnAppNav` resolves an MDI name only through the registry `registerIcons()`
+    populates, with no fallback — the defect ADR-077 exists for. So an icon
+    being canonical is not sufficient; the app has to have imported it.
+
+    planninq failed gate-60 on exactly this. The generated demo data offered
+    `BookOpenVariantOutline`, `MapMarkerPath` and `ViewDashboardOutline` — all
+    in the vocabulary, none in its `src/icons.js`. Control: with the generated
+    file removed the same checker reported 2 manifests and 0 failures, so the
+    demo data was the whole finding.
+    """
+
+    def _app_registering(self, root: Path, *names: str) -> None:
+        (root / "src").mkdir(parents=True, exist_ok=True)
+        (root / "src" / "main.js").write_text(
+            "import { registerIcons } from 'x'\nregisterIcons(icons)\n", encoding="utf-8"
+        )
+        imports = "\n".join(
+            f"import {n} from 'vue-material-design-icons/{n}.vue'" for n in names
+        )
+        (root / "src" / "icons.js").write_text(
+            imports + "\nexport default {\n" + "".join(f"\t{n},\n" for n in names) + "}\n",
+            encoding="utf-8",
+        )
+
+    def _icon_app(self, root: Path) -> None:
+        _write(
+            root,
+            "lib/Settings/widget_register.json",
+            {
+                "components": {
+                    "registers": {"widget": {"schemas": ["Thing"]}},
+                    "schemas": {
+                        "Thing": _schema({"icon": {"type": "string"}}, required=["icon"])
+                    },
+                }
+            },
+        )
+
+    def test_generated_icons_come_only_from_what_the_app_registers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _app(root)
+            self._icon_app(root)
+            # A small registry on purpose: if the scope were ignored, the value
+            # would come from the full vocabulary and almost certainly not be
+            # one of these two.
+            self._app_registering(root, "Cog", "FolderOutline")
+
+            gmr._set_icon_scope(str(root))
+            built = gmr.build(str(root), "widget", 3, None)
+            icons = {o["icon"] for o in built["components"]["objects"]}
+
+            self.assertTrue(icons, "the required icon property must be populated")
+            self.assertTrue(
+                icons <= {"Cog", "FolderOutline"},
+                f"generated icons {icons} must come from what the app registers",
+            )
+
+    def test_it_falls_back_to_the_vocabulary_when_the_app_registers_nothing(self):
+        """An app with no bootstrap must still get a canonical icon.
+
+        Silently emitting no icon would trade a gate-60 failure for an empty
+        value, which is worse: the gate would go quiet and the demo would show
+        a blank where an icon belongs.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _app(root)
+            self._icon_app(root)
+
+            gmr._set_icon_scope(str(root))
+            built = gmr.build(str(root), "widget", 1, None)
+
+            icon = built["components"]["objects"][0]["icon"]
+            self.assertIn(icon, gmr._vocabulary_icons())
+
+
 class RegisterOwnership(unittest.TestCase):
     """A descriptor in an app's tree is not necessarily that app's register.
 

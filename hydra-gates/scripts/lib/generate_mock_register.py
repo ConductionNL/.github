@@ -248,6 +248,52 @@ def _satisfy_pattern(value: Any, pattern: str, index: int, min_len: int = 0) -> 
 _ICON_CACHE: list[str] | None = None
 
 
+def _set_icon_scope(app_dir: str) -> None:
+    """Restrict generated icons to ones THIS APP ACTUALLY REGISTERS.
+
+    🔴 A VOCABULARY ICON THE APP DOES NOT REGISTER RENDERS NOTHING. `CnAppNav`
+    resolves an MDI name only through the registry `registerIcons()` populates,
+    with no fallback — that is the defect ADR-077 exists for. So picking a name
+    that is merely IN the vocabulary is not enough: it has to be one the app
+    imported.
+
+    planninq failed gate-60 on exactly this. The demo data offered
+    `BookOpenVariantOutline`, `MapMarkerPath` and `ViewDashboardOutline` — all
+    canonical, none registered in its `src/icons.js`:
+
+        FAIL src/icons.js: 3 icon name(s) used by the manifests are NOT
+        registered — they render with no icon at all, not a fallback.
+
+    Measured as a control: with the generated file removed the same checker
+    reported 2 manifests and 0 failures. The demo data was the whole finding.
+
+    🔴 THE INTERSECTION IS COMPUTED WITH GATE-60'S OWN EXTRACTOR, imported
+    rather than reimplemented, so the producer and the judge cannot drift into
+    disagreeing about what "registered" means.
+
+    Falls back to the full vocabulary when the app has no bootstrap to inspect
+    or registers nothing recognisable — in which case gate-60 reports it, which
+    is the honest outcome rather than a silently iconless value.
+    """
+    global _ICON_CACHE  # noqa: PLW0603
+    _ICON_CACHE = None
+    vocabulary = _vocabulary_icons()
+
+    registered: set[str] | None = None
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import check_icon_vocabulary as iv  # noqa: PLC0415
+
+        registered, _problem = iv._registered_icon_names(app_dir)
+    except Exception:  # noqa: BLE001
+        registered = None
+
+    if registered:
+        allowed = [name for name in vocabulary if name in registered]
+        if allowed:
+            _ICON_CACHE = allowed
+
+
 def _vocabulary_icons() -> list[str]:
     """Icon names gate-60 accepts, read from its own vocabulary file."""
     global _ICON_CACHE  # noqa: PLW0603
@@ -795,6 +841,7 @@ def build(app_dir: str, app_id: str, per_schema: int, existing: dict | None) -> 
             ref = obj.get("@self", {}) if isinstance(obj, dict) else {}
             keep.setdefault((ref.get("register", ""), ref.get("schema", "")), []).append(obj)
 
+    _set_icon_scope(app_dir)
     decl_registers, owns, definitions = _register_schema_map(app_dir, app_id)
 
     registers: dict[str, Any] = {}
