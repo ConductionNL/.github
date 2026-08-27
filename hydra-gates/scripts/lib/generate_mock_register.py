@@ -283,6 +283,46 @@ def _vocabulary_icons() -> list[str]:
     return _ICON_CACHE
 
 
+def _default_is_usable(default: Any, spec: dict) -> bool:
+    """Whether a declared `default` actually satisfies its own property schema.
+
+    Authors write defaults as documentation of intent, and nothing validates
+    them: shillinq's `JournalEntry.lawfulness` defaults to an object whose
+    `summary_opinion` is null while the nested schema admits only four
+    non-null strings. Emitting that default produced a demo object that failed
+    the very schema the default is written into.
+
+    🔴 UNAVAILABLE VALIDATION IS NOT A CLEAN BILL OF HEALTH — but here the safe
+    direction is to KEEP the author's default, because rejecting every default
+    when `jsonschema` is missing would discard good ones wholesale and change
+    output based on what happens to be installed. `--check` performs the real
+    validation either way, so a bad default that slips through is reported
+    rather than shipped silently.
+    """
+    try:
+        import jsonschema  # noqa: PLC0415
+    except ImportError:
+        return True
+
+    checkable = {
+        k: v for k, v in spec.items()
+        if k in {"type", "properties", "required", "enum", "items", "pattern",
+                 "minLength", "maxLength", "minimum", "maximum", "multipleOf"}
+    }
+    if not checkable:
+        return True
+
+    try:
+        jsonschema.validate(instance=default, schema=_drop_refs(checkable))
+    except jsonschema.ValidationError:
+        return False
+    except Exception:  # noqa: BLE001
+        # A schema too broken to validate against says nothing about the
+        # default. Leave it to `--check`, which reports invalid schemas by name.
+        return True
+    return True
+
+
 def _value(name: str, spec: dict, index: int, depth: int = 0) -> Any:
     """One value for one property, derived from that property's own rules."""
     if not isinstance(spec, dict):
@@ -302,8 +342,16 @@ def _value(name: str, spec: dict, index: int, depth: int = 0) -> Any:
     # A `default: null` on a typed property is not a usable value — it is the
     # absence of one, and handing it back produced `None is not of type 'string'`
     # on real fleet schemas. Fall through and derive a value instead.
+    #
+    # 🔴 AND A NON-NULL DEFAULT IS NOT AUTOMATICALLY A VALID ONE. shillinq's
+    # `JournalEntry.lawfulness` declares a default OBJECT that carries
+    # `summary_opinion: null` while its own nested schema restricts that
+    # property to four non-null strings. Returning the default wholesale
+    # emitted a demo object that failed the schema the default belongs to. A
+    # default is an author's convenience, not a validated value.
     if "default" in spec and spec["default"] is not None:
-        return spec["default"]
+        if _default_is_usable(spec["default"], spec):
+            return spec["default"]
 
     kind = spec.get("type")
     if isinstance(kind, list):
@@ -327,6 +375,38 @@ def _value(name: str, spec: dict, index: int, depth: int = 0) -> Any:
                 value = min(value, int(high))
             except (TypeError, ValueError):
                 pass
+        # 🔴 `multipleOf` IS A CONSTRAINT, AND FLOATS DO NOT SATISFY IT BY LUCK.
+        # shillinq declares `amount` with `multipleOf: 0.01`; the natural value
+        # 2.01 is rejected, because a validator computes 2.01 / 0.01 and gets
+        # 200.99999999999997. Snapping through Decimal produces a value that is
+        # an exact multiple in the arithmetic the validator actually uses.
+        step = spec.get("multipleOf")
+        if isinstance(step, (int, float)) and not isinstance(step, bool) and step > 0:
+            import math  # noqa: PLC0415
+
+            # 🔴 SNAP IN THE VALIDATOR'S ARITHMETIC, NOT IN EXACT ARITHMETIC.
+            # A Decimal snap produces a mathematically perfect multiple and
+            # still fails: jsonschema tests `instance / multipleOf` in FLOAT,
+            # and 2.01 / 0.01 is 200.99999999999997. `amount` came out as
+            # 0.01, 1.01, 2.01 — the first two passed and the third did not,
+            # which is exactly the kind of near-miss that looks like a fluke
+            # and is really a units bug.
+            #
+            # So walk multiples until one divides cleanly the way the checker
+            # divides. The cap keeps a pathological step from spinning; the
+            # value is returned unsnapped in that case and `--check` reports it
+            # rather than the generator claiming success.
+            start = max(int(math.ceil(value / step)), 1)
+            for k in range(start, start + 1000):
+                candidate = step * k
+                high_bound = spec.get("maximum")
+                if isinstance(high_bound, (int, float)) and not isinstance(high_bound, bool):
+                    if candidate > high_bound:
+                        break
+                quotient = candidate / step
+                if int(quotient) == quotient:
+                    return int(candidate) if kind == "integer" else float(candidate)
+
         if kind == "integer":
             import math  # noqa: PLC0415
             return int(math.ceil(value))
@@ -373,9 +453,27 @@ def _value(name: str, spec: dict, index: int, depth: int = 0) -> Any:
             for key in ordered[:8]
         }
 
+    # 🔴 A `pattern` OUTRANKS A `format`. Both may be declared on one property,
+    # and the format placeholder does not have to satisfy the pattern: procest's
+    # `citizenServiceNumber` is `format: bsn` with `pattern: ^[0-9]{9}$`, and the
+    # BSN placeholder is `BSN-PLACEHOLDER-0000` — letters and hyphens against a
+    # nine-digit-only pattern. shillinq's `sourceDocumentUri` is the same shape:
+    # a `uri` format under `^docudesk://attachments/[a-f0-9-]{36}/.+$`.
+    #
+    # Returning the format value directly skipped the pattern entirely. The
+    # format still chooses the SHAPE; the pattern gets the last word.
     fmt = spec.get("format")
     if fmt:
-        return _from_format(str(fmt), index)
+        formatted = _from_format(str(fmt), index)
+        fmt_pattern = spec.get("pattern")
+        if isinstance(formatted, str) and isinstance(fmt_pattern, str) and fmt_pattern:
+            return _satisfy_pattern(
+                formatted,
+                fmt_pattern,
+                index,
+                spec.get("minLength") if isinstance(spec.get("minLength"), int) else 0,
+            )
+        return formatted
 
     # A property NAMED for an icon must carry one. Everything else about the
     # value is generic on purpose; this one is checked by another gate.
@@ -581,7 +679,37 @@ def _descriptors(app_dir: str) -> list[tuple[str, dict]]:
     ]
 
 
-def _register_schema_map(app_dir: str) -> tuple[dict[str, dict], dict[str, list[str]], dict[str, dict]]:
+def _owns_register(data: dict, app_id: str | None) -> bool:
+    """Whether THIS app owns the register a descriptor declares.
+
+    🔴 A DESCRIPTOR IN AN APP'S TREE IS NOT NECESSARILY THAT APP'S REGISTER.
+    openregister ships `n8n_workflows.openregister.json`, which declares
+    `x-openregister.app: n8n` — the n8n app's register, carried here so it
+    installs alongside. Generating demo data for it put five foreign schemas
+    into openregister's descriptor, under a register openregister does not
+    own, and openregister's own `validate-register` rejected them for missing
+    `slug` (a field n8n's schemas do not declare).
+
+    This is the same rule the descriptor INVENTORY already applies — attribute
+    by the DECLARING app, not by which tree the file sits in. The generator
+    disagreed with the inventory, so the two tools described different fleets.
+
+    A descriptor with no `app` marker is this app's own, which is the ordinary
+    single-app case.
+    """
+    if app_id is None:
+        return True
+    marker = data.get("x-openregister")
+    marker = marker if isinstance(marker, dict) else {}
+    declared = marker.get("app")
+    if not isinstance(declared, str) or not declared:
+        return True
+    return declared == app_id
+
+
+def _register_schema_map(
+    app_dir: str, app_id: str | None = None
+) -> tuple[dict[str, dict], dict[str, list[str]], dict[str, dict]]:
     """Resolve which schemas each register actually carries.
 
     🔴 THE REGISTER'S OWN `schemas` LIST IS THE AUTHORITY, and honouring it is
@@ -622,6 +750,11 @@ def _register_schema_map(app_dir: str) -> tuple[dict[str, dict], dict[str, list[
                     definitions[name] = _merge_definition(definitions.get(name), spec)
 
     for _path, data in _descriptors(app_dir):
+        # A register another app declares is not this app's to seed — see
+        # _owns_register.
+        if not _owns_register(data, app_id):
+            continue
+
         components = data["components"]
         decl_registers = components.get("registers") or {}
         decl_schemas = components.get("schemas") or {}
@@ -662,7 +795,7 @@ def build(app_dir: str, app_id: str, per_schema: int, existing: dict | None) -> 
             ref = obj.get("@self", {}) if isinstance(obj, dict) else {}
             keep.setdefault((ref.get("register", ""), ref.get("schema", "")), []).append(obj)
 
-    decl_registers, owns, definitions = _register_schema_map(app_dir)
+    decl_registers, owns, definitions = _register_schema_map(app_dir, app_id)
 
     registers: dict[str, Any] = {}
     schemas: dict[str, Any] = {}
@@ -927,7 +1060,7 @@ def check(app_dir: str, app_id: str, per_schema: int, only: set[str] | None = No
             have[key] = have.get(key, 0) + 1
             objects_by_key.setdefault(key, []).append(obj)
 
-    _regs, owns, definitions = _register_schema_map(app_dir)
+    _regs, owns, definitions = _register_schema_map(app_dir, app_id)
 
     # Which (register, schema) pairs the caller's scope actually covers. Built
     # from the same authority the generator uses, so the producer and the judge

@@ -344,6 +344,98 @@ class AppIdentity(unittest.TestCase):
             self.assertIn("--app=humaniq", built["x-openregister"]["description"])
 
 
+class RegisterOwnership(unittest.TestCase):
+    """A descriptor in an app's tree is not necessarily that app's register.
+
+    openregister ships `n8n_workflows.openregister.json`, which declares
+    `x-openregister.app: n8n` — the n8n app's register, carried along so it
+    installs together. Generating demo data for it put five FOREIGN schemas
+    into openregister's own descriptor, and openregister's `validate-register`
+    rejected them for missing `slug`, a field n8n's schemas do not declare:
+
+        [validate-register] ERROR openregister_mock_register.json › workflow:
+        missing string "slug"
+
+    Two CI checks failed on it. The descriptor INVENTORY already attributes by
+    the declaring app; the generator did not, so the two tools described
+    different fleets.
+    """
+
+    def _app_carrying_a_foreign_register(self, root: Path) -> None:
+        _write(
+            root,
+            "lib/Settings/widget_register.json",
+            {
+                "x-openregister": {"type": "application", "app": "widget"},
+                "components": {
+                    "registers": {"widget": {"schemas": ["Employee"]}},
+                    "schemas": {"Employee": _schema({"name": {"type": "string"}})},
+                },
+            },
+        )
+        _write(
+            root,
+            "lib/Settings/partner_workflows.widget.json",
+            {
+                "x-openregister": {"type": "application", "app": "partner"},
+                "components": {
+                    "registers": {"partner-workflows": {"schemas": ["Workflow"]}},
+                    "schemas": {"Workflow": _schema({"steps": {"type": "string"}})},
+                },
+            },
+        )
+
+    def test_a_register_another_app_declares_is_not_seeded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _app(root)
+            self._app_carrying_a_foreign_register(root)
+
+            _registers, owns, _definitions = gmr._register_schema_map(str(root), "widget")
+
+            self.assertIn("widget", owns)
+            self.assertNotIn(
+                "partner-workflows",
+                owns,
+                "a register declared by another app must not be seeded here",
+            )
+
+    def test_the_foreign_schemas_stay_out_of_the_written_descriptor(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _app(root)
+            self._app_carrying_a_foreign_register(root)
+
+            built = gmr.build(str(root), "widget", 1, None)
+
+            self.assertEqual(list(built["components"]["registers"]), ["widget"])
+            self.assertNotIn("Workflow", built["components"]["schemas"])
+            self.assertEqual(
+                {o["@self"]["register"] for o in built["components"]["objects"]},
+                {"widget"},
+            )
+
+    def test_a_descriptor_with_no_app_marker_is_treated_as_our_own(self):
+        """The ordinary single-app case must not be filtered out."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _app(root)
+            _write(
+                root,
+                "lib/Settings/widget_register.json",
+                {
+                    "components": {
+                        "registers": {"widget": {"schemas": ["Employee"]}},
+                        "schemas": {"Employee": _schema({"name": {"type": "string"}})},
+                    }
+                },
+            )
+
+            _registers, owns, _definitions = gmr._register_schema_map(str(root), "widget")
+
+            self.assertEqual(owns["widget"], ["Employee"])
+
+
 class UnusualComponentShapes(unittest.TestCase):
     """A crashed checker is not a finding.
 
