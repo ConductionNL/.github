@@ -10885,6 +10885,78 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# GATE 98 — repair-step-registration (ADR-005 rule 1, the other half)
+#
+# A repair step that is written but never NAMED in appinfo/info.xml does not
+# run. `OCA\OpenRegister\Repair\ImportFlowRegister` was complete — constructor,
+# version gate, error handling, a docblock explaining it exists so a flow can
+# live in OpenRegister itself — and appeared ZERO times in info.xml: not in
+# <post-migration>, not in <install>. The `flows` register therefore never
+# existed on any instance.
+#
+# ADR-005 Rule 1 already requires a descriptor to be accompanied by a
+# lib/Repair/ step, and its own Consequences warn that one without a step
+# "silently never appears — a recurring author error this ADR exists to
+# prevent". The CLASS complied. The REGISTRATION did not, and the rule does not
+# mention registration, so a reviewer asking "is there a repair step for this?"
+# gets a yes and moves on.
+#
+# HOW LONG IT HID: months. The only symptoms were two e2e suites dying in
+# beforeAll on `registers slug=flows` — which reads like a broken test — and an
+# `occ upgrade` reporting complete success over an instance missing 8 of 15
+# declared registers. It surfaced only when something enumerated DECLARING apps
+# rather than resolved registers.
+#
+# DIFF-SCOPED, unlike gate 97 above, and for the opposite reason. Gate 97 makes
+# a claim about a BOUNDARY, which is only meaningful over the whole tree. This
+# one makes a claim about the step you just added — a claim about the diff. A
+# full-tree version would additionally redden every branch cut before it
+# shipped, for steps their authors never touched, which is how one app's
+# gate-16 reached 102 findings in a single rename. Unregistered steps that
+# predate this gate are real debt, but not debt a passing PR can be asked to pay.
+#
+# THE INTERFACE DECIDES, NOT THE DIRECTORY. A helper or value object under
+# lib/Repair/ is not a repair step; demanding it of info.xml would fail on files
+# the framework never looks for, and a gate that does that teaches people to
+# stop reading it.
+#
+# NOT IN _ARM6_ALLOWED, deliberately: this gate READS the changed-file set, so
+# an empty scope must skip, never pass. That is the property the empty-scope
+# suite exists to hold gates to.
+# ---------------------------------------------------------------------------
+_rsr_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-repair-registration.log
+: > "${_rsr_log}"
+set +e
+if [ "${SCOPE_TO_DIFF}" = "1" ]; then
+    printf '%s\n' "${CHANGED_FILES}" \
+        | python3 "${SCRIPT_DIR}/lib/check_repair_registration.py" . > "${_rsr_log}" 2>&1
+else
+    # NOT SCOPED TO A DIFF, so there is no changed-file set to read. Passing the
+    # empty one would make this gate skip on every full-tree run — including the
+    # gate-acceptance matrix, which invokes the runner against a fixture
+    # directory that is not a git repository. A gate whose own acceptance
+    # fixture can only ever skip is configured, not covered.
+    python3 "${SCRIPT_DIR}/lib/check_repair_registration.py" . --all \
+        > "${_rsr_log}" 2>&1 < /dev/null
+fi
+_rsr_rc=$?
+set +e
+
+if [ "${_rsr_rc}" -eq 0 ]; then
+    _pass 98 "repair-step-registration"
+elif [ "${_rsr_rc}" -eq 4 ]; then
+    _skip 98 "repair-step-registration" na "this diff touches no lib/Repair/*.php, so no repair step needed its info.xml registration checked. See ${_rsr_log}."
+elif ! _helper_finished "${_rsr_log}" '^checked [0-9]+ repair step'; then
+    # A CRASH IS NOT A FINDING.
+    _rsr_why=$(head -3 "${_rsr_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+    _skip 98 "repair-step-registration" wiring "check_repair_registration.py exited ${_rsr_rc} without printing its terminal 'checked N repair step(s)' summary, so registration is UNVERIFIED by this run. Checker output: ${_rsr_why:-<empty>}. See ${_rsr_log}."
+else
+    _rsr_n=$(grep -cE '^FAIL ' "${_rsr_log}" 2>/dev/null || true)
+    case "${_rsr_n}" in ''|*[!0-9]*) _rsr_n=1 ;; esac
+    _fail 98 "repair-step-registration" "${_rsr_n} repair step(s) written but never registered in appinfo/info.xml, so Nextcloud will not run them — see ${_rsr_log}"
+fi
+
+# ---------------------------------------------------------------------------
 # GATE 83 — contract-surface-shift (ADR-084)
 #
 # A method on a published contract can be served two ways: DECLARED
