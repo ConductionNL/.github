@@ -196,10 +196,24 @@ services:
       # looked disabled + needsDbUpgrade/503. Flat sibling mounts (like the 16
       # above) are re-established reliably on restart.
       - ../openregister/custom_apps/analytics:/var/www/html/custom_apps/analytics
-      - ../openregister/custom_apps/app_versions:/var/www/html/custom_apps/app_versions
+      # versioniq is mounted from its OWN sibling checkout. ../openregister/custom_apps/
+      # app_versions is the stale second copy described above — it is not a git
+      # repository, so every edit made in ../app-versions was invisible to this
+      # instance and any "verified live" claim about versioniq verified old code.
+      # The destination keeps the underscore: it must equal the <id> in info.xml.
+      - ../app-versions:/var/www/html/custom_apps/app_versions
       - ../openregister/custom_apps/bookmarks:/var/www/html/custom_apps/bookmarks
       - ../openregister/custom_apps/calendar:/var/www/html/custom_apps/calendar
-      - ../openregister/custom_apps/collectives:/var/www/html/custom_apps/collectives
+      # collectives is NOT mounted: ../openregister/custom_apps/collectives does
+      # not exist on the host. `docker compose up` quietly CREATES a missing bind
+      # source, so the mount looks fine on a fresh start -- and then `docker restart`
+      # refuses to recreate it and kills the container outright:
+      #   OCI runtime create failed: error mounting ".../collectives" to rootfs: no
+      #   such file or directory
+      # which leaves `nextcloud` in Exited (127) and the whole instance down. The
+      # app was never enabled from here either: the auto-created directory has no
+      # appinfo/info.xml, so Nextcloud could not see an app in it. Restore the line
+      # only alongside a real checkout at that path.
       - ../openregister/custom_apps/contacts:/var/www/html/custom_apps/contacts
       - ../openregister/custom_apps/cospend:/var/www/html/custom_apps/cospend
       - ../openregister/custom_apps/deck:/var/www/html/custom_apps/deck
@@ -437,10 +451,24 @@ services:
       - ../petstore:/var/www/html/custom_apps/petstore
       - ../shillinq:/var/www/html/custom_apps/shillinq
       - ../openregister/custom_apps/analytics:/var/www/html/custom_apps/analytics
-      - ../openregister/custom_apps/app_versions:/var/www/html/custom_apps/app_versions
+      # versioniq is mounted from its OWN sibling checkout. ../openregister/custom_apps/
+      # app_versions is the stale second copy described above — it is not a git
+      # repository, so every edit made in ../app-versions was invisible to this
+      # instance and any "verified live" claim about versioniq verified old code.
+      # The destination keeps the underscore: it must equal the <id> in info.xml.
+      - ../app-versions:/var/www/html/custom_apps/app_versions
       - ../openregister/custom_apps/bookmarks:/var/www/html/custom_apps/bookmarks
       - ../openregister/custom_apps/calendar:/var/www/html/custom_apps/calendar
-      - ../openregister/custom_apps/collectives:/var/www/html/custom_apps/collectives
+      # collectives is NOT mounted: ../openregister/custom_apps/collectives does
+      # not exist on the host. `docker compose up` quietly CREATES a missing bind
+      # source, so the mount looks fine on a fresh start -- and then `docker restart`
+      # refuses to recreate it and kills the container outright:
+      #   OCI runtime create failed: error mounting ".../collectives" to rootfs: no
+      #   such file or directory
+      # which leaves `nextcloud` in Exited (127) and the whole instance down. The
+      # app was never enabled from here either: the auto-created directory has no
+      # appinfo/info.xml, so Nextcloud could not see an app in it. Restore the line
+      # only alongside a real checkout at that path.
       - ../openregister/custom_apps/contacts:/var/www/html/custom_apps/contacts
       - ../openregister/custom_apps/cospend:/var/www/html/custom_apps/cospend
       - ../openregister/custom_apps/deck:/var/www/html/custom_apps/deck
