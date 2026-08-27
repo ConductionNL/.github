@@ -34,7 +34,6 @@ gate cannot ask a passing PR to pay.
 
 USAGE
   <changed files on stdin> check_repair_registration.py <root>
-  check_repair_registration.py <root> --all     # ignore the diff, scan lib/Repair
 
 EXIT CODES
   0  every repair step in scope is registered
@@ -103,40 +102,23 @@ def repair_classes(path: str) -> list[tuple[str, str]]:
     return found
 
 
-def all_repair_files(root: str) -> list[str]:
-    """Every lib/Repair/*.php, for a run that was asked to ignore the diff."""
-    directory = os.path.join(root, "lib", "Repair")
-    if not os.path.isdir(directory):
-        return []
-
-    return [
-        f"lib/Repair/{name}"
-        for name in os.listdir(directory)
-        if name.endswith(".php")
-    ]
-
-
 def main(argv: list[str]) -> int:
-    args = [a for a in argv[1:] if a != "--all"]
-    scan_all = "--all" in argv[1:]
-    root = args[0] if args else "."
+    root = argv[1] if len(argv) > 1 else "."
 
-    if scan_all:
-        # 🔴 A DIFF-SCOPED GATE MUST STILL WORK WHEN THERE IS NO DIFF. The runner
-        # passes --all when it was not asked to scope to a diff — full-tree runs,
-        # and the gate-acceptance matrix, which invokes the runner against a
-        # fixture directory that is not a git repository at all. Without this the
-        # gate would read an empty changed-file set, skip, and its acceptance
-        # fixture would prove nothing while looking configured.
-        in_scope = all_repair_files(root)
-    else:
-        changed = [
-            line.strip() for line in sys.stdin.read().splitlines() if line.strip()
-        ]
-        in_scope = [
-            p for p in changed
-            if p.startswith("lib/Repair/") and p.endswith(".php")
-        ]
+    # 🔴 STDIN ONLY. An earlier draft carried an `--all` mode so the generic
+    # gate-acceptance bundle — which runs against a directory that is not a git
+    # repository — could exercise the gate. That was backwards twice over: it
+    # gave the gate a full-tree path CI would then take by default, and it meant
+    # the fixture exercised a mode CI never uses. A fixture that covers the
+    # wrong mode is not coverage.
+    #
+    # Delta-gate acceptance belongs in a suite with a REAL two-commit history,
+    # the way gate-16's does; see test_gate98_repair_registration_scope.sh.
+    changed = [line.strip() for line in sys.stdin.read().splitlines() if line.strip()]
+    in_scope = [
+        p for p in changed
+        if p.startswith("lib/Repair/") and p.endswith(".php")
+    ]
 
     info_xml = os.path.join(root, "appinfo", "info.xml")
     if not in_scope or not os.path.isfile(info_xml):

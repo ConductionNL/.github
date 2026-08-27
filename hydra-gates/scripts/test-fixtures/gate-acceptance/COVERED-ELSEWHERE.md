@@ -48,6 +48,7 @@ with the missing half named.
 | gate | name | suite | fixtures |
 |---|---|---|---|
 | gate-16 | spec-coverage | `test_gate16_spec_coverage_scope.sh` | `test-fixtures/spec-coverage-scope/app` — diff/full scope matrix over a real two-commit history, `.github#361` |
+| gate-98 | repair-step-registration | `test_gate98_repair_registration_scope.sh` | builds a real two-commit history in a tmpdir — a delta gate cannot be covered by a bundle, because the generic format has no git and the gate would only ever report NOT APPLICABLE there. ARM 3 pins that inherited debt is NOT reported on a commit touching no repair step, which is the regression that shipped when the first draft keyed on `SCOPE_TO_DIFF`. |
 | gate-19 | e2e-coverage | `test_gate19_coverage_credibility.sh` | `test-fixtures/e2e-credibility/{req-inherit,scenario-level,file-level-tag,honest}` — `.github#356`, `#343`, `#345` and the never-false `test.skip` guard |
 | gate-23 | or-abstraction-anti-patterns | `test_gates_23_33_never_green_over_nothing.sh` | `test-fixtures/gates-23-33/{planted,clean}` |
 | gate-24 | integration-parity | `test_gates_23_33_never_green_over_nothing.sh` | `test-fixtures/gates-23-33/{planted,clean}` |
