@@ -108,7 +108,15 @@ services:
     # PINNED — never use the floating `nextcloud`/`:latest` tag: on env reset the
     # container would boot a drifted NC over the existing data volume →
     # needsDbUpgrade → maintenance/503 + disabled apps. Bump deliberately.
-    image: nextcloud:34.0.0-apache
+    #
+    # Built from the pinned upstream image plus ext-soap, which integriq needs
+    # (php-soap/ext-soap-engine) and upstream does not ship. A missing PHP
+    # extension is not a boot error, so its absence showed up only as SOAP code
+    # paths fatalling at runtime. The FROM in docker/nextcloud/Dockerfile must
+    # stay in lockstep with the tag below.
+    build:
+      context: ./docker/nextcloud
+    image: conduction/nextcloud:34.0.0-apache-soap
     restart: always
     ports:
       - 8080:80
@@ -390,7 +398,15 @@ services:
     # PINNED — never use the floating `nextcloud`/`:latest` tag: on env reset the
     # container would boot a drifted NC over the existing data volume →
     # needsDbUpgrade → maintenance/503 + disabled apps. Bump deliberately.
-    image: nextcloud:34.0.0-apache
+    #
+    # Built from the pinned upstream image plus ext-soap, which integriq needs
+    # (php-soap/ext-soap-engine) and upstream does not ship. A missing PHP
+    # extension is not a boot error, so its absence showed up only as SOAP code
+    # paths fatalling at runtime. The FROM in docker/nextcloud/Dockerfile must
+    # stay in lockstep with the tag below.
+    build:
+      context: ./docker/nextcloud
+    image: conduction/nextcloud:34.0.0-apache-soap
     restart: always
     ports:
       - 8080:80
