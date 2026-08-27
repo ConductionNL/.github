@@ -237,6 +237,52 @@ def _satisfy_pattern(value: Any, pattern: str, index: int, min_len: int = 0) -> 
     return value
 
 
+# 🔴 READ FROM THE GATE'S OWN FILE, NEVER COPIED. gate-60 (icon-vocabulary)
+# validates icons against `schemas/semantic-icons.json`; an icon outside it
+# "renders blank wherever it is not aliased locally". The generator emitted
+# `Voorbeeld Icon 1` for a property called `icon`, and gate-60 correctly failed
+# the very PR that added the demo data.
+#
+# Carrying a copy of the vocabulary here is how the producer and the judge drift
+# apart — the defect this package already had once today. Same file, one truth.
+_ICON_CACHE: list[str] | None = None
+
+
+def _vocabulary_icons() -> list[str]:
+    """Icon names gate-60 accepts, read from its own vocabulary file."""
+    global _ICON_CACHE  # noqa: PLW0603
+    if _ICON_CACHE is not None:
+        return _ICON_CACHE
+
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "..", "schemas", "semantic-icons.json")
+    names: list[str] = []
+    try:
+        with open(path, encoding="utf-8") as handle:
+            data = json.load(handle)
+        # 🔴 THE VALUES, NOT THE KEYS. This file maps a SEMANTIC key to the MDI
+        # component name — `"documentation": "BookOpenVariantOutline"` — and
+        # gate-60 accepts the MDI name. Emitting the key produced `documentation`,
+        # which the gate rejects in the same breath as the invented name it
+        # replaced: "a kebab-case or lowercase spelling of an MDI name resolves
+        # to nothing". Half-reading a vocabulary is not reading it.
+        for tier in ("tierA", "tierB"):
+            block = data.get(tier)
+            if isinstance(block, dict):
+                names.extend(
+                    v for k, v in block.items()
+                    if not k.startswith("_") and isinstance(v, str) and v
+                )
+    except (OSError, ValueError):
+        names = []
+
+    # An EMPTY list is not a silent fallback to invented names: with no
+    # vocabulary readable the caller leaves the value alone and gate-60 reports
+    # it, which is the honest outcome.
+    _ICON_CACHE = names
+    return _ICON_CACHE
+
+
 def _value(name: str, spec: dict, index: int, depth: int = 0) -> Any:
     """One value for one property, derived from that property's own rules."""
     if not isinstance(spec, dict):
@@ -330,6 +376,13 @@ def _value(name: str, spec: dict, index: int, depth: int = 0) -> Any:
     fmt = spec.get("format")
     if fmt:
         return _from_format(str(fmt), index)
+
+    # A property NAMED for an icon must carry one. Everything else about the
+    # value is generic on purpose; this one is checked by another gate.
+    if kind in (None, "string") and re.fullmatch(r"(?i)icon|.*icon", name or ""):
+        icons = _vocabulary_icons()
+        if icons:
+            return icons[index % len(icons)]
 
     text = f"Voorbeeld {name.replace('_', ' ').strip().title()} {index + 1}"
 
