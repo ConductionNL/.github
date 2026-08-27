@@ -137,6 +137,34 @@ jobs:
       - name: "Assert the filter skips only what it can prove is irrelevant"
         run: python3 scripts/test-changed-path-filter.py .github/workflows/quality.yml
 
+  consolidated-tool-legs:
+    name: "A consolidated tool family cannot swallow a failure"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # `consolidate-tool-legs` turns six one-tool jobs into one six-tool job,
+      # and the danger is quiet: `set -e` is ACTIVE in a `run:` block but
+      # SUSPENDED inside a function invoked on the left of `||`, which is how
+      # `run_tool "$T" || RC=$?` calls it. Bash returns a function's LAST
+      # command's status, so an unguarded command that is NOT last lets the
+      # next command's success become the family's verdict — a red tool
+      # reported green, in the job that exists to catch red tools.
+      #
+      # POSITIVE CONTROL FIRST. It strips the `|| return $?` guards and
+      # requires this suite to notice. That control found a real hole when it
+      # was written: the first version of the suite only failed tools that were
+      # LAST in their case arm, where bash returns the right status anyway, so
+      # it passed with every guard removed. It now covers a failing
+      # `composer install` and a failing `npm ci`, which are the commands the
+      # guards actually protect.
+      - name: "Positive control — removing the guards must fail the suite"
+        run: python3 scripts/test-consolidated-tool-legs.py --positive-control .github/workflows/quality.yml
+
+      - name: "Assert every tool's own exit code reaches the family verdict"
+        run: python3 scripts/test-consolidated-tool-legs.py .github/workflows/quality.yml
+
   coverage-gate-can-fail:
     name: "The spec-coverage threshold can fail a run"
     runs-on: ubuntu-latest

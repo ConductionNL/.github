@@ -562,6 +562,11 @@ on:
         required: false
         type: string
         default: "lib/** src/** tests/** appinfo/** composer.json composer.lock package.json package-lock.json .github/workflows/**"
+      consolidate-tool-legs:
+        description: "Run each tool FAMILY as one job instead of one job per tool: PHP Quality 6 legs -> 1, Vue Quality 2 -> 1, Security 2 -> 1. OPT-IN, default false. Every leg is a separate claim on a runner slot, and slots are this fleet's constraint, not minutes — psalm's leg spends 22 seconds on psalm inside a 36-second job, and each of those jobs waited a median of 28.6 minutes for a runner. Consolidating also pays the composer install and toolchain setup ONCE per family instead of once per tool. The cost is losing per-tool parallelism, so a family becomes as slow as its tools summed — about two extra minutes, against a 28-minute queue wait. PER-TOOL REPORTING IS UNCHANGED: the consolidated job still uploads one artifact per tool, each carrying that tool's OWN exit code, so the Quality Report's per-tool table renders exactly as before and is in fact more accurate than the split legs, which recorded the job status rather than the tool's. `license` is deliberately NOT consolidated — its per-ecosystem license-report artifact is downloaded and parsed by the report, so collapsing it would mean changing the producer's layout and the report's parser together, for a saving of one slot."
+        required: false
+        type: boolean
+        default: false
       reduce-pr-matrix:
         description: "On a pull_request event, run PHPUnit on the PRIMARY php-version against the NEWEST declared Nextcloud only, instead of the full php-test-versions x declared-range product. OPT-IN, default false. The full matrix still runs on every push to a default branch, so the declared range is exercised on every merge and on the release PR into beta — breadth moves from per-commit to per-merge, it is not dropped. The reasoning is that version-drift does not appear between two commits an hour apart; it appears when a dependency or a Nextcloud minor moves, and a push-time matrix catches that just as well at a fraction of the queue cost. Measured: 6 legs at ~2.2 min each, of which ~46s is the test suite and ~85s is container init, two checkouts and a Nextcloud install repeated per leg."
         required: false
@@ -807,7 +812,10 @@ jobs:
     timeout-minutes: 20
     strategy:
       matrix:
-        tool: [lint, phpcs, phpmd, psalm, phpstan, phpmetrics]
+        # ONE LEG ("all") when consolidated, six when not. `fromJSON` on both
+        # arms: a matrix vector that evaluates to a bare string does not shrink
+        # the matrix, it DELETES the job.
+        tool: ${{ inputs.consolidate-tool-legs && fromJSON('["all"]') || fromJSON('["lint", "phpcs", "phpmd", "psalm", "phpstan", "phpmetrics"]') }}
       fail-fast: false
 
     steps:
@@ -862,29 +870,33 @@ jobs:
           # declaration from composer.json rather than from the exit code.
           # Deliberately NOT an `[ -f vendor/bin/<tool> ]` guard — a file-presence
           # guard that skips is the same silent-pass defect in a new costume.
+          # `return 1`, not `exit 1`: this is called from inside run_tool() below,
+          # and an `exit` there would kill the whole step mid-family instead of
+          # failing one tool and continuing to the next.
           require_script() {
             tool="$1"
             hint="$2"
             if [ ! -f composer.json ]; then
               echo "::error::The '$tool' gate is enabled but there is no composer.json in the repository root."
-              exit 1
+              return 1
             fi
             if ! jq -e --arg s "$tool" '(.scripts // {}) | has($s)' composer.json > /dev/null 2>&1; then
               echo "::error::The '$tool' gate is enabled but composer.json declares no '$tool' script. Add it under \"scripts\", or turn the gate off with $hint."
-              exit 1
+              return 1
             fi
           }
-          case "${{ matrix.tool }}" in
+          run_tool() {
+            case "$1" in
             lint)
-              require_script lint "the enable-php input"
-              composer lint
+              require_script lint "the enable-php input" || return 1
+              composer lint || return $?
               ;;
             phpcs)
               if [ "${{ inputs.enable-phpcs }}" != "true" ]; then
                 echo "PHPCS is disabled — skipping."
-                exit 0
+                return 0
               fi
-              require_script phpcs "the enable-phpcs input"
+              require_script phpcs "the enable-phpcs input" || return 1
               #
               # ⚠️ THE EXIT CODES ARE NOT WHAT THIS BLOCK USED TO CLAIM.
               #
@@ -977,53 +989,148 @@ jobs:
                   echo "::error::PHPCS found errors (exit $RC). Warnings are non-blocking and are NOT counted here — this is errors only."
                 fi
               fi
-              exit $RC
+              return $RC
               ;;
             phpmd)
               if [ "${{ inputs.enable-phpmd }}" != "true" ]; then
                 echo "PHPMD is disabled — skipping."
-                exit 0
+                return 0
               fi
-              require_script phpmd "the enable-phpmd input"
-              composer phpmd
+              require_script phpmd "the enable-phpmd input" || return 1
+              composer phpmd || return $?
               ;;
             psalm)
               if [ "${{ inputs.enable-psalm }}" != "true" ]; then
                 echo "Psalm is disabled — skipping."
-                exit 0
+                return 0
               fi
-              require_script psalm "the enable-psalm input"
-              composer psalm
+              require_script psalm "the enable-psalm input" || return 1
+              composer psalm || return $?
               ;;
             phpstan)
               if [ "${{ inputs.enable-phpstan }}" != "true" ]; then
                 echo "PHPStan is disabled — skipping."
-                exit 0
+                return 0
               fi
-              require_script phpstan "the enable-phpstan input"
-              composer phpstan
+              require_script phpstan "the enable-phpstan input" || return 1
+              composer phpstan || return $?
               ;;
             phpmetrics)
               if [ "${{ inputs.enable-phpmetrics }}" != "true" ]; then
                 echo "phpmetrics is disabled — skipping."
-                exit 0
+                return 0
               fi
-              require_script phpmetrics "the enable-phpmetrics input"
-              composer phpmetrics
+              require_script phpmetrics "the enable-phpmetrics input" || return 1
+              composer phpmetrics || return $?
               ;;
-          esac
+            *)
+              echo "::error::unknown tool '$1' — the matrix and run_tool have drifted apart."
+              return 1
+              ;;
+            esac
+          }
 
+          # ── One job, N tools ───────────────────────────────────────────────
+          #
+          # `set -e` is ACTIVE in a GitHub `run:` block, but it is SUSPENDED
+          # inside a function invoked on the left of `||`. That is why every
+          # tool invocation inside run_tool() carries an explicit
+          # `|| return $?`: without it a failing tool would fall through to the
+          # end of its case arm and the function would return 0 — a red tool
+          # reported as green, in the job that exists to catch red tools.
+          TOOLS="${{ matrix.tool }}"
+          [ "$TOOLS" = "all" ] && TOOLS="lint phpcs phpmd psalm phpstan phpmetrics"
+
+          mkdir -p quality-results
+          FAILED=""
+          for T in $TOOLS; do
+            echo "::group::$T"
+            RC=0
+            # SUBSHELL: a tool that `cd`s (npm audit does) must not move the
+            # working directory for the next tool in the family.
+            ( run_tool "$T" ) || RC=$?
+            echo "::endgroup::"
+            if [ "$RC" -eq 0 ]; then
+              echo success > "quality-results/$T.txt"
+            else
+              echo failure > "quality-results/$T.txt"
+              FAILED="$FAILED $T"
+              echo "::error::$T failed (exit $RC)."
+            fi
+          done
+
+          if [ -n "$FAILED" ]; then
+            echo "::error::PHP Quality failed:$FAILED"
+            exit 1
+          fi
+          echo "PHP Quality: all of [$TOOLS] passed."
+
+      # FILLS IN WHAT THE RUN STEP COULD NOT WRITE. In the normal path the run
+      # step above has already recorded each tool's own exit code. This step
+      # exists for the case where the job died BEFORE that loop — a failed
+      # `composer install`, a cancelled runner — where no per-tool file exists
+      # and the report would otherwise read "skipped" for every one of them.
+      # `job.status` is the honest answer there: they did not run, and the job
+      # failed.
       - name: Record result
         if: always()
         run: |
           mkdir -p quality-results
-          echo "${{ job.status }}" > quality-results/${{ matrix.tool }}.txt
-      - name: Upload result
+          TOOLS="${{ matrix.tool }}"
+          [ "$TOOLS" = "all" ] && TOOLS="lint phpcs phpmd psalm phpstan phpmetrics"
+          for T in $TOOLS; do
+            [ -s "quality-results/$T.txt" ] || echo "${{ job.status }}" > "quality-results/$T.txt"
+          done
+      # One artifact PER TOOL even when the legs are consolidated, because the
+      # Quality Report reads `results/result-php-quality-lint/lint.txt` and its
+      # `read_result()` returns "skipped" for a missing file. A single combined
+      # artifact would render every tool as skipped and the report would say so
+      # in the required check, confidently and wrongly.
+      # `if-no-files-found: ignore` is what makes one step list serve both
+      # modes: in split mode this leg holds only its own file and the other
+      # five steps create nothing.
+      - name: "Upload result (lint)"
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: result-php-quality-${{ matrix.tool }}
-          path: quality-results/
+          name: result-php-quality-lint
+          path: quality-results/lint.txt
+          if-no-files-found: ignore
+      - name: "Upload result (phpcs)"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-php-quality-phpcs
+          path: quality-results/phpcs.txt
+          if-no-files-found: ignore
+      - name: "Upload result (phpmd)"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-php-quality-phpmd
+          path: quality-results/phpmd.txt
+          if-no-files-found: ignore
+      - name: "Upload result (psalm)"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-php-quality-psalm
+          path: quality-results/psalm.txt
+          if-no-files-found: ignore
+      - name: "Upload result (phpstan)"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-php-quality-phpstan
+          path: quality-results/phpstan.txt
+          if-no-files-found: ignore
+      - name: "Upload result (phpmetrics)"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-php-quality-phpmetrics
+          path: quality-results/phpmetrics.txt
+          if-no-files-found: ignore
 
   # ── occ app:check-code — private and deprecated Nextcloud API usage ────
   #
@@ -1347,7 +1454,7 @@ jobs:
         working-directory: ${{ inputs.frontend-path }}
     strategy:
       matrix:
-        tool: [eslint, stylelint]
+        tool: ${{ inputs.consolidate-tool-legs && fromJSON('["all"]') || fromJSON('["eslint", "stylelint"]') }}
       fail-fast: false
 
     steps:
@@ -1366,34 +1473,105 @@ jobs:
 
       - name: Run ${{ matrix.tool }}
         run: |
-          case "${{ matrix.tool }}" in
+          # `|| return $?` on every tool: `set -e` is suspended inside a function
+          # called on the left of `||`, so without it a failing linter would
+          # fall through its case arm and the family would report green.
+          run_tool() {
+            case "$1" in
             eslint)
               if [ "${{ inputs.enable-eslint }}" != "true" ]; then
                 echo "ESLint is disabled — skipping."
-                exit 0
+                return 0
               fi
-              npm run lint
+              npm run lint || return $?
               ;;
             stylelint)
               if [ "${{ inputs.enable-stylelint }}" != "true" ]; then
                 echo "Stylelint is disabled — skipping."
-                exit 0
+                return 0
               fi
-              npm run stylelint
+              npm run stylelint || return $?
               ;;
-          esac
+            *)
+              echo "::error::unknown tool '$1' — the matrix and run_tool have drifted apart."
+              return 1
+              ;;
+            esac
+          }
 
+          # ── One job, N tools ───────────────────────────────────────────────
+          #
+          # `set -e` is ACTIVE in a GitHub `run:` block, but it is SUSPENDED
+          # inside a function invoked on the left of `||`. That is why every
+          # tool invocation inside run_tool() carries an explicit
+          # `|| return $?`: without it a failing tool would fall through to the
+          # end of its case arm and the function would return 0 — a red tool
+          # reported as green, in the job that exists to catch red tools.
+          TOOLS="${{ matrix.tool }}"
+          [ "$TOOLS" = "all" ] && TOOLS="eslint stylelint"
+
+          mkdir -p ${{ inputs.frontend-path }}/quality-results
+          FAILED=""
+          for T in $TOOLS; do
+            echo "::group::$T"
+            RC=0
+            # SUBSHELL: a tool that `cd`s (npm audit does) must not move the
+            # working directory for the next tool in the family.
+            ( run_tool "$T" ) || RC=$?
+            echo "::endgroup::"
+            if [ "$RC" -eq 0 ]; then
+              echo success > "${{ inputs.frontend-path }}/quality-results/$T.txt"
+            else
+              echo failure > "${{ inputs.frontend-path }}/quality-results/$T.txt"
+              FAILED="$FAILED $T"
+              echo "::error::$T failed (exit $RC)."
+            fi
+          done
+
+          if [ -n "$FAILED" ]; then
+            echo "::error::Vue Quality failed:$FAILED"
+            exit 1
+          fi
+          echo "Vue Quality: all of [$TOOLS] passed."
+
+      # FILLS IN WHAT THE RUN STEP COULD NOT WRITE. In the normal path the run
+      # step above has already recorded each tool's own exit code. This step
+      # exists for the case where the job died BEFORE that loop — a failed
+      # `composer install`, a cancelled runner — where no per-tool file exists
+      # and the report would otherwise read "skipped" for every one of them.
+      # `job.status` is the honest answer there: they did not run, and the job
+      # failed.
       - name: Record result
         if: always()
         run: |
           mkdir -p quality-results
-          echo "${{ job.status }}" > quality-results/${{ matrix.tool }}.txt
-      - name: Upload result
+          TOOLS="${{ matrix.tool }}"
+          [ "$TOOLS" = "all" ] && TOOLS="eslint stylelint"
+          for T in $TOOLS; do
+            [ -s "quality-results/$T.txt" ] || echo "${{ job.status }}" > "quality-results/$T.txt"
+          done
+      # One artifact PER TOOL even when the legs are consolidated, because the
+      # Quality Report reads `results/result-vue-quality-eslint/eslint.txt` and its
+      # `read_result()` returns "skipped" for a missing file. A single combined
+      # artifact would render every tool as skipped and the report would say so
+      # in the required check, confidently and wrongly.
+      # `if-no-files-found: ignore` is what makes one step list serve both
+      # modes: in split mode this leg holds only its own file and the other
+      # five steps create nothing.
+      - name: "Upload result (eslint)"
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: result-vue-quality-${{ matrix.tool }}
-          path: ${{ inputs.frontend-path }}/quality-results/
+          name: result-vue-quality-eslint
+          path: ${{ inputs.frontend-path }}/quality-results/eslint.txt
+          if-no-files-found: ignore
+      - name: "Upload result (stylelint)"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-vue-quality-stylelint
+          path: ${{ inputs.frontend-path }}/quality-results/stylelint.txt
+          if-no-files-found: ignore
 
   # ── Group 2b: Custom frontend checks ───────────
   #
@@ -1869,7 +2047,7 @@ jobs:
     timeout-minutes: 20
     strategy:
       matrix:
-        ecosystem: [composer, npm]
+        ecosystem: ${{ inputs.consolidate-tool-legs && fromJSON('["all"]') || fromJSON('["composer", "npm"]') }}
       fail-fast: false
 
     steps:
@@ -1877,7 +2055,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup PHP
-        if: matrix.ecosystem == 'composer'
+        # `!= 'npm'` rather than `== 'composer'`: in the consolidated leg
+        # (ecosystem 'all') BOTH toolchains must be installed, and in a split
+        # leg exactly one still is. Same inversion on the npm steps below.
+        if: matrix.ecosystem != 'npm'
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ inputs.php-version }}
@@ -1892,7 +2073,7 @@ jobs:
       # `composer.lock` and `composer.json` are listed because three fleet repos
       # ship no lockfile; `hashFiles` skips patterns that match nothing.
       - name: Cache Composer downloads
-        if: matrix.ecosystem == 'composer' && inputs.enable-php
+        if: matrix.ecosystem != 'npm' && inputs.enable-php
         uses: actions/cache@v4
         with:
           path: ~/.cache/composer
@@ -1907,7 +2088,7 @@ jobs:
       # gate failed with it — a permanent red on every repo that legitimately
       # has no package.json. Observed on ConductionNL/hydra 2026-08-04.
       - name: Setup Node.js
-        if: matrix.ecosystem == 'npm' && inputs.enable-npm
+        if: matrix.ecosystem != 'composer' && inputs.enable-npm
         uses: actions/setup-node@v4
         with:
           node-version: "${{ inputs.node-version }}"
@@ -1918,22 +2099,23 @@ jobs:
         env:
           FRONTEND_PATH: ${{ inputs.frontend-path }}
         run: |
-          case "${{ matrix.ecosystem }}" in
+          run_tool() {
+            case "$1" in
             composer)
               if [ "${{ inputs.enable-php }}" != "true" ]; then
                 echo "PHP toolchain is disabled — skipping composer audit."
-                exit 0
+                return 0
               fi
-              composer install --no-progress --prefer-dist --optimize-autoloader
-              composer audit --format=plain --abandoned=report
+              composer install --no-progress --prefer-dist --optimize-autoloader || return $?
+              composer audit --format=plain --abandoned=report || return $?
               ;;
             npm)
               if [ "${{ inputs.enable-npm }}" != "true" ]; then
                 echo "npm ecosystem is disabled — skipping npm audit."
-                exit 0
+                return 0
               fi
-              cd "$FRONTEND_PATH"
-              npm ci
+              cd "$FRONTEND_PATH" || return $?
+              npm ci || return $?
               # Tolerate an unavailable npm advisory endpoint: npm is retiring
               # the audits/quick endpoint and it intermittently 400s ("audit
               # endpoint returned an error" / "Invalid package tree"). That is an
@@ -1945,22 +2127,89 @@ jobs:
               if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -qiE "audit endpoint returned an error|Invalid package tree|ECONNRESET|ETIMEDOUT|ENOTFOUND|being retired|Service Unavailable"; then
                 echo "::warning::npm audit skipped — npm advisory endpoint unavailable (external); not a vulnerability."
               elif [ "$rc" -ne 0 ]; then
-                exit "$rc"
+                return "$rc"
               fi
               ;;
-          esac
+            *)
+              echo "::error::unknown ecosystem '$1' — the matrix and run_tool have drifted apart."
+              return 1
+              ;;
+            esac
+          }
 
+          # ── One job, N tools ───────────────────────────────────────────────
+          #
+          # `set -e` is ACTIVE in a GitHub `run:` block, but it is SUSPENDED
+          # inside a function invoked on the left of `||`. That is why every
+          # tool invocation inside run_tool() carries an explicit
+          # `|| return $?`: without it a failing tool would fall through to the
+          # end of its case arm and the function would return 0 — a red tool
+          # reported as green, in the job that exists to catch red tools.
+          TOOLS="${{ matrix.ecosystem }}"
+          [ "$TOOLS" = "all" ] && TOOLS="composer npm"
+
+          mkdir -p quality-results
+          FAILED=""
+          for T in $TOOLS; do
+            echo "::group::$T"
+            RC=0
+            # SUBSHELL: a tool that `cd`s (npm audit does) must not move the
+            # working directory for the next tool in the family.
+            ( run_tool "$T" ) || RC=$?
+            echo "::endgroup::"
+            if [ "$RC" -eq 0 ]; then
+              echo success > "quality-results/$T.txt"
+            else
+              echo failure > "quality-results/$T.txt"
+              FAILED="$FAILED $T"
+              echo "::error::$T failed (exit $RC)."
+            fi
+          done
+
+          if [ -n "$FAILED" ]; then
+            echo "::error::Security failed:$FAILED"
+            exit 1
+          fi
+          echo "Security: all of [$TOOLS] passed."
+
+      # FILLS IN WHAT THE RUN STEP COULD NOT WRITE. In the normal path the run
+      # step above has already recorded each tool's own exit code. This step
+      # exists for the case where the job died BEFORE that loop — a failed
+      # `composer install`, a cancelled runner — where no per-tool file exists
+      # and the report would otherwise read "skipped" for every one of them.
+      # `job.status` is the honest answer there: they did not run, and the job
+      # failed.
       - name: Record result
         if: always()
         run: |
           mkdir -p quality-results
-          echo "${{ job.status }}" > quality-results/${{ matrix.ecosystem }}.txt
-      - name: Upload result
+          TOOLS="${{ matrix.ecosystem }}"
+          [ "$TOOLS" = "all" ] && TOOLS="composer npm"
+          for T in $TOOLS; do
+            [ -s "quality-results/$T.txt" ] || echo "${{ job.status }}" > "quality-results/$T.txt"
+          done
+      # One artifact PER TOOL even when the legs are consolidated, because the
+      # Quality Report reads `results/result-security-composer/composer.txt` and its
+      # `read_result()` returns "skipped" for a missing file. A single combined
+      # artifact would render every tool as skipped and the report would say so
+      # in the required check, confidently and wrongly.
+      # `if-no-files-found: ignore` is what makes one step list serve both
+      # modes: in split mode this leg holds only its own file and the other
+      # five steps create nothing.
+      - name: "Upload result (composer)"
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: result-security-${{ matrix.ecosystem }}
-          path: quality-results/
+          name: result-security-composer
+          path: quality-results/composer.txt
+          if-no-files-found: ignore
+      - name: "Upload result (npm)"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-security-npm
+          path: quality-results/npm.txt
+          if-no-files-found: ignore
 
   # ── Group 4: License Compliance ─────────────────
   #
