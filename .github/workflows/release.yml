@@ -139,6 +139,29 @@ jobs:
             echo "Latest stable tag: $LATEST_TAG ($VERSION)"
           fi
 
+          # The baseline must not sit BELOW the branch we are releasing from.
+          #
+          # Everything above derives it from the latest stable TAG (or main's
+          # info.xml). On several apps that trails `development` badly:
+          #
+          #     thematiq   tag v1.0.0  development 1.1.0
+          #     versioniq  tag v1.2.0  development 1.4.1
+          #     planninq   tag v0.1.3  development 0.2.13
+          #     integriq   no tag      development 0.3.4
+          #
+          # Bumping the patch of a baseline that already trails the branch still
+          # computes a version BELOW what is shipping -- 1.2.1-unstable.<ts> is
+          # less than 1.4.1 -- so the downgrade survives. Taking the max with the
+          # branch's own version is what actually closes it.
+          CURRENT=$(grep -oP '(?<=<version>)[^<]+' appinfo/info.xml | head -1 | sed 's/-.*//')
+          if [ -n "$CURRENT" ]; then
+            HIGHER=$(printf '%s\n%s\n' "$VERSION" "$CURRENT" | sort -V | tail -1)
+            if [ "$HIGHER" != "$VERSION" ]; then
+              echo "Baseline $VERSION trails the branch ($CURRENT); using $CURRENT"
+              VERSION="$HIGHER"
+            fi
+          fi
+
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Calculate unstable version
