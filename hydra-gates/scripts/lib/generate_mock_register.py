@@ -587,6 +587,13 @@ def build(app_dir: str, app_id: str, per_schema: int, existing: dict | None) -> 
     }
 
 
+# The seven types JSON Schema itself defines. OpenRegister's vocabulary is a
+# superset; anything outside this set is its own and jsonschema cannot judge it.
+_JSON_SCHEMA_TYPES = {
+    "string", "number", "integer", "boolean", "array", "object", "null",
+}
+
+
 def _drop_refs(node: Any) -> Any:
     """Normalise an OpenAPI-flavoured schema into something jsonschema can judge.
 
@@ -609,6 +616,73 @@ def _drop_refs(node: Any) -> Any:
     """
     if isinstance(node, dict):
         out = {k: _drop_refs(v) for k, v in node.items() if k != "$ref"}
+
+        # 🔴 `required: true` ON A PROPERTY IS OPENAPI 2.0, NOT JSON SCHEMA,
+        # where `required` is an ARRAY on the parent object. jsonschema reports
+        # it as `True is not of type 'array'` — 62 such "errors" across two
+        # apps, none of them a defect in the data.
+        #
+        # Measured before deciding: 38 of the 42 properties carrying the flag
+        # are ALSO named in their parent's `required` array, so the flag is
+        # redundant and consistent. Dropping it here judges the object against
+        # what the parent actually declares.
+        #
+        # (The four that are NOT mirrored are a real finding — a field its
+        # author marked required that nothing enforces — but that is a defect in
+        # those schemas, and silently promoting them to required would change
+        # what saves.)
+        if out.get("required") is True or out.get("required") is False:
+            out.pop("required", None)
+
+        # An EMPTY `required` is "too short" to jsonschema. OpenRegister's own
+        # validator unsets it — `if required is not null and empty: unset` — so
+        # matching that is reading the same rule, not relaxing it.
+        if isinstance(out.get("required"), list) and not out["required"]:
+            out.pop("required", None)
+
+        # 🔴 BUILDER PLACEHOLDERS ARE "UNSET", NOT A CONSTRAINT. These schemas are
+        # emitted by a form builder that writes EVERY keyword, using `null` or
+        # `[]` for the ones that do not apply:
+        #
+        #     "minLength": null, "maximum": null, "oneOf": []
+        #
+        # `oneOf: []` means "validate against exactly one of NOTHING", which no
+        # value can satisfy — 144 properties in one app carried it. Read as
+        # written they are unsatisfiable; read as intended they are absent.
+        # Absent is what the author meant and what OpenRegister does.
+        for key in ("oneOf", "anyOf", "allOf", "enum"):
+            if key in out and (out[key] is None or out[key] == []):
+                out.pop(key)
+        # 🔴 ANY keyword holding null, not a list I maintain. The first version
+        # enumerated minLength/maxLength/minimum/maximum/minItems/maxItems/
+        # pattern/format — and still left twenty failures, because the builder
+        # also writes `multipleOf: null`, `exclusiveMinimum: null` and others.
+        # An enumeration of the keywords I happened to think of is the same
+        # mistake as the icon table it replaced, one file apart.
+        #
+        # `default` and `const` are exempt: null is a legitimate VALUE for both,
+        # and dropping them would discard what the schema actually declares.
+        for key in [k for k, v in out.items()
+                    if v is None and k not in ("default", "const")]:
+            out.pop(key)
+
+        # 🔴 OpenRegister's TYPE VOCABULARY IS WIDER THAN JSON SCHEMA'S.
+        # `PropertyValidatorHandler::$validTypes` accepts `file`, `geo`, `color`,
+        # `recurrence`, `NcFile`, `NcMail`, `NcContact`, `NcNote`, `NcTodo` —
+        # `type: "file"` with `format: "base64"` is a first-class property type
+        # here, handled at PropertyValidatorHandler:244. jsonschema knows none of
+        # them, so it called twelve legitimate declarations invalid.
+        #
+        # Dropped rather than mapped: what these carry is app-specific and this
+        # validator's question is only whether the demo VALUE is well-formed for
+        # the shape declared. A `type` that is a dict is builder noise and goes
+        # the same way.
+        kind = out.get("type")
+        if isinstance(kind, str) and kind not in _JSON_SCHEMA_TYPES:
+            out.pop("type")
+        elif not isinstance(kind, (str, list)) and kind is not None:
+            out.pop("type")
+
         if out.pop("nullable", None) is True:
             kind = out.get("type")
             if isinstance(kind, str):
