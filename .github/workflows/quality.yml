@@ -544,11 +544,32 @@ on:
       #
       # The fleet was not slow because the checks are slow. A Code Quality run
       # does ~38 job-minutes of work and its longest single job is 16 minutes,
-      # but the median successful run took 78.5 minutes wall clock, because
-      # every job queued behind the account's 60-concurrent-job ceiling: one
-      # instantaneous poll found 53 jobs running, 1,528 queued, and a run that
-      # had been waiting 425 minutes to start. 100% of sampled jobs waited more
-      # than 10 minutes for a runner; the median wait was 28.6 minutes.
+      # but the median successful run took 78.5 minutes wall clock. THE WALL
+      # CLOCK IS QUEUE TIME: every one of 272 sampled jobs waited more than ten
+      # minutes for a runner before executing, median 28.6 minutes, and a run
+      # was observed 425 minutes old and still not started.
+      #
+      # That wait is measured on jobs that ACTUALLY EXECUTED, comparing each
+      # job's `created_at` with its `started_at` — and `started_at` was checked
+      # against `steps[0].started_at` and agrees to within a second, so it is
+      # execution start and not queue entry.
+      #
+      # The account ceiling is 60 concurrent jobs (GitHub Team). Replaying the
+      # execution intervals of 5,108 jobs across all workflows and all 21 repos
+      # over 13:00-15:00 UTC gives a PEAK of 61 simultaneous executing jobs and
+      # a p99 of 57 — i.e. the account really was sitting on its cap.
+      #
+      # ⚠️ TWO EARLIER MEASUREMENTS OF THIS WERE WRONG, in opposite directions,
+      # and both looked plausible:
+      #   * Polling every repo for in-flight jobs takes ~4 minutes, so it SUMS
+      #     jobs that ran at different moments. It reported 53, then 78. It is a
+      #     smear, not a snapshot, and cannot measure concurrency at all.
+      #   * Replaying `job.started_at`..`job.completed_at` reported 442. A job
+      #     CANCELLED WHILE STILL QUEUED has `started_at == created_at`, a real
+      #     `completed_at`, and NO steps — it never ran, but it counts as
+      #     running for its whole queued life. 28% of runs today were cancelled.
+      # Only step-derived intervals measure execution. Both wrong numbers were
+      # reported before they were checked; the check is what produced 61.
       #
       # Nothing below makes a check faster. They remove DEMAND, which is the
       # only thing that shortens a queue.
