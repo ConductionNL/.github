@@ -4994,7 +4994,27 @@ jobs:
         run: |
           set -euo pipefail
           GATE=""
+          # The vendored path needs the INNER hydra-gates/ segment.
+          #
+          # conduction/hydra-gates is published from ConductionNL/.github, whose
+          # composer.json declares `extra.hydra-gates.helpers` as
+          # "hydra-gates/scripts/lib" -- a path relative to the PACKAGE ROOT. So
+          # composer installs it to:
+          #
+          #   vendor/conduction/hydra-gates/hydra-gates/scripts/lib/check_e2e_skips.py
+          #                                 ^^^^^^^^^^^
+          #
+          # The first candidate below omitted that segment, so it could never
+          # match in ANY app however correctly hydra-gates was vendored. That is
+          # why this gate is enabled in zero of the 21 fleet repos and why
+          # launchpad -- which DOES require conduction/hydra-gates ^1.8.2 and
+          # DOES configure the html reporter -- still reported
+          # "hydra-gates not vendored here yet".
+          #
+          # The old paths are kept as fallbacks so a checkout-style layout, or a
+          # future package that flattens the tree, still resolves.
           for candidate in \
+            "server/apps/${{ inputs.app-name }}/vendor/conduction/hydra-gates/hydra-gates/scripts/lib/check_e2e_skips.py" \
             "server/apps/${{ inputs.app-name }}/vendor/conduction/hydra-gates/scripts/lib/check_e2e_skips.py" \
             "hydra-gates/scripts/lib/check_e2e_skips.py"; do
             if [ -f "${candidate}" ]; then GATE="${candidate}"; break; fi
