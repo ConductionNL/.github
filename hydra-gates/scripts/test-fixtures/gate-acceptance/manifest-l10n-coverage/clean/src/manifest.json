@@ -1,0 +1,10 @@
+{
+	"version": "1.0.0",
+	"menu": [
+		{ "id": "Dashboard", "label": "Dashboard", "route": "Dashboard" },
+		{ "id": "Flows", "label": "Flow", "route": "Flows" }
+	],
+	"pages": [
+		{ "id": "Dashboard", "type": "dashboard", "title": "Dashboard" }
+	]
+}
