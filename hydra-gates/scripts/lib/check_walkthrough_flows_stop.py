@@ -86,8 +86,16 @@ def _targets_flows(step, page_ids, menu_ids):
     `CnWalkthrough.resolveTarget()` looks a `nav-item` / `page` ref up as
     `[data-cn-route="<ref>"]`, and `CnAppNav` sets that attribute from
     `item.route`. A step authored with the MENU id therefore resolves to
-    nothing and falls back to a centred, anchorless coachmark — it still
-    appears and still advances, it just stops pointing at anything.
+    nothing — and `armStep()` reads:
+
+        if (!el) { if (this.step.optional) { this.wt.skip(); return } }
+
+    so an `optional` step with no anchor is SKIPPED OUTRIGHT, not shown
+    centred. The anchorless-coachmark fallback in `computeRect()` applies only
+    when the target RESOLVED and has zero size (a collapsed nav group); an
+    absent target never reaches it. Since a view-only stop is `optional` by
+    construction (that is what keeps it from forcing authorship), getting the
+    ref wrong makes the step reach nobody, silently.
 
     Accepting the menu id here would make this gate accept a manifest the
     runtime cannot honour, which is the validator-and-executor-disagree
