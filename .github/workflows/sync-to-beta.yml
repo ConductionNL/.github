@@ -35,7 +35,18 @@ jobs:
           if [ -n "$EXISTING_PR" ] && [ "$EXISTING_PR" != "null" ]; then
             echo "PR #$EXISTING_PR already exists — it will auto-update with new commits"
           else
-            gh pr create \
+            # NOTHING TO SYNC IS NOT A FAILURE. When beta already holds every
+            # commit on development, `gh pr create` exits 1 with
+            #   GraphQL: No commits between beta and development
+            # and the whole release pipeline reports red for a branch that is
+            # perfectly in sync. Measured on versioniq 2026-08-27, whose only
+            # non-signing red on development was exactly this.
+            #
+            # Matched on the message rather than pre-comparing the two refs, so
+            # a commit landing between the check and the create cannot turn a
+            # real sync into a skipped one. Every other failure still exits 1.
+            set +e
+            CREATE_OUT=$(gh pr create \
               --base beta \
               --head development \
               --title "Release: merge development into beta" \
@@ -43,5 +54,15 @@ jobs:
 
           Merging this PR will trigger the beta release workflow.
 
-          > **Reminder:** Add a \`major\`, \`minor\`, or \`patch\` label to this PR to control the version bump. Default is \`patch\`."
+          > **Reminder:** Add a \`major\`, \`minor\`, or \`patch\` label to this PR to control the version bump. Default is \`patch\`." 2>&1)
+            CREATE_RC=$?
+            set -e
+            printf '%s\n' "$CREATE_OUT"
+            if [ "$CREATE_RC" -ne 0 ]; then
+              if printf '%s' "$CREATE_OUT" | grep -q 'No commits between'; then
+                echo "beta already holds every commit on development. Nothing to sync."
+              else
+                exit "$CREATE_RC"
+              fi
+            fi
           fi
