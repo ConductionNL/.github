@@ -11039,6 +11039,80 @@ if [ -d lib/Contract ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# Gate 70: walkthrough-flows-stop — an app that ships a `type:"flows"` page must
+# point its getting-started tour at it, and must not make reaching it
+# conditional on building a flow.
+#
+# Measured across the 20 fleet manifests on 2026-08-27: 19 apps declared a
+# walkthrough, 12 shipped a flows page, and exactly ONE tour mentioned flows at
+# all. The automation surface was therefore discoverable only to someone who
+# already knew it was there — which is the same shape as a feature that ships
+# and is never found.
+#
+# Two rules, deliberately pulling opposite ways:
+#   missing-flows-stop  — a flows page exists and no step targets it.
+#   forcing-flows-stop  — a step targets it but advances only on
+#                         `object-created` with no `allowManualNext`, so the
+#                         tour cannot be finished without authoring a flow.
+#                         "Show where it lives" must not become "build one
+#                         first"; a tour you cannot finish is worse than one
+#                         that stays quiet, because the user never reaches the
+#                         end to learn what else exists.
+#
+# NOT APPLICABLE (never a finding) when the app ships no flows page or declares
+# no walkthrough — there is nothing to point at, or nothing to point with.
+#
+# Skill: .claude/skills/hydra-gate-walkthrough-flows-stop/SKILL.md
+# ---------------------------------------------------------------------------
+_wfs_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-walkthrough-flows-stop.log
+: > "${_wfs_log}"
+_wfs_files=()
+while IFS= read -r f; do
+    [ -f "$f" ] || continue
+    _in_scope "$f" || continue
+    _wfs_files+=("$f")
+done < <(find src -maxdepth 1 -name 'manifest.json' 2>/dev/null)
+_wfs_ran=1
+if [ "${#_wfs_files[@]}" -gt 0 ]; then
+    _wfs_helper="${SCRIPT_DIR}/lib/check_walkthrough_flows_stop.py"
+    if [ -f "${_wfs_helper}" ]; then
+        # A CRASHED CHECKER MUST NOT REPORT PASS (#147 / #249 / #262).
+        set +e
+        python3 "${_wfs_helper}" "${_wfs_log}" "${_wfs_files[@]}" >/dev/null 2>>"${_wfs_log}.err"
+        _wfs_rc=$?
+        if [ "${_wfs_rc}" -ne 0 ]; then
+            _wfs_ran=0
+            _skip 70 "walkthrough-flows-stop" wiring "check_walkthrough_flows_stop.py exited ${_wfs_rc} — ${#_wfs_files[@]} manifest file(s) were in scope and no verdict was produced; walkthrough flows coverage is UNVERIFIED by this run. See ${_wfs_log}.err."
+        fi
+    else
+        _wfs_ran=0
+        _skip 70 "walkthrough-flows-stop" wiring "check_walkthrough_flows_stop.py not found at ${_wfs_helper} — ${#_wfs_files[@]} manifest file(s) were in scope and NONE were inspected; walkthrough flows coverage is UNVERIFIED by this run."
+    fi
+fi
+set +e
+_wfs_fail=$(wc -l < "${_wfs_log}" 2>/dev/null | tr -d ' ')
+[ -z "${_wfs_fail}" ] && _wfs_fail=0
+_wfs_applicable=$(cat "${_wfs_log}.applicable" 2>/dev/null | tr -d ' \n')
+[ -z "${_wfs_applicable}" ] && _wfs_applicable=0
+if [ "${#_wfs_files[@]}" -eq 0 ]; then
+    # AN UNOPENED SCOPE IS NEVER A PASS (#242/#240/#258/#268).
+    _skip 70 "walkthrough-flows-stop" na "scope was empty — 0 src/manifest.json file(s) in this repo or this diff, so NO tour was inspected; walkthrough flows coverage is UNVERIFIED by this run."
+elif [ "${_wfs_ran}" -eq 1 ]; then
+    if [ "${_wfs_applicable}" -eq 0 ]; then
+        # NOTHING TO CHECK IS NOT A CLEAN CHECK. Zero findings here means the
+        # app ships no `type:"flows"` page (or no walkthrough), not that its
+        # tour covers one. Reporting PASS would make the two indistinguishable
+        # and would keep this gate green for ever on an app that later drops
+        # its flows page.
+        _skip 70 "walkthrough-flows-stop" na "${#_wfs_files[@]} manifest(s) inspected and NONE declares both a type:\"flows\" page and an enabled walkthrough — there is nothing for a tour to point at, so no tour was judged."
+    elif [ "${_wfs_fail}" -eq 0 ]; then
+        _pass 70 "walkthrough-flows-stop"
+    else
+        _fail 70 "walkthrough-flows-stop" "${_wfs_fail} walkthrough flows finding(s) across ${_wfs_applicable} applicable manifest(s) — see ${_wfs_log}"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
 # Summary + COVERAGE ACCOUNTING
 #
 # The banner used to read "ALL 63 GATES GREEN" whenever the failure count was
