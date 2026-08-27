@@ -62,10 +62,11 @@ def _flows_pages(manifest):
 
 
 def _menu_ids_for(manifest, page_ids):
-    """Menu entry ids whose `route` names one of `page_ids`.
+    """Menu entry ids that route to one of `page_ids`.
 
-    A tour step targets a nav item by MENU id, not by page id, so both have to
-    be known before "does any step point at flows" can be answered.
+    NOT what a tour step should reference — see `_targets_flows`. Kept because
+    a step authored with the MENU id is the most common way to get this wrong,
+    and the finding is far more useful when it can say so.
 
     :param manifest: Parsed manifest.
     :param page_ids: Flows page ids.
@@ -79,18 +80,28 @@ def _menu_ids_for(manifest, page_ids):
 
 
 def _targets_flows(step, page_ids, menu_ids):
-    """Whether a tour step points at the flows surface.
+    """Whether a tour step points at the flows surface AT RUNTIME.
+
+    Keyed on the ROUTE, because that is what actually resolves.
+    `CnWalkthrough.resolveTarget()` looks a `nav-item` / `page` ref up as
+    `[data-cn-route="<ref>"]`, and `CnAppNav` sets that attribute from
+    `item.route`. A step authored with the MENU id therefore resolves to
+    nothing and falls back to a centred, anchorless coachmark — it still
+    appears and still advances, it just stops pointing at anything.
+
+    Accepting the menu id here would make this gate accept a manifest the
+    runtime cannot honour, which is the validator-and-executor-disagree
+    failure the gate set exists to catch. `menu_ids` is used only to say so in
+    the finding.
 
     :param step: A tour step.
-    :param page_ids: Flows page ids.
-    :param menu_ids: Menu ids routing to them.
+    :param page_ids: Flows page ids (== route names).
+    :param menu_ids: Menu ids routing to them, for diagnostics only.
     :return: True when the step targets flows.
     """
     target = step.get('target') or {}
     ref = target.get('ref')
-    if target.get('kind') == 'nav-item' and ref in menu_ids:
-        return True
-    if target.get('kind') == 'page' and ref in page_ids:
+    if target.get('kind') in ('nav-item', 'page') and ref in page_ids:
         return True
     advance = step.get('advanceOn') or {}
     return advance.get('type') == 'route-match' and advance.get('route') in page_ids
@@ -141,12 +152,25 @@ def check(path, findings):
         tour_id = tour.get('id', f'tours[{t_index}]')
 
         if not hits:
+            # Name the near-miss when it is there: a step that references the
+            # MENU id looks correct in review and resolves to nothing at
+            # runtime, so "no step targets it" would read as a flat
+            # contradiction to whoever authored one.
+            near = [s for s in steps
+                    if (s.get('target') or {}).get('ref') in menu_ids]
+            hint = ''
+            if near:
+                ids = ', '.join(sorted({(s.get('target') or {})['ref'] for s in near}))
+                hint = (f' NOTE: step(s) reference the MENU id ({ids}), which resolves to '
+                        f'nothing — CnWalkthrough looks a nav-item ref up as '
+                        f'[data-cn-route], set from the page ROUTE. Use one of '
+                        f'{sorted(page_ids)}.')
             findings.append(
                 f'{path}:walkthrough.tours[{t_index}] rule=missing-flows-stop '
                 f'tour={tour_id} flows_pages={sorted(page_ids)} '
                 'no step targets the flows surface — it is discoverable only to '
                 'someone who already knows it is there. Add a view-only stop '
-                '(optional + allowManualNext + a route-match advance).'
+                '(optional + allowManualNext + a route-match advance).' + hint
             )
             continue
 
