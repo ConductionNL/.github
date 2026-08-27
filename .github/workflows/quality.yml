@@ -5000,8 +5000,24 @@ jobs:
             if [ -f "${candidate}" ]; then GATE="${candidate}"; break; fi
           done
           if [ -z "${GATE}" ]; then
-            echo "::warning::check_e2e_skips.py not found (hydra-gates not vendored here yet) — skip discipline NOT measured on this run."
-            exit 0
+            # An absent GATE is an absent measurement, exactly like the absent
+            # REPORT handled below -- and it must be treated the same way.
+            #
+            # This used to `::warning::` and `exit 0`. That made opting in a
+            # NO-OP: launchpad set e2e-skip-blocking:true, the script was not
+            # vendored, the step warned, the job went green, and the app looked
+            # like the first in the fleet to enforce skip discipline while
+            # measuring nothing at all. The comment on the REPORT branch below
+            # already names this as "the one failure mode that would quietly
+            # turn the whole gate into a no-op" -- it just guarded one of the
+            # two ways in.
+            #
+            # `continue-on-error: !inputs.e2e-skip-blocking` above keeps this
+            # advisory for apps that have NOT opted in, so measure-only mode is
+            # unchanged. For an app that HAS opted in, a missing gate is now a
+            # failure with a fix in the message.
+            echo "::error::check_e2e_skips.py not found — skip discipline could not be measured. Vendor conduction/hydra-gates (composer require --dev conduction/hydra-gates) or check it out to ./hydra-gates. Looked in: server/apps/${{ inputs.app-name }}/vendor/conduction/hydra-gates/scripts/lib/ and ./hydra-gates/scripts/lib/."
+            exit 1
           fi
 
           REPORT=""
