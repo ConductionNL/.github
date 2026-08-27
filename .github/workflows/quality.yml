@@ -2814,6 +2814,15 @@ jobs:
         # journeydoc-capture already run against, so a reduced PR matrix tests
         # the server the rest of the suite is already using rather than
         # inventing a second opinion about which version matters.
+        #
+        # AND IT IS THE ONLY REDUCTION THAT KEEPS THE COVERAGE GUARD ALIVE.
+        # The `Measure merge-base coverage` step below runs on exactly one leg:
+        # `matrix.php-version == inputs.php-version && matrix.nextcloud-ref ==
+        # needs.nextcloud-matrix.outputs.single-server`. The reduced matrix is
+        # that pair and nothing else, so the guard still has its leg. Reducing
+        # to any OTHER combination — the declared floor, say — would have left
+        # that condition unsatisfiable and the coverage ratchet would simply
+        # never have run on a pull request, silently and with nothing red.
         nextcloud-ref: ${{ (inputs.reduce-pr-matrix && github.event_name == 'pull_request') && fromJSON(format('["{0}"]', needs.nextcloud-matrix.outputs.single-server)) || fromJSON(needs.nextcloud-matrix.outputs.branches) }}
         # An empty database-test-matrix collapses to the single `database`
         # input, which is what every caller uses today — so the matrix keeps
