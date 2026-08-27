@@ -344,6 +344,69 @@ class AppIdentity(unittest.TestCase):
             self.assertIn("--app=humaniq", built["x-openregister"]["description"])
 
 
+class UnusualComponentShapes(unittest.TestCase):
+    """A crashed checker is not a finding.
+
+    `components.registers` is not always a slug-keyed map: openregister's
+    `avg-bundle.json` and `report-bundle.json` ship a LIST of register
+    objects. The old discovery required a dict, so those files never reached
+    the code that reads `.keys()`. Widening discovery to schema-defining files
+    let them through and `--check` died with
+
+        AttributeError: 'list' object has no attribute 'keys'
+
+    on the app that owns the gate.
+    """
+
+    def _app_with_a_list_shaped_register(self, root: Path) -> None:
+        _write(
+            root,
+            "lib/Settings/widget_register.json",
+            {
+                "components": {
+                    "registers": {"widget": {"schemas": ["Employee"]}},
+                    "schemas": {"Employee": _schema({"name": {"type": "string"}})},
+                }
+            },
+        )
+        _write(
+            root,
+            "lib/Resources/avg-bundle.json",
+            {
+                "components": {
+                    "registers": [{"title": "AVG", "slug": "avg"}],
+                    "schemas": {"Consent": _schema({"granted": {"type": "boolean"}})},
+                }
+            },
+        )
+
+    def test_check_does_not_crash_on_a_list_shaped_registers_block(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _app(root)
+            self._app_with_a_list_shaped_register(root)
+            gmr.main(["generate_mock_register.py", str(root)])
+
+            rc = gmr.main(["generate_mock_register.py", str(root), "--check"])
+
+            self.assertEqual(rc, 0, "a list-shaped registers block must not crash --check")
+
+    def test_the_map_still_resolves_the_dict_shaped_register(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _app(root)
+            self._app_with_a_list_shaped_register(root)
+
+            _registers, owns, definitions = gmr._register_schema_map(str(root))
+
+            # The bundle contributes its DEFINITIONS but no register slug —
+            # this suite does not teach the generator the list dialect, it only
+            # stops it dying on one.
+            self.assertEqual(owns["widget"], ["Employee"])
+            self.assertIn("Consent", definitions)
+            self.assertNotIn("avg", owns)
+
+
 class MockDescriptorsAreNotInput(unittest.TestCase):
     """The generator's own output must never be read back as a source.
 

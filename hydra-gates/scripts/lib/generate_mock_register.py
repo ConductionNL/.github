@@ -442,6 +442,16 @@ def _object_for(register: str, schema_name: str, schema: dict, index: int) -> di
     }
 
 
+def _as_dict(value: object) -> dict:
+    """`value` when it is a mapping, otherwise an empty one.
+
+    Descriptor `components` blocks are not uniformly shaped: some ship
+    `registers` as a LIST of register objects rather than a slug-keyed map.
+    Anything reading `.keys()` off them without checking crashes on those.
+    """
+    return value if isinstance(value, dict) else {}
+
+
 def _app_id(app_dir: str) -> str:
     """The app's id — `<id>` in appinfo/info.xml, never the directory name.
 
@@ -930,8 +940,14 @@ def check(app_dir: str, app_id: str, per_schema: int, only: set[str] | None = No
     for _path, decl in _component_files(app_dir):
         if only is not None and os.path.relpath(_path, app_dir) not in only:
             continue
-        touched = set((decl["components"].get("schemas") or {}).keys())
-        touched |= set((decl["components"].get("registers") or {}).keys())
+        # 🔴 BOTH KEYS GUARDED. `components.registers` is not always a mapping:
+        # openregister's `avg-bundle.json` and `report-bundle.json` use a LIST
+        # of register objects. `_descriptors` required a dict, so widening
+        # discovery to schema-only files let those through and this line died
+        # with `'list' object has no attribute 'keys'` — a crashed checker, not
+        # a finding. Their schemas still count; they contribute no slug here.
+        touched = set(_as_dict(decl["components"].get("schemas")).keys())
+        touched |= set(_as_dict(decl["components"].get("registers")).keys())
         for reg_slug, names in owns.items():
             for sch_name in names:
                 if sch_name in touched or reg_slug in touched:
