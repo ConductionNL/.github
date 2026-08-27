@@ -10885,6 +10885,111 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# GATE 100 — setup-demo-data-first (ADR-111 rule 4)
+#
+# ADR-042 already built the whole mechanism: `CnSetupWizard` renders
+# `manifest.setup.steps[]`, the manifest schema types the six step kinds, and
+# `POST /api/setup/action/{action}` runs a step's privileged server-side work.
+# Ten fleet apps declare setup steps. Every one opens with `welcome`.
+#
+# A welcome screen tells you what an app is. The demo-data offer lets you SEE
+# it, and that is the only question the first reader actually has — they cannot
+# author objects against a schema they do not know yet.
+#
+# 🔴 IT ASSERTS ON THE DECLARATION, NOT ON VUE SOURCE. The first draft of
+# ADR-111 measured adoption by scanning `src/**/*Wizard*.vue` and found one app;
+# ten have one. The walkthrough is not a file an app writes, it is a
+# declaration an app makes. Counting the artefact instead of the declaration
+# undercounted by 10x and would have justified rebuilding a shared component
+# that already exists.
+#
+# DOES NOT ENFORCE PRESENCE, deliberately. Twenty of thirty manifests declare no
+# setup at all, and failing them would block every unrelated manifest edit in
+# the fleet on the day this ships. Adoption is a rollout, tracked as work; this
+# gate stops the ten that exist from drifting and stops new ones landing wrong.
+# Presence becomes enforceable in a follow-up once the rollout lands.
+# ---------------------------------------------------------------------------
+_sdf_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-setup-demo-first.log
+: > "${_sdf_log}"
+set +e
+printf '%s\n' "${CHANGED_FILES}" \
+    | python3 "${SCRIPT_DIR}/lib/check_setup_demo_first.py" . > "${_sdf_log}" 2>&1
+_sdf_rc=$?
+set +e
+
+if [ "${HAVE_DELTA_BASE}" != "1" ]; then
+    _skip 100 "setup-demo-data-first" na "no delta base was resolved, so there is no changed-file set and no manifest was inspected. This gate judges what a change TOUCHES; with no base it has nothing to judge."
+elif [ "${_sdf_rc}" -eq 0 ]; then
+    _pass 100 "setup-demo-data-first"
+elif [ "${_sdf_rc}" -eq 4 ]; then
+    _skip 100 "setup-demo-data-first" na "this diff touches no src/manifest.json, so no setup declaration needed its first step checked. See ${_sdf_log}."
+elif ! _helper_finished "${_sdf_log}" '^checked [0-9]+ manifest'; then
+    # A CRASH IS NOT A FINDING.
+    _sdf_why=$(head -3 "${_sdf_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+    _skip 100 "setup-demo-data-first" wiring "check_setup_demo_first.py exited ${_sdf_rc} without printing its terminal 'checked N manifest(s)' summary, so the setup order is UNVERIFIED by this run. Checker output: ${_sdf_why:-<empty>}. See ${_sdf_log}."
+else
+    _sdf_n=$(grep -cE '^FAIL ' "${_sdf_log}" 2>/dev/null || true)
+    case "${_sdf_n}" in ''|*[!0-9]*) _sdf_n=1 ;; esac
+    _fail 100 "setup-demo-data-first" "${_sdf_n} manifest(s) whose setup does not open with the demo-data step (ADR-111 rule 4) — see ${_sdf_log}"
+fi
+
+# ---------------------------------------------------------------------------
+# GATE 99 — demo-data-coverage (ADR-111 rules 1 and 2)
+#
+# An app installed from the App Store opens on an empty list. The person
+# evaluating it has to author objects by hand before they can see whether it
+# does anything, and the schema they must satisfy is exactly the thing they do
+# not know yet. Measured 2026-08-27: the fleet declares 598 schemas and 16 of
+# them have any demo data.
+#
+# ADR-111 rule 1 asks for at least THREE demo objects per schema — one object
+# cannot show a list as a list, cannot distinguish an empty state from a
+# populated one, and leaves a detail page with no sibling to page to.
+#
+# 🔴 AND THE OBJECTS MUST SATISFY THE SCHEMA. Counting them only proves somebody
+# wrote something; demo data that fails its own schema fails at import, in front
+# of whoever asked for the demo. The checker runs jsonschema per object, and
+# that validation immediately found four bugs in the generator that produces
+# them — a `pattern` ignored, a character-class lookup table where a parser was
+# needed, an open `{4,}` quantifier that abandoned the whole pattern, and a
+# recursion cap that dropped nested required properties.
+#
+# DIFF-SCOPED, and this one is not a judgement call. Twenty of twenty-one apps
+# have no demo data at all today; a full-tree version would redden every branch
+# in the fleet on the day it shipped. It judges the descriptors a PR TOUCHES —
+# add or change a schema, and that schema's demo data must exist and be valid.
+# Inherited gaps are a rollout, tracked separately, not a tax on unrelated work.
+#
+# gate-98 shipped the opposite of this a day earlier by keying on
+# `SCOPE_TO_DIFF` (which defaults to 0) instead of HAVE_DELTA_BASE, and ran
+# full-tree in production. Same variable, same file — hence the explicit note.
+# ---------------------------------------------------------------------------
+_ddc_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-demo-data-coverage.log
+: > "${_ddc_log}"
+set +e
+printf '%s\n' "${CHANGED_FILES}" \
+    | python3 "${SCRIPT_DIR}/lib/generate_mock_register.py" . --check --only-changed \
+    > "${_ddc_log}" 2>&1
+_ddc_rc=$?
+set +e
+
+if [ "${HAVE_DELTA_BASE}" != "1" ]; then
+    _skip 99 "demo-data-coverage" na "no delta base was resolved, so there is no changed-file set and no descriptor was inspected. This gate judges what a change TOUCHES; with no base it has nothing to judge, and saying so is not the same as passing."
+elif [ "${_ddc_rc}" -eq 0 ]; then
+    _pass 99 "demo-data-coverage"
+elif [ "${_ddc_rc}" -eq 4 ]; then
+    _skip 99 "demo-data-coverage" na "this diff touches no register descriptor under lib/, so no schema needed its demo data checked. See ${_ddc_log}."
+elif ! _helper_finished "${_ddc_log}" '^checked [0-9]+ schema'; then
+    # A CRASH IS NOT A FINDING.
+    _ddc_why=$(head -3 "${_ddc_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+    _skip 99 "demo-data-coverage" wiring "generate_mock_register.py exited ${_ddc_rc} without printing its terminal 'checked N schema(s)' summary, so demo-data coverage is UNVERIFIED by this run. Checker output: ${_ddc_why:-<empty>}. See ${_ddc_log}."
+else
+    _ddc_n=$(grep -cE '^FAIL ' "${_ddc_log}" 2>/dev/null || true)
+    case "${_ddc_n}" in ''|*[!0-9]*) _ddc_n=1 ;; esac
+    _fail 99 "demo-data-coverage" "${_ddc_n} schema(s) without valid demo data (ADR-111 rule 1) — see ${_ddc_log}"
+fi
+
+# ---------------------------------------------------------------------------
 # GATE 98 — repair-step-registration (ADR-005 rule 1, the other half)
 #
 # A repair step that is written but never NAMED in appinfo/info.xml does not
