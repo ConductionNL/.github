@@ -442,8 +442,93 @@ def _object_for(register: str, schema_name: str, schema: dict, index: int) -> di
     }
 
 
-def _descriptors(app_dir: str) -> list[tuple[str, dict]]:
-    """Every non-mock descriptor an app ships, as (path, parsed)."""
+def _app_id(app_dir: str) -> str:
+    """The app's id — `<id>` in appinfo/info.xml, never the directory name.
+
+    🔴 `x-openregister.app` IS LOAD-BEARING. The descriptor inventory resolves
+    a register to an app by that field, so writing the wrong value attributes
+    the register to an app that does not exist — and the `--app=` command this
+    generator prints into its own description then resolves nothing.
+
+    Directory names lag the fleet rename: humaniq's checkout is still `hrmq`
+    while its shipped `<id>` is already `humaniq`, and the same split will
+    reach every app whose id moves. The id is the authority (CLAUDE.md), so
+    read it rather than infer it from where the checkout happens to sit.
+
+    Falls back to the directory basename when info.xml has no `<id>`, which is
+    what a non-app directory looks like. abspath first: `basename(".")` is
+    `"."`, a nonsense id (and filename) the gate would otherwise produce every
+    time, since it always passes a relative dot.
+    """
+    info = os.path.join(app_dir, "appinfo", "info.xml")
+    try:
+        with open(info, encoding="utf-8") as handle:
+            match = re.search(r"<id>\s*([^<\s]+)\s*</id>", handle.read())
+        if match:
+            return match.group(1)
+    except OSError:
+        pass
+    return os.path.basename(os.path.abspath(app_dir))
+
+
+def _merge_definition(existing: dict | None, incoming: dict) -> dict:
+    """Combine two files' definitions of the SAME schema name.
+
+    An extending file carries the properties the base does not, so the schema
+    the demo data must satisfy is the union. Property maps and `required` lists
+    are unioned; every other key keeps the first file's value, because a later
+    file that merely extends has no business restating a `title` or a `slug`.
+
+    The base is not privileged over the overlay for individual properties: a
+    name defined in both keeps the FIRST seen, matching the previous behaviour
+    for the only case where the two genuinely disagree.
+    """
+    if not isinstance(existing, dict):
+        return incoming
+
+    merged = dict(existing)
+
+    old_props = existing.get("properties")
+    new_props = incoming.get("properties")
+    if isinstance(new_props, dict):
+        props = dict(old_props) if isinstance(old_props, dict) else {}
+        for prop_name, prop_spec in new_props.items():
+            props.setdefault(prop_name, prop_spec)
+        merged["properties"] = props
+
+    old_req = existing.get("required")
+    new_req = incoming.get("required")
+    if isinstance(new_req, list):
+        seen = list(old_req) if isinstance(old_req, list) else []
+        for item in new_req:
+            if item not in seen:
+                seen.append(item)
+        merged["required"] = seen
+
+    for key, value in incoming.items():
+        if key not in ("properties", "required"):
+            merged.setdefault(key, value)
+
+    return merged
+
+
+def _component_files(app_dir: str) -> list[tuple[str, dict]]:
+    """Every non-mock file an app ships that carries a `components` block.
+
+    🔴 WIDER THAN `_descriptors`, DELIBERATELY. A schema definition does not
+    have to live in the file that declares its register. hrmq declares the
+    `humaniq` register with a list of 54 schema NAMES in one file and DEFINES
+    all 54 across thirty others that declare no register at all.
+
+    Sweeping definitions only from register-declaring files left every one of
+    those names undefined; the resolver then dropped them as unresolvable and
+    the generator announced "hrmq: declares no schemas — nothing to generate"
+    and exited 0. Three apps — hrmq, doriath, hermiq — were written off as
+    having no schemas on the strength of that sentence.
+
+    The predicate that finds the files must be as wide as the thing being
+    collected. Registers still come from the narrow set below.
+    """
     found = []
     for path in sorted(glob.glob(os.path.join(app_dir, "lib", "**", "*.json"), recursive=True)):
         try:
@@ -457,7 +542,10 @@ def _descriptors(app_dir: str) -> list[tuple[str, dict]]:
         if not isinstance(components, dict):
             continue
         registers = components.get("registers")
-        if not isinstance(registers, dict) or not registers:
+        schemas = components.get("schemas")
+        has_registers = isinstance(registers, dict) and bool(registers)
+        has_schemas = isinstance(schemas, dict) and bool(schemas)
+        if not has_registers and not has_schemas:
             continue
         marker = data.get("x-openregister")
         marker = marker if isinstance(marker, dict) else {}
@@ -465,6 +553,22 @@ def _descriptors(app_dir: str) -> list[tuple[str, dict]]:
             continue
         found.append((path, data))
     return found
+
+
+def _descriptors(app_dir: str) -> list[tuple[str, dict]]:
+    """The subset that DECLARES a register — the authority on register->schema.
+
+    Kept narrow on purpose: the `fallback` rule below ("a register that names
+    no list carries the schemas defined beside it") is only meaningful in a
+    file where the register is actually declared. Widening this set would
+    restore the cross-product the map exists to prevent.
+    """
+    return [
+        (path, data)
+        for path, data in _component_files(app_dir)
+        if isinstance(data["components"].get("registers"), dict)
+        and bool(data["components"]["registers"])
+    ]
 
 
 def _register_schema_map(app_dir: str) -> tuple[dict[str, dict], dict[str, list[str]], dict[str, dict]]:
@@ -489,14 +593,28 @@ def _register_schema_map(app_dir: str) -> tuple[dict[str, dict], dict[str, list[
     definitions: dict[str, dict] = {}
     fallback: dict[str, set[str]] = {}
 
+    # Definitions are swept from EVERY component file, register-declaring or
+    # not — see _component_files. The register pairing below stays narrow.
+    #
+    # 🔴 MERGED, NOT first-wins. A fleet app may define one schema across more
+    # than one file: pipelinq ships a base `ticket` and a separate CTI overlay
+    # that adds `telephony_platform` and friends, with its own comment saying
+    # "the overlay must land here or OpenRegister's magic-table columns for
+    # these fields never exist". `setdefault` kept whichever file sorted first
+    # and silently discarded the other — so which half of `ticket` the demo
+    # data was generated against depended on a filename. Neither outcome is
+    # wrong-looking: both produce a valid object against a real schema.
+    for _path, data in _component_files(app_dir):
+        decl_schemas = data["components"].get("schemas")
+        if isinstance(decl_schemas, dict):
+            for name, spec in decl_schemas.items():
+                if isinstance(spec, dict):
+                    definitions[name] = _merge_definition(definitions.get(name), spec)
+
     for _path, data in _descriptors(app_dir):
         components = data["components"]
         decl_registers = components.get("registers") or {}
         decl_schemas = components.get("schemas") or {}
-        if isinstance(decl_schemas, dict):
-            for name, spec in decl_schemas.items():
-                if isinstance(spec, dict):
-                    definitions.setdefault(name, spec)
 
         for slug, reg in (decl_registers or {}).items():
             if not isinstance(reg, dict):
@@ -805,7 +923,11 @@ def check(app_dir: str, app_id: str, per_schema: int, only: set[str] | None = No
     # from the same authority the generator uses, so the producer and the judge
     # cannot disagree about which pairs exist.
     in_scope_pairs: list[tuple[str, str]] = []
-    for _path, decl in _descriptors(app_dir):
+    # 🔴 `_component_files`, NOT `_descriptors`. In a modular app a PR that adds
+    # a schema touches a file declaring no register, so keying the delta scope
+    # on register-declaring files would put that new schema out of scope — the
+    # gate would pass a PR that shipped a schema with no demo data at all.
+    for _path, decl in _component_files(app_dir):
         if only is not None and os.path.relpath(_path, app_dir) not in only:
             continue
         touched = set((decl["components"].get("schemas") or {}).keys())
@@ -867,10 +989,7 @@ def main(argv: list[str]) -> int:
     args = parser.parse_args(argv[1:])
 
     app_dir = args.app_dir.rstrip("/") or "."
-    # abspath first: `basename(".")` is `"."`, which produced a nonsense app id
-    # (and a nonsense output filename) whenever the caller passed a relative dot
-    # — which the gate always does.
-    app_id = os.path.basename(os.path.abspath(app_dir))
+    app_id = _app_id(app_dir)
 
     if args.check:
         only = None
