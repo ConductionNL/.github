@@ -348,7 +348,12 @@ while read -r dir app; do
   # resolves either extension. Insisting on .js reported a correctly-built app
   # as broken, which is the same failure as missing a broken one.
   { [ -f "$appdir/js/$app-main.js" ] || [ -f "$appdir/js/$app-main.mjs" ]; } && continue
-  have="$(ls "$appdir"/js/*-main.js "$appdir"/js/*-main.mjs 2>/dev/null | head -1 | xargs -r basename)"
+  # Globbed rather than parsed out of `ls` (SC2012): the glob gives the names
+  # directly, and an unmatched glob stays literal, which the -f test rejects.
+  have=""
+  for cand in "$appdir"/js/*-main.js "$appdir"/js/*-main.mjs; do
+    [ -f "$cand" ] && { have="$(basename "$cand")"; break; }
+  done
   STALE_JS=$((STALE_JS+1))
   echo "  $app: js/$app-main.js missing${have:+ (found $have -- stale, pre-rename)}"
   echo "    fix: (cd ../$dir && npm ci && npm run build)"
