@@ -1720,7 +1720,47 @@ jobs:
                 echo "PHP toolchain is disabled — skipping composer audit."
                 exit 0
               fi
-              composer install --no-progress --prefer-dist --optimize-autoloader
+              # RETRIED, because this step reaches the network for the advisory
+              # feed and a transport failure is not a security finding.
+              #
+              # `roave/security-advisories` is a dev-latest package whose install
+              # pulls https://packagist.org/api/security-advisories/ live, so
+              # `composer install` — not `composer audit` — is where the outage
+              # lands. Observed on shillinq 2026-08-27:
+              #
+              #   curl error 28 while downloading
+              #   https://packagist.org/api/security-advisories/: Operation timed
+              #   out after 10006 milliseconds with 0 bytes received
+              #   Process completed with exit code 100
+              #
+              # which renders in every summary as a failed SECURITY gate on
+              # `development`. It reads as "this app has a vulnerability"; it
+              # means "packagist did not answer within ten seconds".
+              #
+              # The npm leg below already tolerates its endpoint being
+              # unavailable. This is the same class of problem, but it must NOT
+              # get the same treatment: an unreachable advisory database with a
+              # green tick is a check that cannot fail, and the audit that
+              # follows would report "no advisories" having consulted nothing.
+              # So retry the transport, and if it still will not answer, fail —
+              # saying which of the two it was.
+              install_ok=""
+              for attempt in 1 2 3; do
+                if composer install --no-progress --prefer-dist --optimize-autoloader; then
+                  install_ok="yes"
+                  break
+                fi
+                echo "::notice::composer install failed (attempt ${attempt}/3); retrying in $((attempt * 10))s"
+                sleep $((attempt * 10))
+              done
+              if [ -z "$install_ok" ]; then
+                echo "::error::composer install did not succeed in 3 attempts. If the log above \
+              shows a curl/timeout error against packagist.org, this is an advisory-feed outage \
+              rather than a vulnerability in this app — but it is still reported as a failure, \
+              because the audit below would otherwise pass having consulted nothing."
+                exit 1
+              fi
+
               composer audit --format=plain --abandoned=report
               ;;
             npm)
