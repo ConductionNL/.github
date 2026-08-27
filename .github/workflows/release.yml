@@ -11,6 +11,19 @@ on:
         description: "Nextcloud app ID (must match appinfo/info.xml)"
         required: true
         type: string
+      previous-app-id:
+        # Set this on an app whose `<id>` has been renamed. The App Store keys
+        # everything on the id, so a renamed app is a BRAND NEW store entry
+        # starting from nothing -- and the version line would silently restart
+        # below what the app already shipped under its old name. filinq was
+        # about to publish 0.0.40 while docudesk sits at 0.1.0-beta.3 on the
+        # store. Naming the old id here folds its published versions into the
+        # baseline, so the renamed app picks the line up instead of restarting
+        # it. Delete the input once the old entry is retired.
+        description: "Previous App Store id, if this app's <id> was renamed (e.g. docudesk for filinq)"
+        required: false
+        type: string
+        default: ""
       php-version:
         description: "PHP version for building"
         required: false
@@ -117,6 +130,132 @@ jobs:
 
       # ── Version calculation ──
 
+      # The App Store is the only place that knows what users can actually
+      # install, and until now nothing in this workflow read it.
+      #
+      # The baseline was derived from the newest STABLE git tag (plus, since
+      # #589, the branch's own info.xml). Neither sees a prerelease line that
+      # ran ahead somewhere else. The fleet spent June and July releasing from
+      # Codeberg, where the beta line had walked up a MINOR -- pipelinq
+      # 0.4.0-beta.2, decidesk 1.1.0-beta.1, larpingapp 0.2.0-beta.1 -- and
+      # those tags are prereleases, so the `^v[0-9]+\.[0-9]+\.[0-9]+$` filter
+      # below is blind to them by construction. Back on GitHub the baseline
+      # fell back to the old stable patch line and every beta since has
+      # proposed a version BELOW what the store already serves: pipelinq
+      # computed 0.3.2-beta against a store holding 0.4.0-beta.2. Measured
+      # 2026-08-27: 14 of the 21 fleet apps were computing a downgrade.
+      #
+      # Nothing rejected it. nextcloudappstore/api/v1/views.py::_check_permission
+      # validates that the app exists and that you own it, and has NO version
+      # ordering rule at all -- a lower version uploads with a 200 and then
+      # sits there, never offered to anyone already on a higher one. So the
+      # defect is invisible from the upload side: it can only be caught here,
+      # by reading what the store holds BEFORE choosing a number.
+      #
+      # /api/v1/apps.json is the unfiltered catalogue. The per-platform
+      # endpoint (/api/v1/platform/<v>/apps.json) is the wrong source: it drops
+      # releases that do not match that platform's requirements, so the max it
+      # reports can be below the true max and would reintroduce the downgrade.
+      # Verified 2026-08-27 across 18 fleet ids -- apps.json agreed with the
+      # union of three platform files on every one.
+      - name: Read what the App Store already serves
+        id: store
+        env:
+          APP_ID: ${{ inputs.app-name }}
+          PREV_APP_ID: ${{ inputs.previous-app-id }}
+        run: |
+          # No `|| true` anywhere in this step. A failed fetch must not fall
+          # back to "the store has nothing", because that is indistinguishable
+          # from an unregistered app and would compute the downgrade this step
+          # exists to prevent.
+          curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors --max-time 180 \
+            "https://apps.nextcloud.com/api/v1/apps.json" -o "$RUNNER_TEMP/appstore.json"
+
+          echo "Catalogue: $(wc -c < "$RUNNER_TEMP/appstore.json") bytes, $(python3 -c 'import json,os;print(len(json.load(open(os.environ["RUNNER_TEMP"]+"/appstore.json"))))') apps"
+
+          # Shared by the assertion step further down.
+          cat > "$RUNNER_TEMP/semver.py" <<'PY'
+          import re
+
+
+          def parse(v):
+              """Order a semver string the way semver.org says, prerelease below release."""
+              m = re.match(r"^(\d+)\.(\d+)\.(\d+)(?:-(.+?))?(?:\+.+)?$", v.strip())
+              if not m:
+                  return None
+              major, minor, patch = int(m.group(1)), int(m.group(2)), int(m.group(3))
+              pre = m.group(4)
+              if pre is None:
+                  # A release outranks every prerelease of the same core.
+                  key = (1,)
+              else:
+                  ids = tuple(
+                      (0, int(p), "") if p.isdigit() else (1, 0, p) for p in pre.split(".")
+                  )
+                  key = (0, ids)
+              return (major, minor, patch, key)
+
+
+          def core(v):
+              p = parse(v)
+              return None if p is None else "%d.%d.%d" % p[:3]
+          PY
+
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os, sys
+
+          sys.path.insert(0, os.environ["RUNNER_TEMP"])
+          from semver import parse, core
+
+          catalogue = json.load(open(os.environ["RUNNER_TEMP"] + "/appstore.json"))
+          by_id = {a["id"]: a for a in catalogue}
+
+          def max_version(app_id):
+              app = by_id.get(app_id)
+              if app is None:
+                  return None
+              versions = [r["version"] for r in app.get("releases", [])]
+              parsed = [v for v in versions if parse(v) is not None]
+              if len(parsed) != len(versions):
+                  # An unparseable version would be silently dropped from the
+                  # max, which is exactly the kind of quiet downgrade this step
+                  # is here to stop.
+                  bad = sorted(set(versions) - set(parsed))
+                  sys.exit("App Store lists a version this step cannot order: %s" % bad)
+              return max(parsed, key=parse) if parsed else None
+
+          app_id = os.environ["APP_ID"]
+          prev_id = os.environ.get("PREV_APP_ID", "").strip()
+
+          this_max = max_version(app_id)
+          prev_max = max_version(prev_id) if prev_id else None
+
+          if prev_id and prev_id not in by_id:
+              sys.exit(
+                  "previous-app-id is set to %r but no such app is on the App Store. "
+                  "Either it is misspelled or the old entry is gone -- drop the input "
+                  "rather than leaving it pointing at nothing." % prev_id
+              )
+
+          print("registered=%s" % ("true" if app_id in by_id else "false"))
+          print("max=%s" % (this_max or ""))
+          print("previous_max=%s" % (prev_max or ""))
+
+          cores = [core(v) for v in (this_max, prev_max) if v]
+          print("baseline=%s" % (max(cores, key=parse) if cores else ""))
+
+          print(
+              "App Store: %s is %s (max %s)%s"
+              % (
+                  app_id,
+                  "registered" if app_id in by_id else "NOT registered",
+                  this_max or "-",
+                  ", previous id %s max %s" % (prev_id, prev_max or "-") if prev_id else "",
+              ),
+              file=sys.stderr,
+          )
+          PY
+
       - name: Get latest stable version
         id: stable_version
         run: |
@@ -162,7 +301,23 @@ jobs:
             fi
           fi
 
+          # ...and it must not trail the App Store either. Both sources above
+          # are repository-local, and the repository is precisely what lost the
+          # Codeberg-era prerelease line. The branch's own info.xml is not a
+          # backstop for that: the version bump lands through a pull request,
+          # so whenever that PR has not merged yet, info.xml still reads the
+          # PREVIOUS release's number and this guard sees nothing wrong.
+          STORE="${{ steps.store.outputs.baseline }}"
+          if [ -n "$STORE" ]; then
+            HIGHER=$(printf '%s\n%s\n' "$VERSION" "$STORE" | sort -V | tail -1)
+            if [ "$HIGHER" != "$VERSION" ]; then
+              echo "Baseline $VERSION trails the App Store ($STORE); using $STORE"
+              VERSION="$HIGHER"
+            fi
+          fi
+
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Baseline: $VERSION"
 
       - name: Calculate unstable version
         if: inputs.release-type == 'unstable'
@@ -259,6 +414,83 @@ jobs:
           echo "NEW_VERSION=$VERSION" >> $GITHUB_ENV
           echo "APP_NAME=${{ inputs.app-name }}" >> $GITHUB_ENV
           echo "Releasing stable version: $VERSION"
+
+      # Assert the two properties the steps above are supposed to produce,
+      # rather than trusting that they did.
+      #
+      # This is deliberately a separate step with its own comparison. The
+      # baseline arithmetic works in stripped X.Y.Z cores and `sort -V`; a
+      # published version is a full semver string where `1.0.10-beta.2` ranks
+      # below `1.0.10` and `0.4.0-beta.2` above `0.4.0-beta.1`. Re-checking the
+      # real thing under real semver is what catches an off-by-one in the core
+      # arithmetic -- comparing cores to cores again would just agree with it.
+      - name: The release must outrank the App Store, and must not invent a major
+        env:
+          NEW_VERSION: ${{ env.NEW_VERSION }}
+          BASELINE: ${{ steps.stable_version.outputs.version }}
+          STORE_MAX: ${{ steps.store.outputs.max }}
+          STORE_PREV_MAX: ${{ steps.store.outputs.previous_max }}
+          PREV_APP_ID: ${{ inputs.previous-app-id }}
+          BUMP_LEVEL: ${{ steps.pr_label.outputs.bump }}
+          RELEASE_TYPE: ${{ inputs.release-type }}
+        run: |
+          python3 - <<'PY'
+          import os, sys
+
+          sys.path.insert(0, os.environ["RUNNER_TEMP"])
+          from semver import parse
+
+          new = os.environ["NEW_VERSION"]
+          new_p = parse(new)
+          if new_p is None:
+              sys.exit("Computed version %r is not a semver string." % new)
+
+          failures = []
+
+          for label, other in (
+              ("the App Store entry for this app", os.environ.get("STORE_MAX", "")),
+              (
+                  "the App Store entry for %s (previous-app-id)"
+                  % os.environ.get("PREV_APP_ID", ""),
+                  os.environ.get("STORE_PREV_MAX", ""),
+              ),
+          ):
+              other = other.strip()
+              if not other:
+                  continue
+              if new_p <= parse(other):
+                  failures.append(
+                      "%s already serves %s, which outranks the %s this run would "
+                      "publish. The App Store accepts it with a 200 and then never "
+                      "offers it to anyone, so this has to fail here."
+                      % (label, other, new)
+                  )
+
+          baseline = os.environ.get("BASELINE", "").strip()
+          if baseline:
+              base_major = parse(baseline)[0]
+              deliberate = (
+                  os.environ.get("RELEASE_TYPE") == "stable"
+                  and os.environ.get("BUMP_LEVEL") == "major"
+              )
+              if new_p[0] != base_major and not deliberate:
+                  failures.append(
+                      "This run would move the major from %d to %d off its own "
+                      "arithmetic. A major bump is a decision, not a side effect -- "
+                      "it happens only on a stable release carrying the `major` "
+                      "label." % (base_major, new_p[0])
+                  )
+
+          if failures:
+              for f in failures:
+                  print("::error::%s" % f)
+              sys.exit(1)
+
+          print(
+              "%s outranks the App Store (%s) and stays on major %d."
+              % (new, os.environ.get("STORE_MAX") or "nothing published", new_p[0])
+          )
+          PY
 
       # ── Build ──
 
@@ -935,30 +1167,56 @@ jobs:
           DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/v${{ env.NEW_VERSION }}/${{ inputs.app-name }}-${{ env.NEW_VERSION }}.tar.gz"
           NIGHTLY="${{ inputs.release-type == 'beta' && 'true' || 'false' }}"
 
-          # Always attempt registration (idempotent — already-registered apps return 200/4xx harmlessly)
-          echo "Ensuring ${{ inputs.app-name }} is registered on App Store..."
+          # Registration used to run on EVERY release, described as "idempotent".
+          # It is not. POST /api/v1/apps is the certificate-update endpoint, it
+          # is rate limited hard, and on 2026-08-27 the fleet was getting
+          #
+          #   HTTP 429 {"detail":"Request was throttled. Expected available in
+          #             62877 seconds."}
+          #
+          # -- a 17-hour lockout bought for nothing, since every one of those
+          # apps was already registered. Ask the catalogue instead: it was
+          # already fetched to compute the version, and it says outright whether
+          # this id exists.
+          if [ "${{ steps.store.outputs.registered }}" = "true" ]; then
+            echo "✓ ${{ inputs.app-name }} is already on the App Store; not re-sending the certificate."
+          else
+            echo "${{ inputs.app-name }} is not on the App Store yet — registering..."
 
-          REG_SIGNATURE=$(echo -n "${{ inputs.app-name }}" | openssl dgst -sha512 -sign signing-key.key | openssl base64 -A)
-          CERT_CONTENT=$(cat signing-cert.crt)
+            REG_SIGNATURE=$(echo -n "${{ inputs.app-name }}" | openssl dgst -sha512 -sign signing-key.key | openssl base64 -A)
+            CERT_CONTENT=$(cat signing-cert.crt)
 
-          REG_CODE=$(curl -s -o /tmp/register-response.json -w "%{http_code}" \
-            -X POST "https://apps.nextcloud.com/api/v1/apps" \
-            -H "Authorization: Token ${{ secrets.NEXTCLOUD_APPSTORE_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            -d "{\"certificate\": $(echo "$CERT_CONTENT" | jq -Rs .), \"signature\": \"$REG_SIGNATURE\"}")
+            REG_CODE=$(curl -s -o /tmp/register-response.json -w "%{http_code}" \
+              -X POST "https://apps.nextcloud.com/api/v1/apps" \
+              -H "Authorization: Token ${{ secrets.NEXTCLOUD_APPSTORE_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              -d "{\"certificate\": $(echo "$CERT_CONTENT" | jq -Rs .), \"signature\": \"$REG_SIGNATURE\"}")
 
-          case "$REG_CODE" in
-            200|201) echo "✓ App registered successfully (first time)" ;;
-            *)
-              REG_BODY=$(cat /tmp/register-response.json 2>/dev/null || echo "")
-              if echo "$REG_BODY" | grep -qi "already"; then
-                echo "✓ App already registered"
-              else
-                echo "Registration returned HTTP $REG_CODE: $REG_BODY"
-                echo "Continuing with release upload..."
-              fi
-              ;;
-          esac
+            REG_BODY=$(cat /tmp/register-response.json 2>/dev/null || echo "")
+
+            case "$REG_CODE" in
+              200|201|204)
+                echo "✓ App registered successfully"
+                ;;
+              *)
+                echo "::error::Registering ${{ inputs.app-name }} returned HTTP $REG_CODE: $REG_BODY"
+                # The two failures the fleet actually hits, named so the log
+                # says what to do rather than what went wrong.
+                case "$REG_BODY" in
+                  *"Signature is invalid"*)
+                    echo "::error::The signing certificate does not match this app id. Nextcloud issues one certificate per id (CN = the id), so a renamed <id> needs its OWN certificate — request it at nextcloud/app-certificate-requests, then put the issued cert in NEXTCLOUD_SIGNING_CERT."
+                    ;;
+                  *"Only the app owner"*)
+                    echo "::error::NEXTCLOUD_APPSTORE_TOKEN belongs to an account that does not own this app on the store. Transfer ownership, or add that account as the owner, at https://apps.nextcloud.com/account/authors."
+                    ;;
+                  *"throttled"*)
+                    echo "::error::Rate limited. This should no longer happen for an already-registered app; if it does, the catalogue read above disagreed with the store."
+                    ;;
+                esac
+                exit 1
+                ;;
+            esac
+          fi
 
           # Sign the release tarball
           SIGNATURE=$(openssl dgst -sha512 -sign signing-key.key nextcloud-release.tar.gz | openssl base64 -A)
@@ -971,13 +1229,31 @@ jobs:
             -H "Content-Type: application/json" \
             -d "{\"download\": \"$DOWNLOAD_URL\", \"signature\": \"$SIGNATURE\", \"nightly\": $NIGHTLY}")
 
+          UPLOAD_BODY=$(cat /tmp/upload-response.json 2>/dev/null || echo "")
+
           if [ "$UPLOAD_CODE" = "200" ] || [ "$UPLOAD_CODE" = "201" ]; then
             echo "✓ Release uploaded to App Store successfully"
           else
-            echo "::warning::App Store upload returned HTTP $UPLOAD_CODE"
-            cat /tmp/upload-response.json 2>/dev/null || true
-            echo ""
-            echo "The GitHub release was created successfully. The App Store upload can be retried manually."
+            # This was a ::warning:: and an exit 0, and that is why the problem
+            # ran for weeks. On 2026-08-27 eighteen of the twenty-one fleet apps
+            # failed this call -- 400 unregistered id, 403 wrong owner -- and
+            # every one of those runs is recorded as a green release. "The App
+            # Store upload can be retried manually" describes a retry that
+            # nobody was ever told to perform.
+            #
+            # Publishing to the store is the job. If it did not happen, the job
+            # did not succeed.
+            echo "::error::App Store upload returned HTTP $UPLOAD_CODE: $UPLOAD_BODY"
+            case "$UPLOAD_BODY" in
+              *"does not exist"*)
+                echo "::error::${{ inputs.app-name }} is not registered on the App Store. If <id> was recently renamed, the new id needs its own Nextcloud-issued certificate before it can be registered."
+                ;;
+              *"permission"*)
+                echo "::error::NEXTCLOUD_APPSTORE_TOKEN belongs to an account that is not an owner or co-maintainer of ${{ inputs.app-name }} on the store."
+                ;;
+            esac
+            echo "The GitHub release and tag were created; only the App Store publish failed. Re-run this job once the cause above is fixed."
+            exit 1
           fi
 
       # ── Summary ──
