@@ -10927,22 +10927,25 @@ fi
 _rsr_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-repair-registration.log
 : > "${_rsr_log}"
 set +e
-if [ "${SCOPE_TO_DIFF}" = "1" ]; then
-    printf '%s\n' "${CHANGED_FILES}" \
-        | python3 "${SCRIPT_DIR}/lib/check_repair_registration.py" . > "${_rsr_log}" 2>&1
-else
-    # NOT SCOPED TO A DIFF, so there is no changed-file set to read. Passing the
-    # empty one would make this gate skip on every full-tree run — including the
-    # gate-acceptance matrix, which invokes the runner against a fixture
-    # directory that is not a git repository. A gate whose own acceptance
-    # fixture can only ever skip is configured, not covered.
-    python3 "${SCRIPT_DIR}/lib/check_repair_registration.py" . --all \
-        > "${_rsr_log}" 2>&1 < /dev/null
-fi
+printf '%s\n' "${CHANGED_FILES}" \
+    | python3 "${SCRIPT_DIR}/lib/check_repair_registration.py" . > "${_rsr_log}" 2>&1
 _rsr_rc=$?
 set +e
 
-if [ "${_rsr_rc}" -eq 0 ]; then
+# `HAVE_DELTA_BASE`, NOT `SCOPE_TO_DIFF` — gate-98 is a DELTA gate, and this
+# distinction is the one gate-16's comment already spells out. What it needs is
+# a BASE, not a narrowed file list.
+#
+# 🔴 THE FIRST DRAFT KEYED ON SCOPE_TO_DIFF AND WAS EXACTLY BACKWARDS. That
+# variable defaults to 0 (full scope is the default since ADR-020 was
+# superseded), so the `else` branch fired on every ordinary run and the gate
+# scanned the whole tree — reporting inherited unregistered steps on branches
+# that never touched lib/Repair/. Measured on openregister: 3 changed files, 19
+# repair steps checked, 2 findings, neither in the diff. That is the fleet-wide
+# red wave the gate's own header says it exists to avoid.
+if [ "${HAVE_DELTA_BASE}" != "1" ]; then
+    _skip 98 "repair-step-registration" na "no delta base was resolved, so there is no changed-file set to read and no repair-step registration was inspected. This gate judges what a change ADDS; with no base it has nothing to judge, and saying so is not the same as passing."
+elif [ "${_rsr_rc}" -eq 0 ]; then
     _pass 98 "repair-step-registration"
 elif [ "${_rsr_rc}" -eq 4 ]; then
     _skip 98 "repair-step-registration" na "this diff touches no lib/Repair/*.php, so no repair step needed its info.xml registration checked. See ${_rsr_log}."
