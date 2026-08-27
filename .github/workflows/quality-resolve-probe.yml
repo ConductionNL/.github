@@ -515,7 +515,7 @@ jobs:
   guard:
     name: "Shared-workflow guard"
     runs-on: ubuntu-latest
-    needs: [static-limits, seed-semantics, gate-completeness, matrix-derivation, coverage-guard, probe, changed-path-filter]
+    needs: [static-limits, seed-semantics, gate-completeness, matrix-derivation, coverage-guard, probe, changed-path-filter, consolidated-tool-legs]
     if: ${{ !cancelled() }}
     steps:
       - name: Assert both guards reached a verdict
@@ -527,12 +527,13 @@ jobs:
           COVERAGE: ${{ needs.coverage-guard.result }}
           PROBE: ${{ needs.probe.result }}
           FILTER: ${{ needs['changed-path-filter'].result }}
+          LEGS_CONSOLIDATED: ${{ needs['consolidated-tool-legs'].result }}
         run: |
           set -eu
-          echo "static-limits=${STATIC} seed-semantics=${SEED} gate-completeness=${LEGS} matrix-derivation=${MATRIX} coverage-guard=${COVERAGE} probe=${PROBE} changed-path-filter=${FILTER}"
+          echo "static-limits=${STATIC} seed-semantics=${SEED} gate-completeness=${LEGS} matrix-derivation=${MATRIX} coverage-guard=${COVERAGE} probe=${PROBE} changed-path-filter=${FILTER} consolidated-tool-legs=${LEGS_CONSOLIDATED}"
           # `skipped` is failed here on purpose. A guard that did not run is
           # not a guard that passed.
-          for pair in "static-limits:${STATIC}" "seed-semantics:${SEED}" "gate-completeness:${LEGS}" "matrix-derivation:${MATRIX}" "coverage-guard:${COVERAGE}" "probe:${PROBE}" "changed-path-filter:${FILTER}"; do
+          for pair in "static-limits:${STATIC}" "seed-semantics:${SEED}" "gate-completeness:${LEGS}" "matrix-derivation:${MATRIX}" "coverage-guard:${COVERAGE}" "probe:${PROBE}" "changed-path-filter:${FILTER}" "consolidated-tool-legs:${LEGS_CONSOLIDATED}"; do
             name="${pair%%:*}"; result="${pair##*:}"
             [ "${result}" = "success" ] || {
               echo "::error::${name} did not succeed (result=${result}). A guard that \
