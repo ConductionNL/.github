@@ -566,7 +566,46 @@ concurrency:
   # other. Runs in different lanes are independent: each gets its own
   # ephemeral server and database, so nothing is shared to contend over.
   group: quality-${{ github.ref }}-${{ github.event_name }}
-  cancel-in-progress: true
+
+  # PUSH RUNS ARE NOT CANCELLED. #526 read this as a cadence problem caused by
+  # the release loop, and at the time it was: an automated cycle pushed
+  # `chore(release):` every 8-12 minutes and a run takes 14-23, so the branch
+  # could never converge. The self-skip guard that landed 2026-08-26 closed
+  # that, and the premise no longer holds.
+  #
+  # Re-measured 2026-08-27 over 8 hours, all 21 fleet repos, 109 commits on
+  # `development`:
+  #
+  #     release-loop churn   0  (0%)
+  #     real work          109  (100%)
+  #
+  # Every one is a squash-merged pull request. openregister alone merged ten.
+  # So the traffic that cancels these runs is not noise to be throttled -- it
+  # is the fleet working, and it is not going to slow down.
+  #
+  # "Once commit N+1 exists, verifying N matters less" is true for a queue of
+  # feature-branch pushes. It is false for an integration branch, because the
+  # run being cancelled is the only thing that would have said whether what
+  # just landed is sound, and the replacement gets cancelled too. Measured the
+  # same day, over each repo's last twelve COMPLETED runs: openregister 12 of
+  # 12 cancelled, learniq 10 of 12, pipelinq 10 of 12. Seven of the 21 apps
+  # had no verdict on `development` at all.
+  #
+  # A cancelled run is not a failure, but it is not a pass either -- it is no
+  # verdict, and it renders as "nothing wrong here" in every summary that
+  # counts failures. That is not theoretical: learniq shipped an eslint error
+  # to `development` and nothing reported it, because every run there since
+  # 09:54 was cancelled rather than completed. It surfaced only when a PR cut
+  # after it went red (learniq#664).
+  #
+  # The cost is queue depth, not money -- the fleet is public, so Actions
+  # minutes are free; the constraint is the 60-concurrent-job account ceiling,
+  # which buys latency, and a late verdict beats no verdict.
+  #
+  # `pull_request` keeps cancelling: there, only the latest head commit is
+  # meaningful and superseding really is correct. `workflow_dispatch` keeps
+  # cancelling within its own lane.
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 jobs:
   # ╔══════════════════════════════════════════════╗
