@@ -3,7 +3,7 @@
 	"$id": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
 	"title": "Conduction App Manifest v2",
 	"description": "v2 schema for the JSON-driven page and navigation manifest consumed by @conduction/nextcloud-vue. Introduces a uniform widgets[] array on every page type with a per-slot grid coordinate system, a typed actions[] discriminator, and the required $schema field for version detection. v1 manifests continue to validate against app-manifest.schema.json (unchanged).",
-	"version": "2.22.0",
+	"version": "2.25.0",
 	"type": "object",
 	"required": ["$schema", "version"],
 	"allOf": [
@@ -33,7 +33,7 @@
 		"openbuildEditable": {
 			"type": "boolean",
 			"default": true,
-			"description": "Whether the OpenBuild in-app edit button (ADR-041) is offered on this app's pages. Default true. Set false to suppress it — e.g. OpenBuild's own UI, which does not edit itself with itself. Read by CnAppRoot to gate `cnOpenBuildAvailable`."
+			"description": "Whether the Buildiq in-app edit button (ADR-041) is offered on this app's pages. Default true. Set false to suppress it — e.g. Buildiq's own UI, which does not edit itself with itself. Read by CnAppRoot to gate `cnOpenBuildAvailable`. The property name and the inject key keep their `openbuild` spelling: both are data/runtime contracts that shipped manifests and consumer apps already carry, so the 2026-08-21 OpenBuild → Buildiq rename deliberately left them untouched."
 		},
 		"dependencies": {
 			"type": "array",
@@ -177,6 +177,45 @@
 				}
 			}
 		},
+		"support": {
+			"type": "object",
+			"additionalProperties": false,
+			"description": "First-open support and donation note. CnAppRoot mounts CnSupportDialog once per user on first open and reads this block; CnEditSupportModal edits it. Omitting the block keeps the default-on behaviour with the shell's own copy, so an app only declares what it wants to override. The block was read by CnAppRoot and written by CnEditSupportModal before it was declared here, which made `additionalProperties: false` reject every manifest that set it.",
+			"properties": {
+				"enabled": {
+					"type": "boolean",
+					"description": "Whether the note is shown on first open. Omit for the default (true); set false to suppress it for this app."
+				},
+				"title": {
+					"type": "string",
+					"description": "Dialog heading. Blank keeps the shell default."
+				},
+				"appName": {
+					"type": "string",
+					"description": "Display name interpolated into the body copy. Defaults to the host app's name."
+				},
+				"bodyParagraphs": {
+					"type": "array",
+					"description": "Body copy, one entry per paragraph, replacing the shell's default paragraphs.",
+					"items": { "type": "string" }
+				},
+				"founderName": { "type": "string", "description": "Signature name." },
+				"founderTitle": { "type": "string", "description": "Signature role, shown under the name." },
+				"founderAvatarUrl": { "type": "string", "description": "Signature avatar image URL." },
+				"founderProfileUrl": { "type": "string", "description": "Profile the signature avatar links to." },
+				"buttons": {
+					"type": "object",
+					"additionalProperties": false,
+					"description": "Per-button overrides, keyed by the four built-in button ids. Each may be hidden, relabelled, restyled or re-pointed; omit a key to keep its default.",
+					"properties": {
+						"donate": { "$ref": "#/$defs/supportButton" },
+						"support": { "$ref": "#/$defs/supportButton" },
+						"feature-request": { "$ref": "#/$defs/supportButton" },
+						"app-store": { "$ref": "#/$defs/supportButton" }
+					}
+				}
+			}
+		},
 		"nav": {
 			"type": "object",
 			"additionalProperties": false,
@@ -202,12 +241,12 @@
 				"forge": {
 					"type": "object",
 					"additionalProperties": false,
-					"description": "Forge that the in-product feature-request deep-link targets. Switching the whole fleet's forge (back to GitHub, or onto a self-hosted Forgejo/Gitea) is just this one field. Defaults to Codeberg.",
+					"description": "Forge that the in-product feature-request deep-link targets. Switching the whole fleet's forge (onto a self-hosted Forgejo/Gitea, or back to Codeberg) is just this one field. Defaults to GitHub, the only host the fleet publishes to.",
 					"properties": {
 						"type": {
 							"type": "string",
 							"enum": ["codeberg", "forgejo", "gitea", "github"],
-							"default": "codeberg",
+							"default": "github",
 							"description": "Forge type. Selects how the 'new issue' form is pre-filled: `github` uses per-field Issue-Form query params; `codeberg`/`forgejo`/`gitea` assemble a Markdown body (only title + body are supported there)."
 						},
 						"baseUrl": {
@@ -265,7 +304,7 @@
 		},
 		"schedules": {
 			"type": "array",
-			"description": "Declarative scheduled tasks (apphost-scheduling capability). Each entry declares a recurring task the OpenRegister AppHost schedule-reconciler turns into an OpenConnector job that runs on the existing background-job path — so a manifest-driven app (including a pure-virtual OpenBuild app with no PHP on disk) can own its ingestion/maintenance cadence without shipping a TimedJob. The temporal peer of `credentials`/`observability`: consumed by the OpenRegister engine, NOT by the Vue renderer. Optional and additive.",
+			"description": "Declarative scheduled tasks (apphost-scheduling capability). Each entry declares a recurring task the OpenRegister AppHost schedule-reconciler turns into an Integriq job that runs on the existing background-job path — so a manifest-driven app (including a pure-virtual Buildiq app with no PHP on disk) can own its ingestion/maintenance cadence without shipping a TimedJob. The temporal peer of `credentials`/`observability`: consumed by the OpenRegister engine, NOT by the Vue renderer. Optional and additive.",
 			"items": {
 				"type": "object",
 				"required": ["id", "action"],
@@ -373,6 +412,34 @@
 		}
 	},
 	"$defs": {
+		"supportButton": {
+			"type": "object",
+			"additionalProperties": false,
+			"description": "Override for one of the four built-in support-note buttons (donate, support, feature-request, app-store). Every field is optional; omit the whole entry to keep the shell's default for that button.",
+			"properties": {
+				"enabled": {
+					"type": "boolean",
+					"description": "Show this button. Set false to hide it."
+				},
+				"label": {
+					"type": "string",
+					"description": "Button text. Blank keeps the default label."
+				},
+				"url": {
+					"type": "string",
+					"description": "Where the button goes. The feature-request and app-store buttons have no useful default, so an app that wants them must set this."
+				},
+				"variant": {
+					"type": "string",
+					"enum": ["primary", "secondary", "tertiary", "error", "warning", "success"],
+					"description": "NcButton variant."
+				},
+				"icon": {
+					"type": "string",
+					"description": "Material Design Icon component name, e.g. HeartOutline."
+				}
+			}
+		},
 		"runtimeTheme": {
 			"type": "object",
 			"additionalProperties": false,
@@ -693,9 +760,9 @@
 				},
 				"section": {
 					"type": "string",
-					"enum": ["main", "footer", "settings"],
+					"enum": ["main", "footer", "settings", "integrations"],
 					"default": "main",
-					"description": "Where the entry renders inside CnAppNav. 'main' (default) places it in the top list. 'footer' pins the entry to the bottom as a flat item above the settings foldout. 'settings' places it inside the NcAppNavigationSettings gear-icon foldout."
+					"description": "Where the entry renders inside CnAppNav. 'main' (default) places it in the top list. 'footer' pins the entry to the bottom as a flat item above the settings foldout. 'settings' places it inside the NcAppNavigationSettings gear-icon foldout. 'integrations' renders the entry NOT in the navigation at all but in the Integrations section at the bottom of the per-user settings modal — the destination for links that leave this app for another (ADR-110). An 'integrations' entry MUST be clickable (href); a group with children is meaningless there."
 				},
 				"type": {
 					"type": "string",
@@ -767,7 +834,7 @@
 				"permission": { "type": "string" },
 				"section": {
 					"type": "string",
-					"enum": ["main", "footer", "settings"],
+					"enum": ["main", "footer", "settings", "integrations"],
 					"default": "main"
 				},
 				"type": {
@@ -824,6 +891,63 @@
 					"description": "Property name in the response items to use as the menu entry route."
 				}
 			}
+		},
+		"navCardEntry": {
+			"type": "object",
+			"required": ["id", "label"],
+			"additionalProperties": false,
+			"description": "One card in a nav-card-grid built-in widget (ADR-044 §4 cards-collapse) — an arbitrary navigation link, not an OpenRegister object. Mirrors the menuItem/primaryAction vocabulary: id + label required, route/href are alternative navigation targets and mutually exclusive, count supports the same integer-or-\"auto\" shape as menuItem.count.",
+			"properties": {
+				"id": {
+					"type": "string",
+					"description": "Unique identifier for this card within its widget's entries[] array."
+				},
+				"label": {
+					"type": "string",
+					"description": "i18n translation key / text rendered as the card's title."
+				},
+				"description": {
+					"type": "string",
+					"description": "Optional explanatory text rendered below the label, associated to the card via aria-describedby (never aria-label)."
+				},
+				"icon": {
+					"type": "string",
+					"description": "MDI icon name (e.g. 'ChartLine'), resolved the same way as menuItem.icon."
+				},
+				"route": {
+					"type": "string",
+					"description": "Vue-router route name (matches a pages[].id) this card navigates to. Mutually exclusive with href."
+				},
+				"href": {
+					"type": "string",
+					"description": "External URL opened per the rendering component's target handling. Mutually exclusive with route."
+				},
+				"count": {
+					"oneOf": [
+						{ "type": "integer", "minimum": 0 },
+						{ "type": "string", "enum": ["auto"] }
+					],
+					"description": "Count badge on the card. Positive integer renders as-is; 'auto' resolves from cnMenuCounts (populated by CnAppRoot) for the card's resolved route page (register + schema), the same mechanism menuItem.count:\"auto\" uses."
+				},
+				"order": {
+					"type": "integer",
+					"description": "Display order among sibling cards. Cards without an order render last."
+				},
+				"permission": {
+					"type": "string",
+					"description": "Permission string the user must hold for this card to render."
+				},
+				"visibleIf": {
+					"$ref": "#/$defs/visibleIfCondition",
+					"description": "Optional display condition evaluated at render time."
+				}
+			},
+			"allOf": [
+				{
+					"description": "route and href are mutually exclusive navigation targets — a card links either in-app or externally, never both.",
+					"not": { "required": ["route", "href"] }
+				}
+			]
 		},
 		"widgetEntry": {
 			"type": "object",
@@ -953,6 +1077,29 @@
 												"class": { "type": "string", "description": "CSS class added to the row when `when` holds." }
 											}
 										}
+									}
+								}
+							}
+						}
+					}
+				},
+				{
+					"description": "nav-card-grid built-in widget (ADR-044 §4 cards-collapse): props.entries is REQUIRED and each entry must match the navCardEntry shape. Unlike stats-block's optional entries[], nav-card-grid has no dataSource alternative — it renders arbitrary navigation links, not fetched data.",
+					"if": {
+						"properties": { "widgetKey": { "const": "nav-card-grid" } },
+						"required": ["widgetKey"]
+					},
+					"then": {
+						"required": ["props"],
+						"properties": {
+							"props": {
+								"type": "object",
+								"required": ["entries"],
+								"properties": {
+									"entries": {
+										"type": "array",
+										"items": { "$ref": "#/$defs/navCardEntry" },
+										"description": "One card per array entry, rendered by CnNavCardGrid."
 									}
 								}
 							}
@@ -1559,7 +1706,7 @@
 				"payload": {
 					"type": "object",
 					"additionalProperties": true,
-					"description": "api-call only: the JSON request body — PREFERRED over `params`, and used instead of it when both are set. Values run the SAME token grammar as `params` (@me, @now, @today±Nd, @monthStart/@quarterStart/@yearStart, @objectId, @object.<field>, @workspace.<key>/@config.<key> with a trailing `?` marking a value OPTIONAL — dropped when unresolved) but resolve RECURSIVELY at ANY nesting depth, including arrays of objects — e.g. a DocuDesk document-generation body: { \"dataRefs\": [{ \"register\": \"crm\", \"schema\": \"lead\", \"id\": \"@objectId\" }] }. A required (non-`?`) token left unresolved anywhere in the tree BLOCKS the call (error toast) instead of sending the literal token string to the server."
+					"description": "api-call only: the JSON request body — PREFERRED over `params`, and used instead of it when both are set. Values run the SAME token grammar as `params` (@me, @now, @today±Nd, @monthStart/@quarterStart/@yearStart, @objectId, @object.<field>, @workspace.<key>/@config.<key> with a trailing `?` marking a value OPTIONAL — dropped when unresolved) but resolve RECURSIVELY at ANY nesting depth, including arrays of objects — e.g. a Filinq document-generation body: { \"dataRefs\": [{ \"register\": \"crm\", \"schema\": \"lead\", \"id\": \"@objectId\" }] }. A required (non-`?`) token left unresolved anywhere in the tree BLOCKS the call (error toast) instead of sending the literal token string to the server."
 				},
 				"params": {
 					"type": "object",
@@ -1950,8 +2097,8 @@
 				},
 				"type": {
 					"type": "string",
-					"enum": ["index", "detail", "dashboard", "logs", "settings", "chat", "files", "form", "map", "roadmap", "search", "wiki", "custom"],
-					"description": "Page type. Closed enum of 14 supported types. 'roadmap' mounts CnFeaturesAndRoadmapPage (features + GitHub-issue-backed roadmap). 'search' mounts CnSearchPage (cross-schema query + facet sidebar + results list; consumers wire the actual search via @search). 'wiki' mounts CnWikiPage (manifest-declared markdown article + optional sidebar tree; MUST declare config.register + config.schema). 'custom' requires a _note field explaining why a standard type was not feasible."
+					"enum": ["index", "detail", "dashboard", "logs", "settings", "chat", "files", "form", "map", "roadmap", "search", "wiki", "flows", "flow-detail", "custom"],
+					"description": "Page type. Closed enum of 16 supported types. 'roadmap' mounts CnFeaturesAndRoadmapPage (features + GitHub-issue-backed roadmap). 'search' mounts CnSearchPage (cross-schema query + facet sidebar + results list; consumers wire the actual search via @search). 'wiki' mounts CnWikiPage (manifest-declared markdown article + optional sidebar tree; MUST declare config.register + config.schema). 'flows' mounts CnFlowsPage (the app-scoped flow list) and 'flow-detail' mounts CnFlowEditorPage (the shared node/edge canvas); both take config.app to scope to the owning app, and neither can be expressed as 'index'/'detail' because a flow lives in OpenRegister's native flow store rather than a register/schema pair (ADR-110 Decision 4). 'custom' requires a _note field explaining why a standard type was not feasible."
 				},
 				"title": {
 					"type": "string",
