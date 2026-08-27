@@ -145,8 +145,29 @@ jobs:
         if: inputs.release-type == 'unstable'
         run: |
           STABLE="${{ steps.stable_version.outputs.version }}"
+          IFS='.' read -ra PARTS <<< "$STABLE"
+
+          # Unstable, like beta, is always one patch AHEAD of the stable
+          # baseline. It used to reuse the baseline verbatim
+          # ("${STABLE}-unstable.${TIMESTAMP}"), and that is a downgrade by
+          # construction: a prerelease sorts BELOW the release of the same
+          # core version, so 0.2.0-unstable.20260827023555 < 0.2.0.
+          #
+          # It only stayed invisible while development sat on a prerelease of
+          # its own. The moment an app's development carried a STABLE version
+          # -- integriq 0.3.4, thematiq 1.1.0, humaniq 0.2.0, versioniq 1.4.1,
+          # planninq 0.2.13 -- every release this job opened proposed to move
+          # the app backwards, and had to be triaged and closed by hand once
+          # per push. The #566 auto-merge guard refused them, so nothing ever
+          # shipped backwards; the cost was the endless backlog, not a bad
+          # release.
+          #
+          # The beta branch below already computed it this way, and was never
+          # affected. This makes unstable agree with it.
+          NEXT_PATCH=$(( ${PARTS[2]} + 1 ))
           TIMESTAMP=$(date -u +"%Y%m%d%H%M%S")
-          UNSTABLE_VERSION="${STABLE}-unstable.${TIMESTAMP}"
+
+          UNSTABLE_VERSION="${PARTS[0]}.${PARTS[1]}.${NEXT_PATCH}-unstable.${TIMESTAMP}"
 
           echo "NEW_VERSION=$UNSTABLE_VERSION" >> $GITHUB_ENV
           echo "APP_NAME=${{ inputs.app-name }}" >> $GITHUB_ENV
