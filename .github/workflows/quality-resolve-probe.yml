@@ -115,6 +115,28 @@ jobs:
       - name: "Assert no job can be DELETED by a producer's result"
         run: python3 scripts/assert-no-producer-deletes-a-verdict.py .github/workflows/quality.yml
 
+  changed-path-filter:
+    name: "The changed-path filter cannot silently delete the test tier"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # The filter decides whether PHPUnit and Playwright run AT ALL. A bug in
+      # it does not go red — it removes the test tier and renders as a green
+      # run over untested code, which is the #194 shape with a new cause. So it
+      # is executed against real git repositories, not reasoned about.
+      #
+      # POSITIVE CONTROL FIRST, same discipline as the two lints above: break
+      # the fail-safe in memory and require the suite to notice. A suite that
+      # had stopped reading the shipped script would pass the real check
+      # forever.
+      - name: "Positive control — a broken fail-safe must fail the suite"
+        run: python3 scripts/test-changed-path-filter.py --positive-control .github/workflows/quality.yml
+
+      - name: "Assert the filter skips only what it can prove is irrelevant"
+        run: python3 scripts/test-changed-path-filter.py .github/workflows/quality.yml
+
   coverage-gate-can-fail:
     name: "The spec-coverage threshold can fail a run"
     runs-on: ubuntu-latest
