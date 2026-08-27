@@ -141,11 +141,20 @@ def _synthesise(pattern: str, index: int, min_len: int = 0) -> str | None:
     # it back into a plain class-and-quantifier run; _satisfy_pattern still
     # verifies the result against the FULL pattern, so a wrong branch is caught
     # rather than shipped.
+    # An OPTIONAL group contributes nothing to the shortest matching string, so
+    # drop it. `^\\d+\\.\\d+\\.\\d+(?:[-+][\\w.-]+)?$` — semver with an optional
+    # pre-release — could not be walked at all with the group present, so the
+    # value fell through unchanged and failed its own pattern.
+    body = re.sub(r"\((?:\?:)?[^()]*\)[?*]", "", body)
+
     while True:
-        group = re.search(r"\(([^()]*\|[^()]*)\)", body)
+        group = re.search(r"\((?:\?:)?([^()]*\|[^()]*)\)", body)
         if group is None:
             break
         body = body[:group.start()] + group.group(1).split("|")[0] + body[group.end():]
+
+    # A remaining non-capturing group is just its contents.
+    body = re.sub(r"\(\?:([^()]*)\)", r"\1", body)
 
     out = []
     pos = 0
@@ -153,14 +162,20 @@ def _synthesise(pattern: str, index: int, min_len: int = 0) -> str | None:
         # NO optional leading backslash: it swallowed the one `\d` needs, so
         # `^CVE-\d{4}-\d{4,}$` tokenised as a literal and produced a string
         # failing its own pattern. The escape branch consumes its own backslash.
-        token = re.match(r"(\[(?P<cls>[^\]]+)\]|\\(?P<esc>[dws])|(?P<lit>[^\[\\{}()|+*?]))"
+        # `\\(?P<esc>[dws])` alone left `\\.` matching NEITHER branch, so the walk
+        # abandoned every semver pattern — `^[0-9]+\\.[0-9]+\\.[0-9]+$` produced a
+        # value failing it. An escaped anything-else is a literal of itself.
+        token = re.match(r"(\[(?P<cls>[^\]]+)\]|\\(?P<esc>[dws])|\\(?P<elit>.)|(?P<lit>[^\[\\{}()|+*?]))"
                          r"(?:\{(?P<n>\d+)(?:,(?P<m>\d*))?\}|(?P<one>[+*?]))?", body[pos:])
         if token is None:
             return None
         pos += token.end()
 
-        if token.group("lit") is not None:
-            alphabet = token.group("lit")
+        literal = token.group("lit")
+        if literal is None:
+            literal = token.group("elit")
+        if literal is not None:
+            alphabet = literal
             fixed = True
         else:
             cls = token.group("cls")
