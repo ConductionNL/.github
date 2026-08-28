@@ -864,7 +864,7 @@ def build(app_dir: str, app_id: str, per_schema: int, existing: dict | None) -> 
 
         for sch_name in carried_names:
             sch = definitions[sch_name]
-            schemas.setdefault(sch_name, sch)
+            schemas.setdefault(sch_name, _strip_code_refs(sch))
             carried = keep.get((reg_slug, sch_name), [])
             objects.extend(carried)
             for index in range(len(carried), per_schema):
@@ -900,6 +900,51 @@ def build(app_dir: str, app_id: str, per_schema: int, existing: dict | None) -> 
 _JSON_SCHEMA_TYPES = {
     "string", "number", "integer", "boolean", "array", "object", "null",
 }
+
+
+# Keys gate-56 (register-handler-resolution) resolves to real PHP code.
+# `class` is deliberately NOT here: it is a plausible name for an ordinary
+# schema property, and stripping it would silently alter the shape the demo
+# objects are validated against.
+_CODE_REF_KEYS = ("handler", "guard", "requires", "save", "fallbackGuard", "preconditions")
+
+
+def _strip_code_refs(node: Any) -> Any:
+    """Remove behavioural blocks that point at PHP classes.
+
+    🔴 A MOCK DESCRIPTOR IS DATA, NOT BEHAVIOUR. It exists so demo objects have
+    a register to live in and a schema to be validated against. Carrying the
+    schema's state machine across makes the demo data assert things about code,
+    and shillinq shows what that costs: the generated mock referenced
+    `OCA\\Shillinq\\Consolidation\\ConsolidationGuard`, a namespace no class on
+    disk uses, and gate-56 failed with 6 unresolved handler references.
+
+    Measured as a control: 6 findings with the mock in the gate's file list, 0
+    without. The real descriptor is clean — it names
+    `OCA\\Shillinq\\Service\\ConsolidationGuard`, which exists.
+
+    The stale namespace came from THIS generator. Definitions are merged across
+    every component file, so a lifecycle block from a non-canonical file is
+    unioned into the copy alongside the canonical one — and the merge cannot
+    tell which of two same-named schemas holds the reference that still
+    resolves. Stripping the blocks removes the whole question: a mock never
+    needs them, and `x-openregister-lifecycle` is not a JSON Schema keyword, so
+    validation of the demo objects is unaffected.
+    """
+    if isinstance(node, dict):
+        out: dict[str, Any] = {}
+        for key, value in node.items():
+            if key == "x-openregister-lifecycle":
+                continue
+            if key in _CODE_REF_KEYS and isinstance(value, str):
+                continue
+            out[key] = _strip_code_refs(value)
+        return out
+
+    if isinstance(node, list):
+        return [_strip_code_refs(item) for item in node]
+
+    return node
 
 
 def _drop_refs(node: Any) -> Any:
