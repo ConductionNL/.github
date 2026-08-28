@@ -1306,7 +1306,39 @@ def main(argv: list[str]) -> int:
     # they are the honest thing to count.
     schemas = len({o["@self"]["schema"] for o in built["components"]["objects"]})
     if schemas == 0:
-        print(f"{app_id}: declares no schemas — nothing to generate.")
+        # 🔴 SAY WHICH ONE IS MISSING. "declares no schemas" was printed for
+        # three DIFFERENT causes, and the docstring of _component_files records
+        # what that cost: hrmq, doriath and hermiq were written off as having no
+        # schemas on the strength of this sentence. Widening the file discovery
+        # fixed the case where definitions live apart from the register; it did
+        # not fix the sentence, which still reports a missing REGISTER as a
+        # missing schema.
+        #
+        # Measured on hermiq 2026-08-28: 30 schema definitions in
+        # lib/Settings/hermiq_register.json, and no `components.registers`
+        # anywhere in lib/. Nothing can be generated — an object needs a
+        # register to live in — but "declares no schemas" sends the reader to
+        # look for schemas that are already there.
+        defined = set()
+        for _path, data in _component_files(app_dir):
+            block = data.get("components", {}).get("schemas")
+            if isinstance(block, dict):
+                defined.update(block)
+        registers = _descriptors(app_dir)
+        if defined and not registers:
+            print(
+                f"{app_id}: defines {len(defined)} schema(s) but declares no register "
+                f"(no `components.registers` under lib/), so there is nothing to attach "
+                f"objects to. Declare the register that owns them, then re-run."
+            )
+        elif defined and registers:
+            print(
+                f"{app_id}: declares {len(registers)} register(s) and defines "
+                f"{len(defined)} schema(s), but none resolved into objects — the "
+                f"register's schema list and the definitions do not line up."
+            )
+        else:
+            print(f"{app_id}: declares no schemas — nothing to generate.")
         return 0
 
     os.makedirs(os.path.dirname(out), exist_ok=True)
