@@ -563,10 +563,10 @@ on:
         type: string
         default: "lib/** src/** tests/** appinfo/** composer.json composer.lock package.json package-lock.json .github/workflows/**"
       reduce-pr-matrix:
-        description: "On a pull_request event, run PHPUnit on the PRIMARY php-version against the NEWEST declared Nextcloud only, instead of the full php-test-versions x declared-range product. OPT-IN, default false. The full matrix still runs on every push to a default branch, so the declared range is exercised on every merge and on the release PR into beta — breadth moves from per-commit to per-merge, it is not dropped. The reasoning is that version-drift does not appear between two commits an hour apart; it appears when a dependency or a Nextcloud minor moves, and a push-time matrix catches that just as well at a fraction of the queue cost. Measured: 6 legs at ~2.2 min each, of which ~46s is the test suite and ~85s is container init, two checkouts and a Nextcloud install repeated per leg."
+        description: "On a pull_request whose BASE IS `development`, run PHPUnit on the PRIMARY php-version against the NEWEST declared Nextcloud only, instead of the full php-test-versions x declared-range product. DEFAULT TRUE since 2026-08-27. The full product still runs in the three places it earns its cost: every push to a default branch, the development->beta promotion PR, and the beta->main promotion PR — so the declared range is exercised on every merge AND at both gates before a version reaches users. Only the continuous case, a feature branch merging into `development`, is reduced. An unrecognised base branch falls through to the full matrix, so the failure direction is more testing rather than less. The reasoning is that version-drift does not appear between two commits an hour apart; it appears when a dependency or a Nextcloud minor moves, and a push-time plus promotion-time matrix catches that just as well at a fraction of the queue cost. Measured: 6 legs at ~2.2 min each, of which ~46s is the test suite and ~85s is container init, two checkouts and a Nextcloud install repeated per leg. Set false to restore the full product on every event."
         required: false
         type: boolean
-        default: false
+        default: true
 
 concurrency:
   # KEYED BY EVENT AS WELL AS REF, so a deliberately-requested run is not
@@ -2880,11 +2880,27 @@ jobs:
 
     strategy:
       matrix:
-        # REDUCED ON PULL REQUESTS when the caller sets reduce-pr-matrix. The
-        # full product still runs on every push to a default branch, so the
-        # declared range is exercised on every merge and on the release PR into
-        # beta — breadth moves from per-commit to per-merge, it is not dropped.
-        php-version: ${{ (inputs.reduce-pr-matrix && github.event_name == 'pull_request') && fromJSON(format('["{0}"]', inputs.php-version)) || fromJSON(inputs.php-test-versions) }}
+        # REDUCED ON PULL REQUESTS INTO `development` ONLY.
+        #
+        # The reduction used to apply to every pull_request, which also caught
+        # the two promotion PRs — development→beta and beta→main. Those are the
+        # ones where the declared Nextcloud range most needs exercising, because
+        # they are the last gate before a version reaches users, and they happen
+        # a handful of times a day rather than continuously. Narrowing the
+        # reduction to `base == development` keeps the full product exactly
+        # where it earns its cost and drops it where it does not: a feature
+        # branch merging into `development`, which is the overwhelming majority
+        # of runs.
+        #
+        # The full product ALSO still runs on every push to a default branch, so
+        # the range is exercised on every merge as well as on both promotions.
+        # Breadth moves from per-commit to per-merge; it is not dropped.
+        #
+        # A base branch this expression does not recognise — a stacked feature
+        # branch, a repo that names its integration branch something else —
+        # falls through to the FULL matrix. The failure direction is more
+        # testing, not less.
+        php-version: ${{ (inputs.reduce-pr-matrix && github.event_name == 'pull_request' && github.base_ref == 'development') && fromJSON(format('["{0}"]', inputs.php-version)) || fromJSON(inputs.php-test-versions) }}
         # DERIVED from appinfo/info.xml by the `nextcloud-matrix` job, not read
         # from an input any more. The `needs:` edge below is what makes this
         # expression resolvable; without it the matrix evaluates to nothing and
@@ -2902,7 +2918,7 @@ jobs:
         # to any OTHER combination — the declared floor, say — would have left
         # that condition unsatisfiable and the coverage ratchet would simply
         # never have run on a pull request, silently and with nothing red.
-        nextcloud-ref: ${{ (inputs.reduce-pr-matrix && github.event_name == 'pull_request') && fromJSON(format('["{0}"]', needs.nextcloud-matrix.outputs.single-server)) || fromJSON(needs.nextcloud-matrix.outputs.branches) }}
+        nextcloud-ref: ${{ (inputs.reduce-pr-matrix && github.event_name == 'pull_request' && github.base_ref == 'development') && fromJSON(format('["{0}"]', needs.nextcloud-matrix.outputs.single-server)) || fromJSON(needs.nextcloud-matrix.outputs.branches) }}
         # An empty database-test-matrix collapses to the single `database`
         # input, which is what every caller uses today — so the matrix keeps
         # exactly its current dimensions until an app opts in. Routed through
