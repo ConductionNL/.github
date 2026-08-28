@@ -1,8 +1,17 @@
 #!/usr/bin/env bash
 #
-# gate-101 (demo-data-coverage) — acceptance over a REAL two-commit history.
+# gate-102 (demo-data-coverage) — acceptance over a REAL two-commit history.
 #
-# 🔴 RENUMBERED 99 -> 101. `manifest-l10n-coverage` also claimed 99, and both
+# 🔴 RENUMBERED TWICE: 99 -> 101 -> 102.
+#
+# The second move was a PARALLEL-WORK collision. Two sessions found the same
+# gate-99 duplicate and fixed it independently, each moving a DIFFERENT gate to
+# the SAME free number: #612 moved demo-data-coverage to 101, #615 moved
+# manifest-l10n-coverage to 101. Both fixes were correct on their own and
+# together they just moved the collision. `check_gate_numbers_unique.sh` now
+# fails on any duplicate, so the next one is caught before it merges.
+#
+# First move: `manifest-l10n-coverage` also claimed 99, and both
 # blocks called `_pass 99` / `_fail 99` with different names — so one gate's
 # verdict overwrote the other's and this suite read the l10n gate's NOT
 # APPLICABLE line while asserting on demo-data coverage. The number is part of
@@ -108,41 +117,41 @@ _verdict() {
     git checkout --quiet "$1"
     mkdir -p "${WORK}/logs-$1"
     HYDRA_GATE_LOG_DIR="${WORK}/logs-$1" bash "${RUNNER}" --base base "${APP}" 2>&1 \
-        | grep -E '\[gate-101\]' | head -1
+        | grep -E '\[gate-102\]' | head -1
 }
 
 echo "-- ARM 1: a NEW schema without demo data is a finding --"
 _v="$(_verdict planted)"
 case "${_v}" in
-    *FAIL*) _ok "gate-101 FAILs a schema added without demo data" ;;
-    *)      _bad "expected FAIL on planted, got: ${_v:-<no gate-101 line>}" ;;
+    *FAIL*) _ok "gate-102 FAILs a schema added without demo data" ;;
+    *)      _bad "expected FAIL on planted, got: ${_v:-<no gate-102 line>}" ;;
 esac
 
 echo "-- ARM 2: the same schema WITH three valid objects is clean --"
 _v="$(_verdict clean)"
 case "${_v}" in
-    *PASS*) _ok "gate-101 PASSes when the added schema has its demo data" ;;
-    *)      _bad "expected PASS on clean, got: ${_v:-<no gate-101 line>}" ;;
+    *PASS*) _ok "gate-102 PASSes when the added schema has its demo data" ;;
+    *)      _bad "expected PASS on clean, got: ${_v:-<no gate-102 line>}" ;;
 esac
 
 echo "-- ARM 3: 🔴 INHERITED DEBT IS NOT THIS PR'S PROBLEM --"
 _v="$(_verdict unrelated)"
 case "${_v}" in
-    *FAIL*) _bad "gate-101 reported the baseline's uncovered schema on a commit touching no descriptor — this is the fleet-wide red wave the suite exists to catch: ${_v}" ;;
+    *FAIL*) _bad "gate-102 reported the baseline's uncovered schema on a commit touching no descriptor — this is the fleet-wide red wave the suite exists to catch: ${_v}" ;;
     *)      _ok "a commit touching no descriptor reports no finding" ;;
 esac
 
 echo "-- ARM 4: COUNTING IS NOT CHECKING — three objects, one invalid, still fails --"
 _v="$(_verdict invalid)"
 case "${_v}" in
-    *FAIL*) _ok "gate-101 FAILs when the count is met but an object breaks its own schema" ;;
-    *)      _bad "expected FAIL on invalid: demo data that fails its schema fails at import, and a gate that only counts would have passed this. Got: ${_v:-<no gate-101 line>}" ;;
+    *FAIL*) _ok "gate-102 FAILs when the count is met but an object breaks its own schema" ;;
+    *)      _bad "expected FAIL on invalid: demo data that fails its schema fails at import, and a gate that only counts would have passed this. Got: ${_v:-<no gate-102 line>}" ;;
 esac
 
 echo
 if [ "${_fail_n}" -eq 0 ]; then
-    echo "test_gate101_demo_data_scope.sh: ALL PASS"
+    echo "test_gate102_demo_data_scope.sh: ALL PASS"
     exit 0
 fi
-echo "test_gate101_demo_data_scope.sh: ${_fail_n} FAILURE(S)"
+echo "test_gate102_demo_data_scope.sh: ${_fail_n} FAILURE(S)"
 exit 1
