@@ -10836,7 +10836,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# GATE 101 — manifest-l10n-coverage
+# GATE 102 — manifest-l10n-coverage
 #
 # A manifest string with no key in l10n/nl.json renders its ENGLISH source to a
 # Dutch user. The l10n extractor scans .vue/.js/.ts for t() calls; the manifest
@@ -10882,17 +10882,17 @@ _mlc_checked=$(sed -n 's/^checked \([0-9]\{1,\}\) manifest string.*/\1/p' "${_ml
 case "${_mlc_checked}" in ''|*[!0-9]*) _mlc_checked=0 ;; esac
 
 if [ "${_mlc_rc}" -eq 4 ] || { [ "${_mlc_rc}" -eq 0 ] && [ "${_mlc_checked}" -eq 0 ]; }; then
-    _skip_empty_scope 101 "manifest-l10n-coverage" "user-visible manifest string checkable against a Dutch catalogue (src/manifest.json or src/manifest.d/*.json plus l10n/nl.json)"
+    _skip_empty_scope 102 "manifest-l10n-coverage" "user-visible manifest string checkable against a Dutch catalogue (src/manifest.json or src/manifest.d/*.json plus l10n/nl.json)"
 elif [ "${_mlc_rc}" -eq 0 ]; then
-    _pass 101 "manifest-l10n-coverage"
+    _pass 102 "manifest-l10n-coverage"
 elif ! _helper_finished "${_mlc_log}" '^checked [0-9]+ manifest string'; then
     # A CRASH IS NOT A FINDING.
     _mlc_why=$(head -3 "${_mlc_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
-    _skip 101 "manifest-l10n-coverage" wiring "check_manifest_l10n_coverage.py exited ${_mlc_rc} without printing its terminal 'checked N manifest string(s)' summary, so manifest translation coverage is UNVERIFIED by this run. Checker output: ${_mlc_why:-<empty>}. See ${_mlc_log}."
+    _skip 102 "manifest-l10n-coverage" wiring "check_manifest_l10n_coverage.py exited ${_mlc_rc} without printing its terminal 'checked N manifest string(s)' summary, so manifest translation coverage is UNVERIFIED by this run. Checker output: ${_mlc_why:-<empty>}. See ${_mlc_log}."
 else
     _mlc_n=$(grep -cE '^FAIL ' "${_mlc_log}" 2>/dev/null || true)
     case "${_mlc_n}" in ''|*[!0-9]*) _mlc_n=1 ;; esac
-    _fail 101 "manifest-l10n-coverage" "${_mlc_n} manifest string(s) have no l10n/nl.json key and will render English to a Dutch user - see ${_mlc_log}"
+    _fail 102 "manifest-l10n-coverage" "${_mlc_n} manifest string(s) have no l10n/nl.json key and will render English to a Dutch user - see ${_mlc_log}"
 fi
 
 # ---------------------------------------------------------------------------
