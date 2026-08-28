@@ -1215,6 +1215,36 @@ def check(app_dir: str, app_id: str, per_schema: int, only: set[str] | None = No
 
     _regs, owns, definitions = _register_schema_map(app_dir, app_id)
 
+    # 🔴 THE OBJECTS NAME THE SLUG; THIS SCOPE NAMES THE DEFINITION KEY.
+    # `have` is keyed by whatever `@self.schema` holds, and since the generator
+    # was corrected to emit the schema SLUG (the form the importer resolves)
+    # that is the slug. `in_scope_pairs` below is built from `owns`, whose
+    # members are DEFINITION KEYS. Where an app's keys are its slugs the two
+    # agree and nothing surfaced this; where they differ every lookup misses
+    # and the checker reports "0 demo object(s)" for objects sitting in the
+    # file it just read.
+    #
+    # Measured on hermiq, whose 30 keys are PascalCase and whose slugs are
+    # lower-case: a freshly generated, --check-valid dataset was reported as 30
+    # schemas with no demo data at all.
+    #
+    # Normalised here rather than at the write site, so a descriptor generated
+    # before the correction still counts.
+    _slug_to_key = {
+        v["slug"]: k
+        for k, v in definitions.items()
+        if isinstance(v, dict) and isinstance(v.get("slug"), str) and v["slug"] and v["slug"] != k
+    }
+    if _slug_to_key:
+        _normalised: dict[tuple[str, str], int] = {}
+        _normalised_objs: dict[tuple[str, str], list] = {}
+        for (_reg, _sch), _n in have.items():
+            _key = (_reg, _slug_to_key.get(_sch, _sch))
+            _normalised[_key] = _normalised.get(_key, 0) + _n
+            _normalised_objs.setdefault(_key, []).extend(objects_by_key.get((_reg, _sch), []))
+        have = _normalised
+        objects_by_key = _normalised_objs
+
     # Which (register, schema) pairs the caller's scope actually covers. Built
     # from the same authority the generator uses, so the producer and the judge
     # cannot disagree about which pairs exist.
