@@ -6440,9 +6440,14 @@ jobs:
       # job. A gate that suppresses sixty other gates to report itself is its
       # own kind of outage. So this step always exits 0, the gates run and print
       # their full report, and the job is failed afterwards.
+      # NOT ON A PULL REQUEST INTO `development`. The Playwright job — the only
+      # producer of tests/axe/report.json — is skipped there by design, so
+      # asserting the report here would demand an artefact nobody in that
+      # context can produce. Enforcement MOVES with its producer to the
+      # promotion pull requests, where Playwright still runs.
       - name: The axe report must exist and hold up
         id: axe-check
-        if: ${{ inputs.enable-axe }}
+        if: ${{ inputs.enable-axe && !(github.event_name == 'pull_request' && github.base_ref == 'development') }}
         env:
           PLAYWRIGHT_RESULT: ${{ needs.playwright.result }}
         run: |
@@ -6625,7 +6630,19 @@ jobs:
           # pin handed this flag aborts with
           # `FATAL: --app-dir '--axe-enabled' is not a directory. No gate ran.`
           # and exits 99: every gate lost, for a flag the caller never typed.
-          if [ "${{ inputs.enable-axe }}" = "true" ]; then
+          # Withheld on a pull request into `development`: the Playwright job that
+          # produces the report is skipped there, and passing the flag would make
+          # gate-33 an APPLICABLE gate that DID NOT RUN — which the runner
+          # correctly refuses to call green. The flag returns on the promotion
+          # pull requests, together with the job that feeds it.
+          AXE_PRODUCER_RAN=true
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.base_ref }}" = "development" ]; then
+            AXE_PRODUCER_RAN=false
+          fi
+          if [ "${{ inputs.enable-axe }}" = "true" ] && [ "${AXE_PRODUCER_RAN}" = "false" ]; then
+            echo "::notice::enable-axe is on, but Playwright does not run on a pull request into development, so no axe report exists to judge. gate-33 is withheld here and enforced on the development->beta and beta->main promotions, where the producer runs."
+          fi
+          if [ "${{ inputs.enable-axe }}" = "true" ] && [ "${AXE_PRODUCER_RAN}" = "true" ]; then
             if [ "${{ steps.gatecap.outputs.categories }}" = "1" ]; then
               ARGS="${ARGS} --axe-enabled"
             else

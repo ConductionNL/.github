@@ -32,23 +32,25 @@ fi
 echo "-- ARM 2: 🔴 the state that actually reached main is caught --"
 # Two sessions fixed one collision by moving DIFFERENT gates to the SAME free
 # number. Both diffs were correct alone; together they relocated it.
-sed 's/_pass 102 "demo-data-coverage"/_pass 101 "demo-data-coverage"/' "${RUNNER}" > "${TMP}/dupe.sh"
+# Fixture keyed on main's numbering: demo-data-coverage=101,
+# manifest-l10n-coverage=102. Moving demo-data onto 102 recreates it.
+sed 's/_pass 101 "demo-data-coverage"/_pass 102 "demo-data-coverage"/' "${RUNNER}" > "${TMP}/dupe.sh"
 out="$(bash "${CHECK}" "${TMP}/dupe.sh" 2>&1)"; rc=$?
-if [ "$rc" -eq 1 ] && printf '%s' "$out" | grep -q 'gate-101 is claimed by'; then
+if [ "$rc" -eq 1 ] && printf '%s' "$out" | grep -q 'gate-102 is claimed by'; then
 	if printf '%s' "$out" | grep -q 'demo-data-coverage' && printf '%s' "$out" | grep -q 'manifest-l10n-coverage'; then
 		_ok "a duplicate is reported, naming BOTH gates"
 	else
 		_bad "reported a duplicate without naming both gates: ${out}"
 	fi
 else
-	_bad "expected exit 1 naming gate-101; got exit ${rc}: ${out}"
+	_bad "expected exit 1 naming gate-102; got exit ${rc}: ${out}"
 fi
 
 echo "-- ARM 3: the COMMENTS are not the authority --"
 # The `# GATE N — name` headers were already distinct (99 and 101) while both
-# gates called `_pass 101`. A checker reading headers would pass the broken
+# gates called `_pass 102`. A checker reading headers would pass the broken
 # state, so this arm plants exactly that: correct headers, colliding calls.
-sed 's/_pass 102 "demo-data-coverage"/_pass 101 "demo-data-coverage"/' "${RUNNER}" > "${TMP}/headers-ok.sh"
+sed 's/_pass 101 "demo-data-coverage"/_pass 102 "demo-data-coverage"/' "${RUNNER}" > "${TMP}/headers-ok.sh"
 out="$(bash "${CHECK}" "${TMP}/headers-ok.sh" 2>&1)"; rc=$?
 if [ "$rc" -eq 1 ]; then
 	_ok "distinct headers do not excuse colliding call sites"

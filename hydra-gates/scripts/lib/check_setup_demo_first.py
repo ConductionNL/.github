@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`setup.steps[0]` must be the demo-data offer (ADR-111 rule 4).
+"""`setup.steps` must open `welcome`, then the demo-data offer (ADR-111 rule 4).
 
 WHAT THIS IS FOR
 
@@ -16,7 +16,17 @@ opens with `welcome`. Not one offers the data that would let the reader see the
 app do anything.
 
 A welcome screen tells you what an app is. The demo-data offer lets you SEE it.
-There is no reason the first step cannot also say hello.
+Both belong at the front, in that order: step 1 says hello, step 2 offers the
+data that makes the app show something.
+
+CORRECTED 2026-08-28. The first version of this gate demanded demo-data at
+step 0 and treated `welcome` as a question nobody asked. That was wrong twice
+over. The wizard is the CONFIGURATION wizard, where an orientation step earns
+its place, and the demo-data offer is the second thing an administrator wants,
+not the first. Measured under the corrected rule, ALL SEVEN fleet apps that
+declare `setup.steps` fail it — including the two the old rule called compliant,
+which lead with demo-data and put `welcome` second. A rule that inverts who
+passes is a rule worth stating carefully.
 
 🔴 WHY THIS CHECKS THE MANIFEST AND NOT THE VUE SOURCE
 
@@ -54,10 +64,20 @@ import os
 import sys
 
 DEMO_STEP_ID = "demo-data"
+WELCOME_STEP_ID = "welcome"
+
+# Two findings, two severities. An app that HAS both steps in the wrong order has
+# a defect it can fix by editing its manifest, and that blocks. An app with no
+# demo-data step at all cannot fix this in a manifest: the step calls
+# `install-demo-data`, and declaring it without that action ships a wizard step
+# that ERRORS on a fresh install — worse than the finding. That warns, so the
+# fleet is not held red for a feature each app still has to build.
+SEVERITY_FAIL = "FAIL"
+SEVERITY_WARN = "WARN"
 
 
-def _judge(path: str, manifest: dict) -> str | None:
-    """The finding for one manifest, or None when it is fine."""
+def _judge(path: str, manifest: dict) -> tuple[str, str] | None:
+    """The (severity, finding) for one manifest, or None when it is fine."""
     setup = manifest.get("setup")
     if not isinstance(setup, dict):
         # Not adoption's judge — see the module docstring.
@@ -69,22 +89,45 @@ def _judge(path: str, manifest: dict) -> str | None:
     steps = setup.get("steps")
     if not isinstance(steps, list) or not steps:
         return (
+            SEVERITY_FAIL,
             f"{path}: `setup` is declared with no steps, so the wizard renders "
-            f"nothing. Give it a first step with id \"{DEMO_STEP_ID}\" (ADR-111 rule 4)."
+            f"nothing. Give it \"{WELCOME_STEP_ID}\" then \"{DEMO_STEP_ID}\" "
+            f"(ADR-111 rule 4).",
         )
 
-    first = steps[0] if isinstance(steps[0], dict) else {}
-    got = str(first.get("id", "") or "")
-    if got == DEMO_STEP_ID:
-        return None
+    ids = [str(s.get("id", "") or "") if isinstance(s, dict) else "" for s in steps]
+    has_demo = DEMO_STEP_ID in ids
 
-    return (
-        f"{path}: setup.steps[0].id is \"{got or '<missing>'}\", not "
-        f"\"{DEMO_STEP_ID}\" (ADR-111 rule 4). The first question a new "
-        f"administrator has is whether they can see the app work; a welcome "
-        f"screen answers a question nobody asked. Move the demo-data offer "
-        f"first — it can still say hello."
-    )
+    if ids[0] != WELCOME_STEP_ID:
+        return (
+            SEVERITY_FAIL,
+            f"{path}: setup.steps[0].id is \"{ids[0] or '<missing>'}\", not "
+            f"\"{WELCOME_STEP_ID}\" (ADR-111 rule 4). The configuration wizard "
+            f"opens by saying what this app is; the demo-data offer is step 2.",
+        )
+
+    if not has_demo:
+        return (
+            SEVERITY_WARN,
+            f"{path}: setup declares no \"{DEMO_STEP_ID}\" step (ADR-111 rule 4). "
+            f"An app installed from the App Store opens on an empty list, and the "
+            f"reader has no way to author data against a schema they do not know "
+            f"yet. This WARNS rather than fails because the step runs "
+            f"`install-demo-data`: declaring it without that action ships a "
+            f"wizard step that errors. Build the demo data, then add the step.",
+        )
+
+    if ids[1] != DEMO_STEP_ID:
+        return (
+            SEVERITY_FAIL,
+            f"{path}: setup.steps[1].id is \"{ids[1] or '<missing>'}\", not "
+            f"\"{DEMO_STEP_ID}\" (ADR-111 rule 4). The app HAS a demo-data step, "
+            f"at index {ids.index(DEMO_STEP_ID)} — move it to step 2, directly "
+            f"after welcome. Nothing between them answers a question the reader "
+            f"has yet.",
+        )
+
+    return None
 
 
 def main(argv: list[str]) -> int:
@@ -98,7 +141,7 @@ def main(argv: list[str]) -> int:
         print("checked 0 manifest(s)")
         return 4
 
-    checked = failures = 0
+    checked = failures = warnings = 0
     for rel in sorted(set(in_scope)):
         absolute = os.path.join(root, rel)
         if not os.path.isfile(absolute):
@@ -124,12 +167,19 @@ def main(argv: list[str]) -> int:
             continue
 
         checked += 1
-        finding = _judge(rel, manifest)
-        if finding is not None:
-            failures += 1
-            print(f"FAIL {finding}")
+        verdict = _judge(rel, manifest)
+        if verdict is not None:
+            severity, finding = verdict
+            print(f"{severity} {finding}")
+            if severity == SEVERITY_FAIL:
+                failures += 1
+            else:
+                warnings += 1
 
-    print(f"checked {checked} manifest(s)")
+    # BOTH counts, printed even when zero: a reader distinguishes "ran and found
+    # nothing" from "never ran", and a warning that is never counted is a
+    # finding nobody schedules.
+    print(f"checked {checked} manifest(s), {warnings} warning(s)")
 
     return 1 if failures else 0
 
