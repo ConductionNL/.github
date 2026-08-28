@@ -27,11 +27,12 @@ trap 'rm -rf "${WORK}"' EXIT
 APP="${WORK}/app"
 mkdir -p "${APP}/src"
 
-_manifest() {  # <first-step-id | "none">
+_manifest() {  # <first-step-id | "none"> [second-step-id]
     if [ "$1" = "none" ]; then
         printf '{"id":"app","name":"App"}\n'
         return
     fi
+    _second="${2:-storage}"
     cat <<JSON
 {
   "id": "app",
@@ -39,7 +40,8 @@ _manifest() {  # <first-step-id | "none">
   "setup": {
     "steps": [
       {"id": "$1", "type": "info", "title": "First"},
-      {"id": "storage", "type": "config-fields", "title": "Storage"}
+      {"id": "${_second}", "type": "config-fields", "title": "Second"},
+      {"id": "done", "type": "summary", "title": "Done"}
     ]
   }
 }
@@ -58,13 +60,21 @@ echo "x" > README.md
 git add -A && git commit --quiet -m "baseline, manifest with no setup"
 git branch -M base
 
+# BOTH steps present, WRONG ORDER — the blocking finding, and fixable by
+# editing the manifest alone.
 git checkout --quiet -b planted
-_manifest welcome > src/manifest.json
-git add -A && git commit --quiet -m "declare setup opening with welcome"
+_manifest demo-data welcome > src/manifest.json
+git add -A && git commit --quiet -m "declare setup opening with demo-data"
 
 git checkout --quiet base && git checkout --quiet -b clean
-_manifest demo-data > src/manifest.json
-git add -A && git commit --quiet -m "declare setup opening with demo-data"
+_manifest welcome demo-data > src/manifest.json
+git add -A && git commit --quiet -m "declare setup opening welcome then demo-data"
+
+# welcome first but NO demo-data step: warns, does not block. An app cannot fix
+# this in a manifest — the step calls install-demo-data.
+git checkout --quiet base && git checkout --quiet -b nodemo
+_manifest welcome storage > src/manifest.json
+git add -A && git commit --quiet -m "declare setup with welcome and no demo-data"
 
 git checkout --quiet base && git checkout --quiet -b nosetup
 printf '{"id":"app","name":"App","version":"1.0.1"}\n' > src/manifest.json
@@ -81,19 +91,42 @@ _verdict() {
         | grep -E '\[gate-100\]' | head -1
 }
 
-echo "-- ARM 1: setup that opens with welcome is a finding --"
+echo "-- ARM 1: both steps present but in the wrong order is a blocking finding --"
 _v="$(_verdict planted)"
 case "${_v}" in
-    *FAIL*) _ok "gate-100 FAILs a setup whose first step is not demo-data" ;;
+    *FAIL*) _ok "gate-100 FAILs a setup whose first step is not welcome" ;;
     *)      _bad "expected FAIL on planted, got: ${_v:-<no gate-100 line>}" ;;
 esac
 
-echo "-- ARM 2: the same setup opening with demo-data is clean --"
+echo "-- ARM 2: welcome then demo-data is clean --"
 _v="$(_verdict clean)"
 case "${_v}" in
-    *PASS*) _ok "gate-100 PASSes when the first step is demo-data" ;;
+    *PASS*) _ok "gate-100 PASSes when welcome is followed by demo-data" ;;
     *)      _bad "expected PASS on clean, got: ${_v:-<no gate-100 line>}" ;;
 esac
+
+echo "-- ARM 5: 🔴 NO demo-data STEP WARNS, IT DOES NOT BLOCK --"
+# This split is the whole reason the corrected gate is shippable. Four of the
+# seven fleet apps that declare setup.steps have no demo-data step, and they
+# CANNOT gain one by editing a manifest: the step calls install-demo-data, so
+# declaring it without that action ships a wizard step that errors on a fresh
+# install. Failing here would hold the fleet red for a feature each app has yet
+# to build, and the pressure would be to satisfy the gate rather than build it.
+# TWO assertions, because the runner's summary line has only PASS and FAIL in
+# it — a WARN is invisible there by design. Asserting on the summary alone would
+# be unsatisfiable; asserting only on the log would not prove it stopped
+# blocking. Both together are the actual contract.
+_v="$(_verdict nodemo)"
+case "${_v}" in
+    *FAIL*) _bad "gate-100 BLOCKED an app that merely lacks demo data — it must not: ${_v}" ;;
+    *PASS*) _ok "gate-100 does not block an app that merely lacks demo data" ;;
+    *)      _bad "expected a PASS summary on nodemo, got: ${_v:-<no gate-100 line>}" ;;
+esac
+if grep -rq "WARN.*demo-data" "${WORK}/logs-nodemo" 2>/dev/null; then
+    _ok "gate-100 records the missing demo-data step as a WARN in its log"
+else
+    _bad "gate-100 passed silently — a warning nobody prints is a finding nobody schedules"
+fi
 
 echo "-- ARM 3: 🔴 AN APP WITH NO SETUP IS NOT THIS GATE'S BUSINESS --"
 _v="$(_verdict nosetup)"
