@@ -1992,13 +1992,13 @@ jobs:
               for attempt in 1 2 3; do
                 out="$(composer audit --format=plain --abandoned=report 2>&1)" && rc=0 || rc=$?
                 [ "$rc" -eq 0 ] && break
-                printf '%s' "$out" | grep -qiE 'security-advisories.*could not be downloaded|could not be downloaded.*security-advisories' || break
+                printf '%s' "$out" | grep -qiE 'security-advisories.*(could not be downloaded|curl error|timed out)|(could not be downloaded|curl error [0-9]+ while downloading).*security-advisories' || break
                 echo "::notice::composer audit could not reach the Packagist advisory feed (attempt ${attempt}/3); retrying in $((attempt * 10))s"
                 sleep $((attempt * 10))
               done
               echo "$out"
               if [ "$rc" -ne 0 ]; then
-                if printf '%s' "$out" | grep -qiE 'security-advisories.*could not be downloaded|could not be downloaded.*security-advisories'; then
+                if printf '%s' "$out" | grep -qiE 'security-advisories.*(could not be downloaded|curl error|timed out)|(could not be downloaded|curl error [0-9]+ while downloading).*security-advisories'; then
                   echo "::warning::composer audit skipped — the Packagist advisory feed is unavailable (external outage), not a vulnerability. Dependencies were NOT audited on this run."
                 else
                   exit "$rc"
