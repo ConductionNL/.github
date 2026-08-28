@@ -2,11 +2,20 @@
 #
 # gate-101 (demo-data-coverage) — acceptance over a REAL two-commit history.
 #
-# 🔴 RENUMBERED 99 -> 101. `manifest-l10n-coverage` also claimed 99, and both
-# blocks called `_pass 99` / `_fail 99` with different names — so one gate's
-# verdict overwrote the other's and this suite read the l10n gate's NOT
-# APPLICABLE line while asserting on demo-data coverage. The number is part of
-# the gate's identity; two gates cannot share one.
+# 🔴 RENUMBERED 99 -> 101, AND IT COLLIDED A SECOND TIME. `manifest-l10n-coverage`
+# also claimed 99, and both blocks called `_pass 99` / `_fail 99` with different
+# names — so one gate's verdict overwrote the other's and this suite read the
+# l10n gate's NOT APPLICABLE line while asserting on demo-data coverage.
+#
+# The first fix moved l10n 99 -> 101, onto the number THIS gate had just taken,
+# and the identical failure reappeared a few hours later reading `[gate-101]
+# manifest-l10n-coverage`. l10n is now 102.
+#
+# Twice, the tell was this suite failing while the gate it names was fine — a
+# test that greps `[gate-N]` reads whichever gate printed that number last. The
+# number is part of the gate's identity; two gates cannot share one, and picking
+# the next free number means checking every `# GATE <n>` in the runner, not just
+# the highest one anybody remembers.
 #
 # A DELTA gate cannot be covered by a gate-acceptance/ bundle: that format runs
 # the runner against a plain directory with no git history, so the gate can only
