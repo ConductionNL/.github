@@ -6629,6 +6629,12 @@ jobs:
       # would otherwise swallow an unknown flag as the app directory.
       - name: Resolve the diff base and the scope
         id: base
+        env:
+          # Through `env:`, never interpolated into the script body. A branch
+          # name is attacker-controlled text and git permits a double quote in
+          # one, so `case "${{ ... }}" in` would be a script-injection site.
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
           set -u
           EVENT="${{ github.event_name }}"
@@ -6638,6 +6644,58 @@ jobs:
             BASE="origin/${{ github.base_ref }}"
             SCOPE="diff"
             WHY="this is a ${EVENT}, so the PR's target branch is the base and ADR-020 diff-scoping applies."
+
+            # A RELEASE PROMOTION IS THE ONE PULL REQUEST WHOSE TARGET IS THE
+            # WRONG BASE.
+            #
+            # The fleet promotes feature -> development -> beta -> main. By the
+            # time `beta` is opened against `main`, every commit in that diff has
+            # already faced these gates twice: once entering development, once
+            # entering beta. Diffing against the TARGET asks "what does this add
+            # to main?", and the answer is every commit since the last release --
+            # so a diff-scoped gate reports the whole tree as changed.
+            #
+            # Measured 2026-08-28 on openregister#2975 (hotfix/... -> main,
+            # 5782 commits): gate-16 reported 256 changed methods missing @spec,
+            # plus gate-83 and gate-70, on a tree that is byte-identical to
+            # `beta` -- where the SAME content passed Hydra Gates green on
+            # #2972. Nothing was found that beta had not already cleared; the
+            # base was simply wrong.
+            #
+            # So for a promotion the base is the branch being promoted FROM.
+            # That keeps the gates real rather than skipping them: a hotfix
+            # carrying genuinely new code still shows that code in the diff
+            # against beta, and is still judged on it. What disappears is only
+            # the re-litigation of commits that already passed.
+            IS_PROMOTION=no
+            case "${PR_HEAD_REF:-}" in
+              development|beta) IS_PROMOTION=yes ;;
+              hotfix/*)
+                case "${BASE_REF:-}" in
+                  beta|main) IS_PROMOTION=yes ;;
+                esac
+                ;;
+            esac
+
+            if [ "$IS_PROMOTION" = yes ]; then
+              case "${BASE_REF:-}" in
+                main) SRC=beta ;;
+                beta) SRC=development ;;
+                *)    SRC="" ;;
+              esac
+
+              # Only re-point at a source branch that actually exists. A repo
+              # without one keeps the target as its base and says so, rather
+              # than resolving to an empty ref and silently scoping to nothing
+              # -- a gate run against no base is the failure mode this whole
+              # step exists to avoid.
+              if [ -n "$SRC" ] && git -C app rev-parse --verify --quiet "refs/remotes/origin/${SRC}" >/dev/null; then
+                BASE="origin/${SRC}"
+                WHY="this is a release promotion (${PR_HEAD_REF} -> ${BASE_REF}), so the base is the branch being promoted FROM (${SRC}). Every commit in the diff against ${BASE_REF} already passed these gates entering ${SRC}; anything genuinely new in this pull request still appears in the diff against ${SRC} and is still judged."
+              else
+                WHY="this is a release promotion (${PR_HEAD_REF} -> ${BASE_REF}), but origin/${SRC:-<none for this target>} is not available, so the target branch remains the base. Expect diff-scoped gates to report the whole release delta."
+              fi
+            fi
           elif [ "${EVENT}" = "push" ]; then
             # A push HAS a previous tip. We deliberately set NOTHING and let the
             # package's own precedence chain resolve origin/HEAD ->
