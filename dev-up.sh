@@ -231,6 +231,31 @@ echo "==> Ensuring custom_apps is writable by www-data"
 docker exec "$CONTAINER" chown www-data:www-data /var/www/html/custom_apps \
   && echo "  ok" || echo "  WARNING: chown failed — /settings/apps may 500"
 
+echo "==> Disabling the App Store"
+# 🔴 `occ upgrade` OVERWRITES BIND-MOUNTED APP SOURCE WITH THE APP STORE RELEASE.
+#
+# Every app here is mounted from a git checkout. Nextcloud does not know that:
+# it compares the mounted <version> against the store and offers an update, and
+# `occ upgrade` takes it -- downloading the store tarball and extracting it over
+# the checkout. The tarball's root entry is <appid>/, so the result is a nested
+# <app>/<app>/ directory holding the PUBLISHED version, the working tree's
+# tracked files gone, and the submodule's `.git` pointer file removed with them.
+#
+# Caught in the act 2026-08-27 22:49:42 on opencatalogi, with two `php occ
+# upgrade` processes running as www-data at that instant. It had already
+# happened three times that day. `occ app:update --showonly` then listed a
+# pending store update for FOURTEEN mounted apps, openregister among them.
+#
+# 🔑 Losing the `.git` pointer is the dangerous half. Without it every git
+# command in that directory silently answers as the apps-extra SUPERPROJECT --
+# wrong remote, wrong branch, thousands of unrelated dirty files -- so the
+# damage reads as a catastrophe in a repo nobody touched.
+#
+# The store has no job on an instance whose apps all come from source.
+occ config:system:set appstoreenabled --value false --type boolean >/dev/null 2>&1 \
+  && echo "  ok (app store off: occ upgrade can no longer overwrite a mounted checkout)" \
+  || echo "  WARNING: could not disable the app store; occ upgrade may overwrite mounted app source"
+
 echo "==> Clearing maintenance mode"
 occ maintenance:mode --off >/dev/null 2>&1 || true
 

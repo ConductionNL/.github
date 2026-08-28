@@ -209,7 +209,16 @@ services:
       # repository, so every edit made in ../app-versions was invisible to this
       # instance and any "verified live" claim about versioniq verified old code.
       # The destination keeps the underscore: it must equal the <id> in info.xml.
-      - ../app-versions:/var/www/html/custom_apps/app_versions
+      # Renamed app: Nextcloud resolves an app by its DIRECTORY name, so the mount
+      # destination follows the <id> in appinfo/info.xml, which is now `versioniq`.
+      # The checkout path stays ../app-versions until the repo directory is renamed.
+      #
+      # Mounted at the OLD id, this app was installed TWICE: the stale checkout at
+      # custom_apps/app_versions, plus a `versioniq` copy the App Store dropped into
+      # the volume. Both enabled. The volume copy carried the only working background
+      # jobs (OCA\Versioniq\...), so the mounted source was contributing nothing and
+      # every edit to ../app-versions was invisible to the instance.
+      - ../app-versions:/var/www/html/custom_apps/versioniq
       - ../openregister/custom_apps/bookmarks:/var/www/html/custom_apps/bookmarks
       - ../openregister/custom_apps/calendar:/var/www/html/custom_apps/calendar
       # collectives is NOT mounted: ../openregister/custom_apps/collectives does
@@ -472,7 +481,16 @@ services:
       # repository, so every edit made in ../app-versions was invisible to this
       # instance and any "verified live" claim about versioniq verified old code.
       # The destination keeps the underscore: it must equal the <id> in info.xml.
-      - ../app-versions:/var/www/html/custom_apps/app_versions
+      # Renamed app: Nextcloud resolves an app by its DIRECTORY name, so the mount
+      # destination follows the <id> in appinfo/info.xml, which is now `versioniq`.
+      # The checkout path stays ../app-versions until the repo directory is renamed.
+      #
+      # Mounted at the OLD id, this app was installed TWICE: the stale checkout at
+      # custom_apps/app_versions, plus a `versioniq` copy the App Store dropped into
+      # the volume. Both enabled. The volume copy carried the only working background
+      # jobs (OCA\Versioniq\...), so the mounted source was contributing nothing and
+      # every edit to ../app-versions was invisible to the instance.
+      - ../app-versions:/var/www/html/custom_apps/versioniq
       - ../openregister/custom_apps/bookmarks:/var/www/html/custom_apps/bookmarks
       - ../openregister/custom_apps/calendar:/var/www/html/custom_apps/calendar
       # collectives is NOT mounted: ../openregister/custom_apps/collectives does
