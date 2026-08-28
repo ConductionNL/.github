@@ -891,7 +891,24 @@ def build(app_dir: str, app_id: str, per_schema: int, existing: dict | None) -> 
             ),
         },
         "paths": {},
-        "components": {"registers": registers, "schemas": schemas, "objects": objects},
+        # 🔴 NO `schemas` BLOCK. The mock declares its REGISTER (the descriptor
+        # lookup keys on that, and the importer needs somewhere to put the
+        # objects) and its OBJECTS, and nothing else.
+        #
+        # Copying the schema definitions in duplicated every one of them inside
+        # lib/Settings, and apps assert that they are unique: shillinq's
+        # `testExactlyOneOrderSchemaDefinitionExists` globs
+        # `lib/Settings/{*.json,register.d/*.json}` and counts definitions by
+        # slug, so the mock turned "exactly 1" into 2 for every schema it
+        # carried. opencatalogi failed the same way.
+        #
+        # Nothing needs the copy. The importer resolves an object's schema by
+        # slug through `schemaMapper->find()` when the descriptor omits it, and
+        # the real descriptor has always imported first (ADR-005 seeds it from a
+        # Repair step at install). `--check` reads definitions from the app's
+        # REAL descriptors too — `_component_files` skips `type: mock` — so
+        # validation is unaffected.
+        "components": {"registers": registers, "objects": objects},
     }
 
 
@@ -1256,8 +1273,12 @@ def main(argv: list[str]) -> int:
             existing = None
 
     built = build(app_dir, app_id, args.objects, existing)
-    schemas = len(built["components"]["schemas"])
     objects = len(built["components"]["objects"])
+    # Counted from the OBJECTS, not from a schemas block — the descriptor no
+    # longer carries one (it duplicated the app's own definitions and broke
+    # their uniqueness tests). The objects are what was actually generated, so
+    # they are the honest thing to count.
+    schemas = len({o["@self"]["schema"] for o in built["components"]["objects"]})
     if schemas == 0:
         print(f"{app_id}: declares no schemas — nothing to generate.")
         return 0
