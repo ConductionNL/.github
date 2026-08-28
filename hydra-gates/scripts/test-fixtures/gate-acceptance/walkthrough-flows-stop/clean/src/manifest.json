@@ -1,0 +1,182 @@
+{
+	"$schema": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
+	"version": "1.0.0",
+	"dependencies": [
+		"openregister"
+	],
+	"menu": [
+		{
+			"id": "Things",
+			"label": "Things",
+			"route": "Things",
+			"order": 10
+		},
+		{
+			"id": "FlowsMenu",
+			"label": "Flows",
+			"icon": "Sitemap",
+			"route": "Flows",
+			"section": "settings",
+			"order": 96
+		}
+	],
+	"pages": [
+		{
+			"id": "Things",
+			"route": "/things",
+			"type": "index",
+			"title": "Things",
+			"config": {
+				"register": "wfsfx",
+				"schema": "thing"
+			}
+		},
+		{
+			"id": "ThingDetail",
+			"route": "/things/:id",
+			"type": "detail",
+			"title": "Thing",
+			"config": {
+				"register": "wfsfx",
+				"schema": "thing"
+			}
+		},
+		{
+			"id": "Flows",
+			"route": "/flows",
+			"type": "flows",
+			"title": "Flows",
+			"config": {
+				"app": "wfsfx"
+			}
+		}
+	],
+	"walkthrough": {
+		"enabled": true,
+		"version": 1,
+		"completionConfigKey": "walkthrough_completed_version",
+		"tours": [
+			{
+				"id": "wfsfx:getting-started",
+				"title": "Getting started",
+				"trigger": "first-visit",
+				"steps": [
+					{
+						"id": "welcome",
+						"sinceVersion": "1.0.0",
+						"placement": "center",
+						"title": "Welcome",
+						"body": "A quick spin.",
+						"target": {
+							"kind": "page",
+							"ref": "Things"
+						},
+						"advanceOn": {
+							"type": "manual"
+						}
+					},
+					{
+						"id": "go-things",
+						"sinceVersion": "1.0.0",
+						"placement": "right",
+						"body": "Things live here.",
+						"task": "Click Things",
+						"target": {
+							"kind": "nav-item",
+							"ref": "Things"
+						},
+						"advanceOn": {
+							"type": "route-match",
+							"route": "Things"
+						}
+					},
+					{
+						"id": "see-flows",
+						"sinceVersion": "1.0.0",
+						"placement": "right",
+						"optional": true,
+						"allowManualNext": true,
+						"title": "Where the automation lives",
+						"body": "Flows are what happens without anyone clicking: a reminder before a deadline passes, a confirmation sent on submission. Read and edit them here.",
+						"task": "Open Flows in the menu",
+						"target": {
+							"kind": "nav-item",
+							"ref": "Flows"
+						},
+						"advanceOn": {
+							"type": "route-match",
+							"route": "Flows"
+						}
+					},
+					{
+						"id": "done",
+						"sinceVersion": "1.0.0",
+						"placement": "center",
+						"title": "Done",
+						"body": "That is it.",
+						"target": {
+							"kind": "page",
+							"ref": "Things"
+						},
+						"advanceOn": {
+							"type": "manual"
+						}
+					}
+				]
+			},
+			{
+				"id": "wfsfx:forcing",
+				"title": "Forcing",
+				"trigger": "manual",
+				"steps": [
+					{
+						"id": "welcome",
+						"sinceVersion": "1.0.0",
+						"placement": "center",
+						"title": "Welcome",
+						"body": "A quick spin.",
+						"target": {
+							"kind": "page",
+							"ref": "Things"
+						},
+						"advanceOn": {
+							"type": "manual"
+						}
+					},
+					{
+						"id": "see-flows",
+						"sinceVersion": "1.0.0",
+						"placement": "right",
+						"optional": true,
+						"allowManualNext": true,
+						"title": "Where the automation lives",
+						"body": "Flows are what happens without anyone clicking: a reminder before a deadline passes, a confirmation sent on submission. Read and edit them here.",
+						"task": "Open Flows in the menu",
+						"target": {
+							"kind": "nav-item",
+							"ref": "Flows"
+						},
+						"advanceOn": {
+							"type": "route-match",
+							"route": "Flows"
+						}
+					},
+					{
+						"id": "done",
+						"sinceVersion": "1.0.0",
+						"placement": "center",
+						"title": "Done",
+						"body": "That is it.",
+						"target": {
+							"kind": "page",
+							"ref": "Things"
+						},
+						"advanceOn": {
+							"type": "manual"
+						}
+					}
+				]
+			}
+		]
+	}
+}
