@@ -86,8 +86,17 @@ def _targets_flows(step, page_ids, menu_ids):
     `CnWalkthrough.resolveTarget()` looks a `nav-item` / `page` ref up as
     `[data-cn-route="<ref>"]`, and `CnAppNav` sets that attribute from
     `item.route`. A step authored with the MENU id therefore resolves to
-    nothing and falls back to a centred, anchorless coachmark — it still
-    appears and still advances, it just stops pointing at anything.
+    nothing — and an OPTIONAL step whose target is absent is SKIPPED, not
+    re-centred:
+
+        const el = this.resolveTarget(this.step)
+        if (!el) { if (this.step.optional) { this.wt.skip(); return } }
+
+    The anchorless-centred fallback in computeRect() applies only to a target
+    that RESOLVED and has zero size (a collapsed nav group); an absent target
+    never reaches it. So a mis-keyed stop does not degrade politely, it
+    vanishes — and `optional: true` is exactly what this gate's own
+    forcing-flows-stop rule requires, so the two rules meet here.
 
     Accepting the menu id here would make this gate accept a manifest the
     runtime cannot honour, which is the validator-and-executor-disagree
@@ -121,6 +130,58 @@ def _is_forcing(step):
         return False
     return step.get('allowManualNext') is not True
 
+
+
+# The first library release whose CnAppNav emits `data-cn-route` on its
+# SETTINGS menu loop (nextcloud-vue#811, shipped in 2.21.0). Below this, a
+# stop that targets a settings-section entry resolves nothing.
+MIN_NC_VUE = (2, 21, 0)
+
+
+def _locked_nc_vue(manifest_path):
+    """The @conduction/nextcloud-vue version this app's LOCK pins, or None.
+
+    The lock, not package.json: `npm ci` installs from the lock, so a caret
+    range that would ACCEPT a new enough library says nothing about what the
+    built bundle actually contains. Returns None when there is no lock or no
+    entry — both are "cannot tell", which this gate treats as out of scope
+    rather than as a pass.
+    """
+    root = os.path.dirname(os.path.dirname(os.path.abspath(manifest_path)))
+    lock = os.path.join(root, 'package-lock.json')
+    try:
+        with open(lock, encoding='utf-8') as handle:
+            data = json.load(handle)
+    except (OSError, ValueError):
+        return None
+    for key, entry in (data.get('packages') or {}).items():
+        if key.endswith('node_modules/@conduction/nextcloud-vue'):
+            raw = (entry or {}).get('version')
+            if not isinstance(raw, str):
+                return None
+            parts = raw.split('-')[0].split('.')
+            try:
+                return tuple(int(x) for x in parts[:3])
+            except ValueError:
+                return None
+    return None
+
+
+def _settings_routes(manifest):
+    """Routes whose menu entry sits in the SETTINGS section.
+
+    `CnAppNav` renders main, child, footer and settings entries as four
+    separate `v-for` loops. `data-cn-route` reached the settings one last
+    (#811), so a stop targeting a settings entry is the case that silently
+    resolved to nothing on older libraries.
+    """
+    routes = set()
+    for item in (manifest.get('menu') or []):
+        if not isinstance(item, dict):
+            continue
+        if item.get('section') == 'settings' and isinstance(item.get('route'), str):
+            routes.add(item['route'])
+    return routes
 
 def check(path, findings):
     """Append findings for one manifest.
@@ -174,7 +235,38 @@ def check(path, findings):
             )
             continue
 
+        settings_routes = _settings_routes(manifest)
+        locked = _locked_nc_vue(path)
+
         for step in hits:
+            # A stop that targets a SETTINGS entry on a library older than
+            # 2.21.0 is not merely cosmetic: CnWalkthrough.armStep() SKIPS an
+            # optional step whose target is absent, with no console error and
+            # nothing on screen. `optional: true` is exactly what keeps this
+            # stop from forcing authorship, so the friendly authoring choice is
+            # also the one that fails silently — and the step counter cannot
+            # catch it either, because skip() advances and the declared total
+            # is unchanged.
+            #
+            # This is the difference between a gate that reads the manifest and
+            # one that measures what a user gets: without it, all seven fleet
+            # apps would have passed this gate while shipping a stop nobody
+            # could ever see.
+            ref = (step.get('target') or {}).get('ref')
+            if (ref in settings_routes
+                    and locked is not None
+                    and locked < MIN_NC_VUE):
+                findings.append(
+                    f'{path}:walkthrough.tours[{t_index}].steps[{step.get("id", "?")}] '
+                    f'rule=unanchorable-flows-stop the stop targets "{ref}", a '
+                    f'SETTINGS-section entry, but package-lock.json pins '
+                    f'@conduction/nextcloud-vue '
+                    f'{".".join(str(x) for x in locked)} — CnAppNav did not emit '
+                    f'data-cn-route on its settings loop until '
+                    f'{".".join(str(x) for x in MIN_NC_VUE)} (#811), so the step '
+                    'resolves nothing and is SKIPPED for every user. Bump the '
+                    'LOCK, not just the caret range: npm ci installs from the lock.'
+                )
             if _is_forcing(step):
                 findings.append(
                     f'{path}:walkthrough.tours[{t_index}].steps[{step.get("id", "?")}] '
