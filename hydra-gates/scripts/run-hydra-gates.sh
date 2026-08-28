@@ -2340,6 +2340,27 @@ if [ -f composer.json ] && command -v composer >/dev/null 2>&1; then
             fi
         elif grep -qiE "no installed packages found|please run \"?composer install" "${_ca_log}"; then
             _fail 4 "composer-audit" "audit COULD NOT RUN (no installed packages and no lock to audit) — NOT a CVE finding; see ${_ca_log}"
+        elif ! grep -qiE '^(Package|CVE|Advisory)[[:space:]]*:' "${_ca_log}"; then
+            # A NON-ZERO EXIT IS NOT AUTOMATICALLY A SECURITY FINDING.
+            #
+            # `composer audit` exits non-zero both when it FINDS advisories and
+            # when it cannot COMPLETE — most often because the advisory database
+            # was unreachable. The else below reported every non-zero exit as
+            # "CVEs or advisories", so a transient network failure was published
+            # as a security finding against the repository.
+            #
+            # Observed 2026-08-28 on versioniq and zaakafhandelapp: PRs whose only
+            # changed file was a Playwright spec failed gate-4, while development —
+            # with a BYTE-IDENTICAL composer.lock — passed it, and
+            # `composer audit --locked` against that same lock reported "No
+            # security vulnerability advisories found".
+            #
+            # `--format=plain` prints a `Package: <name>` block per advisory, so an
+            # absent block means the run named no finding, whatever its exit code.
+            # That is the distinction this file already insists on for gate-5:
+            #     "the attribute is absent"    -> a finding, and a real one
+            #     "I could not open the class" -> the gate learned NOTHING
+            _fail 4 "composer-audit" "audit COULD NOT COMPLETE (exit ${_ca_rc}, and the output names no advisory) — the dependency tree is UNVERIFIED by this run, NOT known-vulnerable. Most often the advisory database was unreachable; see ${_ca_log}"
         else
             _fail 4 "composer-audit" "CVEs or advisories — see ${_ca_log}"
         fi
