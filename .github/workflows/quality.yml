@@ -4011,7 +4011,30 @@ jobs:
     # repos and read as unremarkable. `'' != 'false'` runs the tests instead.
     # The cost of the filter being broken is runner minutes; the cost of it
     # being trusted while broken is a verdict nobody notices is missing.
-    if: ${{ inputs.enable-playwright && needs.changes.outputs.code != 'false' && !cancelled() }}
+    #
+    # NOT ON PULL REQUESTS INTO `development` — the promotion branches keep it.
+    #
+    # This suite is ~16-22 min of a single runner and it runs per pull request.
+    # `development` is the integration branch every app targets, so it carries
+    # the bulk of the fleet's open pull requests — measured 2026-08-28, 35 of
+    # them across ten repos, each re-running the suite on every push. Against a
+    # 60-concurrent-job account ceiling that is not a cost, it is a QUEUE: runs
+    # sat `queued` for hours and the checks a human was waiting on never
+    # arrived. The evidence a merge to an integration branch actually needs is
+    # unit tests plus the mechanical gates, and those are cheap.
+    #
+    # The coverage is not dropped, it MOVES ONE HOP LATER. `development -> beta`
+    # and `beta -> main` are pull requests too, and this condition leaves them
+    # alone: every commit still meets the full E2E suite before it can reach
+    # beta, and again before it can reach main. What changes is that it is asked
+    # once per promotion rather than once per contributor pull request.
+    #
+    # `github.base_ref` is set ONLY on pull_request events, so a push to any
+    # branch — including `development` itself — is unaffected and still runs the
+    # suite. That is deliberate: the post-merge run on `development` is the
+    # backstop that catches whatever the pull request no longer asks about, and
+    # it is one run per merge rather than one per push per open pull request.
+    if: ${{ inputs.enable-playwright && needs.changes.outputs.code != 'false' && !cancelled() && !(github.event_name == 'pull_request' && github.base_ref == 'development') }}
     runs-on: ubuntu-latest
     name: "E2E Tests (Playwright)"
     # `frontend-build` is a dependency purely so its artifact is available to
@@ -7222,6 +7245,14 @@ jobs:
           # EXISTS" — turning a working cost control into a permanent red.
           PATH_FILTER_CODE: ${{ needs.changes.outputs.code }}
           PATH_FILTER_REASON: ${{ needs.changes.outputs.reason }}
+          # The E2E suite does not run on pull requests into `development`; it
+          # runs on the `development -> beta` and `beta -> main` promotions and
+          # on every push. That skip is DELIBERATE and must be declared here for
+          # the same reason the path filter declares its own: an undeclared
+          # `skipped` is classified as "NO VERDICT EXISTS" and fails this job,
+          # which would move the red from the E2E check to this one rather than
+          # removing it.
+          E2E_PROMOTION_SKIP: ${{ github.event_name == 'pull_request' && github.base_ref == 'development' }}
           JOURNEYDOC_ENABLED: ${{ inputs.enable-journeydoc-capture }}
           JOURNEYDOC_RESULT: ${{ needs['journeydoc-capture'].result }}
         run: |
@@ -7252,6 +7283,13 @@ jobs:
                 if [ "${4:-false}" = "true" ] && [ "$PATH_FILTER_CODE" = "false" ]; then
                   echo "  - $1: ENABLED, and deliberately NOT RUN for this diff — $PATH_FILTER_REASON"
                   FILTERED="${FILTERED}${1}"$'\n'
+                elif [ -n "${5:-}" ]; then
+                  # $5 is a DECLARED reason, passed by the caller of classify.
+                  # Same contract as the path filter above: a skip is only
+                  # acceptable when something states, in words, why it was
+                  # deliberate. Anything else that is skipped is still missing.
+                  echo "  - $1: ENABLED, and deliberately NOT RUN — ${5}"
+                  FILTERED="${FILTERED}${1}"$'\n'
                 else
                   echo "  - $1: ENABLED but result=skipped — NO VERDICT EXISTS."
                   MISSING="${MISSING}${1}"$'\n'
@@ -7271,7 +7309,8 @@ jobs:
           echo "Test-tier verdict census:"
           classify "PHPUnit"            "$PHPUNIT_ENABLED"    "$PHPUNIT_RESULT"    true
           classify "Newman"             "$NEWMAN_ENABLED"     "$NEWMAN_RESULT"
-          classify "Playwright"         "$PLAYWRIGHT_ENABLED" "$PLAYWRIGHT_RESULT" true
+          classify "Playwright"         "$PLAYWRIGHT_ENABLED" "$PLAYWRIGHT_RESULT" true \
+            "$([ "$E2E_PROMOTION_SKIP" = "true" ] && printf '%s' "E2E runs on the development -> beta and beta -> main promotions, and on every push, not on pull requests into development." || printf '')"
           classify "Journeydoc capture" "$JOURNEYDOC_ENABLED" "$JOURNEYDOC_RESULT"
 
           # A filtered run is a pass ABOUT THE DIFF IT EXAMINED, and it must not

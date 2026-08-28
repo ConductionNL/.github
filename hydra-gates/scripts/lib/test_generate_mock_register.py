@@ -489,7 +489,13 @@ class RegisterOwnership(unittest.TestCase):
             built = gmr.build(str(root), "widget", 1, None)
 
             self.assertEqual(list(built["components"]["registers"]), ["widget"])
-            self.assertNotIn("Workflow", built["components"]["schemas"])
+            # The mock no longer copies schema DEFINITIONS (they duplicated the
+            # app's own and broke uniqueness tests), so ownership is asserted on
+            # the objects — which is the thing that would actually be seeded.
+            self.assertNotIn(
+                "Workflow",
+                {o["@self"]["schema"] for o in built["components"]["objects"]},
+            )
             self.assertEqual(
                 {o["@self"]["register"] for o in built["components"]["objects"]},
                 {"widget"},

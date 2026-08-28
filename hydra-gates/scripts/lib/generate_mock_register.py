@@ -864,7 +864,7 @@ def build(app_dir: str, app_id: str, per_schema: int, existing: dict | None) -> 
 
         for sch_name in carried_names:
             sch = definitions[sch_name]
-            schemas.setdefault(sch_name, sch)
+            schemas.setdefault(sch_name, _strip_code_refs(sch))
             carried = keep.get((reg_slug, sch_name), [])
             objects.extend(carried)
             for index in range(len(carried), per_schema):
@@ -891,7 +891,24 @@ def build(app_dir: str, app_id: str, per_schema: int, existing: dict | None) -> 
             ),
         },
         "paths": {},
-        "components": {"registers": registers, "schemas": schemas, "objects": objects},
+        # 🔴 NO `schemas` BLOCK. The mock declares its REGISTER (the descriptor
+        # lookup keys on that, and the importer needs somewhere to put the
+        # objects) and its OBJECTS, and nothing else.
+        #
+        # Copying the schema definitions in duplicated every one of them inside
+        # lib/Settings, and apps assert that they are unique: shillinq's
+        # `testExactlyOneOrderSchemaDefinitionExists` globs
+        # `lib/Settings/{*.json,register.d/*.json}` and counts definitions by
+        # slug, so the mock turned "exactly 1" into 2 for every schema it
+        # carried. opencatalogi failed the same way.
+        #
+        # Nothing needs the copy. The importer resolves an object's schema by
+        # slug through `schemaMapper->find()` when the descriptor omits it, and
+        # the real descriptor has always imported first (ADR-005 seeds it from a
+        # Repair step at install). `--check` reads definitions from the app's
+        # REAL descriptors too — `_component_files` skips `type: mock` — so
+        # validation is unaffected.
+        "components": {"registers": registers, "objects": objects},
     }
 
 
@@ -900,6 +917,51 @@ def build(app_dir: str, app_id: str, per_schema: int, existing: dict | None) -> 
 _JSON_SCHEMA_TYPES = {
     "string", "number", "integer", "boolean", "array", "object", "null",
 }
+
+
+# Keys gate-56 (register-handler-resolution) resolves to real PHP code.
+# `class` is deliberately NOT here: it is a plausible name for an ordinary
+# schema property, and stripping it would silently alter the shape the demo
+# objects are validated against.
+_CODE_REF_KEYS = ("handler", "guard", "requires", "save", "fallbackGuard", "preconditions")
+
+
+def _strip_code_refs(node: Any) -> Any:
+    """Remove behavioural blocks that point at PHP classes.
+
+    🔴 A MOCK DESCRIPTOR IS DATA, NOT BEHAVIOUR. It exists so demo objects have
+    a register to live in and a schema to be validated against. Carrying the
+    schema's state machine across makes the demo data assert things about code,
+    and shillinq shows what that costs: the generated mock referenced
+    `OCA\\Shillinq\\Consolidation\\ConsolidationGuard`, a namespace no class on
+    disk uses, and gate-56 failed with 6 unresolved handler references.
+
+    Measured as a control: 6 findings with the mock in the gate's file list, 0
+    without. The real descriptor is clean — it names
+    `OCA\\Shillinq\\Service\\ConsolidationGuard`, which exists.
+
+    The stale namespace came from THIS generator. Definitions are merged across
+    every component file, so a lifecycle block from a non-canonical file is
+    unioned into the copy alongside the canonical one — and the merge cannot
+    tell which of two same-named schemas holds the reference that still
+    resolves. Stripping the blocks removes the whole question: a mock never
+    needs them, and `x-openregister-lifecycle` is not a JSON Schema keyword, so
+    validation of the demo objects is unaffected.
+    """
+    if isinstance(node, dict):
+        out: dict[str, Any] = {}
+        for key, value in node.items():
+            if key == "x-openregister-lifecycle":
+                continue
+            if key in _CODE_REF_KEYS and isinstance(value, str):
+                continue
+            out[key] = _strip_code_refs(value)
+        return out
+
+    if isinstance(node, list):
+        return [_strip_code_refs(item) for item in node]
+
+    return node
 
 
 def _drop_refs(node: Any) -> Any:
@@ -1211,8 +1273,12 @@ def main(argv: list[str]) -> int:
             existing = None
 
     built = build(app_dir, app_id, args.objects, existing)
-    schemas = len(built["components"]["schemas"])
     objects = len(built["components"]["objects"])
+    # Counted from the OBJECTS, not from a schemas block — the descriptor no
+    # longer carries one (it duplicated the app's own definitions and broke
+    # their uniqueness tests). The objects are what was actually generated, so
+    # they are the honest thing to count.
+    schemas = len({o["@self"]["schema"] for o in built["components"]["objects"]})
     if schemas == 0:
         print(f"{app_id}: declares no schemas — nothing to generate.")
         return 0
