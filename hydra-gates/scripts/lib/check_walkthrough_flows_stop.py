@@ -49,14 +49,36 @@ def _load(path):
 
 
 def _flows_pages(manifest):
-    """Page ids of every `type:"flows"` page.
+    """Page ids of every flows surface, however the app declares it.
+
+    NOT `type == "flows"` alone. Measured across the fleet on 2026-08-28:
+    exactly ONE app declares that type. The other eight ship their automation
+    surface as an ordinary schema-driven `type:"index"` page whose id and
+    route are `Flows` — which is the shape the manifest renderer actually
+    supports, and the shape every app that got a flows stop this week uses.
+
+    A predicate matching only the rare declaration made this gate applicable
+    to one repository while reading as though it covered twelve. It would
+    have passed, silently and by NOT APPLYING, every app whose tour omits the
+    flows surface — which is the entire defect it exists to catch.
+
+    So the surface is recognised by any of:
+      * `type: "flows"` — the explicit declaration;
+      * a page whose id is `Flows`;
+      * a page whose route is `/flows` (any capitalisation).
 
     :param manifest: Parsed manifest.
     :return: Set of page ids.
     """
     out = set()
     for page in manifest.get('pages') or []:
-        if isinstance(page, dict) and page.get('type') == 'flows' and page.get('id'):
+        if not isinstance(page, dict) or not page.get('id'):
+            continue
+        route = page.get('route')
+        route = route.strip('/').lower() if isinstance(route, str) else ''
+        if (page.get('type') == 'flows'
+                or str(page['id']).lower() == 'flows'
+                or route == 'flows'):
             out.add(page['id'])
     return out
 
