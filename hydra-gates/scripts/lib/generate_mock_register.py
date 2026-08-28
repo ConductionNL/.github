@@ -576,11 +576,29 @@ def _object_for(register: str, schema_name: str, schema: dict, index: int) -> di
 
     label = body.get("name") or body.get("title") or f"{schema_name}-{index + 1}"
 
+    # 🔴 THE SLUG, NOT THE DEFINITION KEY. The importer resolves
+    # `@self.schema` as a SLUG ("Resolve a seed object's @self register +
+    # schema slugs to their entities" — ImportHandler), so a reference by
+    # definition key only works for apps whose keys happen to BE their slugs.
+    # Most are, which is why this held: dossiq 0 of 150 differ, shillinq 0 of
+    # 582, pipelinq 0 of 105.
+    #
+    # Where they differ the objects silently fail to resolve. Measured
+    # 2026-08-28: larpinq ships a committed mock referencing `event` and `item`
+    # whose real slugs are `larping_event` and `larping_item` — 2 of its 10
+    # schemas' demo objects cannot attach. hermiq differs on 30 of 30 and
+    # buildiq on 15 of 16, so both would have generated an entirely
+    # unresolvable dataset.
+    #
+    # Falls back to the key when a definition declares no slug, which is the
+    # shape the resolver already treats as slug-equals-key.
+    schema_ref = schema.get("slug") if isinstance(schema.get("slug"), str) and schema.get("slug") else schema_name
+
     return {
         "@self": {
             "register": register,
-            "schema": schema_name,
-            "slug": _slugify(f"{schema_name}-{label}-{index + 1}"),
+            "schema": schema_ref,
+            "slug": _slugify(f"{schema_ref}-{label}-{index + 1}"),
         },
         **body,
     }
