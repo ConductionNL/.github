@@ -1059,6 +1059,32 @@ def _drop_refs(node: Any) -> Any:
                 out["type"] = [kind, "null"]
             elif isinstance(kind, list) and "null" not in kind:
                 out["type"] = [*kind, "null"]
+
+        # 🔴 BOOLEAN `exclusiveMinimum` IS DRAFT-04, NOT A DEFECT. Draft-04 and
+        # OpenAPI 3.0 spell "strictly greater than 0" as
+        # `{"minimum": 0, "exclusiveMinimum": true}`; 2020-12 spells it
+        # `{"exclusiveMinimum": 0}`. jsonschema speaks 2020-12 and rejects the
+        # boolean with "True is not of type 'number'".
+        #
+        # THE RUNTIME ACCEPTS BOTH. Measured against opis/json-schema, the
+        # validator OpenRegister actually uses, both spellings reject 0 and
+        # accept 0.5, 1 and 2 — identically. So a schema written in draft-04 is
+        # correct, and reporting it invalid is this checker mistaking its own
+        # dialect for the app's. That mistake has already been made once in this
+        # programme: "55 invalid schemas" was retracted for exactly this reason,
+        # and a real fragment was then rewritten to satisfy the checker, which
+        # broke the app's own test asserting the draft-04 form.
+        #
+        # Normalised for VALIDATION ONLY — the descriptor on disk is untouched.
+        for bound, exclusive in (("minimum", "exclusiveMinimum"), ("maximum", "exclusiveMaximum")):
+            if out.get(exclusive) is True:
+                if isinstance(out.get(bound), (int, float)):
+                    out[exclusive] = out.pop(bound)
+                else:
+                    out.pop(exclusive)
+            elif out.get(exclusive) is False:
+                # Draft-04's explicit "not exclusive" — the bound alone says it.
+                out.pop(exclusive)
         return out
     if isinstance(node, list):
         return [_drop_refs(v) for v in node]
