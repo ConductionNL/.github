@@ -629,6 +629,35 @@ function parseReport(stdout) {
 		fs.rmSync(dir, { recursive: true, force: true })
 	}
 
+	// A6a — a POST-RENAME fleet id is recognised. The 2026-08 `iq` rename
+	// moves per app, so both spellings are live at once in different repos.
+	// FLEET_APP_IDS was written before the rename and kept only the old
+	// names, which made a waiver naming `dossiq:` — an app that had already
+	// shipped that id — fail as "not a known Conduction fleet app id". The
+	// gate's own message tells the author to add it here, so the failure
+	// read as a typo in the waiver rather than a stale list in the gate.
+	//
+	// Both spellings are asserted: dropping the old ones would break every
+	// app that has NOT renamed yet, which is the opposite mistake.
+	{
+		const dir = mkApp([HOME(), HIDDEN], MENU,
+			LAYOUT({ removalsReplacedBy: { HiddenMenu: 'dossiq:SomePage' } }))
+		assert(orphans(dir).length === 0,
+			'cross-app: a post-rename fleet id (dossiq) must be recognised, not read as a typo')
+		assert(waived(dir).length === 1,
+			'cross-app: the post-rename waiver still warns — recognising the id must not upgrade it to a verified waiver')
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+
+	// A6a2 — the PRE-rename spelling of the same app keeps working.
+	{
+		const dir = mkApp([HOME(), HIDDEN], MENU,
+			LAYOUT({ removalsReplacedBy: { HiddenMenu: 'procest:SomePage' } }))
+		assert(orphans(dir).length === 0,
+			'cross-app: the pre-rename id (procest) must keep clearing — apps that have not renamed still use it')
+		fs.rmSync(dir, { recursive: true, force: true })
+	}
+
 	// A6b — the same waiver in an app that DOES declare the dependency. Only
 	// the reported corroboration changes; the verdict must not.
 	{
