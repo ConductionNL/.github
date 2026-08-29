@@ -367,9 +367,40 @@ jobs:
         run: |
           DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/v${{ env.NEW_VERSION }}/${{ inputs.app-name }}-${{ env.NEW_VERSION }}.tar.gz"
 
-          # Always attempt registration (idempotent — already-registered apps return 200/4xx harmlessly)
-          # The /api/v1/apps/{id} lookup endpoint is unreliable (returns 500), so we skip the check.
+          # Registering is NOT harmless for an app that already exists. Per the
+          # store's API, POST /api/v1/apps answers 201 for a first registration
+          # and 204 for "the app was updated, either owner or certificate
+          # change" -- and a certificate change DELETES every existing release
+          # of the app, because their signatures no longer validate against the
+          # new certificate. This step used to say already-registered apps
+          # "return 200/4xx harmlessly", which is how a wrong signing cert in
+          # NEXTCLOUD_SIGNING_CERT would have silently wiped an app's history.
+          #
+          # So compare against what the store actually holds before posting.
+          # The catalogue is the only reliable read: /api/v1/apps/{id} 500s.
+          # Fail closed: if the catalogue cannot be read we do not register
+          # blind, because "no entry" and "no answer" look identical here.
           echo "Ensuring ${{ inputs.app-name }} is registered on App Store..."
+
+          if ! curl -sf --compressed "https://apps.nextcloud.com/api/v1/apps.json" -o /tmp/store-apps.json; then
+            echo "::error::Could not read the App Store catalogue, so the registered certificate cannot be checked. Refusing to register blind."
+            exit 1
+          fi
+
+          STORE_CERT=$(jq -r --arg id "${{ inputs.app-name }}" \
+            '.[] | select(.id==$id) | .certificate' /tmp/store-apps.json)
+
+          if [ -n "$STORE_CERT" ]; then
+            REGISTERED=$(printf '%s' "$STORE_CERT" | tr -d '[:space:]')
+            OURS=$(tr -d '[:space:]' < signing-cert.crt)
+            if [ "$REGISTERED" != "$OURS" ]; then
+              echo "::error::NEXTCLOUD_SIGNING_CERT does not match the certificate registered for ${{ inputs.app-name }} on the App Store. Registering it would DELETE every existing release of this app. Refusing. If this is a deliberate certificate rotation, carry it out knowingly and re-upload the releases afterwards."
+              exit 1
+            fi
+            echo "Certificate matches the one the store has registered."
+          else
+            echo "${{ inputs.app-name }} is not in the catalogue yet, so this is a first registration."
+          fi
 
           REG_SIGNATURE=$(echo -n "${{ inputs.app-name }}" | openssl dgst -sha512 -sign signing-key.key | openssl base64 -A)
           CERT_CONTENT=$(cat signing-cert.crt)
