@@ -10896,6 +10896,63 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# GATE 103 — locale-duplication
+#
+# A locale bundle that is a byte-for-byte copy of ANOTHER language's bundle.
+#
+# On 2026-06-14 one commit — "i18n: add 35 European locale translations +
+# European parity gate" — landed in five apps and populated whole language
+# families by duplication instead of translation. Measured 2026-08-29:
+#
+#     decidiq, learniq, buildiq, shillinq   23-28 language pairs each, identical
+#     be = ru = uk                          every translated value
+#     bs = cs = hr = mk = sk = sl = sr      seven languages, one text
+#     ca = es, da = sv, de = lb, it = rm    every translated value
+#
+# A Czech user of decidiq is served Bosnian; a Ukrainian is served Russian.
+#
+# NOTHING CAUGHT IT FOR TWO AND A HALF MONTHS, and the reason is the point:
+# every l10n check we had passes on these bundles. Key parity passes — the keys
+# are present. The empty-value check passes — nothing is blank. The cognate rule
+# passes — no value equals its English source. A perfect copy of a DIFFERENT
+# language is indistinguishable, to every question we were asking, from finished
+# work. The defect was not a failing check; it was the absence of the check.
+#
+# THE THRESHOLD IS "ALL", DELIBERATELY, NOT A PERCENTAGE. Related languages
+# legitimately overlap — bs and hr sit near 96% in a genuinely translated bundle,
+# and keepiq's families sit at 78-89%, which is a real but different problem. A
+# percentage gate either reddens honest work or is set so high it finds nothing.
+# Two independent translations of a thousand strings are never identical in
+# EVERY one, so exact equality across the whole translated set is not similarity
+# — it is a copy. Verified on real data: fires on the four apps with exact
+# copies, silent on doriath (78-89%), opencatalogi, launchpad and openregister.
+#
+# FULL-TREE, not diff-scoped. The bundles are already wrong; a diff-scoped
+# version would only notice when someone happened to touch one, which is exactly
+# how this survived. The four affected apps go red until their locales are
+# translated, and that is the intended cost.
+# ---------------------------------------------------------------------------
+_dup_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-locale-duplication.log
+: > "${_dup_log}"
+set +e
+python3 "${SCRIPT_DIR}/lib/check_locale_duplication.py" . > "${_dup_log}" 2>&1
+_dup_rc=$?
+set +e
+
+if [ "${_dup_rc}" -eq 0 ]; then
+    _pass 103 "locale-duplication"
+elif [ "${_dup_rc}" -eq 4 ]; then
+    _skip 103 "locale-duplication" na "this repository ships fewer than two comparable locale bundles, so there is no pair to compare. See ${_dup_log}."
+elif ! _helper_finished "${_dup_log}" '^checked [0-9]+ locale'; then
+    _dup_why=$(tail -3 "${_dup_log}" 2>/dev/null | tr '\n' ' ')
+    _skip 103 "locale-duplication" wiring "check_locale_duplication.py exited ${_dup_rc} without printing its terminal 'checked N locale(s)' summary, so cross-locale duplication is UNVERIFIED by this run. Checker output: ${_dup_why:-<empty>}. See ${_dup_log}."
+else
+    _dup_n=$(grep -cE 'translated values identical' "${_dup_log}" 2>/dev/null)
+    case "${_dup_n}" in ''|*[!0-9]*) _dup_n=1 ;; esac
+    _fail 103 "locale-duplication" "${_dup_n} locale pair(s) are a byte-for-byte copy of another language — users who chose one language are served the other. See ${_dup_log}"
+fi
+
+# ---------------------------------------------------------------------------
 # GATE 97 — system-elevation-reachability (ADR-099 rule 9)
 #
 # NUMBERED 97, NOT 96. This gate was written as 96 and #581 landed
