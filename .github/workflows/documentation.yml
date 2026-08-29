@@ -29,6 +29,23 @@ on:
         required: false
         type: string
         default: ""
+      canonical-host:
+        description: >-
+          The ONE hostname this site should be reached on. Optional, and empty
+          by default, which keeps today's behaviour exactly: every host in
+          `docs-hosts` serves the same bytes.
+          Set it after a rename. `docs-hosts` keeps the retired hostname
+          answering — that is what stops old links breaking — but on its own it
+          leaves TWO live copies of every page, so the old app name stays as
+          discoverable as the current one. With this set, any host that is not
+          the canonical one answers 301 to the same path and query on the
+          canonical host, and only the canonical host serves content.
+          It MUST also appear in `docs-hosts`; a canonical host the worker does
+          not answer on would redirect every visitor to a hostname that routes
+          nowhere.
+        required: false
+        type: string
+        default: ""
       worker-name:
         description: >-
           Cloudflare Worker that serves this site. PIN IT. The default derives
@@ -249,6 +266,7 @@ jobs:
           CNAME: ${{ inputs.cname }}
           DOCS_HOSTS: ${{ inputs.docs-hosts }}
           WORKER_NAME: ${{ inputs.worker-name }}
+          CANONICAL_HOST: ${{ inputs.canonical-host }}
         run: |
           set -euo pipefail
 
@@ -261,14 +279,69 @@ jobs:
           cd "$SOURCE_FOLDER"
           rm -rf build/.git
 
+          # WHEN A CANONICAL HOST IS DECLARED, THE OTHER HOSTS REDIRECT TO IT.
+          #
+          # `docs-hosts` makes one worker answer on several hostnames, and it
+          # serves the SAME bytes on each. That is what a rename needs on day
+          # one — the old address must not break — and it is wrong from then on:
+          # openconnector.conduction.nl and integriq.conduction.nl were serving
+          # two identical copies of every page, so the retired name stayed as
+          # discoverable as the current one.
+          #
+          # A worker with only `[assets]` cannot express that, because there is
+          # no code to inspect the Host header. Declaring `canonical-host` adds
+          # a script in front of the asset binding: any request whose hostname
+          # is not the canonical one is answered 301 to the SAME path and query
+          # on the canonical host, and everything else is handed to
+          # `env.ASSETS.fetch(request)` unchanged.
+          #
+          # Delegating rather than reimplementing matters: the asset binding
+          # keeps its own html_handling and 404 behaviour, so a site that opts
+          # in serves exactly what it served before on its canonical host.
+          #
+          # Absent `canonical-host` the generated wrangler.toml is byte-for-byte
+          # what it was, and no script is emitted at all. This is opt-in so that
+          # a rollout cannot regress a site that never asked for it.
+          if [ -n "${CANONICAL_HOST}" ]; then
+            # The hostname reaches the script as a JSON string literal, not as
+            # raw text spliced between quotes, so a stray quote in the input
+            # cannot terminate the string and change what the worker does.
+            CANON_JSON="$(printf '%s' "${CANONICAL_HOST}" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read().strip()))')"
+            cat > docs-redirect-worker.js <<WORKERJS
+          export default {
+            async fetch(request, env) {
+              const url = new URL(request.url);
+              const canonical = ${CANON_JSON};
+              if (url.hostname !== canonical) {
+                url.hostname = canonical;
+                // 301, not 302: the old hostname is retired, not moved for the
+                // afternoon, and only a permanent redirect makes search engines
+                // and caches forget it. Path and query ride along untouched, so
+                // a deep link into the old docs lands on the same page.
+                return Response.redirect(url.toString(), 301);
+              }
+              return env.ASSETS.fetch(request);
+            }
+          };
+          WORKERJS
+          fi
+
           {
             echo "name = \"${WORKER}\""
             echo "compatibility_date = \"2026-05-30\""
             echo "workers_dev = true"
             echo "preview_urls = true"
+            if [ -n "${CANONICAL_HOST}" ]; then
+              echo "main = \"./docs-redirect-worker.js\""
+            fi
             echo ""
             echo "[assets]"
             echo "directory = \"./build\""
+            if [ -n "${CANONICAL_HOST}" ]; then
+              # Only meaningful with a script: this is the name the script
+              # reaches the static files through.
+              echo "binding = \"ASSETS\""
+            fi
             echo ""
             echo "routes = ["
             IFS=,
