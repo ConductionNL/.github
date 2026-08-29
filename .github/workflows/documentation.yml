@@ -334,6 +334,36 @@ jobs:
             if [ -n "${CANONICAL_HOST}" ]; then
               echo "main = \"./docs-redirect-worker.js\""
             fi
+
+            # `routes` MUST BE EMITTED BEFORE `[assets]`, NOT AFTER.
+            #
+            # TOML scopes every key that follows a table header INTO that
+            # table. Written after `[assets]`, this array parsed as
+            # `assets.routes`, so wrangler saw NO top-level routes at all and
+            # attached no custom domain. It said so on every single deploy,
+            # in a line easy to read past:
+            #
+            #   ▲ [WARNING] Processing wrangler.toml configuration:
+            #       - Unexpected fields found in assets field: "routes"
+            #
+            # Two things followed. New workers never got their hostname —
+            # measured 2026-08-29, portaliq and hermiq deployed green and
+            # served on *.workers.dev while portaliq.conduction.nl and
+            # hermiq.conduction.nl had no DNS record at all. And the
+            # reconciliation this file documents ("a host omitted from
+            # docs-hosts is REMOVED from the worker") never once ran; the
+            # sites that do work have domains someone attached by hand on
+            # 2026-08-23.
+            echo ""
+            echo "routes = ["
+            IFS=,
+            for h in $HOSTS; do
+              h="$(echo "$h" | tr -d '[:space:]')"
+              [ -n "$h" ] || continue
+              echo "  { pattern = \"${h}\", custom_domain = true },"
+            done
+            echo "]"
+            unset IFS
             echo ""
             echo "[assets]"
             echo "directory = \"./build\""
@@ -355,15 +385,6 @@ jobs:
               # running rather than the route being wrong.
               echo "run_worker_first = true"
             fi
-            echo ""
-            echo "routes = ["
-            IFS=,
-            for h in $HOSTS; do
-              h="$(echo "$h" | tr -d '[:space:]')"
-              [ -n "$h" ] || continue
-              echo "  { pattern = \"${h}\", custom_domain = true },"
-            done
-            echo "]"
           } > wrangler.toml
 
           echo "── publishing ${WORKER} for: ${HOSTS}"
