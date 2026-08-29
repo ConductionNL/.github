@@ -946,6 +946,119 @@ jobs:
             --auto \
             || echo "::warning::Could not set auto-merge on the version-bump PR for $BR — it stays open and ${{ github.ref_name }} remains one version behind the tag. Check that allow_auto_merge is enabled on this repository."
 
+      # ── SYNC THE RELEASE BRANCH BACK INTO `development` ────────────────
+      #
+      # A release COMMITS a version bump onto the branch it ran from. Nothing
+      # ever carried those commits back, so `development` fell permanently
+      # behind `beta`, and because BOTH branches had then changed the version
+      # file independently, the next `development -> beta` promotion conflicted
+      # on it. Every promotion. Measured across the fleet 2026-08-29: all 20
+      # apps with a `beta` branch were behind it — keepiq by 32 commits, filinq
+      # by 35, integriq by 26 — and openregister's promotion PR sat `dirty` for
+      # nine days because of exactly this.
+      #
+      # The drift REGENERATES after every release, so clearing it by hand is a
+      # chore with no end. This closes the loop where it is created.
+      #
+      # Only from the long-lived release branches: `development` releases have
+      # nowhere to sync back to.
+      - name: Sync the release branch back into development
+        if: ${{ github.ref_name == 'beta' || github.ref_name == 'main' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          SRC="${{ github.ref_name }}"
+          BR="sync/${SRC}-to-development-${{ env.NEW_VERSION }}"
+
+          git fetch --quiet origin development "$SRC" || {
+            echo "::warning::Could not fetch development; skipping the sync."
+            exit 0
+          }
+          if ! git rev-parse --verify --quiet origin/development >/dev/null; then
+            echo "This repository has no development branch; nothing to sync."
+            exit 0
+          fi
+          if git merge-base --is-ancestor "origin/${SRC}" origin/development; then
+            echo "development already contains ${SRC}; nothing to sync."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -q -B "$BR" origin/development
+
+          # The ONLY conflict this may legitimately resolve is the version,
+          # which both branches bump independently. `--ours` here is
+          # development's side: its unstable line is ahead of the released
+          # one, so keeping it never moves a version backwards. Anything else
+          # that conflicts is a real disagreement and stops for a human --
+          # resolving those automatically is how a sync silently drops work.
+          git merge --no-commit --no-ff "origin/${SRC}" >/dev/null 2>&1 || true
+          for F in appinfo/info.xml openapi.json package.json package-lock.json; do
+            if git diff --name-only --diff-filter=U | grep -qxF "$F"; then
+              git checkout --ours -- "$F" && git add "$F" \
+                && echo "Resolved $F to development's version (the higher line)."
+            fi
+          done
+
+          LEFT="$(git diff --name-only --diff-filter=U)"
+          if [ -n "$LEFT" ]; then
+            git merge --abort || true
+            echo "::warning::${SRC} -> development has conflicts outside the version files, so no sync PR was opened. Resolve by hand: $(echo "$LEFT" | tr '\n' ' ')"
+            exit 0
+          fi
+
+          # A 0-file merge is the NORMAL and correct outcome once the content
+          # has already reached development by other means. Recording the
+          # ancestry IS the payload: without it the merge base never moves and
+          # the next promotion conflicts exactly as before.
+          git commit -q --no-verify -m "chore(release): sync ${SRC} back into development
+
+          The ${{ env.NEW_VERSION }} release bumped the version on ${SRC}. Without this,
+          development stays behind ${SRC} and the next development -> ${SRC} promotion
+          conflicts on the version file.
+
+          Version files resolve to development's side, which is the higher line,
+          so this never moves a version backwards." || {
+            echo "Nothing to commit; development is already in step."
+            exit 0
+          }
+
+          git push -q origin "$BR" || {
+            echo "::warning::Could not push ${BR}; no sync PR opened."
+            exit 0
+          }
+
+          gh pr create \
+            --repo "${{ github.repository }}" \
+            --base development \
+            --head "$BR" \
+            --title "chore(release): sync ${SRC} back into development" \
+            --body "Opened by the release workflow after publishing ${{ env.NEW_VERSION }} from \`${SRC}\`.
+
+          A release commits a version bump onto the branch it ran from. Without carrying
+          that back, \`development\` falls behind \`${SRC}\`, and since both branches then
+          changed the version file independently, the next \`development -> ${SRC}\`
+          promotion conflicts on it — every time.
+
+          Version files are resolved to development's side, the higher line, so this
+          cannot move a version backwards. Any other conflict stops the workflow instead
+          of being resolved automatically.
+
+          **Merge this, do not squash.** A squash copies the files and discards the
+          relationship: the merge base would not move and the next promotion would
+          conflict exactly as before. A 0-file diff here is normal and is not a no-op —
+          recording the ancestry is the whole point." \
+            || { echo "::warning::Could not open the sync PR for ${BR}."; exit 0; }
+
+          # --merge, never --squash: see the PR body.
+          gh pr merge "$BR" \
+            --repo "${{ github.repository }}" \
+            --merge \
+            --auto \
+            || echo "::warning::Could not arm auto-merge on ${BR}; it stays open. Merge it with a MERGE COMMIT, not a squash."
+
       - name: Copy files into package directory
         run: |
           mkdir -p package/${{ inputs.app-name }}
