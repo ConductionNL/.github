@@ -6952,7 +6952,34 @@ jobs:
           # pin handed this flag aborts with
           # `FATAL: --app-dir '--axe-enabled' is not a directory. No gate ran.`
           # and exits 99: every gate lost, for a flag the caller never typed.
-          if [ "${{ inputs.enable-axe }}" = "true" ]; then
+          # WITHHELD ON A PULL REQUEST INTO `development`, and this guard must
+          # stay byte-for-byte in step with the one on the axe-report download
+          # step above. The Playwright job is the ONLY producer of
+          # tests/axe/report.json and does not run there by design, so telling
+          # the runner the caller opted in makes gate-33 APPLICABLE with no
+          # input — which `--require-full-coverage` counts as a coverage gap and
+          # turns into a failed job. Not hypothetical: it took zaakafhandelapp
+          # #515 red on `62 of 63 applicable gates ran`, gate-33 the one, over a
+          # change that touched nothing but tests/e2e.
+          #
+          # This pairing was shipped once (#622) and a refactor (#606) dropped
+          # BOTH halves of it. #637 restored the E2E-off-development-PRs half
+          # today; this restores the half that has to travel with it. A skip on
+          # the producer and enforcement on the consumer are two checks over one
+          # artefact that cannot both be satisfied.
+          #
+          # Deliberately the SAME predicate as the download step rather than
+          # `needs.playwright.result == 'skipped'`: a skip caused by
+          # `enable-playwright: false` is a caller misconfiguration that must
+          # keep failing loudly with its named error, not be quietly excused.
+          AXE_PRODUCER_RAN=true
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.base_ref }}" = "development" ]; then
+            AXE_PRODUCER_RAN=false
+          fi
+          if [ "${{ inputs.enable-axe }}" = "true" ] && [ "${AXE_PRODUCER_RAN}" = "false" ]; then
+            echo "::notice::enable-axe is on, but Playwright does not run on a pull request into development, so no axe report exists to judge. gate-33 is withheld here and enforced on the development->beta and beta->main promotions, where the producer runs."
+          fi
+          if [ "${{ inputs.enable-axe }}" = "true" ] && [ "${AXE_PRODUCER_RAN}" = "true" ]; then
             if [ "${{ steps.gatecap.outputs.categories }}" = "1" ]; then
               ARGS="${ARGS} --axe-enabled"
             else
