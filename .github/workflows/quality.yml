@@ -544,11 +544,32 @@ on:
       #
       # The fleet was not slow because the checks are slow. A Code Quality run
       # does ~38 job-minutes of work and its longest single job is 16 minutes,
-      # but the median successful run took 78.5 minutes wall clock, because
-      # every job queued behind the account's 60-concurrent-job ceiling: one
-      # instantaneous poll found 53 jobs running, 1,528 queued, and a run that
-      # had been waiting 425 minutes to start. 100% of sampled jobs waited more
-      # than 10 minutes for a runner; the median wait was 28.6 minutes.
+      # but the median successful run took 78.5 minutes wall clock. THE WALL
+      # CLOCK IS QUEUE TIME: every one of 272 sampled jobs waited more than ten
+      # minutes for a runner before executing, median 28.6 minutes, and a run
+      # was observed 425 minutes old and still not started.
+      #
+      # That wait is measured on jobs that ACTUALLY EXECUTED, comparing each
+      # job's `created_at` with its `started_at` — and `started_at` was checked
+      # against `steps[0].started_at` and agrees to within a second, so it is
+      # execution start and not queue entry.
+      #
+      # The account ceiling is 60 concurrent jobs (GitHub Team). Replaying the
+      # execution intervals of 5,108 jobs across all workflows and all 21 repos
+      # over 13:00-15:00 UTC gives a PEAK of 61 simultaneous executing jobs and
+      # a p99 of 57 — i.e. the account really was sitting on its cap.
+      #
+      # ⚠️ TWO EARLIER MEASUREMENTS OF THIS WERE WRONG, in opposite directions,
+      # and both looked plausible:
+      #   * Polling every repo for in-flight jobs takes ~4 minutes, so it SUMS
+      #     jobs that ran at different moments. It reported 53, then 78. It is a
+      #     smear, not a snapshot, and cannot measure concurrency at all.
+      #   * Replaying `job.started_at`..`job.completed_at` reported 442. A job
+      #     CANCELLED WHILE STILL QUEUED has `started_at == created_at`, a real
+      #     `completed_at`, and NO steps — it never ran, but it counts as
+      #     running for its whole queued life. 28% of runs today were cancelled.
+      # Only step-derived intervals measure execution. Both wrong numbers were
+      # reported before they were checked; the check is what produced 61.
       #
       # Nothing below makes a check faster. They remove DEMAND, which is the
       # only thing that shortens a queue.
@@ -562,11 +583,16 @@ on:
         required: false
         type: string
         default: "lib/** src/** tests/** appinfo/** composer.json composer.lock package.json package-lock.json .github/workflows/**"
-      reduce-pr-matrix:
-        description: "On a pull_request whose BASE IS `development`, run PHPUnit on the PRIMARY php-version against the NEWEST declared Nextcloud only, instead of the full php-test-versions x declared-range product. DEFAULT TRUE since 2026-08-27. The full product still runs in the three places it earns its cost: every push to a default branch, the development->beta promotion PR, and the beta->main promotion PR — so the declared range is exercised on every merge AND at both gates before a version reaches users. Only the continuous case, a feature branch merging into `development`, is reduced. An unrecognised base branch falls through to the full matrix, so the failure direction is more testing rather than less. The reasoning is that version-drift does not appear between two commits an hour apart; it appears when a dependency or a Nextcloud minor moves, and a push-time plus promotion-time matrix catches that just as well at a fraction of the queue cost. Measured: 6 legs at ~2.2 min each, of which ~46s is the test suite and ~85s is container init, two checkouts and a Nextcloud install repeated per leg. Set false to restore the full product on every event."
+      consolidate-tool-legs:
+        description: "Run each tool FAMILY as one job instead of one job per tool: PHP Quality 6 legs -> 1, Vue Quality 2 -> 1, Security 2 -> 1. OPT-IN, default false. Every leg is a separate claim on a runner slot, and slots are this fleet's constraint, not minutes — psalm's leg spends 22 seconds on psalm inside a 36-second job, and each of those jobs waited a median of 28.6 minutes for a runner. Consolidating also pays the composer install and toolchain setup ONCE per family instead of once per tool. The cost is losing per-tool parallelism, so a family becomes as slow as its tools summed — about two extra minutes, against a 28-minute queue wait. PER-TOOL REPORTING IS UNCHANGED: the consolidated job still uploads one artifact per tool, each carrying that tool's OWN exit code, so the Quality Report's per-tool table renders exactly as before and is in fact more accurate than the split legs, which recorded the job status rather than the tool's. `license` is deliberately NOT consolidated — its per-ecosystem license-report artifact is downloaded and parsed by the report, so collapsing it would mean changing the producer's layout and the report's parser together, for a saving of one slot."
         required: false
         type: boolean
-        default: true
+        default: false
+      reduce-pr-matrix:
+        description: "On a pull_request event, run PHPUnit on the PRIMARY php-version against the NEWEST declared Nextcloud only, instead of the full php-test-versions x declared-range product. OPT-IN, default false. The full matrix still runs on every push to a default branch, so the declared range is exercised on every merge and on the release PR into beta — breadth moves from per-commit to per-merge, it is not dropped. The reasoning is that version-drift does not appear between two commits an hour apart; it appears when a dependency or a Nextcloud minor moves, and a push-time matrix catches that just as well at a fraction of the queue cost. Measured: 6 legs at ~2.2 min each, of which ~46s is the test suite and ~85s is container init, two checkouts and a Nextcloud install repeated per leg."
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   # KEYED BY EVENT AS WELL AS REF, so a deliberately-requested run is not
@@ -807,7 +833,10 @@ jobs:
     timeout-minutes: 20
     strategy:
       matrix:
-        tool: [lint, phpcs, phpmd, psalm, phpstan, phpmetrics]
+        # ONE LEG ("all") when consolidated, six when not. `fromJSON` on both
+        # arms: a matrix vector that evaluates to a bare string does not shrink
+        # the matrix, it DELETES the job.
+        tool: ${{ inputs.consolidate-tool-legs && fromJSON('["all"]') || fromJSON('["lint", "phpcs", "phpmd", "psalm", "phpstan", "phpmetrics"]') }}
       fail-fast: false
 
     steps:
@@ -862,29 +891,33 @@ jobs:
           # declaration from composer.json rather than from the exit code.
           # Deliberately NOT an `[ -f vendor/bin/<tool> ]` guard — a file-presence
           # guard that skips is the same silent-pass defect in a new costume.
+          # `return 1`, not `exit 1`: this is called from inside run_tool() below,
+          # and an `exit` there would kill the whole step mid-family instead of
+          # failing one tool and continuing to the next.
           require_script() {
             tool="$1"
             hint="$2"
             if [ ! -f composer.json ]; then
               echo "::error::The '$tool' gate is enabled but there is no composer.json in the repository root."
-              exit 1
+              return 1
             fi
             if ! jq -e --arg s "$tool" '(.scripts // {}) | has($s)' composer.json > /dev/null 2>&1; then
               echo "::error::The '$tool' gate is enabled but composer.json declares no '$tool' script. Add it under \"scripts\", or turn the gate off with $hint."
-              exit 1
+              return 1
             fi
           }
-          case "${{ matrix.tool }}" in
+          run_tool() {
+            case "$1" in
             lint)
-              require_script lint "the enable-php input"
-              composer lint
+              require_script lint "the enable-php input" || return 1
+              composer lint || return $?
               ;;
             phpcs)
               if [ "${{ inputs.enable-phpcs }}" != "true" ]; then
                 echo "PHPCS is disabled — skipping."
-                exit 0
+                return 0
               fi
-              require_script phpcs "the enable-phpcs input"
+              require_script phpcs "the enable-phpcs input" || return 1
               #
               # ⚠️ THE EXIT CODES ARE NOT WHAT THIS BLOCK USED TO CLAIM.
               #
@@ -977,53 +1010,148 @@ jobs:
                   echo "::error::PHPCS found errors (exit $RC). Warnings are non-blocking and are NOT counted here — this is errors only."
                 fi
               fi
-              exit $RC
+              return $RC
               ;;
             phpmd)
               if [ "${{ inputs.enable-phpmd }}" != "true" ]; then
                 echo "PHPMD is disabled — skipping."
-                exit 0
+                return 0
               fi
-              require_script phpmd "the enable-phpmd input"
-              composer phpmd
+              require_script phpmd "the enable-phpmd input" || return 1
+              composer phpmd || return $?
               ;;
             psalm)
               if [ "${{ inputs.enable-psalm }}" != "true" ]; then
                 echo "Psalm is disabled — skipping."
-                exit 0
+                return 0
               fi
-              require_script psalm "the enable-psalm input"
-              composer psalm
+              require_script psalm "the enable-psalm input" || return 1
+              composer psalm || return $?
               ;;
             phpstan)
               if [ "${{ inputs.enable-phpstan }}" != "true" ]; then
                 echo "PHPStan is disabled — skipping."
-                exit 0
+                return 0
               fi
-              require_script phpstan "the enable-phpstan input"
-              composer phpstan
+              require_script phpstan "the enable-phpstan input" || return 1
+              composer phpstan || return $?
               ;;
             phpmetrics)
               if [ "${{ inputs.enable-phpmetrics }}" != "true" ]; then
                 echo "phpmetrics is disabled — skipping."
-                exit 0
+                return 0
               fi
-              require_script phpmetrics "the enable-phpmetrics input"
-              composer phpmetrics
+              require_script phpmetrics "the enable-phpmetrics input" || return 1
+              composer phpmetrics || return $?
               ;;
-          esac
+            *)
+              echo "::error::unknown tool '$1' — the matrix and run_tool have drifted apart."
+              return 1
+              ;;
+            esac
+          }
 
+          # ── One job, N tools ───────────────────────────────────────────────
+          #
+          # `set -e` is ACTIVE in a GitHub `run:` block, but it is SUSPENDED
+          # inside a function invoked on the left of `||`. That is why every
+          # tool invocation inside run_tool() carries an explicit
+          # `|| return $?`: without it a failing tool would fall through to the
+          # end of its case arm and the function would return 0 — a red tool
+          # reported as green, in the job that exists to catch red tools.
+          TOOLS="${{ matrix.tool }}"
+          [ "$TOOLS" = "all" ] && TOOLS="lint phpcs phpmd psalm phpstan phpmetrics"
+
+          mkdir -p quality-results
+          FAILED=""
+          for T in $TOOLS; do
+            echo "::group::$T"
+            RC=0
+            # SUBSHELL: a tool that `cd`s (npm audit does) must not move the
+            # working directory for the next tool in the family.
+            ( run_tool "$T" ) || RC=$?
+            echo "::endgroup::"
+            if [ "$RC" -eq 0 ]; then
+              echo success > "quality-results/$T.txt"
+            else
+              echo failure > "quality-results/$T.txt"
+              FAILED="$FAILED $T"
+              echo "::error::$T failed (exit $RC)."
+            fi
+          done
+
+          if [ -n "$FAILED" ]; then
+            echo "::error::PHP Quality failed:$FAILED"
+            exit 1
+          fi
+          echo "PHP Quality: all of [$TOOLS] passed."
+
+      # FILLS IN WHAT THE RUN STEP COULD NOT WRITE. In the normal path the run
+      # step above has already recorded each tool's own exit code. This step
+      # exists for the case where the job died BEFORE that loop — a failed
+      # `composer install`, a cancelled runner — where no per-tool file exists
+      # and the report would otherwise read "skipped" for every one of them.
+      # `job.status` is the honest answer there: they did not run, and the job
+      # failed.
       - name: Record result
         if: always()
         run: |
           mkdir -p quality-results
-          echo "${{ job.status }}" > quality-results/${{ matrix.tool }}.txt
-      - name: Upload result
+          TOOLS="${{ matrix.tool }}"
+          [ "$TOOLS" = "all" ] && TOOLS="lint phpcs phpmd psalm phpstan phpmetrics"
+          for T in $TOOLS; do
+            [ -s "quality-results/$T.txt" ] || echo "${{ job.status }}" > "quality-results/$T.txt"
+          done
+      # One artifact PER TOOL even when the legs are consolidated, because the
+      # Quality Report reads `results/result-php-quality-lint/lint.txt` and its
+      # `read_result()` returns "skipped" for a missing file. A single combined
+      # artifact would render every tool as skipped and the report would say so
+      # in the required check, confidently and wrongly.
+      # `if-no-files-found: ignore` is what makes one step list serve both
+      # modes: in split mode this leg holds only its own file and the other
+      # five steps create nothing.
+      - name: "Upload result (lint)"
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: result-php-quality-${{ matrix.tool }}
-          path: quality-results/
+          name: result-php-quality-lint
+          path: quality-results/lint.txt
+          if-no-files-found: ignore
+      - name: "Upload result (phpcs)"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-php-quality-phpcs
+          path: quality-results/phpcs.txt
+          if-no-files-found: ignore
+      - name: "Upload result (phpmd)"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-php-quality-phpmd
+          path: quality-results/phpmd.txt
+          if-no-files-found: ignore
+      - name: "Upload result (psalm)"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-php-quality-psalm
+          path: quality-results/psalm.txt
+          if-no-files-found: ignore
+      - name: "Upload result (phpstan)"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-php-quality-phpstan
+          path: quality-results/phpstan.txt
+          if-no-files-found: ignore
+      - name: "Upload result (phpmetrics)"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-php-quality-phpmetrics
+          path: quality-results/phpmetrics.txt
+          if-no-files-found: ignore
 
   # ── occ app:check-code — private and deprecated Nextcloud API usage ────
   #
@@ -1347,7 +1475,7 @@ jobs:
         working-directory: ${{ inputs.frontend-path }}
     strategy:
       matrix:
-        tool: [eslint, stylelint]
+        tool: ${{ inputs.consolidate-tool-legs && fromJSON('["all"]') || fromJSON('["eslint", "stylelint"]') }}
       fail-fast: false
 
     steps:
@@ -1366,34 +1494,105 @@ jobs:
 
       - name: Run ${{ matrix.tool }}
         run: |
-          case "${{ matrix.tool }}" in
+          # `|| return $?` on every tool: `set -e` is suspended inside a function
+          # called on the left of `||`, so without it a failing linter would
+          # fall through its case arm and the family would report green.
+          run_tool() {
+            case "$1" in
             eslint)
               if [ "${{ inputs.enable-eslint }}" != "true" ]; then
                 echo "ESLint is disabled — skipping."
-                exit 0
+                return 0
               fi
-              npm run lint
+              npm run lint || return $?
               ;;
             stylelint)
               if [ "${{ inputs.enable-stylelint }}" != "true" ]; then
                 echo "Stylelint is disabled — skipping."
-                exit 0
+                return 0
               fi
-              npm run stylelint
+              npm run stylelint || return $?
               ;;
-          esac
+            *)
+              echo "::error::unknown tool '$1' — the matrix and run_tool have drifted apart."
+              return 1
+              ;;
+            esac
+          }
 
+          # ── One job, N tools ───────────────────────────────────────────────
+          #
+          # `set -e` is ACTIVE in a GitHub `run:` block, but it is SUSPENDED
+          # inside a function invoked on the left of `||`. That is why every
+          # tool invocation inside run_tool() carries an explicit
+          # `|| return $?`: without it a failing tool would fall through to the
+          # end of its case arm and the function would return 0 — a red tool
+          # reported as green, in the job that exists to catch red tools.
+          TOOLS="${{ matrix.tool }}"
+          [ "$TOOLS" = "all" ] && TOOLS="eslint stylelint"
+
+          mkdir -p ${{ inputs.frontend-path }}/quality-results
+          FAILED=""
+          for T in $TOOLS; do
+            echo "::group::$T"
+            RC=0
+            # SUBSHELL: a tool that `cd`s (npm audit does) must not move the
+            # working directory for the next tool in the family.
+            ( run_tool "$T" ) || RC=$?
+            echo "::endgroup::"
+            if [ "$RC" -eq 0 ]; then
+              echo success > "${{ inputs.frontend-path }}/quality-results/$T.txt"
+            else
+              echo failure > "${{ inputs.frontend-path }}/quality-results/$T.txt"
+              FAILED="$FAILED $T"
+              echo "::error::$T failed (exit $RC)."
+            fi
+          done
+
+          if [ -n "$FAILED" ]; then
+            echo "::error::Vue Quality failed:$FAILED"
+            exit 1
+          fi
+          echo "Vue Quality: all of [$TOOLS] passed."
+
+      # FILLS IN WHAT THE RUN STEP COULD NOT WRITE. In the normal path the run
+      # step above has already recorded each tool's own exit code. This step
+      # exists for the case where the job died BEFORE that loop — a failed
+      # `composer install`, a cancelled runner — where no per-tool file exists
+      # and the report would otherwise read "skipped" for every one of them.
+      # `job.status` is the honest answer there: they did not run, and the job
+      # failed.
       - name: Record result
         if: always()
         run: |
           mkdir -p quality-results
-          echo "${{ job.status }}" > quality-results/${{ matrix.tool }}.txt
-      - name: Upload result
+          TOOLS="${{ matrix.tool }}"
+          [ "$TOOLS" = "all" ] && TOOLS="eslint stylelint"
+          for T in $TOOLS; do
+            [ -s "quality-results/$T.txt" ] || echo "${{ job.status }}" > "quality-results/$T.txt"
+          done
+      # One artifact PER TOOL even when the legs are consolidated, because the
+      # Quality Report reads `results/result-vue-quality-eslint/eslint.txt` and its
+      # `read_result()` returns "skipped" for a missing file. A single combined
+      # artifact would render every tool as skipped and the report would say so
+      # in the required check, confidently and wrongly.
+      # `if-no-files-found: ignore` is what makes one step list serve both
+      # modes: in split mode this leg holds only its own file and the other
+      # five steps create nothing.
+      - name: "Upload result (eslint)"
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: result-vue-quality-${{ matrix.tool }}
-          path: ${{ inputs.frontend-path }}/quality-results/
+          name: result-vue-quality-eslint
+          path: ${{ inputs.frontend-path }}/quality-results/eslint.txt
+          if-no-files-found: ignore
+      - name: "Upload result (stylelint)"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-vue-quality-stylelint
+          path: ${{ inputs.frontend-path }}/quality-results/stylelint.txt
+          if-no-files-found: ignore
 
   # ── Group 2b: Custom frontend checks ───────────
   #
@@ -1869,7 +2068,7 @@ jobs:
     timeout-minutes: 20
     strategy:
       matrix:
-        ecosystem: [composer, npm]
+        ecosystem: ${{ inputs.consolidate-tool-legs && fromJSON('["all"]') || fromJSON('["composer", "npm"]') }}
       fail-fast: false
 
     steps:
@@ -1877,7 +2076,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup PHP
-        if: matrix.ecosystem == 'composer'
+        # `!= 'npm'` rather than `== 'composer'`: in the consolidated leg
+        # (ecosystem 'all') BOTH toolchains must be installed, and in a split
+        # leg exactly one still is. Same inversion on the npm steps below.
+        if: matrix.ecosystem != 'npm'
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ inputs.php-version }}
@@ -1892,7 +2094,7 @@ jobs:
       # `composer.lock` and `composer.json` are listed because three fleet repos
       # ship no lockfile; `hashFiles` skips patterns that match nothing.
       - name: Cache Composer downloads
-        if: matrix.ecosystem == 'composer' && inputs.enable-php
+        if: matrix.ecosystem != 'npm' && inputs.enable-php
         uses: actions/cache@v4
         with:
           path: ~/.cache/composer
@@ -1907,7 +2109,7 @@ jobs:
       # gate failed with it — a permanent red on every repo that legitimately
       # has no package.json. Observed on ConductionNL/hydra 2026-08-04.
       - name: Setup Node.js
-        if: matrix.ecosystem == 'npm' && inputs.enable-npm
+        if: matrix.ecosystem != 'composer' && inputs.enable-npm
         uses: actions/setup-node@v4
         with:
           node-version: "${{ inputs.node-version }}"
@@ -1918,11 +2120,12 @@ jobs:
         env:
           FRONTEND_PATH: ${{ inputs.frontend-path }}
         run: |
-          case "${{ matrix.ecosystem }}" in
+          run_tool() {
+            case "$1" in
             composer)
               if [ "${{ inputs.enable-php }}" != "true" ]; then
                 echo "PHP toolchain is disabled — skipping composer audit."
-                exit 0
+                return 0
               fi
               # RETRIED, because this step reaches the network for the advisory
               # feed and a transport failure is not a security finding.
@@ -2008,10 +2211,10 @@ jobs:
             npm)
               if [ "${{ inputs.enable-npm }}" != "true" ]; then
                 echo "npm ecosystem is disabled — skipping npm audit."
-                exit 0
+                return 0
               fi
-              cd "$FRONTEND_PATH"
-              npm ci
+              cd "$FRONTEND_PATH" || return $?
+              npm ci || return $?
               # Tolerate an unavailable npm advisory endpoint: npm is retiring
               # the audits/quick endpoint and it intermittently 400s ("audit
               # endpoint returned an error" / "Invalid package tree"). That is an
@@ -2023,22 +2226,89 @@ jobs:
               if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -qiE "audit endpoint returned an error|Invalid package tree|ECONNRESET|ETIMEDOUT|ENOTFOUND|being retired|Service Unavailable"; then
                 echo "::warning::npm audit skipped — npm advisory endpoint unavailable (external); not a vulnerability."
               elif [ "$rc" -ne 0 ]; then
-                exit "$rc"
+                return "$rc"
               fi
               ;;
-          esac
+            *)
+              echo "::error::unknown ecosystem '$1' — the matrix and run_tool have drifted apart."
+              return 1
+              ;;
+            esac
+          }
 
+          # ── One job, N tools ───────────────────────────────────────────────
+          #
+          # `set -e` is ACTIVE in a GitHub `run:` block, but it is SUSPENDED
+          # inside a function invoked on the left of `||`. That is why every
+          # tool invocation inside run_tool() carries an explicit
+          # `|| return $?`: without it a failing tool would fall through to the
+          # end of its case arm and the function would return 0 — a red tool
+          # reported as green, in the job that exists to catch red tools.
+          TOOLS="${{ matrix.ecosystem }}"
+          [ "$TOOLS" = "all" ] && TOOLS="composer npm"
+
+          mkdir -p quality-results
+          FAILED=""
+          for T in $TOOLS; do
+            echo "::group::$T"
+            RC=0
+            # SUBSHELL: a tool that `cd`s (npm audit does) must not move the
+            # working directory for the next tool in the family.
+            ( run_tool "$T" ) || RC=$?
+            echo "::endgroup::"
+            if [ "$RC" -eq 0 ]; then
+              echo success > "quality-results/$T.txt"
+            else
+              echo failure > "quality-results/$T.txt"
+              FAILED="$FAILED $T"
+              echo "::error::$T failed (exit $RC)."
+            fi
+          done
+
+          if [ -n "$FAILED" ]; then
+            echo "::error::Security failed:$FAILED"
+            exit 1
+          fi
+          echo "Security: all of [$TOOLS] passed."
+
+      # FILLS IN WHAT THE RUN STEP COULD NOT WRITE. In the normal path the run
+      # step above has already recorded each tool's own exit code. This step
+      # exists for the case where the job died BEFORE that loop — a failed
+      # `composer install`, a cancelled runner — where no per-tool file exists
+      # and the report would otherwise read "skipped" for every one of them.
+      # `job.status` is the honest answer there: they did not run, and the job
+      # failed.
       - name: Record result
         if: always()
         run: |
           mkdir -p quality-results
-          echo "${{ job.status }}" > quality-results/${{ matrix.ecosystem }}.txt
-      - name: Upload result
+          TOOLS="${{ matrix.ecosystem }}"
+          [ "$TOOLS" = "all" ] && TOOLS="composer npm"
+          for T in $TOOLS; do
+            [ -s "quality-results/$T.txt" ] || echo "${{ job.status }}" > "quality-results/$T.txt"
+          done
+      # One artifact PER TOOL even when the legs are consolidated, because the
+      # Quality Report reads `results/result-security-composer/composer.txt` and its
+      # `read_result()` returns "skipped" for a missing file. A single combined
+      # artifact would render every tool as skipped and the report would say so
+      # in the required check, confidently and wrongly.
+      # `if-no-files-found: ignore` is what makes one step list serve both
+      # modes: in split mode this leg holds only its own file and the other
+      # five steps create nothing.
+      - name: "Upload result (composer)"
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: result-security-${{ matrix.ecosystem }}
-          path: quality-results/
+          name: result-security-composer
+          path: quality-results/composer.txt
+          if-no-files-found: ignore
+      - name: "Upload result (npm)"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-security-npm
+          path: quality-results/npm.txt
+          if-no-files-found: ignore
 
   # ── Group 4: License Compliance ─────────────────
   #
@@ -2918,27 +3188,11 @@ jobs:
 
     strategy:
       matrix:
-        # REDUCED ON PULL REQUESTS INTO `development` ONLY.
-        #
-        # The reduction used to apply to every pull_request, which also caught
-        # the two promotion PRs — development→beta and beta→main. Those are the
-        # ones where the declared Nextcloud range most needs exercising, because
-        # they are the last gate before a version reaches users, and they happen
-        # a handful of times a day rather than continuously. Narrowing the
-        # reduction to `base == development` keeps the full product exactly
-        # where it earns its cost and drops it where it does not: a feature
-        # branch merging into `development`, which is the overwhelming majority
-        # of runs.
-        #
-        # The full product ALSO still runs on every push to a default branch, so
-        # the range is exercised on every merge as well as on both promotions.
-        # Breadth moves from per-commit to per-merge; it is not dropped.
-        #
-        # A base branch this expression does not recognise — a stacked feature
-        # branch, a repo that names its integration branch something else —
-        # falls through to the FULL matrix. The failure direction is more
-        # testing, not less.
-        php-version: ${{ (inputs.reduce-pr-matrix && github.event_name == 'pull_request' && github.base_ref == 'development') && fromJSON(format('["{0}"]', inputs.php-version)) || fromJSON(inputs.php-test-versions) }}
+        # REDUCED ON PULL REQUESTS when the caller sets reduce-pr-matrix. The
+        # full product still runs on every push to a default branch, so the
+        # declared range is exercised on every merge and on the release PR into
+        # beta — breadth moves from per-commit to per-merge, it is not dropped.
+        php-version: ${{ (inputs.reduce-pr-matrix && github.event_name == 'pull_request') && fromJSON(format('["{0}"]', inputs.php-version)) || fromJSON(inputs.php-test-versions) }}
         # DERIVED from appinfo/info.xml by the `nextcloud-matrix` job, not read
         # from an input any more. The `needs:` edge below is what makes this
         # expression resolvable; without it the matrix evaluates to nothing and
@@ -2956,7 +3210,7 @@ jobs:
         # to any OTHER combination — the declared floor, say — would have left
         # that condition unsatisfiable and the coverage ratchet would simply
         # never have run on a pull request, silently and with nothing red.
-        nextcloud-ref: ${{ (inputs.reduce-pr-matrix && github.event_name == 'pull_request' && github.base_ref == 'development') && fromJSON(format('["{0}"]', needs.nextcloud-matrix.outputs.single-server)) || fromJSON(needs.nextcloud-matrix.outputs.branches) }}
+        nextcloud-ref: ${{ (inputs.reduce-pr-matrix && github.event_name == 'pull_request') && fromJSON(format('["{0}"]', needs.nextcloud-matrix.outputs.single-server)) || fromJSON(needs.nextcloud-matrix.outputs.branches) }}
         # An empty database-test-matrix collapses to the single `database`
         # input, which is what every caller uses today — so the matrix keeps
         # exactly its current dimensions until an app opts in. Routed through
@@ -3375,37 +3629,12 @@ jobs:
           # and `beta` are protected long-lived integration branches and no
           # feature branch is named either, so a pull request whose HEAD is one
           # of them is a promotion by construction.
-          # A promotion can also arrive on a `hotfix/*` head. When the merge
-          # needs conflict resolution it cannot be pushed to the protected
-          # branch directly, so it is carried on a hotfix branch instead --
-          # measured 2026-08-28 on openregister#2975 (hotfix/... -> main),
-          # which was red on this step alone while five of its six PHPUnit
-          # cells were green, because main's tree fatals under NC stable34
-          # (`OCP\DB\IResult@anonymous contains 6 abstract methods`).
-          #
-          # Branch protection sanctions exactly `hotfix/* -> beta|main`, so
-          # that pair is scoped here and nothing wider. A genuine hotfix aimed
-          # at main matches too, and for those the committed .coverage-baseline
-          # floor is what stays enforced -- the same trade the head-ref branch
-          # above already makes, not a new one.
-          #
-          # KEEP THIS PREDICATE BYTE-IDENTICAL TO ITS TWIN IN `Guard coverage
-          # baseline`. Two copies of one grammar drift silently, and these two
-          # disagreeing means one step skips the ratchet while the other
-          # hard-fails on the base clover the first one never wrote.
-          IS_PROMOTION=no
-          case "${PR_HEAD_REF:-}" in
-            development|beta) IS_PROMOTION=yes ;;
-            hotfix/*)
-              case "${BASE_REF:-}" in
-                beta|main) IS_PROMOTION=yes ;;
-              esac
+          case "$PR_HEAD_REF" in
+            development|beta)
+              echo "::notice::Release promotion ($PR_HEAD_REF -> $BASE_REF): skipping the merge-base coverage ratchet. Its merge base is the previous release point and cannot be booted in this job's Nextcloud environment, and every commit in the diff already passed the ratchet on its own pull request into $PR_HEAD_REF. The committed .coverage-baseline floor is still enforced by the next step."
+              exit 0
               ;;
           esac
-          if [ "$IS_PROMOTION" = yes ]; then
-            echo "::notice::Release promotion ($PR_HEAD_REF -> $BASE_REF): skipping the merge-base coverage ratchet. Its merge base is the previous release point and cannot be booted in this job's Nextcloud environment, and every commit in the diff already passed the ratchet on its own pull request into $PR_HEAD_REF. The committed .coverage-baseline floor is still enforced by the next step."
-            exit 0
-          fi
 
           HEAD_SHA="$(git rev-parse HEAD)"
 
@@ -3462,11 +3691,6 @@ jobs:
           # name is attacker-controlled text and git permits a double quote in
           # one, so `case "${{ ... }}" in` would be a script-injection site.
           PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
-          # Needed by the promotion predicate below, which scopes its
-          # `hotfix/*` case to the base branches branch protection sanctions.
-          # Its twin step already had this; this one did not, which is why the
-          # predicate has to be added here rather than merely widened.
-          BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
           set -euo pipefail
           cd "server/apps/${{ inputs.app-name }}"
@@ -3530,38 +3754,13 @@ jobs:
           # silent-downgrade shape the `against` probe above exists to prevent.
           # So the fallback is gated on the SAME head-ref condition, and any
           # other route to a missing base clover stays a hard failure.
-          # A promotion can also arrive on a `hotfix/*` head. When the merge
-          # needs conflict resolution it cannot be pushed to the protected
-          # branch directly, so it is carried on a hotfix branch instead --
-          # measured 2026-08-28 on openregister#2975 (hotfix/... -> main),
-          # which was red on this step alone while five of its six PHPUnit
-          # cells were green, because main's tree fatals under NC stable34
-          # (`OCP\DB\IResult@anonymous contains 6 abstract methods`).
-          #
-          # Branch protection sanctions exactly `hotfix/* -> beta|main`, so
-          # that pair is scoped here and nothing wider. A genuine hotfix aimed
-          # at main matches too, and for those the committed .coverage-baseline
-          # floor is what stays enforced -- the same trade the head-ref branch
-          # above already makes, not a new one.
-          #
-          # KEEP THIS PREDICATE BYTE-IDENTICAL TO ITS TWIN IN `Measure
-          # merge-base coverage`. Two copies of one grammar drift silently, and
-          # these two disagreeing means one step skips the ratchet while the
-          # other hard-fails on the base clover the first one never wrote.
-          IS_PROMOTION=no
           case "${PR_HEAD_REF:-}" in
-            development|beta) IS_PROMOTION=yes ;;
-            hotfix/*)
-              case "${BASE_REF:-}" in
-                beta|main) IS_PROMOTION=yes ;;
-              esac
+            development|beta)
+              echo "::notice::Release promotion: the merge-base ratchet did not run (see the previous step). Enforcing the committed .coverage-baseline floor instead."
+              php scripts/coverage-guard.php coverage/clover.xml
+              exit 0
               ;;
           esac
-          if [ "$IS_PROMOTION" = yes ]; then
-            echo "::notice::Release promotion: the merge-base ratchet did not run (see the previous step). Enforcing the committed .coverage-baseline floor instead."
-            php scripts/coverage-guard.php coverage/clover.xml
-            exit 0
-          fi
           if [ ! -s "$RUNNER_TEMP/base-clover.xml" ]; then
             echo "::error::No merge-base clover report, and this is not a release promotion — 'Measure merge-base coverage' should have failed before this step was reached. Refusing to report a ratchet that did not run."
             exit 1
@@ -4066,30 +4265,7 @@ jobs:
     # repos and read as unremarkable. `'' != 'false'` runs the tests instead.
     # The cost of the filter being broken is runner minutes; the cost of it
     # being trusted while broken is a verdict nobody notices is missing.
-    #
-    # NOT ON PULL REQUESTS INTO `development` — the promotion branches keep it.
-    #
-    # This suite is ~16-22 min of a single runner and it runs per pull request.
-    # `development` is the integration branch every app targets, so it carries
-    # the bulk of the fleet's open pull requests — measured 2026-08-28, 35 of
-    # them across ten repos, each re-running the suite on every push. Against a
-    # 60-concurrent-job account ceiling that is not a cost, it is a QUEUE: runs
-    # sat `queued` for hours and the checks a human was waiting on never
-    # arrived. The evidence a merge to an integration branch actually needs is
-    # unit tests plus the mechanical gates, and those are cheap.
-    #
-    # The coverage is not dropped, it MOVES ONE HOP LATER. `development -> beta`
-    # and `beta -> main` are pull requests too, and this condition leaves them
-    # alone: every commit still meets the full E2E suite before it can reach
-    # beta, and again before it can reach main. What changes is that it is asked
-    # once per promotion rather than once per contributor pull request.
-    #
-    # `github.base_ref` is set ONLY on pull_request events, so a push to any
-    # branch — including `development` itself — is unaffected and still runs the
-    # suite. That is deliberate: the post-merge run on `development` is the
-    # backstop that catches whatever the pull request no longer asks about, and
-    # it is one run per merge rather than one per push per open pull request.
-    if: ${{ inputs.enable-playwright && needs.changes.outputs.code != 'false' && !cancelled() && !(github.event_name == 'pull_request' && github.base_ref == 'development') }}
+    if: ${{ inputs.enable-playwright && needs.changes.outputs.code != 'false' && !cancelled() }}
     runs-on: ubuntu-latest
     name: "E2E Tests (Playwright)"
     # `frontend-build` is a dependency purely so its artifact is available to
@@ -6533,14 +6709,9 @@ jobs:
       # job. A gate that suppresses sixty other gates to report itself is its
       # own kind of outage. So this step always exits 0, the gates run and print
       # their full report, and the job is failed afterwards.
-      # NOT ON A PULL REQUEST INTO `development`. The Playwright job — the only
-      # producer of tests/axe/report.json — is skipped there by design, so
-      # asserting the report here would demand an artefact nobody in that
-      # context can produce. Enforcement MOVES with its producer to the
-      # promotion pull requests, where Playwright still runs.
       - name: The axe report must exist and hold up
         id: axe-check
-        if: ${{ inputs.enable-axe && !(github.event_name == 'pull_request' && github.base_ref == 'development') }}
+        if: ${{ inputs.enable-axe }}
         env:
           PLAYWRIGHT_RESULT: ${{ needs.playwright.result }}
         run: |
@@ -6629,12 +6800,6 @@ jobs:
       # would otherwise swallow an unknown flag as the app directory.
       - name: Resolve the diff base and the scope
         id: base
-        env:
-          # Through `env:`, never interpolated into the script body. A branch
-          # name is attacker-controlled text and git permits a double quote in
-          # one, so `case "${{ ... }}" in` would be a script-injection site.
-          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
-          BASE_REF: ${{ github.base_ref }}
         run: |
           set -u
           EVENT="${{ github.event_name }}"
@@ -6644,58 +6809,6 @@ jobs:
             BASE="origin/${{ github.base_ref }}"
             SCOPE="diff"
             WHY="this is a ${EVENT}, so the PR's target branch is the base and ADR-020 diff-scoping applies."
-
-            # A RELEASE PROMOTION IS THE ONE PULL REQUEST WHOSE TARGET IS THE
-            # WRONG BASE.
-            #
-            # The fleet promotes feature -> development -> beta -> main. By the
-            # time `beta` is opened against `main`, every commit in that diff has
-            # already faced these gates twice: once entering development, once
-            # entering beta. Diffing against the TARGET asks "what does this add
-            # to main?", and the answer is every commit since the last release --
-            # so a diff-scoped gate reports the whole tree as changed.
-            #
-            # Measured 2026-08-28 on openregister#2975 (hotfix/... -> main,
-            # 5782 commits): gate-16 reported 256 changed methods missing @spec,
-            # plus gate-83 and gate-70, on a tree that is byte-identical to
-            # `beta` -- where the SAME content passed Hydra Gates green on
-            # #2972. Nothing was found that beta had not already cleared; the
-            # base was simply wrong.
-            #
-            # So for a promotion the base is the branch being promoted FROM.
-            # That keeps the gates real rather than skipping them: a hotfix
-            # carrying genuinely new code still shows that code in the diff
-            # against beta, and is still judged on it. What disappears is only
-            # the re-litigation of commits that already passed.
-            IS_PROMOTION=no
-            case "${PR_HEAD_REF:-}" in
-              development|beta) IS_PROMOTION=yes ;;
-              hotfix/*)
-                case "${BASE_REF:-}" in
-                  beta|main) IS_PROMOTION=yes ;;
-                esac
-                ;;
-            esac
-
-            if [ "$IS_PROMOTION" = yes ]; then
-              case "${BASE_REF:-}" in
-                main) SRC=beta ;;
-                beta) SRC=development ;;
-                *)    SRC="" ;;
-              esac
-
-              # Only re-point at a source branch that actually exists. A repo
-              # without one keeps the target as its base and says so, rather
-              # than resolving to an empty ref and silently scoping to nothing
-              # -- a gate run against no base is the failure mode this whole
-              # step exists to avoid.
-              if [ -n "$SRC" ] && git -C app rev-parse --verify --quiet "refs/remotes/origin/${SRC}" >/dev/null; then
-                BASE="origin/${SRC}"
-                WHY="this is a release promotion (${PR_HEAD_REF} -> ${BASE_REF}), so the base is the branch being promoted FROM (${SRC}). Every commit in the diff against ${BASE_REF} already passed these gates entering ${SRC}; anything genuinely new in this pull request still appears in the diff against ${SRC} and is still judged."
-              else
-                WHY="this is a release promotion (${PR_HEAD_REF} -> ${BASE_REF}), but origin/${SRC:-<none for this target>} is not available, so the target branch remains the base. Expect diff-scoped gates to report the whole release delta."
-              fi
-            fi
           elif [ "${EVENT}" = "push" ]; then
             # A push HAS a previous tip. We deliberately set NOTHING and let the
             # package's own precedence chain resolve origin/HEAD ->
@@ -6781,19 +6894,7 @@ jobs:
           # pin handed this flag aborts with
           # `FATAL: --app-dir '--axe-enabled' is not a directory. No gate ran.`
           # and exits 99: every gate lost, for a flag the caller never typed.
-          # Withheld on a pull request into `development`: the Playwright job that
-          # produces the report is skipped there, and passing the flag would make
-          # gate-33 an APPLICABLE gate that DID NOT RUN — which the runner
-          # correctly refuses to call green. The flag returns on the promotion
-          # pull requests, together with the job that feeds it.
-          AXE_PRODUCER_RAN=true
-          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.base_ref }}" = "development" ]; then
-            AXE_PRODUCER_RAN=false
-          fi
-          if [ "${{ inputs.enable-axe }}" = "true" ] && [ "${AXE_PRODUCER_RAN}" = "false" ]; then
-            echo "::notice::enable-axe is on, but Playwright does not run on a pull request into development, so no axe report exists to judge. gate-33 is withheld here and enforced on the development->beta and beta->main promotions, where the producer runs."
-          fi
-          if [ "${{ inputs.enable-axe }}" = "true" ] && [ "${AXE_PRODUCER_RAN}" = "true" ]; then
+          if [ "${{ inputs.enable-axe }}" = "true" ]; then
             if [ "${{ steps.gatecap.outputs.categories }}" = "1" ]; then
               ARGS="${ARGS} --axe-enabled"
             else
@@ -7375,14 +7476,6 @@ jobs:
           # EXISTS" — turning a working cost control into a permanent red.
           PATH_FILTER_CODE: ${{ needs.changes.outputs.code }}
           PATH_FILTER_REASON: ${{ needs.changes.outputs.reason }}
-          # The E2E suite does not run on pull requests into `development`; it
-          # runs on the `development -> beta` and `beta -> main` promotions and
-          # on every push. That skip is DELIBERATE and must be declared here for
-          # the same reason the path filter declares its own: an undeclared
-          # `skipped` is classified as "NO VERDICT EXISTS" and fails this job,
-          # which would move the red from the E2E check to this one rather than
-          # removing it.
-          E2E_PROMOTION_SKIP: ${{ github.event_name == 'pull_request' && github.base_ref == 'development' }}
           JOURNEYDOC_ENABLED: ${{ inputs.enable-journeydoc-capture }}
           JOURNEYDOC_RESULT: ${{ needs['journeydoc-capture'].result }}
         run: |
@@ -7413,13 +7506,6 @@ jobs:
                 if [ "${4:-false}" = "true" ] && [ "$PATH_FILTER_CODE" = "false" ]; then
                   echo "  - $1: ENABLED, and deliberately NOT RUN for this diff — $PATH_FILTER_REASON"
                   FILTERED="${FILTERED}${1}"$'\n'
-                elif [ -n "${5:-}" ]; then
-                  # $5 is a DECLARED reason, passed by the caller of classify.
-                  # Same contract as the path filter above: a skip is only
-                  # acceptable when something states, in words, why it was
-                  # deliberate. Anything else that is skipped is still missing.
-                  echo "  - $1: ENABLED, and deliberately NOT RUN — ${5}"
-                  FILTERED="${FILTERED}${1}"$'\n'
                 else
                   echo "  - $1: ENABLED but result=skipped — NO VERDICT EXISTS."
                   MISSING="${MISSING}${1}"$'\n'
@@ -7439,8 +7525,7 @@ jobs:
           echo "Test-tier verdict census:"
           classify "PHPUnit"            "$PHPUNIT_ENABLED"    "$PHPUNIT_RESULT"    true
           classify "Newman"             "$NEWMAN_ENABLED"     "$NEWMAN_RESULT"
-          classify "Playwright"         "$PLAYWRIGHT_ENABLED" "$PLAYWRIGHT_RESULT" true \
-            "$([ "$E2E_PROMOTION_SKIP" = "true" ] && printf '%s' "E2E runs on the development -> beta and beta -> main promotions, and on every push, not on pull requests into development." || printf '')"
+          classify "Playwright"         "$PLAYWRIGHT_ENABLED" "$PLAYWRIGHT_RESULT" true
           classify "Journeydoc capture" "$JOURNEYDOC_ENABLED" "$JOURNEYDOC_RESULT"
 
           # A filtered run is a pass ABOUT THE DIFF IT EXAMINED, and it must not
