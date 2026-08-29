@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<id>wfsfx</id>
+	<name>Walkthrough Flows Stop Fixture</name>
+	<summary>Fixture app for gate-70 acceptance. Not a real app.</summary>
+	<description>Exists so the gate suite can drive a tour that does and does not point at a flows page through the real wrapper.</description>
+	<version>1.0.0</version>
+	<licence>agpl</licence>
+	<author>Conduction</author>
+	<namespace>WfsFx</namespace>
+	<category>tools</category>
+	<dependencies><nextcloud min-version="30" max-version="32"/></dependencies>
+</info>

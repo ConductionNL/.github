@@ -541,12 +541,33 @@ const CROSS_APP_ATTEMPT_RE = /^([^:/\s]+):(.*)$/
 // purpose: this is shared infrastructure consumed live at @main by every fleet
 // app, and a refactor touching a second gate's inputs is a wider blast radius
 // than this change is worth. Recorded so the next reader knows both exist.
+// BOTH the pre-rename and the post-rename id of every renamed app, on
+// purpose. The 2026-08 `iq` rename moves PER APP: an app's id changes only
+// when its own `appinfo/info.xml` ships the new `<id>`, and as of
+// 2026-08-28 fourteen have (integriq, filinq, thematiq, stackiq, larpinq,
+// dossiq, learniq, decidiq, buildiq, keepiq, humaniq, versioniq, planninq,
+// plus portaliq and hermiq which were already listed) while others have
+// not. So both spellings are live at once, in different repos, and this
+// set has to accept either.
+//
+// Dropping the old names would be the more tempting edit and the wrong
+// one: an app that has not renamed yet would then have its cross-app
+// waiver read as a typo. Keeping only the old ones is how this list
+// arrived — it was written before the rename and never revisited, so a
+// waiver naming `dossiq:SomePage` failed with "not a known Conduction
+// fleet app id" even though dossiq is exactly that. The gate's own message
+// says to add it here; this is that.
 const FLEET_APP_IDS = new Set([
-	// 18 core apps
+	// Core apps, pre-rename ids
 	'openregister', 'opencatalogi', 'openconnector', 'docudesk', 'nldesign',
 	'launchpad', 'softwarecatalog', 'larpingapp', 'zaakafhandelapp', 'procest',
 	'pipelinq', 'shillinq', 'scholiq', 'portaliq', 'decidesk', 'openbuild',
 	'doriath', 'hermiq',
+	// Core apps, post-rename ids (verified shipped in appinfo/info.xml on
+	// development, 2026-08-28)
+	'integriq', 'filinq', 'thematiq', 'stackiq', 'larpinq', 'dossiq',
+	'learniq', 'decidiq', 'buildiq', 'keepiq', 'humaniq', 'versioniq',
+	'planninq',
 	// ExApp sidecar wrappers
 	'openklant', 'opentalk', 'openzaak', 'valtimo', 'n8n',
 ])

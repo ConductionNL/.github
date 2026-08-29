@@ -820,6 +820,55 @@ jobs:
         run: |
           set -euo pipefail
           BR="${{ steps.bump.outputs.bump_branch }}"
+
+          # SUPERSEDE THE PREVIOUS BUMP BEFORE OPENING A NEW ONE.
+          #
+          # The auto-merge below closes the loop only where the merge can
+          # actually happen. It cannot here: the org-level ruleset
+          # "Development Branch Protection" requires one approving review on
+          # `development`, and nothing reviews a bot's pull request. So the PR
+          # sits at MERGEABLE/BLOCKED with auto-merge armed and every check
+          # green, waiting on `reviewDecision`, forever.
+          #
+          # That requirement is INVISIBLE to `/branches/{branch}/protection`,
+          # which reports `required_pull_request_reviews: null`. Only
+          # `repos/{repo}/rulesets` shows it. Anyone checking the older
+          # endpoint concludes no review is needed and looks at the checks
+          # instead — which are green, so the cause is never found.
+          #
+          # Measured 2026-08-27: 49 open release pull requests across 9 repos,
+          # 8 on opencatalogi alone. Worse, they begin CONFLICTING with each
+          # other, because each rewrites the same <version> line in
+          # appinfo/info.xml — and a conflicted PR gets no CI at all, so its
+          # auto-merge can never fire either. One stuck PR cascades into all
+          # the rest.
+          #
+          # The real fix is a bypass actor on the ruleset for this app, and it
+          # needs `admin:org`. Until that lands, this keeps at most ONE open
+          # bump per branch instead of one per push. Superseding is safe: the
+          # older PR's version is already published under its own tag, and the
+          # new PR carries the branch further forward than the old one did.
+          #
+          # Never fails the release. The tag and the package are already
+          # published by the time this runs, so a failure to tidy up is a
+          # backlog item, not a broken release.
+          gh pr list \
+            --repo "${{ github.repository }}" \
+            --base "${{ github.ref_name }}" \
+            --state open \
+            --limit 100 \
+            --json number,headRefName \
+            --jq '.[] | select(.headRefName | startswith("release/v")) | "\(.number)\t\(.headRefName)"' \
+          | while IFS=$'\t' read -r OLD_NUM OLD_BR; do
+              if [ "$OLD_BR" = "$BR" ]; then continue; fi
+              echo "Superseding #${OLD_NUM} (${OLD_BR}) with ${BR}."
+              gh pr close "$OLD_NUM" \
+                --repo "${{ github.repository }}" \
+                --delete-branch \
+                --comment "Superseded by the version bump for ${{ env.NEW_VERSION }}. The version this pull request carries is already published under its own tag; \`${{ github.ref_name }}\` catches up via the newer bump." \
+                || echo "::warning::Could not close superseded release PR #${OLD_NUM}."
+            done || echo "::warning::Could not enumerate open release pull requests to supersede."
+
           if gh pr view "$BR" --repo "${{ github.repository }}" >/dev/null 2>&1; then
             echo "A pull request for $BR already exists."
             exit 0

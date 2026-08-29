@@ -3,7 +3,7 @@
 	"$id": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
 	"title": "Conduction App Manifest v2",
 	"description": "v2 schema for the JSON-driven page and navigation manifest consumed by @conduction/nextcloud-vue. Introduces a uniform widgets[] array on every page type with a per-slot grid coordinate system, a typed actions[] discriminator, and the required $schema field for version detection. v1 manifests continue to validate against app-manifest.schema.json (unchanged).",
-	"version": "2.25.0",
+	"version": "2.26.0",
 	"type": "object",
 	"required": ["$schema", "version"],
 	"allOf": [
@@ -2097,8 +2097,8 @@
 				},
 				"type": {
 					"type": "string",
-					"enum": ["index", "detail", "dashboard", "logs", "settings", "chat", "files", "form", "map", "roadmap", "search", "wiki", "flows", "flow-detail", "custom"],
-					"description": "Page type. Closed enum of 16 supported types. 'roadmap' mounts CnFeaturesAndRoadmapPage (features + GitHub-issue-backed roadmap). 'search' mounts CnSearchPage (cross-schema query + facet sidebar + results list; consumers wire the actual search via @search). 'wiki' mounts CnWikiPage (manifest-declared markdown article + optional sidebar tree; MUST declare config.register + config.schema). 'flows' mounts CnFlowsPage (the app-scoped flow list) and 'flow-detail' mounts CnFlowEditorPage (the shared node/edge canvas); both take config.app to scope to the owning app, and neither can be expressed as 'index'/'detail' because a flow lives in OpenRegister's native flow store rather than a register/schema pair (ADR-110 Decision 4). 'custom' requires a _note field explaining why a standard type was not feasible."
+					"enum": ["index", "detail", "dashboard", "logs", "settings", "chat", "files", "form", "map", "roadmap", "search", "wiki", "flow", "flows", "flow-detail", "custom"],
+					"description": "Page type. Closed enum of 17 supported types. 'flow' opens ONE flow in the editor; the flow LIST is an ordinary 'index' with config.entitySource='flows'. 'flows' and 'flow-detail' are DEPRECATED aliases kept for migration — 'flows' predates named index sources and 'flow-detail' is the old name for 'flow'. 'roadmap' mounts CnFeaturesAndRoadmapPage (features + GitHub-issue-backed roadmap). 'search' mounts CnSearchPage (cross-schema query + facet sidebar + results list; consumers wire the actual search via @search). 'wiki' mounts CnWikiPage (manifest-declared markdown article + optional sidebar tree; MUST declare config.register + config.schema). 'flow' and the deprecated 'flow-detail' both mount CnFlowEditorPage (the shared node/edge canvas) and take config.app to scope to the owning app. A flow lives in OpenRegister's native flow store rather than a register/schema pair, so a single flow cannot be a 'detail' page — but the LIST is a plain 'index' once a named entitySource supplies it, which is why 'flows' is deprecated (ADR-110 Decision 4). 'custom' requires a _note field explaining why a standard type was not feasible."
 				},
 				"title": {
 					"type": "string",
@@ -2150,6 +2150,15 @@
 					"additionalProperties": true,
 					"allOf": [{ "$ref": "#/$defs/sentinelGuardedValue" }],
 					"properties": {
+						"entitySource": {
+							"type": "string",
+							"enum": ["flows"],
+							"description": "Name a registered NON-OBJECT entity collection for a type='index' page, instead of register+schema. Deliberately NOT called `source`: that key is already taken on page config and is polymorphic (a URL string in some manifests, an object with `params` in others), so reusing it would give one key two meanings and break six deployed shillinq pages. A flow definition is deliberately not an OpenRegister object, so an index had nothing to bind to and such lists became bespoke type='custom' pages. With a source the index loads the list itself. Takes precedence over register/schema; non-empty `objects` still wins over both. Registered sources live in src/composables/indexSources.js."
+						},
+						"app": {
+							"type": "string",
+							"description": "Scopes a named `entitySource` to one app (e.g. entitySource='flows' with app='dossiq' lists that app's flows)."
+						},
 						"register": {
 							"type": "string",
 							"description": "OpenRegister register slug."
@@ -2384,6 +2393,26 @@
 							"type": "array",
 							"description": "Page-level header actions rendered inside CnActionsBar's overflow dropdown (between the built-in Refresh action and the `#action-items` slot). Same shape as the row-level `actions[]` ($ref action), but handlers receive NO row context — they are page-level. Reserved ids (`refresh`, `import`, `export`, `copy`, `delete`) are dropped at render time to avoid shadowing built-ins. See manifest-icons-and-page-actions for the dispatch semantics.",
 							"items": { "$ref": "#/$defs/action" }
+						},
+						"actions": {
+							"type": "array",
+							"items": {
+								"type": "object",
+								"required": ["label"],
+								"additionalProperties": true,
+								"properties": {
+									"label": { "type": "string", "minLength": 1 }
+								}
+							},
+							"description": "Declarative actions on a page. Governed ONLY by \"an object carrying a non-empty label\", deliberately: this key is polymorphic by page type (index rows dispatch $defs/action; detail pages also carry type='lifecycle-transition' entries), so one closed grammar here would reject working manifests. A label is what every dialect needs — CnRowActions renders an entry from its label and icon, so an entry without one became a full-height, clickable, EMPTY row in the overflow menu. Two shapes hit this, both meaning \"show the built-in\": a bare string (\"edit\") and a key-only object ({\"key\": \"edit\"}). Built-ins are enabled with config.actionToggles / the show*Action keys, never by naming them here."
+						},
+						"editOpensDetail": {
+							"type": "boolean",
+							"description": "type='index': send the Edit row action to the record's detail page instead of opening the edit modal. Set automatically by CnPageRenderer when a type='detail' page exists for the same register+schema (or config.rowRoute is set); declare it explicitly only to override that. Maps to CnIndexPage `editOpensDetail`."
+						},
+						"showEditAction": {
+							"type": "boolean",
+							"description": "type='detail': show the header Edit button that opens the record's schema form. Set automatically by CnPageRenderer for every schema-bound detail page; declare false to make a detail page read-only. Maps to CnDetailPage `showEditAction`."
 						},
 						"actionToggles": {
 							"type": "object",
