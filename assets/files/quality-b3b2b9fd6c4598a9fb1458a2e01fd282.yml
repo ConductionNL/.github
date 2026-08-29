@@ -540,6 +540,60 @@ on:
         type: boolean
         default: true
 
+      # ── Cost controls (measured 2026-08-27, .github#5xx) ──────────────────
+      #
+      # The fleet was not slow because the checks are slow. A Code Quality run
+      # does ~38 job-minutes of work and its longest single job is 16 minutes,
+      # but the median successful run took 78.5 minutes wall clock. THE WALL
+      # CLOCK IS QUEUE TIME: every one of 272 sampled jobs waited more than ten
+      # minutes for a runner before executing, median 28.6 minutes, and a run
+      # was observed 425 minutes old and still not started.
+      #
+      # That wait is measured on jobs that ACTUALLY EXECUTED, comparing each
+      # job's `created_at` with its `started_at` — and `started_at` was checked
+      # against `steps[0].started_at` and agrees to within a second, so it is
+      # execution start and not queue entry.
+      #
+      # The account ceiling is 60 concurrent jobs (GitHub Team). Replaying the
+      # execution intervals of 5,108 jobs across all workflows and all 21 repos
+      # over 13:00-15:00 UTC gives a PEAK of 61 simultaneous executing jobs and
+      # a p99 of 57 — i.e. the account really was sitting on its cap.
+      #
+      # ⚠️ TWO EARLIER MEASUREMENTS OF THIS WERE WRONG, in opposite directions,
+      # and both looked plausible:
+      #   * Polling every repo for in-flight jobs takes ~4 minutes, so it SUMS
+      #     jobs that ran at different moments. It reported 53, then 78. It is a
+      #     smear, not a snapshot, and cannot measure concurrency at all.
+      #   * Replaying `job.started_at`..`job.completed_at` reported 442. A job
+      #     CANCELLED WHILE STILL QUEUED has `started_at == created_at`, a real
+      #     `completed_at`, and NO steps — it never ran, but it counts as
+      #     running for its whole queued life. 28% of runs today were cancelled.
+      # Only step-derived intervals measure execution. Both wrong numbers were
+      # reported before they were checked; the check is what produced 61.
+      #
+      # Nothing below makes a check faster. They remove DEMAND, which is the
+      # only thing that shortens a queue.
+      enable-path-filtering:
+        description: "Run the two expensive job families (PHPUnit and Playwright) only when the diff touches paths that could change their verdict — see path-filter-code-globs. OPT-IN, default false. In a 60-commit sample of recent fleet pushes, 58% touched no .php/.js/.ts/.vue file at all (l10n writebacks, committed build transcripts, docs and openspec edits) and every one still ran six PHPUnit legs and a 16-minute Playwright suite. FAIL-SAFE BY CONSTRUCTION, in the direction that costs money rather than signal: the filter runs the tests unless it can PROVE the diff is irrelevant, so an unreadable diff, a force-push, a branch creation, a workflow_dispatch, a shallow clone or a git error all resolve to 'run everything'. A path-filtered skip is NOT silent — it is a declared state in the Quality Report's test-tier census, distinct from both a pass and a missing verdict, and it names the rule that produced it. Turning this on does not weaken the merge gate: it changes which diffs the heavy tier is asked about, not what it says when asked."
+        required: false
+        type: boolean
+        default: false
+      path-filter-code-globs:
+        description: "Space-separated git pathspecs that make a diff 'code' for enable-path-filtering. Default covers PHP sources, the frontend, tests, the app manifest, both dependency manifests and the workflows themselves. A diff touching ANY of these runs the full heavy tier. Widen this rather than narrowing it when unsure — a glob that is too broad costs runner minutes, a glob that is too narrow costs a verdict, and only one of those is recoverable after the merge."
+        required: false
+        type: string
+        default: "lib/** src/** tests/** appinfo/** composer.json composer.lock package.json package-lock.json .github/workflows/**"
+      consolidate-tool-legs:
+        description: "Run each tool FAMILY as one job instead of one job per tool: PHP Quality 6 legs -> 1, Vue Quality 2 -> 1, Security 2 -> 1. OPT-IN, default false. Every leg is a separate claim on a runner slot, and slots are this fleet's constraint, not minutes — psalm's leg spends 22 seconds on psalm inside a 36-second job, and each of those jobs waited a median of 28.6 minutes for a runner. Consolidating also pays the composer install and toolchain setup ONCE per family instead of once per tool. The cost is losing per-tool parallelism, so a family becomes as slow as its tools summed — about two extra minutes, against a 28-minute queue wait. PER-TOOL REPORTING IS UNCHANGED: the consolidated job still uploads one artifact per tool, each carrying that tool's OWN exit code, so the Quality Report's per-tool table renders exactly as before and is in fact more accurate than the split legs, which recorded the job status rather than the tool's. `license` is deliberately NOT consolidated — its per-ecosystem license-report artifact is downloaded and parsed by the report, so collapsing it would mean changing the producer's layout and the report's parser together, for a saving of one slot."
+        required: false
+        type: boolean
+        default: false
+      reduce-pr-matrix:
+        description: "On a pull_request event, run PHPUnit on the PRIMARY php-version against the NEWEST declared Nextcloud only, instead of the full php-test-versions x declared-range product. OPT-IN, default false. The full matrix still runs on every push to a default branch, so the declared range is exercised on every merge and on the release PR into beta — breadth moves from per-commit to per-merge, it is not dropped. The reasoning is that version-drift does not appear between two commits an hour apart; it appears when a dependency or a Nextcloud minor moves, and a push-time matrix catches that just as well at a fraction of the queue cost. Measured: 6 legs at ~2.2 min each, of which ~46s is the test suite and ~85s is container init, two checkouts and a Nextcloud install repeated per leg."
+        required: false
+        type: boolean
+        default: false
+
 concurrency:
   # KEYED BY EVENT AS WELL AS REF, so a deliberately-requested run is not
   # cancelled by routine merge traffic.
@@ -566,9 +620,185 @@ concurrency:
   # other. Runs in different lanes are independent: each gets its own
   # ephemeral server and database, so nothing is shared to contend over.
   group: quality-${{ github.ref }}-${{ github.event_name }}
-  cancel-in-progress: true
+
+  # PUSH RUNS ARE NOT CANCELLED. #526 read this as a cadence problem caused by
+  # the release loop, and at the time it was: an automated cycle pushed
+  # `chore(release):` every 8-12 minutes and a run takes 14-23, so the branch
+  # could never converge. The self-skip guard that landed 2026-08-26 closed
+  # that, and the premise no longer holds.
+  #
+  # Re-measured 2026-08-27 over 8 hours, all 21 fleet repos, 109 commits on
+  # `development`:
+  #
+  #     release-loop churn   0  (0%)
+  #     real work          109  (100%)
+  #
+  # Every one is a squash-merged pull request. openregister alone merged ten.
+  # So the traffic that cancels these runs is not noise to be throttled -- it
+  # is the fleet working, and it is not going to slow down.
+  #
+  # "Once commit N+1 exists, verifying N matters less" is true for a queue of
+  # feature-branch pushes. It is false for an integration branch, because the
+  # run being cancelled is the only thing that would have said whether what
+  # just landed is sound, and the replacement gets cancelled too. Measured the
+  # same day, over each repo's last twelve COMPLETED runs: openregister 12 of
+  # 12 cancelled, learniq 10 of 12, pipelinq 10 of 12. Seven of the 21 apps
+  # had no verdict on `development` at all.
+  #
+  # A cancelled run is not a failure, but it is not a pass either -- it is no
+  # verdict, and it renders as "nothing wrong here" in every summary that
+  # counts failures. That is not theoretical: learniq shipped an eslint error
+  # to `development` and nothing reported it, because every run there since
+  # 09:54 was cancelled rather than completed. It surfaced only when a PR cut
+  # after it went red (learniq#664).
+  #
+  # The cost is queue depth, not money -- the fleet is public, so Actions
+  # minutes are free; the constraint is the 60-concurrent-job account ceiling,
+  # which buys latency, and a late verdict beats no verdict.
+  #
+  # `pull_request` keeps cancelling: there, only the latest head commit is
+  # meaningful and superseding really is correct. `workflow_dispatch` keeps
+  # cancelling within its own lane.
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 jobs:
+  # ── STAGE 0 — what did this diff actually touch? ──────────────────────────
+  #
+  # Produces ONE boolean, `code`, consumed by the two most expensive job
+  # families (PHPUnit, ~13 job-min across its legs; Playwright, ~16 job-min).
+  # Together they are 29 of the ~38 job-minutes a run spends, so this is the
+  # only lever that moves the queue rather than the clock.
+  #
+  # THIS JOB IS NOT GATED ON ANY enable-flag, and that is load-bearing. A
+  # skipped job publishes EMPTY outputs, and `'' == 'true'` is false — so a
+  # gated version of this job would delete the test tier for every caller that
+  # left path filtering off. The consumers therefore test `!= 'false'`, and
+  # this job always runs and always answers. Both halves are required: either
+  # one alone reintroduces the silent-skip.
+  #
+  # It fails safe TOWARDS RUNNING. Every uncertain state — filtering off, a
+  # branch-creation push, a dispatch or a schedule, a base commit missing from
+  # the clone, a git error, an empty file list — resolves to `code=true`. The
+  # filter must PROVE the diff is irrelevant; it never assumes it.
+  changes:
+    runs-on: ubuntu-latest
+    name: "Changed paths"
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.decide.outputs.code }}
+      reason: ${{ steps.decide.outputs.reason }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history: `git diff base...head` needs both endpoints and the
+          # merge base, and a depth-1 clone has none of them. A shallow clone
+          # here would make every diff unreadable, which fails safe (runs
+          # everything) but would make the whole filter inert and silent.
+          fetch-depth: 0
+
+      - name: Decide whether the heavy tier has anything to say about this diff
+        id: decide
+        env:
+          FILTER_ON: ${{ inputs.enable-path-filtering }}
+          GLOBS: ${{ inputs.path-filter-code-globs }}
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -uo pipefail
+          # Word-splitting on $GLOBS is INTENTIONAL (it is a space-separated
+          # pathspec list); shell globbing of it is NOT. `set -f` stops the
+          # shell expanding `lib/**` against the working tree before git ever
+          # sees it — without it the pathspec becomes whatever files happen to
+          # exist, which is a different and silently wrong query.
+          set -f
+
+          emit() {
+            echo "code=$1" >> "$GITHUB_OUTPUT"
+            echo "reason=$2" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Changed-path filter"
+              echo ""
+              echo "- Heavy tier (PHPUnit, Playwright): **$([ "$1" = true ] && echo RUNS || echo SKIPPED)**"
+              echo "- Reason: $2"
+            } >> "$GITHUB_STEP_SUMMARY"
+          }
+
+          run_everything() {
+            emit true "$1"
+            echo "::notice::Heavy tier WILL run — $1"
+            exit 0
+          }
+
+          [ "$FILTER_ON" = "true" ] || run_everything "path filtering is not enabled for this repository (enable-path-filtering=false)."
+
+          case "$EVENT" in
+            pull_request)
+              BASE="$BASE_SHA"
+              [ -n "$BASE" ] || run_everything "pull_request event carried no base SHA."
+              RANGE="${BASE}...${HEAD_SHA}"
+              ;;
+            push)
+              case "$BEFORE" in
+                ""|0000000000000000000000000000000000000000)
+                  run_everything "this push created the branch, so there is no previous commit to diff against."
+                  ;;
+              esac
+              RANGE="${BEFORE}..${HEAD_SHA}"
+              BASE="$BEFORE"
+              ;;
+            *)
+              run_everything "event '$EVENT' is neither a push nor a pull_request, so the diff for it is undefined."
+              ;;
+          esac
+
+          git cat-file -e "${BASE}^{commit}" 2>/dev/null || run_everything "base commit ${BASE} is not present in this clone (force-push or rewritten history)."
+          git cat-file -e "${HEAD_SHA}^{commit}" 2>/dev/null || run_everything "head commit ${HEAD_SHA} is not present in this clone."
+
+          ALL="$(git diff --name-only "$RANGE")" || run_everything "git diff over ${RANGE} failed."
+          if [ -z "$ALL" ]; then
+            run_everything "the diff over ${RANGE} listed no files at all — not a state this filter can reason about."
+          fi
+
+          MATCHED="$(git diff --name-only "$RANGE" -- $GLOBS)" || run_everything "git diff with the code pathspec failed."
+
+          echo "Files in ${RANGE}:"
+          printf '  %s\n' $ALL
+          echo ""
+          echo "Code globs: $GLOBS"
+
+          if [ -n "$MATCHED" ]; then
+            echo "Matched the code pathspec:"
+            printf '  %s\n' $MATCHED
+            emit true "the diff touches code paths ($(printf '%s\n' $MATCHED | wc -l) file(s) matched the code globs)."
+            exit 0
+          fi
+
+          # ── SECOND, INDEPENDENT RULE ───────────────────────────────────────
+          #
+          # Two rules must AGREE before anything is skipped. The pathspec above
+          # says "no code path was touched"; this one asks a different question
+          # with a different instrument — "does any changed file carry a source
+          # extension?" — and a disagreement between them means the globs are
+          # wrong for this repo, not that the diff is safe.
+          #
+          # A wrong glob is the whole risk of this feature: it would delete the
+          # test tier for a real code change and render exactly like a repo
+          # whose diff was genuinely docs-only. So a disagreement runs
+          # everything AND says so as a warning, which is how the glob list
+          # gets fixed instead of quietly under-testing.
+          SUSPECT="$(printf '%s\n' $ALL | grep -E '\.(php|js|mjs|cjs|ts|tsx|vue|css|scss)$' || true)"
+          if [ -n "$SUSPECT" ]; then
+            echo "::warning::The code pathspec matched nothing, but these changed files carry source extensions — path-filter-code-globs does not cover this repository's layout. Running the full tier and NOT trusting the filter."
+            printf '::warning::  unmatched source file: %s\n' $SUSPECT
+            run_everything "the two filter rules disagreed (source-extension files outside the code globs), so the filter was not trusted."
+          fi
+
+          echo "No changed file matches the code globs, and none carries a source extension."
+          emit false "no file in this diff matches the code globs, and none carries a source extension — the heavy tier has nothing to decide about it."
+
   # ╔══════════════════════════════════════════════╗
   # ║  STAGE 1 — Four parallel quality gates        ║
   # ║                                               ║
@@ -603,7 +833,10 @@ jobs:
     timeout-minutes: 20
     strategy:
       matrix:
-        tool: [lint, phpcs, phpmd, psalm, phpstan, phpmetrics]
+        # ONE LEG ("all") when consolidated, six when not. `fromJSON` on both
+        # arms: a matrix vector that evaluates to a bare string does not shrink
+        # the matrix, it DELETES the job.
+        tool: ${{ inputs.consolidate-tool-legs && fromJSON('["all"]') || fromJSON('["lint", "phpcs", "phpmd", "psalm", "phpstan", "phpmetrics"]') }}
       fail-fast: false
 
     steps:
@@ -658,29 +891,33 @@ jobs:
           # declaration from composer.json rather than from the exit code.
           # Deliberately NOT an `[ -f vendor/bin/<tool> ]` guard — a file-presence
           # guard that skips is the same silent-pass defect in a new costume.
+          # `return 1`, not `exit 1`: this is called from inside run_tool() below,
+          # and an `exit` there would kill the whole step mid-family instead of
+          # failing one tool and continuing to the next.
           require_script() {
             tool="$1"
             hint="$2"
             if [ ! -f composer.json ]; then
               echo "::error::The '$tool' gate is enabled but there is no composer.json in the repository root."
-              exit 1
+              return 1
             fi
             if ! jq -e --arg s "$tool" '(.scripts // {}) | has($s)' composer.json > /dev/null 2>&1; then
               echo "::error::The '$tool' gate is enabled but composer.json declares no '$tool' script. Add it under \"scripts\", or turn the gate off with $hint."
-              exit 1
+              return 1
             fi
           }
-          case "${{ matrix.tool }}" in
+          run_tool() {
+            case "$1" in
             lint)
-              require_script lint "the enable-php input"
-              composer lint
+              require_script lint "the enable-php input" || return 1
+              composer lint || return $?
               ;;
             phpcs)
               if [ "${{ inputs.enable-phpcs }}" != "true" ]; then
                 echo "PHPCS is disabled — skipping."
-                exit 0
+                return 0
               fi
-              require_script phpcs "the enable-phpcs input"
+              require_script phpcs "the enable-phpcs input" || return 1
               #
               # ⚠️ THE EXIT CODES ARE NOT WHAT THIS BLOCK USED TO CLAIM.
               #
@@ -773,53 +1010,148 @@ jobs:
                   echo "::error::PHPCS found errors (exit $RC). Warnings are non-blocking and are NOT counted here — this is errors only."
                 fi
               fi
-              exit $RC
+              return $RC
               ;;
             phpmd)
               if [ "${{ inputs.enable-phpmd }}" != "true" ]; then
                 echo "PHPMD is disabled — skipping."
-                exit 0
+                return 0
               fi
-              require_script phpmd "the enable-phpmd input"
-              composer phpmd
+              require_script phpmd "the enable-phpmd input" || return 1
+              composer phpmd || return $?
               ;;
             psalm)
               if [ "${{ inputs.enable-psalm }}" != "true" ]; then
                 echo "Psalm is disabled — skipping."
-                exit 0
+                return 0
               fi
-              require_script psalm "the enable-psalm input"
-              composer psalm
+              require_script psalm "the enable-psalm input" || return 1
+              composer psalm || return $?
               ;;
             phpstan)
               if [ "${{ inputs.enable-phpstan }}" != "true" ]; then
                 echo "PHPStan is disabled — skipping."
-                exit 0
+                return 0
               fi
-              require_script phpstan "the enable-phpstan input"
-              composer phpstan
+              require_script phpstan "the enable-phpstan input" || return 1
+              composer phpstan || return $?
               ;;
             phpmetrics)
               if [ "${{ inputs.enable-phpmetrics }}" != "true" ]; then
                 echo "phpmetrics is disabled — skipping."
-                exit 0
+                return 0
               fi
-              require_script phpmetrics "the enable-phpmetrics input"
-              composer phpmetrics
+              require_script phpmetrics "the enable-phpmetrics input" || return 1
+              composer phpmetrics || return $?
               ;;
-          esac
+            *)
+              echo "::error::unknown tool '$1' — the matrix and run_tool have drifted apart."
+              return 1
+              ;;
+            esac
+          }
 
+          # ── One job, N tools ───────────────────────────────────────────────
+          #
+          # `set -e` is ACTIVE in a GitHub `run:` block, but it is SUSPENDED
+          # inside a function invoked on the left of `||`. That is why every
+          # tool invocation inside run_tool() carries an explicit
+          # `|| return $?`: without it a failing tool would fall through to the
+          # end of its case arm and the function would return 0 — a red tool
+          # reported as green, in the job that exists to catch red tools.
+          TOOLS="${{ matrix.tool }}"
+          [ "$TOOLS" = "all" ] && TOOLS="lint phpcs phpmd psalm phpstan phpmetrics"
+
+          mkdir -p quality-results
+          FAILED=""
+          for T in $TOOLS; do
+            echo "::group::$T"
+            RC=0
+            # SUBSHELL: a tool that `cd`s (npm audit does) must not move the
+            # working directory for the next tool in the family.
+            ( run_tool "$T" ) || RC=$?
+            echo "::endgroup::"
+            if [ "$RC" -eq 0 ]; then
+              echo success > "quality-results/$T.txt"
+            else
+              echo failure > "quality-results/$T.txt"
+              FAILED="$FAILED $T"
+              echo "::error::$T failed (exit $RC)."
+            fi
+          done
+
+          if [ -n "$FAILED" ]; then
+            echo "::error::PHP Quality failed:$FAILED"
+            exit 1
+          fi
+          echo "PHP Quality: all of [$TOOLS] passed."
+
+      # FILLS IN WHAT THE RUN STEP COULD NOT WRITE. In the normal path the run
+      # step above has already recorded each tool's own exit code. This step
+      # exists for the case where the job died BEFORE that loop — a failed
+      # `composer install`, a cancelled runner — where no per-tool file exists
+      # and the report would otherwise read "skipped" for every one of them.
+      # `job.status` is the honest answer there: they did not run, and the job
+      # failed.
       - name: Record result
         if: always()
         run: |
           mkdir -p quality-results
-          echo "${{ job.status }}" > quality-results/${{ matrix.tool }}.txt
-      - name: Upload result
+          TOOLS="${{ matrix.tool }}"
+          [ "$TOOLS" = "all" ] && TOOLS="lint phpcs phpmd psalm phpstan phpmetrics"
+          for T in $TOOLS; do
+            [ -s "quality-results/$T.txt" ] || echo "${{ job.status }}" > "quality-results/$T.txt"
+          done
+      # One artifact PER TOOL even when the legs are consolidated, because the
+      # Quality Report reads `results/result-php-quality-lint/lint.txt` and its
+      # `read_result()` returns "skipped" for a missing file. A single combined
+      # artifact would render every tool as skipped and the report would say so
+      # in the required check, confidently and wrongly.
+      # `if-no-files-found: ignore` is what makes one step list serve both
+      # modes: in split mode this leg holds only its own file and the other
+      # five steps create nothing.
+      - name: "Upload result (lint)"
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: result-php-quality-${{ matrix.tool }}
-          path: quality-results/
+          name: result-php-quality-lint
+          path: quality-results/lint.txt
+          if-no-files-found: ignore
+      - name: "Upload result (phpcs)"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-php-quality-phpcs
+          path: quality-results/phpcs.txt
+          if-no-files-found: ignore
+      - name: "Upload result (phpmd)"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-php-quality-phpmd
+          path: quality-results/phpmd.txt
+          if-no-files-found: ignore
+      - name: "Upload result (psalm)"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-php-quality-psalm
+          path: quality-results/psalm.txt
+          if-no-files-found: ignore
+      - name: "Upload result (phpstan)"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-php-quality-phpstan
+          path: quality-results/phpstan.txt
+          if-no-files-found: ignore
+      - name: "Upload result (phpmetrics)"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-php-quality-phpmetrics
+          path: quality-results/phpmetrics.txt
+          if-no-files-found: ignore
 
   # ── occ app:check-code — private and deprecated Nextcloud API usage ────
   #
@@ -1143,7 +1475,7 @@ jobs:
         working-directory: ${{ inputs.frontend-path }}
     strategy:
       matrix:
-        tool: [eslint, stylelint]
+        tool: ${{ inputs.consolidate-tool-legs && fromJSON('["all"]') || fromJSON('["eslint", "stylelint"]') }}
       fail-fast: false
 
     steps:
@@ -1162,34 +1494,105 @@ jobs:
 
       - name: Run ${{ matrix.tool }}
         run: |
-          case "${{ matrix.tool }}" in
+          # `|| return $?` on every tool: `set -e` is suspended inside a function
+          # called on the left of `||`, so without it a failing linter would
+          # fall through its case arm and the family would report green.
+          run_tool() {
+            case "$1" in
             eslint)
               if [ "${{ inputs.enable-eslint }}" != "true" ]; then
                 echo "ESLint is disabled — skipping."
-                exit 0
+                return 0
               fi
-              npm run lint
+              npm run lint || return $?
               ;;
             stylelint)
               if [ "${{ inputs.enable-stylelint }}" != "true" ]; then
                 echo "Stylelint is disabled — skipping."
-                exit 0
+                return 0
               fi
-              npm run stylelint
+              npm run stylelint || return $?
               ;;
-          esac
+            *)
+              echo "::error::unknown tool '$1' — the matrix and run_tool have drifted apart."
+              return 1
+              ;;
+            esac
+          }
 
+          # ── One job, N tools ───────────────────────────────────────────────
+          #
+          # `set -e` is ACTIVE in a GitHub `run:` block, but it is SUSPENDED
+          # inside a function invoked on the left of `||`. That is why every
+          # tool invocation inside run_tool() carries an explicit
+          # `|| return $?`: without it a failing tool would fall through to the
+          # end of its case arm and the function would return 0 — a red tool
+          # reported as green, in the job that exists to catch red tools.
+          TOOLS="${{ matrix.tool }}"
+          [ "$TOOLS" = "all" ] && TOOLS="eslint stylelint"
+
+          mkdir -p ${{ inputs.frontend-path }}/quality-results
+          FAILED=""
+          for T in $TOOLS; do
+            echo "::group::$T"
+            RC=0
+            # SUBSHELL: a tool that `cd`s (npm audit does) must not move the
+            # working directory for the next tool in the family.
+            ( run_tool "$T" ) || RC=$?
+            echo "::endgroup::"
+            if [ "$RC" -eq 0 ]; then
+              echo success > "${{ inputs.frontend-path }}/quality-results/$T.txt"
+            else
+              echo failure > "${{ inputs.frontend-path }}/quality-results/$T.txt"
+              FAILED="$FAILED $T"
+              echo "::error::$T failed (exit $RC)."
+            fi
+          done
+
+          if [ -n "$FAILED" ]; then
+            echo "::error::Vue Quality failed:$FAILED"
+            exit 1
+          fi
+          echo "Vue Quality: all of [$TOOLS] passed."
+
+      # FILLS IN WHAT THE RUN STEP COULD NOT WRITE. In the normal path the run
+      # step above has already recorded each tool's own exit code. This step
+      # exists for the case where the job died BEFORE that loop — a failed
+      # `composer install`, a cancelled runner — where no per-tool file exists
+      # and the report would otherwise read "skipped" for every one of them.
+      # `job.status` is the honest answer there: they did not run, and the job
+      # failed.
       - name: Record result
         if: always()
         run: |
           mkdir -p quality-results
-          echo "${{ job.status }}" > quality-results/${{ matrix.tool }}.txt
-      - name: Upload result
+          TOOLS="${{ matrix.tool }}"
+          [ "$TOOLS" = "all" ] && TOOLS="eslint stylelint"
+          for T in $TOOLS; do
+            [ -s "quality-results/$T.txt" ] || echo "${{ job.status }}" > "quality-results/$T.txt"
+          done
+      # One artifact PER TOOL even when the legs are consolidated, because the
+      # Quality Report reads `results/result-vue-quality-eslint/eslint.txt` and its
+      # `read_result()` returns "skipped" for a missing file. A single combined
+      # artifact would render every tool as skipped and the report would say so
+      # in the required check, confidently and wrongly.
+      # `if-no-files-found: ignore` is what makes one step list serve both
+      # modes: in split mode this leg holds only its own file and the other
+      # five steps create nothing.
+      - name: "Upload result (eslint)"
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: result-vue-quality-${{ matrix.tool }}
-          path: ${{ inputs.frontend-path }}/quality-results/
+          name: result-vue-quality-eslint
+          path: ${{ inputs.frontend-path }}/quality-results/eslint.txt
+          if-no-files-found: ignore
+      - name: "Upload result (stylelint)"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-vue-quality-stylelint
+          path: ${{ inputs.frontend-path }}/quality-results/stylelint.txt
+          if-no-files-found: ignore
 
   # ── Group 2b: Custom frontend checks ───────────
   #
@@ -1665,7 +2068,7 @@ jobs:
     timeout-minutes: 20
     strategy:
       matrix:
-        ecosystem: [composer, npm]
+        ecosystem: ${{ inputs.consolidate-tool-legs && fromJSON('["all"]') || fromJSON('["composer", "npm"]') }}
       fail-fast: false
 
     steps:
@@ -1673,7 +2076,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup PHP
-        if: matrix.ecosystem == 'composer'
+        # `!= 'npm'` rather than `== 'composer'`: in the consolidated leg
+        # (ecosystem 'all') BOTH toolchains must be installed, and in a split
+        # leg exactly one still is. Same inversion on the npm steps below.
+        if: matrix.ecosystem != 'npm'
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ inputs.php-version }}
@@ -1688,7 +2094,7 @@ jobs:
       # `composer.lock` and `composer.json` are listed because three fleet repos
       # ship no lockfile; `hashFiles` skips patterns that match nothing.
       - name: Cache Composer downloads
-        if: matrix.ecosystem == 'composer' && inputs.enable-php
+        if: matrix.ecosystem != 'npm' && inputs.enable-php
         uses: actions/cache@v4
         with:
           path: ~/.cache/composer
@@ -1703,7 +2109,7 @@ jobs:
       # gate failed with it — a permanent red on every repo that legitimately
       # has no package.json. Observed on ConductionNL/hydra 2026-08-04.
       - name: Setup Node.js
-        if: matrix.ecosystem == 'npm' && inputs.enable-npm
+        if: matrix.ecosystem != 'composer' && inputs.enable-npm
         uses: actions/setup-node@v4
         with:
           node-version: "${{ inputs.node-version }}"
@@ -1714,22 +2120,101 @@ jobs:
         env:
           FRONTEND_PATH: ${{ inputs.frontend-path }}
         run: |
-          case "${{ matrix.ecosystem }}" in
+          run_tool() {
+            case "$1" in
             composer)
               if [ "${{ inputs.enable-php }}" != "true" ]; then
                 echo "PHP toolchain is disabled — skipping composer audit."
-                exit 0
+                return 0
               fi
-              composer install --no-progress --prefer-dist --optimize-autoloader
-              composer audit --format=plain --abandoned=report
+              # RETRIED, because this step reaches the network for the advisory
+              # feed and a transport failure is not a security finding.
+              #
+              # `roave/security-advisories` is a dev-latest package whose install
+              # pulls https://packagist.org/api/security-advisories/ live, so
+              # `composer install` — not `composer audit` — is where the outage
+              # lands. Observed on shillinq 2026-08-27:
+              #
+              #   curl error 28 while downloading
+              #   https://packagist.org/api/security-advisories/: Operation timed
+              #   out after 10006 milliseconds with 0 bytes received
+              #   Process completed with exit code 100
+              #
+              # which renders in every summary as a failed SECURITY gate on
+              # `development`. It reads as "this app has a vulnerability"; it
+              # means "packagist did not answer within ten seconds".
+              #
+              # The npm leg below already tolerates its endpoint being
+              # unavailable. This is the same class of problem, but it must NOT
+              # get the same treatment: an unreachable advisory database with a
+              # green tick is a check that cannot fail, and the audit that
+              # follows would report "no advisories" having consulted nothing.
+              # So retry the transport, and if it still will not answer, fail —
+              # saying which of the two it was.
+              install_ok=""
+              for attempt in 1 2 3; do
+                if composer install --no-progress --prefer-dist --optimize-autoloader; then
+                  install_ok="yes"
+                  break
+                fi
+                echo "::notice::composer install failed (attempt ${attempt}/3); retrying in $((attempt * 10))s"
+                sleep $((attempt * 10))
+              done
+              if [ -z "$install_ok" ]; then
+                echo "::error::composer install did not succeed in 3 attempts. If the log above \
+              shows a curl/timeout error against packagist.org, this is an advisory-feed outage \
+              rather than a vulnerability in this app — but it is still reported as a failure, \
+              because the audit below would otherwise pass having consulted nothing."
+                exit 1
+              fi
+
+              # Tolerate an unavailable PACKAGIST advisory endpoint, exactly as
+              # the npm leg below already does for its own.
+              #
+              # The retry above wraps `composer install`, on the stated belief
+              # that "composer install — not composer audit — is where the
+              # outage shows up". That is not always true. Observed on
+              # openregister#2956:
+              #
+              #   ##[error]The "https://packagist.org/api/security-advisories/"
+              #   file could not be downloaded (HTTP/2 502 )
+              #   ##[error]Process completed with exit code 100
+              #
+              # `install` succeeded; `audit` reached the advisory feed itself and
+              # got a 502. Nothing retried it and nothing recognised it, so a
+              # Packagist outage reads as a security failure on every PR in the
+              # fleet at once — the same fleet-wide red this job's own header
+              # describes, from the same cause, one command further along.
+              #
+              # 🔴 THE DISTINCTION IS THE MESSAGE, NOT THE EXIT CODE. A real
+              # advisory and an unreachable feed both exit non-zero. Only the
+              # transport failure prints the "could not be downloaded" line, so
+              # that — and only that — is tolerated. An advisory still fails the
+              # gate, which is the property that makes this a check rather than
+              # a green tick that cannot fail.
+              for attempt in 1 2 3; do
+                out="$(composer audit --format=plain --abandoned=report 2>&1)" && rc=0 || rc=$?
+                [ "$rc" -eq 0 ] && break
+                printf '%s' "$out" | grep -qiE 'security-advisories.*(could not be downloaded|curl error|timed out)|(could not be downloaded|curl error [0-9]+ while downloading).*security-advisories' || break
+                echo "::notice::composer audit could not reach the Packagist advisory feed (attempt ${attempt}/3); retrying in $((attempt * 10))s"
+                sleep $((attempt * 10))
+              done
+              echo "$out"
+              if [ "$rc" -ne 0 ]; then
+                if printf '%s' "$out" | grep -qiE 'security-advisories.*(could not be downloaded|curl error|timed out)|(could not be downloaded|curl error [0-9]+ while downloading).*security-advisories'; then
+                  echo "::warning::composer audit skipped — the Packagist advisory feed is unavailable (external outage), not a vulnerability. Dependencies were NOT audited on this run."
+                else
+                  exit "$rc"
+                fi
+              fi
               ;;
             npm)
               if [ "${{ inputs.enable-npm }}" != "true" ]; then
                 echo "npm ecosystem is disabled — skipping npm audit."
-                exit 0
+                return 0
               fi
-              cd "$FRONTEND_PATH"
-              npm ci
+              cd "$FRONTEND_PATH" || return $?
+              npm ci || return $?
               # Tolerate an unavailable npm advisory endpoint: npm is retiring
               # the audits/quick endpoint and it intermittently 400s ("audit
               # endpoint returned an error" / "Invalid package tree"). That is an
@@ -1741,22 +2226,89 @@ jobs:
               if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -qiE "audit endpoint returned an error|Invalid package tree|ECONNRESET|ETIMEDOUT|ENOTFOUND|being retired|Service Unavailable"; then
                 echo "::warning::npm audit skipped — npm advisory endpoint unavailable (external); not a vulnerability."
               elif [ "$rc" -ne 0 ]; then
-                exit "$rc"
+                return "$rc"
               fi
               ;;
-          esac
+            *)
+              echo "::error::unknown ecosystem '$1' — the matrix and run_tool have drifted apart."
+              return 1
+              ;;
+            esac
+          }
 
+          # ── One job, N tools ───────────────────────────────────────────────
+          #
+          # `set -e` is ACTIVE in a GitHub `run:` block, but it is SUSPENDED
+          # inside a function invoked on the left of `||`. That is why every
+          # tool invocation inside run_tool() carries an explicit
+          # `|| return $?`: without it a failing tool would fall through to the
+          # end of its case arm and the function would return 0 — a red tool
+          # reported as green, in the job that exists to catch red tools.
+          TOOLS="${{ matrix.ecosystem }}"
+          [ "$TOOLS" = "all" ] && TOOLS="composer npm"
+
+          mkdir -p quality-results
+          FAILED=""
+          for T in $TOOLS; do
+            echo "::group::$T"
+            RC=0
+            # SUBSHELL: a tool that `cd`s (npm audit does) must not move the
+            # working directory for the next tool in the family.
+            ( run_tool "$T" ) || RC=$?
+            echo "::endgroup::"
+            if [ "$RC" -eq 0 ]; then
+              echo success > "quality-results/$T.txt"
+            else
+              echo failure > "quality-results/$T.txt"
+              FAILED="$FAILED $T"
+              echo "::error::$T failed (exit $RC)."
+            fi
+          done
+
+          if [ -n "$FAILED" ]; then
+            echo "::error::Security failed:$FAILED"
+            exit 1
+          fi
+          echo "Security: all of [$TOOLS] passed."
+
+      # FILLS IN WHAT THE RUN STEP COULD NOT WRITE. In the normal path the run
+      # step above has already recorded each tool's own exit code. This step
+      # exists for the case where the job died BEFORE that loop — a failed
+      # `composer install`, a cancelled runner — where no per-tool file exists
+      # and the report would otherwise read "skipped" for every one of them.
+      # `job.status` is the honest answer there: they did not run, and the job
+      # failed.
       - name: Record result
         if: always()
         run: |
           mkdir -p quality-results
-          echo "${{ job.status }}" > quality-results/${{ matrix.ecosystem }}.txt
-      - name: Upload result
+          TOOLS="${{ matrix.ecosystem }}"
+          [ "$TOOLS" = "all" ] && TOOLS="composer npm"
+          for T in $TOOLS; do
+            [ -s "quality-results/$T.txt" ] || echo "${{ job.status }}" > "quality-results/$T.txt"
+          done
+      # One artifact PER TOOL even when the legs are consolidated, because the
+      # Quality Report reads `results/result-security-composer/composer.txt` and its
+      # `read_result()` returns "skipped" for a missing file. A single combined
+      # artifact would render every tool as skipped and the report would say so
+      # in the required check, confidently and wrongly.
+      # `if-no-files-found: ignore` is what makes one step list serve both
+      # modes: in split mode this leg holds only its own file and the other
+      # five steps create nothing.
+      - name: "Upload result (composer)"
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: result-security-${{ matrix.ecosystem }}
-          path: quality-results/
+          name: result-security-composer
+          path: quality-results/composer.txt
+          if-no-files-found: ignore
+      - name: "Upload result (npm)"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-security-npm
+          path: quality-results/npm.txt
+          if-no-files-found: ignore
 
   # ── Group 4: License Compliance ─────────────────
   #
@@ -2578,7 +3130,14 @@ jobs:
     # `needs.security.*` — verified across the whole file, where every
     # surviving `needs.` expression belongs to the `report` job or to the
     # Playwright job's frontend-build artifact check.
-    if: ${{ inputs.enable-php && inputs.enable-phpunit && !cancelled() }}
+    # `!= 'false'` and NOT `== 'true'`, deliberately. If the `changes` job ever
+    # fails, is cancelled or is deleted, its outputs are the EMPTY STRING, and
+    # `'' == 'true'` would silently delete this entire job family — the exact
+    # shape that once turned PHPUnit, Newman and E2E into `skipped` across 16
+    # repos and read as unremarkable. `'' != 'false'` runs the tests instead.
+    # The cost of the filter being broken is runner minutes; the cost of it
+    # being trusted while broken is a verdict nobody notices is missing.
+    if: ${{ inputs.enable-php && inputs.enable-phpunit && needs.changes.outputs.code != 'false' && !cancelled() }}
     runs-on: ubuntu-latest
     name: "PHPUnit (PHP ${{ matrix.php-version }}, NC ${{ matrix.nextcloud-ref }}, ${{ matrix.database }})"
     # `nextcloud-matrix` is a REAL edge, unlike `security`: this job's matrix
@@ -2586,7 +3145,7 @@ jobs:
     # `!cancelled()` in the `if:` above still suppresses the implicit success(),
     # so a failed resolve does not delete these legs — the resolve step publishes
     # a valid array before it exits non-zero, precisely so this stays true.
-    needs: [security, nextcloud-matrix]
+    needs: [security, nextcloud-matrix, changes]
     # Observed across 337 SUCCESSFUL executions: median 1.7 min, p95 13.6 min,
     # max 18.9 min (shillinq, green). The spread is huge because each leg
     # installs a full Nextcloud server before the suite runs, so a tight bound
@@ -2629,12 +3188,29 @@ jobs:
 
     strategy:
       matrix:
-        php-version: ${{ fromJSON(inputs.php-test-versions) }}
+        # REDUCED ON PULL REQUESTS when the caller sets reduce-pr-matrix. The
+        # full product still runs on every push to a default branch, so the
+        # declared range is exercised on every merge and on the release PR into
+        # beta — breadth moves from per-commit to per-merge, it is not dropped.
+        php-version: ${{ (inputs.reduce-pr-matrix && github.event_name == 'pull_request') && fromJSON(format('["{0}"]', inputs.php-version)) || fromJSON(inputs.php-test-versions) }}
         # DERIVED from appinfo/info.xml by the `nextcloud-matrix` job, not read
         # from an input any more. The `needs:` edge below is what makes this
         # expression resolvable; without it the matrix evaluates to nothing and
         # the job is DELETED rather than failed.
-        nextcloud-ref: ${{ fromJSON(needs.nextcloud-matrix.outputs.branches) }}
+        # `single-server` is the same NEWEST-first entry Newman, Playwright and
+        # journeydoc-capture already run against, so a reduced PR matrix tests
+        # the server the rest of the suite is already using rather than
+        # inventing a second opinion about which version matters.
+        #
+        # AND IT IS THE ONLY REDUCTION THAT KEEPS THE COVERAGE GUARD ALIVE.
+        # The `Measure merge-base coverage` step below runs on exactly one leg:
+        # `matrix.php-version == inputs.php-version && matrix.nextcloud-ref ==
+        # needs.nextcloud-matrix.outputs.single-server`. The reduced matrix is
+        # that pair and nothing else, so the guard still has its leg. Reducing
+        # to any OTHER combination — the declared floor, say — would have left
+        # that condition unsatisfiable and the coverage ratchet would simply
+        # never have run on a pull request, silently and with nothing red.
+        nextcloud-ref: ${{ (inputs.reduce-pr-matrix && github.event_name == 'pull_request') && fromJSON(format('["{0}"]', needs.nextcloud-matrix.outputs.single-server)) || fromJSON(needs.nextcloud-matrix.outputs.branches) }}
         # An empty database-test-matrix collapses to the single `database`
         # input, which is what every caller uses today — so the matrix keeps
         # exactly its current dimensions until an app opts in. Routed through
@@ -3682,7 +4258,14 @@ jobs:
     # most expensive evidence this workflow produces and it was the easiest to
     # delete: one advisory against a dev-only formatter took it out fleet-wide
     # on 2026-08-06 and rendered as a grey tick. See the `security` job.
-    if: ${{ inputs.enable-playwright && !cancelled() }}
+    # `!= 'false'` and NOT `== 'true'`, deliberately. If the `changes` job ever
+    # fails, is cancelled or is deleted, its outputs are the EMPTY STRING, and
+    # `'' == 'true'` would silently delete this entire job family — the exact
+    # shape that once turned PHPUnit, Newman and E2E into `skipped` across 16
+    # repos and read as unremarkable. `'' != 'false'` runs the tests instead.
+    # The cost of the filter being broken is runner minutes; the cost of it
+    # being trusted while broken is a verdict nobody notices is missing.
+    if: ${{ inputs.enable-playwright && needs.changes.outputs.code != 'false' && !cancelled() }}
     runs-on: ubuntu-latest
     name: "E2E Tests (Playwright)"
     # `frontend-build` is a dependency purely so its artifact is available to
@@ -3708,7 +4291,7 @@ jobs:
     # job run and simply rebuild the bundle itself.
     #
     # `nextcloud-matrix` supplies the server this job checks out. Real edge.
-    needs: [security, frontend-build, nextcloud-matrix]
+    needs: [security, frontend-build, nextcloud-matrix, changes]
     # No job in this file declared a timeout, so a hung suite ran to GitHub's
     # 6-hour default. Observed durations once the suite is healthy: 4-10 min
     # (planix 0.8, doriath 4.2, zaakafhandelapp 5.3, softwarecatalog 6.1,
@@ -4994,14 +5577,50 @@ jobs:
         run: |
           set -euo pipefail
           GATE=""
+          # The vendored path needs the INNER hydra-gates/ segment.
+          #
+          # conduction/hydra-gates is published from ConductionNL/.github, whose
+          # composer.json declares `extra.hydra-gates.helpers` as
+          # "hydra-gates/scripts/lib" -- a path relative to the PACKAGE ROOT. So
+          # composer installs it to:
+          #
+          #   vendor/conduction/hydra-gates/hydra-gates/scripts/lib/check_e2e_skips.py
+          #                                 ^^^^^^^^^^^
+          #
+          # The first candidate below omitted that segment, so it could never
+          # match in ANY app however correctly hydra-gates was vendored. That is
+          # why this gate is enabled in zero of the 21 fleet repos and why
+          # launchpad -- which DOES require conduction/hydra-gates ^1.8.2 and
+          # DOES configure the html reporter -- still reported
+          # "hydra-gates not vendored here yet".
+          #
+          # The old paths are kept as fallbacks so a checkout-style layout, or a
+          # future package that flattens the tree, still resolves.
           for candidate in \
+            "server/apps/${{ inputs.app-name }}/vendor/conduction/hydra-gates/hydra-gates/scripts/lib/check_e2e_skips.py" \
             "server/apps/${{ inputs.app-name }}/vendor/conduction/hydra-gates/scripts/lib/check_e2e_skips.py" \
             "hydra-gates/scripts/lib/check_e2e_skips.py"; do
             if [ -f "${candidate}" ]; then GATE="${candidate}"; break; fi
           done
           if [ -z "${GATE}" ]; then
-            echo "::warning::check_e2e_skips.py not found (hydra-gates not vendored here yet) — skip discipline NOT measured on this run."
-            exit 0
+            # An absent GATE is an absent measurement, exactly like the absent
+            # REPORT handled below -- and it must be treated the same way.
+            #
+            # This used to `::warning::` and `exit 0`. That made opting in a
+            # NO-OP: launchpad set e2e-skip-blocking:true, the script was not
+            # vendored, the step warned, the job went green, and the app looked
+            # like the first in the fleet to enforce skip discipline while
+            # measuring nothing at all. The comment on the REPORT branch below
+            # already names this as "the one failure mode that would quietly
+            # turn the whole gate into a no-op" -- it just guarded one of the
+            # two ways in.
+            #
+            # `continue-on-error: !inputs.e2e-skip-blocking` above keeps this
+            # advisory for apps that have NOT opted in, so measure-only mode is
+            # unchanged. For an app that HAS opted in, a missing gate is now a
+            # failure with a fix in the message.
+            echo "::error::check_e2e_skips.py not found — skip discipline could not be measured. Vendor conduction/hydra-gates (composer require --dev conduction/hydra-gates) or check it out to ./hydra-gates. Looked in: server/apps/${{ inputs.app-name }}/vendor/conduction/hydra-gates/scripts/lib/ and ./hydra-gates/scripts/lib/."
+            exit 1
           fi
 
           REPORT=""
@@ -6181,6 +6800,12 @@ jobs:
       # would otherwise swallow an unknown flag as the app directory.
       - name: Resolve the diff base and the scope
         id: base
+        env:
+          # Through `env:`, never interpolated into the script body. A branch
+          # name is attacker-controlled text and git permits a double quote in
+          # one, so `case "${{ ... }}" in` would be a script-injection site.
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
           set -u
           EVENT="${{ github.event_name }}"
@@ -6190,6 +6815,58 @@ jobs:
             BASE="origin/${{ github.base_ref }}"
             SCOPE="diff"
             WHY="this is a ${EVENT}, so the PR's target branch is the base and ADR-020 diff-scoping applies."
+
+            # A RELEASE PROMOTION IS THE ONE PULL REQUEST WHOSE TARGET IS THE
+            # WRONG BASE.
+            #
+            # The fleet promotes feature -> development -> beta -> main. By the
+            # time `beta` is opened against `main`, every commit in that diff has
+            # already faced these gates twice: once entering development, once
+            # entering beta. Diffing against the TARGET asks "what does this add
+            # to main?", and the answer is every commit since the last release --
+            # so a diff-scoped gate reports the whole tree as changed.
+            #
+            # Measured 2026-08-28 on openregister#2975 (hotfix/... -> main,
+            # 5782 commits): gate-16 reported 256 changed methods missing @spec,
+            # plus gate-83 and gate-70, on a tree that is byte-identical to
+            # `beta` -- where the SAME content passed Hydra Gates green on
+            # #2972. Nothing was found that beta had not already cleared; the
+            # base was simply wrong.
+            #
+            # So for a promotion the base is the branch being promoted FROM.
+            # That keeps the gates real rather than skipping them: a hotfix
+            # carrying genuinely new code still shows that code in the diff
+            # against beta, and is still judged on it. What disappears is only
+            # the re-litigation of commits that already passed.
+            IS_PROMOTION=no
+            case "${PR_HEAD_REF:-}" in
+              development|beta) IS_PROMOTION=yes ;;
+              hotfix/*)
+                case "${BASE_REF:-}" in
+                  beta|main) IS_PROMOTION=yes ;;
+                esac
+                ;;
+            esac
+
+            if [ "$IS_PROMOTION" = yes ]; then
+              case "${BASE_REF:-}" in
+                main) SRC=beta ;;
+                beta) SRC=development ;;
+                *)    SRC="" ;;
+              esac
+
+              # Only re-point at a source branch that actually exists. A repo
+              # without one keeps the target as its base and says so, rather
+              # than resolving to an empty ref and silently scoping to nothing
+              # -- a gate run against no base is the failure mode this whole
+              # step exists to avoid.
+              if [ -n "$SRC" ] && git -C app rev-parse --verify --quiet "refs/remotes/origin/${SRC}" >/dev/null; then
+                BASE="origin/${SRC}"
+                WHY="this is a release promotion (${PR_HEAD_REF} -> ${BASE_REF}), so the base is the branch being promoted FROM (${SRC}). Every commit in the diff against ${BASE_REF} already passed these gates entering ${SRC}; anything genuinely new in this pull request still appears in the diff against ${SRC} and is still judged."
+              else
+                WHY="this is a release promotion (${PR_HEAD_REF} -> ${BASE_REF}), but origin/${SRC:-<none for this target>} is not available, so the target branch remains the base. Expect diff-scoped gates to report the whole release delta."
+              fi
+            fi
           elif [ "${EVENT}" = "push" ]; then
             # A push HAS a previous tip. We deliberately set NOTHING and let the
             # package's own precedence chain resolve origin/HEAD ->
@@ -6432,7 +7109,7 @@ jobs:
     # which is exactly why this has to be gated separately: a green PHPUnit
     # matrix measured on versions the app never claimed is the failure this
     # whole change exists to remove, and it looks identical to a pass.
-    needs: [php-quality, vue-quality, frontend-build, frontend-checks, frontend-tests, security, license, nextcloud-matrix, phpunit, newman, playwright, journeydoc-capture, baseline-protection, sbom, features-check, features-extract, hydra-gates, app-check-code, info-xml, reuse]
+    needs: [php-quality, vue-quality, frontend-build, frontend-checks, frontend-tests, security, license, nextcloud-matrix, phpunit, newman, playwright, journeydoc-capture, baseline-protection, sbom, features-check, features-extract, hydra-gates, app-check-code, info-xml, reuse, changes]
     if: always()
     # Observed across 266 executions: median 0.6 min — but 2% of runs sit at
     # ~30 min because the `Install PDF tools` apt-get step stalls on the Ubuntu
@@ -6851,6 +7528,12 @@ jobs:
           NEWMAN_RESULT: ${{ needs.newman.result }}
           PLAYWRIGHT_ENABLED: ${{ inputs.enable-playwright }}
           PLAYWRIGHT_RESULT: ${{ needs.playwright.result }}
+          # The changed-path filter's own verdict, so a DELIBERATE skip can be
+          # told apart from a missing one. Without these two the census sees
+          # only `skipped` and would report a filtered run as "NO VERDICT
+          # EXISTS" — turning a working cost control into a permanent red.
+          PATH_FILTER_CODE: ${{ needs.changes.outputs.code }}
+          PATH_FILTER_REASON: ${{ needs.changes.outputs.reason }}
           JOURNEYDOC_ENABLED: ${{ inputs.enable-journeydoc-capture }}
           JOURNEYDOC_RESULT: ${{ needs['journeydoc-capture'].result }}
         run: |
@@ -6858,8 +7541,19 @@ jobs:
 
           MISSING=""
           RAN=""
+          FILTERED=""
 
-          # $1 = human label, $2 = enabled ("true"/"false"), $3 = job result
+          # $1 = human label, $2 = enabled ("true"/"false"), $3 = job result,
+          # $4 = "true" when this family is gated by the changed-path filter.
+          #
+          # FOUR states, not three. `skipped` alone is ambiguous, and collapsing
+          # the ambiguity in either direction is a defect: call every skip a
+          # missing verdict and a correctly-filtered docs commit is permanently
+          # red; call every skip fine and the 2026-08-06 failure returns, where
+          # a dev-dependency advisory deleted the test tier in 16 repos and
+          # every run read as unremarkable. So a filtered skip must be
+          # DECLARED — by the filter, in words, with its reason — and anything
+          # else that is skipped is still a missing verdict.
           classify() {
             if [ "$2" != "true" ]; then
               echo "  - $1: not enabled by this caller — nothing expected."
@@ -6867,8 +7561,13 @@ jobs:
             fi
             case "$3" in
               skipped)
-                echo "  - $1: ENABLED but result=skipped — NO VERDICT EXISTS."
-                MISSING="${MISSING}${1}"$'\n'
+                if [ "${4:-false}" = "true" ] && [ "$PATH_FILTER_CODE" = "false" ]; then
+                  echo "  - $1: ENABLED, and deliberately NOT RUN for this diff — $PATH_FILTER_REASON"
+                  FILTERED="${FILTERED}${1}"$'\n'
+                else
+                  echo "  - $1: ENABLED but result=skipped — NO VERDICT EXISTS."
+                  MISSING="${MISSING}${1}"$'\n'
+                fi
                 ;;
               success)
                 echo "  - $1: ran, passed."
@@ -6882,10 +7581,30 @@ jobs:
           }
 
           echo "Test-tier verdict census:"
-          classify "PHPUnit"            "$PHPUNIT_ENABLED"    "$PHPUNIT_RESULT"
+          classify "PHPUnit"            "$PHPUNIT_ENABLED"    "$PHPUNIT_RESULT"    true
           classify "Newman"             "$NEWMAN_ENABLED"     "$NEWMAN_RESULT"
-          classify "Playwright"         "$PLAYWRIGHT_ENABLED" "$PLAYWRIGHT_RESULT"
+          classify "Playwright"         "$PLAYWRIGHT_ENABLED" "$PLAYWRIGHT_RESULT" true
           classify "Journeydoc capture" "$JOURNEYDOC_ENABLED" "$JOURNEYDOC_RESULT"
+
+          # A filtered run is a pass ABOUT THE DIFF IT EXAMINED, and it must not
+          # be readable as a pass about the code. Say which families did not
+          # run, in the report body, every time.
+          if [ -n "$FILTERED" ]; then
+            {
+              echo ""
+              echo "### ⚠️ Partial run — the heavy test tier did not execute"
+              echo ""
+              echo "The changed-path filter decided this diff could not change their verdict:"
+              echo ""
+              printf '%s' "$FILTERED" | sed 's/^/- /'
+              echo ""
+              echo "Reason: $PATH_FILTER_REASON"
+              echo ""
+              echo "This run is green **about the files it examined**. It is not"
+              echo "evidence that the test suite passes — no test suite ran."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice::Partial run — $(printf '%s' "$FILTERED" | tr '\n' ' ')did not execute because the changed-path filter found nothing for them to decide. This run is green about the files it examined, not about the test suite."
+          fi
 
           if [ -z "$MISSING" ]; then
             echo "Every enabled test job produced a verdict."
