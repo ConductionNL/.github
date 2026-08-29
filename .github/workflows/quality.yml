@@ -3192,7 +3192,7 @@ jobs:
         # full product still runs on every push to a default branch, so the
         # declared range is exercised on every merge and on the release PR into
         # beta — breadth moves from per-commit to per-merge, it is not dropped.
-        php-version: ${{ (inputs.reduce-pr-matrix && github.event_name == 'pull_request') && fromJSON(format('["{0}"]', inputs.php-version)) || fromJSON(inputs.php-test-versions) }}
+        php-version: ${{ (inputs.reduce-pr-matrix && github.event_name == 'pull_request' && github.base_ref == 'development') && fromJSON(format('["{0}"]', inputs.php-version)) || fromJSON(inputs.php-test-versions) }}
         # DERIVED from appinfo/info.xml by the `nextcloud-matrix` job, not read
         # from an input any more. The `needs:` edge below is what makes this
         # expression resolvable; without it the matrix evaluates to nothing and
@@ -3210,7 +3210,7 @@ jobs:
         # to any OTHER combination — the declared floor, say — would have left
         # that condition unsatisfiable and the coverage ratchet would simply
         # never have run on a pull request, silently and with nothing red.
-        nextcloud-ref: ${{ (inputs.reduce-pr-matrix && github.event_name == 'pull_request') && fromJSON(format('["{0}"]', needs.nextcloud-matrix.outputs.single-server)) || fromJSON(needs.nextcloud-matrix.outputs.branches) }}
+        nextcloud-ref: ${{ (inputs.reduce-pr-matrix && github.event_name == 'pull_request' && github.base_ref == 'development') && fromJSON(format('["{0}"]', needs.nextcloud-matrix.outputs.single-server)) || fromJSON(needs.nextcloud-matrix.outputs.branches) }}
         # An empty database-test-matrix collapses to the single `database`
         # input, which is what every caller uses today — so the matrix keeps
         # exactly its current dimensions until an app opts in. Routed through
@@ -4265,7 +4265,7 @@ jobs:
     # repos and read as unremarkable. `'' != 'false'` runs the tests instead.
     # The cost of the filter being broken is runner minutes; the cost of it
     # being trusted while broken is a verdict nobody notices is missing.
-    if: ${{ inputs.enable-playwright && needs.changes.outputs.code != 'false' && !cancelled() }}
+    if: ${{ inputs.enable-playwright && needs.changes.outputs.code != 'false' && !cancelled() && !(github.event_name == 'pull_request' && github.base_ref == 'development') }}
     runs-on: ubuntu-latest
     name: "E2E Tests (Playwright)"
     # `frontend-build` is a dependency purely so its artifact is available to
@@ -6711,7 +6711,7 @@ jobs:
       # their full report, and the job is failed afterwards.
       - name: The axe report must exist and hold up
         id: axe-check
-        if: ${{ inputs.enable-axe }}
+        if: ${{ inputs.enable-axe && !(github.event_name == 'pull_request' && github.base_ref == 'development') }}
         env:
           PLAYWRIGHT_RESULT: ${{ needs.playwright.result }}
         run: |
@@ -7534,6 +7534,12 @@ jobs:
           # EXISTS" — turning a working cost control into a permanent red.
           PATH_FILTER_CODE: ${{ needs.changes.outputs.code }}
           PATH_FILTER_REASON: ${{ needs.changes.outputs.reason }}
+          # A pull request into `development` deliberately does not run E2E:
+          # the promotion into beta/main does, so it is one run per merge rather
+          # than one per push per open pull request. Without this the census
+          # sees only `skipped` and calls a working cost control "NO VERDICT
+          # EXISTS", which moves the red instead of removing it.
+          E2E_PROMOTION_SKIP: ${{ github.event_name == 'pull_request' && github.base_ref == 'development' }}
           JOURNEYDOC_ENABLED: ${{ inputs.enable-journeydoc-capture }}
           JOURNEYDOC_RESULT: ${{ needs['journeydoc-capture'].result }}
         run: |
@@ -7561,7 +7567,10 @@ jobs:
             fi
             case "$3" in
               skipped)
-                if [ "${4:-false}" = "true" ] && [ "$PATH_FILTER_CODE" = "false" ]; then
+                if [ -n "${5:-}" ]; then
+                  echo "  - $1: ENABLED, and deliberately NOT RUN — ${5}"
+                  FILTERED="${FILTERED}${1}"$'\n'
+                elif [ "${4:-false}" = "true" ] && [ "$PATH_FILTER_CODE" = "false" ]; then
                   echo "  - $1: ENABLED, and deliberately NOT RUN for this diff — $PATH_FILTER_REASON"
                   FILTERED="${FILTERED}${1}"$'\n'
                 else
@@ -7583,7 +7592,11 @@ jobs:
           echo "Test-tier verdict census:"
           classify "PHPUnit"            "$PHPUNIT_ENABLED"    "$PHPUNIT_RESULT"    true
           classify "Newman"             "$NEWMAN_ENABLED"     "$NEWMAN_RESULT"
-          classify "Playwright"         "$PLAYWRIGHT_ENABLED" "$PLAYWRIGHT_RESULT" true
+          E2E_REASON=""
+          if [ "$E2E_PROMOTION_SKIP" = "true" ]; then
+            E2E_REASON="E2E runs on the promotion into beta/main, not on a pull request into development."
+          fi
+          classify "Playwright"         "$PLAYWRIGHT_ENABLED" "$PLAYWRIGHT_RESULT" true "$E2E_REASON"
           classify "Journeydoc capture" "$JOURNEYDOC_ENABLED" "$JOURNEYDOC_RESULT"
 
           # A filtered run is a pass ABOUT THE DIFF IT EXAMINED, and it must not
