@@ -208,11 +208,29 @@ jobs:
               # carried commits into one that the source branch does not
               # contain, so the two diverge again immediately and the NEXT
               # comparison reports the same work as still outstanding.
-              if gh pr merge "${existing}" --repo "${R}" --merge 2>/dev/null; then
+              #
+              # --admin is REQUIRED, not a convenience. Both `Beta Branch
+              # Protection` and `Development Branch Protection` set
+              # required_approving_review_count: 1 with OrganizationAdmin as
+              # the only bypass actor, so a plain merge from this token is
+              # refused with "the base branch policy prohibits the merge".
+              # fleet-friday-merge.yml shipped without it and merged almost
+              # nothing for weeks while reporting success — 20 of its 23 real
+              # attempts on 2026-08-28 died exactly here.
+              #
+              # The green rule above is stricter than the policy bypassed:
+              # these rulesets require ZERO status checks, so GitHub itself
+              # would merge a red pull request here.
+              #
+              # The error text is KEPT rather than discarded to /dev/null. A
+              # refusal that names no reason reads as an ordinary conflict,
+              # which is precisely why the friday-merge cause went undiagnosed.
+              if merge_err=$(gh pr merge "${existing}" --repo "${R}" --merge --admin 2>&1); then
                 srow "| \`${app}\` | ${up}→${down} | merged PR #${existing} |"
                 MERGED=$((MERGED + 1))
               else
-                srow "| \`${app}\` | ${up}→${down} | PR #${existing} green but merge REFUSED |"
+                why=$(printf '%s' "${merge_err}" | tr '\n|' '  ' | cut -c1-110)
+                srow "| \`${app}\` | ${up}→${down} | PR #${existing} green but merge REFUSED — ${why} |"
                 SKIPPED=$((SKIPPED + 1))
               fi
               return
