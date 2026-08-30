@@ -48,14 +48,34 @@
 # Recording the ancestry IS the payload — without it the merge base never
 # moves and the next promotion conflicts exactly as before.
 #
-# That also decides when merging unattended is safe:
+# ══════════════════════════════════════════════════════════════════════════
+# A BACK-MERGE DOES NOT WAIT FOR GREEN
+# ══════════════════════════════════════════════════════════════════════════
 #
-#   0 files changed  -> nothing to test; merge. The tree is unchanged, so
-#                       demanding CI would block ancestry repair forever on
-#                       branches already red for unrelated reasons — which
-#                       is most of beta and main today.
-#   any file changed -> real content moves; require every check green, the
-#                       same rule as fleet-friday-merge.yml.
+# This is the one place in the fleet where unattended merging is NOT gated
+# on a green run, and the reason is that the gate would prove nothing.
+#
+# Everything carried here has already passed the quality workflow further
+# UP the chain: a Dependabot bump that reached `main` was gated on `main`.
+# Re-running the same checks on the same commits on the way back down adds
+# no information.
+#
+# What it does cost is convergence. These pull requests sit on branches
+# that are red for reasons of their own — a stale `beta` failing today's
+# gates, a release job with no signing credentials — none of which has
+# anything to do with the commits being carried. Waiting for green there
+# means the ancestry is never repaired, so every following promotion
+# conflicts on the same version file, forever. That is the failure this
+# workflow exists to end.
+#
+# If a back-merge does break something, the UP-merge is where it shows:
+# `development` runs the full suite on every push, and `development → beta`
+# runs it again with E2E. A defect carried down is caught one hop later,
+# against a smaller diff.
+#
+# The safety that remains is the one that matters: a CONFLICTING pull
+# request still cannot merge, and anything conflicting outside the version
+# files is refused rather than resolved automatically.
 name: Fleet back-merge
 
 on:
@@ -145,20 +165,6 @@ jobs:
 
           CARRIED=0; INSYNC=0; SKIPPED=0
 
-          # Is every check on this pull request green, with at least one present?
-          pr_is_green() {
-            states=$(gh pr checks "$2" --repo "$1" --json state --jq '.[].state' 2>/dev/null)
-            # AN EMPTY RESPONSE IS NOT "no failing checks".
-            [ -z "${states}" ] && return 1
-            total=$(printf '%s\n' "${states}" | grep -c .)
-            [ "${total}" -eq 0 ] && return 1
-            pending=$(printf '%s\n' "${states}" | grep -cE 'PENDING|IN_PROGRESS|QUEUED|EXPECTED')
-            bad=$(printf '%s\n' "${states}" | grep -cE 'FAILURE|CANCELLED|TIMED_OUT|ACTION_REQUIRED|STALE')
-            [ "${pending}" -ne 0 ] && return 1
-            [ "${bad}" -ne 0 ] && return 1
-            return 0
-          }
-
           hop() {
             app="$1"; up="$2"; down="$3"
             R="ConductionNL/${app}"
@@ -225,13 +231,33 @@ jobs:
             [ -z "${url}" ] && { srow "| \`${app}\` | ${up}→${down} | branch pushed but PR create failed |"; SKIPPED=$((SKIPPED+1)); return; }
             pr="${url##*/}"
 
-            # 0 files changed: nothing to test, and the tree is byte-identical
-            # to ${down}. Requiring CI here would block ancestry repair
-            # forever on branches that are red for unrelated reasons.
-            if [ "${nf}" -ne 0 ] && ! pr_is_green "${R}" "${pr}"; then
-              srow "| \`${app}\` | ${up}→${down} | opened #${pr} (${ahead} commits, ${nf} files) — carries content, left for review |"
-              SKIPPED=$((SKIPPED+1)); return
-            fi
+            # A BACK-MERGE DOES NOT WAIT FOR GREEN, deliberately.
+            #
+            # This carries content DOWNSTREAM — main → beta → development —
+            # and everything it carries has already passed the quality
+            # workflow further up the chain. A Dependabot bump that reached
+            # `main` was gated there; re-gating the same commits on the way
+            # back down proves nothing new.
+            #
+            # What it does cost is convergence. These pull requests sit on
+            # branches that are red for reasons of their own — a stale
+            # `beta` failing today's gates, a release job without signing
+            # credentials — and none of that has anything to do with the
+            # commits being carried. Waiting for green there means the
+            # ancestry is never repaired, so every following promotion
+            # conflicts on the same version file, forever. That is the
+            # failure this workflow exists to end.
+            #
+            # If a back-merge does break something, the UP-merge is where it
+            # shows: `development` runs the full suite on every push, and
+            # `development → beta` runs it again with E2E. A defect carried
+            # down is caught on the way back up, one hop later, with a
+            # smaller diff to read.
+            #
+            # The safety that remains is the one that matters: a CONFLICTING
+            # pull request still cannot merge, and anything conflicting
+            # outside the version files was already refused above rather
+            # than resolved automatically.
 
             # --admin is REQUIRED. `Beta Branch Protection` and `Development
             # Branch Protection` both set required_approving_review_count: 1
