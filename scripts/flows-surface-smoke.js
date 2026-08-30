@@ -83,7 +83,18 @@ async function dismissOverlays(page) {
 async function probe(page, id, route) {
 	for (const url of [`${BASE}/apps/${id}/${route}`, `${BASE}/apps/${id}/#/${route}`]) {
 		await page.goto(url, { waitUntil: 'domcontentloaded' }).catch(() => {})
-		await page.waitForTimeout(2500)
+		// Wait for the surface to settle rather than sleeping a fixed amount.
+		// A flat 2500ms reported openregister as having no sidebar when it has
+		// one: the app is heavy and simply had not mounted it yet. A smoke test
+		// whose verdict depends on how fast the machine is will be ignored, and
+		// deservedly.
+		await page.waitForFunction(() => {
+			const canvas = document.querySelector('.cn-flow-detail')
+			const sidebar = document.querySelector('#app-sidebar-vue, aside.app-sidebar')
+			const locked = /[#/]lock(\?|$|\/)/.test(location.href)
+			const flows = /\bFlows\b/.test(document.body.innerText)
+			return locked || (canvas && sidebar) || (flows && !canvas)
+		}, { timeout: 15000 }).catch(() => {})
 		await dismissOverlays(page)
 		const r = await page.evaluate(() => ({
 			canvas: !!document.querySelector('.cn-flow-detail'),
