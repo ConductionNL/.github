@@ -1,0 +1,279 @@
+# Fleet back-merge — carry what lands downstream, so the three branches converge.
+#
+# ══════════════════════════════════════════════════════════════════════════
+# THE PROBLEM THIS SOLVES
+# ══════════════════════════════════════════════════════════════════════════
+#
+# The fleet promotes UPWARD: development → beta → main. Nothing carried
+# content the other way, and content does arrive out of band:
+#
+#   • Dependabot bumps, where a repository's default branch is `main`.
+#   • `hotfix/*`, which is allowed straight into `main` or `beta` by design.
+#   • `release/v*` version bumps, which a release commits onto the branch it
+#     ran from.
+#
+# Every one of those makes the NEXT promotion conflict on the very file that
+# changed — usually appinfo/info.xml — because both branches then bumped the
+# version independently. Measured 2026-08-30: 13 of 19 open
+# `development → beta` promotion pull requests were CONFLICTING for exactly
+# this reason, and `main` sat 27 to 3,038 commits behind `beta`.
+#
+# release.yml already carries its own bump back (`sync/*-to-development`),
+# but only for the app that just released. This generalises it to the whole
+# fleet and to anything that arrives, from any source.
+#
+# ══════════════════════════════════════════════════════════════════════════
+# WHY IT MERGES RATHER THAN OPENING A BRANCH-TO-BRANCH PULL REQUEST
+# ══════════════════════════════════════════════════════════════════════════
+#
+# The obvious shape — `gh pr create --head main --base beta` — cannot work,
+# and was tried first. Such a pull request has no way to resolve the version
+# conflict, so it opens CONFLICTING, gets no CI at all (a conflicted PR runs
+# none), and sits forever. Measured on portaliq: the direct beta→development
+# pull request opened CONFLICTING while the sync branch below merged clean.
+#
+# So it does what release.yml does: branch off the DOWNSTREAM ref, merge the
+# upstream one, and resolve ONLY the version files to the downstream side —
+# whose unstable line is ahead of the released one, so a version never moves
+# backwards. Anything else that conflicts is a real disagreement and stops
+# for a human; resolving those automatically is how a sync silently drops
+# work.
+#
+# ══════════════════════════════════════════════════════════════════════════
+# A 0-FILE MERGE IS THE POINT, NOT A NO-OP
+# ══════════════════════════════════════════════════════════════════════════
+#
+# Most hops change no files: a squash merge of beta into main creates a
+# commit `beta` does not contain even though the trees are identical.
+# Recording the ancestry IS the payload — without it the merge base never
+# moves and the next promotion conflicts exactly as before.
+#
+# That also decides when merging unattended is safe:
+#
+#   0 files changed  -> nothing to test; merge. The tree is unchanged, so
+#                       demanding CI would block ancestry repair forever on
+#                       branches already red for unrelated reasons — which
+#                       is most of beta and main today.
+#   any file changed -> real content moves; require every check green, the
+#                       same rule as fleet-friday-merge.yml.
+name: Fleet back-merge
+
+on:
+  schedule:
+    # Every three hours. A bump that reaches `main` should not wait a day to
+    # reach `development`, because the promotion it will collide with can be
+    # opened at any time.
+    - cron: "40 */3 * * *"
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Report what would be carried, change nothing"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  # Never let two sweeps open competing sync branches for the same repo.
+  group: fleet-back-merge
+  cancel-in-progress: false
+
+jobs:
+  back-merge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assert a cross-repo token is present
+        env:
+          FLEET_DISPATCH_TOKEN: ${{ secrets.FLEET_DISPATCH_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${FLEET_DISPATCH_TOKEN}" ]; then
+            echo "::error::FLEET_DISPATCH_TOKEN is not set, so this routine can carry nothing."
+            echo "It needs 'contents: write' and 'pull-requests: write' on every repo in fleet-apps.json."
+            exit 1
+          fi
+          echo "Token present."
+
+      - name: Carry main into beta, and beta into development
+        env:
+          GH_TOKEN: ${{ secrets.FLEET_DISPATCH_TOKEN }}
+          # A scheduled run ACTS. Written as an explicit event-name test
+          # rather than `inputs.dry-run == false`, because on a schedule
+          # `inputs.dry-run` is null and GitHub casts both null and false to
+          # 0 — so that comparison is TRUE and reads exactly backwards from
+          # what it appears to say.
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run && 'true' || 'false' }}
+        run: |
+          # -e off: one unreachable repo degrades to a reported skip rather
+          # than aborting the fleet and leaving the rest unexamined.
+          set +e
+          set -uo pipefail
+
+          APPS=$(jq -r '.swept[]' fleet-apps.json)
+          [ -z "${APPS}" ] && { echo "::error::fleet-apps.json lists no apps."; exit 1; }
+
+          # The ONLY files this may resolve automatically. Everything else
+          # that conflicts is a real disagreement.
+          VERFILES="appinfo/info.xml openapi.json package.json package-lock.json composer.json composer.lock"
+
+          WORK="$(mktemp -d)"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          {
+            echo "### Fleet back-merge"
+            echo ""
+            [ "${DRY_RUN}" = "true" ] && echo "**DRY RUN** — nothing pushed or merged."
+            echo ""
+            echo "| App | Hop | Outcome |"
+            echo "| --- | --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Every verdict goes to the log as well as the summary: this
+          # workflow merges, and an audit trail that lives only in a rendered
+          # artifact is one no script can read.
+          srow() {
+            echo "$1" >> "$GITHUB_STEP_SUMMARY"
+            echo "VERDICT: $(printf '%s' "$1" | tr -d '`*' | sed 's/^| //; s/ |$//')"
+          }
+
+          CARRIED=0; INSYNC=0; SKIPPED=0
+
+          # Is every check on this pull request green, with at least one present?
+          pr_is_green() {
+            states=$(gh pr checks "$2" --repo "$1" --json state --jq '.[].state' 2>/dev/null)
+            # AN EMPTY RESPONSE IS NOT "no failing checks".
+            [ -z "${states}" ] && return 1
+            total=$(printf '%s\n' "${states}" | grep -c .)
+            [ "${total}" -eq 0 ] && return 1
+            pending=$(printf '%s\n' "${states}" | grep -cE 'PENDING|IN_PROGRESS|QUEUED|EXPECTED')
+            bad=$(printf '%s\n' "${states}" | grep -cE 'FAILURE|CANCELLED|TIMED_OUT|ACTION_REQUIRED|STALE')
+            [ "${pending}" -ne 0 ] && return 1
+            [ "${bad}" -ne 0 ] && return 1
+            return 0
+          }
+
+          hop() {
+            app="$1"; up="$2"; down="$3"
+            R="ConductionNL/${app}"
+
+            cd "${WORK}/${app}" || { srow "| \`${app}\` | ${up}→${down} | skipped — clone missing |"; SKIPPED=$((SKIPPED+1)); return; }
+            git fetch -q origin "${up}" "${down}" 2>/dev/null
+
+            # A missing branch is REPORTED, never treated as "in sync" —
+            # those look identical from a failed comparison.
+            git rev-parse --verify -q "origin/${up}"   >/dev/null 2>&1 || { srow "| \`${app}\` | ${up}→${down} | skipped — no \`${up}\` branch |"; SKIPPED=$((SKIPPED+1)); return; }
+            git rev-parse --verify -q "origin/${down}" >/dev/null 2>&1 || { srow "| \`${app}\` | ${up}→${down} | skipped — no \`${down}\` branch |"; SKIPPED=$((SKIPPED+1)); return; }
+
+            ahead=$(git rev-list --count "origin/${down}..origin/${up}" 2>/dev/null)
+            # Demand digits before believing it: a failed rev-list prints
+            # nothing, which a numeric test would coerce to zero and report
+            # as "in sync".
+            case "${ahead}" in
+              ''|*[!0-9]*)
+                srow "| \`${app}\` | ${up}→${down} | skipped — comparison unreadable (\`${ahead:-empty}\`), NOT assumed in sync |"
+                SKIPPED=$((SKIPPED+1)); return ;;
+            esac
+            [ "${ahead}" -eq 0 ] && { INSYNC=$((INSYNC+1)); return; }
+
+            br="sync/${up}-to-${down}-$(date -u +%Y%m%d%H%M%S)"
+            git checkout -q -B "${br}" "origin/${down}" 2>/dev/null || { srow "| \`${app}\` | ${up}→${down} | skipped — checkout failed |"; SKIPPED=$((SKIPPED+1)); return; }
+            git merge --no-commit --no-ff "origin/${up}" >/dev/null 2>&1 || true
+
+            for F in ${VERFILES}; do
+              if git diff --name-only --diff-filter=U | grep -qxF "${F}"; then
+                git checkout --ours -- "${F}" 2>/dev/null && git add "${F}" 2>/dev/null
+              fi
+            done
+
+            left="$(git diff --name-only --diff-filter=U)"
+            if [ -n "${left}" ]; then
+              git merge --abort 2>/dev/null || true
+              srow "| \`${app}\` | ${up}→${down} | STOPPED for a human — conflicts outside the version files: $(echo "${left}" | tr '\n' ' ') |"
+              SKIPPED=$((SKIPPED+1)); return
+            fi
+
+            git commit -q --no-verify -m "chore(sync): carry ${up} back into ${down}" 2>/dev/null
+            [ -z "$(git log --oneline "origin/${down}..HEAD" 2>/dev/null)" ] && { INSYNC=$((INSYNC+1)); return; }
+
+            nf=$(git diff --name-only "origin/${down}..HEAD" 2>/dev/null | wc -l)
+
+            if [ "${DRY_RUN}" = "true" ]; then
+              srow "| \`${app}\` | ${up}→${down} | would carry ${ahead} commit(s), ${nf} file(s) |"
+              CARRIED=$((CARRIED+1)); return
+            fi
+
+            git push -q origin "${br}" 2>/dev/null || { srow "| \`${app}\` | ${up}→${down} | push failed |"; SKIPPED=$((SKIPPED+1)); return; }
+
+            body=$(printf '%s\n' \
+              "\`${up}\` held ${ahead} commit(s) \`${down}\` did not — release version bumps committed onto the branch the release ran from, and anything else that arrived out of band. Left unreconciled, both branches change the version file independently and the next \`${down}\` → \`${up}\` promotion conflicts on it." \
+              "" \
+              "**${nf} file(s) change.** A 0-file result is the normal and correct outcome once the content has already reached \`${down}\` by other means — recording the ancestry *is* the payload. Without it the merge base never moves and the next promotion conflicts exactly as before." \
+              "" \
+              "Version files were resolved to \`${down}\`'s side, whose line is ahead of the released one, so this never moves a version backwards. Any conflict outside them aborts the merge for a human instead." \
+              "" \
+              "Opened by fleet-back-merge.yml, using the algorithm \`release.yml\` already applies to its own \`sync/*-to-development\` pull requests.")
+
+            url=$(gh pr create --repo "${R}" --head "${br}" --base "${down}" \
+                    --title "chore(sync): carry ${up} back into ${down}" --body "${body}" 2>&1 | grep -o 'https://[^ ]*')
+            [ -z "${url}" ] && { srow "| \`${app}\` | ${up}→${down} | branch pushed but PR create failed |"; SKIPPED=$((SKIPPED+1)); return; }
+            pr="${url##*/}"
+
+            # 0 files changed: nothing to test, and the tree is byte-identical
+            # to ${down}. Requiring CI here would block ancestry repair
+            # forever on branches that are red for unrelated reasons.
+            if [ "${nf}" -ne 0 ] && ! pr_is_green "${R}" "${pr}"; then
+              srow "| \`${app}\` | ${up}→${down} | opened #${pr} (${ahead} commits, ${nf} files) — carries content, left for review |"
+              SKIPPED=$((SKIPPED+1)); return
+            fi
+
+            # --admin is REQUIRED. `Beta Branch Protection` and `Development
+            # Branch Protection` both set required_approving_review_count: 1
+            # with OrganizationAdmin as the only bypass, so a plain merge is
+            # refused with "the base branch policy prohibits the merge".
+            # fleet-friday-merge.yml shipped without it and merged almost
+            # nothing for weeks while reporting success.
+            #
+            # --merge, never --squash: squashing would create a commit the
+            # source branch does not contain and reopen the gap just closed.
+            #
+            # The error text is KEPT. A refusal that names no reason reads as
+            # an ordinary conflict, which is why that cause went undiagnosed.
+            if merge_err=$(gh pr merge "${pr}" --repo "${R}" --merge --admin 2>&1); then
+              srow "| \`${app}\` | ${up}→${down} | carried #${pr} (${ahead} commits, ${nf} files) |"
+              CARRIED=$((CARRIED+1))
+            else
+              srow "| \`${app}\` | ${up}→${down} | #${pr} ready but merge REFUSED — $(printf '%s' "${merge_err}" | tr '\n|' '  ' | cut -c1-100) |"
+              SKIPPED=$((SKIPPED+1))
+            fi
+          }
+
+          for app in ${APPS}; do
+            if ! gh repo view "ConductionNL/${app}" --json name > /dev/null 2>&1; then
+              srow "| \`${app}\` | — | UNREADABLE — not judged |"
+              SKIPPED=$((SKIPPED+1)); continue
+            fi
+            # --filter=blob:none keeps full history (a merge needs it) without
+            # file contents, so cloning the whole fleet stays cheap.
+            if ! git clone -q --filter=blob:none "https://x-access-token:${GH_TOKEN}@github.com/ConductionNL/${app}.git" "${WORK}/${app}" 2>/dev/null; then
+              srow "| \`${app}\` | — | clone failed — not judged |"
+              SKIPPED=$((SKIPPED+1)); continue
+            fi
+            # main → beta first, so a bump that landed on main can reach
+            # development in the SAME run rather than three hours later.
+            hop "${app}" main beta
+            hop "${app}" beta development
+            cd "${WORK}" && rm -rf "${WORK:?}/${app}"
+          done
+
+          {
+            echo ""
+            echo "carried=${CARRIED} already-in-sync=${INSYNC} skipped=${SKIPPED}"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "TOTALS: carried=${CARRIED} in-sync=${INSYNC} skipped=${SKIPPED}"
