@@ -70,6 +70,58 @@ function appsUnderTest() {
 	return [...seen.values()].sort((a, b) => a.id.localeCompare(b.id))
 }
 
+/**
+ * Vault apps (keepiq) gate every route behind a master password. `isLocked` is
+ * purely `cryptoKey === null` in the browser and the password never reaches the
+ * server, so no config key or occ command can wave this through: the only way
+ * past it is to type the password.
+ *
+ * Two screens, because the vault may not exist yet:
+ *   "Set up your master password" -> two fields, creates the vault (12 char min)
+ *   "Unlock Keepiq"               -> one field, unlocks the session
+ *
+ * The lock ROUTE resolves before the lock FORM mounts, so this waits for the
+ * field rather than the URL. Waiting on the URL alone found zero password
+ * inputs, filled nothing, and left the app reported LOCKED with the unlock
+ * never actually attempted.
+ *
+ * NC_VAULT_PASS is a dev-instance credential and nothing else. It exists so a
+ * vault app's flows surface is asserted rather than skipped, which is the
+ * difference between a report covering 14 apps and one quietly covering 13.
+ *
+ * @param {import('playwright').Page} page The logged-in page sitting on a lock screen.
+ * @return {Promise<boolean>} True if an unlock was attempted.
+ */
+async function unlockVaultIfPrompted(page) {
+	const pass = process.env.NC_VAULT_PASS || 'admin-admin-keepiq'
+	const first = page.locator('input[type=password]').first()
+	await first.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {})
+	if (!(await first.isVisible().catch(() => false))) return false
+
+	await first.fill(pass).catch(() => {})
+	// A second password field means this is the create-the-vault screen.
+	const confirm = page.locator('input[type=password]').nth(1)
+	if (await confirm.count().catch(() => 0)) {
+		await confirm.fill(pass).catch(() => {})
+	}
+
+	// The submit stays disabled until the password validates, so clicking too
+	// early is a silent no-op.
+	await page.waitForFunction(() => {
+		const b = [...document.querySelectorAll('button')]
+			.find(x => /^(Unlock|Set up vault)$/.test((x.innerText || '').trim()))
+		return b && !b.disabled
+	}, { timeout: 10000 }).catch(() => {})
+
+	await page.getByRole('button', { name: /^(Unlock|Set up vault)$/ })
+		.first().click().catch(() => {})
+	await page.waitForFunction(
+		() => !/[#/]lock(\?|$|\/)/.test(location.href),
+		{ timeout: 15000 },
+	).catch(() => {})
+	return true
+}
+
 /** First-run overlays sit above the app and swallow everything behind them. */
 async function dismissOverlays(page) {
 	await page.evaluate(() => {
@@ -83,6 +135,18 @@ async function dismissOverlays(page) {
 async function probe(page, id, route) {
 	for (const url of [`${BASE}/apps/${id}/${route}`, `${BASE}/apps/${id}/#/${route}`]) {
 		await page.goto(url, { waitUntil: 'domcontentloaded' }).catch(() => {})
+		// A vault's crypto key lives in memory only, so every full page load
+		// re-locks it. Unlocking once per app is not enough: it has to happen
+		// after each navigation. The lock screen carries `?returnUrl=`, so the
+		// app returns to the route we asked for once it opens.
+		await page.waitForFunction(
+			() => /[#/]lock(\?|$|\/)/.test(location.href)
+				|| document.querySelector('main h1, main h2, .cn-flow-detail'),
+			{ timeout: 10000 },
+		).catch(() => {})
+		if (/[#/]lock(\?|$|\/)/.test(page.url())) {
+			await unlockVaultIfPrompted(page)
+		}
 		// Wait for the surface to settle rather than sleeping a fixed amount.
 		// A flat 2500ms reported openregister as having no sidebar when it has
 		// one: the app is heavy and simply had not mounted it yet. A smoke test
@@ -134,13 +198,19 @@ async function probe(page, id, route) {
 	for (const { id } of apps) {
 		const index = await probe(page, id, 'flows')
 		const detail = await probe(page, id, 'flows/new')
-		rows.push({
+		const row = {
 			id,
 			index: index.flowsHeading,
 			canvas: detail.canvas,
 			sidebar: detail.sidebar,
 			locked: detail.locked || index.locked,
-		})
+		}
+		rows.push(row)
+		// Print as we go. A run over 14 apps takes minutes, and a silent
+		// process that only speaks at the end is indistinguishable from a hung
+		// one — which is exactly how it looked the first time it ran long.
+		process.stderr.write(`  ${row.id}: `
+			+ `${row.locked ? 'locked' : (row.canvas && row.sidebar ? 'ok' : 'FAIL')}\n`)
 	}
 	await browser.close()
 
