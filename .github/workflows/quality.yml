@@ -3629,8 +3629,20 @@ jobs:
           # and `beta` are protected long-lived integration branches and no
           # feature branch is named either, so a pull request whose HEAD is one
           # of them is a promotion by construction.
+          # `release/beta-to-main-*` is the same promotion by another name. A
+          # beta -> main promotion whose branches have diverged CANNOT be sent
+          # with `beta` as the head: the conflicts have to be resolved
+          # somewhere, and resolving them on `beta` would rewrite the release
+          # candidate. So the resolution is carried on a prepared branch off
+          # `main`, and its second parent is the beta tip. It is a promotion in
+          # every respect the ratchet cares about, and its merge base is the
+          # same previous release point that cannot be booted here.
+          #
+          # The pattern is deliberately narrow. `release/v*` (the version bump
+          # release.yml commits) is NOT matched: it targets development as
+          # ordinary work and must keep facing the ratchet.
           case "$PR_HEAD_REF" in
-            development|beta)
+            development|beta|release/beta-to-main-*)
               echo "::notice::Release promotion ($PR_HEAD_REF -> $BASE_REF): skipping the merge-base coverage ratchet. Its merge base is the previous release point and cannot be booted in this job's Nextcloud environment, and every commit in the diff already passed the ratchet on its own pull request into $PR_HEAD_REF. The committed .coverage-baseline floor is still enforced by the next step."
               exit 0
               ;;
@@ -3754,8 +3766,14 @@ jobs:
           # silent-downgrade shape the `against` probe above exists to prevent.
           # So the fallback is gated on the SAME head-ref condition, and any
           # other route to a missing base clover stays a hard failure.
+          # Matches the head-ref set used by the step above, including the
+          # prepared `release/beta-to-main-*` promotion branch. The two must
+          # agree: if this fallback recognised fewer promotions than the step
+          # that skips the ratchet, a promotion would skip the ratchet there
+          # and then hard-fail here for the missing base clover it just chose
+          # not to produce.
           case "${PR_HEAD_REF:-}" in
-            development|beta)
+            development|beta|release/beta-to-main-*)
               echo "::notice::Release promotion: the merge-base ratchet did not run (see the previous step). Enforcing the committed .coverage-baseline floor instead."
               php scripts/coverage-guard.php coverage/clover.xml
               exit 0
@@ -6840,7 +6858,23 @@ jobs:
             # the re-litigation of commits that already passed.
             IS_PROMOTION=no
             case "${PR_HEAD_REF:-}" in
-              development|beta) IS_PROMOTION=yes ;;
+              # `release/beta-to-main-*` is a beta -> main promotion carried on
+              # a prepared branch. When the two have diverged the promotion
+              # CANNOT be sent with `beta` as the head -- the conflicts have to
+              # be resolved somewhere, and resolving them on `beta` would
+              # rewrite the release candidate -- so the merge is prepared off
+              # `main` with the beta tip as its second parent.
+              #
+              # Without this arm such a branch is judged against `main`, which
+              # is exactly the measurement this step exists to prevent:
+              # measured 2026-08-30, gate-16 reported 253 changed methods
+              # missing @spec on filinq, on content beta had already cleared.
+              # Same symptom as openregister#2975 above, same wrong base.
+              #
+              # Narrow on purpose: `release/v*`, the version bump release.yml
+              # commits, is NOT matched. That targets development as ordinary
+              # work and must keep being judged against it.
+              development|beta|release/beta-to-main-*) IS_PROMOTION=yes ;;
               hotfix/*)
                 case "${BASE_REF:-}" in
                   beta|main) IS_PROMOTION=yes ;;
