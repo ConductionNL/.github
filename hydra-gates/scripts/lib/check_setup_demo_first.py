@@ -52,7 +52,7 @@ land wrong. Presence becomes enforceable in a follow-up once the rollout lands,
 and that ordering is deliberate.
 
 EXIT CODES
-  0  every manifest in scope leads with the demo-data step (or declares no setup)
+  0  every manifest in scope leads with welcome then the offer (or declares no setup)
   1  at least one declares setup and does not lead with it
   4  nothing in scope
 """
@@ -65,6 +65,27 @@ import sys
 
 DEMO_STEP_ID = "demo-data"
 WELCOME_STEP_ID = "welcome"
+
+# 🔴 THE OFFER IS THE RULE, NOT THE ID.
+#
+# ADR-111 rule 4 says step 2 offers the data that lets a reader SEE the app work.
+# It does not say what that step must be called, and this gate matched one
+# literal id, so an app that satisfied the rule under a better name was judged as
+# having no offer at all — and told to "build the demo data" it had already
+# built.
+#
+# Measured on decidiq (2026-08-30). It shipped four example sets an operator
+# picks between (municipality, association, company board, works council) plus
+# the ADR-111 generated dataset, all in one `choice` step at index 1 named
+# `example-set`. Under the id-only rule that read as WARN "declares no demo-data
+# step", whose remedy — declare a step calling `install-demo-data` — would have
+# replaced a working chooser with the single un-chosen dataset the app had
+# deliberately stopped shipping.
+#
+# So the accepted ids are the ones that mean "the offer": `demo-data` for an app
+# that offers one dataset, `example-set` for one that offers several. A new name
+# for the same step belongs in this set, not in a finding.
+OFFER_STEP_IDS = (DEMO_STEP_ID, "example-set")
 
 # Two findings, two severities. An app that HAS both steps in the wrong order has
 # a defect it can fix by editing its manifest, and that blocks. An app with no
@@ -91,12 +112,12 @@ def _judge(path: str, manifest: dict) -> tuple[str, str] | None:
         return (
             SEVERITY_FAIL,
             f"{path}: `setup` is declared with no steps, so the wizard renders "
-            f"nothing. Give it \"{WELCOME_STEP_ID}\" then \"{DEMO_STEP_ID}\" "
-            f"(ADR-111 rule 4).",
+            f"nothing. Give it \"{WELCOME_STEP_ID}\" then one of "
+            f"{list(OFFER_STEP_IDS)} (ADR-111 rule 4).",
         )
 
     ids = [str(s.get("id", "") or "") if isinstance(s, dict) else "" for s in steps]
-    has_demo = DEMO_STEP_ID in ids
+    has_demo = any(step_id in OFFER_STEP_IDS for step_id in ids)
 
     if ids[0] != WELCOME_STEP_ID:
         return (
@@ -109,20 +130,21 @@ def _judge(path: str, manifest: dict) -> tuple[str, str] | None:
     if not has_demo:
         return (
             SEVERITY_WARN,
-            f"{path}: setup declares no \"{DEMO_STEP_ID}\" step (ADR-111 rule 4). "
+            f"{path}: setup declares none of {list(OFFER_STEP_IDS)} (ADR-111 rule 4). "
             f"An app installed from the App Store opens on an empty list, and the "
             f"reader has no way to author data against a schema they do not know "
             f"yet. This WARNS rather than fails because the step runs "
-            f"`install-demo-data`: declaring it without that action ships a "
-            f"wizard step that errors. Build the demo data, then add the step.",
+            f"an import action: declaring the step without one ships a "
+            f"wizard step that errors. Build the data, then add the step.",
         )
 
-    if ids[1] != DEMO_STEP_ID:
+    if ids[1] not in OFFER_STEP_IDS:
+        offered_at = next(i for i, step_id in enumerate(ids) if step_id in OFFER_STEP_IDS)
         return (
             SEVERITY_FAIL,
-            f"{path}: setup.steps[1].id is \"{ids[1] or '<missing>'}\", not "
-            f"\"{DEMO_STEP_ID}\" (ADR-111 rule 4). The app HAS a demo-data step, "
-            f"at index {ids.index(DEMO_STEP_ID)} — move it to step 2, directly "
+            f"{path}: setup.steps[1].id is \"{ids[1] or '<missing>'}\", not one of "
+            f"{list(OFFER_STEP_IDS)} (ADR-111 rule 4). The app HAS the offer, "
+            f"at index {offered_at} — move it to step 2, directly "
             f"after welcome. Nothing between them answers a question the reader "
             f"has yet.",
         )
