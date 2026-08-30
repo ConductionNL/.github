@@ -145,6 +145,34 @@ jobs:
                 SKIPPED=$((SKIPPED + 1)); continue
               fi
 
+              # TRUSTED AUTHORS ONLY.
+              #
+              # The header above has always said this workflow refuses "PRs
+              # whose author is not trusted for unattended merge". Nothing
+              # enforced it: the author was read on the `while` line above and
+              # then only ever printed. Every green human PR was a candidate
+              # for an unattended merge, and the sole reason none happened is
+              # that GitHub refused them all for an unrelated reason (see
+              # --admin below). Two bugs cancelling out is not a safety
+              # property, and fixing only the second would have turned this
+              # into a workflow that merges functional work without review.
+              #
+              # Dependency bumps are the class that is safe unattended: the
+              # diff is a version number, and the gates that judge it are the
+              # same ones a human reviewer would read. Functional work keeps
+              # its review.
+              #
+              # `dependabot[bot]` is quoted deliberately — unquoted, the
+              # brackets are a case-pattern character class matching
+              # `dependabott`, not the literal login.
+              case "${author}" in
+                app/dependabot|dependabot|'dependabot[bot]') ;;
+                *)
+                  srow "| \`${app}\` | #${pr} | skipped — author ${author} not trusted for unattended merge |"
+                  SKIPPED=$((SKIPPED + 1)); continue
+                  ;;
+              esac
+
               states=$(gh pr checks "${pr}" --repo "${R}" --json state --jq '.[].state' 2>/dev/null)
               if [ -z "${states}" ]; then
                 srow "| \`${app}\` | #${pr} | skipped — checks unreadable, NOT assumed passing |"
@@ -172,11 +200,26 @@ jobs:
                 MERGED=$((MERGED + 1)); continue
               fi
 
-              if gh pr merge "${pr}" --repo "${R}" --squash 2>/dev/null; then
+              # --admin, and why it is required rather than merely convenient.
+              #
+              # `Development Branch Protection` sets
+              # required_approving_review_count: 1 and grants bypass to
+              # OrganizationAdmin only. A plain squash from this token
+              # therefore CANNOT merge — and did not. The 2026-08-28 run
+              # reported "3 merged/would-merge, 46 skipped" with every real
+              # attempt logged as "merge refused by GitHub". The routine ran on
+              # schedule, reported success, and merged nothing, for weeks.
+              #
+              # The old branch discarded the error, which is exactly why the
+              # cause went undiagnosed for so long: "refused by GitHub" names
+              # no reason, so it read as an ordinary conflict. Keep the text —
+              # a refusal we cannot read is a refusal we will misattribute.
+              if merge_err=$(gh pr merge "${pr}" --repo "${R}" --squash --admin 2>&1); then
                 srow "| \`${app}\` | #${pr} | **merged** (${total} checks green) |"
                 MERGED=$((MERGED + 1))
               else
-                srow "| \`${app}\` | #${pr} | merge refused by GitHub — left open |"
+                why=$(printf '%s' "${merge_err}" | tr '\n|' '  ' | cut -c1-120)
+                srow "| \`${app}\` | #${pr} | merge refused by GitHub — ${why} |"
                 SKIPPED=$((SKIPPED + 1))
               fi
             done <<< "${prs}"
