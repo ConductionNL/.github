@@ -172,7 +172,29 @@ jobs:
                 MERGED=$((MERGED + 1)); continue
               fi
 
-              if gh pr merge "${pr}" --repo "${R}" --squash 2>/dev/null; then
+              # --admin IS REQUIRED, and its absence is why this routine merged
+              # almost nothing. The org ruleset "Development Branch Protection"
+              # carries a `pull_request` rule with
+              # required_approving_review_count: 1, whose ONLY bypass actor is
+              # OrganizationAdmin. Without --admin the API refuses with:
+              #
+              #   Pull request #N is not mergeable: the base branch policy
+              #   prohibits the merge.
+              #
+              # MEASURED on run 33163749650 (schedule, 2026-08-28): of 49
+              # candidates, 3 merged and 20 were refused by exactly this — 18 of
+              # those being `chore(release): *-unstable.*` version bumps, which
+              # were then superseded and closed unmerged. The summary read
+              # "3 merged/would-merge, 46 skipped" and the run reported success,
+              # so it read as a fleet with little to merge rather than a merge
+              # step that could not act at all.
+              #
+              # This is NOT a weakening of the gate. That same ruleset requires
+              # ZERO status checks on `development`, so GitHub would happily
+              # merge a red pull request here. The green rule enforced above is
+              # strictly stronger than the policy being bypassed, and it is the
+              # only thing actually checking CI.
+              if gh pr merge "${pr}" --repo "${R}" --squash --admin 2>/dev/null; then
                 srow "| \`${app}\` | #${pr} | **merged** (${total} checks green) |"
                 MERGED=$((MERGED + 1))
               else
