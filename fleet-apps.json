@@ -37,8 +37,9 @@
     "shillinq",
     "stackiq",
     "thematiq",
-    "versioniq",
-    "zaakafhandelapp"
+    "versioniq"
   ],
-  "deprecated": []
+  "deprecated": [
+    "zaakafhandelapp"
+  ]
 }
