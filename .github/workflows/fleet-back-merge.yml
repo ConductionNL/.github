@@ -1,0 +1,265 @@
+# Fleet back-merge — carry what lands downstream, so the three branches converge.
+#
+# ══════════════════════════════════════════════════════════════════════════
+# THE PROBLEM THIS SOLVES
+# ══════════════════════════════════════════════════════════════════════════
+#
+# The fleet promotes UPWARD: development → beta → main. Nothing carried
+# content the other way, and content does arrive out of band:
+#
+#   • Dependabot bumps. Dependabot reads its config from the repository's
+#     DEFAULT branch only. Ten fleet apps default to `main`, whose
+#     .github/dependabot.yml carries no `target-branch`, so every bump is
+#     opened against `main`. branch-protection.yml now admits those (see the
+#     `dependabot/*` arm there) — but a dependency that lands on `main` alone
+#     leaves `beta` and `development` on the old version.
+#   • `hotfix/*`, which is allowed straight into `main` or `beta` by design.
+#   • `release/v*` version bumps, which commit onto the branch they ran from.
+#
+# Every one of those makes the next promotion conflict on the very file that
+# was changed — a lockfile or appinfo/info.xml — because both branches then
+# changed it independently. release.yml already carries its own bump back
+# (the `sync/beta-to-development-*` pull requests); this generalises that to
+# anything that arrives, from any source.
+#
+# ══════════════════════════════════════════════════════════════════════════
+# HOW IT DECIDES, AND WHY IT DOES NOT LOOK AT THE SOURCE
+# ══════════════════════════════════════════════════════════════════════════
+#
+# The rule as stated is "a merge into main that did not come from beta should
+# go to beta". Implementing that literally means identifying the pull request
+# behind each commit and reading its head — which is fragile across squash
+# merges, direct pushes and force-pushes, all of which occur here.
+#
+# The equivalent question is answerable from the refs alone, and is exact:
+#
+#     is there anything on `main` that `beta` does not have?
+#
+# If beta → main was the only route, the answer is no and nothing happens.
+# If ANYTHING else landed, the answer is yes, whatever its source. This also
+# catches the case the literal rule misses: a squash merge of beta into main
+# creates a commit `beta` genuinely does not contain, and leaving that
+# unreconciled is what makes the following promotion conflict.
+#
+# ══════════════════════════════════════════════════════════════════════════
+# GREEN MEANS GREEN
+# ══════════════════════════════════════════════════════════════════════════
+#
+# Merging is held to the same rule as fleet-friday-merge.yml: EVERY check
+# reported and NONE failed. Pending, cancelled, timed-out and an unreadable
+# response are each a refusal, not a pass — an empty API response has been
+# read as "no failing checks" in this fleet before, and merged a red PR.
+#
+# ZERO checks is likewise not green: a conflicted pull request runs no CI at
+# all, and "no failures" is exactly what that looks like.
+name: Fleet back-merge
+
+on:
+  schedule:
+    # Every three hours. A bump that reaches `main` should not wait a day to
+    # reach `development`, because the promotion it will collide with can be
+    # opened at any time.
+    - cron: "40 */3 * * *"
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Report what would be opened/merged, change nothing"
+        required: false
+        type: boolean
+        default: true
+      merge:
+        description: "Merge back-merge PRs that are fully green"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  # Never let two sweeps open competing pull requests for the same repo.
+  group: fleet-back-merge
+  cancel-in-progress: false
+
+jobs:
+  back-merge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assert a cross-repo token is present
+        env:
+          FLEET_DISPATCH_TOKEN: ${{ secrets.FLEET_DISPATCH_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${FLEET_DISPATCH_TOKEN}" ]; then
+            echo "::error::FLEET_DISPATCH_TOKEN is not set, so this routine can carry nothing."
+            echo "It needs 'contents: write' and 'pull-requests: write' on every repo in fleet-apps.json."
+            exit 1
+          fi
+          echo "Token present."
+
+      - name: Carry main into beta, and beta into development
+        env:
+          GH_TOKEN: ${{ secrets.FLEET_DISPATCH_TOKEN }}
+          # A scheduled run ACTS. `inputs.dry-run` is empty on a schedule, and
+          # comparing it to `false` would make every scheduled run a dry run --
+          # which is how a routine ends up documented, green, and doing nothing.
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run && 'true' || 'false' }}
+          DO_MERGE: ${{ github.event_name == 'workflow_dispatch' && !inputs.merge && 'false' || 'true' }}
+        run: |
+          # -e off: one unreachable repo degrades to a reported skip rather than
+          # aborting the fleet and leaving the rest unexamined.
+          set +e
+          set -uo pipefail
+
+          APPS=$(jq -r '.swept[]' fleet-apps.json)
+          [ -z "${APPS}" ] && { echo "::error::fleet-apps.json lists no apps."; exit 1; }
+
+          {
+            echo "### Fleet back-merge"
+            echo ""
+            [ "${DRY_RUN}" = "true" ] && echo "**DRY RUN** — nothing opened or merged."
+            echo ""
+            echo "| App | Hop | Outcome |"
+            echo "| --- | --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Every verdict goes to the log as well as the summary: this workflow
+          # opens and merges pull requests, and an audit trail that lives only in
+          # a rendered artifact is one no script can read.
+          srow() {
+            echo "$1" >> "$GITHUB_STEP_SUMMARY"
+            echo "VERDICT: $(printf '%s' "$1" | tr -d '`*' | sed 's/^| //; s/ |$//')"
+          }
+
+          OPENED=0; MERGED=0; INSYNC=0; SKIPPED=0
+
+          # Is every check on this PR green, with at least one check present?
+          # Returns 0 only when that is provably true.
+          pr_is_green() {
+            local repo="$1" pr="$2"
+            local states total pending bad
+            states=$(gh pr checks "${pr}" --repo "${repo}" --json state --jq '.[].state' 2>/dev/null)
+            # AN EMPTY RESPONSE IS NOT "no failing checks".
+            [ -z "${states}" ] && return 1
+            total=$(printf '%s\n' "${states}" | grep -c .)
+            [ "${total}" -eq 0 ] && return 1
+            pending=$(printf '%s\n' "${states}" | grep -cE 'PENDING|IN_PROGRESS|QUEUED|EXPECTED')
+            bad=$(printf '%s\n' "${states}" | grep -cE 'FAILURE|CANCELLED|TIMED_OUT|ACTION_REQUIRED|STALE')
+            [ "${pending}" -ne 0 ] && return 1
+            [ "${bad}" -ne 0 ] && return 1
+            return 0
+          }
+
+          # One hop: carry $UP down into $DOWN for repo $R.
+          hop() {
+            local app="$1" up="$2" down="$3"
+            local R="ConductionNL/${app}"
+            local ahead existing url
+
+            # Both refs must exist. A missing branch is reported, never treated
+            # as "in sync" -- those look identical from a failed comparison.
+            if ! gh api "repos/${R}/branches/${up}" --jq .name >/dev/null 2>&1; then
+              srow "| \`${app}\` | ${up}→${down} | skipped — no \`${up}\` branch |"
+              SKIPPED=$((SKIPPED + 1)); return
+            fi
+            if ! gh api "repos/${R}/branches/${down}" --jq .name >/dev/null 2>&1; then
+              srow "| \`${app}\` | ${up}→${down} | skipped — no \`${down}\` branch |"
+              SKIPPED=$((SKIPPED + 1)); return
+            fi
+
+            # ahead_by = commits ${up} has that ${down} does not.
+            ahead=$(gh api "repos/${R}/compare/${down}...${up}" --jq '.ahead_by' 2>/dev/null)
+
+            # `gh api --jq` prints `null` on a 404 and nothing on a transport
+            # error, and BOTH are non-empty-or-empty strings that a numeric
+            # test would happily coerce. Demand digits before believing it.
+            case "${ahead}" in
+              ''|*[!0-9]*)
+                srow "| \`${app}\` | ${up}→${down} | skipped — comparison unreadable (\`${ahead:-empty}\`), NOT assumed in sync |"
+                SKIPPED=$((SKIPPED + 1)); return
+                ;;
+            esac
+
+            if [ "${ahead}" -eq 0 ]; then
+              INSYNC=$((INSYNC + 1)); return
+            fi
+
+            existing=$(gh pr list --repo "${R}" --base "${down}" --head "${up}" --state open \
+                         --json number --jq '.[0].number' 2>/dev/null)
+
+            if [ -n "${existing}" ] && [ "${existing}" != "null" ]; then
+              if [ "${DO_MERGE}" != "true" ]; then
+                srow "| \`${app}\` | ${up}→${down} | PR #${existing} open (${ahead} commits) — merging disabled |"
+                SKIPPED=$((SKIPPED + 1)); return
+              fi
+              if ! pr_is_green "${R}" "${existing}"; then
+                srow "| \`${app}\` | ${up}→${down} | PR #${existing} open (${ahead} commits) — not green, left for review |"
+                SKIPPED=$((SKIPPED + 1)); return
+              fi
+              if [ "${DRY_RUN}" = "true" ]; then
+                srow "| \`${app}\` | ${up}→${down} | would merge PR #${existing} (all checks green) |"
+                MERGED=$((MERGED + 1)); return
+              fi
+              # --merge, never --squash. Squashing a promotion rewrites the
+              # carried commits into one that the source branch does not
+              # contain, so the two diverge again immediately and the NEXT
+              # comparison reports the same work as still outstanding.
+              if gh pr merge "${existing}" --repo "${R}" --merge 2>/dev/null; then
+                srow "| \`${app}\` | ${up}→${down} | merged PR #${existing} |"
+                MERGED=$((MERGED + 1))
+              else
+                srow "| \`${app}\` | ${up}→${down} | PR #${existing} green but merge REFUSED |"
+                SKIPPED=$((SKIPPED + 1))
+              fi
+              return
+            fi
+
+            if [ "${DRY_RUN}" = "true" ]; then
+              srow "| \`${app}\` | ${up}→${down} | would open PR (${ahead} commits behind) |"
+              OPENED=$((OPENED + 1)); return
+            fi
+
+            BODY=$(printf '%s\n' \
+              "Automated back-merge opened by fleet-back-merge.yml." \
+              "" \
+              "\`${up}\` holds ${ahead} commit(s) that \`${down}\` does not. Content reaches \`${up}\` from routes other than the promotion — Dependabot bumps, \`hotfix/*\`, and the version bump a release commits onto the branch it ran from. Left unreconciled, the next \`${down}\` → \`${up}\` promotion conflicts on exactly the file that changed." \
+              "" \
+              "This carries it down so the branches converge. It is a merge, not a squash: squashing would create a commit \`${up}\` does not contain and reopen the same gap.")
+
+            url=$(gh pr create --repo "${R}" --base "${down}" --head "${up}" \
+                    --title "chore(sync): carry ${up} back into ${down}" \
+                    --body "${BODY}" 2>&1)
+
+            if printf '%s' "${url}" | grep -q 'https://'; then
+              srow "| \`${app}\` | ${up}→${down} | opened $(printf '%s' "${url}" | grep -o 'https://[^ ]*') (${ahead} commits) |"
+              OPENED=$((OPENED + 1))
+            elif printf '%s' "${url}" | grep -q 'No commits between'; then
+              # The comparison and the create raced; not a failure.
+              INSYNC=$((INSYNC + 1))
+            else
+              srow "| \`${app}\` | ${up}→${down} | could NOT open PR — $(printf '%s' "${url}" | head -1 | cut -c1-90) |"
+              SKIPPED=$((SKIPPED + 1))
+            fi
+          }
+
+          for app in ${APPS}; do
+            if ! gh repo view "ConductionNL/${app}" --json name > /dev/null 2>&1; then
+              srow "| \`${app}\` | — | UNREADABLE — not judged |"
+              SKIPPED=$((SKIPPED + 1))
+              continue
+            fi
+            # main → beta first, so a bump that landed on main can reach
+            # development in the SAME run rather than three hours later.
+            hop "${app}" main beta
+            hop "${app}" beta development
+          done
+
+          {
+            echo ""
+            echo "opened=${OPENED} merged=${MERGED} already-in-sync=${INSYNC} skipped=${SKIPPED}"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "TOTALS: opened=${OPENED} merged=${MERGED} in-sync=${INSYNC} skipped=${SKIPPED}"
