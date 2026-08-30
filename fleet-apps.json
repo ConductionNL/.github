@@ -32,14 +32,14 @@
     "opencatalogi",
     "openregister",
     "pipelinq",
+    "planninq",
     "portaliq",
     "shillinq",
     "stackiq",
     "thematiq",
-    "versioniq",
-    "zaakafhandelapp"
+    "versioniq"
   ],
   "deprecated": [
-    "planninq"
+    "zaakafhandelapp"
   ]
 }
