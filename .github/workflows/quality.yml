@@ -402,6 +402,24 @@ on:
         required: false
         type: string
         default: "[]"
+      e2e-additional-apps:
+        description: |
+          JSON array of EXTRA app repos installed only in the browser jobs
+          (playwright / newman / journeydoc-capture), on top of `additional-apps`.
+
+          `additional-apps` is installed for every leg of `nextcloud-test-refs`,
+          so an app listed there must support the WHOLE declared range. pipelinq
+          declares min-version 32 / max-version 34 and tests all three, while
+          nextcloud/contacts has no branch spanning 32 and 34 (stable8.3 is
+          32-33, stable8.5+ start at 33) — listing it there aborts the stable32
+          leg on a min-version mismatch.
+
+          The browser jobs check out only `fromJSON(nextcloud-test-refs)[0]` as
+          their single server, so an app needed purely to make E2E seeding work
+          can be pinned to a ref valid for that one version.
+        required: false
+        type: string
+        default: "[]"
       e2e-skip-blocking:
         description: "Make the E2E skip-discipline check a hard failure for this app. It reads the RUN's Playwright report — the only place a runtime `test.skip(cond, reason)` is visible — and reports three things: a spec file that executed ZERO tests, a skip deferring to a deploy state CI itself decides ('not deployed', 'deploy drift', 'predates'), and a skip carrying no reason. A skip naming a genuinely absent optional app or external service is allowed. Default false because eight apps carry findings today (measured 2026-08-24: 298/3210 tests skipped fleet-wide, 27 zero-test spec files) and a gate that turns them all red at once is a gate nobody can turn on — same reasoning as check-code-blocking. Flip it per app once that app is worked down; it can then only stay clean."
         required: false
@@ -3946,9 +3964,13 @@ jobs:
           tools: composer:v2
 
       - name: Checkout additional apps
-        if: ${{ inputs.additional-apps != '[]' }}
+        if: ${{ inputs.additional-apps != '[]' || inputs.e2e-additional-apps != '[]' }}
         run: |
-          echo '${{ inputs.additional-apps }}' | jq -c '.[]' | while read -r app; do
+          # Browser job: `additional-apps` PLUS `e2e-additional-apps`. The
+          # second list exists because this job pins a single server ref, so
+          # an app that cannot span the whole declared range still installs
+          # here. `add` concatenates the two arrays.
+          printf '%s\n%s\n' '${{ inputs.additional-apps }}' '${{ inputs.e2e-additional-apps }}' | jq -c -s 'add // [] | .[]' | while read -r app; do
             repo=$(echo "$app" | jq -r '.repo')
             name=$(echo "$app" | jq -r '.app')
             ref=$(echo "$app" | jq -r '.ref // "main"')
@@ -4384,9 +4406,13 @@ jobs:
           tools: composer:v2
 
       - name: Checkout additional apps
-        if: ${{ inputs.additional-apps != '[]' }}
+        if: ${{ inputs.additional-apps != '[]' || inputs.e2e-additional-apps != '[]' }}
         run: |
-          echo '${{ inputs.additional-apps }}' | jq -c '.[]' | while read -r app; do
+          # Browser job: `additional-apps` PLUS `e2e-additional-apps`. The
+          # second list exists because this job pins a single server ref, so
+          # an app that cannot span the whole declared range still installs
+          # here. `add` concatenates the two arrays.
+          printf '%s\n%s\n' '${{ inputs.additional-apps }}' '${{ inputs.e2e-additional-apps }}' | jq -c -s 'add // [] | .[]' | while read -r app; do
             repo=$(echo "$app" | jq -r '.repo')
             name=$(echo "$app" | jq -r '.app')
             ref=$(echo "$app" | jq -r '.ref // "main"')
@@ -5809,9 +5835,13 @@ jobs:
           tools: composer:v2
 
       - name: Checkout additional apps
-        if: ${{ inputs.additional-apps != '[]' }}
+        if: ${{ inputs.additional-apps != '[]' || inputs.e2e-additional-apps != '[]' }}
         run: |
-          echo '${{ inputs.additional-apps }}' | jq -c '.[]' | while read -r app; do
+          # Browser job: `additional-apps` PLUS `e2e-additional-apps`. The
+          # second list exists because this job pins a single server ref, so
+          # an app that cannot span the whole declared range still installs
+          # here. `add` concatenates the two arrays.
+          printf '%s\n%s\n' '${{ inputs.additional-apps }}' '${{ inputs.e2e-additional-apps }}' | jq -c -s 'add // [] | .[]' | while read -r app; do
             repo=$(echo "$app" | jq -r '.repo')
             name=$(echo "$app" | jq -r '.app')
             ref=$(echo "$app" | jq -r '.ref // "main"')
