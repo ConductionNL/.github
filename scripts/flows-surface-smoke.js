@@ -105,16 +105,27 @@ async function unlockVaultIfPrompted(page) {
 		await confirm.fill(pass).catch(() => {})
 	}
 
-	// The submit stays disabled until the password validates, so clicking too
-	// early is a silent no-op.
+	// Match the submit by SHAPE, not by its label. An earlier version looked for
+	// /^(Unlock|Set up vault)$/, which silently found nothing on a Dutch instance
+	// rendering "Kluis instellen": the click never fired and keepiq was reported
+	// LOCKED, which reads as "app gated its own surface" rather than "the test
+	// could not press the button". A label match is a language assertion, and
+	// this suite has no business asserting the instance's language.
+	//
+	// The submit is the one button in the lock panel that starts disabled and
+	// becomes enabled once the password validates; the only other buttons there
+	// are the password-visibility toggles, which are never disabled.
 	await page.waitForFunction(() => {
-		const b = [...document.querySelectorAll('button')]
-			.find(x => /^(Unlock|Set up vault)$/.test((x.innerText || '').trim()))
+		const inPanel = [...document.querySelectorAll('main button, [role=main] button')]
+		const b = inPanel.filter(x => !x.closest('[class*=visibility], [class*=toggle]')).pop()
 		return b && !b.disabled
 	}, { timeout: 10000 }).catch(() => {})
 
-	await page.getByRole('button', { name: /^(Unlock|Set up vault)$/ })
-		.first().click().catch(() => {})
+	await page.evaluate(() => {
+		const inPanel = [...document.querySelectorAll('main button, [role=main] button')]
+		const b = inPanel.filter(x => !x.closest('[class*=visibility], [class*=toggle]')).pop()
+		if (b && !b.disabled) b.click()
+	}).catch(() => {})
 	await page.waitForFunction(
 		() => !/[#/]lock(\?|$|\/)/.test(location.href),
 		{ timeout: 15000 },
