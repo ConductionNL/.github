@@ -76,6 +76,14 @@ git checkout --quiet base && git checkout --quiet -b nodemo
 _manifest welcome storage > src/manifest.json
 git add -A && git commit --quiet -m "declare setup with welcome and no demo-data"
 
+# An app that offers SEVERAL example sets rather than one demo dataset. The rule
+# is the OFFER at step 2, never the id: decidiq ships four sets plus the ADR-111
+# generated one behind a single `example-set` choice step, and an id-only match
+# read that as "no demo data" and advised building what it had already built.
+git checkout --quiet base && git checkout --quiet -b exampleset
+_manifest welcome example-set > src/manifest.json
+git add -A && git commit --quiet -m "declare setup opening welcome then example-set"
+
 git checkout --quiet base && git checkout --quiet -b nosetup
 printf '{"id":"app","name":"App","version":"1.0.1"}\n' > src/manifest.json
 git add -A && git commit --quiet -m "edit the manifest, still no setup block"
@@ -126,6 +134,23 @@ if grep -rq "WARN.*demo-data" "${WORK}/logs-nodemo" 2>/dev/null; then
     _ok "gate-100 records the missing demo-data step as a WARN in its log"
 else
     _bad "gate-100 passed silently — a warning nobody prints is a finding nobody schedules"
+fi
+
+echo "-- ARM 6: AN example-set OFFER AT STEP 2 SATISFIES THE RULE --"
+# 🔴 THE OFFER IS THE RULE, NOT THE ID. Without this arm the gate quietly
+# punishes the better name: an app offering a CHOICE of example sets was told it
+# declared no demo data, and the remedy on offer would have replaced the chooser
+# with the single un-chosen dataset it had deliberately stopped shipping.
+_v="$(_verdict exampleset)"
+case "${_v}" in
+    *FAIL*) _bad "gate-100 FAILED an app whose step 2 offers example sets: ${_v}" ;;
+    *PASS*) _ok "gate-100 accepts an example-set offer at step 2" ;;
+    *)      _bad "expected a PASS summary on exampleset, got: ${_v:-<no gate-100 line>}" ;;
+esac
+if grep -rq "WARN" "${WORK}/logs-exampleset" 2>/dev/null; then
+    _bad "gate-100 warned about a manifest that satisfies the rule"
+else
+    _ok "gate-100 records no warning for an example-set offer"
 fi
 
 echo "-- ARM 3: 🔴 AN APP WITH NO SETUP IS NOT THIS GATE'S BUSINESS --"
