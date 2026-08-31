@@ -11548,7 +11548,7 @@ _a11y_has_markup_dir || _declare_na "no src/, templates/ or appinfo/templates/ �
     14
 # `if [ -f src/manifest.json ]` — gates 15 22 53 68
 [ -f src/manifest.json ] || _declare_na "no src/manifest.json — this repo declares no manifest, so there are no pages, widgets or handler references for this gate to inspect." \
-    15 22 53 68
+    15 22 53 68 104
 # `if [ -d openspec/specs ] || [ -d tests/e2e ]` — gate 19
 { [ -d openspec/specs ] || [ -d tests/e2e ]; } || _declare_na "no openspec/specs/ and no tests/e2e/ — there is neither a spec scenario to trace nor an e2e suite to trace it to." \
     19
