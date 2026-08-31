@@ -137,6 +137,21 @@ async function unlockVaultIfPrompted(page) {
 async function dismissOverlays(page) {
 	await page.evaluate(() => {
 		document.querySelectorAll('.cn-walkthrough').forEach(n => n.remove())
+
+		// The NON-GATING optional-setup wizard (REQ-SETUP-NV-012) auto-opens
+		// once per manifest `setup.version` whenever a step marked optional is
+		// still unmet, and records its dismissal in localStorage. Playwright
+		// starts from a fresh profile every run, so that dismissal never
+		// carries over and the wizard reopens on every navigation, covering
+		// the canvas. opencatalogi reported INDEX yes / CANVAS no for exactly
+		// this reason, with its own API answering `completed: true`.
+		//
+		// Only `__setup-optional` is removed. The GATING surface renders as
+		// `cn-app-root__setup` and means a REQUIRED step is unmet — the app
+		// genuinely is not set up, and removing that would fake a pass on an
+		// app that cannot work.
+		document.querySelectorAll('.cn-app-root__setup-optional').forEach(n => n.remove())
+
 		document.querySelectorAll('[data-testid="cn-modal"] button[aria-label="Close"]')
 			.forEach(b => b.click())
 	}).catch(() => {})
