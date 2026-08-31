@@ -171,6 +171,33 @@ _manifest arm9 '"headerActions": [
     ]'
 _arm arm9 0 1
 
+# --- ARM 10: a duplicate declared only in a manifest.d fragment ------------
+# src/manifest.d/*.json is merged into the manifest at runtime by
+# require.context, so a checker that opens only src/manifest.json is blind to
+# it. Eight fleet apps use fragments and shillinq ships 87, which is the same
+# reason gate-96 reads them.
+mkdir -p "${WORK}/arm10/src/manifest.d"
+cat > "${WORK}/arm10/src/manifest.json" <<'JSON'
+{ "id": "fixture", "pages": [] }
+JSON
+cat > "${WORK}/arm10/src/manifest.d/dashboard.json" <<'JSON'
+{
+  "pages": [
+    {
+      "id": "FragDash",
+      "route": "/frag",
+      "type": "dashboard",
+      "config": {
+        "headerActions": [
+          { "id": "frag-refresh", "type": "refresh", "label": "Refresh" }
+        ]
+      }
+    }
+  ]
+}
+JSON
+_arm arm10 1 1
+
 echo ""
 if [ "${_fail_n}" -eq 0 ]; then
     echo "gate-104 checker acceptance: ALL GREEN"
