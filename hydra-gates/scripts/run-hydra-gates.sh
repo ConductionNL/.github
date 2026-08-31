@@ -10953,6 +10953,76 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# GATE 104 — duplicate-page-refresh
+#
+# NUMBERED 104 because 103 is the highest number this file already uses. The
+# number is part of a gate's identity: gate-101's suite was misread twice when
+# two gates shared one, so picking the next free number means reading every
+# `# GATE <n>` here, not the highest anyone remembers.
+#
+# CnActionsMenu renders Refresh as the FIRST item of the page-level Actions
+# overflow menu, and the page hosts pass `show-refresh="showRefresh"` with
+# `showRefresh` defaulting to TRUE. A surface that declares a Refresh of its
+# own therefore ships two, side by side, doing the same thing.
+#
+# MEASURED 2026-08-31, after a user reported the dossiq dashboard showing
+# "Refresh" as a toolbar button AND as the first Actions-menu item. Five
+# surfaces had it: dossiq, hermiq and larpinq via a manifest `"type":
+# "refresh"` headerAction, opencatalogi and shillinq via a hand-written button
+# in the `#actions` / `#header-actions` slot.
+#
+# THE MANIFEST CASE IS A PURE DUPLICATE: actionsDispatcher.js dispatches
+# `"type": "refresh"` as `emit(PAGE_REFRESH_CHANNEL, {})`, the exact signal
+# CnActionsMenu broadcasts on `refresh-channel="cn:page:refresh"`.
+#
+# THE VUE CASE WAS WORSE THAN A DUPLICATE. On both apps the hand-written button
+# called a host method that was NOT subscribed to `cn:page:refresh`, so the
+# menu's Refresh did nothing at all. Removing the button without wiring
+# `@refresh` would have left only the dead one — which is why the remedy names
+# the listener, not just the deletion.
+#
+# openregister's dashboard shows the supported way to keep a prominent button:
+# `:showRefresh="false"` stands the menu item down. Either shape passes.
+# Shipping BOTH does not.
+#
+# FULL-TREE, not diff-scoped, for the reason gates 84 and 93-96 give: the
+# duplicates are already in the tree, and a diff-scoped version reports clean
+# on every PR that does not touch that page.
+#
+# NOTE ON PLACEMENT: top level, outside any `_FAILED` guard — a gate that only
+# runs once everything else passed is green-but-dead.
+# ---------------------------------------------------------------------------
+_dpr_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-duplicate-page-refresh.log
+: > "${_dpr_log}"
+set +e
+python3 "${SCRIPT_DIR}/lib/check_duplicate_page_refresh.py" . > "${_dpr_log}" 2>&1
+_dpr_rc=$?
+# `set +e`, not `set -e`: errexit off is the state this script actually runs
+# in. See the note at the top of this file.
+set +e
+
+# An empty scope must not print the same word as a clean full-tree read.
+# `checked 0` means the checker inspected NOTHING — the repo ships no manifest
+# dashboard/detail page and mounts no CnDashboardPage / CnDetailPage. That is
+# `na`, not PASS: reporting PASS there is the .github#374 defect.
+_dpr_checked=$(sed -n 's/^checked \([0-9]\{1,\}\) page surface.*/\1/p' "${_dpr_log}" 2>/dev/null | tail -1)
+case "${_dpr_checked}" in ''|*[!0-9]*) _dpr_checked=0 ;; esac
+
+if [ "${_dpr_rc}" -eq 4 ] || { [ "${_dpr_rc}" -eq 0 ] && [ "${_dpr_checked}" -eq 0 ]; }; then
+    _skip_empty_scope 104 "duplicate-page-refresh" "page surface (a manifest page of type dashboard/detail, or a .vue mounting CnDashboardPage / CnDetailPage)"
+elif [ "${_dpr_rc}" -eq 0 ]; then
+    _pass 104 "duplicate-page-refresh"
+elif ! _helper_finished "${_dpr_log}" '^checked [0-9]+ page surface'; then
+    # A CRASH IS NOT A FINDING.
+    _dpr_why=$(head -3 "${_dpr_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+    _skip 104 "duplicate-page-refresh" wiring "check_duplicate_page_refresh.py exited ${_dpr_rc} without printing its terminal 'checked N page surface(s)' summary, so duplicate Refresh controls are UNVERIFIED by this run. Checker output: ${_dpr_why:-<empty>}. See ${_dpr_log}."
+else
+    _dpr_n=$(grep -cE '^FAIL ' "${_dpr_log}" 2>/dev/null || true)
+    case "${_dpr_n}" in ''|*[!0-9]*) _dpr_n=1 ;; esac
+    _fail 104 "duplicate-page-refresh" "${_dpr_n} page surface(s) ship a second Refresh beside the one CnActionsMenu already renders - see ${_dpr_log}"
+fi
+
+# ---------------------------------------------------------------------------
 # GATE 97 — system-elevation-reachability (ADR-099 rule 9)
 #
 # NUMBERED 97, NOT 96. This gate was written as 96 and #581 landed
