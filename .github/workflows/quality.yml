@@ -7287,6 +7287,18 @@ jobs:
           echo "::warning::pandoc/wkhtmltopdf could not be installed after 3 bounded attempts. The PDF rendering of the quality report is skipped; the report, the step summary and every gate below still run. This is infrastructure, not a finding about this app."
 
       - name: Generate report
+        env:
+          # The SAME three facts the "Gate — a test job that was ENABLED but
+          # never ran" step below reads, so the table and the gate classify one
+          # skip one way. Before this, the gate knew a PR into `development`
+          # defers E2E to the promotion run and passed, while this table only
+          # knew enabled+skipped and stamped the same run "🚨 NO VERDICT" — a
+          # deliberate cost control rendered as a missing test tier, on every
+          # dev PR, forever (observed on keepiq#479). Env rather than inline
+          # `${{ }}`: `reason` is free text and does not belong in the script.
+          PATH_FILTER_CODE: ${{ needs.changes.outputs.code }}
+          PATH_FILTER_REASON: ${{ needs.changes.outputs.reason }}
+          E2E_PROMOTION_SKIP: ${{ github.event_name == 'pull_request' && github.base_ref == 'development' }}
         run: |
           set -euo pipefail
 
@@ -7317,25 +7329,59 @@ jobs:
             esac
           }
 
-          # Test-tier icon (#194). `skipped` means two completely different
-          # things depending on whether the caller asked for the job:
+          # Test-tier icon (#194). `skipped` means THREE completely different
+          # things depending on whether the caller asked for the job and
+          # whether something declared the skip:
           #
           #   enabled=false → the repo does not have this kind of test. ⏭️.
-          #   enabled=true  → the job was asked for and DID NOT RUN. That is
+          #   enabled=true, declared reason ($3 non-empty)
+          #                 → the job was asked for and a named mechanism (the
+          #                   changed-path filter, the dev-PR promotion rule)
+          #                   decided this run does not need it. The verdict
+          #                   still happens — later, or not for this diff — and
+          #                   the cell says so IN WORDS. A bare ⏭️ here would
+          #                   be the same glyph as "no tests configured", the
+          #                   exact ambiguity this function exists to remove.
+          #   enabled=true, no declared reason
+          #                 → the job was asked for and DID NOT RUN. That is
           #                   the ABSENCE OF A VERDICT, and it must not share a
-          #                   glyph with "no tests configured" — which is
-          #                   exactly how a fleet-wide advisory deleted the test
-          #                   tier on 2026-08-06 while every report looked
-          #                   ordinary. Rendered in words, not a tick.
+          #                   glyph with either state above — which is exactly
+          #                   how a fleet-wide advisory deleted the test tier
+          #                   on 2026-08-06 while every report looked ordinary.
+          #                   The 🚨 wording is unchanged on purpose: its alarm
+          #                   value is the point, it is only NARROWED to the
+          #                   case it was written for.
           #
-          # $1 = needs.<job>.result, $2 = "true"/"false" for enabled
+          # $1 = needs.<job>.result, $2 = "true"/"false" for enabled,
+          # $3 = declared-skip reason, empty when nothing declared the skip
           test_icon() {
             if [ "$2" = "true" ] && [ "$1" = "skipped" ]; then
-              echo "🚨 **NO VERDICT — enabled but never ran**"
+              if [ -n "${3:-}" ]; then
+                echo "⏭️ **${3}**"
+              else
+                echo "🚨 **NO VERDICT — enabled but never ran**"
+              fi
             else
               icon "$1"
             fi
           }
+
+          # The declared-skip reasons, mirrored from `classify()` in the gate
+          # step below — same precedence: the promotion rule names the E2E skip
+          # first, the changed-path filter covers whatever it gates. Computed
+          # once here so the two rows cannot drift apart from each other or
+          # from the gate.
+          PHPUNIT_SKIP_REASON=""
+          PLAYWRIGHT_SKIP_REASON=""
+          if [ "$E2E_PROMOTION_SKIP" = "true" ]; then
+            PLAYWRIGHT_SKIP_REASON="deferred — runs on the promotion into beta/main, not on a pull request into development"
+          fi
+          if [ "$PATH_FILTER_CODE" = "false" ]; then
+            PHPUNIT_SKIP_REASON="not run for this diff — ${PATH_FILTER_REASON}"
+            if [ -z "$PLAYWRIGHT_SKIP_REASON" ]; then
+              PLAYWRIGHT_SKIP_REASON="not run for this diff — ${PATH_FILTER_REASON}"
+            fi
+          fi
 
           # Build license info strings
           license_info() {
@@ -7421,9 +7467,12 @@ jobs:
             # Test rows. `test_icon` rather than `icon`: see its definition —
             # an enabled-but-skipped test job is the absence of a verdict and
             # says so in words.
-            echo "| PHPUnit | | | | | $(test_icon '${{ needs.phpunit.result }}' '${{ inputs.enable-php && inputs.enable-phpunit }}') |"
+            # PHPUnit and Playwright carry a declared-skip reason; Newman is
+            # not gated by the changed-path filter or the promotion rule, so a
+            # skipped-while-enabled Newman really is a missing verdict.
+            echo "| PHPUnit | | | | | $(test_icon '${{ needs.phpunit.result }}' '${{ inputs.enable-php && inputs.enable-phpunit }}' "$PHPUNIT_SKIP_REASON") |"
             echo "| Newman | | | | | $(test_icon '${{ needs.newman.result }}' '${{ inputs.enable-newman }}') |"
-            echo "| Playwright | | | | | $(test_icon '${{ needs.playwright.result }}' '${{ inputs.enable-playwright }}') |"
+            echo "| Playwright | | | | | $(test_icon '${{ needs.playwright.result }}' '${{ inputs.enable-playwright }}' "$PLAYWRIGHT_SKIP_REASON") |"
             if [ '${{ inputs.enable-journeydoc-capture }}' = 'true' ]; then
               echo "| Journeydoc capture | | | | | $(test_icon '${{ needs.journeydoc-capture.result }}' 'true') |"
             fi
