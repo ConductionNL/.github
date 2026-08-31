@@ -186,6 +186,14 @@ async function probe(page, id, route) {
 			return locked || (canvas && sidebar) || (flows && !canvas)
 		}, { timeout: 15000 }).catch(() => {})
 		await dismissOverlays(page)
+		// Re-settle AFTER dismissing. The wait above can time out with the
+		// overlay still up, and reading the verdict in that same frame reports
+		// a canvas that simply had not been allowed to mount yet.
+		await page.waitForFunction(() => {
+			const canvas = document.querySelector('.cn-flow-detail')
+			const sidebar = document.querySelector('#app-sidebar-vue, aside.app-sidebar')
+			return (canvas && sidebar) || /[#/]lock(\?|$|\/)/.test(location.href)
+		}, { timeout: 10000 }).catch(() => {})
 		const r = await page.evaluate(() => ({
 			canvas: !!document.querySelector('.cn-flow-detail'),
 			sidebar: !!document.querySelector('#app-sidebar-vue, aside.app-sidebar'),
@@ -212,6 +220,7 @@ async function probe(page, id, route) {
 
 	const browser = await chromium.launch()
 	const page = await browser.newPage()
+
 	await page.goto(`${BASE}/login`, { waitUntil: 'domcontentloaded' })
 	await page.fill('input[name=user]', USER)
 	await page.fill('input[name=password]', PASS)
