@@ -10443,6 +10443,15 @@ fi
 # Spec:  openspec/architecture/adr-112-reports-are-one-page.md (hydra repo)
 # ---------------------------------------------------------------------------
 if [ -f src/manifest.json ]; then
+    # AN UNOPENED SCOPE IS NEVER A PASS (.github#374). This gate reads the whole
+    # effective manifest, so a narrowed run that does not touch the manifest
+    # inspected nothing — and a PASS here would print the same word as a run
+    # that read the manifest and found it compliant, while COUNTING toward the
+    # COVERAGE line. Measured: with the manifest out of scope this gate passed
+    # over a tree whose every planted defect was still on disk.
+    if [ "${SCOPE_TO_DIFF}" = "1" ] && ! _in_scope "src/manifest.json" && ! _in_scope "src/manifest.d/"; then
+        _skip_empty_scope 104 "reports-one-page" "src/manifest.json or src/manifest.d/ fragment"
+    else
     _rop_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-reports-one-page.log
     : > "${_rop_log}"
     _rop_builder="${SCRIPT_DIR}/lib/build_effective_manifest.js"
@@ -10476,6 +10485,7 @@ if [ -f src/manifest.json ]; then
                 fi
                 ;;
         esac
+    fi
     fi
 fi
 
