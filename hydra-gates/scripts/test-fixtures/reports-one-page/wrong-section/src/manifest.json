@@ -1,0 +1,81 @@
+{
+  "$schema": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
+  "version": "2.0.0",
+  "menu": [
+    {
+      "id": "DashboardMenu",
+      "label": "Dashboard",
+      "route": "Dashboard",
+      "order": 10
+    },
+    {
+      "id": "DocsMenu",
+      "label": "Documentation",
+      "href": "https://example.org",
+      "order": 90,
+      "section": "footer"
+    },
+    {
+      "id": "ReportsMenu",
+      "label": "Reports",
+      "route": "Reports",
+      "order": 95
+    },
+    {
+      "id": "RoadmapMenu",
+      "label": "Features & roadmap",
+      "route": "FeaturesRoadmap",
+      "order": 100,
+      "section": "footer"
+    }
+  ],
+  "pages": [
+    {
+      "id": "Dashboard",
+      "route": "/",
+      "type": "dashboard",
+      "title": "Dashboard",
+      "config": {
+        "widgets": []
+      }
+    },
+    {
+      "id": "Throughput",
+      "route": "/reports/throughput",
+      "type": "index",
+      "title": "Throughput",
+      "config": {
+        "register": "app",
+        "schema": "case",
+        "columns": [
+          "name"
+        ]
+      }
+    },
+    {
+      "id": "FeaturesRoadmap",
+      "route": "/features-roadmap",
+      "type": "roadmap",
+      "title": "Features & roadmap"
+    },
+    {
+      "id": "Reports",
+      "route": "/reports",
+      "type": "reports",
+      "title": "Reports",
+      "config": {
+        "categories": {
+          "operational": "Operational"
+        },
+        "cards": [
+          {
+            "id": "t",
+            "label": "Throughput",
+            "category": "operational",
+            "route": "Throughput"
+          }
+        ]
+      }
+    }
+  ]
+}

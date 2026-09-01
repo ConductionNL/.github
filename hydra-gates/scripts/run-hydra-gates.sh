@@ -10424,6 +10424,72 @@ if [ -f src/manifest.json ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# Gate 104: reports-one-page — reports are cards on one page, in the footer.
+#
+# ADR-112. Reports arrive one at a time, each looks like a menu item, and the
+# menu is where the last one went, so a Reports branch grows an entry per
+# report and never loses one (shillinq reached 96 report types).
+#
+# Checks three STRUCTURAL things against the effective manifest: at most one
+# type:"reports" page; its menu entry is section:"footer"; and no other menu
+# entry points at a page that page already carries as a card.
+#
+# NOT APPLICABLE when the app declares no type:"reports" page — ADR-112
+# Decision 4 does not require one of an app with no reports, and the checker
+# says so on stderr rather than passing silently.
+#
+# Fail-closed (mirrors gate-68): a missing vendored helper FAILs.
+#
+# Spec:  openspec/architecture/adr-112-reports-are-one-page.md (hydra repo)
+# ---------------------------------------------------------------------------
+if [ -f src/manifest.json ]; then
+    # AN UNOPENED SCOPE IS NEVER A PASS (.github#374). This gate reads the whole
+    # effective manifest, so a narrowed run that does not touch the manifest
+    # inspected nothing — and a PASS here would print the same word as a run
+    # that read the manifest and found it compliant, while COUNTING toward the
+    # COVERAGE line. Measured: with the manifest out of scope this gate passed
+    # over a tree whose every planted defect was still on disk.
+    if [ "${SCOPE_TO_DIFF}" = "1" ] && ! _in_scope "src/manifest.json" && ! _in_scope "src/manifest.d/"; then
+        _skip_empty_scope 104 "reports-one-page" "src/manifest.json or src/manifest.d/ fragment"
+    else
+    _rop_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-reports-one-page.log
+    : > "${_rop_log}"
+    _rop_builder="${SCRIPT_DIR}/lib/build_effective_manifest.js"
+    _rop_checker="${SCRIPT_DIR}/lib/check_reports_one_page.js"
+    if [ ! -f "${_rop_builder}" ] || [ ! -f "${_rop_checker}" ]; then
+        _fail 104 "reports-one-page" "vendored helper missing under ${SCRIPT_DIR}/lib (need build_effective_manifest.js + check_reports_one_page.js) — fail-closed"
+    elif ! command -v node >/dev/null 2>&1; then
+        _skip 104 "reports-one-page" wiring "src/manifest.json is present but \`node\` is not on PATH — the effective manifest could not be assembled. This is a missing tool in the runner environment, not a finding about the manifest."
+    else
+        set +e
+        node "${_rop_checker}" --app-dir . >> "${_rop_log}" 2>&1
+        _rop_rc=$?
+        set +e
+        _rop_reported=$(grep -oE '\[reports-one-page\] findings=[0-9]+' "${_rop_log}" 2>/dev/null \
+            | tail -1 | sed 's/.*findings=//')
+        case "${_rop_reported}" in
+            ''|*[!0-9]*)
+                # THE HELPER DID NOT FINISH (#209 convention). No `findings=`
+                # line means it crashed or was killed — never read its silence
+                # as a clean manifest.
+                _skip 104 "reports-one-page" wiring "check_reports_one_page.js exited ${_rop_rc} without printing its \`findings=\` count — it did NOT finish, so the manifest's report surface was left uninspected and ADR-112 is UNVERIFIED by this run. This is a broken checker, NOT a finding about the manifest. See ${_rop_log}."
+                ;;
+            *)
+                if grep -q 'NOT APPLICABLE' "${_rop_log}" 2>/dev/null; then
+                    echo "[gate-104] reports-one-page: NOT APPLICABLE — this app declares no type:\"reports\" page (ADR-112 Decision 4). Nothing was inspected; this is not evidence its report surface is right."
+                fi
+                if [ "${_rop_rc}" -eq 0 ]; then
+                    _pass 104 "reports-one-page"
+                else
+                    _fail 104 "reports-one-page" "${_rop_reported} finding(s) against ADR-112 (one reports page, in the footer, no report reachable both as a card and as a menu entry) — see ${_rop_log}"
+                fi
+                ;;
+        esac
+    fi
+    fi
+fi
+
+# ---------------------------------------------------------------------------
 # Gate 69: page-type-discipline — every page should be one of the three typed
 # archetypes (index / detail / dashboard) AND should actually render that
 # type's page component.
@@ -11562,7 +11628,7 @@ _a11y_has_markup_dir || _declare_na "no src/, templates/ or appinfo/templates/ �
     14
 # `if [ -f src/manifest.json ]` — gates 15 22 53 68
 [ -f src/manifest.json ] || _declare_na "no src/manifest.json — this repo declares no manifest, so there are no pages, widgets or handler references for this gate to inspect." \
-    15 22 53 68
+    15 22 53 68 104
 # `if [ -d openspec/specs ] || [ -d tests/e2e ]` — gate 19
 { [ -d openspec/specs ] || [ -d tests/e2e ]; } || _declare_na "no openspec/specs/ and no tests/e2e/ — there is neither a spec scenario to trace nor an e2e suite to trace it to." \
     19
