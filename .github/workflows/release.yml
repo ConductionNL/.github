@@ -816,9 +816,32 @@ jobs:
       - name: Open the version-bump pull request
         if: steps.bump.outputs.bump_branch != ''
         env:
-          GH_TOKEN: ${{ github.token }}
+          # Opened with the org PAT, not GITHUB_TOKEN, so this pull request carries
+          # a real identity and its checks actually run.
+          #
+          # The block above describes the cost of the old behaviour and the
+          # workaround chosen for it: GitHub withholds workflow triggering from
+          # GITHUB_TOKEN, so the bump PR merged with no quality gate, and the
+          # response was to bound what the bump may contain. A PAT removes the
+          # CAUSE rather than the blast radius, and without the objection raised
+          # there: we are not calling quality.yml with the wrong `ref`, we are
+          # letting the normal `pull_request` trigger fire on the PR's own commit.
+          #
+          # Measured 2026-08-30: 38 release runs sat at `action_required` across
+          # hermiq, zaakafhandelapp and opencatalogi, waiting on a human who was
+          # never coming.
+          #
+          # The fallback is deliberate. A secret that does not exist expands to the
+          # empty string, and an empty GH_TOKEN would break release PR creation
+          # fleet-wide. So we keep working, and say so loudly — degrading to the
+          # unverified path in SILENCE is the failure this change exists to end.
+          GH_TOKEN: ${{ secrets.FLEET_DISPATCH_TOKEN || github.token }}
+          HAVE_PAT: ${{ secrets.FLEET_DISPATCH_TOKEN != '' }}
         run: |
           set -euo pipefail
+          if [ "${HAVE_PAT}" != "true" ]; then
+            echo "::warning::FLEET_DISPATCH_TOKEN is not set here. Opening this pull request with GITHUB_TOKEN, so its checks will NOT run and it can merge unverified. See the note on this step."
+          fi
           BR="${{ steps.bump.outputs.bump_branch }}"
 
           # SUPERSEDE THE PREVIOUS BUMP BEFORE OPENING A NEW ONE.
@@ -965,9 +988,16 @@ jobs:
       - name: Sync the release branch back into development
         if: ${{ github.ref_name == 'beta' || github.ref_name == 'main' }}
         env:
-          GH_TOKEN: ${{ github.token }}
+          # Same reasoning as the version-bump pull request above: opened with the
+          # org PAT so the sync PR's checks run, with a loud fallback rather than a
+          # silent one if the secret is absent.
+          GH_TOKEN: ${{ secrets.FLEET_DISPATCH_TOKEN || github.token }}
+          HAVE_PAT: ${{ secrets.FLEET_DISPATCH_TOKEN != '' }}
         run: |
           set -uo pipefail
+          if [ "${HAVE_PAT}" != "true" ]; then
+            echo "::warning::FLEET_DISPATCH_TOKEN is not set here. Opening this pull request with GITHUB_TOKEN, so its checks will NOT run and it can merge unverified. See the note on this step."
+          fi
           SRC="${{ github.ref_name }}"
           BR="sync/${SRC}-to-development-${{ env.NEW_VERSION }}"
 
