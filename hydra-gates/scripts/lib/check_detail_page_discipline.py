@@ -468,6 +468,42 @@ def _collect(node, key, out):
             _collect(v, key, out)
 
 
+def _contained_widget_ids(widgets):
+    """
+    Widget ids that a CONTAINER widget on this page places itself.
+
+    A container renders other widgets inside its own body, so its children are
+    correctly absent from `layout` — a grid cell for one would render it twice.
+    Two shapes are read, because the catalog has two containers:
+
+      - `tabs`      -> content.tabs[]       (entries are {widgetId} or a bare id)
+      - `container` -> content.placements[] (entries carry a widgetId)
+
+    Unknown container types contribute nothing rather than raising: a gate that
+    dies on a manifest it has not met yet is worse than one that under-reports.
+
+    :param widgets: The page's config.widgets list.
+    :return: Set of widget ids placed by a container.
+    """
+    contained = set()
+    for widget in widgets:
+        if not isinstance(widget, dict):
+            continue
+        content = widget.get("content")
+        if not isinstance(content, dict):
+            continue
+        for key in ("tabs", "placements"):
+            entries = content.get(key)
+            if not isinstance(entries, list):
+                continue
+            for entry in entries:
+                if isinstance(entry, str) and entry:
+                    contained.add(entry)
+                elif isinstance(entry, dict) and entry.get("widgetId"):
+                    contained.add(entry["widgetId"])
+    return contained
+
+
 def _overlap(a, b):
     ax, ay, aw, ah = a
     bx, by, bw, bh = b
@@ -506,8 +542,25 @@ def check_page(path, page, page_ids, findings):
         from collections import Counter
         wc = Counter(widget_ids)
         lc = Counter(layout_ids)
+        # A CONTAINER WIDGET PLACES ITS OWN CHILDREN, so those children are
+        # correctly absent from `layout`. A `tabs` widget names the widgets it
+        # holds in `content.tabs[]`; the widget renders them inside its panels,
+        # and a layout cell for one would render it TWICE — once in the tab and
+        # once loose on the grid. Rule 8 predates container widgets and read
+        # every such child as unplaced.
+        contained = _contained_widget_ids(widgets)
         for wid in set(widget_ids):
             n = lc.get(wid, 0)
+            if wid in contained:
+                # Placed by its container. The one thing still worth saying is
+                # if it ALSO has a grid cell, which is the double-render.
+                if n:
+                    findings.append(
+                        f"{path}: page '{pid}' — widget '{wid}' is held by a "
+                        f"container widget AND has {n} layout cell(s), so it "
+                        f"renders twice (ADR-062 rule 8)"
+                    )
+                continue
             if n != 1:
                 findings.append(
                     f"{path}: page '{pid}' — widget '{wid}' maps to {n} layout "
