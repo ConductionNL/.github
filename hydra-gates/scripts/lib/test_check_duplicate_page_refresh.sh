@@ -73,9 +73,12 @@ _manifest() {  # <dir> <config-body>
 JSON
 }
 
-_vue() {  # <dir> <file-body>
+# _vue <dir>, body on STDIN. A quoted heredoc, not an argument: the fixtures
+# contain Vue template markup, and shellcheck reads a backtick inside a
+# single-quoted argument as command substitution (SC2016).
+_vue() {
     mkdir -p "${WORK}/$1/src/views"
-    printf '%s\n' "$2" > "${WORK}/$1/src/views/Fixture.vue"
+    cat > "${WORK}/$1/src/views/Fixture.vue"
 }
 
 echo "gate-104 duplicate-page-refresh — checker acceptance"
@@ -95,27 +98,31 @@ _manifest arm2 '"showRefresh": false,
 _arm arm2 0 1
 
 # --- ARM 3: the Vue duplicate ----------------------------------------------
-_vue arm3 '<template>
-	<CnDashboardPage :title="t(`app`, `Dashboard`)">
+_vue arm3 <<'VUE'
+<template>
+	<CnDashboardPage :title="t('app', 'Dashboard')">
 		<template #actions>
 			<NcButton @click="reload">
 				{{ t("app", "Refresh") }}
 			</NcButton>
 		</template>
 	</CnDashboardPage>
-</template>'
+</template>
+VUE
 _arm arm3 1 1
 
 # --- ARM 4: the same Vue surface, opted out --------------------------------
-_vue arm4 '<template>
-	<CnDashboardPage :title="t(`app`, `Dashboard`)" :showRefresh="false">
+_vue arm4 <<'VUE'
+<template>
+	<CnDashboardPage :title="t('app', 'Dashboard')" :showRefresh="false">
 		<template #actions>
 			<NcButton @click="reload">
 				{{ t("app", "Refresh") }}
 			</NcButton>
 		</template>
 	</CnDashboardPage>
-</template>'
+</template>
+VUE
 _arm arm4 0 1
 
 # --- ARM 5: Refresh named only in a comment (the fix writes these) ----------
@@ -123,23 +130,26 @@ _arm arm4 0 1
 # branch would otherwise hit — a `<Refresh>` tag and a quoted 'Refresh' label.
 # Without comment stripping this arm fails, and it fails on precisely the
 # shape this gate's own remedy leaves behind.
-_vue arm5 '<template>
-	<CnDashboardPage :title="t(`app`, `Dashboard`)" @refresh="reload">
+_vue arm5 <<'VUE'
+<template>
+	<CnDashboardPage :title="t('app', 'Dashboard')" @refresh="reload">
 		<template #actions>
 			<!-- Refresh is NOT repeated here. The removed markup was
-			     <NcButton :aria-label="t(`app`, `Refresh`)"><Refresh :size="20" /></NcButton>
+			     <NcButton :aria-label="t('app', 'Refresh')"><Refresh :size="20" /></NcButton>
 			     and @refresh on the host now routes the menu item to reload. -->
 			<NcButton @click="create">
 				{{ t("app", "New thing") }}
 			</NcButton>
 		</template>
 	</CnDashboardPage>
-</template>'
+</template>
+VUE
 _arm arm5 0 1
 
 # --- ARM 6: a nested <template #icon> must not truncate the slot scan -------
-_vue arm6 '<template>
-	<CnDashboardPage :title="t(`app`, `Dashboard`)">
+_vue arm6 <<'VUE'
+<template>
+	<CnDashboardPage :title="t('app', 'Dashboard')">
 		<template #actions>
 			<NcButton @click="create">
 				<template #icon>
@@ -154,7 +164,8 @@ _vue arm6 '<template>
 			</NcButton>
 		</template>
 	</CnDashboardPage>
-</template>'
+</template>
+VUE
 _arm arm6 1 1
 
 # --- ARM 7: empty scope must not read as PASS ------------------------------
