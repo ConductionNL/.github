@@ -1,0 +1,4 @@
+{
+  "$comment": "NEAR MISS 1 — a fragment addresses an existing schema by its dict KEY and declares no slug of its own. larpinq ships exactly this shape against the schema keyed `skill`, whose slug is `larping_skill`.",
+  "components": { "schemas": { "product": { "configuration": { "x-openregister-mcp": { "search": {} } } } } }
+}
