@@ -1,0 +1,15 @@
+{
+  "openapi": "3.0.0",
+  "info": { "title": "Keepiq Register", "version": "1.0.0" },
+  "x-openregister": { "type": "application", "app": "keepiq" },
+  "components": {
+    "registers": { "keepiq": { "slug": "keepiq", "title": "Keepiq", "version": "1.0.0", "schemas": ["product"] } },
+    "schemas": {
+      "product": {
+        "slug": "product",
+        "title": "Product",
+        "properties": { "name": { "type": "string", "title": "Name" } }
+      }
+    }
+  }
+}

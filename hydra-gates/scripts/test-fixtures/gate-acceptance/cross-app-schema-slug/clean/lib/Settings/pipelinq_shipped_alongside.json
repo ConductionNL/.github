@@ -1,0 +1,10 @@
+{
+  "openapi": "3.0.0",
+  "info": { "title": "Pipelinq Register", "version": "1.0.0" },
+  "x-openregister": { "type": "application", "app": "pipelinq" },
+  "components": {
+    "schemas": {
+      "product": { "slug": "product", "title": "Product", "properties": { "name": { "type": "string" } } }
+    }
+  }
+}
