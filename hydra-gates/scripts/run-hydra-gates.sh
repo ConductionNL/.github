@@ -11019,12 +11019,19 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# GATE 104 — duplicate-page-refresh
+# GATE 105 — duplicate-page-refresh
 #
-# NUMBERED 104 because 103 is the highest number this file already uses. The
-# number is part of a gate's identity: gate-101's suite was misread twice when
-# two gates shared one, so picking the next free number means reading every
-# `# GATE <n>` here, not the highest anyone remembers.
+# 🔴 NUMBERED 105, NOT 104. This gate was written as 104 when 103 was the
+# highest number in the file, and `reports-one-page` landed on 104 first, from
+# a branch cut in parallel. check_gate_numbers_unique.sh caught it on the merge:
+# "gate-104 is claimed by: duplicate-page-refresh reports-one-page".
+#
+# The number is part of a gate's identity: gate-101's suite was misread twice
+# when two gates shared one, because a test that greps `[gate-N]` reads whichever
+# gate printed that number last. So the free number must be read off the CALL
+# SITES on the CURRENT main, not off the `# GATE <n>` comments and not off the
+# highest number anyone remembers. Picking it when the branch was cut is not
+# enough; another branch can take it while yours is open.
 #
 # CnActionsMenu renders Refresh as the FIRST item of the page-level Actions
 # overflow menu, and the page hosts pass `show-refresh="showRefresh"` with
@@ -11075,17 +11082,17 @@ _dpr_checked=$(sed -n 's/^checked \([0-9]\{1,\}\) page surface.*/\1/p' "${_dpr_l
 case "${_dpr_checked}" in ''|*[!0-9]*) _dpr_checked=0 ;; esac
 
 if [ "${_dpr_rc}" -eq 4 ] || { [ "${_dpr_rc}" -eq 0 ] && [ "${_dpr_checked}" -eq 0 ]; }; then
-    _skip_empty_scope 104 "duplicate-page-refresh" "page surface (a manifest page of type dashboard/detail, or a .vue mounting CnDashboardPage / CnDetailPage)"
+    _skip_empty_scope 105 "duplicate-page-refresh" "page surface (a manifest page of type dashboard/detail, or a .vue mounting CnDashboardPage / CnDetailPage)"
 elif [ "${_dpr_rc}" -eq 0 ]; then
-    _pass 104 "duplicate-page-refresh"
+    _pass 105 "duplicate-page-refresh"
 elif ! _helper_finished "${_dpr_log}" '^checked [0-9]+ page surface'; then
     # A CRASH IS NOT A FINDING.
     _dpr_why=$(head -3 "${_dpr_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
-    _skip 104 "duplicate-page-refresh" wiring "check_duplicate_page_refresh.py exited ${_dpr_rc} without printing its terminal 'checked N page surface(s)' summary, so duplicate Refresh controls are UNVERIFIED by this run. Checker output: ${_dpr_why:-<empty>}. See ${_dpr_log}."
+    _skip 105 "duplicate-page-refresh" wiring "check_duplicate_page_refresh.py exited ${_dpr_rc} without printing its terminal 'checked N page surface(s)' summary, so duplicate Refresh controls are UNVERIFIED by this run. Checker output: ${_dpr_why:-<empty>}. See ${_dpr_log}."
 else
     _dpr_n=$(grep -cE '^FAIL ' "${_dpr_log}" 2>/dev/null || true)
     case "${_dpr_n}" in ''|*[!0-9]*) _dpr_n=1 ;; esac
-    _fail 104 "duplicate-page-refresh" "${_dpr_n} page surface(s) ship a second Refresh beside the one CnActionsMenu already renders - see ${_dpr_log}"
+    _fail 105 "duplicate-page-refresh" "${_dpr_n} page surface(s) ship a second Refresh beside the one CnActionsMenu already renders - see ${_dpr_log}"
 fi
 
 # ---------------------------------------------------------------------------

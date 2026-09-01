@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: EUPL-1.2
 #
-# gate-104 (duplicate-page-refresh) — checker acceptance over planted trees.
+# gate-105 (duplicate-page-refresh) — checker acceptance over planted trees.
 #
 # 🔴 ARM 5 AND ARM 6 ARE THE LOAD-BEARING ONES.
 #
@@ -33,7 +33,7 @@ _fail_n=0
 _ok()  { printf '  ok   — %s\n' "$1"; }
 _bad() { _fail_n=$((_fail_n + 1)); printf '  FAIL — %s\n' "$1"; }
 
-WORK="$(mktemp -d "${TMPDIR:-/tmp}/gate104-dpr.XXXXXXXX")"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/gate105-dpr.XXXXXXXX")"
 trap 'rm -rf "${WORK}"' EXIT
 
 # _arm <name> <expected-rc> <expected-min-checked>
@@ -81,7 +81,7 @@ _vue() {
     cat > "${WORK}/$1/src/views/Fixture.vue"
 }
 
-echo "gate-104 duplicate-page-refresh — checker acceptance"
+echo "gate-105 duplicate-page-refresh — checker acceptance"
 
 # --- ARM 1: the manifest duplicate -----------------------------------------
 _manifest arm1 '"headerActions": [
@@ -211,8 +211,8 @@ _arm arm10 1 1
 
 echo ""
 if [ "${_fail_n}" -eq 0 ]; then
-    echo "gate-104 checker acceptance: ALL GREEN"
+    echo "gate-105 checker acceptance: ALL GREEN"
     exit 0
 fi
-echo "gate-104 checker acceptance: ${_fail_n} assertion(s) failed"
+echo "gate-105 checker acceptance: ${_fail_n} assertion(s) failed"
 exit 1

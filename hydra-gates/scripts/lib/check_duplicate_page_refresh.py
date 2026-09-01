@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: EUPL-1.2
 """
-Gate 104 — duplicate-page-refresh.
+Gate 105 — duplicate-page-refresh.
 
 Every page surface built on `CnDashboardPage` / `CnDetailPage` already ships a
 Refresh. `CnActionsMenu` renders it as the FIRST item of the page-level ...
