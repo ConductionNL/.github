@@ -11096,6 +11096,83 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# GATE 106 — cross-app-schema-slug
+#
+# A schema slug is GLOBAL on a shared OpenRegister. SchemaMapper::find()
+# matches on LOWER(slug) across every application and returns the first row it
+# fetches, and register descriptors write relations as a bare `"$ref": "Person"`
+# rather than a qualified path. Two apps that pick the same word resolve to
+# each other, and the failure is SILENT: the wrong schema answers, or an import
+# binds to a foreign row.
+#
+# Measured on the dev instance 2026-08-31, before the consolidation: 20 slugs
+# claimed by more than one app across the fleet's shipped registers, 35
+# duplicated slugs live. `application` meant a built app, a job application and
+# a school admission in three apps, sharing 4 percent of their properties.
+#
+# WHY A CONTRACT FILE. CI checks out ONE repository, so a cross-app question
+# has no answer from the tree alone — the same reason gate-57 declines to judge
+# openregister. contracts/fleet-schema-slugs.json records who declares what,
+# and build_fleet_schema_slugs.py regenerates it.
+#
+# WHAT IT REFUSES TO DECIDE. It takes NO view on who SHOULD own a generic word.
+# That is a product decision and a gate that guessed would be wrong both ways.
+# The 29 slugs with several claimants stay green for every app already listed:
+# reddening existing state is how a gate teaches people to ignore it (see the
+# note on full-tree gates in gate-84). Only a NEW claim fails.
+#
+# DIFF-SCOPED under ADR-020, because unlike gates 84 and 93-96 the pre-existing
+# state here is deliberately accepted, so there is nothing for a full-tree read
+# to find that the baseline does not already record.
+# ---------------------------------------------------------------------------
+_cas_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-cross-app-schema-slug.log
+: > "${_cas_log}"
+_cas_args=""
+_cas_skip=0
+if [ "${SCOPE_TO_DIFF}" = "1" ]; then
+    _cas_changed=$(printf '%s\n' "${CHANGED_FILES}" | grep -E '^lib/Settings/(register\.d/)?[^/]+\.json$' || true)
+    if [ -z "${_cas_changed}" ]; then
+        _skip 106 "cross-app-schema-slug" na "the diff against '${BASE_REF}' touched no register descriptor under lib/Settings, so NO slug was inspected. Diff-scoped out under ADR-020 — this gate runs on the next PR that touches one."
+        _cas_skip=1
+    else
+        for _f in ${_cas_changed}; do
+            _cas_args="${_cas_args} --changed-file ${_f}"
+        done
+    fi
+fi
+
+if [ "${_cas_skip}" -eq 0 ]; then
+    set +e
+    python3 "${SCRIPT_DIR}/lib/check_cross_app_schema_slug.py" . ${_cas_args} > "${_cas_log}" 2>&1
+    _cas_rc=$?
+    set +e
+
+    # `checked 0` means this repo ships no descriptor at all. That is `na`, not
+    # PASS — reporting PASS for an app with nothing to check is the .github#374
+    # defect.
+    _cas_checked=$(sed -n 's/^checked \([0-9]\{1,\}\) descriptor.*/\1/p' "${_cas_log}" 2>/dev/null | tail -1)
+    case "${_cas_checked}" in ''|*[!0-9]*) _cas_checked=0 ;; esac
+
+    if [ "${_cas_rc}" -eq 2 ]; then
+        _cas_why=$(head -3 "${_cas_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+        _skip 106 "cross-app-schema-slug" wiring "the fleet slug contract could not be read, so NO slug was judged and a cross-app claim would pass unseen. Checker output: ${_cas_why:-<empty>}. See ${_cas_log}."
+    elif [ "${_cas_rc}" -eq 0 ] && [ "${_cas_checked}" -eq 0 ]; then
+        _skip_empty_scope 106 "cross-app-schema-slug" "register descriptor under lib/Settings"
+    elif [ "${_cas_rc}" -eq 0 ]; then
+        _pass 106 "cross-app-schema-slug"
+    elif ! _helper_finished "${_cas_log}" '^checked [0-9]+ descriptor'; then
+        # A CRASH IS NOT A FINDING.
+        _cas_why=$(head -3 "${_cas_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+        _skip 106 "cross-app-schema-slug" wiring "check_cross_app_schema_slug.py exited ${_cas_rc} without printing its terminal 'checked N descriptor(s)' summary, so cross-app slug claims are UNVERIFIED by this run. Checker output: ${_cas_why:-<empty>}. See ${_cas_log}."
+    else
+        _cas_n=$(grep -cE '^FAIL ' "${_cas_log}" 2>/dev/null || true)
+        case "${_cas_n}" in ''|*[!0-9]*) _cas_n=1 ;; esac
+        grep -E '^FAIL ' "${_cas_log}" || true
+        _fail 106 "cross-app-schema-slug" "${_cas_n} schema slug(s) newly claim a word another app owns - see ${_cas_log}"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
 # GATE 97 — system-elevation-reachability (ADR-099 rule 9)
 #
 # NUMBERED 97, NOT 96. This gate was written as 96 and #581 landed
