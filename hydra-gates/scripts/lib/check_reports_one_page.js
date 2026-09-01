@@ -124,7 +124,21 @@ const rel = path.relative(process.cwd(), APP_DIR) || '.'
 
 if (reportsPages.length === 0) {
 	// NOT APPLICABLE, said out loud. ADR-112 Decision 4.
-	console.error(`at ${rel}: NOT APPLICABLE — the app declares no type:"reports" page, and ADR-112 Decision 4 does not require one of an app with no reports.`)
+	// SAYS WHAT IT CHECKED, NOT WHAT IT ASSUMED.
+	//
+	// This used to read "does not require one of an app with no reports",
+	// which asserts something the gate cannot see. shillinq is the case that
+	// proves it: it has a whole report CATALOGUE behind
+	// /reporting-compliance, rendered as category-grouped cards, and it is
+	// the page ADR-112 was modelled on. It is `type: "custom"` because its
+	// cards carry a per-card output-format picker and a Generate action that
+	// CnReportsPage has no way to express — its cards navigate, they do not
+	// generate. Converting it would LOSE that, which ADR-044 forbids.
+	//
+	// So a reader who took the old wording literally could have concluded
+	// shillinq has no reports and "fixed" it by adding a second, poorer
+	// reports page beside the one it already has.
+	console.error(`at ${rel}: NOT APPLICABLE — the app declares no type:"reports" page, so there is nothing here for this gate to check. That is NOT a finding that the app has no reports: an app may express them another way, and ADR-112 Decision 4 does not require this page type of one that does.`)
 	console.log(JSON.stringify({ status: 'passed', checked: 0, failed: 0 }))
 	console.log('[reports-one-page] findings=0')
 	process.exit(0)
