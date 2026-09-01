@@ -1883,6 +1883,11 @@
 			"additionalProperties": false,
 			"description": "#91 Wave 3: the shared visibility predicate (the Wave-1 banner shape). THREE modes: `endpoint` (GET a JSON endpoint, `field` dot-paths into the body), `source` (an OpenRegister { register, schema, filter? } query — `field` into the first result, or omit / use @total for the collection total), or LOCAL (neither endpoint nor source — `field` dot-paths into the caller's object context, e.g. a detail-page record). `op` defaults to eq. Evaluation is FAIL-SAFE (any error → hidden).",
 			"properties": {
+				"appInstalled": {
+					"type": "string",
+					"minLength": 1,
+					"description": "Nextcloud app id that must be installed and enabled for the guarded element to show. A PRECONDITION rather than a fourth mode: it is checked before anything else, and on its own it is the whole condition. Combined with endpoint/source/field it gates that mode too, so both must hold. It exists because the menu's `visibleIf` already spoke this word and `visibleWhen` did not, so the same manifest vocabulary meant two different things in two places. Use it on an action that writes into a sibling app, so an install without that app shows no button rather than a form that saves nowhere."
+				},
 				"endpoint": {
 					"type": "string",
 					"description": "A same-origin URL returning JSON; `field` is a dot-path into the body."
