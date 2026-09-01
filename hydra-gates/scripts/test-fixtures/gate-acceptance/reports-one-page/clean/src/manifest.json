@@ -1,0 +1,99 @@
+{
+	"$schema": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
+	"version": "2.0.0",
+	"_note": "CLEAN arm for gate-104 (ADR-112). The remedy the gate prescribes, applied to all three findings: one type:\"reports\" page, its entry in the footer between Documentation and Features & roadmap, and the carded report's own menu entry retired. ThingDetail stays as the anti-widening control: it is not a report and no card names it, and it must not fire.",
+	"menu": [
+		{
+			"id": "DashboardMenu",
+			"label": "Dashboard",
+			"icon": "ViewDashboardOutline",
+			"route": "Dashboard",
+			"order": 10
+		},
+		{
+			"id": "ReportsMenu",
+			"label": "Reports",
+			"icon": "ChartBoxOutline",
+			"route": "Reports",
+			"order": 95,
+			"section": "footer"
+		},
+		{
+			"id": "DocsMenu",
+			"label": "Documentation",
+			"icon": "BookOpenOutline",
+			"href": "https://example.org",
+			"order": 90,
+			"section": "footer"
+		},
+		{
+			"id": "RoadmapMenu",
+			"label": "Features & roadmap",
+			"icon": "MapOutline",
+			"route": "FeaturesRoadmap",
+			"order": 100,
+			"section": "footer"
+		}
+	],
+	"pages": [
+		{
+			"id": "Dashboard",
+			"route": "/",
+			"type": "dashboard",
+			"title": "Dashboard",
+			"config": {
+				"widgets": []
+			}
+		},
+		{
+			"id": "Throughput",
+			"route": "/reports/throughput",
+			"type": "index",
+			"title": "Processing time",
+			"config": {
+				"register": "ropfx",
+				"schema": "case",
+				"columns": [
+					"name"
+				]
+			}
+		},
+		{
+			"id": "ThingDetail",
+			"route": "/things/:id",
+			"type": "detail",
+			"title": "Thing",
+			"_note": "ANTI-WIDENING: not a report and named by no card. A gate widened to 'every page needs a card' turns the clean arm red on this.",
+			"config": {
+				"register": "ropfx",
+				"schema": "case",
+				"fields": []
+			}
+		},
+		{
+			"id": "FeaturesRoadmap",
+			"route": "/features-roadmap",
+			"type": "roadmap",
+			"title": "Features & roadmap"
+		},
+		{
+			"id": "Reports",
+			"route": "/reports",
+			"type": "reports",
+			"title": "Reports",
+			"config": {
+				"categories": {
+					"throughput": "Throughput"
+				},
+				"cards": [
+					{
+						"id": "t",
+						"label": "Processing time",
+						"category": "throughput",
+						"route": "Throughput"
+					}
+				]
+			}
+		}
+	]
+}
