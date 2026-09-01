@@ -1,0 +1,40 @@
+{
+  "id": "dprfx",
+  "version": "1.0.0",
+  "pages": [
+    {
+      "id": "Dashboard",
+      "route": "/",
+      "type": "dashboard",
+      "title": "Dashboard",
+      "config": {
+        "headerActions": [
+          { "id": "new-thing", "type": "open-form", "label": "New thing", "icon": "Plus" }
+        ]
+      }
+    },
+    {
+      "id": "ThingDetail",
+      "route": "/things/:id",
+      "type": "detail",
+      "title": "Thing",
+      "config": {
+        "headerActions": [
+          { "id": "renew-consent", "type": "api-call", "label": "Renew consent", "icon": "Refresh" }
+        ]
+      }
+    },
+    {
+      "id": "Reports",
+      "route": "/reports",
+      "type": "dashboard",
+      "title": "Reports",
+      "config": {
+        "showRefresh": false,
+        "headerActions": [
+          { "id": "reports-refresh", "type": "refresh", "label": "Refresh" }
+        ]
+      }
+    }
+  ]
+}
