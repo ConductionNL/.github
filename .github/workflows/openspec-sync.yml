@@ -38,10 +38,20 @@ jobs:
   sync:
     name: Sync OpenSpec to GitHub Issues
     runs-on: ubuntu-latest
-    # Observed: 1.6 min (larpingapp, the only executed run found). Walks
-    # openspec/changes and creates or updates one issue per change, so runtime
-    # scales with the number of changes and with GitHub API rate limiting.
-    timeout-minutes: 20
+    # Walks openspec/changes and creates or updates one issue per change, so
+    # runtime scales with the TOTAL number of changes — archived ones included,
+    # and those are the bulk of it. dossiq carries 320 archived against 49
+    # active and runs 16-20 min; on 2026-09-02 it hit 20m13s and was cancelled
+    # mid-sync, which reads as a broken job rather than a budget it outgrew.
+    #
+    # 45 buys dossiq roughly double its current work at the rate it grows.
+    # It does not fix the shape: ~87% of every run re-syncs archived changes
+    # whose issues are already closed, and the durable fix is to skip those.
+    # Raising the ceiling is the deliberate stopgap until someone does.
+    #
+    # Earlier note, kept because it shows how fast this grew: "Observed 1.6 min
+    # (larpingapp, the only executed run found)".
+    timeout-minutes: 45
     permissions:
       issues: write
       contents: read
