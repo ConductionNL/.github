@@ -3,7 +3,7 @@
 	"$id": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
 	"title": "Conduction App Manifest v2",
 	"description": "v2 schema for the JSON-driven page and navigation manifest consumed by @conduction/nextcloud-vue. Introduces a uniform widgets[] array on every page type with a per-slot grid coordinate system, a typed actions[] discriminator, and the required $schema field for version detection. v1 manifests continue to validate against app-manifest.schema.json (unchanged).",
-	"version": "2.26.0",
+	"version": "2.28.0",
 	"type": "object",
 	"required": ["$schema", "version"],
 	"allOf": [
@@ -958,7 +958,7 @@
 				"requiredApp": {
 					"type": "string",
 					"minLength": 1,
-					"description": "Nextcloud app id this widget leans on. When absent the widget renders its normal chrome and a set-up state and issues NO request."
+					"description": "Nextcloud app id this widget leans on — its data lives in that app's register, or its component comes from that app's integration leaf. When the app is absent the widget renders its normal chrome and a set-up state and issues NO request. Declared rather than inferred from content.register, because a register slug is not always the app id and a widget can depend on an app without querying it."
 				},
 				"id": {
 					"type": "string",
@@ -1652,6 +1652,34 @@
 					"description": "Additional props forwarded to the handler or modal.",
 					"additionalProperties": true
 				},
+				"createOverride": {
+					"type": "string",
+					"description": "Registry handler name that owns the persist for an `open-form` action, replacing the default objectStore.saveObject. Resolved exactly as CnIndexPage resolves its own `createOverride` prop (a kind:'create-override' entry's `.handler`, a function-valued registry entry, or a function in the legacy customComponents map). Needed when the schema requires a field the create form cannot supply on its own — a server-minted foreign key, say — where a straight save would 400."
+				},
+				"includeFields": {
+					"type": "array",
+					"items": { "type": "string" },
+					"description": "open-form: the only fields the create dialog asks for. One schema often backs two surfaces, a detail page that edits all of it and a header button that collects what someone filing a new one types, and this is how the button says which it is. Omit for the whole schema."
+				},
+				"excludeFields": {
+					"type": "array",
+					"items": { "type": "string" },
+					"description": "open-form: fields the create dialog leaves out. Use it to drop a handful; use includeFields when it is easier to name what stays."
+				},
+				"fieldOverrides": {
+					"type": "object",
+					"additionalProperties": true,
+					"description": "open-form: per-field overrides passed to fieldsFromSchema, keyed by field. Recognised keys include label, order, hidden, readOnly and widget."
+				},
+				"advanced": {
+					"type": "boolean",
+					"default": false,
+					"description": "open-form: open the properties-and-JSON table (CnAdvancedFormDialog) instead of the plain form. The plain form is the default because a header button is aimed at someone filing a record, not at inspecting its schema."
+				},
+				"formTitle": {
+					"type": "string",
+					"description": "open-form: overrides the create dialog's heading. Defaults to 'Create {schema title}'."
+				},
 				"handler": {
 					"type": "string",
 					"description": "Registry key for type: 'handler'. Resolved against the customComponents map passed to CnAppRoot. Also the built-in dispatch verb when paired with `route` (handler: 'navigate' → $router.push to `route`)."
@@ -2097,6 +2125,21 @@
 			"additionalProperties": false,
 			"description": "A v2 page definition. CnPageRenderer dispatches by type and matches by $route.name === page.id. All page types support a uniform widgets[] array for declarative slot placement. Sentinels (@resolve:*) are NOT allowed in id, route, component, headerComponent, actionsComponent, or slots.* — those are router and registry invariants.",
 			"properties": {
+				"requiresApp": {
+					"description": "Soft dependency gating this WHOLE page. When the named Nextcloud app is not installed, the page renders the missing-dependency screen instead of its body. This is for the DEEP LINK: an entry gated by visibleIf.appInstalled is already hidden from the menu, so the remaining ways in are a bookmark, a shared URL, a redirect or an e2e spec, and those otherwise land on an empty page where 'not installed' looks the same as 'no data'. Gate a single WIDGET with visibleIf.appInstalled instead: a detail page may carry many widgets where only one needs the app, and that widget should hide while the page renders normally.",
+					"oneOf": [
+						{ "type": "string", "minLength": 1 },
+						{
+							"type": "object",
+							"required": ["id"],
+							"additionalProperties": false,
+							"properties": {
+								"id": { "type": "string", "minLength": 1 },
+								"name": { "type": "string", "minLength": 1, "description": "Human-readable app name shown on the screen; defaults to the id." }
+							}
+						}
+					]
+				},
 				"id": {
 					"type": "string",
 					"description": "Vue-router route name. MUST be unique across pages[]. Sentinels (@resolve:*) are NOT allowed."
@@ -2108,7 +2151,7 @@
 				"type": {
 					"type": "string",
 					"enum": ["index", "detail", "dashboard", "logs", "settings", "chat", "files", "form", "map", "roadmap", "reports", "search", "wiki", "flow", "flows", "flow-detail", "custom"],
-					"description": "Page type. Closed enum of 17 supported types. 'flow' opens ONE flow in the editor; the flow LIST is an ordinary 'index' with config.entitySource='flows'. 'flows' and 'flow-detail' are DEPRECATED aliases kept for migration — 'flows' predates named index sources and 'flow-detail' is the old name for 'flow'. 'roadmap' mounts CnFeaturesAndRoadmapPage (features + GitHub-issue-backed roadmap). 'reports' mounts CnReportsPage: one page listing an app's reports as cards, each naming a ROUTE (never a path) plus an optional category, so reports stop being a menu branch that grows one entry per report and never shrinks (ADR-112). 'search' mounts CnSearchPage (cross-schema query + facet sidebar + results list; consumers wire the actual search via @search). 'wiki' mounts CnWikiPage (manifest-declared markdown article + optional sidebar tree; MUST declare config.register + config.schema). 'flow' and the deprecated 'flow-detail' both mount CnFlowEditorPage (the shared node/edge canvas) and take config.app to scope to the owning app. A flow lives in OpenRegister's native flow store rather than a register/schema pair, so a single flow cannot be a 'detail' page — but the LIST is a plain 'index' once a named entitySource supplies it, which is why 'flows' is deprecated (ADR-110 Decision 4). 'custom' requires a _note field explaining why a standard type was not feasible."
+					"description": "Page type. Closed enum of 17 supported types. 'flow' opens ONE flow in the editor; the flow LIST is an ordinary 'index' with config.entitySource='flows'. 'flows' and 'flow-detail' are DEPRECATED aliases kept for migration — 'flows' predates named index sources and 'flow-detail' is the old name for 'flow'. 'roadmap' mounts CnFeaturesAndRoadmapPage (features + GitHub-issue-backed roadmap). 'search' mounts CnSearchPage (cross-schema query + facet sidebar + results list; consumers wire the actual search via @search). 'wiki' mounts CnWikiPage (manifest-declared markdown article + optional sidebar tree; MUST declare config.register + config.schema). 'flow' and the deprecated 'flow-detail' both mount CnFlowEditorPage (the shared node/edge canvas) and take config.app to scope to the owning app. A flow lives in OpenRegister's native flow store rather than a register/schema pair, so a single flow cannot be a 'detail' page — but the LIST is a plain 'index' once a named entitySource supplies it, which is why 'flows' is deprecated (ADR-110 Decision 4). 'custom' requires a _note field explaining why a standard type was not feasible."
 				},
 				"title": {
 					"type": "string",
@@ -2163,7 +2206,7 @@
 						"entitySource": {
 							"type": "string",
 							"enum": ["flows", "tasks"],
-							"description": "Name a registered NON-OBJECT entity collection for a type='index' page, instead of register+schema. Deliberately NOT called `source`: that key is already taken on page config and is polymorphic (a URL string in some manifests, an object with `params` in others), so reusing it would give one key two meanings and break six deployed shillinq pages. A flow definition is deliberately not an OpenRegister object, so an index had nothing to bind to and such lists became bespoke type='custom' pages. With a source the index loads the list itself. Takes precedence over register/schema; non-empty `objects` still wins over both. Registered sources live in src/composables/indexSources.js."
+							"description": "Name a registered NON-OBJECT entity collection for a type='index' page, instead of register+schema. Deliberately NOT called `source`: that key is already taken on page config and is polymorphic (a URL string in some manifests, an object with `params` in others), so reusing it would give one key two meanings and break six deployed shillinq pages. A flow definition is deliberately not an OpenRegister object, so an index had nothing to bind to and such lists became bespoke type='custom' pages. With a source the index loads the list itself. Takes precedence over register/schema; non-empty `objects` still wins over both. Registered sources live in src/composables/indexSources.js. `tasks` lists the viewer's task inbox from OpenRegister's flow-tasks read (cn-tasks-entity-source)."
 						},
 						"app": {
 							"type": "string",
@@ -2402,6 +2445,11 @@
 						"headerActions": {
 							"type": "array",
 							"description": "Page-level header actions rendered inside CnActionsBar's overflow dropdown (between the built-in Refresh action and the `#action-items` slot). Same shape as the row-level `actions[]` ($ref action), but handlers receive NO row context — they are page-level. Reserved ids (`refresh`, `import`, `export`, `copy`, `delete`) are dropped at render time to avoid shadowing built-ins. See manifest-icons-and-page-actions for the dispatch semantics.",
+							"items": { "$ref": "#/$defs/action" }
+						},
+						"bulkActions": {
+							"type": "array",
+							"description": "Bulk actions rendered in the contextual selection strip that appears while rows are selected. Same shape as the row-level `actions[]` ($ref action), but the handler receives the SELECTION rather than a row: `{ actionId, selectedIds, count }`. For `type: \"open-modal\"` the selection is merged into the modal's props as `selectedIds` and `count`, so a manifest-declared modal component can act on the selection without the page hand-writing anything. Reserved ids (`copy`, `delete`) are dropped at render time: the strip already ships both as built-ins. Before this existed the strip had only a `#selection-actions` slot, which only a hand-written host component could fill \u2014 so a page declared in a manifest could carry row actions and header actions but never a bulk one.",
 							"items": { "$ref": "#/$defs/action" }
 						},
 						"actions": {
