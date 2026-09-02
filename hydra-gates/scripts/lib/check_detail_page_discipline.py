@@ -504,6 +504,59 @@ def _contained_widget_ids(widgets):
     return contained
 
 
+_APP_REGISTERS_CACHE = {}
+
+
+def _app_own_registers(path):
+    """The OpenRegister register slugs this app itself ships.
+
+    Read from ``lib/Settings/*register*.json`` — ``components.registers`` — of
+    the app that owns *path*. Returns None when the app ships no register file
+    at all, which is NOT the same as an empty set: an app we cannot read owns
+    an UNKNOWN set of registers, and judging a widget against an empty set
+    would flag every widget it has.
+    """
+    src = _src_dir(path)
+    app_root = os.path.dirname(src)
+    if app_root in _APP_REGISTERS_CACHE:
+        return _APP_REGISTERS_CACHE[app_root]
+
+    files = glob.glob(os.path.join(app_root, "lib", "Settings", "*register*.json"))
+    if not files:
+        _APP_REGISTERS_CACHE[app_root] = None
+        return None
+
+    own = set()
+    for f in files:
+        try:
+            with open(f, encoding="utf-8") as fh:
+                doc = json.load(fh)
+        except Exception:
+            continue
+        regs = (doc.get("components") or {}).get("registers")
+        if isinstance(regs, dict):
+            own.update(str(k) for k in regs)
+    _APP_REGISTERS_CACHE[app_root] = own or None
+    return _APP_REGISTERS_CACHE[app_root]
+
+
+def _widget_registers(widget):
+    """Every register slug a widget definition reads from.
+
+    Covers the single-source shape (``content.register``) and the multi-entry
+    one (``content.entries[].register``), which is what a stats-block uses.
+    """
+    content = widget.get("content") if isinstance(widget.get("content"), dict) else {}
+    out = []
+    for src in [content] + [
+        e for e in (content.get("entries") or []) if isinstance(e, dict)
+    ]:
+        reg = src.get("register")
+        if isinstance(reg, str) and reg and not reg.startswith("@"):
+            out.append(reg)
+    return out
+
+
 def _overlap(a, b):
     ax, ay, aw, ah = a
     bx, by, bw, bh = b
@@ -682,6 +735,36 @@ def check_page(path, page, page_ids, findings):
                     f"console errors on mount)"
                 )
 
+
+
+    # (g) cross-app widgets must declare requiredApp.
+    #
+    # A widget reading another app's register renders a value whether or not
+    # that app is installed: the query 404s and an aggregation shows 0, which
+    # is what a real zero shows. dossiq's hours tile did exactly this on every
+    # install without humaniq and looked correct doing it. `requiredApp` makes
+    # the host render a set-up state instead of asking.
+    #
+    # Skipped entirely when the app ships no register file — then we do not
+    # know which registers are its own, and every widget would be flagged.
+    own_registers = _app_own_registers(path)
+    if own_registers:
+        for w in widgets:
+            if not isinstance(w, dict):
+                continue
+            if w.get("requiredApp") or (
+                isinstance(w.get("content"), dict) and w["content"].get("requiredApp")
+            ):
+                continue
+            for reg in _widget_registers(w):
+                if reg not in own_registers:
+                    findings.append(
+                        f"{path}: page '{pid}' — widget '{w.get('id')}' reads register "
+                        f"'{reg}', which this app does not ship, but declares no "
+                        f"'requiredApp'. Without it the widget queries an app that may "
+                        f"not be installed and renders 0 / empty rather than saying so."
+                    )
+                    break
 
 def check_file(path, page_ids, findings, base_ref):
     try:
