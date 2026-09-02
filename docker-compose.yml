@@ -574,7 +574,12 @@ services:
       GREENMAIL_OPTS: "-Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.auth.disabled"
       JAVA_OPTS: "-Xmx256m"
     healthcheck:
-      test: ["CMD-SHELL", "nc -z localhost 3025 && nc -z localhost 3143"]
+      # 🔴 NOT `nc`. The greenmail/standalone image ships no netcat, so this
+      # check could never pass: the container reported "unhealthy" forever
+      # while SMTP and IMAP were serving normally, and `ox` below waits on
+      # `condition: service_healthy`, so the whole ox profile could not
+      # start. The image does ship bash, so probe the ports with /dev/tcp.
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/3025 && echo > /dev/tcp/127.0.0.1/3143"]
       interval: 10s
       timeout: 5s
       retries: 5
