@@ -1373,6 +1373,183 @@ _outJ5="${_tmp}/j5.txt"
 _run "${_appJ}" "${_outJ5}"
 _expect "${_outJ5}" 50 "PASS" "control: a } in a string or heredoc does not truncate the method span"
 
+
+# ===========================================================================
+# FAMILY K — THE VENDORED MANIFEST SCHEMA MUST NOT DRIFT BEHIND THE LIBRARY.
+#
+# dossiq#1729: gate-53 failed dossiq's Dashboard with
+#
+#   at /pages/0/config/headerActions/0: must NOT have additional properties
+#
+# and the manifest was RIGHT. `includeFields` / `excludeFields` /
+# `fieldOverrides` / `size` / `columns` / `formTitle` / `advanced` /
+# `createOverride` are the open-form option set, and CnActionButtons binds
+# every one of them onto CnFormDialog:
+#
+#     :include-fields="formEntry.includeFields || null"
+#     :exclude-fields="formEntry.excludeFields || []"
+#     :field-overrides="formEntry.fieldOverrides || {}"
+#     :size="formEntry.size || 'normal'"
+#     :columns="formEntry.columns || 1"
+#
+# The library accepted them, the RUNTIME rendered them, and the gate's
+# vendored copy of the schema — 2.26.0, released as v1.11.0 — had never heard
+# of them. The gate was stale, not the app; the app's narrowed "New case"
+# form was a deliberate feature (dossiq#1713).
+#
+# ⚠️ THIS IS THE THIRD TIME THIS CLASS HAS SHIPPED. The 2.28.0 sync (#664)
+# and the 2.29.0 sync (#667) were both the same defect — a vendored schema
+# predating a library feature — and BOTH landed with no fixture, so nothing
+# in this package could tell a synced schema from a stale one. That is the
+# hole this family closes: it is not a test of the schema's contents, it is a
+# test that the vendored copy is CURRENT ENOUGH to accept what the library
+# renders.
+#
+# THE TWO ARMS ARE THE POINT. K1 alone would pass just as well against a
+# schema someone had "fixed" by setting the action's additionalProperties to
+# true — which would retire the gate rather than update it. So K2 plants two
+# INDEPENDENTLY fatal defects in the same action, one of each kind the sloppy
+# fix would destroy:
+#
+#   * `includeFieldz` — a typo'd key, caught only if additionalProperties is
+#     still false;
+#   * `size: "enormous"` — outside the enum, caught only if the enum survived.
+#
+# A schema loosened either way passes K1 and fails K2, which is exactly the
+# discrimination a bare "does dossiq validate?" check cannot make.
+# ===========================================================================
+_appK="${_tmp}/appK"
+mkdir -p "${_appK}/src"
+cat > "${_appK}/src/manifest.json" <<'JSON'
+{
+  "$schema": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
+  "version": "0.1.0",
+  "menu": [{ "id": "Dashboard", "label": "Dashboard", "icon": "ViewDashboardOutline", "route": "Dashboard", "order": 10 }],
+  "pages": [
+    {
+      "id": "Dashboard",
+      "type": "dashboard",
+      "route": "/",
+      "title": "Dashboard",
+      "_note": "Landing page; the header button files a new case.",
+      "config": {
+        "headerActions": [
+          {
+            "id": "new-case",
+            "type": "open-form",
+            "label": "New case",
+            "icon": "Plus",
+            "register": "dossiq",
+            "schema": "case",
+            "size": "large",
+            "columns": 2,
+            "includeFields": ["caseType", "title", "description"],
+            "excludeFields": ["internalRef"],
+            "fieldOverrides": { "description": { "widget": "textarea" } },
+            "formTitle": "New case",
+            "advanced": false,
+            "createOverride": "mintCaseNumber",
+            "onSuccessRoute": "Dashboard",
+            "successMessage": "Case created."
+          }
+        ]
+      }
+    }
+  ]
+}
+JSON
+git -C "${_appK}" init -q .
+_commit "${_appK}" init
+
+# K1 — dossiq's real shape, whole. Against the 2.26.0 schema this arm FAILS
+# with the exact string from #1729; against a current one it passes.
+_outK1="${_tmp}/k1.txt"
+_run "${_appK}" "${_outK1}"
+_expect "${_outK1}" 53 "PASS" "accepts the full open-form option set on a header action (dossiq#1729)"
+
+# K2 — ANTI-WIDENING. Two independently fatal defects in that same action.
+_appK2="${_tmp}/appK2"
+cp -r "${_appK}" "${_appK2}"
+python3 - "${_appK2}/src/manifest.json" <<'PY'
+import json, sys
+p = sys.argv[1]
+raw = open(p).read()
+a = '            "size": "large",\n'
+b = '            "includeFields": ["caseType", "title", "description"],\n'
+assert a in raw, "PLANT ANCHOR MISSING (size) — the fixture changed, fix the test not the anchor"
+assert b in raw, "PLANT ANCHOR MISSING (includeFields) — the fixture changed, fix the test not the anchor"
+raw = raw.replace(a, '            "size": "enormous",\n', 1)
+raw = raw.replace(b, '            "includeFieldz": ["caseType", "title", "description"],\n', 1)
+open(p, 'w').write(raw)
+json.load(open(p))
+PY
+_commit "${_appK2}" "plant an unknown key and an out-of-enum size"
+_outK2="${_tmp}/k2.txt"
+_run "${_appK2}" "${_outK2}"
+_expect "${_outK2}" 53 "FAIL" "still rejects an unknown action key and an out-of-enum size"
+_logK2="$(sed -n 's/.*see \(.*hydra-gate-effective-manifest-crossref\.log\).*/\1/p' "${_outK2}" | head -1)"
+if [ -n "${_logK2}" ] && grep -q 'additionalProperties' "${_logK2}" && grep -q 'enum' "${_logK2}"; then
+    _ok "gate-53 names BOTH planted defects (additionalProperties + enum)"
+else
+    _bad "gate-53 failed without naming both planted defects — a schema loosened one way would pass this"
+fi
+
+# ===========================================================================
+# FAMILY L — THE BUILT-IN WIDGET LIST IS THE SAME DRIFT, ONE FILE OVER.
+#
+# `check_manifest.js` carries a hand-copied BUILT_IN_WIDGET_KEYS feeding the
+# ADR-036 "single 12×12 custom widget is a custom page in disguise" rule. Its
+# comment says it is kept in sync with nextcloud-vue's validateManifest.js.
+# It was not: the library's own list had grown by five (`banner`,
+# `audit-trail`, `header`, `text`, `divider`) and its v2 runtime registry
+# `BUILT_IN_WIDGETS` by six more (`object-geo`, `nav-card-grid`, `data`,
+# `metadata`, `related`, `integration`), while the gate still knew six keys.
+#
+# The consequence is a FALSE POSITIVE with impossible advice. For a library
+# widget the gate said:
+#
+#   (a) declare as type:"custom" with component:"banner" and register the
+#       component with kind:"page"
+#
+# — asking the app to register a component it does not own and cannot supply.
+#
+# L1 proves a library built-in is accepted; L2 is the anti-widening arm that
+# keeps the rule alive for a genuinely app-owned widget, which is the case
+# ADR-036 Decision 1 exists to catch.
+# ===========================================================================
+_mk_widget_app() {  # _mk_widget_app <dir> <widgetKey>
+    mkdir -p "$1/src"
+    python3 - "$1/src/manifest.json" "$2" <<'PY'
+import json, sys
+m = {
+    "$schema": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
+    "version": "0.1.0",
+    "menu": [{"id": "D", "label": "Dashboard", "icon": "ViewDashboardOutline", "route": "D", "order": 10}],
+    "pages": [{
+        "id": "D", "type": "dashboard", "route": "/", "title": "Dashboard",
+        "_note": "One full-bleed widget.",
+        "widgets": [{"id": "w1", "widgetKey": sys.argv[2], "slot": "body",
+                     "gridX": 0, "gridY": 0, "gridWidth": 12, "gridHeight": 12}],
+    }],
+}
+json.dump(m, open(sys.argv[1], 'w'), indent=1)
+PY
+    git -C "$1" init -q .
+    _commit "$1" init
+}
+
+_appL1="${_tmp}/appL1"
+_mk_widget_app "${_appL1}" banner
+_outL1="${_tmp}/l1.txt"
+_run "${_appL1}" "${_outL1}"
+_expect "${_outL1}" 53 "PASS" "a single 12x12 LIBRARY built-in widget is not a custom page in disguise"
+
+_appL2="${_tmp}/appL2"
+_mk_widget_app "${_appL2}" AppOwnedCaseBoard
+_outL2="${_tmp}/l2.txt"
+_run "${_appL2}" "${_outL2}"
+_expect "${_outL2}" 53 "FAIL" "a single 12x12 APP-OWNED widget still trips ADR-036 Decision 1"
+
 echo ""
 if [ "${_failures}" -eq 0 ]; then
     echo "test_gate_45_to_55_acceptance.sh: ALL GREEN"
