@@ -99,7 +99,42 @@ const BASE_SCHEMA_CANDIDATES = [
 // checks — the two rules the gate spec mandates but JSON Schema cannot
 // express. Kept in sync with nextcloud-vue src/utils/validateManifest.js and
 // src/utils/resolveSlotColumns.js.
-const BUILT_IN_WIDGET_KEYS = new Set(['object-table', 'card-grid', 'form-renderer', 'map-viewer', 'chart', 'stats-block'])
+// A LIBRARY WIDGET IS NEVER "A CUSTOM PAGE IN DISGUISE" (dossiq#1729, same
+// class one file over from the schema drift that issue reported).
+//
+// This list feeds the ADR-036 Decision 1 rule below, whose finding tells the
+// author to "declare as type:"custom" with component:"<key>" and register the
+// component with kind:"page"". That advice is only possible for a widget the
+// APP owns. For a key the library resolves itself the app has nothing to
+// register, so a missing entry here is not a stricter gate — it is a finding
+// the author cannot act on.
+//
+// It had drifted twice over. nextcloud-vue's own
+// LIBRARY_BUILT_IN_WIDGET_KEYS had grown by five (banner, audit-trail,
+// header, text, divider) and its v2 runtime registry BUILT_IN_WIDGETS
+// (src/components/CnWidgetGrid/builtInWidgets.js — what CnWidgetGrid
+// ACTUALLY resolves a widgetKey against) carries six more on top of that.
+// This set is the union of those two: every key the v2 grid resolves to a
+// library component, plus `chart` and `stats-block`, which the manifest-v2
+// spec reserves and nextcloud-vue's validator already allows ahead of them
+// shipping.
+//
+// ⚠️ KNOWN REMAINING GAP, DELIBERATELY NOT CLOSED HERE. CnWidgetGrid falls
+// back to the dashboard-widget catalog (registerDashboardWidgets.js: table,
+// object-list, map, countdown, tabs, …) after these, so those keys also
+// resolve to library components at runtime. nextcloud-vue's OWN validator
+// flags them too, so matching it is not a false positive this package
+// invented; widening past the library's validator is a change to make in
+// nextcloud-vue first. Tracked in the report on dossiq#1729.
+const BUILT_IN_WIDGET_KEYS = new Set([
+	// manifest-v2 spec set, mirrored from nextcloud-vue
+	// src/utils/validateManifest.js LIBRARY_BUILT_IN_WIDGET_KEYS.
+	'object-table', 'card-grid', 'form-renderer', 'map-viewer', 'chart', 'stats-block',
+	'banner', 'audit-trail', 'header', 'text', 'divider',
+	// v2 runtime registry, mirrored from nextcloud-vue
+	// src/components/CnWidgetGrid/builtInWidgets.js BUILT_IN_WIDGETS.
+	'object-geo', 'nav-card-grid', 'data', 'metadata', 'related', 'integration',
+])
 const SLOT_COLUMNS_DEFAULTS = { body: 12, sidebar: 1, 'header-actions': 12, footer: 12, modal: 12 }
 
 function slotColumns(slotName, overrides) {
