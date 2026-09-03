@@ -113,6 +113,31 @@ jobs:
     # installs composer deps, packages and signs a tarball and uploads it — so
     # this is bounded at 45 min, ~11x the worst run, purely as a hang stop.
     timeout-minutes: 45
+    # Serialize releases per repository AND per branch, here rather than only
+    # in the callers.
+    #
+    # Most callers already declare `concurrency: release-${{ github.ref_name }}`
+    # at workflow level. Measured 2026-09-03, three do not: openregister,
+    # opencatalogi and integriq. Those are the busiest repositories in the
+    # fleet, so they are precisely the ones whose release runs overlap, and
+    # nothing stopped two of them signing and uploading packages at once.
+    #
+    # `cancel-in-progress: false` for the reason the callers give: a cancelled
+    # release is neither a success nor a rollback, it is a half-published
+    # version. Queued runs wait.
+    #
+    # The group name is deliberately NOT the callers' `release-<ref>`, so a
+    # caller that also declares one keeps its own outer queue and this inner
+    # one is then trivially satisfied. Two nested groups cannot deadlock:
+    # holding the outer admits exactly one run, which is the only contender
+    # for the inner.
+    #
+    # Serialization alone does NOT make a release correct. The run that goes
+    # FIRST still publishes from whatever it checked out, however far the
+    # branch has moved since. That is what the freshness guard below is for.
+    concurrency:
+      group: release-shared-${{ github.repository }}-${{ github.ref_name }}
+      cancel-in-progress: false
     steps:
 
       - name: Validate release type
@@ -628,6 +653,144 @@ jobs:
       # No push on a dry run and no push when the number has not moved — a
       # re-run of a release that already happened must not create an empty
       # commit and re-tag it.
+
+      # ── REFUSE TO PUBLISH FROM A CHECKOUT THE BRANCH HAS MOVED PAST ──
+      #
+      # Measured on dossiq, 2026-09-03. Two pull requests merged into
+      # `development` 14 seconds apart:
+      #
+      #   10:26:30  push 9990c251          -> release run 33744307677
+      #   10:26:44  push 1582f4a6 (#1729)  -> release run 33744333169
+      #
+      # The FIRST run checked out 9990c251, spent three minutes building, and
+      # at 10:29:35 committed its bump on top of 9990c251, tagged that commit
+      # v0.3.12-unstable.20260903102722 (e2a22a7e) and published the release
+      # at 10:30. `compare/1582f4a6...e2a22a7e` answers
+      # `status=diverged, ahead_by=1, behind_by=1`: the newest release on the
+      # repository did not contain #1729.
+      #
+      # Nothing about that run was wrong on its own terms. The tag names the
+      # tree whose info.xml matches it, and e2a22a7e IS a descendant of the
+      # sha that triggered the run. The damage was in WHEN it published: by
+      # 10:30 the branch had been at 1582f4a6 for three and a half minutes,
+      # and `generateReleaseNotes` builds its list from the repository's
+      # pull-request history rather than from the tag's ancestry, so the
+      # release notes carried #1729's title. An acceptance rig installed "the
+      # release with the fix", reproduced every defect the fix removes, and a
+      # marker-symbol grep inside the installed tree was the only thing that
+      # exposed it.
+      #
+      # Concurrency does not fix this, and it is worth being explicit about
+      # that because the concurrency group looks like it should. Those two runs
+      # DID serialize: the second waited and took 11 minutes against a 3 minute
+      # median. Waiting your turn does not make your checkout current. The run
+      # that goes first is precisely the stale one.
+      #
+      # So read the remote tip and stop if the branch has moved. This sits
+      # immediately before `Commit the version bump`, the first step with any
+      # effect outside the runner, so stopping here leaves no release branch,
+      # no pull request, no tag, no package and no App Store entry behind.
+      #
+      # Three outcomes, deliberately different:
+      #
+      #   unchanged  proceed.
+      #   advanced   the tip is a descendant of our sha. Fail, naming the run
+      #              that supersedes this one. It is a real failure to publish
+      #              here, and skipping quietly would be a release that nobody
+      #              can tell from one that never needed to happen.
+      #   diverged   the branch was rewritten under us. Fail, harder.
+      #
+      # This step only READS. `git ls-remote` and a fetch into FETCH_HEAD: no
+      # push, no force-push, no local or remote branch moved. The version bump
+      # keeps going to its own `release/v<version>` branch and reaching the
+      # integration branch through a pull request, exactly as before.
+      - name: Refuse to release from a superseded checkout
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          # Never silence the call a conclusion is drawn from: a rate-limited
+          # `gh` that is read as "no successor run" would turn this guard into
+          # a random release failure. One retry, then an explicit error.
+          api_get() {
+            local path="$1" jq_expr="$2" out=""
+            for attempt in 1 2; do
+              if out="$(gh api "${path}" --jq "${jq_expr}")"; then
+                printf '%s' "${out}"
+                return 0
+              fi
+              echo "GitHub API call failed (attempt ${attempt}): ${path}" >&2
+              if [ "${attempt}" = "1" ]; then sleep 5; fi
+            done
+            return 1
+          }
+
+          TRIGGER_SHA="${GITHUB_SHA}"
+          REMOTE_TIP="$(git ls-remote origin "refs/heads/${REF_NAME}" | cut -f1)"
+
+          echo "Triggering sha  : ${TRIGGER_SHA}"
+          echo "Remote tip now  : ${REMOTE_TIP:-<none>}"
+
+          if [ -z "${REMOTE_TIP}" ]; then
+            echo "::error::${REF_NAME} has no head on origin. Refusing to publish a release from a branch that does not exist remotely."
+            exit 1
+          fi
+
+          if [ "${REMOTE_TIP}" = "${TRIGGER_SHA}" ]; then
+            echo "The checkout is current: ${REF_NAME} is still at ${TRIGGER_SHA}."
+            exit 0
+          fi
+
+          # Bring the new tip in so ancestry is answerable. FETCH_HEAD only.
+          git fetch --quiet --no-tags origin "refs/heads/${REF_NAME}"
+          NEW_TIP="$(git rev-parse FETCH_HEAD)"
+
+          if ! git merge-base --is-ancestor "${TRIGGER_SHA}" "${NEW_TIP}"; then
+            echo "::error::${REF_NAME} no longer contains ${TRIGGER_SHA}; it now points at ${NEW_TIP}, which is not a descendant of it. The branch was rewritten or force-pushed while this run was building. Refusing to tag anything."
+            exit 1
+          fi
+
+          BEHIND="$(git rev-list --count "${TRIGGER_SHA}..${NEW_TIP}")"
+
+          # Is a run of THIS workflow already covering the new tip? Ask by
+          # workflow id, not by name: inside a called workflow GITHUB_RUN_ID is
+          # the CALLER's run, so its workflow_id is this repository's own
+          # release workflow whatever that file is called here.
+          if ! WORKFLOW_ID="$(api_get "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" '.workflow_id')"; then
+            echo "::error::${REF_NAME} advanced to ${NEW_TIP} while this run was building, and the API would not say whether a newer release run exists. Refusing to publish a release that is already ${BEHIND} commit(s) behind the branch."
+            exit 1
+          fi
+
+          if ! SUCCESSORS="$(api_get "repos/${GITHUB_REPOSITORY}/actions/workflows/${WORKFLOW_ID}/runs?head_sha=${NEW_TIP}&per_page=1" '.total_count')"; then
+            SUCCESSORS="unknown"
+          fi
+
+          echo "::error::This release run is superseded and will not publish."
+          echo "::error::${REF_NAME} was at ${TRIGGER_SHA} when this run was triggered and is now at ${NEW_TIP}, ${BEHIND} commit(s) ahead."
+          echo "::error::Tagging here would publish a package that does not contain those commits, while the release notes list them."
+
+          if [[ "${SUCCESSORS}" =~ ^[0-9]+$ ]] && [ "${SUCCESSORS}" -gt 0 ]; then
+            echo "::error::${SUCCESSORS} run(s) of this workflow already exist for ${NEW_TIP} and will publish a superset of this one. NO ACTION IS NEEDED: this failure is the guard working, not a defect in the change that triggered it."
+          else
+            echo "::error::NO run of this workflow exists for ${NEW_TIP}, so nothing else is going to publish it. Re-run this workflow against ${REF_NAME} once the branch settles, or the fleet stays on the previous version."
+          fi
+
+          {
+            echo "### Release stood down: superseded checkout"
+            echo
+            echo "| | commit |"
+            echo "|---|---|"
+            echo "| triggered at | \`${TRIGGER_SHA}\` |"
+            echo "| \`${REF_NAME}\` now | \`${NEW_TIP}\` (${BEHIND} ahead) |"
+            echo "| successor runs | ${SUCCESSORS:-unknown} |"
+            echo
+            echo "Nothing was tagged, pushed or published."
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          exit 1
+
       - name: Commit the version bump
         id: bump
         run: |
@@ -1329,6 +1492,63 @@ jobs:
           draft: false
           prerelease: ${{ inputs.release-type != 'stable' }}
           generateReleaseNotes: true
+
+      # ── PROVE THE TAG CONTAINS WHAT TRIGGERED THE RUN ──
+      #
+      # The freshness guard above closes the window that produced dossiq's
+      # e2a22a7e. This is the backstop that would have CAUGHT it had the guard
+      # not been there, and it stays because it catches a second, different
+      # way to tag the wrong tree that no timing guard sees:
+      #
+      #   `commit:` above is `steps.bump.outputs.bump_sha || github.sha`, and
+      #   `bump_sha` has a reuse path. When `release/v<version>` already exists
+      #   on the remote, the bump step adopts that branch's head, read straight
+      #   out of `git ls-remote`, WITHOUT this run ever having looked at what
+      #   is on it. That commit was authored by some other run, from some other
+      #   checkout. The allow-list check downstream explicitly skips it
+      #   ("not present locally, skipping"). So the sha this release tags can
+      #   be a tree this run never built and never verified.
+      #
+      # One assertion covers both: the tag's commit must contain the commit
+      # that triggered this run. It is cheap, it is exact, and it fails after
+      # the release exists but BEFORE any asset is attached, which leaves an
+      # obviously broken release rather than an installable wrong one. Fail
+      # closed: an empty release cannot be installed by mistake.
+      - name: The published tag must contain the triggering commit
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          TAG="v${NEW_VERSION}"
+
+          git fetch --quiet --no-tags origin "refs/tags/${TAG}"
+          TAG_SHA="$(git rev-parse "FETCH_HEAD^{commit}")"
+
+          echo "Tag             : ${TAG}"
+          echo "Tag commit      : ${TAG_SHA}"
+          echo "Triggering sha  : ${GITHUB_SHA}"
+
+          if ! git merge-base --is-ancestor "${GITHUB_SHA}" "${TAG_SHA}"; then
+            echo "::error::${TAG} points at ${TAG_SHA}, which does NOT contain ${GITHUB_SHA}, the commit this run was triggered by."
+            echo "::error::The published package therefore does not contain the code this run was asked to release, whatever its release notes say."
+            echo "::error::Delete the tag and the release for ${TAG} before anything installs it, then find out which checkout that commit came from."
+            exit 1
+          fi
+          echo "OK: ${TAG_SHA} contains ${GITHUB_SHA}."
+
+          # Advisory. The guard above proved the branch was current when the
+          # bump was committed, but tagging and packaging take another minute
+          # or two and the branch can move inside it. That residual window
+          # cannot be closed without a compare-and-swap on the tag, and the
+          # result is still a correct release, just not the newest possible
+          # one. Record it so a stale-looking release can be explained.
+          TIP="$(git ls-remote origin "refs/heads/${REF_NAME}" | cut -f1)"
+          if [ -n "${TIP}" ] && [ "${TIP}" != "${GITHUB_SHA}" ]; then
+            git fetch --quiet --no-tags origin "refs/heads/${REF_NAME}"
+            if ! git merge-base --is-ancestor "$(git rev-parse FETCH_HEAD)" "${TAG_SHA}"; then
+              echo "::warning::${REF_NAME} moved to ${TIP} while ${TAG} was being packaged, so this release does not contain everything now on the branch. The run for ${TIP} publishes next; this release is correct for ${GITHUB_SHA}."
+            fi
+          fi
 
       - name: Attach tarball to release
         uses: svenstaro/upload-release-action@v2
