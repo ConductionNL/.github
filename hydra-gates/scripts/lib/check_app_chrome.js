@@ -95,7 +95,12 @@ try {
 // failed for putting a Store in the wrong place while fifteen others are
 // merely warned for having none at all.
 const STORE_IS_BLOCKING = false
-const REPORTS_IS_BLOCKING = false
+// Promoted 2026-09-03: the Reports rollout has landed in every in-scope app.
+// Measured, not assumed — gate-107 was run against origin/development for all
+// 19 and every one passed with zero hard failures. keepiq, whose register
+// declares no schemas, has a Reports page like the rest; its exemption is from
+// the STORE, not from this.
+const REPORTS_IS_BLOCKING = true
 
 // ADR-110 Decision 4's three documented placement exceptions: these keep Flows
 // in `main`. openregister owns the engine and its /flows is the unscoped
