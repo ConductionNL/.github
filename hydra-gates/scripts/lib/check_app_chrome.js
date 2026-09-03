@@ -413,6 +413,31 @@ for (const spec of CHROME) {
 	}
 }
 
+// --- Decision 1, item 6: Personal settings must be reachable ----------------
+//
+// `CnAppNav` auto-prepends Personal settings, and `nav.includePersonalSettings:
+// false` turns it off. That flag is legitimate for an app that declares its own
+// entry with `action: "user-settings"`, which opens the SAME dialog: keepiq does
+// exactly that and injects its own sections into CnAppRoot's `#user-settings`
+// slot, so re-enabling the shell's copy would give it two entries onto one
+// dialog.
+//
+// It is NOT legitimate on its own. The dialog is not empty by default —
+// CnAppRoot's slot falls back to the user's notification preferences, and the
+// ADR-110 Integrations section renders below it — so an app that suppresses the
+// entry and offers no replacement puts those out of reach entirely. Measured
+// 2026-09-03: openregister and decidiq both do, each with a bare
+// `{"includePersonalSettings": false}` and no note.
+{
+	const nav = (manifest && typeof manifest.nav === 'object' && manifest.nav !== null) ? manifest.nav : {}
+	const suppressed = nav.includePersonalSettings === false
+	const ownEntry = entries.some(({ node }) => node.action === 'user-settings')
+
+	if (suppressed && ownEntry === false) {
+		report('error', 'Personal settings', 'nav.includePersonalSettings is false and no menu entry declares action:"user-settings", so Personal settings is reachable NOWHERE. That dialog is not empty: CnAppRoot falls back to the user\'s notification preferences and renders the ADR-110 Integrations section below them, and suppressing the entry puts both out of reach. Either drop the flag, or declare your own entry with action:"user-settings" the way keepiq does.')
+	}
+}
+
 // --- Decision 2: the shell draws Admin settings, and no app declares it ------
 //
 // A hand-rolled copy renders twice for an instance admin, and once for a user
