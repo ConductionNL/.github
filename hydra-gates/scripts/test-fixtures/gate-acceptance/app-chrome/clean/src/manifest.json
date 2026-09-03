@@ -1,6 +1,10 @@
 {
 	"$schema": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
 	"version": "2.0.0",
+	"nav": {
+		"includePersonalSettings": false,
+		"_note": "ANTI-WIDENING 4: suppressing the auto-prepended entry is LEGITIMATE when the app declares its own action:\"user-settings\" entry, which opens the same dialog. keepiq does exactly this and injects its own sections into CnAppRoot's #user-settings slot; re-enabling the shell copy would give it two entries onto one dialog. A gate that flagged the flag alone would red keepiq."
+	},
 	"_note": "CLEAN arm for gate-107 (ADR-114). The remedy the gate prescribes, applied to all three planted defects: Documentation moved to footer, a Flows surface added in the settings foldout, and the hand-rolled AdminSettingsLink deleted (CnAppNav prepends it). Two anti-widening controls ride along, see their own notes.",
 	"menu": [
 		{
@@ -49,6 +53,14 @@
 			"route": "FeaturesRoadmap",
 			"order": 100,
 			"section": "footer"
+		},
+		{
+			"id": "UserSettings",
+			"label": "Personal settings",
+			"icon": "CogOutline",
+			"action": "user-settings",
+			"section": "settings",
+			"order": 1
 		},
 		{
 			"id": "ConfigGroup",

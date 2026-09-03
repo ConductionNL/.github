@@ -1,6 +1,10 @@
 {
 	"$schema": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
 	"version": "2.0.0",
+	"nav": {
+		"includePersonalSettings": false,
+		"_note": "DEFECT 5: Personal settings is suppressed and nothing replaces it, so the user's notification preferences and the ADR-110 Integrations section are reachable nowhere. CnAppRoot's #user-settings slot is NOT empty by default."
+	},
 	"_note": "PLANTED arm for gate-107 (ADR-114). Three blocking defects, one per direction of the rule: Documentation sits in main instead of footer (Decision 1), there is no Flows surface at all (Decision 6 / ADR-110 D4), and AdminSettingsLink hand-rolls the link CnAppNav already prepends (Decision 2). Store and Reports are PRESENT and correctly placed in both arms on purpose: they are on the D8 ratchet, so if they were absent here the arm would still fail for the three real reasons and the fixture would stop proving anything the day the ratchet promotes.",
 	"menu": [
 		{

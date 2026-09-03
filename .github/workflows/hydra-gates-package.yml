@@ -56,7 +56,17 @@ jobs:
   invariants:
     name: "Package invariants"
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Measured 2026-09-03 across five runs of this job: the ones that finished
+    # took 10.0 and 10.4 minutes; three others ran to exactly 15.3 and were
+    # killed. A 15-minute cap on a 10-minute suite with that spread times out
+    # routinely, and GitHub reports a timeout as CANCELLED — which reads as
+    # "superseded by a newer push" rather than "your suite was killed", so the
+    # failures were being dismissed. It was flapping on `main` and on two other
+    # branches, not on any one change.
+    #
+    # 30 leaves real headroom without hiding a suite that has genuinely started
+    # to hang: double the observed worst finish.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Run the invariant suite
