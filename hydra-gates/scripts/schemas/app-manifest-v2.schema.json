@@ -3,7 +3,7 @@
 	"$id": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
 	"title": "Conduction App Manifest v2",
 	"description": "v2 schema for the JSON-driven page and navigation manifest consumed by @conduction/nextcloud-vue. Introduces a uniform widgets[] array on every page type with a per-slot grid coordinate system, a typed actions[] discriminator, and the required $schema field for version detection. v1 manifests continue to validate against app-manifest.schema.json (unchanged).",
-	"version": "2.28.0",
+	"version": "2.29.0",
 	"type": "object",
 	"required": ["$schema", "version"],
 	"allOf": [
@@ -1679,6 +1679,18 @@
 				"formTitle": {
 					"type": "string",
 					"description": "open-form: overrides the create dialog's heading. Defaults to 'Create {schema title}'."
+				},
+				"size": {
+					"type": "string",
+					"enum": ["small", "normal", "large", "full"],
+					"default": "normal",
+					"description": "open-form: how wide the create dialog is, passed straight to NcDialog. Widen a form that asks enough questions to need scrolling; pair it with columns: 2."
+				},
+				"columns": {
+					"type": "integer",
+					"enum": [1, 2],
+					"default": 1,
+					"description": "open-form: how many columns the fields flow into. 2 pairs them up, which halves the scrolling on a longer form. Textareas and JSON editors still span the full width, and the layout collapses to one column below 700px. Widen the dialog with size: 'large' as well, or two columns are merely two narrow ones."
 				},
 				"handler": {
 					"type": "string",
