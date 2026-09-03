@@ -10490,6 +10490,100 @@ if [ -f src/manifest.json ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# Gate 107: app-chrome — the same seven items at the bottom-left of every app.
+#
+# ADR-114. CnAppNav draws Personal settings and Admin settings itself and no
+# app declares them (ADR-079 / ADR-110 D2). The other five are the app's own:
+# Documentation, Store, Reports and Features & roadmap in `footer`, Flows in
+# the settings foldout. Measured 2026-09-03: ONE of 21 apps carries all seven.
+#
+# WHY THIS IS NOT COVERED BY THE FOUR GATES THAT ALREADY READ THIS MENU:
+# every one of them is presence-blind. gate-60 validates the icon on an entry
+# that exists, gates 62/63 judge the names of entries that exist, gate-104
+# says in its own header that it does NOT require an app to HAVE a reports
+# page, and gate-53 checks a declared entry resolves. Fifteen apps ship no
+# Store at all and every one of those gates is green.
+#
+# RATCHET (ADR-114 D8). Documentation, Features & roadmap, Flows and the
+# hand-rolled Admin settings link are BLOCKING from day one. Store and Reports
+# WARN until their rollouts land; the two constants at the top of the checker
+# are the promotion.
+#
+# NOT APPLICABLE when the effective manifest declares no pages (ADR-040
+# Tier-0). The test is the measurement, not a list of app names: ADR-110 named
+# planninq Tier-0 while it shipped pages:[], it now ships nine, and nobody
+# noticed the exemption had lapsed.
+#
+# Fail-closed (mirrors gates 68 and 104): a missing vendored helper FAILs.
+#
+# Spec:  openspec/architecture/adr-114-app-chrome-is-seven-items.md (hydra repo)
+# ---------------------------------------------------------------------------
+if [ -f src/manifest.json ]; then
+    # AN UNOPENED SCOPE IS NEVER A PASS (.github#374). This gate reads the whole
+    # effective manifest, so a narrowed run that never touched the manifest
+    # inspected nothing, and a PASS would print the same word as a run that read
+    # it and found it compliant while COUNTING toward the COVERAGE line.
+    if [ "${SCOPE_TO_DIFF}" = "1" ] && ! _in_scope "src/manifest.json" && ! _in_scope "src/manifest.d/"; then
+        _skip_empty_scope 107 "app-chrome" "src/manifest.json or src/manifest.d/ fragment"
+    else
+    _ac_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-app-chrome.log
+    : > "${_ac_log}"
+    _ac_builder="${SCRIPT_DIR}/lib/build_effective_manifest.js"
+    _ac_checker="${SCRIPT_DIR}/lib/check_app_chrome.js"
+    if [ ! -f "${_ac_builder}" ] || [ ! -f "${_ac_checker}" ]; then
+        _fail 107 "app-chrome" "vendored helper missing under ${SCRIPT_DIR}/lib (need build_effective_manifest.js + check_app_chrome.js) — fail-closed"
+    elif ! command -v node >/dev/null 2>&1; then
+        _skip 107 "app-chrome" wiring "src/manifest.json is present but \`node\` is not on PATH — the effective manifest could not be assembled. This is a missing tool in the runner environment, not a finding about the manifest."
+    else
+        set +e
+        node "${_ac_checker}" --app-dir . >> "${_ac_log}" 2>&1
+        _ac_rc=$?
+        set +e
+        _ac_marker=$(grep -oE '\[app-chrome\] findings=[0-9]+ warnings=[0-9]+' "${_ac_log}" 2>/dev/null | tail -1)
+        _ac_reported=$(printf '%s' "${_ac_marker}" | sed -n 's/.*findings=\([0-9]*\).*/\1/p')
+        _ac_warns=$(printf '%s' "${_ac_marker}" | sed -n 's/.*warnings=\([0-9]*\).*/\1/p')
+        # The NOT APPLICABLE arm prints `findings=0` with no warnings field, so
+        # accept that shape too rather than reading it as a crashed checker.
+        if [ -z "${_ac_reported}" ]; then
+            _ac_reported=$(grep -oE '\[app-chrome\] findings=[0-9]+' "${_ac_log}" 2>/dev/null | tail -1 | sed 's/.*findings=//')
+            _ac_warns=0
+        fi
+        case "${_ac_reported}" in
+            ''|*[!0-9]*)
+                # THE HELPER DID NOT FINISH (#209 convention). No `findings=`
+                # line means it crashed or was killed. Never read its silence
+                # as a compliant chrome.
+                _skip 107 "app-chrome" wiring "check_app_chrome.js exited ${_ac_rc} without printing its \`findings=\` count — it did NOT finish, so the app's navigation chrome was left uninspected and ADR-114 is UNVERIFIED by this run. This is a broken checker, NOT a finding about the manifest. See ${_ac_log}."
+                ;;
+            *)
+                if grep -q 'NOT APPLICABLE' "${_ac_log}" 2>/dev/null; then
+                    echo "[gate-107] app-chrome: NOT APPLICABLE — the effective manifest declares no pages (ADR-040 Tier-0, ADR-114 Decision 7). Nothing was inspected; this is not evidence the app's navigation is right."
+                fi
+                # THE COUNT IS PRINTED ON EVERY RUN, PASSING OR FAILING
+                # (ADR-114 D8). A gate that is silent when it passes cannot be
+                # shown to have run.
+                grep -E 'app-chrome: [0-9]+ of [0-9]+ declared chrome items' "${_ac_log}" 2>/dev/null | tail -1 | sed 's/^/[gate-107] /'
+                [ "${_ac_warns:-0}" -gt 0 ] && echo "[gate-107] app-chrome: ${_ac_warns} WARN finding(s) (non-blocking) — Store and Reports are on the ADR-114 D8 ratchet and promote to blocking once their rollouts land. See ${_ac_log}."
+                if [ "${_ac_rc}" -eq 0 ]; then
+                    _pass 107 "app-chrome"
+                else
+                    _fail 107 "app-chrome" "${_ac_reported} blocking finding(s) against ADR-114 (Documentation, Features & roadmap and Flows in every app, in their declared sections, and no hand-rolled Admin settings link) — see ${_ac_log}"
+                fi
+                ;;
+        esac
+    fi
+    fi
+else
+    # SILENCE COUNTS AGAINST COVERAGE. A gate stops counting only by declaring
+    # itself not-applicable OUT LOUD — the runner's accounting treats a gate
+    # that simply never spoke as DID NOT RUN, and --require-full-coverage exits
+    # 98 on it. Without this arm gate-107 was the only silent gate in the
+    # package and it failed the entry-point invariant suite on a fixture with
+    # no manifest at all.
+    _skip 107 "app-chrome" na "no src/manifest.json — this app declares no manifest-driven navigation for the ADR-114 chrome to sit in (ADR-040 Tier-0 by the first half of Decision 7's test; the second half, pages.length == 0, is answered by the checker itself)."
+fi
+
+# ---------------------------------------------------------------------------
 # Gate 69: page-type-discipline — every page should be one of the three typed
 # archetypes (index / detail / dashboard) AND should actually render that
 # type's page component.

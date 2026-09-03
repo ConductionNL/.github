@@ -1,0 +1,112 @@
+{
+	"$schema": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
+	"version": "2.0.0",
+	"_note": "PLANTED arm for gate-107 (ADR-114). Three blocking defects, one per direction of the rule: Documentation sits in main instead of footer (Decision 1), there is no Flows surface at all (Decision 6 / ADR-110 D4), and AdminSettingsLink hand-rolls the link CnAppNav already prepends (Decision 2). Store and Reports are PRESENT and correctly placed in both arms on purpose: they are on the D8 ratchet, so if they were absent here the arm would still fail for the three real reasons and the fixture would stop proving anything the day the ratchet promotes.",
+	"menu": [
+		{
+			"id": "DashboardMenu",
+			"label": "Dashboard",
+			"icon": "ViewDashboardOutline",
+			"route": "Dashboard",
+			"order": 10
+		},
+		{
+			"id": "DocsMenu",
+			"label": "Documentation",
+			"icon": "BookOpenVariantOutline",
+			"href": "https://example.org",
+			"order": 90,
+			"_note": "DEFECT 1: no section, so it renders in the main navigation. ADR-114 Decision 1 puts it in footer at order 90."
+		},
+		{
+			"id": "StoreMenu",
+			"label": "Store",
+			"icon": "StoreOutline",
+			"route": "Store",
+			"order": 92,
+			"section": "footer"
+		},
+		{
+			"id": "ReportsMenu",
+			"label": "Reports",
+			"icon": "ChartBoxOutline",
+			"route": "Reports",
+			"order": 200,
+			"section": "footer",
+			"_note": "DEFECT 4: Reports sits BELOW Features & roadmap, so the footer group reads in a different order from every other app. ADR-114 Decision 1 fixes the sequence: Documentation, Store, Reports, Features & roadmap. The RELATIVE order is the rule, which is why 200 fails here while pipelinq's 160/200/230 passes on the live fleet."
+		},
+		{
+			"id": "RoadmapMenu",
+			"label": "Features & roadmap",
+			"icon": "MapMarkerPath",
+			"route": "FeaturesRoadmap",
+			"order": 100,
+			"section": "footer"
+		},
+		{
+			"id": "AdminSettingsLink",
+			"label": "Admin settings",
+			"icon": "CogOutline",
+			"href": "/settings/admin/acfx",
+			"order": 1,
+			"section": "settings",
+			"_note": "DEFECT 3: CnAppNav auto-prepends this link for instance admins (ADR-079). This copy misses the shell's isAdmin gating, so it renders for users who cannot open it."
+		}
+	],
+	"pages": [
+		{
+			"id": "Dashboard",
+			"route": "/",
+			"type": "dashboard",
+			"title": "Dashboard",
+			"config": {
+				"widgets": []
+			}
+		},
+		{
+			"id": "Store",
+			"route": "/store",
+			"type": "custom",
+			"component": "StoreGallery",
+			"title": "Store",
+			"config": {
+				"storeRegistry": true
+			},
+			"_note": "The shape dossiq ships today. `store` is NOT yet a page type in the manifest schema, so a fixture declaring one would red gate-22 while proving nothing about gate-107. When nextcloud-vue absorbs dossiq's StoreGallery as CnStorePage and the enum gains `store`, this becomes type:\"store\" and the checker already accepts it."
+		},
+		{
+			"id": "Reports",
+			"route": "/reports",
+			"type": "reports",
+			"title": "Reports",
+			"config": {
+				"cards": [
+					{
+						"id": "t",
+						"label": "Throughput",
+						"route": "Throughput"
+					}
+				]
+			}
+		},
+		{
+			"id": "Throughput",
+			"route": "/reports/throughput",
+			"type": "index",
+			"title": "Throughput",
+			"config": {
+				"register": "acfx",
+				"schema": "case",
+				"columns": [
+					"name"
+				]
+			}
+		},
+		{
+			"id": "FeaturesRoadmap",
+			"route": "/features-roadmap",
+			"type": "roadmap",
+			"title": "Features & roadmap"
+		}
+	]
+}
