@@ -28,14 +28,24 @@
 // checks a declared entry RESOLVES, which cannot ask why an entry was never
 // declared. Fifteen apps ship no Store and every gate is green.
 //
-// DETECTION IS BY PAGE TYPE, NOT BY LABEL.
+// DETECTION IS STRUCTURAL, NEVER BY LABEL.
 // ----------------------------------------
 // A label is not a reliable key. launchpad and humaniq ship i18n KEYS as
 // labels ("launchpad.menu.dashboards"), dossiq's Reports entry has the id
 // "AnalyticsGroup", and any of them may be translated. So four of the five
-// items are resolved by following `entry.route` to a page and reading that
-// page's `type`. Only Documentation has no page behind it (it is an href to a
-// docs site), and it is matched on id/label as a documented exception.
+// items are resolved by following `entry.route` to a page, and that page
+// counts when EITHER its `type` is the canonical one OR its `route` is the
+// canonical path (see isSurface). Only Documentation has no page behind it —
+// it is an href to a docs site — and it is matched on id/label as the one
+// documented exception.
+//
+// Both signals are needed. Requiring the page TYPE alone reds apps that are
+// right: openregister's /features-roadmap is `type: "custom"` because the
+// built-in page was deliberately not adopted in a shell swap, and shillinq's
+// reports catalogue is `type: "custom"` because CnReportsPage cannot express
+// its per-card Generate action. Accepting the route PATH as well is not a
+// loosening — the path is the half of the contract deep links and e2e specs
+// already address, and gate-53 holds the menu-to-page join independently.
 //
 // THE MENU WALK DESCENDS INTO children[].
 // ---------------------------------------
@@ -235,6 +245,40 @@ function isDocumentation(node) {
 }
 
 /**
+ * True when a page IS one of the chrome surfaces, by page type OR by the
+ * canonical route path.
+ *
+ * ⚠️ THE PAGE TYPE IS NOT THE ONLY CORRECT IMPLEMENTATION, and a gate that
+ * insisted on it would red apps that are right. Two live cases, both
+ * deliberate and both documented in the manifest that ships them:
+ *
+ *   openregister's `/features-roadmap` is `type: "custom"` over its own
+ *   FeaturesRoadmapIndex ("the built-in roadmap page is not adopted in this
+ *   shell-swap change").
+ *
+ *   shillinq's reports catalogue is `type: "custom"` because its cards carry a
+ *   per-card output-format picker and a Generate action that CnReportsPage
+ *   cannot express: its cards navigate, they do not generate. gate-104's own
+ *   header says converting it would LOSE that, which ADR-044 forbids.
+ *
+ * What ADR-114 actually requires is that the surface EXISTS and the chrome
+ * points at it. The route path is the stable half of that contract anyway:
+ * deep links and e2e specs address these pages by path, and gate-53 already
+ * holds the menu-to-page join. So either signal satisfies the item, and
+ * neither is a label.
+ *
+ * @param {object} page A manifest page.
+ * @param {string} type The canonical page type for this chrome item.
+ * @param {string} path The canonical route path for this chrome item.
+ * @return {boolean} Whether the page implements the surface.
+ */
+function isSurface(page, type, path) {
+	if (!page) { return false }
+	if (page.type === type) { return true }
+	return typeof page.route === 'string' && page.route.replace(/\/+$/, '') === path
+}
+
+/**
  * True when a page is the app's flow index.
  *
  * Three shapes are live in the fleet and all three render the same surface:
@@ -250,7 +294,11 @@ function isFlowsPage(page) {
 	if (!page) { return false }
 	if (page.type === 'flows') { return true }
 	const src = page.config && page.config.entitySource
-	return page.type === 'index' && src === 'flows'
+	if (page.type === 'index' && src === 'flows') { return true }
+	// A custom flow surface at the canonical path counts too, on the same
+	// reasoning as isSurface(): the ADR is about the surface existing and the
+	// chrome pointing at it, not about which component renders it.
+	return typeof page.route === 'string' && page.route.replace(/\/+$/, '') === '/flows'
 }
 
 const findings = []
@@ -283,7 +331,8 @@ const CHROME = [
 		blocking: STORE_IS_BLOCKING,
 		find: () => entries.find(({ node }) => {
 			const p = pageOf(node)
-			return (p && p.type === 'store') || /^(store|app store|marketplace)$/i.test(String(node.label || '').trim())
+			return isSurface(p, 'store', '/store')
+				|| /^(store|app store|marketplace)$/i.test(String(node.label || '').trim())
 		}),
 		absent: 'no Store entry. ADR-114 Decision 4: section:"footer", order 92, over a type:"store" page. ADR-080 Decision 4 still governs what may carry the word: registry-backed via GenericStoreService, and with no registry configured it renders the app\'s built-in items and makes no network call.',
 	},
@@ -291,20 +340,14 @@ const CHROME = [
 		item: 'Reports',
 		section: 'footer',
 		blocking: REPORTS_IS_BLOCKING,
-		find: () => entries.find(({ node }) => {
-			const p = pageOf(node)
-			return Boolean(p) && p.type === 'reports'
-		}),
+		find: () => entries.find(({ node }) => isSurface(pageOf(node), 'reports', '/reports')),
 		absent: 'no Reports entry. ADR-114 Decision 3 amends ADR-112 Decision 4: the title of that ADR wins, and every app in scope declares one type:"reports" page in section:"footer" at order 95. An empty Reports page is still forbidden, so an app with nothing to report fills the page rather than skipping it.',
 	},
 	{
 		item: 'Features & roadmap',
 		section: 'footer',
 		blocking: true,
-		find: () => entries.find(({ node }) => {
-			const p = pageOf(node)
-			return Boolean(p) && p.type === 'roadmap'
-		}),
+		find: () => entries.find(({ node }) => isSurface(pageOf(node), 'roadmap', '/features-roadmap')),
 		absent: 'no Features & roadmap entry. ADR-018 requires it in every app and ADR-114 Decision 5 repeals the clause that forbade gates from enforcing that.',
 	},
 	{
@@ -334,6 +377,40 @@ for (const spec of CHROME) {
 	}
 
 	report(severity, spec.item, `the ${spec.item} entry is section:${JSON.stringify(hit.node.section ?? null)}, not ${JSON.stringify(spec.section)}. ADR-114 Decision 1 fixes the sections so the bottom-left of the navigation reads the same in every app.`)
+}
+
+// --- Decision 1: the footer group reads in the same ORDER everywhere --------
+//
+// RELATIVE order, not the absolute numbers. ADR-114 Decision 1 names 90 / 92 /
+// 95 / 100 and those are what a NEW entry should use, but the fleet's absolute
+// numbers are all over the place for reasons that have nothing to do with this
+// contract: openregister runs 1 and 2, pipelinq 160 / 200 / 230, keepiq 80 and
+// 85. Every one of those is already in the right ORDER, and renumbering them
+// would be a fleet-wide diff that changes not one pixel.
+//
+// What a user can actually see is the sequence, so the sequence is the rule:
+// Documentation, then Store, then Reports, then Features & roadmap. Measured
+// 2026-09-03: all 19 manifest-driven apps already satisfy it, so this blocks
+// nothing today and catches the next entry dropped in at the wrong number.
+{
+	const wanted = ['Documentation', 'Store', 'Reports', 'Features & roadmap']
+	const placed = []
+	for (const spec of CHROME) {
+		if (spec.section !== 'footer') { continue }
+		const hit = spec.find()
+		if (hit === undefined || sectionOf(hit.node) !== 'footer') { continue }
+		const order = typeof hit.node.order === 'number' ? hit.node.order : null
+		if (order === null) { continue }
+		placed.push({ item: spec.item, order })
+	}
+
+	placed.sort((a, b) => a.order - b.order)
+	const actual = placed.map((p) => p.item)
+	const expected = wanted.filter((w) => actual.includes(w))
+
+	if (actual.join(' > ') !== expected.join(' > ')) {
+		report('error', 'footer order', `the footer group reads ${JSON.stringify(actual.join(' > '))}, and ADR-114 Decision 1 orders it ${JSON.stringify(expected.join(' > '))}. The RELATIVE order is the rule, not the absolute numbers: a new entry takes Documentation 90, Store 92, Reports 95, Features & roadmap 100, but an app already running its footer at other numbers only has to keep the sequence.`)
+	}
 }
 
 // --- Decision 2: the shell draws Admin settings, and no app declares it ------

@@ -31,8 +31,9 @@
 			"label": "Reports",
 			"icon": "ChartBoxOutline",
 			"route": "Reports",
-			"order": 95,
-			"section": "footer"
+			"order": 200,
+			"section": "footer",
+			"_note": "DEFECT 4: Reports sits BELOW Features & roadmap, so the footer group reads in a different order from every other app. ADR-114 Decision 1 fixes the sequence: Documentation, Store, Reports, Features & roadmap. The RELATIVE order is the rule, which is why 200 fails here while pipelinq's 160/200/230 passes on the live fleet."
 		},
 		{
 			"id": "RoadmapMenu",
