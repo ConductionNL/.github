@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<id>acfx</id>
+	<name>App Chrome Fixture</name>
+	<summary>Fixture app for gate-107 acceptance. Not a real app.</summary>
+	<description>Exists so the gate suite can drive an app whose bottom-left chrome is and is not the seven items ADR-114 requires, through the real effective-manifest builder.</description>
+	<version>1.0.0</version>
+	<licence>agpl</licence>
+	<author>Conduction</author>
+	<namespace>AcFx</namespace>
+	<category>tools</category>
+	<dependencies><nextcloud min-version="30" max-version="32"/></dependencies>
+</info>

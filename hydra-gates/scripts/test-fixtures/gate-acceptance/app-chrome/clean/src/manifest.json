@@ -1,0 +1,162 @@
+{
+	"$schema": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
+	"version": "2.0.0",
+	"_note": "CLEAN arm for gate-107 (ADR-114). The remedy the gate prescribes, applied to all three planted defects: Documentation moved to footer, a Flows surface added in the settings foldout, and the hand-rolled AdminSettingsLink deleted (CnAppNav prepends it). Two anti-widening controls ride along, see their own notes.",
+	"menu": [
+		{
+			"id": "DashboardMenu",
+			"label": "Dashboard",
+			"icon": "ViewDashboardOutline",
+			"route": "Dashboard",
+			"order": 10
+		},
+		{
+			"id": "FlowRunsMenu",
+			"label": "Flow runs",
+			"icon": "PlayCircleOutline",
+			"route": "FlowRuns",
+			"order": 20,
+			"_note": "ANTI-WIDENING 1: an operational list whose LABEL contains 'flow' but which is an ordinary index, in main, and is not the flow authoring surface. A gate that matched Flows on the label rather than on the page type would accept this as the Flows entry in the planted arm and would flag its placement here. Detection is by page type for exactly this reason."
+		},
+		{
+			"id": "DocsMenu",
+			"label": "Documentation",
+			"icon": "BookOpenVariantOutline",
+			"href": "https://example.org",
+			"order": 90,
+			"section": "footer"
+		},
+		{
+			"id": "StoreMenu",
+			"label": "Store",
+			"icon": "StoreOutline",
+			"route": "Store",
+			"order": 92,
+			"section": "footer"
+		},
+		{
+			"id": "ReportsMenu",
+			"label": "Reports",
+			"icon": "ChartBoxOutline",
+			"route": "Reports",
+			"order": 95,
+			"section": "footer"
+		},
+		{
+			"id": "RoadmapMenu",
+			"label": "Features & roadmap",
+			"icon": "MapMarkerPath",
+			"route": "FeaturesRoadmap",
+			"order": 100,
+			"section": "footer"
+		},
+		{
+			"id": "ConfigGroup",
+			"label": "Configuration",
+			"icon": "CogOutline",
+			"section": "settings",
+			"order": 50,
+			"children": [
+				{
+					"id": "FlowsMenu",
+					"label": "Flows",
+					"icon": "Sitemap",
+					"route": "Flows",
+					"order": 10,
+					"section": "settings",
+					"_note": "ANTI-WIDENING 2: nested under a group rather than declared top-level. ADR-110's own fleet audit walked only top-level menu[] entries, read integriq's nested Flows as absent, and had to withdraw the claim inside the ADR. A gate that does not descend into children[] turns this clean arm red."
+				}
+			]
+		}
+	],
+	"pages": [
+		{
+			"id": "Dashboard",
+			"route": "/",
+			"type": "dashboard",
+			"title": "Dashboard",
+			"config": {
+				"widgets": []
+			}
+		},
+		{
+			"id": "FlowRuns",
+			"route": "/flow-runs",
+			"type": "index",
+			"title": "Flow runs",
+			"config": {
+				"register": "acfx",
+				"schema": "case",
+				"columns": [
+					"name"
+				]
+			}
+		},
+		{
+			"id": "Flows",
+			"route": "/flows",
+			"type": "index",
+			"title": "Flows",
+			"config": {
+				"entitySource": "flows",
+				"app": "acfx",
+				"rowRoute": "FlowDetail"
+			},
+			"_note": "The CANONICAL flow index: type:\"index\" over the named `flows` entity source. nextcloud-vue marks the dedicated `flows` / `flow-detail` page types DEPRECATED in CnPageRenderer/pageTypes.js, kept only so the fleet can migrate without a flag day. The gate must recognise this shape, because it is the one new apps are supposed to write."
+		},
+		{
+			"id": "FlowDetail",
+			"route": "/flows/:id",
+			"type": "flow",
+			"title": "Flow",
+			"config": {
+				"app": "acfx"
+			}
+		},
+		{
+			"id": "Store",
+			"route": "/store",
+			"type": "custom",
+			"component": "StoreGallery",
+			"title": "Store",
+			"config": {
+				"storeRegistry": true
+			},
+			"_note": "The shape dossiq ships today. `store` is NOT yet a page type in the manifest schema, so a fixture declaring one would red gate-22 while proving nothing about gate-107. When nextcloud-vue absorbs dossiq's StoreGallery as CnStorePage and the enum gains `store`, this becomes type:\"store\" and the checker already accepts it."
+		},
+		{
+			"id": "Reports",
+			"route": "/reports",
+			"type": "reports",
+			"title": "Reports",
+			"config": {
+				"cards": [
+					{
+						"id": "t",
+						"label": "Throughput",
+						"route": "Throughput"
+					}
+				]
+			}
+		},
+		{
+			"id": "Throughput",
+			"route": "/reports/throughput",
+			"type": "index",
+			"title": "Throughput",
+			"config": {
+				"register": "acfx",
+				"schema": "case",
+				"columns": [
+					"name"
+				]
+			}
+		},
+		{
+			"id": "FeaturesRoadmap",
+			"route": "/features-roadmap",
+			"type": "roadmap",
+			"title": "Features & roadmap"
+		}
+	]
+}
