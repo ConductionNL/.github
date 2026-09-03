@@ -10573,6 +10573,14 @@ if [ -f src/manifest.json ]; then
         esac
     fi
     fi
+else
+    # SILENCE COUNTS AGAINST COVERAGE. A gate stops counting only by declaring
+    # itself not-applicable OUT LOUD — the runner's accounting treats a gate
+    # that simply never spoke as DID NOT RUN, and --require-full-coverage exits
+    # 98 on it. Without this arm gate-107 was the only silent gate in the
+    # package and it failed the entry-point invariant suite on a fixture with
+    # no manifest at all.
+    _skip 107 "app-chrome" na "no src/manifest.json — this app declares no manifest-driven navigation for the ADR-114 chrome to sit in (ADR-040 Tier-0 by the first half of Decision 7's test; the second half, pages.length == 0, is answered by the checker itself)."
 fi
 
 # ---------------------------------------------------------------------------
