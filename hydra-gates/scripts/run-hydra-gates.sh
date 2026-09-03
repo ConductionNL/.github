@@ -11442,6 +11442,112 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# GATE 108 — shipped-object-properties
+#
+# OpenRegister DOES NOT REJECT AN UNDECLARED PROPERTY. It drops it and answers
+# 200. `MagicMapper::writeMagicRow()` walks the SCHEMA's declared property
+# names and asks the data for each one, so a key the schema does not declare is
+# never visited, never written, and has no column to be written to. The save
+# succeeds and the value is gone. The mismatch is silent in the other direction
+# too: `MagicSearchHandler::applyObjectFilters()` compiles a filter on an
+# undeclared key to a literal `1 = 0`, matching zero rows forever.
+#
+# 🔴 AND gate-101 CANNOT SEE THIS, BY CONSTRUCTION. It validates demo objects
+# with `jsonschema`, and JSON Schema is OPEN-WORLD: an undeclared property is
+# VALID unless the schema says `additionalProperties: false`. Measured across
+# ~1,930 fleet schemas: not one declares it anywhere. So gate-101 printed PASS
+# over every one of these defects, correctly, against the rule it enforces.
+#
+# WHAT IT HAS COST, in two days:
+#   dossiq#1782  ten demo keys no schema declares — a `catalog` key carrying a
+#                zero uuid on three each of the generated caseType,
+#                decisionType and documentType objects, plus
+#                `zaaksysteemMapping.openstaandeWijzigingen`.
+#   dossiq#1779  eight StUF field names drifted from their schemas by a
+#                vocabulary pass; every async confirmation dropped.
+#   earlier      publications/publishedAt, the opschorting pause fields,
+#                taskUuid.
+# Each was found by a human reading JSON.
+#
+# WHAT IT SEES, and this is deliberately WIDER than gate-101:
+#   * `components.objects` as a LIST   — 151 files fleet-wide
+#   * `objects` at the TOP LEVEL       —  56 files (shillinq)
+#   * `components.objects` as a DICT keyed by slug — 3 files (shillinq)
+#   * `x-openregister.seedData.objects`, schema-slug -> list — 9 files
+# gate-101 counts objects ONLY inside an `x-openregister.type: mock`
+# descriptor, so dossiq's 91 base-register objects and the 100 across its ten
+# `register.d` fragments are invisible to it. This gate reads all four, mock or
+# not. That blind spot is not inherited.
+#
+# WHAT IT DOES NOT SEE, stated rather than discovered later:
+#   * bespoke `*_seed_data.json` with no `@self` (dossiq, pipelinq, integriq
+#     ship ~8) — a hand-written PHP loader maps their buckets to schemas in
+#     code and even renames keys on the way, so the file alone cannot say which
+#     schema an object belongs to. Judging them would be a guess.
+#   * an object whose `@self.schema` names a schema this app does not define.
+#     Every property would read as undeclared, so it is reported as NOTE and
+#     counted, never as a finding.
+#   * `slug`, `name`, `title`, `description`, `summary` and their Dutch
+#     spellings. `MetadataHydrationHandler` copies whichever it finds into the
+#     object's metadata columns whether the schema declares it or not, so the
+#     VALUE is not lost — and they outnumber every real finding combined
+#     (`description` 1,431 occurrences, `name` 1,333) so reporting them would
+#     drown the gate.
+#   * nested keys. The magic table maps TOP-LEVEL declared names to columns and
+#     stores each value whole, so a sub-object's keys are not independently
+#     droppable and are not judged.
+#
+# DIFF-SCOPED, and wider than "the file that changed". ADR-020 is superseded
+# and the file scope is full by default, so this gate keys on HAVE_DELTA_BASE
+# like gate-101 rather than on SCOPE_TO_DIFF — the mistake gate-98 shipped. A
+# full-tree version would redden four apps on the day it landed for debt nobody
+# in the PR touched, which is the fleet's most repeated gate trap.
+#
+# 🔴 THE SCOPE INCLUDES THE SCHEMA SIDE, AND THE INCIDENT SAYS WHY. dossiq#1782
+# was created by two PRs a minute apart: #1779 REMOVED a property from a
+# schema, and #1780 added the only seed object carrying it. Neither PR touched
+# both files, so a gate scoped to the object's own file passes both. An object
+# is therefore judged when its own file changed OR when any file DECLARING its
+# schema changed.
+#
+# FAIL-CLOSED: no helper, or a helper that does not reach its own
+# `checked N object(s)` line, is a SKIP that says the subject is UNVERIFIED —
+# never a pass. An unreadable JSON file that is itself in scope is a finding.
+# ---------------------------------------------------------------------------
+_sop_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-shipped-object-properties.log
+: > "${_sop_log}"
+_sop_helper="${SCRIPT_DIR}/lib/check_shipped_object_properties.py"
+
+if [ ! -f "${_sop_helper}" ]; then
+    _fail 108 "shipped-object-properties" "vendored helper missing at ${_sop_helper} — fail-closed, because a gate whose checker is absent inspects nothing and must not print the same word as one that read every object"
+elif ! command -v python3 >/dev/null 2>&1; then
+    _skip 108 "shipped-object-properties" wiring "python3 is not on PATH, so no shipped object could be read. This is a missing tool in the runner environment, not a finding about the objects."
+elif [ "${HAVE_DELTA_BASE}" != "1" ]; then
+    _skip 108 "shipped-object-properties" na "no delta base was resolved, so there is no changed-file set. This gate judges the objects and schemas a change TOUCHES; with no base it has nothing to judge, and saying so is not the same as passing. Give it a base (--base <ref> or HYDRA_GATE_BASE_REF) and it runs at any file scope."
+else
+    set +e
+    printf '%s\n' "${CHANGED_FILES}" \
+        | python3 "${_sop_helper}" . --only-changed \
+        > "${_sop_log}" 2>&1
+    _sop_rc=$?
+    set +e
+
+    if [ "${_sop_rc}" -eq 0 ]; then
+        _pass 108 "shipped-object-properties"
+    elif [ "${_sop_rc}" -eq 4 ]; then
+        _skip 108 "shipped-object-properties" na "this diff touches no shipped register/seed/demo JSON under lib/, so no object needed its properties checked. See ${_sop_log}."
+    elif ! _helper_finished "${_sop_log}" '^checked [0-9]+ object'; then
+        # A CRASH IS NOT A FINDING.
+        _sop_why=$(head -3 "${_sop_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+        _skip 108 "shipped-object-properties" wiring "check_shipped_object_properties.py exited ${_sop_rc} without printing its terminal 'checked N object(s)' summary, so it did NOT finish and the shipped objects were left uninspected. This is a broken checker, NOT a finding about the objects. Checker output: ${_sop_why:-<empty>}. See ${_sop_log}."
+    else
+        _sop_n=$(grep -cE '^FAIL ' "${_sop_log}" 2>/dev/null || true)
+        case "${_sop_n}" in ''|*[!0-9]*) _sop_n=1 ;; esac
+        _fail 108 "shipped-object-properties" "${_sop_n} shipped object(s) carry a property their schema does not declare — OpenRegister stores none of them and answers 200 — see ${_sop_log}"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
 # GATE 98 — repair-step-registration (ADR-005 rule 1, the other half)
 #
 # A repair step that is written but never NAMED in appinfo/info.xml does not
