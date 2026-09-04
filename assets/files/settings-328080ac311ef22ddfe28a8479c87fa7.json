@@ -13,6 +13,8 @@
       "Write(~/.claude/settings-repo-url)",
       "Edit(~/.claude/settings-repo-ref)",
       "Write(~/.claude/settings-repo-ref)",
+      "Edit(~/.claude/user-hooks.json)",
+      "Write(~/.claude/user-hooks.json)",
 
       "Bash(sudo:*)",
       "Bash(su:*)",
@@ -204,6 +206,24 @@
             "command": "bash ~/.claude/hooks/sound-notify.sh question"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/user-hooks-dispatch.sh PreToolUse"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/user-hooks-dispatch.sh PostToolUse"
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
@@ -212,6 +232,24 @@
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/check-settings-version.sh"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/user-hooks-dispatch.sh UserPromptSubmit"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/user-hooks-dispatch.sh SessionStart"
           }
         ]
       }
@@ -224,6 +262,14 @@
             "command": "bash ~/.claude/hooks/sound-notify.sh permission"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/user-hooks-dispatch.sh PermissionRequest"
+          }
+        ]
       }
     ],
     "Stop": [
@@ -232,6 +278,44 @@
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/sound-notify.sh stop"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/user-hooks-dispatch.sh Stop"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/user-hooks-dispatch.sh SubagentStop"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/user-hooks-dispatch.sh PreCompact"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/user-hooks-dispatch.sh Notification"
           }
         ]
       }

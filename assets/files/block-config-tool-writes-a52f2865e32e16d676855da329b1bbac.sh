@@ -29,7 +29,7 @@ hard_deny() {
 # ── Protected-path regex (mirrors block-write-commands.sh) ───────────────────
 # shellcheck disable=SC2016 # single quotes intentional: literal regex for sed
 _h=$(printf '%s' "$HOME" | sed 's/[.[\*^$()+?{}|]/\\&/g')
-_prot="(~|\\\$HOME|\\\$\\{HOME\\}|${_h})[\"']?/\.claude/(settings\.json|hooks/?|settings-version|settings-repo-path|settings-repo-url|settings-repo-ref)"
+_prot="(~|\\\$HOME|\\\$\\{HOME\\}|${_h})[\"']?/\.claude/(settings\.json|hooks/?|settings-version|settings-repo-path|settings-repo-url|settings-repo-ref|user-hooks\.json)"
 
 # ── Guard 1: file_path targets a protected file ──────────────────────────────
 # The deny list in settings.json matches the unexpanded `~/.claude/...` form.
@@ -49,6 +49,7 @@ if [ -n "$file_path" ]; then
         | "${HOME}/.claude/settings-repo-path" \
         | "${HOME}/.claude/settings-repo-url" \
         | "${HOME}/.claude/settings-repo-ref" \
+        | "${HOME}/.claude/user-hooks.json" \
         | "${HOME}/.claude/hooks/"*)
             hard_deny "BLOCKED: Claude cannot ${tool_name} ~/.claude/ config files. Updates must run via canonical Bash commands (gh api / git show origin/main) that block-write-commands.sh validates."
             ;;
