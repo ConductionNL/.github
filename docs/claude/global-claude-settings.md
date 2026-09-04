@@ -123,6 +123,8 @@ You can configure:
 | `~/.claude/hooks/check-settings-version.sh`     | Hook script that shows the status panel and warns on version mismatch                                           |
 | `~/.claude/hooks/sound-notify.sh`               | Optional sound-notification wrapper. Reads `~/.claude/sound-config.sh` and plays a sound on question / permission / stop events (v2.2.0+) |
 | `~/.claude/sound-config.sh`                     | **User-editable, not `chattr`-locked.** Absent by default (opt-in). Toggles sounds and points at sound files    |
+| `~/.claude/hooks/user-hooks-dispatch.sh`        | Per-user hook dispatcher. Registered once for every Claude Code event; reads `~/.claude/user-hooks.json` and fires the hooks listed there (v2.4.0+) |
+| `~/.claude/user-hooks.json`                     | **User-owned, Claude-blocked.** Absent by default (opt-in). Lists the user's private hooks. Never overwritten by a settings update; deny-listed + guard-hook protected, optionally `chattr +i` |
 | `~/.claude/settings-version`                    | Installed version (semver, matches repo `VERSION`)                                                              |
 | `~/.claude/settings-repo-url`                   | Codeberg repo slug for online version checking (e.g. `Conduction/.github`)                                      |
 | `~/.claude/settings-repo-path`                  | Absolute path to the root of the canonical repo (fallback for git-based check)                                  |
@@ -134,7 +136,7 @@ You can configure:
 
 Hard-blocked patterns — Claude cannot perform these even with user approval:
 
-- **Config files**: `Edit`/`Write` of `~/.claude/settings.json`, `hooks/*`, `settings-version`, `settings-repo-path`, `settings-repo-url`, `settings-repo-ref`
+- **Config files**: `Edit`/`Write` of `~/.claude/settings.json`, `hooks/*`, `settings-version`, `settings-repo-path`, `settings-repo-url`, `settings-repo-ref`, `user-hooks.json`
 - **System**: `sudo`, `su`, `shutdown`, `reboot`, `halt`, `poweroff`, `mkfs`, `dd if=`
 - **GitHub destructive**: `gh pr merge`, `gh repo delete`, `gh release delete`
 - **Git destructive**: `git reset --hard`, `git clean -f/-fd/-fdx`, `git filter-branch`, `git filter-repo`, `git reflog expire/delete`, `git update-ref -d`, `git config --global`, `git checkout --`, `git restore --` (file restore; `git restore --staged` is allowed), `git push --force/-f`, `git rebase`
@@ -219,7 +221,63 @@ Fires when Claude shows an allow/deny permission prompt. (v2.2.0 used `Notificat
 
 Fires when Claude finishes its turn.
 
-### 8. `mcpServers` (optional)
+### 8. `hooks.*` — `user-hooks-dispatch.sh` (per-user custom hooks, v2.4.0+)
+
+Every hook event in the shared `settings.json` carries **one** extra entry that hands off to a dispatcher:
+
+```json
+"UserPromptSubmit": [
+  { "hooks": [{ "type": "command", "command": "bash ~/.claude/hooks/check-settings-version.sh" }] },
+  { "hooks": [{ "type": "command", "command": "bash ~/.claude/hooks/user-hooks-dispatch.sh UserPromptSubmit" }] }
+]
+```
+
+The same pattern is repeated for `PreToolUse`, `PostToolUse`, `SessionStart`, `PermissionRequest`, `Stop`, `SubagentStop`, `PreCompact` and `Notification` — the event name is passed as `$1`.
+
+**Why a dispatcher instead of editing `settings.json`?** The shared `settings.json` is copy-overwritten on every version update, so any hook a user adds there is wiped out on the next "update my global settings". The dispatcher decouples the two: the shared file only ever holds the dispatcher registration, and the actual per-user hook list lives in `~/.claude/user-hooks.json`, which an update never touches.
+
+**How it works at runtime.** The dispatcher reads `~/.claude/user-hooks.json`, picks the array under the key matching `$1`, and for each entry:
+
+1. Applies the optional `matcher` (anchored ERE against `tool_name` — only meaningful for `PreToolUse` / `PostToolUse`; ignored for the other events).
+2. Runs `command` with the original hook JSON payload on stdin.
+3. Forwards the hook's stdout back to Claude Code (so a `UserPromptSubmit` user hook can inject prompt context exactly like a shared one).
+4. Propagates **exit 2** (hard-deny) immediately. Swallows every other non-zero exit with a stderr warning — a broken personal hook can never wedge a session.
+
+If the file is absent, empty, or malformed, the dispatcher exits 0 silently.
+
+**Schema of `~/.claude/user-hooks.json`:**
+
+```json
+{
+  "PreToolUse":        [ { "matcher": "Bash", "command": "bash ~/my-hooks/extra-guard.sh" } ],
+  "PostToolUse":       [],
+  "UserPromptSubmit":  [ { "command": "bash ~/.claude/projects/<slug>/plans/hooks/plan-context.sh" } ],
+  "SessionStart":      [],
+  "PermissionRequest": [],
+  "Stop":              [ { "command": "bash ~/my-hooks/notify-done.sh" } ],
+  "SubagentStop":      [],
+  "PreCompact":        [],
+  "Notification":      []
+}
+```
+
+`global-settings/user-hooks.example.json` ships this skeleton plus a `$examples` block with worked entries; copy it into place and fill it in.
+
+**Enabling** (once, in your own terminal):
+
+```bash
+cp "$REPO_ROOT/global-settings/user-hooks.example.json" ~/.claude/user-hooks.json
+chmod 600 ~/.claude/user-hooks.json
+sudo chattr +i ~/.claude/user-hooks.json        # recommended, mirrors the other locked files
+```
+
+Restart Claude Code or run `/hooks`. From then on your hooks fire alongside the shared ones, and survive every settings update.
+
+**Claude is blocked from editing `user-hooks.json`.** A user hook can register itself in front of every tool call, so letting Claude write this file would hand it a way to weaken the shared guards from inside a session. The file therefore sits under the same three protection layers as the other config files: the `permissions.deny` list, the protected-path regex in `block-config-tool-writes.sh` and `block-write-commands.sh`, and (recommended) `chattr +i`. Users edit it by hand — the `sudo chattr -i … / edit / sudo chattr +i …` dance is the same as for `settings.json`.
+
+**Disabling:** empty the arrays, or delete the file. The dispatcher exits 0 in both cases.
+
+### 9. `mcpServers` (optional)
 
 7 Playwright browser instances (`browser-1` through `browser-7`). `browser-6` runs headed (no `--headless`). Adjust the count to match your actual usage.
 
