@@ -3,7 +3,7 @@
 	"$id": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
 	"title": "Conduction App Manifest v2",
 	"description": "v2 schema for the JSON-driven page and navigation manifest consumed by @conduction/nextcloud-vue. Introduces a uniform widgets[] array on every page type with a per-slot grid coordinate system, a typed actions[] discriminator, and the required $schema field for version detection. v1 manifests continue to validate against app-manifest.schema.json (unchanged).",
-	"version": "2.32.0",
+	"version": "2.33.0",
 	"type": "object",
 	"required": ["$schema", "version"],
 	"allOf": [
@@ -90,7 +90,8 @@
 									"properties": { "value": {}, "label": { "type": "string" } }
 								}
 							},
-							"optionsSource": { "type": "string", "description": "choice: endpoint/registry to load options from (alternative to static options)." },
+							"optionsSource": { "type": "string", "description": "choice: where to read the option list from at runtime, instead of declaring it here. Names a key in the app's own GET /api/setup/status document (dots walk into nested objects, e.g. `profiles`). Entries accept `id` for `value` and `name` for `label`, and a numeric `objectCount` becomes the stat a card shows. Use it when the SERVER owns what is on offer, so the manifest cannot drift from it." },
+							"display": { "type": "string", "enum": ["select", "cards"], "default": "select", "description": "choice: how the options are rendered. `select` is a dropdown; `cards` is a grid of CnChoiceCards, which shows each option's description and stats. Pick cards when the choice needs explaining." },
 							"dependsOn": { "type": "string", "description": "choice: the configKey of a previous choice step this one cascades from. Disabled until the parent is set; its option list is taken from optionsByParent[parentValue] (e.g. organisation-type depends on country)." },
 							"optionsByParent": { "type": "object", "description": "choice: map of parent-choice value → options[] for a dependent (dependsOn) choice. Same option item shape as `options`.", "additionalProperties": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["value", "label"], "properties": { "value": {}, "label": { "type": "string" } } } } },
 							"suggestFrom": { "type": "string", "description": "choice: the configKey of an earlier choice this step pre-fills a suggestion from. When that value is set and the user has not yet picked here, the option matching suggestMap[parentValue] is auto-selected (still user-overridable)." },

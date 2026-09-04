@@ -1639,6 +1639,80 @@ else
     _bad "gate-22 failed without naming both planted defects — a schema loosened one way would pass this"
 fi
 
+# ===========================================================================
+# FAMILY N — THE SETUP CHOICE PLANE. THE FIFTH TIME, AND THE SAME CAUSE.
+#
+# nextcloud-vue 2.33.0 lets a `choice` setup step render as cards over a list
+# the SERVER owns: `display: "cards"` picks the renderer, and `optionsSource`
+# names the key in the app's own /api/setup/status document to read the
+# options from. decidiq is the first consumer, and its manifest stops carrying
+# a hand-written copy of that list entirely.
+#
+# The vendored copy here has to know both keys before that manifest exists,
+# because check_manifest.js prefers the CANONICAL vendored schema over the
+# app's pinned node_modules copy. A stale copy rejects a correct manifest and
+# names the app, not itself.
+#
+# N1 is the currency arm: the shape decidiq ships. N2 and N3 are the
+# anti-widening arms, because N1 alone passes just as well against a schema
+# "fixed" by setting a setup step's additionalProperties to true, or by
+# dropping the display enum. Each plants one independently fatal defect.
+# ===========================================================================
+_mk_setup_choice_app() {  # _mk_setup_choice_app <dir> <displayKey> <displayValue>
+    mkdir -p "$1/src"
+    python3 - "$1/src/manifest.json" "$2" "$3" <<'CHOICE_PY'
+import json, sys
+m = {
+    "$schema": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
+    "version": "0.1.0",
+    "setup": {
+        "version": 1,
+        "steps": [
+            {"id": "welcome", "type": "info", "title": "Welcome",
+             "body": "A short setup to get this app ready."},
+            {"id": "example-set", "type": "choice",
+             "title": "Which kind of organisation is this for?",
+             "configKey": "example_profile",
+             "optionsSource": "profiles",
+             "multiple": True,
+             sys.argv[2]: sys.argv[3]},
+        ],
+    },
+    "menu": [
+        {"id": "D", "label": "Dashboard", "icon": "ViewDashboardOutline", "route": "D", "order": 10},
+    ],
+    "pages": [
+        {"id": "D", "type": "dashboard", "route": "/", "title": "Dashboard",
+         "_note": "Landing page.",
+         "widgets": [{"id": "w1", "widgetKey": "banner", "slot": "body",
+                      "gridX": 0, "gridY": 0, "gridWidth": 12, "gridHeight": 6}]},
+    ],
+}
+json.dump(m, open(sys.argv[1], 'w'), indent=1)
+CHOICE_PY
+    git -C "$1" init -q .
+    _commit "$1" init
+}
+
+_appN1="${_tmp}/appN1"
+_mk_setup_choice_app "${_appN1}" display cards
+_outN1="${_tmp}/n1.txt"
+_run "${_appN1}" "${_outN1}"
+_expect "${_outN1}" 22 "PASS" "accepts a choice step rendered as cards over a server-owned list (nextcloud-vue#996)"
+_expect "${_outN1}" 53 "PASS" "the ASSEMBLED manifest accepts the setup choice plane too"
+
+_appN2="${_tmp}/appN2"
+_mk_setup_choice_app "${_appN2}" displayy cards
+_outN2="${_tmp}/n2.txt"
+_run "${_appN2}" "${_outN2}"
+_expect "${_outN2}" 22 "FAIL" "still rejects an unknown key on a setup step"
+
+_appN3="${_tmp}/appN3"
+_mk_setup_choice_app "${_appN3}" display carousel
+_outN3="${_tmp}/n3.txt"
+_run "${_appN3}" "${_outN3}"
+_expect "${_outN3}" 22 "FAIL" "still rejects a display mode outside the enum"
+
 echo ""
 if [ "${_failures}" -eq 0 ]; then
     echo "test_gate_45_to_55_acceptance.sh: ALL GREEN"
