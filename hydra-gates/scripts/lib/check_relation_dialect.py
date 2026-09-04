@@ -70,7 +70,11 @@ lines are advisory and never fail the gate):
                         (rule 10: readOnly with no expressible transitions =
                         permanently frozen).
   f. $REF TARGETS     — a string ``$ref`` must resolve to a schema key in the
-                        same register file set (case-exact). A numeric ``$ref``
+                        same register file set (case-exact), OR name an
+                        OpenRegister shared projection (``nc-`` prefixed:
+                        ``nc-user``, ``nc-group``, ``nc-organisation``), which
+                        every app can reference and OpenRegister resolves
+                        through its object-source registry. A numeric ``$ref``
                         is allowed (live-schema form) but WARNs.
 
 Diff-scoping (ADR-020): only the changed register files passed on argv are
@@ -576,9 +580,38 @@ def _has_uuid_format(prop):
     return False
 
 
+# OpenRegister's own virtual schemas, which every app can reference.
+#
+# These are projections OpenRegister serves from its `directory` register:
+# `nc-user`, `nc-group`, `nc-organisation`. They are `nc-` prefixed by
+# OpenRegister precisely so they cannot collide with a leaf app's schema of the
+# same name, and that prefix is what makes them recognisable here.
+#
+# A `$ref` at one of these is NOT the unresolvable cross-app reference rule (f)
+# exists to catch. Measured 2026-09-04 on opencatalogi: `publication.organization`
+# pointing at `nc-organisation` renders the raw uuid plain and INLINES the
+# organisation under `_extend`, resolved through `ObjectSourceRegistry`. It is a
+# working relation, and the only reason the register set does not contain the key
+# is that the schema belongs to the platform rather than to the app.
+#
+# Without this, an app consolidating onto a shared projection had no green route:
+# keeping the `$ref` failed check (f), and dropping it failed check (b) as a
+# relation-shaped property with no canonical `$ref` — the same both-arms-fail
+# trap that `x-external-register` was added for. That exemption does not fit
+# here, because it exists for a `$ref` OpenRegister can NEVER resolve, and this
+# one it resolves every time.
+_SHARED_PROJECTION_PREFIX = "nc-"
+
+
+def _is_shared_projection(ref):
+    """True when ``ref`` names an OpenRegister virtual schema."""
+    return isinstance(ref, str) and ref.strip().startswith(_SHARED_PROJECTION_PREFIX)
+
+
 def _resolve_ref(ref, keys):
     """Return ('ok'|'warn'|'fail', normalized). Numeric → warn (live-schema
-    form). Hash form resolves to its last path segment."""
+    form). Hash form resolves to its last path segment. An OpenRegister shared
+    projection resolves even though it is not in the app's own register set."""
     if isinstance(ref, (int, float)):
         return "warn", str(ref)
     if not isinstance(ref, str):
@@ -588,6 +621,8 @@ def _resolve_ref(ref, keys):
         return "warn", r
     if r.startswith("#"):
         r = r.rstrip("/").rsplit("/", 1)[-1]
+    if _is_shared_projection(r):
+        return "ok", r
     return ("ok", r) if r in keys else ("fail", r)
 
 
