@@ -402,6 +402,24 @@ on:
         required: false
         type: string
         default: "[]"
+      e2e-additional-apps:
+        description: |
+          JSON array of EXTRA app repos installed only in the browser jobs
+          (playwright / newman / journeydoc-capture), on top of `additional-apps`.
+
+          `additional-apps` is installed for every leg of `nextcloud-test-refs`,
+          so an app listed there must support the WHOLE declared range. pipelinq
+          declares min-version 32 / max-version 34 and tests all three, while
+          nextcloud/contacts has no branch spanning 32 and 34 (stable8.3 is
+          32-33, stable8.5+ start at 33) — listing it there aborts the stable32
+          leg on a min-version mismatch.
+
+          The browser jobs check out only `fromJSON(nextcloud-test-refs)[0]` as
+          their single server, so an app needed purely to make E2E seeding work
+          can be pinned to a ref valid for that one version.
+        required: false
+        type: string
+        default: "[]"
       e2e-skip-blocking:
         description: "Make the E2E skip-discipline check a hard failure for this app. It reads the RUN's Playwright report — the only place a runtime `test.skip(cond, reason)` is visible — and reports three things: a spec file that executed ZERO tests, a skip deferring to a deploy state CI itself decides ('not deployed', 'deploy drift', 'predates'), and a skip carrying no reason. A skip naming a genuinely absent optional app or external service is allowed. Default false because eight apps carry findings today (measured 2026-08-24: 298/3210 tests skipped fleet-wide, 27 zero-test spec files) and a gate that turns them all red at once is a gate nobody can turn on — same reasoning as check-code-blocking. Flip it per app once that app is worked down; it can then only stay clean."
         required: false
@@ -3629,8 +3647,20 @@ jobs:
           # and `beta` are protected long-lived integration branches and no
           # feature branch is named either, so a pull request whose HEAD is one
           # of them is a promotion by construction.
+          # `release/beta-to-main-*` is the same promotion by another name. A
+          # beta -> main promotion whose branches have diverged CANNOT be sent
+          # with `beta` as the head: the conflicts have to be resolved
+          # somewhere, and resolving them on `beta` would rewrite the release
+          # candidate. So the resolution is carried on a prepared branch off
+          # `main`, and its second parent is the beta tip. It is a promotion in
+          # every respect the ratchet cares about, and its merge base is the
+          # same previous release point that cannot be booted here.
+          #
+          # The pattern is deliberately narrow. `release/v*` (the version bump
+          # release.yml commits) is NOT matched: it targets development as
+          # ordinary work and must keep facing the ratchet.
           case "$PR_HEAD_REF" in
-            development|beta)
+            development|beta|release/beta-to-main-*)
               echo "::notice::Release promotion ($PR_HEAD_REF -> $BASE_REF): skipping the merge-base coverage ratchet. Its merge base is the previous release point and cannot be booted in this job's Nextcloud environment, and every commit in the diff already passed the ratchet on its own pull request into $PR_HEAD_REF. The committed .coverage-baseline floor is still enforced by the next step."
               exit 0
               ;;
@@ -3754,8 +3784,14 @@ jobs:
           # silent-downgrade shape the `against` probe above exists to prevent.
           # So the fallback is gated on the SAME head-ref condition, and any
           # other route to a missing base clover stays a hard failure.
+          # Matches the head-ref set used by the step above, including the
+          # prepared `release/beta-to-main-*` promotion branch. The two must
+          # agree: if this fallback recognised fewer promotions than the step
+          # that skips the ratchet, a promotion would skip the ratchet there
+          # and then hard-fail here for the missing base clover it just chose
+          # not to produce.
           case "${PR_HEAD_REF:-}" in
-            development|beta)
+            development|beta|release/beta-to-main-*)
               echo "::notice::Release promotion: the merge-base ratchet did not run (see the previous step). Enforcing the committed .coverage-baseline floor instead."
               php scripts/coverage-guard.php coverage/clover.xml
               exit 0
@@ -3928,9 +3964,13 @@ jobs:
           tools: composer:v2
 
       - name: Checkout additional apps
-        if: ${{ inputs.additional-apps != '[]' }}
+        if: ${{ inputs.additional-apps != '[]' || inputs.e2e-additional-apps != '[]' }}
         run: |
-          echo '${{ inputs.additional-apps }}' | jq -c '.[]' | while read -r app; do
+          # Browser job: `additional-apps` PLUS `e2e-additional-apps`. The
+          # second list exists because this job pins a single server ref, so
+          # an app that cannot span the whole declared range still installs
+          # here. `add` concatenates the two arrays.
+          printf '%s\n%s\n' '${{ inputs.additional-apps }}' '${{ inputs.e2e-additional-apps }}' | jq -c -s 'add // [] | .[]' | while read -r app; do
             repo=$(echo "$app" | jq -r '.repo')
             name=$(echo "$app" | jq -r '.app')
             ref=$(echo "$app" | jq -r '.ref // "main"')
@@ -4366,9 +4406,13 @@ jobs:
           tools: composer:v2
 
       - name: Checkout additional apps
-        if: ${{ inputs.additional-apps != '[]' }}
+        if: ${{ inputs.additional-apps != '[]' || inputs.e2e-additional-apps != '[]' }}
         run: |
-          echo '${{ inputs.additional-apps }}' | jq -c '.[]' | while read -r app; do
+          # Browser job: `additional-apps` PLUS `e2e-additional-apps`. The
+          # second list exists because this job pins a single server ref, so
+          # an app that cannot span the whole declared range still installs
+          # here. `add` concatenates the two arrays.
+          printf '%s\n%s\n' '${{ inputs.additional-apps }}' '${{ inputs.e2e-additional-apps }}' | jq -c -s 'add // [] | .[]' | while read -r app; do
             repo=$(echo "$app" | jq -r '.repo')
             name=$(echo "$app" | jq -r '.app')
             ref=$(echo "$app" | jq -r '.ref // "main"')
@@ -5791,9 +5835,13 @@ jobs:
           tools: composer:v2
 
       - name: Checkout additional apps
-        if: ${{ inputs.additional-apps != '[]' }}
+        if: ${{ inputs.additional-apps != '[]' || inputs.e2e-additional-apps != '[]' }}
         run: |
-          echo '${{ inputs.additional-apps }}' | jq -c '.[]' | while read -r app; do
+          # Browser job: `additional-apps` PLUS `e2e-additional-apps`. The
+          # second list exists because this job pins a single server ref, so
+          # an app that cannot span the whole declared range still installs
+          # here. `add` concatenates the two arrays.
+          printf '%s\n%s\n' '${{ inputs.additional-apps }}' '${{ inputs.e2e-additional-apps }}' | jq -c -s 'add // [] | .[]' | while read -r app; do
             repo=$(echo "$app" | jq -r '.repo')
             name=$(echo "$app" | jq -r '.app')
             ref=$(echo "$app" | jq -r '.ref // "main"')
@@ -6840,7 +6888,23 @@ jobs:
             # the re-litigation of commits that already passed.
             IS_PROMOTION=no
             case "${PR_HEAD_REF:-}" in
-              development|beta) IS_PROMOTION=yes ;;
+              # `release/beta-to-main-*` is a beta -> main promotion carried on
+              # a prepared branch. When the two have diverged the promotion
+              # CANNOT be sent with `beta` as the head -- the conflicts have to
+              # be resolved somewhere, and resolving them on `beta` would
+              # rewrite the release candidate -- so the merge is prepared off
+              # `main` with the beta tip as its second parent.
+              #
+              # Without this arm such a branch is judged against `main`, which
+              # is exactly the measurement this step exists to prevent:
+              # measured 2026-08-30, gate-16 reported 253 changed methods
+              # missing @spec on filinq, on content beta had already cleared.
+              # Same symptom as openregister#2975 above, same wrong base.
+              #
+              # Narrow on purpose: `release/v*`, the version bump release.yml
+              # commits, is NOT matched. That targets development as ordinary
+              # work and must keep being judged against it.
+              development|beta|release/beta-to-main-*) IS_PROMOTION=yes ;;
               hotfix/*)
                 case "${BASE_REF:-}" in
                   beta|main) IS_PROMOTION=yes ;;
@@ -7223,6 +7287,18 @@ jobs:
           echo "::warning::pandoc/wkhtmltopdf could not be installed after 3 bounded attempts. The PDF rendering of the quality report is skipped; the report, the step summary and every gate below still run. This is infrastructure, not a finding about this app."
 
       - name: Generate report
+        env:
+          # The SAME three facts the "Gate — a test job that was ENABLED but
+          # never ran" step below reads, so the table and the gate classify one
+          # skip one way. Before this, the gate knew a PR into `development`
+          # defers E2E to the promotion run and passed, while this table only
+          # knew enabled+skipped and stamped the same run "🚨 NO VERDICT" — a
+          # deliberate cost control rendered as a missing test tier, on every
+          # dev PR, forever (observed on keepiq#479). Env rather than inline
+          # `${{ }}`: `reason` is free text and does not belong in the script.
+          PATH_FILTER_CODE: ${{ needs.changes.outputs.code }}
+          PATH_FILTER_REASON: ${{ needs.changes.outputs.reason }}
+          E2E_PROMOTION_SKIP: ${{ github.event_name == 'pull_request' && github.base_ref == 'development' }}
         run: |
           set -euo pipefail
 
@@ -7253,25 +7329,59 @@ jobs:
             esac
           }
 
-          # Test-tier icon (#194). `skipped` means two completely different
-          # things depending on whether the caller asked for the job:
+          # Test-tier icon (#194). `skipped` means THREE completely different
+          # things depending on whether the caller asked for the job and
+          # whether something declared the skip:
           #
           #   enabled=false → the repo does not have this kind of test. ⏭️.
-          #   enabled=true  → the job was asked for and DID NOT RUN. That is
+          #   enabled=true, declared reason ($3 non-empty)
+          #                 → the job was asked for and a named mechanism (the
+          #                   changed-path filter, the dev-PR promotion rule)
+          #                   decided this run does not need it. The verdict
+          #                   still happens — later, or not for this diff — and
+          #                   the cell says so IN WORDS. A bare ⏭️ here would
+          #                   be the same glyph as "no tests configured", the
+          #                   exact ambiguity this function exists to remove.
+          #   enabled=true, no declared reason
+          #                 → the job was asked for and DID NOT RUN. That is
           #                   the ABSENCE OF A VERDICT, and it must not share a
-          #                   glyph with "no tests configured" — which is
-          #                   exactly how a fleet-wide advisory deleted the test
-          #                   tier on 2026-08-06 while every report looked
-          #                   ordinary. Rendered in words, not a tick.
+          #                   glyph with either state above — which is exactly
+          #                   how a fleet-wide advisory deleted the test tier
+          #                   on 2026-08-06 while every report looked ordinary.
+          #                   The 🚨 wording is unchanged on purpose: its alarm
+          #                   value is the point, it is only NARROWED to the
+          #                   case it was written for.
           #
-          # $1 = needs.<job>.result, $2 = "true"/"false" for enabled
+          # $1 = needs.<job>.result, $2 = "true"/"false" for enabled,
+          # $3 = declared-skip reason, empty when nothing declared the skip
           test_icon() {
             if [ "$2" = "true" ] && [ "$1" = "skipped" ]; then
-              echo "🚨 **NO VERDICT — enabled but never ran**"
+              if [ -n "${3:-}" ]; then
+                echo "⏭️ **${3}**"
+              else
+                echo "🚨 **NO VERDICT — enabled but never ran**"
+              fi
             else
               icon "$1"
             fi
           }
+
+          # The declared-skip reasons, mirrored from `classify()` in the gate
+          # step below — same precedence: the promotion rule names the E2E skip
+          # first, the changed-path filter covers whatever it gates. Computed
+          # once here so the two rows cannot drift apart from each other or
+          # from the gate.
+          PHPUNIT_SKIP_REASON=""
+          PLAYWRIGHT_SKIP_REASON=""
+          if [ "$E2E_PROMOTION_SKIP" = "true" ]; then
+            PLAYWRIGHT_SKIP_REASON="deferred — runs on the promotion into beta/main, not on a pull request into development"
+          fi
+          if [ "$PATH_FILTER_CODE" = "false" ]; then
+            PHPUNIT_SKIP_REASON="not run for this diff — ${PATH_FILTER_REASON}"
+            if [ -z "$PLAYWRIGHT_SKIP_REASON" ]; then
+              PLAYWRIGHT_SKIP_REASON="not run for this diff — ${PATH_FILTER_REASON}"
+            fi
+          fi
 
           # Build license info strings
           license_info() {
@@ -7357,9 +7467,12 @@ jobs:
             # Test rows. `test_icon` rather than `icon`: see its definition —
             # an enabled-but-skipped test job is the absence of a verdict and
             # says so in words.
-            echo "| PHPUnit | | | | | $(test_icon '${{ needs.phpunit.result }}' '${{ inputs.enable-php && inputs.enable-phpunit }}') |"
+            # PHPUnit and Playwright carry a declared-skip reason; Newman is
+            # not gated by the changed-path filter or the promotion rule, so a
+            # skipped-while-enabled Newman really is a missing verdict.
+            echo "| PHPUnit | | | | | $(test_icon '${{ needs.phpunit.result }}' '${{ inputs.enable-php && inputs.enable-phpunit }}' "$PHPUNIT_SKIP_REASON") |"
             echo "| Newman | | | | | $(test_icon '${{ needs.newman.result }}' '${{ inputs.enable-newman }}') |"
-            echo "| Playwright | | | | | $(test_icon '${{ needs.playwright.result }}' '${{ inputs.enable-playwright }}') |"
+            echo "| Playwright | | | | | $(test_icon '${{ needs.playwright.result }}' '${{ inputs.enable-playwright }}' "$PLAYWRIGHT_SKIP_REASON") |"
             if [ '${{ inputs.enable-journeydoc-capture }}' = 'true' ]; then
               echo "| Journeydoc capture | | | | | $(test_icon '${{ needs.journeydoc-capture.result }}' 'true') |"
             fi

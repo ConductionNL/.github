@@ -28,28 +28,46 @@ jobs:
           # It is a narrow allowance, not a hole: release.yml stages only
           # appinfo/info.xml and, where present, openapi.json, and hard-fails
           # its own run if the bump commit strays outside that allow-list.
+          # `dependabot/*` is allowed for the same reason, and it is the fix
+          # for a backlog that could not drain. Dependabot reads its config from
+          # the repository's DEFAULT branch only. For the ten fleet apps whose
+          # default is `main`, `main`'s .github/dependabot.yml carries no
+          # `target-branch`, so every bump was opened against `main` — where this
+          # gate refused it. Measured 2026-08-30: 41 open pull requests across
+          # zaakafhandelapp (12), filinq (11), openregister (5), opencatalogi (3),
+          # integriq (3), dossiq (2), planninq (2), and one each on thematiq,
+          # launchpad and stackiq. None could ever merge, and Dependabot reopens
+          # them, so the backlog only grew.
+          #
+          # Allowing the bump in is only half of it: a dependency landing on
+          # `main` alone leaves `beta` and `development` behind, and the next
+          # promotion conflicts on the lockfile. fleet-back-merge.yml carries
+          # whatever reaches `main` down into `beta`, and whatever reaches `beta`
+          # down into `development`, so the three converge instead of diverging.
           if [[ "$TARGET" == "main" || "$TARGET" == "master" ]]; then
-            if [[ "$SOURCE" != "beta" ]] && ! [[ "$SOURCE" =~ ^hotfix ]] && ! [[ "$SOURCE" =~ ^release/ ]]; then
-              echo "::error::Pull requests to main must come from 'beta', a 'hotfix/*' branch, or a 'release/v*' version bump."
+            if [[ "$SOURCE" != "beta" ]] && ! [[ "$SOURCE" =~ ^hotfix ]] && ! [[ "$SOURCE" =~ ^release/ ]] && ! [[ "$SOURCE" =~ ^dependabot/ ]]; then
+              echo "::error::Pull requests to main must come from 'beta', a 'hotfix/*' branch, a 'release/v*' version bump, or 'dependabot/*'."
               echo ""
               echo "Allowed patterns:"
               echo "  beta → main"
               echo "  hotfix/* → main"
               echo "  release/v* → main (automated version bump)"
+              echo "  dependabot/* → main (dependency bump, back-merged downstream)"
               echo ""
               echo "Your branch '$SOURCE' does not match any allowed pattern."
               exit 1
             fi
 
           elif [[ "$TARGET" == "beta" ]]; then
-            if [[ "$SOURCE" != "development" ]] && ! [[ "$SOURCE" =~ ^hotfix ]] && [[ "$SOURCE" != "main" ]] && [[ "$SOURCE" != "master" ]] && ! [[ "$SOURCE" =~ ^release/ ]]; then
-              echo "::error::Pull requests to beta must come from 'development', 'main', a 'hotfix/*' branch, or a 'release/v*' version bump."
+            if [[ "$SOURCE" != "development" ]] && ! [[ "$SOURCE" =~ ^hotfix ]] && [[ "$SOURCE" != "main" ]] && [[ "$SOURCE" != "master" ]] && ! [[ "$SOURCE" =~ ^release/ ]] && ! [[ "$SOURCE" =~ ^dependabot/ ]]; then
+              echo "::error::Pull requests to beta must come from 'development', 'main', a 'hotfix/*' branch, a 'release/v*' version bump, or 'dependabot/*'."
               echo ""
               echo "Allowed patterns:"
               echo "  development → beta"
               echo "  hotfix/* → beta"
               echo "  main → beta (backport)"
               echo "  release/v* → beta (automated version bump)"
+              echo "  dependabot/* → beta (dependency bump, back-merged downstream)"
               echo ""
               echo "Your branch '$SOURCE' does not match any allowed pattern."
               exit 1
