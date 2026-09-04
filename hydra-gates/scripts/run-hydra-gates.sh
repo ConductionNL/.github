@@ -2327,20 +2327,107 @@ if [ -f composer.json ] && command -v composer >/dev/null 2>&1; then
             # and it is only meaningful if there IS one.
             _ca_mode=""
         fi
-        composer audit ${_ca_mode} --format=plain >"${_ca_log}" 2>&1
-        _ca_rc=$?
+        # RETRY ON A TRANSPORT FAILURE — AND ON NOTHING ELSE.
+        #
+        # `composer audit` reaches https://packagist.org/api/security-advisories/
+        # on every run. When that endpoint does not answer, composer raises a
+        # TransportException and Composer\Console\Application rewrites its
+        # exit code to Installer::ERROR_TRANSPORT_EXCEPTION = 100. Nothing
+        # about the lock changed and nothing was audited; the branch below that
+        # refuses to PASS such a run is right and is kept. But running the
+        # command ONCE turned every hiccup of that one endpoint into a red PR,
+        # fleet-wide, at the same instant:
+        #
+        #   2026-09-03 11:56 UTC  keepiq#601 and keepiq#602 failed gate-4 in the
+        #                         SAME MINUTE with "exit 100, and the output
+        #                         names no advisory". Every hydra run before and
+        #                         after passed it on a byte-identical
+        #                         composer.lock, and the same run's Security
+        #                         (composer) job — which retries — audited that
+        #                         lock clean.
+        #   openregister#2956     "security-advisories/ file could not be
+        #                         downloaded (HTTP/2 502 )", exit 100 — the
+        #                         case that gave quality.yml's Security
+        #                         (composer) leg its retry loop.
+        #
+        # This is that same loop: three attempts, 10/20s apart, because it is
+        # the same command talking to the same endpoint one job over, and a
+        # feed that is back within a minute should not cost a re-run.
+        #
+        # What the loop deliberately does NOT do:
+        #   - It does not retry a real finding. `--format=plain` prints a
+        #     `Package: <name>` block per advisory; a run that names one is a
+        #     verdict, whatever its exit code, and goes straight to the CVE
+        #     branch below. Retrying it would only delay the same answer.
+        #   - It does not retry any other failure. Only exit 100, or output
+        #     that names a download/connection error, earns another attempt.
+        #     "No installed packages found" and friends are configuration
+        #     errors and are reported as such on the first attempt.
+        #   - It does not turn three transport failures into a PASS or a skip.
+        #     An unverified tree is exactly as unverified after three attempts
+        #     as after one; the FAIL wording below says so and now names the
+        #     attempt count, so a reader can tell "the feed was down for the
+        #     whole window" from "composer fell over once".
+        #
+        # Every attempt's output is kept in ${_ca_log} under an "### attempt"
+        # header, so the log shows what each attempt said and not only the
+        # last. The verdict is judged on the LAST attempt only (${_ca_last}) —
+        # a stale error from attempt 1 must not be mistaken for the outcome.
+        #
+        # HYDRA_GATE_COMPOSER_RETRY_DELAY is the backoff unit in seconds
+        # (default 10 → waits of 10s, then 20s). It exists so the test suite
+        # can drive the test arms without sleeping; nothing in CI sets it.
+        #
+        # See: .github/workflows/quality.yml, job `security`, step "Run
+        # ${{ matrix.ecosystem }} audit", the `for attempt in 1 2 3` loop
+        # around `composer audit` (line ~2213 at the time of writing) for the
+        # sibling implementation. The two diverge ON PURPOSE:
+        #   - regex: quality.yml scopes its match to lines that also name
+        #     `security-advisories`; this gate matches any download or
+        #     connection error, because the advisory feed is the ONLY thing
+        #     `composer audit` downloads — any transport error IS the feed.
+        #   - verdict after 3 failures: quality.yml soft-fails (::warning,
+        #     job stays green, "dependencies were NOT audited"); this gate
+        #     hard-FAILs, because a hydra gate that cannot verify must say
+        #     so as a FAIL, never as a green tick.
+        _ca_attempts=3
+        _ca_delay="${HYDRA_GATE_COMPOSER_RETRY_DELAY:-10}"
+        _ca_transport_re='could not be downloaded|curl error|timed out|could not resolve host|failed to open stream|connection (refused|reset)'
+        _ca_last="${_ca_log}.last-attempt"
+        : >"${_ca_log}"
+        _ca_attempt=1
+        while :; do
+            echo "### composer audit — attempt ${_ca_attempt}/${_ca_attempts}" >>"${_ca_log}"
+            composer audit ${_ca_mode} --format=plain >"${_ca_last}" 2>&1
+            _ca_rc=$?
+            cat "${_ca_last}" >>"${_ca_log}"
+            [ "${_ca_rc}" -eq 0 ] && break
+            # A named advisory is a verdict, never a hiccup — no retry.
+            grep -qiE '^(Package|CVE|Advisory)[[:space:]]*:' "${_ca_last}" && break
+            # Only a transport failure earns another attempt. Exit 100 is
+            # composer's own code for it (>= 2.7); the message patterns cover
+            # composers that still exit 1 on a failed download.
+            if [ "${_ca_rc}" -ne 100 ] && ! grep -qiE "${_ca_transport_re}" "${_ca_last}"; then
+                break
+            fi
+            [ "${_ca_attempt}" -ge "${_ca_attempts}" ] && break
+            _ca_wait=$((_ca_attempt * _ca_delay))
+            echo "[hydra-gates] gate-4 composer-audit: attempt ${_ca_attempt}/${_ca_attempts} could not reach the advisory feed (exit ${_ca_rc}); retrying in ${_ca_wait}s"
+            sleep "${_ca_wait}"
+            _ca_attempt=$((_ca_attempt + 1))
+        done
         if [ "${_ca_rc}" -eq 0 ]; then
             # Distinguish "audited, clean" from "audited nothing, called it
             # clean". The second is the 2.7.x fail-open above, and it must never
             # be counted as a pass.
-            if grep -qiE "no packages|no installed packages" "${_ca_log}"; then
+            if grep -qiE "no packages|no installed packages" "${_ca_last}"; then
                 _fail 4 "composer-audit" "audited NOTHING (composer found no packages) — this is not a clean audit; see ${_ca_log}"
             else
                 _pass 4 "composer-audit"
             fi
-        elif grep -qiE "no installed packages found|please run \"?composer install" "${_ca_log}"; then
+        elif grep -qiE "no installed packages found|please run \"?composer install" "${_ca_last}"; then
             _fail 4 "composer-audit" "audit COULD NOT RUN (no installed packages and no lock to audit) — NOT a CVE finding; see ${_ca_log}"
-        elif ! grep -qiE '^(Package|CVE|Advisory)[[:space:]]*:' "${_ca_log}"; then
+        elif ! grep -qiE '^(Package|CVE|Advisory)[[:space:]]*:' "${_ca_last}"; then
             # A NON-ZERO EXIT IS NOT AUTOMATICALLY A SECURITY FINDING.
             #
             # `composer audit` exits non-zero both when it FINDS advisories and
@@ -2360,7 +2447,15 @@ if [ -f composer.json ] && command -v composer >/dev/null 2>&1; then
             # That is the distinction this file already insists on for gate-5:
             #     "the attribute is absent"    -> a finding, and a real one
             #     "I could not open the class" -> the gate learned NOTHING
-            _fail 4 "composer-audit" "audit COULD NOT COMPLETE (exit ${_ca_rc}, and the output names no advisory) — the dependency tree is UNVERIFIED by this run, NOT known-vulnerable. Most often the advisory database was unreachable; see ${_ca_log}"
+            #
+            # Since the retry loop above, reaching this branch means one of two
+            # things, and the attempt count in the message tells them apart:
+            #   3 attempts  the feed stayed unreachable for the whole ~30s
+            #               window — a real outage, re-run later;
+            #   1 attempt   composer failed for a reason that is neither exit
+            #               100 nor a recognisable download error — read the
+            #               log, this is not the network.
+            _fail 4 "composer-audit" "audit COULD NOT COMPLETE (exit ${_ca_rc} after ${_ca_attempt} of ${_ca_attempts} attempt(s), and the output names no advisory) — the dependency tree is UNVERIFIED by this run, NOT known-vulnerable. Most often the advisory database was unreachable; every attempt's output is in ${_ca_log}"
         else
             _fail 4 "composer-audit" "CVEs or advisories — see ${_ca_log}"
         fi
