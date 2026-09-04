@@ -1550,6 +1550,95 @@ _outL2="${_tmp}/l2.txt"
 _run "${_appL2}" "${_outL2}"
 _expect "${_outL2}" 53 "FAIL" "a single 12x12 APP-OWNED widget still trips ADR-036 Decision 1"
 
+# ===========================================================================
+# FAMILY M — THE STORE PLANE. THE FOURTH TIME THIS CLASS HAS SHIPPED.
+#
+# Same defect as family K, one library feature later. The declarative store
+# plane (ADR-080 / ADR-114 Decision 4) landed in nextcloud-vue as schema
+# 2.30.0 to 2.32.0: a top-level `store` block and a `store` page type. The
+# vendored copy here was 2.29.0 and had heard of neither, and because
+# check_manifest.js deliberately prefers the CANONICAL vendored schema over
+# the app's pinned node_modules copy, the stale copy WON.
+#
+# What that looked like on decidiq (measured 2026-09-04, full-tree run on a
+# pristine `development` clone):
+#
+#   [gate-22]  at /: must NOT have additional properties
+#              at /pages/29/type: must be equal to one of the allowed values
+#   [gate-53]  the same two, against the ASSEMBLED manifest
+#
+# — two gates, four findings, ONE cause, and the app's own
+# `npm run check:manifest` passed against nextcloud-vue 2.32.0 in the very
+# same run. The manifest was right and the gate was old.
+#
+# M1 is the currency arm: a store block and a store page, the shape decidiq
+# actually ships. M2 is the anti-widening arm, because M1 alone would pass
+# just as well against a schema someone "fixed" by setting the store block's
+# additionalProperties to true, or by deleting the page-type enum. It plants
+# one independently fatal defect of each kind:
+#
+#   * `cardFieldz` — a typo'd key inside `store`, caught only if that block's
+#     additionalProperties is still false;
+#   * `type: "storefront"` — outside the page-type enum, caught only if the
+#     enum survived.
+# ===========================================================================
+_mk_store_app() {  # _mk_store_app <dir> <storeKey> <pageType>
+    mkdir -p "$1/src"
+    python3 - "$1/src/manifest.json" "$2" "$3" <<'PY'
+import json, sys
+m = {
+    "$schema": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
+    "version": "0.1.0",
+    "store": {
+        "types": ["openregister.configset"],
+        "localRegister": "decidiq",
+        sys.argv[2]: {"title": "title"},
+        "builtIn": [
+            {"slug": "municipality", "title": "Municipality",
+             "description": "A council with committees and factions.",
+             "kind": "openregister.configset"},
+        ],
+    },
+    "menu": [
+        {"id": "D", "label": "Dashboard", "icon": "ViewDashboardOutline", "route": "D", "order": 10},
+        {"id": "StoreMenu", "label": "Store", "icon": "StoreOutline", "route": "S", "section": "footer", "order": 92},
+    ],
+    "pages": [
+        {"id": "D", "type": "dashboard", "route": "/", "title": "Dashboard",
+         "_note": "Landing page.",
+         "widgets": [{"id": "w1", "widgetKey": "banner", "slot": "body",
+                      "gridX": 0, "gridY": 0, "gridWidth": 12, "gridHeight": 6}]},
+        {"id": "S", "type": sys.argv[3], "route": "/store", "title": "Store",
+         "_note": "The declarative store surface.",
+         "config": {"app": "decidiq", "title": "Store",
+                    "description": "Install configuration other organisations have published."}},
+    ],
+}
+json.dump(m, open(sys.argv[1], 'w'), indent=1)
+PY
+    git -C "$1" init -q .
+    _commit "$1" init
+}
+
+_appM1="${_tmp}/appM1"
+_mk_store_app "${_appM1}" cardFields store
+_outM1="${_tmp}/m1.txt"
+_run "${_appM1}" "${_outM1}"
+_expect "${_outM1}" 22 "PASS" "accepts the declarative store block and the store page type (decidiq#1142)"
+_expect "${_outM1}" 53 "PASS" "the ASSEMBLED manifest accepts the store plane too"
+
+_appM2="${_tmp}/appM2"
+_mk_store_app "${_appM2}" cardFieldz storefront
+_outM2="${_tmp}/m2.txt"
+_run "${_appM2}" "${_outM2}"
+_expect "${_outM2}" 22 "FAIL" "still rejects an unknown store key and an out-of-enum page type"
+_logM2="$(sed -n 's/.*see \(.*hydra-gate-manifest-validation\.log\).*/\1/p' "${_outM2}" | head -1)"
+if [ -n "${_logM2}" ] && grep -q 'additionalProperties' "${_logM2}" && grep -q 'enum' "${_logM2}"; then
+    _ok "gate-22 names BOTH planted defects (additionalProperties + enum)"
+else
+    _bad "gate-22 failed without naming both planted defects — a schema loosened one way would pass this"
+fi
+
 echo ""
 if [ "${_failures}" -eq 0 ]; then
     echo "test_gate_45_to_55_acceptance.sh: ALL GREEN"
