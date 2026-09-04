@@ -2376,10 +2376,23 @@ if [ -f composer.json ] && command -v composer >/dev/null 2>&1; then
         #
         # HYDRA_GATE_COMPOSER_RETRY_DELAY is the backoff unit in seconds
         # (default 10 → waits of 10s, then 20s). It exists so the test suite
-        # can drive all four arms without sleeping; nothing in CI sets it.
+        # can drive the test arms without sleeping; nothing in CI sets it.
+        #
+        # See: .github/workflows/quality.yml, job `security`, step "Run
+        # ${{ matrix.ecosystem }} audit", the `for attempt in 1 2 3` loop
+        # around `composer audit` (line ~2213 at the time of writing) for the
+        # sibling implementation. The two diverge ON PURPOSE:
+        #   - regex: quality.yml scopes its match to lines that also name
+        #     `security-advisories`; this gate matches any download or
+        #     connection error, because the advisory feed is the ONLY thing
+        #     `composer audit` downloads — any transport error IS the feed.
+        #   - verdict after 3 failures: quality.yml soft-fails (::warning,
+        #     job stays green, "dependencies were NOT audited"); this gate
+        #     hard-FAILs, because a hydra gate that cannot verify must say
+        #     so as a FAIL, never as a green tick.
         _ca_attempts=3
         _ca_delay="${HYDRA_GATE_COMPOSER_RETRY_DELAY:-10}"
-        _ca_transport_re='could not be downloaded|curl error|timed out|could not resolve host|failed to open stream|connection (refused|reset|timed out)'
+        _ca_transport_re='could not be downloaded|curl error|timed out|could not resolve host|failed to open stream|connection (refused|reset)'
         _ca_last="${_ca_log}.last-attempt"
         : >"${_ca_log}"
         _ca_attempt=1

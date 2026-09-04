@@ -33,6 +33,14 @@
 #          three attempts for the reader.
 #   ARM 4  A clean first attempt is called ONCE. The loop costs nothing on the
 #          common path.
+#   ARM 5  A non-transport, non-advisory error (composer exits 2 on an unknown
+#          option) is called ONCE and FAILs as "COULD NOT COMPLETE (exit 2
+#          after 1 of 3 attempt(s))". A code or configuration error is not an
+#          outage; retrying it would only repeat the same answer three times
+#          and hide, in the attempt count, that nothing was ever reachable to
+#          fix. This pins the ORDER of the break conditions: a refactor that
+#          dropped the `-ne 100` half of the transport test would retry every
+#          non-zero exit, and ARMs 1–4 would stay green.
 #
 # The composer binary is a stub on PATH whose behaviour is chosen per arm; it
 # writes its invocation count to a file so each arm can assert how many times
@@ -50,8 +58,10 @@ _scripts="$(cd "${_here}/.." && pwd)"
 #
 # Against the pre-fix runner ARM 2 must go RED (a single attempt cannot PASS a
 # feed that only answers on the third call) and ARM 3's attempt-count and
-# per-attempt-log assertions must go RED. ARMs 1 and 4 stay green — they are
-# the properties the fix must NOT change.
+# per-attempt-log assertions must go RED. ARMs 1 and 4 stay green, and so do
+# ARM 5's call-count assertions — those are the properties the fix must NOT
+# change. Only ARM 5's wording assertion goes RED, because the pre-fix
+# FAIL text did not name an attempt count.
 _runner="${HYDRA_GATES_RUNNER_UNDER_TEST:-${_scripts}/run-hydra-gates.sh}"
 
 _failures=0
@@ -84,7 +94,8 @@ mkdir -p "${_app}"
 # mode is lifted from real composer 2.10 output, because the gate decides by
 # reading that output: the transport case must carry the "could not be
 # downloaded" line and exit 100, the advisory case must carry a `Package:`
-# block and exit 1.
+# block and exit 1, and the config_error case must carry NEITHER shape and
+# exit with a code other than 100.
 # ---------------------------------------------------------------------------
 _fakebin="${_tmp}/bin"
 mkdir -p "${_fakebin}"
@@ -120,6 +131,12 @@ case "${GATE4_STUB_MODE}" in
         echo "Affected versions: <9.9.9"
         echo "Reported at: 2026-01-01T00:00:00+00:00"
         exit 1 ;;
+    config_error)
+        # Neither an advisory nor a transport error: composer's own exit 2 for
+        # a bad invocation. Nothing here matches the gate's transport regex.
+        echo 'The "--foo" option does not exist.'
+        echo 'audit [--format FORMAT] [--locked] [--abandoned ABANDONED]'
+        exit 2 ;;
     *)
         echo "stub: unknown GATE4_STUB_MODE '${GATE4_STUB_MODE:-}'" >&2
         exit 99 ;;
@@ -233,6 +250,30 @@ if [ "$(_calls)" -eq 1 ]; then
     _ok "a clean first attempt is not retried (composer called once)"
 else
     _bad "a clean first attempt called composer $(_calls)x — the loop is running on the success path"
+fi
+
+# ---------------------------------------------------------------------------
+# ARM 5 — a non-transport, non-advisory error is not retried, ever.
+#         composer exits 2 on an unknown option: a code/config bug, not an
+#         infra hiccup. The runner must break on the first attempt and the
+#         FAIL must say so, "1 of 3", so a reader can tell it from an outage.
+# ---------------------------------------------------------------------------
+_run config_error
+_v="$(_verdict config_error)"
+if printf '%s' "${_v}" | grep -q 'FAIL — audit COULD NOT COMPLETE'; then
+    _ok "a non-transport error is FAIL (audit COULD NOT COMPLETE), not a CVE finding and not a PASS"
+else
+    _bad "a non-transport error produced '${_v:-none emitted}' — expected 'FAIL — audit COULD NOT COMPLETE'"
+fi
+if [ "$(_calls)" -eq 1 ]; then
+    _ok "a non-transport error is NOT retried (composer called once)"
+else
+    _bad "a non-transport error was retried (composer called $(_calls)x) — the runner is treating a code error as an outage"
+fi
+if printf '%s' "${_v}" | grep -q 'exit 2 after 1 of 3 attempt(s)'; then
+    _ok "the FAIL says 'exit 2 after 1 of 3 attempt(s)' — the reader can tell this from a real outage"
+else
+    _bad "the FAIL does not say 'exit 2 after 1 of 3 attempt(s)' — got '${_v}'"
 fi
 
 echo
