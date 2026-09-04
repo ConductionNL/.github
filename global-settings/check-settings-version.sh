@@ -239,11 +239,11 @@ elif [ "$online_source" = "git-fetch" ]; then
 fi
 
 # ── Friendly source name (surfaced in the session-start message) ─────────────
-# codeberg-raw is always Codeberg (hardcoded URL). For git-fetch we infer the
+# github-raw is always GitHub (hardcoded URL). For git-fetch we infer the
 # host from the local repo's origin URL.
 online_source_name=""
-if [ "$online_source" = "codeberg-raw" ]; then
-    online_source_name="Codeberg"
+if [ "$online_source" = "github-raw" ]; then
+    online_source_name="GitHub"
 elif [ "$online_source" = "git-fetch" ] && [ -n "$git_root" ]; then
     _origin_url=$(git -C "$git_root" remote get-url origin 2>/dev/null)
     if echo "$_origin_url" | grep -qE 'codeberg\.org'; then
