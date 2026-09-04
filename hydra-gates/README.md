@@ -229,6 +229,61 @@ went red on adoption. Check `lib/`, not just `tests/`.
 
 ---
 
+## `stubs/` is a different thing from `contracts/`
+
+`hydra-gates/stubs/` holds files that are **never loaded at all**. Not by an
+autoloader, not by a test bootstrap. They exist so psalm and phpstan can resolve
+a sibling Nextcloud app's classes, and nothing else reads them.
+
+That is why they are not in `contracts/`. The two contract interfaces above are
+`require`d for real by a leaf app's PHPUnit bootstrap, and the section above
+tells apps to point phpstan's `scanDirectories` at the whole `contracts/`
+directory. A file that must never be loaded does not belong in a directory apps
+are told to load wholesale. An app that already carries its own stub for the
+same class would get a duplicate declaration out of it.
+
+Wire a stub file by name, from the app's own config:
+
+```xml
+<stubs>
+    <file name="vendor/conduction/hydra-gates/hydra-gates/stubs/openregister-apphost-bootstrap.stub.php" />
+</stubs>
+```
+
+```neon
+parameters:
+    scanFiles:
+        - vendor/conduction/hydra-gates/hydra-gates/stubs/openregister-apphost-bootstrap.stub.php
+```
+
+### `openregister-apphost-bootstrap.stub.php`
+
+`OCA\OpenRegister\AppHost\Bootstrap`, the AppHost composition root (ADR-040).
+
+A leaf that composes its own registrars rather than calling
+`Bootstrap::register()` still has to bind the store controller the shared route
+table declares. Every such leaf writes the same guarded call:
+
+```php
+if (class_exists(Bootstrap::class) === true) {
+    Bootstrap::aliasStoreController(context: $context, ...);
+}
+```
+
+`openregister` is a sibling app, not a composer dependency, so psalm cannot
+resolve the class. It decides the guarded block is dead and reports `UnusedParam:
+Param context is never referenced in this method` about a parameter passed on the
+very next line. decidiq and filinq were both red on `development` for this, and
+planninq had already paid for a hand-vendored copy. Suppressing the finding would
+also suppress the next genuinely unused parameter in the same method.
+
+**The stub carries the engine's public surface only, and it can drift.** When
+`openregister/lib/AppHost/Bootstrap.php` changes a public signature, change this
+file with it. A stub that disagrees with the engine is worse than no stub,
+because it makes a wrong call look checked.
+
+---
+
 ## What it needs at runtime
 
 `bash`, `git`, `python3` (about twenty gates are Python helpers) and `node`
