@@ -2650,11 +2650,7 @@
       "filinq"
     ],
     "project": [
-      "pipelinq",
       "planninq"
-    ],
-    "projectactivity": [
-      "pipelinq"
     ],
     "projectassignment": [
       "shillinq"
@@ -2663,11 +2659,7 @@
       "shillinq"
     ],
     "projectphase": [
-      "pipelinq",
       "planninq"
-    ],
-    "projecttask": [
-      "pipelinq"
     ],
     "promotion_audit": [
       "integriq"
