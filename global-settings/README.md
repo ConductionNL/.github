@@ -15,8 +15,8 @@ Current version: see [`VERSION`](VERSION)
 | `sound-notify.sh`             | `~/.claude/hooks/sound-notify.sh`             | Optional notification-sound wrapper. Reads `~/.claude/sound-config.sh` and plays a sound on question / permission / stop events. Silent by default (added in v2.2.0)         |
 | `user-hooks-dispatch.sh`      | `~/.claude/hooks/user-hooks-dispatch.sh`      | Reads `~/.claude/user-hooks.json` and executes per-user hooks for every Claude Code event. Lets each user register private hooks that survive a settings update (added in v2.4.0) |
 | `VERSION`                     | `~/.claude/settings-version`                  | Installed version tracker (semver)                                                                                          |
-| `settings-repo-url.example`   | `~/.claude/settings-repo-url`                 | Codeberg repo slug for online version checking                                                                              |
-| `settings-repo-ref.example`   | `~/.claude/settings-repo-ref`                 | Branch to track (defaults to `main` when absent; the Codeberg raw URL uses `/raw/branch/<ref>/`)                            |
+| `settings-repo-url.example`   | `~/.claude/settings-repo-url`                 | GitHub repo slug for online version checking                                                                                |
+| `settings-repo-ref.example`   | `~/.claude/settings-repo-ref`                 | Branch to track (defaults to `main` when absent; the GitHub raw URL uses `raw.githubusercontent.com/<slug>/<ref>/`)         |
 | `sound-config.sh.example`     | `~/.claude/sound-config.sh` (optional)        | Opt-in sound configuration. Only install if you want notification sounds. User-editable — **not** `chattr +i`-locked        |
 | `user-hooks.example.json`     | `~/.claude/user-hooks.json` (optional)        | Per-user hook config. Copy this file, list your own hooks, done. The shared settings.json will never overwrite it. Claude is blocked from editing it (deny list + guard hooks) (added in v2.4.0) |
 
@@ -40,7 +40,7 @@ chmod +x ~/.claude/hooks/*.sh
 cp "$REPO_ROOT/global-settings/VERSION" ~/.claude/settings-version
 echo "$REPO_ROOT" > ~/.claude/settings-repo-path
 
-# Online version checking via Codeberg (recommended — no local repo required):
+# Online version checking via GitHub (recommended — no local repo required):
 cp "$REPO_ROOT/global-settings/settings-repo-url.example" ~/.claude/settings-repo-url
 
 # Optional: track a branch other than main (tag or SHA also accepted).
@@ -59,9 +59,9 @@ Restart Claude Code after installing. Requires `jq`, `md5sum`, `curl`, and `chat
 
 ## Online version checking
 
-When `~/.claude/settings-repo-url` is configured, the version check uses Codeberg's raw URL (`https://codeberg.org/<slug>/raw/branch/<ref>/global-settings/VERSION`) as its primary method. This means you get accurate online version checks even without a local clone of the `.github` repo.
+When `~/.claude/settings-repo-url` is configured, the version check uses GitHub's raw URL (`https://raw.githubusercontent.com/<slug>/<ref>/global-settings/VERSION`) as its primary method. This means you get accurate online version checks even without a local clone of the `.github` repo.
 
-If Codeberg is unreachable or `curl` is not installed, the hook falls back to `git fetch` via `~/.claude/settings-repo-path` (if configured).
+If GitHub is unreachable or `curl` is not installed, the hook falls back to `git fetch` via `~/.claude/settings-repo-path` (if configured).
 
 The status panel at session start shows which method was used:
 
@@ -69,7 +69,7 @@ The status panel at session start shows which method was used:
 │     Global Claude Settings Status            │
   Installed  : v2.0.0 ✓
   Local repo : (not configured)
-  Online     : v2.0.0  (via Codeberg)
+  Online     : v2.0.0  (via GitHub)
 ```
 
 ## Optional: notification sounds (opt-in)
@@ -186,7 +186,7 @@ When you see a version warning at session start:
    ```bash
    sudo chattr -i $HOME/.claude/settings.json $HOME/.claude/hooks/*.sh $HOME/.claude/settings-version
    ```
-2. Then say: **"update my global settings to \<version\>"** — Claude will pull the latest files from Codeberg.
+2. Then say: **"update my global settings to \<version\>"** — Claude will pull the latest files from GitHub.
 3. After Claude finishes, re-apply the immutable lock:
    ```bash
    sudo chattr +i $HOME/.claude/settings.json $HOME/.claude/hooks/*.sh $HOME/.claude/settings-version

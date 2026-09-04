@@ -52,6 +52,8 @@ volumes:
   ox-db:
   ox-etc:
   ox-data:
+  matomo-db:
+  matomo:
 
 networks:
   default:
@@ -551,6 +553,66 @@ services:
   # ===========================================================================
   # Mail (use --profile mail)
   # ===========================================================================
+
+  # Matomo - self-hosted web analytics (use --profile matomo)
+  # Web UI at: http://localhost:8089 (first run opens the install wizard)
+  # Backs the pipelinq marketing connectors (campaign, referrer and goal
+  # reports over the Reporting API) and portaliq traffic analytics, so
+  # campaign attribution can be developed without a third-party tracker.
+  # Database: the matomo image supports MySQL/MariaDB only, hence matomo-db.
+  # Documentation: https://matomo.org/faq/on-premise/
+  matomo-db:
+    profiles:
+      - matomo
+    image: mariadb:11.2
+    container_name: conduction-matomo-db
+    restart: always
+    command: --max-allowed-packet=64MB
+    environment:
+      MARIADB_DATABASE: matomo
+      MARIADB_USER: matomo
+      MARIADB_PASSWORD: matomo
+      MARIADB_ROOT_PASSWORD: matomo
+    volumes:
+      - matomo-db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  matomo:
+    profiles:
+      - matomo
+    image: matomo:5-apache
+    container_name: conduction-matomo
+    restart: always
+    depends_on:
+      matomo-db:
+        condition: service_healthy
+    ports:
+      - "8089:80"     # Web UI + Reporting API
+    environment:
+      MATOMO_DATABASE_HOST: matomo-db
+      MATOMO_DATABASE_ADAPTER: mysql
+      MATOMO_DATABASE_TABLES_PREFIX: matomo_
+      MATOMO_DATABASE_USERNAME: matomo
+      MATOMO_DATABASE_PASSWORD: matomo
+      MATOMO_DATABASE_DBNAME: matomo
+      PHP_MEMORY_LIMIT: 512M
+    volumes:
+      - matomo:/var/www/html
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
 
   # GreenMail - Lightweight SMTP/IMAP/POP3 test mail server
   # Web UI at: http://localhost:8085
