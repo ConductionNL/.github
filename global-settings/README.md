@@ -13,10 +13,12 @@ Current version: see [`VERSION`](VERSION)
 | `block-config-tool-writes.sh` | `~/.claude/hooks/block-config-tool-writes.sh` | Guards Write/Edit/MultiEdit calls — denies tools that write to `~/.claude/` or produce scripts that would (added in v1.7.0) |
 | `check-settings-version.sh`   | `~/.claude/hooks/check-settings-version.sh`   | Warns at session start if settings are outdated                                                                             |
 | `sound-notify.sh`             | `~/.claude/hooks/sound-notify.sh`             | Optional notification-sound wrapper. Reads `~/.claude/sound-config.sh` and plays a sound on question / permission / stop events. Silent by default (added in v2.2.0)         |
+| `user-hooks-dispatch.sh`      | `~/.claude/hooks/user-hooks-dispatch.sh`      | Reads `~/.claude/user-hooks.json` and executes per-user hooks for every Claude Code event. Lets each user register private hooks that survive a settings update (added in v2.4.0) |
 | `VERSION`                     | `~/.claude/settings-version`                  | Installed version tracker (semver)                                                                                          |
 | `settings-repo-url.example`   | `~/.claude/settings-repo-url`                 | GitHub repo slug for online version checking                                                                                |
 | `settings-repo-ref.example`   | `~/.claude/settings-repo-ref`                 | Branch to track (defaults to `main` when absent; the GitHub raw URL uses `raw.githubusercontent.com/<slug>/<ref>/`)         |
 | `sound-config.sh.example`     | `~/.claude/sound-config.sh` (optional)        | Opt-in sound configuration. Only install if you want notification sounds. User-editable — **not** `chattr +i`-locked        |
+| `user-hooks.example.json`     | `~/.claude/user-hooks.json` (optional)        | Per-user hook config. Copy this file, list your own hooks, done. The shared settings.json will never overwrite it. Claude is blocked from editing it (deny list + guard hooks) (added in v2.4.0) |
 
 ## Install
 
@@ -32,6 +34,7 @@ cp "$REPO_ROOT/global-settings/block-write-commands.sh" ~/.claude/hooks/block-wr
 cp "$REPO_ROOT/global-settings/block-config-tool-writes.sh" ~/.claude/hooks/block-config-tool-writes.sh
 cp "$REPO_ROOT/global-settings/check-settings-version.sh" ~/.claude/hooks/check-settings-version.sh
 cp "$REPO_ROOT/global-settings/sound-notify.sh" ~/.claude/hooks/sound-notify.sh
+cp "$REPO_ROOT/global-settings/user-hooks-dispatch.sh" ~/.claude/hooks/user-hooks-dispatch.sh
 chmod +x ~/.claude/hooks/*.sh
 
 cp "$REPO_ROOT/global-settings/VERSION" ~/.claude/settings-version
@@ -120,6 +123,60 @@ rm ~/.claude/sound-config.sh
 ```
 
 The wrapper never blocks Claude regardless of state — a broken sound never delays a turn.
+
+## Optional: per-user custom hooks (opt-in, added in v2.4.0)
+
+The shared `settings.json` is copy-overwritten on every version update, so any per-user hook you add there is wiped out the next time you run "update my global settings". Since v2.4.0 that problem is decoupled cleanly:
+
+- The shared `settings.json` registers a single **dispatcher** (`user-hooks-dispatch.sh`) once for every Claude Code hook event.
+- The dispatcher reads **`~/.claude/user-hooks.json`** at runtime and fires whatever the user listed there.
+- `~/.claude/user-hooks.json` is user-owned, never touched by an update, and Claude is blocked from editing it (deny list + guard hooks).
+
+### Enabling per-user hooks
+
+```bash
+# Copy the example config into place — this is the opt-in step.
+cp "$REPO_ROOT/global-settings/user-hooks.example.json" ~/.claude/user-hooks.json
+chmod 600 ~/.claude/user-hooks.json
+
+# (recommended) mirror the kernel lock used for the other hooks so a
+# runaway process cannot rewrite it either:
+sudo chattr +i ~/.claude/user-hooks.json
+```
+
+Then edit the file **in your own terminal** and add entries under the relevant event keys. Every top-level key mirrors a Claude Code hook event (`PreToolUse`, `PostToolUse`, `UserPromptSubmit`, `SessionStart`, `PermissionRequest`, `Stop`, `SubagentStop`, `PreCompact`, `Notification`). Each entry is `{ "command": "…" }` with an optional `"matcher"` (ERE against `tool_name`, only relevant for the two `*ToolUse` events).
+
+Restart Claude Code (or run `/hooks` to reload) — that's it. When the shared `settings.json` is next bumped and re-installed, `user-hooks.json` is left untouched and your hooks keep firing.
+
+### Editing after `chattr +i`
+
+Same dance as the other locked files:
+
+```bash
+sudo chattr -i ~/.claude/user-hooks.json
+${EDITOR:-nano} ~/.claude/user-hooks.json
+sudo chattr +i ~/.claude/user-hooks.json
+```
+
+### Why is Claude blocked from editing `user-hooks.json`?
+
+A user hook can silently register itself before every tool call. If Claude could rewrite this file it could weaken the shared guards from inside a session — the exact bypass the deny list + guard hooks + `chattr +i` triangle is designed to prevent. So `user-hooks.json` sits under the same three layers as the other config files (deny list in `settings.json`, `block-config-tool-writes.sh` / `block-write-commands.sh` protected-path regex, optional `chattr +i`). The user configures it by hand; Claude never touches it.
+
+### Disabling per-user hooks
+
+Two ways:
+
+```bash
+# Method 1 — empty the arrays inside ~/.claude/user-hooks.json. The
+# dispatcher fast-paths through empty arrays with zero side effects.
+
+# Method 2 — delete the file entirely. The dispatcher exits 0 silently
+# when the file is absent, so this fully disables the feature:
+sudo chattr -i ~/.claude/user-hooks.json   # only needed if you locked it
+rm ~/.claude/user-hooks.json
+```
+
+The dispatcher never blocks Claude regardless of state — a broken personal hook exits with a warning to stderr and Claude keeps going.
 
 ## Updating
 

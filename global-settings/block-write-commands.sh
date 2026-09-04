@@ -63,7 +63,7 @@ _h=$(printf '%s' "$HOME" | sed 's/[.[\*^$()+?{}|]/\\&/g')
 # Optional quote between the home-form and `/.claude/` catches patterns where the quote
 # wraps only the home variable — e.g. `"$HOME"/.claude/...`, `"${HOME}"/.claude/...`,
 # `'/home/wilco'/.claude/...` — rather than the whole path.
-_prot="(~|\\\$HOME|\\\$\\{HOME\\}|${_h})[\"']?/\.claude/(settings\.json|hooks/?|settings-version|settings-repo-path|settings-repo-url|settings-repo-ref)"
+_prot="(~|\\\$HOME|\\\$\\{HOME\\}|${_h})[\"']?/\.claude/(settings\.json|hooks/?|settings-version|settings-repo-path|settings-repo-url|settings-repo-ref|user-hooks\.json)"
 
 # chmod guard: deny write-enabling permissions on protected files
 if echo "$cmd" | grep -qE "(^|[;&|]\s*)chmod\b" && echo "$cmd" | grep -qE "${_prot}"; then

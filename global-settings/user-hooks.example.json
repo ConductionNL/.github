@@ -1,0 +1,82 @@
+{
+  "$comment": [
+    "Per-user Claude Code hooks — copy this file into place to register your own hooks,",
+    "which the shared settings.json will never overwrite.",
+    "",
+    "Install:",
+    "  cp global-settings/user-hooks.example.json ~/.claude/user-hooks.json",
+    "  chmod 600 ~/.claude/user-hooks.json",
+    "  # (optional) mirror the kernel lock the other hooks use:",
+    "  sudo chattr +i ~/.claude/user-hooks.json",
+    "",
+    "Schema:",
+    "  Each top-level key is a Claude Code hook event. Each value is an array of",
+    "  entries with two fields:",
+    "    - command   Bash command line to run when the event fires. Stdin will be",
+    "                the standard Claude Code hook JSON payload; stdout is",
+    "                forwarded back to Claude (relevant for UserPromptSubmit,",
+    "                which uses stdout as additional prompt context).",
+    "    - matcher   (optional) Anchored ERE tested against tool_name for",
+    "                PreToolUse / PostToolUse. Empty or omitted = fire on every",
+    "                tool call. Ignored for events that carry no tool_name.",
+    "",
+    "  Exit codes:",
+    "    - 0    normal completion.",
+    "    - 2    hard-deny (only meaningful for PreToolUse). Propagated to Claude.",
+    "    - any other non-zero code is logged to stderr and swallowed — a broken",
+    "      personal hook must never wedge a Claude session.",
+    "",
+    "The dispatcher (~/.claude/hooks/user-hooks-dispatch.sh) is registered once,",
+    "for every event, in the shared settings.json. You never touch settings.json;",
+    "you only touch this file. When the shared settings.json is bumped and",
+    "re-installed, this file is left completely alone.",
+    "",
+    "Editing:",
+    "  Claude is BLOCKED from modifying this file (see the deny list in the",
+    "  shared settings.json and the two block-*-writes.sh hooks). Edit it in",
+    "  your own terminal, exactly like ~/.claude/sound-config.sh.",
+    "",
+    "The keys below are the complete set of Claude Code hook events. Leave any",
+    "you don't need as empty arrays — the dispatcher fast-paths past them."
+  ],
+
+  "PreToolUse": [],
+  "PostToolUse": [],
+  "UserPromptSubmit": [],
+  "SessionStart": [],
+  "PermissionRequest": [],
+  "Stop": [],
+  "SubagentStop": [],
+  "PreCompact": [],
+  "Notification": [],
+
+  "$examples": {
+    "$comment": "Reference-only. Copy the entries you want into the arrays above; the dispatcher ignores anything under $examples.",
+
+    "UserPromptSubmit": [
+      {
+        "$comment": "Inject per-project plan context on every prompt (see ~/.claude/projects/<slug>/plans/hooks/plan-context.sh in the claude-plans-nc-server repo for the pattern).",
+        "command": "bash ~/.claude/projects/-home-wilco-nextcloud-docker-dev-workspace-server/plans/hooks/plan-context.sh"
+      }
+    ],
+
+    "PreToolUse": [
+      {
+        "$comment": "Fire only on Bash calls — a personal write-command guard on top of the shared one.",
+        "matcher": "Bash",
+        "command": "bash ~/my-hooks/extra-bash-guard.sh"
+      },
+      {
+        "$comment": "Fire on every tool call — an audit logger.",
+        "command": "bash ~/my-hooks/audit-log.sh"
+      }
+    ],
+
+    "Stop": [
+      {
+        "$comment": "Custom end-of-turn notification (Slack, ntfy, etc.).",
+        "command": "bash ~/my-hooks/notify-turn-done.sh"
+      }
+    ]
+  }
+}
