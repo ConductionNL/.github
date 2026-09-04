@@ -3,7 +3,7 @@
 	"$id": "https://raw.githubusercontent.com/ConductionNL/nextcloud-vue/main/src/schemas/app-manifest-v2.schema.json",
 	"title": "Conduction App Manifest v2",
 	"description": "v2 schema for the JSON-driven page and navigation manifest consumed by @conduction/nextcloud-vue. Introduces a uniform widgets[] array on every page type with a per-slot grid coordinate system, a typed actions[] discriminator, and the required $schema field for version detection. v1 manifests continue to validate against app-manifest.schema.json (unchanged).",
-	"version": "2.29.0",
+	"version": "2.32.0",
 	"type": "object",
 	"required": ["$schema", "version"],
 	"allOf": [
@@ -326,6 +326,26 @@
 		"observability": {
 			"$ref": "#/$defs/observability",
 			"description": "Declarative observability block (ADR-040). Consumed at request time by the OpenRegister AppHost observability engine (GenericHealthController + GenericMetricsController), NOT by the Vue renderer. Declares the app's health checks and Prometheus metric descriptors so adopting apps ship zero hand-written observability PHP while keeping their /api/health + /api/metrics URLs and the ADR-006 contract."
+		},
+		"store": {
+			"type": "object",
+			"description": "ADR-080 / ADR-114 Decision 4. The declarative store plane. An app that declares this block gets a working Store surface with NO backend of its own: OpenRegister's AppHost aliases /api/store/items and /api/store/items/{slug}/install at its GenericStoreController, which reads this block at request time. Discovery stays in the engine (the SSRF guard, the redirect refusal and the registry token never leave it) and the app builds no registry URL.",
+			"additionalProperties": false,
+			"anyOf": [
+				{ "required": ["schema"], "title": "An objects store names the remote schema its registry serves." },
+				{ "required": ["types"], "title": "A configuration store names the shareable types it surfaces." }
+			],
+			"properties": {
+				"schema": { "type": "string", "description": "Remote schema slug the registry serves (e.g. \"case-type-template\", \"application-template\")." },
+				"register": { "type": "string", "description": "Remote register segment, used when the instance's registry_register config is unset or empty." },
+				"localRegister": { "type": "string", "description": "The register an install WRITES into. Defaults to the app id. A schema slug is NOT unique across the fleet (`case`, `task` and `document` exist in several apps at once), so an unscoped write can land in another app's register: an app whose OpenRegister register slug differs from its app id must set this." },
+				"installable": { "type": "array", "items": { "type": "string" }, "description": "Schema slugs an install may write. THIS IS A SECURITY BOUNDARY, not a convenience: a registry is somebody else's server, and without the allowlist an item could name any schema the app owns. An absent or empty list refuses EVERY install rather than permitting every install." },
+				"kinds": { "type": "array", "items": { "type": "string" }, "description": "Kind quick-filters (ADR-080 Decision 5). Declared ONCE here, beside the allowlist: the engine returns them in the search response and CnStorePage prefers them over its page config. Defaults to the shared vocabulary when omitted." },
+				"types": { "type": "array", "items": { "type": "string" }, "description": "Shareable configuration type ids this store surfaces (store-over-federated-config). Declaring these makes the store exchange CONFIGURATION rather than rows: an item is a configuration set (`openregister.configset`), a flow (`openregister.flows`), a register with its schemas (`openregister.registers`), or any schema that marked itself `x-openregister-shareable`. Cards come from federated discovery and an install runs through the owning type, so a set arrives as registers, schemas, objects, views, flows, sources and mappings. An app that declares none keeps the remote objects API described by `schema`/`register`, and makes no discovery call at all." },
+				"cardFields": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Card field to remote property map. Defaults to the field names the fleet's registries already publish." },
+				"builtIn": { "type": "array", "description": "The items this app ships itself, rendered when no registry is configured or the registry does not answer. ADR-080 Decision 4 makes this the price of the word Store: a surface that goes blank without a registry was never a store.", "items": { "type": "object", "additionalProperties": false, "required": ["slug", "title"], "properties": { "slug": { "type": "string" }, "title": { "type": "string" }, "description": { "type": "string" }, "kind": { "type": "string" } } } },
+				"_note": { "type": "string", "description": "Free-text rationale, ignored at runtime." }
+			}
 		},
 		"deepLinks": {
 			"type": "array",
@@ -2162,7 +2182,8 @@
 				},
 				"type": {
 					"type": "string",
-					"enum": ["index", "detail", "dashboard", "logs", "settings", "chat", "files", "form", "map", "roadmap", "reports", "search", "wiki", "flow", "flows", "flow-detail", "custom"],
+					"enum": ["index", "detail", "dashboard", "logs", "settings", "chat", "files", "form", "map", "roadmap", "reports",
+						"store", "search", "wiki", "flow", "flows", "flow-detail", "custom"],
 					"description": "Page type. Closed enum of 17 supported types. 'flow' opens ONE flow in the editor; the flow LIST is an ordinary 'index' with config.entitySource='flows'. 'flows' and 'flow-detail' are DEPRECATED aliases kept for migration — 'flows' predates named index sources and 'flow-detail' is the old name for 'flow'. 'roadmap' mounts CnFeaturesAndRoadmapPage (features + GitHub-issue-backed roadmap). 'search' mounts CnSearchPage (cross-schema query + facet sidebar + results list; consumers wire the actual search via @search). 'wiki' mounts CnWikiPage (manifest-declared markdown article + optional sidebar tree; MUST declare config.register + config.schema). 'flow' and the deprecated 'flow-detail' both mount CnFlowEditorPage (the shared node/edge canvas) and take config.app to scope to the owning app. A flow lives in OpenRegister's native flow store rather than a register/schema pair, so a single flow cannot be a 'detail' page — but the LIST is a plain 'index' once a named entitySource supplies it, which is why 'flows' is deprecated (ADR-110 Decision 4). 'custom' requires a _note field explaining why a standard type was not feasible."
 				},
 				"title": {
@@ -2202,7 +2223,7 @@
 				"widgets": {
 					"type": "array",
 					"items": { "$ref": "#/$defs/widgetEntry" },
-					"description": "Uniform widget placement array. Available on ALL page types in v2 (not just dashboard). Each entry specifies a widget key, slot, and grid coordinates. The cross-field constraint gridX + gridWidth <= 12 is enforced by validateManifestV2() post-schema check. Single-widget dashboards: a type:'dashboard' page with exactly one body widget covering the full 12×12 grid whose widgetKey resolves to a custom (non-library-built-in) registry component is REJECTED — see ADR-036 Decision 1 (single-widget dashboard anti-pattern). Use type:'custom' with component:'<widgetKey>' or split into N>1 widgets instead. Library built-in widget keys (object-table, card-grid, form-renderer, map-viewer, chart, stats-block, banner, audit-trail, header, text, divider) are exempt from the rule. Enforced by validateManifestV2() post-schema check."
+					"description": "Uniform widget placement array. Available on ALL page types in v2 (not just dashboard). Each entry specifies a widget key, slot, and grid coordinates. The cross-field constraint gridX + gridWidth <= 12 is enforced by validateManifestV2() post-schema check. Single-widget dashboards: a type:'dashboard' page with exactly one body widget covering the full 12×12 grid whose widgetKey resolves to a custom (non-library-built-in) registry component is REJECTED — see ADR-036 Decision 1 (single-widget dashboard anti-pattern). Use type:'custom' with component:'<widgetKey>' or split into N>1 widgets instead. Library built-in widget keys are exempt from the rule; the exempt set is LIBRARY_WIDGET_KEYS in src/utils/libraryWidgetKeys.js, which is held to set equality against the BUILT_IN_WIDGETS registry and the dashboard widget catalog by tests/utils/libraryWidgetKeys.spec.js. It is not restated here, because an out-of-date second copy of that list is the defect this replaced. Enforced by validateManifestV2() post-schema check."
 				},
 				"actions": {
 					"type": "array",
