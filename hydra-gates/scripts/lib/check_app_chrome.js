@@ -94,7 +94,26 @@ try {
 // BOTH its absence and its misplacement blocking, so an app is never hard-
 // failed for putting a Store in the wrong place while fifteen others are
 // merely warned for having none at all.
-const STORE_IS_BLOCKING = false
+// Promoted 2026-09-04: the Store rollout has landed in every in-scope app.
+// Measured, not assumed — gate-107 was run against origin/development for all
+// 20 manifest-driven apps and every one passed. Eighteen carry a Store row;
+// the two that do not are exempt for different reasons (see below and the
+// pages.length === 0 test above).
+const STORE_IS_BLOCKING = true
+
+// ADR-114 Decision 4's one documented Store exemption.
+//
+// keepiq's OpenRegister register declares ZERO schemas — it keeps secrets in
+// its own tables — so an install would have nothing to write into and ADR-080
+// Decision 4 refuses the word Store on a surface that cannot honour it.
+//
+// This is a NAME rather than a measurement, unlike the whole-app exemption
+// above, and that is a deliberate narrowing: "the register declares no
+// schemas" reads as TRUE for several apps that merely keep their schemas in a
+// second file, so measuring it would silently excuse apps that should be
+// failed. A one-app list is checkable by hand; a wrong measurement is not.
+// If keepiq ever grows a schema an install could write into, delete the entry.
+const STORE_NOT_APPLICABLE = new Set(['keepiq'])
 // Promoted 2026-09-03: the Reports rollout has landed in every in-scope app.
 // Measured, not assumed — gate-107 was run against origin/development for all
 // 19 and every one passed with zero hard failures. keepiq, whose register
@@ -333,7 +352,7 @@ const CHROME = [
 	{
 		item: 'Store',
 		section: 'footer',
-		blocking: STORE_IS_BLOCKING,
+		blocking: STORE_IS_BLOCKING && !STORE_NOT_APPLICABLE.has(appId),
 		find: () => entries.find(({ node }) => {
 			const p = pageOf(node)
 			return isSurface(p, 'store', '/store')
