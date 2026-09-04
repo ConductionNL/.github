@@ -238,6 +238,25 @@ elif [ "$online_source" = "git-fetch" ]; then
     online_label="  ${DIM}(via git fetch${ref_suffix})${NC}"
 fi
 
+# ── Friendly source name (surfaced in the session-start message) ─────────────
+# codeberg-raw is always Codeberg (hardcoded URL). For git-fetch we infer the
+# host from the local repo's origin URL.
+online_source_name=""
+if [ "$online_source" = "codeberg-raw" ]; then
+    online_source_name="Codeberg"
+elif [ "$online_source" = "git-fetch" ] && [ -n "$git_root" ]; then
+    _origin_url=$(git -C "$git_root" remote get-url origin 2>/dev/null)
+    if echo "$_origin_url" | grep -qE 'codeberg\.org'; then
+        online_source_name="Codeberg"
+    elif echo "$_origin_url" | grep -qE 'github\.com'; then
+        online_source_name="GitHub"
+    elif echo "$_origin_url" | grep -qE 'gitlab\.com'; then
+        online_source_name="GitLab"
+    else
+        online_source_name="git origin"
+    fi
+fi
+
 # ── Status panel → stderr (displayed directly in the UI) ─────────────────────
 {
     echo -e "${CYAN}${BOLD}┌──────────────────────────────────────────────┐${NC}"
@@ -397,8 +416,13 @@ if $online_fetch_ok && semver_gt "$online_version" "$installed_version"; then
 
 # Settings up to date — brief session-start acknowledgement
 elif $online_fetch_ok && semver_eq "$online_version" "$installed_version"; then
-    echo "NEW SESSION — Global Claude Settings checked. ✅ Settings are up to date (v${installed_version})."
-    echo "Briefly mention at the start of your response that a new session has started and the global Claude settings are up to date."
+    if [ -n "$online_source_name" ]; then
+        echo "NEW SESSION — Global Claude Settings checked. ✅ Settings are up to date (v${installed_version}, via ${online_source_name})."
+        echo "Briefly mention at the start of your response that a new session has started, that the global Claude settings are up to date, and name the source (${online_source_name})."
+    else
+        echo "NEW SESSION — Global Claude Settings checked. ✅ Settings are up to date (v${installed_version})."
+        echo "Briefly mention at the start of your response that a new session has started and the global Claude settings are up to date."
+    fi
     echo ""
 
 # Online version unknown but no other warning — still note session start
