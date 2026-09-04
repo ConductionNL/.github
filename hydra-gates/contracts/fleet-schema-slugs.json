@@ -2663,7 +2663,8 @@
       "shillinq"
     ],
     "projectphase": [
-      "pipelinq"
+      "pipelinq",
+      "planninq"
     ],
     "projecttask": [
       "pipelinq"
