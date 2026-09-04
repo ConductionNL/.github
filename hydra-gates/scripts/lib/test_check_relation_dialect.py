@@ -306,6 +306,58 @@ class NestedFalseNegativesTest(_Base):
 # --------------------------------------------------------------------------
 # 4. Collector mechanics — termination guards and scope discipline.
 # --------------------------------------------------------------------------
+class SharedProjectionRefTest(_Base):
+    """A `$ref` at an OpenRegister shared projection is a working relation.
+
+    These schemas (`nc-user`, `nc-group`, `nc-organisation`) live on
+    OpenRegister's `directory` register, not in the app's own register set, so
+    check (f) used to reject them. Measured 2026-09-04 on opencatalogi: the ref
+    resolves and `_extend` inlines the organisation, so rejecting it left an app
+    consolidating onto the shared organisation with no green route — keeping the
+    `$ref` failed (f), dropping it failed (b).
+    """
+
+    def _projection_relation(self, ref):
+        return {
+            "type": "string",
+            "format": "uuid",
+            "$ref": ref,
+            "title": "Organisation",
+            "description": "Reference to the organisation that owns this record",
+        }
+
+    def test_shared_projection_ref_is_accepted(self):
+        msgs = self.run_check(_register({"organization": self._projection_relation("nc-organisation")}))
+        self.assertEqual([], msgs)
+
+    def test_every_shared_projection_is_accepted(self):
+        for ref in ("nc-user", "nc-group", "nc-organisation"):
+            with self.subTest(ref=ref):
+                msgs = self.run_check(_register({"owner": self._projection_relation(ref)}))
+                self.assertEqual([], msgs, f"{ref} must be accepted")
+
+    def test_an_unknown_non_projection_ref_still_fails(self):
+        """THE CONTROL. Without this the change reads as 'stop checking (f)'."""
+        msgs = self.run_check(_register({"owner": self._projection_relation("organisation")}))
+        self.assertTrue(
+            any("does not resolve to a schema key" in m for m in msgs),
+            f"a genuinely unresolvable ref must still fail, got {msgs}",
+        )
+
+    def test_a_prefix_lookalike_still_fails(self):
+        """`ncx-thing` is not a projection. The prefix is `nc-`, not `nc`."""
+        msgs = self.run_check(_register({"owner": self._projection_relation("ncthing")}))
+        self.assertTrue(
+            any("does not resolve to a schema key" in m for m in msgs),
+            f"a lookalike prefix must still fail, got {msgs}",
+        )
+
+    def test_resolver_verdicts_directly(self):
+        self.assertEqual(("ok", "nc-organisation"), g._resolve_ref("nc-organisation", set()))
+        self.assertEqual(("fail", "organisation"), g._resolve_ref("organisation", set()))
+        self.assertEqual(("ok", "skill"), g._resolve_ref("skill", {"skill"}))
+
+
 class CollectorTest(unittest.TestCase):
     def test_collects_nested_names_qualified(self):
         props = _register({"requirementOverrides": _nested_relation()})[
