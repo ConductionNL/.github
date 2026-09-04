@@ -56,6 +56,7 @@ docker compose -f .github/docker-compose.yml --profile mail --profile ai --profi
 | _(default)_                    | db, nextcloud, exapp-n8n                                                                        | Core dev environment                           | ~1 GB        |
 | `demo`                         | nextcloud-demo                                                                                  | Self-contained demo (installs from app store)  | ~1 GB        |
 | `mail`                         | greenmail                                                                                       | Test mail server (SMTP/IMAP)                   | ~512 MB      |
+| `matomo`                       | matomo, matomo-db                                                                               | Self-hosted web analytics (campaign reports)   | ~1 GB        |
 | `ai`                           | presidio, tgi-llm, dolphin-vlm, openanonymiser, exapp-openwebui                                 | AI/LLM services                                | ~40 GB + GPU |
 | `ollama`                       | ollama                                                                                          | Standalone LLM inference                       | ~16 GB + GPU |
 | `ui`                           | tilburg-woo-ui                                                                                  | Public WOO document frontend                   | ~256 MB      |
@@ -313,11 +314,38 @@ Quick reference for all service ports:
 | 8086  | OpenProject         | openproject   |
 | 8087  | Open-Xchange        | ox            |
 | 8088  | XWiki               | xwiki         |
+| 8089  | Matomo              | matomo        |
 | 8180  | Keycloak            | commonground  |
 | 8780  | HaRP                | exapps        |
 | 8983  | Solr                | solr          |
 | 9200  | Elasticsearch       | elasticsearch |
 | 11434 | Ollama              | ollama        |
+
+## Matomo analytics (--profile matomo)
+
+Matomo is the fleet's self-hosted web analytics. The pipelinq marketing
+connectors read campaign, referrer and goal reports from it over the
+Reporting API, and portaliq traffic analytics can forward to it, so campaign
+attribution is developed without sending visitors to a third party.
+
+```bash
+docker compose -f .github/docker-compose.yml --profile matomo up -d
+```
+
+First run:
+
+1. Open http://localhost:8089 and walk through the install wizard. The
+   database step is prefilled from the container environment (host
+   `matomo-db`, database `matomo`, user `matomo`, password `matomo`).
+2. Create the first website for `http://localhost:8080` (the Nextcloud dev
+   instance). Its site id is `1`.
+3. Create an auth token under Administration → Personal → Security. Paste
+   it into the pipelinq Search and analytics settings as the Matomo token;
+   pipelinq stores it as a `credentialRef` through the OpenRegister broker,
+   never as a plain setting.
+
+Campaign parameters follow Matomo's `mtm_*` names and the `utm_*` synonyms.
+Both are recognised without configuration.
 
 ## Demo Mode (--profile demo)
 
