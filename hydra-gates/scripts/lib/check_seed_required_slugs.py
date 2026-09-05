@@ -69,6 +69,44 @@ _REQUIRED_RE = re.compile(
 _SLUG_RE = re.compile(r"['\"]([A-Za-z0-9_.\-]+)['\"]")
 
 
+# Where an app may keep the register descriptor the seed imports.
+#
+# `lib/Settings/` is the convention and covers most of the fleet, but it is a
+# convention rather than a rule: zaakafhandelapp keeps its whole register at
+# `tests/e2e/ci-register.json` and has no descriptor under lib/Settings at all.
+# Looking only in the conventional place made this gate SKIP there — and a skip
+# under `--require-full-coverage` is a job failure, so a gate written to catch
+# a rename turned into a red build on an app it could not read.
+#
+# Ordered widest-last so the conventional location is still what usually
+# answers, and every match is merged rather than the first one winning.
+DESCRIPTOR_DIRS = (
+    os.path.join('lib', 'Settings'),
+    os.path.join('tests', 'e2e'),
+    os.path.join('appinfo',),
+)
+
+
+def _descriptor_paths(app_dir):
+    """Every JSON file that could declare this app's schemas.
+
+    A descriptor is recognised by SHAPE, not by name: `components.schemas` as
+    an object. That keeps fixtures, mock payloads and manifests out of the
+    answer without maintaining a filename list, which would drift the moment an
+    app named its register something new.
+    """
+    paths = []
+    for rel in DESCRIPTOR_DIRS:
+        root_dir = os.path.join(app_dir, rel)
+        if not os.path.isdir(root_dir):
+            continue
+        for root, _dirs, files in os.walk(root_dir):
+            for name in sorted(files):
+                if name.endswith('.json'):
+                    paths.append(os.path.join(root, name))
+    return paths
+
+
 def _declared_slugs(app_dir):
     """Every schema slug the app's descriptors declare.
 
@@ -85,35 +123,32 @@ def _declared_slugs(app_dir):
     106's fixture records — larpinq ships exactly it against `skill`, whose slug
     is `larping_skill`.
     """
-    settings = os.path.join(app_dir, 'lib', 'Settings')
-    if not os.path.isdir(settings):
+    paths = _descriptor_paths(app_dir)
+    if not paths:
         return set()
 
     # key -> declared slug, or None when no file has declared one yet.
     by_key = {}
-    for root, _dirs, files in os.walk(settings):
-        for name in sorted(files):
-            if not name.endswith('.json'):
-                continue
-            try:
-                with open(os.path.join(root, name), encoding='utf-8') as fh:
-                    doc = json.load(fh)
-            except (OSError, ValueError):
-                # Not a descriptor, or not readable. `check:manifest` and the
-                # import own that finding; reporting it here would be a second
-                # voice on someone else's subject.
-                continue
+    for path in paths:
+        try:
+            with open(path, encoding='utf-8') as fh:
+                doc = json.load(fh)
+        except (OSError, ValueError):
+            # Not a descriptor, or not readable. `check:manifest` and the
+            # import own that finding; reporting it here would be a second
+            # voice on someone else's subject.
+            continue
 
-            schemas = ((doc.get('components') or {}).get('schemas') or {})
-            if not isinstance(schemas, dict):
-                continue
-            for key, value in schemas.items():
-                key = str(key)
-                slug = value.get('slug') if isinstance(value, dict) else None
-                if slug:
-                    by_key[key] = str(slug)
-                else:
-                    by_key.setdefault(key, None)
+        schemas = ((doc.get('components') or {}).get('schemas') or {})
+        if not isinstance(schemas, dict):
+            continue
+        for key, value in schemas.items():
+            key = str(key)
+            slug = value.get('slug') if isinstance(value, dict) else None
+            if slug:
+                by_key[key] = str(slug)
+            else:
+                by_key.setdefault(key, None)
 
     return {slug if slug else key for key, slug in by_key.items()}
 

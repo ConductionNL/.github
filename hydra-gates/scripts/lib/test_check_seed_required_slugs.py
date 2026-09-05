@@ -45,10 +45,15 @@ PY
 """
 
 
-def _tree(tmp, schemas_by_file, required):
-    """Write a fixture app: descriptors plus a seed requiring `required`."""
+def _tree(tmp, schemas_by_file, required, base=('lib', 'Settings')):
+    """Write a fixture app: descriptors plus a seed requiring `required`.
+
+    `base` is where the descriptors go. It defaults to the conventional
+    `lib/Settings`; the discovery arm below moves it, because an app is allowed
+    to keep its register elsewhere and one in this fleet does.
+    """
     for rel, schemas in schemas_by_file.items():
-        path = os.path.join(tmp, 'lib', 'Settings', rel)
+        path = os.path.join(tmp, *base, rel)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, 'w', encoding='utf-8') as fh:
             json.dump({'components': {'schemas': schemas}}, fh)
@@ -137,6 +142,34 @@ def test_case_only_difference_is_not_a_finding():
         check('case-only difference passes', rc == 0, f'rc={rc} {out}')
 
 
+def test_descriptor_outside_lib_settings_is_read():
+    """THE REGRESSION THAT SHIPPED.
+
+    zaakafhandelapp keeps its whole register at `tests/e2e/ci-register.json`
+    and has no descriptor under `lib/Settings` at all. Looking only in the
+    conventional place made this gate answer SKIPPED (wiring) there — and a
+    skip under `--require-full-coverage` is a job FAILURE, so a gate written to
+    catch a rename turned into a red build on an app it had simply not read.
+
+    Both halves are asserted, because reading the file is only useful if the
+    verdict it produces is still right: a present slug passes, and a renamed
+    one is still named.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        _tree(tmp, {'ci-register.json': {'zaak': {'slug': 'zaak'}}},
+              ['zaak'], base=('tests', 'e2e'))
+        rc, out = _run(tmp)
+        check('a descriptor outside lib/Settings is read, not skipped',
+              rc == 0 and 'WIRING' not in out, f'rc={rc} {out}')
+
+    with tempfile.TemporaryDirectory() as tmp:
+        _tree(tmp, {'ci-register.json': {'zaak': {'slug': 'zaak'}}},
+              ['zaakType'], base=('tests', 'e2e'))
+        rc, out = _run(tmp)
+        check('and still names a renamed slug it finds there',
+              rc == 1, f'rc={rc} {out}')
+
+
 def test_no_seed_is_na_not_pass():
     with tempfile.TemporaryDirectory() as tmp:
         os.makedirs(os.path.join(tmp, 'lib', 'Settings'))
@@ -161,6 +194,7 @@ if __name__ == '__main__':
                test_fragment_key_is_not_a_claim,
                test_key_counts_when_no_slug_field,
                test_case_only_difference_is_not_a_finding,
+               test_descriptor_outside_lib_settings_is_read,
                test_no_seed_is_na_not_pass,
                test_seed_without_descriptors_is_wiring_not_pass):
         print(fn.__name__)
