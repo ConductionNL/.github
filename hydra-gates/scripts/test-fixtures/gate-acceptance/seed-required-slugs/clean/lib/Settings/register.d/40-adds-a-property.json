@@ -1,0 +1,7 @@
+{
+  "components": {
+    "schemas": {
+      "TimeEntry": { "properties": { "note": { "type": "string" } } }
+    }
+  }
+}
