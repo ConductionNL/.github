@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: EUPL-1.2
 #
-# gate-109 (migration-version-bump) — acceptance over a REAL two-commit history.
+# gate-110 (migration-version-bump) — acceptance over a REAL two-commit history.
 #
 # WHY THIS IS NOT A gate-acceptance/ BUNDLE
 #
-# gate-109 is a DELTA gate twice over: it needs a base to know what the change
+# gate-110 is a DELTA gate twice over: it needs a base to know what the change
 # ADDED, and it needs that same base to read `<version>` as it stood before the
 # change. The generic bundle format runs the runner against a plain directory
 # with no git history, so a delta gate there can only ever report NOT
@@ -32,7 +32,7 @@
 # since full scope became the default, so its `else` fired on every ordinary run
 # and it scanned the whole tree — reporting inherited debt as a failure of
 # somebody's unrelated PR. Eight fleet apps carry stranded steps today; a
-# full-tree gate-109 would redden every one of their branches on the day it
+# full-tree gate-110 would redden every one of their branches on the day it
 # landed. ARM 3 is the assertion that it does not.
 
 set -u
@@ -44,7 +44,7 @@ _fail_n=0
 _ok()  { printf '  ok   — %s\n' "$1"; }
 _bad() { _fail_n=$((_fail_n + 1)); printf '  FAIL — %s\n' "$1"; }
 
-WORK="$(mktemp -d "${TMPDIR:-/tmp}/gate109-scope.XXXXXXXX")"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/gate110-scope.XXXXXXXX")"
 trap 'rm -rf "${WORK}"' EXIT
 
 APP="${WORK}/app"
@@ -183,19 +183,19 @@ git add -A && git commit --quiet -m "just the repair step, no bump"
 _logdir() { printf '%s/logs-%s' "${WORK}" "$1"; }
 _findings_of() { printf '%s/hydra-gate-migration-version-bump.log' "$(_logdir "$1")"; }
 
-_verdict() {  # <branch> [runner args...] -> the gate-109 line
+_verdict() {  # <branch> [runner args...] -> the gate-110 line
     local _branch="$1"; shift
     git checkout --quiet "${_branch}"
     mkdir -p "$(_logdir "${_branch}")"
     HYDRA_GATE_LOG_DIR="$(_logdir "${_branch}")" bash "${RUNNER}" "$@" "${APP}" 2>&1 \
-        | grep -E '\[gate-109\]' | head -1
+        | grep -E '\[gate-110\]' | head -1
 }
 
 echo "-- ARM 1: TWO independently fatal defects, neither delivered --"
 _v="$(_verdict planted --base base)"
 case "${_v}" in
-    *FAIL*) _ok "gate-109 FAILs a migration and a repair step added with no version bump" ;;
-    *)      _bad "expected FAIL on the planted branch, got: ${_v:-<no gate-109 line>}" ;;
+    *FAIL*) _ok "gate-110 FAILs a migration and a repair step added with no version bump" ;;
+    *)      _bad "expected FAIL on the planted branch, got: ${_v:-<no gate-110 line>}" ;;
 esac
 _findings="$(_findings_of planted)"
 if grep -qF 'lib/Migration/Version9Date20260906090000.php' "${_findings}" 2>/dev/null; then
@@ -217,8 +217,8 @@ fi
 echo "-- ARM 2: the SAME two additions, with the bump, are clean --"
 _v="$(_verdict clean --base base)"
 case "${_v}" in
-    *PASS*) _ok "gate-109 PASSes once <version> moves" ;;
-    *)      _bad "expected PASS on the clean branch, got: ${_v:-<no gate-109 line>}" ;;
+    *PASS*) _ok "gate-110 PASSes once <version> moves" ;;
+    *)      _bad "expected PASS on the clean branch, got: ${_v:-<no gate-110 line>}" ;;
 esac
 
 echo "-- ARM 3: 🔴 INHERITED DEBT IS NOT THIS PR'S PROBLEM --"
@@ -226,7 +226,7 @@ echo "-- ARM 3: 🔴 INHERITED DEBT IS NOT THIS PR'S PROBLEM --"
 # branch they cut; a delta gate reddens none of them.
 _v="$(_verdict unrelated --base base)"
 case "${_v}" in
-    *FAIL*) _bad "gate-109 reported a finding on a commit touching no migration or repair step — this is the full-tree regression the suite exists to catch: ${_v}" ;;
+    *FAIL*) _bad "gate-110 reported a finding on a commit touching no migration or repair step — this is the full-tree regression the suite exists to catch: ${_v}" ;;
     *)      _ok "a commit touching neither directory reports no finding" ;;
 esac
 case "${_v}" in
@@ -240,7 +240,7 @@ echo "-- ARM 4: near misses — a trait, an unregistered helper, an <install>-on
 # author cannot act on. This is the anti-widening arm.
 _v="$(_verdict near-miss --base base)"
 case "${_v}" in
-    *FAIL*) _bad "gate-109 demanded a version bump for a trait, a helper or an <install>-only step — none of which Nextcloud runs on upgrade: ${_v}" ;;
+    *FAIL*) _bad "gate-110 demanded a version bump for a trait, a helper or an <install>-only step — none of which Nextcloud runs on upgrade: ${_v}" ;;
     *)      _ok "a trait, an unregistered helper and an <install>-only step are not subjects" ;;
 esac
 
@@ -251,12 +251,12 @@ echo "-- ARM 5: each planted defect is fatal ON ITS OWN --"
 _v="$(_verdict only-migration --base base)"
 case "${_v}" in
     *FAIL*) _ok "the migration alone still FAILs" ;;
-    *)      _bad "a lone unbumped migration did not fail: ${_v:-<no gate-109 line>}" ;;
+    *)      _bad "a lone unbumped migration did not fail: ${_v:-<no gate-110 line>}" ;;
 esac
 _v="$(_verdict only-step --base base)"
 case "${_v}" in
     *FAIL*) _ok "the repair step alone still FAILs" ;;
-    *)      _bad "a lone unbumped repair step did not fail — this is exactly the dossiq incident: ${_v:-<no gate-109 line>}" ;;
+    *)      _bad "a lone unbumped repair step did not fail — this is exactly the dossiq incident: ${_v:-<no gate-110 line>}" ;;
 esac
 
 echo "-- ARM 6: a timestamp-only move IS a bump, because Nextcloud thinks so --"
@@ -267,7 +267,7 @@ echo "-- ARM 6: a timestamp-only move IS a bump, because Nextcloud thinks so --"
 _v="$(_verdict timestamp-only --base base)"
 case "${_v}" in
     *PASS*) _ok "a timestamp-only move is accepted" ;;
-    *)      _bad "a move Nextcloud would act on was rejected: ${_v:-<no gate-109 line>}" ;;
+    *)      _bad "a move Nextcloud would act on was rejected: ${_v:-<no gate-110 line>}" ;;
 esac
 
 echo "-- ARM 7: with NO base, the gate says nothing — it never says PASS --"
@@ -275,16 +275,16 @@ echo "-- ARM 7: with NO base, the gate says nothing — it never says PASS --"
 # removed. A run that cannot see a base has no verdict to give.
 _v="$(_verdict planted --full)"
 case "${_v}" in
-    *PASS*) _bad "gate-109 PASSED with no delta base — it compared nothing and called it green: ${_v}" ;;
+    *PASS*) _bad "gate-110 PASSED with no delta base — it compared nothing and called it green: ${_v}" ;;
     *NOT\ APPLICABLE*|*SKIPPED*) _ok "no base resolves to a skip that says so, not to a pass" ;;
     *FAIL*) _ok "verdict without a base: ${_v}" ;;
-    *)      _bad "no gate-109 line at all on a run with no base" ;;
+    *)      _bad "no gate-110 line at all on a run with no base" ;;
 esac
 
 echo
 if [ "${_fail_n}" -eq 0 ]; then
-    echo "test_gate109_migration_version_bump_scope.sh: ALL PASS"
+    echo "test_gate110_migration_version_bump_scope.sh: ALL PASS"
     exit 0
 fi
-echo "test_gate109_migration_version_bump_scope.sh: ${_fail_n} FAILURE(S)"
+echo "test_gate110_migration_version_bump_scope.sh: ${_fail_n} FAILURE(S)"
 exit 1
