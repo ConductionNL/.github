@@ -1,0 +1,9 @@
+{
+  "components": {
+    "schemas": {
+      "Task": { "slug": "task", "title": "Task" },
+      "project": { "title": "Project" },
+      "TimeEntry": { "slug": "plannedTimeEntry", "title": "Time entry" }
+    }
+  }
+}

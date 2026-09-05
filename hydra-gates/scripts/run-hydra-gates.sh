@@ -11537,6 +11537,58 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# GATE 109 — seed-required-slugs
+#
+# `tests/e2e/ci-seed.sh` verifies, before Playwright starts, that the schemas
+# the suite needs actually imported — against a hard-coded list of slugs. Rename
+# a slug and forget that list, and the seed exits non-zero and takes Playwright
+# with it: EVERY SPEC REPORTS AS NOT RUN rather than as failing. The leg reads
+# as one broken seed instead of a suite that never executed, and the tally says
+# `1 failed` when the truth is `0 of 340 ran`.
+#
+# Measured 2026-09-05, three apps in one afternoon: planninq
+# (`timeEntry` -> `plannedTimeEntry`, #575), buildiq (`agent` -> `buildAgent`,
+# #686) and decidiq (an action id renamed weeks earlier, answering 404 the whole
+# time). Each rename was careful about the DATA — planninq's and buildiq's both
+# shipped a repair step in `<post-migration>` and `<install>`, because the
+# import matches on (application, slug) and its not-found branch would create a
+# second schema and orphan every existing row — and each missed this one list in
+# the test harness.
+#
+# Gate 106 stops an app NEWLY claiming a slug another app owns. Nothing checked
+# the follow-through once a rename resolved such a collision. This does.
+#
+# NOT diff-scoped: the defect is a rename landing WITHOUT touching the seed, so
+# scoping to a diff that contains the seed would skip exactly the change that
+# causes it.
+# ---------------------------------------------------------------------------
+_srs_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-seed-required-slugs.log
+: > "${_srs_log}"
+
+set +e
+python3 "${SCRIPT_DIR}/lib/check_seed_required_slugs.py" . > "${_srs_log}" 2>&1
+_srs_rc=$?
+set +e
+
+if [ "${_srs_rc}" -eq 2 ]; then
+    _srs_why=$(head -3 "${_srs_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+    _skip 109 "seed-required-slugs" wiring "the seed requires schemas but no descriptor could be read, so NO slug was resolved and a renamed one would pass unseen. Checker output: ${_srs_why:-<empty>}. See ${_srs_log}."
+elif grep -q '^NA: ' "${_srs_log}" 2>/dev/null; then
+    _skip 109 "seed-required-slugs" na "this repo ships no tests/e2e/ci-seed.sh with a required-schema list, so NO slug was inspected. Saying so is not the same as passing."
+elif [ "${_srs_rc}" -eq 0 ]; then
+    _pass 109 "seed-required-slugs"
+elif ! _helper_finished "${_srs_log}" '^checked [0-9]+ required slug'; then
+    # A CRASH IS NOT A FINDING.
+    _srs_why=$(head -3 "${_srs_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+    _skip 109 "seed-required-slugs" wiring "check_seed_required_slugs.py exited ${_srs_rc} without printing its terminal 'checked N required slug(s)' summary, so the seed's schema list is UNVERIFIED by this run. Checker output: ${_srs_why:-<empty>}. See ${_srs_log}."
+else
+    _srs_n=$(grep -cE '^FAIL ' "${_srs_log}" 2>/dev/null || true)
+    case "${_srs_n}" in ''|*[!0-9]*) _srs_n=1 ;; esac
+    grep -E '^FAIL ' "${_srs_log}" || true
+    _fail 109 "seed-required-slugs" "${_srs_n} schema slug(s) the e2e seed requires are declared nowhere - the seed would exit before Playwright starts and every spec would report as NOT RUN - see ${_srs_log}"
+fi
+
 # GATE 108 — shipped-object-properties
 #
 # OpenRegister DOES NOT REJECT AN UNDECLARED PROPERTY. It drops it and answers
