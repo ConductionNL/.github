@@ -11770,7 +11770,23 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# GATE 109 — migration-version-bump
+# GATE 110 — migration-version-bump
+#
+# 🔴 THIS WAS 109 FOR AN HOUR, AND 109 WAS ALREADY TAKEN. #691
+# (seed-required-slugs) and #690 (this gate) were cut from the same `main`
+# within minutes of each other, both read "108 is the highest", and both
+# claimed 109. Neither PR could see the other: the number is chosen at
+# authoring time and nothing reserves it. #691 merged first, so the
+# inventory grep — first declaration per number wins — resolved 109 to
+# seed-required-slugs and THIS GATE BECAME INVISIBLE to the COVERAGE tally
+# and to the acceptance ratchet, while its own suite read the other gate's
+# verdict line and reported five failures about a gate it does not test.
+#
+# check_gate_numbers_unique.sh caught it on `main`, which is what it is for.
+# Its header also records that the FIRST repair of the previous collision
+# made things worse, because two sessions each moved a different gate to the
+# same free number. So: this gate moved, seed-required-slugs did not, and
+# 110 was read out of the merged runner rather than out of either branch.
 #
 # gate-98 above asks whether a repair step is REGISTERED. This one asks whether
 # anything registered will actually RUN. They are different failures with the
@@ -11823,11 +11839,11 @@ _mvb_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-migration-version-bump.log
 _mvb_helper="${SCRIPT_DIR}/lib/check_migration_version_bump.py"
 
 if [ ! -f "${_mvb_helper}" ]; then
-    _fail 109 "migration-version-bump" "vendored helper missing at ${_mvb_helper} — fail-closed, because a gate whose checker is absent inspects nothing and must not print the same word as one that compared two versions"
+    _fail 110 "migration-version-bump" "vendored helper missing at ${_mvb_helper} — fail-closed, because a gate whose checker is absent inspects nothing and must not print the same word as one that compared two versions"
 elif ! command -v python3 >/dev/null 2>&1; then
-    _skip 109 "migration-version-bump" wiring "python3 is not on PATH, so no version could be compared. This is a missing tool in the runner environment, not a finding about the app."
+    _skip 110 "migration-version-bump" wiring "python3 is not on PATH, so no version could be compared. This is a missing tool in the runner environment, not a finding about the app."
 elif [ "${HAVE_DELTA_BASE}" != "1" ]; then
-    _skip 109 "migration-version-bump" na "no delta base was resolved, so there is no merge-base version to compare against. This gate judges what a change ADDS; with no base it has nothing to judge, and saying so is not the same as passing. Give it a base (--base <ref> or HYDRA_GATE_BASE_REF) and it runs at any file scope."
+    _skip 110 "migration-version-bump" na "no delta base was resolved, so there is no merge-base version to compare against. This gate judges what a change ADDS; with no base it has nothing to judge, and saying so is not the same as passing. Give it a base (--base <ref> or HYDRA_GATE_BASE_REF) and it runs at any file scope."
 else
     set +e
     python3 "${_mvb_helper}" . --base-ref "${BASE_REF}" > "${_mvb_log}" 2>&1
@@ -11835,22 +11851,22 @@ else
     set +e
 
     if [ "${_mvb_rc}" -eq 0 ]; then
-        _pass 109 "migration-version-bump"
+        _pass 110 "migration-version-bump"
     elif [ "${_mvb_rc}" -eq 4 ]; then
-        _skip 109 "migration-version-bump" na "this diff adds no migration and no upgrade-time repair step, so there was no version bump to require. See ${_mvb_log}."
+        _skip 110 "migration-version-bump" na "this diff adds no migration and no upgrade-time repair step, so there was no version bump to require. See ${_mvb_log}."
     elif [ "${_mvb_rc}" -eq 3 ]; then
         # NO VERDICT IS NOT A PASS. An unresolvable base is the one condition
         # under which this gate must say nothing rather than green.
         _mvb_why=$(head -3 "${_mvb_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
-        _skip 109 "migration-version-bump" wiring "the checker could not resolve what to compare, so the version bump is UNVERIFIED by this run: ${_mvb_why:-<empty>}. See ${_mvb_log}."
+        _skip 110 "migration-version-bump" wiring "the checker could not resolve what to compare, so the version bump is UNVERIFIED by this run: ${_mvb_why:-<empty>}. See ${_mvb_log}."
     elif ! _helper_finished "${_mvb_log}" '^checked [0-9]+ added migration/repair step'; then
         # A CRASH IS NOT A FINDING.
         _mvb_why=$(head -3 "${_mvb_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
-        _skip 109 "migration-version-bump" wiring "check_migration_version_bump.py exited ${_mvb_rc} without printing its terminal 'checked N added migration/repair step(s)' summary, so it did NOT finish and the version was left uncompared. This is a broken checker, NOT a finding about the app. Checker output: ${_mvb_why:-<empty>}. See ${_mvb_log}."
+        _skip 110 "migration-version-bump" wiring "check_migration_version_bump.py exited ${_mvb_rc} without printing its terminal 'checked N added migration/repair step(s)' summary, so it did NOT finish and the version was left uncompared. This is a broken checker, NOT a finding about the app. Checker output: ${_mvb_why:-<empty>}. See ${_mvb_log}."
     else
         _mvb_n=$(grep -cE '^FAIL ' "${_mvb_log}" 2>/dev/null || true)
         case "${_mvb_n}" in ''|*[!0-9]*) _mvb_n=1 ;; esac
-        _fail 109 "migration-version-bump" "${_mvb_n} migration(s)/repair step(s) added without moving <version> in appinfo/info.xml, so \`occ upgrade\` will answer \"No upgrade required.\" and run none of them — see ${_mvb_log}"
+        _fail 110 "migration-version-bump" "${_mvb_n} migration(s)/repair step(s) added without moving <version> in appinfo/info.xml, so \`occ upgrade\` will answer \"No upgrade required.\" and run none of them — see ${_mvb_log}"
     fi
 fi
 

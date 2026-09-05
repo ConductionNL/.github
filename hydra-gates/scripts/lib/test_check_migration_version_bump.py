@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: EUPL-1.2
-"""Unit arms for gate-109's checker (check_migration_version_bump.py).
+"""Unit arms for gate-110's checker (check_migration_version_bump.py).
 
 Two things are asserted here, and the acceptance suite
-`test_gate109_migration_version_bump_scope.sh` asserts the third (the gate
+`test_gate110_migration_version_bump_scope.sh` asserts the third (the gate
 itself, through the real wrapper, over a real two-commit history).
 
   1. THE COMPARATOR AGREES WITH PHP. Nextcloud's upgrade decision is literally
@@ -137,7 +137,7 @@ def info_xml(path: str, version: str, steps: list[str], install: list[str]) -> N
 
 
 print("-- ARM 2: only files Nextcloud will actually RUN are subjects --")
-WORK = tempfile.mkdtemp(prefix="gate109-unit.")
+WORK = tempfile.mkdtemp(prefix="gate110-unit.")
 try:
     info = os.path.join(WORK, "appinfo", "info.xml")
     info_xml(
@@ -249,14 +249,14 @@ else:
 # ---------------------------------------------------------------------------
 # ARM 4 — a base it cannot see is NEVER a pass.
 #
-# The wrapper guards this too (gate-109 skips when HAVE_DELTA_BASE != 1), so
+# The wrapper guards this too (gate-110 skips when HAVE_DELTA_BASE != 1), so
 # this arm is the only thing holding the CHECKER to the same contract. That
 # matters because the checker is also runnable on its own — from a pre-commit
 # hook, or by hand — where no wrapper is standing in front of it. A silent 0
 # here is the exact failure the whole gate exists to remove.
 # ---------------------------------------------------------------------------
 print("-- ARM 4: an unresolvable base is exit 3, never exit 0 --")
-WORK2 = tempfile.mkdtemp(prefix="gate109-nobase.")
+WORK2 = tempfile.mkdtemp(prefix="gate110-nobase.")
 try:
     subprocess.run(["git", "init", "--quiet", WORK2], check=False,
                    capture_output=True)
