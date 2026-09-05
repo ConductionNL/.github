@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: EUPL-1.2
 """Unit arms for gate-109's checker (check_migration_version_bump.py).
 
 Two things are asserted here, and the acceptance suite

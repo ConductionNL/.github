@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: EUPL-1.2
 """A migration that ships without a version bump reaches nobody.
 
 WHAT THIS CATCHES
