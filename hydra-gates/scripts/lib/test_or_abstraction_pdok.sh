@@ -247,6 +247,36 @@ class Adapter {
 PHPEOF
 assert_rc 0 "silent: openconnector PROVIDES the PDOK adapter — exempt by app id, not by path"
 
+# --- ...and still owns it under the id it was renamed to --------------------
+# The exemption was keyed on the old id alone, so the 2026-08 rename to
+# `integriq` pointed this rule at the app that provides the adapter. Measured
+# on integriq at 835d0d5d: four canonical PDOK implementations told to route
+# through themselves, WARN until 2026-10-03 and hard-failing after.
+reset_tree
+printf '<?xml version="1.0"?>\n<info>\n  <id>integriq</id>\n</info>\n' > "${WORK}/appinfo/info.xml"
+cat > "${WORK}/lib/Service/Adapter.php" <<'PHPEOF'
+<?php
+class Adapter {
+    public function go(): string {
+        return file_get_contents('https://api.pdok.nl/bzk/locatieserver/search/v3_1/free');
+    }
+}
+PHPEOF
+assert_rc 0 "silent: integriq is openconnector renamed and still PROVIDES the adapter"
+
+# --- a leaf app routed at the NEW provider id is compliant ------------------
+reset_tree
+printf '<?xml version="1.0"?>\n<info>\n  <id>someleaf</id>\n</info>\n' > "${WORK}/appinfo/info.xml"
+cat > "${WORK}/src/pdokService.js" <<'JSEOF'
+export const PDOK_HOST = 'https://api.pdok.nl/bzk/locatieserver/search/v3_1'
+export const pdokUrl = () => generateUrl('/apps/integriq/api/pdok')
+JSEOF
+# The host is on a CODE line with no transport token, so this reaches the
+# routed-versus-direct branch rather than being dismissed as prose. Without
+# the provider's new id in that branch's pattern, routing cannot be
+# demonstrated and the file counts against the app.
+assert_rc 0 "silent: a leaf repointed at /apps/integriq/api/pdok is routing, not calling"
+
 echo ""
 if [ "${FAILS}" -eq 0 ]; then
     echo "test_or_abstraction_pdok: all assertions passed."

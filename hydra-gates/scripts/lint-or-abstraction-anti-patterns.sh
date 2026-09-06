@@ -231,7 +231,19 @@ _code_lines() {
 # Tokens that mean "this file performs its own HTTP call".
 _PDOK_DIRECT_TRANSPORT='file_get_contents|fopen[[:space:]]*\(|stream_context_create|curl_init|curl_exec|curl_setopt|GuzzleHttp|HttpClient|XMLHttpRequest|fetch[[:space:]]*\(|axios\.(get|post|put|request)|\$\.ajax'
 
-if [ "${APP_ID}" != "openconnector" ]; then
+# The provider's app id MOVED. `openconnector` was renamed to `integriq` in the
+# 2026-08 fleet rename and shipped the new `<id>` in appinfo/info.xml, so this
+# exemption stopped matching the app it exists for. Measured 2026-09-05 on
+# integriq at 835d0d5d: four findings, every one a canonical PDOK
+# implementation (lib/Sources/Pdok/PdokGeocodingClient.php,
+# lib/Adapters/Pdok/PdokGeocodingClientHttp.php, lib/Connectors/PdokConnector.php,
+# lib/Service/CatalogRegistryService.php) being told to route through itself.
+# The rule is WARN until 2026-10-03 and hard-fails the provider on that date.
+#
+# BOTH ids are accepted rather than swapped: the rename is per app and the old
+# id is still what some checkouts and every stored flow carry, so a swap would
+# just move the same breakage to whichever side is measured next.
+if [ "${APP_ID}" != "openconnector" ] && [ "${APP_ID}" != "integriq" ]; then
     _pdok_candidates="$(grep -rl --include='*.php' --include='*.js' --include='*.ts' --include='*.vue' "api\\.pdok\\.nl" "${SEARCH_ROOT}" src 2>/dev/null || true)"
     _pdok_direct=""
     _pdok_routed=""
@@ -249,8 +261,11 @@ if [ "${APP_ID}" != "openconnector" ]; then
             _pdok_direct="${_pdok_direct}${_pf}"$'\n'
             continue
         fi
-        # No transport of its own AND it names OpenConnector → routed.
-        if printf '%s\n' "${_pf_code}" | grep -qi 'openconnector'; then
+        # No transport of its own AND it names the provider → routed.
+        # BOTH provider ids: a leaf app repointed at `/apps/integriq/api/pdok`
+        # after the rename is routing correctly, and matching only the old name
+        # would read that as a direct call and flag it.
+        if printf '%s\n' "${_pf_code}" | grep -qiE 'openconnector|integriq'; then
             _pdok_routed="${_pdok_routed}${_pf}"$'\n'
             continue
         fi
