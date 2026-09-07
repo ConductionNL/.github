@@ -31,7 +31,39 @@
     <!-- Clean Code Rules -->
     <rule ref="rulesets/cleancode.xml/BooleanArgumentFlag"/>
     <rule ref="rulesets/cleancode.xml/ElseExpression"/>
-    <rule ref="rulesets/cleancode.xml/StaticAccess"/>
+    <!-- StaticAccess, with ONE class exempted, named per app.
+
+         `FleetAppId` is the fleet's cross-app id resolver. The fleet renamed
+         (openconnector to integriq, docudesk to filinq, and so on) and every
+         cross-app reference is a DUCK-TYPED RUNTIME LOOKUP, so
+         `isInstalled('docudesk')` against an instance running `filinq` does
+         not error: it returns false and the integration silently does nothing.
+         The resolver asks under both names and returns whichever the instance
+         actually has.
+
+         It is stateless and takes its collaborators as arguments
+         (`FleetAppId::resolve($appManager, 'filinq')`), so the coupling this
+         rule exists to catch is absent — there is no hidden dependency to
+         inject, and nothing to stub that a parameter does not already supply.
+         The rule was firing on the SHAPE of the call, and on 2026-09-06 it did
+         so 24 times across larpinq, humaniq, dossiq and decidiq within minutes
+         of the resolver landing, reddening four apps for a correct design.
+
+         ⚠️ FULLY-QUALIFIED NAMES, ONE PER APP, and that is not a style choice.
+         phpmd matches this property against the FQN it prints. Measured:
+         `FleetAppId` matches nothing (3 findings remained) and
+         `Support\FleetAppId` matches nothing either; only
+         `OCA\Larpinq\Support\FleetAppId` silences it. So an app that adopts
+         the resolver must be ADDED HERE, or it goes red on its first push —
+         which is the cost of an exemption narrow enough to still catch every
+         other static call. Verified against a probe class in the same
+         namespace: unrelated static access is still reported. -->
+    <rule ref="rulesets/cleancode.xml/StaticAccess">
+        <properties>
+            <property name="exceptions"
+                      value="OCA\OpenRegister\Support\FleetAppId,OCA\Larpinq\Support\FleetAppId,OCA\Dossiq\Support\FleetAppId,OCA\Pipelinq\Support\FleetAppId,OCA\Shillinq\Support\FleetAppId,OCA\Learniq\Support\FleetAppId,OCA\Decidiq\Support\FleetAppId,OCA\Humaniq\Support\FleetAppId"/>
+        </properties>
+    </rule>
     <rule ref="rulesets/cleancode.xml/IfStatementAssignment"/>
     <rule ref="rulesets/cleancode.xml/DuplicatedArrayKey"/>
     <rule ref="rulesets/cleancode.xml/MissingImport"/>
