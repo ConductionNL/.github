@@ -31,7 +31,39 @@
     <!-- Clean Code Rules -->
     <rule ref="rulesets/cleancode.xml/BooleanArgumentFlag"/>
     <rule ref="rulesets/cleancode.xml/ElseExpression"/>
-    <rule ref="rulesets/cleancode.xml/StaticAccess"/>
+    <!-- StaticAccess exempts FleetAppId, and only FleetAppId.
+
+         The rule exists to catch hidden dependencies: a static call that
+         reaches out and grabs collaborators a caller cannot see or replace.
+         FleetAppId has none of that. It is a `final` class of pure functions
+         that takes its `IAppManager` as a PARAMETER, holds no state, and
+         resolves nothing implicitly — the dependency is visible at every call
+         site and substitutable in a test.
+
+         It exists because the iq rename made app ids move per app, so
+         `isInstalled('docudesk')` and friends are duck-typed lookups that fail
+         SILENTLY against a name nothing answers to. Centralising them is the
+         mitigation; making it an injected service would put a constructor
+         dependency in every class that needs one string, for no gain.
+
+         ⚠️ THE FULLY QUALIFIED NAME IS REQUIRED. Verified against phpmd
+         directly, because the short form looks like it should work and does
+         not:
+
+             exceptions=""                                  -> FLAGGED
+             exceptions="FleetAppId"                        -> FLAGGED
+             exceptions="\OCA\Larpinq\Support\FleetAppId"   -> clean
+             exceptions="OCA\Larpinq\Support\FleetAppId"    -> clean
+
+         So each app's own namespace has to be listed. An app that adds
+         lib/Support/FleetAppId.php and is missing here will fail phpmd with a
+         finding that looks like a code smell and is not. -->
+    <rule ref="rulesets/cleancode.xml/StaticAccess">
+        <properties>
+            <property name="exceptions"
+                      value="\OCA\OpenRegister\Support\FleetAppId,\OCA\Larpinq\Support\FleetAppId,\OCA\Dossiq\Support\FleetAppId,\OCA\Pipelinq\Support\FleetAppId,\OCA\Shillinq\Support\FleetAppId,\OCA\Learniq\Support\FleetAppId,\OCA\Decidiq\Support\FleetAppId,\OCA\Humaniq\Support\FleetAppId"/>
+        </properties>
+    </rule>
     <rule ref="rulesets/cleancode.xml/IfStatementAssignment"/>
     <rule ref="rulesets/cleancode.xml/DuplicatedArrayKey"/>
     <rule ref="rulesets/cleancode.xml/MissingImport"/>
