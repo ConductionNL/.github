@@ -57,6 +57,15 @@ sudo chattr +i ~/.claude/settings.json ~/.claude/hooks/*.sh ~/.claude/settings-v
 
 Restart Claude Code after installing. Requires `jq`, `md5sum`, `curl`, and `chattr` on `PATH` (chattr is part of `e2fsprogs` — present on every standard Linux distro).
 
+> **Known side effect of the lock — model switching.** The VSCode extension persists every model switch by rewriting the locked `~/.claude/settings.json`, so the model picker shows `Failed to set model: EPERM: operation not permitted` and does nothing, and a typed `/model <name>` only applies for the current session (with the same toast). This is the lock working as designed, not a broken install. Pin your default model in the **project-local** settings file instead — `model` is a regular settings key and the local scope wins over the locked user scope:
+>
+> ```bash
+> ROOT="$(git rev-parse --show-toplevel)"; mkdir -p "$ROOT/.claude"
+> printf '{\n  "model": "opus"\n}\n' > "$ROOT/.claude/settings.local.json"   # merge if the file exists
+> ```
+>
+> Use `/model fable` (typed, not the picker) when a session needs a heavier model; it reverts to the pinned default next session. Full explanation, verification command and what not to do: [global-claude-settings.md → Troubleshooting](../docs/claude/global-claude-settings.md#troubleshooting).
+
 ## Online version checking
 
 When `~/.claude/settings-repo-url` is configured, the version check uses GitHub's raw URL (`https://raw.githubusercontent.com/<slug>/<ref>/global-settings/VERSION`) as its primary method. This means you get accurate online version checks even without a local clone of the `.github` repo.

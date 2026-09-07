@@ -415,3 +415,63 @@ After installing (see [README](../../global-settings/README.md)), verify:
 - `find . -exec` should prompt
 - `rm -rf` should be hard-blocked
 - Status panel appears at session start
+
+## Troubleshooting
+
+### `/model` or the model picker fails with `EPERM: operation not permitted, open '~/.claude/settings.json'`
+
+**Symptom.** Switching models in the VSCode extension — via the model picker or by typing `/model <name>` — pops an error notification:
+
+```
+Failed to set model: EPERM: operation not permitted, open '/home/<user>/.claude/settings.json'
+```
+
+**Cause.** This is the kernel immutable lock (protection layer 4 from the [README's security model](../../global-settings/README.md#security-model--defense-in-depth)) doing exactly what it is meant to do — it just has a side effect the install steps don't mention. The VSCode extension persists every model switch by rewriting `~/.claude/settings.json` with `{"model": "<name>"}`. That write is hard-wired to the user-settings file; it does not consult the project or local settings scopes. With the immutable bit set, the kernel refuses the write and the extension surfaces the `EPERM`.
+
+What still works and what does not, while the lock is on:
+
+| Action                                 | Effect                                                                                                                                                                                                  |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Typing `/model <name>` in the chat     | **Works for the session.** The CLI applies the switch in memory ("Set model to … for this session only"); only the follow-up persist by the extension fails, so you still get the error notification. |
+| Model picker dropdown in the UI        | **Does nothing.** The extension writes the settings file *before* pushing the switch to the CLI; the write fails, so the switch is never applied.                                                        |
+| Claude Code's startup model migrations | Silently log `Failed to migrate … model setting` — harmless.                                                                                                                                             |
+
+**Fix — pin your default model in project-local settings (recommended).** `model` is a regular settings key ("Override the default model used by Claude Code") and the local scope takes precedence over the user scope, so the shared locked file never needs to change. Pin the model you want *every* session to start on — `opus` is the sensible default; more expensive models are then an explicit per-session choice (next paragraph):
+
+```bash
+# Run from anywhere inside the repo you work in.
+# Claude Code resolves the local-settings scope to the *git root*, not the cwd
+# (observed with Claude Code 2.1.263, 2026-09) — so write it there.
+ROOT="$(git rev-parse --show-toplevel)"
+mkdir -p "$ROOT/.claude"
+cat > "$ROOT/.claude/settings.local.json" <<'JSON'
+{
+  "model": "opus"
+}
+JSON
+```
+
+Merge the key into the file if it already exists (Claude Code stores per-project permission grants there too). The file is meant to stay out of git — check with `git check-ignore -v .claude/settings.local.json`; add `**/.claude/settings.local.json` to your global ignore file (`~/.config/git/ignore`) if it isn't. Restart the session and verify which model is actually served:
+
+```bash
+claude -p "Reply with exactly the word ok" --output-format json | jq '.modelUsage | keys'
+```
+
+The result should list the model you pinned (e.g. `["claude-opus-5"]`). Swapping the value to `"sonnet"` and re-running is a quick control test that the file is what decides.
+
+`"env": {"ANTHROPIC_MODEL": "opus"}` in the same file is an equivalent alternative; `model` is the cleaner one because Claude Code shows it as the workspace default in the picker.
+
+**Switching to another model for one session (e.g. Fable).** Type the command in the chat — don't use the picker:
+
+```
+/model fable
+```
+
+The CLI confirms with "Set model to Fable 5.1 for this session only" and the switch is live. The `Failed to set model: EPERM` toast that follows is the extension's failed attempt to *persist* the choice — ignore it; nothing was lost, and the next session starts on your pinned default again. That is the intended behaviour under this setup: the default stays the cheaper model, using a heavier one is a deliberate, visible act each time.
+
+**Fix — one-off switch.** If you only need to change the persisted model once, run the unlock step from [README → Updating](../../global-settings/README.md#updating) in your own terminal, switch the model in Claude Code, then run the relock step. Don't skip the relock.
+
+**What not to do.**
+
+- Don't leave the lock off "because the picker is annoying" — that disarms the only protection layer that survives a compromised hook chain.
+- Don't add `model` to the shared `global-settings/settings.json`. It is a per-user preference, it would be overwritten on every settings update, and the file is still locked — the picker would keep failing.
