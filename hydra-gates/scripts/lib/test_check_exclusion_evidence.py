@@ -187,6 +187,141 @@ class ExclusionEvidenceTest(unittest.TestCase):
                _spec("").replace("@e2e exclude \n", "@e2e exclude\n"))
         self.assertEqual(self._buckets()["exclusions"], 0)
 
+    # -- families ------------------------------------------------------------
+
+    def test_a_trailing_star_names_a_family_of_methods(self):
+        # buildiq: `CopilotServiceTest::testHealthReports*` stands for the three
+        # methods that begin with it. Reading the * literally accuses a
+        # citation that is MORE precise than a bare class name.
+        _write(self.root, "tests/unit/CopilotServiceTest.php",
+               "<?php\nclass CopilotServiceTest {\n"
+               "  public function testHealthReportsNoProvider(): void {}\n"
+               "  public function testHealthReportsAvailable(): void {}\n}\n")
+        _write(self.root, "openspec/specs/copilot/spec.md",
+               _spec("probe verified by CopilotServiceTest::testHealthReports*"))
+        b = self._buckets()
+        self.assertEqual(b[cee.RESOLVED], 1)
+        self.assertEqual(b[cee.UNRESOLVED], 0)
+
+    def test_a_star_family_with_no_member_is_still_unresolved(self):
+        _write(self.root, "tests/unit/CopilotServiceTest.php",
+               "<?php\nclass CopilotServiceTest {\n"
+               "  public function testSomethingElse(): void {}\n}\n")
+        _write(self.root, "openspec/specs/copilot/spec.md",
+               _spec("probe verified by CopilotServiceTest::testHealthReports*"))
+        self.assertEqual(self._buckets()[cee.UNRESOLVED], 1)
+
+    def test_a_brace_group_expands_to_its_members(self):
+        for n in ("Map", "Roadmap"):
+            _write(self.root, f"tests/components/{n}PageEditor.spec.js", "// t\n")
+        _write(self.root, "openspec/specs/pages/spec.md",
+               _spec("component contracts in "
+                     "tests/components/{Map,Roadmap}PageEditor.spec.js"))
+        b = self._buckets()
+        self.assertEqual(b[cee.RESOLVED], 1)
+        self.assertEqual(b[cee.UNRESOLVED], 0)
+
+    def test_a_brace_member_that_is_missing_is_still_RECORDED(self):
+        # Pins the expansion, and pins a LIMITATION with it. `classify` buckets
+        # a reason as RESOLVED as soon as one artifact resolves, keeping the
+        # rest under "missing". So a group where three of four exist reads as
+        # resolved, and the fourth is visible only in the detail. That
+        # any-not-all rule is older than brace expansion and applies to every
+        # multi-artifact reason, so changing it is a separate measured change,
+        # not a side effect of this one.
+        _write(self.root, "tests/components/MapPageEditor.spec.js", "// t\n")
+        _write(self.root, "openspec/specs/pages/spec.md",
+               _spec("component contracts in "
+                     "tests/components/{Map,Roadmap}PageEditor.spec.js"))
+        self.assertEqual(self._buckets()[cee.RESOLVED], 1)
+        bucket, detail = cee.classify(
+            "component contracts in tests/components/{Map,Roadmap}PageEditor.spec.js",
+            cee._Artifacts(self.root),
+        )
+        self.assertEqual(bucket, cee.RESOLVED)
+        self.assertEqual(detail["resolved"], ["MapPageEditor.spec.js"])
+        self.assertEqual(detail["missing"], ["RoadmapPageEditor.spec.js"])
+
+    def test_the_brace_TAIL_alone_is_not_counted_as_a_file(self):
+        # The control. Leaving the brace form in the plain scan would also pick
+        # up the bare tail and report a fifth file nobody cited.
+        for n in ("Map", "Roadmap"):
+            _write(self.root, f"tests/components/{n}PageEditor.spec.js", "// t\n")
+        _write(self.root, "openspec/specs/pages/spec.md",
+               _spec("contracts in tests/components/{Map,Roadmap}PageEditor.spec.js"))
+        self.assertEqual(self._buckets()[cee.UNRESOLVED], 0)
+
+    # -- a reason that wraps ------------------------------------------------
+
+    def test_a_citation_on_a_CONTINUATION_line_is_read(self):
+        # integriq cited the same non-existent Playwright spec three times and
+        # only one was reported: in the other two the marker and the filename
+        # sat on different lines. The gate undercounted, which is the worse
+        # direction — a PASS meant less than it looked.
+        _write(self.root, "openspec/specs/flows/spec.md",
+               "#### Scenario: A thing\n\n"
+               "@e2e exclude needs a runnable seeded flow, covered by\n"
+               "tests/e2e/ci/flow-controls.spec.ts and the engine's unit tests\n"
+               "\n- **THEN** it happens\n")
+        b = self._buckets()
+        self.assertEqual(b[cee.UNRESOLVED], 1)
+
+    def test_a_wrapped_citation_that_EXISTS_resolves(self):
+        _write(self.root, "tests/unit/ProjectRepositoryTest.php", _PHP_TEST)
+        _write(self.root, "openspec/specs/projects/spec.md",
+               "#### Scenario: A thing\n\n"
+               "@e2e exclude backend-only, with no UI surface, and it is\n"
+               "asserted by ProjectRepositoryTest\n"
+               "\n- **THEN** it happens\n")
+        b = self._buckets()
+        self.assertEqual(b[cee.RESOLVED], 1)
+        self.assertEqual(b[cee.UNRESOLVED], 0)
+
+    def test_the_scenarios_own_bullets_are_NOT_swallowed(self):
+        # The control, and the reason the terminator list exists. GIVEN/WHEN/
+        # THEN prose names services and controllers constantly. Reading them as
+        # part of the reason would invent findings out of the scenario body.
+        _write(self.root, "openspec/specs/projects/spec.md",
+               "#### Scenario: A thing\n\n"
+               "@e2e exclude depends on test data state\n"
+               "- **GIVEN** GeoServiceTest and CaseGeoControllerTest are absent\n"
+               "- **THEN** nothing here is a citation\n")
+        b = self._buckets()
+        self.assertEqual(b[cee.NO_CLAIM], 1)
+        self.assertEqual(b[cee.UNRESOLVED], 0)
+
+    def test_a_blank_line_ends_the_reason(self):
+        _write(self.root, "openspec/specs/projects/spec.md",
+               "#### Scenario: A thing\n\n"
+               "@e2e exclude depends on test data state\n"
+               "\n"
+               "Prose about GeoServiceTest that is not part of the reason.\n")
+        b = self._buckets()
+        self.assertEqual(b[cee.NO_CLAIM], 1)
+        self.assertEqual(b[cee.UNRESOLVED], 0)
+
+    def test_an_html_comment_marker_reads_to_its_terminator(self):
+        # buildiq wraps its exclusions in `<!-- ... -->`, across lines.
+        _write(self.root, "tests/composables/useManifestValidator.spec.js", "// t\n")
+        _write(self.root, "openspec/specs/theme/spec.md",
+               "#### Scenario: A thing\n\n"
+               "<!-- @e2e exclude pure manifest validation, covered by\n"
+               "tests/composables/useManifestValidator.spec.js. -->\n"
+               "\n- **THEN** it happens\n")
+        b = self._buckets()
+        self.assertEqual(b[cee.RESOLVED], 1)
+
+    def test_the_join_is_bounded(self):
+        # A missing terminator must not swallow the rest of the file.
+        body = "\n".join(f"line {i} mentioning GeoServiceTest" for i in range(40))
+        _write(self.root, "openspec/specs/projects/spec.md",
+               "#### Scenario: A thing\n\n@e2e exclude a reason\n" + body + "\n")
+        r = cee.analyse(self.root)
+        found = [e for k in ("unresolved", "no_claim", "unverifiable",
+                             "resolved", "cross_repo") for e in r.get(k, [])]
+        self.assertEqual(len(found), 1, found)
+        self.assertNotIn("line 20", found[0]["reason"])
+
     # -- scope --------------------------------------------------------------
 
     def test_all_four_exclusion_tags_are_judged(self):
