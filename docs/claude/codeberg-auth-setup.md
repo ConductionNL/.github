@@ -9,7 +9,7 @@ The setup is two layers:
 
 Once both are configured, Claude Code can drive the entire Codeberg workflow inside your existing session — no extra prompts, no token paste-ins.
 
-> **Why Codeberg?** Conduction migrated from `github.com/ConductionNL` to `codeberg.org/Conduction` in May 2026. Codeberg runs Forgejo (a Gitea fork) — a community-owned, EU-hosted alternative to GitHub. The platform-preference order is **Codeberg primary, GitHub secondary, GitLab alternative**. Hydra and all migrated skills still understand GitHub URLs, so older repos and PR links continue to work.
+> **Do you need this?** Probably not. Conduction migrated to `codeberg.org/Conduction` in May 2026, but that move was **reversed** — directive 2026-07-17, executed 2026-07-23. The platform-preference order is now **GitHub primary, GitLab alternative, Gitea/Forgejo only for a repo that genuinely lives on a Forgejo host**, and all Conduction work lives under `github.com/ConductionNL`. This guide is kept for that last case: a non-Conduction repo on Codeberg or another Forgejo instance. For Conduction work, set up `gh` instead — see [workstation-setup.md](./workstation-setup.md).
 
 ## Prerequisites
 
