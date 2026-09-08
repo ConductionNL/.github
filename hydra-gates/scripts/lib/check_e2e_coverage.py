@@ -20,8 +20,26 @@ Two scenario formats are supported:
     1. **GIVEN** ... **WHEN** ... **THEN** ...
     2. **GIVEN** ... **WHEN** ... **THEN** ...
 
-Both formats must appear inside ``openspec/specs/<spec-name>/spec.md`` files
-that are ADDED or MODIFIED in a PR. Every such scenario must be referenced by
+Both formats are read from **two file shapes**, and the spec name a scenario
+ref is built from comes from whichever shape it is:
+
+    openspec/specs/<spec-name>/spec.md      -> <spec-name>   (parent directory)
+    openspec/specs/<spec-name>.md           -> <spec-name>   (file stem)
+
+The flat shape was invisible to this gate until 2026-09-08. Measured across
+the 21 core apps that day, planninq kept 153 of its 224 scenarios in 13 flat
+files and the gate reported 70. Those scenarios were not counted, not
+enforceable, and not excludable either: an ``@e2e exclude`` in a file nothing
+opens excludes nothing. ``README.md`` is documentation about the directory and
+is never a spec.
+
+Because both shapes share one name space, ``<name>.md`` beside
+``<name>/spec.md`` makes every ``@e2e <name>::<slug>`` anchor ambiguous. That
+is REPORTED (``spec_name_collisions`` in report mode) and never resolved by
+picking one, which would credit an anchor against scenarios it was not written
+for.
+
+A scenario in a file that is ADDED or MODIFIED in a PR must be referenced by
 at least one Playwright e2e test file under ``tests/e2e/**`` (``*.spec.ts``,
 ``*.spec.js``, ``*.test.ts``, ``*.test.js``). This closes the loop between the
 *what-should-happen* (the scenario in the spec) and the *automated proof* (the
@@ -265,6 +283,91 @@ def _make_scenario_entry(
     }
 
 
+# ---------------------------------------------------------------------------
+# WHERE A SPEC FILE LIVES — TWO SHAPES, NOT ONE
+# ---------------------------------------------------------------------------
+#
+# This gate read `openspec/specs/*/spec.md` and nothing else. OpenSpec also
+# admits a FLAT spec file, `openspec/specs/<name>.md`, and the fleet uses it:
+#
+#   MEASURED 2026-09-08 across all 21 core apps. planninq keeps 153 of its 224
+#   scenarios in 13 flat files (projects.md alone holds 32). Every one of them
+#   was invisible here: not counted, not enforceable, and not even EXCLUDABLE,
+#   because an `@e2e exclude` in a file the gate never opens is not read
+#   either. The app reported 70 scenarios and has 224.
+#
+# An unseen scenario is worse than an uncovered one. An uncovered scenario is
+# on a list somebody can work down; an unseen one is absent from the
+# denominator, so the coverage percentage is computed over a corpus that
+# silently excludes it.
+#
+# README.md is excluded by name. It is documentation ABOUT the specs directory
+# and, in at least one repo, quotes a `#### Scenario:` heading as an example of
+# the format — which this parser would otherwise register as a real scenario.
+_SPEC_DIR_GLOB = "*/spec.md"
+_SPEC_FLAT_GLOB = "*.md"
+_NOT_A_SPEC = {"readme.md"}
+
+
+def spec_name_for(spec_path: Path) -> str:
+    """Return the spec identity a scenario ref is built from.
+
+    ``openspec/specs/kanban-board/spec.md`` -> ``kanban-board`` (parent dir).
+    ``openspec/specs/kanban-board.md``      -> ``kanban-board`` (file stem).
+
+    Both shapes therefore produce the SAME ref namespace, which is what makes
+    an `@e2e <spec>::<slug>` anchor portable when a flat spec is later promoted
+    to a directory. It also means the two shapes can COLLIDE; see
+    :func:`spec_files` for how that is surfaced rather than silently resolved.
+
+    :param spec_path: Path to the spec markdown file.
+    :return: The spec name.
+    """
+    if spec_path.name == "spec.md":
+        return spec_path.parent.name
+    return spec_path.stem
+
+
+def spec_files(spec_root: Path) -> list[Path]:
+    """Return every spec markdown file under ``spec_root``, both shapes.
+
+    :param spec_root: The ``openspec/specs`` directory.
+    :return: Sorted list of spec file paths, directory and flat shapes both.
+    """
+    if not spec_root.is_dir():
+        return []
+    found = list(spec_root.glob(_SPEC_DIR_GLOB))
+    found += [
+        p
+        for p in spec_root.glob(_SPEC_FLAT_GLOB)
+        if p.is_file() and p.name.lower() not in _NOT_A_SPEC
+    ]
+    return sorted(set(found))
+
+
+def spec_name_collisions(spec_root: Path) -> dict[str, list[str]]:
+    """Find spec names claimed by more than one file.
+
+    ``kanban-board.md`` beside ``kanban-board/spec.md`` makes the ref
+    ``kanban-board::<slug>`` ambiguous: one `@e2e` anchor would resolve against
+    two different scenario sets. planninq ships exactly this pair today.
+
+    Never resolved silently. Picking one file would credit an anchor against
+    scenarios it was never written for, which is the failure this whole gate
+    exists to prevent.
+
+    :param spec_root: The ``openspec/specs`` directory.
+    :return: Mapping of spec name to the relative paths claiming it, for names
+        claimed more than once. Empty when every name is unique.
+    """
+    by_name: dict[str, list[str]] = {}
+    for path in spec_files(spec_root):
+        by_name.setdefault(spec_name_for(path), []).append(
+            str(path.relative_to(spec_root))
+        )
+    return {name: sorted(paths) for name, paths in by_name.items() if len(paths) > 1}
+
+
 def parse_spec_scenarios(spec_path: Path) -> list[dict]:
     """Parse a spec.md and return a list of scenario dicts.
 
@@ -303,7 +406,7 @@ def parse_spec_scenarios(spec_path: Path) -> list[dict]:
             "bare_exclude": bool,           # True when excluded but no reason
         }
     """
-    spec_name = spec_path.parent.name
+    spec_name = spec_name_for(spec_path)
     try:
         lines = spec_path.read_text(encoding="utf-8").splitlines()
     except OSError:
@@ -453,10 +556,18 @@ def parse_spec_scenarios(spec_path: Path) -> list[dict]:
 
 # Accept either annotation form:
 #   @e2e openspec/specs/<spec>/<anything>spec.md#<slug>
+#   @e2e openspec/specs/<spec>.md#<slug>        (flat spec file)
 #   @e2e <spec>::<slug>
-# Both may appear in comments, test titles, describe strings — anywhere.
+# All may appear in comments, test titles, describe strings — anywhere.
+#
+# The flat alternative exists because `openspec/specs/<name>.md` is a spec file
+# this gate now reads (see `spec_files`). Without it, the path form could not
+# address 153 of planninq's 224 scenarios and an author annotating one would
+# have had to use the `::` form or be told the anchor was unresolvable.
 _E2E_PATH_RE = re.compile(
-    r"@e2e\s+openspec/specs/(?P<spec>[^/]+)/[^\s#]*#(?P<slug>[A-Za-z0-9_-]+)"
+    r"@e2e\s+openspec/specs/"
+    r"(?:(?P<spec>[^/\s#]+)/[^\s#]*|(?P<flatspec>[^/\s#]+?)\.md)"
+    r"#(?P<slug>[A-Za-z0-9_-]+)"
 )
 _E2E_SHORT_RE = re.compile(
     r"@e2e\s+(?P<spec>[A-Za-z0-9_-]+)::(?P<slug>[A-Za-z0-9_-]+)"
@@ -1646,7 +1757,13 @@ def collect_ref_status(app_dir: Path) -> tuple[set[str], dict[str, str]]:
         doc = _TestFile(text)
         for rex in (_E2E_PATH_RE, _E2E_SHORT_RE):
             for m in rex.finditer(text):
-                ref = f"{m.group('spec')}::{m.group('slug')}"
+                # `_E2E_PATH_RE` matches two shapes and fills exactly one of
+                # them: `spec` for `<name>/…spec.md`, `flatspec` for
+                # `<name>.md`. `_E2E_SHORT_RE` has no `flatspec` group at all,
+                # hence `groupdict().get` rather than `group`, which would
+                # raise IndexError on the short form.
+                spec = m.group("spec") or m.groupdict().get("flatspec")
+                ref = f"{spec}::{m.group('slug')}"
                 # A MENTION IS NOT A DIRECTIVE (#358). Checked before liveness
                 # on purpose: prose that names an anchor is not a weak tag on a
                 # good test, it is not a tag, and the finding has to say so or
@@ -1708,7 +1825,17 @@ def changed_spec_files(base_ref: str, app_dir: Path) -> set[str]:
     paths: set[str] = set()
     for line in diff.splitlines():
         line = line.strip()
-        if line.startswith("openspec/specs/") and line.endswith("spec.md"):
+        if not line.startswith("openspec/specs/") or not line.endswith(".md"):
+            continue
+        rest = line[len("openspec/specs/"):]
+        depth = rest.count("/")
+        # `<name>/spec.md` — the classic shape, exactly one level down.
+        if depth == 1 and rest.endswith("/spec.md"):
+            paths.add(line)
+            continue
+        # `<name>.md` — the flat shape, which this gate used to skip entirely.
+        # README.md is documentation about the directory, not a spec.
+        if depth == 0 and rest.lower() not in _NOT_A_SPEC:
             paths.add(line)
     return paths
 
@@ -1768,7 +1895,7 @@ def run_report(app_dir: Path) -> int:
     covered_refs = collect_covered_refs(app_dir)
 
     all_scenarios: list[dict] = []
-    for spec_md in sorted(spec_root.glob("*/spec.md")):
+    for spec_md in spec_files(spec_root):
         all_scenarios.extend(parse_spec_scenarios(spec_md))
 
     totals = {"scenarios": len(all_scenarios), "covered": 0, "excluded": 0, "uncovered": 0}
@@ -1792,6 +1919,11 @@ def run_report(app_dir: Path) -> int:
         "totals": totals,
         "uncovered": uncovered,
         "coverage_pct": coverage_pct,
+        # Reported, never resolved. Two files claiming one spec name make every
+        # `@e2e <name>::<slug>` anchor in the repo ambiguous, and a dashboard
+        # that shows a coverage percentage without showing this is quoting a
+        # number computed over a corpus it could not identify.
+        "spec_name_collisions": spec_name_collisions(spec_root),
     }
     print(json.dumps(out, indent=2))
     return 0
@@ -1840,17 +1972,14 @@ def run_gate(app_dir: Path) -> int:
         return EXIT_ERROR
 
     spec_root = app_dir / "openspec" / "specs"
-    all_specs = (
-        {str(p.relative_to(app_dir)) for p in spec_root.glob("*/spec.md")}
-        if spec_root.is_dir()
-        else set()
-    )
+    all_specs = {str(p.relative_to(app_dir)) for p in spec_files(spec_root)}
 
     if not all_specs:
         print(
             f"[gate-{GATE_NUM}] e2e-coverage: NOT APPLICABLE — no "
-            f"openspec/specs/*/spec.md in this repository, so there is no "
-            f"declared scenario for an e2e test to trace back to."
+            f"openspec/specs/*/spec.md or openspec/specs/*.md in this "
+            f"repository, so there is no declared scenario for an e2e test to "
+            f"trace back to."
         )
         return EXIT_NOT_APPLICABLE
 
