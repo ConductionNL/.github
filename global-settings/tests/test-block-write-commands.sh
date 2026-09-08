@@ -190,6 +190,29 @@ for f in "${FP_PROT_FILES[@]}"; do
       "echo foo && truncate -s 0 \"\$HOME/.claude/${f}\""
 done
 
+# Non-segment-start destructive verbs. These are the shapes that a
+# `(^|[;&|]\s*)` anchor on the sed/perl/awk/gawk/ruby and truncate/shred/unlink
+# arms would silently stop matching, because `(`, `{`, a leading space and a
+# wrapper word are not command separators. The guard deliberately keeps a bare
+# \bverb\b match on those two arms for exactly this reason — every command below
+# genuinely mutates the protected path and must stay denied.
+for f in "${FP_PROT_FILES[@]}"; do
+    for wrap in \
+        "  sed -i 's/a/b/' PATH" \
+        "	sed -i 's/a/b/' PATH" \
+        "(sed -i 's/a/b/' PATH)" \
+        "{ sed -i 's/a/b/' PATH; }" \
+        "env sed -i 's/a/b/' PATH" \
+        "if true; then sed -i 's/a/b/' PATH; fi" \
+        "  truncate -s 0 PATH" \
+        "(truncate -s 0 PATH)" \
+        "{ unlink PATH; }" \
+        "env shred PATH"; do
+        add_deny "non-segment-start: ${wrap%% PATH*}… → $f" \
+          "${wrap//PATH/\"\$HOME/.claude/${f}\"}"
+    done
+done
+
 # ── DENY fixtures ─────────────────────────────────────────────────────────────
 # 1) Redirects: `>` and `>>` against every path variant.
 for op in '>' '>>'; do

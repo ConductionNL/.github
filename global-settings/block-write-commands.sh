@@ -91,15 +91,24 @@ fi
 # overwrite sourced from the canonical repo (enforced by the write guard below). This is a
 # HARD BLOCK regardless of source, because these operations cannot carry canonical content.
 #
-# All three patterns anchor the tool name at a command-segment boundary and keep the
-# gap up to the protected path inside that same segment ([^|;&] rather than [^|]).
-# Without both, the tool name, its -i flag and the protected path could each be
-# borrowed from a DIFFERENT command in the same chain: `awk '{print}' f; grep -c -i x
-# ~/.claude/hooks/y.sh` was hard-denied as an "in-place edit" because [^|]* happily
-# spans `;`, matching awk from the first command and -i from the third. Fails closed,
-# so the symptom was a refused read-only inspection with a misleading reason.
-if echo "$cmd" | grep -qE "(^|[;&|]\s*)(sed|perl|awk|gawk|ruby)\b[^|;&]*[[:space:]]-i\b[^|;&]*${_prot}" \
-|| echo "$cmd" | grep -qE "(^|[;&|]\s*)(truncate|shred|unlink)\b[^|;&]*${_prot}" \
+# The gap classes are [^|;&] rather than [^|] so the tool name, its -i flag and the
+# protected path must all sit in the SAME command segment. With the old [^|]* — which
+# stops at a pipe but spans `;` and `&&` — they could each be borrowed from a
+# DIFFERENT command in one chain, e.g. `awk '{print}' f; grep -c -i x
+# ~/.claude/hooks/y.sh` was hard-denied as an "in-place edit" using awk from the
+# first command and -i from the second. Fails closed, so the symptom was a refused
+# read-only inspection with a misleading reason.
+#
+# Deliberately NOT anchored on the first two arms. Adding `(^|[;&|]\s*)` there looks
+# tidier and matches the rm arm, but it strictly removes coverage: a genuine verb is
+# not always at a segment start. `  sed -i … ~/.claude/x` (leading whitespace),
+# `(sed -i … ~/.claude/x)`, `{ sed -i … ~/.claude/x; }`, `env sed -i … ~/.claude/x`
+# and `if true; then sed -i … ~/.claude/x; fi` all stop matching, because `(`, `{`
+# and a bare `^`-plus-space are not segment separators. Keep the bare \bverb\b match:
+# narrowing the gap alone fixes the false positive without opening those holes.
+# The rm arm keeps its anchor — that is pre-existing behaviour, not added here.
+if echo "$cmd" | grep -qE "\b(sed|perl|awk|gawk|ruby)\b[^|;&]*[[:space:]]-i\b[^|;&]*${_prot}" \
+|| echo "$cmd" | grep -qE "\b(truncate|shred|unlink)\b[^|;&]*${_prot}" \
 || echo "$cmd" | grep -qE "(^|[;&|]\s*)rm\b[^|;&]*${_prot}"; then
     hard_deny "BLOCKED: in-place edits, truncation, or deletion of ~/.claude/ config files are not permitted. The only allowed operation is a full overwrite with canonical content from the configured source."
 fi
