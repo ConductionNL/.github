@@ -24,7 +24,7 @@ OS-level pieces that must exist before any command below works. For each row, **
 
 Regardless of which path you take, you also need:
 
-- A **Codeberg account** (`codeberg.org`) with repo access — ask your team lead for `Conduction/hydra` and any app repos you'll touch.
+- A **GitHub account** with access to the `ConductionNL` org — ask your team lead for `ConductionNL/hydra` (private) and any app repos you'll touch.
 - A **Claude Max** account (OAuth, no API key needed for normal work).
 
 The canonical [`workstation-setup.md`](./workstation-setup.md) documents the Windows + WSL2 path in most detail; the Linux and macOS paths reuse the same tools, just installed via `apt` or `brew` instead.
@@ -75,28 +75,28 @@ nvm install 20 && nvm use 20 && nvm alias default 20
 # --- 3.2 PHP 8.1 + Composer ---
 sudo apt update && sudo apt install -y php8.1-cli php8.1-curl php8.1-mbstring php8.1-xml php8.1-zip php8.1-sqlite3 composer
 
-# --- 3.3 Git-host CLIs (tea = primary, gh = fallback) ---
-# tea (Codeberg/Gitea/Forgejo)
-sudo wget -O /usr/local/bin/tea https://dl.gitea.com/tea/0.11.0/tea-0.11.0-linux-amd64
-sudo chmod +x /usr/local/bin/tea
-# Token from https://codeberg.org/user/settings/applications
-#   scopes: read:repository, write:repository, read:issue, write:issue
-tea login add --name codeberg --url https://codeberg.org --token <YOUR_TOKEN>
-# gh (GitHub fallback)
+# --- 3.3 Git-host CLIs (gh = primary) ---
+# gh (GitHub — all ConductionNL work)
 sudo apt install -y gh
 gh auth login
+# glab (GitLab — only for non-Conduction client work)
+# sudo apt install -y glab && glab auth login
+# tea (Gitea/Forgejo — only for a non-Conduction repo on a Forgejo host)
+# sudo wget -O /usr/local/bin/tea https://dl.gitea.com/tea/0.11.0/tea-0.11.0-linux-amd64
+# sudo chmod +x /usr/local/bin/tea
+# See codeberg-auth-setup.md for the token scopes and login command.
 
-# --- 3.4 Codeberg SSH key ---
-ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_codeberg -C "<your@email>"
-# Paste ~/.ssh/id_ed25519_codeberg.pub at https://codeberg.org/user/settings/keys
+# --- 3.4 GitHub SSH key ---
+ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_github -C "<your@email>"
+# Paste ~/.ssh/id_ed25519_github.pub at https://github.com/settings/keys
 # Then add to ~/.ssh/config:
-#   Host codeberg.org
-#       HostName codeberg.org
+#   Host github.com
+#       HostName github.com
 #       User git
-#       IdentityFile ~/.ssh/id_ed25519_codeberg
+#       IdentityFile ~/.ssh/id_ed25519_github
 #       IdentitiesOnly yes
 sudo apt install -y keychain
-keychain ~/.ssh/id_ed25519_codeberg
+keychain ~/.ssh/id_ed25519_github
 
 # --- 3.5 OpenSpec CLI + Claude Code CLI ---
 npm install -g @fission-ai/openspec @anthropic-ai/claude-code
@@ -132,9 +132,8 @@ openspec --version                   # 1.x
 npx playwright --version             # 1.x
 
 # Git-host auth
-ssh -T git@codeberg.org              # → "Hi there, <YourCodebergUsername>!"
-tea logins list                      # codeberg entry shown
-gh auth status                       # logged in
+ssh -T git@github.com                # → "Hi <YourGitHubUsername>! You've successfully authenticated..."
+gh auth status                       # logged in to github.com
 
 # Claude global settings active
 ls -l ~/.claude/settings.json        # exists, immutable bit will show via lsattr
@@ -151,6 +150,6 @@ If any line fails, the corresponding section in [`workstation-setup.md`](./works
 
 - Detailed VS Code extension list — see [`workstation-setup.md` §4](./workstation-setup.md#4-install-vs-code-extensions).
 - Onboarding flow, buddy system, ISO compliance — see [`docs/WayOfWork/onboarding.mdx`](../WayOfWork/onboarding.mdx).
-- The Codeberg auth deep-dive (when `tea` parity gaps bite, when to use REST instead) — see [`codeberg-auth-setup.md`](./codeberg-auth-setup.md).
+- The Forgejo/Codeberg auth deep-dive, needed only for a non-Conduction repo on a Forgejo host (when `tea` parity gaps bite, when to use REST instead) — see [`codeberg-auth-setup.md`](./codeberg-auth-setup.md).
 - Local LLM (Ollama + Qwen) for overnight batch jobs — see [`local-llm.md`](./local-llm.md).
 - An automated bootstrap script — not yet. The command list above is the cheat-sheet for now; a `bootstrap-workstation.sh` may follow once the recipe has been validated on more clean WSL installs.

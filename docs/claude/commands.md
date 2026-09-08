@@ -2,7 +2,7 @@
 
 Complete reference for all commands available in the spec-driven development workflow. Commands are organized by domain — click through to the detailed reference for each area.
 
-> **Platform policy.** Commands that interact with a git host (`/create-pr`, `/review-pr`, `/report-out`, `/opsx-plan-to-issues`, `/opsx-apply`, `/opsx-verify`, `/opsx-archive`, etc.) auto-detect the per-repo platform from `git remote get-url origin` and prefer **Codeberg / Gitea / Forgejo** *(primary)* over **GitHub** *(secondary/fallback)* over **GitLab** *(alternative)*. The `gh` calls shown below are the github form; on Codeberg they shell out to `tea` (or REST `POST /api/v1/...` when the operation requires a TTY that `tea` needs). Conduction is migrating to `codeberg.org/Conduction/*` (2026-05-29) — the chain is bidirectional. See [hydra/.claude/skills/PLATFORM-POLICY.md](https://github.com/ConductionNL/hydra/blob/main/.claude/skills/PLATFORM-POLICY.md) for the canonical reference.
+> **Platform policy.** Commands that interact with a git host (`/create-pr`, `/review-pr`, `/report-out`, `/opsx-plan-to-issues`, `/opsx-apply`, `/opsx-verify`, `/opsx-archive`, etc.) auto-detect the per-repo platform from `git remote get-url origin` and prefer **GitHub** *(primary)* over **GitLab** *(alternative, non-Conduction client work)* over **Gitea / Forgejo** *(only for a repo that genuinely lives on a Forgejo host — never the default)*. All Conduction work lives under `ConductionNL/*` on GitHub, so the `gh` calls shown below are the form you will actually use; on a Forgejo host they shell out to `tea` (or REST `POST /api/v1/...` when the operation requires a TTY that `tea` needs). See [hydra/.claude/skills/PLATFORM-POLICY.md](https://github.com/ConductionNL/hydra/blob/main/.claude/skills/PLATFORM-POLICY.md) for the canonical reference.
 
 ## OpenSpec Commands
 
@@ -25,7 +25,7 @@ For the complete reference, see [commands-openspec.md](commands-openspec.md).
 | `/opsx-pipeline`     | Full Lifecycle | Parallel multi-change lifecycle (up to 5 agents)               |
 | `/opsx-onboard`      | Setup          | Overview of current OpenSpec setup                             |
 
-**Retrofit commands** (bringing legacy apps under [ADR-003 §Spec traceability](https://codeberg.org/Conduction/hydra/blob/main/openspec/architecture/adr-003-backend.md)): `/opsx-coverage-scan`, `/opsx-annotate`, `/opsx-reverse-spec` — see [retrofit.md](retrofit.md) for the full playbook.
+**Retrofit commands** (bringing legacy apps under [ADR-003 §Spec traceability](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-003-backend.md)): `/opsx-coverage-scan`, `/opsx-annotate`, `/opsx-reverse-spec` — see [retrofit.md](retrofit.md) for the full playbook.
 
 **OpenSpec CLI** (terminal commands, not slash commands): `openspec init`, `openspec list`, `openspec validate`, etc. — see [commands-openspec.md](commands-openspec.md#openspec-cli-commands).
 
@@ -172,7 +172,7 @@ Create a Pull Request from a branch in any repo. Handles the full flow interacti
 
 **Model:** Checked at run time — the command reads your active model from context and stops automatically if you're on Haiku (or anything weaker than Sonnet). Involves parsing CI workflows, detecting branch-protection rules, and reasoning about code diffs where mistakes have real consequences. **Sonnet** for most PRs. **Opus** when the repo uses reusable CI workflows, branch-protection rulesets, or a complex branching strategy — that's where it pays off most.
 
-**Requires:** at least one platform CLI authenticated — `tea login add` (Codeberg, primary), `gh auth login` (GitHub, fallback), or `glab auth login` (GitLab, alternative)
+**Requires:** at least one platform CLI authenticated — `gh auth login` (GitHub, primary), `glab auth login` (GitLab), or `glab auth login` (GitLab, alternative)
 
 ---
 
@@ -214,7 +214,7 @@ Review one or more GitHub Pull Requests. Fetches the diff, detects prior reviews
 
 **Model:** Requires Sonnet or Opus — stops immediately on Haiku. Batch mode lets you choose the model for parallel analysis agents (Sonnet default, Opus for security-sensitive batches).
 
-**Requires:** at least one platform CLI authenticated — `tea login add` (Codeberg, primary), `gh auth login` (GitHub, fallback), or `glab auth login` (GitLab, alternative)
+**Requires:** at least one platform CLI authenticated — `gh auth login` (GitHub, primary), `glab auth login` (GitLab), or `glab auth login` (GitLab, alternative)
 
 ---
 
@@ -266,7 +266,7 @@ Daily end-of-day report. Scans local git repos for the user's commits and uncomm
 
 **Maturity:** L6 (9 evals, learnings.md with consolidation pipeline). See `hydra/.claude/skills/report-out/SKILL.md`.
 
-**Requires:** at least one platform CLI authenticated — `tea login add` (Codeberg, primary), `gh auth login` (GitHub, fallback), or `glab auth login` (GitLab, alternative), `git` configured with `user.name` and `user.email`.
+**Requires:** at least one platform CLI authenticated — `gh auth login` (GitHub, primary), `glab auth login` (GitLab), or `glab auth login` (GitLab, alternative), `git` configured with `user.name` and `user.email`.
 
 ---
 
@@ -311,7 +311,7 @@ Checks whether `global-settings/VERSION` has been correctly bumped after any cha
 
 **Phase:** Planning → tracking issues (per-repo platform)
 
-Converts an OpenSpec change's `tasks.md` into structured `plan.json` and creates corresponding tracking issues on whichever platform the target repo lives on (Codeberg primary, GitHub fallback, GitLab alternative — auto-detected from `git remote get-url origin`).
+Converts an OpenSpec change's `tasks.md` into structured `plan.json` and creates corresponding tracking issues on whichever platform the target repo lives on (GitHub primary, GitLab alternative, Forgejo only for non-Conduction repos — auto-detected from `git remote get-url origin`).
 
 **Usage:**
 
@@ -322,13 +322,13 @@ Converts an OpenSpec change's `tasks.md` into structured `plan.json` and creates
 **Prerequisites:**
 
 - A change with completed `tasks.md`
-- At least one platform CLI authenticated for the target repo's host — `tea login add` (Codeberg/Gitea/Forgejo, primary), `gh auth login` (GitHub, fallback), or `glab auth login` (GitLab, alternative)
-- Git remote pointing to a Conduction-org repository (`Conduction/*` on Codeberg as of 2026-05-29; legacy `ConductionNL/*` on github.com still supported)
+- At least one platform CLI authenticated for the target repo's host — `gh auth login` (GitHub, primary), or `glab auth login` (GitLab, alternative)
+- Git remote pointing to a Conduction-org repository (`ConductionNL/*` on github.com)
 
 **What it does:**
 
 1. **Finds the active change** in the current project's `openspec/changes/`
-2. **Detects the repo + platform** from `git remote get-url origin` (Codeberg / GitHub / GitLab)
+2. **Detects the repo + platform** from `git remote get-url origin` (GitHub / GitLab / Forgejo)
 3. **Parses tasks.md** into structured JSON
 4. **Creates tracking issues** on the detected platform:
    - One **tracking issue** (epic) with:
@@ -341,10 +341,10 @@ Converts an OpenSpec change's `tasks.md` into structured `plan.json` and creates
      - Labels: `openspec`, `<change-name>`
 5. **Saves `plan.json`** with all issue numbers linked
 
-**Output example (Codeberg-hosted repo):**
+**Output example (GitHub-hosted repo):**
 
 ```
-Created tracking issue: https://codeberg.org/Conduction/opencatalogi/issues/42
+Created tracking issue: https://github.com/ConductionNL/opencatalogi/issues/42
 Created 5 task issues: #43, #44, #45, #46, #47
 Saved plan.json at: openspec/changes/add-search/plan.json
 
@@ -470,7 +470,7 @@ Competitive analysis and ecosystem gap-finding workflow. For the complete refere
 /feature-counsel        (optional: 9-persona feedback on specs)
        │
        ▼
-/opsx-plan-to-issues    (optional: tasks → JSON + tracking issues — Codeberg/GitHub/GitLab)
+/opsx-plan-to-issues    (optional: tasks → JSON + tracking issues — GitHub/GitLab/Forgejo)
        │
        ▼
 /opsx-apply             (implement tasks)
@@ -484,10 +484,10 @@ Competitive analysis and ecosystem gap-finding workflow. For the complete refere
 /test-app               (optional: full technical sweep)
        │
        ▼
-/create-pr              (create PR/MR on the per-repo platform — Codeberg primary, GitHub fallback, GitLab alternative)
+/create-pr              (create PR/MR on the per-repo platform — GitHub primary, GitLab alternative, Forgejo only for non-Conduction repos)
        │
        ▼
 /opsx-archive           (complete & preserve)
 ```
 
-**End of day:** `/report-out` summarizes the day's commits and per-platform activity (Codeberg + GitHub + GitLab) across local repos, optionally updates tracking-issue comments and open PR descriptions, and produces a copy-paste Dutch Slack message. Independent of the workflow chain above — run it whenever you want a daily wrap-up.
+**End of day:** `/report-out` summarizes the day's commits and per-platform activity (GitHub + GitLab) across local repos, optionally updates tracking-issue comments and open PR descriptions, and produces a copy-paste Dutch Slack message. Independent of the workflow chain above — run it whenever you want a daily wrap-up.

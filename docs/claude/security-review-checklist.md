@@ -77,8 +77,8 @@ Reference case: opencatalogi PR #85 (WOO-516) and PR #86 (WOO-515) — both secu
 ## Related
 
 - [writing-controllers.md](./writing-controllers.md) — full authoring guide.
-- [ADR-005 security](https://codeberg.org/Conduction/hydra/src/branch/main/openspec/architecture/adr-005-security.md)
-- [ADR-051 controller exception translation](https://codeberg.org/Conduction/hydra/src/branch/development/openspec/architecture/adr-051-controller-exception-translation.md)
-- [ADR-049 config fail-mode](https://codeberg.org/Conduction/hydra/src/branch/development/openspec/architecture/adr-049-config-fail-mode.md)
-- [ADR-052 URL canonicalization](https://codeberg.org/Conduction/hydra/src/branch/development/openspec/architecture/adr-052-url-canonicalization.md)
-- Companion mechanical gates: [gate-47 security-change-has-tests](https://codeberg.org/Conduction/hydra/src/branch/development/.claude/skills/hydra-gate-security-change-has-tests/SKILL.md), [gate-48 csrf-cochange](https://codeberg.org/Conduction/hydra/src/branch/development/.claude/skills/hydra-gate-csrf-cochange/SKILL.md), [gate-49 controller-exception-translation](https://codeberg.org/Conduction/hydra/src/branch/development/.claude/skills/hydra-gate-controller-exception-translation/SKILL.md), [gate-50 security-config-fail-mode](https://codeberg.org/Conduction/hydra/src/branch/development/.claude/skills/hydra-gate-security-config-fail-mode/SKILL.md).
+- [ADR-005 security](https://github.com/ConductionNL/hydra/src/branch/main/openspec/architecture/adr-005-security.md)
+- [ADR-051 controller exception translation](https://github.com/ConductionNL/hydra/src/branch/development/openspec/architecture/adr-051-controller-exception-translation.md)
+- [ADR-049 config fail-mode](https://github.com/ConductionNL/hydra/src/branch/development/openspec/architecture/adr-049-config-fail-mode.md)
+- [ADR-052 URL canonicalization](https://github.com/ConductionNL/hydra/src/branch/development/openspec/architecture/adr-052-url-canonicalization.md)
+- Companion mechanical gates: [gate-47 security-change-has-tests](https://github.com/ConductionNL/hydra/src/branch/development/.claude/skills/hydra-gate-security-change-has-tests/SKILL.md), [gate-48 csrf-cochange](https://github.com/ConductionNL/hydra/src/branch/development/.claude/skills/hydra-gate-csrf-cochange/SKILL.md), [gate-49 controller-exception-translation](https://github.com/ConductionNL/hydra/src/branch/development/.claude/skills/hydra-gate-controller-exception-translation/SKILL.md), [gate-50 security-config-fail-mode](https://github.com/ConductionNL/hydra/src/branch/development/.claude/skills/hydra-gate-security-config-fail-mode/SKILL.md).

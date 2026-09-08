@@ -170,10 +170,10 @@ Every Conduction app repo follows a clean split:
 
 | Location                                                                                                | Scope                                                                                                     | Who writes                                             |
 | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| [`hydra/openspec/architecture/`](https://codeberg.org/Conduction/hydra/tree/main/openspec/architecture) | **Org-wide ADRs** — apply to every Conduction app                                                         | Humans (architecture-level decisions)                  |
+| [`hydra/openspec/architecture/`](https://github.com/ConductionNL/hydra/tree/main/openspec/architecture) | **Org-wide ADRs** — apply to every Conduction app                                                         | Humans (architecture-level decisions)                  |
 | `<app>/openspec/architecture/`                                                                          | **Repo-specific ADRs** — apply only to that app (data model choices, domain standards, storage decisions) | Authored by Specter during research; evolved by humans |
 
-The authoritative org-wide list is the directory itself — [`hydra/openspec/architecture/`](https://codeberg.org/Conduction/hydra/tree/main/openspec/architecture) on `main`. GitHub renders it as a browsable index, so we don't mirror it here (the mirror would drift the moment a new ADR lands).
+The authoritative org-wide list is the directory itself — [`hydra/openspec/architecture/`](https://github.com/ConductionNL/hydra/tree/main/openspec/architecture) on `main`. GitHub renders it as a browsable index, so we don't mirror it here (the mirror would drift the moment a new ADR lands).
 
 App repos do **NOT** carry copies of the org-wide ADRs. Earlier they had stale duplicates that drifted (e.g. a copy saying `fetch()` while hydra's master said `axios`) — those copies were removed across every app repo that had them.
 
@@ -198,4 +198,4 @@ ADRs are for *design decisions* — the principled statement of what and why. Ga
 
 Prefer both when the design decision is a rule authors are likely to forget on individual PRs. Gate-only is only for rules that mostly enforce themselves through language / framework conventions. ADR-only is only for rules whose enforcement is inherently semantic (needs human judgment).
 
-Cross-reference: the [full catalog of Hydra gates](https://codeberg.org/Conduction/hydra/src/branch/main/.claude/skills) — each gate lives at `.claude/skills/hydra-gate-<name>/SKILL.md` with a link back to the ADR it enforces.
+Cross-reference: the [full catalog of Hydra gates](https://github.com/ConductionNL/hydra/src/branch/main/.claude/skills) — each gate lives at `.claude/skills/hydra-gate-<name>/SKILL.md` with a link back to the ADR it enforces.
