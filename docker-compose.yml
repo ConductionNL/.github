@@ -70,6 +70,12 @@ services:
     image: pgvector/pgvector:pg16
     restart: always
     container_name: conduction-postgres
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+        reservations:
+          memory: 512M
     volumes:
       - db:/var/lib/postgresql/data
       - ./docker/postgres/init-extensions.sql:/docker-entrypoint-initdb.d/01-init-extensions.sql:ro
@@ -107,6 +113,12 @@ services:
   nextcloud:
     user: root
     container_name: nextcloud
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+        reservations:
+          memory: 1G
     # PINNED — never use the floating `nextcloud`/`:latest` tag: on env reset the
     # container would boot a drifted NC over the existing data volume →
     # needsDbUpgrade → maintenance/503 + disabled apps. Bump deliberately.
@@ -291,6 +303,12 @@ services:
   exapp-n8n:
     image: ghcr.io/conductionnl/n8n-nextcloud:latest
     container_name: conduction-exapp-n8n
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 256M
     restart: always
     volumes:
       - exapp-n8n:/data
@@ -326,6 +344,12 @@ services:
       - demo
     user: root
     container_name: nextcloud
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 512M
     # PINNED — never use the floating `nextcloud`/`:latest` tag: on env reset the
     # container would boot a drifted NC over the existing data volume →
     # needsDbUpgrade → maintenance/503 + disabled apps. Bump deliberately.
@@ -375,6 +399,12 @@ services:
     image: mariadb:11.2
     restart: always
     container_name: conduction-mariadb
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 256M
     volumes:
       - db:/var/lib/mysql
     environment:
@@ -406,6 +436,12 @@ services:
       - mariadb
     user: root
     container_name: nextcloud-mariadb
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+        reservations:
+          memory: 1G
     # PINNED — never use the floating `nextcloud`/`:latest` tag: on env reset the
     # container would boot a drifted NC over the existing data volume →
     # needsDbUpgrade → maintenance/503 + disabled apps. Bump deliberately.
@@ -667,6 +703,12 @@ services:
       - ox
     image: mariadb:11.2
     container_name: conduction-ox-mariadb
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 128M
     restart: always
     volumes:
       - ox-db:/var/lib/mysql
@@ -736,6 +778,12 @@ services:
       - search
     image: zookeeper:3.8
     container_name: conduction-zookeeper
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 128M
     restart: always
     environment:
       - ZOO_MY_ID=1
@@ -758,6 +806,12 @@ services:
       - search
     image: solr:9-slim
     container_name: conduction-solr
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+        reservations:
+          memory: 512M
     restart: always
     ports:
       - "8983:8983"
@@ -1027,6 +1081,12 @@ services:
       - standalone
     image: n8nio/n8n:latest
     container_name: conduction-n8n
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 256M
     restart: always
     user: root
     ports:
@@ -1073,6 +1133,12 @@ services:
       - standalone
     image: ghcr.io/open-webui/open-webui:main
     container_name: conduction-open-webui
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+        reservations:
+          memory: 512M
     restart: always
     ports:
       - "3000:8080"
@@ -1149,6 +1215,12 @@ services:
       dockerfile: Dockerfile.dev
       target: development
     container_name: conduction-tilburg-woo-ui
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 128M
     restart: always
     ports:
       - "3000:81"
@@ -1263,6 +1335,12 @@ services:
       - exapps
     image: ghcr.io/nextcloud/nextcloud-appapi-harp:release
     container_name: conduction-harp
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 128M
     restart: always
     ports:
       - "8780:8780"
@@ -1287,6 +1365,12 @@ services:
       - exapps-legacy
     image: ghcr.io/nextcloud/docker-socket-proxy:latest
     container_name: conduction-docker-socket-proxy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 32M
     restart: always
     ports:
       - "2375:2375"
@@ -1311,6 +1395,12 @@ services:
       - exapps
     image: redis:7-alpine
     container_name: conduction-exapp-redis
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 64M
     restart: always
     volumes:
       - exapp-redis:/data
