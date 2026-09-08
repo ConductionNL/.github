@@ -169,7 +169,27 @@ class _Artifacts:
             known = self.php_tests.get(cls)
             if known is None:
                 missing.append(token)
-            elif method and method not in known:
+                continue
+            # A CITED SUBJECT IS NOT A MISSING TEST.
+            #
+            # `AcknowledgementServiceTest::isOutstanding` names the method
+            # UNDER test, not a test method, and that is a legitimate and
+            # common way to write the citation — the class does assert it, in
+            # `testIsOutstandingReackOnChangeChecksCurrentVersion`. Demanding a
+            # `function isOutstanding()` inside the test class accuses a
+            # correct citation, and a finding that is wrong even occasionally
+            # is a finding nobody works.
+            #
+            # So the method half is only checked when it is spelled as a test:
+            # `::testFoo` missing from a class that exists is the rename this
+            # gate is for, and shillinq's `SettingsControllerTest::testLoad`
+            # (the class has `testLoadReturnsConfigurationResult`) is exactly
+            # that. `::someSubject` resolves on the class alone.
+            #
+            # Measured on the two it got wrong: launchpad's
+            # AcknowledgementServiceTest::isOutstanding and decidiq's
+            # BoardMeetingServiceTest::getNoticeDeadlineInfo, 2 of 33 findings.
+            if method and method.startswith("test") and method not in known:
                 missing.append(token)
             else:
                 resolved.append(token)
