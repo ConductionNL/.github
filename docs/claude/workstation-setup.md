@@ -208,7 +208,14 @@ Conduction's platform is **GitHub** (under the `ConductionNL` org). The 2026-05-
 
 **[Codeberg Authentication Setup](./codeberg-auth-setup.md)** remains available for that last case — SSH key generation, `keychain` for passphrase persistence across shells, `tea` CLI install + token scopes, VS Code Gitea extension, and how to switch existing repo remotes. You do not need it for ConductionNL work.
 
-Quick smoke test after following that guide:
+Quick smoke test — this is the one that matters for ConductionNL work:
+
+```bash
+ssh -T git@github.com     # expect: "Hi <user>! You've successfully authenticated..."
+gh auth status            # expect: "Logged in to github.com account <user>"
+```
+
+Only if you also set up a non-Conduction Forgejo host, per the Codeberg guide above:
 
 ```bash
 ssh -T git@codeberg.org   # expect: "Hi <user>! ... but Forgejo does not provide shell access."
