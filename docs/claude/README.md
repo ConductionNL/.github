@@ -114,7 +114,7 @@ How to run Claude Code with a local Qwen model via Ollama for privacy, cost redu
 
 ### [Playwright MCP Browser Setup](./playwright-setup.md)
 
-Detailed setup guide for the 7 independent Playwright browser sessions used for parallel testing, including VS Code extension configuration, CLI alternatives, and usage rules.
+Setup guide for the Playwright MCP browsers: `browser-1` by default, the opt-in seven-browser pool on one shared server for parallel testing, VS Code user-scope registration, verification and usage rules.
 
 ### [Usage Tracker](../../usage-tracker/README.md)
 
@@ -440,7 +440,7 @@ cp docs/claude/examples/CLAUDE.local.md.example .claude/CLAUDE.local.md
 
 ## Playwright MCP Browser Setup
 
-The workspace uses 7 independent Playwright browser sessions for parallel testing. Copy the [example .mcp.json](./examples/.mcp.json.example) to your project root as `.mcp.json`, or see the [playwright-setup.md](./playwright-setup.md) guide for the full configuration, verification steps, CLI alternatives, and usage rules.
+Every project ships **one** headless browser (`browser-1`) in its root `.mcp.json` — copy the [example .mcp.json](./examples/.mcp.json.example). The seven-browser pool for parallel agents is opt-in: one shared `@playwright/mcp` server on `localhost:8931`, referenced by URL, so a pool costs zero processes per session ([example](./examples/browser-pool-shared.json.example)). Claude Code starts every stdio server in `.mcp.json` at session start; seven per session is how WSL ran out of memory on 2026-09-08. See [playwright-setup.md](./playwright-setup.md) for the shared server, the user-scope registration for VS Code, verification steps and usage rules.
 
 **Quick summary:**
 
@@ -491,7 +491,8 @@ This repo contains **documentation**, **global settings**, and **project templat
 │       ├── retrofit.md                  # Legacy app retrofit playbook
 │       └── examples/                    # Project-level template files
 │           ├── CLAUDE.local.md.example      # Template for project .claude/CLAUDE.local.md
-│           └── .mcp.json.example            # Template for project root .mcp.json (7 browsers)
+│           ├── .mcp.json.example            # Template for project root .mcp.json (browser-1 only)
+│           └── browser-pool-shared.json.example  # Opt-in 7-browser pool pointing at the shared server
 │
 ├── global-settings/                  # Mandatory user-level settings for ~/.claude/
 │   ├── settings.json                     # → ~/.claude/settings.json (global read-only policy)
@@ -511,7 +512,7 @@ Each Conduction project (Nextcloud apps, WordPress sites, etc.) has its own `.cl
 
 ```
 <project-root>/
-├── .mcp.json                     # Playwright browser MCP servers (see docs/claude/examples/.mcp.json.example)
+├── .mcp.json                     # Playwright browser-1 (see docs/claude/examples/.mcp.json.example); pools live in .claude/mcp/
 │
 └── .claude/
     ├── CLAUDE.md                     # Workflow rules, project context
@@ -646,6 +647,8 @@ You can verify the MCP binary itself starts correctly:
 npx -y @playwright/mcp@latest --headless --isolated --port 9999
 # Should print: Listening on http://localhost:9999
 ```
+
+If the pool entries (`browser-2`…) fail while `browser-1` works, the shared server is not running: `scripts/playwright-mcp-server.sh status` in the hydra checkout.
 
 ### Claude Code doesn't see commands
 

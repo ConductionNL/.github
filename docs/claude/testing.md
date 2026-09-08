@@ -393,4 +393,4 @@ Ensure Docker is running and Nextcloud is accessible before testing. See [docker
 
 **Rule:** Single agent = `browser-1`. Parallel agents = each gets a distinct browser (`browser-2`, `browser-3`, `browser-4`, …) to avoid session conflicts.
 
-For browser pool configuration, verification steps, and `.mcp.json` setup, see [playwright-setup.md](playwright-setup.md).
+The default `.mcp.json` ships only `browser-1`; the parallel rows above need the opt-in pool (one shared server, URL entries). For configuration, verification and setup, see [playwright-setup.md](playwright-setup.md).

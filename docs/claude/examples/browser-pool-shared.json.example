@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "browser-1": { "type": "http", "url": "http://localhost:8931/mcp" },
+    "browser-2": { "type": "http", "url": "http://localhost:8931/mcp" },
+    "browser-3": { "type": "http", "url": "http://localhost:8931/mcp" },
+    "browser-4": { "type": "http", "url": "http://localhost:8931/mcp" },
+    "browser-5": { "type": "http", "url": "http://localhost:8931/mcp" },
+    "browser-6": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest", "--browser", "chromium", "--isolated"]
+    },
+    "browser-7": { "type": "http", "url": "http://localhost:8931/mcp" }
+  }
+}

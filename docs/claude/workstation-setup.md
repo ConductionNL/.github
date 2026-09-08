@@ -292,6 +292,18 @@ npx playwright install chromium
 
 > If the MCP server reports a different revision is needed (e.g. after a `@playwright/mcp` update), run the install from the npx cache that the MCP server uses. You can find it at `~/.npm/_npx/` — look for the directory containing `@playwright/mcp`.
 
+### Shared Playwright MCP server (recommended)
+
+Projects ship only `browser-1` in `.mcp.json`. The parallel-testing pool (`browser-2`…`browser-7`) points at one shared server, so it costs no processes per session. Install it once from the hydra checkout; it runs as a systemd user unit and starts with your WSL session:
+
+```bash
+cd ~/hydra
+scripts/playwright-mcp-server.sh install-service
+for i in 2 3 4 5 7; do claude mcp add --scope user --transport http "browser-$i" http://localhost:8931/mcp; done
+```
+
+See [playwright-setup.md](./playwright-setup.md) for the why and the fallbacks.
+
 ### OpenSpec CLI
 
 Used by all `/opsx-*` commands for spec-driven development:
