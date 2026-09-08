@@ -20,8 +20,26 @@ Two scenario formats are supported:
     1. **GIVEN** ... **WHEN** ... **THEN** ...
     2. **GIVEN** ... **WHEN** ... **THEN** ...
 
-Both formats must appear inside ``openspec/specs/<spec-name>/spec.md`` files
-that are ADDED or MODIFIED in a PR. Every such scenario must be referenced by
+Both formats are read from **two file shapes**, and the spec name a scenario
+ref is built from comes from whichever shape it is:
+
+    openspec/specs/<spec-name>/spec.md      -> <spec-name>   (parent directory)
+    openspec/specs/<spec-name>.md           -> <spec-name>   (file stem)
+
+The flat shape was invisible to this gate until 2026-09-08. Measured across
+the 21 core apps that day, planninq kept 153 of its 224 scenarios in 13 flat
+files and the gate reported 70. Those scenarios were not counted, not
+enforceable, and not excludable either: an ``@e2e exclude`` in a file nothing
+opens excludes nothing. ``README.md`` is documentation about the directory and
+is never a spec.
+
+Because both shapes share one name space, ``<name>.md`` beside
+``<name>/spec.md`` makes every ``@e2e <name>::<slug>`` anchor ambiguous. That
+is REPORTED (``spec_name_collisions`` in report mode) and never resolved by
+picking one, which would credit an anchor against scenarios it was not written
+for.
+
+A scenario in a file that is ADDED or MODIFIED in a PR must be referenced by
 at least one Playwright e2e test file under ``tests/e2e/**`` (``*.spec.ts``,
 ``*.spec.js``, ``*.test.ts``, ``*.test.js``). This closes the loop between the
 *what-should-happen* (the scenario in the spec) and the *automated proof* (the
@@ -265,6 +283,91 @@ def _make_scenario_entry(
     }
 
 
+# ---------------------------------------------------------------------------
+# WHERE A SPEC FILE LIVES — TWO SHAPES, NOT ONE
+# ---------------------------------------------------------------------------
+#
+# This gate read `openspec/specs/*/spec.md` and nothing else. OpenSpec also
+# admits a FLAT spec file, `openspec/specs/<name>.md`, and the fleet uses it:
+#
+#   MEASURED 2026-09-08 across all 21 core apps. planninq keeps 153 of its 224
+#   scenarios in 13 flat files (projects.md alone holds 32). Every one of them
+#   was invisible here: not counted, not enforceable, and not even EXCLUDABLE,
+#   because an `@e2e exclude` in a file the gate never opens is not read
+#   either. The app reported 70 scenarios and has 224.
+#
+# An unseen scenario is worse than an uncovered one. An uncovered scenario is
+# on a list somebody can work down; an unseen one is absent from the
+# denominator, so the coverage percentage is computed over a corpus that
+# silently excludes it.
+#
+# README.md is excluded by name. It is documentation ABOUT the specs directory
+# and, in at least one repo, quotes a `#### Scenario:` heading as an example of
+# the format — which this parser would otherwise register as a real scenario.
+_SPEC_DIR_GLOB = "*/spec.md"
+_SPEC_FLAT_GLOB = "*.md"
+_NOT_A_SPEC = {"readme.md"}
+
+
+def spec_name_for(spec_path: Path) -> str:
+    """Return the spec identity a scenario ref is built from.
+
+    ``openspec/specs/kanban-board/spec.md`` -> ``kanban-board`` (parent dir).
+    ``openspec/specs/kanban-board.md``      -> ``kanban-board`` (file stem).
+
+    Both shapes therefore produce the SAME ref namespace, which is what makes
+    an `@e2e <spec>::<slug>` anchor portable when a flat spec is later promoted
+    to a directory. It also means the two shapes can COLLIDE; see
+    :func:`spec_files` for how that is surfaced rather than silently resolved.
+
+    :param spec_path: Path to the spec markdown file.
+    :return: The spec name.
+    """
+    if spec_path.name == "spec.md":
+        return spec_path.parent.name
+    return spec_path.stem
+
+
+def spec_files(spec_root: Path) -> list[Path]:
+    """Return every spec markdown file under ``spec_root``, both shapes.
+
+    :param spec_root: The ``openspec/specs`` directory.
+    :return: Sorted list of spec file paths, directory and flat shapes both.
+    """
+    if not spec_root.is_dir():
+        return []
+    found = list(spec_root.glob(_SPEC_DIR_GLOB))
+    found += [
+        p
+        for p in spec_root.glob(_SPEC_FLAT_GLOB)
+        if p.is_file() and p.name.lower() not in _NOT_A_SPEC
+    ]
+    return sorted(set(found))
+
+
+def spec_name_collisions(spec_root: Path) -> dict[str, list[str]]:
+    """Find spec names claimed by more than one file.
+
+    ``kanban-board.md`` beside ``kanban-board/spec.md`` makes the ref
+    ``kanban-board::<slug>`` ambiguous: one `@e2e` anchor would resolve against
+    two different scenario sets. planninq ships exactly this pair today.
+
+    Never resolved silently. Picking one file would credit an anchor against
+    scenarios it was never written for, which is the failure this whole gate
+    exists to prevent.
+
+    :param spec_root: The ``openspec/specs`` directory.
+    :return: Mapping of spec name to the relative paths claiming it, for names
+        claimed more than once. Empty when every name is unique.
+    """
+    by_name: dict[str, list[str]] = {}
+    for path in spec_files(spec_root):
+        by_name.setdefault(spec_name_for(path), []).append(
+            str(path.relative_to(spec_root))
+        )
+    return {name: sorted(paths) for name, paths in by_name.items() if len(paths) > 1}
+
+
 def parse_spec_scenarios(spec_path: Path) -> list[dict]:
     """Parse a spec.md and return a list of scenario dicts.
 
@@ -303,7 +406,7 @@ def parse_spec_scenarios(spec_path: Path) -> list[dict]:
             "bare_exclude": bool,           # True when excluded but no reason
         }
     """
-    spec_name = spec_path.parent.name
+    spec_name = spec_name_for(spec_path)
     try:
         lines = spec_path.read_text(encoding="utf-8").splitlines()
     except OSError:
@@ -453,10 +556,18 @@ def parse_spec_scenarios(spec_path: Path) -> list[dict]:
 
 # Accept either annotation form:
 #   @e2e openspec/specs/<spec>/<anything>spec.md#<slug>
+#   @e2e openspec/specs/<spec>.md#<slug>        (flat spec file)
 #   @e2e <spec>::<slug>
-# Both may appear in comments, test titles, describe strings — anywhere.
+# All may appear in comments, test titles, describe strings — anywhere.
+#
+# The flat alternative exists because `openspec/specs/<name>.md` is a spec file
+# this gate now reads (see `spec_files`). Without it, the path form could not
+# address 153 of planninq's 224 scenarios and an author annotating one would
+# have had to use the `::` form or be told the anchor was unresolvable.
 _E2E_PATH_RE = re.compile(
-    r"@e2e\s+openspec/specs/(?P<spec>[^/]+)/[^\s#]*#(?P<slug>[A-Za-z0-9_-]+)"
+    r"@e2e\s+openspec/specs/"
+    r"(?:(?P<spec>[^/\s#]+)/[^\s#]*|(?P<flatspec>[^/\s#]+?)\.md)"
+    r"#(?P<slug>[A-Za-z0-9_-]+)"
 )
 _E2E_SHORT_RE = re.compile(
     r"@e2e\s+(?P<spec>[A-Za-z0-9_-]+)::(?P<slug>[A-Za-z0-9_-]+)"
@@ -1192,6 +1303,129 @@ class _TestFile:
         return not self.mask[node.body[0] + 1:node.body[1]].strip()
 
 
+# ---------------------------------------------------------------------------
+# A TEST THAT PROVES A PAGE MOUNTED IS NOT A TEST THAT PROVES A SCENARIO
+# ---------------------------------------------------------------------------
+#
+# `_ref_is_live` answers "does anything run behind this anchor". It cannot
+# answer "does what runs assert the scenario", and the fleet exploits the gap.
+#
+#   MEASURED 2026-09-08 by classifying all 3,063 Playwright tests CI runs
+#   across the 21 core apps. Of the 1,695 carrying an `@e2e` anchor, 242 do
+#   nothing but navigate and check that a static label is visible, and 13 more
+#   assert nothing at all. Gate-19 credits every one of them.
+#
+#   The clearest case is filinq's bank-statement wizard: eleven anchored tests,
+#   each opening the dialog and asserting step one is visible, each deferring
+#   the real assertion to a unit test IN A COMMENT. Eleven scenarios about
+#   parsing, rejection and IDOR are "covered" by eleven proofs that a dialog
+#   opens.
+#
+# THE DEFINITION IS DELIBERATELY NARROW. Only a test that neither ACTS on the
+# page nor CHECKS any content is reported. A test that clicks and then asserts
+# visibility is arguable and is NOT reported here; a test that reads rendered
+# text is doing real work and is NOT reported here. The point is to name the
+# tests that could not have failed for the reason their scenario describes, not
+# to grade every test in the fleet.
+
+# Matchers that establish only that something EXISTS. `toHaveCount` is here on
+# purpose: a count is presence arithmetic, not content.
+_PRESENCE_MATCHERS = frozenset({
+    "toBeVisible", "toBeAttached", "toBeInViewport", "toBeHidden",
+    "toHaveCount", "toBeTruthy", "toBeDefined", "toBeOK",
+    "toBeGreaterThan", "toBeGreaterThanOrEqual", "toBeLessThan",
+    "toBeLessThanOrEqual",
+})
+
+# Anything that changes the page or the server. A test that does one of these
+# is exercising behaviour whatever it asserts afterwards.
+_INTERACTION_RE = re.compile(
+    r"\.(?:click|dblclick|fill|press|pressSequentially|selectOption|check|"
+    r"uncheck|setChecked|setInputFiles|dragTo|dragAndDrop|hover|tap|clear|"
+    r"selectText|focus|blur)\s*\(|"
+    r"(?:keyboard|mouse)\s*\.\s*(?:press|type|insertText|down|up|move|wheel|click)\s*\(|"
+    r"request\s*\.\s*(?:post|put|patch|delete|fetch)\s*\("
+)
+
+# A CALL THIS PARSER CANNOT SEE INSIDE IS NOT EVIDENCE OF ABSENCE.
+#
+# The fleet's convention is a page-object helper taking the page first:
+# `openIndexSidebar(page)`, `dismissSupportModal(page)`, `revealNavEntry(page,
+# 'Contacts')`. Some are pure locator builders; `openIndexSidebar` clicks.
+# Resolving which would mean following imports across files, and a gate that
+# guesses wrong ACCUSES A GOOD TEST of proving nothing.
+#
+# Found on the first fleet run of this classifier: zaakafhandelapp's "selecting
+# a zaak" test was reported as presence-only, and it does drive the page -- the
+# click is one frame down, inside `openIndexSidebar(page)`.
+#
+# So a call receiving `page` ends the classification at `behaviour`. This trades
+# recall for precision deliberately. The finding has to be true every time, or
+# nobody works the list.
+#
+# The exclusion list is load-bearing, not defensive. `expect(page.getByText(…))`
+# matches "an identifier called with `page`" perfectly, and without the guard
+# this pattern fires on EVERY assertion about the page -- which silently
+# classified all but 55 of the fleet's presence-only anchors as behaviour.
+# Caught by this module's own tests before it shipped.
+_NOT_A_HELPER = r"(?!(?:expect|if|for|while|switch|return|typeof|await|catch)\b)"
+_HELPER_CALL_RE = re.compile(rf"\b{_NOT_A_HELPER}\w+\s*\(\s*page\s*[,)]")
+
+# `expect(` / `expect.soft(` / `expect.poll(`, and the matcher that follows the
+# closing paren of its argument.
+_EXPECT_RE = re.compile(r"\bexpect\s*(?:\.\s*(?:soft|poll)\s*)?\(")
+_MATCHER_RE = re.compile(r"\A\s*(?:\.\s*(?:not|resolves|rejects)\s*)*\.\s*(\w+)\s*\(")
+
+EVIDENCE_BEHAVIOUR = "behaviour"
+EVIDENCE_PRESENCE_ONLY = "presence-only"
+EVIDENCE_NO_ASSERTION = "no-assertion"
+
+
+def classify_evidence(
+    doc: _TestFile, node: _TestNode, opaque_call_acts: bool = True
+) -> str:
+    """What does the test at *node* actually establish?
+
+    :param doc: The tokenised test file.
+    :param node: The declaration owning the anchor.
+    :param opaque_call_acts: When True (the default, and the only setting a
+        FINDING may be raised from), a call receiving ``page`` is assumed to
+        act, because this parser cannot see inside it. Set False to compute the
+        other end of the range: what the count would be if no such helper acted.
+        The truth is between the two and cannot be narrowed statically, because
+        some of those helpers act only as SETUP -- zaakafhandelapp's
+        ``dismissSupportModal(page)`` clicks a modal shut before the scenario
+        starts, which is not the scenario being exercised.
+    :return: ``behaviour``, ``presence-only`` or ``no-assertion``.
+    """
+    if node.body is None:
+        return EVIDENCE_NO_ASSERTION
+    body = doc.mask[node.body[0]:node.body[1]]
+
+    matchers: list[str] = []
+    for m in _EXPECT_RE.finditer(body):
+        close = _match_paren(body, m.end() - 1)
+        if close is None:
+            continue
+        found = _MATCHER_RE.match(body[close + 1:close + 160])
+        if found:
+            matchers.append(found.group(1))
+
+    if not matchers:
+        return EVIDENCE_NO_ASSERTION
+    # Acting on the page is behaviour regardless of the matcher that follows.
+    if _INTERACTION_RE.search(body):
+        return EVIDENCE_BEHAVIOUR
+    # A helper taking `page` may act inside. Unknown is not absence.
+    if opaque_call_acts and _HELPER_CALL_RE.search(body):
+        return EVIDENCE_BEHAVIOUR
+    # Every assertion is about existence, and nothing was driven to make it
+    # true. This test would pass on any build where the page renders.
+    if all(name in _PRESENCE_MATCHERS for name in matchers):
+        return EVIDENCE_PRESENCE_ONLY
+    return EVIDENCE_BEHAVIOUR
+
+
 def _ref_is_live(doc: _TestFile, pos: int) -> bool:
     """Does the test that owns the `@e2e` tag at *pos* actually assert
     anything?
@@ -1608,12 +1842,25 @@ def collect_covered_refs(app_dir: Path) -> set[str]:
     return live
 
 
-def collect_ref_status(app_dir: Path) -> tuple[set[str], dict[str, str]]:
+def collect_ref_status(
+    app_dir: Path,
+    evidence: dict[str, str] | None = None,
+    evidence_loose: dict[str, str] | None = None,
+) -> tuple[set[str], dict[str, str]]:
     """(live refs, {dead ref: reason}) across the app's e2e suite.
 
     A ref is live if ANY test referencing it runs. One skipped copy alongside
     a real one is not a regression, so the dead map only keeps refs with no
     live reference at all.
+
+    :param app_dir: The app root.
+    :param evidence: Optional dict, populated in place with ``{ref: class}``
+        from :func:`classify_evidence` for every LIVE ref. Passed as an out
+        parameter rather than returned so the gate-mode caller's tuple unpack
+        is untouched.
+    :param evidence_loose: Optional dict, same shape, classified with
+        ``opaque_call_acts=False``. The two together give the RANGE a static
+        reader can honestly claim; see :func:`classify_evidence`.
     """
     live: set[str] = set()
     dead: dict[str, str] = {}
@@ -1646,7 +1893,13 @@ def collect_ref_status(app_dir: Path) -> tuple[set[str], dict[str, str]]:
         doc = _TestFile(text)
         for rex in (_E2E_PATH_RE, _E2E_SHORT_RE):
             for m in rex.finditer(text):
-                ref = f"{m.group('spec')}::{m.group('slug')}"
+                # `_E2E_PATH_RE` matches two shapes and fills exactly one of
+                # them: `spec` for `<name>/…spec.md`, `flatspec` for
+                # `<name>.md`. `_E2E_SHORT_RE` has no `flatspec` group at all,
+                # hence `groupdict().get` rather than `group`, which would
+                # raise IndexError on the short form.
+                spec = m.group("spec") or m.groupdict().get("flatspec")
+                ref = f"{spec}::{m.group('slug')}"
                 # A MENTION IS NOT A DIRECTIVE (#358). Checked before liveness
                 # on purpose: prose that names an anchor is not a weak tag on a
                 # good test, it is not a tag, and the finding has to say so or
@@ -1655,6 +1908,23 @@ def collect_ref_status(app_dir: Path) -> tuple[set[str], dict[str, str]]:
                 if directive and file_runs and _ref_is_live(doc, m.end()):
                     live.add(ref)
                     dead.pop(ref, None)
+                    if evidence is not None:
+                        node = doc.owner(m.end())
+                        if node is None:
+                            klass, loose = (EVIDENCE_NO_ASSERTION,) * 2
+                        else:
+                            klass = classify_evidence(doc, node)
+                            loose = classify_evidence(
+                                doc, node, opaque_call_acts=False
+                            )
+                        # STRONGEST WINS. A scenario anchored from two tests is
+                        # covered by the better of them, so a thin second
+                        # anchor never downgrades a real proof.
+                        if evidence.get(ref) != EVIDENCE_BEHAVIOUR:
+                            evidence[ref] = klass
+                        if evidence_loose is not None and \
+                                evidence_loose.get(ref) != EVIDENCE_BEHAVIOUR:
+                            evidence_loose[ref] = loose
                 elif ref not in live:
                     if not directive:
                         reason = (
@@ -1708,7 +1978,17 @@ def changed_spec_files(base_ref: str, app_dir: Path) -> set[str]:
     paths: set[str] = set()
     for line in diff.splitlines():
         line = line.strip()
-        if line.startswith("openspec/specs/") and line.endswith("spec.md"):
+        if not line.startswith("openspec/specs/") or not line.endswith(".md"):
+            continue
+        rest = line[len("openspec/specs/"):]
+        depth = rest.count("/")
+        # `<name>/spec.md` — the classic shape, exactly one level down.
+        if depth == 1 and rest.endswith("/spec.md"):
+            paths.add(line)
+            continue
+        # `<name>.md` — the flat shape, which this gate used to skip entirely.
+        # README.md is documentation about the directory, not a spec.
+        if depth == 0 and rest.lower() not in _NOT_A_SPEC:
             paths.add(line)
     return paths
 
@@ -1765,26 +2045,49 @@ def run_report(app_dir: Path) -> int:
         print(json.dumps(out, indent=2))
         return 0
 
-    covered_refs = collect_covered_refs(app_dir)
+    evidence: dict[str, str] = {}
+    evidence_loose: dict[str, str] = {}
+    covered_refs, _dead = collect_ref_status(
+        app_dir, evidence=evidence, evidence_loose=evidence_loose
+    )
 
     all_scenarios: list[dict] = []
-    for spec_md in sorted(spec_root.glob("*/spec.md")):
+    for spec_md in spec_files(spec_root):
         all_scenarios.extend(parse_spec_scenarios(spec_md))
 
-    totals = {"scenarios": len(all_scenarios), "covered": 0, "excluded": 0, "uncovered": 0}
+    totals = {"scenarios": len(all_scenarios), "covered": 0, "excluded": 0,
+              "uncovered": 0, "covered_thinly": 0, "covered_thinly_max": 0}
     uncovered: list[dict] = []
 
+    # A scenario whose only proof is "the page rendered" is counted as covered
+    # here, exactly as the gate counts it, AND listed separately. Silently
+    # reclassifying it would move a number nobody could reconcile against the
+    # gate's own verdict; listing it lets the two be compared.
+    thin: list[dict] = []
     for s in all_scenarios:
         if s["excluded"] and not s["bare_exclude"]:
             totals["excluded"] += 1
         elif s["ref"] in covered_refs:
             totals["covered"] += 1
+            klass = evidence.get(s["ref"], EVIDENCE_BEHAVIOUR)
+            if klass != EVIDENCE_BEHAVIOUR:
+                totals["covered_thinly"] += 1
+                thin.append({
+                    "ref": s["ref"], "spec": s["spec"],
+                    "scenario": s["scenario"], "evidence": klass,
+                })
+            if evidence_loose.get(s["ref"], EVIDENCE_BEHAVIOUR) != EVIDENCE_BEHAVIOUR:
+                totals["covered_thinly_max"] += 1
         else:
             totals["uncovered"] += 1
             uncovered.append({"ref": s["ref"], "spec": s["spec"], "scenario": s["scenario"]})
 
     denominator = totals["scenarios"] - totals["excluded"]
     coverage_pct = round(totals["covered"] / denominator * 100, 1) if denominator > 0 else None
+    # What the percentage becomes once a proof that the page mounted stops
+    # counting as a proof of the scenario.
+    strong = totals["covered"] - totals["covered_thinly"]
+    coverage_pct_strong = round(strong / denominator * 100, 1) if denominator > 0 else None
 
     out = {
         "mode": "report",
@@ -1792,6 +2095,16 @@ def run_report(app_dir: Path) -> int:
         "totals": totals,
         "uncovered": uncovered,
         "coverage_pct": coverage_pct,
+        # The same percentage with presence-only proofs removed. Measured
+        # 2026-09-08: 242 of the fleet's 1,695 anchored tests navigate and
+        # assert a static label is visible, and 13 assert nothing at all.
+        "coverage_pct_strong": coverage_pct_strong,
+        "covered_thinly": thin,
+        # Reported, never resolved. Two files claiming one spec name make every
+        # `@e2e <name>::<slug>` anchor in the repo ambiguous, and a dashboard
+        # that shows a coverage percentage without showing this is quoting a
+        # number computed over a corpus it could not identify.
+        "spec_name_collisions": spec_name_collisions(spec_root),
     }
     print(json.dumps(out, indent=2))
     return 0
@@ -1840,17 +2153,14 @@ def run_gate(app_dir: Path) -> int:
         return EXIT_ERROR
 
     spec_root = app_dir / "openspec" / "specs"
-    all_specs = (
-        {str(p.relative_to(app_dir)) for p in spec_root.glob("*/spec.md")}
-        if spec_root.is_dir()
-        else set()
-    )
+    all_specs = {str(p.relative_to(app_dir)) for p in spec_files(spec_root)}
 
     if not all_specs:
         print(
             f"[gate-{GATE_NUM}] e2e-coverage: NOT APPLICABLE — no "
-            f"openspec/specs/*/spec.md in this repository, so there is no "
-            f"declared scenario for an e2e test to trace back to."
+            f"openspec/specs/*/spec.md or openspec/specs/*.md in this "
+            f"repository, so there is no declared scenario for an e2e test to "
+            f"trace back to."
         )
         return EXIT_NOT_APPLICABLE
 
