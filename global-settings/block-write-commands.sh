@@ -91,25 +91,37 @@ fi
 # overwrite sourced from the canonical repo (enforced by the write guard below). This is a
 # HARD BLOCK regardless of source, because these operations cannot carry canonical content.
 #
-# The gap classes are [^|;&] rather than [^|] so the tool name, its -i flag and the
-# protected path must all sit in the SAME command segment. With the old [^|]* — which
-# stops at a pipe but spans `;` and `&&` — they could each be borrowed from a
-# DIFFERENT command in one chain, e.g. `awk '{print}' f; grep -c -i x
-# ~/.claude/hooks/y.sh` was hard-denied as an "in-place edit" using awk from the
-# first command and -i from the second. Fails closed, so the symptom was a refused
-# read-only inspection with a misleading reason.
+# Exactly ONE thing differs from the long-standing form: on the first arm, the gap
+# between the tool name and its -i flag is [^|;&]* instead of [^|]*. That closes a
+# false positive where the verb and the flag came from DIFFERENT commands in one
+# chain — `awk '{print}' f; grep -c -i x ~/.claude/hooks/y.sh` was hard-denied as an
+# "in-place edit" using awk from the first command and -i from the second. A `;` or
+# `&` can never legitimately sit between a command name and its own flag, so
+# narrowing there costs no coverage.
 #
-# Deliberately NOT anchored on the first two arms. Adding `(^|[;&|]\s*)` there looks
-# tidier and matches the rm arm, but it strictly removes coverage: a genuine verb is
-# not always at a segment start. `  sed -i … ~/.claude/x` (leading whitespace),
-# `(sed -i … ~/.claude/x)`, `{ sed -i … ~/.claude/x; }`, `env sed -i … ~/.claude/x`
-# and `if true; then sed -i … ~/.claude/x; fi` all stop matching, because `(`, `{`
-# and a bare `^`-plus-space are not segment separators. Keep the bare \bverb\b match:
-# narrowing the gap alone fixes the false positive without opening those holes.
-# The rm arm keeps its anchor — that is pre-existing behaviour, not added here.
-if echo "$cmd" | grep -qE "\b(sed|perl|awk|gawk|ruby)\b[^|;&]*[[:space:]]-i\b[^|;&]*${_prot}" \
-|| echo "$cmd" | grep -qE "\b(truncate|shred|unlink)\b[^|;&]*${_prot}" \
-|| echo "$cmd" | grep -qE "(^|[;&|]\s*)rm\b[^|;&]*${_prot}"; then
+# Everything else is left exactly as it was, and both temptations to "tidy up" are
+# deliberately resisted:
+#
+#   1. Do NOT anchor the first two arms with `(^|[;&|]\s*)` to match the rm arm.
+#      A genuine verb is often not at a segment start: `  sed -i … ~/.claude/x`,
+#      `(sed -i … ~/.claude/x)`, `{ sed -i … ~/.claude/x; }`, `env sed -i …` and
+#      `if true; then sed -i …; fi` all stop matching, because `(`, `{` and a bare
+#      leading space are not separators.
+#
+#   2. Do NOT narrow the gap that precedes ${_prot} on any arm. This guard is plain
+#      text matching with no shell awareness, so it cannot tell a command separator
+#      from the same character inside a quoted argument. `sed -i "s/a/b/;s/c/d/"
+#      ~/.claude/settings.json` is an ordinary two-substitution sed script; with a
+#      narrowed gap it stops matching and — for perl/awk/truncate/unlink, which have
+#      no generic fallback rule — becomes a silent ALLOW of a real in-place edit.
+#
+# The residual false positives (`rm /tmp/junk; cat ~/.claude/settings-version`, and
+# `sed -i … /tmp/x; grep … ~/.claude/x`) are the price of that. They fail CLOSED — a
+# refused read, never an allowed write — and cannot be fixed at the regex level
+# without opening the fail-open hole above. Fixing them needs real shell parsing.
+if echo "$cmd" | grep -qE "\b(sed|perl|awk|gawk|ruby)\b[^|;&]*[[:space:]]-i\b[^|]*${_prot}" \
+|| echo "$cmd" | grep -qE "\b(truncate|shred|unlink)\b[^|]*${_prot}" \
+|| echo "$cmd" | grep -qE "(^|[;&|]\s*)rm\b[^|]*${_prot}"; then
     hard_deny "BLOCKED: in-place edits, truncation, or deletion of ~/.claude/ config files are not permitted. The only allowed operation is a full overwrite with canonical content from the configured source."
 fi
 
