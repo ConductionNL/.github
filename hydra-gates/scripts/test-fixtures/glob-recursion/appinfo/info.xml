@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<id>globrecfx</id>
+	<name>Glob Recursion Fixture</name>
+	<summary>Fixture app for the glob-recursion regression suite. Not a real app.</summary>
+	<description>Every defect in this app sits BELOW the directory a non-recursive glob would enumerate. There are deliberately no top-level twins, so a gate that re-acquires a shallow glob finds nothing and the suite fails.</description>
+	<version>1.0.0</version>
+	<licence>agpl</licence>
+	<author>Conduction</author>
+	<namespace>GlobRecFx</namespace>
+	<category>tools</category>
+	<dependencies><nextcloud min-version="30" max-version="32"/></dependencies>
+</info>
