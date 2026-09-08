@@ -2311,5 +2311,165 @@ class ChangedSpecFilesShapeTest(unittest.TestCase):
         )
 
 
+class ClassifyEvidenceTest(unittest.TestCase):
+    """A test that proves a page mounted is not a test that proves a scenario."""
+
+    def _classify(self, body: str, **kw) -> str:
+        src = "test('t', async ({ page }) => {\n" + body + "\n})\n"
+        doc = cec._TestFile(src)
+        node = doc.owner(0)
+        self.assertIsNotNone(node, "fixture did not parse as a test")
+        return cec.classify_evidence(doc, node, **kw)
+
+    def test_navigate_and_assert_visible_is_presence_only(self):
+        self.assertEqual(
+            self._classify(
+                "  await page.goto('/apps/x/things')\n"
+                "  await expect(page.getByText('Things')).toBeVisible()\n"
+            ),
+            cec.EVIDENCE_PRESENCE_ONLY,
+        )
+
+    def test_a_count_is_presence_arithmetic_not_content(self):
+        self.assertEqual(
+            self._classify(
+                "  await page.goto('/apps/x/things')\n"
+                "  await expect(page.locator('.row')).toHaveCount(3)\n"
+            ),
+            cec.EVIDENCE_PRESENCE_ONLY,
+        )
+
+    def test_reading_content_is_behaviour(self):
+        self.assertEqual(
+            self._classify(
+                "  await page.goto('/apps/x/things')\n"
+                "  await expect(page.locator('.total')).toHaveText('42')\n"
+            ),
+            cec.EVIDENCE_BEHAVIOUR,
+        )
+
+    def test_clicking_then_asserting_visible_is_behaviour(self):
+        # Deliberately NOT a finding. Arguable, and the gate only reports what
+        # is indefensible.
+        self.assertEqual(
+            self._classify(
+                "  await page.goto('/apps/x/things')\n"
+                "  await page.getByRole('button', { name: 'Add' }).click()\n"
+                "  await expect(page.getByRole('dialog')).toBeVisible()\n"
+            ),
+            cec.EVIDENCE_BEHAVIOUR,
+        )
+
+    def test_an_api_write_is_behaviour(self):
+        self.assertEqual(
+            self._classify(
+                "  const r = await page.request.post('/api/things', { data: {} })\n"
+                "  expect(r.ok()).toBeTruthy()\n"
+            ),
+            cec.EVIDENCE_BEHAVIOUR,
+        )
+
+    def test_no_expect_at_all_is_no_assertion(self):
+        self.assertEqual(
+            self._classify("  await page.goto('/apps/x/things')\n"),
+            cec.EVIDENCE_NO_ASSERTION,
+        )
+
+    def test_a_negated_content_matcher_still_counts_as_content(self):
+        self.assertEqual(
+            self._classify(
+                "  await page.goto('/apps/x')\n"
+                "  await expect(page.locator('body')).not.toContainText('Error')\n"
+            ),
+            cec.EVIDENCE_BEHAVIOUR,
+        )
+
+    def test_a_helper_taking_page_is_treated_as_possibly_acting(self):
+        # zaakafhandelapp's "selecting a zaak": the click lives inside
+        # openIndexSidebar(page). Unknown is not absence, so no finding.
+        body = (
+            "  await page.goto('/apps/x/zaken')\n"
+            "  await openIndexSidebar(page)\n"
+            "  await expect(page.getByRole('heading')).toBeVisible()\n"
+        )
+        self.assertEqual(self._classify(body), cec.EVIDENCE_BEHAVIOUR)
+        # ... and the other end of the range says what it would be if that
+        # helper turned out to be a pure locator builder.
+        self.assertEqual(
+            self._classify(body, opaque_call_acts=False),
+            cec.EVIDENCE_PRESENCE_ONLY,
+        )
+
+    def test_expect_poll_and_soft_are_recognised(self):
+        self.assertEqual(
+            self._classify(
+                "  await page.goto('/apps/x')\n"
+                "  await expect.soft(page.locator('.x')).toBeVisible()\n"
+            ),
+            cec.EVIDENCE_PRESENCE_ONLY,
+        )
+
+
+class ReportModeEvidenceTest(unittest.TestCase):
+    """Report mode carries the thin-coverage floor and ceiling."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def _report(self) -> dict:
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            cec.run_report(self.root)
+        return json.loads(buf.getvalue())
+
+    def test_a_presence_only_proof_counts_as_covered_and_as_thin(self):
+        _write(self.root, "openspec/specs/things/spec.md", BASIC_SPEC)
+        _write(
+            self.root,
+            "tests/e2e/things.spec.ts",
+            "import { expect, test } from '@playwright/test'\n"
+            "// @e2e things::foo-does-bar\n"
+            "test('foo renders', async ({ page }) => {\n"
+            "  await page.goto('/apps/x')\n"
+            "  await expect(page.getByText('Foo')).toBeVisible()\n"
+            "})\n"
+            "// @e2e things::foo-handles-error\n"
+            "test('foo errors', async ({ page }) => {\n"
+            "  await page.goto('/apps/x')\n"
+            "  await expect(page.locator('.msg')).toHaveText('nope')\n"
+            "})\n",
+        )
+        out = self._report()
+        t = out["totals"]
+        self.assertEqual(t["covered"], 2)
+        # Counted as covered, exactly as the gate counts it, AND listed.
+        self.assertEqual(t["covered_thinly"], 1)
+        self.assertEqual(out["coverage_pct"], 100.0)
+        self.assertEqual(out["coverage_pct_strong"], 50.0)
+        self.assertEqual(
+            [x["ref"] for x in out["covered_thinly"]], ["things::foo-does-bar"]
+        )
+
+    def test_the_ceiling_is_at_least_the_floor(self):
+        _write(self.root, "openspec/specs/things/spec.md", BASIC_SPEC)
+        _write(
+            self.root,
+            "tests/e2e/things.spec.ts",
+            "import { expect, test } from '@playwright/test'\n"
+            "// @e2e things::foo-does-bar\n"
+            "test('a', async ({ page }) => {\n"
+            "  await settle(page)\n"
+            "  await expect(page.getByText('Foo')).toBeVisible()\n"
+            "})\n",
+        )
+        t = self._report()["totals"]
+        self.assertEqual(t["covered_thinly"], 0)      # helper may act
+        self.assertEqual(t["covered_thinly_max"], 1)  # if it does not
+        self.assertLessEqual(t["covered_thinly"], t["covered_thinly_max"])
+
+
 if __name__ == "__main__":
     unittest.main()
