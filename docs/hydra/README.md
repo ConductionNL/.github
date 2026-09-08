@@ -9,7 +9,7 @@ description: Conduction's agentic spec-driven CI/CD pipeline — what it is, how
 
 **Hydra is Conduction's agentic spec-driven CI/CD pipeline.** It takes an OpenSpec change proposal and runs it through a multi-stage AI pipeline — Builder, automated quality tests, parallel Code and Security Review — and produces a draft pull request ready for a single human approval. No code reaches `main` without a human in the loop.
 
-It is the factory, not the product. The applications Hydra builds live under [ConductionNL](https://github.com/ConductionNL) with legacy/archived projects on the [ConductionNL](https://github.com/ConductionNL) GitHub org; Hydra itself lives at [Conduction/hydra](https://github.com/ConductionNL/hydra).
+It is the factory, not the product. The applications Hydra builds live under the [ConductionNL](https://github.com/ConductionNL) GitHub org; Hydra itself lives at [ConductionNL/hydra](https://github.com/ConductionNL/hydra) (private).
 
 ## How it works
 
@@ -63,7 +63,7 @@ Two separate repos, two distinct purposes, no overlap:
 | **What it contains** | Container images, agent personas, orchestration scripts, the `.claude/skills/` catalogue (`hydra-gate-*`, `opsx-*`, `test-*`), OpenSpec changes, K8s manifests | Developer guides (`docs/claude/`), Way-of-Work and onboarding (`docs/WayOfWork/`), the public Hydra one-pager (`docs/hydra/`), ISO compliance (`docs/iso/`), global Claude settings (`global-settings/`), the usage-tracker tool |
 | **What it's for** | *Running* the pipeline — everything that executes | *Reading and configuring* — everything you study, install once per machine, or hand to a new colleague |
 | **Clone it when** | You want to run Hydra locally, modify a skill, inspect agent configs, or browse the OpenSpec change backlog | You want to read the docs offline, install the mandatory global Claude settings, or contribute to the developer handbook |
-| **Self-description** | "Factory, not the product" — from [`hydra/README.md`](https://github.com/ConductionNL/hydra/src/branch/main/README.md) and [`hydra/CLAUDE.md`](https://github.com/ConductionNL/hydra/src/branch/main/CLAUDE.md) | "Central hub for org-level defaults, developer guides, global tooling configuration, and shared documentation" — from [`.github/README.md`](https://github.com/ConductionNL/.github/src/branch/main/README.md) |
+| **Self-description** | "Factory, not the product" — from [`hydra/README.md`](https://github.com/ConductionNL/hydra/blob/main/README.md) and [`hydra/CLAUDE.md`](https://github.com/ConductionNL/hydra/blob/main/CLAUDE.md) | "Central hub for org-level defaults, developer guides, global tooling configuration, and shared documentation" — from [`.github/README.md`](https://github.com/ConductionNL/.github/blob/main/README.md) |
 
 Each repo has its own `docs/` directory, and that's not a duplication: **Hydra's `docs/`** covers pipeline internals (container architecture, secrets, cron, retrospectives) — only relevant if you operate the pipeline. **`.github/docs/`** is for everyone using the pipeline as a consumer.
 

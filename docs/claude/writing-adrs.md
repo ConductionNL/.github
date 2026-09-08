@@ -198,4 +198,4 @@ ADRs are for *design decisions* — the principled statement of what and why. Ga
 
 Prefer both when the design decision is a rule authors are likely to forget on individual PRs. Gate-only is only for rules that mostly enforce themselves through language / framework conventions. ADR-only is only for rules whose enforcement is inherently semantic (needs human judgment).
 
-Cross-reference: the [full catalog of Hydra gates](https://github.com/ConductionNL/hydra/src/branch/main/.claude/skills) — each gate lives at `.claude/skills/hydra-gate-<name>/SKILL.md` with a link back to the ADR it enforces.
+Cross-reference: the [full catalog of Hydra gates](https://github.com/ConductionNL/hydra/tree/main/.claude/skills) — each gate lives at `.claude/skills/hydra-gate-<name>/SKILL.md` with a link back to the ADR it enforces.

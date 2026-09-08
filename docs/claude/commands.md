@@ -172,7 +172,7 @@ Create a Pull Request from a branch in any repo. Handles the full flow interacti
 
 **Model:** Checked at run time — the command reads your active model from context and stops automatically if you're on Haiku (or anything weaker than Sonnet). Involves parsing CI workflows, detecting branch-protection rules, and reasoning about code diffs where mistakes have real consequences. **Sonnet** for most PRs. **Opus** when the repo uses reusable CI workflows, branch-protection rulesets, or a complex branching strategy — that's where it pays off most.
 
-**Requires:** at least one platform CLI authenticated — `gh auth login` (GitHub, primary), `glab auth login` (GitLab), or `glab auth login` (GitLab, alternative)
+**Requires:** at least one platform CLI authenticated — `gh auth login` (GitHub, primary), `glab auth login` (GitLab, alternative), or `tea login add` (Gitea/Forgejo, non-Conduction repos only)
 
 ---
 
@@ -214,7 +214,7 @@ Review one or more GitHub Pull Requests. Fetches the diff, detects prior reviews
 
 **Model:** Requires Sonnet or Opus — stops immediately on Haiku. Batch mode lets you choose the model for parallel analysis agents (Sonnet default, Opus for security-sensitive batches).
 
-**Requires:** at least one platform CLI authenticated — `gh auth login` (GitHub, primary), `glab auth login` (GitLab), or `glab auth login` (GitLab, alternative)
+**Requires:** at least one platform CLI authenticated — `gh auth login` (GitHub, primary), `glab auth login` (GitLab, alternative), or `tea login add` (Gitea/Forgejo, non-Conduction repos only)
 
 ---
 
@@ -266,7 +266,7 @@ Daily end-of-day report. Scans local git repos for the user's commits and uncomm
 
 **Maturity:** L6 (9 evals, learnings.md with consolidation pipeline). See `hydra/.claude/skills/report-out/SKILL.md`.
 
-**Requires:** at least one platform CLI authenticated — `gh auth login` (GitHub, primary), `glab auth login` (GitLab), or `glab auth login` (GitLab, alternative), `git` configured with `user.name` and `user.email`.
+**Requires:** at least one platform CLI authenticated — `gh auth login` (GitHub, primary), `glab auth login` (GitLab, alternative), or `tea login add` (Gitea/Forgejo, non-Conduction repos only), `git` configured with `user.name` and `user.email`.
 
 ---
 

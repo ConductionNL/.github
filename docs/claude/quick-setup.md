@@ -126,8 +126,8 @@ php --version                        # 8.1+
 composer --version                   # 2.x
 docker --version                     # 24+
 docker compose version               # plugin present
-tea --version                        # 0.10+
 gh --version                         # 2.x+
+# tea --version                      # only if you installed it for a Forgejo host
 openspec --version                   # 1.x
 npx playwright --version             # 1.x
 

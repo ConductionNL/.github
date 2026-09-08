@@ -14,8 +14,8 @@ Once both are configured, Claude Code can drive the entire Codeberg workflow ins
 ## Prerequisites
 
 - WSL2 with Ubuntu (see [Workstation Setup](./workstation-setup.md) → "Install WSL2")
-- A Codeberg account at <https://codeberg.org>
-- Membership in the `Conduction` organisation (ask a maintainer if you're missing access)
+- A Codeberg account at <https://codeberg.org> (or an account on whichever Forgejo instance hosts the repo)
+- Access to the repo or organisation you need on that instance
 - VS Code with the Remote WSL extension installed on the Windows side
 
 ## Step 1 — Generate an SSH key
@@ -207,18 +207,26 @@ You should see one row with `NAME=codeberg`, `URL=https://codeberg.org`, `USER=<
 
 The token is stored in `~/.config/tea/config.yml` from now on. Every `tea` invocation reuses it.
 
-## Step 9 — Switch existing repo remotes to Codeberg
+## Step 9 — Point a repo at a Forgejo host
 
-Repos cloned before the migration still point at GitHub. To switch one:
+> Do **not** do this for a Conduction repo. All Conduction work lives on GitHub under `ConductionNL/*`; moving one back to Codeberg contradicts the platform policy. This step exists for a non-Conduction repo that genuinely lives on a Forgejo host.
+
+To point such a repo at its Forgejo remote — substitute the host and owner for the instance you are actually using:
 
 ```bash
-git -C /path/to/repo remote set-url origin git@codeberg.org:Conduction/<repo-name>.git
+git -C /path/to/repo remote set-url origin git@codeberg.org:<owner>/<repo-name>.git
 ```
 
-For a freshly-cloned repo, use the SSH URL from the start:
+For a fresh clone, use the SSH URL from the start:
 
 ```bash
-git clone git@codeberg.org:Conduction/<repo-name>.git
+git clone git@codeberg.org:<owner>/<repo-name>.git
+```
+
+If you find a **Conduction** repo whose remote still points at `codeberg.org`, that is stale state from the reversed migration — switch it back:
+
+```bash
+git -C /path/to/repo remote set-url origin git@github.com:ConductionNL/<repo-name>.git
 ```
 
 **Sanity check** for any repo whose remote you switched:
@@ -272,7 +280,7 @@ This is an alternative to manually clicking "Gesprek oplossen" on each thread. P
 
 ### How it works
 
-Four browser cookies authenticate the resolve endpoint (verified against Conduction/openregister on 2026-06-02):
+Four browser cookies authenticate the resolve endpoint (verified against a Conduction repo on Codeberg on 2026-06-02, before the migration was reversed):
 
 | Cookie | Lifetime | Purpose |
 |---|---|---|
@@ -481,7 +489,7 @@ The Codeberg REST API has no such prompt. Claude can create PRs, post comments, 
        title: "<title>",
        body: "<markdown body>"
      }')" \
-     "https://codeberg.org/api/v1/repos/Conduction/<repo>/pulls"
+     "https://codeberg.org/api/v1/repos/<owner>/<repo>/pulls"
    ```
 
    HTTP `201` = created; the response JSON has `.html_url` pointing at the new PR. Sanitize any log echo with `sed 's/[a-f0-9]\{40\}/<TOKEN-REDACTED>/g'` to avoid leaking the token (or any 40-char hex like commit SHAs) in conversation history.
@@ -549,13 +557,13 @@ A ready-to-copy template for the Codeberg-auth section of `~/.claude/CLAUDE.md` 
 | `cb-cookies-load` succeeds but Claude's `/issues/resolve_conversation` POSTs return `HTTP 302/303 → /user/login` | Anubis JWT (`techaro.lol-anubis-auth`) has expired (~7-day lifetime), or the browser session was logged out | Re-extract all four cookies from a fresh logged-in Codeberg browser tab, then `cb-cookies-refresh` and `cb-cookies-load` again. Step 11. |
 | `age: failed to obtain passphrase: ... /dev/tty is not available` when running `cb-cookies-load` from a non-interactive shell | `age` reads the SSH key file directly and prompts for the passphrase via `/dev/tty`; it cannot use the `ssh-agent` | Run `cb-cookies-load` once in an interactive terminal *before* the non-interactive shell starts. The exported `$CB_COOKIES` is inherited by every child shell launched from there. |
 
-## Bidirectional / migration notes
+## Migration notes — the move to Codeberg was reversed
 
-The migration to Codeberg may reverse — Conduction's tooling is being kept **bidirectional**, not Codeberg-only:
+The 2026-05-29 migration to Codeberg **was reversed**: directive 2026-07-17, executed 2026-07-23. Conduction's tooling stayed multi-platform throughout, which is why this guide still works for a genuine Forgejo host:
 
-- The same SSH key works on GitHub too — add the same `.pub` to <https://github.com/settings/keys> and your existing GitHub workflow keeps working unchanged.
-- Skills that talk to git hosts (`create-pr`, `review-pr`, `report-out`, `opsx-*`) detect the platform from the git remote URL and dispatch to `tea` / `gh` / `glab` accordingly. No skill is Codeberg-only.
-- If you ever need to switch a repo back to GitHub: `git remote set-url origin git@github.com:ConductionNL/<repo>.git` — reversible at any time.
+- The same SSH key works on GitHub too — add the same `.pub` to <https://github.com/settings/keys>.
+- Skills that talk to git hosts (`create-pr`, `review-pr`, `report-out`, `opsx-*`) detect the platform from the git remote URL and dispatch to `gh` / `glab` / `tea` accordingly. No skill is tied to one host.
+- For a Conduction repo the correct remote is always GitHub: `git remote set-url origin git@github.com:ConductionNL/<repo>.git`.
 
 ## See also
 

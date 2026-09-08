@@ -159,9 +159,9 @@ public function destroy(string | int $id): JSONResponse
 
 ## Related
 
-- [ADR-002 API](https://github.com/ConductionNL/hydra/src/branch/main/openspec/architecture/adr-002-api.md)
-- [ADR-005 security](https://github.com/ConductionNL/hydra/src/branch/main/openspec/architecture/adr-005-security.md)
-- [ADR-050 response envelope](https://github.com/ConductionNL/hydra/src/branch/development/openspec/architecture/adr-050-response-envelope.md)
-- [ADR-051 controller exception translation](https://github.com/ConductionNL/hydra/src/branch/development/openspec/architecture/adr-051-controller-exception-translation.md)
-- [ADR-049 config fail-mode](https://github.com/ConductionNL/hydra/src/branch/development/openspec/architecture/adr-049-config-fail-mode.md)
+- [ADR-002 API](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-002-api.md)
+- [ADR-005 security](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-005-security.md)
+- [ADR-050 response envelope](https://github.com/ConductionNL/hydra/blob/development/openspec/architecture/adr-050-response-envelope.md)
+- [ADR-105 controller exception translation](https://github.com/ConductionNL/hydra/blob/development/openspec/architecture/adr-105-controller-exception-translation.md)
+- [ADR-102 config fail-mode](https://github.com/ConductionNL/hydra/blob/development/openspec/architecture/adr-102-config-fail-mode.md)
 - [security-review-checklist.md](./security-review-checklist.md) — the pre-flight checklist for security-sensitive PRs

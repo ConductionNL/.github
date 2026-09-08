@@ -32,7 +32,7 @@ You don't need to write code to contribute:
 
 ## First-Time Contributors
 
-New to open source or to Conduction? Look for issues labeled `good first issue` on [GitHub](https://github.com/ConductionNL) or via the legacy [GitHub search](https://github.com/search?q=org%3AConductionNL+label%3A%22good+first+issue%22&type=issues) — these are scoped to be approachable without deep context.
+New to open source or to Conduction? Look for issues labeled `good first issue` in the [ConductionNL org](https://github.com/ConductionNL), or use this [cross-repo search](https://github.com/search?q=org%3AConductionNL+label%3A%22good+first+issue%22&type=issues) — these are scoped to be approachable without deep context.
 
 If you're unsure where to start, open a discussion or leave a comment on an issue you're interested in. We'll help you get oriented.
 
