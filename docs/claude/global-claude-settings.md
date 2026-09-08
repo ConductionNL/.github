@@ -464,8 +464,10 @@ Restart the session and verify which model is actually served:
 
 ```bash
 # The VSCode extension ships its own CLI and does not put `claude` on your PATH.
-# If `command -v claude` comes up empty, point at the bundled binary instead:
-CLAUDE="$(command -v claude || echo ~/.vscode-server/extensions/anthropic.claude-code-*/resources/native-binary/claude)"
+# If `command -v claude` comes up empty, point at the bundled binary instead.
+# VSCode keeps several extension versions during an upgrade, so take the newest
+# match rather than letting the glob expand to more than one path.
+CLAUDE="$(command -v claude || ls -1d ~/.vscode-server/extensions/anthropic.claude-code-*/resources/native-binary/claude 2>/dev/null | tail -1)"
 "$CLAUDE" -p "Reply with exactly the word ok" --output-format json | jq '.modelUsage | keys'
 ```
 
@@ -479,7 +481,7 @@ The result should list the model you pinned (e.g. `["claude-opus-5"]`). Swapping
 /model fable
 ```
 
-The CLI confirms with "Set model to Fable 5.1 for this session only" and the switch is live. The `Failed to set model: EPERM` toast that follows is the extension's failed attempt to *persist* the choice — ignore it; nothing was lost, and the next session starts on your pinned default again. That is the intended behaviour under this setup: the default stays the cheaper model, using a heavier one is a deliberate, visible act each time.
+The CLI confirms with "Set model to Fable 5.1 for this session only" and the switch is live. The "for this session only" wording is Claude Code telling you the persist was refused — nothing was lost, and the next session starts on your pinned default again. Reach for the picker instead and you get the `Failed to set model: EPERM` toast with no switch at all. That split is the intended behaviour under this setup: the default stays the cheaper model, and using a heavier one is a deliberate, visible act each time.
 
 **Fix — one-off switch.** If you only need to change the persisted model once, run the unlock step from [README → Updating](../../global-settings/README.md#updating) in your own terminal, switch the model in Claude Code, then run the relock step. Don't skip the relock.
 
