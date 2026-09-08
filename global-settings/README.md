@@ -57,14 +57,7 @@ sudo chattr +i ~/.claude/settings.json ~/.claude/hooks/*.sh ~/.claude/settings-v
 
 Restart Claude Code after installing. Requires `jq`, `md5sum`, `curl`, and `chattr` on `PATH` (chattr is part of `e2fsprogs` — present on every standard Linux distro).
 
-> **Known side effect of the lock — model switching.** The VSCode extension persists every model switch by rewriting the locked `~/.claude/settings.json`, so the model picker shows `Failed to set model: EPERM: operation not permitted` and does nothing, and a typed `/model <name>` only applies for the current session (with the same toast). This is the lock working as designed, not a broken install. Pin your default model in the **project-local** settings file instead — `model` is a regular settings key and the local scope wins over the locked user scope:
->
-> ```bash
-> ROOT="$(git rev-parse --show-toplevel)"; mkdir -p "$ROOT/.claude"
-> printf '{\n  "model": "opus"\n}\n' > "$ROOT/.claude/settings.local.json"   # merge if the file exists
-> ```
->
-> Use `/model fable` (typed, not the picker) when a session needs a heavier model; it reverts to the pinned default next session. Full explanation, verification command and what not to do: [global-claude-settings.md → Troubleshooting](../docs/claude/global-claude-settings.md#troubleshooting).
+> **Known side effect of the lock — model switching.** The model picker fails with `Failed to set model: EPERM: operation not permitted` and does nothing, because the VSCode extension persists every switch by rewriting the locked `~/.claude/settings.json`. This is the lock working as designed, not a broken install. The fix is to pin your default model in the project-local settings file, which the lock does not cover — steps, verification and what not to do: [global-claude-settings.md → Troubleshooting](../docs/claude/global-claude-settings.md#troubleshooting).
 
 ## Online version checking
 
@@ -205,9 +198,11 @@ When you see a version warning at session start:
 
 ## ⚠️ Bumping the version — REQUIRED on every change
 
-**Any commit that modifies a file in `global-settings/` MUST also increment `VERSION`.**
+**Any commit that modifies an *installed artifact* in `global-settings/` MUST also increment `VERSION`.** An installed artifact is anything the [Install](#install) steps copy into `~/.claude/` — `settings.json`, the hook scripts, and the `.example` files.
 
 Failing to bump the version means users will not be warned to update, and their installed settings will silently fall behind.
+
+Changes to `global-settings/README.md` alone do **not** require a bump: nothing installed changes, so a bump would push every developer through the unlock/relock cycle to copy a file they don't have. Documentation under `docs/claude/` is likewise never a trigger.
 
 Semver rules:
 

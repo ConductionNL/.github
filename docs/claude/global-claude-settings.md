@@ -405,7 +405,7 @@ If you personally want to prevent Claude from touching `sound-config.sh` in your
 Project `settings.json` in `.claude/` enables MCP servers and project-specific permissions. That is separate from the global Bash policy above:
 
 1. Global `~/.claude/settings.json` + hooks for Bash safety and version checking.
-2. Project `.claude/settings.json` (and `settings.local.json` if used) for workspace-specific MCP.
+2. Project `.claude/settings.json` (and `settings.local.json` if used) for workspace-specific MCP, per-project permission grants, and your per-repo model default (see [Troubleshooting](#troubleshooting)).
 
 ## Verification
 
@@ -430,11 +430,11 @@ Failed to set model: EPERM: operation not permitted, open '/home/<user>/.claude/
 
 What still works and what does not, while the lock is on:
 
-| Action                                 | Effect                                                                                                                                                                                                  |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Typing `/model <name>` in the chat     | **Works for the session.** The CLI applies the switch in memory ("Set model to … for this session only"); only the follow-up persist by the extension fails, so you still get the error notification. |
-| Model picker dropdown in the UI        | **Does nothing.** The extension writes the settings file *before* pushing the switch to the CLI; the write fails, so the switch is never applied.                                                        |
-| Claude Code's startup model migrations | Silently log `Failed to migrate … model setting` — harmless.                                                                                                                                             |
+| Action                                 | Effect                                                                                                                                                                                                                                  |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Typing `/model <name>` in the chat     | **Works for the session.** Claude Code applies the switch in memory, then tries to persist it; when the locked file refuses the write it reports "Set model to … for this session only" and moves on. Nothing is lost.                  |
+| The model picker in the UI             | **Does nothing, and this is what raises the toast.** The extension writes the settings file *before* pushing the switch to the CLI, so the failed write aborts the switch. It is the only code path that reports `Failed to set model`. |
+| Claude Code's startup model migrations | Silently log `Failed to migrate … model setting` — harmless.                                                                                                                                                                            |
 
 **Fix — pin your default model in project-local settings (recommended).** `model` is a regular settings key ("Override the default model used by Claude Code") and the local scope takes precedence over the user scope, so the shared locked file never needs to change. Pin the model you want *every* session to start on — `opus` is the sensible default; more expensive models are then an explicit per-session choice (next paragraph):
 
@@ -442,6 +442,9 @@ What still works and what does not, while the lock is on:
 # Run from anywhere inside the repo you work in.
 # Claude Code resolves the local-settings scope to the *git root*, not the cwd
 # (observed with Claude Code 2.1.263, 2026-09) — so write it there.
+# In a linked git worktree, --show-toplevel gives the worktree while Claude Code's
+# canonical scope is the main repo root (git rev-parse --git-common-dir). Both are
+# read, but the canonical root is the durable place to put it.
 ROOT="$(git rev-parse --show-toplevel)"
 mkdir -p "$ROOT/.claude"
 cat > "$ROOT/.claude/settings.local.json" <<'JSON'
@@ -451,15 +454,24 @@ cat > "$ROOT/.claude/settings.local.json" <<'JSON'
 JSON
 ```
 
-Merge the key into the file if it already exists (Claude Code stores per-project permission grants there too). The file is meant to stay out of git — check with `git check-ignore -v .claude/settings.local.json`; add `**/.claude/settings.local.json` to your global ignore file (`~/.config/git/ignore`) if it isn't. Restart the session and verify which model is actually served:
+Append `[1m]` to the value (`"opus[1m]"`) if you want the 1M-context variant — a bare `"opus"` in the local scope overrides an `"opus[1m]"` in the user scope and silently drops you back to the standard context window.
+
+Merge the key into the file if it already exists (Claude Code stores per-project permission grants there too). The file is meant to stay out of git — check with `git check-ignore -v "$ROOT/.claude/settings.local.json"`; add `**/.claude/settings.local.json` to your global ignore file (`~/.config/git/ignore`) if it isn't.
+
+This file is **not** covered by the deny list, the guard hooks, or the immutable lock — all three protect `~/.claude/` only, so Claude can edit it. That is deliberate, for the same reason as `sound-config.sh` (see [What's blocked from Claude, what isn't](#whats-blocked-from-claude-what-isnt)): your model choice is a cost-and-capability preference, not security policy, and it never affects which commands Claude may run. The deny rules and hooks stay in the kernel-locked user file.
+
+Restart the session and verify which model is actually served:
 
 ```bash
-claude -p "Reply with exactly the word ok" --output-format json | jq '.modelUsage | keys'
+# The VSCode extension ships its own CLI and does not put `claude` on your PATH.
+# If `command -v claude` comes up empty, point at the bundled binary instead:
+CLAUDE="$(command -v claude || echo ~/.vscode-server/extensions/anthropic.claude-code-*/resources/native-binary/claude)"
+"$CLAUDE" -p "Reply with exactly the word ok" --output-format json | jq '.modelUsage | keys'
 ```
 
 The result should list the model you pinned (e.g. `["claude-opus-5"]`). Swapping the value to `"sonnet"` and re-running is a quick control test that the file is what decides.
 
-`"env": {"ANTHROPIC_MODEL": "opus"}` in the same file is an equivalent alternative; `model` is the cleaner one because Claude Code shows it as the workspace default in the picker.
+`"env": {"ANTHROPIC_MODEL": "opus"}` in the same file also works, and takes precedence over `model` rather than being equivalent to it. Prefer `model`: it is a first-class settings key, so `/model` reports it back to you as the workspace default.
 
 **Switching to another model for one session (e.g. Fable).** Type the command in the chat — don't use the picker:
 
