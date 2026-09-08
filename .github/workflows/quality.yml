@@ -4309,9 +4309,60 @@ jobs:
           # Process substitution rather than a pipe: a piped `while` runs in a
           # subshell, so `FAIL` set inside it is discarded at `done`. That is
           # precisely the shape that lets a failing collection report green.
+          # A DECLARED EXCLUSION IS HONOURED, and this is the half the recursion
+          # above got wrong on the day it landed. buildiq keeps
+          # `tests/integration/quarantine/buildiq-version-diff.postman_collection.json`
+          # one directory below the configured path, and its README states the
+          # contract the old flat glob happened to provide: "CI runs
+          # *.postman_collection.json in tests/integration/ NON-RECURSIVELY, so
+          # nothing in this directory is executed". The reason is not neglect.
+          # That collection asserts the ref grammar REQ-OBV-005 specifies and
+          # `resolveVersionBlob()` does not implement, and the README is explicit
+          # that rewriting it to match today's behaviour "would convert a product
+          # gap into a fixed-looking test". Recursing without reading that turned
+          # a deliberate, documented deferral into a red job, and the only fixes
+          # available at the collection level would have been to delete the
+          # evidence or to fake it.
+          #
+          # So the runner reads the SAME marker gate-112 reads: `@newman exclude
+          # <reason>` in `info.description`. One declaration, honoured in both
+          # places. Before this, the marker told the gate not to report a
+          # collection while the runner ran it anyway, which is the worst of both
+          # (the finding is silenced and the job is still red).
+          #
+          # A BARE `@newman exclude` with no reason does NOT skip. Gate-112
+          # already fails a bare marker as finding V5, and letting it also stop
+          # execution would make "write nothing" the cheapest way to delete a
+          # test.
           FAIL=0
           RAN=0
+          SKIPPED=0
           while IFS= read -r -d '' collection; do
+            # The heredoc body is indented to the YAML block level and no
+            # further: this is a literal block scalar, so YAML strips exactly
+            # that indentation and the shell sees `PYEOF` in column 0. Indent
+            # any of it one space more and the terminator is never recognised.
+            REASON="$(python3 - "$collection" <<'PYEOF'
+          import json, re, sys
+          try:
+              with open(sys.argv[1], encoding="utf-8") as fh:
+                  data = json.load(fh)
+          except Exception:
+              raise SystemExit(0)   # unreadable: let newman be the one to say so
+          desc = (data.get("info") or {}).get("description") or ""
+          if isinstance(desc, dict):          # Postman's {content, type} form
+              desc = desc.get("content") or ""
+          m = re.search(r"@newman\s+exclude\b[ \t]*(.*)", str(desc))
+          if m and m.group(1).strip():        # a bare marker is not an exclusion
+              print(" ".join(m.group(1).split())[:200])
+          PYEOF
+            )"
+            if [ -n "$REASON" ]; then
+              echo ""
+              echo "=== Skipping: ${collection#./} (@newman exclude: ${REASON})"
+              SKIPPED=$((SKIPPED + 1))
+              continue
+            fi
             echo ""
             echo "=== Running: ${collection#./} ==="
             RAN=$((RAN + 1))
@@ -4321,10 +4372,13 @@ jobs:
           # A count nobody reconciles is how the flat glob survived unnoticed
           # for as long as it did. Compare what ran with what the validate step
           # counted, and refuse to publish a verdict about a different set.
+          # Skips are counted here rather than subtracted from the expectation,
+          # so a collection that vanishes between the two steps still trips this.
           echo ""
-          echo "Ran ${RAN} of ${NEWMAN_EXPECTED:-?} discovered collection(s)."
-          if [ -n "${NEWMAN_EXPECTED:-}" ] && [ "$RAN" -ne "$NEWMAN_EXPECTED" ]; then
-            echo "::error::Discovery mismatch: the validate step counted ${NEWMAN_EXPECTED} collection(s) and this step ran ${RAN}. The verdict below would describe a different set than the one that was validated."
+          echo "Ran ${RAN} and skipped ${SKIPPED} of ${NEWMAN_EXPECTED:-?} discovered collection(s)."
+          ACCOUNTED=$((RAN + SKIPPED))
+          if [ -n "${NEWMAN_EXPECTED:-}" ] && [ "$ACCOUNTED" -ne "$NEWMAN_EXPECTED" ]; then
+            echo "::error::Discovery mismatch: the validate step counted ${NEWMAN_EXPECTED} collection(s) and this step accounted for ${ACCOUNTED} (${RAN} run, ${SKIPPED} skipped). The verdict below would describe a different set than the one that was validated."
             exit 1
           fi
           if [ "$FAIL" -ne 0 ]; then
