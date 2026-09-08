@@ -30,6 +30,7 @@ GATES="${SCRIPT_DIR}/../run-hydra-gates.sh"
 FIXTURE="$(cd "${SCRIPT_DIR}/../test-fixtures/glob-recursion" && pwd)"
 
 _fails=0
+LOG_DIR="/tmp"
 
 _assert_found() { # <log-name> <expected-substring> <label>
     local want="$2" label="$3" log
@@ -43,9 +44,10 @@ _assert_found() { # <log-name> <expected-substring> <label>
     # The paths are gate-name-derived and contain no whitespace, so SC2012's
     # concern (non-alphanumeric filenames) does not apply.
     # shellcheck disable=SC2012
-    log="$(ls -t "/tmp/hydra-gate-$1.log" /tmp/hydra-gate-"$1".*.log 2>/dev/null | head -1)"
+    log="$(ls -t "${LOG_DIR}/hydra-gate-$1.log" "${LOG_DIR}"/hydra-gate-"$1".*.log \
+        "/tmp/hydra-gate-$1.log" /tmp/hydra-gate-"$1".*.log 2>/dev/null | head -1)"
     if [ -z "${log}" ] || [ ! -f "${log}" ]; then
-        echo "FAIL: ${label} — no /tmp/hydra-gate-$1[.XXXXXX].log written (gate did not run)"
+        echo "FAIL: ${label} — no hydra-gate-$1[.XXXXXX].log in ${LOG_DIR} (gate did not run)"
         _fails=$((_fails + 1)); return
     fi
     if grep -qF -- "${want}" "${log}"; then
@@ -81,6 +83,22 @@ echo
 echo "=== running real gates against ${FIXTURE} ==="
 rm -f /tmp/hydra-gate-*.log
 bash "${GATES}" "${FIXTURE}" > /tmp/hydra-glob-recursion-fixture.out 2>&1 || true
+
+# WHERE THE LOGS ARE IS THE RUNNER'S TO SAY, NOT THIS TEST'S TO ASSUME.
+#
+# This suite looked in /tmp/hydra-gate-<name>.log. The runner writes to
+# ${HYDRA_GATE_LOG_DIR}, which defaults to a mktemp directory so parallel runs
+# across repos cannot clobber each other — and announces it on its first line.
+# So every assertion below reported "gate did not run" for gates that had run
+# and had written their findings, which is the worse of the two failure modes
+# this file's own `_assert_found` comment warns about.
+#
+# Read the announced directory. The /tmp fallback in `_assert_found` keeps an
+# older runner, which did use the fixed path, working unchanged.
+LOG_DIR="$(sed -n 's/^\[hydra-gates\] findings logs: //p' \
+    /tmp/hydra-glob-recursion-fixture.out | head -1)"
+LOG_DIR="${LOG_DIR:-/tmp}"
+echo "reading findings from: ${LOG_DIR}"
 
 echo
 echo "=== nested-reach assertions ==="
