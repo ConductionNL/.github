@@ -64,7 +64,7 @@ Open VS Code and install these extensions (`Ctrl+Shift+X`):
 | GitLens             | eamodio.gitlens              | Advanced Git history, blame, line annotations                  |
 | GitHub Copilot Chat | github.copilot-chat          | AI pair programmer (requires Copilot license)                  |
 | YAML                | redhat.vscode-yaml           | Syntax & validation for `docker-compose.yml` and OpenSpec YAML |
-| GitHub Actions      | github.vscode-github-actions | View and validate CI/CD workflows (legacy GitHub repos)        |
+| GitHub Actions      | github.vscode-github-actions | View and validate CI/CD workflows (all ConductionNL repos)     |
 | Makefile Tools      | ms-vscode.makefile-tools     | Makefile support (`make check-strict`)                         |
 | Pylance             | ms-python.vscode-pylance     | Enhanced Python type checking and IntelliSense                 |
 
