@@ -12132,7 +12132,19 @@ if [ -d openspec/specs ]; then
             1)
                 cat "${_ee_log}"
                 _ee_n=$(grep -cE '^  openspec/' "${_ee_log}" 2>/dev/null || echo 0)
-                _fail 113 "exclusion-evidence" "${_ee_n} exclusion(s) cite a test nothing in this repo answers to — they read as verified and are not. See ${_ee_log}"
+                # WARNING, NOT A FAILURE, UNTIL AN APP OPTS IN. Same reason
+                # as gate-112 above: this reddened 10 of 21 repos on inherited
+                # debt the moment it merged, dossiq with 15 findings. Its own
+                # docstring already argues that "4,898 findings on day one is a
+                # gate nobody can turn on" and then blocked on the smaller set
+                # anyway.
+                #
+                # `HYDRA_GATE_EXCLUSION_EVIDENCE_BLOCKING=1` makes it block.
+                if [ "${HYDRA_GATE_EXCLUSION_EVIDENCE_BLOCKING:-0}" = "1" ]; then
+                    _fail 113 "exclusion-evidence" "${_ee_n} exclusion(s) cite a test nothing in this repo answers to — they read as verified and are not. See ${_ee_log}"
+                else
+                    _warn 113 "exclusion-evidence" "${_ee_n} exclusion(s) cite a test nothing in this repo answers to — they read as verified and are not. Report-only: set HYDRA_GATE_EXCLUSION_EVIDENCE_BLOCKING=1 for this repo once they are corrected. See ${_ee_log}"
+                fi
                 ;;
             4)
                 _skip 113 "exclusion-evidence" na "no reason-bearing @e2e/@spec/@contract/@visual exclusion in openspec/specs, so there is no evidence claim to check."
@@ -12192,7 +12204,22 @@ if [ "${_nr_collections}" -gt 0 ]; then
             1)
                 cat "${_nr_log}"
                 _nr_n=$(grep -cE '^  V[0-9]' "${_nr_log}" 2>/dev/null || echo 0)
-                _fail 112 "newman-reach" "${_nr_n} committed Postman collection(s) that CI never runs, or that run without asserting anything — see ${_nr_log}"
+                # WARNING, NOT A FAILURE, UNTIL AN APP OPTS IN.
+                #
+                # This gate reddened 10 of the 21 fleet repos the hour it
+                # merged, on inherited debt none of those PRs introduced —
+                # openregister alone has 53 findings. That is the shape
+                # `e2e-skip-blocking` exists to avoid, and this file already
+                # says why: "a gate that turns eight apps red at once is a gate
+                # nobody can turn on".
+                #
+                # The count is real and is printed. `HYDRA_GATE_NEWMAN_REACH_BLOCKING=1`
+                # makes it block, per app, once that app is worked down.
+                if [ "${HYDRA_GATE_NEWMAN_REACH_BLOCKING:-0}" = "1" ]; then
+                    _fail 112 "newman-reach" "${_nr_n} committed Postman collection(s) that CI never runs, or that run without asserting anything — see ${_nr_log}"
+                else
+                    _warn 112 "newman-reach" "${_nr_n} committed Postman collection(s) that CI never runs, or that run without asserting anything. Report-only: set HYDRA_GATE_NEWMAN_REACH_BLOCKING=1 for this repo once they are worked down. See ${_nr_log}"
+                fi
                 ;;
             4)
                 _skip 112 "newman-reach" na "this repo commits no *.postman_collection.json outside vendor/node_modules, so it exposes no API suite for CI to reach."
