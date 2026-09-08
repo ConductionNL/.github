@@ -4404,7 +4404,35 @@ jobs:
     # repos and read as unremarkable. `'' != 'false'` runs the tests instead.
     # The cost of the filter being broken is runner minutes; the cost of it
     # being trusted while broken is a verdict nobody notices is missing.
-    if: ${{ inputs.enable-playwright && needs.changes.outputs.code != 'false' && !cancelled() && !(github.event_name == 'pull_request' && github.base_ref == 'development') }}
+    #
+    # E2E RUNS ON PULL REQUESTS INTO `development` AGAIN, except from a
+    # `release/` or `sync/` branch. #618 deferred it to the promotions to
+    # relieve the queue, and that argument was sound on its own terms. What it
+    # could not know is that deferring it to the push leaves the verdict
+    # nowhere, because a `development` push run is usually CANCELLED BEFORE
+    # ANY JOB STARTS.
+    #
+    # That is not the `cancel-in-progress` expression below, which already
+    # exempts pushes. GitHub's concurrency queue holds at most ONE pending run
+    # per group, so with cancelling off a third arrival cancels the pending
+    # second. Merges land every few minutes and a run takes 14-23, so pending
+    # runs are cancelled in turn. Measured on dossiq's last 20 `development`
+    # push runs, 2026-09-08: 14 cancelled, and each cancelled one carries ZERO
+    # jobs with an `updated_at` equal to the next push's `created_at`. It never
+    # started.
+    #
+    # What that cost: 23 red E2E tests sitting on `development`, one of them a
+    # defect making EVERY status transition answer 500 for real users, none of
+    # it reported for hours.
+    #
+    # `release/` and `sync/` stay deferred, because those branches carry
+    # version strings and merge commits and nothing a browser can observe.
+    # Across the fleet's open pull requests they are 23 of 60, so this keeps
+    # most of #618's saving. Dependabot branches deliberately DO run it: a
+    # dependency bump is exactly where a browser-observable break appears, and
+    # `@nextcloud/axios` 2.6.0 breaking every `@conduction/nextcloud-vue`
+    # component is this month's example.
+    if: ${{ inputs.enable-playwright && needs.changes.outputs.code != 'false' && !cancelled() && !(github.event_name == 'pull_request' && github.base_ref == 'development' && (startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'sync/'))) }}
     runs-on: ubuntu-latest
     name: "E2E Tests (Playwright)"
     # `frontend-build` is a dependency purely so its artifact is available to
@@ -6858,7 +6886,7 @@ jobs:
       # their full report, and the job is failed afterwards.
       - name: The axe report must exist and hold up
         id: axe-check
-        if: ${{ inputs.enable-axe && !(github.event_name == 'pull_request' && github.base_ref == 'development') }}
+        if: ${{ inputs.enable-axe && !(github.event_name == 'pull_request' && github.base_ref == 'development' && (startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'sync/'))) }}
         env:
           PLAYWRIGHT_RESULT: ${{ needs.playwright.result }}
         run: |
@@ -7136,7 +7164,7 @@ jobs:
           # `enable-playwright: false` is a caller misconfiguration that must
           # keep failing loudly with its named error, not be quietly excused.
           AXE_PRODUCER_RAN=true
-          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.base_ref }}" = "development" ]; then
+          if [ "${{ github.event_name == 'pull_request' && github.base_ref == 'development' && (startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'sync/')) }}" = "true" ]; then
             AXE_PRODUCER_RAN=false
           fi
           if [ "${{ inputs.enable-axe }}" = "true" ] && [ "${AXE_PRODUCER_RAN}" = "false" ]; then
@@ -7397,7 +7425,7 @@ jobs:
           # `${{ }}`: `reason` is free text and does not belong in the script.
           PATH_FILTER_CODE: ${{ needs.changes.outputs.code }}
           PATH_FILTER_REASON: ${{ needs.changes.outputs.reason }}
-          E2E_PROMOTION_SKIP: ${{ github.event_name == 'pull_request' && github.base_ref == 'development' }}
+          E2E_PROMOTION_SKIP: ${{ github.event_name == 'pull_request' && github.base_ref == 'development' && (startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'sync/')) }}
         run: |
           set -euo pipefail
 
@@ -7473,7 +7501,7 @@ jobs:
           PHPUNIT_SKIP_REASON=""
           PLAYWRIGHT_SKIP_REASON=""
           if [ "$E2E_PROMOTION_SKIP" = "true" ]; then
-            PLAYWRIGHT_SKIP_REASON="deferred — runs on the promotion into beta/main, not on a pull request into development"
+            PLAYWRIGHT_SKIP_REASON="deferred: a release or sync branch carries only version strings, so E2E runs on the merge and on the promotions"
           fi
           if [ "$PATH_FILTER_CODE" = "false" ]; then
             PHPUNIT_SKIP_REASON="not run for this diff — ${PATH_FILTER_REASON}"
@@ -7778,7 +7806,7 @@ jobs:
           # than one per push per open pull request. Without this the census
           # sees only `skipped` and calls a working cost control "NO VERDICT
           # EXISTS", which moves the red instead of removing it.
-          E2E_PROMOTION_SKIP: ${{ github.event_name == 'pull_request' && github.base_ref == 'development' }}
+          E2E_PROMOTION_SKIP: ${{ github.event_name == 'pull_request' && github.base_ref == 'development' && (startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'sync/')) }}
           JOURNEYDOC_ENABLED: ${{ inputs.enable-journeydoc-capture }}
           JOURNEYDOC_RESULT: ${{ needs['journeydoc-capture'].result }}
         run: |
@@ -7833,7 +7861,7 @@ jobs:
           classify "Newman"             "$NEWMAN_ENABLED"     "$NEWMAN_RESULT"
           E2E_REASON=""
           if [ "$E2E_PROMOTION_SKIP" = "true" ]; then
-            E2E_REASON="E2E runs on the promotion into beta/main, not on a pull request into development."
+            E2E_REASON="This pull request comes from a release or sync branch, which carries only version strings. E2E runs on the merge and on the promotions."
           fi
           classify "Playwright"         "$PLAYWRIGHT_ENABLED" "$PLAYWRIGHT_RESULT" true "$E2E_REASON"
           classify "Journeydoc capture" "$JOURNEYDOC_ENABLED" "$JOURNEYDOC_RESULT"
