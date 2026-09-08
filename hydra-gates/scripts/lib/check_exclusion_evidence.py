@@ -120,8 +120,12 @@ CROSS_REPO = "cross-repo"
 # reader still sees the claim and can go and check the other repo. What it no
 # longer does is fail the gate, because this repo cannot resolve it either way
 # and a checkout of it will never contain the answer.
+#
+# The short forms count too. pipelinq writes "engine-level behaviour covered by
+# nc-vue `useWalkthrough.spec.js`", and nextcloud-vue/tests/composables/
+# useWalkthrough.spec.js exists. Matching only the long name accused that one.
 _CROSS_REPO_RE = re.compile(
-    r"\b(?:openregister|open ?register|nextcloud-vue|opencatalogi|"
+    r"\b(?:openregister|open ?register|nextcloud-vue|nc-vue|opencatalogi|"
     r"openconnector|integriq|conduction/[a-z-]+)\b",
     re.I,
 )
