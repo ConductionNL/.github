@@ -1,0 +1,36 @@
+{
+  "info": {
+    "name": "Orphan suite",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "list things",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/index.php/apps/newmanreachfx/api/things",
+        "header": [
+          {
+            "key": "OCS-APIRequest",
+            "value": "true"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('things list answers 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test('things list returns an array', function () {",
+              "    pm.expect(pm.response.json().results).to.be.an('array');",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

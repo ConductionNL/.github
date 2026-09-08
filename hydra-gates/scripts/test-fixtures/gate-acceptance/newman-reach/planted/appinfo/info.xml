@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<id>newmanreachfx</id>
+	<name>Newman Reach Fixture (planted)</name>
+	<summary>Fixture app for gate-112 acceptance. Not a real app.</summary>
+	<description>Exists so the gate suite can drive a committed-but-unreachable Postman collection through the real wrapper.</description>
+	<version>1.0.0</version>
+	<licence>agpl</licence>
+	<author>Conduction</author>
+	<namespace>NewmanReachFx</namespace>
+	<category>tools</category>
+	<dependencies><nextcloud min-version="30" max-version="32"/></dependencies>
+</info>

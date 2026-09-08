@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: EUPL-1.2
+# Newman is ENABLED here, so the gate's V1 arm is not what either fixture
+# exercises. The difference between the two arms is WHERE the collection sits.
+name: Code Quality
+on: [push]
+jobs:
+  quality:
+    uses: ConductionNL/.github/.github/workflows/quality.yml@main
+    with:
+      app-name: newmanreachfx
+      enable-newman: true
