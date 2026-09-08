@@ -71,6 +71,18 @@ class ExclusionEvidenceTest(unittest.TestCase):
                _spec("asserted by ProjectRepositoryTest::testArchivedExcluded"))
         self.assertEqual(self._buckets()[cee.RESOLVED], 1)
 
+    def test_a_cited_SUBJECT_resolves_on_the_class_alone(self):
+        # `AcknowledgementServiceTest::isOutstanding` names the method UNDER
+        # test, not a test method, and the class does assert it. Demanding a
+        # `function isOutstanding()` inside the test class accuses a correct
+        # citation. Only a `test*` method is checked by name.
+        _write(self.root, "tests/unit/ProjectRepositoryTest.php", _PHP_TEST)
+        _write(self.root, "openspec/specs/projects/spec.md",
+               _spec("asserted in ProjectRepositoryTest::archivedAreExcluded"))
+        b = self._buckets()
+        self.assertEqual(b[cee.RESOLVED], 1)
+        self.assertEqual(b[cee.UNRESOLVED], 0)
+
     def test_a_named_method_that_does_not_exist_is_unresolved(self):
         # The class is here and the method is not. This is the shape a rename
         # leaves behind, and it is the whole reason the gate looks at methods.

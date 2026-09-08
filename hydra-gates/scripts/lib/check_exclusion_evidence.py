@@ -169,7 +169,27 @@ class _Artifacts:
             known = self.php_tests.get(cls)
             if known is None:
                 missing.append(token)
-            elif method and method not in known:
+                continue
+            # A CITED SUBJECT IS NOT A MISSING TEST.
+            #
+            # `AcknowledgementServiceTest::isOutstanding` names the method
+            # UNDER test, not a test method, and that is a legitimate and
+            # common way to write the citation — the class does assert it, in
+            # `testIsOutstandingReackOnChangeChecksCurrentVersion`. Demanding a
+            # `function isOutstanding()` inside the test class accuses a
+            # correct citation, and a finding that is wrong even occasionally
+            # is a finding nobody works.
+            #
+            # So the method half is only checked when it is spelled as a test:
+            # `::testFoo` missing from a class that exists is the rename this
+            # gate is for, and shillinq's `SettingsControllerTest::testLoad`
+            # (the class has `testLoadReturnsConfigurationResult`) is exactly
+            # that. `::someSubject` resolves on the class alone.
+            #
+            # Measured on the two it got wrong: launchpad's
+            # AcknowledgementServiceTest::isOutstanding and decidiq's
+            # BoardMeetingServiceTest::getNoticeDeadlineInfo, 2 of 33 findings.
+            if method and method.startswith("test") and method not in known:
                 missing.append(token)
             else:
                 resolved.append(token)
@@ -328,6 +348,15 @@ def main(argv: list[str]) -> int:
     if len(result["unresolved"]) > 40:
         print(f"  ... and {len(result['unresolved']) - 40} more")
     print(
+        "  NOTE: this gate reads a bare `SomethingTest` token ANYWHERE in the "
+        "reason as a claim, so a sentence REPORTING that a class is gone "
+        "re-triggers this finding. Describe the deleted class rather than "
+        "naming it — \"the app-local health controller and its PHPUnit class\" "
+        "passes where \"...together with HealthControllerTest\" does not. "
+        "Narrowing this to a claim-versus-mention rule (gate-19's "
+        "`is_directive`) needs a positive list of claiming verbs, and the "
+        "blacklist alternative would silently drop real findings, so it is not "
+        "guessed at here.\n"
         "  Fix: correct the citation, or restore the test it names. A renamed "
         "test lands here the day it moves, which is the point."
     )
