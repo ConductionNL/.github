@@ -4242,6 +4242,12 @@ jobs:
             exit 1
           fi
           echo "Found $COLLECTIONS Postman collection(s) in $COLLECTION_PATH."
+          # Handed to the run step so the number COUNTED here and the number
+          # RUN there can be reconciled. They disagreed by construction until
+          # 2026-09-08: this step counts with a recursive `find`, and the run
+          # step globbed one flat directory. Nothing compared them, so the job
+          # printed a count it did not honour.
+          echo "NEWMAN_EXPECTED=$COLLECTIONS" >> "$GITHUB_ENV"
 
       - name: Run Newman tests
         run: |
@@ -4276,12 +4282,51 @@ jobs:
             ENV_ARGS='--env-var "base_url=http://localhost:8080" --env-var "admin_user=admin" --env-var "admin_password=admin"'
           fi
 
+          # RUN EVERY COLLECTION UNDER THE PATH, NOT ONLY ITS TOP DIRECTORY.
+          #
+          # This loop was `for collection in *.postman_collection.json` — a
+          # flat glob, one directory deep — while the validate step above
+          # counts the same tree with a recursive `find`. The two therefore
+          # disagreed by construction, and nothing reconciled them, so the job
+          # announced "Found 19 collection(s)" and ran 18.
+          #
+          # MEASURED across the 21 fleet repos on 2026-09-08: 3,067 Postman
+          # requests are committed and 1,444 execute. Of the 1,623 that never
+          # run, buildiq's sit in `tests/integration/quarantine/` — counted by
+          # the validator, skipped by the runner, one directory below the
+          # configured path. Recursing here is what closes that class.
+          #
+          # It does NOT reach a collection in a SIBLING of the configured path
+          # (dossiq's `data/`, learniq's `tests/wedge-scaffolds/`). Those are a
+          # different decision — whether that directory is test input at all —
+          # and belong to the app's own caller, not to this loop.
+          #
+          # `-print0` with `read -r -d ''`: two repos ship collection files
+          # whose names contain spaces ("ZGW OAS tests.postman_collection.json").
+          # A word-splitting loop runs those as two nonexistent paths and, with
+          # `|| FAIL=1`, records a failure whose message names neither file.
+          #
+          # Process substitution rather than a pipe: a piped `while` runs in a
+          # subshell, so `FAIL` set inside it is discarded at `done`. That is
+          # precisely the shape that lets a failing collection report green.
           FAIL=0
-          for collection in *.postman_collection.json; do
+          RAN=0
+          while IFS= read -r -d '' collection; do
             echo ""
-            echo "=== Running: $collection ==="
+            echo "=== Running: ${collection#./} ==="
+            RAN=$((RAN + 1))
             eval newman run "\"$collection\"" $ENV_ARGS --reporters cli || FAIL=1
-          done
+          done < <(find . -name '*.postman_collection.json' -print0 | sort -z)
+
+          # A count nobody reconciles is how the flat glob survived unnoticed
+          # for as long as it did. Compare what ran with what the validate step
+          # counted, and refuse to publish a verdict about a different set.
+          echo ""
+          echo "Ran ${RAN} of ${NEWMAN_EXPECTED:-?} discovered collection(s)."
+          if [ -n "${NEWMAN_EXPECTED:-}" ] && [ "$RAN" -ne "$NEWMAN_EXPECTED" ]; then
+            echo "::error::Discovery mismatch: the validate step counted ${NEWMAN_EXPECTED} collection(s) and this step ran ${RAN}. The verdict below would describe a different set than the one that was validated."
+            exit 1
+          fi
           if [ "$FAIL" -ne 0 ]; then
             echo "::error::One or more Newman collections failed."
             exit 1

@@ -11950,6 +11950,69 @@ if [ -d lib/Contract ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# GATE 111 — flow-node-taxonomy
+#
+# THE CHECKER, ITS FIXTURES AND ITS UNIT SUITE LANDED IN #698 AND THE CALL SITE
+# DID NOT. `check_flow_node_taxonomy.py`, the three-arm fixture tree and
+# `test_gate111_flow_node_taxonomy.sh` all merged to `main`, and
+# test-fixtures/gate-acceptance/flow-node-taxonomy/expect.conf declared gate 111
+# — but nothing in this file ever called `_pass 111` / `_fail 111`. The
+# acceptance matrix ran the runner over both arms, found no `[gate-111]` verdict
+# line, and reported "emitted NO verdict line at all" for each: `main` red from
+# f8088938 onward, on the one suite whose job is to prove a gate refuses.
+#
+# The unit suite passed the whole time, because it invokes the CHECKER directly.
+# That is the shape worth remembering: a gate can be fully implemented, fully
+# tested at the unit level, and still not exist as far as any repository the
+# runner is pointed at is concerned.
+#
+# WHAT IT REFUSES: a class under this repository's own lib/Service/Flow/Nodes/
+# that implements IFlowNode without IFlowNodeTaxonomy. The palette then serves
+# it as serviceTask/other — a default that is visible only to whoever opens the
+# palette, and that a BPMN export carries as if someone had answered.
+#
+# 🔴 SCOPED BY PATH, NEVER BY INTERFACE. On a measured instance 38 of 65 step
+# types come from apps in other repositories on their own release cycles. A gate
+# that flagged any IFlowNode implementation missing the methods would fire on
+# every one of them, in pull requests that cannot fix them.
+#
+# FULL-TREE, NOT DIFF-SCOPED, and that is the checker's design rather than an
+# oversight: the subject is the set of nodes this repository SERVES, which is
+# what the palette reads, not the set it touched in one diff. The scope is
+# already narrow enough for that to be actionable — one directory the repo owns.
+#
+# NO `-d` GUARD around the call. The checker reports NOT APPLICABLE itself
+# (exit 4) with the directory named, so a repo without flow nodes gets a verdict
+# line instead of silence. gate-83 above wraps its call in `[ -d lib/Contract ]`
+# and therefore emits nothing at all in the repos it skips — the same shape that
+# left this gate invisible, and not one to copy.
+# ---------------------------------------------------------------------------
+_fnt_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-flow-node-taxonomy.log
+: > "${_fnt_log}"
+
+set +e
+python3 "${SCRIPT_DIR}/lib/check_flow_node_taxonomy.py" . > "${_fnt_log}" 2>&1
+_fnt_rc=$?
+# `set +e`, not `set -e` — errexit off is the state this script actually runs
+# in. See the invariant at the top of this file.
+set +e
+
+if [ "${_fnt_rc}" -eq 4 ]; then
+    _skip 111 "flow-node-taxonomy" na "this repo ships no lib/Service/Flow/Nodes/, so it contributes no flow node of its own. A node it contributes from ANOTHER repository is deliberately not this gate's business — 38 of 65 step types on a measured instance are, and firing on them would be unfixable from the PR it fired on. See ${_fnt_log}."
+elif [ "${_fnt_rc}" -eq 0 ]; then
+    _pass 111 "flow-node-taxonomy"
+elif ! _helper_finished "${_fnt_log}" '^checked [0-9]+ flow node'; then
+    # A CRASH IS NOT A FINDING.
+    _fnt_why=$(head -3 "${_fnt_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+    _skip 111 "flow-node-taxonomy" wiring "check_flow_node_taxonomy.py exited ${_fnt_rc} without printing its terminal 'checked N flow node file(s)' summary, so NO node was inspected and the step types this app serves are UNVERIFIED by this run. Checker output: ${_fnt_why:-<empty>}. See ${_fnt_log}."
+else
+    _fnt_n=$(grep -cE '^FAIL ' "${_fnt_log}" 2>/dev/null || true)
+    case "${_fnt_n}" in ''|*[!0-9]*) _fnt_n=1 ;; esac
+    grep -E '^FAIL ' "${_fnt_log}" || true
+    _fail 111 "flow-node-taxonomy" "${_fnt_n} flow node(s) implement IFlowNode without IFlowNodeTaxonomy, so the palette serves them as serviceTask/other and a BPMN export carries that guess as an answer. Declare getKind() and getCategory(); see ${_fnt_log}"
+fi
+
+# ---------------------------------------------------------------------------
 # Gate 70: walkthrough-flows-stop — an app that ships a `type:"flows"` page must
 # point its getting-started tour at it, and must not make reaching it
 # conditional on building a flow.
@@ -12021,6 +12084,153 @@ elif [ "${_wfs_ran}" -eq 1 ]; then
     else
         _fail 70 "walkthrough-flows-stop" "${_wfs_fail} walkthrough flows finding(s) across ${_wfs_applicable} applicable manifest(s) — see ${_wfs_log}"
     fi
+fi
+
+# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# GATE 113 — exclusion-evidence
+#
+# An exclusion that names a test nobody can find.
+#
+# `exclusion_reason.py` deliberately stops at STRUCTURAL degeneracy, and says
+# so: "an exemption's reason is a testable claim: reasons naming a test
+# artifact hold, reasons naming a state of the world rot ... Judging that needs
+# a purpose-built check, not a len()". This is that check.
+#
+# MEASURED 2026-09-08 across the 21 core apps: 5,529 reason-bearing exclusions.
+# 1,079 name a test that is here. 48 name one that is NOT — procest alone cites
+# GeoServiceTest, CaseGeoControllerTest and WfsServiceTest, none of which exists
+# anywhere in that repo. Those scenarios are excluded AND uncovered, invisible
+# twice over.
+#
+# ONLY THE 48 FAIL. The 2,791 that claim a tier without naming a member of it
+# ("asserted by PHPUnit") are reported as a worklist and never failed on: a
+# gate that reds every repo on day one is a gate nobody turns on, and the fix
+# there is an annotation pass, not a code change.
+#
+# See scripts/lib/check_exclusion_evidence.py for the classification.
+# ---------------------------------------------------------------------------
+if [ -d openspec/specs ]; then
+    _ee_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-exclusion-evidence.log
+    : > "${_ee_log}"
+    _ee_helper="${SCRIPT_DIR}/lib/check_exclusion_evidence.py"
+    if [ ! -f "${_ee_helper}" ]; then
+        _skip 113 "exclusion-evidence" wiring "check_exclusion_evidence.py not found at ${_ee_helper} — openspec/specs exists here and NO exclusion claim was checked, so whether they cite tests that exist is UNVERIFIED by this run."
+    else
+        set +e
+        python3 "${_ee_helper}" . >> "${_ee_log}" 2>&1
+        _ee_rc=$?
+        set +e
+        # Always print the worklist line, pass or fail. A gate that only speaks
+        # when it fails leaves the migration invisible, which is how 2,791
+        # uncheckable claims accumulated without anyone deciding to allow them.
+        grep -E '^\[gate-113\] exclusion-evidence: [0-9]+ exclusion' "${_ee_log}" 2>/dev/null | tail -1
+        case "${_ee_rc}" in
+            0)
+                _pass 113 "exclusion-evidence"
+                ;;
+            1)
+                cat "${_ee_log}"
+                _ee_n=$(grep -cE '^  openspec/' "${_ee_log}" 2>/dev/null || echo 0)
+                # WARNING, NOT A FAILURE, UNTIL AN APP OPTS IN. Same reason
+                # as gate-112 above: this reddened 10 of 21 repos on inherited
+                # debt the moment it merged, dossiq with 15 findings. Its own
+                # docstring already argues that "4,898 findings on day one is a
+                # gate nobody can turn on" and then blocked on the smaller set
+                # anyway.
+                #
+                # `HYDRA_GATE_EXCLUSION_EVIDENCE_BLOCKING=1` makes it block.
+                if [ "${HYDRA_GATE_EXCLUSION_EVIDENCE_BLOCKING:-0}" = "1" ]; then
+                    _fail 113 "exclusion-evidence" "${_ee_n} exclusion(s) cite a test nothing in this repo answers to — they read as verified and are not. See ${_ee_log}"
+                else
+                    _warn 113 "exclusion-evidence" "${_ee_n} exclusion(s) cite a test nothing in this repo answers to — they read as verified and are not. Report-only: set HYDRA_GATE_EXCLUSION_EVIDENCE_BLOCKING=1 for this repo once they are corrected. See ${_ee_log}"
+                fi
+                ;;
+            4)
+                _skip 113 "exclusion-evidence" na "no reason-bearing @e2e/@spec/@contract/@visual exclusion in openspec/specs, so there is no evidence claim to check."
+                ;;
+            *)
+                _skip 113 "exclusion-evidence" wiring "check_exclusion_evidence.py exited ${_ee_rc} without a verdict — openspec/specs was in scope and NO exclusion claim was judged. See ${_ee_log}."
+                ;;
+        esac
+    fi
+else
+    _skip 113 "exclusion-evidence" na "this repo has no openspec/specs, so it declares no exclusions to evidence."
+fi
+
+# ---------------------------------------------------------------------------
+# GATE 112 — newman-reach
+#
+# A committed Postman collection that CI never runs. The Newman job executes
+# what it finds under ONE configured directory (`newman-collection-path`), and
+# nothing reports what is committed elsewhere.
+#
+# MEASURED 2026-09-08 across the 21 core apps: 3,067 requests are committed and
+# 1,444 execute. dossiq alone holds 946 that have never run. hermiq and
+# portaliq ship the unedited scaffold — one request, to /status.php — and
+# report a green Newman job that has never asserted anything about the app.
+#
+# FULL-TREE, not diff-scoped, deliberately. The subject is "does this file ever
+# execute", which is a property of the repo's layout and its caller's inputs,
+# not of the diff. A delta gate here would report NOT APPLICABLE on every PR
+# that does not touch a collection, which is every PR, which is why nobody
+# noticed.
+#
+# See scripts/lib/check_newman_reach.py for the discovery + finding logic.
+# ---------------------------------------------------------------------------
+_nr_collections=$(find . -name '*.postman_collection.json' \
+    -not -path './node_modules/*' -not -path './vendor/*' -not -path './.git/*' \
+    -not -path './lib/Resources/template/*' 2>/dev/null | wc -l | tr -d ' ')
+if [ "${_nr_collections}" -gt 0 ]; then
+    _nr_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-newman-reach.log
+    : > "${_nr_log}"
+    _nr_helper="${SCRIPT_DIR}/lib/check_newman_reach.py"
+    if [ ! -f "${_nr_helper}" ]; then
+        # A missing helper is a missing MEASUREMENT, never a pass. This is the
+        # shape that once let gate-7 report PASS over 11 unguarded endpoints.
+        _skip 112 "newman-reach" wiring "check_newman_reach.py not found at ${_nr_helper} — ${_nr_collections} Postman collection(s) are committed here and NONE were inspected, so whether CI runs them is UNVERIFIED by this run."
+    else
+        set +e
+        python3 "${_nr_helper}" . >> "${_nr_log}" 2>&1
+        _nr_rc=$?
+        set +e
+        # The verdict comes from the EXIT CODE, which this helper keeps to the
+        # documented status set (0/1/2/4) and never overloads with a count.
+        case "${_nr_rc}" in
+            0)
+                grep -E '^\[gate-112\]' "${_nr_log}" 2>/dev/null | tail -1
+                _pass 112 "newman-reach"
+                ;;
+            1)
+                cat "${_nr_log}"
+                _nr_n=$(grep -cE '^  V[0-9]' "${_nr_log}" 2>/dev/null || echo 0)
+                # WARNING, NOT A FAILURE, UNTIL AN APP OPTS IN.
+                #
+                # This gate reddened 10 of the 21 fleet repos the hour it
+                # merged, on inherited debt none of those PRs introduced —
+                # openregister alone has 53 findings. That is the shape
+                # `e2e-skip-blocking` exists to avoid, and this file already
+                # says why: "a gate that turns eight apps red at once is a gate
+                # nobody can turn on".
+                #
+                # The count is real and is printed. `HYDRA_GATE_NEWMAN_REACH_BLOCKING=1`
+                # makes it block, per app, once that app is worked down.
+                if [ "${HYDRA_GATE_NEWMAN_REACH_BLOCKING:-0}" = "1" ]; then
+                    _fail 112 "newman-reach" "${_nr_n} committed Postman collection(s) that CI never runs, or that run without asserting anything — see ${_nr_log}"
+                else
+                    _warn 112 "newman-reach" "${_nr_n} committed Postman collection(s) that CI never runs, or that run without asserting anything. Report-only: set HYDRA_GATE_NEWMAN_REACH_BLOCKING=1 for this repo once they are worked down. See ${_nr_log}"
+                fi
+                ;;
+            4)
+                _skip 112 "newman-reach" na "this repo commits no *.postman_collection.json outside vendor/node_modules, so it exposes no API suite for CI to reach."
+                ;;
+            *)
+                _skip 112 "newman-reach" wiring "check_newman_reach.py exited ${_nr_rc} without a verdict — ${_nr_collections} collection(s) were in scope and NONE were judged. See ${_nr_log}."
+                ;;
+        esac
+    fi
+else
+    _skip 112 "newman-reach" na "this repo commits no *.postman_collection.json, so there is no API suite for CI to reach."
 fi
 
 # ---------------------------------------------------------------------------

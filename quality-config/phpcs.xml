@@ -224,6 +224,21 @@
         <type>error</type>
     </rule>
 
+    <!-- Block run-time lookups on the global container: \OC::$server->get() /
+         ->query() and \OCP\Server::get(). Inside a DI-built class they hide a
+         dependency no unit test can control; outside a booted Nextcloud they
+         autowire from scratch and can recurse through a constructor cycle until
+         memory runs out (openregister #3523, 19 GB on 2026-09-08). Framework
+         entry points that run before or outside DI are excluded by path. -->
+    <rule ref="./phpcs-custom-sniffs/CustomSniffs/Sniffs/Nextcloud/NoServiceLocatorSniff.php">
+        <type>error</type>
+        <exclude-pattern>*/lib/AppInfo/*</exclude-pattern>
+        <exclude-pattern>*/lib/AppHost/*</exclude-pattern>
+        <exclude-pattern>*/lib/Migration/*</exclude-pattern>
+        <exclude-pattern>*/lib/Repair/*</exclude-pattern>
+        <exclude-pattern>*/lib/Resources/*</exclude-pattern>
+    </rule>
+
     <!-- Warn when a class or public method is missing the @spec PHPDoc tag
          (hydra ADR-003). Warnings, not errors, so CI surfaces the gap without
          blocking merges. -->
