@@ -97,6 +97,38 @@ RESOLVED = "resolved"
 UNRESOLVED = "unresolved"
 UNVERIFIABLE = "unverifiable"
 NO_CLAIM = "no-claim"
+CROSS_REPO = "cross-repo"
+
+# A CITATION THIS REPO CANNOT REACH IS NOT A BROKEN CITATION.
+#
+# This gate only ever looks in the app's own tree, and the fleet's specs
+# legitimately cite tests in SIBLING repositories:
+#
+#   hermiq   "covered by nextcloud-vue `tests/components/CnFlowEdge.spec.js`"
+#            -> nextcloud-vue/tests/components/CnFlowEdge.spec.js  EXISTS
+#   hermiq   "the warning is produced by OpenRegister's save response,
+#            covered by FlowDeadEndTest"
+#            -> openregister/tests/Unit/Service/Flow/FlowDeadEndTest.php EXISTS
+#   filinq   "asserted in OpenRegister (ProcessingLogController ...)"
+#            -> openregister/tests/Unit/Controller/ProcessingLogControllerTest.php
+#
+# Measured 2026-09-08: 7 of the 28 remaining findings, a quarter of them, are
+# this. Reporting them as "cites a test nothing answers to" accuses a correct
+# citation, which is the same defect #711 fixed for a cited SUBJECT.
+#
+# They are DOWNGRADED, not suppressed. The bucket is printed on every run, so a
+# reader still sees the claim and can go and check the other repo. What it no
+# longer does is fail the gate, because this repo cannot resolve it either way
+# and a checkout of it will never contain the answer.
+#
+# The short forms count too. pipelinq writes "engine-level behaviour covered by
+# nc-vue `useWalkthrough.spec.js`", and nextcloud-vue/tests/composables/
+# useWalkthrough.spec.js exists. Matching only the long name accused that one.
+_CROSS_REPO_RE = re.compile(
+    r"\b(?:openregister|open ?register|nextcloud-vue|nc-vue|opencatalogi|"
+    r"openconnector|integriq|conduction/[a-z-]+)\b",
+    re.I,
+)
 
 _SKIP_PARTS = ("node_modules", "vendor", ".git", "dist", "build", "coverage")
 
@@ -248,6 +280,7 @@ def analyse(app_dir: Path) -> dict:
 
     buckets: dict[str, list[dict]] = {
         RESOLVED: [], UNRESOLVED: [], UNVERIFIABLE: [], NO_CLAIM: [],
+        CROSS_REPO: [],
     }
     for spec in _spec_files(app_dir):
         rel = spec.relative_to(app_dir).as_posix()
@@ -265,6 +298,10 @@ def analyse(app_dir: Path) -> dict:
                     # A bare marker is gate-16/19's finding, not this gate's.
                     continue
                 bucket, detail = classify(reason, artifacts)
+                # An unresolvable token in a reason that names another
+                # repository is out of this checkout's reach, not wrong.
+                if bucket == UNRESOLVED and _CROSS_REPO_RE.search(reason):
+                    bucket = CROSS_REPO
                 buckets[bucket].append({
                     "file": rel, "line": n, "tag": tag,
                     "reason": reason[:200], **detail,
@@ -277,11 +314,13 @@ def analyse(app_dir: Path) -> dict:
             "exclusions": total,
             RESOLVED: len(buckets[RESOLVED]),
             UNRESOLVED: len(buckets[UNRESOLVED]),
+            CROSS_REPO: len(buckets[CROSS_REPO]),
             UNVERIFIABLE: len(buckets[UNVERIFIABLE]),
             NO_CLAIM: len(buckets[NO_CLAIM]),
         },
         "resolved_pct": round(100 * len(buckets[RESOLVED]) / total, 1) if total else None,
         "unresolved": buckets[UNRESOLVED],
+        "cross_repo": buckets[CROSS_REPO],
         "unverifiable": buckets[UNVERIFIABLE][:200],
         "no_claim": buckets[NO_CLAIM][:200],
     }
@@ -324,9 +363,9 @@ def main(argv: list[str]) -> int:
     # speaks when it fails leaves the migration invisible.
     print(
         f"[gate-{GATE_NUM}] {GATE_NAME}: {t['exclusions']} exclusion(s) — "
-        f"{t[RESOLVED]} name a test that is here, {t[UNVERIFIABLE]} claim a "
-        f"tier without naming a member of it, {t[NO_CLAIM]} name no evidence "
-        f"at all."
+        f"{t[RESOLVED]} name a test that is here, {t[CROSS_REPO]} name one in "
+        f"another repository, {t[UNVERIFIABLE]} claim a tier without naming a "
+        f"member of it, {t[NO_CLAIM]} name no evidence at all."
     )
 
     if not result["unresolved"]:

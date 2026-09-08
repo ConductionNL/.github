@@ -93,6 +93,42 @@ class ExclusionEvidenceTest(unittest.TestCase):
         self.assertEqual(b[cee.UNRESOLVED], 1)
         self.assertEqual(b[cee.RESOLVED], 0)
 
+    def test_a_citation_naming_ANOTHER_repo_is_cross_repo_not_unresolved(self):
+        # hermiq: "covered by nextcloud-vue `tests/components/CnFlowEdge.spec.js`"
+        # — that file exists, in nextcloud-vue. This checkout will never contain
+        # it, so calling it a broken citation accuses a correct one.
+        _write(self.root, "openspec/specs/canvas/spec.md",
+               _spec("covered by nextcloud-vue tests/components/CnFlowEdge.spec.js"))
+        b = self._buckets()
+        self.assertEqual(b[cee.CROSS_REPO], 1)
+        self.assertEqual(b[cee.UNRESOLVED], 0)
+
+    def test_the_SHORT_form_of_a_repo_name_is_also_cross_repo(self):
+        # pipelinq: "engine-level behaviour covered by nc-vue
+        # `useWalkthrough.spec.js`" — and nextcloud-vue/tests/composables/
+        # useWalkthrough.spec.js exists. Matching only the long name accused a
+        # correct citation, which is the defect this bucket exists to prevent.
+        _write(self.root, "openspec/specs/nav/spec.md",
+               _spec("engine-level behaviour covered by nc-vue useWalkthrough.spec.js"))
+        b = self._buckets()
+        self.assertEqual(b[cee.CROSS_REPO], 1)
+        self.assertEqual(b[cee.UNRESOLVED], 0)
+
+    def test_a_cross_repo_citation_does_not_fail_the_gate(self):
+        _write(self.root, "openspec/specs/logs/spec.md",
+               _spec("asserted in OpenRegister by ProcessingLogControllerTest"))
+        self.assertEqual(cee.main(["x", str(self.root)]), cee.EXIT_PASS)
+
+    def test_a_LOCAL_missing_citation_still_fails(self):
+        # The control. Naming no other repo, it stays a finding — the
+        # downgrade must not have switched the check off.
+        _write(self.root, "openspec/specs/gis/spec.md",
+               _spec("asserted by GeoServiceTest"))
+        b = self._buckets()
+        self.assertEqual(b[cee.UNRESOLVED], 1)
+        self.assertEqual(b[cee.CROSS_REPO], 0)
+        self.assertEqual(cee.main(["x", str(self.root)]), cee.EXIT_FAIL)
+
     def test_a_named_class_that_does_not_exist_is_unresolved(self):
         # procest cites GeoServiceTest, CaseGeoControllerTest and WfsServiceTest.
         # None of the three exists anywhere in that repo.
