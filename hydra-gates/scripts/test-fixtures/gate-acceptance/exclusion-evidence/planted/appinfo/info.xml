@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<id>exclevidfx</id>
+	<name>Exclusion Evidence Fixture (planted)</name>
+	<summary>Fixture app for gate-113 acceptance. Not a real app.</summary>
+	<description>Exists so the gate suite can drive an exclusion that cites a test through the real wrapper, once where the test is absent and once where it is present.</description>
+	<version>1.0.0</version>
+	<licence>agpl</licence>
+	<author>Conduction</author>
+	<namespace>ExclEvidFx</namespace>
+	<category>tools</category>
+	<dependencies><nextcloud min-version="30" max-version="32"/></dependencies>
+</info>
