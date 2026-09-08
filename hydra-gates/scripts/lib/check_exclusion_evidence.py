@@ -348,6 +348,15 @@ def main(argv: list[str]) -> int:
     if len(result["unresolved"]) > 40:
         print(f"  ... and {len(result['unresolved']) - 40} more")
     print(
+        "  NOTE: this gate reads a bare `SomethingTest` token ANYWHERE in the "
+        "reason as a claim, so a sentence REPORTING that a class is gone "
+        "re-triggers this finding. Describe the deleted class rather than "
+        "naming it — \"the app-local health controller and its PHPUnit class\" "
+        "passes where \"...together with HealthControllerTest\" does not. "
+        "Narrowing this to a claim-versus-mention rule (gate-19's "
+        "`is_directive`) needs a positive list of claiming verbs, and the "
+        "blacklist alternative would silently drop real findings, so it is not "
+        "guessed at here.\n"
         "  Fix: correct the citation, or restore the test it names. A renamed "
         "test lands here the day it moves, which is the point."
     )
