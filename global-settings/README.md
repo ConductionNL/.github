@@ -57,6 +57,8 @@ sudo chattr +i ~/.claude/settings.json ~/.claude/hooks/*.sh ~/.claude/settings-v
 
 Restart Claude Code after installing. Requires `jq`, `md5sum`, `curl`, and `chattr` on `PATH` (chattr is part of `e2fsprogs` — present on every standard Linux distro).
 
+> **Known side effect of the lock — model switching.** The model picker fails with `Failed to set model: EPERM: operation not permitted` and does nothing, because the VSCode extension persists every switch by rewriting the locked `~/.claude/settings.json`. This is the lock working as designed, not a broken install. The fix is to pin your default model in the project-local settings file, which the lock does not cover — steps, verification and what not to do: [global-claude-settings.md → Troubleshooting](../docs/claude/global-claude-settings.md#troubleshooting).
+
 ## Online version checking
 
 When `~/.claude/settings-repo-url` is configured, the version check uses GitHub's raw URL (`https://raw.githubusercontent.com/<slug>/<ref>/global-settings/VERSION`) as its primary method. This means you get accurate online version checks even without a local clone of the `.github` repo.
@@ -196,9 +198,11 @@ When you see a version warning at session start:
 
 ## ⚠️ Bumping the version — REQUIRED on every change
 
-**Any commit that modifies a file in `global-settings/` MUST also increment `VERSION`.**
+**Any commit that modifies an *installed artifact* in `global-settings/` MUST also increment `VERSION`.** An installed artifact is anything the [Install](#install) steps copy into `~/.claude/` — `settings.json`, the hook scripts, and the `.example` files.
 
 Failing to bump the version means users will not be warned to update, and their installed settings will silently fall behind.
+
+Changes to `global-settings/README.md` alone do **not** require a bump: nothing installed changes, so a bump would push every developer through the unlock/relock cycle to copy a file they don't have. Documentation under `docs/claude/` is likewise never a trigger.
 
 Semver rules:
 

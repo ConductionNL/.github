@@ -24,9 +24,9 @@ Step-by-step guide from installation to your first completed change. Start here 
 
 ### [Workflow Overview](./workflow.md)
 
-Architecture overview of the full system: how specs, tracking issues (Codeberg primary, GitHub fallback per the platform-policy below), and plan.json fit together. Includes the plan.json format and flow diagrams.
+Architecture overview of the full system: how specs, tracking issues (GitHub — see the platform policy below), and plan.json fit together. Includes the plan.json format and flow diagrams.
 
-> **Platform policy (2026-05-29):** Conduction is migrating from `github.com/ConductionNL/*` to `codeberg.org/Conduction/*`. All Hydra skills and pipeline scripts auto-detect the per-repo platform from `git remote get-url origin` and prefer Codeberg/Gitea/Forgejo first, GitHub second (fallback), GitLab third (alternative). The migration is bidirectional. See [hydra/.claude/skills/PLATFORM-POLICY.md](https://github.com/ConductionNL/hydra/blob/main/.claude/skills/PLATFORM-POLICY.md) for the canonical reference.
+> **Platform policy (2026-08-22, supersedes the 2026-05-29 Codeberg-first order):** **ConductionNL work lives on GitHub.** The 2026-05-29 migration to `codeberg.org/Conduction/*` was reversed — directive 2026-07-17, executed 2026-07-23; zero Codeberg remotes remained fleet-wide as of 2026-08-22. All Hydra skills and pipeline scripts auto-detect the per-repo platform from `git remote get-url origin` and prefer GitHub first, GitLab second (non-Conduction client work), Gitea/Forgejo third (only for a repo that genuinely lives on a Forgejo host — never the default). A `codeberg.org` URL found inside a repo is stale data to be fixed, not evidence of where that repo lives. See [hydra/.claude/skills/PLATFORM-POLICY.md](https://github.com/ConductionNL/hydra/blob/main/.claude/skills/PLATFORM-POLICY.md) for the canonical reference.
 
 ### [Command Reference](./commands.md)
 
@@ -82,7 +82,7 @@ Available docker-compose profiles, reset instructions, and environment setup.
 
 ### [Workstation Setup](./workstation-setup.md)
 
-How to set up a new machine — Windows + WSL2 + Docker Desktop + VS Code installation, required/recommended extensions, Claude Code authentication, and WSL prerequisites (Node.js, PHP, Composer, git-host CLIs — `tea` for Codeberg/Gitea/Forgejo (primary), `gh` for GitHub (fallback), `glab` for GitLab — Playwright, OpenSpec CLI).
+How to set up a new machine — Windows + WSL2 + Docker Desktop + VS Code installation, required/recommended extensions, Claude Code authentication, and WSL prerequisites (Node.js, PHP, Composer, git-host CLIs — `gh` for GitHub (primary), `glab` for GitLab, `tea` for Codeberg/Gitea/Forgejo (non-Conduction repos only) — Playwright, OpenSpec CLI).
 
 ### [Quick Setup — for people who already know the system](./quick-setup.md)
 
@@ -90,7 +90,7 @@ Condensed cheat-sheet for re-imaging a known-good workstation: prerequisites, re
 
 ### [Codeberg Authentication Setup](./codeberg-auth-setup.md)
 
-End-to-end auth for Codeberg (the Conduction primary git host) from WSL: SSH key generation + Codeberg upload, `~/.ssh/config`, `keychain` for passphrase persistence, `tea` CLI install + token scopes, VS Code Gitea extension, switching existing repo remotes, and how Claude Code inherits the auth without re-prompting. Read this when setting up a new workstation or onboarding a new dev — the [Workstation Setup](./workstation-setup.md) doc points at this for the Codeberg-specific steps.
+End-to-end auth for Codeberg from WSL: SSH key generation + Codeberg upload, `~/.ssh/config`, `keychain` for passphrase persistence, `tea` CLI install + token scopes, VS Code Gitea extension, switching existing repo remotes, and how Claude Code inherits the auth without re-prompting. Per the platform policy above, ConductionNL work does **not** live on Codeberg — read this only when you need a non-Conduction repo that genuinely lives on a Forgejo host.
 
 ### [Global Claude settings (`~/.claude`)](./global-claude-settings.md)
 
@@ -126,7 +126,7 @@ A complete worked example showing every phase of the flow on a realistic feature
 
 ### [Retrofit Playbook](./retrofit.md)
 
-Bringing legacy apps under [ADR-003 §Spec traceability](https://codeberg.org/Conduction/hydra/blob/main/openspec/architecture/adr-003-backend.md) — the three retrofit skills (`/opsx-coverage-scan`, `/opsx-annotate`, `/opsx-reverse-spec`) in order, plus the six coverage buckets and when to extend vs create new specs.
+Bringing legacy apps under [ADR-003 §Spec traceability](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-003-backend.md) — the three retrofit skills (`/opsx-coverage-scan`, `/opsx-annotate`, `/opsx-reverse-spec`) in order, plus the six coverage buckets and when to extend vs create new specs.
 
 ---
 
@@ -241,7 +241,7 @@ Collect requirements, study existing solutions, and identify what to build. Clau
 
 | Source                 | How                                                                                                    | Commands / Tools                                                                                       |
 | ---------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| **Tracking issues**    | Sync and analyze open issues from project repos (Codeberg primary, GitHub fallback)                    | `/swc-update`, `tea issues list`, `gh issue list`                                                      |
+| **Tracking issues**    | Sync and analyze open issues from project repos (GitHub; `tea` only for non-Conduction Forgejo repos)  | `/swc-update`, `gh issue list`, `tea issues list`                                                      |
 | **Other applications** | Crawl code or browse running apps to understand patterns                                               | `/opsx-explore`, Playwright browsers (`browser-1`–`browser-7`)                                         |
 | **Documentation**      | Read docs from other platforms, APIs, standards                                                        | `WebFetch`, `WebSearch`, `/opsx-explore`                                                               |
 | **Tenders**            | Scrape TenderNed, classify by category, analyze requirements and ecosystem gaps                        | `/tender-scan`, `/tender-status`, `/tender-gap-report`, `/ecosystem-investigate`, `Read` (PDF support) |
@@ -253,7 +253,7 @@ Collect requirements, study existing solutions, and identify what to build. Clau
 /opsx-explore                              # Investigate a topic or problem
 > "What calendar apps exist on ArtifactHub and WordPress that we could learn from?"
 > "Crawl the Nextcloud app store for document management apps"
-> "Analyze the tracking issues for openregister and summarize themes" (on the per-repo platform — Codeberg primary for `Conduction/*`, GitHub for legacy `ConductionNL/*` repos)
+> "Analyze the tracking issues for openregister and summarize themes" (on the per-repo platform — GitHub for `ConductionNL/*`, which is where all Conduction work lives)
 ```
 
 ### Stage 2: Specify — Writing OpenSpec Artifacts
@@ -373,7 +373,7 @@ composer phpcs && composer phpmd           # Code quality gates
 
 ## Workstation Setup
 
-For new-machine setup instructions — Windows + WSL2 + Docker Desktop + VS Code installation, extensions, Claude Code authentication, and WSL prerequisites (Node.js, PHP, Composer, git-host CLIs — `tea` for Codeberg (primary), `gh` for GitHub (fallback), `glab` for GitLab — Playwright, OpenSpec CLI, etc.) — see **[workstation-setup.md](./workstation-setup.md)**.
+For new-machine setup instructions — Windows + WSL2 + Docker Desktop + VS Code installation, extensions, Claude Code authentication, and WSL prerequisites (Node.js, PHP, Composer, git-host CLIs — `gh` for GitHub (primary), `glab` for GitLab, `tea` for Codeberg/Gitea/Forgejo (non-Conduction repos only) — Playwright, OpenSpec CLI, etc.) — see **[workstation-setup.md](./workstation-setup.md)**.
 
 ---
 
@@ -507,7 +507,7 @@ This repo contains **documentation**, **global settings**, and **project templat
 
 ### Typical project workspace
 
-Each Conduction project (Nextcloud apps, WordPress sites, etc.) has its own `.claude/` directory with skills, personas, and configuration. The [Hydra](https://codeberg.org/Conduction/hydra) repo also maintains its own set of skills and personas for CI/CD agents.
+Each Conduction project (Nextcloud apps, WordPress sites, etc.) has its own `.claude/` directory with skills, personas, and configuration. The [Hydra](https://github.com/ConductionNL/hydra) repo also maintains its own set of skills and personas for CI/CD agents.
 
 ```
 <project-root>/
@@ -567,9 +567,9 @@ See [usage-tracker/README.md](../../usage-tracker/README.md) for full documentat
 
 ## Related: Hydra CI/CD Pipeline
 
-[Hydra](https://codeberg.org/Conduction/hydra) is Conduction's agentic CI/CD platform that runs the same spec-driven workflow autonomously in Docker containers. It transforms OpenSpec change proposals into validated, security-scanned code on feature branches — with final human approval before merging.
+[Hydra](https://github.com/ConductionNL/hydra) is Conduction's agentic CI/CD platform that runs the same spec-driven workflow autonomously in Docker containers. It transforms OpenSpec change proposals into validated, security-scanned code on feature branches — with final human approval before merging.
 
-For an overview of the pipeline stages, the label-based triggers (`ready-to-build`, `code-review:queued`, `security-review:queued`), and how to put Hydra to work on your PR, see the **[Hydra docs](../hydra/README.md)**. For container architecture, image builds, orchestrator internals, and operator-level material, see the [Hydra repository](https://codeberg.org/Conduction/hydra).
+For an overview of the pipeline stages, the label-based triggers (`ready-to-build`, `code-review:queued`, `security-review:queued`), and how to put Hydra to work on your PR, see the **[Hydra docs](../hydra/README.md)**. For container architecture, image builds, orchestrator internals, and operator-level material, see the [Hydra repository](https://github.com/ConductionNL/hydra).
 
 ---
 
@@ -654,16 +654,17 @@ Ensure `.claude/` is at the workspace root and Claude Code is started from that 
 ### `tea login list` empty / `gh: not logged in`
 
 ```bash
-# Codeberg / Gitea / Forgejo — PRIMARY
+# GitHub — PRIMARY (the ConductionNL org: code, PRs and issues)
+gh auth login
+
+# GitLab — ALTERNATIVE (non-Conduction client work)
+glab auth login
+
+# Codeberg / Gitea / Forgejo — only for a non-Conduction repo that genuinely
+# lives on a Forgejo host. Not needed for ConductionNL work.
 tea login add --name codeberg --url https://codeberg.org --token <PAT>
 # Token from https://codeberg.org/user/settings/applications
 # Scopes: read:repository, write:repository, read:issue, write:issue
-
-# GitHub — SECONDARY (still required while migration is in progress)
-gh auth login
-
-# GitLab — ALTERNATIVE
-glab auth login
 ```
 
 Note: `tea pulls create` / `tea issues create` need a controlling TTY and fail from Claude Code's Bash tool. Claude-driven workflows use REST `POST /api/v1/...` with the token from `~/.config/tea/config.yml`. Read-only `tea login list/default`, `tea repos list`, `tea pulls list -o json` are TTY-safe.
