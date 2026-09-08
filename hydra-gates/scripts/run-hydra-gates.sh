@@ -12147,6 +12147,66 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# GATE 112 — newman-reach
+#
+# A committed Postman collection that CI never runs. The Newman job executes
+# what it finds under ONE configured directory (`newman-collection-path`), and
+# nothing reports what is committed elsewhere.
+#
+# MEASURED 2026-09-08 across the 21 core apps: 3,067 requests are committed and
+# 1,444 execute. dossiq alone holds 946 that have never run. hermiq and
+# portaliq ship the unedited scaffold — one request, to /status.php — and
+# report a green Newman job that has never asserted anything about the app.
+#
+# FULL-TREE, not diff-scoped, deliberately. The subject is "does this file ever
+# execute", which is a property of the repo's layout and its caller's inputs,
+# not of the diff. A delta gate here would report NOT APPLICABLE on every PR
+# that does not touch a collection, which is every PR, which is why nobody
+# noticed.
+#
+# See scripts/lib/check_newman_reach.py for the discovery + finding logic.
+# ---------------------------------------------------------------------------
+_nr_collections=$(find . -name '*.postman_collection.json' \
+    -not -path './node_modules/*' -not -path './vendor/*' -not -path './.git/*' \
+    -not -path './lib/Resources/template/*' 2>/dev/null | wc -l | tr -d ' ')
+if [ "${_nr_collections}" -gt 0 ]; then
+    _nr_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-newman-reach.log
+    : > "${_nr_log}"
+    _nr_helper="${SCRIPT_DIR}/lib/check_newman_reach.py"
+    if [ ! -f "${_nr_helper}" ]; then
+        # A missing helper is a missing MEASUREMENT, never a pass. This is the
+        # shape that once let gate-7 report PASS over 11 unguarded endpoints.
+        _skip 112 "newman-reach" wiring "check_newman_reach.py not found at ${_nr_helper} — ${_nr_collections} Postman collection(s) are committed here and NONE were inspected, so whether CI runs them is UNVERIFIED by this run."
+    else
+        set +e
+        python3 "${_nr_helper}" . >> "${_nr_log}" 2>&1
+        _nr_rc=$?
+        set +e
+        # The verdict comes from the EXIT CODE, which this helper keeps to the
+        # documented status set (0/1/2/4) and never overloads with a count.
+        case "${_nr_rc}" in
+            0)
+                grep -E '^\[gate-112\]' "${_nr_log}" 2>/dev/null | tail -1
+                _pass 112 "newman-reach"
+                ;;
+            1)
+                cat "${_nr_log}"
+                _nr_n=$(grep -cE '^  V[0-9]' "${_nr_log}" 2>/dev/null || echo 0)
+                _fail 112 "newman-reach" "${_nr_n} committed Postman collection(s) that CI never runs, or that run without asserting anything — see ${_nr_log}"
+                ;;
+            4)
+                _skip 112 "newman-reach" na "this repo commits no *.postman_collection.json outside vendor/node_modules, so it exposes no API suite for CI to reach."
+                ;;
+            *)
+                _skip 112 "newman-reach" wiring "check_newman_reach.py exited ${_nr_rc} without a verdict — ${_nr_collections} collection(s) were in scope and NONE were judged. See ${_nr_log}."
+                ;;
+        esac
+    fi
+else
+    _skip 112 "newman-reach" na "this repo commits no *.postman_collection.json, so there is no API suite for CI to reach."
+fi
+
+# ---------------------------------------------------------------------------
 # Summary + COVERAGE ACCOUNTING
 #
 # The banner used to read "ALL 63 GATES GREEN" whenever the failure count was
