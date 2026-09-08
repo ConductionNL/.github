@@ -2126,5 +2126,350 @@ class PlaywrightConfigResolutionTest(unittest.TestCase):
         self.assertEqual(scope.test_dir, "tests/e2e")
 
 
+# ---------------------------------------------------------------------------
+# FLAT SPEC FILES — openspec/specs/<name>.md, not only <name>/spec.md
+# ---------------------------------------------------------------------------
+#
+# Measured 2026-09-08: planninq keeps 153 of its 224 scenarios in 13 flat
+# files. This gate read none of them, so they were not counted, not
+# enforceable, and not excludable either.
+
+
+_FLAT_SPEC = """\
+## Requirements
+
+### Requirement: Projects list
+
+#### Scenario: A project appears in the list
+
+- **WHEN** a project exists
+- **THEN** it is listed
+
+#### Scenario: An archived project is hidden
+
+@e2e exclude asserted by ProjectRepositoryTest::testArchivedExcluded
+
+- **WHEN** a project is archived
+- **THEN** it is not listed
+"""
+
+
+class FlatSpecFileTest(unittest.TestCase):
+    """A spec written as openspec/specs/<name>.md is a spec."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+        self.specs = self.root / "openspec" / "specs"
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def test_flat_file_takes_its_name_from_the_file_stem(self):
+        p = _write(self.root, "openspec/specs/projects.md", _FLAT_SPEC)
+        scenarios = cec.parse_spec_scenarios(p)
+        self.assertEqual(len(scenarios), 2)
+        # Not "specs", which is what the parent-directory rule would have given
+        # every flat file in the repo.
+        self.assertEqual(scenarios[0]["spec"], "projects")
+        self.assertEqual(scenarios[0]["ref"], "projects::a-project-appears-in-the-list")
+
+    def test_directory_shape_still_takes_the_directory_name(self):
+        p = _write(self.root, "openspec/specs/projects/spec.md", _FLAT_SPEC)
+        self.assertEqual(cec.spec_name_for(p), "projects")
+
+    def test_an_exclusion_in_a_flat_file_is_now_read(self):
+        # Previously unreachable: an `@e2e exclude` in a file the gate never
+        # opened excluded nothing, because it was never parsed.
+        p = _write(self.root, "openspec/specs/projects.md", _FLAT_SPEC)
+        scenarios = cec.parse_spec_scenarios(p)
+        hidden = next(s for s in scenarios if s["slug"] == "an-archived-project-is-hidden")
+        self.assertTrue(hidden["excluded"])
+        self.assertFalse(hidden["bare_exclude"])
+
+    def test_spec_files_returns_both_shapes(self):
+        _write(self.root, "openspec/specs/flat.md", _FLAT_SPEC)
+        _write(self.root, "openspec/specs/nested/spec.md", _FLAT_SPEC)
+        names = sorted(cec.spec_name_for(p) for p in cec.spec_files(self.specs))
+        self.assertEqual(names, ["flat", "nested"])
+
+    def test_readme_is_documentation_not_a_spec(self):
+        # A README that quotes `#### Scenario:` as a format example would
+        # otherwise register phantom scenarios in the denominator.
+        _write(self.root, "openspec/specs/README.md", _FLAT_SPEC)
+        self.assertEqual(cec.spec_files(self.specs), [])
+
+    def test_a_nested_file_that_is_not_spec_md_is_not_collected(self):
+        # `<name>/design.md` and `<name>/tasks.md` sit beside a real spec.md in
+        # every OpenSpec change directory and are not scenario sources.
+        _write(self.root, "openspec/specs/nested/design.md", _FLAT_SPEC)
+        self.assertEqual(cec.spec_files(self.specs), [])
+
+    def test_report_mode_counts_flat_scenarios(self):
+        _write(self.root, "openspec/specs/projects.md", _FLAT_SPEC)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            cec.run_report(self.root)
+        out = json.loads(buf.getvalue())
+        self.assertEqual(out["totals"]["scenarios"], 2)
+        self.assertEqual(out["totals"]["excluded"], 1)
+
+
+class SpecNameCollisionTest(unittest.TestCase):
+    """Two files claiming one spec name make every anchor to it ambiguous."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+        self.specs = self.root / "openspec" / "specs"
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def test_flat_beside_directory_is_reported(self):
+        # planninq ships exactly this pair today.
+        _write(self.root, "openspec/specs/kanban-board.md", _FLAT_SPEC)
+        _write(self.root, "openspec/specs/kanban-board/spec.md", _FLAT_SPEC)
+        collisions = cec.spec_name_collisions(self.specs)
+        self.assertEqual(
+            collisions,
+            {"kanban-board": ["kanban-board.md", "kanban-board/spec.md"]},
+        )
+
+    def test_unique_names_collide_with_nothing(self):
+        _write(self.root, "openspec/specs/projects.md", _FLAT_SPEC)
+        _write(self.root, "openspec/specs/kanban-board/spec.md", _FLAT_SPEC)
+        self.assertEqual(cec.spec_name_collisions(self.specs), {})
+
+    def test_report_mode_surfaces_the_collision(self):
+        _write(self.root, "openspec/specs/kanban-board.md", _FLAT_SPEC)
+        _write(self.root, "openspec/specs/kanban-board/spec.md", _FLAT_SPEC)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            cec.run_report(self.root)
+        out = json.loads(buf.getvalue())
+        self.assertIn("kanban-board", out["spec_name_collisions"])
+
+
+class FlatSpecAnchorTest(unittest.TestCase):
+    """The path-form anchor has to be able to address a flat spec file."""
+
+    def test_flat_path_anchor_resolves_to_the_file_stem(self):
+        m = cec._E2E_PATH_RE.search(
+            "// @e2e openspec/specs/projects.md#a-project-appears-in-the-list"
+        )
+        self.assertIsNotNone(m)
+        self.assertIsNone(m.group("spec"))
+        self.assertEqual(m.group("flatspec"), "projects")
+        self.assertEqual(m.group("slug"), "a-project-appears-in-the-list")
+
+    def test_directory_path_anchor_is_unchanged(self):
+        m = cec._E2E_PATH_RE.search(
+            "// @e2e openspec/specs/projects/spec.md#a-project-appears-in-the-list"
+        )
+        self.assertIsNotNone(m)
+        self.assertEqual(m.group("spec"), "projects")
+        self.assertIsNone(m.group("flatspec"))
+
+    def test_short_form_has_no_flatspec_group(self):
+        # Guards the `groupdict().get` in collect_ref_status: `group("flatspec")`
+        # on this pattern raises IndexError.
+        m = cec._E2E_SHORT_RE.search("// @e2e projects::a-project-appears-in-the-list")
+        self.assertIsNotNone(m)
+        self.assertNotIn("flatspec", m.groupdict())
+
+
+class ChangedSpecFilesShapeTest(unittest.TestCase):
+    """Diff scoping selects both spec shapes and nothing else."""
+
+    def _select(self, paths: list[str]) -> set[str]:
+        # changed_spec_files' filter, applied to a synthetic diff listing.
+        keep = set()
+        for line in paths:
+            line = line.strip()
+            if not line.startswith("openspec/specs/") or not line.endswith(".md"):
+                continue
+            rest = line[len("openspec/specs/"):]
+            depth = rest.count("/")
+            if depth == 1 and rest.endswith("/spec.md"):
+                keep.add(line)
+            elif depth == 0 and rest.lower() not in cec._NOT_A_SPEC:
+                keep.add(line)
+        return keep
+
+    def test_selects_both_shapes_and_rejects_the_rest(self):
+        selected = self._select([
+            "openspec/specs/projects.md",              # flat spec
+            "openspec/specs/kanban/spec.md",           # directory spec
+            "openspec/specs/README.md",                # documentation
+            "openspec/specs/kanban/design.md",         # not a spec source
+            "openspec/specs/a/b/spec.md",              # too deep
+            "openspec/changes/foo/specs/x/spec.md",    # a change, not a spec
+            "src/components/Thing.vue",                # not markdown
+        ])
+        self.assertEqual(
+            selected,
+            {"openspec/specs/projects.md", "openspec/specs/kanban/spec.md"},
+        )
+
+
+class ClassifyEvidenceTest(unittest.TestCase):
+    """A test that proves a page mounted is not a test that proves a scenario."""
+
+    def _classify(self, body: str, **kw) -> str:
+        src = "test('t', async ({ page }) => {\n" + body + "\n})\n"
+        doc = cec._TestFile(src)
+        node = doc.owner(0)
+        self.assertIsNotNone(node, "fixture did not parse as a test")
+        return cec.classify_evidence(doc, node, **kw)
+
+    def test_navigate_and_assert_visible_is_presence_only(self):
+        self.assertEqual(
+            self._classify(
+                "  await page.goto('/apps/x/things')\n"
+                "  await expect(page.getByText('Things')).toBeVisible()\n"
+            ),
+            cec.EVIDENCE_PRESENCE_ONLY,
+        )
+
+    def test_a_count_is_presence_arithmetic_not_content(self):
+        self.assertEqual(
+            self._classify(
+                "  await page.goto('/apps/x/things')\n"
+                "  await expect(page.locator('.row')).toHaveCount(3)\n"
+            ),
+            cec.EVIDENCE_PRESENCE_ONLY,
+        )
+
+    def test_reading_content_is_behaviour(self):
+        self.assertEqual(
+            self._classify(
+                "  await page.goto('/apps/x/things')\n"
+                "  await expect(page.locator('.total')).toHaveText('42')\n"
+            ),
+            cec.EVIDENCE_BEHAVIOUR,
+        )
+
+    def test_clicking_then_asserting_visible_is_behaviour(self):
+        # Deliberately NOT a finding. Arguable, and the gate only reports what
+        # is indefensible.
+        self.assertEqual(
+            self._classify(
+                "  await page.goto('/apps/x/things')\n"
+                "  await page.getByRole('button', { name: 'Add' }).click()\n"
+                "  await expect(page.getByRole('dialog')).toBeVisible()\n"
+            ),
+            cec.EVIDENCE_BEHAVIOUR,
+        )
+
+    def test_an_api_write_is_behaviour(self):
+        self.assertEqual(
+            self._classify(
+                "  const r = await page.request.post('/api/things', { data: {} })\n"
+                "  expect(r.ok()).toBeTruthy()\n"
+            ),
+            cec.EVIDENCE_BEHAVIOUR,
+        )
+
+    def test_no_expect_at_all_is_no_assertion(self):
+        self.assertEqual(
+            self._classify("  await page.goto('/apps/x/things')\n"),
+            cec.EVIDENCE_NO_ASSERTION,
+        )
+
+    def test_a_negated_content_matcher_still_counts_as_content(self):
+        self.assertEqual(
+            self._classify(
+                "  await page.goto('/apps/x')\n"
+                "  await expect(page.locator('body')).not.toContainText('Error')\n"
+            ),
+            cec.EVIDENCE_BEHAVIOUR,
+        )
+
+    def test_a_helper_taking_page_is_treated_as_possibly_acting(self):
+        # zaakafhandelapp's "selecting a zaak": the click lives inside
+        # openIndexSidebar(page). Unknown is not absence, so no finding.
+        body = (
+            "  await page.goto('/apps/x/zaken')\n"
+            "  await openIndexSidebar(page)\n"
+            "  await expect(page.getByRole('heading')).toBeVisible()\n"
+        )
+        self.assertEqual(self._classify(body), cec.EVIDENCE_BEHAVIOUR)
+        # ... and the other end of the range says what it would be if that
+        # helper turned out to be a pure locator builder.
+        self.assertEqual(
+            self._classify(body, opaque_call_acts=False),
+            cec.EVIDENCE_PRESENCE_ONLY,
+        )
+
+    def test_expect_poll_and_soft_are_recognised(self):
+        self.assertEqual(
+            self._classify(
+                "  await page.goto('/apps/x')\n"
+                "  await expect.soft(page.locator('.x')).toBeVisible()\n"
+            ),
+            cec.EVIDENCE_PRESENCE_ONLY,
+        )
+
+
+class ReportModeEvidenceTest(unittest.TestCase):
+    """Report mode carries the thin-coverage floor and ceiling."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def _report(self) -> dict:
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            cec.run_report(self.root)
+        return json.loads(buf.getvalue())
+
+    def test_a_presence_only_proof_counts_as_covered_and_as_thin(self):
+        _write(self.root, "openspec/specs/things/spec.md", BASIC_SPEC)
+        _write(
+            self.root,
+            "tests/e2e/things.spec.ts",
+            "import { expect, test } from '@playwright/test'\n"
+            "// @e2e things::foo-does-bar\n"
+            "test('foo renders', async ({ page }) => {\n"
+            "  await page.goto('/apps/x')\n"
+            "  await expect(page.getByText('Foo')).toBeVisible()\n"
+            "})\n"
+            "// @e2e things::foo-handles-error\n"
+            "test('foo errors', async ({ page }) => {\n"
+            "  await page.goto('/apps/x')\n"
+            "  await expect(page.locator('.msg')).toHaveText('nope')\n"
+            "})\n",
+        )
+        out = self._report()
+        t = out["totals"]
+        self.assertEqual(t["covered"], 2)
+        # Counted as covered, exactly as the gate counts it, AND listed.
+        self.assertEqual(t["covered_thinly"], 1)
+        self.assertEqual(out["coverage_pct"], 100.0)
+        self.assertEqual(out["coverage_pct_strong"], 50.0)
+        self.assertEqual(
+            [x["ref"] for x in out["covered_thinly"]], ["things::foo-does-bar"]
+        )
+
+    def test_the_ceiling_is_at_least_the_floor(self):
+        _write(self.root, "openspec/specs/things/spec.md", BASIC_SPEC)
+        _write(
+            self.root,
+            "tests/e2e/things.spec.ts",
+            "import { expect, test } from '@playwright/test'\n"
+            "// @e2e things::foo-does-bar\n"
+            "test('a', async ({ page }) => {\n"
+            "  await settle(page)\n"
+            "  await expect(page.getByText('Foo')).toBeVisible()\n"
+            "})\n",
+        )
+        t = self._report()["totals"]
+        self.assertEqual(t["covered_thinly"], 0)      # helper may act
+        self.assertEqual(t["covered_thinly_max"], 1)  # if it does not
+        self.assertLessEqual(t["covered_thinly"], t["covered_thinly_max"])
+
+
 if __name__ == "__main__":
     unittest.main()
