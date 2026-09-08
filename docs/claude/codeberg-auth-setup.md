@@ -177,7 +177,7 @@ Go to <https://codeberg.org/user/settings/applications> → **Generate New Token
 | `repository` | Push branches, create files via API, manage releases |
 | `issue` | PRs share the issue API surface on Gitea — needed for comments, labels, assignees, reviews |
 | `user` | Identify the authenticated user |
-| `organization` | List `Conduction` org repos, manage team membership reads |
+| `organization` | List the org's repos, manage team membership reads |
 
 **Skip** these — they add risk without value for normal dev work:
 
@@ -235,9 +235,9 @@ git -C /path/to/repo remote set-url origin git@github.com:ConductionNL/<repo-nam
 git -C /path/to/repo ls-remote --heads origin | head -3
 ```
 
-If you see branch refs, the remote is correctly pointing at Codeberg and your SSH key works. If you see "Permission denied" or "repository not found", retrace Steps 1-5.
+If you see branch refs, the remote is correctly pointing at the Forgejo host and your SSH key works. If you see "Permission denied" or "repository not found", retrace Steps 1-5.
 
-> **Heads-up for Hydra users:** The Hydra orchestrator and its cron scripts (`scripts/orchestrate.sh`, `scripts/cron-*.sh`, `scripts/hydra-supervisor.sh`) still assume GitHub for issue dispatch. If you switch the Hydra repo's `origin` to Codeberg, `git push` from inside those scripts goes to Codeberg, but `gh issue` calls still hit GitHub — a temporary split-brain. Hold off on switching `hydra` and `openregister` origins until Hydra has migrated to `tea`/Codeberg APIs. The other repos (`.github`, `openwoo-app-website`, app repos) are safe to switch immediately.
+> **Heads-up for Hydra users:** this used to say which Conduction repos were safe to switch to Codeberg. None are — the migration was reversed, and `hydra` plus every app repo live on GitHub under `ConductionNL`. The orchestrator and its cron scripts (`scripts/orchestrate.sh`, `scripts/cron-*.sh`, `scripts/hydra-supervisor.sh`) dispatch issues via `gh`, which matches where the repos actually are. Pointing any of them at Codeberg would recreate the split-brain this note originally warned about.
 
 ## Step 10 — Install the VS Code Gitea extension (optional but recommended)
 
