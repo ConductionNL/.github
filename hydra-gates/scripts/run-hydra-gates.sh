@@ -12152,6 +12152,65 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# GATE 113 — exclusion-evidence
+#
+# An exclusion that names a test nobody can find.
+#
+# `exclusion_reason.py` deliberately stops at STRUCTURAL degeneracy, and says
+# so: "an exemption's reason is a testable claim: reasons naming a test
+# artifact hold, reasons naming a state of the world rot ... Judging that needs
+# a purpose-built check, not a len()". This is that check.
+#
+# MEASURED 2026-09-08 across the 21 core apps: 5,529 reason-bearing exclusions.
+# 1,079 name a test that is here. 48 name one that is NOT — procest alone cites
+# GeoServiceTest, CaseGeoControllerTest and WfsServiceTest, none of which exists
+# anywhere in that repo. Those scenarios are excluded AND uncovered, invisible
+# twice over.
+#
+# ONLY THE 48 FAIL. The 2,791 that claim a tier without naming a member of it
+# ("asserted by PHPUnit") are reported as a worklist and never failed on: a
+# gate that reds every repo on day one is a gate nobody turns on, and the fix
+# there is an annotation pass, not a code change.
+#
+# See scripts/lib/check_exclusion_evidence.py for the classification.
+# ---------------------------------------------------------------------------
+if [ -d openspec/specs ]; then
+    _ee_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-exclusion-evidence.log
+    : > "${_ee_log}"
+    _ee_helper="${SCRIPT_DIR}/lib/check_exclusion_evidence.py"
+    if [ ! -f "${_ee_helper}" ]; then
+        _skip 113 "exclusion-evidence" wiring "check_exclusion_evidence.py not found at ${_ee_helper} — openspec/specs exists here and NO exclusion claim was checked, so whether they cite tests that exist is UNVERIFIED by this run."
+    else
+        set +e
+        python3 "${_ee_helper}" . >> "${_ee_log}" 2>&1
+        _ee_rc=$?
+        set +e
+        # Always print the worklist line, pass or fail. A gate that only speaks
+        # when it fails leaves the migration invisible, which is how 2,791
+        # uncheckable claims accumulated without anyone deciding to allow them.
+        grep -E '^\[gate-113\] exclusion-evidence: [0-9]+ exclusion' "${_ee_log}" 2>/dev/null | tail -1
+        case "${_ee_rc}" in
+            0)
+                _pass 113 "exclusion-evidence"
+                ;;
+            1)
+                cat "${_ee_log}"
+                _ee_n=$(grep -cE '^  openspec/' "${_ee_log}" 2>/dev/null || echo 0)
+                _fail 113 "exclusion-evidence" "${_ee_n} exclusion(s) cite a test nothing in this repo answers to — they read as verified and are not. See ${_ee_log}"
+                ;;
+            4)
+                _skip 113 "exclusion-evidence" na "no reason-bearing @e2e/@spec/@contract/@visual exclusion in openspec/specs, so there is no evidence claim to check."
+                ;;
+            *)
+                _skip 113 "exclusion-evidence" wiring "check_exclusion_evidence.py exited ${_ee_rc} without a verdict — openspec/specs was in scope and NO exclusion claim was judged. See ${_ee_log}."
+                ;;
+        esac
+    fi
+else
+    _skip 113 "exclusion-evidence" na "this repo has no openspec/specs, so it declares no exclusions to evidence."
+fi
+
+# ---------------------------------------------------------------------------
 # Summary + COVERAGE ACCOUNTING
 #
 # The banner used to read "ALL 63 GATES GREEN" whenever the failure count was
