@@ -5,4 +5,5 @@
     <rule ref="CustomSniffs.Functions.NamedParameters"/>
     <rule ref="CustomSniffs.Commenting.SpecTag"/>
     <rule ref="CustomSniffs.Nextcloud.NoLegacyServerAccessors"/>
+    <rule ref="CustomSniffs.Nextcloud.NoServiceLocator"/>
 </ruleset>
