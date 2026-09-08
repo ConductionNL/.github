@@ -90,9 +90,17 @@ fi
 # have NO canonical path — they are never allowed. The only permitted operation is a full
 # overwrite sourced from the canonical repo (enforced by the write guard below). This is a
 # HARD BLOCK regardless of source, because these operations cannot carry canonical content.
-if echo "$cmd" | grep -qE "\b(sed|perl|awk|gawk|ruby)\b[^|]*[[:space:]]-i\b[^|]*${_prot}" \
-|| echo "$cmd" | grep -qE "\b(truncate|shred|unlink)\b[^|]*${_prot}" \
-|| echo "$cmd" | grep -qE "(^|[;&|]\s*)rm\b[^|]*${_prot}"; then
+#
+# All three patterns anchor the tool name at a command-segment boundary and keep the
+# gap up to the protected path inside that same segment ([^|;&] rather than [^|]).
+# Without both, the tool name, its -i flag and the protected path could each be
+# borrowed from a DIFFERENT command in the same chain: `awk '{print}' f; grep -c -i x
+# ~/.claude/hooks/y.sh` was hard-denied as an "in-place edit" because [^|]* happily
+# spans `;`, matching awk from the first command and -i from the third. Fails closed,
+# so the symptom was a refused read-only inspection with a misleading reason.
+if echo "$cmd" | grep -qE "(^|[;&|]\s*)(sed|perl|awk|gawk|ruby)\b[^|;&]*[[:space:]]-i\b[^|;&]*${_prot}" \
+|| echo "$cmd" | grep -qE "(^|[;&|]\s*)(truncate|shred|unlink)\b[^|;&]*${_prot}" \
+|| echo "$cmd" | grep -qE "(^|[;&|]\s*)rm\b[^|;&]*${_prot}"; then
     hard_deny "BLOCKED: in-place edits, truncation, or deletion of ~/.claude/ config files are not permitted. The only allowed operation is a full overwrite with canonical content from the configured source."
 fi
 

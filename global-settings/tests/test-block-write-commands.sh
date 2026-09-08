@@ -142,6 +142,31 @@ done
 add_allow "npm ci (lockfile-pinned)" "npm ci"
 add_allow "npm ci --ignore-scripts" "npm ci --ignore-scripts"
 
+# Destructive/in-place guard — segment-boundary regressions.
+# The guard's gap pattern used to be [^|]*, which stops at a pipe but happily spans
+# `;` and `&&`. So the tool name, its -i flag and the protected path could each be
+# borrowed from a DIFFERENT command in the same chain, and a read-only inspection got
+# hard-denied as an "in-place edit". Every command below only ever READS the protected
+# path; the destructive verb operates on an unprotected one.
+FP_PROT_FILES=( "settings.json" "hooks/check-settings-version.sh" "settings-version" )
+for f in "${FP_PROT_FILES[@]}"; do
+    add_allow "segment-fp: awk earlier, unrelated -i later → $f" \
+      "awk '{print}' /tmp/x; grep -c -i needle \"\$HOME/.claude/${f}\""
+    add_allow "segment-fp: sed -i on an unprotected path → $f" \
+      "sed -i 's/a/b/' /tmp/x; grep -c needle \"\$HOME/.claude/${f}\""
+    add_allow "segment-fp: rm earlier on an unprotected path → $f" \
+      "rm /tmp/junk; cat \"\$HOME/.claude/${f}\""
+    add_allow "segment-fp: unlink earlier on an unprotected path → $f" \
+      "unlink /tmp/junk && wc -l \"\$HOME/.claude/${f}\""
+    # Controls: narrowing the gap must not let a genuine destructive op through,
+    # including one that sits after a command-chain prefix (section 4 below never
+    # exercises the chained form for in-place mutators).
+    add_deny "segment-fp control: chained sed -i → $f" \
+      "echo foo; sed -i 's/a/b/' \"\$HOME/.claude/${f}\""
+    add_deny "segment-fp control: chained truncate → $f" \
+      "echo foo && truncate -s 0 \"\$HOME/.claude/${f}\""
+done
+
 # ── DENY fixtures ─────────────────────────────────────────────────────────────
 # 1) Redirects: `>` and `>>` against every path variant.
 for op in '>' '>>'; do
