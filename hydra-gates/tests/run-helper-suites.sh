@@ -37,18 +37,22 @@ PKG_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 LIB="${PKG_ROOT}/scripts/lib"
 
 # --- quarantine: "<basename>|<reason>" --------------------------------------
-# These two fail for the SAME reason the crossref suite did — they reference
+# This one fails for the SAME reason the crossref suite did — it references
 # fixture directories that have never existed in this repository:
 #   scripts/test-fixtures/register-handler-resolution-{pass,fail}/
 #   scripts/test-fixtures/orphaned-write-capability-{pass,fail}/
 #   scripts/test-fixtures/orphaned-write-crossapp/
-#   (+ the glob-recursion fixture tree)
-# test_gate_orphaned_capability_fixtures.sh is the worse of the two: its `cd`
-# into the missing directory fails, the gate then finds nothing, and its
+# test_gate_orphaned_capability_fixtures.sh is the worse shape: its `cd` into
+# the missing directory fails, the gate then finds nothing, and its
 # "pass fixture: 0 finding(s)" assertions report PASS on that empty result —
 # green because the input is absent. Tracked, not silently unrun.
+#
+# `test_gate_glob_recursion_fixtures.sh` LEFT THE QUARANTINE 2026-09-08: its
+# fixture tree is authored (scripts/test-fixtures/glob-recursion/) and all 7
+# assertions pass. The quarantine's own integrity check is what required this
+# line to go — a quarantined suite that passes is a hard failure, so a fixed
+# suite cannot be left sitting on the list.
 QUARANTINE=(
-	"test_gate_glob_recursion_fixtures.sh|fixtures absent — 7 assertions red; needs the nested lib/ + src/ fixture tree authored (follow-up to the gate-30 fixture work)"
 	"test_gate_orphaned_capability_fixtures.sh|fixtures absent — 3 assertions red AND 2 green-because-empty; needs register-handler-resolution-{pass,fail}, orphaned-write-capability-{pass,fail}, orphaned-write-crossapp authored"
 )
 
