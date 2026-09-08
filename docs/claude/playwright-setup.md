@@ -2,6 +2,14 @@
 
 Each project workspace configures its own Playwright MCP browser sessions in a `.mcp.json` file at the project root. The Nextcloud workspace uses 7 browsers; other workspaces may use fewer depending on the parallelism their tests demand. An [example .mcp.json](./examples/.mcp.json.example) with the 7-browser configuration is available as a starting point.
 
+Hydra ships this file at its repository root (`hydra/.mcp.json`). A workspace that symlinks Hydra's `.claude/skills` should symlink `.mcp.json` the same way, so the browser pool always travels with the skills that depend on it:
+
+```bash
+ln -sfn /path/to/hydra/.mcp.json /path/to/workspace/.mcp.json
+```
+
+Do **not** put `mcpServers` in `~/.claude/settings.json` — Claude Code ignores that key there ([docs](https://code.claude.com/docs/en/debug-your-config#check-common-causes)).
+
 ## Browser Pool (Nextcloud workspace)
 
 | Server      | Mode       | Purpose                           |
@@ -101,10 +109,10 @@ The VS Code extension loads MCP servers from `.mcp.json` in the **project root**
 }
 ```
 
-The project's shared `.claude/settings.json` has two pre-approval entries:
+Project servers from `.mcp.json` need a one-time approval per workspace: accept the workspace-trust dialog when Claude Code first opens the folder, then approve the servers from `/mcp` if prompted. That is all — **no pre-approval settings are required**:
 
-- **`"enableAllProjectMcpServers": true`** — auto-approves all servers from `.mcp.json` without prompting on each reload.
-- **All `mcp__browser-*` tool calls** — pre-approved for all 7 browsers so that parallel sub-agents (used by `/test-app` Full mode and `/test-counsel`) can use their assigned browser without needing an interactive permission prompt. Without this, background agents are silently denied and no testing occurs.
+- `enableAllProjectMcpServers` only skips that one prompt. Hydra deliberately does not commit `.claude/settings.json` (it is machine-specific, see its `.gitignore`), and Claude Code ignores committed approvals in an untrusted folder anyway ([docs](https://code.claude.com/docs/en/mcp#project-server-approvals-and-workspace-trust)).
+- An `mcp__browser-*` allow-list is not needed for parallel sub-agents (`/test-app` Full mode, `/test-counsel`): background subagents surface their permission prompts in the main session, and in auto mode the classifier evaluates their tool calls with the same rules as the main conversation ([subagent permissions](https://code.claude.com/docs/en/sub-agents)). Earlier versions of this page claimed sub-agents were "silently denied" without it; that is no longer how Claude Code behaves.
 
 Then **reload the VS Code window**: `Ctrl+Shift+P` → type `reload window` → Enter.
 
@@ -118,6 +126,19 @@ After reload, open the MCP servers panel to verify all 7 browsers show **Connect
 ![MCP servers panel showing all 7 browser instances connected](./img/mcp-servers-connected.png)
 
 If any server shows an error, check the output panel: `Ctrl+Shift+P` → **"Output: Focus on Output"** → select **"Claude VSCode"** from the dropdown.
+
+## User scope (all projects on this machine)
+
+To have the browser pool in every project on your machine — including repositories that do not ship a `.mcp.json` — register the servers at user scope. They are stored in `~/.claude.json` and load in every project. Run once:
+
+```bash
+for i in 1 2 3 4 5 7; do
+  claude mcp add --scope user "browser-$i" -- npx -y @playwright/mcp@latest --browser chromium --headless --isolated
+done
+claude mcp add --scope user browser-6 -- npx -y @playwright/mcp@latest --browser chromium --isolated   # headed
+```
+
+Verify with `claude mcp list`. A project `.mcp.json` that defines the same server name takes precedence over the user-scope entry, so both can coexist. Remove one with `claude mcp remove --scope user browser-N`.
 
 ## CLI Alternative (terminal only)
 

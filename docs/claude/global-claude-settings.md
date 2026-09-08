@@ -119,7 +119,7 @@ You can configure:
 
 | Path                                            | Role                                                                                                            |
 | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `~/.claude/settings.json`                       | User permissions allowlist, hooks (`PreToolUse`, `UserPromptSubmit`, `PermissionRequest`, `Stop`), optional `mcpServers` |
+| `~/.claude/settings.json`                       | User permissions allowlist, hooks (`PreToolUse`, `UserPromptSubmit`, `PermissionRequest`, `Stop`) |
 | `~/.claude/hooks/block-write-commands.sh`       | Hook script invoked for every **Bash** tool use before it runs                                                  |
 | `~/.claude/hooks/block-config-tool-writes.sh`   | Hook script invoked for every **Write/Edit/MultiEdit** tool use before it runs                                  |
 | `~/.claude/hooks/check-settings-version.sh`     | Hook script that shows the status panel and warns on version mismatch                                           |
@@ -279,9 +279,14 @@ Restart Claude Code or run `/hooks`. From then on your hooks fire alongside the 
 
 **Disabling:** empty the arrays, or delete the file. The dispatcher exits 0 in both cases.
 
-### 9. `mcpServers` (optional)
+### 9. MCP servers — not configured here
 
-7 Playwright browser instances (`browser-1` through `browser-7`). `browser-6` runs headed (no `--headless`). Adjust the count to match your actual usage.
+`settings.json` does not read an `mcpServers` key ([Claude Code docs](https://code.claude.com/docs/en/debug-your-config#check-common-causes)), so MCP servers are **not** part of the global settings. Versions up to 2.4.0 shipped a dead `mcpServers` block with 7 Playwright browsers; it never loaded anything and was removed in 2.4.1. Configure MCP servers at one of the two supported scopes instead:
+
+- **Project scope** — `.mcp.json` at the repository root, committed so the whole team gets the same servers. Hydra ships one with the 7-browser pool; a workspace that symlinks Hydra's `.claude/skills` symlinks its `.mcp.json` the same way. See [playwright-setup.md](playwright-setup.md).
+- **User scope** — `claude mcp add --scope user …`, stored in `~/.claude.json` and loaded in every project on your machine. See [playwright-setup.md → User scope](playwright-setup.md#user-scope-all-projects-on-this-machine).
+
+When both define the same server name, the project-scope entry wins.
 
 ---
 

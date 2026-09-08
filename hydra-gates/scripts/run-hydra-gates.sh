@@ -11950,6 +11950,69 @@ if [ -d lib/Contract ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# GATE 111 — flow-node-taxonomy
+#
+# THE CHECKER, ITS FIXTURES AND ITS UNIT SUITE LANDED IN #698 AND THE CALL SITE
+# DID NOT. `check_flow_node_taxonomy.py`, the three-arm fixture tree and
+# `test_gate111_flow_node_taxonomy.sh` all merged to `main`, and
+# test-fixtures/gate-acceptance/flow-node-taxonomy/expect.conf declared gate 111
+# — but nothing in this file ever called `_pass 111` / `_fail 111`. The
+# acceptance matrix ran the runner over both arms, found no `[gate-111]` verdict
+# line, and reported "emitted NO verdict line at all" for each: `main` red from
+# f8088938 onward, on the one suite whose job is to prove a gate refuses.
+#
+# The unit suite passed the whole time, because it invokes the CHECKER directly.
+# That is the shape worth remembering: a gate can be fully implemented, fully
+# tested at the unit level, and still not exist as far as any repository the
+# runner is pointed at is concerned.
+#
+# WHAT IT REFUSES: a class under this repository's own lib/Service/Flow/Nodes/
+# that implements IFlowNode without IFlowNodeTaxonomy. The palette then serves
+# it as serviceTask/other — a default that is visible only to whoever opens the
+# palette, and that a BPMN export carries as if someone had answered.
+#
+# 🔴 SCOPED BY PATH, NEVER BY INTERFACE. On a measured instance 38 of 65 step
+# types come from apps in other repositories on their own release cycles. A gate
+# that flagged any IFlowNode implementation missing the methods would fire on
+# every one of them, in pull requests that cannot fix them.
+#
+# FULL-TREE, NOT DIFF-SCOPED, and that is the checker's design rather than an
+# oversight: the subject is the set of nodes this repository SERVES, which is
+# what the palette reads, not the set it touched in one diff. The scope is
+# already narrow enough for that to be actionable — one directory the repo owns.
+#
+# NO `-d` GUARD around the call. The checker reports NOT APPLICABLE itself
+# (exit 4) with the directory named, so a repo without flow nodes gets a verdict
+# line instead of silence. gate-83 above wraps its call in `[ -d lib/Contract ]`
+# and therefore emits nothing at all in the repos it skips — the same shape that
+# left this gate invisible, and not one to copy.
+# ---------------------------------------------------------------------------
+_fnt_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-flow-node-taxonomy.log
+: > "${_fnt_log}"
+
+set +e
+python3 "${SCRIPT_DIR}/lib/check_flow_node_taxonomy.py" . > "${_fnt_log}" 2>&1
+_fnt_rc=$?
+# `set +e`, not `set -e` — errexit off is the state this script actually runs
+# in. See the invariant at the top of this file.
+set +e
+
+if [ "${_fnt_rc}" -eq 4 ]; then
+    _skip 111 "flow-node-taxonomy" na "this repo ships no lib/Service/Flow/Nodes/, so it contributes no flow node of its own. A node it contributes from ANOTHER repository is deliberately not this gate's business — 38 of 65 step types on a measured instance are, and firing on them would be unfixable from the PR it fired on. See ${_fnt_log}."
+elif [ "${_fnt_rc}" -eq 0 ]; then
+    _pass 111 "flow-node-taxonomy"
+elif ! _helper_finished "${_fnt_log}" '^checked [0-9]+ flow node'; then
+    # A CRASH IS NOT A FINDING.
+    _fnt_why=$(head -3 "${_fnt_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+    _skip 111 "flow-node-taxonomy" wiring "check_flow_node_taxonomy.py exited ${_fnt_rc} without printing its terminal 'checked N flow node file(s)' summary, so NO node was inspected and the step types this app serves are UNVERIFIED by this run. Checker output: ${_fnt_why:-<empty>}. See ${_fnt_log}."
+else
+    _fnt_n=$(grep -cE '^FAIL ' "${_fnt_log}" 2>/dev/null || true)
+    case "${_fnt_n}" in ''|*[!0-9]*) _fnt_n=1 ;; esac
+    grep -E '^FAIL ' "${_fnt_log}" || true
+    _fail 111 "flow-node-taxonomy" "${_fnt_n} flow node(s) implement IFlowNode without IFlowNodeTaxonomy, so the palette serves them as serviceTask/other and a BPMN export carries that guess as an answer. Declare getKind() and getCategory(); see ${_fnt_log}"
+fi
+
+# ---------------------------------------------------------------------------
 # Gate 70: walkthrough-flows-stop — an app that ships a `type:"flows"` page must
 # point its getting-started tour at it, and must not make reaching it
 # conditional on building a flow.
