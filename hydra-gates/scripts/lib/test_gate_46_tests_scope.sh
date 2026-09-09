@@ -30,6 +30,14 @@
 # BOTH DIRECTIONS. Arm 2 is the one that keeps this honest: a tag in `tests/`
 # whose target and anchor are real must still PASS, or widening the scope has
 # simply moved the blindness into noise.
+#
+# ARMS 5 TO 7 are `appinfo/` and `scripts/` (.github#727), which the
+# enumerator also did not name. 52 anchors in 6 apps, never opened, 10 of them
+# unresolved — and 8 of those 10 are in ONE file, openregister's
+# `appinfo/routes.php`, two of them ending in a stray full stop that was never
+# a path. Arm 5 is that file's shape verbatim, arm 6 is the anti-widening
+# control, and arm 7 pins `scripts/` so the weaker half of the request cannot
+# be dropped by accident later.
 
 set -u
 
@@ -51,7 +59,7 @@ trap 'rm -rf "${_tmp}"' EXIT
 # missing file. `openspec/changes/dso-omgevingsloket/` no longer exists;
 # `openspec/changes/archive/2026-06-13-dso-omgevingsloket/` does.
 _mkapp() {  # _mkapp <dir>
-    mkdir -p "$1/lib" "$1/src" "$1/tests/Unit" \
+    mkdir -p "$1/lib" "$1/src" "$1/tests/Unit" "$1/appinfo" "$1/scripts" \
              "$1/openspec/changes/archive/2026-06-13-dso-omgevingsloket"
     printf '{"name":"fx","menu":[]}\n' > "$1/src/manifest.json"
     cat > "$1/openspec/changes/archive/2026-06-13-dso-omgevingsloket/tasks.md" <<'MD'
@@ -173,6 +181,68 @@ class Job {
 }
 PHP
 _assert "a dangling anchor in lib/ is still a FAIL" "FAIL" "$(_run46 "${_app}")"
+
+# ---------------------------------------------------------------------------
+# ARM 5 — a dangling `@spec` in `appinfo/routes.php` is a finding (#727).
+#
+# openregister's shape verbatim, trailing full stop and all. `tasks.md.` was
+# never a path, and nothing in this fleet has ever opened the file to say so.
+# ---------------------------------------------------------------------------
+_app="${_tmp}/a5"
+_mkapp "${_app}"
+cat > "${_app}/appinfo/routes.php" <<'PHP'
+<?php
+/**
+ * @spec openspec/changes/dso-omgevingsloket/tasks.md.
+ */
+return ['routes' => [['name' => 'thing#index', 'url' => '/api/thing', 'verb' => 'GET']]];
+PHP
+_out="$(_run46 "${_app}")"
+_assert "a dangling @spec in appinfo/routes.php → FAIL" "FAIL" "${_out}"
+if grep -q 'appinfo/routes.php' "$(cat "${_LAST_LOG_PTR}")" 2>/dev/null; then
+    _ok "the finding NAMES appinfo/routes.php"
+else
+    _bad "the finding does not name appinfo/routes.php — the file was not opened"
+fi
+
+# ---------------------------------------------------------------------------
+# ARM 6 — ANTI-WIDENING. A REAL anchor in `appinfo/` must still PASS, or
+# opening the directory has traded blindness for noise on the one file every
+# app has.
+# ---------------------------------------------------------------------------
+_app="${_tmp}/a6"
+_mkapp "${_app}"
+cat > "${_app}/appinfo/routes.php" <<'PHP'
+<?php
+/**
+ * @spec openspec/changes/dso-omgevingsloket/tasks.md#T02
+ */
+return ['routes' => [['name' => 'thing#index', 'url' => '/api/thing', 'verb' => 'GET']]];
+PHP
+_assert "a REAL anchor in appinfo/routes.php → PASS" "PASS" "$(_run46 "${_app}")"
+
+# ---------------------------------------------------------------------------
+# ARM 7 — `scripts/` too. The weaker half of #727: 7 anchors in one app and
+# none dangling today, included so the next one written there is not
+# decorative. Without this arm the directory can be dropped from the
+# enumerator and every suite stays green.
+# ---------------------------------------------------------------------------
+_app="${_tmp}/a7"
+_mkapp "${_app}"
+cat > "${_app}/scripts/seed.php" <<'PHP'
+<?php
+/**
+ * @spec openspec/changes/dso-omgevingsloket/tasks.md#T77
+ */
+function seed(): void {}
+PHP
+_out="$(_run46 "${_app}")"
+_assert "a dangling @spec in scripts/ → FAIL" "FAIL" "${_out}"
+if grep -q 'scripts/seed.php' "$(cat "${_LAST_LOG_PTR}")" 2>/dev/null; then
+    _ok "the finding NAMES scripts/seed.php"
+else
+    _bad "the finding does not name scripts/seed.php — the directory was not opened"
+fi
 
 echo ""
 if [ "${_failures}" -eq 0 ]; then
