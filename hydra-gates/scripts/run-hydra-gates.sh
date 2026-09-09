@@ -10571,7 +10571,32 @@ if [ -f src/manifest.json ]; then
                 ;;
             *)
                 if grep -q 'NOT APPLICABLE' "${_rop_log}" 2>/dev/null; then
-                    echo "[gate-104] reports-one-page: NOT APPLICABLE — this app declares no type:\"reports\" page (ADR-112 Decision 4). Nothing was inspected; this is not evidence its report surface is right."
+                    # ONE VERDICT LINE PER GATE (.github#729).
+                    #
+                    # This line used to be verdict-SHAPED — `[gate-104]
+                    # reports-one-page: NOT APPLICABLE — …` — and `_pass 104`
+                    # follows it two lines below. Every verdict parser in this
+                    # package (gate_fixture_support.sh, the acceptance matrix,
+                    # the base-ref channel set) matches on
+                    # `: (PASS|FAIL|WARNING|NOT APPLICABLE|SKIPPED)`, so a
+                    # single run emitted TWO verdicts for gate-104 and the
+                    # `head -1` in each of those parsers picked the one that
+                    # arrived first. Same shape as the gate-112 FAIL/WARNING
+                    # pair #729 was filed for, found by the rule that issue
+                    # asked for rather than by a reader.
+                    #
+                    # The information is worth keeping and is kept. What is
+                    # removed is the verdict WORD, so the line reads as the
+                    # note it always was.
+                    #
+                    # NOT FIXED HERE, DELIBERATELY: whether `_pass` is the
+                    # right verdict at all over a manifest with no reports page
+                    # — this file's own rule since #242/#240/#258/#268 is that
+                    # an unopened scope is never a PASS, and the note says in
+                    # so many words that nothing was inspected. That is an
+                    # accounting change across 21 repos and belongs in its own
+                    # review, not in a change about verdict words.
+                    echo "[gate-104] reports-one-page: note — this app declares no type:\"reports\" page (ADR-112 Decision 4). Nothing was inspected; this is not evidence its report surface is right."
                 fi
                 if [ "${_rop_rc}" -eq 0 ]; then
                     _pass 104 "reports-one-page"
