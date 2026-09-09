@@ -58,6 +58,28 @@ A collection is excluded by putting ``@newman exclude <reason>`` in its
 carry a comment, and it survives a round trip through the Postman UI. The
 reason must be reason-bearing, exactly as gate-16 and gate-19 require.
 
+THE VERDICT WORD BELONGS TO THE RUNNER (.github#729)
+===================================================
+
+This helper prints a COUNT and never a verdict word. It cannot print one
+honestly: whether its findings block a merge is decided in
+``run-hydra-gates.sh``, from ``HYDRA_GATE_NEWMAN_REACH_BLOCKING``, in a place
+this process cannot see. It used to print ``FAIL`` anyway, the runner
+``cat``-ed that log to stdout, and the runner's own ``WARNING`` landed 45
+lines further down. A single run then carried two contradicting verdicts for
+one gate, the ``FAIL`` one arriving first and inside the ``RESULT: N GATE(S)
+FAILED`` block.
+
+That is not cosmetic. The instruction this package gives its readers — and
+gives its agents — is "read the exit code, then the named FAIL lines". Two
+readers followed it on two separate executions of this gate and both counted
+a failure that had not happened.
+
+So: the exit code carries the answer (0/1/2/4), the runner chooses the word,
+and the line below states what was measured. ``test_gate_acceptance_matrix.sh``
+now refuses any run in which one gate emits more than one verdict line, which
+is what makes this a rule rather than a habit.
+
 Usage::
 
     # Gate mode:
@@ -358,15 +380,16 @@ def main(argv: list[str]) -> int:
     findings = result["findings"]
     t = result["totals"]
     if not findings:
+        # NO VERDICT WORD HERE — see THE VERDICT WORD BELONGS TO THE RUNNER.
         print(
-            f"[gate-{GATE_NUM}] {GATE_NAME}: PASS — {t['requests']} request(s) "
-            f"in {t['collections']} collection(s), all reachable by CI and all "
-            f"asserting something."
+            f"[gate-{GATE_NUM}] {GATE_NAME}: 0 finding(s). {t['requests']} "
+            f"request(s) in {t['collections']} collection(s), all reachable by "
+            f"CI and all asserting something."
         )
         return EXIT_PASS
 
     print(
-        f"[gate-{GATE_NUM}] {GATE_NAME}: FAIL — {len(findings)} finding(s). "
+        f"[gate-{GATE_NUM}] {GATE_NAME}: {len(findings)} finding(s). "
         f"{t['requests_that_run']} of {t['requests']} committed request(s) run."
     )
     for f in findings:

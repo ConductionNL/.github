@@ -375,6 +375,51 @@ class ExclusionEvidenceTest(unittest.TestCase):
     def test_a_missing_directory_is_an_error_not_a_pass(self):
         self.assertEqual(cee.main(["x", str(self.root / "nope")]), cee.EXIT_ERROR)
 
+    # -- the verdict word belongs to the runner (.github#729) ---------------
+    #
+    # gate-113 is report-only until an app sets
+    # HYDRA_GATE_EXCLUSION_EVIDENCE_BLOCKING=1, and that switch lives in
+    # run-hydra-gates.sh. This helper printed FAIL regardless, the runner
+    # cat-ed the log and then emitted WARNING for the same gate, and a run
+    # carried two contradicting verdicts for one gate. Same shape as gate-112,
+    # same fix: state the count, let the runner name the outcome.
+
+    def _stdout_of(self, argv):
+        import contextlib
+        import io as _io
+        buf = _io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = cee.main(argv)
+        return rc, buf.getvalue()
+
+    def test_the_unresolved_verdict_states_a_count_and_no_verdict_word(self):
+        _write(self.root, "openspec/specs/gis/spec.md",
+               _spec("asserted by GeoServiceTest"))
+        rc, out = self._stdout_of(["x", str(self.root)])
+        self.assertEqual(rc, cee.EXIT_FAIL)
+        lines = [ln for ln in out.splitlines() if ln.startswith("[gate-113]")]
+        self.assertTrue(lines, "the helper printed no [gate-113] line at all")
+        for ln in lines:
+            for word in ("FAIL", "PASS", "WARNING"):
+                self.assertNotIn(
+                    word, ln,
+                    f"the helper printed the verdict word {word!r} on {ln!r}; "
+                    "only run-hydra-gates.sh knows whether this blocks",
+                )
+        self.assertIn("1 unresolved", out)
+
+    def test_the_clean_verdict_states_a_count_and_no_verdict_word(self):
+        _write(self.root, "tests/unit/ProjectRepositoryTest.php", _PHP_TEST)
+        _write(self.root, "openspec/specs/projects/spec.md",
+               _spec("asserted by ProjectRepositoryTest"))
+        rc, out = self._stdout_of(["x", str(self.root)])
+        self.assertEqual(rc, cee.EXIT_PASS)
+        for ln in out.splitlines():
+            if ln.startswith("[gate-113]"):
+                for word in ("FAIL", "PASS", "WARNING"):
+                    self.assertNotIn(word, ln)
+        self.assertIn("0 unresolved", out)
+
 
 if __name__ == "__main__":
     unittest.main()

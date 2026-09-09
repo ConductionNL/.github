@@ -68,6 +68,28 @@ A reason resolves when a token in it matches something on disk:
 Deliberately generous. The question is "can a reader find what this names",
 not "is this the best possible citation".
 
+THE VERDICT WORD BELONGS TO THE RUNNER (.github#729)
+===================================================
+
+This helper prints a COUNT and never a verdict word. It cannot print one
+honestly: whether its findings block a merge is decided in
+``run-hydra-gates.sh``, from ``HYDRA_GATE_EXCLUSION_EVIDENCE_BLOCKING``, in a place
+this process cannot see. It used to print ``FAIL`` anyway, the runner
+``cat``-ed that log to stdout, and the runner's own ``WARNING`` landed 45
+lines further down. A single run then carried two contradicting verdicts for
+one gate, the ``FAIL`` one arriving first and inside the ``RESULT: N GATE(S)
+FAILED`` block.
+
+That is not cosmetic. The instruction this package gives its readers — and
+gives its agents — is "read the exit code, then the named FAIL lines". Two
+readers followed it on two separate executions of this gate and both counted
+a failure that had not happened.
+
+So: the exit code carries the answer (0/1/2/4), the runner chooses the word,
+and the line below states what was measured. ``test_gate_acceptance_matrix.sh``
+now refuses any run in which one gate emits more than one verdict line, which
+is what makes this a rule rather than a habit.
+
 Usage::
 
     python3 scripts/lib/check_exclusion_evidence.py [app-dir]
@@ -462,16 +484,17 @@ def main(argv: list[str]) -> int:
     )
 
     if not result["unresolved"]:
+        # NO VERDICT WORD HERE — see THE VERDICT WORD BELONGS TO THE RUNNER.
         print(
-            f"[gate-{GATE_NUM}] {GATE_NAME}: PASS — every exclusion that names "
-            f"an artifact names one that exists."
+            f"[gate-{GATE_NUM}] {GATE_NAME}: 0 unresolved — every exclusion "
+            f"that names an artifact names one that exists."
         )
         return EXIT_PASS
 
     print(
-        f"[gate-{GATE_NUM}] {GATE_NAME}: FAIL — {t[UNRESOLVED]} exclusion(s) "
-        f"cite a test nothing in this repo answers to. They read as verified "
-        f"and are not."
+        f"[gate-{GATE_NUM}] {GATE_NAME}: {t[UNRESOLVED]} unresolved — that many "
+        f"exclusion(s) cite a test nothing in this repo answers to. They read "
+        f"as verified and are not."
     )
     for f in result["unresolved"][:40]:
         print(f"  {f['file']}:{f['line']}  @{f['tag']} exclude -> "

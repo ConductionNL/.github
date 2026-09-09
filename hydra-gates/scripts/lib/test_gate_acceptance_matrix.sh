@@ -144,8 +144,59 @@ _verdict() {  # <gate-n> -> that gate's verdict line
     printf '%s' "${_OUT}" | grep -E "^\[gate-$1\] " | grep -vE "^\[gate-[0-9]+\] (NOTE|WARN|INFO):" | head -1
 }
 
+# _verdict_lines <gate-n> -> EVERY verdict-shaped line that gate printed
+_verdict_lines() {
+    printf '%s' "${_OUT}" \
+        | grep -E "^\[gate-$1\] [^:]+: (PASS|FAIL|WARNING|NOT APPLICABLE|SKIPPED)\b"
+}
+
+# ---------------------------------------------------------------------------
+# ONE VERDICT LINE PER GATE (.github#729).
+#
+# `_verdict` above takes `head -1`, and so does `gf_verdict` in
+# gate_fixture_support.sh, and so does every reader following this package's
+# own instruction: read the exit code, then the named FAIL lines. A gate that
+# prints two verdict-shaped lines breaks all three at once, and it broke them
+# in the direction that manufactures failures — gate-112's helper printed
+# `FAIL` while the runner, 45 lines later, printed `WARNING` for the same
+# gate, because the WORD is chosen in the helper and the blocking DECISION is
+# made in the runner. Two readers counted a failure that had not happened.
+#
+# The runner already states this contract in `_fail`'s own comment — "the
+# contract of this runner's stdout is ONE `[gate-N] name: VERDICT` line per
+# gate" — and nothing enforced it. This does.
+#
+# ⚠️ THIS RUNS OVER EVERY GATE THAT EMITTED, not only the rows a bundle
+# declares, and the difference is not academic. The third instance of this
+# defect — gate-104, which printed a verdict-shaped `NOT APPLICABLE` note and
+# then `PASS` — appears in five bundles and is a declared row in NONE of them.
+# Scoped to expect.conf rows this check would have reported it zero times.
+#
+# Measured over all bundles and both arms when it was added: gates 112, 113
+# and 104, and nothing else.
+# ---------------------------------------------------------------------------
+_assert_one_verdict_per_gate() {  # <bundle> <arm>
+    local _bundle="$1" _arm="$2" _g _n _seen=0
+    while read -r _g; do
+        [ -n "${_g}" ] || continue
+        _n="$(_verdict_lines "${_g}" | grep -c . || true)"
+        _seen=$((_seen + 1))
+        if [ "${_n:-0}" -gt 1 ]; then
+            _bad "[${_bundle}/${_arm}] gate-${_g} printed ${_n} verdict lines for ONE gate — every parser here, and every reader, takes the first. Lines: $(_verdict_lines "${_g}" | tr '\n' '|')"
+        fi
+    done < <(printf '%s' "${_OUT}" \
+        | grep -oE "^\[gate-[0-9]+\] [^:]+: (PASS|FAIL|WARNING|NOT APPLICABLE|SKIPPED)\b" \
+        | grep -oE '[0-9]+' | sort -un)
+    if [ "${_seen}" -eq 0 ]; then
+        # NEVER GREEN OVER NOTHING, applied to this check itself: a run whose
+        # verdict lines this extraction cannot read would report "no gate
+        # printed twice" for free.
+        _bad "[${_bundle}/${_arm}] read ZERO verdict lines out of a run that reached its summary — the extraction no longer matches the runner's shape, so the one-verdict-per-gate check passed vacuously"
+    fi
+}
+
 # _grade <gate-n> <wanted-status> <arm> <bundle>
-# wanted-status is FAIL / PASS / NOT APPLICABLE / SKIPPED
+# wanted-status is FAIL / PASS / WARNING / NOT APPLICABLE / SKIPPED
 _grade() {
     local _g="$1" _want="$2" _arm="$3" _bundle="$4" _line
     _line="$(_verdict "${_g}")"
@@ -155,7 +206,8 @@ _grade() {
     fi
     # A gate that reports NOT APPLICABLE over a fixture authored to trigger it
     # is the gate-61 defect. Name it as such rather than as a generic mismatch.
-    if [ "${_want}" = "FAIL" ] && printf '%s' "${_line}" | grep -q 'NOT APPLICABLE'; then
+    if { [ "${_want}" = "FAIL" ] || [ "${_want}" = "WARNING" ]; } \
+        && printf '%s' "${_line}" | grep -q 'NOT APPLICABLE'; then
         _bad "[${_bundle}/${_arm}] gate-${_g} reported NOT APPLICABLE over a fixture built to TRIGGER it — this is the gate-61 shape (a gate with nothing in scope prints the same word as a gate that looked and found nothing). Line: ${_line}"
         return 1
     fi
@@ -228,19 +280,33 @@ for _bundle in "${BUNDLE_DIRS[@]}"; do
         continue
     fi
 
-    echo "== ${_bundle}: planted/ — every declared gate must FAIL and NAME its subject =="
+    echo "== ${_bundle}: planted/ — every declared gate must FAIL (or WARNING, if advisory) and NAME its subject =="
     if _run "${_bdir}/planted"; then
+        _assert_one_verdict_per_gate "${_bundle}" planted
         for _row in "${_rows[@]}"; do
             read -r _kw _g _log _pv _cv _subject <<< "${_row}"
             COVERED+=("${_g}")
             if _grade "${_g}" "${_pv}" planted "${_bundle}"; then
-                [ "${_pv}" = "FAIL" ] && _names "${_g}" "${_log}" "${_subject}" "${_bundle}"
+                # WARNING IS A FINDING, SO IT MUST NAME ITS SUBJECT TOO.
+                #
+                # This read `[ "${_pv}" = "FAIL" ]`. An advisory gate — gate-19
+                # since #477, gates 112 and 113 since #712 — reports WARNING
+                # over a planted defect, so the moment its row was written
+                # honestly the load-bearing assertion of this whole suite
+                # stopped running for it, silently, leaving a bundle that only
+                # checked the verdict word. A gate may be demoted; the
+                # requirement that it NAME what it found is not part of the
+                # demotion.
+                case "${_pv}" in
+                    FAIL|WARNING) _names "${_g}" "${_log}" "${_subject}" "${_bundle}" ;;
+                esac
             fi
         done
     fi
 
     echo "== ${_bundle}: clean/ — the SAME gates must not fire (no widening) =="
     if _run "${_bdir}/clean"; then
+        _assert_one_verdict_per_gate "${_bundle}" clean
         for _row in "${_rows[@]}"; do
             read -r _kw _g _log _pv _cv _subject <<< "${_row}"
             _grade "${_g}" "${_cv}" clean "${_bundle}"
