@@ -818,10 +818,20 @@ fi
 #                          carries 12 on one page and the next longest bar
 #                          anywhere is 3. Per-repo opt-in:
 #                          HYDRA_GATE_HEADER_ACTION_BUDGET_BLOCKING=1.
+#   115  stale-fleet-app-id .github#728. Measured 2026-09-09 on a clean
+#                          `development` clone of all 21 core apps: 57
+#                          findings in 8 repos. Blocking on day one would have
+#                          redded 8 of 21 on inherited debt no PR introduced.
+#                          A fleet sweep has since worked that down to 10, all
+#                          of which are deliberate documented gaps where the
+#                          target does not exist, so the gate stays advisory
+#                          for a different reason than it started: the
+#                          remainder needs exclusions, not repoints. Per-repo
+#                          opt-in: HYDRA_GATE_STALE_FLEET_APP_ID_BLOCKING=1.
 #
-# All three are worked down per app and flipped back individually; the findings
+# All four are worked down per app and flipped back individually; the findings
 # print on every run either way, so none is hidden.
-_ADVISORY_ALLOWED_GATES="19 112 113 114"
+_ADVISORY_ALLOWED_GATES="19 112 113 114 115"
 
 _runner_src="${GF_PKG_ROOT}/scripts/run-hydra-gates.sh"
 _warn_gates="$(grep -oE '^[[:space:]]*_warn[[:space:]]+[0-9]+' "${_runner_src}" \
