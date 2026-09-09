@@ -812,10 +812,17 @@ fi
 #   113  exclusion-evidence .github#712, same day, same reason — 10 of 21,
 #                          dossiq with 15. Per-repo opt-in:
 #                          HYDRA_GATE_EXCLUSION_EVIDENCE_BLOCKING=1.
+#   114  stale-fleet-app-id Measured 2026-09-09 on a clean `development` clone
+#                          of all 21 core apps: 57 findings in 8 repos
+#                          (openregister 23, launchpad 8, buildiq 8,
+#                          pipelinq 5, dossiq 5, learniq 4, stackiq 2,
+#                          hermiq 2). Blocking on day one reds 8 of 21 on
+#                          inherited debt no PR introduced. Per-repo opt-in:
+#                          HYDRA_GATE_STALE_FLEET_APP_ID_BLOCKING=1.
 #
-# Both are worked down per app and flipped back individually; the findings
-# print on every run either way, so neither is hidden.
-_ADVISORY_ALLOWED_GATES="19 112 113"
+# They are worked down per app and flipped back individually; the findings
+# print on every run either way, so none of them is hidden.
+_ADVISORY_ALLOWED_GATES="19 112 113 114"
 
 _runner_src="${GF_PKG_ROOT}/scripts/run-hydra-gates.sh"
 _warn_gates="$(grep -oE '^[[:space:]]*_warn[[:space:]]+[0-9]+' "${_runner_src}" \

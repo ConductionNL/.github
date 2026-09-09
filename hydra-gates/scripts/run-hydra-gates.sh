@@ -12182,6 +12182,110 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# GATE 114 — stale-fleet-app-id
+#
+# A cross-app lookup naming an app id or namespace the fleet has retired.
+#
+# Every cross-app reference here is DUCK-TYPED. `isInstalled('openconnector')`
+# on an instance running `integriq` does not error, it returns false.
+# `class_exists()` on a moved namespace answers false. `$container->get()` on
+# one throws into the catch that exists so the app stays installable without
+# its optional peer. A `/apps/<old>/` path 404s, and the caller reads the 404
+# as "that app is absent" rather than "I asked for the wrong name". So the
+# failure mode is not a red build, it is a feature that quietly stops working.
+#
+# MEASURED BOTH WAYS on the incident that prompted it. Against dossiq at
+# 4502857 this reports 5 findings, which are exactly the 5 detectable defects
+# dossiq#2061 fixed; against that PR's head it reports 0. Among the 5: the
+# lookup that had turned EVERY generated beschikking into a text placeholder
+# for months, 201 and "success: true" all the way back to the caseworker.
+#
+# FLEET BASELINE, measured 2026-09-09 on a clean `development` clone of each of
+# the 21 core apps: 63 findings in 8 repos — openregister 25, launchpad 11,
+# buildiq 9, pipelinq 5, dossiq 5, learniq 4, stackiq 2, hermiq 2. The other 13
+# are clean.
+#
+# Measured on CLEAN CLONES on purpose: the shared workspace checkouts sit on
+# other agents' in-flight branches, and humaniq reads 9 there and 0 on
+# `development`. Triaging from those would have sent someone to fix work that
+# was already being fixed.
+#
+# An earlier figure of 60 was published and was LOW. The dual-spelling accept
+# tested the whole file, so a file that named its own successor anywhere — a
+# hand-written comment, or a phpcs:ignore annotation — had every stale lookup
+# in it suppressed. Only 3 findings fleet-wide were hidden, and that small
+# number is the worrying part rather than the reassuring one: the rule went
+# blind in proportion to how carefully a file had been documented, so the three
+# it lost were the three with the most context attached.
+#
+# WARNING-ONLY, and the baseline is the reason: 8 of 21 repos would go red the
+# minute this merges, since every one of them sets `enable-hydra-gates:true`
+# and CI resolves this runner at @main. `HYDRA_GATE_STALE_FLEET_APP_ID_BLOCKING=1`
+# makes it block per repo, which is the right order: fix a repo, then turn it on
+# there.
+#
+# WHAT IT CANNOT SEE. It reads NAMES. It cannot know which methods or routes
+# the other app publishes, and two of the seven defects in the dossiq incident
+# were exactly that: `generateFromTemplate()`, which has never existed on
+# filinq, and the `pdok.parcel` route, which integriq does not publish. Both
+# are the dangerous shape — a repoint that reads as a fix. A gate that clears
+# the name half silently reads as coverage of both, so this one prints its own
+# blind spot on EVERY run, pass or fail. Closing that half needs cross-repo
+# surface reading on gate-67's model and is not this check.
+#
+# See scripts/lib/check_stale_fleet_app_id.py for the four exclusions and why
+# each is the rule stated correctly rather than an allowlist entry.
+# ---------------------------------------------------------------------------
+if [ -d lib ] || [ -d src ]; then
+    _sfa_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-stale-fleet-app-id.log
+    : > "${_sfa_log}"
+    _sfa_helper="${SCRIPT_DIR}/lib/check_stale_fleet_app_id.py"
+    if [ ! -f "${_sfa_helper}" ]; then
+        _skip 114 "stale-fleet-app-id" wiring "check_stale_fleet_app_id.py not found at ${_sfa_helper} — lib/ or src/ exists here and NO cross-app lookup was checked, so whether any names a retired app is UNVERIFIED by this run."
+    else
+        set +e
+        python3 "${_sfa_helper}" . >> "${_sfa_log}" 2>&1
+        _sfa_rc=$?
+        set +e
+        # The count line AND the blind-spot line print on every outcome. A gate
+        # that only speaks when it fails lets a clean run be read as "no stale
+        # cross-app references", and half of what went dark in the incident
+        # that prompted this gate is invisible to it.
+        grep -E '^\[gate-114\] stale-fleet-app-id: ' "${_sfa_log}" 2>/dev/null
+        case "${_sfa_rc}" in
+            0)
+                _pass 114 "stale-fleet-app-id"
+                ;;
+            1)
+                grep -E '^  ' "${_sfa_log}" 2>/dev/null
+                # READ THE HELPER'S OWN COUNT, do not count indented lines.
+                # The log also carries the register-slug advisory, which is
+                # deliberately NOT part of this verdict, and counting every
+                # indented line reported 4 where 2 were stale names. A verdict
+                # whose number is larger than the thing it names is the same
+                # defect this gate exists to find, one level up.
+                _sfa_n=$(sed -n 's/^\[gate-114\] stale-fleet-app-id: \([0-9]*\) cross-app.*/\1/p' \
+                    "${_sfa_log}" 2>/dev/null | head -1)
+                [ -z "${_sfa_n}" ] && _sfa_n=$(_count '^  ' "${_sfa_log}")
+                if [ "${HYDRA_GATE_STALE_FLEET_APP_ID_BLOCKING:-0}" = "1" ]; then
+                    _fail 114 "stale-fleet-app-id" "${_sfa_n} cross-app lookup(s) name a retired app id or namespace — each one answers false or 404s rather than erroring, so the integration is inert and nothing reports it. See ${_sfa_log}"
+                else
+                    _warn 114 "stale-fleet-app-id" "${_sfa_n} cross-app lookup(s) name a retired app id or namespace — each one answers false or 404s rather than erroring, so the integration is inert and nothing reports it. Report-only: set HYDRA_GATE_STALE_FLEET_APP_ID_BLOCKING=1 for this repo once they are corrected. See ${_sfa_log}"
+                fi
+                ;;
+            4)
+                _skip 114 "stale-fleet-app-id" na "no lib/, src/ or appinfo/ content to scan, so there is no cross-app lookup to judge."
+                ;;
+            *)
+                _skip 114 "stale-fleet-app-id" wiring "check_stale_fleet_app_id.py exited ${_sfa_rc} without a verdict — lib/ or src/ was in scope and NO cross-app lookup was judged. See ${_sfa_log}."
+                ;;
+        esac
+    fi
+else
+    _skip 114 "stale-fleet-app-id" na "this repo has no lib/ or src/, so it makes no cross-app lookups to judge."
+fi
+
+# ---------------------------------------------------------------------------
 # GATE 112 — newman-reach
 #
 # A committed Postman collection that CI never runs. The Newman job executes
