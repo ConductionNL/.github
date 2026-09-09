@@ -812,10 +812,16 @@ fi
 #   113  exclusion-evidence .github#712, same day, same reason — 10 of 21,
 #                          dossiq with 15. Per-repo opt-in:
 #                          HYDRA_GATE_EXCLUSION_EVIDENCE_BLOCKING=1.
+#   114  header-action-budget .github#724. A NEW gate, advisory on the fleet
+#                          rule that a new scope ships as a warning. The bars
+#                          it counts have never been measured before: dossiq
+#                          carries 12 on one page and the next longest bar
+#                          anywhere is 3. Per-repo opt-in:
+#                          HYDRA_GATE_HEADER_ACTION_BUDGET_BLOCKING=1.
 #
-# Both are worked down per app and flipped back individually; the findings
-# print on every run either way, so neither is hidden.
-_ADVISORY_ALLOWED_GATES="19 112 113"
+# All three are worked down per app and flipped back individually; the findings
+# print on every run either way, so none is hidden.
+_ADVISORY_ALLOWED_GATES="19 112 113 114"
 
 _runner_src="${GF_PKG_ROOT}/scripts/run-hydra-gates.sh"
 _warn_gates="$(grep -oE '^[[:space:]]*_warn[[:space:]]+[0-9]+' "${_runner_src}" \

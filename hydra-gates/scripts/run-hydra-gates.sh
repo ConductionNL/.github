@@ -12364,8 +12364,13 @@ if [ -f src/manifest.json ] || [ -d src/manifest.d ]; then
             _pass 114 "header-action-budget"
         elif [ "${_hab_reported}" -eq 0 ]; then
             _pass 114 "header-action-budget"
+        elif [ "${HYDRA_GATE_HEADER_ACTION_BUDGET_BLOCKING:-0}" = "1" ]; then
+            # PER-REPO PROMOTION, the gate-112 and gate-113 convention. An app
+            # that has measured its bars and worked them down flips this on for
+            # itself, without waiting for the whole fleet.
+            _fail 114 "header-action-budget" "${_hab_reported} page(s) whose header actions bar grew against the base — see ${_hab_log}"
         else
-            _warn 114 "header-action-budget" "${_hab_reported} page(s) whose header actions bar grew against the base. Advisory while the fleet's bars are measured (dossiq's case page carries 12, the fleet's longest as of 2026-09-09); this does not block the merge. Check first whether the page already reaches the same gesture through a sidebar tab, a panel's own Add control or a widget button. See ${_hab_log}"
+            _warn 114 "header-action-budget" "${_hab_reported} page(s) whose header actions bar grew against the base. Advisory while the fleet's bars are measured (dossiq's case page carries 12, the fleet's longest as of 2026-09-09); this does not block the merge. Check first whether the page already reaches the same gesture through a sidebar tab, a panel's own Add control or a widget button. Set HYDRA_GATE_HEADER_ACTION_BUDGET_BLOCKING=1 for this repo to make it block. See ${_hab_log}"
         fi
     fi
 else
