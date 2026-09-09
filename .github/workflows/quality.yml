@@ -4778,7 +4778,17 @@ jobs:
             # precisely the state this step exists to remove, and it must not
             # pass quietly. Counting the output is the difference between
             # "the command ran" and "the bundle is on disk".
-            COUNT=$(find "$dir/js" -maxdepth 1 -name '*.js' 2>/dev/null | wc -l)
+            # NOT `find ... 2>/dev/null | wc -l` in one substitution: with
+            # `pipefail` set, find's exit 1 on an ABSENT js/ takes the whole
+            # assignment down under `set -e`, and the step then dies at exactly
+            # the moment it has something to say, printing nothing. A guard
+            # that fails silently is the shape of bug this step exists to
+            # remove. Mutation-checked by deleting js/ and requiring the
+            # ::error:: below to appear.
+            COUNT=0
+            if [ -d "$dir/js" ]; then
+              COUNT=$(find "$dir/js" -maxdepth 1 -name '*.js' | wc -l)
+            fi
             echo "additional-app-frontend: $name emitted $COUNT JavaScript file(s) into $dir/js"
             if [ "$COUNT" -eq 0 ]; then
               echo "::error::additional-app-frontend: '$name' built without error and emitted no JavaScript into $dir/js. Its pages would render empty and the failure would be attributed to this repository."
@@ -6260,7 +6270,17 @@ jobs:
             # precisely the state this step exists to remove, and it must not
             # pass quietly. Counting the output is the difference between
             # "the command ran" and "the bundle is on disk".
-            COUNT=$(find "$dir/js" -maxdepth 1 -name '*.js' 2>/dev/null | wc -l)
+            # NOT `find ... 2>/dev/null | wc -l` in one substitution: with
+            # `pipefail` set, find's exit 1 on an ABSENT js/ takes the whole
+            # assignment down under `set -e`, and the step then dies at exactly
+            # the moment it has something to say, printing nothing. A guard
+            # that fails silently is the shape of bug this step exists to
+            # remove. Mutation-checked by deleting js/ and requiring the
+            # ::error:: below to appear.
+            COUNT=0
+            if [ -d "$dir/js" ]; then
+              COUNT=$(find "$dir/js" -maxdepth 1 -name '*.js' | wc -l)
+            fi
             echo "additional-app-frontend: $name emitted $COUNT JavaScript file(s) into $dir/js"
             if [ "$COUNT" -eq 0 ]; then
               echo "::error::additional-app-frontend: '$name' built without error and emitted no JavaScript into $dir/js. Its pages would render empty and the failure would be attributed to this repository."
