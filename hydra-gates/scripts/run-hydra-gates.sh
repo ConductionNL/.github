@@ -11053,6 +11053,20 @@ fi
 # violations are already in the tree, and a diff-scoped version reports clean
 # on every PR that does not happen to touch the manifest.
 #
+# ALSO READS THE APP STORE DESCRIPTION, since 2026-09-09, AS A WARNING.
+# `appinfo/info.xml` was never checked by anything, and it is the most public
+# prose these apps ship. Measured across all 21 core apps at `development`:
+# 204 em-dashes inside <description>/<summary>, spread over 20 of the 21, plus
+# 273 more inside XML comments which are deliberately NOT in scope. Only dossiq
+# is clean, and only because it was fixed that day (dossiq#2036).
+#
+# It WARNS rather than fails, per the fleet rule that a new scope ships
+# advisory: this repo resolves at @main for all 21, so blocking on inherited
+# debt would redden 20 repositories the minute it merged. The manifest half
+# stays blocking, because it is already green and a regression there must not
+# ship. Promotion to blocking is a deliberate edit to
+# scripts/lib/test_check_manifest_copy_style.py, which pins the exit code.
+#
 # NOTE ON PLACEMENT: top level, outside any `_FAILED` guard - a gate that only
 # runs once everything else passed is green-but-dead.
 # ---------------------------------------------------------------------------
@@ -11075,6 +11089,15 @@ set +e
 # clean.
 _mcs_checked=$(sed -n 's/^checked \([0-9]\{1,\}\) manifest string.*/\1/p' "${_mcs_log}" 2>/dev/null | tail -1)
 case "${_mcs_checked}" in ''|*[!0-9]*) _mcs_checked=0 ;; esac
+
+# The App Store scope (appinfo/info.xml <description>/<summary>, added
+# 2026-09-09) is ADVISORY and does not touch the exit code. Surface it here
+# anyway: a finding that only reaches a log file is a check that runs nowhere,
+# and the whole reason this scope was added is that nobody was reading the App
+# Store description in the first place.
+_mcs_warn=$(grep -cE '^WARN ' "${_mcs_log}" 2>/dev/null || true)
+case "${_mcs_warn}" in ''|*[!0-9]*) _mcs_warn=0 ;; esac
+[ "${_mcs_warn}" -gt 0 ] && echo "[gate-96] manifest-copy-style: WARNING — ${_mcs_warn} App Store description string(s) break voice.md §8 (advisory, non-blocking; 204 fleet-wide as of 2026-09-09) — see ${_mcs_log}"
 
 if [ "${_mcs_rc}" -eq 4 ] || { [ "${_mcs_rc}" -eq 0 ] && [ "${_mcs_checked}" -eq 0 ]; }; then
     _skip_empty_scope 96 "manifest-copy-style" "user-visible manifest string (a title / body / task / label / description / emptyText / placeholder / subtitle / helpText in src/manifest.json or src/manifest.d/*.json)"
