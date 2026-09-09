@@ -812,10 +812,20 @@ fi
 #   113  exclusion-evidence .github#712, same day, same reason — 10 of 21,
 #                          dossiq with 15. Per-repo opt-in:
 #                          HYDRA_GATE_EXCLUSION_EVIDENCE_BLOCKING=1.
+#   46   spec-anchor-existence
+#                          .github#726, and PARTIAL: only the `@e2e` half is
+#                          advisory. An unresolved `@spec` target still FAILS
+#                          in the same run, so this is not a demotion of the
+#                          gate — it is the ship condition for a widening.
+#                          194 dangling `@e2e` anchors fleet-wide, 154 of them
+#                          in four repos (dossiq 46, zaakafhandelapp 43,
+#                          pipelinq 36, decidesk 29), which are the four with
+#                          the most e2e coverage. Per-repo opt-in:
+#                          HYDRA_GATE_SPEC_ANCHOR_E2E_BLOCKING=1.
 #
-# Both are worked down per app and flipped back individually; the findings
-# print on every run either way, so neither is hidden.
-_ADVISORY_ALLOWED_GATES="19 112 113"
+# All are worked down per app and flipped back individually; the findings
+# print on every run either way, so none is hidden.
+_ADVISORY_ALLOWED_GATES="19 46 112 113"
 
 _runner_src="${GF_PKG_ROOT}/scripts/run-hydra-gates.sh"
 _warn_gates="$(grep -oE '^[[:space:]]*_warn[[:space:]]+[0-9]+' "${_runner_src}" \
