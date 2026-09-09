@@ -12257,6 +12257,122 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# GATE 114 — header-action-budget
+#
+# COUNT THE ACTIONS BAR, BECAUSE NOBODY WAS.
+#
+# Three surfaces in one app, over the same fifteen changes, measured on dossiq
+# at `development` on 2026-09-09:
+#
+#   main navigation   budget of four to six entries, enforced by ADR-097.
+#                     Held at five.
+#   case page tabs    no budget. Went from ten to fourteen, and a refactor
+#                     spent days cutting them back to six. Four of the eight
+#                     that went duplicated a sidebar tab already on the page.
+#   case header bar   went from ONE to TWELVE, and nobody was counting.
+#
+# Eleven of those twelve landed on a single day (2026-09-08, dossiq #1902,
+# #1907, #1908, #1913, #1929, #1935) and not one has ever been removed. Every
+# one arrived in a green pull request, because nothing in this package reads
+# `config.headerActions[]`. Replayed against this gate, the two biggest jumps
+# report as findings: 3 to 7 on 0f0d36c61, 9 to 12 on f060b12c3.
+#
+# The pattern the tab refactor already paid for is that whatever is not
+# counted is where the complexity goes. This gate puts a number on the bar.
+#
+# A RATCHET, NOT A CEILING. A ceiling asks someone to guess the right number
+# today. Nobody knows whether a case page should carry four buttons or seven,
+# and a guess that lands high enforces nothing while a guess that lands low
+# blocks work that is fine. A ratchet asks the smaller question that has an
+# answer: is this page's bar longer than it was at the base. Same shape as
+# gate-69's custom-page ratchet (ADR-100) and gate-52's custom-widget ratchet
+# (ADR-049).
+#
+# A DELTA GATE, WIRED TO THE DELTA BASE. This gate hands the checker
+# ${BASE_REF} unconditionally, the way gates 16, 29, 47, 48 and 61 do, and NOT
+# behind `if [ "${SCOPE_TO_DIFF}" = "1" ]`. That condition is how gates 52, 68
+# and 69 pass their base, and the shared quality workflow never puts this
+# runner in diff scope: full scope is the default since ADR-020 was superseded
+# and `--scope-to-diff` appears in no workflow. So those three ratchets do not
+# run in CI at all. Verified 2026-09-09 by planting a thirteenth type:"custom"
+# page in dossiq: the gate-69 checker reports one finding when handed a base
+# and ZERO in the mode CI actually uses. A ratchet reads its base off the
+# delta channel or it is decoration.
+#
+# WARNING, NOT BLOCKING, ON PURPOSE. This package resolves at @main for all 21
+# core apps, so a blocking gate lands fleet-wide the minute it merges and fails
+# every repository carrying inherited debt. `_warn` keeps the gate inside the
+# COVERAGE tally while leaving ${_FAILED} alone. Promotion to blocking is a
+# deliberate edit here AND in scripts/lib/test_check_header_action_budget.py,
+# which pins the exit code, so it cannot happen by accident.
+#
+# It still calls _pass and _skip, not _warn alone. The declared inventory below
+# and scripts/lib/check_gate_numbers_unique.sh both read `_(pass|fail|skip)`
+# call sites and neither reads `_warn`, so a gate registered only as a warning
+# is a gate the coverage accounting has never heard of.
+#
+# NOT diff-scoped for its FILE scope, for the reason gates 84, 93, 94, 95 and
+# 96 give: the census is a property of the tree, and a file-scoped version
+# reports clean on every pull request that does not happen to touch a manifest.
+#
+# READS THE FRAGMENTS TOO. src/manifest.d/*.json is merged over the base
+# manifest at runtime through require.context (ADR-037), so a checker that
+# opens only src/manifest.json is blind to whatever the fragments add.
+#
+# PLACEMENT: top level, outside any `_FAILED` guard. A gate that only runs once
+# everything else passed is green but dead.
+# ---------------------------------------------------------------------------
+if [ -f src/manifest.json ] || [ -d src/manifest.d ]; then
+    _hab_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-header-action-budget.log
+    : > "${_hab_log}"
+    _hab_helper="${SCRIPT_DIR}/lib/check_header_action_budget.py"
+    if [ ! -f "${_hab_helper}" ]; then
+        _skip 114 "header-action-budget" wiring "check_header_action_budget.py not found at ${_hab_helper} — this app ships a manifest and NO page's header actions bar was counted, so its growth is UNVERIFIED by this run."
+    else
+        # THE BASE COMES OFF THE DELTA CHANNEL, UNCONDITIONALLY. See the note
+        # above: gating this on SCOPE_TO_DIFF is what left three other ratchets
+        # dark in CI. An empty BASE_REF is handled below by saying so out loud.
+        set +e
+        HYDRA_GATE_BASE_REF="${BASE_REF}" \
+            python3 "${_hab_helper}" . > "${_hab_log}" 2>&1
+        _hab_rc=$?
+        set +e
+        _hab_reported=$(grep -oE '\[header-action-budget\] findings=[0-9]+' "${_hab_log}" 2>/dev/null \
+            | tail -1 | sed 's/.*findings=//')
+        case "${_hab_reported}" in ''|*[!0-9]*) _hab_reported="" ;; esac
+
+        # THE CENSUS IS PRINTED ON EVERY RUN, PASSING OR FAILING (the gate-107
+        # convention). A gate that is silent when it passes cannot be shown to
+        # have run, and the whole point of this one is that a number exists.
+        grep -E '^\[header-action-budget\] pages=' "${_hab_log}" 2>/dev/null | tail -1 | sed 's/^/[gate-114] /'
+        _hab_counts=$(grep -m1 -oE 'base=[0-9]+ head=[0-9]+ delta=[+-][0-9]+' "${_hab_log}" 2>/dev/null || true)
+        [ -n "${_hab_counts}" ] && echo "[gate-114] header-action-budget: ${_hab_counts}"
+
+        if [ "${_hab_rc}" -eq 4 ]; then
+            _skip_empty_scope 114 "header-action-budget" "page in the effective manifest (src/manifest.json plus src/manifest.d/*.json)"
+        elif [ -z "${_hab_reported}" ]; then
+            # A CRASH IS NOT A FINDING (#209). No findings= line means the
+            # helper died, was killed, or predates this contract. Reporting a
+            # count here would invent one.
+            _hab_why=$(head -3 "${_hab_log}" 2>/dev/null | tr '\n' ' ' | cut -c1-200)
+            _skip 114 "header-action-budget" wiring "check_header_action_budget.py exited ${_hab_rc} without printing its \`findings=\` count — it did NOT finish, so no page's header actions bar was counted and its growth is UNVERIFIED by this run. This is a broken checker, NOT a finding about the manifest. Checker output: ${_hab_why:-<empty>}. See ${_hab_log}."
+        elif [ -z "${_hab_counts}" ]; then
+            # THE RATCHET HALF DID NOT RUN, AND IT HAS TO SAY SO (.github#374,
+            # the defect gate-52 already carries this line for). The census
+            # half ran; a PASS below covers that half only.
+            echo "[hydra-gates] gate-114 header-action-budget: the RATCHET half was NOT computed — no base/head/delta counts, which the helper prints only when it has a delta base. The CENSUS half did run. A PASS below covers that half only; give the run a base (--base <ref> or HYDRA_GATE_BASE_REF) to judge growth."
+            _pass 114 "header-action-budget"
+        elif [ "${_hab_reported}" -eq 0 ]; then
+            _pass 114 "header-action-budget"
+        else
+            _warn 114 "header-action-budget" "${_hab_reported} page(s) whose header actions bar grew against the base. Advisory while the fleet's bars are measured (dossiq's case page carries 12, the fleet's longest as of 2026-09-09); this does not block the merge. Check first whether the page already reaches the same gesture through a sidebar tab, a panel's own Add control or a widget button. See ${_hab_log}"
+        fi
+    fi
+else
+    _skip 114 "header-action-budget" na "no src/manifest.json and no src/manifest.d/ — this app declares no manifest-driven pages, so it has no header actions bar to grow."
+fi
+
+# ---------------------------------------------------------------------------
 # Summary + COVERAGE ACCOUNTING
 #
 # The banner used to read "ALL 63 GATES GREEN" whenever the failure count was
