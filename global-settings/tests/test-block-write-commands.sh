@@ -165,6 +165,68 @@ done
 add_allow "npm ci (lockfile-pinned)" "npm ci"
 add_allow "npm ci --ignore-scripts" "npm ci --ignore-scripts"
 
+# Destructive/in-place guard — the verb and its -i flag must come from the SAME
+# command. The gap between them used to be [^|]*, which stops at a pipe but spans
+# `;` and `&&`, so the guard could pair a verb from one command with a `-i` from
+# another and hard-deny a read-only inspection as an "in-place edit". The command
+# below only READS the protected path; `awk` and the `-i` belong to different
+# commands and neither touches it.
+FP_PROT_FILES=( "settings.json" "hooks/check-settings-version.sh" "settings-version" )
+for f in "${FP_PROT_FILES[@]}"; do
+    add_allow "verb/-i from different commands → $f" \
+      "awk '{print}' /tmp/x; grep -c -i needle \"\$HOME/.claude/${f}\""
+    # Controls: the narrowing must not let a genuine destructive op through,
+    # including one after a command-chain prefix (section 4 below never exercises
+    # the chained form for in-place mutators).
+    add_deny "control: chained sed -i → $f" \
+      "echo foo; sed -i 's/a/b/' \"\$HOME/.claude/${f}\""
+    add_deny "control: chained truncate → $f" \
+      "echo foo && truncate -s 0 \"\$HOME/.claude/${f}\""
+done
+
+# Separator characters inside a QUOTED ARGUMENT. This guard is plain text matching
+# with no shell awareness, so it cannot tell a real command separator from the same
+# character inside an argument. Narrowing the gap that precedes the protected path
+# would make every command below stop matching — and for perl/awk/truncate/unlink,
+# which have no generic fallback rule, that is a silent ALLOW of a real in-place
+# edit. `sed -i "s/a/b/;s/c/d/" <path>` is an ordinary two-substitution script, not
+# a contrived evasion. These must stay denied.
+for f in "${FP_PROT_FILES[@]}"; do
+    for wrap in \
+        "sed -i \"s/a/b/;s/c/d/\" PATH" \
+        "perl -i -pe 's/a/b/;s/c/d/' PATH" \
+        "gawk -i inplace '{a=1;print}' PATH" \
+        "sed -i 's/a/b/' \"x&&y\" PATH" \
+        "truncate -s 0 \"a;b\" PATH" \
+        "rm \"a;b\" PATH"; do
+        add_deny "separator inside a quoted arg: ${wrap%% PATH*}… → $f" \
+          "${wrap//PATH/\"\$HOME/.claude/${f}\"}"
+    done
+done
+
+# Non-segment-start destructive verbs. These are the shapes that a
+# `(^|[;&|]\s*)` anchor on the sed/perl/awk/gawk/ruby and truncate/shred/unlink
+# arms would silently stop matching, because `(`, `{`, a leading space and a
+# wrapper word are not command separators. The guard deliberately keeps a bare
+# \bverb\b match on those two arms for exactly this reason — every command below
+# genuinely mutates the protected path and must stay denied.
+for f in "${FP_PROT_FILES[@]}"; do
+    for wrap in \
+        "  sed -i 's/a/b/' PATH" \
+        "	sed -i 's/a/b/' PATH" \
+        "(sed -i 's/a/b/' PATH)" \
+        "{ sed -i 's/a/b/' PATH; }" \
+        "env sed -i 's/a/b/' PATH" \
+        "if true; then sed -i 's/a/b/' PATH; fi" \
+        "  truncate -s 0 PATH" \
+        "(truncate -s 0 PATH)" \
+        "{ unlink PATH; }" \
+        "env shred PATH"; do
+        add_deny "non-segment-start: ${wrap%% PATH*}… → $f" \
+          "${wrap//PATH/\"\$HOME/.claude/${f}\"}"
+    done
+done
+
 # ── DENY fixtures ─────────────────────────────────────────────────────────────
 # 1) Redirects: `>` and `>>` against every path variant.
 for op in '>' '>>'; do
