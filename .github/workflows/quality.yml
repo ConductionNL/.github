@@ -557,6 +557,30 @@ on:
         required: false
         type: boolean
         default: true
+      hydra-gates-e2e-anchor-blocking:
+        # THE OPT-IN GATE-46 ALREADY INVITES AND NOTHING COULD ACCEPT.
+        #
+        # Gate-46 resolves both traceability tags by identical rules, but only
+        # `@spec` blocks; `@e2e` is report-only, and its warning ends "set
+        # HYDRA_GATE_SPEC_ANCHOR_E2E_BLOCKING=1 for this repo once they are
+        # worked down". That instruction was unreachable. The gate step's `env:`
+        # block is fixed in this file, and a reusable workflow does not inherit
+        # `env` from its caller, so no app repo could set the variable however
+        # it wrote its own workflow. Measured 2026-09-10: the string appears
+        # nowhere in the organisation except the runner and the runner's own
+        # test — zero repos had opted in, and none could have.
+        #
+        # Same shape and the same reasoning as gates 112, 113, 114 and 115,
+        # which carry the identical "set HYDRA_GATE_<X>_BLOCKING=1 for this
+        # repo" invitation and are, today, equally unreachable. Wiring one flag
+        # per input is deliberate: a single passthrough for arbitrary
+        # HYDRA_GATE_* variables would let a caller silently disable a blocking
+        # gate, which is the opposite of what these opt-ins are for. Each new
+        # one is a visible, named line in the caller's workflow.
+        description: "Make gate-46 (spec-anchor-existence) BLOCK on unresolved `@e2e` anchors, not just on `@spec`. OPT-IN, default false, and it must stay opt-in: #726 counted 194 dangling @e2e anchors fleet-wide with 154 of them in four repos (dossiq 46, zaakafhandelapp 43, pipelinq 36, decidesk 29), so blocking on day one would turn the four repos with the MOST end-to-end coverage red on debt no PR introduced. The count is printed on every run either way — turning this on changes the verdict, not the visibility. Turn it on for a repo only once its @e2e count is measured at zero, with the gate's own resolver (scripts/lib/check_spec_anchors.py) rather than a reimplementation: three published figures for a comparable set were wrong on 2026-09-10 and every wrong one came from a hand-rolled resolver. `@spec` blocks regardless of this flag, exactly as it has since #246."
+        required: false
+        type: boolean
+        default: false
 
       # ── Cost controls (measured 2026-08-27, .github#5xx) ──────────────────
       #
@@ -4702,6 +4726,101 @@ jobs:
             npm ci
           fi
 
+      - name: Build additional app frontends
+        # A SIBLING APP WAS INSTALLED WITH NO COMPILED FRONTEND, IN EVERY
+        # BROWSER JOB THIS WORKFLOW HAS EVER RUN.
+        #
+        # `Checkout additional apps` clones the sibling and installs its
+        # composer dependencies, and stops there. The `Build app frontend`
+        # step further down is scoped to `inputs.app-name` — it builds the app
+        # under test and nothing else. Every Conduction app gitignores its
+        # webpack output (openregister's `.gitignore` carries a bare `/js/`),
+        # so the clone arrives with no bundle and nothing ever compiles one.
+        #
+        # THE FAILURE IS SILENT, WHICH IS WHY IT LASTED. A Nextcloud app whose
+        # bundle is missing does not 404: `Util::addScript` / `addInitScript`
+        # still emit the <script> tag, the request falls through to index.php,
+        # and the browser gets Nextcloud's HTML error page with status 200 and
+        # discards it as a console syntax error. Everything that app
+        # contributes to a page then renders nothing, and the CONSUMING app's
+        # specs are what go red.
+        #
+        # Measured on dossiq: `openregister-integration-global.js` is the
+        # bundle that installs `window.OCA.OpenRegister.integrations`, so every
+        # `type: "integration"` widget in a consuming app's manifest resolved to
+        # nothing here while resolving fine on any developer box, where someone
+        # had once run a build. The two rigs disagreed in exactly the place that
+        # decides the verdict. The spec that caught it
+        # (`case-detail-kpis-and-tabs`) was on its way to being narrowed to stop
+        # asserting content for those sections — a working feature about to be
+        # written down as an environmental fact.
+        #
+        # This is not one app's problem: 39 repos declare an `additional-apps`
+        # entry AND enable a browser job, and openregister is the entry in all
+        # of them.
+        #
+        # Restricted to the browser jobs deliberately. The phpunit job also
+        # checks out additional apps and has no page to render, so it pays
+        # nothing for this.
+        if: ${{ inputs.additional-apps != '[]' || inputs.e2e-additional-apps != '[]' }}
+        # Bounded for the same reason `Install Playwright` is: a stalled setup
+        # step consumes the job's whole cap and produces no verdict at all.
+        # A cold `npm ci` plus a production webpack build of the largest app in
+        # the fleet (openregister) measures well inside this.
+        timeout-minutes: 20
+        run: |
+          set -euo pipefail
+          BUILT=0
+          SKIPPED=0
+          # `add` concatenates the two lists, exactly as the checkout step does.
+          for name in $(printf '%s\n%s\n' '${{ inputs.additional-apps }}' '${{ inputs.e2e-additional-apps }}' | jq -r -s 'add // [] | .[].app'); do
+            dir="server/apps/$name"
+            if [ ! -f "$dir/package.json" ]; then
+              echo "additional-app-frontend: $name has no package.json, nothing to build."
+              SKIPPED=$((SKIPPED + 1))
+              continue
+            fi
+            if ! node -e "const s = require('./$dir/package.json').scripts || {}; process.exit(s.build ? 0 : 1)"; then
+              echo "additional-app-frontend: $name has no 'build' script, nothing to build."
+              SKIPPED=$((SKIPPED + 1))
+              continue
+            fi
+            if [ ! -f "$dir/package-lock.json" ]; then
+              # NOT silent, and not fatal either. `npm ci` requires a lockfile,
+              # so there is nothing this step can do — but the consequence is
+              # the invisible-empty-render above, and it has to be said out
+              # loud rather than left to look like a clean skip.
+              echo "::warning::additional-app-frontend: '$name' has a build script but no package-lock.json, so 'npm ci' cannot run. Its frontend will be ABSENT and anything it renders into this app's pages will be silently empty. Commit a package-lock.json to close that gap."
+              SKIPPED=$((SKIPPED + 1))
+              continue
+            fi
+            echo "additional-app-frontend: building $name ..."
+            # A subshell, so the cd cannot leak into the next iteration.
+            (cd "$dir" && npm ci --no-audit --no-fund && npm run build)
+            BUILT=$((BUILT + 1))
+            # EVIDENCE, NOT A CLAIM. A build that exits 0 and emits nothing is
+            # precisely the state this step exists to remove, and it must not
+            # pass quietly. Counting the output is the difference between
+            # "the command ran" and "the bundle is on disk".
+            # NOT `find ... 2>/dev/null | wc -l` in one substitution: with
+            # `pipefail` set, find's exit 1 on an ABSENT js/ takes the whole
+            # assignment down under `set -e`, and the step then dies at exactly
+            # the moment it has something to say, printing nothing. A guard
+            # that fails silently is the shape of bug this step exists to
+            # remove. Mutation-checked by deleting js/ and requiring the
+            # ::error:: below to appear.
+            COUNT=0
+            if [ -d "$dir/js" ]; then
+              COUNT=$(find "$dir/js" -maxdepth 1 -name '*.js' | wc -l)
+            fi
+            echo "additional-app-frontend: $name emitted $COUNT JavaScript file(s) into $dir/js"
+            if [ "$COUNT" -eq 0 ]; then
+              echo "::error::additional-app-frontend: '$name' built without error and emitted no JavaScript into $dir/js. Its pages would render empty and the failure would be attributed to this repository."
+              exit 1
+            fi
+          done
+          echo "additional-app-frontend: built ${BUILT}, skipped ${SKIPPED}."
+
       - name: Install Playwright
         # A STALLED SETUP STEP EATS THE JOB'S WHOLE CAP AND LEAVES NO VERDICT.
         #
@@ -6099,6 +6218,101 @@ jobs:
             npm ci
           fi
 
+      - name: Build additional app frontends
+        # A SIBLING APP WAS INSTALLED WITH NO COMPILED FRONTEND, IN EVERY
+        # BROWSER JOB THIS WORKFLOW HAS EVER RUN.
+        #
+        # `Checkout additional apps` clones the sibling and installs its
+        # composer dependencies, and stops there. The `Build app frontend`
+        # step further down is scoped to `inputs.app-name` — it builds the app
+        # under test and nothing else. Every Conduction app gitignores its
+        # webpack output (openregister's `.gitignore` carries a bare `/js/`),
+        # so the clone arrives with no bundle and nothing ever compiles one.
+        #
+        # THE FAILURE IS SILENT, WHICH IS WHY IT LASTED. A Nextcloud app whose
+        # bundle is missing does not 404: `Util::addScript` / `addInitScript`
+        # still emit the <script> tag, the request falls through to index.php,
+        # and the browser gets Nextcloud's HTML error page with status 200 and
+        # discards it as a console syntax error. Everything that app
+        # contributes to a page then renders nothing, and the CONSUMING app's
+        # specs are what go red.
+        #
+        # Measured on dossiq: `openregister-integration-global.js` is the
+        # bundle that installs `window.OCA.OpenRegister.integrations`, so every
+        # `type: "integration"` widget in a consuming app's manifest resolved to
+        # nothing here while resolving fine on any developer box, where someone
+        # had once run a build. The two rigs disagreed in exactly the place that
+        # decides the verdict. The spec that caught it
+        # (`case-detail-kpis-and-tabs`) was on its way to being narrowed to stop
+        # asserting content for those sections — a working feature about to be
+        # written down as an environmental fact.
+        #
+        # This is not one app's problem: 39 repos declare an `additional-apps`
+        # entry AND enable a browser job, and openregister is the entry in all
+        # of them.
+        #
+        # Restricted to the browser jobs deliberately. The phpunit job also
+        # checks out additional apps and has no page to render, so it pays
+        # nothing for this.
+        if: ${{ inputs.additional-apps != '[]' || inputs.e2e-additional-apps != '[]' }}
+        # Bounded for the same reason `Install Playwright` is: a stalled setup
+        # step consumes the job's whole cap and produces no verdict at all.
+        # A cold `npm ci` plus a production webpack build of the largest app in
+        # the fleet (openregister) measures well inside this.
+        timeout-minutes: 20
+        run: |
+          set -euo pipefail
+          BUILT=0
+          SKIPPED=0
+          # `add` concatenates the two lists, exactly as the checkout step does.
+          for name in $(printf '%s\n%s\n' '${{ inputs.additional-apps }}' '${{ inputs.e2e-additional-apps }}' | jq -r -s 'add // [] | .[].app'); do
+            dir="server/apps/$name"
+            if [ ! -f "$dir/package.json" ]; then
+              echo "additional-app-frontend: $name has no package.json, nothing to build."
+              SKIPPED=$((SKIPPED + 1))
+              continue
+            fi
+            if ! node -e "const s = require('./$dir/package.json').scripts || {}; process.exit(s.build ? 0 : 1)"; then
+              echo "additional-app-frontend: $name has no 'build' script, nothing to build."
+              SKIPPED=$((SKIPPED + 1))
+              continue
+            fi
+            if [ ! -f "$dir/package-lock.json" ]; then
+              # NOT silent, and not fatal either. `npm ci` requires a lockfile,
+              # so there is nothing this step can do — but the consequence is
+              # the invisible-empty-render above, and it has to be said out
+              # loud rather than left to look like a clean skip.
+              echo "::warning::additional-app-frontend: '$name' has a build script but no package-lock.json, so 'npm ci' cannot run. Its frontend will be ABSENT and anything it renders into this app's pages will be silently empty. Commit a package-lock.json to close that gap."
+              SKIPPED=$((SKIPPED + 1))
+              continue
+            fi
+            echo "additional-app-frontend: building $name ..."
+            # A subshell, so the cd cannot leak into the next iteration.
+            (cd "$dir" && npm ci --no-audit --no-fund && npm run build)
+            BUILT=$((BUILT + 1))
+            # EVIDENCE, NOT A CLAIM. A build that exits 0 and emits nothing is
+            # precisely the state this step exists to remove, and it must not
+            # pass quietly. Counting the output is the difference between
+            # "the command ran" and "the bundle is on disk".
+            # NOT `find ... 2>/dev/null | wc -l` in one substitution: with
+            # `pipefail` set, find's exit 1 on an ABSENT js/ takes the whole
+            # assignment down under `set -e`, and the step then dies at exactly
+            # the moment it has something to say, printing nothing. A guard
+            # that fails silently is the shape of bug this step exists to
+            # remove. Mutation-checked by deleting js/ and requiring the
+            # ::error:: below to appear.
+            COUNT=0
+            if [ -d "$dir/js" ]; then
+              COUNT=$(find "$dir/js" -maxdepth 1 -name '*.js' | wc -l)
+            fi
+            echo "additional-app-frontend: $name emitted $COUNT JavaScript file(s) into $dir/js"
+            if [ "$COUNT" -eq 0 ]; then
+              echo "::error::additional-app-frontend: '$name' built without error and emitted no JavaScript into $dir/js. Its pages would render empty and the failure would be attributed to this repository."
+              exit 1
+            fi
+          done
+          echo "additional-app-frontend: built ${BUILT}, skipped ${SKIPPED}."
+
       - name: Install Playwright
         # Same bound, same reason as the playwright job's copy of this step: an
         # apt stall inside `--with-deps` otherwise consumes the job's cap and
@@ -7106,6 +7320,17 @@ jobs:
           # The author's own head commit, so the fallback stops reading the
           # merge commit. Empty on a push, where `git log -1` is already right.
           HYDRA_GATE_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          # Gate-46's `@e2e` half blocks only where the caller asked for it.
+          #
+          # Passed as an explicit '1'/'0' rather than the boolean's own string
+          # form. The runner compares against the literal "1"; a GitHub boolean
+          # interpolates as "true"/"false", which would read as "not 1" and
+          # leave the gate report-only in a repo that had opted in — a flag that
+          # says it is on, a gate that is off, and nothing in the log to tell
+          # them apart. Set unconditionally so the variable's value always comes
+          # from the caller's declaration rather than from whatever the runner
+          # defaults to.
+          HYDRA_GATE_SPEC_ANCHOR_E2E_BLOCKING: ${{ inputs.hydra-gates-e2e-anchor-blocking && '1' || '0' }}
         run: |
           set -u
           ARGS="--app-dir ${GITHUB_WORKSPACE}/app"

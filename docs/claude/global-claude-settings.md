@@ -154,7 +154,7 @@ Write(~/.claude/settings.json) is not matched by file permission checks — only
 rules are. Use Edit(~/.claude/settings.json) instead (Edit rules cover all file-editing tools).
 ```
 
-Up to v2.4.2 the deny list carried a `Write(...)` twin for each of the seven config paths. They were inert — every one already had the `Edit(...)` rule that does the work — and they were removed in v2.4.3. Layer 1 is unchanged in strength: the seven `Edit(...)` rules still hard-block Write, MultiEdit and NotebookEdit on those paths.
+Up to v2.4.4 the deny list carried a `Write(...)` twin for each of the seven config paths. They were inert — every one already had the `Edit(...)` rule that does the work — and they were removed in v2.4.5. Layer 1 is unchanged in strength: the seven `Edit(...)` rules still hard-block Write, MultiEdit and NotebookEdit on those paths.
 
 When adding a new protected path, write the `Edit(...)` rule only.
 

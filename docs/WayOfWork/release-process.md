@@ -17,7 +17,7 @@ keywords:
 
 # Release Process
 
-This document describes how we version, build, and release our Nextcloud apps. All release workflows are centralized in the [Conduction/.github](https://codeberg.org/Conduction/.github) repository and shared across all app repositories.
+This document describes how we version, build, and release our Nextcloud apps. All release workflows are centralized in the [Conduction/.github](https://github.com/ConductionNL/.github) repository and shared across all app repositories.
 
 ## Branch Model
 
@@ -238,7 +238,7 @@ A: This is still managed in your repo's `appinfo/info.xml`. Only the `<version>`
 
 ## Further Reading
 
-- **Centralized workflows**: [codeberg.org/Conduction/.github](https://codeberg.org/Conduction/.github/tree/main/.github/workflows) — all shared workflow definitions
-- **Branch protection**: [`.github/workflows/branch-protection.yml`](https://codeberg.org/Conduction/.github/blob/main/.github/workflows/branch-protection.yml)
-- **Release workflows**: [`release.yml`](https://codeberg.org/Conduction/.github/blob/main/.github/workflows/release.yml), [`release-beta.yml`](https://codeberg.org/Conduction/.github/blob/main/.github/workflows/release-beta.yml), [`release-stable.yml`](https://codeberg.org/Conduction/.github/blob/main/.github/workflows/release-stable.yml)
+- **Centralized workflows**: [github.com/ConductionNL/.github](https://github.com/ConductionNL/.github/tree/main/.github/workflows) — all shared workflow definitions
+- **Branch protection**: [`.github/workflows/branch-protection.yml`](https://github.com/ConductionNL/.github/blob/main/.github/workflows/branch-protection.yml)
+- **Release workflows**: [`release.yml`](https://github.com/ConductionNL/.github/blob/main/.github/workflows/release.yml), [`release-beta.yml`](https://github.com/ConductionNL/.github/blob/main/.github/workflows/release-beta.yml), [`release-stable.yml`](https://github.com/ConductionNL/.github/blob/main/.github/workflows/release-stable.yml)
 - **Semantic Versioning**: [semver.org](https://semver.org)
