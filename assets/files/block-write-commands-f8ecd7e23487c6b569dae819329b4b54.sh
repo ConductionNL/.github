@@ -90,7 +90,36 @@ fi
 # have NO canonical path — they are never allowed. The only permitted operation is a full
 # overwrite sourced from the canonical repo (enforced by the write guard below). This is a
 # HARD BLOCK regardless of source, because these operations cannot carry canonical content.
-if echo "$cmd" | grep -qE "\b(sed|perl|awk|gawk|ruby)\b[^|]*[[:space:]]-i\b[^|]*${_prot}" \
+#
+# Exactly ONE thing differs from the long-standing form: on the first arm, the gap
+# between the tool name and its -i flag is [^|;&]* instead of [^|]*. That closes a
+# false positive where the verb and the flag came from DIFFERENT commands in one
+# chain — `awk '{print}' f; grep -c -i x ~/.claude/hooks/y.sh` was hard-denied as an
+# "in-place edit" using awk from the first command and -i from the second. A `;` or
+# `&` can never legitimately sit between a command name and its own flag, so
+# narrowing there costs no coverage.
+#
+# Everything else is left exactly as it was, and both temptations to "tidy up" are
+# deliberately resisted:
+#
+#   1. Do NOT anchor the first two arms with `(^|[;&|]\s*)` to match the rm arm.
+#      A genuine verb is often not at a segment start: `  sed -i … ~/.claude/x`,
+#      `(sed -i … ~/.claude/x)`, `{ sed -i … ~/.claude/x; }`, `env sed -i …` and
+#      `if true; then sed -i …; fi` all stop matching, because `(`, `{` and a bare
+#      leading space are not separators.
+#
+#   2. Do NOT narrow the gap that precedes ${_prot} on any arm. This guard is plain
+#      text matching with no shell awareness, so it cannot tell a command separator
+#      from the same character inside a quoted argument. `sed -i "s/a/b/;s/c/d/"
+#      ~/.claude/settings.json` is an ordinary two-substitution sed script; with a
+#      narrowed gap it stops matching and — for perl/awk/truncate/unlink, which have
+#      no generic fallback rule — becomes a silent ALLOW of a real in-place edit.
+#
+# The residual false positives (`rm /tmp/junk; cat ~/.claude/settings-version`, and
+# `sed -i … /tmp/x; grep … ~/.claude/x`) are the price of that. They fail CLOSED — a
+# refused read, never an allowed write — and cannot be fixed at the regex level
+# without opening the fail-open hole above. Fixing them needs real shell parsing.
+if echo "$cmd" | grep -qE "\b(sed|perl|awk|gawk|ruby)\b[^|;&]*[[:space:]]-i\b[^|]*${_prot}" \
 || echo "$cmd" | grep -qE "\b(truncate|shred|unlink)\b[^|]*${_prot}" \
 || echo "$cmd" | grep -qE "(^|[;&|]\s*)rm\b[^|]*${_prot}"; then
     hard_deny "BLOCKED: in-place edits, truncation, or deletion of ~/.claude/ config files are not permitted. The only allowed operation is a full overwrite with canonical content from the configured source."
