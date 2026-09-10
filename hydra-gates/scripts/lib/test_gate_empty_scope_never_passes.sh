@@ -636,7 +636,16 @@ fi
 #                        equivalent lives in gate-acceptance/system-elevation,
 #                        whose planted arm FAILS and whose clean arm PASSES on
 #                        a tree built for it.
-_ARM6_ALLOWED=" 4 15 16 23 47 48 68 97 "
+# gate-115 (stale-fleet-app-id) is on this list because it CAN state what it
+# computed: it enumerates every tracked file under lib/, src/ and appinfo/ and
+# reads all of them, on every run, regardless of --scope-to-diff. That is
+# deliberate rather than an oversight. A stale cross-app binding is a property
+# of the TREE, not of a change, so a diff-scoped version would report clean on
+# every PR that happens not to touch the stale file — which is the same silent
+# under-report the gate exists to find. Its PASS therefore means "the whole
+# tree was read and no cross-app lookup names a retired app", never "nothing
+# was in scope".
+_ARM6_ALLOWED=" 4 15 16 23 47 48 68 97 115 "
 
 _wide_bad=""
 while IFS= read -r _g; do

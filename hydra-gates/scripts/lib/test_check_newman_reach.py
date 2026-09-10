@@ -228,6 +228,53 @@ class NewmanReachTest(unittest.TestCase):
             cnr.main(["x", str(self.root / "nope")]), cnr.EXIT_ERROR
         )
 
+    # -- the verdict word belongs to the runner (.github#729) ---------------
+    #
+    # This gate is report-only until an app sets
+    # HYDRA_GATE_NEWMAN_REACH_BLOCKING=1, and that switch lives in
+    # run-hydra-gates.sh. A helper that prints FAIL is asserting an outcome it
+    # cannot know: the runner then emits WARNING for the same gate, 45 lines
+    # apart, and the reader who was told to "count the named FAIL lines" counts
+    # a failure that did not happen. Both arms below run the REAL main(), so
+    # they fail if the word comes back in either direction.
+
+    def _stdout_of(self, argv):
+        import contextlib
+        import io as _io
+        buf = _io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = cnr.main(argv)
+        return rc, buf.getvalue()
+
+    def test_the_finding_verdict_states_a_count_and_no_verdict_word(self):
+        _write(self.root, ".github/workflows/code-quality.yml", _CALLER_OFF)
+        _write(self.root, "tests/integration/a.postman_collection.json",
+               _collection(["{{base_url}}/api/things"]))
+        rc, out = self._stdout_of(["x", str(self.root)])
+        self.assertEqual(rc, cnr.EXIT_FAIL)
+        verdict = [ln for ln in out.splitlines() if ln.startswith("[gate-112]")]
+        self.assertTrue(verdict, "the helper printed no [gate-112] line at all")
+        for word in ("FAIL", "PASS", "WARNING"):
+            for ln in verdict:
+                self.assertNotIn(
+                    word, ln,
+                    f"the helper printed the verdict word {word!r} on {ln!r}; "
+                    "only run-hydra-gates.sh knows whether this blocks",
+                )
+        self.assertIn("1 finding(s)", out)
+
+    def test_the_clean_verdict_states_a_count_and_no_verdict_word(self):
+        _write(self.root, ".github/workflows/code-quality.yml", _CALLER_ON)
+        _write(self.root, "tests/integration/a.postman_collection.json",
+               _collection(["{{base_url}}/api/things"]))
+        rc, out = self._stdout_of(["x", str(self.root)])
+        self.assertEqual(rc, cnr.EXIT_PASS)
+        for ln in out.splitlines():
+            if ln.startswith("[gate-112]"):
+                for word in ("FAIL", "PASS", "WARNING"):
+                    self.assertNotIn(word, ln)
+        self.assertIn("0 finding(s)", out)
+
 
 if __name__ == "__main__":
     unittest.main()

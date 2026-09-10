@@ -4,14 +4,6 @@
 # test_gate_46_tests_scope.sh — gate-46 must resolve its targets wherever the
 # tag is WRITTEN, and `tests/` is one of those places.
 #
-# ARMS 5 TO 8 cover the OTHER tag (.github#726). `@e2e openspec/...` uses the
-# identical target grammar and means the identical thing in the opposite
-# direction, and until #726 no gate resolved one: 1,964 of them fleet-wide,
-# 194 dangling, against 55,720 `@spec` anchors with one unresolved. They are
-# report-only, and arms 6 and 7 are what stop that from drifting in either
-# direction — a widening that quietly starts blocking is as much a defect as
-# one that quietly stops reporting.
-#
 # WHAT THIS GUARDS (.github#322)
 # ------------------------------
 # Gate-46's enumerator was `find lib src`. It had never opened a test file,
@@ -38,6 +30,27 @@
 # BOTH DIRECTIONS. Arm 2 is the one that keeps this honest: a tag in `tests/`
 # whose target and anchor are real must still PASS, or widening the scope has
 # simply moved the blindness into noise.
+#
+# ARMS 5 TO 7 are `appinfo/` and `scripts/` (.github#727), which the
+# enumerator also did not name. 52 anchors in 6 apps, never opened, 10 of them
+# unresolved — and 8 of those 10 are in ONE file, openregister's
+# `appinfo/routes.php`, two of them ending in a stray full stop that was never
+# a path. Arm 5 is that file's shape verbatim, arm 6 is the anti-widening
+# control, and arm 7 pins `scripts/` so the weaker half of the request cannot
+# be dropped by accident later.
+#
+# ARMS 8 TO 11 cover the OTHER tag (.github#726). `@e2e openspec/...` uses the
+# identical target grammar and means the identical thing in the opposite
+# direction, and until #726 no gate resolved one: 1,964 of them fleet-wide,
+# 194 dangling, against 55,720 `@spec` anchors with one unresolved. They are
+# report-only, and arms 9 and 10 are what stop that from drifting in either
+# direction — a widening that quietly starts blocking is as much a defect as
+# one that quietly stops reporting.
+#
+# ⚠️ Those four arms were 5 to 8 before #734 landed first and took 5 to 7.
+# Renumbering them is the whole reason this note carries numbers at all: an
+# arm header and a prose reference that disagree is how a suite ends up
+# describing a test it is not running.
 
 set -u
 
@@ -59,7 +72,7 @@ trap 'rm -rf "${_tmp}"' EXIT
 # missing file. `openspec/changes/dso-omgevingsloket/` no longer exists;
 # `openspec/changes/archive/2026-06-13-dso-omgevingsloket/` does.
 _mkapp() {  # _mkapp <dir>
-    mkdir -p "$1/lib" "$1/src" "$1/tests/Unit" "$1/tests/e2e" \
+    mkdir -p "$1/lib" "$1/src" "$1/tests/Unit" "$1/tests/e2e" "$1/appinfo" "$1/scripts" \
              "$1/openspec/changes/archive/2026-06-13-dso-omgevingsloket"
     printf '{"name":"fx","menu":[]}\n' > "$1/src/manifest.json"
     cat > "$1/openspec/changes/archive/2026-06-13-dso-omgevingsloket/tasks.md" <<'MD'
@@ -183,13 +196,75 @@ PHP
 _assert "a dangling anchor in lib/ is still a FAIL" "FAIL" "$(_run46 "${_app}")"
 
 # ---------------------------------------------------------------------------
-# ARM 5 — a dangling `@e2e` anchor is a finding, and it WARNS (#726).
+# ARM 5 — a dangling `@spec` in `appinfo/routes.php` is a finding (#727).
+#
+# openregister's shape verbatim, trailing full stop and all. `tasks.md.` was
+# never a path, and nothing in this fleet has ever opened the file to say so.
+# ---------------------------------------------------------------------------
+_app="${_tmp}/a5"
+_mkapp "${_app}"
+cat > "${_app}/appinfo/routes.php" <<'PHP'
+<?php
+/**
+ * @spec openspec/changes/dso-omgevingsloket/tasks.md.
+ */
+return ['routes' => [['name' => 'thing#index', 'url' => '/api/thing', 'verb' => 'GET']]];
+PHP
+_out="$(_run46 "${_app}")"
+_assert "a dangling @spec in appinfo/routes.php → FAIL" "FAIL" "${_out}"
+if grep -q 'appinfo/routes.php' "$(cat "${_LAST_LOG_PTR}")" 2>/dev/null; then
+    _ok "the finding NAMES appinfo/routes.php"
+else
+    _bad "the finding does not name appinfo/routes.php — the file was not opened"
+fi
+
+# ---------------------------------------------------------------------------
+# ARM 6 — ANTI-WIDENING. A REAL anchor in `appinfo/` must still PASS, or
+# opening the directory has traded blindness for noise on the one file every
+# app has.
+# ---------------------------------------------------------------------------
+_app="${_tmp}/a6"
+_mkapp "${_app}"
+cat > "${_app}/appinfo/routes.php" <<'PHP'
+<?php
+/**
+ * @spec openspec/changes/dso-omgevingsloket/tasks.md#T02
+ */
+return ['routes' => [['name' => 'thing#index', 'url' => '/api/thing', 'verb' => 'GET']]];
+PHP
+_assert "a REAL anchor in appinfo/routes.php → PASS" "PASS" "$(_run46 "${_app}")"
+
+# ---------------------------------------------------------------------------
+# ARM 7 — `scripts/` too. The weaker half of #727: 7 anchors in one app and
+# none dangling today, included so the next one written there is not
+# decorative. Without this arm the directory can be dropped from the
+# enumerator and every suite stays green.
+# ---------------------------------------------------------------------------
+_app="${_tmp}/a7"
+_mkapp "${_app}"
+cat > "${_app}/scripts/seed.php" <<'PHP'
+<?php
+/**
+ * @spec openspec/changes/dso-omgevingsloket/tasks.md#T77
+ */
+function seed(): void {}
+PHP
+_out="$(_run46 "${_app}")"
+_assert "a dangling @spec in scripts/ → FAIL" "FAIL" "${_out}"
+if grep -q 'scripts/seed.php' "$(cat "${_LAST_LOG_PTR}")" 2>/dev/null; then
+    _ok "the finding NAMES scripts/seed.php"
+else
+    _bad "the finding does not name scripts/seed.php — the directory was not opened"
+fi
+
+# ---------------------------------------------------------------------------
+# ARM 8 — a dangling `@e2e` anchor is a finding, and it WARNS (#726).
 #
 # dossiq#2057's shape verbatim: a spec file renumbered its scenarios and the
 # e2e spec kept citing the old ids. Every check passed, and the tests went on
 # reporting green while naming scenarios that no longer existed.
 # ---------------------------------------------------------------------------
-_app="${_tmp}/a5"
+_app="${_tmp}/a8"
 _mkapp "${_app}"
 cat > "${_app}/tests/e2e/kanban-board.spec.ts" <<'TS'
 /** @e2e openspec/changes/dso-omgevingsloket/tasks.md#T14 */
@@ -209,14 +284,14 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# ARM 6 — ANTI-WIDENING, twice over.
+# ARM 9 — ANTI-WIDENING, twice over.
 #
 # A resolving `@e2e` anchor must PASS, or reading the second tag has simply
 # moved the blindness into noise. And a reason-bearing `@e2e exclude` is not a
 # target at all: the tag regex requires an `openspec/` path, and 5,529
 # exclusions fleet-wide would become findings if it did not.
 # ---------------------------------------------------------------------------
-_app="${_tmp}/a6"
+_app="${_tmp}/a9"
 _mkapp "${_app}"
 cat > "${_app}/tests/e2e/deadline.spec.ts" <<'TS'
 /** @e2e openspec/changes/dso-omgevingsloket/tasks.md#T02 */
@@ -230,13 +305,13 @@ _assert "a REAL @e2e anchor, and an @e2e exclude beside it → PASS" \
     "PASS" "$(_run46 "${_app}")"
 
 # ---------------------------------------------------------------------------
-# ARM 7 — THE ADVISORY HALF MUST NOT MASK THE BLOCKING HALF.
+# ARM 10 — THE ADVISORY HALF MUST NOT MASK THE BLOCKING HALF.
 #
 # One repo, both tags, both dangling. `@spec` still FAILS. This is the arm
 # that fails if somebody "simplifies" the split by warning on everything, and
 # it is the reason the counts are computed per tag rather than in total.
 # ---------------------------------------------------------------------------
-_app="${_tmp}/a7"
+_app="${_tmp}/a10"
 _mkapp "${_app}"
 cat > "${_app}/tests/e2e/both.spec.ts" <<'TS'
 /** @e2e openspec/changes/dso-omgevingsloket/tasks.md#T14 */
@@ -257,12 +332,12 @@ case "${_out}" in
 esac
 
 # ---------------------------------------------------------------------------
-# ARM 8 — the per-repo switch actually blocks.
+# ARM 11 — the per-repo switch actually blocks.
 #
 # A report-only gate whose opt-in does nothing is worse than no opt-in: it
 # reads as a promise that the debt can be locked down once it is cleared.
 # ---------------------------------------------------------------------------
-_app="${_tmp}/a8"
+_app="${_tmp}/a11"
 _mkapp "${_app}"
 cat > "${_app}/tests/e2e/switch.spec.ts" <<'TS'
 /** @e2e openspec/changes/dso-omgevingsloket/tasks.md#T14 */
@@ -270,6 +345,32 @@ test('a', async () => {})
 TS
 _assert "HYDRA_GATE_SPEC_ANCHOR_E2E_BLOCKING=1 turns the warning into a failure" \
     "FAIL" "$(HYDRA_GATE_SPEC_ANCHOR_E2E_BLOCKING=1 _run46 "${_app}")"
+
+# ---------------------------------------------------------------------------
+# ARM 12 — THE INTERACTION THE REBASE CREATED, which neither change covers on
+# its own: the SECOND tag inside the NEWLY OPENED directory.
+#
+# #727 anticipated it in as many words — "if `@e2e` starts being read, the
+# scope question gets slightly bigger, because `appinfo/` carries none but
+# `scripts/` might in future". Arms 5 to 7 only ever write `@spec` there, arms
+# 8 to 11 only ever write `@e2e` under `tests/`, so the product of the two
+# changes was the one square nothing landed on. It works, and this is what
+# says so out loud rather than by inference from two green suites.
+# ---------------------------------------------------------------------------
+_app="${_tmp}/a12"
+_mkapp "${_app}"
+cat > "${_app}/scripts/smoke.js" <<'JS'
+/** @e2e openspec/changes/dso-omgevingsloket/tasks.md#T14 */
+run()
+JS
+_out="$(_run46 "${_app}")"
+_assert "a dangling @e2e in scripts/ → WARNING (both changes, one square)" \
+    "WARNING" "${_out}"
+if grep -q '@e2e anchor not found' "$(cat "${_LAST_LOG_PTR}")" 2>/dev/null; then
+    _ok "it is labelled @e2e, so the newly-opened directory feeds the split verdict too"
+else
+    _bad "the finding in scripts/ is not labelled @e2e"
+fi
 
 echo ""
 if [ "${_failures}" -eq 0 ]; then
