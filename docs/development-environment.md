@@ -5,6 +5,27 @@ Shared Docker Compose setup for all ConductionNL Nextcloud app development. The 
 ## Prerequisites
 
 - Docker and Docker Compose v2+
+- **A PHP coverage driver.** Install it once:
+
+  ```bash
+  sudo apt install php8.3-pcov   # match your PHP; php -v tells you
+  php -m | grep -E '^(pcov|xdebug)$'   # must print something
+  ```
+
+  This is not only for coverage reports. `phpunit.xml` sets `failOnRisky` and
+  `beStrictAboutCoverageMetadata`, and **both are inert without a driver**. A
+  test that executes a class its `@covers` block does not name is risky, and
+  risky is exit 1 — in CI, where a driver is loaded. Without one locally the
+  check cannot fire, `composer check:strict` passes, and the suite prints
+  `OK, but there were issues!`, which reads like a pass to anyone looking at
+  the summary line instead of the exit code.
+
+  On 2026-09-10 that reddened every PHPUnit cell in two repos within the same
+  hour, on `development`, for the same reason: dossiq's `EngineTaskInboxTest`
+  executing `EngineInboxQuery`, and pipelinq's `ConnectorEgressTest` executing
+  `ConnectorSourceRegister`. Neither author could have seen it. Adding a
+  collaborator to an existing test is an ordinary edit that looks nothing like
+  touching coverage metadata. See `.github#746`.
 - The workspace directory should contain all app repos as siblings of `.github/`:
   ```
   apps-extra/
