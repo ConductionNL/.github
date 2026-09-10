@@ -7523,9 +7523,9 @@ fi
 
 
 # ---------------------------------------------------------------------------
-# Gate 46: Spec-anchor-existence — every `@spec openspec/...` PHPDoc/JSDoc
-# tag in a changed file must resolve to an existing file AND (when a
-# `#fragment` is present) an existing section anchor. Gate-16 checks the
+# Gate 46: Spec-anchor-existence — every `@spec openspec/...` and
+# `@e2e openspec/...` tag in a changed file must resolve to an existing file
+# AND (when a `#fragment` is present) an existing section anchor. Gate-16 checks the
 # tag EXISTS; this gate checks its TARGET resolves. Observed 2026-07-03
 # on opencatalogi#85 where `@spec openspec/specs/federation/spec.md
 # #requirement-directory-self-detection` pointed at a non-existent
@@ -7603,6 +7603,30 @@ fi
 # that file exists at the very commit the issue measured. What made the gate
 # say PASS there is ADR-020 diff scoping, not blindness. The REAL hole the
 # investigation uncovered is the one fixed above: `tests/` was never enumerated.
+# AND `@e2e` IS A TAG THIS GATE MUST READ (#726).
+#
+# The pattern was `@spec` and nothing else, so a fifth of the fleet's
+# traceability anchors were resolved by nothing: 1,964 `@e2e` tags across the
+# 21 apps, 194 of them dangling, against 55,720 `@spec` anchors with ONE
+# unresolved. The two tags share a target grammar and a meaning; only the
+# direction differs.
+#
+# The cost is measured, not argued. dossiq#2057 renumbered two scenarios from
+# DASH-V1-006d/e to 006f/g; two `@e2e` anchors kept citing 006d and 006e, every
+# check passed, and the tests went on reporting green while naming scenarios
+# that no longer existed. Two sessions later found six such anchors BY HAND,
+# hours apart, in the same repo on the same day. Under `@spec` that is a
+# gate-46 failure the same afternoon. openregister has the other flavour:
+# `openspec/changes/mdm-survivorship-override/specs/<capability>/spec.md#`,
+# a literal template placeholder nobody filled in.
+#
+# Most of the 194 are not missing files. They are "anchor not found" — the
+# spec resolves and the fragment names a heading nobody wrote, which is the
+# opencatalogi#85 shape this gate was built for, surviving in the half of the
+# corpus it did not read.
+#
+# `@e2e` findings are REPORT-ONLY; see the verdict block below for why and for
+# the per-repo switch that turns them on.
 _sae_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-spec-anchor-existence.log
 : > "${_sae_log}"
 _sae_files=()
@@ -7624,14 +7648,14 @@ if [ "${#_sae_files[@]}" -eq 0 ]; then
     # the shape #258 removed from gates 19/25/62/63 and #268 then categorised.
     # Gates 4/6/7/28 have said `na` for the identical situation since #268.
     _sae_ran=0
-    _skip 46 "spec-anchor-existence" na "scope was empty — 0 lib/, src/, tests/, appinfo/ or scripts/ file(s) in this diff, so NO @spec target was resolved. Diff-scoped out under ADR-020: nothing in this repository is missing, and no change the author could make would let this gate inspect a file the diff does not contain. It runs on the next PR that touches annotated code."
+    _skip 46 "spec-anchor-existence" na "scope was empty — 0 lib/, src/, tests/, appinfo/ or scripts/ file(s) in this diff, so NO @spec or @e2e target was resolved. Diff-scoped out under ADR-020: nothing in this repository is missing, and no change the author could make would let this gate inspect a file the diff does not contain. It runs on the next PR that touches annotated code."
 elif [ ! -f "${_sae_helper}" ]; then
     # A MISSING HELPER MUST NOT REPORT PASS (#147). The gate previously
     # carried its resolver inline, so "the helper is absent" was not a
     # reachable state; now that it lives in scripts/lib it is, and an absent
     # resolver looks exactly like a repository with no dangling anchors.
     _sae_ran=0
-    _skip 46 "spec-anchor-existence" wiring "check_spec_anchors.py not found at ${_sae_helper} — ${#_sae_files[@]} file(s) were in scope and NONE had their @spec targets resolved; dangling spec references are UNVERIFIED by this run."
+    _skip 46 "spec-anchor-existence" wiring "check_spec_anchors.py not found at ${_sae_helper} — ${#_sae_files[@]} file(s) were in scope and NONE had their @spec or @e2e targets resolved; dangling spec references are UNVERIFIED by this run."
 else
     # A CRASHED CHECKER MUST NOT REPORT PASS (#147 / #249 / #262).
     #
@@ -7647,30 +7671,56 @@ else
     _sae_rc=$?
     if [ "${_sae_rc}" -ne 0 ]; then
         _sae_ran=0
-        _skip 46 "spec-anchor-existence" wiring "check_spec_anchors.py exited ${_sae_rc} — ${#_sae_files[@]} file(s) were in scope and no verdict was produced; dangling @spec targets are UNVERIFIED by this run. See ${_sae_log}.err."
+        _skip 46 "spec-anchor-existence" wiring "check_spec_anchors.py exited ${_sae_rc} — ${#_sae_files[@]} file(s) were in scope and no verdict was produced; dangling @spec/@e2e targets are UNVERIFIED by this run. See ${_sae_log}.err."
     fi
 fi
 set +e
 _sae_fail=$(wc -l < "${_sae_log}" 2>/dev/null | tr -d ' ')
 set +e
 [ -z "${_sae_fail}" ] && _sae_fail=0
+# THE TWO TAGS ARE COUNTED SEPARATELY (#726).
+#
+# `@e2e` targets are resolved by the same helper, by the same rules, from the
+# same scope — and they are REPORT-ONLY, while `@spec` blocks exactly as it
+# has since #246. Splitting the count here rather than in the helper keeps the
+# helper free of the blocking decision, which is the #729 rule.
+set +e
+_sae_spec=$(grep -cE ': @spec (target file not found|anchor not found)' "${_sae_log}" 2>/dev/null | tr -d ' ')
+_sae_e2e=$(grep -cE ': @e2e (target file not found|anchor not found)' "${_sae_log}" 2>/dev/null | tr -d ' ')
+set +e
+[ -z "${_sae_spec}" ] && _sae_spec=0
+[ -z "${_sae_e2e}" ] && _sae_e2e=0
 if [ "${_sae_ran}" -eq 1 ]; then
+    # A FINDING COUNT IS NOT A DEFECT COUNT.
+    #
+    # One dangling target annotated on 15 methods emits 15 findings, and
+    # portaliq's "100 findings" were 29 distinct targets. Reporting only the
+    # raw line count made gate-46 look like a mountain of separate defects and
+    # drove people to grind tags one file at a time, when the actual work is
+    # one repoint per TARGET. Both numbers are printed so the size of the job
+    # is legible from the summary line.
+    set +e
+    _sae_targets=$(sed 's/^[^:]*: //' "${_sae_log}" 2>/dev/null | sort -u | wc -l | tr -d ' ')
+    set +e
+    [ -z "${_sae_targets}" ] && _sae_targets="?"
     if [ "${_sae_fail}" -eq 0 ]; then
         _pass 46 "spec-anchor-existence"
+    elif [ "${_sae_spec}" -gt 0 ] || [ "${HYDRA_GATE_SPEC_ANCHOR_E2E_BLOCKING:-0}" = "1" ]; then
+        _fail 46 "spec-anchor-existence" "${_sae_fail} unresolved finding(s) (${_sae_spec} @spec, ${_sae_e2e} @e2e) from ${_sae_targets} distinct target(s) — fix the TARGET, not each tag; see ${_sae_log}"
     else
-        # A FINDING COUNT IS NOT A DEFECT COUNT.
+        # WARNING, NOT A FAILURE, UNTIL AN APP OPTS IN.
         #
-        # One dangling target annotated on 15 methods emits 15 findings, and
-        # portaliq's "100 findings" were 29 distinct targets. Reporting only
-        # the raw line count made gate-46 look like a mountain of separate
-        # defects and drove people to grind tags one file at a time, when the
-        # actual work is one repoint per TARGET. Both numbers are printed so
-        # the size of the job is legible from the summary line.
-        set +e
-        _sae_targets=$(sed 's/^[^:]*: //' "${_sae_log}" 2>/dev/null | sort -u | wc -l | tr -d ' ')
-        set +e
-        [ -z "${_sae_targets}" ] && _sae_targets="?"
-        _fail 46 "spec-anchor-existence" "${_sae_fail} unresolved @spec finding(s) from ${_sae_targets} distinct target(s) — fix the TARGET, not each tag; see ${_sae_log}"
+        # Same reasoning as gates 112 and 113, and the same measurement behind
+        # it. #726 counted 194 dangling `@e2e` anchors fleet-wide, and 154 of
+        # them sit in FOUR repos: dossiq 46, zaakafhandelapp 43, pipelinq 36,
+        # decidesk 29. Blocking on day one turns those four red on debt no PR
+        # introduced, and they are the four with the MOST end-to-end coverage,
+        # which is the wrong thing to punish.
+        #
+        # The count prints on every run either way, so nothing is hidden, and
+        # a `@spec` finding still blocks in the same run — the advisory half
+        # never masks the blocking half.
+        _warn 46 "spec-anchor-existence" "${_sae_e2e} unresolved @e2e finding(s) from ${_sae_targets} distinct target(s) — fix the TARGET, not each tag. Report-only: set HYDRA_GATE_SPEC_ANCHOR_E2E_BLOCKING=1 for this repo once they are worked down. See ${_sae_log}"
     fi
 fi
 

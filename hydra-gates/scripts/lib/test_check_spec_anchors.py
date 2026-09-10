@@ -786,5 +786,77 @@ class TaskPrefixedCheckboxIds(unittest.TestCase):
         self.assertFalse(_anchor(self.PREFIXED, "task-9.9"))
 
 
+class TheGateReadsE2eAnchorsToo(unittest.TestCase):
+    """#726 — `@e2e openspec/...` is the same claim, pointed the other way.
+
+    1,964 of them across the 21 fleet apps, 194 dangling, resolved by nothing
+    until this change, against 55,720 `@spec` anchors with ONE unresolved.
+
+    Every arm here ships with the control that stops the widening from
+    becoming noise, because that is how this gate earned its 54% false
+    positive rate the first time: a resolving `@e2e` anchor must stay silent,
+    and `@e2e exclude` must never be read as a target.
+    """
+
+    TREE = {
+        "openspec/specs/real/spec.md":
+            "# Spec\n\n## Requirement: Real Thing\n\ntext\n",
+    }
+
+    def test_e1_a_dangling_e2e_target_is_a_finding(self):
+        out = _scan(self.TREE, "tests/e2e/thing.spec.ts",
+                    "/** @e2e openspec/specs/absent/spec.md */\n"
+                    "test('x', async () => {})\n")
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("absent", out[0])
+
+    def test_e2_a_dangling_e2e_anchor_is_a_finding(self):
+        out = _scan(self.TREE, "tests/e2e/thing.spec.ts",
+                    "/** @e2e openspec/specs/real/spec.md#requirement-imaginary */\n"
+                    "test('x', async () => {})\n")
+        self.assertEqual(len(out), 1, out)
+
+    def test_e3_the_finding_is_labelled_by_the_tag_it_came_from(self):
+        # THE LOAD-BEARING ONE. The runner blocks on `@spec` and reports
+        # `@e2e`, and it computes that split by reading these labels out of
+        # the log. Collapse the label and the two counts become one.
+        e2e = _scan(self.TREE, "tests/e2e/thing.spec.ts",
+                    "/** @e2e openspec/specs/absent/spec.md */\n")
+        spec = _scan(self.TREE, "lib/Thing.php",
+                     "<?php\n/**\n * @spec openspec/specs/absent/spec.md\n */\n")
+        self.assertIn("@e2e ", e2e[0])
+        self.assertNotIn("@spec ", e2e[0])
+        self.assertIn("@spec ", spec[0])
+        self.assertNotIn("@e2e ", spec[0])
+
+    def test_e4_control_a_resolving_e2e_anchor_is_silent(self):
+        out = _scan(self.TREE, "tests/e2e/thing.spec.ts",
+                    "/** @e2e openspec/specs/real/spec.md#requirement-real-thing */\n")
+        self.assertEqual(out, [])
+
+    def test_e5_control_an_e2e_exclusion_is_not_a_target(self):
+        # 5,529 reason-bearing exclusions fleet-wide. The `openspec/` prefix
+        # in the pattern is the only thing keeping them out, so pin it.
+        out = _scan(self.TREE, "tests/e2e/thing.spec.ts",
+                    "/** @e2e exclude asserted below the HTTP surface by "
+                    "GhostServiceTest */\n")
+        self.assertEqual(out, [])
+
+    def test_e6_control_the_tag_is_still_position_anchored(self):
+        # #415/#423 applies to both tags or to neither: a sentence about a
+        # tag is not a tag.
+        out = _scan(
+            self.TREE, "tests/e2e/thing.spec.ts",
+            "// See @e2e openspec/specs/gone/spec.md#missing for why this went.\n")
+        self.assertEqual(out, [])
+
+    def test_e7_control_an_unrelated_at_tag_is_not_read(self):
+        # `@spec` and `@e2e` and nothing else. `@contract` and `@visual` are
+        # other gates' vocabulary and resolve against other things.
+        out = _scan(self.TREE, "tests/e2e/thing.spec.ts",
+                    "/** @contract openspec/specs/absent/spec.md */\n")
+        self.assertEqual(out, [])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
