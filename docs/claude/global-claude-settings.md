@@ -138,12 +138,25 @@ You can configure:
 
 Hard-blocked patterns — Claude cannot perform these even with user approval:
 
-- **Config files**: `Edit`/`Write` of `~/.claude/settings.json`, `hooks/*`, `settings-version`, `settings-repo-path`, `settings-repo-url`, `settings-repo-ref`, `user-hooks.json`
+- **Config files**: `Edit` of `~/.claude/settings.json`, `hooks/*`, `settings-version`, `settings-repo-path`, `settings-repo-url`, `settings-repo-ref`, `user-hooks.json` — see [Why there are no `Write(...)` rules](#why-there-are-no-write-rules)
 - **System**: `sudo`, `su`, `shutdown`, `reboot`, `halt`, `poweroff`, `mkfs`, `dd if=`
 - **GitHub destructive**: `gh pr merge`, `gh repo delete`, `gh release delete`
 - **Git destructive**: `git reset --hard`, `git clean -f/-fd/-fdx`, `git filter-branch`, `git filter-repo`, `git reflog expire/delete`, `git update-ref -d`, `git config --global`, `git checkout --`, `git restore --` (file restore; `git restore --staged` is allowed), `git push --force/-f`, `git rebase`
 - **Filesystem destructive**: `rm -rf`, `rm -Rf`
 - **Package managers (arbitrary code execution)**: `pip install`, `npm install`
+
+#### Why there are no `Write(...)` rules
+
+An `Edit(path)` rule covers **every** file-editing tool — Write, MultiEdit and NotebookEdit included. A `Write(path)` rule is not matched by file-permission checks at all, so it protects nothing on its own. Claude Code says so itself when it validates the config:
+
+```
+Write(~/.claude/settings.json) is not matched by file permission checks — only Edit(path)
+rules are. Use Edit(~/.claude/settings.json) instead (Edit rules cover all file-editing tools).
+```
+
+Up to v2.4.4 the deny list carried a `Write(...)` twin for each of the seven config paths. They were inert — every one already had the `Edit(...)` rule that does the work — and they were removed in v2.4.5. Layer 1 is unchanged in strength: the seven `Edit(...)` rules still hard-block Write, MultiEdit and NotebookEdit on those paths.
+
+When adding a new protected path, write the `Edit(...)` rule only.
 
 ### 2. `permissions.allow`
 
@@ -386,7 +399,7 @@ rm ~/.claude/sound-config.sh
 
 | File                              | Deny-list rule                  | Content hook            | `chattr +i`             |
 | --------------------------------- | ------------------------------- | ----------------------- | ----------------------- |
-| `~/.claude/hooks/sound-notify.sh` | ✅ `Edit/Write(~/.claude/hooks/*)` | ✅ matches `hooks/?` regex | ✅ applied on install     |
+| `~/.claude/hooks/sound-notify.sh` | ✅ `Edit(~/.claude/hooks/*)`      | ✅ matches `hooks/?` regex | ✅ applied on install     |
 | `~/.claude/sound-config.sh`       | ❌ (intentional — user preference) | ❌ (not in protected list) | ❌ (not applied)         |
 
 The wrapper is protected the same way every other hook script is — Claude cannot Edit or Write it, cannot use a Bash `cat > ...` trick to overwrite it, and the kernel refuses even root writes while the immutable bit is set.
@@ -398,7 +411,7 @@ The config file is intentionally **not** protected because:
 - Locking it would force a `sudo chattr -i / +i` dance for every sound tweak, defeating the point of a user-configurable feature.
 - The [`update-config` skill](commands.md) uses `Edit`/`Write` to modify `~/.claude/` config on user request; keeping `sound-config.sh` unprotected lets that skill help users enable/tune sounds naturally.
 
-If you personally want to prevent Claude from touching `sound-config.sh` in your local setup, add `"Edit(~/.claude/sound-config.sh)"` and `"Write(~/.claude/sound-config.sh)"` to a **project** `.claude/settings.json` deny list — that overlays on top of the global settings without needing a global settings change.
+If you personally want to prevent Claude from touching `sound-config.sh` in your local setup, add `"Edit(~/.claude/sound-config.sh)"` to a **project** `.claude/settings.json` deny list — that overlays on top of the global settings without needing a global settings change, and the one `Edit` rule covers Write too.
 
 ## Relationship to this repo's `.claude/settings.json`
 
