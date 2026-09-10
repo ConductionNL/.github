@@ -579,6 +579,152 @@ class StaleFleetAppIdTest(unittest.TestCase):
         })
         self.assertEqual(rc, 0, f"the current namespace is not a finding\n{out}")
 
+    # -- arm 8: the exclusion marker ----------------------------------------
+
+    def test_a_reason_bearing_marker_records_a_finding_and_says_so(self):
+        """An answered finding is recorded, not re-asked — and never silently.
+
+        Some stale names have no successor to point at: the route was retired
+        rather than renamed, or the target never existed under either name.
+        Swapping the name there produces a lookup that misses exactly as it
+        missed before, on a diff that reads as a fix. The answer is to record
+        what was read, which needs a marker, or the gate keeps raising a
+        question somebody already answered.
+
+        The second assertion is the one that matters as much as the first: an
+        exclusion that removed a line from the count and left no trace would
+        make "0 findings" mean either "nothing stale" or "somebody decided the
+        stale thing was fine", with no way to tell them apart.
+        """
+        rc, out = self.run_check({
+            "lib/Service/Probe.php": """\
+                <?php
+                public function go($c) {
+                    // @stale-fleet-app-id exclude integriq publishes no PaymentService
+                    // under either name: git log -S over its 3,960 commits, which span
+                    // the whole openconnector era, finds the class never existed.
+                    return $c->get('OCA\\OpenConnector\\Service\\PaymentService');
+                }
+                """,
+        })
+        self.assertEqual(rc, 0, f"a recorded finding must not fail the gate\n{out}")
+        self.assertIn("1 finding(s) recorded with a reason-bearing", out, out)
+        self.assertIn("lib/Service/Probe.php", out, out)
+
+    def test_a_bare_marker_excludes_nothing(self):
+        """The evidence IS the marker. Without it there is nothing to record.
+
+        Matches every other exclusion in the suite since .github#400/#412,
+        where one full stop was the whole difference between a blocked PR and
+        a green one.
+        """
+        rc, out = self.run_check({
+            "lib/Service/Probe.php": """\
+                <?php
+                public function go($c) {
+                    // @stale-fleet-app-id exclude
+                    return $c->get('OCA\\OpenConnector\\Service\\PaymentService');
+                }
+                """,
+        })
+        self.assertEqual(rc, 1, f"a bare marker must not exclude\n{out}")
+        self.assertIn("1 cross-app lookup(s)", out, out)
+        self.assertIn("bare @stale-fleet-app-id exclude marker(s)", out, out)
+
+    def test_a_marker_cannot_reach_the_next_statement(self):
+        """Statement-scoped, the same unit the dual-spelling accept uses.
+
+        A file-scoped marker is the shape that already went wrong once here:
+        exclusion 2 tested the whole file, and launchpad documenting a known
+        gap switched two live findings off. One marker silencing every stale
+        binding below it in the file would be that defect, deliberately.
+        """
+        rc, out = self.run_check({
+            "lib/Service/Probe.php": """\
+                <?php
+                public function first($c) {
+                    // @stale-fleet-app-id exclude that PaymentService never existed on
+                    // integriq under either name, checked against its full history.
+                    return $c->get('OCA\\OpenConnector\\Service\\PaymentService');
+                }
+
+                public function second($c) {
+                    return $c->get('OCA\\Docudesk\\Service\\DocumentService');
+                }
+                """,
+        })
+        self.assertEqual(rc, 1, f"the second binding is unmarked and stands\n{out}")
+        self.assertIn("1 cross-app lookup(s)", out, out)
+        self.assertIn("Docudesk -> Filinq", out, out)
+
+    def test_a_marker_on_a_current_name_records_nothing(self):
+        """A marker can only ever silence something that WOULD be reported.
+
+        Tested last in the loop for exactly this reason. If the marker were
+        read before the finding was established, a marker beside a name that
+        is already correct would count as a recorded answer, and the recorded
+        count would become evidence that somebody answered a question nobody
+        had asked.
+        """
+        rc, out = self.run_check({
+            "lib/Service/Probe.php": """\
+                <?php
+                public function go($c) {
+                    // @stale-fleet-app-id exclude nothing here is stale, this marker
+                    // sits beside a name the fleet currently answers to.
+                    return $c->get('OCA\\Filinq\\Service\\DocumentService');
+                }
+                """,
+        })
+        self.assertEqual(rc, 0, f"a current name is clean\n{out}")
+        self.assertNotIn("recorded with a reason-bearing", out, out)
+
+    def test_a_marker_that_reaches_no_finding_is_reported(self):
+        """A scope rule that quietly does not apply reads as a broken one.
+
+        The enclosing method's docblock is out of scope on purpose — a marker
+        there would cover every stale binding in the body, including ones
+        added later that nobody read the other repo about. But an author who
+        writes it there gets a finding that still stands and, without this,
+        no explanation at all. That is an afternoon of "why is my exclusion
+        not working".
+        """
+        rc, out = self.run_check({
+            "lib/Service/Probe.php": """\
+                <?php
+                /**
+                 * @stale-fleet-app-id exclude written in the method docblock, which
+                 * is one level too high to attach to the binding below.
+                 */
+                public function go($c) {
+                    return $c->get('OCA\\OpenConnector\\Service\\PaymentService');
+                }
+                """,
+        })
+        self.assertEqual(rc, 1, f"an out-of-scope marker excludes nothing\n{out}")
+        self.assertIn("marker(s) that reach no finding", out, out)
+
+    def test_a_register_slug_takes_no_marker(self):
+        """A slug is answered by a probe, never by prose.
+
+        Both slugs are live across the fleet depending on whether a given
+        instance has run the rename repair, so nothing anybody writes in a
+        comment makes an old slug return rows on a migrated one. Offering a
+        marker there would only offer a way to silence a live defect.
+        """
+        rc, out = self.run_check({
+            "lib/Service/Probe.php": """\
+                <?php
+                /**
+                 * @stale-fleet-app-id exclude this reason is long enough to pass the
+                 * reason-bearing test and must still not silence a slug.
+                 */
+                private const SOURCE_REGISTER = 'openconnector';
+                """,
+        })
+        self.assertEqual(rc, 1, f"a slug finding stands regardless of markers\n{out}")
+        self.assertIn("1 OpenRegister register slug reference(s)", out, out)
+
     # -- scope ---------------------------------------------------------------
 
     def test_a_repo_with_nothing_to_scan_says_so_rather_than_passing(self):

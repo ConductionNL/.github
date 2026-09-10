@@ -17,6 +17,18 @@ class Fallbacks {
         'OCA\Decidesk\Event\DecisionConcludedEvent',
     ];
 
+    // Exclusion 5: an ANSWERED finding, recorded rather than repointed. This
+    // is a genuinely stale binding — without the marker below it fires — and
+    // it lives in the file BOTH arms share, so removing the marker support
+    // reddens the CLEAN arm rather than leaving the planted one green.
+    public function reportGap($container) {
+        // @stale-fleet-app-id exclude integriq publishes no PaymentService under
+        // either name: git log -S over its 3,960 commits, which span the whole
+        // openconnector era, finds the class never existed. Repointing would
+        // swap one missing lookup for another on a diff that reads as a fix.
+        return $container->get('OCA\OpenConnector\Service\PaymentService');
+    }
+
     // A CURRENT register slug. Both arms carry it, and it must never fire:
     // the slug rule is about slugs the owning app has MIGRATED AWAY from, not
     // about the word "register" appearing next to an app name.

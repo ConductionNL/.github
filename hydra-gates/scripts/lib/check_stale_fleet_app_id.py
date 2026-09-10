@@ -111,6 +111,36 @@ denominator for a fleet gate has to be the fleet.
      looking for one fixed filename would have reported learniq as never
      having migrated.
 
+RECORDING AN ANSWER: `@stale-fleet-app-id exclude <reason>`
+-----------------------------------------------------------
+NOT EVERY STALE NAME HAS A SUCCESSOR TO POINT AT, and those are the ones this
+gate would otherwise ask about forever. Three shapes, all read out of the other
+app's tree before they were written down:
+
+  - the route was RETIRED, not renamed. integriq served `GET /api/endpoints`
+    from a `resources` block until 496f2025 deleted it in the chain-C
+    OpenRegister cutover.
+  - the target NEVER EXISTED under either name. `git log -S` over integriq's
+    3,960 commits, which span the whole openconnector era, finds no
+    `PaymentService`, no `WalletOfferConcludedEvent`, no `sources/{source}/call`
+    and no `lti/deployments/…/launch`.
+  - the class was DELETED. `OCA\\OpenConnector\\Db\\SourceMapper` went with
+    14 other mappers in ac47457f and has no `OCA\\Integriq\\Db\\` counterpart.
+
+Repointing any of those produces a lookup that misses exactly as it missed
+before, on a diff that reads to the next person as a fix already applied —
+strictly worse than the stale name, which at least still says out loud that
+something is unfinished. So the answer is to RECORD what was read.
+
+The marker is the package's one convention, `@<tag> exclude <reason>`, with
+the reason graded by the shared `exclusion_reason.is_reason_bearing()`. A bare
+marker excludes nothing. It attaches to the BINDING — the statement's own
+docblock or the comment lines directly above the line — never to the enclosing
+method, and a marker that reaches no finding is reported rather than ignored.
+An excluded finding is counted and printed on every run, so "0 findings" can
+never mean two different things. Register slugs take no marker: a slug is
+answered by probing OpenRegister for the name it responds to, not in prose.
+
 Usage:  python3 check_stale_fleet_app_id.py <repo-root>
 Exit:   0 clean · 1 findings · 4 nothing in scope (no lib/ or src/)
 
@@ -125,6 +155,9 @@ import re
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from exclusion_reason import exclude_pattern, is_reason_bearing  # noqa: E402
 
 # Retired app id -> the id it answers to now. `<id>` in appinfo/info.xml is the
 # only authority for the right-hand side; this map is the fleet rename record
@@ -183,6 +216,134 @@ BLOCK_OPEN = re.compile(r"^\s*(/\*|<!--)")
 BLOCK_CLOSE = re.compile(r"(\*/|-->)")
 SCAN_DIRS = ("lib", "src", "appinfo")
 SCAN_EXT = (".php", ".js", ".ts", ".vue", ".json")
+
+# The exclusion marker, on the package's one convention:
+# `@<tag> exclude <reason>`, with the reason graded by the shared
+# `exclusion_reason.is_reason_bearing()`. gate-16/19/25/26 read `@spec`,
+# `@e2e`, `@contract` and `@visual`; gate-6 reads `@orphan-auth`, gate-52
+# `@custom-widget-ratchet`, gate-57 `@orphaned-write-capability`. This is that
+# tag for this gate and nothing about it is new.
+#
+# WHY A NAME FINDING NEEDS ONE AT ALL
+# -----------------------------------
+# Not every stale name has a successor to point at. Three shapes recur, and
+# all three were read out of the other app's tree before they were written
+# down:
+#
+#   - the route was RETIRED, not renamed. integriq served `GET /api/endpoints`
+#     from a `resources` block until 496f2025 deleted it in the chain-C
+#     OpenRegister cutover; there is no integriq path that answers now.
+#   - the target NEVER EXISTED under either name. `git log -S` over integriq's
+#     3,960 commits, which span the whole openconnector era, finds no
+#     `PaymentService`, no `WalletOfferConcludedEvent` and no
+#     `sources/{source}/call`.
+#   - the class was DELETED. `OCA\OpenConnector\Db\SourceMapper` went with
+#     14 other mappers in ac47457f and has no `OCA\Integriq\Db\` counterpart.
+#
+# In each of those, swapping the name produces a lookup that misses exactly as
+# it missed before, on a diff that reads to the next person as a fix already
+# applied. That is strictly worse than the stale name, because the stale name
+# still says out loud that something is unfinished. So the answer to these is
+# to RECORD what was read, not to repoint — and without a marker, recording it
+# leaves the gate raising a question somebody has already answered, which is
+# how an answered finding gets re-litigated by whoever turns the gate on.
+#
+# WHY THIS DOES NOT REOPEN "PROSE NEVER VOUCHES FOR A BINDING"
+# -----------------------------------------------------------
+# It looks like the rule exclusion 2 exists to prevent: a comment switching a
+# finding off. The difference is that a marker is an EXPLICIT ACT NAMING THIS
+# GATE, and the thing exclusion 2 got wrong was INCIDENTAL prose — launchpad
+# documented a known gap, the words `integriq` and `dossiq` appeared in the
+# file, and two live findings went dark with nobody intending it. Nobody
+# writes `@stale-fleet-app-id exclude` by accident.
+#
+# It is scoped to the STATEMENT, the same unit exclusion 2 uses, so a marker
+# on one binding cannot reach the next one down the file. And an excluded
+# finding is COUNTED AND PRINTED on every run: an exclusion that suppressed
+# silently would be the silent-exclusion bug wearing the fix's clothes, which
+# this checker has already made once (see the slug/use-site ordering below).
+#
+# WHERE THE MARKER GOES, AND WHAT HAPPENS WHEN IT IS PUT SOMEWHERE ELSE
+# ---------------------------------------------------------------------
+# It attaches to the BINDING: the statement's own docblock, or the comment
+# lines directly above the line, which are inside the statement's range
+# because a range opens where the previous statement's terminator closed. That
+# is where these get written anyway — every one of the ten answered findings
+# this shipped for already had its evidence in a comment sitting directly
+# above the stale line, or in the docblock of the constant holding it.
+#
+# The ENCLOSING METHOD's docblock is deliberately out of scope: a marker there
+# would cover every stale binding in the body, including ones added later that
+# nobody read the other repo about.
+#
+# But a rule that just quietly does not apply is the failure mode this whole
+# package is about, so a marker that exists in the file and reaches no finding
+# is REPORTED as misplaced rather than ignored. Getting that wrong is a
+# question — "why is my exclusion not working" — and a question with an answer
+# printed next to it costs minutes instead of an afternoon.
+#
+# A BARE `@stale-fleet-app-id exclude` WITH NO REASON DOES NOT EXCLUDE. The
+# finding stands and the bare marker is reported, matching every other gate in
+# the suite since .github#400/#412 — the whole value of an exclusion here is
+# the evidence, so an exclusion with no evidence is the one shape that must
+# not work.
+#
+# SLUG FINDINGS TAKE NO MARKER, ON PURPOSE. A stale name can be answered by
+# reading the other repo; a stale register slug cannot be answered in prose at
+# all. Both slugs are live across the fleet depending on whether a given
+# instance has run the rename repair, so the fix is a probe for the slug the
+# register actually answers to. Nothing anybody writes in a comment makes an
+# old slug return rows on a migrated instance, and offering a marker there
+# would only offer a way to silence a defect that is still a defect.
+EXCLUDE_RE = re.compile(exclude_pattern("stale-fleet-app-id"))
+
+
+def file_markers(lines: list[str]) -> list[tuple[int, bool]]:
+    """Every exclusion marker in the file, as ``(line index, has a reason)``.
+
+    Collected once per file rather than per finding so that a marker which
+    reaches NO finding can be reported. A marker written in the enclosing
+    method's docblock is out of scope on purpose, and a scope rule that just
+    quietly does not apply is indistinguishable from a broken one.
+
+    :param lines: Every raw line of the file, prose included.
+    :return: One entry per marker found.
+    """
+    out: list[tuple[int, bool]] = []
+    for i, line in enumerate(lines):
+        m = EXCLUDE_RE.search(line)
+        if m is None:
+            continue
+        # Each checker strips the trailing comment syntax of the file type it
+        # reads; this one reads four, and two of them close a comment on the
+        # marker's own line: `*/` a PHP or JS docblock, `-->` a Vue template
+        # comment. Leaving those attached makes `*/` alone read as a reason.
+        reason = m.group("reason").strip()
+        for tail in ("*/", "-->"):
+            if reason.endswith(tail):
+                reason = reason[:-len(tail)].strip()
+        out.append((i, is_reason_bearing(reason)))
+    return out
+
+
+def excluded(markers: list[tuple[int, bool]],
+             span: tuple[int, int]) -> tuple[bool, bool]:
+    """Whether the statement at *span* carries a reason-bearing marker.
+
+    :param markers: Every marker in the file, from :func:`file_markers`.
+    :param span:    The inclusive line-index range of the statement.
+    :return: ``(excluded, saw_a_bare_marker in this span)``.
+    """
+    start, end = span
+    bare = False
+    for idx, has_reason in markers:
+        if not start <= idx <= end:
+            continue
+        if has_reason:
+            return True, False
+        bare = True
+    return False, bare
+
 
 VISION_LIMIT = (
     "[gate-115] stale-fleet-app-id: this gate reads NAMES only. It cannot see "
@@ -258,7 +419,30 @@ def statement_blocks(code: list[str | None]) -> list[str]:
     Prose does not count either way: only code lines are joined, so a comment
     naming the successor can no longer vouch for a binding.
     """
+    ranges = statement_ranges(code)
     blocks: list[str] = [""] * len(code)
+    for i, (start, end) in enumerate(ranges):
+        blocks[i] = "\n".join(x for x in code[start:end + 1] if x is not None)
+    return blocks
+
+
+def statement_ranges(code: list[str | None]) -> list[tuple[int, int]]:
+    """For each line, the half-open-inclusive line range of its statement.
+
+    SPLIT OUT OF `statement_blocks` SO THERE IS ONE DEFINITION OF "STATEMENT".
+    `statement_blocks` joins the CODE in a statement, which is what the
+    dual-spelling accept needs; the exclusion marker needs the same unit
+    expressed as line numbers, so it can read the PROSE inside it too. Two
+    functions each deciding for themselves where a statement ends would drift,
+    and the drift would show up as an exclusion that silently stops applying.
+
+    A range starts on the line after the previous statement's terminator, so
+    the docblock or comment written above a statement is INSIDE that
+    statement's range rather than outside it. That is what makes a marker
+    placed where an author would naturally write it — in the comment
+    explaining the finding — attach to the finding below it.
+    """
+    ranges: list[tuple[int, int]] = [(0, 0)] * len(code)
     start = 0
     for i, line in enumerate(code):
         if line is None:
@@ -276,15 +460,14 @@ def statement_blocks(code: list[str | None]) -> list[str]:
         if IMPORT.match(line) and _next_code(code, i) is not None and IMPORT.match(_next_code(code, i)):
             continue
         if line.rstrip().endswith((";", "{", "}")):
-            joined = "\n".join(x for x in code[start:i + 1] if x is not None)
             for j in range(start, i + 1):
-                blocks[j] = joined
+                ranges[j] = (start, i)
             start = i + 1
     if start < len(code):
-        joined = "\n".join(x for x in code[start:] if x is not None)
+        last = len(code) - 1
         for j in range(start, len(code)):
-            blocks[j] = joined
-    return blocks
+            ranges[j] = (start, last)
+    return ranges
 
 
 
@@ -416,6 +599,9 @@ def main() -> int:
 
     findings: list[str] = []
     slug_hits: list[str] = []
+    excluded_hits: list[str] = []
+    bare_markers: list[str] = []
+    misplaced: list[str] = []
     for rel in scan_files(root):
         if rel.endswith("FleetAppId.php"):
             continue  # the rename map itself
@@ -439,6 +625,9 @@ def main() -> int:
         lines = text.split("\n")
         code = code_lines(lines)
         blocks = statement_blocks(code)
+        ranges = statement_ranges(code)
+        markers = file_markers(lines)
+        reached: set[int] = set()
 
         for lineno, line in enumerate(lines, 1):
             if code[lineno - 1] is None:
@@ -476,7 +665,25 @@ def main() -> int:
             # current name is a SIBLING BINDING in the same statement.
             if new and new in blocks[lineno - 1]:
                 continue
+            # RECORDED BY A HUMAN WHO READ THE OTHER REPO. Last, so a marker
+            # can only ever silence something that WOULD have been reported:
+            # placing this test earlier would let a marker "exclude" a line
+            # that was never a finding, and the count would read as evidence
+            # that somebody had answered a question nobody had asked.
+            is_excluded, bare = excluded(markers, ranges[lineno - 1])
+            span = ranges[lineno - 1]
+            reached.update(i for i, _ in markers if span[0] <= i <= span[1])
+            if is_excluded:
+                excluded_hits.append(
+                    f"  {rel}:{lineno}  [{old} -> {new}]  {line.strip()[:110]}")
+                continue
+            if bare:
+                bare_markers.append(f"  {rel}:{lineno}")
             findings.append(f"  {rel}:{lineno}  [{old} -> {new}]  {line.strip()[:110]}")
+
+        misplaced.extend(
+            f"  {rel}:{i + 1}  {lines[i].strip()[:110]}"
+            for i, _ in markers if i not in reached)
 
     own = ", ".join(x for x in (mine, mine_ns) if x)
     print(f"[gate-115] stale-fleet-app-id: {len(findings)} cross-app lookup(s) "
@@ -485,6 +692,39 @@ def main() -> int:
     print(VISION_LIMIT)
     for f in findings:
         print(f)
+
+    # AN EXCLUSION IS PRINTED, ALWAYS. A marker that removed a line from the
+    # count and left no trace would make "0 findings" mean two different
+    # things — nothing stale, or somebody decided the stale thing was fine —
+    # and a reader has no way to tell those apart. This gate has already made
+    # the silent version of that mistake once, in the slug/use-site ordering
+    # above, where the advisory printed nothing while the count still read
+    # zero. So the recorded answers stay visible on a clean run.
+    if excluded_hits:
+        print(f"[gate-115] stale-fleet-app-id: {len(excluded_hits)} finding(s) "
+              f"recorded with a reason-bearing @stale-fleet-app-id exclude marker "
+              f"— read the reason beside each before trusting it, and re-check it "
+              f"against the other app's tree when that app changes")
+        for f in excluded_hits:
+            print(f)
+
+    if bare_markers:
+        print(f"[gate-115] stale-fleet-app-id: {len(bare_markers)} bare "
+              f"@stale-fleet-app-id exclude marker(s) with no reason — these "
+              f"exclude NOTHING and the finding stands. The evidence is the whole "
+              f"point of the marker: name what you read in the other repo and "
+              f"what you found there")
+        for f in bare_markers:
+            print(f)
+
+    if misplaced:
+        print(f"[gate-115] stale-fleet-app-id: {len(misplaced)} @stale-fleet-app-id "
+              f"exclude marker(s) that reach no finding. The marker attaches to the "
+              f"BINDING — the statement's own docblock, or the comment lines directly "
+              f"above the line — not to the enclosing method, and not to a register "
+              f"slug, which is answered by probing OpenRegister rather than in prose")
+        for f in misplaced:
+            print(f)
 
     if slug_hits:
         print(f"[gate-115] stale-fleet-app-id: {len(slug_hits)} OpenRegister register "

@@ -12338,6 +12338,18 @@ fi
 # blind spot on EVERY run, pass or fail. Closing that half needs cross-repo
 # surface reading on gate-67's model and is not this check.
 #
+# RECORDING AN ANSWERED FINDING. Not every stale name has a successor to point
+# at: integriq's `GET /api/endpoints` was RETIRED with the chain-C cutover, and
+# `PaymentService`, `WalletOfferConcludedEvent` and `sources/{source}/call`
+# never existed under either name across its 3,960 commits. Repointing those
+# produces a lookup that misses exactly as it missed before, on a diff that
+# reads as a fix. So `@stale-fleet-app-id exclude <reason>` — the package's one
+# exclusion convention, reason graded by exclusion_reason.is_reason_bearing()
+# — records what was read next to the binding. Excluded findings are counted
+# and printed on every run, a bare marker excludes nothing, and a marker that
+# reaches no finding is reported. Register slugs take no marker: that answer is
+# a probe, not prose.
+#
 # See scripts/lib/check_stale_fleet_app_id.py for the four exclusions and why
 # each is the rule stated correctly rather than an allowlist entry.
 # ---------------------------------------------------------------------------
