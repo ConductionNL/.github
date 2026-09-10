@@ -2,19 +2,12 @@
   "permissions": {
     "deny": [
       "Edit(~/.claude/settings.json)",
-      "Write(~/.claude/settings.json)",
       "Edit(~/.claude/hooks/*)",
-      "Write(~/.claude/hooks/*)",
       "Edit(~/.claude/settings-version)",
-      "Write(~/.claude/settings-version)",
       "Edit(~/.claude/settings-repo-path)",
-      "Write(~/.claude/settings-repo-path)",
       "Edit(~/.claude/settings-repo-url)",
-      "Write(~/.claude/settings-repo-url)",
       "Edit(~/.claude/settings-repo-ref)",
-      "Write(~/.claude/settings-repo-ref)",
       "Edit(~/.claude/user-hooks.json)",
-      "Write(~/.claude/user-hooks.json)",
 
       "Bash(sudo:*)",
       "Bash(su:*)",
