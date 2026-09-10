@@ -5,7 +5,7 @@
 <meta name="generator" content="Docusaurus v3.10.1">
 <title data-rh="true">Spec-Driven Development Workflow | Conduction Docs</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" property="og:image" content="https://docs.conduction.nl/nl/img/og-conduction.png"><meta data-rh="true" name="twitter:image" content="https://docs.conduction.nl/nl/img/og-conduction.png"><meta data-rh="true" property="og:url" content="https://docs.conduction.nl/nl/claude/workflow/"><meta data-rh="true" property="og:locale" content="nl_NL"><meta data-rh="true" property="og:locale:alternate" content="en_GB"><meta data-rh="true" name="docusaurus_locale" content="nl"><meta data-rh="true" name="docsearch:language" content="nl"><meta data-rh="true" name="twitter:site" content="@ConductionNL"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:type" content="website"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="Spec-Driven Development Workflow | Conduction Docs"><meta data-rh="true" name="description" content="This is the **architecture reference** — see Getting Started for setup and your first change, and End-to-End Walkthrough for a complete concrete example."><meta data-rh="true" property="og:description" content="This is the **architecture reference** — see Getting Started for setup and your first change, and End-to-End Walkthrough for a complete concrete example."><link data-rh="true" rel="icon" href="/nl/img/favicon.svg"><link data-rh="true" rel="canonical" href="https://docs.conduction.nl/nl/claude/workflow/"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/claude/workflow/" hreflang="en-GB"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/nl/claude/workflow/" hreflang="nl-NL"><link data-rh="true" rel="alternate" href="https://docs.conduction.nl/claude/workflow/" hreflang="x-default"><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Hydra","item":"https://docs.conduction.nl/nl/hydra/"},{"@type":"ListItem","position":2,"name":"Hydra gebruiken","item":"https://docs.conduction.nl/nl/claude/"},{"@type":"ListItem","position":3,"name":"Spec-Driven Development Workflow","item":"https://docs.conduction.nl/nl/claude/workflow"}]}</script><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","@id":"https://docs.conduction.nl/nl/claude/workflow#article","mainEntityOfPage":"https://docs.conduction.nl/nl/claude/workflow","headline":"Spec-Driven Development Workflow","inLanguage":"en","publisher":{"@id":"https://www.conduction.nl/#org"},"description":"This is the **architecture reference** — see Getting Started for setup and your first change, and End-to-End Walkthrough for a complete concrete example.","author":{"@type":"Organization","name":"Conduction","@id":"https://www.conduction.nl/#org"}}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","@id":"https://www.conduction.nl/#org","name":"Conduction B.V.","alternateName":"Conduction","url":"https://www.conduction.nl/","logo":"https://www.conduction.nl/img/brand/avatar-conduction-gold-on-white.svg","foundingDate":"2019","description":"Dutch open-source software company building EUPL-1.2 apps for the Nextcloud workspace.","address":{"@type":"PostalAddress","streetAddress":"Lauriergracht 14h","postalCode":"1016 RR","addressLocality":"Amsterdam","addressCountry":"NL"},"email":"info@conduction.nl","telephone":"+31-85-303-6840","taxID":"NL860784241B01","vatID":"NL860784241B01","identifier":{"@type":"PropertyValue","propertyID":"KvK","value":"76741850"},"sameAs":["https://github.com/ConductionNL","https://www.linkedin.com/company/conduction/"]}</script>
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","@id":"https://docs.conduction.nl/#website","url":"https://docs.conduction.nl/","name":"Conduction Docs","publisher":{"@id":"https://www.conduction.nl/#org"},"inLanguage":["en","nl"]}</script><link rel="stylesheet" href="/nl/assets/css/styles.f2866016.css">
-<script src="/nl/assets/js/runtime~main.149dcb25.js" defer="defer"></script>
+<script src="/nl/assets/js/runtime~main.45e86e05.js" defer="defer"></script>
 <script src="/nl/assets/js/main.aa48fbde.js" defer="defer"></script>
 </head>
 <body>
@@ -18,10 +18,10 @@
 <p>This workspace uses a spec-driven development workflow that combines:</p>
 <ul>
 <li class=""><strong>OpenSpec</strong> — Structured specifications alongside code</li>
-<li class=""><strong>Tracking issues</strong> on Codeberg / Gitea / Forgejo (primary, under the <code>Conduction</code> org as of 2026-05-29) or GitHub (secondary/fallback) — visual progress tracking via per-repo project boards or kanban</li>
+<li class=""><strong>Tracking issues</strong> on GitHub (under the <code>ConductionNL</code> org) — visual progress tracking via per-repo project boards or kanban</li>
 <li class=""><strong>Spec verification</strong> — Automated review of code against specifications</li>
 </ul>
-<p><strong>Platform note.</strong> Conduction is migrating from <code>github.com/ConductionNL/*</code> to <code>codeberg.org/Conduction/*</code>. Skills and Hydra-pipeline scripts auto-detect the per-repo platform from <code>git remote get-url origin</code>; opsx-* skills create tracking issues on whichever host the target repo lives. The migration is bidirectional — every operation also supports GitHub fallback so the system can revert if needed.</p>
+<p><strong>Platform note.</strong> All Conduction work lives under <code>github.com/ConductionNL/*</code>; the 2026-05-29 move to Codeberg was reversed (directive 2026-07-17, executed 2026-07-23). Skills and Hydra-pipeline scripts still auto-detect the per-repo platform from <code>git remote get-url origin</code> — GitHub first, GitLab for non-Conduction client work, Gitea/Forgejo only for a repo that genuinely lives on a Forgejo host. opsx-* skills create tracking issues on whichever host the target repo lives on.</p>
 <p>The key insight: <strong>specs are written once, then broken into small JSON tasks</strong> that each point back to a specific spec section. This means AI coding loops can work with minimal context (just the task + its spec ref) instead of loading entire spec documents.</p>
 <h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="architecture">Architecture<a href="#architecture" class="hash-link" aria-label="Directe link naar Architecture" title="Directe link naar Architecture" translate="no">​</a></h2>
 <p>All specs and changes live in their <strong>primary app repository</strong> (submodule). Skills and shared config (schemas, company-wide ADRs) live in the <code>hydra</code> repo inside apps-extra. Developer documentation lives in the <code>.github</code> repo (<code>~/.github</code>).</p>
@@ -34,7 +34,7 @@
 </ul>
 <h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="the-full-flow">The Full Flow<a href="#the-full-flow" class="hash-link" aria-label="Directe link naar The Full Flow" title="Directe link naar The Full Flow" translate="no">​</a></h2>
 <blockquote>
-<p><strong>Legacy app?</strong> This flow assumes the app is spec-first — methods carry <code>@spec</code> tags that <code>/opsx-verify</code> walks at review time. Apps that predate the convention (<a href="https://codeberg.org/Conduction/hydra/blob/main/openspec/architecture/adr-003-backend.md" target="_blank" rel="noopener noreferrer" class="">ADR-003</a>) need a one-time retrofit pass before normal feature work. See the <a class="" href="/nl/claude/retrofit/">Retrofit Playbook</a>.</p>
+<p><strong>Legacy app?</strong> This flow assumes the app is spec-first — methods carry <code>@spec</code> tags that <code>/opsx-verify</code> walks at review time. Apps that predate the convention (<a href="https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-003-backend.md" target="_blank" rel="noopener noreferrer" class="">ADR-003</a>) need a one-time retrofit pass before normal feature work. See the <a class="" href="/nl/claude/retrofit/">Retrofit Playbook</a>.</p>
 </blockquote>
 <h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="phase-1-spec-building">Phase 1: Spec Building<a href="#phase-1-spec-building" class="hash-link" aria-label="Directe link naar Phase 1: Spec Building" title="Directe link naar Phase 1: Spec Building" translate="no">​</a></h3>
 <p>Start by defining what you&#x27;re building. This creates structured, reviewable specifications.</p>
@@ -56,7 +56,7 @@
 <p>This command:</p>
 <ol>
 <li class="">Parses <code>tasks.md</code> into structured JSON</li>
-<li class="">Creates a <strong>tracking issue</strong> (epic) on the per-repo platform (Codeberg primary, GitHub fallback, GitLab alternative) with a full task checklist</li>
+<li class="">Creates a <strong>tracking issue</strong> (epic) on the per-repo platform (GitHub primary, GitLab alternative, Forgejo only for non-Conduction repos) with a full task checklist</li>
 <li class="">Creates <strong>individual issues</strong> per task, each containing:
 <ul>
 <li class="">Task description</li>
@@ -70,7 +70,7 @@
 </ol>
 <p><strong>Why tracking issues?</strong></p>
 <ul>
-<li class="">Visual kanban board (per-repo on Codeberg; Codeberg has no cross-repo board yet — see <a href="https://codeberg.org/Codeberg/Community/issues/694" target="_blank" rel="noopener noreferrer" class="">Codeberg Community #694</a>)</li>
+<li class="">Visual kanban board (per-repo, plus cross-repo boards via GitHub Projects v2)</li>
 <li class="">Progress visible to the whole team</li>
 <li class="">Each issue links back to specs for traceability</li>
 <li class="">Can be managed independently of Claude sessions</li>
@@ -95,8 +95,8 @@
 </li>
 <li class=""><strong>Runs tests</strong> — unit tests, Newman tests, and browser verification MUST pass before marking complete</li>
 <li class=""><strong>Updates progress</strong> — marks task done in plan.json and tasks.md</li>
-<li class=""><strong>Closes the tracking issue</strong> — with a summary comment (Codeberg/GitHub/GitLab depending on the per-repo platform)</li>
-<li class=""><strong>Moves to the next task</strong>   — or stops if all done</li>
+<li class=""><strong>Closes the tracking issue</strong> — with a summary comment (GitHub/GitLab/Forgejo depending on the per-repo platform)</li>
+<li class=""><strong>Moves to the next task</strong> — or stops if all done</li>
 </ol>
 <p><strong>Why this works:</strong></p>
 <ul>
@@ -122,7 +122,7 @@
 </ul>
 </li>
 <li class="">Generates <code>review.md</code> in the change directory</li>
-<li class="">Creates a tracking issue (on the per-repo platform — Codeberg primary, GitHub fallback) if CRITICAL/WARNING findings exist</li>
+<li class="">Creates a tracking issue (on the per-repo platform — GitHub primary, GitLab alternative) if CRITICAL/WARNING findings exist</li>
 </ol>
 <h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="phase-5-archive">Phase 5: Archive<a href="#phase-5-archive" class="hash-link" aria-label="Directe link naar Phase 5: Archive" title="Directe link naar Phase 5: Archive" translate="no">​</a></h3>
 <p>Once review passes:</p>
@@ -192,7 +192,7 @@
 
 
 
-<table><thead><tr><th>Command</th><th>Phase</th><th>Description</th></tr></thead><tbody><tr><td><code>/opsx-new &lt;name&gt;</code></td><td>Spec</td><td>Start a new change</td></tr><tr><td><code>/opsx-ff</code></td><td>Spec</td><td>Fast-forward all artifacts</td></tr><tr><td><code>/opsx-continue</code></td><td>Spec</td><td>Create next artifact</td></tr><tr><td><code>/opsx-plan-to-issues</code></td><td>Plan</td><td>Tasks → JSON + tracking issues (per-repo platform — Codeberg primary, GitHub fallback)</td></tr><tr><td><code>/opsx-apply</code></td><td>Implement</td><td>Implement tasks from plan.json</td></tr><tr><td><code>/opsx-verify</code></td><td>Review</td><td>Verify implementation against specs</td></tr><tr><td><code>/opsx-archive</code></td><td>Archive</td><td>Complete and preserve change</td></tr></tbody></table>
+<table><thead><tr><th>Command</th><th>Phase</th><th>Description</th></tr></thead><tbody><tr><td><code>/opsx-new &lt;name&gt;</code></td><td>Spec</td><td>Start a new change</td></tr><tr><td><code>/opsx-ff</code></td><td>Spec</td><td>Fast-forward all artifacts</td></tr><tr><td><code>/opsx-continue</code></td><td>Spec</td><td>Create next artifact</td></tr><tr><td><code>/opsx-plan-to-issues</code></td><td>Plan</td><td>Tasks → JSON + tracking issues (per-repo platform — GitHub primary, GitLab alternative)</td></tr><tr><td><code>/opsx-apply</code></td><td>Implement</td><td>Implement tasks from plan.json</td></tr><tr><td><code>/opsx-verify</code></td><td>Review</td><td>Verify implementation against specs</td></tr><tr><td><code>/opsx-archive</code></td><td>Archive</td><td>Complete and preserve change</td></tr></tbody></table>
 <h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="team-role-commands">Team Role Commands<a href="#team-role-commands" class="hash-link" aria-label="Directe link naar Team Role Commands" title="Directe link naar Team Role Commands" translate="no">​</a></h2>
 <p>Specialist agents representing different roles on the development team. Useful for getting a focused perspective on a change — architecture review, QA, product sign-off, etc.</p>
 
@@ -252,7 +252,7 @@
 <li class=""><strong>Keep tasks small</strong>: Each task should be completable in one focused iteration (15-30 min of work)</li>
 <li class=""><strong>Use shared specs</strong>: Reference cross-project specs in your delta specs to avoid reinventing patterns</li>
 <li class=""><strong>Trust the JSON</strong>: The plan.json is your source of truth during implementation — it survives context window resets</li>
-<li class=""><strong>The tracking issue is your dashboard</strong>: Use the per-repo project board (Codeberg primary, GitHub Projects on legacy repos) to visualize progress across multiple changes and projects. Codeberg has no cross-repo board yet — per-repo only.</li>
+<li class=""><strong>The tracking issue is your dashboard</strong>: Use the per-repo project board, or a cross-repo GitHub Projects v2 board, to visualize progress across multiple changes and projects.</li>
 </ul>
 <h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="post-fix-commit-gate-verification-fix-mode">Post-fix-commit gate verification (fix mode)<a href="#post-fix-commit-gate-verification-fix-mode" class="hash-link" aria-label="Directe link naar Post-fix-commit gate verification (fix mode)" title="Directe link naar Post-fix-commit gate verification (fix mode)" translate="no">​</a></h2>
 <p>Every commit that addresses a review finding must be checked against the mechanical gates BEFORE <code>git push</code>. The pattern to avoid: a fix commit that resolves the review concerns but silently introduces NEW gate failures. This turns a &quot;one more round&quot; into &quot;one more round, plus surface new issues&quot; and burns review cycles.</p>
