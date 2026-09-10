@@ -466,8 +466,9 @@ Restart the session and verify which model is actually served:
 # The VSCode extension ships its own CLI and does not put `claude` on your PATH.
 # If `command -v claude` comes up empty, point at the bundled binary instead.
 # VSCode keeps several extension versions during an upgrade, so take the newest
-# match rather than letting the glob expand to more than one path.
-CLAUDE="$(command -v claude || ls -1d ~/.vscode-server/extensions/anthropic.claude-code-*/resources/native-binary/claude 2>/dev/null | tail -1)"
+# match by modification time rather than letting the glob expand to more than
+# one path — a plain lexicographic sort would pick e.g. 1.9.0 over 1.10.0.
+CLAUDE="$(command -v claude || ls -1dt ~/.vscode-server/extensions/anthropic.claude-code-*/resources/native-binary/claude 2>/dev/null | head -1)"
 "$CLAUDE" -p "Reply with exactly the word ok" --output-format json | jq '.modelUsage | keys'
 ```
 
