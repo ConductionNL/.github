@@ -345,7 +345,7 @@ Key commands: `/opsx-verify` (spec verification), `/test-counsel` (9-persona tes
 
 #### CI/CD
 
-All apps have `code-quality.yml` workflows that block PRs on (GitHub Actions today; Forgejo Actions runs the same files natively on Codeberg-mirrored repos):
+All apps have `code-quality.yml` workflows that block PRs on (GitHub Actions; the same files also run natively under Forgejo Actions, which is why the `.forgejo/` variants are kept):
 
 - PHPCS + PHPMD + Psalm (PHP quality)
 - ESLint (frontend quality)

@@ -74,7 +74,7 @@ The skill uses progressive disclosure and has a description optimized for reliab
 description: A skill that helps with various document-related tasks
 
 # Good: specific, third-person, front-loaded action + trigger terms
-description: Create a Pull Request from the current branch — runs local checks, picks target branch, and opens the PR. Supports Codeberg (primary), GitHub (fallback) and GitLab (alternative).
+description: Create a Pull Request from the current branch — runs local checks, picks target branch, and opens the PR. Supports GitHub (primary), GitLab (alternative) and Codeberg/Gitea/Forgejo (non-Conduction repos).
 ```
 
 **Known limitation:** Multiple independent sources report ~50% auto-activation rates for skills. The `SLASH_COMMAND_TOOL_CHAR_BUDGET` defaults to 1% of context window, limiting how many descriptions fit. With large skill libraries, explicit `/skill-name` invocation is more reliable than auto-triggering.
@@ -131,7 +131,7 @@ The skill contains domain-specific knowledge that makes it uniquely effective fo
 **In this repository**, L4 personalization includes:
 
 - Dutch government standards (GEMMA, ZGW, BIO2, Common Ground)
-- NL Design System CSS variables and **WCAG 2.2 AA** compliance (legal floor is WCAG 2.1 AA via EN 301 549 v3.2.1 today; v4.1.1 → 2.2 AA expected Oct 2026). Mechanical enforcement lives in Hydra's `hydra-gate-*` skills; see [`openspec/architecture/wcag-coverage.md`](https://codeberg.org/Conduction/hydra/src/branch/main/openspec/architecture/wcag-coverage.md) in hydra for the per-SC coverage matrix. The `hydra-gate-*` skill pattern (frontmatter, `## Hard rule` section, `## Check` bash block, `## Fix action` numbered list, `examples/pass.log` + `examples/fail.log` artefacts) is the template for new mechanical gates.
+- NL Design System CSS variables and **WCAG 2.2 AA** compliance (legal floor is WCAG 2.1 AA via EN 301 549 v3.2.1 today; v4.1.1 → 2.2 AA expected Oct 2026). Mechanical enforcement lives in Hydra's `hydra-gate-*` skills; see [`openspec/architecture/wcag-coverage.md`](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/wcag-coverage.md) in hydra for the per-SC coverage matrix. The `hydra-gate-*` skill pattern (frontmatter, `## Hard rule` section, `## Check` bash block, `## Fix action` numbered list, `examples/pass.log` + `examples/fail.log` artefacts) is the template for new mechanical gates.
 - Conduction app patterns (openregister, opencatalogi, etc.)
 - 9 Dutch citizen/professional personas for testing (incl. Jasper — screen-reader-primary, the first AT-primary persona)
 - OpenSpec workflow integration (specs, ADRs, changes)
@@ -464,7 +464,7 @@ When a SKILL.md instructs Claude to read a file (persona card, shared doc, spec)
 | **Personas inside a `.claude`-centered workspace** (where `.claude/` lives at the project root)                                 | `.claude/personas/<slug>.md`                 | `.claude/personas/<role>.md`                                                     |
 | **Company-wide specs** (hydra `openspec/specs/`)                                                                                | `hydra/openspec/specs/<capability>/spec.md`  | `hydra/openspec/specs/nextcloud-app/spec.md`                                     |
 | **Company-wide ADRs** (hydra `openspec/architecture/`)                                                                          | `hydra/openspec/architecture/adr-<NNN>-*.md` | `hydra/openspec/architecture/adr-001-data-layer.md`                              |
-| **Developer/Claude docs** (lives in `Conduction/.github` repo, cloned separately — **not** a subdir of any project workspace) | Full GitHub URL                              | `https://codeberg.org/Conduction/.github/blob/main/docs/claude/writing-specs.md` |
+| **Developer/Claude docs** (lives in `Conduction/.github` repo, cloned separately — **not** a subdir of any project workspace) | Full GitHub URL                              | `https://github.com/ConductionNL/.github/blob/main/docs/claude/writing-specs.md` |
 | **App-specific docs** (inside the current app)                                                                                  | Workspace-relative                           | `{APP_DIR}/docs/features/README.md`                                              |
 | **App-specific specs**                                                                                                          | Workspace-relative                           | `openspec/specs/<capability>/spec.md`                                            |
 
