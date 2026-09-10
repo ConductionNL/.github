@@ -7560,6 +7560,36 @@ fi
 # buried. If per-document annotation is wanted later it needs a way to tell a
 # quoted example from a live tag; it is not this gate's job today.
 #
+# AND `appinfo/` AND `scripts/` (#727).
+#
+# The enumerator named three directories and `appinfo/` was not one of them,
+# so every `@spec` tag written there was decorative. Measured across the fleet:
+# 52 anchors in 6 apps that this gate has never opened, 10 of them unresolved.
+#
+# openregister is the case that makes the argument. All 9 of its unenumerated
+# anchors are in `appinfo/routes.php` and 8 of the 9 dangle, including two that
+# end in a stray full stop:
+#
+#   openspec/changes/integration-analytics/tasks.md.
+#   openspec/changes/integration-activity/tasks.md.
+#
+# That was never a path. It is exactly the kind of thing a gate catches on the
+# day it is typed and a human never catches at all — and `appinfo/routes.php`
+# is not an obscure file, it is the one place every controller method's
+# reachability is declared. Two other gates already read it (route-auth,
+# route-reachability), so a `@spec` tag on a route entry is the natural place
+# to say which requirement an endpoint exists for.
+#
+# `scripts/` is the weaker half and is included for symmetry: 7 anchors in one
+# app, 0 dangling. It costs nothing and it stops the next `@spec` written there
+# from being decorative too.
+#
+# 10 findings in 3 repos, 8 of them in one file, so this ships BLOCKING rather
+# than warning-first. The rule that a widened gate warns first exists for the
+# case where inherited debt reddens repos that did nothing wrong; ten findings
+# is not that case. If it should warn instead, the switch is the same shape as
+# gate-112's: an env-gated `_warn` at the verdict below.
+#
 # WHAT THIS IS NOT. #322 as filed reports that `tasks.md` targets are "never
 # existence-checked" — 353 of them on doriath. That premise does not hold on
 # this package, and the correction is recorded here so nobody re-fixes it: a
@@ -7580,7 +7610,7 @@ while IFS= read -r f; do
     [ -f "$f" ] || continue
     _in_scope "$f" || continue
     _sae_files+=("$f")
-done < <(find lib src tests \( -name '*.php' -o -name '*.vue' -o -name '*.js' -o -name '*.ts' -o -name '*.md' \) \
+done < <(find lib src tests appinfo scripts \( -name '*.php' -o -name '*.vue' -o -name '*.js' -o -name '*.ts' -o -name '*.md' \) \
     -not -path '*/vendor/*' -not -path '*/node_modules/*' \
     -not -path '*/dist/*' -not -path '*/build/*' 2>/dev/null)
 _sae_ran=1
@@ -7594,7 +7624,7 @@ if [ "${#_sae_files[@]}" -eq 0 ]; then
     # the shape #258 removed from gates 19/25/62/63 and #268 then categorised.
     # Gates 4/6/7/28 have said `na` for the identical situation since #268.
     _sae_ran=0
-    _skip 46 "spec-anchor-existence" na "scope was empty — 0 lib/, src/ or tests/ file(s) in this diff, so NO @spec target was resolved. Diff-scoped out under ADR-020: nothing in this repository is missing, and no change the author could make would let this gate inspect a file the diff does not contain. It runs on the next PR that touches annotated code."
+    _skip 46 "spec-anchor-existence" na "scope was empty — 0 lib/, src/, tests/, appinfo/ or scripts/ file(s) in this diff, so NO @spec target was resolved. Diff-scoped out under ADR-020: nothing in this repository is missing, and no change the author could make would let this gate inspect a file the diff does not contain. It runs on the next PR that touches annotated code."
 elif [ ! -f "${_sae_helper}" ]; then
     # A MISSING HELPER MUST NOT REPORT PASS (#147). The gate previously
     # carried its resolver inline, so "the helper is absent" was not a
