@@ -499,7 +499,43 @@ The CLI confirms with "Set model to Fable 5.1 for this session only" and the swi
 
 **Fix — one-off switch.** If you only need to change the persisted model once, run the unlock step from [README → Updating](../../global-settings/README.md#updating) in your own terminal, switch the model in Claude Code, then run the relock step. Don't skip the relock.
 
+**Fix — keep `settings.json` unlocked, lock everything else.** If you switch models with the picker often enough that the two fixes above are friction rather than protection, drop just that one file from the relock list:
+
+```bash
+# Note: no $HOME/.claude/settings.json in this list.
+sudo chattr +i $HOME/.claude/hooks/*.sh $HOME/.claude/settings-version
+```
+
+Be clear about what this costs. `settings.json` carries `permissions.deny` and the hook wiring, so it is the file an attacker would most want to edit — you are giving up layer 4 on exactly that file. What still defends it: the `permissions.deny` rules that block the Edit/Write tools, the protected-path regex in `block-write-commands.sh`, and `block-config-tool-writes.sh` — and all three of those live in hook files that stay kernel-locked, so a session cannot disarm them to get at the settings file. That is a real position to take, not a broken setup; it is weaker than pinning the model project-locally and keeping all four layers, which stays the recommendation.
+
 **What not to do.**
 
-- Don't leave the lock off "because the picker is annoying" — that disarms the only protection layer that survives a compromised hook chain.
+- Don't leave the lock off *entirely* "because the picker is annoying" — unlocking the hooks along with the settings file disarms the only protection layer that survives a compromised hook chain. Dropping `settings.json` alone from the relock (previous fix) is a bounded trade; unlocking `hooks/*.sh` is not.
 - Don't add `model` to the shared `global-settings/settings.json`. It is a per-user preference, it would be overwritten on every settings update, and the file is still locked — the picker would keep failing.
+
+### An update fails with `Permission denied` after you ran `sudo chattr -i`
+
+**Symptom.** You cleared the immutable bit, told Claude to update, and it stops partway:
+
+```
+/bin/bash: line 6: /home/<user>/.claude/hooks/block-write-commands.sh: Permission denied
+```
+
+`lsattr` shows no `i` flag, so the unlock did land. `ls -l` shows why it failed anyway:
+
+```
+-r-xr-xr-x 1 <user> <user>  block-write-commands.sh     ← mode 555, nobody can write it
+-r--r--r-- 1 <user> <user>  settings-version            ← mode 444
+```
+
+**Cause.** Two protections sit on these files and the update instructions historically only cleared one. Claude installs every hook with `chmod 555` and `settings-version` with `chmod 444` — the only modes `block-write-commands.sh` lets it use on a protected path (`chmod 644`, `chmod u+w` and `chattr` are all hard-denied, so a session can never widen its own access). Those modes then persist into the *next* update, where they block the write that `chattr -i` was supposed to enable. Claude cannot clear them and is explicitly told not to route around them with `rm`/`mv`/`cp` — all of which are denied on protected paths as well.
+
+**Fix.** Run the mode reset yourself and let Claude continue — this is step 1 of [README → Updating](../../global-settings/README.md#updating), which now includes it:
+
+```bash
+chmod u+w $HOME/.claude/settings.json $HOME/.claude/hooks/*.sh $HOME/.claude/settings-version
+```
+
+No `sudo` — you own the files; the privileged half was the `chattr -i`.
+
+**Partially-updated `~/.claude/` is expected here, and safe.** The update writes one file per command and `settings-version` last, precisely so a denial leaves the version marker *behind* rather than ahead. A half-installed tree therefore still reports itself as outdated at the next session start, and re-running the update finishes the job. Nothing needs to be undone by hand.

@@ -141,6 +141,31 @@ add_allow "Write /tmp/notes.txt mentions path" \
 add_allow "Write /tmp/config.json with text" \
     "$(mk_write "/tmp/config.json" '{"path": "~/.claude/settings.json"}')"
 
+# ── Canonical-source exemption ───────────────────────────────────────────────
+# The repo copies of the global-settings scripts necessarily contain the update
+# commands this scan looks for — the guard must not veto edits to its own
+# source. See the "Canonical-source exemption" block in the hook.
+add_allow "Edit repo check-settings-version.sh" \
+    "$(mk_edit "${TEST_HOME}/.github/global-settings/check-settings-version.sh" "$BAD_CHATTR")"
+add_allow "Edit repo block-config-tool-writes.sh" \
+    "$(mk_edit "/srv/repos/.github/global-settings/block-config-tool-writes.sh" "$BAD_REDIRECT")"
+add_allow "Edit repo block-write-commands.sh" \
+    "$(mk_edit "/srv/repos/.github/global-settings/block-write-commands.sh" "$BAD_CP")"
+add_allow "Write repo tests/ fixture" \
+    "$(mk_write "/srv/repos/.github/global-settings/tests/test-block-write-commands.sh" "$BAD_REDIRECT")"
+
+# The exemption is name-scoped: an arbitrary script parked under a
+# global-settings/ directory is still scanned.
+add_deny "Write global-settings/evil.sh (not a canonical name)" \
+    "$(mk_write "/tmp/global-settings/evil.sh" "$BAD_REDIRECT")"
+add_deny "Write global-settings/tests-helper.sh (not under tests/)" \
+    "$(mk_write "/tmp/global-settings/tests-helper.sh" "$BAD_RM")"
+
+# The INSTALLED copies are never exempt, even though they share the filename —
+# guard 1 owns those and runs first.
+add_deny "Edit installed check-settings-version.sh" \
+    "$(mk_edit "${TEST_HOME}/.claude/hooks/check-settings-version.sh" "$BAD_REDIRECT")"
+
 # Empty content must not deny.
 add_allow "Write /tmp/x.sh empty content"  "$(mk_write "/tmp/x.sh" "")"
 

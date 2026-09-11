@@ -97,6 +97,40 @@ fi
 
 $_looks_like_script || exit 0
 
+# ── Canonical-source exemption ───────────────────────────────────────────────
+# The scripts in this repo's global-settings/ directory ARE the update
+# mechanism. Their bodies necessarily contain the very write operations guard 2
+# scans for — the update notice check-settings-version.sh prints, the fixtures
+# the test scripts assert on. Without this exemption the guard vetoes every edit
+# to its own source, so Claude can never maintain the canonical files (observed
+# 2026-09-11: an edit to the update notice in check-settings-version.sh was
+# hard-denied — the same notice Claude is instructed to keep accurate).
+#
+# Scope is deliberately narrow: a repo checkout path ending in
+# global-settings/<canonical name>.sh or global-settings/tests/<name>.sh. The
+# installed copies are excluded explicitly — guard 1 above already hard-denies
+# those and runs first; this case is belt-and-braces should the two ever be
+# reordered.
+#
+# What still covers the "write a script, then run it" bypass this hook exists
+# for: block-write-commands.sh scans the body of any script it is asked to
+# execute, and the kernel immutable bit refuses the write regardless. A file
+# staged at some/global-settings/sound-notify.sh is inert unless it is also
+# executed, which the Bash hook independently denies.
+case "$file_path" in
+    "${HOME}/.claude/"*)
+        : # installed copies are never exempt — fall through to the scan
+        ;;
+    */global-settings/block-write-commands.sh \
+    | */global-settings/block-config-tool-writes.sh \
+    | */global-settings/check-settings-version.sh \
+    | */global-settings/sound-notify.sh \
+    | */global-settings/user-hooks-dispatch.sh \
+    | */global-settings/tests/*.sh)
+        exit 0
+        ;;
+esac
+
 # Look for a protected-path write inside the content. We replicate the
 # operator set from block-write-commands.sh so behaviour matches whether the
 # command lands at the Write step (here) or the Bash step (the other hook).
