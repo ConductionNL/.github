@@ -177,6 +177,22 @@ add_deny "Write \$HOME/.claude/global-settings/ (var)" \
 add_deny "Write \${HOME}/.claude/global-settings/tests/ (braced)" \
     "$(mk_write "\${HOME}/.claude/global-settings/tests/x.sh" "$BAD_RM")"
 
+# Path canonicalization: the exempt patterns end in `*` after tests/, and a
+# case-glob `*` matches `/` too — so a `..` traversal could otherwise satisfy
+# an exempt pattern while landing on an installed hook, missing both the
+# ~/.claude/ arm and guard 1 (neither sees a raw string that STARTS with
+# $HOME/.claude/). Regression cases for that.
+add_deny "Traversal out of tests/ into installed hooks" \
+    "$(mk_write "/tmp/global-settings/tests/../../..${TEST_HOME}/.claude/hooks/evil.sh" "$BAD_REDIRECT")"
+add_deny "Traversal out of a canonical-name dir" \
+    "$(mk_write "/tmp/global-settings/tests/../..${TEST_HOME}/.claude/settings.json.sh" "$BAD_CHATTR")"
+add_deny "Traversal segment anywhere disables the exemption" \
+    "$(mk_write "/srv/repos/.github/global-settings/tests/../../../etc/../..${TEST_HOME}/.claude/hooks/x.sh" "$BAD_CP")"
+
+# …but a legitimate repo path that merely CONTAINS no traversal still passes.
+add_allow "Repo tests/ path with a dotted filename" \
+    "$(mk_write "/srv/repos/.github/global-settings/tests/test-a.b.sh" "$BAD_REDIRECT")"
+
 # Empty content must not deny.
 add_allow "Write /tmp/x.sh empty content"  "$(mk_write "/tmp/x.sh" "")"
 

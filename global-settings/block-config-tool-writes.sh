@@ -125,7 +125,27 @@ $_looks_like_script || exit 0
 # Match on the SAME normalized path guard 1 computed ($_expanded resolves the
 # unexpanded ~/ and $HOME/ spellings), so the non-exempt arm below holds for
 # every form guard 1 recognizes — not only the already-expanded one.
-case "${_expanded:-$file_path}" in
+#
+# Then canonicalize further before matching. The exempt patterns end in `*`
+# after `tests/`, and a `*` in a case glob matches `/` as well — so without
+# this step a path like
+#     /tmp/global-settings/tests/../../..$HOME/.claude/hooks/evil.sh
+# satisfies */global-settings/tests/*.sh, misses the ~/.claude/ arm above
+# (the raw string does not START with $HOME/.claude/) and misses guard 1 for
+# the same reason, exempting a write that lands squarely on an installed hook.
+# `realpath -m` resolves both `..` components and symlinked parents without
+# requiring the target to exist; where it is unavailable we refuse to exempt
+# any path that still carries a `..` component rather than guessing.
+_canon="${_expanded:-$file_path}"
+if command -v realpath >/dev/null 2>&1; then
+    _canon=$(realpath -m -- "$_canon" 2>/dev/null || printf '%s' "$_canon")
+fi
+
+# shellcheck disable=SC2088,SC2016 # case patterns match literal tokens — tilde and $HOME are intentionally NOT expanded
+case "$_canon" in
+    *'/../'* | */.. | '../'* | ..)
+        : # unresolved parent-dir traversal — never exempt; fall through to the scan
+        ;;
     "${HOME}/.claude/"* | '~/.claude/'* | '$HOME/.claude/'* | '${HOME}/.claude/'*)
         : # installed copies are never exempt — fall through to the scan
         ;;
