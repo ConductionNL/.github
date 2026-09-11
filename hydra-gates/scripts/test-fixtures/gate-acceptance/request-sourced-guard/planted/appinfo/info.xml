@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<id>rsgfixture</id>
+	<name>Request-Sourced Guard Fixture</name>
+	<summary>Fixture app for gate-7's request-sourced-object-guard rule. Not a real app.</summary>
+	<description>Exists so the gate suite can assert that a guard the caller decides is not a guard.</description>
+	<version>1.0.0</version>
+	<licence>agpl</licence>
+	<author>Conduction</author>
+	<namespace>RsgFixture</namespace>
+	<category>tools</category>
+	<dependencies><nextcloud min-version="30" max-version="32"/></dependencies>
+</info>
