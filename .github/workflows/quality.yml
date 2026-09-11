@@ -4479,7 +4479,13 @@ jobs:
     # does not mention `matrix` gets its values appended by GitHub, and the
     # unsharded job would then render as "E2E Tests (Playwright) (1)". With the
     # expression, one leg keeps the exact name it has always had.
-    name: ${{ inputs.e2e-shards > 1 && format('E2E Tests (Playwright, shard {0} of {1})', matrix.shard, inputs.e2e-shards) || 'E2E Tests (Playwright)' }}
+    #
+    # The readable text stays OUTSIDE the expression. A skipped matrix job is
+    # never expanded, so its row shows the name template as written, the way
+    # the skipped PHPUnit row shows `${{ matrix.php-version }}`. Written as one
+    # whole expression, the skipped E2E row in every repo without Playwright
+    # read as a line of expression source (quality-selftest run 34595801159).
+    name: E2E Tests (Playwright${{ inputs.e2e-shards > 1 && format(', shard {0} of {1}', matrix.shard, inputs.e2e-shards) || '' }})
     # ── SHARDING (opt-in, `e2e-shards`) ─────────────────────────────────────
     #
     # One leg when `e2e-shards` is 1, which is every caller until one opts in.
