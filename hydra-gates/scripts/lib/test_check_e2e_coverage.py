@@ -2471,5 +2471,233 @@ class ReportModeEvidenceTest(unittest.TestCase):
         self.assertLessEqual(t["covered_thinly"], t["covered_thinly_max"])
 
 
+# ---------------------------------------------------------------------------
+# GitHub heading anchors — the second spelling of a Format A slug
+# ---------------------------------------------------------------------------
+#
+# GitHub slugifies the WHOLE heading, `Scenario` label included, so the anchor
+# a developer gets by clicking the heading on the rendered spec is
+# `#scenario-<slug>`. The gate's own slug drops the label. The two used to be
+# unequal strings and the citation was dropped in silence — the scenario read
+# as `missing @e2e`, which looks exactly like nobody writing a test. Measured
+# in dossiq: 42 of 330 citations, none crediting anything.
+
+GH_ANCHOR_SPEC = """\
+# things Specification
+
+## Purpose
+
+### Requirement: Foo behaviour
+
+#### Scenario: Foo does bar
+
+- WHEN foo is called
+- THEN bar happens
+"""
+
+
+def _runs(name: str, tag: str) -> str:
+    """One tagged, asserting Playwright test."""
+    return (
+        f"import {{ expect, test }} from '@playwright/test'\n"
+        f"// @e2e {tag}\n"
+        f"test('{name}', async ({{ page }}) => {{\n"
+        f"  await page.goto('/apps/x')\n"
+        f"  await expect(page.getByText('Foo')).toBeVisible()\n"
+        f"}})\n"
+    )
+
+
+class GithubHeadingAnchorTest(unittest.TestCase):
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+        _write(self.root, "openspec/specs/things/spec.md", GH_ANCHOR_SPEC)
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def _gate(self):
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = cec.run_gate(self.root)
+        return rc, buf.getvalue()
+
+    # -- the helper itself ---------------------------------------------------
+
+    def test_github_anchor_ref_adds_the_prefix(self):
+        self.assertEqual(cec.github_anchor_ref("things::foo-does-bar"),
+                         "things::scenario-foo-does-bar")
+
+    def test_github_anchor_ref_rejects_a_non_ref(self):
+        self.assertIsNone(cec.github_anchor_ref("not-a-ref"))
+        self.assertIsNone(cec.github_anchor_ref("::orphan"))
+        self.assertIsNone(cec.github_anchor_ref("spec::"))
+
+    # -- the three cases the change has to get right --------------------------
+
+    def test_the_github_form_credits_the_scenario(self):
+        """THE BUG. An anchor copied off the rendered spec must count."""
+        _write(self.root, "tests/e2e/things.spec.ts",
+               _runs("a", "things::scenario-foo-does-bar"))
+        rc, out = self._gate()
+        self.assertEqual(rc, cec.EXIT_PASS,
+                         f"the GitHub-spelled anchor must credit, got:\n{out}")
+        self.assertNotIn("missing @e2e", out)
+
+    def test_the_github_form_credits_through_the_path_spelling_too(self):
+        """The same anchor as a copied URL, not as the `::` shorthand."""
+        _write(self.root, "tests/e2e/things.spec.ts",
+               _runs("a", "openspec/specs/things/spec.md"
+                          "#scenario-foo-does-bar"))
+        rc, out = self._gate()
+        self.assertEqual(rc, cec.EXIT_PASS, out)
+
+    def test_the_bare_form_still_credits(self):
+        """THE CONTROL. Loosening must not cost the form that already worked."""
+        _write(self.root, "tests/e2e/things.spec.ts",
+               _runs("a", "things::foo-does-bar"))
+        rc, out = self._gate()
+        self.assertEqual(rc, cec.EXIT_PASS, out)
+
+    def test_a_near_miss_slug_still_does_not_credit(self):
+        """`scenario-` is the only prefix forgiven. A typo is still a miss."""
+        _write(self.root, "tests/e2e/things.spec.ts",
+               _runs("a", "things::scenario-foo-does-baz"))
+        rc, out = self._gate()
+        self.assertEqual(rc, cec.EXIT_FAIL,
+                         "a slug that names no scenario must not credit one")
+        self.assertIn("things::foo-does-bar — missing @e2e", out)
+
+    def test_a_bare_prefix_alone_does_not_credit(self):
+        """`things::scenario-` names nothing; it must not blanket the spec."""
+        _write(self.root, "tests/e2e/things.spec.ts",
+               _runs("a", "things::scenario-x"))
+        rc, out = self._gate()
+        self.assertEqual(rc, cec.EXIT_FAIL, out)
+
+    def test_the_reverse_direction_is_not_supported(self):
+        """A scenario titled "Scenario …" is addressed by its own two
+        spellings, `scenario-scenario-x` and `scenario-x`, and by neither
+        `x` nor anything else. Stripping a prefix off a citation would eat a
+        real word, so only adding one is done."""
+        _write(self.root, "openspec/specs/things/spec.md",
+               "# things Specification\n\n## Purpose\n\n"
+               "### Requirement: R\n\n#### Scenario: Scenario naming is odd\n\n"
+               "- WHEN x\n- THEN y\n")
+        _write(self.root, "tests/e2e/things.spec.ts",
+               _runs("a", "things::naming-is-odd"))
+        rc, out = self._gate()
+        self.assertEqual(rc, cec.EXIT_FAIL, out)
+        self.assertIn("things::scenario-naming-is-odd — missing @e2e", out)
+
+    # -- format B does not collide -------------------------------------------
+
+    def test_format_b_slugs_are_untouched(self):
+        """Format B slugs END in `-scenario-<n>`; this change reads the START.
+
+        The numbered form carries no heading, so GitHub mints no anchor for
+        it and the prefixed spelling never appears. Its own slug must keep
+        crediting exactly as before.
+        """
+        _write(self.root, "openspec/specs/things/spec.md",
+               "# things Specification\n\n## Purpose\n\n"
+               "### REQ-ALT-001: Alt format requirement\n\n"
+               "**Scenarios:**\n\n"
+               "1. **GIVEN** a thing **WHEN** poked **THEN** it moves\n")
+        ref = "things::req-alt-001-alt-format-requirement-scenario-1"
+        _write(self.root, "tests/e2e/things.spec.ts", _runs("a", ref))
+        rc, out = self._gate()
+        self.assertEqual(rc, cec.EXIT_PASS, out)
+
+    def test_an_orphan_format_b_slug_keeps_its_own_anchor(self):
+        """THE ONE COLLISION THE FLEET CAN ACTUALLY REACH.
+
+        A `**Scenarios:**` block with no `### Requirement:` above it slugs its
+        items `scenario-<n>` (see `_flush_alt_item`). That is the same string
+        as the GitHub spelling of a Format A scenario slugged `<n>`. The
+        anchor belongs to the Format B item that declares it.
+        """
+        _write(self.root, "openspec/specs/things/spec.md",
+               "# things Specification\n\n## Purpose\n\n"
+               "#### Scenario: 1\n\n- WHEN a\n- THEN b\n\n"
+               "**Scenarios:**\n\n"
+               "1. **GIVEN** an orphan block **WHEN** poked **THEN** it moves\n")
+        _write(self.root, "tests/e2e/things.spec.ts",
+               _runs("a", "things::scenario-1"))
+        rc, out = self._gate()
+        self.assertEqual(rc, cec.EXIT_FAIL, out)
+        self.assertIn("things::1 — missing @e2e", out)
+        self.assertNotIn("things::scenario-1 — missing @e2e", out)
+
+    # -- the collision guard --------------------------------------------------
+
+    def test_an_anchor_does_not_credit_a_scenario_it_does_not_name(self):
+        """THE ONE WAY THIS COULD CREDIT THE WRONG THING.
+
+        A heading whose TEXT begins with "Scenario" slugs to `scenario-x`,
+        which is also the GitHub spelling of a sibling slugged `x`. One
+        citation must not credit both. No such heading exists in the fleet
+        today, which is why this is a guard rather than a fix.
+        """
+        _write(self.root, "openspec/specs/things/spec.md",
+               "# things Specification\n\n## Purpose\n\n"
+               "### Requirement: R\n\n"
+               "#### Scenario: Scenario picker opens\n\n- WHEN a\n- THEN b\n\n"
+               "#### Scenario: Picker opens\n\n- WHEN c\n- THEN d\n")
+        _write(self.root, "tests/e2e/things.spec.ts",
+               _runs("a", "things::scenario-picker-opens"))
+        rc, out = self._gate()
+        # The prefixed anchor belongs to the scenario DECLARING that slug.
+        self.assertEqual(rc, cec.EXIT_FAIL, out)
+        self.assertIn("things::picker-opens — missing @e2e", out)
+        self.assertNotIn("things::scenario-picker-opens — missing @e2e", out)
+
+    # -- report mode ----------------------------------------------------------
+
+    def test_report_mode_counts_the_github_form_as_covered(self):
+        _write(self.root, "tests/e2e/things.spec.ts",
+               _runs("a", "things::scenario-foo-does-bar"))
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            cec.run_report(self.root)
+        totals = json.loads(buf.getvalue())["totals"]
+        self.assertEqual(totals["covered"], 1)
+        self.assertEqual(totals["uncovered"], 0)
+
+    def test_report_mode_reads_evidence_under_the_ref_that_covered(self):
+        """A GitHub-spelled anchor must not be promoted to the strongest
+        evidence class just because the evidence map is keyed by the other
+        spelling. This test asserts a THIN proof stays thin."""
+        _write(self.root, "tests/e2e/things.spec.ts",
+               "import { expect, test } from '@playwright/test'\n"
+               "// @e2e things::scenario-foo-does-bar\n"
+               "test('a', async ({ page }) => {\n"
+               "  await page.goto('/apps/x')\n"
+               "  await expect(page.getByText('Foo')).toBeVisible()\n"
+               "})\n")
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            cec.run_report(self.root)
+        out = json.loads(buf.getvalue())
+        self.assertEqual(out["totals"]["covered"], 1)
+        self.assertEqual(out["totals"]["covered_thinly"], 1)
+        self.assertEqual([x["ref"] for x in out["covered_thinly"]],
+                         ["things::foo-does-bar"])
+
+    # -- a dead test is still dead, in either spelling ------------------------
+
+    def test_the_github_form_on_a_skipped_test_is_not_coverage(self):
+        """Loosening the SPELLING must not loosen what counts as a test."""
+        _write(self.root, "tests/e2e/things.spec.ts",
+               "import { expect, test } from '@playwright/test'\n"
+               "// @e2e things::scenario-foo-does-bar\n"
+               "test.skip('a', async ({ page }) => {\n"
+               "  await expect(page.getByText('Foo')).toBeVisible()\n"
+               "})\n")
+        rc, out = self._gate()
+        self.assertEqual(rc, cec.EXIT_FAIL, out)
+        self.assertIn("the test does not run", out)
+
+
 if __name__ == "__main__":
     unittest.main()

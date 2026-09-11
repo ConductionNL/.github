@@ -76,6 +76,15 @@ nothing after it to run. Writing *about* coverage is not coverage
 **Format A slug:** kebab-case of the ``#### Scenario:`` heading text
 (lower-case, punctuation stripped, words joined with ``-``).
 
+A Format A scenario has **two accepted spellings**, and they differ by the
+leading word of the heading. GitHub slugifies the whole heading text, so
+clicking the heading on the rendered spec gives ``scenario-<slug>``; this
+gate's own slug drops the ``Scenario:`` label and is just ``<slug>``. Both
+address the same scenario. Before 2026-09-11 only the second one matched, and
+an anchor copied from the rendered page was parsed, matched nothing and was
+dropped without a word — 42 of dossiq's 330 citations were invisible that way.
+See :func:`covering_ref`.
+
 **Format B slug:** ``<parent-req-slug>-scenario-<n>`` where ``parent-req-slug``
 is the kebab-case of the enclosing ``### REQ-...:`` or ``### Requirement:``
 heading (text after the colon, or the full heading if no colon), and ``<n>`` is
@@ -137,6 +146,7 @@ import os
 import re
 import subprocess
 import sys
+from collections.abc import Container
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -1832,6 +1842,76 @@ class _PlaywrightScope:
         return False
 
 
+# ---------------------------------------------------------------------------
+# A FORMAT A SCENARIO HAS TWO SPELLINGS, AND THE GATE ONLY KNEW ONE
+# ---------------------------------------------------------------------------
+#
+# A Format A heading reads:
+#
+#     #### Scenario: REQ-ZAK-004b Empty dossier shows upload CTA
+#
+# `_SCENARIO_RE` captures only the text AFTER `Scenario:`, so the gate's slug
+# is `req-zak-004b-empty-dossier-shows-upload-cta`. GitHub slugifies the WHOLE
+# heading text, leading word included, so clicking that heading on the rendered
+# page hands a developer
+# `#scenario-req-zak-004b-empty-dossier-shows-upload-cta`.
+#
+# The two disagree by exactly `scenario-`. An anchor copied from the rendered
+# spec parsed fine, matched nothing, and was dropped in silence: the scenario
+# then reported as `missing @e2e`, which is indistinguishable from nobody
+# having written a test. Measured in dossiq on 2026-09-11: 42 of 330 citations
+# carried the GitHub spelling and none of them credited anything.
+#
+# So both spellings address the same scenario. The alias is built FROM the
+# scenario's own slug (add the prefix) rather than by stripping a prefix off a
+# citation, because adding is unambiguous and stripping is not: a slug that
+# genuinely begins with the word "Scenario" would lose a real word.
+_GITHUB_SCENARIO_PREFIX = "scenario-"
+
+
+def github_anchor_ref(ref: str) -> str | None:
+    """The ``<spec>::<slug>`` spelling GitHub's heading anchor would produce.
+
+    ``things::foo-does-bar`` -> ``things::scenario-foo-does-bar``. Returns
+    ``None`` for anything that is not a ``<spec>::<slug>`` pair.
+    """
+    spec, sep, slug = ref.partition("::")
+    if not sep or not spec or not slug:
+        return None
+    return f"{spec}::{_GITHUB_SCENARIO_PREFIX}{slug}"
+
+
+def covering_ref(
+    ref: str,
+    refs: Container[str],
+    declared: Container[str] | None = None,
+) -> str | None:
+    """Which member of *refs* addresses the scenario *ref*, if any.
+
+    The exact ref wins outright; the GitHub spelling is only ever a FALLBACK,
+    consulted when the exact one is absent. That ordering is what makes this
+    purely additive: no scenario that was credited before can stop being
+    credited, because its exact ref is still tried first and still decides.
+
+    *declared* is the set of refs the specs under inspection actually declare.
+    It exists for one case: a scenario whose heading TEXT begins with the word
+    "Scenario" gets the Format A slug ``scenario-x``, which is also the GitHub
+    spelling of a sibling scenario slugged ``x``. An anchor written for the
+    former must not also credit the latter. When the fallback spelling is
+    itself a declared scenario, it belongs to that scenario and this one does
+    not get it. No such heading exists anywhere in the fleet today (searched
+    2026-09-11), which is why this is a guard and not a workaround.
+    """
+    if ref in refs:
+        return ref
+    alias = github_anchor_ref(ref)
+    if alias is None or alias == ref:
+        return None
+    if declared is not None and alias in declared:
+        return None
+    return alias if alias in refs else None
+
+
 def collect_covered_refs(app_dir: Path) -> set[str]:
     """Return the set of ``<spec>::<slug>`` refs found in any e2e test file.
 
@@ -2064,19 +2144,27 @@ def run_report(app_dir: Path) -> int:
     # reclassifying it would move a number nobody could reconcile against the
     # gate's own verdict; listing it lets the two be compared.
     thin: list[dict] = []
+    # Both spellings of a Format A slug address the same scenario; see
+    # `covering_ref`. The evidence maps are keyed by the ref the TEST wrote, so
+    # the class has to be read under the ref that actually did the covering —
+    # looking it up under the scenario's own ref would miss and fall back to
+    # EVIDENCE_BEHAVIOUR, quietly promoting every GitHub-spelled anchor to the
+    # strongest class it has.
+    declared_refs = {s["ref"] for s in all_scenarios}
     for s in all_scenarios:
+        hit = covering_ref(s["ref"], covered_refs, declared_refs)
         if s["excluded"] and not s["bare_exclude"]:
             totals["excluded"] += 1
-        elif s["ref"] in covered_refs:
+        elif hit is not None:
             totals["covered"] += 1
-            klass = evidence.get(s["ref"], EVIDENCE_BEHAVIOUR)
+            klass = evidence.get(hit, EVIDENCE_BEHAVIOUR)
             if klass != EVIDENCE_BEHAVIOUR:
                 totals["covered_thinly"] += 1
                 thin.append({
                     "ref": s["ref"], "spec": s["spec"],
                     "scenario": s["scenario"], "evidence": klass,
                 })
-            if evidence_loose.get(s["ref"], EVIDENCE_BEHAVIOUR) != EVIDENCE_BEHAVIOUR:
+            if evidence_loose.get(hit, EVIDENCE_BEHAVIOUR) != EVIDENCE_BEHAVIOUR:
                 totals["covered_thinly_max"] += 1
         else:
             totals["uncovered"] += 1
@@ -2189,6 +2277,10 @@ def run_gate(app_dir: Path) -> int:
         if not spec_md.is_file():
             continue
         scenarios = parse_spec_scenarios(spec_md)
+        # The refs this spec declares, so `covering_ref` can refuse to hand one
+        # scenario's anchor to another. Per spec file is enough: a ref carries
+        # its spec name, so two files can never contend for the same anchor.
+        declared_refs = {s["ref"] for s in scenarios}
         for s in scenarios:
             if s["excluded"] and not s["bare_exclude"]:
                 # Legitimately excluded — not required
@@ -2198,12 +2290,21 @@ def run_gate(app_dir: Path) -> int:
                 findings.append(
                     f"{s['ref']} — @e2e exclude without reason (reason required)"
                 )
-            elif s["ref"] in dead_refs:
+                continue
+            # ASKED BEFORE `dead_refs` ON PURPOSE. `collect_ref_status` keeps
+            # the two disjoint (a ref that goes live is popped from dead), so
+            # for an exact match this order is the same verdict as the old
+            # one. It differs only where one spelling of a scenario is live
+            # and the other is dead, and there the live one is the truth.
+            if covering_ref(s["ref"], covered_refs, declared_refs) is not None:
+                continue
+            dead_by = covering_ref(s["ref"], dead_refs, declared_refs)
+            if dead_by is not None:
                 # Named, but not by a running test. Saying "missing @e2e" here
                 # would send someone to add a tag that is already visible in
                 # the file, so the finding names the mechanism instead — and
                 # the two mechanisms need different remedies.
-                reason = dead_refs[s["ref"]]
+                reason = dead_refs[dead_by]
                 if reason.startswith("named only in PROSE"):
                     findings.append(
                         f"{s['ref']} — {reason}, or exclude the scenario with a "
@@ -2216,8 +2317,8 @@ def run_gate(app_dir: Path) -> int:
                         f"not coverage: unskip it, give it a body, or replace the tag "
                         f"with a reason-bearing `@e2e exclude`."
                     )
-            elif s["ref"] not in covered_refs:
-                findings.append(f"{s['ref']} — missing @e2e")
+                continue
+            findings.append(f"{s['ref']} — missing @e2e")
 
     for line in sorted(set(findings)):
         print(line)
