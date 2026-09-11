@@ -2699,5 +2699,83 @@ class GithubHeadingAnchorTest(unittest.TestCase):
         self.assertIn("the test does not run", out)
 
 
+# A scenario heading may carry an identifier between "Scenario" and the colon.
+# OpenSpec accepts the form; the gate used to require `Scenario:` verbatim and
+# so could not see these scenarios at all.
+ID_HEADING_SPEC = """# Mapping
+
+### Requirement: Base layers
+
+#### Scenario PDOK-01a: BRT Achtergrondkaart
+
+- GIVEN the map component is rendered
+- THEN the BRT layer is shown
+
+#### Scenario: Plain heading still works
+
+- GIVEN nothing unusual
+- THEN it is a scenario as before
+"""
+
+
+class ScenarioHeadingWithAnIdTest(unittest.TestCase):
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+        self.spec = _write(self.root, "openspec/specs/maps/spec.md", ID_HEADING_SPEC)
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def _refs(self):
+        path = self.root / "openspec/specs/maps/spec.md"
+        return {s["ref"] for s in cec.parse_spec_scenarios(path)}
+
+    def _gate(self):
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = cec.run_gate(self.root)
+        return rc, buf.getvalue()
+
+    def test_a_heading_with_an_id_is_a_scenario(self):
+        """THE BUG. It must be parsed at all, not just be uncovered."""
+        self.assertIn("maps::pdok-01a-brt-achtergrondkaart", self._refs())
+
+    def test_a_plain_heading_keeps_its_slug(self):
+        """THE CONTROL. No scenario the gate already saw changes its ref."""
+        self.assertIn("maps::plain-heading-still-works", self._refs())
+
+    def test_the_id_is_kept_in_the_slug(self):
+        """Dropping the id would make GitHub's anchor miss by exactly the id."""
+        self.assertNotIn("maps::brt-achtergrondkaart", self._refs())
+
+    def test_an_uncited_id_heading_is_reported_missing(self):
+        """Visible means REQUIRED: an uncovered one must now be a finding."""
+        _write(self.root, "tests/e2e/maps.spec.ts",
+               _runs("a", "maps::plain-heading-still-works"))
+        rc, out = self._gate()
+        self.assertIn("maps::pdok-01a-brt-achtergrondkaart", out)
+
+    def test_the_github_anchor_for_an_id_heading_credits(self):
+        """GitHub keeps the leading word AND the id: scenario-pdok-01a-...
+
+        Asserted in two halves on purpose. A pass on its own is vacuous here:
+        were the heading not parsed at all, there would be nothing to credit
+        and the gate would pass anyway. So the scenario is first shown to be
+        REQUIRED, and only then shown to be satisfied by the GitHub anchor.
+        """
+        _write(self.root, "tests/e2e/maps.spec.ts",
+               _runs("a", "maps::plain-heading-still-works"))
+        _rc, out = self._gate()
+        self.assertIn("maps::pdok-01a-brt-achtergrondkaart", out,
+                      "the id heading must be required before its credit means anything")
+
+        _write(self.root, "tests/e2e/maps.spec.ts",
+               _runs("a", "maps::plain-heading-still-works")
+               + _runs("b", "maps::scenario-pdok-01a-brt-achtergrondkaart"))
+        rc, out = self._gate()
+        self.assertEqual(rc, cec.EXIT_PASS, out)
+        self.assertNotIn("pdok-01a", out)
+
+
 if __name__ == "__main__":
     unittest.main()
