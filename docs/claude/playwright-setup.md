@@ -64,6 +64,7 @@ The names are stable; only where the processes come from changed. Hydra keeps tw
 An [example of the shared pool](./examples/browser-pool-shared.json.example) is in this repo. Load a pool for one terminal session:
 
 ```bash
+# the shared server must be running first — see "The shared server" below
 claude --mcp-config .claude/mcp/browser-pool-shared.json
 ```
 
@@ -77,7 +78,7 @@ scripts/playwright-mcp-server.sh install-service
 scripts/playwright-mcp-server.sh status
 ```
 
-`start` / `stop` / `restart` / `logs` / `uninstall-service` do what they say; `PLAYWRIGHT_MCP_PORT` changes the port (keep the pool file in sync). The unit pins the `npx` it finds at install time, because a user unit does not load nvm. The headed `browser-6` is deliberately not served by it: a systemd user unit has no WSLg display, and observation browsers are rare enough that a per-session stdio entry is fine.
+`start` / `stop` / `restart` / `logs` / `uninstall-service` do what they say; `PLAYWRIGHT_MCP_PORT` changes the port (keep the pool file in sync). The server resolves `@playwright/mcp@latest` once, when it starts, so a long-running unit keeps that build until you `restart` it — unlike the old per-session stdio model, where every new session re-resolved `@latest`. The unit pins the `npx` it finds at install time, because a user unit does not load nvm. The headed `browser-6` is deliberately not served by it: a systemd user unit has no WSLg display, and observation browsers are rare enough that a per-session stdio entry is fine.
 
 Two concurrent MCP sessions against one server were verified to get distinct session ids and separate Chromium processes, so the isolation the numbered browsers promise still holds.
 

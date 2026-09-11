@@ -284,7 +284,7 @@ Restart Claude Code or run `/hooks`. From then on your hooks fire alongside the 
 `settings.json` does not read an `mcpServers` key ([Claude Code docs](https://code.claude.com/docs/en/debug-your-config#check-common-causes)), so MCP servers are **not** part of the global settings. Versions up to 2.4.0 shipped a dead `mcpServers` block with 7 Playwright browsers; it never loaded anything and was removed in 2.4.1. Configure MCP servers at one of the two supported scopes instead:
 
 - **Project scope** — `.mcp.json` at the repository root, committed so the whole team gets the same servers. Hydra ships one with `browser-1` only; the seven-browser pool is opt-in under `.claude/mcp/` (shared server, URL entries). A workspace that symlinks Hydra's `.claude/skills` symlinks `.mcp.json` and `.claude/mcp` the same way. See [playwright-setup.md](playwright-setup.md).
-- **User scope** — `claude mcp add --scope user …`, stored in `~/.claude.json` and loaded in every project on your machine. See [playwright-setup.md → User scope](playwright-setup.md#user-scope-all-projects-on-this-machine).
+- **User scope** — `claude mcp add --scope user …`, stored in `~/.claude.json` and loaded in every project on your machine. See [playwright-setup.md → The pool in VS Code](playwright-setup.md#the-pool-in-vs-code).
 
 When both define the same server name, the project-scope entry wins.
 
