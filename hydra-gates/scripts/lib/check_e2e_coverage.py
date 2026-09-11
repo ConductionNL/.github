@@ -178,7 +178,26 @@ def _slugify(text: str) -> str:
 # ---------------------------------------------------------------------------
 
 # Headings — Format A (classic)
-_SCENARIO_RE = re.compile(r"^#{4}\s+Scenario:\s*(.+)", re.IGNORECASE)
+# 🔴 AN IDENTIFIER MAY SIT BETWEEN "Scenario" AND THE COLON, and OpenSpec's own
+# parser accepts it: `#### Scenario PDOK-01a: BRT Achtergrondkaart` is a
+# scenario to `openspec show --json` and passes `openspec validate --strict`.
+# This regex used to require `Scenario:` verbatim, so every such heading was
+# not merely uncovered but INVISIBLE: never required, never credited, never
+# counted. Measured 2026-09-11: 663 of dossiq's scenarios, 155 of pipelinq's
+# and 5 of shillinq's were outside the gate that way, and a spec written only
+# in that form reported zero findings while nothing in it was measured.
+#
+# The identifier is kept in the name, so the slug is `pdok-01a-brt-...`. That
+# is not a choice of taste: GitHub's anchor for the heading is
+# `scenario-pdok-01a-brt-...`, which `covering_ref` already accepts as the
+# GitHub spelling of exactly that slug. Dropping the identifier would make the
+# anchor a developer copies from the rendered page miss by the id.
+#
+# A plain `#### Scenario: x` matches with no identifier and slugs exactly as it
+# did before, so no scenario the gate already saw changes its ref.
+_SCENARIO_RE = re.compile(
+    r"^#{4}\s+Scenario(?:\s+(?P<id>[^:\n]*?))?\s*:\s*(?P<text>.+)", re.IGNORECASE
+)
 # Headings — any ### heading that may parent scenarios (Requirement: OR REQ-*: patterns)
 _REQUIREMENT_RE = re.compile(r"^#{3}\s+(?:Requirement:|REQ-[A-Z0-9_-]+:)\s*(.*)", re.IGNORECASE)
 _PURPOSE_RE = re.compile(r"^(#{1,2}\s+(?:Purpose|.*Specification))", re.IGNORECASE)
@@ -517,7 +536,9 @@ def parse_spec_scenarios(spec_path: Path) -> list[dict]:
             _flush_scenario_a()
             _flush_alt_item()
             in_alt_scenarios_block = False
-            current_scenario_a = scen_m.group(1).strip()
+            _sid = (scen_m.group("id") or "").strip()
+            _stext = scen_m.group("text").strip()
+            current_scenario_a = f"{_sid} {_stext}" if _sid else _stext
             in_scenario_a = True
             continue
 
