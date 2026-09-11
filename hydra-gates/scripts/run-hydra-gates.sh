@@ -2904,10 +2904,18 @@ if [ "${_idor_ran}" -eq 1 ]; then
     # gates 112 and 113 failed fourteen of twenty-one on inherited findings.
     #
     # MEASURED BEFORE MERGE, twenty core apps, 761 `lib/Controller` files:
-    # THREE findings. dossiq's `submitResult()` (the real one, a write IDOR
-    # open since 2026-08-11), and two in openregister
-    # `OrganisationController` that are correct code. So the population is
-    # small and hand-readable, and it is not yet clean.
+    # ONE finding, in launchpad, and it is a false positive (see below).
+    # dossiq's `submitResult()` is the real one, a write IDOR open since
+    # 2026-08-11, and it is counted separately because this rule is what found
+    # it. So the population is one line long and hand-readable, and it is not
+    # yet clean.
+    #
+    # An earlier draft scored THREE. The other two were openregister
+    # `OrganisationController::join()` and `::leave()`, both correct code, and
+    # reading them is what narrowed `_unenforceable_comparison_guard` to
+    # require "decides nothing" rather than accepting a presence test on its
+    # own. They are back to zero. Recorded because the narrowing is the part
+    # worth knowing, not the count.
     #
     # WHAT A TRIAGER SHOULD CHECK FIRST, because the measured false positive
     # has a recognisable shape: the comparison is REDUNDANT DEFENCE in front
