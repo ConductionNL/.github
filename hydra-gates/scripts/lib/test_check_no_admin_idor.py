@@ -3775,6 +3775,262 @@ class C extends Controller {
         )
 
 
+# ---------------------------------------------------------------------------
+# The REQUEST-SOURCED OBJECT GUARD (ConductionNL/dossiq#799)
+# ---------------------------------------------------------------------------
+#
+# A guard whose comparison value the caller supplies, and which therefore
+# cannot refuse anybody, is not a per-object guard. Both arms matter and the
+# NEGATIVE ones matter more: this rule sits in front of every clearing pattern
+# in the file, so a widening here reddens correct code across twenty apps.
+
+class RequestSourcedObjectGuardTest(unittest.TestCase):
+    """Positive controls — the shapes that must be FLAGGED."""
+
+    def test_the_dossiq_799_shape_is_flagged(self) -> None:
+        """The measured original, verbatim, including the admin wrapper.
+
+        `$assignedInspector` comes off the wire, is compared to the caller's
+        own uid, and is then passed to, read by and stored in nothing. There
+        is no input for which this throws.
+        """
+        src = """<?php
+class C extends Controller {
+    #[NoAdminRequired]
+    public function submitResult(string $id): JSONResponse {
+        $user = $this->userSession->getUser();
+        if ($user === null) {
+            throw new OCSForbiddenException('Not authenticated');
+        }
+        $params = $this->request->getParams();
+        if ($this->groupManager->isAdmin($user->getUID()) === false) {
+            $assignedUid = $params['assignedInspector'] ?? '';
+            if ($assignedUid !== '' && $assignedUid !== $user->getUID()) {
+                throw new OCSForbiddenException('Not authorized');
+            }
+        }
+        return new JSONResponse($this->service->submitResult($id, $params));
+    }
+}
+"""
+        found = _scan(src)
+        self.assertEqual(1, len(found), f"expected exactly one finding, got {found}")
+        self.assertIn("method=submitResult", found[0])
+        self.assertIn("rule=request-sourced-object-guard", found[0])
+
+    def test_the_admin_wrapper_alone_does_not_clear_it(self) -> None:
+        """`isAdmin(` anywhere in a body used to clear it via `_GUARD_BODY_RE`.
+
+        Blanking only the inner comparison left the wrapper's `isAdmin(`
+        behind and the method stayed green. This pins the wrapper demotion.
+        """
+        src = """<?php
+class C extends Controller {
+    #[NoAdminRequired]
+    public function purge(string $id): JSONResponse {
+        $user = $this->userSession->getUser();
+        $claimed = $this->request->getParam('ownerUid');
+        if ($this->groupManager->isAdmin($user->getUID()) === false) {
+            if ($claimed !== $user->getUID()) {
+                throw new OCSForbiddenException('no');
+            }
+        }
+        return new JSONResponse($this->store->delete($id));
+    }
+}
+"""
+        self.assertEqual(
+            1, len(_scan(src)),
+            "an isAdmin() branch whose only content is an unenforceable "
+            "comparison is the bypass half of a guard, not a guard",
+        )
+
+    def test_a_declared_parameter_used_as_an_identity_is_flagged(self) -> None:
+        """A controller method parameter is request input too."""
+        src = """<?php
+class C extends Controller {
+    #[NoAdminRequired]
+    public function remove(string $id, string $actorUid): JSONResponse {
+        $user = $this->userSession->getUser();
+        if ($actorUid !== $user->getUID()) {
+            throw new OCSForbiddenException('no');
+        }
+        return new JSONResponse($this->store->delete($id));
+    }
+}
+"""
+        self.assertEqual(1, len(_scan(src)))
+
+
+class RequestSourcedObjectGuardNegativeTest(unittest.TestCase):
+    """Negative controls — the CORRECT shapes that must stay green.
+
+    Every one of these is request-sourced in some sense. None of them is a
+    defect, and a rule that reddened any of them would be worse than the
+    blindness it replaces.
+    """
+
+    def test_stored_state_compared_against_the_caller_still_clears(self) -> None:
+        """The canonical correct guard.
+
+        `$id` is caller-supplied and `$doc` was fetched WITH it, but a value
+        that came out of a lookup is stored state. Taint must not propagate
+        through the call, or this shape reddens fleet-wide.
+        """
+        src = """<?php
+class C extends Controller {
+    #[NoAdminRequired]
+    public function show(string $id): JSONResponse {
+        $user = $this->userSession->getUser();
+        $doc = $this->mapper->find($id);
+        if ($doc->getOwner() !== $user->getUID()) {
+            throw new OCSForbiddenException('no');
+        }
+        return new JSONResponse($doc);
+    }
+}
+"""
+        self.assertEqual([], _scan(src))
+
+    def test_a_stored_value_in_a_bare_local_still_clears(self) -> None:
+        """PINS THE CALL-STOP, which the test above does not.
+
+        `$doc->getOwner()` is an untrackable expression, so that arm clears on
+        a second, independent clause (`_value_decides_nothing` fails closed on
+        anything it cannot name) and stays green even with taint propagation
+        broken. Here the stored value lands in a BARE LOCAL, which IS
+        trackable and IS used nowhere else, so only the call-stop keeps it
+        green. `$params` IS a request seed, so propagating taint through
+        `$this->cases->find($params['caseId'])` would make `$case` — and then
+        the bare `$assignee` — caller-supplied, and this reddens immediately.
+        """
+        src = """<?php
+class C extends Controller {
+    #[NoAdminRequired]
+    public function close(): JSONResponse {
+        $user = $this->userSession->getUser();
+        $params = $this->request->getParams();
+        $case = $this->cases->find($params['caseId']);
+        $assignee = $case['assignee'];
+        if ($assignee !== $user->getUID()) {
+            throw new OCSForbiddenException('no');
+        }
+        return new JSONResponse($this->cases->close($params['caseId']));
+    }
+}
+"""
+        self.assertEqual(
+            [], _scan(src),
+            "a value fetched from the store is stored state, however it is "
+            "spelled and whatever caller-supplied id was used to fetch it",
+        )
+
+    def test_a_caller_value_constrained_to_the_caller_still_clears(self) -> None:
+        """`$userId` IS the lookup key, and pinning it to the caller IS the scoping.
+
+        This is the shape that makes "compared against request input" alone
+        an unusable rule: it is request-sourced AND correct.
+        """
+        src = """<?php
+class C extends Controller {
+    #[NoAdminRequired]
+    public function prefs(string $userId): JSONResponse {
+        $user = $this->userSession->getUser();
+        if ($userId !== $user->getUID()) {
+            throw new OCSForbiddenException('no');
+        }
+        return new JSONResponse($this->prefs->loadFor($userId));
+    }
+}
+"""
+        self.assertEqual([], _scan(src))
+
+    def test_a_body_value_that_scopes_the_lookup_still_clears(self) -> None:
+        """Same shape, read off the body rather than the route."""
+        src = """<?php
+class C extends Controller {
+    #[NoAdminRequired]
+    public function mine(): JSONResponse {
+        $user = $this->userSession->getUser();
+        $owner = $this->request->getParam('owner');
+        if ($owner !== $user->getUID()) {
+            throw new OCSForbiddenException('no');
+        }
+        return new JSONResponse($this->store->listFor($owner));
+    }
+}
+"""
+        self.assertEqual([], _scan(src))
+
+    def test_an_admin_wrapper_around_a_real_guard_still_clears(self) -> None:
+        """The wrapper demotion must not eat a branch that really refuses."""
+        src = """<?php
+class C extends Controller {
+    #[NoAdminRequired]
+    public function edit(string $id): JSONResponse {
+        $user = $this->userSession->getUser();
+        $case = $this->cases->find($id);
+        if ($this->groupManager->isAdmin($user->getUID()) === false) {
+            if ($case['assignee'] !== $user->getUID()) {
+                throw new OCSForbiddenException('no');
+            }
+        }
+        return new JSONResponse($case);
+    }
+}
+"""
+        self.assertEqual([], _scan(src))
+
+    def test_a_value_the_callee_receives_still_clears(self) -> None:
+        """MEASURED on openregister `OrganisationController::join()`.
+
+        Omitting `userId` does skip the refusal, and that is harmless: the
+        service resolves `$targetUserId ?? $currentUser->getUID()`, so absent
+        means "me". A value the callee actually receives is a parameter, not
+        a decoration, and the gate cannot know what the callee makes of it.
+        This arm is why "decides nothing" is REQUIRED rather than one of two
+        alternative tells.
+        """
+        src = """<?php
+class C extends Controller {
+    #[NoAdminRequired]
+    public function join(string $uuid): JSONResponse {
+        $currentUser = $this->userSession->getUser();
+        $userId = $this->request->getParam('userId');
+        if ($userId !== null && $userId !== $currentUser->getUID()
+            && $this->canManageOrganisationMembers($uuid) === false
+        ) {
+            return new JSONResponse(['error' => 'nope'], 403);
+        }
+        return new JSONResponse($this->orgs->joinOrganisation($uuid, $userId));
+    }
+}
+"""
+        self.assertEqual(
+            [], _scan(src),
+            "a compared value that the callee receives must not be demoted",
+        )
+
+    def test_a_documented_exemption_still_wins(self) -> None:
+        """`@no-admin-idor-exempt <reason>` is read before this rule runs."""
+        src = """<?php
+class C extends Controller {
+    /**
+     * @NoAdminRequired
+     * @no-admin-idor-exempt availability probe, takes no object id
+     */
+    public function ping(string $actorUid): JSONResponse {
+        $user = $this->userSession->getUser();
+        if ($actorUid !== $user->getUID()) {
+            throw new OCSForbiddenException('no');
+        }
+        return new JSONResponse(['ok' => true]);
+    }
+}
+"""
+        self.assertEqual([], _scan(src))
+
+
 # Keep this block LAST in the file. `tests/run-helper-suites.sh` invokes this
 # suite as `python3 scripts/lib/test_check_no_admin_idor.py`, so `unittest.main()`
 # runs — and exits — at the point it is reached. A test class appended BELOW it
