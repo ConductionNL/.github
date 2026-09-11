@@ -7,10 +7,10 @@ _This is the **architecture reference** — see [Getting Started](./getting-star
 This workspace uses a spec-driven development workflow that combines:
 
 - **OpenSpec** — Structured specifications alongside code
-- **Tracking issues** on Codeberg / Gitea / Forgejo (primary, under the `Conduction` org as of 2026-05-29) or GitHub (secondary/fallback) — visual progress tracking via per-repo project boards or kanban
+- **Tracking issues** on GitHub (under the `ConductionNL` org) — visual progress tracking via per-repo project boards or kanban
 - **Spec verification** — Automated review of code against specifications
 
-**Platform note.** Conduction is migrating from `github.com/ConductionNL/*` to `codeberg.org/Conduction/*`. Skills and Hydra-pipeline scripts auto-detect the per-repo platform from `git remote get-url origin`; opsx-* skills create tracking issues on whichever host the target repo lives. The migration is bidirectional — every operation also supports GitHub fallback so the system can revert if needed.
+**Platform note.** All Conduction work lives under `github.com/ConductionNL/*`; the 2026-05-29 move to Codeberg was reversed (directive 2026-07-17, executed 2026-07-23). Skills and Hydra-pipeline scripts still auto-detect the per-repo platform from `git remote get-url origin` — GitHub first, GitLab for non-Conduction client work, Gitea/Forgejo only for a repo that genuinely lives on a Forgejo host. opsx-* skills create tracking issues on whichever host the target repo lives on.
 
 The key insight: **specs are written once, then broken into small JSON tasks** that each point back to a specific spec section. This means AI coding loops can work with minimal context (just the task + its spec ref) instead of loading entire spec documents.
 
@@ -64,7 +64,7 @@ apps-extra/                         # Workspace root
 
 ## The Full Flow
 
-> **Legacy app?** This flow assumes the app is spec-first — methods carry `@spec` tags that `/opsx-verify` walks at review time. Apps that predate the convention ([ADR-003](https://codeberg.org/Conduction/hydra/blob/main/openspec/architecture/adr-003-backend.md)) need a one-time retrofit pass before normal feature work. See the [Retrofit Playbook](retrofit.md).
+> **Legacy app?** This flow assumes the app is spec-first — methods carry `@spec` tags that `/opsx-verify` walks at review time. Apps that predate the convention ([ADR-003](https://github.com/ConductionNL/hydra/blob/main/openspec/architecture/adr-003-backend.md)) need a one-time retrofit pass before normal feature work. See the [Retrofit Playbook](retrofit.md).
 
 ### Phase 1: Spec Building
 
@@ -122,7 +122,7 @@ Once specs are reviewed and approved, convert them to trackable work items:
 This command:
 
 1. Parses `tasks.md` into structured JSON
-2. Creates a **tracking issue** (epic) on the per-repo platform (Codeberg primary, GitHub fallback, GitLab alternative) with a full task checklist
+2. Creates a **tracking issue** (epic) on the per-repo platform (GitHub primary, GitLab alternative, Forgejo only for non-Conduction repos) with a full task checklist
 3. Creates **individual issues** per task, each containing:
    - Task description
    - Acceptance criteria (from spec scenarios)
@@ -133,7 +133,7 @@ This command:
 
 **Why tracking issues?**
 
-- Visual kanban board (per-repo on Codeberg; Codeberg has no cross-repo board yet — see [Codeberg Community #694](https://codeberg.org/Codeberg/Community/issues/694))
+- Visual kanban board (per-repo, plus cross-repo boards via GitHub Projects v2)
 - Progress visible to the whole team
 - Each issue links back to specs for traceability
 - Can be managed independently of Claude sessions
@@ -167,7 +167,7 @@ Each iteration of the loop:
    - **Tests**: unit tests (PHPUnit), API tests (Newman/Postman), browser tests (Playwright MCP)
 4. **Runs tests** — unit tests, Newman tests, and browser verification MUST pass before marking complete
 5. **Updates progress** — marks task done in plan.json and tasks.md
-6. **Closes the tracking issue** — with a summary comment (Codeberg/GitHub/GitLab depending on the per-repo platform)
+6. **Closes the tracking issue** — with a summary comment (GitHub/GitLab/Forgejo depending on the per-repo platform)
 7. **Moves to the next task** — or stops if all done
 
 **Why this works:**
@@ -196,7 +196,7 @@ This command:
    - **WARNING** — Should fix (partial compliance)
    - **SUGGESTION** — Nice to have
 5. Generates `review.md` in the change directory
-6. Creates a tracking issue (on the per-repo platform — Codeberg primary, GitHub fallback) if CRITICAL/WARNING findings exist
+6. Creates a tracking issue (on the per-repo platform — GitHub primary, GitLab alternative) if CRITICAL/WARNING findings exist
 
 ### Phase 5: Archive
 
@@ -263,7 +263,7 @@ See [writing-specs.md](writing-specs.md) for the complete guide — RFC 2119 key
 | `/opsx-new <name>`     | Spec      | Start a new change                  |
 | `/opsx-ff`             | Spec      | Fast-forward all artifacts          |
 | `/opsx-continue`       | Spec      | Create next artifact                |
-| `/opsx-plan-to-issues` | Plan      | Tasks → JSON + tracking issues (per-repo platform — Codeberg primary, GitHub fallback) |
+| `/opsx-plan-to-issues` | Plan      | Tasks → JSON + tracking issues (per-repo platform — GitHub primary, GitLab alternative) |
 | `/opsx-apply`          | Implement | Implement tasks from plan.json      |
 | `/opsx-verify`         | Review    | Verify implementation against specs |
 | `/opsx-archive`        | Archive   | Complete and preserve change        |
@@ -300,7 +300,7 @@ Specialist agents representing different roles on the development team. Useful f
 - **Keep tasks small**: Each task should be completable in one focused iteration (15-30 min of work)
 - **Use shared specs**: Reference cross-project specs in your delta specs to avoid reinventing patterns
 - **Trust the JSON**: The plan.json is your source of truth during implementation — it survives context window resets
-- **The tracking issue is your dashboard**: Use the per-repo project board (Codeberg primary, GitHub Projects on legacy repos) to visualize progress across multiple changes and projects. Codeberg has no cross-repo board yet — per-repo only.
+- **The tracking issue is your dashboard**: Use the per-repo project board, or a cross-repo GitHub Projects v2 board, to visualize progress across multiple changes and projects.
 
 ## Post-fix-commit gate verification (fix mode)
 

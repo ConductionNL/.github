@@ -3387,7 +3387,19 @@ jobs:
           # install cost. Making it conditional would mean a mysql leg silently
           # falling back to the else-branch of the install below and testing
           # sqlite while its name said mysql.
-          extensions: mbstring, intl, sqlite3, pgsql, pdo_pgsql, mysqli, pdo_mysql, zip, gd, curl, xml, json
+          #
+          # xdebug-3.5.3 IS A PIN, NOT CLUTTER. `coverage: xdebug` alone enables
+          # whatever Xdebug the packaged PHP carries, and between 2026-09-09 and
+          # 2026-09-10 that became Xdebug 3.6.0alpha1 on both PHP 8.3 and 8.4
+          # (PECL's newest release is still 3.5.3). The openregister suite went
+          # from ~3.5 min to ~39.6 min under it (about 12x: jobs 102466575014
+          # vs 102811468997), so every PHPUnit leg hit the 45-minute cap and
+          # was cancelled. setup-php runs `extensions` before `coverage`, so
+          # this builds 3.5.3 from PECL first and `coverage: xdebug` then finds
+          # it loaded and keeps it.
+          # Lift the pin only once Xdebug 3.6 is STABLE and a PHPUnit leg has
+          # been measured to be no slower under it than under 3.5.3.
+          extensions: mbstring, intl, sqlite3, pgsql, pdo_pgsql, mysqli, pdo_mysql, zip, gd, curl, xml, json, xdebug-3.5.3
           coverage: xdebug
           tools: composer:v2
 

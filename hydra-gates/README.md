@@ -148,9 +148,29 @@ gap, not a pass — see *Reading a green*.
 
 ## The shipped OpenRegister contracts are opt-in, not autoloaded
 
-`hydra-gates/contracts/` ships `ObjectServiceInterface` and
-`ObjectEntityInterface` so a leaf app can typehint OpenRegister's data-access
-surface under PHPUnit without the OpenRegister app installed.
+`hydra-gates/contracts/` ships OpenRegister's published contract, so a leaf app
+can typehint it under PHPUnit without the OpenRegister app installed:
+
+| File | Kind | What it is |
+|---|---|---|
+| `ObjectServiceInterface.php` | interface | the data-access surface |
+| `ObjectEntityInterface.php` | interface | the object a read returns |
+| `RegisterSlugResolverInterface.php` | interface | finds the slug a register answers to on this instance |
+| `RegisterSlugResolution.php` | **final class** | the value `resolve()` returns |
+
+Each file is a byte-for-byte copy of the same file in openregister's
+`lib/Contract/`. No namespace rewrite, no header, no index. Gate 67 fails the
+build when the two directories differ in any byte, or when a file is in one and
+not the other.
+
+**Adding a file to openregister's `lib/Contract/` takes a release here too.**
+Copy it into `contracts/` unmodified and cut a hydra-gates release. Then bump
+openregister's `composer.lock` to that release. Gate 67 prefers the consumer's
+own `vendor/` copy over the one beside the runner. CI never runs `composer
+install` for the gates, so CI goes green as soon as this repo ships the file. A
+local checkout with an older release in `vendor/` keeps reporting it as "NOT
+shipped" until the lock moves. `RegisterSlugResolution` and `RegisterSlugResolverInterface`
+landed in openregister#3571, here in #739, and first shipped in v1.18.0.
 
 They are **not** autoloaded. This package used to declare
 
@@ -166,12 +186,13 @@ process**. Measured on a real instance: softwarecatalog's vendored copy was
 supplying openregister's own interface, and a v1.8.0 copy without
 `patchObject()` broke callers of the real one (ConductionNL/.github#531).
 
-A consumer that needs these interfaces requires them from its own test
+A consumer that needs these contracts requires them from its own test
 bootstrap, behind a guard:
 
 ```php
-foreach (['ObjectEntityInterface', 'ObjectServiceInterface'] as $contract) {
-	if (interface_exists('\\OCA\\OpenRegister\\Contract\\' . $contract) === false) {
+foreach (['ObjectEntityInterface', 'ObjectServiceInterface', 'RegisterSlugResolution', 'RegisterSlugResolverInterface'] as $contract) {
+	$fqcn = '\\OCA\\OpenRegister\\Contract\\' . $contract;
+	if (interface_exists($fqcn) === false && class_exists($fqcn) === false) {
 		$shipped = __DIR__ . '/../vendor/conduction/hydra-gates/hydra-gates/contracts/' . $contract . '.php';
 		if (file_exists($shipped) === true) {
 			require_once $shipped;
@@ -179,6 +200,14 @@ foreach (['ObjectEntityInterface', 'ObjectServiceInterface'] as $contract) {
 	}
 }
 ```
+
+**Keep the `class_exists()` half.** `RegisterSlugResolution` is a class, and
+`interface_exists()` is always false for a class. With that check alone, the
+guard requires the shipped copy even when OpenRegister already loaded the real
+one. PHP then fatals with `Cannot declare class
+OCA\OpenRegister\Contract\RegisterSlugResolution, because the name is already
+in use`. That only happens where OpenRegister is installed, so a unit run
+without it stays green and hides the bug.
 
 Put it **before** anything that implements the interface — a stub entity that
 `implements \OCA\OpenRegister\Contract\ObjectEntityInterface` fatals inside the
@@ -188,7 +217,7 @@ in the bootstrap `phpunit.xml` actually loads: several apps ship two or three.
 `interface_exists()` rather than a fallback autoloader, because
 `spl_autoload_register` appends relative to *registration order*, and
 registration order across independently loaded apps is exactly the thing nobody
-controls. Asking whether the interface is resolvable is order-independent.
+controls. Asking whether the contract is resolvable is order-independent.
 
 ### The bootstrap is not enough if your `lib/` typehints the contract
 
@@ -209,6 +238,8 @@ the autoloader is precisely the defect this change removed.
 <stubs>
     <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/ObjectServiceInterface.php" />
     <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/ObjectEntityInterface.php" />
+    <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/RegisterSlugResolverInterface.php" />
+    <file name="vendor/conduction/hydra-gates/hydra-gates/contracts/RegisterSlugResolution.php" />
 </stubs>
 ```
 
@@ -235,7 +266,7 @@ went red on adoption. Check `lib/`, not just `tests/`.
 autoloader, not by a test bootstrap. They exist so psalm and phpstan can resolve
 a sibling Nextcloud app's classes, and nothing else reads them.
 
-That is why they are not in `contracts/`. The two contract interfaces above are
+That is why they are not in `contracts/`. The contract files above are
 `require`d for real by a leaf app's PHPUnit bootstrap, and the section above
 tells apps to point phpstan's `scanDirectories` at the whole `contracts/`
 directory. A file that must never be loaded does not belong in a directory apps
