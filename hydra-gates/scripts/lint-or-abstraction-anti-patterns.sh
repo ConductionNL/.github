@@ -31,11 +31,13 @@
 #
 # THE ADR-022 EXCEPTION CLAUSE APPLIES TO EVERY RULE HERE, not only to the
 # capability table. An app-local ADR under openspec/architecture/ that
-# references ADR-022 and names the affected path suppresses the finding for
-# exactly that path; the suppression is printed with the ADR that bought it;
+# references ADR-022, names the affected path AND names the rules it covers
+# (a `Gate 23 rules:` line) suppresses the finding for exactly that path under
+# exactly those rules; the suppression is printed with the ADR that bought it;
 # an ADR with no sunset date is printed as a warning; an ADR whose sunset has
-# passed stops suppressing. Rules 2 to 6 gained this on 2026-09-11 — the
-# block above rule 2 says why, and what leaving it out cost.
+# passed stops suppressing. Rules 2 to 6 gained this on 2026-09-11, and the
+# same day it became per (file, rule) instead of per file. The block above
+# rule 2 says why, and what leaving each half out cost.
 #
 # Run from a Conduction app repo root:
 #   bash hydra/scripts/lint-or-abstraction-anti-patterns.sh
@@ -340,9 +342,151 @@ fi
 # already reported, so no repository can newly fail because of it. The
 # expired-sunset arm is the single ratchet, and on the day this landed no ADR
 # in the fleet carried a sunset date at all, so it fired for nobody.
+#
+# SUPPRESSION IS PER (FILE, RULE), NOT PER FILE.
+#
+# The first cut of the above (ConductionNL/.github#755) matched on path alone,
+# across every rule at once. So an ADR written to excuse a file under ONE rule
+# silenced that file under every OTHER rule too. The worked example is the one
+# that mattered most: dossiq ADR-004 covers lib/Service/TenantAuditTrailService.php
+# for rule 4 (a correct OpenRegister consumer flagged on its Tenant* name), and
+# that also hid the file's rule-7 `search_path` hit. That hit is the evidence
+# for dossiq#2470: the class's hardening checklist cites a search_path
+# middleware as tenant-isolation evidence, and the schema it switches to is
+# never created. The suppression printed, so nothing vanished outright. But a
+# finding a reader has to go looking for in a suppression list is a finding
+# that gets ignored.
+#
+# #755 had a second blast radius nobody measured. ANY ADR under
+# openspec/architecture/ that mentions ADR-022 counts as an exception ADR, and
+# ANY path-shaped token in it counts as a covered path, directories included.
+# Measured on development 2026-09-11: keepiq's secrets ADR says `lib/Service/`
+# in prose, which suppressed five audit-trail classes and an authorization
+# service; hermiq's agent-boundary ADR did the same for three Tenant*
+# services; shillinq's data-model ADR for an audit-trail guard. None of those
+# ADRs was written as a gate-23 exception, and none could have been: rules 2
+# to 6 had no exception path until that morning.
+#
+# THE GRAMMAR. It extends the two conventions #755 reads, the path tokens and
+# the `Sunset:` line, and adds one keyword-anchored line of the same shape:
+#
+#   ADR-wide, as a metadata bullet beside `- **Sunset:**`:
+#       - **Gate 23 rules:** 4, 7
+#   Per path, after the path on the same line:
+#       - `lib/Service/TenantAuditTrailService.php` (gate 23 rules: 4)
+#
+# A rule is named by its number in this file (2 to 7) or by the key the gate
+# prints (`consume-or-tenant-fleet-wide`, `or-capability:tenant-boundary`).
+# `7` covers every capability row; `or-capability:<row>` covers that row only.
+# A per-path list REPLACES the ADR-wide one for that path, everywhere in the
+# ADR: repeating the path in prose further down does not widen it. Once an ADR
+# declares rules anywhere, a path it mentions without a rule list is covered
+# for the ADR-wide rules only, and for nothing if it has none.
+#
+# AN ADR THAT NAMES NO RULES is read as covering RULE 7 ONLY, and says so on
+# every suppression. Rule 7 is the only rule that honoured an exception ADR
+# before 2026-09-11, so it is the only rule an ADR written without this grammar
+# can have been written against. That makes the fallback exactly the gate's
+# behaviour before #755: no repository can fail on it that did not already,
+# and nothing #755 accidentally hid under rules 2 to 6 stays hidden. When a
+# rule-less ADR names a path that is still counted under rules 2 to 6, the
+# gate prints which ADR and which token, so the author can add the line.
+#
+# Direction of travel: this TIGHTENS. Findings #755 hid come back. Measured on
+# all 21 core apps before it merged; see the PR for the per-repo table.
 # ---------------------------------------------------------------------------
 
-# One record per (path token, ADR): "<token>|<adr path>|<none|YYYY-MM-DD|expired:YYYY-MM-DD>"
+# One record per (path token, ADR), five fields:
+#
+#   <token>|<adr path>|<none|YYYY-MM-DD|expired:YYYY-MM-DD>|<rules>|<source>
+#
+# <rules> is a space-padded set, " 4 7 " or " 4 or-capability:tenant-boundary ",
+# so membership is a plain `case` glob. <source> says where the set came from:
+#   path    a per-path `(gate 23 rules: ...)` on the line naming the path
+#   adr     the ADR-wide `Gate 23 rules:` line
+#   legacy  the ADR names no rules anywhere, so it is read as " 7 "
+#
+# The parse is one awk pass per ADR, not a shell loop per line: shillinq's
+# data-model ADR alone is 8,600 lines. Only POSIX awk is used (match, substr,
+# split, gsub, tolower), because the CI runner's awk is mawk.
+#
+# The path token regex is #755's, unchanged, so every path that was a candidate
+# before is a candidate now. What changed is which RULES each one buys.
+# shellcheck disable=SC2016  # the awk program is single-quoted on purpose
+_EXCEPTION_AWK='
+function ruleset(s,    n, i, w, out, words) {
+    out = ""
+    n = split(s, words, /[ \t,;&]+/)
+    for (i = 1; i <= n; i++) {
+        w = words[i]
+        gsub(/^[(]+/, "", w)
+        gsub(/[).:]+$/, "", w)
+        if (w == "" || w == "and" || w == "rule" || w == "rules") continue
+        if (w ~ /^[0-9]+$/ || w ~ /^consume-or-[a-z-]+-fleet-wide$/ || w ~ /^or-capability:[a-z0-9-]+$/) {
+            out = out " " w
+            continue
+        }
+        # The list ends at the first word that is not a rule, so prose after
+        # it ("4 (the name rule). Rule 7 stays counted") cannot add a rule.
+        break
+    }
+    return out
+}
+{
+    line = $0
+    gsub(/\r/, "", line)
+    # Emphasis and code marks become spaces, not nothing, so a position in
+    # `plain` is the same position in `line`.
+    plain = tolower(line)
+    gsub(/[*`_]/, " ", plain)
+
+    ntok = 0
+    rest = line
+    off = 0
+    while (match(rest, /[A-Za-z0-9_.-]+(\/[A-Za-z0-9_.*-]+)+\/?/)) {
+        ntok++
+        tok[ntok] = substr(rest, RSTART, RLENGTH)
+        tpos[ntok] = off + RSTART
+        off += RSTART + RLENGTH - 1
+        rest = substr(rest, RSTART + RLENGTH)
+    }
+
+    # ADR-wide: the line OPENS with the keyword, after any list or quote mark.
+    # Anchored on purpose: "gate 23, rules 2, 4 and 7" in a References line is
+    # prose and must not declare anything.
+    if (match(plain, /^[ \t>+-]*gate[ -]*23 +rules? *:/)) {
+        declared = 1
+        adrwide = adrwide ruleset(substr(plain, RSTART + RLENGTH))
+        next
+    }
+
+    # Per path: the keyword FOLLOWS a path on the same line, and the list
+    # applies to the paths before it.
+    m = 0
+    rs = ""
+    if (match(plain, /gate[ -]*23 +rules? *:/)) {
+        m = RSTART
+        rs = ruleset(substr(plain, RSTART + RLENGTH))
+    }
+    for (i = 1; i <= ntok; i++) {
+        if (m > 0 && tpos[i] < m) {
+            declared = 1
+            annotated[tok[i]] = annotated[tok[i]] rs
+        } else {
+            plaintok[tok[i]] = 1
+        }
+    }
+}
+END {
+    for (t in annotated) print t "|" adr "|" state "|" annotated[t] " |path"
+    for (t in plaintok) {
+        if (t in annotated) continue
+        if (declared) print t "|" adr "|" state "|" adrwide " |adr"
+        else print t "|" adr "|" state "| 7 |legacy"
+    }
+}
+'
+
 EXCEPTION_RECORDS=""
 if [ -d openspec/architecture ]; then
     _exception_adrs="$(grep -rl 'ADR-022' openspec/architecture --include='*.md' 2>/dev/null || true)"
@@ -361,37 +505,71 @@ if [ -d openspec/architecture ]; then
                 _state="${_sunset}"
             fi
         fi
-        _adr_paths="$(grep -oE '[A-Za-z0-9_.-]+(/[A-Za-z0-9_.*-]+)+/?' "${_adr}" 2>/dev/null || true)"
-        while IFS= read -r _adr_tok; do
-            [ -z "${_adr_tok}" ] && continue
-            EXCEPTION_RECORDS="${EXCEPTION_RECORDS}${_adr_tok}|${_adr}|${_state}"$'\n'
-        done <<< "${_adr_paths}"
+        # A parse that fails must say so. An empty record set suppresses
+        # nothing, which fails closed, but a reader should not have to work
+        # out why an exception they wrote stopped counting.
+        if ! _adr_recs="$(awk -v adr="${_adr}" -v state="${_state}" "${_EXCEPTION_AWK}" "${_adr}")"; then
+            echo "  ⚠️  could not parse exception ADR ${_adr}; it suppresses nothing this run."
+            continue
+        fi
+        EXCEPTION_RECORDS="${EXCEPTION_RECORDS}${_adr_recs}"$'\n'
     done <<< "${_exception_adrs}"
     EXCEPTION_RECORDS="$(printf '%s' "${EXCEPTION_RECORDS}" | sort -u)"
 fi
 
-# Return 0 (suppressed) when the exception ADRs name the finding's exact file
+# The names a finding answers to in an ADR's rule list: its number in this
+# file, and the key the gate prints for it. A rule-7 finding also answers to
+# its own capability row, so an ADR can cover `or-capability:tenant-boundary`
+# without covering `or-capability:mdm-surface` on the same file.
+_rule_aliases() {  # <rule-key> -> " <n> <key> "
+    case "$1" in
+        consume-or-audit-trail-fleet-wide)       printf ' 2 %s ' "$1" ;;
+        consume-or-approval-workflow-fleet-wide) printf ' 3 %s ' "$1" ;;
+        consume-or-tenant-fleet-wide)            printf ' 4 %s ' "$1" ;;
+        consume-or-workflow-engine-fleet-wide)   printf ' 5 %s ' "$1" ;;
+        consume-or-rbac-fleet-wide)              printf ' 6 %s ' "$1" ;;
+        # "or-capability:avg-dsar-workflow (ADR-047)" answers to the key
+        # without its parenthetical.
+        or-capability:*)                         printf ' 7 %s ' "${1%% (*}" ;;
+        *)                                       printf ' %s ' "$1" ;;
+    esac
+}
+
+_rules_cover() {  # <rule set> <aliases> -> 0 when any alias is in the set
+    for _rc_alias in $2; do
+        case "$1" in
+            *" ${_rc_alias} "*) return 0 ;;
+        esac
+    done
+    return 1
+}
+
+# Return 0 (suppressed) when an exception ADR names the finding's exact file
 # path, or a directory the finding lives under (true prefix match on whole
 # path segments — naming lib/Service/Avg/ never suppresses a sibling like
-# lib/Service/Mdm/, and a bare word in prose never suppresses). Sets
-# _SUPP_ADR and _SUPP_SUNSET on a hit; sets _SUPP_EXPIRED, and returns 1, when
-# the only ADR naming the path has run out of time.
+# lib/Service/Mdm/, and a bare word in prose never suppresses), AND that ADR
+# covers the finding's RULE for that path. Sets _SUPP_ADR, _SUPP_SUNSET and
+# _SUPP_SOURCE on a hit. Returns 1 otherwise, and says why: _SUPP_EXPIRED when
+# an ADR covering this rule has run out of time, _SUPP_UNCOVERED (one line
+# per ADR) when an ADR names the path but not this rule.
 _SUPP_ADR=""
 _SUPP_SUNSET=""
+_SUPP_SOURCE=""
 _SUPP_EXPIRED=""
-_cap_suppressed() {
+_SUPP_UNCOVERED=""
+_cap_suppressed() {  # <path> <rule-key>
     _p="$1"
+    _x_aliases="$(_rule_aliases "$2")"
     _SUPP_ADR=""
     _SUPP_SUNSET=""
+    _SUPP_SOURCE=""
     _SUPP_EXPIRED=""
+    _SUPP_UNCOVERED=""
     [ -z "${EXCEPTION_RECORDS}" ] && return 1
     while IFS= read -r _rec; do
         [ -z "${_rec}" ] && continue
-        _x_tok="${_rec%%|*}"
-        _x_rest="${_rec#*|}"
-        _x_adr="${_x_rest%%|*}"
-        _x_state="${_x_rest#*|}"
-        _x_tok="${_x_tok%/\*}"    # lib/Service/Avg/* → lib/Service/Avg
+        IFS='|' read -r _x_raw _x_adr _x_state _x_rules _x_src <<< "${_rec}"
+        _x_tok="${_x_raw%/\*}"    # lib/Service/Avg/* → lib/Service/Avg
         _x_tok="${_x_tok%/}"      # lib/Service/Avg/ → lib/Service/Avg
         [ -z "${_x_tok}" ] && continue
         _x_hit=1
@@ -400,6 +578,13 @@ _cap_suppressed() {
             "${_x_tok}"/*) _x_hit=0 ;;
         esac
         [ "${_x_hit}" -eq 0 ] || continue
+        if ! _rules_cover "${_x_rules}" "${_x_aliases}"; then
+            case $'\n'"${_SUPP_UNCOVERED}" in
+                *$'\n'"${_x_adr}|"*) ;;
+                *) _SUPP_UNCOVERED="${_SUPP_UNCOVERED}${_x_adr}|${_x_raw}|${_x_rules}|${_x_src}"$'\n' ;;
+            esac
+            continue
+        fi
         case "${_x_state}" in
             expired:*)
                 _SUPP_EXPIRED="${_x_adr} (sunset ${_x_state#expired:})"
@@ -408,6 +593,7 @@ _cap_suppressed() {
         esac
         _SUPP_ADR="${_x_adr}"
         _SUPP_SUNSET="${_x_state}"
+        _SUPP_SOURCE="${_x_src}"
         return 0
     done <<< "${EXCEPTION_RECORDS}"
     return 1
@@ -416,18 +602,37 @@ _cap_suppressed() {
 # Print the exception verdict for one file. Returns 0 when the file SURVIVES
 # (still a finding), 1 when it was suppressed. Every outcome prints.
 _report_exception() {  # <rule-key> <path>
-    if _cap_suppressed "$2"; then
+    if _cap_suppressed "$2" "$1"; then
         echo "  ℹ️  [$1] suppressed by app-local exception ADR (ADR-022 exception clause): $2"
         if [ "${_SUPP_SUNSET}" = "none" ]; then
             echo "      ⚠️  ${_SUPP_ADR} names NO sunset date. An exception with no end date is a permanent one; add a 'Sunset: YYYY-MM-DD' line."
         else
             echo "      by ${_SUPP_ADR}, sunset ${_SUPP_SUNSET}"
         fi
+        if [ "${_SUPP_SOURCE}" = "legacy" ]; then
+            echo "      ⚠️  ${_SUPP_ADR} names no gate 23 rules, so it is read as covering rule 7 only, the one rule an exception ADR could suppress before 2026-09-11. Add a 'Gate 23 rules:' line naming the rules it covers."
+        fi
         return 1
     fi
     if [ -n "${_SUPP_EXPIRED}" ]; then
         echo "  ⌛ [$1] the exception ADR naming this path has EXPIRED, so it counts again: $2"
         echo "      ${_SUPP_EXPIRED}"
+    fi
+    # An ADR that names the path but not this rule. Printed next to the
+    # finding, so the reader sees the exception was considered and does not
+    # reach this rule, instead of inferring it from a suppression list.
+    if [ -n "${_SUPP_UNCOVERED}" ]; then
+        while IFS='|' read -r _u_adr _u_tok _u_rules _u_src; do
+            [ -z "${_u_adr}" ] && continue
+            if [ "${_u_src}" = "legacy" ]; then
+                echo "  ℹ️  [$1] still counted: $2 is named by ${_u_adr} (as ${_u_tok}), which names no gate 23 rules and is read as covering rule 7 only."
+            else
+                _u_list="${_u_rules# }"
+                _u_list="${_u_list% }"
+                _u_list="${_u_list// /, }"
+                echo "  ℹ️  [$1] still counted: $2 is named by ${_u_adr} (as ${_u_tok}), which covers it for rules: ${_u_list:-none}. Not this one."
+            fi
+        done <<< "${_SUPP_UNCOVERED}"
     fi
     return 0
 }
@@ -530,9 +735,13 @@ fi  # IS_OR == 0
 # older umbrella epoch above.
 #
 # Exception path (ADR-022 exception clause): an app-local ADR under
-# openspec/architecture/ that references ADR-022 and literally names the
-# affected file path (or its directory) suppresses the finding for exactly
-# those paths. Suppressions are printed as info lines so reviewers see them.
+# openspec/architecture/ that references ADR-022, literally names the
+# affected file path (or its directory) and covers rule 7 for it suppresses
+# the finding for exactly those paths. `7` covers every row below;
+# `or-capability:<key>` covers the rows sharing that key, so the two
+# tenant-boundary rows (the middleware name and the search_path grep) are
+# covered together or not at all. An ADR naming no rules is read as rule 7
+# only. Suppressions are printed as info lines so reviewers see them.
 # ---------------------------------------------------------------------------
 CAP_BLOCK_AFTER_EPOCH="${HYDRA_OR_CAPABILITY_GATE_BLOCK_AFTER_EPOCH:-1790985600}"  # 2026-10-03 00:00 UTC
 CAP_MODE=0
@@ -557,8 +766,9 @@ OR_CAPABILITY_RULES=(
 # The exception-ADR index (EXCEPTION_RECORDS) and `_cap_suppressed()` USED TO
 # BE DEFINED HERE, immediately above the only loop that called them. That
 # placement is why rules 2 to 6 had no exception path: they run earlier in the
-# file. Both now live above rule 2 and serve every rule, unchanged in
-# behaviour for this one apart from naming the ADR in the printed line.
+# file. Both now live above rule 2 and serve every rule. For this rule the
+# behaviour of an ADR without a `Gate 23 rules:` line is unchanged: it still
+# covers rule 7, and is now told on every run to say so explicitly.
 
 CAP_FOUND_ANY=0
 flag_capability() {
