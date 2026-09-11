@@ -2895,8 +2895,71 @@ if [ "${#_idor_files[@]}" -gt 0 ]; then
 fi
 if [ "${_idor_ran}" -eq 1 ]; then
     _filter_preexisting "${_idor_log}"
+    # ---- dossiq#799: `request-sourced-object-guard` is WARN-FIRST ----------
+    #
+    # A NEW RULE SHIPS AS A WARNING. All twenty-one core apps set
+    # `enable-hydra-gates: true` and resolve this package at `@main`, so a
+    # blocking rule merged here is blocking in every repo the same minute,
+    # against debt none of those repos have had a chance to read. That is how
+    # gates 112 and 113 failed fourteen of twenty-one on inherited findings.
+    #
+    # MEASURED BEFORE MERGE, twenty core apps, 761 `lib/Controller` files:
+    # THREE findings. dossiq's `submitResult()` (the real one, a write IDOR
+    # open since 2026-08-11), and two in openregister
+    # `OrganisationController` that are correct code. So the population is
+    # small and hand-readable, and it is not yet clean.
+    #
+    # WHAT A TRIAGER SHOULD CHECK FIRST, because the measured false positive
+    # has a recognisable shape: the comparison is REDUNDANT DEFENCE in front
+    # of a sink that already takes the session identity —
+    #
+    #     $bodyUserId = $this->request->getParam('userId');
+    #     if ($bodyUserId !== null && (string)$bodyUserId !== $this->userId) { 403 }
+    #     $this->service->acknowledge(userId: $this->userId);   // <- session
+    #
+    # The compared value really does decide nothing, which is what the rule
+    # says; it decides nothing because the endpoint is structurally scoped to
+    # the caller anyway. That is dead code, not a hole. The rule is right
+    # about the comparison and wrong about the risk, and it cannot tell the
+    # two apart without knowing which object the write targets.
+    #
+    # Set HYDRA_GATE_IDOR_REQUEST_SOURCED_BLOCKING=1 in a repo to make it
+    # block there once that repo's population is worked down.
+    _idor_rsg_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-no-admin-idor-request-sourced.log
+    : > "${_idor_rsg_log}"
+    _idor_rsg=0
+    if [ "${HYDRA_GATE_IDOR_REQUEST_SOURCED_BLOCKING:-0}" != "1" ]; then
+        grep 'rule=request-sourced-object-guard' "${_idor_log}" \
+            >> "${_idor_rsg_log}" 2>/dev/null || true
+        _idor_rsg=$(wc -l < "${_idor_rsg_log}" 2>/dev/null || echo 0)
+        if [ "${_idor_rsg}" -gt 0 ]; then
+            # Remove them from the BLOCKING log. `grep -v` exits 1 when it
+            # matches nothing, which is a normal outcome here, so the || true
+            # is load-bearing rather than defensive noise.
+            grep -v 'rule=request-sourced-object-guard' "${_idor_log}" \
+                > "${_idor_log}.blocking" 2>/dev/null || true
+            mv "${_idor_log}.blocking" "${_idor_log}"
+        fi
+    fi
     _idor_fail=$(wc -l < "${_idor_log}" 2>/dev/null || echo 0)
-    if [ "${_idor_fail}" -eq 0 ]; then
+    # ONE VERDICT LINE PER GATE (.github#729), so the advisory is an `elif`
+    # and not an extra line. `_warn` and `_pass` BOTH append to
+    # `_EMITTED_GATES`, and the coverage summary counts that list with
+    # `grep -c .` WITHOUT deduplicating — printing both would make the run
+    # claim one more gate than it executed AND give every `head -1` reader two
+    # verdicts to choose between. The detail lines below are INDENTED, so they
+    # cannot be mistaken for a verdict by the shape the readers match on.
+    if [ "${_idor_fail}" -gt 0 ] && [ "${_idor_rsg}" -gt 0 ]; then
+        # A blocking finding wins the verdict; the advisory still has to be
+        # visible. `[gate-N] NOTE:` is the prefix every verdict reader in this
+        # package explicitly skips.
+        echo "[gate-7] NOTE: ${_idor_rsg} additional method(s) matched the advisory request-sourced-object-guard rule (non-blocking) — see ${_idor_rsg_log}"
+        sed 's/^/  /' "${_idor_rsg_log}" || true
+    fi
+    if [ "${_idor_fail}" -eq 0 ] && [ "${_idor_rsg}" -gt 0 ]; then
+        _warn 7 "no-admin-idor" "${_idor_rsg} method(s) whose per-object guard compares the caller against a value the CALLER SUPPLIED, and which therefore cannot refuse (advisory, non-blocking — dossiq#799) — see ${_idor_rsg_log}. The fix is to derive the comparison from STORED state: load the object and compare the acting uid against what is recorded on it. Adding a second request-sourced check is not the fix. Before treating one as real, check whether the write is already scoped to the caller by a session identity handed into the sink — if it is, the comparison is dead code rather than a hole."
+        sed 's/^/  /' "${_idor_rsg_log}" || true
+    elif [ "${_idor_fail}" -eq 0 ]; then
         _pass 7 "no-admin-idor"
     else
         # THE GUARD MAY BE TWO FRAMES DOWN (.github#315). The checker can only

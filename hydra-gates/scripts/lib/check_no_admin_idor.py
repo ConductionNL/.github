@@ -1236,6 +1236,391 @@ def _blank_authentication_only_guards(cleaned: str, src: str) -> str:
     return "".join(out)
 
 
+# ---------------------------------------------------------------------------
+# THE REQUEST-SOURCED OBJECT GUARD (ConductionNL/dossiq#799)
+# ---------------------------------------------------------------------------
+#
+# `.github#365` established that an AUTHENTICATION check is not an
+# authorisation guard, and blanked it. This is the same defect one level up:
+# a check that IS shaped like authorisation, and still cannot refuse anybody,
+# because the value it compares the caller's identity against was supplied BY
+# THE CALLER.
+#
+# MEASURED on dossiq `InspectionChecklistController::submitResult()`
+# (`#[NoAdminRequired]`, routed `POST /api/vth/cases/{id}/inspection-result`,
+# WRITES an `inspectionResult` against an arbitrary case id). Open since
+# 2026-08-11; gate-7 reported PASS on it every single run:
+#
+#     $params = $this->request->getParams();
+#     ...
+#     if ($this->groupManager->isAdmin($user->getUID()) === false) {
+#         $assignedUid = $params['assignedInspector'] ?? '';
+#         if ($assignedUid !== '' && $assignedUid !== $user->getUID()) {
+#             throw new OCSForbiddenException('Not authorized ...');
+#         }
+#     }
+#
+# There is no input for which that throws. Omit `assignedInspector` and
+# `$assignedUid` is `''`, so the `!== ''` conjunct is false and the branch is
+# skipped; send your own uid and the second conjunct is false too. The field is
+# not even a property of the `inspectionResult` schema, so nothing server-side
+# was ever going to be compared against it.
+#
+# gate-7 cleared it at the COARSEST layer — `_GUARD_BODY_RE` matched
+# `OCSForbiddenException`, and `_guard_body_is_credible` agreed the body
+# consults identity (it does: `$user->getUID()` is right there). Pattern 7
+# would have cleared it too: `_has_ownership_comparison_guard` asks only
+# whether ONE SIDE of the comparison is an identity, never where the OTHER
+# side came from.
+#
+# WHY THE RULE IS SPELLED SO NARROWLY
+# -----------------------------------
+# "Compared against request input" ALONE is not the defect, and shipping that
+# would redden the correct code. Both of these are request-sourced and both are
+# real guards:
+#
+#     if ($userId !== $user->getUID()) { throw; }      // $userId IS the lookup key
+#     $doc = $this->mapper->find($id);                 // $id is caller-supplied,
+#     if ($doc->getOwner() !== $uid) { throw; }        // $doc is STORED STATE
+#
+# The first constrains the caller-supplied reference to the caller — that is
+# scoping, spelled as a comparison. The second compares stored state; the fact
+# that a caller-supplied id was used to FETCH it does not make the fetched
+# value caller-supplied. So:
+#
+#   * taint does NOT propagate through a `->`/`::` call. A value that came out
+#     of a lookup is stored state. This is what keeps the second shape green,
+#     and it is the opposite of `_taint_closure`'s policy, which is tuned for a
+#     different question (does a steerable reference reach an unscoped call).
+#
+#   * a declared parameter is request-sourced as an ATOM but seeds nothing.
+#
+#   * and the branch is only demoted when the comparison demonstrably CANNOT
+#     refuse, by one of two mechanical tells:
+#
+#       (a) DECIDES NOTHING — the compared value is never used anywhere else in
+#           the method. It steers no lookup and reaches no call, so the
+#           comparison is decorative. `$userId` above fails this clause
+#           immediately (it is the lookup key), which is how the correct shape
+#           stays green.
+#
+#       (b) ABSENCE SKIPS IT — the identity comparison is conjoined with a
+#           PRESENCE test on the same value (`$x !== '' && $x !== $uid`), so
+#           omitting the field from the body skips the refusal outright. This
+#           is the exact bypass filed in dossiq#799 and it is unambiguous: a
+#           guard you disable by sending less is not a guard.
+#
+# Demotion is spelled as BLANKING, exactly as `#365` blanked authentication,
+# and for the same reason: every later pattern still gets its say. A method
+# that also delegates to a real collaborator guard, hands the session identity
+# into its lookups, or reaches OpenRegister's RBAC still clears. Only the
+# method whose ONLY evidence was the unenforceable comparison is reported.
+_REQUEST_READ_RE = re.compile(
+    r"->\s*getParams?\s*\("
+    r"|->\s*getQueryParam[A-Za-z0-9_]*\s*\("
+    r"|->\s*getBody\s*\("
+    r"|->\s*getUploadedFile\s*\("
+    r"|\$_(?:GET|POST|REQUEST|COOKIE|FILES)\b"
+)
+
+# Any method/static call. Used as a taint STOP, not a taint source.
+_ANY_CALL_RE = re.compile(r"(?:->|::)\s*[A-Za-z_][A-Za-z0-9_]*\s*\(")
+
+# `$x !== ''`, `$x != null`, `isset($x)`, `empty($x) === false` — an assertion
+# that a value is PRESENT. Conjoined with an identity comparison on the same
+# value it means: send nothing, refuse nothing.
+_PRESENCE_TEST_RE = re.compile(
+    r"!==?\s*(?:''|\"\"|null)\b"
+    r"|(?:''|\"\")\s*!==?"
+    r"|\bnull\s*!==?"
+    r"|\bisset\s*\("
+    r"|\bempty\s*\([^)]*\)\s*===?\s*false\b"
+    r"|\barray_key_exists\s*\(",
+    re.IGNORECASE,
+)
+
+
+def _request_sourced_locals(body: str) -> set:
+    """Local names in *body* bound to caller-supplied input.
+
+    Propagation is deliberately PURE-ONLY: an assignment whose right-hand side
+    performs any `->`/`::` call is NOT propagated, because its value came out
+    of that call rather than off the wire. Without that stop,
+    ``$doc = $this->mapper->find($id)`` would make every field of a fetched
+    object "request-sourced" and the rule would redden the canonical correct
+    ownership guard.
+    """
+    tainted: set = set()
+    for _ in range(6):  # fixpoint; method bodies are far shallower
+        grew = False
+        for m in _TAINT_ASSIGN_RE.finditer(body):
+            dst, expr = m.group(1), m.group(2)
+            if dst in tainted:
+                continue
+            if _REQUEST_READ_RE.search(expr):
+                tainted.add(dst)
+                grew = True
+                continue
+            if _ANY_CALL_RE.search(expr):
+                continue  # came out of a call — stored state, not the wire
+            if any(re.search(r"\$" + re.escape(t) + r"\b", expr)
+                   for t in tainted):
+                tainted.add(dst)
+                grew = True
+        if not grew:
+            break
+    return tainted
+
+
+def _request_sourced_atom(expr: str, tainted: set, declared: set) -> bool:
+    """True when *expr* evaluates to something the caller supplied."""
+    expr = _strip_leading_scalar_casts(expr.strip())
+    if expr == "" or expr[0] in ("'", '"'):
+        return False
+    if _REQUEST_READ_RE.search(expr):
+        return True
+    if _ANY_CALL_RE.search(expr):
+        return False  # a call result is stored state, whatever fed the call
+    names = {m.group(1) for m in re.finditer(r"\$([A-Za-z_][A-Za-z0-9_]*)", expr)}
+    if not names:
+        return False
+    return bool(names & (tainted | declared))
+
+
+def _value_reference_tokens(expr: str) -> list:
+    """The spellings by which *expr*'s value would be recognised elsewhere.
+
+    ``$params['owner']`` is looked for whole — `$params` on its own is not a
+    usable signal, because the whole array is routinely forwarded to the
+    service while the one subscript the guard compared is forwarded nowhere.
+    """
+    expr = _strip_leading_scalar_casts(expr.strip())
+    sub = re.fullmatch(
+        r"(\$[A-Za-z_][A-Za-z0-9_]*\s*\[[^\]]{1,120}\])\s*(?:\?\?.*)?", expr, re.S)
+    if sub is not None:
+        return [re.sub(r"\s+", "", sub.group(1))]
+    bare = re.fullmatch(r"\$[A-Za-z_][A-Za-z0-9_]*", expr)
+    if bare is not None:
+        return [expr]
+    return []
+
+
+def _value_decides_nothing(expr: str, body: str, span: tuple) -> bool:
+    """True when *expr*'s value is never used outside the guard at *span*.
+
+    A comparison whose subject reaches no call, no lookup and no payload
+    cannot be constraining anything: the method behaves identically with the
+    whole branch deleted. Occurrences that are the value's OWN assignment are
+    not uses.
+
+    Fails CLOSED: an expression whose value cannot be tracked (a property
+    chain, a computed subscript) returns False and the branch keeps its guard
+    status.
+    """
+    tokens = _value_reference_tokens(expr)
+    if not tokens:
+        return False
+    start, end = span
+    for token in tokens:
+        pattern = re.compile(
+            r"".join(
+                (r"\s*" if ch.isspace() else re.escape(ch)) for ch in token
+            ) + r"(?![A-Za-z0-9_])"
+        )
+        for m in pattern.finditer(body):
+            if start <= m.start() < end:
+                continue  # inside the guard itself
+            tail = body[m.end():m.end() + 40]
+            if re.match(r"\s*(?:\[[^\]]*\]\s*)*=(?!=)", tail):
+                continue  # this occurrence is being ASSIGNED TO, not used
+            return False
+    return True
+
+
+def _unenforceable_comparison_guard(cond: str, consequent_span: tuple,
+                                    body: str, body_offset: int,
+                                    tainted: set, declared: set,
+                                    context: str) -> bool:
+    """True when *cond* is an identity comparison that can never refuse.
+
+    Requires, in order: at least one identity comparison; EVERY identity
+    comparison putting a caller-supplied value on the other side; and then one
+    of the two tells — the value decides nothing, or a presence test lets its
+    absence skip the branch.
+    """
+    atoms: list = []
+    for chunk in _top_level_split(cond, "&&"):
+        atoms.extend(_top_level_split(chunk, "||"))
+
+    compared: list = []
+    for atom in atoms:
+        op = None
+        for candidate in ("===", "!==", "==", "!="):
+            if candidate in atom:
+                op = candidate
+                break
+        if op is None:
+            continue
+        parts = _top_level_split(atom, op)
+        if len(parts) != 2:
+            continue
+        lhs, rhs = parts
+        if _NULLISH_LITERAL_RE.match(lhs.strip()) or _NULLISH_LITERAL_RE.match(rhs.strip()):
+            continue  # an absence test, not an ownership comparison
+        # ⚠️ REQUEST-SOURCEDNESS IS ASKED FIRST, AND THAT ORDER IS THE WHOLE
+        # RULE. `_is_identity_expression` reads ANY `$…Uid` / `$…User` name as
+        # an identity, so in dossiq#799's own condition BOTH sides qualify:
+        # `$assignedUid !== $user->getUID()`. Classifying by identity first
+        # picked `$user->getUID()` as "the other side", found it not
+        # request-sourced, and cleared the very defect this rule exists for.
+        lhs_req = _request_sourced_atom(lhs, tainted, declared)
+        rhs_req = _request_sourced_atom(rhs, tainted, declared)
+        if lhs_req and not rhs_req and _is_identity_expression(rhs, context):
+            compared.append(lhs)
+        elif rhs_req and not lhs_req and _is_identity_expression(lhs, context):
+            compared.append(rhs)
+        elif _is_identity_expression(lhs, context) or _is_identity_expression(rhs, context):
+            # An identity compared against something the caller does NOT
+            # control — stored state, a constant, a session value. That is a
+            # real guard and one of them is enough to keep the branch.
+            return False
+        else:
+            continue
+
+    if not compared:
+        return False
+    for other in compared:
+        if not _request_sourced_atom(other, tainted, declared):
+            return False
+
+    # DECIDES NOTHING is REQUIRED, not one of two alternatives, and this is the
+    # narrowing the first fleet measurement bought.
+    #
+    # It shipped with "a presence test lets absence skip the refusal" as an
+    # INDEPENDENT trigger. Run across 761 controller files in the twenty core
+    # apps it produced three findings, and two of them — openregister
+    # `OrganisationController::join()` and `::leave()` — were exactly that
+    # shape and exactly correct:
+    #
+    #     if ($userId !== null && $userId !== $currentUser->getUID()
+    #         && $this->canManageOrganisationMembers($uuid) === false) { 403 }
+    #     $this->organisationService->joinOrganisation($uuid, targetUserId: $userId);
+    #
+    # Omitting `userId` does skip the refusal, and skipping it is HARMLESS,
+    # because the value is a real parameter the callee receives and resolves:
+    # `$userId = $targetUserId ?? $currentUser->getUID()`. Absent means "me".
+    #
+    # A value the callee actually receives is a parameter, not a decoration,
+    # and the gate cannot know what the callee does with it — so it must not
+    # assume the worst. Requiring "decides nothing" first removes both of
+    # those findings and keeps dossiq#799, whose `$assignedUid` is passed to
+    # nothing, read by nothing, and stored nowhere.
+    rel = (consequent_span[0] - body_offset, consequent_span[1] - body_offset)
+    return all(_value_decides_nothing(other, body, rel) for other in compared)
+
+
+def _request_sourced_guard_spans(cleaned: str, src: str) -> list:
+    """``(start, end)`` spans of every refusal branch that cannot refuse."""
+    spans: list = []
+    for _name, bstart, bend in _all_method_spans(cleaned):
+        body = src[bstart:bend]
+        tainted = _request_sourced_locals(body)
+        sig_open = cleaned.rfind("function", 0, bstart)
+        declared: set = set()
+        if sig_open != -1:
+            params = _parameter_list(cleaned, sig_open)
+            if params:
+                declared = _declared_parameter_names(params)
+        if not tainted and not declared:
+            continue
+        for m in re.finditer(r"\bif\s*\(", cleaned[bstart:bend]):
+            at = bstart + m.start()
+            open_paren = cleaned.find("(", at)
+            if open_paren == -1 or open_paren >= bend:
+                continue
+            close = _matching_close(cleaned, open_paren)
+            if close == -1 or close >= bend:
+                continue
+            end = _consequent_end(cleaned, close + 1)
+            if end == -1 or end > bend:
+                continue
+            if not _REFUSAL_RE.search(cleaned[close + 1:end]):
+                continue
+            context = src[max(0, bstart):at]
+            if _unenforceable_comparison_guard(
+                    src[open_paren + 1:close], (at, end), body, bstart,
+                    tainted, declared, context):
+                spans.append((at, end))
+    return spans
+
+
+# An `isAdmin()` branch that WRAPS an unenforceable guard and does nothing else
+# is not a guard either — it is the bypass half of one. `_GUARD_BODY_RE` and
+# `_NON_STATUS_GUARD_RE` both clear a body on a bare `isAdmin(` anywhere in it,
+# so blanking the inner comparison alone leaves dossiq#799 green.
+#
+# Deliberately restricted to a branch that, once the inner comparison is
+# blanked, refuses nothing and carries no other guard evidence. An `isAdmin()`
+# that leads to a real refusal, a real predicate, or a real delegation keeps
+# every bit of its standing.
+def _hollow_admin_wrapper_spans(cleaned: str, src: str, inner: list) -> list:
+    """Spans of `isAdmin()` branches whose only content was an *inner* span."""
+    if not inner:
+        return []
+    spans: list = []
+    for m in re.finditer(r"\bif\s*\(", cleaned):
+        open_paren = cleaned.find("(", m.start())
+        close = _matching_close(cleaned, open_paren)
+        if close == -1:
+            continue
+        end = _consequent_end(cleaned, close + 1)
+        if end == -1:
+            continue
+        if not re.search(r"isAdmin\s*\(", src[open_paren + 1:close]):
+            continue
+        wrapped = [s for s in inner if close < s[0] and s[1] <= end]
+        if not wrapped:
+            continue
+        rest = list(src[close + 1:end])
+        for s_start, s_end in wrapped:
+            for i in range(s_start - (close + 1), min(s_end - (close + 1), len(rest))):
+                if rest[i] != "\n":
+                    rest[i] = " "
+        rest_text = "".join(rest)
+        if _REFUSAL_RE.search(rest_text):
+            continue
+        if _NON_STATUS_GUARD_RE.search(rest_text):
+            continue
+        if _HELPER_GUARD_BODY_RE.search(rest_text):
+            continue
+        spans.append((m.start(), end))
+    return spans
+
+
+def _blank_spans(text: str, spans: list) -> str:
+    """*text* with every span replaced by spaces; length and lines preserved."""
+    if not spans:
+        return text
+    out = list(text)
+    for start, end in spans:
+        for i in range(start, min(end, len(out))):
+            if out[i] != "\n":
+                out[i] = " "
+    return "".join(out)
+
+
+def _blank_unenforceable_guards(cleaned: str, src: str):
+    """``(gsrc, spans)`` — *src* minus authentication AND minus every guard
+    whose comparison the caller controls. *spans* are the demoted regions, so
+    a reported method can name WHICH rule demoted it."""
+    gsrc = _blank_authentication_only_guards(cleaned, src)
+    spans = _request_sourced_guard_spans(cleaned, gsrc)
+    if not spans:
+        return gsrc, []
+    wrappers = _hollow_admin_wrapper_spans(cleaned, gsrc, spans)
+    return _blank_spans(gsrc, spans + wrappers), spans
+
+
 def _guard_source(src: str, cleaned: str = None) -> str:
     """The text guard patterns are matched against: *src* minus authentication."""
     if cleaned is None:
@@ -2367,14 +2752,15 @@ def _or_delegating_methods_deep(class_file: str, depth: int,
 
 def _collaborator_guard_methods(class_file: str) -> set:
     """Strict guard-bearing method names declared by the class in *class_file*."""
-    cached = _COLLABORATOR_GUARD_CACHE.get(class_file)
+    cache_key = class_file
+    cached = _COLLABORATOR_GUARD_CACHE.get(cache_key)
     if cached is not None:
         return cached
     try:
         with open(class_file, encoding="utf-8") as fh:
             src = fh.read()
     except OSError:
-        _COLLABORATOR_GUARD_CACHE[class_file] = set()
+        _COLLABORATOR_GUARD_CACHE[cache_key] = set()
         return set()
     cleaned = _strip_strings_and_comments(src)
     # `.github#365`: a collaborator whose only "guard" is a `no user -> 401`
@@ -2411,7 +2797,7 @@ def _collaborator_guard_methods(class_file: str) -> set:
         result = result | _or_delegating_methods_deep(
             class_file, _OR_DELEGATION_MAX_DEPTH
         )
-    _COLLABORATOR_GUARD_CACHE[class_file] = result
+    _COLLABORATOR_GUARD_CACHE[cache_key] = result
     return result
 
 
@@ -3858,7 +4244,13 @@ def scan_file(path: str) -> int:
     # whitespace. Offsets, spans and line numbers are unchanged — only the text
     # the guard patterns get to see is. `src` itself is still what gets
     # reported, so findings name real lines.
-    gsrc = _blank_authentication_only_guards(cleaned, src)
+    #
+    # dossiq#799 adds the second blanking on the same principle: a guard whose
+    # comparison value the CALLER supplies, and which therefore cannot refuse,
+    # is demoted here rather than vetoed later, so every subsequent pattern
+    # still gets its say. `demoted_spans` records where, so a method reported
+    # below can name THIS rule instead of the generic one.
+    gsrc, demoted_spans = _blank_unenforceable_guards(cleaned, src)
     is_or_repo = bool(_OR_NAMESPACE_RE.search(cleaned))
     # Pattern 2b context: does this leaf-app file name OpenRegister's
     # ObjectService? Comment-free source with strings KEPT — the container form
@@ -3895,6 +4287,10 @@ def scan_file(path: str) -> int:
         # and those carry no data access, so the CORS and zero-input patterns
         # below are unaffected by reading it too.
         body = gsrc[body_start:body_end]
+        # dossiq#799 — was any unenforceable comparison demoted inside THIS
+        # method? Computed here because two places below need it.
+        demoted_here_early = any(
+            body_start <= s < body_end for s, _e in demoted_spans)
 
         # ---- Exemption 1: constructor -----------------------------------
         if name == "__construct":
@@ -3943,6 +4339,38 @@ def scan_file(path: str) -> int:
         # REQUIRED — a bare tag does not exempt (mirrors gate-16/19 exclude
         # conventions) — and reviewers treat the reason as a claim to verify.
         if _IDOR_EXEMPT_RE.search(head):
+            continue
+
+        # ---- dossiq#799: A GUARD THE CALLER DECIDES IS ITS OWN FINDING ---
+        # Reported HERE, before every clearing pattern, and that placement is
+        # the rule rather than an accident.
+        #
+        # Every pattern below answers "is this endpoint guarded somewhere?".
+        # This one answers a different question — "does this method contain a
+        # per-object check that cannot refuse?" — and the two are independent.
+        # dossiq `InspectionChecklistController::submitResult()` proved it:
+        # after the comparison was demoted, FOUR separate patterns still
+        # cleared the method (a same-class helper, a collaborator, Pattern 2b's
+        # OpenRegister delegation, and Pattern 6's session hand-off), so an
+        # "unless something else clears it" spelling reported nothing at all
+        # and the gate stayed exactly as blind as before.
+        #
+        # A comparison that can never refuse is dead authorisation code even
+        # when a real guard sits beside it — that is gate-9 orphan-auth's whole
+        # premise — and it is worse than absent, because an author opening the
+        # file reads "already guarded" and moves on. The finding names the
+        # method and the rule, and the runner reports this rule WARN-only, so
+        # the cost of a wrong one is a line to read rather than a red build.
+        #
+        # The precision lives entirely in the demotion test, not here: see
+        # `_unenforceable_comparison_guard`, which demands that every identity
+        # comparison in the condition put a caller-supplied value on the other
+        # side AND that the value either decides nothing or be skippable by
+        # omitting it. A documented exemption above still wins.
+        if demoted_here_early:
+            print(f"{path}:{line_no} method={name} "
+                  f"rule=request-sourced-object-guard")
+            violations += 1
             continue
 
         # At least one authorisation guard must appear in the body OR the
@@ -4059,8 +4487,19 @@ def scan_file(path: str) -> int:
         # fix is to constrain the lookup to a scope the endpoint declares
         # public — not to add an ownership check. A distinct name also lets
         # triage separate the two populations without re-reading every hit.
-        rule = ("publicpage-unscoped-object-lookup" if is_public_page
-                else "no-auth-guard-in-body")
+        # dossiq#799: a method whose ONLY guard evidence was an unenforceable
+        # caller-supplied comparison gets its OWN rule name. The remedy differs
+        # from a bare missing guard — the code already contains something
+        # guard-SHAPED, and "add a guard" reads as already-done to whoever
+        # opens the file — and the runner reports this rule WARN-only while the
+        # fleet works the population down, which needs the two separated.
+        demoted_here = any(body_start <= s < body_end for s, _e in demoted_spans)
+        if is_public_page:
+            rule = "publicpage-unscoped-object-lookup"
+        elif demoted_here:
+            rule = "request-sourced-object-guard"
+        else:
+            rule = "no-auth-guard-in-body"
         print(f"{path}:{line_no} method={name} rule={rule}")
         violations += 1
 
