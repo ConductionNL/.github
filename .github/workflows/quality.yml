@@ -425,6 +425,11 @@ on:
         required: false
         type: boolean
         default: false
+      e2e-shards:
+        description: "Split the Playwright suite across this many runners, 1 to 8. OPT-IN, default 1, and 1 runs exactly one job with exactly the command line it always ran. Above 1, the E2E job becomes a matrix of legs, each with its own Nextcloud and its own database, each running `npx playwright test --shard=<i>/<n>`. Every leg exports E2E_SHARD_INDEX and E2E_SHARD_TOTAL so the app's config can size its own globalTimeout (it is per process, so per shard). Before any test runs, each leg lists every shard and FAILS if one test the unsharded suite would run is on no shard. Read the note on the playwright job before opting in: Playwright never shards a project that another project depends on, so a config with project `dependencies` can end up running most of its suite on every leg."
+        required: false
+        type: number
+        default: 1
       enable-coverage-guard:
         description: "Enforce the coverage ratchet — READ-ONLY, never commits. On a PULL REQUEST the merge base is measured in the phpunit job and the change must not reduce coverage against it; the floor is measured, not typed, so it cannot go stale and there is nothing for an author to keep up to date. On a PUSH the committed .coverage-baseline is enforced as a conservative fail-safe floor (below it fails; above it is fine). PRs may raise that floor but never lower it. Requires scripts/coverage-guard.php supporting --against; the workflow probes for it and fails loudly rather than silently downgrading the check."
         required: false
@@ -4470,7 +4475,57 @@ jobs:
     # component is this month's example.
     if: ${{ inputs.enable-playwright && needs.changes.outputs.code != 'false' && !cancelled() && !(github.event_name == 'pull_request' && github.base_ref == 'development' && (startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'sync/'))) }}
     runs-on: ubuntu-latest
-    name: "E2E Tests (Playwright)"
+    # The name carries a matrix expression on purpose. A matrix job whose name
+    # does not mention `matrix` gets its values appended by GitHub, and the
+    # unsharded job would then render as "E2E Tests (Playwright) (1)". With the
+    # expression, one leg keeps the exact name it has always had.
+    #
+    # The readable text stays OUTSIDE the expression. A skipped matrix job is
+    # never expanded, so its row shows the name template as written, the way
+    # the skipped PHPUnit row shows `${{ matrix.php-version }}`. Written as one
+    # whole expression, the skipped E2E row in every repo without Playwright
+    # read as a line of expression source (quality-selftest run 34595801159).
+    name: E2E Tests (Playwright${{ inputs.e2e-shards > 1 && format(', shard {0} of {1}', matrix.shard, inputs.e2e-shards) || '' }})
+    # ── SHARDING (opt-in, `e2e-shards`) ─────────────────────────────────────
+    #
+    # One leg when `e2e-shards` is 1, which is every caller until one opts in.
+    # Above 1, one leg per shard, each on its own runner with its own
+    # Nextcloud and its own Postgres.
+    #
+    # THE REQUIRED CHECK IS UNTOUCHED. The legs are one job, `playwright`, and
+    # `needs.playwright.result` is `failure` when any leg fails. Quality Report
+    # already lists `playwright` in its `needs:`, so a red shard reaches the
+    # required check with no new job and no aggregator in between. There is no
+    # merge job for a failure to hide behind.
+    #
+    # `fail-fast: false` IS LOAD-BEARING. The default cancels every sibling the
+    # moment one leg fails, and a cancelled leg prints no tally and uploads no
+    # report. That is the exact loss `globalTimeout` exists to prevent, so one
+    # red shard must leave the others running to their own verdict.
+    #
+    # EACH SHARD KEEPS ITS OWN REPORT. Every leg prints its own tally, and
+    # uploads its own HTML report and traces under a name carrying the shard.
+    # There is no `merge-reports` step. A merged report is only as complete as
+    # the shards that reached it, and a shard cancelled at the job cap leaves
+    # no blob behind, so the merged tally would be missing exactly the shard
+    # that went wrong while looking whole. Per-shard reports cannot do that.
+    #
+    # ⚠️ READ THIS BEFORE OPTING IN. Playwright never shards a project that
+    # another project lists in `dependencies`, and it never shards a
+    # `teardown` project either. It runs them in full on every shard. A
+    # config whose main project is a dependency of a small one therefore runs
+    # nearly everything on every leg. Measured on dossiq: every one of four
+    # shards listed all 361 tests of its main project. The partition step
+    # below reports that as a warning, because it is the slow direction, not
+    # the lossy one.
+    #
+    # The lookup table expands 1..8. Anything else falls back to one leg, and
+    # the partition step then fails that leg by name, so a typo cannot quietly
+    # turn sharding off.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON('{"1":[1],"2":[1,2],"3":[1,2,3],"4":[1,2,3,4],"5":[1,2,3,4,5],"6":[1,2,3,4,5,6],"7":[1,2,3,4,5,6,7],"8":[1,2,3,4,5,6,7,8]}')[format('{0}', inputs.e2e-shards)] || fromJSON('[1]') }}
     # `frontend-build` is a dependency purely so its artifact is available to
     # download — NOT a gate. The `if:` above contains `!cancelled()`, which
     # suppresses the implicit `success()` on needs, so a failed or skipped
@@ -4985,6 +5040,137 @@ jobs:
           fi
           echo "Found $TESTS Playwright test file(s) in $TEST_PATH."
 
+      # ── THE SHARDS MUST COVER THE SUITE (only when `e2e-shards` is not 1) ──
+      #
+      # A sharding bug that LOSES a test is the worst thing this change could
+      # do. It would reproduce the defect this workflow keeps fighting: a test
+      # that never ran, in a run that reads green. Playwright's own `--shard`
+      # does not drop tests, but an app's config can, for instance by routing
+      # projects on E2E_SHARD_INDEX. So each leg proves it before any test runs.
+      #
+      # It lists the suite the unsharded job would run, then lists every shard
+      # with the env that shard gets, and compares. A test on no shard FAILS
+      # this leg, naming the test. A test on more than one shard is reported,
+      # not failed: that is Playwright running a dependency or teardown project
+      # in full on every leg, which costs time and loses nothing. Listing is
+      # cheap, about four seconds per call on dossiq's 394 tests.
+      #
+      # Every leg runs it, not just one, so the proof does not depend on any
+      # single leg surviving. `scripts/test-e2e-shard-partition.py` in
+      # ConductionNL/.github runs this exact program against a lossy fixture
+      # and requires it to fail.
+      - name: Prove the shards cover the whole suite
+        if: ${{ inputs.e2e-shards != 1 }}
+        env:
+          SHARDS_INPUT: ${{ inputs.e2e-shards }}
+          E2E_SHARD_INDEX: ${{ matrix.shard }}
+          BASE_URL: http://localhost:8080
+          NEXTCLOUD_URL: http://localhost:8080
+          NC_BASE_URL: http://localhost:8080
+          ADMIN_USER: admin
+          ADMIN_PASSWORD: admin
+          NC_ADMIN_USER: admin
+          NC_ADMIN_PASS: admin
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "$SHARDS_INPUT" | grep -Eq '^[1-8]$'; then
+            echo "::error::e2e-shards is '${SHARDS_INPUT}'. It must be a whole number from 1 to 8. This leg ran the suite as ONE shard instead, so the value you set is not in effect."
+            exit 1
+          fi
+          export E2E_SHARD_TOTAL="$SHARDS_INPUT"
+          cd server/apps/${{ inputs.app-name }}
+          CONFIG="${{ inputs.playwright-test-path }}/playwright.config.ts"
+          if [ ! -f "$CONFIG" ] && [ -f "playwright.config.ts" ]; then
+            CONFIG="playwright.config.ts"
+          fi
+          export CONFIG
+          python3 - <<'SHARD_PARTITION_PY'
+          import collections, json, os, subprocess, sys, tempfile
+
+          CONFIG = os.environ["CONFIG"]
+          TOTAL = int(os.environ["E2E_SHARD_TOTAL"])
+          ME = int(os.environ["E2E_SHARD_INDEX"])
+          SUMMARY = os.environ.get("GITHUB_STEP_SUMMARY") or os.devnull
+          NPX = os.environ.get("SHARD_PARTITION_NPX", "npx")
+
+
+          def listing(index, total, shard):
+              """Every test Playwright would run, as (project, file, line, column, title)."""
+              fd, path = tempfile.mkstemp(suffix=".json")
+              os.close(fd)
+              env = dict(os.environ, E2E_SHARD_INDEX=str(index), E2E_SHARD_TOTAL=str(total),
+                         PLAYWRIGHT_JSON_OUTPUT_NAME=path)
+              args = [NPX, "playwright", "test", f"--config={CONFIG}", "--list", "--reporter=json"]
+              if shard:
+                  args.append(f"--shard={index}/{total}")
+              proc = subprocess.run(args, env=env, capture_output=True, text=True)
+              label = f"shard {index}/{total}" if shard else "the unsharded suite"
+              if proc.returncode != 0:
+                  sys.stderr.write(proc.stdout[-4000:] + proc.stderr[-4000:])
+                  print(f"::error::Could not list {label} (exit {proc.returncode}). No partition can be proven, so this leg does not run.")
+                  sys.exit(1)
+              with open(path, encoding="utf-8") as handle:
+                  report = json.load(handle)
+              if report.get("errors"):
+                  print(f"::error::Listing {label} reported load errors: {json.dumps(report['errors'])[:1500]}")
+                  sys.exit(1)
+              keys = []
+
+              def walk(suite):
+                  for spec in suite.get("specs", []):
+                      for test in spec.get("tests", []):
+                          keys.append((test.get("projectName", ""), spec["file"], spec["line"], spec["column"], spec["title"]))
+                  for child in suite.get("suites", []):
+                      walk(child)
+
+              for suite in report.get("suites", []):
+                  walk(suite)
+              return keys
+
+
+          whole = listing(1, 1, False)
+          if not whole:
+              print("::error::The unsharded suite lists ZERO tests. There is nothing to shard, and a green run here would mean nothing.")
+              sys.exit(1)
+
+          seen = collections.Counter()
+          sizes = {}
+          for index in range(1, TOTAL + 1):
+              keys = listing(index, TOTAL, True)
+              sizes[index] = len(keys)
+              seen.update(set(keys))
+
+          missing = sorted(set(whole) - set(seen))
+          extra = sorted(set(seen) - set(whole))
+          repeated = sorted(k for k, n in seen.items() if n > 1)
+
+          with open(SUMMARY, "a", encoding="utf-8") as out:
+              out.write(f"### Shard partition, seen from shard {ME} of {TOTAL}\n\n")
+              out.write(f"The unsharded suite lists {len(whole)} tests.\n\n| Shard | Tests |\n|---|---|\n")
+              for index, size in sizes.items():
+                  out.write(f"| {index}{' (this leg)' if index == ME else ''} | {size} |\n")
+              out.write(f"\nOn no shard: **{len(missing)}**. On more than one shard: {len(repeated)}.\n")
+
+          print(f"Unsharded suite: {len(whole)} tests. Per shard: {sizes}.")
+
+          if repeated:
+              projects = collections.Counter(k[0] for k in repeated)
+              print(f"::warning::{len(repeated)} tests run on more than one shard ({dict(projects)}). Playwright runs a project listed in `dependencies`, or named as a `teardown`, in full on every shard. That costs time on every leg and loses nothing.")
+          if sizes[ME] >= 0.9 * len(whole):
+              print(f"::warning::This shard lists {sizes[ME]} of {len(whole)} tests. Sharding is buying almost nothing here, most likely because the main project is a dependency of another project.")
+          for index, size in sizes.items():
+              if size == 0:
+                  print(f"::warning::Shard {index} of {TOTAL} lists no tests. It costs a runner and checks nothing; lower e2e-shards.")
+          if extra:
+              print(f"::warning::{len(extra)} tests appear on a shard but not in the unsharded suite, so the sharded run is not the same suite. First: {extra[0]}")
+          if missing:
+              for key in missing[:25]:
+                  print(f"::error::On NO shard: [{key[0]}] {key[1]}:{key[2]} {key[4]}")
+              print(f"::error::{len(missing)} of {len(whole)} tests would run on no shard. Each leg would go green without them, so this leg refuses to run at all.")
+              sys.exit(1)
+          print(f"OK: all {len(whole)} tests are on at least one of the {TOTAL} shards.")
+          SHARD_PARTITION_PY
+
       - name: Start PHP built-in server
         # Started AFTER the slow setup phases (npm ci, playwright install,
         # frontend build) so the server is not idle for minutes — that's
@@ -5260,7 +5446,14 @@ jobs:
           if [ ! -f "$CONFIG" ] && [ -f "playwright.config.ts" ]; then
             CONFIG="playwright.config.ts"
           fi
-          npx playwright test --config="$CONFIG"
+          # Empty unless `e2e-shards` is above 1, so one leg runs the exact
+          # command line this step always ran.
+          SHARD_ARGS=()
+          if [ "$E2E_SHARD_TOTAL" -gt 1 ]; then
+            SHARD_ARGS=(--shard="${E2E_SHARD_INDEX}/${E2E_SHARD_TOTAL}")
+            echo "Running shard ${E2E_SHARD_INDEX} of ${E2E_SHARD_TOTAL}."
+          fi
+          npx playwright test --config="$CONFIG" "${SHARD_ARGS[@]}"
         # This step exported only BASE_URL / ADMIN_USER / ADMIN_PASSWORD, but a
         # survey of the 21 fleet repos found 15 whose config resolves the target
         # as `process.env.NEXTCLOUD_URL || 'http://localhost:8080'` and never
@@ -5284,6 +5477,13 @@ jobs:
           NC_ADMIN_USER: admin
           NC_ADMIN_PASS: admin
           COLLECT_COVERAGE: ${{ inputs.enable-playwright-coverage }}
+          # Which shard this leg is, for the app's own config. `globalTimeout`
+          # is per Playwright process, so per shard, and only the app knows
+          # what budget a shard of its suite needs. 1 of 1 when not sharded.
+          # A value outside 1..8 ran as one leg and was failed by the
+          # partition step before this one, so it never reaches here.
+          E2E_SHARD_INDEX: ${{ matrix.shard }}
+          E2E_SHARD_TOTAL: ${{ (inputs.e2e-shards >= 1 && inputs.e2e-shards <= 8) && inputs.e2e-shards || 1 }}
 
       # ── THE SERVER'S OWN ACCOUNT OF A 5xx, WHICH THIS JOB USED TO DISCARD ───
       #
@@ -5366,7 +5566,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: nextcloud-log-e2e
+          name: nextcloud-log-e2e${{ inputs.e2e-shards > 1 && format('-shard-{0}-of-{1}', matrix.shard, inputs.e2e-shards) || '' }}
           path: ${{ runner.temp }}/nextcloud-log
           retention-days: 7
           if-no-files-found: ignore
@@ -5396,8 +5596,12 @@ jobs:
       # runner was embedded here deliberately. That was true until #161/#166/#168
       # and is exactly the instruction that must not survive: inlining it is what
       # made the whole workflow unresolvable fleet-wide.)
+      #
+      # SHARDED, AXE RUNS ON SHARD 1 ONLY. It measures routes, not the suite,
+      # so every shard would produce the same report, and two legs uploading
+      # the one `axe-report` artifact the gates job reads would collide.
       - name: Checkout the axe runner
-        if: ${{ inputs.enable-axe && !cancelled() }}
+        if: ${{ inputs.enable-axe && matrix.shard == 1 && !cancelled() }}
         uses: actions/checkout@v4
         with:
           repository: ConductionNL/.github
@@ -5411,7 +5615,7 @@ jobs:
       # then as "the axe report never arrived", which points the reader at
       # Playwright — the one place the fault is not.
       - name: Assert the axe runner exists at the pinned ref
-        if: ${{ inputs.enable-axe && !cancelled() }}
+        if: ${{ inputs.enable-axe && matrix.shard == 1 && !cancelled() }}
         env:
           GATES_REF: ${{ inputs.hydra-gates-ref }}
         run: |
@@ -5424,7 +5628,7 @@ jobs:
           echo "axe runner present at ref ${GATES_REF}."
 
       - name: Install axe-core
-        if: ${{ inputs.enable-axe && !cancelled() }}
+        if: ${{ inputs.enable-axe && matrix.shard == 1 && !cancelled() }}
         run: |
           set -euo pipefail
           cd server/apps/${{ inputs.app-name }}
@@ -5473,7 +5677,7 @@ jobs:
 
       - name: Run axe-core against the app routes
         id: axe
-        if: ${{ inputs.enable-axe && !cancelled() }}
+        if: ${{ inputs.enable-axe && matrix.shard == 1 && !cancelled() }}
         env:
           AXE_BASE_URL: http://localhost:8080
           AXE_USER: admin
@@ -5537,7 +5741,7 @@ jobs:
         # Only when the runner succeeded. A failed runner has deliberately left
         # no file, and `if-no-files-found: error` keeps that honest rather than
         # publishing an empty artifact the gates job would then try to read.
-        if: ${{ inputs.enable-axe && !cancelled() && steps.axe.outcome == 'success' }}
+        if: ${{ inputs.enable-axe && matrix.shard == 1 && !cancelled() && steps.axe.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: axe-report
@@ -5953,7 +6157,7 @@ jobs:
         # you need them. Extra paths are harmless: unmatched ones are ignored.
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report${{ inputs.e2e-shards > 1 && format('-shard-{0}-of-{1}', matrix.shard, inputs.e2e-shards) || '' }}
           path: |
             server/apps/${{ inputs.app-name }}/playwright-report/
             server/apps/${{ inputs.app-name }}/tests/e2e/playwright-report/
@@ -5965,7 +6169,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-traces
+          name: playwright-traces${{ inputs.e2e-shards > 1 && format('-shard-{0}-of-{1}', matrix.shard, inputs.e2e-shards) || '' }}
           path: |
             server/apps/${{ inputs.app-name }}/test-results/
             server/apps/${{ inputs.app-name }}/tests/e2e/test-results/
@@ -7599,11 +7803,17 @@ jobs:
           path: coverage/
         continue-on-error: true
 
+      # A PATTERN, so a sharded E2E job is read too. Sharded, each leg uploads
+      # `playwright-report-shard-<i>-of-<n>`, and the exact name matched none
+      # of them. The coverage file is the same on every shard (it reads spec
+      # and test files, not the run), so merging the downloads is safe. With
+      # one leg the pattern matches the one artifact it always matched.
       - name: Download Playwright coverage
         uses: actions/download-artifact@v4
         with:
-          name: playwright-report
+          pattern: playwright-report*
           path: results/playwright-report/
+          merge-multiple: true
         continue-on-error: true
 
       # A PACKAGE INSTALL MUST NOT BE ABLE TO DISABLE THE GATE.
