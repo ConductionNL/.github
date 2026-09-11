@@ -113,12 +113,20 @@ $_looks_like_script || exit 0
 # reordered.
 #
 # What still covers the "write a script, then run it" bypass this hook exists
-# for: block-write-commands.sh scans the body of any script it is asked to
-# execute, and the kernel immutable bit refuses the write regardless. A file
-# staged at some/global-settings/sound-notify.sh is inert unless it is also
-# executed, which the Bash hook independently denies.
-case "$file_path" in
-    "${HOME}/.claude/"*)
+# for: a staged file is inert unless it is also executed, and the kernel
+# immutable bit refuses the write regardless of how it is invoked.
+# block-write-commands.sh catches the common invocation shapes (bash <path>,
+# source <path>, bare-path execution) but not every wrapper — it reads the
+# first token of a segment, so `nohup bash <path>` slips past. That limit
+# predates this exemption: a payload could already be staged at any path the
+# script-extension check does not cover. Layer 4 (chattr +i) is what actually
+# closes it.
+#
+# Match on the SAME normalized path guard 1 computed ($_expanded resolves the
+# unexpanded ~/ and $HOME/ spellings), so the non-exempt arm below holds for
+# every form guard 1 recognizes — not only the already-expanded one.
+case "${_expanded:-$file_path}" in
+    "${HOME}/.claude/"* | '~/.claude/'* | '$HOME/.claude/'* | '${HOME}/.claude/'*)
         : # installed copies are never exempt — fall through to the scan
         ;;
     */global-settings/block-write-commands.sh \

@@ -166,6 +166,17 @@ add_deny "Write global-settings/tests-helper.sh (not under tests/)" \
 add_deny "Edit installed check-settings-version.sh" \
     "$(mk_edit "${TEST_HOME}/.claude/hooks/check-settings-version.sh" "$BAD_REDIRECT")"
 
+# A global-settings/ directory planted INSIDE ~/.claude/ is not exempt either,
+# in every spelling guard 1 normalizes — not just the already-expanded one.
+add_deny "Write ~/.claude/global-settings/ (expanded)" \
+    "$(mk_write "${TEST_HOME}/.claude/global-settings/sound-notify.sh" "$BAD_REDIRECT")"
+add_deny "Write ~/.claude/global-settings/ (tilde)" \
+    "$(mk_write "~/.claude/global-settings/sound-notify.sh" "$BAD_REDIRECT")"
+add_deny "Write \$HOME/.claude/global-settings/ (var)" \
+    "$(mk_write "\$HOME/.claude/global-settings/check-settings-version.sh" "$BAD_CHATTR")"
+add_deny "Write \${HOME}/.claude/global-settings/tests/ (braced)" \
+    "$(mk_write "\${HOME}/.claude/global-settings/tests/x.sh" "$BAD_RM")"
+
 # Empty content must not deny.
 add_allow "Write /tmp/x.sh empty content"  "$(mk_write "/tmp/x.sh" "")"
 

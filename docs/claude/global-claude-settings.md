@@ -506,7 +506,7 @@ The CLI confirms with "Set model to Fable 5.1 for this session only" and the swi
 sudo chattr +i $HOME/.claude/hooks/*.sh $HOME/.claude/settings-version
 ```
 
-Be clear about what this costs. `settings.json` carries `permissions.deny` and the hook wiring, so it is the file an attacker would most want to edit — you are giving up layer 4 on exactly that file. What still defends it: the `permissions.deny` rules that block the Edit/Write tools, the protected-path regex in `block-write-commands.sh`, and `block-config-tool-writes.sh` — and all three of those live in hook files that stay kernel-locked, so a session cannot disarm them to get at the settings file. That is a real position to take, not a broken setup; it is weaker than pinning the model project-locally and keeping all four layers, which stays the recommendation.
+Be clear about what this costs. `settings.json` carries `permissions.deny` and the hook wiring, so it is the file an attacker would most want to edit — you are giving up layer 4 on exactly that file. What still defends it: the `permissions.deny` rules that block the Edit/Write tools, plus the protected-path guards in `block-write-commands.sh` and `block-config-tool-writes.sh`. The deny rules themselves live *in* `settings.json`, i.e. in the file you just unlocked — but the two hooks that enforce the same boundary stay kernel-locked, and they deny every edit to `settings.json` regardless of what the deny list says. That is what keeps the unlock bounded: a session cannot rewrite the deny list, because the locked hooks stop it before it gets there. That is a real position to take, not a broken setup; it is weaker than pinning the model project-locally and keeping all four layers, which stays the recommendation.
 
 **What not to do.**
 
