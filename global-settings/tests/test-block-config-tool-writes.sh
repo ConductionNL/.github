@@ -141,6 +141,58 @@ add_allow "Write /tmp/notes.txt mentions path" \
 add_allow "Write /tmp/config.json with text" \
     "$(mk_write "/tmp/config.json" '{"path": "~/.claude/settings.json"}')"
 
+# ── Canonical-source exemption ───────────────────────────────────────────────
+# The repo copies of the global-settings scripts necessarily contain the update
+# commands this scan looks for — the guard must not veto edits to its own
+# source. See the "Canonical-source exemption" block in the hook.
+add_allow "Edit repo check-settings-version.sh" \
+    "$(mk_edit "${TEST_HOME}/.github/global-settings/check-settings-version.sh" "$BAD_CHATTR")"
+add_allow "Edit repo block-config-tool-writes.sh" \
+    "$(mk_edit "/srv/repos/.github/global-settings/block-config-tool-writes.sh" "$BAD_REDIRECT")"
+add_allow "Edit repo block-write-commands.sh" \
+    "$(mk_edit "/srv/repos/.github/global-settings/block-write-commands.sh" "$BAD_CP")"
+add_allow "Write repo tests/ fixture" \
+    "$(mk_write "/srv/repos/.github/global-settings/tests/test-block-write-commands.sh" "$BAD_REDIRECT")"
+
+# The exemption is name-scoped: an arbitrary script parked under a
+# global-settings/ directory is still scanned.
+add_deny "Write global-settings/evil.sh (not a canonical name)" \
+    "$(mk_write "/tmp/global-settings/evil.sh" "$BAD_REDIRECT")"
+add_deny "Write global-settings/tests-helper.sh (not under tests/)" \
+    "$(mk_write "/tmp/global-settings/tests-helper.sh" "$BAD_RM")"
+
+# The INSTALLED copies are never exempt, even though they share the filename —
+# guard 1 owns those and runs first.
+add_deny "Edit installed check-settings-version.sh" \
+    "$(mk_edit "${TEST_HOME}/.claude/hooks/check-settings-version.sh" "$BAD_REDIRECT")"
+
+# A global-settings/ directory planted INSIDE ~/.claude/ is not exempt either,
+# in every spelling guard 1 normalizes — not just the already-expanded one.
+add_deny "Write ~/.claude/global-settings/ (expanded)" \
+    "$(mk_write "${TEST_HOME}/.claude/global-settings/sound-notify.sh" "$BAD_REDIRECT")"
+add_deny "Write ~/.claude/global-settings/ (tilde)" \
+    "$(mk_write "~/.claude/global-settings/sound-notify.sh" "$BAD_REDIRECT")"
+add_deny "Write \$HOME/.claude/global-settings/ (var)" \
+    "$(mk_write "\$HOME/.claude/global-settings/check-settings-version.sh" "$BAD_CHATTR")"
+add_deny "Write \${HOME}/.claude/global-settings/tests/ (braced)" \
+    "$(mk_write "\${HOME}/.claude/global-settings/tests/x.sh" "$BAD_RM")"
+
+# Path canonicalization: the exempt patterns end in `*` after tests/, and a
+# case-glob `*` matches `/` too — so a `..` traversal could otherwise satisfy
+# an exempt pattern while landing on an installed hook, missing both the
+# ~/.claude/ arm and guard 1 (neither sees a raw string that STARTS with
+# $HOME/.claude/). Regression cases for that.
+add_deny "Traversal out of tests/ into installed hooks" \
+    "$(mk_write "/tmp/global-settings/tests/../../..${TEST_HOME}/.claude/hooks/evil.sh" "$BAD_REDIRECT")"
+add_deny "Traversal out of a canonical-name dir" \
+    "$(mk_write "/tmp/global-settings/tests/../..${TEST_HOME}/.claude/settings.json.sh" "$BAD_CHATTR")"
+add_deny "Traversal segment anywhere disables the exemption" \
+    "$(mk_write "/srv/repos/.github/global-settings/tests/../../../etc/../..${TEST_HOME}/.claude/hooks/x.sh" "$BAD_CP")"
+
+# …but a legitimate repo path that merely CONTAINS no traversal still passes.
+add_allow "Repo tests/ path with a dotted filename" \
+    "$(mk_write "/srv/repos/.github/global-settings/tests/test-a.b.sh" "$BAD_REDIRECT")"
+
 # Empty content must not deny.
 add_allow "Write /tmp/x.sh empty content"  "$(mk_write "/tmp/x.sh" "")"
 
