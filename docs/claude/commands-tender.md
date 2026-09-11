@@ -87,7 +87,7 @@ Deep-dive research into a software category — find and analyze open-source com
 **What it does:**
 
 1. Loads category context and related tenders from the intelligence database
-2. Uses the browser pool (browser-1 through browser-5) to scrape 5-10 competitors from multiple source types
+2. Uses the browser pool (browser-1 through browser-5) to scrape 5-10 competitors from multiple source types — the pool beyond `browser-1` is opt-in and needs the shared server, see [playwright-setup.md](playwright-setup.md)
 3. Creates competitor profiles in `concurrentie-analyse/{category}/{competitor-slug}/`
 4. Inserts competitors and feature data into the database with provenance tracking
 5. Presents a comparison table and recommendation for Nextcloud ecosystem fit
