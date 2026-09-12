@@ -388,6 +388,18 @@ Gates **16, 29, 47, 48 and 61** ask what a *change* did and cannot be answered b
 checkout. With a base they run at any file scope; with none they report
 `NOT APPLICABLE` **by name, with a reason** — never `PASS`, and never counted as one.
 
+**Gate 19 (e2e-coverage) is delta-scoped whenever a base exists** too, since
+2026-09-12: it counts only the scenarios in spec files the change added or
+modified, at either file scope, and sweeps the whole repository only on a run
+with no base at all (the audit mode). Until then the base reached it only under
+`--scope-to-diff`, so every full-scope pull-request run printed the repository's
+entire backlog: 1,342 advisory lines on dossiq, none about the change. With a
+base the gate also knows which scenario headings the change **added**, and for
+those an `@e2e exclude` does not count — they are reported on their own lines as
+`new scenario without a test` and counted separately on the summary line. A
+scenario written today is written with its test; an exclusion is for a scenario
+that predates the suite. Existing scenarios keep their exclusion semantics.
+
 A delta gate also has to decide what *counts* as a change, and a plain `git diff`
 answers "a line moved". gate-16 therefore compares each changed file against its
 own base version with layout normalised away on both sides: brace style (K&R vs

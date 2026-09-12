@@ -115,13 +115,29 @@ directly after the spec's title / ``## Purpose`` section header. This is the
 correct mechanism for pure-backend or API-contract specs that are covered by
 Newman/PHPUnit instead of Playwright.
 
+A new scenario is not excludable
+================================
+
+When a base is available the gate also asks which scenarios the change ADDED:
+a ref present in the HEAD version of a touched spec and absent from its base
+version (every scenario of a spec file the change created counts). For those,
+an ``@e2e exclude`` does not satisfy the gate. Only a running test does. They
+are reported on their own lines as ``new scenario without a test`` and counted
+separately on the summary line, because the remedy differs from an existing
+uncovered scenario's: an existing one can be waived with a reason, a new one is
+written together with its test or not yet. Existing scenarios keep the
+exclusion semantics above unchanged.
+
 Diff scope
 ==========
 
-In gate mode (default), the gate is diff-scoped via ``HYDRA_GATE_BASE_REF``
-(default ``origin/development``): only scenarios in spec files that are ADDED or
-MODIFIED in the PR are checked. Scenarios in untouched spec files are never
-flagged.
+In gate mode (default), the gate is scoped to the change whenever the runner
+hands it a base through ``HYDRA_GATE_BASE_REF``, which it now does on every
+run that has a delta base and not only under ``--scope-to-diff``: only
+scenarios in spec files that are ADDED or MODIFIED relative to that base are
+checked, and scenarios in untouched spec files are never flagged. Without a
+base (a ``workflow_dispatch``, a plain local run) every spec in the repository
+is swept, which is the audit mode.
 
 Exit code is a STATUS, not a count: ``0`` pass, ``1`` fail, ``2`` error. The
 number of findings is on stdout, in the ``FAIL — <n> scenario(s)`` summary
@@ -437,10 +453,25 @@ def parse_spec_scenarios(spec_path: Path) -> list[dict]:
     """
     spec_name = spec_name_for(spec_path)
     try:
-        lines = spec_path.read_text(encoding="utf-8").splitlines()
+        text = spec_path.read_text(encoding="utf-8")
     except OSError:
         return []
+    return parse_spec_text(text, spec_name)
 
+
+def parse_spec_text(text: str, spec_name: str) -> list[dict]:
+    """Parse spec markdown held in memory; see :func:`parse_spec_scenarios`.
+
+    Split out so the BASE version of a touched spec (``git show base:path``)
+    can be parsed with the same rules as the HEAD version. That is what lets
+    the gate tell a scenario this change ADDED from one it merely sits next
+    to, without writing the base file to disk.
+
+    :param text: The spec markdown.
+    :param spec_name: The spec identity refs are built from.
+    :return: Scenario dicts, same shape as :func:`parse_spec_scenarios`.
+    """
+    lines = text.splitlines()
     results: list[dict] = []
 
     # ---- detect a whole-spec exclusion: @e2e exclude before the first ### heading
@@ -2094,6 +2125,54 @@ def changed_spec_files(base_ref: str, app_dir: Path) -> set[str]:
     return paths
 
 
+def _diff_base_commit(base_ref: str, app_dir: Path) -> str:
+    """The commit the diff is measured from: the merge base when there is one.
+
+    ``changed_spec_files`` diffs ``base...HEAD``, which compares against the
+    merge base, so the base version of a file has to be read from the same
+    commit or a spec edited on the base branch since the fork would show its
+    base-side scenarios as "added" here. Falls back to the ref itself when no
+    merge base exists (the two-dot fallback in ``changed_spec_files``).
+    """
+    merge_base = _git(["merge-base", base_ref, "HEAD"], app_dir).strip()
+    return merge_base or base_ref
+
+
+def added_scenario_refs(base_ref: str, app_dir: Path,
+                        touched: set[str]) -> set[str]:
+    """Refs of scenarios that exist at HEAD and did not exist at the base.
+
+    A scenario is ADDED when its ref is absent from the base version of the
+    same spec file, which includes every scenario of a spec file the change
+    created. A renamed heading therefore counts as added: its ref is new and
+    no existing anchor can cover it, which is the honest reading.
+
+    Only ``touched`` files are compared, because an untouched file cannot
+    carry an added scenario, and reading the base version of every spec in
+    the repository on every run is what this gate is being scoped away from.
+
+    :param base_ref: The delta base the caller resolved.
+    :param app_dir: The app root.
+    :param touched: Relative paths of spec files in the diff.
+    :return: The set of ``<spec>::<slug>`` refs added by this change.
+    """
+    base = _diff_base_commit(base_ref, app_dir)
+    added: set[str] = set()
+    for rel in touched:
+        spec_md = app_dir / rel
+        if not spec_md.is_file():
+            continue
+        spec_name = spec_name_for(spec_md)
+        head_refs = {s["ref"] for s in parse_spec_scenarios(spec_md)}
+        # An absent base version (file created by this change) reads as empty
+        # stdout, so every scenario in it is added. `_git` already swallows
+        # the non-zero exit git uses for "no such path at that commit".
+        base_text = _git(["show", f"{base}:{rel}"], app_dir)
+        base_refs = {s["ref"] for s in parse_spec_text(base_text, spec_name)} if base_text else set()
+        added |= head_refs - base_refs
+    return added
+
+
 # ---------------------------------------------------------------------------
 # Gate number for self-identification in output lines
 # ---------------------------------------------------------------------------
@@ -2274,6 +2353,10 @@ def run_gate(app_dir: Path) -> int:
         return EXIT_NOT_APPLICABLE
 
     base_ref = os.environ.get("HYDRA_GATE_BASE_REF")
+    # The scenarios this change ADDED, by ref. Empty on a full sweep: with no
+    # base there is no "before", so nothing can be called new. See the loop
+    # below for what "new" changes about the verdict.
+    added_refs: set[str] = set()
     if base_ref:
         touched = changed_spec_files(base_ref, app_dir)
         if not touched:
@@ -2287,12 +2370,32 @@ def run_gate(app_dir: Path) -> int:
                 f"--scope-to-diff --base <root-commit>."
             )
             return EXIT_EMPTY_SCOPE
+        added_refs = added_scenario_refs(base_ref, app_dir, touched)
     else:
         touched = all_specs
 
     covered_refs, dead_refs = collect_ref_status(app_dir)
 
     findings: list[str] = []
+    # A NEW SCENARIO IS NOT EXCLUDABLE, and it is reported on its own line.
+    #
+    # An `@e2e exclude <reason>` waives a scenario that predates the test
+    # suite: legacy debt that a PR touching the file next to it must not be
+    # blocked on (the ADR-020 reading this gate has always had). A scenario
+    # WRITTEN BY THIS CHANGE is not legacy. The author is in the file, the
+    # behaviour is being specified now, and the cheapest way to satisfy the
+    # gate was to type the exclusion under the heading in the same commit.
+    # Measured 2026-08-16 across the fleet: nldesign carried 585 of 786
+    # scenarios excluded before the gate was ever demoted, and the demotion
+    # note (.github#477) names mass exclusion as the remedy that empties the
+    # gate of meaning. So for an ADDED scenario an exclusion does not count;
+    # only a running test does. Existing scenarios keep the old semantics.
+    #
+    # Reported separately because the remedy differs: an existing uncovered
+    # scenario can be excluded with a reason, a new one cannot. The two are
+    # counted in one total (the runner reads that number) and the new ones are
+    # named in their own count on the summary line.
+    new_without_test: list[str] = []
     for rel in sorted(touched):
         spec_md = app_dir / rel
         if not spec_md.is_file():
@@ -2303,6 +2406,28 @@ def run_gate(app_dir: Path) -> int:
         # its spec name, so two files can never contend for the same anchor.
         declared_refs = {s["ref"] for s in scenarios}
         for s in scenarios:
+            if s["ref"] in added_refs \
+                    and covering_ref(s["ref"], covered_refs, declared_refs) is None:
+                if s["excluded"]:
+                    # A bare marker keeps the "without reason" wording the
+                    # reasonless-marker probe in test_exclusion_reason.py
+                    # looks for: two defects on one line, both named.
+                    how = (
+                        "excluded with `@e2e exclude` in the same change"
+                        if not s["bare_exclude"]
+                        else "excluded with a bare `@e2e exclude` without reason (reason required)"
+                    )
+                elif covering_ref(s["ref"], dead_refs, declared_refs) is not None:
+                    how = "tagged only by a test that does not run"
+                else:
+                    how = "no @e2e tag"
+                new_without_test.append(
+                    f"{s['ref']} — new scenario without a test ({how}). "
+                    f"This change ADDS the scenario, so an exclusion does not "
+                    f"satisfy it: write the Playwright test that proves it, "
+                    f"or leave the scenario out until it can be proven."
+                )
+                continue
             if s["excluded"] and not s["bare_exclude"]:
                 # Legitimately excluded — not required
                 continue
@@ -2343,13 +2468,21 @@ def run_gate(app_dir: Path) -> int:
 
     for line in sorted(set(findings)):
         print(line)
+    for line in sorted(set(new_without_test)):
+        print(line)
 
-    count = len(set(findings))
+    new_count = len(set(new_without_test))
+    count = len(set(findings)) + new_count
     if count == 0:
         print(f"[gate-{GATE_NUM}] e2e-coverage: PASS — {len(covered_refs)} reference(s) in e2e suite")
         return EXIT_PASS
+    # ONE summary line, and the total comes first: the runner reads
+    # `FAIL — <n> scenario` off this line, and the new-scenario count rides
+    # behind it so a reader sees both numbers without a second grep.
     print(
-        f"[gate-{GATE_NUM}] e2e-coverage: FAIL — {count} scenario(s) without a running e2e test"
+        f"[gate-{GATE_NUM}] e2e-coverage: FAIL — {count} scenario(s) without a "
+        f"running e2e test, {new_count} of them new scenario(s) without a test "
+        f"(an @e2e exclude does not satisfy a scenario this change adds)"
     )
     return EXIT_FAIL
 

@@ -687,7 +687,7 @@ else
         if [ "${HAVE_DELTA_BASE}" = "1" ]; then
             _db_count=$(printf '%s' "${CHANGED_FILES}" | grep -c . 2>/dev/null || true)
             echo "[hydra-gates] Delta base: ${BASE_REF} = $(git -c safe.directory='*' rev-parse --short "${BASE_REF}" 2>/dev/null) — ${_db_count:-0} changed file(s)."
-            echo "[hydra-gates] The DELTA gates (16, 29, 47, 48, 61) judge that change set. Every other gate reads the whole tree."
+            echo "[hydra-gates] The DELTA gates (16, 29, 47, 48, 61) judge that change set, and gate 19 counts only the scenarios in spec files it touched. Every other gate reads the whole tree."
         else
             CHANGED_FILES=""
             echo "[hydra-gates] Delta base: UNUSABLE — '${BASE_REF}' was named but ${_db_why}."
@@ -4403,8 +4403,22 @@ fi
 # `@e2e exclude` (no reason) is treated as non-compliant, mirroring gate-16's
 # `@spec exclude` rule.
 #
-# Diff-scoped (ADR-020): only spec files touched by the PR are checked.
-# Untouched legacy scenarios in unchanged spec files are never flagged.
+# DELTA-SCOPED WHENEVER A BASE EXISTS (2026-09-12): only spec files added or
+# modified relative to the delta base are checked, at EITHER file scope.
+# Until now the base reached this gate only under --scope-to-diff, so every
+# full-scope PR run — the fleet default since ADR-020 was superseded — swept
+# every spec in the repository and printed the whole backlog on every pull
+# request: 1,342 advisory lines on dossiq, none of them about the change in
+# front of the reader. Gate-16 has keyed on HAVE_DELTA_BASE since the scope
+# flip for exactly this reason; this gate now does the same. The whole-repo
+# sweep remains the behaviour when there is NO base at all (a
+# workflow_dispatch, a bare local run), which is the audit mode.
+#
+# A NEW SCENARIO IS NOT EXCLUDABLE. With a base the checker also tells which
+# scenario headings this change ADDED, and for those an `@e2e exclude` does
+# not count: they are reported as "new scenario without a test", named on
+# their own lines and counted on the summary line, still on this gate's
+# advisory channel. Existing scenarios keep the exclusion semantics below.
 #
 # A whole spec can be excluded (e.g. pure-backend API contracts covered by
 # Newman) by placing `@e2e exclude <reason>` after the spec's ## Purpose
@@ -4430,13 +4444,20 @@ if [ -d openspec/specs ] || [ -d tests/e2e ]; then
         # Capture the exit code directly — avoids the grep -c bug where grep
         # exits 1 on zero matches, causing "|| echo 0" to append a second "0",
         # leaving _e2e_fail="0\n0" which fails the -eq integer comparison.
-        # SCOPE ONLY WHEN THE CALLER ASKED FOR IT (#242). BASE_REF was passed
-        # unconditionally, so an UNSCOPED run — the mode a fleet audit uses —
-        # was silently narrowed to the diff against origin/development, came
-        # back empty, and the helper printed PASS over a repo it never opened.
-        # Measured on openconnector: 5 findings scoped, 412 over the full tree.
+        # SCOPE ONLY WHEN THERE IS A BASE TO SCOPE TO (#242, widened
+        # 2026-09-12). BASE_REF used to be passed unconditionally, so an
+        # UNSCOPED run with no base was silently narrowed to the diff against
+        # the helper's own `origin/development` default, came back empty, and
+        # the helper printed PASS over a repo it never opened (openconnector:
+        # 5 findings scoped, 412 over the full tree). The guard is now
+        # HAVE_DELTA_BASE rather than SCOPE_TO_DIFF: a full-scope run WITH a
+        # base — every pull request — judges the change's spec files, and a
+        # run with no base sweeps the tree. `${BASE_REF}` is empty exactly
+        # when HAVE_DELTA_BASE is 0, and the environment was scrubbed at the
+        # top of this file, so the helper never sees a base this run did not
+        # resolve and print.
         set +e
-        if [ "${SCOPE_TO_DIFF}" = "1" ]; then
+        if [ "${HAVE_DELTA_BASE}" = "1" ]; then
             HYDRA_GATE_BASE_REF="${BASE_REF}" \
                 python3 "${_e2e_lib_dir}/check_e2e_coverage.py" . \
                 >> "${_e2e_log}" 2>&1
@@ -4482,7 +4503,7 @@ if [ -d openspec/specs ] || [ -d tests/e2e ]; then
             # missing and no change the author could make would put a spec
             # file into a diff that does not touch one. See _skip's header.
             _e2e_ran=0
-            _skip 19 "e2e-coverage" na "the diff against '${BASE_REF}' touched NO spec file, so no scenario was inspected. Diff-scoped out under ADR-020, exactly as gates 4/6/7 are for the same diff — not a gap: the specs in this repo are unchanged from the base branch, so this PR introduces no scenario whose @e2e traceability could be missing. This gate runs on the next PR that touches a spec. See ${_e2e_log}."
+            _skip 19 "e2e-coverage" na "the diff against '${BASE_REF}' touched NO spec file, so no scenario was inspected. Delta-scoped out (the ADR-020 diff-scoping rule, kept for this gate at every file scope since 2026-09-12), as gate-16 is for the same change — not a gap: the specs in this repo are unchanged from the base, so this change introduces no scenario whose @e2e traceability could be missing. This gate runs on the next change that touches a spec; the whole-repo sweep is a run with no base. See ${_e2e_log}."
         elif [ "${_e2e_fail}" -eq 4 ]; then
             _e2e_ran=0
             _skip 19 "e2e-coverage" na "no openspec/specs/*/spec.md in this repository — there is no declared scenario for an e2e test to trace back to."
@@ -4514,7 +4535,16 @@ if [ -d openspec/specs ] || [ -d tests/e2e ]; then
             # So: keep measuring, stop blocking, and fix the gate properly on
             # its own — see .github#477. This is a temporary demotion with an
             # owner, not a retirement.
-            _warn 19 "e2e-coverage" "${_e2e_count} scenario(s) missing @e2e (advisory, non-blocking — see .github#477) — see ${_e2e_log}"
+            # The new-scenario count rides on the checker's summary line
+            # behind the total; surface it here so the reader learns which
+            # of the two remedies applies without opening the log.
+            _e2e_new=$(grep -oE ', [0-9]+ of them new scenario' "${_e2e_log}" 2>/dev/null \
+                | tail -1 | grep -oE '[0-9]+' || true)
+            _e2e_new_note=""
+            if [ -n "${_e2e_new}" ] && [ "${_e2e_new}" != "0" ]; then
+                _e2e_new_note="; ${_e2e_new} of them NEW scenario(s) without a test — this change adds them, and an @e2e exclude does not satisfy a scenario it adds"
+            fi
+            _warn 19 "e2e-coverage" "${_e2e_count} scenario(s) missing @e2e${_e2e_new_note} (advisory, non-blocking — see .github#477) — see ${_e2e_log}"
         fi
     fi
 fi

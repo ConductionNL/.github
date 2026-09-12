@@ -533,6 +533,31 @@ class GateModeTest(unittest.TestCase):
             cwd=str(self.root), capture_output=True, text=True
         ).stdout.strip()
 
+    def _existing_spec(self, rel: str, content: str) -> str:
+        """Commit ``content`` at ``rel`` as the BASE, then touch it at HEAD.
+
+        The exclusion semantics under test apply to scenarios that PREDATE
+        the change. A spec written in the PR itself is a different case (a
+        new scenario is not excludable, see the NewScenario tests below), so
+        the base must already hold the spec and the PR must merely edit the
+        file to bring it into the diff.
+        """
+        _write(self.root, "README.md", "# app\n")
+        _write(self.root, rel, content)
+        base = self._commit("base with spec")
+        _write(self.root, rel, content + "\nA prose line the change adds.\n")
+        return base
+
+    def _gate(self, base: str) -> tuple[int, str]:
+        os.environ["HYDRA_GATE_BASE_REF"] = base
+        try:
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                rc = cec.run_gate(self.root)
+        finally:
+            del os.environ["HYDRA_GATE_BASE_REF"]
+        return rc, buf.getvalue()
+
     def test_no_specs_in_the_repo_at_all_is_NOT_APPLICABLE_not_a_pass(self):
         """A repo with no specs has nothing to trace — say so, don't claim a pass.
 
@@ -641,21 +666,16 @@ class GateModeTest(unittest.TestCase):
         self.assertNotIn("PASS", buf.getvalue())
 
     def test_the_clamp_does_not_turn_a_clean_spec_into_a_failure(self):
-        # THE CONTROL for the clamp.
-        _write(self.root, "README.md", "# app\n")
-        base = self._commit("base")
-        _write(self.root, "openspec/specs/s/spec.md",
-               "# S\n\n## Requirements\n\n### Requirement: R\n\n"
-               "#### Scenario: only one\n\n- **WHEN** x happens\n"
-               "- @e2e exclude backend only — covered by PHPUnit\n")
-        self._commit("add spec")
-
-        os.environ["HYDRA_GATE_BASE_REF"] = base
-        try:
-            with redirect_stdout(io.StringIO()):
-                rc = cec.run_gate(self.root)
-        finally:
-            del os.environ["HYDRA_GATE_BASE_REF"]
+        # THE CONTROL for the clamp. The excluded scenario predates the change
+        # (an exclusion on a scenario the change ADDS is a finding in its own
+        # right, tested below).
+        base = self._existing_spec(
+            "openspec/specs/s/spec.md",
+            "# S\n\n## Requirements\n\n### Requirement: R\n\n"
+            "#### Scenario: only one\n\n- **WHEN** x happens\n"
+            "- @e2e exclude backend only — covered by PHPUnit\n")
+        self._commit("touch spec")
+        rc, _out = self._gate(base)
         self.assertEqual(rc, 0)
 
     def test_fail_uncovered_scenario_in_diff(self):
@@ -674,12 +694,17 @@ class GateModeTest(unittest.TestCase):
         finally:
             del os.environ["HYDRA_GATE_BASE_REF"]
 
-        # The STATUS is 1 (fail). The COUNT is 2, and it is on stdout.
+        # The STATUS is 1 (fail). The COUNT is 2, and it is on stdout. Both
+        # scenarios were ADDED by this change, so they are reported as new
+        # scenarios without a test rather than as legacy debt missing a tag,
+        # and the summary line carries the new-scenario count as well.
         self.assertEqual(rc, cec.EXIT_FAIL)
         out = buf.getvalue()
-        self.assertIn("missing @e2e", out)
+        self.assertIn("new scenario without a test", out)
+        self.assertNotIn("missing @e2e", out)
         self.assertIn("FAIL", out)
         self.assertIn("2 scenario(s)", out)
+        self.assertIn("2 of them new scenario(s) without a test", out)
 
     def test_pass_when_all_scenarios_covered(self):
         _write(self.root, "README.md", "# app\n")
@@ -701,59 +726,107 @@ class GateModeTest(unittest.TestCase):
         self.assertIn("PASS", buf.getvalue())
 
     def test_fail_bare_exclude_is_noncompliant(self):
-        _write(self.root, "README.md", "# app\n")
-        base = self._commit("base")
-        _write(self.root, "openspec/specs/my-spec/spec.md", SPEC_WITH_BARE_EXCLUDE)
-        self._commit("add spec with bare exclude")
-
-        os.environ["HYDRA_GATE_BASE_REF"] = base
-        try:
-            buf = io.StringIO()
-            with redirect_stdout(buf):
-                rc = cec.run_gate(self.root)
-        finally:
-            del os.environ["HYDRA_GATE_BASE_REF"]
-
+        base = self._existing_spec("openspec/specs/my-spec/spec.md",
+                                   SPEC_WITH_BARE_EXCLUDE)
+        self._commit("touch spec with bare exclude")
+        rc, out = self._gate(base)
         self.assertEqual(rc, 1)
-        out = buf.getvalue()
         self.assertIn("exclude without reason", out)
 
     def test_pass_exclude_with_reason(self):
-        _write(self.root, "README.md", "# app\n")
-        base = self._commit("base")
-        _write(self.root, "openspec/specs/my-spec/spec.md", SPEC_WITH_EXCLUSION)
+        base = self._existing_spec("openspec/specs/my-spec/spec.md",
+                                   SPEC_WITH_EXCLUSION)
         # Only the non-excluded scenario needs coverage
         _write(self.root, "tests/e2e/my.spec.ts",
                "// @e2e my-spec::another-covered\ntest('x', async ({ page }) => { await expect(page).toHaveTitle(/x/) })\n")
-        self._commit("add spec + test for visible scenario")
-
-        os.environ["HYDRA_GATE_BASE_REF"] = base
-        try:
-            buf = io.StringIO()
-            with redirect_stdout(buf):
-                rc = cec.run_gate(self.root)
-        finally:
-            del os.environ["HYDRA_GATE_BASE_REF"]
-
+        self._commit("touch spec + test for visible scenario")
+        rc, out = self._gate(base)
         self.assertEqual(rc, 0)
-        self.assertIn("PASS", buf.getvalue())
+        self.assertIn("PASS", out)
 
     def test_whole_spec_exclude_passes_all_scenarios(self):
+        base = self._existing_spec("openspec/specs/backend-spec/spec.md",
+                                   WHOLE_SPEC_EXCLUDED)
+        self._commit("touch backend-only spec")
+        rc, out = self._gate(base)
+        self.assertEqual(rc, 0)
+        self.assertIn("PASS", out)
+
+    # -----------------------------------------------------------------------
+    # A NEW SCENARIO IS NOT EXCLUDABLE
+    #
+    # An `@e2e exclude` waives a scenario that predates the test suite. A
+    # scenario the change itself writes is not legacy, and typing the
+    # exclusion under the heading in the same commit is the cheap answer the
+    # demotion note (.github#477) names as the one that empties the gate.
+    # -----------------------------------------------------------------------
+
+    def test_a_scenario_added_next_to_an_excluded_one_is_new_without_a_test(self):
+        base = self._existing_spec("openspec/specs/my-spec/spec.md",
+                                   SPEC_WITH_EXCLUSION)
+        # The change adds a THIRD scenario and excludes it in the same breath,
+        # and covers the existing visible one so nothing else is outstanding.
+        _write(self.root, "openspec/specs/my-spec/spec.md",
+               SPEC_WITH_EXCLUSION
+               + "\n#### Scenario: Added today\n\n"
+               + "@e2e exclude too hard to drive from a browser\n\n"
+               + "- WHEN added\n- THEN excluded\n")
+        _write(self.root, "tests/e2e/my.spec.ts",
+               "// @e2e my-spec::another-covered\ntest('x', async ({ page }) => { await expect(page).toHaveTitle(/x/) })\n")
+        self._commit("add a scenario and exclude it")
+        rc, out = self._gate(base)
+        self.assertEqual(rc, cec.EXIT_FAIL)
+        self.assertIn("my-spec::added-today — new scenario without a test", out)
+        self.assertIn("excluded with `@e2e exclude` in the same change", out)
+        # The PRE-EXISTING excluded scenario keeps its waiver.
+        self.assertNotIn("internal-wiring", out)
+        self.assertIn("1 scenario(s) without a running e2e test, "
+                      "1 of them new scenario(s) without a test", out)
+
+    def test_a_new_spec_file_under_a_whole_spec_exclude_is_all_new(self):
         _write(self.root, "README.md", "# app\n")
         base = self._commit("base")
         _write(self.root, "openspec/specs/backend-spec/spec.md", WHOLE_SPEC_EXCLUDED)
         self._commit("add backend-only spec")
+        rc, out = self._gate(base)
+        # Every scenario in a file the change created is new, and the
+        # whole-spec exclusion does not cover a single one of them.
+        self.assertEqual(rc, cec.EXIT_FAIL)
+        self.assertIn("2 scenario(s) without a running e2e test, "
+                      "2 of them new scenario(s) without a test", out)
+        self.assertIn("returns-200-on-success — new scenario without a test", out)
 
-        os.environ["HYDRA_GATE_BASE_REF"] = base
-        try:
-            buf = io.StringIO()
-            with redirect_stdout(buf):
-                rc = cec.run_gate(self.root)
-        finally:
-            del os.environ["HYDRA_GATE_BASE_REF"]
+    def test_a_new_scenario_with_a_running_test_passes(self):
+        base = self._existing_spec("openspec/specs/my-spec/spec.md", BASIC_SPEC)
+        _write(self.root, "openspec/specs/my-spec/spec.md",
+               BASIC_SPEC + "\n#### Scenario: Added and proven\n\n- WHEN a\n- THEN b\n")
+        _write(self.root, "tests/e2e/my.spec.ts",
+               "// @e2e my-spec::foo-does-bar\n// @e2e my-spec::foo-handles-error\n"
+               "// @e2e my-spec::added-and-proven\n"
+               "test('x', async ({ page }) => { await expect(page).toHaveTitle(/x/) })\n")
+        self._commit("add a scenario with its test")
+        rc, out = self._gate(base)
+        self.assertEqual(rc, cec.EXIT_PASS, out)
+        self.assertNotIn("new scenario", out)
 
-        self.assertEqual(rc, 0)
-        self.assertIn("PASS", buf.getvalue())
+    def test_without_a_base_nothing_is_new(self):
+        # A full sweep has no "before", so the exclusion semantics are the
+        # classic ones and a reasoned exclusion still passes.
+        _write(self.root, "openspec/specs/backend-spec/spec.md", WHOLE_SPEC_EXCLUDED)
+        self._commit("spec")
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = cec.run_gate(self.root)
+        self.assertEqual(rc, cec.EXIT_PASS, buf.getvalue())
+
+    def test_added_scenario_refs_names_only_the_new_heading(self):
+        base = self._existing_spec("openspec/specs/my-spec/spec.md", BASIC_SPEC)
+        _write(self.root, "openspec/specs/my-spec/spec.md",
+               BASIC_SPEC + "\n#### Scenario: Brand new\n\n- WHEN a\n- THEN b\n")
+        self._commit("add one scenario")
+        added = cec.added_scenario_refs(base, self.root,
+                                        {"openspec/specs/my-spec/spec.md"})
+        self.assertEqual(added, {"my-spec::brand-new"})
 
     def test_diff_scope_only_changed_spec_flagged(self):
         """A spec not touched in the diff must NOT be flagged even if uncovered."""
