@@ -58,8 +58,17 @@
 # Two arms agreeing that nothing is applicable is not parity, it is silence —
 # and it is the precise shape the defect wore. So the suite refuses to grade
 # until a positive control proves the subject is present and findable, and it
-# separately asserts that gate-19 FAILS IN BOTH ARMS naming the fixture's own
-# scenario. Agreement alone can never satisfy this file.
+# separately asserts that gate-19 REPORTS THE SUBJECT IN BOTH ARMS on a diff
+# that touches the spec. Agreement alone can never satisfy this file.
+#
+# SINCE 2026-09-12 GATE-19 IS DELTA-SCOPED WHENEVER A BASE EXISTS, at either
+# file scope, exactly as gate-16 has been since the scope flip. So the shape
+# this suite was written against — a docs-only diff at full scope, gate-19
+# expected to sweep the tree and name the scenario — is no longer the correct
+# behaviour: on that diff gate-19 now declines BY NAME in both channels, which
+# is parity too, and is asserted as such. The load-bearing arm is therefore
+# the second pair below, where the diff DOES touch the spec and the finding
+# must surface through both channels. Two diffs, one base, four runs.
 #
 # Run: bash scripts/lib/test_gate_base_ref_delivery_channel.sh
 set -uo pipefail
@@ -124,11 +133,12 @@ _verdict_set() {
 # Build ONE repository. Both arms read this same tree at this same commit, so
 # nothing but the channel can differ.
 #
-# The diff deliberately touches only docs/CHANGELOG.md: no spec, no controller,
-# no page component. That is what makes a diff-scoped gate-19/25/26 decline —
-# and therefore what makes the leak visible. A diff that touched the spec would
-# put it in scope through either channel and the arms would agree while the bug
-# was live.
+# The FIRST diff deliberately touches only docs/CHANGELOG.md: no spec, no
+# controller, no page component. That is what makes a diff-scoped
+# gate-19/25/26 decline, and for gates 25/26 (still state gates) what makes a
+# leak visible: they must NOT decline at full scope. The SECOND diff, built
+# further down, touches the spec, so gate-19's delta scope selects it and the
+# finding has to surface through both channels.
 # ---------------------------------------------------------------------------
 gf_build_repo "${WORK}/app" "${SRC}"
 gf_commit_all "${WORK}/app" "base: fixture app carrying one uncovered scenario"
@@ -213,11 +223,12 @@ fi
 
 # ===========================================================================
 echo
-echo "== the subject must be REPORTED, in BOTH arms =="
+echo "== on a docs-only diff, gate-19 declines BY NAME in BOTH arms =="
 # ===========================================================================
-# This is what makes agreement non-vacuous. Two arms that both say NOT
-# APPLICABLE agree perfectly and prove nothing — that is the exact state
-# `#416` produced. Assert the finding, by name, on each side independently.
+# gate-19 is delta-scoped whenever a base exists (2026-09-12), so on a diff
+# that touches no spec it must say so — through either channel — and must
+# not name the scenario the sweep would have found. Silence is not accepted
+# either: a gate that emits nothing is the #416 shape wearing a new coat.
 for _arm in arg env; do
     # Indirect expansion rather than `eval`: it assigns `_o` where ShellCheck
     # can see it (an `eval` form trips SC2154, and this repo's wrapper fails on
@@ -225,18 +236,76 @@ for _arm in arg env; do
     _ovar="_out_${_arm}"
     _o="${!_ovar}"
     _v="$(gf_verdict "${_o}" 19)"
-    # FAIL or WARNING both satisfy this suite: it asserts the gate SAW the
-    # uncovered scenario at full file scope, not that the finding blocks.
-    # gate-19 became advisory in .github#477 (see _warn in run-hydra-gates.sh).
     case "${_v}" in
-        *FAIL*|*WARNING*) _ok "arm ${_arm}: gate-19 reports the finding — ${_v#*: }" ;;
         *"NOT APPLICABLE"*)
-            _bad "arm ${_arm}: gate-19 reported NOT APPLICABLE at FULL file scope over a tree whose uncovered scenario the positive control just named. This is .github#416: the base leaked past the scope decision and diff-scoped a state gate. Verdict: ${_v:0:200}"
+            if printf '%s' "${_o}" | grep -qiF "${SUBJECT}"; then
+                _bad "arm ${_arm}: gate-19 declined AND named ${SUBJECT} — it swept the tree while saying it did not"
+            else
+                _ok "arm ${_arm}: gate-19 declines by name on a diff that touches no spec — ${_v#*: }"
+            fi
+            ;;
+        *FAIL*|*WARNING*)
+            _bad "arm ${_arm}: gate-19 reported a finding on a diff that touched NO spec file. It swept the whole tree with a base available, which is the pre-2026-09-12 behaviour (1,342 advisory lines on dossiq per PR). Verdict: ${_v:0:200}"
             ;;
         "") _bad "arm ${_arm}: gate-19 emitted no verdict line at all" ;;
         *)  _bad "arm ${_arm}: gate-19 gave an unrecognised verdict: ${_v:0:200}" ;;
     esac
 done
+# The STATE gates 25 and 26 are what #416 was about: at full file scope they
+# must NOT decline on a docs-only diff, in either channel. Their subject is
+# absent from this fixture (no routes.php, no manifest), so the assertion is
+# the honest one available: whatever they say, they say the SAME through both
+# channels — covered by the set comparison below — and gate-19's reason must
+# not be "the environment narrowed me", which the set comparison also catches.
+
+# ===========================================================================
+echo
+echo "== the subject must be REPORTED, in BOTH arms, once the diff touches the spec =="
+# ===========================================================================
+# This is what makes agreement non-vacuous. Two arms that both decline agree
+# perfectly and prove nothing on their own — so the second diff puts the spec
+# in scope, and the finding must then surface by name on each side.
+printf '\nA prose line the change adds, so the spec is in the diff.\n' \
+    >> "${WORK}/app/openspec/specs/channel-parity/spec.md"
+gf_commit_paths "${WORK}/app" "spec: touched" openspec/specs/channel-parity/spec.md
+_out_arg2="$(env -u HYDRA_GATE_BASE_REF bash "${GF_PKG_ROOT}/bin/hydra-gates" \
+    --base "${BASE}" --app-dir "${WORK}/app" 2>&1)"
+_set_arg2="$(_verdict_set "${_out_arg2}")"
+_out_env2="$(HYDRA_GATE_BASE_REF="${BASE}" bash "${GF_PKG_ROOT}/bin/hydra-gates" \
+    --app-dir "${WORK}/app" 2>&1)"
+_set_env2="$(_verdict_set "${_out_env2}")"
+for _arm in arg2 env2; do
+    _ovar="_out_${_arm}"
+    _o="${!_ovar}"
+    _v="$(gf_verdict "${_o}" 19)"
+    # FAIL or WARNING both satisfy this suite: it asserts the gate SAW the
+    # uncovered scenario, not that the finding blocks. gate-19 became
+    # advisory in .github#477 (see _warn in run-hydra-gates.sh).
+    case "${_v}" in
+        *FAIL*|*WARNING*)
+            # The verdict line carries the COUNT; the scenario's name is in
+            # the gate's log, which lives in the wrapper's own mktemp dir and
+            # is not reachable from here. One finding on a one-scenario spec
+            # is the subject.
+            _ok "arm ${_arm}: gate-19 reports the finding on the spec-touching diff — ${_v#*: }"
+            ;;
+        *"NOT APPLICABLE"*)
+            _bad "arm ${_arm}: gate-19 reported NOT APPLICABLE on a diff that TOUCHES the spec carrying the uncovered scenario. The base leaked, or the delta scope dropped the touched file. Verdict: ${_v:0:200}"
+            ;;
+        "") _bad "arm ${_arm}: gate-19 emitted no verdict line at all" ;;
+        *)  _bad "arm ${_arm}: gate-19 gave an unrecognised verdict: ${_v:0:200}" ;;
+    esac
+done
+if [ "${_set_arg2}" = "${_set_env2}" ]; then
+    _ok "on the spec-touching diff, every gate returned the same verdict through both channels ($(printf '%s\n' "${_set_arg2}" | grep -c . ) gate(s) compared)"
+else
+    _bad "on the spec-touching diff, THE DELIVERY CHANNEL CHANGED THE VERDICT (.github#416)"
+    join -t'|' -j1 \
+        <(printf '%s\n' "${_set_arg2}" | LC_ALL=C sort -t'|' -k1,1) \
+        <(printf '%s\n' "${_set_env2}" | LC_ALL=C sort -t'|' -k1,1) 2>/dev/null \
+        | LC_ALL=C sort -t'|' -k1,1n \
+        | awk -F'|' '$2 != $3 { printf "   %4s | %-17s | %s\n", $1, $2, $3 }'
+fi
 
 # ===========================================================================
 echo

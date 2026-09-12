@@ -388,6 +388,18 @@ Gates **16, 29, 47, 48 and 61** ask what a *change* did and cannot be answered b
 checkout. With a base they run at any file scope; with none they report
 `NOT APPLICABLE` **by name, with a reason** — never `PASS`, and never counted as one.
 
+**Gate 19 (e2e-coverage) is delta-scoped whenever a base exists** too, since
+2026-09-12: it counts only the scenarios in spec files the change added or
+modified, at either file scope, and sweeps the whole repository only on a run
+with no base at all (the audit mode). Until then the base reached it only under
+`--scope-to-diff`, so every full-scope pull-request run printed the repository's
+entire backlog: 1,342 advisory lines on dossiq, none about the change. With a
+base the gate also knows which scenario headings the change **added**, and for
+those an `@e2e exclude` does not count — they are reported on their own lines as
+`new scenario without a test` and counted separately on the summary line. A
+scenario written today is written with its test; an exclusion is for a scenario
+that predates the suite. Existing scenarios keep their exclusion semantics.
+
 A delta gate also has to decide what *counts* as a change, and a plain `git diff`
 answers "a line moved". gate-16 therefore compares each changed file against its
 own base version with layout normalised away on both sides: brace style (K&R vs
@@ -491,6 +503,53 @@ and the reason is named:
 `$HYDRA_GATE_PUSH_BEFORE` overrides the event payload. It exists so the
 invariant suite can drive each row above without a runner, and so a human can
 reproduce a CI run locally with the scope CI used.
+
+**Outside a push, a base that IS HEAD is refused, not rewritten.** The runner
+used to fall back from a self-comparison to the empty tree (#183: audit
+everything rather than nothing) whether or not a push context existed. Measured
+2026-09-12 on a dossiq clone: `--scope-to-diff --base fake-base`, where
+`fake-base` had been created at HEAD and the two-line change under test was
+uncommitted, put 4,753 files in scope and took 22m48s, and gate-16 then reported
+161 methods in files the change never touched. Every gate had honoured the base
+it was given; the base had been rewritten to "everything" in the preamble. The
+fallback is now reserved for a push whose previous tip is unusable
+(`GITHUB_EVENT_NAME=push`, or `$HYDRA_GATE_PUSH_BEFORE` set). With no push
+context the run exits 99, names the uncommitted files if there are any (the
+runner diffs committed history; an uncommitted edit is in no diff it can
+compute), and names `--full` as the way to ask for the audit.
+`scripts/lib/test_gate_local_base_is_honoured.sh` holds all three properties: a
+plain local branch name scopes every gate to the one committed change (gate-16
+names only the changed file, the run finishes in seconds), a base at HEAD is
+refused with zero `[gate-` lines, and the push fallback still fires on a push.
+
+### gate-33 in a separate CI job: `--axe-external`
+
+gate-33 (axe-core) is the one gate whose input comes from a browser, and the
+shared quality workflow judges it in its own `Hydra Gates (axe)` job since
+2026-09-12, so the other gates no longer wait ~30 minutes behind Playwright.
+That job runs `scripts/lib/check_axe_report.py`, the same helper the runner's
+gate-33 calls when the report is in the tree. The main gates job passes
+`--axe-external` when the caller set `enable-axe`; gate-33 then reports
+`NOT APPLICABLE` *to that run* by name, pointing at the job that owns the
+verdict, and stays out of the coverage tally. Without the flag, `--axe-enabled`
+with no report is still a structural gap, which is right for a single job and
+wrong for a split.
+
+### Per-gate timing
+
+Every run ends with a `[hydra-gates] TIMING:` block: the total, then one
+`[hydra-gates] TIMING gate-N <name>: <seconds>s` line per gate, slowest first. The number is the wall clock between consecutive verdict
+lines, which is exact for this runner because each gate's body sits between the
+previous verdict and its own; the clock starts at gate 1, so the shared set-up
+(scope resolution, the mask probes) is charged to nothing.
+
+Under `--scope-to-diff` a gate that takes longer than the budget
+(`HYDRA_GATE_TIMING_BUDGET`, default 5 seconds) gets an advisory
+`[hydra-gates] TIMING WARNING:` line naming it. It is prefixed `[hydra-gates]`
+and not `[gate-N]` on purpose: it is not a verdict, it does not count in the
+COVERAGE tally, and it never fails a run. Its job is to make the next gate that
+reads the whole tree on a diff-scoped run show up as a number, rather than as a
+run that felt slow.
 
 ### Scope granularity, and where file granularity is not enough
 

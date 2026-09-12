@@ -115,6 +115,13 @@
 #                             not opted into runtime a11y enforcement" (NOT
 #                             APPLICABLE); with it, a missing report means the
 #                             producer broke (a real gap, and it fails).
+#   --axe-external            tell the runner the caller set enable-axe AND
+#                             judges the report in a separate job of the same
+#                             run (the shared workflow's `Hydra Gates (axe)`
+#                             job, since the gates/axe split). gate-33 then
+#                             reports NOT APPLICABLE to this run by name and
+#                             stays out of the coverage tally; the verdict is
+#                             that job's.
 #
 # Base ref resolution order (first that resolves wins, and it is printed):
 #   1. --base REF
@@ -186,6 +193,7 @@ case "${HYDRA_GATE_SCOPE:-full}" in
 esac
 REQUIRE_FULL_COVERAGE=0
 AXE_ENABLED="${HYDRA_GATE_AXE_ENABLED:-0}"
+AXE_EXTERNAL="${HYDRA_GATE_AXE_EXTERNAL:-0}"
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -197,6 +205,7 @@ while [ $# -gt 0 ]; do
         --scope-to-diff|--diff) SCOPE_DIFF=1; shift ;;
         --require-full-coverage) REQUIRE_FULL_COVERAGE=1; shift ;;
         --axe-enabled) AXE_ENABLED=1; shift ;;
+        --axe-external) AXE_EXTERNAL=1; shift ;;
         -h|--help) sed -n '3,70p' "${_self}" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) APP_DIR="$1"; shift ;;
     esac
@@ -459,6 +468,9 @@ fi
 # report; this wrapper just has to stop swallowing the caller's declaration.
 if [ "${AXE_ENABLED}" = "1" ]; then
     set -- --axe-enabled "$@"
+fi
+if [ "${AXE_EXTERNAL}" = "1" ]; then
+    set -- --axe-external "$@"
 fi
 
 _out="$(mktemp -t hydra-gates-out.XXXXXX)"
