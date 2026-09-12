@@ -1617,6 +1617,47 @@ _NA_GATES=""
 # bin/hydra-gates' coverage assertion, the reviewer skill, the builder's Rule 0b
 # wrapper — anchors on `^\[gate-`. A verdict that wraps onto a second line is
 # a verdict that silently loses its own reason.
+#
+# ---------------------------------------------------------------------------
+# PER-GATE TIMING, so a slow gate is a named number and not a feeling.
+#
+# The 2026-09-12 velocity diagnosis found that four gates took 63-65% of a
+# diff-scoped run, because they read the whole tree regardless of the flag.
+# Nobody had measured that per gate, because the runner printed no timing at
+# all: a run was "slow" and every gate was equally suspect. The wall clock
+# between consecutive verdict lines is attributed to the gate that emitted the
+# later one, which is exact for a linear runner where each gate's body sits
+# between its predecessor's verdict and its own. The clock is (re)started just
+# before gate 1, so the scope resolution and the mask probes above are not
+# charged to it.
+#
+# `$EPOCHREALTIME` (bash 5) gives microseconds; on an older bash the fallback
+# is whole seconds from date(1), which is coarse but never wrong. The locale's
+# decimal separator is normalised so awk reads the number under nl_NL as well.
+#
+# The numbers are printed in the summary, one line per gate, and under
+# --scope-to-diff a gate over the budget (HYDRA_GATE_TIMING_BUDGET, default 5s)
+# gets an advisory TIMING WARNING line. That line is prefixed `[hydra-gates]`,
+# not `[gate-N]`, on purpose: it is not a verdict, it must not register in the
+# COVERAGE tally, and it never fails a run.
+# ---------------------------------------------------------------------------
+_GATE_TIMES=""
+_gate_now() {
+    if [ -n "${EPOCHREALTIME:-}" ]; then
+        printf '%s' "${EPOCHREALTIME/,/.}"
+    else
+        date +%s
+    fi
+}
+_GATE_T_PREV="$(_gate_now)"
+_gate_stamp() {
+    local _now _el
+    _now="$(_gate_now)"
+    _el=$(LC_ALL=C awk -v a="${_GATE_T_PREV}" -v b="${_now}" 'BEGIN { printf "%.2f", b - a }' 2>/dev/null || echo 0)
+    _GATE_TIMES="${_GATE_TIMES}$1 ${_el}
+"
+    _GATE_T_PREV="${_now}"
+}
 _fail() {
     set +e   # backstop — see the errexit invariant at the top of this file
     local _reason
@@ -1624,8 +1665,9 @@ _fail() {
     echo "[gate-$1] $2: FAIL${_reason:+ — ${_reason}}"
     _FAILED=$((_FAILED + 1))
     _EMITTED_GATES="${_EMITTED_GATES}$1 "
+    _gate_stamp "$1"
 }
-_pass() { set +e; echo "[gate-$1] $2: PASS"; _EMITTED_GATES="${_EMITTED_GATES}$1 "; }
+_pass() { set +e; echo "[gate-$1] $2: PASS"; _EMITTED_GATES="${_EMITTED_GATES}$1 "; _gate_stamp "$1"; }
 
 # _warn — A GATE THAT REPORTED A REAL FINDING AND IS DELIBERATELY NOT BLOCKING.
 #
@@ -1648,6 +1690,7 @@ _warn() {
     echo "[gate-$1] $2: WARNING${_reason:+ — ${_reason}}"
     _WARNED=$((_WARNED + 1))
     _EMITTED_GATES="${_EMITTED_GATES}$1 "
+    _gate_stamp "$1"
 }
 _WARNED=0
 
@@ -1838,6 +1881,7 @@ _skip() {
     local _cat _reason
     _cat="${3:-}"
     _reason=$(printf '%s' "${4:-}" | tr '\n' ' ')
+    _gate_stamp "$1"
     case "${_cat}" in
         na)
             echo "[gate-$1] $2: NOT APPLICABLE — ${_reason}"
@@ -1944,6 +1988,11 @@ _filter_preexisting() {
     python3 "${_gate_helper_dir}/filter_preexisting_methods.py" "${BASE_REF}" "$@" 2>&1 \
         | grep -E '^\[filter-preexisting\]' >&2 || true
 }
+
+# The per-gate clock starts HERE. Everything above — scope resolution, the
+# AppHost scan, the mask probes — is set-up shared by every gate and is not
+# charged to gate 1.
+_GATE_T_PREV="$(_gate_now)"
 
 # ---------------------------------------------------------------------------
 # Gate 1: SPDX / license headers on every lib/**/*.php
@@ -12702,6 +12751,9 @@ fi
 # ---------------------------------------------------------------------------
 _SUMMARY_REACHED=1
 echo ""
+# The applicability declarations below stamp too (they go through _skip); reset
+# the clock so they are charged the microseconds they take, not the last gate's.
+_GATE_T_PREV="$(_gate_now)"
 
 # Declared inventory: "<n> <name>" per line, first declaration of each number
 # wins (a gate may call _pass/_fail/_skip from several branches).
@@ -12919,6 +12971,43 @@ if [ "${_not_run_n}" -gt 0 ]; then
         echo "[hydra-gates]   gate-${_nr%% *} ${_nr#* }"
     done <<< "${_not_run}"
 fi
+
+# PER-GATE TIMING — one line per gate, slowest first, plus the total. See the
+# note at _gate_stamp. Under --scope-to-diff a gate over the budget is named in
+# an advisory line: a diff-scoped gate that still reads the whole tree is the
+# shape the 2026-09-12 velocity diagnosis found in gates 20, 3, 21, 5 and 14,
+# and the budget is what stops it coming back unnoticed. Advisory only: it is
+# not a verdict, it is not counted, and it never fails a run.
+_timing_budget="${HYDRA_GATE_TIMING_BUDGET:-5}"
+case "${_timing_budget}" in ''|*[!0-9.]*) _timing_budget=5 ;; esac
+_timing_rows=$(printf '%s' "${_GATE_TIMES}" | LC_ALL=C awk '
+    NF == 2 { t[$1] += $2; total += $2; n++ }
+    END {
+        for (g in t) printf "%s %.2f\n", g, t[g]
+        printf "TOTAL %.2f %d\n", total, n
+    }' 2>/dev/null)
+_timing_total=$(printf '%s\n' "${_timing_rows}" | awk '$1 == "TOTAL" {print $2}')
+_timing_n=$(printf '%s\n' "${_timing_rows}" | awk '$1 == "TOTAL" {print $3}')
+echo "[hydra-gates] TIMING: ${_timing_total:-0} s of gate time across ${_timing_n:-0} verdict(s); one TIMING line per gate follows, slowest first (wall clock between consecutive verdict lines; the clock starts at gate 1)."
+_timing_slow=""
+while read -r _tg _ts; do
+    [ -n "${_tg:-}" ] || continue
+    [ "${_tg}" = "TOTAL" ] && continue
+    _tname=$(printf '%s\n' "${_declared}" | awk -v g="${_tg}" '$1==g {print $2; exit}')
+    # `TIMING gate-N`, NOT the three-space `  gate-N` shape: that indentation
+    # is the NOT APPLICABLE / DID NOT RUN lists above, and consumers grep it
+    # as such (tests/test-hydra-gates-bin.sh reads `^\[hydra-gates\]   gate-`
+    # as "listed as not run"). A timing line must never read as a gap.
+    echo "[hydra-gates] TIMING gate-${_tg} ${_tname:-?}: ${_ts}s"
+    if [ "${SCOPE_TO_DIFF}" = "1" ] \
+        && LC_ALL=C awk -v s="${_ts}" -v b="${_timing_budget}" 'BEGIN { exit !(s + 0 > b + 0) }'; then
+        _timing_slow="${_timing_slow}${_tg}:${_tname:-?}:${_ts} "
+    fi
+done < <(printf '%s\n' "${_timing_rows}" | grep -v '^TOTAL' | sort -k2,2gr -k1,1n)
+for _slow in ${_timing_slow}; do
+    _sg="${_slow%%:*}"; _srest="${_slow#*:}"; _sn="${_srest%%:*}"; _st="${_srest#*:}"
+    echo "[hydra-gates] TIMING WARNING: gate-${_sg} ${_sn} took ${_st}s under --scope-to-diff, over the ${_timing_budget}s budget. A diff-scoped gate should read the changed files, not the tree — check that it enumerates through _enum_scoped / _in_scope. Advisory: this line is not a verdict and does not fail the run."
+done
 
 # ADVISORY GATES — printed BEFORE the verdict, and deliberately never folded
 # into it. A gate that reported a real finding and was demoted to non-blocking

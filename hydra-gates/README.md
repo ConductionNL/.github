@@ -492,6 +492,22 @@ and the reason is named:
 invariant suite can drive each row above without a runner, and so a human can
 reproduce a CI run locally with the scope CI used.
 
+### Per-gate timing
+
+Every run ends with a `[hydra-gates] TIMING:` block: the total, then one
+`[hydra-gates] TIMING gate-N <name>: <seconds>s` line per gate, slowest first. The number is the wall clock between consecutive verdict
+lines, which is exact for this runner because each gate's body sits between the
+previous verdict and its own; the clock starts at gate 1, so the shared set-up
+(scope resolution, the mask probes) is charged to nothing.
+
+Under `--scope-to-diff` a gate that takes longer than the budget
+(`HYDRA_GATE_TIMING_BUDGET`, default 5 seconds) gets an advisory
+`[hydra-gates] TIMING WARNING:` line naming it. It is prefixed `[hydra-gates]`
+and not `[gate-N]` on purpose: it is not a verdict, it does not count in the
+COVERAGE tally, and it never fails a run. Its job is to make the next gate that
+reads the whole tree on a diff-scoped run show up as a number, rather than as a
+run that felt slow.
+
 ### Scope granularity, and where file granularity is not enough
 
 Most gates scope by **file**: a finding in a file the PR did not touch does not
