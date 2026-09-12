@@ -10,6 +10,7 @@ Current version: see [`VERSION`](VERSION)
 | ----------------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | `settings.json`               | `~/.claude/settings.json`                     | Permissions allowlist + hooks                                                                                               |
 | `block-write-commands.sh`     | `~/.claude/hooks/block-write-commands.sh`     | Guards Bash write operations, prompts for approval                                                                          |
+| `block-polling.sh`            | `~/.claude/hooks/block-polling.sh`            | Blocks hand-rolled waiting: CI watch commands, poll loops, long sleeps, idle heartbeats (velocity plan item 5, 2026-09-12)   |
 | `block-config-tool-writes.sh` | `~/.claude/hooks/block-config-tool-writes.sh` | Guards Write/Edit/MultiEdit calls — denies tools that write to `~/.claude/` or produce scripts that would (added in v1.7.0) |
 | `check-settings-version.sh`   | `~/.claude/hooks/check-settings-version.sh`   | Warns at session start if settings are outdated                                                                             |
 | `sound-notify.sh`             | `~/.claude/hooks/sound-notify.sh`             | Optional notification-sound wrapper. Reads `~/.claude/sound-config.sh` and plays a sound on question / permission / stop events. Silent by default (added in v2.2.0)         |
@@ -31,6 +32,7 @@ mkdir -p ~/.claude/hooks
 
 cp "$REPO_ROOT/global-settings/settings.json" ~/.claude/settings.json
 cp "$REPO_ROOT/global-settings/block-write-commands.sh" ~/.claude/hooks/block-write-commands.sh
+cp "$REPO_ROOT/global-settings/block-polling.sh" ~/.claude/hooks/block-polling.sh
 cp "$REPO_ROOT/global-settings/block-config-tool-writes.sh" ~/.claude/hooks/block-config-tool-writes.sh
 cp "$REPO_ROOT/global-settings/check-settings-version.sh" ~/.claude/hooks/check-settings-version.sh
 cp "$REPO_ROOT/global-settings/sound-notify.sh" ~/.claude/hooks/sound-notify.sh
