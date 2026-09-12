@@ -706,10 +706,26 @@ fi
 # running full-repo OR the file appears in CHANGED_FILES). Used inside
 # every gate's file loop to filter out untouched files when
 # --scope-to-diff is active.
+#
+# A BASH PATTERN MATCH, NOT A GREP. This used to be
+# `echo "${CHANGED_FILES}" | grep -qxF "$1"`: two forks per call, and every
+# gate called it once per TRACKED file, so a diff-scoped run over a 26-file
+# change forked grep several thousand times per gate just to say "no". Measured
+# on dossiq 2026-09-12: gate-21 spent 54.6 s on a diff that touched none of its
+# files, most of it here. The membership test is now a `case` over the list
+# with a newline on either side of each entry, which is exact-line matching
+# with no process at all. The quotes inside the pattern make `$1` literal, so a
+# path carrying a glob character still matches only itself.
+_NL='
+'
+_CHANGED_FILES_NL="${_NL}${CHANGED_FILES}${_NL}"
 _in_scope() {
     [ "${SCOPE_TO_DIFF}" = "0" ] && return 0
     [ -z "${CHANGED_FILES}" ] && return 1
-    echo "${CHANGED_FILES}" | grep -qxF "$1"
+    case "${_CHANGED_FILES_NL}" in
+        *"${_NL}$1${_NL}"*) return 0 ;;
+    esac
+    return 1
 }
 
 # Filter a newline-separated list of file paths (one per line) on stdin,
@@ -719,17 +735,6 @@ _filter_files_by_scope() {
     while IFS= read -r _f; do
         [ -z "${_f}" ] && continue
         _in_scope "${_f}" && echo "${_f}"
-    done
-}
-
-# Filter a newline-separated list of "file:line:..." (grep -n format) on
-# stdin, writing to stdout only those whose file part is in scope.
-_filter_grep_by_scope() {
-    if [ "${SCOPE_TO_DIFF}" = "0" ]; then cat; return; fi
-    while IFS= read -r _line; do
-        [ -z "${_line}" ] && continue
-        _f="${_line%%:*}"
-        _in_scope "${_f}" && echo "${_line}"
     done
 }
 
@@ -786,6 +791,56 @@ _enum_tracked() {
         | grep -E "${_re}" 2>/dev/null \
         | grep -vE '(^|/)(vendor|node_modules|dist|build|custom_apps)/' \
         | sort -u || true
+}
+
+# ---------------------------------------------------------------------------
+# _enum_scoped <basename-regex> <dir> [<dir>...]
+#
+# The files a gate should OPEN on this run: `_enum_tracked` at full scope, and
+# the CHANGED FILES under those directories under --scope-to-diff.
+#
+# WHY THIS EXISTS (velocity diagnosis, 2026-09-12). Gates 20, 3, 21, 5 and 14
+# took 63-65% of a diff-scoped run, and the reason was the shape
+#
+#     while read -r f; do _in_scope "$f" || continue; …; done < <(_enum_tracked … lib)
+#
+# which enumerates the ENTIRE tracked tree and then asks, per file, whether it
+# is in the diff. The answer is "no" for all but a handful, but the question
+# costs a process each time (see `_in_scope`), and some gates did work BEFORE
+# asking — gate-3 ran `grep -rn` over all of lib/ and src/ and filtered the
+# hits afterwards, gate-21 ran `find` over six directories. Under
+# --scope-to-diff the changed-file list IS the scope, so the honest enumeration
+# starts from it: filter that list by directory and pattern, keep what exists
+# on disk, and never touch the tree. The full-scope arm is unchanged, so a full
+# run reads exactly what it read before.
+#
+# A changed file is tracked at HEAD by construction (the diff is
+# `--diff-filter=ACMR` against HEAD), so "changed ∩ pattern" here equals the old
+# "tracked ∩ pattern ∩ changed" exactly; the `-f` test only drops a path the
+# working tree no longer has.
+# ---------------------------------------------------------------------------
+_enum_scoped() {
+    if [ "${SCOPE_TO_DIFF}" = "0" ]; then
+        _enum_tracked "$@"
+        return
+    fi
+    local _re="$1"; shift
+    [ "$#" -gt 0 ] || return 0
+    [ -n "${CHANGED_FILES}" ] || return 0
+    local _d _dirs="" _f
+    for _d in "$@"; do
+        _d="${_d%/}"
+        _dirs="${_dirs}${_dirs:+|}$(printf '%s' "${_d}" | sed 's/[][\.*^$|+?(){}]/\\&/g')"
+    done
+    printf '%s\n' "${CHANGED_FILES}" \
+        | grep -E "^(${_dirs})/" 2>/dev/null \
+        | grep -E "${_re}" 2>/dev/null \
+        | grep -vE '(^|/)(vendor|node_modules|dist|build|custom_apps)/' \
+        | sort -u \
+        | while IFS= read -r _f; do
+            [ -f "${_f}" ] && printf '%s\n' "${_f}"
+        done
+    return 0
 }
 
 # ---------------------------------------------------------------------------
@@ -1325,8 +1380,9 @@ _ctrl_path_from_name() {
             local _sub="${_name#"${_HYDRA_APP_NS}"\\}"
             local _sub_last="${_sub##*\\}"
             local _sub_ns="${_sub%\\*}"
-            local _sub_last_cap
-            _sub_last_cap="$(printf '%s' "${_sub_last}" | awk '{print toupper(substr($0,1,1)) substr($0,2)}')"
+            # `${x^}` is awk's toupper(substr($0,1,1)) substr($0,2) with no
+            # fork: this resolver runs once per route, in two gates.
+            local _sub_last_cap="${_sub_last^}"
             if [ "${_sub_ns}" = "${_sub}" ]; then
                 # `OCA\<App>\Foo` — no intermediate namespace.
                 echo "lib/${_sub_last_cap}Controller.php"
@@ -1337,10 +1393,7 @@ _ctrl_path_from_name() {
         *\\*)
             local _last="${_name##*\\}"
             local _ns="${_name%\\*}"
-            # SC2155: declare and assign separately so awk's exit code isn't
-            # masked by `local`.
-            local _last_cap
-            _last_cap="$(printf '%s' "${_last}" | awk '{print toupper(substr($0,1,1)) substr($0,2)}')"
+            local _last_cap="${_last^}"
             # EVERY remaining separator becomes a directory separator, not just
             # the last one. `${_ns}` used to be interpolated raw, so a two-level
             # name produced a path with a literal backslash inside it —
@@ -1406,8 +1459,7 @@ _ctrl_path_from_name() {
             echo "lib/Controller/${_camel}Controller.php"
             ;;
         *)
-            local _cap
-            _cap=$(printf '%s' "${_name}" | awk '{print toupper(substr($0,1,1)) substr($0,2)}')
+            local _cap="${_name^}"
             echo "lib/Controller/${_cap}Controller.php"
             ;;
     esac
@@ -2097,11 +2149,22 @@ _stub_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-stub-scan.log
 : > "${_stub_log}"
 # How much surface did this gate actually get to look at? An empty scope must
 # not be reported as a clean one — see the gate-1 note.
+# SCOPED AT THE ENUMERATION, not after the fact (2026-09-12). Every arm of this
+# gate used to walk the whole of lib/ and src/ and discard what the diff did
+# not contain; under --scope-to-diff each now starts from the changed-file
+# list (`_enum_scoped`). The full-scope arm is untouched: `grep -rn` still
+# reads the tree there, and the two forms print the same `file:line:text`.
 _stub_scope=0
 while IFS= read -r f; do
-    _in_scope "$f" && _stub_scope=$((_stub_scope + 1))
-done < <(_enum_tracked '\.(php|vue)$' lib src)
-grep -rn "In a complete implementation" lib/ src/ 2>/dev/null | _filter_grep_by_scope | head -5 >> "${_stub_log}" || true
+    [ -n "$f" ] && _stub_scope=$((_stub_scope + 1))
+done < <(_enum_scoped '\.(php|vue)$' lib src)
+if [ "${SCOPE_TO_DIFF}" = "1" ]; then
+    # -H so a single file still prints its name, exactly as -r does.
+    _enum_scoped '.' lib src | tr '\n' '\0' \
+        | xargs -0 -r grep -Hn "In a complete implementation" 2>/dev/null | head -5 >> "${_stub_log}" || true
+else
+    grep -rn "In a complete implementation" lib/ src/ 2>/dev/null | head -5 >> "${_stub_log}" || true
+fi
 # A DELEGATING run() IS NOT A STUB, AND A DEAD LINE MUST NOT CLOSE THE GATE
 # (#226).
 #
@@ -2131,9 +2194,8 @@ if [ -d lib/BackgroundJob ]; then
     _stub_jobs=()
     while IFS= read -r job; do
         [ -f "${job}" ] || continue
-        _in_scope "${job}" || continue
         _stub_jobs+=("${job}")
-    done < <(_enum_tracked '\.php$' lib/BackgroundJob)
+    done < <(_enum_scoped '\.php$' lib/BackgroundJob)
     if [ "${#_stub_jobs[@]}" -eq 0 ]; then
         : # nothing in scope.
     elif [ ! -f "${_stub_helper}" ]; then
@@ -2151,14 +2213,22 @@ if [ -d lib/BackgroundJob ]; then
     fi
 fi
 if [ -d src ]; then
+    # `find` at full scope (it sees an untracked component too); the changed
+    # files under --scope-to-diff, where an untracked file is outside the
+    # committed diff by definition.
+    if [ "${SCOPE_TO_DIFF}" = "1" ]; then
+        _stub_vue_list=$(_enum_scoped '\.vue$' src)
+    else
+        _stub_vue_list=$(find src -name '*.vue' 2>/dev/null)
+    fi
     while IFS= read -r vue; do
-        _in_scope "${vue}" || continue
+        [ -n "${vue}" ] || continue
         if grep -qE 'fetch[A-Z][A-Za-z]*\s*\(\s*\)\s*\{' "${vue}" \
            && grep -qE "return\s*\[\s*\{\s*label:\s*'(Default|Personal|Test|Demo)" "${vue}"; then
             echo "${vue}: fetch*() returns hard-coded single-entry stub" >> "${_stub_log}"
         fi
         # .vue only: a `fetch*()` stub is a Vue component-method pattern.
-    done < <(find src -name '*.vue' 2>/dev/null)
+    done <<< "${_stub_vue_list}"
 fi
 # Stub auth / ignored caller-identity parameter — decidesk#45 pattern
 # (2026-04-22). The builder's fix-mode created empty-stub authorize*()
@@ -2204,7 +2274,6 @@ fi
 # method of being unfinished.
 while IFS= read -r f; do
     [ -f "$f" ] || continue
-    _in_scope "$f" || continue
     # Anchor on CODE. A file whose mask cannot be produced is not judged by
     # this arm — reading the raw text instead is the behaviour being removed.
     _stub_code=$(_php_code_copy "$f") || continue
@@ -2291,7 +2360,7 @@ while IFS= read -r f; do
                 fi
             fi
         done
-done < <(_enum_tracked '\.php$' lib/Service lib/Controller)
+done < <(_enum_scoped '\.php$' lib/Service lib/Controller)
 # AN ARM THAT SILENTLY DID NOT RUN IS NOT A PASS. The caller-identity arm above
 # `continue`s on every file whose comment mask cannot be produced, so without
 # this the gate would print PASS with one of its four arms switched off and no
@@ -2633,6 +2702,17 @@ if [ -f appinfo/routes.php ]; then
     # Touching appinfo/routes.php puts every routed method back in scope.
     _ra_routes_touched=0
     _in_scope "appinfo/routes.php" && _ra_routes_touched=1
+    # WHAT THIS GATE READS UNDER --scope-to-diff (2026-09-12). A routed method
+    # is judged when the diff touched the controller that serves it OR
+    # appinfo/routes.php itself; routes.php is read in full either way, because
+    # it is the only place the route table lives — that is the direct
+    # dependency of every changed controller. The loop below still walks every
+    # route entry (400 on dossiq) to resolve its class, but `_in_scope` no
+    # longer forks per entry and `_ctrl_path_from_name` no longer forks awk,
+    # which took this gate from 9.2 s to well under a second on a diff that
+    # judged nothing. Routes whose class this repo does not ship are still
+    # listed as NOT JUDGED at either scope, so the disclosure line is unchanged.
+    #
     # Process substitution, not a pipeline: the loop must run in THIS shell so
     # the log appends and the scope flags are read from one consistent state.
     #
@@ -3556,6 +3636,16 @@ if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
     # invariant 2 — see the scope note at that loop.
     _rr_routes_touched=0
     _in_scope "appinfo/routes.php" && _rr_routes_touched=1
+    # WHAT THIS GATE READS UNDER --scope-to-diff (2026-09-12). This gate
+    # genuinely needs more than the changed files: a route for a changed
+    # controller method may sit anywhere in appinfo/routes.php, and a changed
+    # routes.php names controllers the diff did not touch. So the scope is the
+    # CHANGED FILES PLUS THEIR DIRECT DEPENDENCY: invariant 1 enumerates only
+    # the changed controllers (`_enum_scoped`) and reads routes.php in full;
+    # invariant 2 reads every route entry and judges those whose target class
+    # is in scope, or all of them when routes.php itself changed. What it no
+    # longer does is enumerate every tracked controller to ask each one
+    # whether it is in the diff.
 
     # A ROUTE WRITTEN ONLY IN A COMMENT IS NOT A ROUTE (#415 / #422).
     # ---------------------------------------------------------------
@@ -3624,7 +3714,6 @@ if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
     # the current shell so variable updates survive.
     while IFS= read -r _ctrl_path; do
         [ -n "${_ctrl_path}" ] || continue
-        _in_scope "${_ctrl_path}" || continue
         # BOTH INVARIANTS COUNT TOWARD "THIS GATE OPENED SOMETHING" (.github#374).
         #
         # A first draft counted only invariant 2's route loop, and gate-14 then
@@ -3722,7 +3811,7 @@ if [ -d lib/Controller ] && [ -f appinfo/routes.php ]; then
                 echo "${_ctrl_path} method=${_m} expected_route='${_ctrl_slug}#${_m}' rule=missing-route" >> "${_rr_log}"
             fi
         done
-    done < <(_enum_tracked 'Controller\.php$' lib/Controller)
+    done < <(_enum_scoped 'Controller\.php$' lib/Controller)
 
     # ---- Invariant 2: every routed entry resolves to a method that exists.
     #
@@ -4541,10 +4630,13 @@ if [ -d lib ]; then
     # `$this->orObjectService?->`. `$this->schemaMapper->createFromArray()` is
     # a different class's real method and is deliberately not matched.
     _OR_FABRICATED_RX='(\$this->[A-Za-z_]*[Oo]bjectService|\$[A-Za-z_]*[Oo]bjectService)\??->(findObjects|findObject|createFromArray|updateFromArray|deleteFromId)[[:space:]]*\('
+    # Enumerated through `_enum_scoped`: at full scope every tracked PHP file
+    # under lib/, under --scope-to-diff only the changed ones. The mask below
+    # is a python process per file, so reading 724 files to judge 9 was the
+    # whole cost of this gate on a diff-scoped run (8.1 s on dossiq).
     while IFS= read -r _file; do
         [ -z "${_file}" ] && continue
         [ -f "${_file}" ] || continue
-        _in_scope "${_file}" || continue
         _or_inspected=$((_or_inspected + 1))
         # Comments blanked BEFORE the search (#294). Offsets and newlines are
         # preserved by php_mask, so grep's -n line numbers still address the
@@ -4583,7 +4675,7 @@ if [ -d lib ]; then
             echo "${_file}:${_or_no}:${_or_src}  rule=or-objectservice-fabricated-method" >> "${_or_log}"
             _or_hits=$((_or_hits + 1))
         done <<< "${_hits}"
-    done < <(_enum_tracked '\.php$' lib)
+    done < <(_enum_scoped '\.php$' lib)
     if [ "${_or_ran}" -eq 0 ]; then
         _skip 20 "or-objectservice-api" wiring "the comment mask or grep did NOT complete on ${_or_broken} — no call site was judged from that file onward. Calls to methods that do not exist on OpenRegister's ObjectService are UNVERIFIED by this run. See ${_or_log}.err."
     elif [ "${_or_inspected}" -eq 0 ]; then
@@ -4652,6 +4744,15 @@ fi
 # `appinfo/routes.php` — incident #12, one of the three this gate was written
 # for — was therefore reported as `2 file(s)`. Verified: `find lib appinfo src
 # tests openspec l10n appinfo -name '*.xml'` prints `appinfo/info.xml` twice.
+#
+# UNDER --scope-to-diff THE ENUMERATION IS THE CHANGED-FILE LIST (2026-09-12).
+# The untracked-file argument above is about FULL scope, where the tree is the
+# scope. A diff-scoped run's scope is the committed diff, and an untracked file
+# is outside it by definition, so walking six directories to then discard
+# everything the diff does not name bought nothing: measured on dossiq, 54.6 s
+# for a 26-file change that touched none of this gate's files, the single
+# slowest gate of the run. `_enum_scoped` starts from the list instead; the
+# `find` arm is byte-for-byte what it was.
 # ---------------------------------------------------------------------------
 _cm_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-conflict-markers.log
 : > "${_cm_log}"
@@ -4661,13 +4762,21 @@ _cm_hits=0
 # whole tree — measured on a fixture holding a real `<<<<<<<` marker:
 # full run FAIL — 1, docs-only diff PASS.
 _cm_inspected=0
+if [ "${SCOPE_TO_DIFF}" = "1" ]; then
+    _cm_list=$(_enum_scoped '\.(php|js|ts|vue|json|md|yaml|yml|xml)$' lib appinfo src tests openspec l10n)
+else
+    _cm_list=$(find lib appinfo src tests openspec l10n \
+            \( -name '*.php' -o -name '*.js' -o -name '*.ts' \
+             -o -name '*.vue' -o -name '*.json' -o -name '*.md' \
+             -o -name '*.yaml' -o -name '*.yml' -o -name '*.xml' \) \
+             2>/dev/null)
+fi
 # Match git's exact marker shapes: `<<<<<<< ` / `======= ` (end of line OK) / `>>>>>>> `
 # at the start of a line. Length is exactly 7 chars of the marker glyph; the
 # trailing content for << / >> is a ref name, ======= can be bare.
 while IFS= read -r _file; do
     [ -z "${_file}" ] && continue
     [ ! -f "${_file}" ] && continue
-    _in_scope "${_file}" || continue
     _cm_inspected=$((_cm_inspected + 1))
     # grep -l would short-circuit but we want a line count for the log.
     _matches=$(grep -nE '^(<{7}[[:space:]]|>{7}[[:space:]]|={7}$)' "${_file}" 2>/dev/null || true)
@@ -4683,11 +4792,7 @@ while IFS= read -r _file; do
     echo "${_file}:" >> "${_cm_log}"
     echo "${_matches}" | head -5 | sed 's/^/  /' >> "${_cm_log}"
     _cm_hits=$((_cm_hits + 1))
-done < <(find lib appinfo src tests openspec l10n \
-            \( -name '*.php' -o -name '*.js' -o -name '*.ts' \
-             -o -name '*.vue' -o -name '*.json' -o -name '*.md' \
-             -o -name '*.yaml' -o -name '*.yml' -o -name '*.xml' \) \
-             2>/dev/null)
+done <<< "${_cm_list}"
 if [ "${_cm_inspected}" -eq 0 ]; then
     # AN UNOPENED SCOPE IS NEVER A PASS (.github#374). See _skip_empty_scope.
     _skip_empty_scope 21 "conflict-markers" "source file under lib|appinfo|src|tests|openspec|l10n (php|js|ts|vue|json|md|yaml|yml|xml)"
