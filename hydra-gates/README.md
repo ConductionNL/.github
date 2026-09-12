@@ -504,6 +504,24 @@ and the reason is named:
 invariant suite can drive each row above without a runner, and so a human can
 reproduce a CI run locally with the scope CI used.
 
+**Outside a push, a base that IS HEAD is refused, not rewritten.** The runner
+used to fall back from a self-comparison to the empty tree (#183: audit
+everything rather than nothing) whether or not a push context existed. Measured
+2026-09-12 on a dossiq clone: `--scope-to-diff --base fake-base`, where
+`fake-base` had been created at HEAD and the two-line change under test was
+uncommitted, put 4,753 files in scope and took 22m48s, and gate-16 then reported
+161 methods in files the change never touched. Every gate had honoured the base
+it was given; the base had been rewritten to "everything" in the preamble. The
+fallback is now reserved for a push whose previous tip is unusable
+(`GITHUB_EVENT_NAME=push`, or `$HYDRA_GATE_PUSH_BEFORE` set). With no push
+context the run exits 99, names the uncommitted files if there are any (the
+runner diffs committed history; an uncommitted edit is in no diff it can
+compute), and names `--full` as the way to ask for the audit.
+`scripts/lib/test_gate_local_base_is_honoured.sh` holds all three properties: a
+plain local branch name scopes every gate to the one committed change (gate-16
+names only the changed file, the run finishes in seconds), a base at HEAD is
+refused with zero `[gate-` lines, and the push fallback still fires on a push.
+
 ### Per-gate timing
 
 Every run ends with a `[hydra-gates] TIMING:` block: the total, then one

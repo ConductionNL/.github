@@ -530,8 +530,59 @@ if [ "${SCOPE_TO_DIFF}" = "1" ]; then
             echo "[hydra-gates] ERROR: scripts/lib/resolve-push-base.sh is missing from this package." >&2
             _push_base=""
         fi
+        # A BASE THAT IS HEAD, OUTSIDE A PUSH, IS REFUSED BY NAME (2026-09-12).
+        #
+        # The #183 fallback below exists for a PUSH whose previous tip cannot
+        # be used — a branch created by the push, a force-push, a fresh
+        # mirror. It was reached from a different place: a human at a
+        # terminal, `--scope-to-diff --base fake-base`, where `fake-base` had
+        # been created AT HEAD and the two-line change under test sat
+        # UNCOMMITTED in the working tree. There was no push payload, the
+        # empty-tree fallback fired, 4,753 files went into scope, and 22
+        # minutes later gate-16 reported 161 methods missing @spec in files
+        # the change never touched, gate-19 1,668 scenarios, gate-52 a
+        # ratchet of base=0. Every gate had honoured the base it was given;
+        # the base had been rewritten to "everything" three screens above,
+        # in prose, and the run read as the gates ignoring --base.
+        #
+        # So the fallback is now reserved for the situation it was written
+        # for: a push context existed (GITHUB_EVENT_NAME=push, or
+        # HYDRA_GATE_PUSH_BEFORE was set) and its tip was unusable. With no
+        # push context at all, an explicit base that equals HEAD is a
+        # question with two honest answers and this runner cannot pick one:
+        # `--full` if the whole tree was meant, or a base that is actually
+        # behind HEAD if the change was. Refusing names both, and names the
+        # uncommitted files when there are any, because that is the shape
+        # this was measured in: the runner diffs COMMITTED history, and an
+        # edit that is not committed is not in any diff it can compute.
+        if [ -z "${_push_base:-}" ] \
+            && [ "${GITHUB_EVENT_NAME:-}" != "push" ] \
+            && [ -z "${HYDRA_GATE_PUSH_BEFORE:-}" ]; then
+            _dirty=$(git -c safe.directory='*' status --porcelain --untracked-files=no 2>/dev/null | head -20)
+            _dirty_n=$(printf '%s' "${_dirty}" | grep -c . 2>/dev/null || true)
+            echo "[hydra-gates] ERROR: --base '${BASE_REF}' resolves to HEAD (${_head_sha}), so the diff is EMPTY," >&2
+            echo "[hydra-gates] and this run has no push payload to take a previous tip from (GITHUB_EVENT_NAME" >&2
+            echo "[hydra-gates] is not 'push' and HYDRA_GATE_PUSH_BEFORE is unset)." >&2
+            echo "[hydra-gates] Every gate scopes to COMMITTED history (git diff <base>...HEAD); an edit that" >&2
+            echo "[hydra-gates] is not committed is not in any diff this runner can compute." >&2
+            if [ "${_dirty_n:-0}" -gt 0 ]; then
+                echo "[hydra-gates] The working tree has ${_dirty_n} uncommitted change(s):" >&2
+                printf '%s\n' "${_dirty}" | sed 's/^/[hydra-gates]     /' >&2
+                echo "[hydra-gates] Commit them and re-run with --base <the commit before them>." >&2
+            else
+                echo "[hydra-gates] Pass a --base that is actually behind HEAD (e.g. the branch this change" >&2
+                echo "[hydra-gates] forked from), or set HYDRA_GATE_PUSH_BEFORE to the previous tip." >&2
+            fi
+            echo "[hydra-gates] A whole-tree audit is available by NAME: --full. It is not substituted for a" >&2
+            echo "[hydra-gates] diff-scoped run any more, because a 22-minute audit that nobody asked for" >&2
+            echo "[hydra-gates] reads exactly like the gates ignoring --base. NOTHING WAS CHECKED." >&2
+            exit 99
+        fi
         if [ -z "${_push_base:-}" ]; then
-            # AUDIT EVERYTHING RATHER THAN NOTHING (#183).
+            # AUDIT EVERYTHING RATHER THAN NOTHING (#183) — ON A PUSH.
+            #
+            # Reached only when a push context existed and its previous tip
+            # could not be used (see the refusal above for every other case).
             #
             # This used to `exit 99`. The reasoning was sound about the evidence
             # — a scoped run against itself inspects nothing — and wrong about
