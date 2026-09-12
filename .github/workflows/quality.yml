@@ -244,6 +244,11 @@ on:
         required: false
         type: boolean
         default: false
+      lockfile-sync-blocking:
+        description: "Turn a package.json / package-lock.json desync into a build failure. OFF by default, and it stays off until somebody re-measures: all 21 core apps resolve this workflow at @main, so a gate merged as blocking fails every repo carrying the defect the same minute. Measured 2026-09-12 on the toolchain pins with each repo's own .npmrc: 21 of 21 pass on both development and beta, so this would fail nothing today. The check itself runs, and warns, regardless of this flag."
+        required: false
+        type: boolean
+        default: false
       enable-license-check:
         description: "Run dependency license compliance check (composer + npm)"
         required: false
@@ -1639,6 +1644,163 @@ jobs:
         with:
           name: result-vue-quality-stylelint
           path: ${{ inputs.frontend-path }}/quality-results/stylelint.txt
+          if-no-files-found: ignore
+
+  # ── package.json and package-lock.json, checked against each other ─────
+  #
+  # THE DEFECT. The `main` to `beta` to `development` sync merge takes `main`'s
+  # `package.json` across and keeps `development`'s `package-lock.json`.
+  # Neither file is individually wrong and the merge has no conflict to report,
+  # because the two are separate paths. Git has no reason to complain and npm
+  # has every reason to.
+  #
+  # WHAT IT COSTS, measured 2026-09-12 (ConductionNL/.github#766). Two apps on
+  # `development` were desynced at once. One broken install read as SIXTEEN
+  # failing jobs on decidiq and TWENTY-THREE on shillinq: eslint, stylelint,
+  # build, l10n, unit tests, npm audit, licence, gates. Every one of them was
+  # `npm ci` dying at step one. It also blocked every open PR in those repos,
+  # because Actions checks out the merge of head into base for `pull_request`
+  # events, so each PR inherited the broken base through no fault of its own.
+  #
+  # This job asks the one question those sixteen jobs were each discovering
+  # separately, in seconds, before anything is installed or built.
+  #
+  # NON-BLOCKING ON ARRIVAL, and that is deliberate. All 21 core apps resolve
+  # this workflow at `@main`, so a gate merged as blocking fails every repo
+  # carrying the defect the same minute. Measured on 2026-09-12 against every
+  # core app's `development` and `beta` tips, on the toolchain pins (Node
+  # 24.11.1, npm 11.19.1) and with each repo's own `.npmrc`: 21 of 21 pass on
+  # both branches, so this would fail nothing today. That is the measurement to
+  # re-take, not to assume, before `lockfile-sync-blocking` is flipped anywhere.
+  #
+  # WHY `npm ci --dry-run` AND NOT A PROXY. `npm install` succeeding proves
+  # nothing: it REWRITES the lockfile to match, which is the repair, not the
+  # test. `npm ls` reads an installed tree. Only `npm ci` compares the two files
+  # as committed, and `--dry-run` does it without writing node_modules.
+  #
+  # EUSAGE IS THE ONLY FINDING THIS JOB OWNS. npm answers `EUSAGE` for exactly
+  # this defect. Any other non-zero exit is a registry hiccup, a proxy, a
+  # missing optional platform binary, and a gate that reds on those is a gate
+  # that gets switched off. Those are reported as inconclusive and never fail,
+  # even when blocking is on.
+  lockfile-sync:
+    if: ${{ inputs.enable-frontend }}
+    runs-on: ubuntu-latest
+    name: "Lockfile Sync"
+    # Seconds in the normal case. 10 min is a hang-breaker, not a budget.
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ${{ inputs.frontend-path }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # BEFORE setup-node on purpose, exactly as `frontend-build` does it:
+      # `actions/setup-node` with `cache: npm` hard-fails when it finds no
+      # lockfile, so a repo without one must skip before any step can fail on
+      # its behalf. A missing lockfile is a real gap, and `frontend-build`
+      # already warns about it; it is not THIS job's finding.
+      - name: Detect a lockfile pair
+        id: detect
+        run: |
+          if [ ! -f package.json ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No package.json in '${{ inputs.frontend-path }}', so there is no pair to compare."
+            exit 0
+          fi
+          if [ ! -f package-lock.json ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::package.json is present in '${{ inputs.frontend-path }}' but package-lock.json is not. npm ci cannot run at all, which every npm job in this workflow already reports. Nothing for the lockfile-sync check to compare."
+            exit 0
+          fi
+          echo "run=true" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js
+        if: steps.detect.outputs.run == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "${{ inputs.node-version }}"
+          cache: "npm"
+          cache-dependency-path: "${{ inputs.frontend-path }}/package-lock.json"
+
+      # `--ignore-scripts` because nothing is being built here and a lifecycle
+      # script is a way for this check to fail for a reason that is not its
+      # own. `--no-audit --no-fund` because neither answer is read.
+      - name: Compare package.json against package-lock.json
+        id: check
+        if: steps.detect.outputs.run == 'true'
+        run: |
+          set -uo pipefail
+          echo "node $(node -v), npm $(npm -v)"
+          set +e
+          OUT="$(npm ci --dry-run --ignore-scripts --no-audit --no-fund 2>&1)"
+          RC=$?
+          set -e
+          printf '%s\n' "$OUT"
+
+          if [ "$RC" -eq 0 ]; then
+            echo "verdict=success" >> "$GITHUB_OUTPUT"
+            echo "package.json and package-lock.json agree."
+            exit 0
+          fi
+
+          # BOTH conditions, because npm answers EUSAGE for "no lockfile at
+          # all" as well, with the same code and a different sentence. The
+          # detect step above already rules that case out, so this is defence
+          # in depth: a code on its own is not a diagnosis.
+          if printf '%s' "$OUT" | grep -q 'npm error code EUSAGE' \
+            && printf '%s' "$OUT" | grep -q 'package.json and package-lock.json .* are in sync'; then
+            echo "verdict=failure" >> "$GITHUB_OUTPUT"
+            {
+              echo "package.json and package-lock.json DISAGREE in '${{ inputs.frontend-path }}'."
+              echo
+              echo "Repair, on this branch, and commit the lockfile alone:"
+              echo
+              echo "    npm install --package-lock-only"
+              echo "    rm -rf node_modules && npm ci     # verify from nothing"
+              echo
+              echo "Do NOT copy the lockfile from main. This branch is legitimately"
+              echo "ahead of main on ranges of its own, and the lock has to be"
+              echo "regenerated against the package.json that is actually here."
+            } > /tmp/lockfile-sync-advice.txt
+            cat /tmp/lockfile-sync-advice.txt
+            exit 0
+          fi
+
+          # `skipped` and not `failure`: the report's icon() renders anything
+          # that is not success or skipped as a finding, and a registry hiccup
+          # is not a finding about this repo. ⏭️ says "no verdict", which is
+          # the honest answer, and the warning above says why.
+          echo "verdict=skipped" >> "$GITHUB_OUTPUT"
+          echo "::warning::npm ci --dry-run exited $RC without reporting EUSAGE, so this is not the lockfile-sync defect and this run produced NO verdict about the lockfile. The output is above."
+          exit 0
+
+      - name: Report the finding
+        if: steps.check.outputs.verdict == 'failure'
+        run: |
+          cat /tmp/lockfile-sync-advice.txt >> "$GITHUB_STEP_SUMMARY" || true
+          if [ "${{ inputs.lockfile-sync-blocking }}" = "true" ]; then
+            echo "::error::package.json and package-lock.json are out of sync, and lockfile-sync-blocking is on."
+            exit 1
+          fi
+          echo "::warning::package.json and package-lock.json are out of sync. Every npm job in this workflow will fail on npm ci until the lockfile is regenerated. Not blocking yet: set lockfile-sync-blocking: true once this repo is measured clean."
+
+      # The RAW verdict, the way REUSE records `steps.lint.outcome` rather than
+      # the job status. So the report cell goes red on a finding even while the
+      # job concludes success, which is the shape that makes a warn-first gate
+      # visible instead of invisible.
+      - name: Record result
+        if: always()
+        run: |
+          mkdir -p quality-results
+          echo "${{ steps.check.outputs.verdict || 'skipped' }}" > quality-results/lockfile-sync.txt
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-lockfile-sync
+          path: ${{ inputs.frontend-path }}/quality-results/lockfile-sync.txt
           if-no-files-found: ignore
 
   # ── Group 2b: Custom frontend checks ───────────
@@ -7855,7 +8017,7 @@ jobs:
     # which is exactly why this has to be gated separately: a green PHPUnit
     # matrix measured on versions the app never claimed is the failure this
     # whole change exists to remove, and it looks identical to a pass.
-    needs: [php-quality, vue-quality, frontend-build, frontend-checks, frontend-tests, security, license, nextcloud-matrix, phpunit, newman, playwright, journeydoc-capture, baseline-protection, sbom, features-check, features-extract, hydra-gates, hydra-gates-axe, app-check-code, info-xml, reuse, changes]
+    needs: [php-quality, vue-quality, lockfile-sync, frontend-build, frontend-checks, frontend-tests, security, license, nextcloud-matrix, phpunit, newman, playwright, journeydoc-capture, baseline-protection, sbom, features-check, features-extract, hydra-gates, hydra-gates-axe, app-check-code, info-xml, reuse, changes]
     if: always()
     # Observed across 266 executions: median 0.6 min — but 2% of runs sit at
     # ~30 min because the `Install PDF tools` apt-get step stalls on the Ubuntu
@@ -8124,6 +8286,11 @@ jobs:
             echo "| app:check-code | $(icon "$(read_result "results/result-app-check-code/app-check-code.txt")") | | | | |"
             echo "| info.xml | $(icon "$(read_result "results/result-info-xml/info-xml.txt")") | | | | |"
             echo "| REUSE | $(icon "$(read_result "results/result-reuse/reuse.txt")") | | | | |"
+
+            # Reads the RAW verdict, like REUSE: ❌ on a desync even though the
+            # job concludes success while `lockfile-sync-blocking` is off. A
+            # warn-first gate that renders green is a gate nobody ever turns on.
+            echo "| lockfile sync | | $(icon "$(read_result "results/result-lockfile-sync/lockfile-sync.txt")") | | | |"
 
             # Test rows. `test_icon` rather than `icon`: see its definition —
             # an enabled-but-skipped test job is the absence of a verdict and
