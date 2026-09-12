@@ -6924,25 +6924,14 @@ jobs:
   # The package is checked out as a SIBLING of the app checkout, not inside it,
   # so nothing in the gate package can ever be mistaken for app code under scan.
   hydra-gates:
-    # `!cancelled()` is load-bearing, not decoration. `needs:` below implies
-    # `success()` on the Playwright job, which would make this whole job vanish
-    # for every repo that has the gates on and Playwright off — the gates would
-    # stop running on a majority of the fleet, silently, as a side effect of
-    # wiring up ONE gate's input. `!cancelled()` suppresses that implicit
-    # `success()`, so a skipped or failed Playwright job still lets the gates
-    # run and reach their own verdict.
-    #
-    # MEASURED, not assumed — ConductionNL/.github run 30909727531, a harness
-    # that reproduced this exact `needs:`/`if:` pair three times in one run and
-    # drove the producer into each of its three states:
-    #
-    #   producer succeeded -> gates RAN   (needs.playwright.result=success)
-    #   producer FAILED    -> gates RAN   (needs.playwright.result=failure)
-    #   producer SKIPPED   -> gates RAN   (needs.playwright.result=skipped)
-    #
-    # Do not "simplify" this to a bare `inputs.enable-hydra-gates`: that
-    # restores the implicit `success()` and deletes the job with no red, no
-    # skip and no trace whenever Playwright does not succeed.
+    # `!cancelled()` is load-bearing, not decoration, even now that this job
+    # has no `needs:`. It keeps the gates reporting when the RUN is being
+    # cancelled around them or another leg has failed, so a PR keeps its
+    # mechanical feedback while someone fixes an unrelated job. The measured
+    # `needs:`/`if:` history (run 30909727531: producer succeeded, failed and
+    # skipped, gates RAN each time) now belongs to `hydra-gates-axe` below,
+    # which is the job that still carries the Playwright edge; the note lives
+    # there.
     if: ${{ inputs.enable-hydra-gates && !cancelled() }}
     runs-on: ubuntu-latest
     name: "Hydra Gates"
@@ -7541,10 +7530,24 @@ jobs:
   # producer does not run by design and the gate is enforced on the
   # promotions instead.
   hydra-gates-axe:
-    # `!cancelled()` for the same reason as on `hydra-gates`: `needs:` implies
-    # `success()` on the producer, and a FAILED Playwright job must still
-    # reach the step below that names the failure as "no report", rather
-    # than vanishing with no red, no skip and no trace.
+    # `!cancelled()` is load-bearing, not decoration. `needs:` below implies
+    # `success()` on the Playwright job, which would make this job vanish
+    # whenever the producer fails or is skipped — exactly when a report is
+    # missing and the failure has to be NAMED rather than silently absent.
+    # `!cancelled()` suppresses that implicit `success()`, so a skipped or
+    # failed Playwright job still reaches the step that says "no report".
+    #
+    # MEASURED, not assumed — ConductionNL/.github run 30909727531, a harness
+    # that reproduced this exact `needs:`/`if:` pair three times in one run and
+    # drove the producer into each of its three states:
+    #
+    #   producer succeeded -> job RAN   (needs.playwright.result=success)
+    #   producer FAILED    -> job RAN   (needs.playwright.result=failure)
+    #   producer SKIPPED   -> job RAN   (needs.playwright.result=skipped)
+    #
+    # Do not "simplify" this to a bare `inputs.enable-axe`: that restores the
+    # implicit `success()` and deletes the job with no red, no skip and no
+    # trace whenever Playwright does not succeed.
     if: ${{ inputs.enable-hydra-gates && inputs.enable-axe && !cancelled() }}
     runs-on: ubuntu-latest
     name: "Hydra Gates (axe)"
