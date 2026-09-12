@@ -522,6 +522,19 @@ plain local branch name scopes every gate to the one committed change (gate-16
 names only the changed file, the run finishes in seconds), a base at HEAD is
 refused with zero `[gate-` lines, and the push fallback still fires on a push.
 
+### gate-33 in a separate CI job: `--axe-external`
+
+gate-33 (axe-core) is the one gate whose input comes from a browser, and the
+shared quality workflow judges it in its own `Hydra Gates (axe)` job since
+2026-09-12, so the other gates no longer wait ~30 minutes behind Playwright.
+That job runs `scripts/lib/check_axe_report.py`, the same helper the runner's
+gate-33 calls when the report is in the tree. The main gates job passes
+`--axe-external` when the caller set `enable-axe`; gate-33 then reports
+`NOT APPLICABLE` *to that run* by name, pointing at the job that owns the
+verdict, and stays out of the coverage tally. Without the flag, `--axe-enabled`
+with no report is still a structural gap, which is right for a single job and
+wrong for a split.
+
 ### Per-gate timing
 
 Every run ends with a `[hydra-gates] TIMING:` block: the total, then one

@@ -281,6 +281,15 @@ REQUIRE_FULL_COVERAGE="${HYDRA_GATE_REQUIRE_FULL_COVERAGE:-0}"
 # to guess "unverified" in both cases, which is why --require-full-coverage was
 # unusable in every repo in the fleet.
 AXE_ENABLED="${HYDRA_GATE_AXE_ENABLED:-0}"
+# The caller set enable-axe AND judges gate-33's report in a SEPARATE job of
+# the same run, from this same package (the `Hydra Gates (axe)` job of the
+# shared quality workflow, since the gates/axe split of 2026-09-12). This run
+# will therefore never see the report, and its absence is neither a choice
+# the repo made nor a gap: gate-33 reports NOT APPLICABLE *to this run* by
+# name, pointing at the job that owns the verdict, and stays out of this
+# run's coverage tally. Without this flag, `--axe-enabled` with no report is
+# a structural gap, which is correct for a single job and wrong for a split.
+AXE_EXTERNAL="${HYDRA_GATE_AXE_EXTERNAL:-0}"
 # THE SCOPE IS AN EXPLICIT, NAMED INPUT — never inferred from whether a base
 # happens to be set. `$HYDRA_GATE_SCOPE` is the env form of the flags below; an
 # unrecognised value is a hard stop rather than a silent fall-back to either
@@ -359,6 +368,7 @@ while [ $# -gt 0 ]; do
         --full) SCOPE_TO_DIFF=0; shift ;;
         --require-full-coverage) REQUIRE_FULL_COVERAGE=1; shift ;;
         --axe-enabled) AXE_ENABLED=1; shift ;;
+        --axe-external) AXE_EXTERNAL=1; shift ;;
         --base) BASE_REF="$2"; shift 2 ;;
         --base=*) BASE_REF="${1#--base=}"; shift ;;
         *) APP_DIR="$1"; shift ;;
@@ -6426,6 +6436,11 @@ _axe_report="tests/axe/report.json"
 if [ ! -f "${_axe_report}" ]; then
     if [ ! -d src ]; then
         _skip 33 "axe-core" na "no src/ and no ${_axe_report} — no frontend to run axe-core against in this repo."
+    elif [ "${AXE_EXTERNAL}" = "1" ]; then
+        # Not a gap and not a choice: the report is judged by a sibling job
+        # of this same run, with scripts/lib/check_axe_report.py, the helper
+        # this gate itself calls when the file is here. See AXE_EXTERNAL.
+        _skip 33 "axe-core" na "the caller set enable-axe and judges ${_axe_report} in its separate 'Hydra Gates (axe)' job (--axe-external), from this same package and with the same helper this gate uses. The verdict is that job's row in the Quality Report; a missing or rejected report fails THERE, with the producer's state quoted. Not a gap in this run and not counted as one."
     elif [ "${AXE_ENABLED}" = "1" ]; then
         _skip 33 "axe-core" structural "the caller set enable-axe/--axe-enabled, so a ${_axe_report} was EXPECTED, and none arrived. axe-core never ran against a rendered DOM: contrast / landmark / ARIA-validity / live-region accessibility is UNVERIFIED. The Playwright job that produces it was skipped, failed, or its artifact was rejected — that is the thing to fix, not this gate."
     else
@@ -6435,64 +6450,28 @@ fi
 if [ -f "${_axe_report}" ]; then
     _axe_log=${HYDRA_GATE_LOG_DIR}/hydra-gate-axe.log
     : > "${_axe_log}"
-    # Parse with python so we don't add a jq dependency. Counts violations
-    # by impact and emits one line per serious/critical violation for the
-    # detail log. Exit code 0 if zero serious-or-critical; 1 otherwise.
-    # `{}` IS NOT "NO VIOLATIONS" (#148's remaining half).
-    #
-    # The skip branches above make an ABSENT report loud. A report that is
-    # PRESENT but carries no `violations` key at all was still read as a clean
-    # result — `data.get('violations', [])` supplies the empty list — so a
-    # crashed capture step, a truncated artifact or a placeholder file turned
-    # the loud skip into a silent PASS, which is strictly worse than never
-    # having run. Every real axe result object HAS the key (axe-core always
-    # emits `violations`, even when empty); its absence means the producer
-    # never got that far. Exit 2 = "this is not an axe report".
-    python3 - "${_axe_report}" "${_axe_log}" <<'PYAXE'
-import json, sys
-path, log = sys.argv[1], sys.argv[2]
-try:
-    with open(path) as f:
-        data = json.load(f)
-except Exception as e:
-    with open(log, 'w') as f:
-        f.write(f"axe-report-unreadable: {e}\n")
-    sys.exit(2)
-if not isinstance(data, dict) or 'violations' not in data:
-    with open(log, 'w') as f:
-        f.write(
-            "axe-report-shapeless: %s parses as JSON but has no `violations` key, "
-            "so it is not an axe result object. axe-core always emits that key, "
-            "empty or not — its absence means the run that was supposed to "
-            "produce this file never reached the assertion.\n" % path
-        )
-    sys.exit(2)
-violations = data.get('violations') or []
-if not isinstance(violations, list):
-    with open(log, 'w') as f:
-        f.write("axe-report-shapeless: `violations` is not a list\n")
-    sys.exit(2)
-blocking = [v for v in violations if isinstance(v, dict) and v.get('impact') in ('serious', 'critical')]
-with open(log, 'w') as f:
-    for v in blocking:
-        rule = v.get('id', '?')
-        impact = v.get('impact', '?')
-        help_url = v.get('helpUrl', '')
-        targets = []
-        for n in v.get('nodes', [])[:3]:
-            t = n.get('target', [])
-            targets.append(' > '.join(t) if isinstance(t, list) else str(t))
-        f.write(f"axe-rule={rule} impact={impact} nodes={len(v.get('nodes', []))} help={help_url} targets={targets}\n")
-print(
-    "[hydra-gates] gate-33 axe-core: report read — %d violation(s) present, "
-    "%d serious/critical. A PASS here is a PASS over that number, not over "
-    "silence." % (len(violations), len(blocking))
-)
-sys.exit(0 if not blocking else 1)
-PYAXE
-    _axe_rc=$?
+    # ONE HELPER, TWO CALLERS. The parse lived here as an inline python
+    # heredoc until 2026-09-12; it is scripts/lib/check_axe_report.py now,
+    # because the shared quality workflow judges the same report in its own
+    # `Hydra Gates (axe)` job (the gates/axe split, see AXE_EXTERNAL) and two
+    # copies of a verdict are two verdicts. Same contract as before: exit 0
+    # clean, 1 blocking violations (one line each in the log), 2 not a
+    # readable axe result object — `{}` IS NOT "NO VIOLATIONS" (#148's
+    # remaining half): a report PRESENT without a `violations` key is a
+    # producer that never got that far, not a clean run. A missing helper is
+    # a wiring skip, never a pass.
+    _axe_helper="${SCRIPT_DIR}/lib/check_axe_report.py"
+    if [ -f "${_axe_helper}" ]; then
+        python3 "${_axe_helper}" "${_axe_report}" "${_axe_log}"
+        _axe_rc=$?
+    else
+        echo "axe-helper-missing: ${_axe_helper} is not in this package" > "${_axe_log}"
+        _axe_rc=5
+    fi
     _axe_fail=$(wc -l < "${_axe_log}" 2>/dev/null || echo 0)
-    if [ "${_axe_rc}" -ge 2 ]; then
+    if [ "${_axe_rc}" -eq 5 ]; then
+        _skip 33 "axe-core" wiring "check_axe_report.py is not in this package at ${_axe_helper} — ${_axe_report} exists and NO violation in it was judged; runtime accessibility is UNVERIFIED by this run."
+    elif [ "${_axe_rc}" -ge 2 ]; then
         # Present but not an axe result object — see the parser's own message.
         _skip 33 "axe-core" wiring "${_axe_report} exists but is not a readable axe result object ($(head -1 "${_axe_log}" 2>/dev/null)). NO rendered-DOM violation was inspected; runtime accessibility is UNVERIFIED by this run. Fix the step that writes the report, not this gate."
     elif [ "${_axe_fail}" -eq 0 ]; then
