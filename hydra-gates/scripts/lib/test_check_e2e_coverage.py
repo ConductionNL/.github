@@ -744,6 +744,53 @@ class GateModeTest(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertIn("PASS", out)
 
+    def test_a_cited_exclusion_warns_and_does_not_block(self):
+        """The spec says no test can prove it; a running test says it does.
+
+        Exactly one of the two is wrong, and before this the gate discarded
+        the test's claim in silence: the excluded branch returned
+        unconditionally without ever asking whether anything covered it.
+
+        Advisory on purpose. Measured on dossiq 2026-09-12, 31 citations sit
+        on an excluded scenario across 8 files, so failing here would redden
+        the fleet on inherited debt the moment it landed.
+        """
+        base = self._existing_spec("openspec/specs/my-spec/spec.md",
+                                   SPEC_WITH_EXCLUSION)
+        # BOTH scenarios cited: the visible one legitimately, and the excluded
+        # one in contradiction of its own spec.
+        _write(self.root, "tests/e2e/my.spec.ts",
+               "// @e2e my-spec::another-covered\n"
+               "test('x', async ({ page }) => { await expect(page).toHaveTitle(/x/) })\n"
+               "// @e2e my-spec::internal-wiring\n"
+               "test('y', async ({ page }) => { await expect(page).toHaveTitle(/y/) })\n")
+        self._commit("cite an excluded scenario")
+        rc, out = self._gate(base)
+
+        self.assertEqual(rc, 0, "a cited exclusion must not fail the gate")
+        self.assertIn("PASS", out)
+        self.assertIn("WARN", out)
+        self.assertIn("my-spec::internal-wiring", out)
+        self.assertIn("`@e2e exclude`", out)
+
+    def test_an_uncited_exclusion_does_not_warn(self):
+        """The other direction, so the warning cannot fire on every exclusion.
+
+        Without this, a check that flagged all excluded scenarios would look
+        identical to one that flags the contradiction.
+        """
+        base = self._existing_spec("openspec/specs/my-spec/spec.md",
+                                   SPEC_WITH_EXCLUSION)
+        _write(self.root, "tests/e2e/my.spec.ts",
+               "// @e2e my-spec::another-covered\n"
+               "test('x', async ({ page }) => { await expect(page).toHaveTitle(/x/) })\n")
+        self._commit("cite only the visible scenario")
+        rc, out = self._gate(base)
+
+        self.assertEqual(rc, 0)
+        self.assertIn("PASS", out)
+        self.assertNotIn("WARN", out)
+
     def test_whole_spec_exclude_passes_all_scenarios(self):
         base = self._existing_spec("openspec/specs/backend-spec/spec.md",
                                    WHOLE_SPEC_EXCLUDED)
