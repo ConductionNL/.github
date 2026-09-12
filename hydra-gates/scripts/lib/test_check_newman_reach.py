@@ -6,6 +6,8 @@
 """
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import shutil
@@ -196,6 +198,42 @@ class NewmanReachTest(unittest.TestCase):
                _collection(["{{base_url}}/api/things"],
                            description="@newman exclude"))
         self.assertEqual(self._codes(), ["V1", "V5"])
+
+    def _pass_line(self) -> str:
+        """The line `--mode gate` prints, captured."""
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            cnr.main(["x", str(self.root)])
+        return buf.getvalue()
+
+    def test_the_pass_line_does_not_claim_CI_runs_what_it_does_not(self):
+        # 🔴 A PASS THAT READS LIKE THE WRONG PASS. Since V1 honours
+        # exclusions there are two ways to have no findings, and they must not
+        # print the same sentence. dossiq passed this gate while reading
+        # "922 request(s) ... all reachable by CI and all asserting something"
+        # on a run where `enable-newman: false` meant not one of them ran.
+        _write(self.root, ".github/workflows/code-quality.yml", _CALLER_OFF)
+        _write(self.root, "tests/integration/a.postman_collection.json",
+               _collection(["{{base_url}}/api/things"],
+                           description="@newman exclude the ZGW API is still in "
+                                       "progress, this suite fails at 95 percent"))
+
+        line = self._pass_line()
+        self.assertIn("0 finding(s)", line)
+        self.assertNotIn("reachable by CI", line)
+        self.assertIn("record why they do not", line)
+        self.assertIn("0 of 1 committed request(s) run", line)
+
+    def test_the_pass_line_still_says_reachable_when_CI_does_run_them(self):
+        # The other half: a repo whose suite genuinely runs keeps the sentence
+        # that says so, or this fix would make every pass read like an excuse.
+        _write(self.root, ".github/workflows/code-quality.yml", _CALLER_ON)
+        _write(self.root, "tests/integration/a.postman_collection.json",
+               _collection(["{{base_url}}/api/things"]))
+
+        line = self._pass_line()
+        self.assertIn("all reachable by CI", line)
+        self.assertNotIn("record why they do not", line)
 
     def test_an_exclusion_on_its_own_line_of_a_longer_description_is_found(self):
         _write(self.root, ".github/workflows/code-quality.yml", _CALLER_ON)
