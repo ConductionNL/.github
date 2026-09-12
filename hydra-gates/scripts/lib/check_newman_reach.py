@@ -35,7 +35,10 @@ WHAT IT REPORTS
 
 **V1 — collections exist and Newman is switched off.** Every request in the
 repo is dead. The caller sets ``enable-newman: false``, or never sets it and
-the input defaults to false.
+the input defaults to false. A collection carrying a reason-bearing
+``@newman exclude`` is not counted: the repo has said why that one does not
+run, which is what the exclusion is for. A BARE exclusion still counts, and is
+reported again as V5.
 
 **V2 — a collection outside the configured path.** It runs nowhere. Either move
 it under ``newman-collection-path``, point that input at it, or delete it. A
@@ -272,17 +275,30 @@ def analyse(app_dir: Path) -> dict:
     findings: list[dict] = []
     live = [r for r in rows if not r["excluded"] or r["bare_exclude"]]
 
-    if rows and not enabled:
+    # 🔴 `live`, NOT `rows`, AND THAT IS THE FIX FOR #757.
+    #
+    # V1 used to be raised from every committed collection, so a repo that had
+    # recorded a reason for each one was still reported as carrying unrun
+    # work. The Fix line printed underneath offers `@newman exclude <reason>`
+    # as a remedy, and it was a remedy that could not work: while Newman is
+    # off, no exclusion changed the verdict. Measured on dossiq, which
+    # deleted four dead collections and gave the other ten a reason, and still
+    # read `922 request(s) across 10 collection(s) ... Not one of them has
+    # ever run.`
+    #
+    # A bare exclusion stays in `live` by construction, so an exclusion with
+    # no reason still counts here, and V5 reports it separately below.
+    if live and not enabled:
         findings.append({
             "code": "V1",
             "detail": (
-                f"{sum(r['requests'] for r in rows)} request(s) across "
-                f"{len(rows)} collection(s) are committed, and this repo's "
+                f"{sum(r['requests'] for r in live)} request(s) across "
+                f"{len(live)} collection(s) are committed, and this repo's "
                 f"caller does not enable Newman"
                 + (f" ({wf})" if wf else " (no caller workflow found)")
                 + ". Not one of them has ever run."
             ),
-            "paths": [r["path"] for r in rows],
+            "paths": [r["path"] for r in live],
         })
     else:
         for r in live:

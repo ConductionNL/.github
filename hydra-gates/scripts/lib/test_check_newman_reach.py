@@ -160,6 +160,43 @@ class NewmanReachTest(unittest.TestCase):
                            description="@newman exclude"))
         self.assertEqual(self._codes(), ["V2", "V5"])
 
+    def test_V1_does_not_count_a_collection_that_recorded_why_it_does_not_run(self):
+        # 🔴 THE DEFECT IN #757. V1 was raised from every committed collection
+        # whenever Newman was off, so a repo that had given each one a reason
+        # was still told it carried unrun work, and the Fix line printed
+        # underneath offered exactly the exclusion that could not help.
+        _write(self.root, ".github/workflows/code-quality.yml", _CALLER_OFF)
+        _write(self.root, "tests/integration/a.postman_collection.json",
+               _collection(["{{base_url}}/api/things"],
+                           description="@newman exclude the ZGW API is still in "
+                                       "progress, this suite fails at 95 percent"))
+        self.assertEqual(self._codes(), [])
+
+    def test_V1_still_counts_the_collections_that_recorded_nothing(self):
+        # The half that must not be lost: one reason does not excuse the rest,
+        # and V1 names only the ones still unaccounted for.
+        _write(self.root, ".github/workflows/code-quality.yml", _CALLER_OFF)
+        _write(self.root, "tests/integration/excused.postman_collection.json",
+               _collection(["{{base_url}}/api/things"],
+                           description="@newman exclude owned by the supplier"))
+        _write(self.root, "tests/integration/silent.postman_collection.json",
+               _collection(["{{base_url}}/api/other"]))
+
+        findings = cnr.analyse(self.root)["findings"]
+        self.assertEqual([f["code"] for f in findings], ["V1"])
+        self.assertEqual(findings[0]["paths"],
+                         ["tests/integration/silent.postman_collection.json"])
+        self.assertIn("1 collection(s)", findings[0]["detail"])
+
+    def test_V1_still_counts_a_bare_exclusion_and_V5_still_names_it(self):
+        # An exclusion with no reason is not a reason. It stays counted, and
+        # keeps its own finding.
+        _write(self.root, ".github/workflows/code-quality.yml", _CALLER_OFF)
+        _write(self.root, "tests/integration/a.postman_collection.json",
+               _collection(["{{base_url}}/api/things"],
+                           description="@newman exclude"))
+        self.assertEqual(self._codes(), ["V1", "V5"])
+
     def test_an_exclusion_on_its_own_line_of_a_longer_description_is_found(self):
         _write(self.root, ".github/workflows/code-quality.yml", _CALLER_ON)
         _write(self.root, "tests/newman/a.postman_collection.json",
