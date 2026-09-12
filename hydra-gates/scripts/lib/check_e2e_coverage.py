@@ -2377,6 +2377,9 @@ def run_gate(app_dir: Path) -> int:
     covered_refs, dead_refs = collect_ref_status(app_dir)
 
     findings: list[str] = []
+    # Advisory only: printed, never counted into the exit code. See the
+    # cited-exclusion branch below for why this is not a finding.
+    contradictions: list[str] = []
     # A NEW SCENARIO IS NOT EXCLUDABLE, and it is reported on its own line.
     #
     # An `@e2e exclude <reason>` waives a scenario that predates the test
@@ -2429,7 +2432,34 @@ def run_gate(app_dir: Path) -> int:
                 )
                 continue
             if s["excluded"] and not s["bare_exclude"]:
-                # Legitimately excluded — not required
+                # Legitimately excluded — not required.
+                #
+                # BUT A CITED EXCLUSION IS TWO STATEMENTS THAT DISAGREE. The
+                # spec says no test can prove this scenario; a running test
+                # says it does. Exactly one of them is wrong, and until now
+                # neither the gate nor a reader had any way to notice: the
+                # `continue` below is unconditional, so the test's claim was
+                # discarded in silence.
+                #
+                # Both directions happen. Sometimes the test caught up and the
+                # exclusion is stale; sometimes the citation overclaims and the
+                # exclusion is right. The gate cannot tell which, so it names
+                # the pair and asks for a decision rather than guessing.
+                #
+                # ADVISORY, NOT BLOCKING, deliberately. Measured on dossiq
+                # 2026-09-12: 31 citations sit on an excluded scenario, in 8
+                # files. Failing on that would redden the fleet on inherited
+                # debt the moment this lands, which is how a useful check gets
+                # switched off. It prints and does not touch the exit code.
+                cited_by = covering_ref(s["ref"], covered_refs, declared_refs)
+                if cited_by is not None:
+                    contradictions.append(
+                        f"{s['ref']} — the spec marks this scenario `@e2e "
+                        f"exclude` and a RUNNING test cites it (as "
+                        f"`{cited_by}`). One of the two is wrong: either the "
+                        f"exclusion is stale and should go, or the citation "
+                        f"claims a scenario its test does not prove."
+                    )
                 continue
             if s["bare_exclude"]:
                 # Bare @e2e exclude without reason — non-compliant, flag it
@@ -2470,6 +2500,8 @@ def run_gate(app_dir: Path) -> int:
         print(line)
     for line in sorted(set(new_without_test)):
         print(line)
+    for line in sorted(set(contradictions)):
+        print(f"[gate-{GATE_NUM}] WARN {line}")
 
     new_count = len(set(new_without_test))
     count = len(set(findings)) + new_count
